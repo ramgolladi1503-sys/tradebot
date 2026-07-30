@@ -8,6 +8,7 @@ metadata that an existing runtime boundary supplies.
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import statistics
 import time
@@ -132,10 +133,30 @@ def build_live_captured_metadata_row(
     misaligned_constituents: Sequence[str] | None = None,
     late_constituents: Sequence[str] | None = None,
     duplicate_interval: bool = False,
+    universe_name: str = "UNKNOWN_LIVE_UNIVERSE",
+    universe_version: str = "UNVERSIONED",
+    universe_hash: str | None = None,
+    expected_constituent_symbols: Sequence[str] | None = None,
+    index_instrument_token: int | None = None,
+    subscription_evidence_id: str | None = None,
 ) -> dict[str, Any]:
     """Build one canonical row from already-completed live metadata."""
 
     normalized_bars = [_normalize_constituent_bar(row, session_date=session_date) for row in constituent_bars]
+    expected_symbols = _string_list(expected_constituent_symbols) or [
+        str(row.get("symbol") or row.get("instrument") or "") for row in normalized_bars
+    ]
+    expected_symbols = [symbol for symbol in expected_symbols if symbol]
+    resolved_universe_hash = universe_hash or _universe_hash(
+        universe_name=universe_name,
+        universe_version=universe_version,
+        index_symbol=symbol,
+        index_instrument_token=index_instrument_token,
+        constituent_symbols=expected_symbols,
+        constituent_tokens=[
+            row.get("instrument_token") for row in normalized_bars if str(row.get("symbol") or row.get("instrument") or "") in set(expected_symbols)
+        ],
+    )
     index_ret1 = _index_ret1(index_bar)
     latest_bar = {
         "ts_epoch": float(ts_epoch),
@@ -157,9 +178,21 @@ def build_live_captured_metadata_row(
         "source_bar_end_epoch": float(source_bar_end_epoch),
         "index_source_bar_end_epoch": float(source_bar_end_epoch),
         "index_bar_available": index_bar is not None,
-        "index_bar": dict(index_bar or {}),
+        "index_bar": _normalize_json_bar(index_bar or {}),
         "index_ret1": index_ret1,
         "expected_constituents": int(expected_constituents),
+        "expected_constituent_symbols": expected_symbols,
+        "live_universe": {
+            "name": str(universe_name),
+            "version": str(universe_version),
+            "hash": str(resolved_universe_hash),
+            "expected_count": int(expected_constituents),
+            "index_symbol": str(symbol or "").upper(),
+            "index_instrument_token": index_instrument_token,
+            "constituent_symbols": expected_symbols,
+        },
+        "universe_hash": str(resolved_universe_hash),
+        "subscription_evidence_id": subscription_evidence_id,
         "completed_constituent_bars": [latest_bar],
         "constituent_bar_details": normalized_bars,
         "missing_constituents": _string_list(missing_constituents),
@@ -262,8 +295,26 @@ def validate_live_captured_metadata_row(row: Mapping[str, Any]) -> ValidationRes
         expected = int(row.get("expected_constituents"))
     except Exception:
         return ValidationResult(False, REASON_INCOMPLETE_UNIVERSE)
+    expected_symbols = _string_list(row.get("expected_constituent_symbols"))
+    if len(expected_symbols) != expected:
+        return ValidationResult(False, REASON_INCOMPLETE_UNIVERSE, ("expected_symbols_mismatch",))
+    live_universe = row.get("live_universe")
+    if not isinstance(live_universe, Mapping):
+        return ValidationResult(False, REASON_INCOMPLETE_UNIVERSE, ("live_universe_missing",))
+    if str(live_universe.get("hash") or "") != str(row.get("universe_hash") or ""):
+        return ValidationResult(False, REASON_INCOMPLETE_UNIVERSE, ("universe_hash_mismatch",))
+    universe_symbols = _string_list(live_universe.get("constituent_symbols"))
+    if universe_symbols != expected_symbols:
+        return ValidationResult(False, REASON_INCOMPLETE_UNIVERSE, ("universe_symbols_mismatch",))
+    if len(set(expected_symbols)) != len(expected_symbols):
+        return ValidationResult(False, REASON_INCOMPLETE_UNIVERSE, ("duplicate_expected_symbols",))
     if len(returns) != expected:
         return ValidationResult(False, REASON_INCOMPLETE_UNIVERSE, (f"expected={expected}", f"observed={len(returns)}"))
+    latest_symbols = _string_list(latest.get("constituent_symbols"))
+    if latest_symbols != expected_symbols:
+        return ValidationResult(False, REASON_INCOMPLETE_UNIVERSE, ("observed_symbols_mismatch",))
+    if expected < int(FROZEN_THRESHOLDS["min_constituents"]):
+        return ValidationResult(False, REASON_INCOMPLETE_UNIVERSE, ("below_frozen_min_constituents",))
     if bool(row.get("duplicate_interval")):
         return ValidationResult(False, REASON_DUPLICATE_INTERVAL)
     return ValidationResult(True, REASON_OK)
@@ -371,9 +422,21 @@ def _iter_jsonl(path: Path | str) -> Iterable[Any]:
 
 
 def _normalize_constituent_bar(row: Mapping[str, Any], *, session_date: str) -> dict[str, Any]:
-    out = dict(row)
+    out = _normalize_json_bar(row)
     out.setdefault("session_date", session_date)
     out["completed"] = bool(out.get("completed", True))
+    return out
+
+
+def _normalize_json_bar(row: Mapping[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, value in dict(row).items():
+        if hasattr(value, "isoformat"):
+            out[key] = value.isoformat()
+        elif isinstance(value, Mapping):
+            out[key] = _normalize_json_bar(value)
+        else:
+            out[key] = value
     return out
 
 
@@ -457,6 +520,28 @@ def _string_list(value: Any) -> list[str]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return []
     return [str(item) for item in value if str(item or "").strip()]
+
+
+def _universe_hash(
+    *,
+    universe_name: str,
+    universe_version: str,
+    index_symbol: str,
+    index_instrument_token: int | None,
+    constituent_symbols: Sequence[str],
+    constituent_tokens: Sequence[Any],
+) -> str:
+    payload = {
+        "universe_name": str(universe_name),
+        "universe_version": str(universe_version),
+        "index_symbol": str(index_symbol or "").upper(),
+        "index_instrument_token": index_instrument_token,
+        "constituents": [
+            {"symbol": str(symbol), "instrument_token": token}
+            for symbol, token in zip(list(constituent_symbols), list(constituent_tokens))
+        ],
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 __all__ = [

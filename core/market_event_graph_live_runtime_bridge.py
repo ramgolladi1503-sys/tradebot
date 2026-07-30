@@ -1,22 +1,22 @@
-"""Opt-in runtime bridge that exports synchronized live market-event snapshots.
+"""Opt-in runtime bridge for real market-event graph live-source evidence.
 
-The bridge is advisory only. It does not subscribe to feeds, call brokers,
-place orders, mutate strategy state, or affect execution decisions. It only
-observes already-available completed OHLC bars and, when explicitly enabled,
-appends validated live-captured metadata rows.
+The bridge is advisory only. It observes already-completed OHLC bars and writes
+validated evidence rows only when universe, subscription, interval, and live
+provenance truth are all explicit. Evidence rejection never changes feed,
+strategy, risk, or execution output.
 """
 
 from __future__ import annotations
 
+import atexit
 import hashlib
 import json
 import logging
-import atexit
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from config import config as cfg
 from core.market_data import get_token_for_symbol, ohlc_buffer
@@ -24,11 +24,38 @@ from core.market_event_graph_live_source import (
     LiveCapturedMetadataExporter,
     build_live_captured_metadata_row,
     default_live_capture_path,
-    frozen_threshold_metadata,
 )
-from core.time_utils import now_ist
+from core.time_utils import IST_TZ
 
 logger = logging.getLogger(__name__)
+
+LIVE_UNIVERSE_NOT_CONFIGURED = "LIVE_UNIVERSE_NOT_CONFIGURED"
+BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE = "BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE"
+BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION = "BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION"
+LIVE_BAR_PROVENANCE_UNPROVEN = "LIVE_BAR_PROVENANCE_UNPROVEN"
+INDEX_INTERVAL_MISALIGNED = "INDEX_INTERVAL_MISALIGNED"
+SNAPSHOT_INCOMPLETE = "SNAPSHOT_INCOMPLETE"
+
+
+@dataclass(frozen=True)
+class LiveUniverseContract:
+    name: str
+    version: str
+    effective_date: str
+    index_symbol: str
+    index_instrument_token: int
+    constituents: tuple[dict[str, Any], ...]
+    source_provenance: str
+    capture_session_id: str
+    canonical_sha256: str
+
+    @property
+    def constituent_symbols(self) -> tuple[str, ...]:
+        return tuple(str(row["symbol"]).upper() for row in self.constituents)
+
+    @property
+    def constituent_tokens(self) -> tuple[int, ...]:
+        return tuple(int(row["instrument_token"]) for row in self.constituents)
 
 
 @dataclass
@@ -38,21 +65,30 @@ class LiveSourceBridgeResult:
     reason: str
     latency_ms: dict[str, float] = field(default_factory=dict)
     accepted_constituent_count: int = 0
+    rejected_identities: tuple[str, ...] = ()
     missing_constituents: tuple[str, ...] = ()
     audit: dict[str, Any] = field(default_factory=dict)
 
 
 class LiveSourceRuntimeBridge:
-    def __init__(self, *, exporter: LiveCapturedMetadataExporter | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        exporter: LiveCapturedMetadataExporter | None = None,
+        universe_contract: Mapping[str, Any] | None = None,
+        subscription_evidence_provider: Callable[[LiveUniverseContract], Mapping[str, Any]] | None = None,
+    ) -> None:
         self.exporter = exporter or LiveCapturedMetadataExporter(
             Path(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_PATH", default_live_capture_path()))
         )
+        self._explicit_universe_contract = dict(universe_contract or {})
+        self._subscription_evidence_provider = subscription_evidence_provider
         self._last_source_bar_end_epoch: float | None = None
         self._last_session_date: str | None = None
-        self._last_run_id: str | None = None
         self._write_failures = 0
         self._dropped_evidence_writes = 0
         self._max_queue_depth = 0
+        self._diagnostics: list[dict[str, Any]] = []
 
     def observe_cycle(
         self,
@@ -60,233 +96,224 @@ class LiveSourceRuntimeBridge:
         *,
         cycle_cutoff: datetime,
     ) -> LiveSourceBridgeResult:
-        t0 = time.perf_counter()
-        attempted = False
-        exported = False
-        reason = "DISABLED"
         latency_ms = {"snapshot_assembly": 0.0, "validation": 0.0, "queue_write": 0.0}
         if not bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
-            return LiveSourceBridgeResult(False, False, reason, latency_ms=latency_ms)
+            return LiveSourceBridgeResult(False, False, "DISABLED", latency_ms=latency_ms)
 
-        attempted = True
+        t0 = time.perf_counter()
+        contract, reason = self._load_universe_contract()
+        if contract is None:
+            return self._reject(reason, latency_ms=latency_ms)
+
+        subscription = self._subscription_evidence(contract)
+        subscription_ok, subscription_reason, subscription_rejected = self._validate_subscription_evidence(contract, subscription)
+        if not subscription_ok:
+            return self._reject(subscription_reason, latency_ms=latency_ms, identities=subscription_rejected, audit=subscription)
+
         t1 = time.perf_counter()
-        snapshot = self._assemble_snapshot(snapshot_rows, cycle_cutoff=cycle_cutoff)
-        t2 = time.perf_counter()
-        latency_ms["snapshot_assembly"] = (t2 - t1) * 1000.0
+        snapshot, snapshot_reason, rejected = self._assemble_snapshot(contract, subscription, cycle_cutoff=cycle_cutoff)
+        latency_ms["snapshot_assembly"] = (time.perf_counter() - t1) * 1000.0
         if snapshot is None:
-            return LiveSourceBridgeResult(True, False, "SNAPSHOT_INCOMPLETE", latency_ms=latency_ms)
+            return self._reject(snapshot_reason, latency_ms=latency_ms, identities=rejected, audit=subscription)
 
         validation_start = time.perf_counter()
         row = build_live_captured_metadata_row(
             session_date=str(snapshot["session_date"]),
-            symbol=str(snapshot["symbol"]),
+            symbol=contract.index_symbol,
             interval_end=str(snapshot["interval_end"]),
-            ts_epoch=float(snapshot["ts_epoch"]),
+            ts_epoch=float(snapshot["observed_at_epoch"]),
             source_bar_end_epoch=float(snapshot["source_bar_end_epoch"]),
             index_bar=snapshot["index_bar"],
             constituent_bars=snapshot["constituent_bars"],
-            expected_constituents=int(snapshot["expected_constituents"]),
-            run_id=str(snapshot["run_id"]),
-            runtime_source_identifier=str(snapshot["runtime_source_identifier"]),
-            missing_constituents=list(snapshot.get("missing_constituents") or []),
-            stale_constituents=list(snapshot.get("stale_constituents") or []),
-            duplicate_constituents=list(snapshot.get("duplicate_constituents") or []),
-            misaligned_constituents=list(snapshot.get("misaligned_constituents") or []),
-            late_constituents=list(snapshot.get("late_constituents") or []),
-            duplicate_interval=bool(snapshot.get("duplicate_interval")),
+            expected_constituents=len(contract.constituents),
+            run_id=contract.capture_session_id,
+            runtime_source_identifier=str(subscription["subscription_evidence_id"]),
+            missing_constituents=[],
+            stale_constituents=[],
+            duplicate_constituents=[],
+            misaligned_constituents=[],
+            late_constituents=[],
+            universe_name=contract.name,
+            universe_version=contract.version,
+            universe_hash=contract.canonical_sha256,
+            expected_constituent_symbols=contract.constituent_symbols,
+            index_instrument_token=contract.index_instrument_token,
+            subscription_evidence_id=str(subscription["subscription_evidence_id"]),
         )
-        row.update(
-            {
-                "subscription_evidence": dict(snapshot.get("subscription_evidence") or {}),
-                "authority_isolation": {
-                    "read_only": True,
-                    "is_order_action": False,
-                    "broker_api_called": False,
-                    "allowed_for_live_execution": False,
-                },
-                "frozen_strategy_provenance": {
-                    "thresholds": frozen_threshold_metadata(),
-                    "source": "live_runtime_bridge",
-                },
-            }
-        )
+        row["observed_at_epoch"] = float(snapshot["observed_at_epoch"])
+        row["index_source_bar_end_epoch"] = float(snapshot["index_source_bar_end_epoch"])
+        row["subscription_evidence"] = dict(subscription)
         latency_ms["validation"] = (time.perf_counter() - validation_start) * 1000.0
+
         write_start = time.perf_counter()
         result = self.exporter.export_row(row)
         latency_ms["queue_write"] = (time.perf_counter() - write_start) * 1000.0
+        latency_ms["total"] = (time.perf_counter() - t0) * 1000.0
         self._max_queue_depth = max(self._max_queue_depth, 1)
-        if result.written:
-            exported = True
-            reason = result.reason
-            self._last_source_bar_end_epoch = float(row["source_bar_end_epoch"])
-            self._last_session_date = str(row["session_date"])
-            self._last_run_id = str(result.row.get("run_id") if result.row else "")
-        else:
+        if not result.written:
             self._write_failures += 1
             if result.reason == "WRITE_FAILED":
                 self._dropped_evidence_writes += 1
-            reason = result.reason
-            logger.warning(
-                "market_event_graph_live_source_write_failed reason=%s details=%s",
-                result.reason,
-                ",".join(result.details),
-            )
-        latency_ms["total"] = (time.perf_counter() - t0) * 1000.0
+            logger.warning("market_event_graph_live_source_write_failed reason=%s details=%s", result.reason, ",".join(result.details))
+            return self._reject(result.reason, latency_ms=latency_ms, audit=subscription)
+
+        self._last_source_bar_end_epoch = float(row["source_bar_end_epoch"])
+        self._last_session_date = str(row["session_date"])
         return LiveSourceBridgeResult(
-            attempted=attempted,
-            exported=exported,
-            reason=reason,
+            attempted=True,
+            exported=True,
+            reason=result.reason,
             latency_ms=latency_ms,
-            accepted_constituent_count=len(snapshot.get("constituent_bars") or []),
-            missing_constituents=tuple(snapshot.get("missing_constituents") or ()),
-            audit=self._audit_payload(),
+            accepted_constituent_count=len(contract.constituents),
+            audit=self._audit_payload(subscription),
         )
 
     def flush(self) -> dict[str, Any]:
+        payload = self._audit_payload({})
+        payload["flushed"] = True
+        return payload
+
+    def _load_universe_contract(self) -> tuple[LiveUniverseContract | None, str]:
+        raw = dict(self._explicit_universe_contract or {})
+        if not raw:
+            path_text = str(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", "") or "").strip()
+            if not path_text:
+                return None, LIVE_UNIVERSE_NOT_CONFIGURED
+            path = Path(path_text)
+            if not path.exists():
+                return None, BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                return None, BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
+        try:
+            constituents = tuple(
+                {"symbol": str(row["symbol"]).upper(), "instrument_token": int(row["instrument_token"])}
+                for row in raw.get("constituents", [])
+            )
+            contract = LiveUniverseContract(
+                name=str(raw["name"]),
+                version=str(raw["version"]),
+                effective_date=str(raw["effective_date"]),
+                index_symbol=str(raw["index_symbol"]).upper(),
+                index_instrument_token=int(raw["index_instrument_token"]),
+                constituents=constituents,
+                source_provenance=str(raw["source_provenance"]),
+                capture_session_id=str(raw["capture_session_id"]),
+                canonical_sha256=str(raw["canonical_sha256"]),
+            )
+        except Exception:
+            return None, BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
+        if len(contract.constituents) < int(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_MIN_CONSTITUENTS", 40)):
+            return None, BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
+        if len(set(contract.constituent_symbols)) != len(contract.constituent_symbols):
+            return None, BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
+        if contract.canonical_sha256 != canonical_live_universe_sha256(contract):
+            return None, BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
+        return contract, "OK"
+
+    def _subscription_evidence(self, contract: LiveUniverseContract) -> dict[str, Any]:
+        if self._subscription_evidence_provider is not None:
+            return dict(self._subscription_evidence_provider(contract) or {})
+        symbols = [contract.index_symbol, *contract.constituent_symbols]
+        token_by_symbol = {symbol: self._resolve_token(symbol) for symbol in symbols}
         return {
-            "flushed": True,
-            "write_failures": self._write_failures,
-            "dropped_evidence_writes": self._dropped_evidence_writes,
-            "max_queue_high_water_mark": self._max_queue_depth,
-            "last_source_bar_end_epoch": self._last_source_bar_end_epoch,
-            "last_session_date": self._last_session_date,
-            "last_run_id": self._last_run_id,
-            "read_only": True,
-            "is_order_action": False,
-            "broker_api_called": False,
-            "allowed_for_live_execution": False,
+            "subscription_evidence_id": "",
+            "token_resolved_symbols": [symbol for symbol, token in token_by_symbol.items() if token is not None],
+            "subscription_requested_symbols": [],
+            "subscription_callback_applied_symbols": [],
+            "mode_applied_symbols": [],
+            "live_tick_observed_symbols": [],
+            "completed_bar_available_symbols": [],
+            "token_by_symbol": token_by_symbol,
         }
+
+    def _validate_subscription_evidence(
+        self,
+        contract: LiveUniverseContract,
+        evidence: Mapping[str, Any],
+    ) -> tuple[bool, str, tuple[str, ...]]:
+        required = tuple([contract.index_symbol, *contract.constituent_symbols])
+        rejected: list[str] = []
+        if not str(evidence.get("subscription_evidence_id") or "").strip():
+            return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, required
+        for field in (
+            "token_resolved_symbols",
+            "subscription_requested_symbols",
+            "subscription_callback_applied_symbols",
+            "mode_applied_symbols",
+            "live_tick_observed_symbols",
+        ):
+            observed = tuple(str(symbol).upper() for symbol in evidence.get(field, []) or [])
+            if observed != required:
+                missing = [symbol for symbol in required if symbol not in set(observed)]
+                rejected.extend(missing)
+                return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(dict.fromkeys(rejected))
+        return True, "OK", ()
 
     def _assemble_snapshot(
         self,
-        snapshot_rows: Sequence[Mapping[str, Any]],
+        contract: LiveUniverseContract,
+        subscription: Mapping[str, Any],
         *,
         cycle_cutoff: datetime,
-    ) -> dict[str, Any] | None:
-        index_symbol = str(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_INDEX_SYMBOL", "NIFTY") or "NIFTY").upper()
-        constituent_symbols = self._resolve_constituent_symbols(snapshot_rows, index_symbol=index_symbol)
-        if not constituent_symbols:
-            return None
-        index_bar = self._completed_bar_for(index_symbol, cycle_cutoff=cycle_cutoff)
+    ) -> tuple[dict[str, Any] | None, str, tuple[str, ...]]:
+        index_bar = self._completed_bar_for(contract.index_symbol, cycle_cutoff=cycle_cutoff)
         if index_bar is None:
-            return None
+            return None, SNAPSHOT_INCOMPLETE, (contract.index_symbol,)
+        index_end = _bar_end_epoch(index_bar)
+        if index_end is None:
+            return None, INDEX_INTERVAL_MISALIGNED, (contract.index_symbol,)
+        if not _bar_has_live_provenance(index_bar):
+            return None, LIVE_BAR_PROVENANCE_UNPROVEN, (contract.index_symbol,)
 
         constituent_bars: list[dict[str, Any]] = []
-        missing: list[str] = []
-        stale: list[str] = []
-        misaligned: list[str] = []
-        late: list[str] = []
-        duplicate: list[str] = []
-        source_end: float | None = None
-        session_date = str(
-            getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_SESSION_DATE", "")
-            or self._session_date_from_bar(index_bar)
-            or cycle_cutoff.date().isoformat()
-        )
-        for symbol in constituent_symbols:
+        for spec in contract.constituents:
+            symbol = str(spec["symbol"]).upper()
             bar = self._completed_bar_for(symbol, cycle_cutoff=cycle_cutoff)
-            token = get_token_for_symbol(symbol)
             if bar is None:
-                missing.append(symbol)
-                continue
-            bar_source_end = self._safe_epoch(bar.get("ts"))
-            if source_end is None:
-                source_end = bar_source_end
-            elif bar_source_end != source_end:
-                misaligned.append(symbol)
-                continue
-            if self._safe_epoch(bar.get("ts")) is None:
-                late.append(symbol)
-                continue
+                return None, SNAPSHOT_INCOMPLETE, (symbol,)
+            end_epoch = _bar_end_epoch(bar)
+            if end_epoch != index_end:
+                return None, INDEX_INTERVAL_MISALIGNED, (symbol,)
+            if not _bar_has_live_provenance(bar):
+                return None, LIVE_BAR_PROVENANCE_UNPROVEN, (symbol,)
             bar = dict(bar)
             bar["symbol"] = symbol
-            bar["instrument_token"] = token
+            bar["instrument_token"] = int(spec["instrument_token"])
+            bar["source_bar_end_epoch"] = float(index_end)
             bar["completed"] = True
             constituent_bars.append(bar)
 
-        if missing or misaligned or late or duplicate:
-            return None
-        if source_end is None:
-            return None
+        if self._last_source_bar_end_epoch is not None and float(index_end) <= float(self._last_source_bar_end_epoch):
+            return None, "DUPLICATE_INTERVAL", ()
+        if float(index_end) > float(cycle_cutoff.timestamp()):
+            return None, "FUTURE_SOURCE_BAR", ()
 
-        runtime_source_identifier = self._runtime_source_identifier(index_symbol, constituent_symbols)
-        ts_epoch = float(cycle_cutoff.timestamp())
-        interval_end = cycle_cutoff.isoformat()
-        return {
-            "session_date": session_date,
-            "symbol": index_symbol,
-            "interval_end": interval_end,
-            "ts_epoch": ts_epoch,
-            "source_bar_end_epoch": float(source_end),
-            "index_bar": dict(index_bar),
-            "constituent_bars": constituent_bars,
-            "expected_constituents": len(constituent_symbols),
-            "run_id": self._last_run_id or f"meg-live-source-{int(ts_epoch)}",
-            "runtime_source_identifier": runtime_source_identifier,
-            "missing_constituents": missing,
-            "stale_constituents": stale,
-            "duplicate_constituents": duplicate,
-            "misaligned_constituents": misaligned,
-            "late_constituents": late,
-            "duplicate_interval": False,
-            "subscription_evidence": self._subscription_evidence(constituent_symbols, index_symbol=index_symbol),
-            "market_event_graph_runtime_state": {
-                "session_date": session_date,
-                "source": "live_runtime_bridge",
+        source_dt = datetime.fromtimestamp(float(index_end), tz=IST_TZ)
+        return (
+            {
+                "session_date": source_dt.date().isoformat(),
+                "interval_end": source_dt.isoformat(),
+                "source_bar_end_epoch": float(index_end),
+                "index_source_bar_end_epoch": float(index_end),
+                "observed_at_epoch": float(cycle_cutoff.timestamp()),
+                "index_bar": {**dict(index_bar), "source_bar_end_epoch": float(index_end), "instrument_token": contract.index_instrument_token, "completed": True},
+                "constituent_bars": constituent_bars,
+                "subscription": dict(subscription),
             },
-            "market_event_graph_thresholds": {},
-        }
+            "OK",
+            (),
+        )
 
     def _completed_bar_for(self, symbol: str, *, cycle_cutoff: datetime) -> dict[str, Any] | None:
         bars = ohlc_buffer.get_completed_bars(symbol, as_of=cycle_cutoff)
         if not bars:
             return None
         latest = dict(bars[-1])
-        ts = latest.get("ts")
-        if not isinstance(ts, datetime):
+        if not isinstance(latest.get("ts"), datetime):
             return None
-        latest["ts"] = ts
         return latest
-
-    def _resolve_constituent_symbols(
-        self,
-        snapshot_rows: Sequence[Mapping[str, Any]],
-        *,
-        index_symbol: str,
-    ) -> list[str]:
-        configured = [str(sym).upper() for sym in getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_CONSTITUENT_SYMBOLS", []) if str(sym).strip()]
-        if configured:
-            return list(dict.fromkeys(configured))
-        if snapshot_rows:
-            inferred = [str(row.get("symbol") or "").upper() for row in snapshot_rows if str(row.get("symbol") or "").strip()]
-            inferred = [sym for sym in inferred if sym != index_symbol]
-            if inferred:
-                return list(dict.fromkeys(inferred))
-        return [str(sym).upper() for sym in getattr(cfg, "SYMBOLS", []) if str(sym).strip() and str(sym).upper() != index_symbol]
-
-    def _runtime_source_identifier(self, index_symbol: str, constituents: Sequence[str]) -> str:
-        payload = {
-            "index_symbol": index_symbol,
-            "constituent_symbols": list(constituents),
-            "session_date": self._last_session_date or "",
-        }
-        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
-
-    def _subscription_evidence(self, constituents: Sequence[str], *, index_symbol: str) -> dict[str, Any]:
-        requested = {index_symbol: self._resolve_token(index_symbol)}
-        for sym in constituents:
-            requested[sym] = self._resolve_token(sym)
-        accepted = {sym: token for sym, token in requested.items() if token is not None}
-        rejected = [sym for sym, token in requested.items() if token is None]
-        return {
-            "requested_count": len(requested),
-            "accepted_count": len(accepted),
-            "rejected_count": len(rejected),
-            "missing_identities": rejected,
-            "token_by_symbol": accepted,
-            "callback_applied": bool(accepted),
-            "mode_applied": bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)),
-        }
 
     def _resolve_token(self, symbol: str) -> int | None:
         try:
@@ -294,29 +321,141 @@ class LiveSourceRuntimeBridge:
         except Exception:
             return None
 
-    def _session_date_from_bar(self, bar: Mapping[str, Any]) -> str | None:
-        value = str(bar.get("session_date") or "").strip()
-        return value or None
-
-    def _safe_epoch(self, value: Any) -> float | None:
-        try:
-            return float(value.timestamp()) if hasattr(value, "timestamp") else float(value)
-        except Exception:
-            return None
-
-    def _audit_payload(self) -> dict[str, Any]:
-        return {
-            "attempted": True,
-            "export_path": str(self.exporter.path),
-            "last_source_bar_end_epoch": self._last_source_bar_end_epoch,
-            "write_failures": self._write_failures,
-            "dropped_evidence_writes": self._dropped_evidence_writes,
-            "max_queue_high_water_mark": self._max_queue_depth,
+    def _reject(
+        self,
+        reason: str,
+        *,
+        latency_ms: Mapping[str, float],
+        identities: Sequence[str] = (),
+        audit: Mapping[str, Any] | None = None,
+    ) -> LiveSourceBridgeResult:
+        row = {
+            "reason": str(reason),
+            "affected_identities": [str(item) for item in identities],
+            "ts_epoch": time.time(),
             "read_only": True,
             "is_order_action": False,
             "broker_api_called": False,
             "allowed_for_live_execution": False,
         }
+        self._diagnostics.append(row)
+        logger.warning("market_event_graph_live_source_rejected reason=%s identities=%s", reason, ",".join(row["affected_identities"]))
+        return LiveSourceBridgeResult(
+            attempted=True,
+            exported=False,
+            reason=str(reason),
+            latency_ms=dict(latency_ms),
+            rejected_identities=tuple(row["affected_identities"]),
+            missing_constituents=tuple(row["affected_identities"]),
+            audit=self._audit_payload(audit or {}),
+        )
+
+    def _audit_payload(self, subscription: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "export_path": str(self.exporter.path),
+            "last_source_bar_end_epoch": self._last_source_bar_end_epoch,
+            "last_session_date": self._last_session_date,
+            "write_failures": self._write_failures,
+            "dropped_evidence_writes": self._dropped_evidence_writes,
+            "max_queue_high_water_mark": self._max_queue_depth,
+            "diagnostic_count": len(self._diagnostics),
+            "latest_diagnostic": dict(self._diagnostics[-1]) if self._diagnostics else None,
+            "subscription_evidence": dict(subscription or {}),
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+        }
+
+
+def canonical_live_universe_sha256(contract: LiveUniverseContract | Mapping[str, Any]) -> str:
+    if isinstance(contract, LiveUniverseContract):
+        payload = {
+            "name": contract.name,
+            "version": contract.version,
+            "effective_date": contract.effective_date,
+            "index_symbol": contract.index_symbol,
+            "index_instrument_token": contract.index_instrument_token,
+            "constituents": list(contract.constituents),
+            "source_provenance": contract.source_provenance,
+            "capture_session_id": contract.capture_session_id,
+        }
+    else:
+        payload = {
+            "name": str(contract.get("name") or ""),
+            "version": str(contract.get("version") or ""),
+            "effective_date": str(contract.get("effective_date") or ""),
+            "index_symbol": str(contract.get("index_symbol") or "").upper(),
+            "index_instrument_token": int(contract.get("index_instrument_token") or 0),
+            "constituents": [
+                {"symbol": str(row.get("symbol") or "").upper(), "instrument_token": int(row.get("instrument_token") or 0)}
+                for row in contract.get("constituents", []) or []
+            ],
+            "source_provenance": str(contract.get("source_provenance") or ""),
+            "capture_session_id": str(contract.get("capture_session_id") or ""),
+        }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def build_live_constituent_subscription_audit() -> dict[str, Any]:
+    bridge = LiveSourceRuntimeBridge()
+    contract, reason = bridge._load_universe_contract()
+    if contract is None:
+        return {
+            "verdict": reason,
+            "callback_applied_status": "UNPROVEN",
+            "mode_applied_status": "UNPROVEN",
+            "completed_bar_availability_status": "UNPROVEN",
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+        }
+    evidence = bridge._subscription_evidence(contract)
+    ok, sub_reason, rejected = bridge._validate_subscription_evidence(contract, evidence)
+    return {
+        "verdict": "SUBSCRIPTION_EVIDENCE_READY" if ok else sub_reason,
+        "universe_name": contract.name,
+        "universe_version": contract.version,
+        "universe_hash": contract.canonical_sha256,
+        "requested_count": len([contract.index_symbol, *contract.constituent_symbols]),
+        "callback_applied_status": "APPLIED" if ok else "UNPROVEN",
+        "mode_applied_status": "APPLIED" if ok else "UNPROVEN",
+        "missing_or_unapplied_identities": list(rejected),
+        "subscription_evidence": dict(evidence),
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+    }
+
+
+def _bar_end_epoch(bar: Mapping[str, Any], interval_seconds: int = 60) -> float | None:
+    ts = bar.get("source_bar_end_epoch")
+    if ts is not None:
+        try:
+            return float(ts)
+        except Exception:
+            return None
+    start = bar.get("ts")
+    if not isinstance(start, datetime):
+        return None
+    return float((start + timedelta(seconds=interval_seconds)).timestamp())
+
+
+def _bar_has_live_provenance(bar: Mapping[str, Any]) -> bool:
+    prov = bar.get("bar_provenance")
+    if not isinstance(prov, Mapping):
+        return False
+    if str(prov.get("source_type") or "").lower() not in {"live_websocket", "tick_store_live"}:
+        return False
+    if not str(prov.get("live_feed_session_id") or "").strip():
+        return False
+    if bool(prov.get("historical_seed")) or bool(prov.get("replay_fixture")):
+        return False
+    if bool(prov.get("non_live_fallback")) or bool(prov.get("recovered_synthetic")):
+        return False
+    return prov.get("first_live_tick_epoch") is not None and prov.get("last_live_tick_epoch") is not None
 
 
 _LIVE_SOURCE_BRIDGE: LiveSourceRuntimeBridge | None = None
@@ -344,50 +483,27 @@ def flush_live_source_bridge() -> dict[str, Any]:
     return _LIVE_SOURCE_BRIDGE.flush()
 
 
-def build_live_constituent_subscription_audit() -> dict[str, Any]:
-    index_symbol = str(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_INDEX_SYMBOL", "NIFTY") or "NIFTY").upper()
-    constituent_symbols = [
-        str(sym).upper()
-        for sym in getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_CONSTITUENT_SYMBOLS", []) or []
-        if str(sym).strip()
-    ] or [str(sym).upper() for sym in getattr(cfg, "SYMBOLS", []) if str(sym).strip() and str(sym).upper() != index_symbol]
-    token_by_symbol = {sym: get_token_for_symbol(sym) for sym in [index_symbol, *constituent_symbols]}
-    accepted = {sym: token for sym, token in token_by_symbol.items() if token is not None}
-    rejected = [sym for sym, token in token_by_symbol.items() if token is None]
-    return {
-        "index_symbol": index_symbol,
-        "constituent_symbols": constituent_symbols,
-        "requested_count": len(token_by_symbol),
-        "accepted_count": len(accepted),
-        "rejected_count": len(rejected),
-        "missing_identities": rejected,
-        "token_by_symbol": token_by_symbol,
-        "callback_applied_status": "UNPROVEN_IN_STATIC_AUDIT",
-        "mode_applied_status": "UNPROVEN_IN_STATIC_AUDIT",
-        "completed_bar_availability_status": "UNPROVEN_IN_STATIC_AUDIT",
-        "evidence_source": "code_inspection_only",
-        "read_only": True,
-        "is_order_action": False,
-        "broker_api_called": False,
-        "allowed_for_live_execution": False,
-    }
-
-
 def _flush_at_exit() -> None:
     try:
         if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_FLUSH_ON_SHUTDOWN", True)):
             flush_live_source_bridge()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("market_event_graph_live_source_shutdown_flush_failed err=%s", type(exc).__name__)
 
 
 atexit.register(_flush_at_exit)
 
 
 __all__ = [
+    "BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE",
+    "BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION",
+    "LIVE_BAR_PROVENANCE_UNPROVEN",
+    "LIVE_UNIVERSE_NOT_CONFIGURED",
     "LiveSourceBridgeResult",
     "LiveSourceRuntimeBridge",
+    "LiveUniverseContract",
     "build_live_constituent_subscription_audit",
+    "canonical_live_universe_sha256",
     "flush_live_source_bridge",
     "get_live_source_bridge",
 ]

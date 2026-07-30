@@ -1,73 +1,74 @@
 # Live Constituent Subscription Audit
 
-This audit is code-based and read-only. It documents the runtime bridge added in this PR and the current evidence boundary. It does not claim live subscription truth that the process has not observed.
+Verdict: `BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE`
 
-## Exact files and functions
+This audit is read-only. The repaired bridge no longer infers a live certification universe from `snapshot_rows`, `cfg.SYMBOLS`, token lookup, or sample replay manifests. Without a versioned authoritative live-universe contract at `MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH`, no accepted live-source row can be exported.
+
+## Runtime Integration
 
 - `core/market_data.py`
-  - `fetch_live_market_data()`: opt-in bridge hook added at the end of the live data cycle.
+  - `fetch_live_market_data()` calls `core.market_event_graph_live_runtime_bridge.get_live_source_bridge().observe_cycle(...)` only when `MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE=true`.
 - `core/market_event_graph_live_runtime_bridge.py`
-  - `LiveSourceRuntimeBridge.observe_cycle()`
-  - `LiveSourceRuntimeBridge._assemble_snapshot()`
-  - `build_live_constituent_subscription_audit()`
-  - `flush_live_source_bridge()`
-  - `get_live_source_bridge()`
+  - `LiveSourceRuntimeBridge.observe_cycle()` enforces live-universe, subscription, interval-alignment, and provenance truth before writing.
+  - `build_live_constituent_subscription_audit()` reports unresolved universe or unapplied subscription evidence without claiming success.
 - `core/market_event_graph_live_source.py`
-  - `LiveCapturedMetadataExporter`
-  - `build_live_captured_metadata_row()`
-  - `validate_live_captured_metadata_row()`
-- `core/kite_depth_ws.py`
-  - `_begin_option_feed_verification()`
-  - `_option_feed_verification_overlay_payload()`
-  - `_tick_option_feed_verification()`
+  - `validate_live_captured_metadata_row()` now checks expected identities and universe hash, not only count equality.
+- `core/ohlc_buffer.py`
+  - `update_tick(..., provenance=...)` preserves live/historical provenance on bars.
+  - `seed_bars()` marks historical seed provenance so seeded bars cannot certify live evidence.
 
-## Exact runtime integration point
+## Universe Contract Status
 
-- `fetch_live_market_data()` now performs an opt-in call to `get_live_source_bridge().observe_cycle(...)` after the symbol loop completes.
-- The bridge is disabled by default through `MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE=false`.
-- The bridge is advisory only and does not affect market-data return values, strategy decisions, execution, or risk.
+- Required source: `MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH`
+- Required fields: universe name, version, effective date, index symbol/token, ordered constituents/tokens, expected count, canonical SHA-256, source provenance, capture session ID.
+- Current repository/runtime status: no authoritative live NIFTY constituent contract is configured in this PR.
+- Requested count: `0`
+- Applied count: `0`
+- Missing identities: all certification identities are unresolved until the authoritative contract is supplied.
+- Evidence source: code inspection and local tests only.
 
-## Exact universe identities
+## Subscription Truth Status
 
-- Index symbol source: `MARKET_EVENT_GRAPH_LIVE_SOURCE_INDEX_SYMBOL` default `NIFTY`
-- Constituent symbol source:
-  - `MARKET_EVENT_GRAPH_LIVE_SOURCE_CONSTITUENT_SYMBOLS` when explicitly configured
-  - otherwise `cfg.SYMBOLS` excluding the index symbol
+Token resolution is not subscription proof. A row is rejected unless the runtime subscription evidence has the exact ordered set for:
 
-## Exact instrument tokens
+- token resolved;
+- subscription requested;
+- subscription callback acknowledged/applied;
+- mode applied;
+- live tick observed.
 
-- Token identity is resolved via `core.market_data.get_token_for_symbol()`.
-- The bridge records token presence in `subscription_evidence.token_by_symbol`.
-- The current static audit cannot prove live acceptance or callback application without runtime execution.
+Current status:
 
-## Requested, accepted, rejected
+- callback-applied status: `UNPROVEN`
+- mode-applied status: `UNPROVEN`
+- completed-bar availability status: `UNPROVEN`
+- live tick provenance status: `UNPROVEN`
+- subscription evidence ID: unavailable without a live runtime session.
 
-- Requested count: computed from index symbol plus resolved constituent symbols.
-- Accepted count: symbol/token pairs whose tokens resolve non-null.
-- Rejected count: symbols whose tokens do not resolve.
+Failure reason when token resolution exists but callback/mode/tick proof is missing: `BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION`.
 
-## Callback-applied status
+## Interval And Provenance Truth
 
-- Current status: `UNPROVEN_IN_STATIC_AUDIT`
-- Evidence source: the repository does not yet contain a live execution log for the new bridge path.
+Accepted rows must use the completed source interval end as `interval_end` and `source_bar_end_epoch`. Observation time remains separate as `observed_at_epoch` / `ts_epoch`. The index bar and every constituent bar must share the same source interval boundary.
 
-## Mode-applied status
+Accepted bars must prove:
 
-- Current status: `UNPROVEN_IN_STATIC_AUDIT`
-- Evidence source: the bridge is opt-in and mode-gated by config only.
+- source type is `live_websocket` or `tick_store_live`;
+- live feed session ID is present;
+- first and last contributing live tick timestamps are present;
+- not historical seed;
+- not replay;
+- not non-live fallback;
+- not recovered synthetic data.
 
-## Completed-bar availability status
+Failure reason when this is missing: `LIVE_BAR_PROVENANCE_UNPROVEN`.
 
-- Current status: `UNPROVEN_IN_STATIC_AUDIT`
-- Evidence source: the bridge queries `ohlc_buffer.get_completed_bars(symbol, as_of=cycle_cutoff)` and rejects incomplete or misaligned snapshots, but no live session has been captured through the path yet.
+## Safety Boundary
 
-## Evidence source for every conclusion
+- read_only=true
+- is_order_action=false
+- broker_api_called=false
+- allowed_for_live_execution=false
+- normal runtime continues when evidence capture rejects or writer fails.
 
-- Code inspection of the files listed above.
-- Existing partial-session artifacts under `research/market_event_graph_live_shadow_v1/live_20260730_partial_103840_ist/` show Stage A remained `INSUFFICIENT_LIVE_BREADTH_EVIDENCE` before the bridge existed.
-- No live capture file was observed in the runtime path at the time of this audit.
-
-## Operational note
-
-The bridge is intentionally fail-closed for evidence capture. If it cannot assemble a complete synchronized snapshot, it exports nothing and leaves the primary runtime unchanged.
-
+Stage A remains `INSUFFICIENT_LIVE_BREADTH_EVIDENCE`. Stage B remains `PASS_GRAPH_FORWARD_SHADOW_CORRECTNESS`.

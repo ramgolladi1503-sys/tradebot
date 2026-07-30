@@ -2680,7 +2680,21 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             continue
         try:
             if ltp and ltp > 0:
-                ohlc_buffer.update_tick(symbol, ltp, volume=None, ts=cycle_cutoff)
+                live_source_type = "tick_store_live" if str(ltp_source) == "tick_store" else ("live_websocket" if str(ltp_source) == "live" else "unknown")
+                ohlc_buffer.update_tick(
+                    symbol,
+                    ltp,
+                    volume=None,
+                    ts=cycle_cutoff,
+                    provenance={
+                        "source_type": live_source_type,
+                        "live_feed_session_id": os.getenv("LIVE_FEED_SESSION_ID", ""),
+                        "historical_seed": False,
+                        "replay_fixture": False,
+                        "non_live_fallback": False,
+                        "recovered_synthetic": False,
+                    },
+                )
         except Exception:
             pass
         vwap = ltp
