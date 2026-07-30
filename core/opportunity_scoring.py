@@ -247,6 +247,51 @@ def score_opportunities(
     )
 
 
+def _regime_policy_inputs(candidate: StrategyCandidate) -> dict[str, Any]:
+    """Resolve canonical regime-policy inputs from candidate evidence.
+
+    The resolver supports the legacy nested ``entropy_state`` object and the
+    explicit Regime Robustness V1 fields. It does not invent missing evidence.
+    """
+    evidence = dict(candidate.evidence or {})
+    nested_entropy = evidence.get("entropy_state")
+    if isinstance(nested_entropy, Mapping):
+        raw_entropy = nested_entropy.get("current_value")
+        normalized_entropy = nested_entropy.get("normalized")
+        entropy_state = nested_entropy.get("state")
+    else:
+        raw_entropy = evidence.get("regime_entropy", evidence.get("entropy_value", 0.0))
+        normalized_entropy = evidence.get(
+            "regime_entropy_normalized",
+            evidence.get("normalized_entropy", 0.0),
+        )
+        entropy_state = evidence.get(
+            "regime_entropy_state",
+            nested_entropy if nested_entropy is not None else "UNKNOWN",
+        )
+
+    stable_raw = evidence.get("stable_regime_confirmed")
+    stable_regime = stable_raw if isinstance(stable_raw, bool) else None
+    trend_state = (
+        evidence.get("trend_state")
+        or evidence.get("stable_regime")
+        or evidence.get("primary_regime")
+        or "UNKNOWN"
+    )
+    return {
+        "session_bucket": evidence.get("session_bucket", "DEFAULT"),
+        "entropy_value": raw_entropy if raw_entropy is not None else 0.0,
+        "normalized_entropy": normalized_entropy if normalized_entropy is not None else 0.0,
+        "entropy_state": entropy_state or "UNKNOWN",
+        "trend_state": trend_state,
+        "volume_impulse": bool(evidence.get("volume_impulse", False)),
+        "liquidity_quality": evidence.get("liquidity_quality", "UNKNOWN"),
+        "is_expiry_day": bool(evidence.get("is_expiry_day", False)),
+        "regime_status": evidence.get("regime_status"),
+        "stable_regime": stable_regime,
+    }
+
+
 def score_candidate(
     candidate: StrategyCandidate,
     decision: HardDowngradeDecision,
@@ -263,20 +308,13 @@ def score_candidate(
         raise ValueError("candidate_and_downgrade_strategy_id_mismatch")
 
     from core.strategy_regime_policy import evaluate_strategy_regime_policy
-    evidence = candidate.evidence or {}
-    entropy_state = evidence.get("entropy_state")
-    entropy_value = entropy_state.get("current_value", 0.0) if isinstance(entropy_state, dict) else 0.0
-    normalized_entropy = entropy_state.get("normalized", 0.0) if isinstance(entropy_state, dict) else 0.0
-    entropy_state_str = entropy_state.get("state", "UNKNOWN") if isinstance(entropy_state, dict) else str(entropy_state) if entropy_state else "UNKNOWN"
 
+    policy_inputs = _regime_policy_inputs(candidate)
     volatility_expansion = (candidate.regime_scores or {}).get("VOLATILITY_EXPANSION", 0.0) > 0.5
     policy_output = evaluate_strategy_regime_policy(
         strategy=candidate.strategy_id,
-        session_bucket=evidence.get("session_bucket", "DEFAULT"),
-        entropy_value=entropy_value,
-        normalized_entropy=normalized_entropy,
-        entropy_state=entropy_state_str,
         volatility_expansion=volatility_expansion,
+        **policy_inputs,
     )
 
     policy_result = policy_output.get("policy_result", "ELIGIBLE")
