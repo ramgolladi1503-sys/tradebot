@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "source": "google_drive",
+  "synthetic": false,
+  "mock": false,
+  "fallback": false,
+  "files": [
+    {
+      "fixture_name": "NIFTY_20250521.parquet",
+      "original_name": "NIFTY_20250521.parquet",
+      "size_bytes": 27716,
+      "sha256": "d6e713e50c0fed55f354dc4000bc7a2efcdd5dcf0cf185aaeaef1af77cde91dd",
+      "google_drive_file_id": "19mD1K8kKVOK47r6pkhIBlZ7UZ43mN08k",
+      "session_date": "20250521",
+      "source_folder": "upstox_candidate_replay/20250521/underlying",
+      "data_origin": "upstox_api",
+      "provider": "upstox"
+    }
+  ]
+}
