@@ -1,4 +1,4 @@
-"""Explicit separation of execution, UI and research ranking authorities."""
+"""Explicit separation of execution-selection, UI and research ranking authorities."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,7 +7,7 @@ from typing import Iterable
 
 
 class RankingAuthority(str, Enum):
-    EXECUTION = "EXECUTION"
+    EXECUTION_SELECTION = "EXECUTION_SELECTION"
     UI_ONLY = "UI_ONLY"
     RESEARCH_ONLY = "RESEARCH_ONLY"
     UNKNOWN_PENDING_PROOF = "UNKNOWN_PENDING_PROOF"
@@ -26,9 +26,9 @@ DEFAULT_RANKING_ENGINES: tuple[RankingEngineRecord, ...] = (
     RankingEngineRecord(
         "legacy_opportunity_engine",
         "core.opportunity_engine",
-        "annotate_ranked_opportunities",
-        RankingAuthority.UNKNOWN_PENDING_PROOF,
-        "Imported by TradeBuilder; exact execution-intent authority requires runtime call-path proof.",
+        "select_best_opportunity",
+        RankingAuthority.EXECUTION_SELECTION,
+        "TradeBuilder selects best_trade from ranked candidates and Orchestrator sends that trade through risk, manual approval, execution guard and ExecutionRouter.",
     ),
     RankingEngineRecord(
         "canonical_ranked_opportunity_pipeline",
@@ -42,7 +42,7 @@ DEFAULT_RANKING_ENGINES: tuple[RankingEngineRecord, ...] = (
         "core.runtime_snapshot_producer",
         "produce_and_store_runtime_snapshots",
         RankingAuthority.UI_ONLY,
-        "Projects ranked records into dashboard/evidence snapshots.",
+        "Projects ranked records into dashboard and evidence snapshots.",
     ),
 )
 
@@ -56,7 +56,9 @@ def validate_ranking_authorities(
     errors: list[str] = []
     if len({row.engine_id for row in rows}) != len(rows):
         errors.append("duplicate_ranking_engine_id")
-    execution = [row for row in rows if row.authority is RankingAuthority.EXECUTION]
+    execution = [
+        row for row in rows if row.authority is RankingAuthority.EXECUTION_SELECTION
+    ]
     if len(execution) > 1:
         errors.append("multiple_execution_ranking_authorities")
     if require_execution_authority and len(execution) != 1:
@@ -71,14 +73,19 @@ def resolve_execution_ranking_authority(
     errors = validate_ranking_authorities(rows, require_execution_authority=True)
     if errors:
         raise RuntimeError(";".join(errors))
-    return next(row for row in rows if row.authority is RankingAuthority.EXECUTION)
+    return next(
+        row for row in rows if row.authority is RankingAuthority.EXECUTION_SELECTION
+    )
 
 
 def assert_ui_rankings_non_executable(
     engines: Iterable[RankingEngineRecord] = DEFAULT_RANKING_ENGINES,
 ) -> None:
     for row in engines:
-        if row.authority is RankingAuthority.UI_ONLY and row.engine_id == "legacy_opportunity_engine":
+        if (
+            row.authority is RankingAuthority.UI_ONLY
+            and row.engine_id == "legacy_opportunity_engine"
+        ):
             raise AssertionError("legacy_execution_candidate_misclassified_as_ui_only")
 
 
