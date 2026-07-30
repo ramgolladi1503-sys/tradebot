@@ -116,6 +116,14 @@ legacy runtime
 -> no runtime promotion in this PR
 ```
 
+## GSD Review
+
+Verdict: PASS
+
+The implementation is split into independently testable contracts rather than a
+large rewrite. Each stage has one acceptance boundary, and any unknown execution
+or ranking authority fails closed. The working feed remains outside the change set.
+
 ## QA / Safety Review
 
 Focused coverage includes:
@@ -140,6 +148,63 @@ Standalone pre-publication result:
 ```
 
 The repository-dependent checks run in GitHub Actions against the complete checkout.
+
+## Acceptance Proof
+
+Required focused command:
+
+```bash
+PYTHONPATH=. DISABLE_ML=true python -m pytest -q \
+  tests/test_canonical_execution_decision.py \
+  tests/test_runtime_authority_contract.py \
+  tests/test_trade_builder_characterization.py \
+  tests/test_orchestration_stage_pipeline.py \
+  tests/test_ranking_authority.py \
+  tests/test_orchestrator_shadowing_audit.py \
+  tests/test_runtime_hardening_campaign.py \
+  tests/test_runtime_authority_hardening_audit.py
+```
+
+Required audit command:
+
+```bash
+PYTHONPATH=. DISABLE_ML=true python scripts/audit_runtime_authority_hardening_v1.py \
+  --repo-root . \
+  --base-ref origin/main
+```
+
+Required static checks:
+
+```bash
+python -m py_compile \
+  core/canonical_execution_decision.py \
+  core/runtime_authority_contract.py \
+  core/trade_builder_characterization.py \
+  core/orchestration_stage_pipeline.py \
+  core/ranking_authority.py \
+  core/orchestrator_shadowing_audit.py \
+  core/runtime_hardening_campaign.py \
+  scripts/audit_runtime_authority_hardening_v1.py
+
+git diff --check
+python scripts/validate_agent_review_evidence.py
+```
+
+Acceptance requires all focused checks, repository gates and the protected feed-path
+audit to pass on the final branch head.
+
+## Runtime Proof Required After Merge
+
+No runtime authority is promoted by this PR. Before a later promotion campaign:
+
+- capture the actual candidate-to-risk-to-intent call path from the production loop;
+- run TradeBuilder characterization twice on frozen real snapshots and prove exact hashes;
+- compare legacy and canonical execution decisions with zero unsafe mismatches;
+- identify exactly one execution-ranking authority or retain fail-closed no-authority status;
+- run the extracted stage kernel in shadow beside the legacy cycle;
+- prove critical and noncritical fault behavior in supervised PAPER mode;
+- leave feed, WebSocket, recovery and subscription code unchanged unless a separately
+  reproduced defect requires its own isolated campaign.
 
 ## What This PR Does Not Prove
 
