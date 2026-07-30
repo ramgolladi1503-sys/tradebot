@@ -84,10 +84,17 @@ jobs:
           pip install -r requirements.txt
           pip install pytest-cov
 
+      - name: Disable automatic compatibility layer for honest coverage
+        run: |
+          mkdir -p .runtime/qa
+          mv sitecustomize.py .runtime/qa/sitecustomize.py.disabled
+          test ! -f sitecustomize.py
+
       - name: Run authentication behavior and branch coverage baseline
         run: >-
           PYTHONPATH=. pytest -q -o addopts=''
           tests/auth/test_auth_manager_behavior_contracts.py
+          tests/auth/test_auth_boundary_exhaustive.py
           tests/auth/test_auth_safety.py
           tests/test_kite_client_auth_guard.py
           tests/test_runtime_auth_freshness.py
@@ -107,6 +114,7 @@ jobs:
           path: |
             .runtime/qa/auth_coverage.json
             .runtime/qa/auth_pytest.xml
+            .runtime/qa/sitecustomize.py.disabled
 
   auth_static_security:
     runs-on: ubuntu-latest
