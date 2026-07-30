@@ -21,6 +21,7 @@ TEST_CLASSES = {
 
 _ORDER_MARKER = "place" + "_order"
 _ASSERT_MARKER = "assert" + " "
+_WEAK_NOT_NONE_NAMES = {"result", "response", "data"}
 
 
 @dataclass(frozen=True)
@@ -99,7 +100,7 @@ def _classify_test_file(repo_root: Path, path: Path) -> TestRealityStatus:
     lowered = source.lower()
     risks = _risk_markers(lowered)
     assertion_count = _assertion_count(source)
-    evidence = []
+    evidence: list[str] = []
 
     if _has_fake_confidence_markers(lowered, source):
         evidence.append("fake_confidence_marker")
@@ -254,17 +255,53 @@ def score_test_strength(
 
 
 def _assertion_count(source: str) -> int:
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
+    tree = _parse_test_tree(source)
+    if tree is None:
         return source.count(_ASSERT_MARKER)
     return sum(1 for node in ast.walk(tree) if isinstance(node, ast.Assert))
 
 
 def _has_fake_confidence_markers(lowered: str, source: str) -> bool:
+    """Return true only for executable weak proof, never fixture/comment text.
+
+    The old implementation searched raw source for fragments such as
+    ``assert len(`` and ``assert True``. That incorrectly classified auditor
+    tests as fake when those strings appeared inside fixture content. AST
+    inspection keeps the gate strict while limiting findings to real test code.
+    """
+
+    tree = _parse_test_tree(source)
+    if tree is None:
+        return _legacy_fake_confidence_fallback(lowered, source)
+
+    assertions = [node for node in ast.walk(tree) if isinstance(node, ast.Assert)]
+    if any(_is_unconditional_true_assert(node) for node in assertions):
+        return True
+
+    if assertions and all(_is_weak_assertion(node) for node in assertions):
+        return True
+
+    if _has_swallowed_exception(tree):
+        return True
+
+    if _has_mocked_order_call_without_firewall(tree):
+        return True
+
+    if len(assertions) == 1 and _is_single_membership_shape_assert(assertions[0]):
+        return True
+    return False
+
+
+def _parse_test_tree(source: str) -> ast.AST | None:
+    try:
+        return ast.parse(source)
+    except SyntaxError:
+        return None
+
+
+def _legacy_fake_confidence_fallback(lowered: str, source: str) -> bool:
     weak_assertions = [
         _ASSERT_MARKER + "true",
-        _ASSERT_MARKER + "len(",
         _ASSERT_MARKER + "result is not none",
         _ASSERT_MARKER + "response is not none",
         _ASSERT_MARKER + "data is not none",
@@ -278,6 +315,75 @@ def _has_fake_confidence_markers(lowered: str, source: str) -> bool:
     if source.count(_ASSERT_MARKER) == 1 and any(marker in lowered for marker in [" in result", " in data", " in report"]):
         return True
     return False
+
+
+def _is_unconditional_true_assert(node: ast.Assert) -> bool:
+    return isinstance(node.test, ast.Constant) and node.test.value is True
+
+
+def _is_weak_assertion(node: ast.Assert) -> bool:
+    test = node.test
+    if isinstance(test, ast.Call):
+        return isinstance(test.func, ast.Name) and test.func.id == "len"
+    if isinstance(test, ast.Compare) and len(test.ops) == 1 and len(test.comparators) == 1:
+        left = test.left
+        right = test.comparators[0]
+        if (
+            isinstance(test.ops[0], ast.IsNot)
+            and isinstance(left, ast.Name)
+            and left.id in _WEAK_NOT_NONE_NAMES
+            and isinstance(right, ast.Constant)
+            and right.value is None
+        ):
+            return True
+    return False
+
+
+def _is_single_membership_shape_assert(node: ast.Assert) -> bool:
+    test = node.test
+    if not isinstance(test, ast.Compare) or len(test.ops) != 1:
+        return False
+    if not isinstance(test.ops[0], ast.In) or len(test.comparators) != 1:
+        return False
+    container = test.comparators[0]
+    return isinstance(container, ast.Name) and container.id in {"result", "data", "report"}
+
+
+def _has_swallowed_exception(tree: ast.AST) -> bool:
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ExceptHandler):
+            continue
+        catches_exception = node.type is None or (
+            isinstance(node.type, ast.Name) and node.type.id in {"Exception", "BaseException"}
+        )
+        if catches_exception and node.body and all(isinstance(item, ast.Pass) for item in node.body):
+            return True
+    return False
+
+
+def _has_mocked_order_call_without_firewall(tree: ast.AST) -> bool:
+    mocked_order_call = False
+    firewall_reference = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id == "broker_api_called":
+            firewall_reference = True
+        elif isinstance(node, ast.Attribute) and node.attr == "broker_api_called":
+            firewall_reference = True
+        if not isinstance(node, ast.Call):
+            continue
+        call_name = _call_name(node.func).lower()
+        if _ORDER_MARKER in call_name and "mock" in call_name:
+            mocked_order_call = True
+    return mocked_order_call and not firewall_reference
+
+
+def _call_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _call_name(node.value)
+        return f"{parent}.{node.attr}" if parent else node.attr
+    return ""
 
 
 def _has_safety_markers(lowered: str) -> bool:
