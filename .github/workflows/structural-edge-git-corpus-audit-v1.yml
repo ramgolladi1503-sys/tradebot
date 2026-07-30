@@ -1,6 +1,9 @@
 name: Structural Edge Git LFS Corpus Audit V1
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - research/structural-edge-git-corpus-audit-v1
