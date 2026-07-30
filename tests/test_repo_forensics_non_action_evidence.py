@@ -189,3 +189,36 @@ def test_non_action_evidence_tracks_baseline_debt_separately(tmp_path):
     assert report.new_regressions == []
     assert report.baseline_debt
     assert report.baseline_debt[0].scope == "baseline_debt"
+
+
+def test_execution_fill_with_mode_is_not_misclassified_as_candidate_decision(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(
+        tmp_path / "evidence" / "events.jsonl",
+        '{"event_type":"EXECUTION_FILL","mode":"PAPER","order_id":"O1",'
+        '"trade_id":"T1","price":101.0,"qty":10,"timestamp":"2026-01-01T00:00:00Z"}\n',
+    )
+    config = load_config(_write_strict_profile(tmp_path))
+
+    report = audit_evidence(tmp_path, config)
+
+    assert report.reviewed_files == 1
+    assert report.findings == []
+
+
+def test_explicit_candidate_event_still_requires_complete_decision_schema(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(
+        tmp_path / "evidence" / "candidate_event.json",
+        '{"event_type":"CANDIDATE_DECISION","mode":"PAPER","candidate_id":"C1"}',
+    )
+    config = load_config(_write_strict_profile(tmp_path))
+
+    report = audit_evidence(tmp_path, config)
+
+    assert report.high
+    missing = set(report.high[0].missing_fields)
+    assert "decision" in missing
+    assert "reason" in missing
+    assert ORDER_FIELD in missing
+    assert BROKER_FIELD in missing
