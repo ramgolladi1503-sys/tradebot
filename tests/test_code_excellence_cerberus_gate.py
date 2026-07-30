@@ -177,6 +177,29 @@ def test_cerberus_gate_blocks_non_action_field_regression(tmp_path):
     assert finding.marker == "no_action=false"
 
 
+def test_cerberus_gate_blocks_bad_keyword_argument(tmp_path):
+    config = _write_config(tmp_path)
+    _write_file(
+        tmp_path,
+        "tools/bad_keyword.py",
+        """
+        def build_record(**kwargs):
+            return kwargs
+
+        RECORD = build_record(no_action=True, client_called=False)
+        """,
+    )
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tools/bad_keyword.py",),
+    )
+
+    assert report.block_count == 1
+    assert report.blocked_findings[0].marker == "no_action=false"
+
+
 def test_cerberus_gate_ignores_required_field_name_constants(tmp_path):
     config = _write_config(tmp_path)
     _write_file(
@@ -189,7 +212,7 @@ def test_cerberus_gate_ignores_required_field_name_constants(tmp_path):
         )
 
         def test_header_lists_required_fields():
-            header = "no_action: false\\nclient_called: false"
+            header = "no_action: false\nclient_called: false"
             for field in REQUIRED_FIELDS:
                 assert field in header
         """,
@@ -203,6 +226,63 @@ def test_cerberus_gate_ignores_required_field_name_constants(tmp_path):
 
     assert report.block_count == 0
     assert report.exit_code == 0
+
+
+def test_cerberus_gate_ignores_field_vocabulary_in_classifier_logic(tmp_path):
+    config = _write_config(tmp_path)
+    _write_file(
+        tmp_path,
+        "tools/classifier.py",
+        """
+        def is_protected_field(node):
+            return node.id == "no_action" or node.attr == "client_called"
+        """,
+    )
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tools/classifier.py",),
+    )
+
+    assert report.block_count == 0
+    assert report.pass_count == 1
+
+
+def test_cerberus_gate_ignores_forbidden_marker_inside_fixture_text(tmp_path):
+    config = _write_config(tmp_path)
+    _write_file(
+        tmp_path,
+        "tests/test_scanner_fixture.py",
+        """
+        def test_fixture():
+            source = "return restricted_client.place(payload={})"
+            assert "restricted_client.place" in source
+        """,
+    )
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tests/test_scanner_fixture.py",),
+    )
+
+    assert report.block_count == 0
+    assert report.pass_count == 1
+
+
+def test_cerberus_gate_blocks_unparseable_python_instead_of_scanning_blind(tmp_path):
+    config = _write_config(tmp_path)
+    _write_file(tmp_path, "tools/broken.py", "def broken(:\n    pass\n")
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tools/broken.py",),
+    )
+
+    assert report.block_count == 1
+    assert report.blocked_findings[0].reason == "python_source_unparseable"
 
 
 def test_cerberus_gate_scopes_to_changed_paths_only(tmp_path):
