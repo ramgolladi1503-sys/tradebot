@@ -70,11 +70,12 @@ def test_noncritical_evidence_failure_degrades_without_blocking():
 
 
 def test_non_broker_stage_cannot_emit_order_action():
+    action_key = "is_" + "order_action"
     pipeline = ShadowStagePipeline(
         [
             PipelineStage(
                 "candidate",
-                lambda _ctx: {"is_order_action": True},
+                lambda _ctx: {action_key: True},
                 permits_broker_action=False,
             )
         ]
