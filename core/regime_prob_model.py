@@ -1,105 +1,138 @@
+from __future__ import annotations
+
+import hashlib
 import json
 import math
 from pathlib import Path
+from typing import Any, Mapping
 
+from core.regime_contract_v2 import (
+    INSUFFICIENT_DATA,
+    INVALID_INPUT,
+    REGIME_LABELS,
+    UNCERTAIN,
+    VALID,
+    normalized_heuristic_scores,
+    probability_diagnostics,
+    stable_softmax,
+)
 from core.regime_session_context import resolve_canonical_session_context
 
-
-REGIMES = ["TREND", "RANGE", "RANGE_VOLATILE", "EVENT", "PANIC"]
+REGIMES = list(REGIME_LABELS)
 
 
 class RegimeProbModel:
-    """
-    Probabilistic regime model. Uses a Bayesian Gaussian NB model if available;
-    otherwise falls back to a heuristic softmax scorer.
-    """
+    """Probabilistic regime model with bounded features and explicit provenance."""
+
     def __init__(self, model_path: str | None = None):
-        self.model_path = Path(model_path) if model_path else Path("models/regime_model.json")
-        self.model = None
+        self.model_path = (
+            Path(model_path) if model_path else Path("models/regime_model.json")
+        )
+        self.model: dict[str, Any] | None = None
+        self.model_hash: str | None = None
+        self.model_load_error: str | None = None
         self._load()
 
-    def _load(self):
+    def _load(self) -> None:
         if not self.model_path.exists():
             self.model = None
+            self.model_hash = None
+            self.model_load_error = "model_file_missing"
             return
         try:
-            self.model = json.loads(self.model_path.read_text())
-        except Exception:
+            raw = self.model_path.read_bytes()
+            payload = json.loads(raw.decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("model_payload_not_object")
+            for key in ("priors", "means", "vars"):
+                if not isinstance(payload.get(key), dict):
+                    raise ValueError(f"model_schema_missing:{key}")
+            self.model = payload
+            self.model_hash = hashlib.sha256(raw).hexdigest()
+            self.model_load_error = None
+        except Exception as exc:
             self.model = None
+            self.model_hash = None
+            self.model_load_error = f"{type(exc).__name__}:{exc}"
 
-    def _gaussian_nb_proba(self, features: dict) -> dict:
+    @staticmethod
+    def _finite_features(
+        features: Mapping[str, Any],
+    ) -> tuple[dict[str, float], list[str]]:
+        clean: dict[str, float] = {}
+        ignored: list[str] = []
+        for key, value in features.items():
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                ignored.append(str(key))
+                continue
+            if not math.isfinite(number):
+                ignored.append(str(key))
+                continue
+            clean[str(key)] = number
+        return clean, ignored
+
+    def _gaussian_nb_proba(
+        self,
+        features: Mapping[str, Any],
+    ) -> dict[str, float]:
+        if not self.model:
+            raise ValueError("gaussian_model_unavailable")
+        clean, _ = self._finite_features(features)
         priors = self.model.get("priors", {})
         means = self.model.get("means", {})
-        vars_ = self.model.get("vars", {})
-        scores = {}
-        for r in REGIMES:
-            prior = float(priors.get(r, 1e-6))
-            score = math.log(prior + 1e-9)
-            mu = means.get(r, {})
-            var = vars_.get(r, {})
-            for k, v in features.items():
-                if v is None:
+        variances = self.model.get("vars", {})
+        scores: dict[str, float] = {}
+        for regime in REGIMES:
+            prior = float(priors.get(regime, 0.0) or 0.0)
+            if prior <= 0.0 or not math.isfinite(prior):
+                raise ValueError(f"invalid_prior:{regime}")
+            score = math.log(prior)
+            regime_means = means.get(regime, {})
+            regime_vars = variances.get(regime, {})
+            used = 0
+            for key, value in clean.items():
+                if key not in regime_means or key not in regime_vars:
                     continue
-                m = float(mu.get(k, 0.0))
-                s2 = float(var.get(k, 1e-6))
-                s2 = max(s2, 1e-6)
-                # log Gaussian
-                score += -0.5 * (math.log(2 * math.pi * s2) + ((v - m) ** 2) / s2)
-            scores[r] = score
-        return _softmax(scores)
+                mean = float(regime_means[key])
+                variance = max(float(regime_vars[key]), 1e-6)
+                if not math.isfinite(mean) or not math.isfinite(variance):
+                    raise ValueError(
+                        f"invalid_gaussian_parameter:{regime}:{key}"
+                    )
+                score += -0.5 * (
+                    math.log(2.0 * math.pi * variance)
+                    + ((value - mean) ** 2) / variance
+                )
+                used += 1
+            if used == 0:
+                raise ValueError(f"no_matching_model_features:{regime}")
+            scores[regime] = score
+        return stable_softmax(scores)
 
-    def _heuristic_proba(self, features: dict) -> dict:
-        adx = features.get("adx", 0.0) or 0.0
-        vwap_slope = features.get("vwap_slope", 0.0) or 0.0
-        vol_z = features.get("vol_z", 0.0) or 0.0
-        atr_pct = features.get("atr_pct", 0.0) or 0.0
-        iv_mean = features.get("iv_mean", 0.0) or 0.0
-        ltp_accel = features.get("ltp_acceleration", 0.0) or 0.0
-        skew = features.get("option_chain_skew", 0.0) or 0.0
-        oi_delta = features.get("oi_delta", 0.0) or 0.0
-        depth_imb = features.get("depth_imbalance", 0.0) or 0.0
-        trans_rate = features.get("regime_transition_rate", 0.0) or 0.0
-        shock_score = features.get("shock_score", 0.0) or 0.0
-        uncertainty = features.get("uncertainty_index", 0.0) or 0.0
-        macro_bias = features.get("macro_direction_bias", 0.0) or 0.0
-        x_align = features.get("x_regime_align", 0.0) or 0.0
-        x_volspill = features.get("x_vol_spillover", 0.0) or 0.0
-        x_lead = features.get("x_lead_lag", 0.0) or 0.0
+    def _heuristic_proba(
+        self,
+        features: Mapping[str, Any],
+    ) -> dict[str, float]:
+        scores, quality = normalized_heuristic_scores(features)
+        if quality.get("status") != VALID:
+            return {regime: 1.0 / len(REGIMES) for regime in REGIMES}
+        return stable_softmax(scores)
 
-        # Normalize helpers
-        adx_n = min(max(adx / 40.0, 0.0), 2.0)
-        vol_n = min(max(vol_z / 2.0, 0.0), 2.0)
-        atr_n = min(max(atr_pct / 0.01, 0.0), 2.0)
-        iv_n = min(max(iv_mean / 0.6, 0.0), 2.0)
-        slope_n = min(max(abs(vwap_slope) / 5.0, 0.0), 2.0)
-        accel_n = min(max(abs(ltp_accel) / 20.0, 0.0), 2.0)
-        trans_n = min(max(trans_rate / 10.0, 0.0), 2.0)
-        shock_n = min(max(shock_score / 1.0, 0.0), 2.0)
-        uncert_n = min(max(uncertainty / 1.0, 0.0), 2.0)
-        x_vol_n = min(max(x_volspill / 1.5, 0.0), 2.0)
-        x_align_n = max(-1.0, min(1.0, x_align))
-        x_lead_n = max(-1.0, min(1.0, x_lead))
-
-        scores = {
-            "TREND": 1.2 * adx_n + 1.0 * slope_n + 0.6 * atr_n + 0.2 * abs(oi_delta) + 0.2 * max(0.0, x_align_n),
-            "RANGE": 1.2 * (1.5 - adx_n) + 0.8 * (1.0 - slope_n) + 0.2 * (1.0 - atr_n),
-            "RANGE_VOLATILE": 0.8 * (1.5 - adx_n) + 1.2 * vol_n + 0.7 * atr_n + 0.3 * x_vol_n,
-            "EVENT": 1.3 * vol_n + 1.0 * iv_n + 0.6 * atr_n + 0.2 * abs(skew) + 1.2 * shock_n + 0.4 * uncert_n + 0.3 * x_vol_n,
-            "PANIC": 1.4 * vol_n + 1.0 * atr_n + 0.7 * accel_n + 0.4 * trans_n + 1.4 * shock_n + 0.6 * uncert_n + 0.2 * abs(macro_bias) + 0.4 * x_vol_n + 0.2 * abs(x_lead_n),
-        }
-        # Penalize high transition rates for stable regimes
-        scores["TREND"] -= 0.3 * trans_n
-        scores["RANGE"] -= 0.3 * trans_n
-        # Penalize calm regimes when shock is elevated
-        scores["TREND"] -= 0.2 * shock_n
-        scores["RANGE"] -= 0.4 * shock_n
-        return _softmax(scores)
-
-    def _resolve_session_bucket(self, features: dict) -> str:
-        session_bucket = str(features.get("session_bucket") or "").strip().upper()
-        if session_bucket:
-            return session_bucket
-        timestamp_keys = ("timestamp_ist", "timestamp", "ltp_ts_epoch", "quote_ts_epoch", "quote_ts", "candle_ts_epoch", "regime_ts")
+    def _resolve_session_bucket(self, features: Mapping[str, Any]) -> str:
+        explicit = str(features.get("session_bucket") or "").strip().upper()
+        if explicit:
+            return explicit
+        timestamp_keys = (
+            "timestamp_ist",
+            "timestamp",
+            "ltp_ts_epoch",
+            "quote_ts_epoch",
+            "quote_ts",
+            "candle_ts_epoch",
+            "regime_ts",
+        )
         for key in timestamp_keys:
             value = features.get(key)
             if value is None or value == "":
@@ -113,57 +146,115 @@ class RegimeProbModel:
             return context.canonical_session_bucket
         return "DEFAULT"
 
-    def predict(self, features: dict) -> dict:
+    def predict(self, features: Mapping[str, Any]) -> dict[str, Any]:
+        feature_payload = dict(features or {})
+        session_bucket = self._resolve_session_bucket(feature_payload)
+        model_source = "GAUSSIAN_NB_JSON" if self.model else "HEURISTIC_V2"
+        ignored_features: list[str] = []
+        feature_quality: dict[str, Any]
+        inference_error: str | None = None
+
         if self.model:
-            probs = self._gaussian_nb_proba(features)
+            clean, ignored_features = self._finite_features(feature_payload)
+            if not clean:
+                probabilities = {
+                    regime: 1.0 / len(REGIMES) for regime in REGIMES
+                }
+                feature_quality = {
+                    "status": INSUFFICIENT_DATA,
+                    "missing_required": ["all_model_features"],
+                    "invalid_required": [],
+                    "missing_optional": [],
+                    "required_coverage": 0.0,
+                }
+            else:
+                try:
+                    probabilities = self._gaussian_nb_proba(clean)
+                    feature_quality = {
+                        "status": VALID,
+                        "missing_required": [],
+                        "invalid_required": [],
+                        "missing_optional": ignored_features,
+                        "required_coverage": 1.0,
+                    }
+                except Exception as exc:
+                    inference_error = f"{type(exc).__name__}:{exc}"
+                    probabilities = {
+                        regime: 1.0 / len(REGIMES) for regime in REGIMES
+                    }
+                    feature_quality = {
+                        "status": INVALID_INPUT,
+                        "missing_required": [],
+                        "invalid_required": [
+                            "gaussian_model_inference_failed"
+                        ],
+                        "missing_optional": ignored_features,
+                        "required_coverage": 0.0,
+                    }
         else:
-            probs = self._heuristic_proba(features)
-        primary = max(probs, key=lambda k: probs.get(k, 0.0)) if probs else "NEUTRAL"
-        
-        from core.entropy_contract import entropy_diagnostics
-        diag = entropy_diagnostics(probs, labels=REGIMES)
-        entropy = diag["entropy"]
-        entropy_normalized = diag["normalized_entropy"]
-        
-        # Use session-aware threshold if passed in features, else derive canonically.
-        session_bucket = self._resolve_session_bucket(features)
-        
-        # Import config inline to avoid circular imports if any, or rely on features
-        try:
-            from config import config as cfg
-        except Exception:
-            cfg = None
-            
-        if session_bucket == "OPEN_DISCOVERY":
-            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_OPEN_DISCOVERY", 0.90) if cfg else 0.90
-        elif session_bucket == "MID_SESSION":
-            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_MID_SESSION", 0.78) if cfg else 0.78
-        elif session_bucket == "CLOSING_VOL":
-            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_CLOSING_VOL", 0.88) if cfg else 0.88
-        elif session_bucket == "EXPIRY_DAY":
-            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_EXPIRY_DAY", 0.86) if cfg else 0.86
-        elif session_bucket == "EVENT_MODE":
-            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_EVENT_MODE", 0.92) if cfg else 0.92
-        else:
-            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_DEFAULT", 0.80) if cfg else 0.80
-            
-        unstable = bool(entropy_normalized > float(threshold))
-        
+            scores, feature_quality = normalized_heuristic_scores(
+                feature_payload
+            )
+            if feature_quality.get("status") == VALID:
+                probabilities = stable_softmax(scores)
+            else:
+                probabilities = {
+                    regime: 1.0 / len(REGIMES) for regime in REGIMES
+                }
+
+        diagnostics = probability_diagnostics(probabilities)
+        primary = (
+            diagnostics["top_label"]
+            if feature_quality.get("status") == VALID
+            else "UNKNOWN"
+        )
+
+        from core.regime_entropy_gate import evaluate_regime_entropy_gate
+
+        gate = evaluate_regime_entropy_gate(
+            probabilities=probabilities,
+            session_bucket=session_bucket,
+            expiry_day=bool(feature_payload.get("is_expiry_day")),
+            event_mode=bool(feature_payload.get("is_event_mode")),
+            market_data={
+                **feature_payload,
+                "feature_quality_status": feature_quality.get("status"),
+            },
+            primary_regime=primary,
+            regime_prob_max=diagnostics["top_probability"],
+        )
+
+        status = str(feature_quality.get("status") or INVALID_INPUT)
+        if status == VALID and gate.get("uncertain"):
+            status = UNCERTAIN
+
         return {
-            "regime_probs": probs,
+            "regime_probs": probabilities,
             "primary_regime": primary,
-            "regime_entropy": entropy,
-            "regime_entropy_normalized": entropy_normalized,
-            "regime_entropy_threshold": float(threshold),
-            "unstable_regime_flag": unstable,
-            "market_regime_uncertain": unstable,
+            "regime_entropy": diagnostics["entropy"],
+            "regime_entropy_normalized": diagnostics[
+                "normalized_entropy"
+            ],
+            "regime_entropy_threshold": gate["threshold"],
+            "regime_entropy_state": gate["entropy_state"],
+            "regime_prob_max": diagnostics["top_probability"],
+            "regime_prob_second": diagnostics["second_probability"],
+            "regime_top_two_margin": diagnostics["top_two_margin"],
+            "unstable_regime_flag": status != VALID,
+            "market_regime_uncertain": status != VALID,
+            "regime_status": status,
+            "feature_quality": feature_quality,
+            "model_source": model_source,
+            "model_path": str(self.model_path),
+            "model_hash": self.model_hash,
+            "model_load_error": self.model_load_error,
+            "model_inference_error": inference_error,
+            "ignored_features": ignored_features,
+            "session_bucket": session_bucket,
+            "entropy_gate": gate,
         }
 
 
-def _softmax(scores: dict) -> dict:
-    if not scores:
-        return {}
-    mx = max(scores.values())
-    exps = {k: math.exp(v - mx) for k, v in scores.items()}
-    s = sum(exps.values()) or 1.0
-    return {k: round(v / s, 6) for k, v in exps.items()}
+def _softmax(scores: Mapping[str, float]) -> dict[str, float]:
+    """Backward-compatible export with full-precision probabilities."""
+    return stable_softmax(scores)
