@@ -1,0 +1,5 @@
+scope,underlying,total_feed_tokens,underlying_tokens,desired_option_tokens,verification_inventory_tokens,observed_tick_tokens,zero_tick_tokens,classification
+TOTAL,ALL,73,3,70,70,64,6,FEED_SUBSCRIPTION_TRUTH_INCONSISTENT
+SYMBOL,BANKNIFTY,27,1,26,26,24,2,OUTERMOST_LOW_STRIKE_PAIR_ZERO_TICKS
+SYMBOL,NIFTY,27,1,26,26,24,2,OUTERMOST_LOW_STRIKE_PAIR_ZERO_TICKS
+SYMBOL,SENSEX,19,1,18,18,16,2,OUTERMOST_LOW_STRIKE_PAIR_ZERO_TICKS

@@ -103,6 +103,7 @@ _PENDING_SUBSCRIBE_TOKENS = set()
 _PENDING_UNSUBSCRIBE_TOKENS = set()
 _PENDING_MODE_FULL_TOKENS = set()
 _LAST_MUTATION_RESULT = None
+_SOCKET_GENERATION = 0
 
 _LAST_DESIRED_TOKENS: list[int] | None = None
 _UNDERLYING_TOKENS: set[int] = set()
@@ -5528,7 +5529,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
-    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
+    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
         try:
@@ -5787,6 +5788,17 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             _WATCHDOG_STOP.set()
         _WATCHDOG_STOP = threading.Event()
         kws = get_kite_ticker(api_key=api_key, access_token=access_token, debug=False)
+        _SOCKET_GENERATION += 1
+        socket_generation = int(_SOCKET_GENERATION)
+        _log_ws(
+            "FEED_SOCKET_GENERATION_STARTED",
+            {
+                "socket_generation": socket_generation,
+                "token_count": len(tokens),
+                "timestamp": float(now_utc_epoch()),
+                "result": "started",
+            },
+        )
         if hasattr(kws, "auto_reconnect"):
             try:
                 kws.auto_reconnect = _use_native_reconnect()
@@ -5801,6 +5813,22 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         _KITE_TICKER = kws
 
     handshake_soft_reset_used = False
+
+    def _generation_is_current(callback: str) -> bool:
+        if socket_generation == int(_SOCKET_GENERATION):
+            return True
+        _log_ws(
+            "FEED_OLD_GENERATION_CALLBACK_IGNORED",
+            {
+                "socket_generation": socket_generation,
+                "active_generation": int(_SOCKET_GENERATION),
+                "callback": callback,
+                "callback_thread": threading.current_thread().name,
+                "timestamp": float(now_utc_epoch()),
+                "result": "ignored",
+            },
+        )
+        return False
 
     def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
         global _LAST_TOKENS, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
@@ -5905,8 +5933,21 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if not desired:
             desired = sorted(set(int(t) for t in (tokens or []) if int(t) > 0))
         if desired:
+            event_base = {
+                "socket_generation": socket_generation,
+                "token_count": len(desired),
+                "token_ids": list(desired),
+                "desired_count": len(desired),
+                "callback_thread": threading.current_thread().name,
+                "timestamp": float(now_utc_epoch()),
+                "reason": reason,
+            }
+            _log_ws("FEED_SUBSCRIBE_REQUESTED", {**event_base, "result": "requested"})
             ws.subscribe(desired)
+            _log_ws("FEED_SUBSCRIBE_CALLBACK_APPLIED", {**event_base, "result": "applied"})
+            _log_ws("FEED_MODE_FULL_REQUESTED", {**event_base, "result": "requested"})
             ws.set_mode(ws.MODE_FULL, desired)
+            _log_ws("FEED_MODE_FULL_CALLBACK_APPLIED", {**event_base, "result": "applied"})
         _record_feed_restart_verify_subscribe(now_epoch=float(now_utc_epoch()))
         _LAST_TOKENS[:] = desired
         tokens[:] = desired
@@ -5974,6 +6015,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_connect(ws, response):
         global _STALE_STRIKES, _WARMUP_PENDING, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
+            if not _generation_is_current("on_connect"):
+                return
             _clear_last_disconnected_info()
             _record_feed_restart_verify_connect(now_epoch=float(now_utc_epoch()))
             _log_ws("ws_connected", {"response": str(response), "ws_lifecycle_state": "CONNECTED"})
@@ -5994,6 +6037,18 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     book["ts_epoch"] = None
                     book["ts"] = None
             _resubscribe_full(ws, reason="connect")
+            _log_ws(
+                "FEED_SUBSCRIPTION_REGISTRY_SNAPSHOT",
+                {
+                    "socket_generation": socket_generation,
+                    "desired_count": len(_LAST_DESIRED_TOKENS or []),
+                    "applied_count": len(_LAST_TOKENS or []),
+                    "mode_full_applied_count": len(_LAST_TOKENS or []),
+                    "queued_count": len(_PENDING_SUBSCRIBE_TOKENS),
+                    "timestamp": float(now_utc_epoch()),
+                    "result": "snapshot",
+                },
+            )
             _RUNTIME_STATE = "RUNNING"
             _LAST_RUNTIME_ERROR = ""
             _persist_runtime_snapshot_row(
@@ -6015,6 +6070,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
 
     def on_reconnect(ws, attempts):
         try:
+            if not _generation_is_current("on_reconnect"):
+                return
             _log_ws("ws_reconnect_attempt", {"attempts": attempts, "ws_lifecycle_state": "RECONNECTING"})
             _log_ws("FEED_RECONNECTING", {"attempts": attempts})
         except Exception as exc:
@@ -6025,6 +6082,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_error(ws, code, reason):
         nonlocal handshake_soft_reset_used, ws_fault_seen
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+        if not _generation_is_current("on_error"):
+            return
         reason_text = str(reason)
         code_int = None
         try:
@@ -6125,6 +6184,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_close(ws, code, reason):
         nonlocal ws_fault_seen
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+        if not _generation_is_current("on_close"):
+            return
         code_int = None
         try:
             code_int = int(code) if code is not None else None
@@ -6730,7 +6791,12 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     kws.on_reconnect = on_reconnect
     kws.on_error = on_error
     kws.on_close = on_close
-    kws.on_ticks = on_ticks
+    def on_ticks_current(ws, ticks):
+        if not _generation_is_current("on_ticks"):
+            return
+        on_ticks(ws, ticks)
+
+    kws.on_ticks = on_ticks_current
     watchdog_thread = threading.Thread(target=_watchdog)
     try:
         watchdog_thread.name = "kite-depth-watchdog"
