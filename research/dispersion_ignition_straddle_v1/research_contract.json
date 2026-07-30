@@ -1,0 +1,14 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "campaign_id": "dispersion_ignition_straddle_v1",
+  "direction_prediction": false,
+  "entry_contract": "same_strike_ce_pe_exact_next_minute_open",
+  "friction_rates": [0.005, 0.01, 0.015],
+  "holdout_policy": "sealed_until_oof_and_validation_pass",
+  "horizons_minutes": [5, 10, 15, 20],
+  "is_order_action": false,
+  "maximum_variants": 3,
+  "research_only": true,
+  "source_strategy_reused": false
+}
