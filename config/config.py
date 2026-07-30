@@ -2713,6 +2713,26 @@ LIVE_ENABLEMENT_AUDIT_PATH = os.getenv("LIVE_ENABLEMENT_AUDIT_PATH", f"{LOGS_ROO
 LIVE_ENABLEMENT_REQUIRE_STATISTICAL_PASS = (
     os.getenv("LIVE_ENABLEMENT_REQUIRE_STATISTICAL_PASS", "true").lower() == "true"
 )
+MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE = os.getenv("MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", "false").lower() == "true"
+MARKET_EVENT_GRAPH_LIVE_SOURCE_PATH = os.getenv(
+    "MARKET_EVENT_GRAPH_LIVE_SOURCE_PATH",
+    "runtime/market_event_graph_live_shadow/captured_metadata.jsonl",
+)
+MARKET_EVENT_GRAPH_LIVE_SOURCE_INDEX_SYMBOL = os.getenv("MARKET_EVENT_GRAPH_LIVE_SOURCE_INDEX_SYMBOL", "NIFTY")
+MARKET_EVENT_GRAPH_LIVE_SOURCE_CONSTITUENT_SYMBOLS = [
+    s.strip().upper()
+    for s in os.getenv("MARKET_EVENT_GRAPH_LIVE_SOURCE_CONSTITUENT_SYMBOLS", "").split(",")
+    if s.strip()
+]
+MARKET_EVENT_GRAPH_LIVE_SOURCE_SESSION_DATE = os.getenv("MARKET_EVENT_GRAPH_LIVE_SOURCE_SESSION_DATE", "")
+MARKET_EVENT_GRAPH_LIVE_SOURCE_DUMP_AUDIT_PATH = os.getenv(
+    "MARKET_EVENT_GRAPH_LIVE_SOURCE_DUMP_AUDIT_PATH",
+    "research/market_event_graph_live_shadow_v1/live_constituent_subscription_audit.md",
+)
+MARKET_EVENT_GRAPH_LIVE_SOURCE_FLUSH_ON_SHUTDOWN = os.getenv(
+    "MARKET_EVENT_GRAPH_LIVE_SOURCE_FLUSH_ON_SHUTDOWN",
+    "true",
+).lower() == "true"
 
 # -------------------------------
 # Cross-asset features

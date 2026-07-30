@@ -3997,6 +3997,15 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "ltp_change_10m": ltp_change_10m,
             })
 
+    try:
+        if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
+            from core.market_event_graph_live_runtime_bridge import get_live_source_bridge
+
+            bridge = get_live_source_bridge()
+            bridge.observe_cycle(results, cycle_cutoff=cycle_cutoff)
+    except Exception as exc:
+        logger.warning("market_event_graph_live_source_bridge_error err=%s", exc)
+
     return results
 
 # Alias for backward compatibility
