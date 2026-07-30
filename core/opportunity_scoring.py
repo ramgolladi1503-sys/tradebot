@@ -365,7 +365,7 @@ def score_candidate(
     policy_eligibility = _score_eligibility(decision)
     safety_flags = list(decision.safety_flags)
 
-    if policy_result == "BLOCKED":
+    if policy_result == "BLOCKED" and policy_eligibility != NO_TRADE_ONLY:
         policy_bucket = "SUPPRESSED_CANDIDATE"
         policy_eligibility = "SUPPRESSED_BY_DOWNGRADE"
     elif policy_result == "ADVISORY_ONLY":
