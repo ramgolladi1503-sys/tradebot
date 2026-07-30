@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import math
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from scripts import run_outcome_blind_pattern_observation_stage_v1 as observe
 
