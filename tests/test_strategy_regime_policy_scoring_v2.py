@@ -1,6 +1,8 @@
+from dataclasses import replace
+
 from core.hard_downgrade_engine import HardDowngradeDecision
 from core.movement_contract import StrategyCandidate
-from core.opportunity_scoring import ADVISORY_ONLY, score_candidate
+from core.opportunity_scoring import ADVISORY_ONLY, SCORE_ELIGIBLE, score_candidate
 
 
 def _candidate(strategy_id: str, *, entropy_state: str, normalized: float) -> StrategyCandidate:
@@ -81,3 +83,29 @@ def test_unknown_high_entropy_strategy_is_suppressed():
     )
     assert result.executable_candidate is False
     assert result.bucket == "SUPPRESSED_CANDIDATE"
+
+
+def test_generic_scorer_fixture_without_regime_context_retains_legacy_contract():
+    strategy_id = "clean"
+    candidate = replace(
+        _candidate(strategy_id, entropy_state="LOW", normalized=0.20),
+        evidence={},
+        lineage={"promotion_state": "PROMOTED"},
+    )
+    result = score_candidate(candidate, _clean_decision(strategy_id))
+    assert result.executable_candidate is True
+    assert result.bucket == "EXECUTABLE_CANDIDATE"
+    assert result.score_eligibility == SCORE_ELIGIBLE
+
+
+def test_unknown_movement_candidate_without_regime_context_fails_closed():
+    strategy_id = "future_movement_v1"
+    candidate = replace(
+        _candidate(strategy_id, entropy_state="LOW", normalized=0.20),
+        evidence={},
+        lineage={"source": "movement_strategy", "promotion_state": "PROMOTED"},
+    )
+    result = score_candidate(candidate, _clean_decision(strategy_id))
+    assert result.executable_candidate is False
+    assert result.bucket == "ADVISORY_CANDIDATE"
+    assert result.score_eligibility == ADVISORY_ONLY
