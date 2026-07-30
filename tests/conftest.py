@@ -34,6 +34,10 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
     monkeypatch.delenv("TRADING_MODE", raising=False)
     monkeypatch.delenv("DRY_RUN", raising=False)
 
+    from core import tick_store
+
+    tick_store.reset_runtime_state_for_tests()
+
     runtime_root = tmp_path / "runtime"
     assert runtime_root.name == "runtime"
 
@@ -86,6 +90,8 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
     feed_path.write_text(json.dumps({"feed_ok": True}), encoding="utf-8")
 
     yield
+
+    tick_store.reset_runtime_state_for_tests()
 
 
 @pytest.fixture(scope="session", autouse=True)

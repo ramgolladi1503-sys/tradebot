@@ -725,6 +725,28 @@ def reset_audit_counters() -> None:
         _WRITE_QUEUE.clear()
 
 
+def reset_runtime_state_for_tests() -> None:
+    """Reset the process-wide tick persistence singleton between tests.
+
+    Tests that exercise shutdown intentionally close write acceptance. Cache-only
+    cleanup is insufficient because the next test then inherits a terminal worker
+    lifecycle. This helper is deliberately explicit and must not be called by live
+    runtime code.
+    """
+    global _FLUSH_THREAD, _FLUSH_THREAD_IDENT, _FLUSH_THREAD_NAME, _LAST_TICK_EPOCH
+    shutdown_persistence_worker(deadline_seconds=1.0)
+    reset_audit_counters()
+    clear_replay_pressure_hook()
+    set_replay_pressure_immediate_flush_enabled(True)
+    set_replay_pressure_read_flush_enabled(True)
+    _LAST_TICK_EPOCH = None
+    _LAST_TICK_BY_TOKEN.clear()
+    _tick_window.clear()
+    _FLUSH_THREAD = None
+    _FLUSH_THREAD_IDENT = None
+    _FLUSH_THREAD_NAME = None
+
+
 def _flush_loop() -> None:
     global _FLUSH_THREAD_TERMINATED
     while not _FLUSH_THREAD_STOP.is_set():
