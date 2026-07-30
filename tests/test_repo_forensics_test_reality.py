@@ -126,3 +126,53 @@ def test_score_test_strength_penalizes_fake_confidence_and_mock_only_proof():
     assert mock_score.score == 35
     assert mock_score.grade == "weak"
     assert "mock_without_negative_proof:-10" in mock_score.reasons
+
+
+def test_minerva_does_not_treat_fake_assertion_text_inside_fixture_as_executable(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(
+        tmp_path / "tests" / "test_auditor_fixture.py",
+        "def test_auditor_fixture():\n"
+        "    fixture = 'def test_placeholder():\\n    assert True\\n'\n"
+        "    findings = ['unconditional_assert_true'] if 'assert True' in fixture else []\n"
+        "    assert findings == ['unconditional_assert_true']\n",
+    )
+    config = load_config(_write_profile(tmp_path))
+
+    report = classify_tests(tmp_path, config)
+    status = next(item for item in report.tests if item.path == "tests/test_auditor_fixture.py")
+
+    assert status.test_class != "FAKE_CONFIDENCE"
+    assert status.strength_grade in {"medium", "strong"}
+
+
+def test_minerva_accepts_len_comparison_but_rejects_bare_len_assertion(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(
+        tmp_path / "tests" / "test_len_comparison.py",
+        "def test_len_comparison():\n    patches = [1, 2]\n    assert len(patches) == 2\n",
+    )
+    _write(
+        tmp_path / "tests" / "test_bare_len.py",
+        "def test_bare_len():\n    patches = [1]\n    assert len(patches)\n",
+    )
+    config = load_config(_write_profile(tmp_path))
+
+    report = classify_tests(tmp_path, config)
+    classes = {item.path: item.test_class for item in report.tests}
+
+    assert classes["tests/test_len_comparison.py"] != "FAKE_CONFIDENCE"
+    assert classes["tests/test_bare_len.py"] == "FAKE_CONFIDENCE"
+
+
+def test_minerva_flags_real_unconditional_assert_true(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(
+        tmp_path / "tests" / "test_placeholder.py",
+        "def test_placeholder():\n    assert True\n",
+    )
+    config = load_config(_write_profile(tmp_path))
+
+    report = classify_tests(tmp_path, config)
+
+    assert report.tests[0].test_class == "FAKE_CONFIDENCE"
