@@ -11,9 +11,11 @@ on:
       - "core/execution_ranking_authority.py"
       - "core/trade_builder_stage_pipeline.py"
       - "core/orchestrator_stage_pipeline.py"
+      - "scripts/run_architecture_hardening_campaign.py"
       - "tests/test_execution_decision_contract.py"
       - "tests/test_runtime_authority_audit.py"
       - "tests/test_architecture_hardening_proofs.py"
+      - "tests/test_architecture_hardening_campaign.py"
       - "docs/architecture/trade_builder_orchestration_hardening_v1.md"
       - ".github/workflows/trade-builder-orchestration-hardening.yml"
   workflow_dispatch:
@@ -45,9 +47,11 @@ jobs:
             core/execution_ranking_authority.py \
             core/trade_builder_stage_pipeline.py \
             core/orchestrator_stage_pipeline.py \
+            scripts/run_architecture_hardening_campaign.py \
             tests/test_execution_decision_contract.py \
             tests/test_runtime_authority_audit.py \
-            tests/test_architecture_hardening_proofs.py
+            tests/test_architecture_hardening_proofs.py \
+            tests/test_architecture_hardening_campaign.py
       - name: Run focused tests
         env:
           DISABLE_ML: "true"
@@ -55,7 +59,8 @@ jobs:
           pytest -q \
             tests/test_execution_decision_contract.py \
             tests/test_runtime_authority_audit.py \
-            tests/test_architecture_hardening_proofs.py
+            tests/test_architecture_hardening_proofs.py \
+            tests/test_architecture_hardening_campaign.py
       - name: Prove feed implementation untouched
         shell: bash
         run: |
