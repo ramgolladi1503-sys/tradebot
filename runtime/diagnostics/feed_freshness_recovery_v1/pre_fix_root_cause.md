@@ -11,3 +11,11 @@ The historical 70-token verification field is mislabeled desired/requested inven
 Physical transport and execution safety were also conflated. Tick callbacks prove the transport remained active after canonical snapshots reported `ws_connected=false`. The truthful state was: transport callbacks active, subscription registry inconsistent/unknown, execution feed not ready, canonical safety state `RECOVERY_BLOCKED`.
 
 This change adds generation-gated mutation callbacks and explicit requested, queued, callback-applied, callback-failed, old-generation-ignored, socket-generation-started, and registry-snapshot events. It deliberately does not clear `partial_recovery` or perform token-local resubscription before a new instrumented run resolves the six-token ambiguity.
+
+## Follow-up validation
+
+The exact 73-token deterministic inventory (3 underlying, 26 BANKNIFTY options, 26 NIFTY options, and 18 SENSEX options) survives budget enforcement, subscribe invocation, and `MODE_FULL` invocation without dropping either outer boundary pair. No local outer-boundary implementation defect was reproduced.
+
+The earlier order-dependent feed failures were caused by `tests/test_feed_robustness_replay_runner.py` shutting down the process-wide tick persistence worker and leaving `_ACCEPTING_WRITES=false`. Later tests cleared tick caches but did not reset the worker lifecycle, so writes were rejected. `reset_runtime_state_for_tests()` now drains the worker, clears hooks/queues/caches, and restores write acceptance through the autouse fixture.
+
+Token-local recovery and permanent-latch changes remain blocked until an approved instrumented startup classifies each zero-tick contract using callback and `MODE_FULL` evidence. The passive collector and operator gates are documented in `instrumented_startup_runbook.md`.
