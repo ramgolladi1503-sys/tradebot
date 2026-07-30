@@ -1,8 +1,11 @@
+from core.candidate_pool_orchestrator import build_candidate_pool_report
 from core.market_event_graph_breadth_producer import (
     frozen_threshold_metadata,
     initial_market_event_graph_runtime_state,
 )
 from core.market_event_graph_runtime_observer import observe_market_event_graph_runtime
+from core.movement_contract import StrategyContext
+from core.movement_regime import MovementRegimeResult
 
 
 def _returns(negative_count: int, total: int = 50, value: float = 0.001):
@@ -40,6 +43,45 @@ def _metadata():
             _bar(280.0, 270.0, negative_count=20, index_ret1=0.001),
         ],
     }
+
+
+def _context(metadata):
+    return StrategyContext(
+        symbol="NIFTY",
+        ts_epoch=280.0,
+        spot_ltp=22550.0,
+        option_ce_ltp=120.0,
+        option_pe_ltp=90.0,
+        ce_premium_change=14.0,
+        pe_premium_change=-2.0,
+        ce_spread_pct=0.8,
+        pe_spread_pct=0.9,
+        ce_depth=1200.0,
+        pe_depth=1000.0,
+        option_ltp_age_sec=0.4,
+        quote_source="live_option_tick",
+        fallback_used=False,
+        metadata=metadata,
+    )
+
+
+def _regime():
+    return MovementRegimeResult(
+        schema_version=1,
+        primary_regime="TREND_UP",
+        scores={
+            "TREND_UP": 0.8,
+            "TREND_DOWN": 0.0,
+            "RANGE": 0.0,
+            "CHOP": 0.0,
+            "COMPRESSION": 0.0,
+            "VOLATILITY_EXPANSION": 0.0,
+            "TRAP_RISK": 0.0,
+            "EXHAUSTION_RISK": 0.0,
+            "EXPIRY_CONTEXT": 0.0,
+            "INCONCLUSIVE": 0.2,
+        },
+    )
 
 
 def test_reports_missing_live_breadth_source_without_emission_authority():
@@ -125,3 +167,24 @@ def test_contract_mismatch_is_distinct_from_market_no_signal():
     assert observation["producer_status"] == "NOT_EVALUATED"
     assert observation["adapter_status"] == "NOT_EVALUATED"
     assert observation["graph_trigger_count"] == 0
+
+
+def test_candidate_pool_exposes_runtime_observation_without_execution_authority():
+    report = build_candidate_pool_report(
+        _context(_metadata()),
+        _regime(),
+        candidate_generators=(),
+        include_no_trade_candidate=False,
+    )
+
+    observation = report.metadata["market_event_graph_runtime_observation"]
+    assert report.metadata["market_event_graph_runtime_status"] == "GRAPH_READY"
+    assert report.metadata["market_event_graph_runtime_reason"] == (
+        "producer_and_adapter_accepted_frozen_graph"
+    )
+    assert observation["accepted_interval_count"] == 4
+    assert observation["graph_trigger_count"] == 1
+    assert observation["allowed_for_live_execution"] is False
+    assert report.read_only is True
+    assert report.is_order_action is False
+    assert report.report_executable_eligible_count == 0
