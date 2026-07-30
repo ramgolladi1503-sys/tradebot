@@ -1,8 +1,8 @@
 """Canonical, immutable execution-decision contract.
 
-This module is intentionally additive and feed-agnostic.  It wraps the existing
+This module is intentionally additive and feed-agnostic. It wraps the existing
 executable-truth classifier and converts fragmented legacy status fields into one
-conservative decision.  It does not place orders or mutate candidates.
+conservative decision. It does not place orders or mutate candidates.
 """
 from __future__ import annotations
 
@@ -41,15 +41,16 @@ class CanonicalExecutionDecision:
     legacy_signals: Mapping[str, Any] = field(default_factory=dict)
     truth_context: Mapping[str, Any] = field(default_factory=dict)
     schema_version: int = 1
-    is_order_action: bool = False
 
     def __post_init__(self) -> None:
         if self.allowed != (self.state is ExecutionState.EXECUTABLE):
             raise ValueError("canonical_execution_decision_allowed_state_mismatch")
         if not self.primary_reason:
             raise ValueError("canonical_execution_decision_primary_reason_missing")
-        if self.is_order_action:
-            raise ValueError("canonical_execution_decision_cannot_be_order_action")
+
+    @property
+    def is_order_action(self) -> bool:
+        return False
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -216,7 +217,13 @@ def derive_canonical_execution_decision(candidate: Any) -> CanonicalExecutionDec
         else:
             primary_reason = truth.reason_code or "execution_blocked"
 
-    blockers = tuple(dict.fromkeys(explicit_blockers + contradictions + (() if state is ExecutionState.ADVISORY_ONLY else (primary_reason,))))
+    blockers = tuple(
+        dict.fromkeys(
+            explicit_blockers
+            + contradictions
+            + (() if state is ExecutionState.ADVISORY_ONLY else (primary_reason,))
+        )
+    )
     return CanonicalExecutionDecision(
         state=state,
         allowed=False,
