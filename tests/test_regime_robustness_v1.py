@@ -11,6 +11,7 @@ from core.regime_contract_v2 import (
     probability_diagnostics,
     stable_softmax,
 )
+from core.regime_entropy_gate import evaluate_regime_entropy_gate
 from core.regime_prob_model import RegimeProbModel
 
 
@@ -124,6 +125,38 @@ def test_low_entropy_is_not_itself_an_error():
     )
     assert diag["normalized_entropy"] == 0.0
     assert diag["top_label"] == "TREND"
+
+
+def test_legacy_raw_trend_override_is_preserved():
+    result = evaluate_regime_entropy_gate(
+        raw_entropy=1.45,
+        primary_regime="TREND",
+        regime_prob_max=0.65,
+        market_data={"volume_delta_override": True},
+    )
+    assert result["uncertain"] is False
+    assert "LEGACY_RAW_TREND_OVERRIDE" in result["threshold_source"]
+
+
+def test_probability_vector_never_uses_legacy_trend_override():
+    result = evaluate_regime_entropy_gate(
+        probabilities={
+            "TREND": 0.2,
+            "RANGE": 0.2,
+            "RANGE_VOLATILE": 0.2,
+            "EVENT": 0.2,
+            "PANIC": 0.2,
+        },
+        primary_regime="TREND",
+        regime_prob_max=0.65,
+        market_data={
+            "volume_delta_override": True,
+            "depth_imbalance": 0.8,
+            "feature_quality_status": VALID,
+        },
+    )
+    assert result["uncertain"] is True
+    assert "LEGACY_RAW_TREND_OVERRIDE" not in result["threshold_source"]
 
 
 def test_stabilizer_ignores_duplicate_bar_and_requires_confirmation():
