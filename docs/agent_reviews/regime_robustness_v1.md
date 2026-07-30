@@ -69,7 +69,7 @@ The previous heuristic mixed bounded normalized indicators with unbounded raw OI
 
 Files affecting regime decisions were changed, so this branch must remain draft until broad CI and market-hours validation pass.
 
-The implementation does not bypass fail-closed behavior. Missing or malformed required evidence yields `UNKNOWN` and unstable status. Invalid probability vectors remain blocked.
+The probability model and entropy gate are authoritative when this branch is run. The completed-bar stabilizer is implemented but is not wired as live routing authority. Missing or malformed required evidence yields `UNKNOWN` and unstable status. Invalid probability vectors remain blocked.
 
 ## Feed Isolation Proof
 
@@ -109,7 +109,8 @@ PYTHONPATH=. python scripts/certify_regime_robustness_v1.py
 - is_order_action: false
 - broker_api_called: false
 - feed_files_modified: false
-- execution_authority_enabled: false
+- probability_authority_changed_on_branch: true
+- stabilizer_authority_enabled: false
 - live_market_certified: false
 
 ## Runtime Proof Required
