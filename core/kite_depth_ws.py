@@ -46,6 +46,7 @@ from core.market_event_graph_live_observation_registry import (
     get_observation_registry,
     load_observation_registry,
     observation_budget_preflight,
+    build_observation_subscription_merge,
     observation_tokens,
 )
 from core.market_event_graph_live_ohlc_buffer import record_live_source_shadow_tick
@@ -1445,15 +1446,10 @@ def build_depth_subscription_tokens(symbols=None, max_tokens=None):
                 tokens, resolution = fn(symbols=symbols, max_tokens=max_tokens)
                 obs = sorted(observation_tokens())
                 if obs:
-                    combined = list(dict.fromkeys(list(tokens or []) + obs))
-                    preflight = observation_budget_preflight(
-                        budget=max_tokens,
-                        current_tokens=list(tokens or []),
-                        overlap_tokens=set(int(t) for t in list(tokens or []) if int(t) in set(obs)),
+                    decision = build_observation_subscription_merge(
+                        production_tokens=list(tokens or []), observation_tokens=obs, budget=max_tokens
                     )
-                    if not bool(preflight.get("ok")):
-                        raise RuntimeError(BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET)
-                    tokens = combined
+                    tokens = decision["tokens"]
                 return tokens, resolution
             except TypeError:
                 try:
@@ -5221,8 +5217,9 @@ def on_ticks(ws, ticks):
         if token_int is not None:
             _LAST_MSG_TS_BY_TOKEN[int(token_int)] = float(freshness_tick_epoch)
             if int(token_int) in _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN:
-                _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.setdefault(int(token_int), float(freshness_tick_epoch))
-        symbol = _TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None
+                _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.setdefault(int(token_int), float(now_epoch))
+        observation_identity = registry.observation_identity(token_int) if registry and token_int is not None else None
+        symbol = (observation_identity or {}).get("symbol") or (_TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None)
         underlying_tick = _is_underlying_token(token_int)
         has_depth = _depth_has_bid_ask(depth)
         tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
@@ -5231,7 +5228,7 @@ def on_ticks(ws, ticks):
             packet_kind = "UNKNOWN"
             is_full_payload = False
             source_epoch = payload_tick_epoch
-            if registry.instrument_class_by_token.get(int(token_int)) == "INDEX":
+            if observation_identity and observation_identity.get("instrument_class") == "INDEX":
                 packet_kind = "INDEX_FULL" if isinstance(t.get("ohlc"), dict) and t.get("change") is not None else "INDEX_QUOTE"
                 is_full_payload = packet_kind == "INDEX_FULL"
             else:
@@ -5239,7 +5236,7 @@ def on_ticks(ws, ticks):
                 is_full_payload = has_depth
             try:
                 record_live_source_shadow_tick(
-                    symbol=str(symbol or registry.index_symbol if token_int == registry.index_token else symbol or _TOKEN_TO_SYMBOL.get(token_int) or "").upper(),
+                    symbol=str(symbol or "").upper(),
                     instrument_token=token_int,
                     price=last_price,
                     source_tick_epoch=source_epoch,
@@ -5254,6 +5251,13 @@ def on_ticks(ws, ticks):
                 )
             except Exception:
                 pass
+        if token_int is not None and token_int in observation_token_set and registry is not None:
+            mode_epoch = _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int)
+            mode_effective = mode_epoch is not None and float(now_epoch) > float(mode_epoch)
+            if is_full_payload and mode_effective and token_int == registry.index_token:
+                _record_full_payload_observed(token_int)
+            elif is_full_payload and mode_effective and isinstance(depth, dict) and depth:
+                _record_full_payload_observed(token_int)
         if token_int is not None and isinstance(depth, dict) and depth:
             _record_full_payload_observed(token_int)
             depth_store.update(token_int, depth)

@@ -8,8 +8,10 @@ cached token lookup for websocket subscription and raw tick routing.
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping
 
 from config import config as cfg
@@ -27,12 +29,13 @@ class ObservationRegistry:
     token_domain: str
     index_symbol: str
     index_token: int
-    token_by_symbol: dict[str, int]
-    instrument_class_by_token: dict[int, str]
+    token_by_symbol: Mapping[str, int]
+    symbol_by_token: Mapping[int, str]
+    instrument_class_by_token: Mapping[int, str]
     constituent_symbols: tuple[str, ...]
     constituent_tokens: tuple[int, ...]
     all_tokens: tuple[int, ...]
-    contract: dict[str, Any]
+    contract: Mapping[str, Any]
 
     @property
     def token_count(self) -> int:
@@ -40,7 +43,7 @@ class ObservationRegistry:
 
     def observation_identity(self, token: int) -> dict[str, Any] | None:
         token_int = int(token)
-        symbol = next((sym for sym, tok in self.token_by_symbol.items() if tok == token_int), None)
+        symbol = self.symbol_by_token.get(token_int)
         if symbol is None:
             return None
         return {
@@ -54,6 +57,13 @@ class ObservationRegistry:
 
 
 _OBSERVATION_REGISTRY: ObservationRegistry | None = None
+_OBSERVATION_REGISTRY_IDENTITY: tuple[str, str, str] | None = None
+
+
+def reset_observation_registry() -> None:
+    global _OBSERVATION_REGISTRY, _OBSERVATION_REGISTRY_IDENTITY
+    _OBSERVATION_REGISTRY = None
+    _OBSERVATION_REGISTRY_IDENTITY = None
 
 
 def _contract_path() -> Path | None:
@@ -64,16 +74,19 @@ def _contract_path() -> Path | None:
 
 
 def load_observation_registry(*, force: bool = False) -> ObservationRegistry | None:
-    global _OBSERVATION_REGISTRY
-    if _OBSERVATION_REGISTRY is not None and not force:
-        return _OBSERVATION_REGISTRY
+    global _OBSERVATION_REGISTRY, _OBSERVATION_REGISTRY_IDENTITY
     if not bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
-        _OBSERVATION_REGISTRY = None
+        reset_observation_registry()
         return None
     path = _contract_path()
     if path is None or not path.exists():
         raise FileNotFoundError(path or "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH")
+    contract_sha = hashlib.sha256(path.read_bytes()).hexdigest()
     raw = json.loads(path.read_text(encoding="utf-8"))
+    canonical = str(raw.get("canonical_sha256") or "") if isinstance(raw, Mapping) else ""
+    identity = (str(path.resolve()), contract_sha, canonical)
+    if _OBSERVATION_REGISTRY is not None and not force and _OBSERVATION_REGISTRY_IDENTITY == identity:
+        return _OBSERVATION_REGISTRY
     if not isinstance(raw, Mapping):
         raise ValueError("live universe contract must be a JSON object")
     provider = str(raw.get("broker_provider") or "").lower().strip()
@@ -94,11 +107,12 @@ def load_observation_registry(*, force: bool = False) -> ObservationRegistry | N
         raise ValueError(BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE)
     index_symbol = str(raw.get("index_symbol") or "NIFTY").upper()
     index_token = int(raw["index_instrument_token"])
+    if index_symbol != "NIFTY" or index_token != 256265 or index_token in tokens:
+        raise ValueError(BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE)
     token_by_symbol = {index_symbol: index_token, **{sym: tok for sym, tok in zip(symbols, tokens)}}
     all_tokens = tuple(sorted(set(token_by_symbol.values())))
     if len(all_tokens) != 51:
         raise ValueError(BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE)
-    canonical = str(raw.get("canonical_sha256") or "")
     if canonical != canonical_live_universe_sha256(raw):
         raise ValueError(BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE)
     instrument_class_by_token = {index_token: "INDEX"}
@@ -111,14 +125,16 @@ def load_observation_registry(*, force: bool = False) -> ObservationRegistry | N
         token_domain=token_domain,
         index_symbol=index_symbol,
         index_token=index_token,
-        token_by_symbol=token_by_symbol,
-        instrument_class_by_token=instrument_class_by_token,
+        token_by_symbol=MappingProxyType(token_by_symbol),
+        symbol_by_token=MappingProxyType({token: symbol for symbol, token in token_by_symbol.items()}),
+        instrument_class_by_token=MappingProxyType(instrument_class_by_token),
         constituent_symbols=tuple(symbols),
         constituent_tokens=tuple(tokens),
         all_tokens=all_tokens,
-        contract=dict(raw),
+        contract=MappingProxyType(dict(raw)),
     )
     _OBSERVATION_REGISTRY = registry
+    _OBSERVATION_REGISTRY_IDENTITY = identity
     return registry
 
 
@@ -158,6 +174,22 @@ def observation_budget_preflight(*, budget: int | None, current_tokens: list[int
     }
 
 
+def build_observation_subscription_merge(*, production_tokens: list[int], observation_tokens: list[int], budget: int | None) -> dict[str, Any]:
+    production = tuple(dict.fromkeys(int(token) for token in production_tokens if int(token) > 0))
+    observation = tuple(dict.fromkeys(int(token) for token in observation_tokens if int(token) > 0))
+    overlap = set(production) & set(observation)
+    union = tuple(dict.fromkeys(production + observation))
+    ok = budget is None or len(union) <= int(budget)
+    return {
+        "ok": ok, "reason": "OK" if ok else BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET,
+        "production_token_count": len(production), "observation_token_count": len(observation),
+        "overlap_count": len(overlap), "observation_exclusive_count": len(set(observation) - set(production)),
+        "final_union_count": len(union), "configured_budget": budget,
+        "missing_or_pruned_observation_tokens": [] if ok else list(observation),
+        "tokens": list(union) if ok else list(production),
+    }
+
+
 __all__ = [
     "BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE",
     "BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET",
@@ -165,5 +197,7 @@ __all__ = [
     "get_observation_registry",
     "load_observation_registry",
     "observation_budget_preflight",
+    "build_observation_subscription_merge",
+    "reset_observation_registry",
     "observation_tokens",
 ]

@@ -29,6 +29,11 @@ def test_shadow_buffer_accepts_only_new_raw_ticks(monkeypatch):
     reset_live_source_shadow_buffer()
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     identity = {"feed_session_id": "session-1", "reconnect_generation": 7}
+    capture = {
+        "provider": "kite",
+        "token_domain": "kite_instrument_token",
+        "universe_hash": "fba078a4cd7aeb520432b05071a5ac4078e164b809fec0eb80503cb7fe562371",
+    }
 
     first = record_live_source_shadow_tick(
         symbol="NIFTY",
@@ -37,7 +42,7 @@ def test_shadow_buffer_accepts_only_new_raw_ticks(monkeypatch):
         source_tick_epoch=100.0,
         source_type="live_websocket",
         payload_mode="full",
-        feed_identity=identity,
+            feed_identity=identity, **capture,
     )
     repeated = record_live_source_shadow_tick(
         symbol="NIFTY",
@@ -46,7 +51,7 @@ def test_shadow_buffer_accepts_only_new_raw_ticks(monkeypatch):
         source_tick_epoch=100.0,
         source_type="live_websocket",
         payload_mode="full",
-        feed_identity=identity,
+            feed_identity=identity, **capture,
     )
 
     assert first["accepted"] is True

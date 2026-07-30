@@ -73,8 +73,12 @@ def record_live_source_shadow_tick(
         return {"accepted": False, "status": "INVALID_SHADOW_TICK"}
     if token <= 0 or price_value <= 0:
         return {"accepted": False, "status": "INVALID_SHADOW_TICK"}
-    if str(source_type).lower() not in {"live_websocket", "tick_store_live"}:
+    if str(source_type).lower() != "live_websocket":
         return {"accepted": False, "status": "NON_LIVE_SOURCE"}
+    if str(provider).strip().lower() != "kite" or str(token_domain).strip() != "kite_instrument_token":
+        return {"accepted": False, "status": "CAPTURE_IDENTITY_INVALID"}
+    if not str(universe_hash).strip() or not str(symbol).strip():
+        return {"accepted": False, "status": "CAPTURE_IDENTITY_INVALID"}
     identity = dict(feed_identity or {})
     session_id = str(identity.get("feed_session_id") or "").strip()
     if not session_id:
@@ -87,7 +91,9 @@ def record_live_source_shadow_tick(
     _apply_identity(capture_identity)
     if source_tick_epoch is None:
         return {
-            "accepted": True,
+            "accepted": False,
+            "delivery_observed": True,
+            "bar_written": False,
             "status": "DELIVERED_NO_SOURCE_TIMESTAMP",
             "capture_identity": capture_identity,
             "packet_kind": packet_kind,
@@ -126,6 +132,8 @@ def record_live_source_shadow_tick(
     if bool(result.get("accepted")):
         _LAST_SOURCE_TICK_EPOCH_BY_TOKEN[token] = tick_epoch
     result["capture_identity"] = capture_identity
+    result["delivery_observed"] = True
+    result["bar_written"] = bool(result.get("accepted"))
     result["packet_kind"] = str(packet_kind or "")
     result["is_full_payload"] = bool(is_full_payload)
     return result

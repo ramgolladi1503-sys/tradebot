@@ -2,7 +2,13 @@ import json
 from pathlib import Path
 
 from config import config as cfg
-from core.market_event_graph_live_observation_registry import BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE, load_observation_registry, observation_budget_preflight
+from core.market_event_graph_live_observation_registry import (
+    BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE,
+    build_observation_subscription_merge,
+    load_observation_registry,
+    observation_budget_preflight,
+    reset_observation_registry,
+)
 
 
 def test_observation_registry_loads_cached_kite_contract(monkeypatch):
@@ -54,3 +60,19 @@ def test_observation_registry_rejects_forged_hash_and_bad_provider(monkeypatch, 
         assert BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE in str(exc)
     else:
         raise AssertionError("expected forged hash to be rejected")
+
+
+def test_disabled_feature_clears_prior_cached_registry(monkeypatch):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", "runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json")
+    assert load_observation_registry(force=True) is not None
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)
+    assert load_observation_registry() is None
+
+
+def test_observation_merge_is_all_or_none_and_fail_open():
+    decision = build_observation_subscription_merge(production_tokens=[1, 2], observation_tokens=[2, 3, 4], budget=3)
+    assert decision["ok"] is False
+    assert decision["tokens"] == [1, 2]
+    assert decision["overlap_count"] == 1
+    assert decision["observation_exclusive_count"] == 2
