@@ -9,7 +9,8 @@ from sklearn.cluster import AgglomerativeClustering
 
 ROOT = Path("research/local_evidence_consolidation_v1")
 OUT = Path("information-migration-sequence-v1-stage1")
-N_GROUPS = 8
+N_GROUPS = 4
+MIN_GROUP_SIZE = 4
 LEADERS_PER_GROUP = 2
 COOLDOWN_BARS = 3
 
@@ -78,7 +79,7 @@ def main() -> None:
     returns = _session_returns(c)
     development = returns.loc[returns.index.get_level_values("session").isin(development_sessions)]
     symbols = [symbol for symbol in development.columns if symbol != "NIFTY"]
-    if "NIFTY" not in development.columns or len(symbols) < N_GROUPS * 2:
+    if "NIFTY" not in development.columns or len(symbols) < N_GROUPS * MIN_GROUP_SIZE:
         raise SystemExit("insufficient symbols or missing NIFTY")
 
     correlation = development[symbols].corr(min_periods=500).fillna(0.0).clip(-1.0, 1.0)
@@ -87,6 +88,9 @@ def main() -> None:
     model = AgglomerativeClustering(n_clusters=N_GROUPS, metric="precomputed", linkage="average")
     labels = model.fit_predict(distance_array)
     groups = {int(group): sorted(correlation.columns[labels == group].tolist()) for group in sorted(set(labels))}
+    undersized = {group: members for group, members in groups.items() if len(members) < MIN_GROUP_SIZE}
+    if undersized:
+        raise SystemExit(f"degenerate communities below minimum size {MIN_GROUP_SIZE}: {undersized}")
 
     leader_rows: list[dict] = []
     leaders: dict[int, list[str]] = {}
@@ -95,11 +99,8 @@ def main() -> None:
         scores: list[tuple[str, float]] = []
         for symbol in members:
             peers = [member for member in members if member != symbol]
-            if not peers:
-                score = float("nan")
-            else:
-                future_peer_mean = group_returns[peers].mean(axis=1).groupby(level=0, sort=False).shift(-1)
-                score = group_returns[symbol].corr(future_peer_mean)
+            future_peer_mean = group_returns[peers].mean(axis=1).groupby(level=0, sort=False).shift(-1)
+            score = group_returns[symbol].corr(future_peer_mean)
             scores.append((symbol, float(score) if pd.notna(score) else -1.0))
         scores.sort(key=lambda item: (-item[1], item[0]))
         leaders[group] = [symbol for symbol, _ in scores[:LEADERS_PER_GROUP]]
@@ -166,7 +167,7 @@ def main() -> None:
     split_counts = signals["split"].value_counts().to_dict() if not signals.empty else {}
     direction_counts = signals.groupby(["split", "direction"]).size().to_dict() if not signals.empty else {}
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "research_only": True,
         "allowed_for_live_execution": False,
         "constituent_path": str(constituent_path),
@@ -178,6 +179,7 @@ def main() -> None:
         "holdout_first_session": holdout_sessions[0],
         "holdout_last_session": holdout_sessions[-1],
         "community_count": N_GROUPS,
+        "minimum_community_size": MIN_GROUP_SIZE,
         "communities": groups,
         "leaders": leaders,
         "thresholds_frozen_from_development_only": thresholds,
