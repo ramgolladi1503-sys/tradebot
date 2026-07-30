@@ -78,6 +78,99 @@ def _candidate_decisions_log_path() -> Path:
     return logs_dir() / "desks" / desk_id / "candidate_decisions.jsonl"
 
 
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value not in (None, "", "None"):
+            return value
+    return None
+
+
+def _regime_policy_context(data: dict[str, Any]) -> dict[str, Any]:
+    regime = data.get("regime") if isinstance(data.get("regime"), dict) else {}
+    feature_quality = _first_present(
+        regime.get("feature_quality"),
+        data.get("feature_quality"),
+    )
+    context = {
+        "session_bucket": _first_present(
+            regime.get("session_bucket"),
+            data.get("session_bucket"),
+        ),
+        "regime_entropy": _first_present(
+            regime.get("regime_entropy"),
+            regime.get("entropy"),
+            data.get("regime_entropy"),
+        ),
+        "regime_entropy_normalized": _first_present(
+            regime.get("regime_entropy_normalized"),
+            regime.get("normalized_entropy"),
+            data.get("regime_entropy_normalized"),
+        ),
+        "regime_entropy_state": _first_present(
+            regime.get("regime_entropy_state"),
+            regime.get("entropy_state"),
+            data.get("regime_entropy_state"),
+        ),
+        "regime_status": _first_present(
+            regime.get("regime_status"),
+            data.get("regime_status"),
+        ),
+        "primary_regime": _first_present(
+            regime.get("primary_regime"),
+            data.get("primary_regime"),
+            data.get("regime_hint"),
+        ),
+        "stable_regime": _first_present(
+            regime.get("stable_regime"),
+            data.get("stable_regime"),
+        ),
+        "stable_regime_confirmed": _first_present(
+            regime.get("stable_regime_confirmed"),
+            data.get("stable_regime_confirmed"),
+        ),
+        "trend_state": _first_present(
+            regime.get("trend_state"),
+            data.get("trend_state"),
+        ),
+        "is_expiry_day": _first_present(
+            regime.get("is_expiry_day"),
+            data.get("is_expiry_day"),
+            data.get("expiry_context"),
+        ),
+        "volume_impulse": _first_present(
+            regime.get("volume_impulse"),
+            data.get("volume_impulse"),
+        ),
+        "liquidity_quality": _first_present(
+            data.get("liquidity_quality"),
+            (data.get("option_chain_summary") or {}).get("liquidity_quality"),
+        ),
+        "model_source": _first_present(
+            regime.get("model_source"),
+            data.get("model_source"),
+        ),
+        "model_hash": _first_present(
+            regime.get("model_hash"),
+            data.get("model_hash"),
+        ),
+        "probability_calibrated": _first_present(
+            regime.get("probability_calibrated"),
+            data.get("probability_calibrated"),
+        ),
+        "probability_semantics": _first_present(
+            regime.get("probability_semantics"),
+            data.get("probability_semantics"),
+        ),
+        "regime_top_two_margin": _first_present(
+            regime.get("regime_top_two_margin"),
+            regime.get("top_two_margin"),
+            data.get("regime_top_two_margin"),
+        ),
+        "feature_quality": feature_quality if isinstance(feature_quality, dict) else None,
+    }
+    return {key: value for key, value in context.items() if value is not None}
+
+
 def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> StrategyContext:
     allowed = {field.name for field in dataclass_fields(StrategyContext)}
     payload: dict[str, Any] = {"symbol": str(symbol or "").strip().upper() or "UNKNOWN"}
@@ -98,9 +191,11 @@ def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> S
     payload["fallback_used"] = (data.get("feed_health") or {}).get("fallback_used", data.get("fallback_used"))
     payload["option_ltp_age_sec"] = (data.get("feed_health") or {}).get("option_ltp_age_sec", data.get("option_ltp_age_sec"))
     payload["ts_epoch"] = data.get("ts_epoch")
-    payload["metadata"] = dict(data.get("metadata") or {})
-    payload["evidence"] = dict(data.get("evidence") or {})
-    payload["lineage"] = dict(data.get("lineage") or {})
+    metadata = dict(data.get("metadata") or {})
+    policy_context = _regime_policy_context(data)
+    if policy_context:
+        metadata["regime_policy_context"] = policy_context
+    payload["metadata"] = metadata
     filtered = {key: value for key, value in payload.items() if key in allowed and value is not None}
     return StrategyContext(**filtered)
 
@@ -341,7 +436,6 @@ def _candidate_decision_to_advisory_row(payload: dict[str, Any]) -> dict[str, An
     advisory_payload.setdefault("row_kind", "canonical_suggestion")
     advisory_payload.setdefault("non_canonical_levels", False)
     return serialize_advisory_row(advisory_payload, allow_legacy=True)
-
 
 
 def _build_and_write_canonical_ranked_snapshot(
