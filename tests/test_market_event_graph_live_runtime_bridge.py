@@ -32,7 +32,7 @@ def _contract(**overrides):
     payload = {
         "schema_version": 1,
         "broker_provider": "kite",
-        "token_domain": "kite",
+        "token_domain": "kite_instrument_token",
         "name": "NIFTY_LIVE_CONSTITUENTS",
         "version": "2026-07-30.test",
         "effective_date": "2026-07-30",
@@ -57,10 +57,34 @@ def _contract(**overrides):
 
 
 def _evidence(contract):
-    required = [contract.index_symbol, *contract.constituent_symbols]
+    index_symbol = contract.index_symbol if hasattr(contract, "index_symbol") else str(contract["index_symbol"]).upper()
+    constituents = contract.constituents if hasattr(contract, "constituents") else tuple(contract["constituents"])
+    constituent_symbols = (
+        contract.constituent_symbols
+        if hasattr(contract, "constituent_symbols")
+        else tuple(str(row["symbol"]).upper() for row in constituents)
+    )
+    index_token = contract.index_instrument_token if hasattr(contract, "index_instrument_token") else int(contract["index_instrument_token"])
+    required = [index_symbol, *constituent_symbols]
     token_by_symbol = {
-        contract.index_symbol: contract.index_instrument_token,
-        **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in contract.constituents},
+        index_symbol: index_token,
+        **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in constituents},
+    }
+    token_lifecycle = {
+        str(token): {
+            "symbol": symbol,
+            "instrument_token": token,
+            "subscription_requested_epoch": 10.0,
+            "subscribe_call_succeeded_epoch": 11.0,
+            "mode_request_succeeded_epoch": 12.0,
+            "first_live_tick_epoch": 13.0,
+            "latest_live_tick_epoch": 20.0,
+            "first_full_payload_epoch": 14.0,
+            "latest_full_payload_epoch": 21.0,
+            "feed_session_id": "feed-session-1",
+            "reconnect_generation": 1,
+        }
+        for symbol, token in token_by_symbol.items()
     }
     return {
         "subscription_evidence_id": "sub-proof-1",
@@ -74,6 +98,7 @@ def _evidence(contract):
         "live_tick_observed_symbols": required,
         "full_payload_observed_symbols": required,
         "completed_bar_available_symbols": required,
+        "token_lifecycle": token_lifecycle,
     }
 
 
@@ -92,6 +117,7 @@ def _bar(ts_epoch: float, symbol: str, close: float = 100.0, *, provenance=None)
             else {
             "source_type": "live_websocket",
             "live_feed_session_id": "feed-session-1",
+            "reconnect_generation": 1,
             "first_live_tick_epoch": ts_epoch + 1.0,
             "last_live_tick_epoch": ts_epoch + 50.0,
             "historical_seed": False,
@@ -115,7 +141,7 @@ def _install_bars(monkeypatch, *, contract_payload, index_epoch=60.0, constituen
             return [_bar(constituent_epoch, symbol, 100.0, provenance=provenance)]
         return []
 
-    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.ohlc_buffer.get_completed_bars", bars)
+    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.shadow_ohlc_buffer.get_completed_bars", bars)
 
 
 def test_bridge_is_disabled_by_default(monkeypatch, tmp_path):
@@ -244,11 +270,11 @@ def test_rejection_ledger_is_durable_and_separate_from_accepted_rows(monkeypatch
 
     result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
 
-    assert result.reason == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION
+    assert result.reason == "SUBSCRIPTION_REQUEST_FAILED"
     assert output_path.exists() is False
     rows = [json.loads(line) for line in rejection_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     (row,) = rows
-    assert row["reason"] == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION
+    assert row["reason"] == "SUBSCRIPTION_REQUEST_FAILED"
     assert row["read_only"] is True
     assert row["broker_api_called"] is False
 
@@ -260,7 +286,8 @@ def test_default_subscription_provider_reads_feed_lifecycle_snapshot(monkeypatch
 
     def provider(token_by_symbol):
         assert token_by_symbol["NIFTY"] == 1
-        return {
+        payload = _evidence(contract_payload)
+        payload.update({
             "subscription_evidence_id": "feed-proof",
             "feed_session_id": "feed-session-1",
             "reconnect_generation": 3,
@@ -272,7 +299,10 @@ def test_default_subscription_provider_reads_feed_lifecycle_snapshot(monkeypatch
             "live_tick_observed_symbols": ["NIFTY", *list(_symbols())],
             "full_payload_observed_symbols": ["NIFTY", *list(_symbols())],
             "completed_bar_available_symbols": ["NIFTY", *list(_symbols())],
-        }
+        })
+        for row in payload["token_lifecycle"].values():
+            row["reconnect_generation"] = 3
+        return payload
 
     monkeypatch.setattr("core.kite_depth_ws.market_event_graph_subscription_evidence_for_tokens", provider)
     bridge = LiveSourceRuntimeBridge(exporter=LiveCapturedMetadataExporter(tmp_path / "out.jsonl"), universe_contract=contract_payload)
@@ -290,7 +320,7 @@ def test_token_resolution_without_callback_proof_is_rejected(monkeypatch, tmp_pa
 
     result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
 
-    assert result.reason == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION
+    assert result.reason == "SUBSCRIPTION_REQUEST_FAILED"
     assert result.exported is False
 
 
@@ -315,6 +345,7 @@ def test_history_seeded_and_fallback_bars_are_rejected(monkeypatch, tmp_path):
     blocked_provenance = {
         "source_type": "historical_seed",
         "live_feed_session_id": "feed-session-1",
+        "reconnect_generation": 1,
         "first_live_tick_epoch": 61.0,
         "last_live_tick_epoch": 119.0,
         "historical_seed": True,

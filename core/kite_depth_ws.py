@@ -124,6 +124,12 @@ _SUBSCRIPTION_REQUESTED_TOKENS: set[int] = set()
 _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS: set[int] = set()
 _MODE_REQUEST_SUCCEEDED_TOKENS: set[int] = set()
 _FULL_PAYLOAD_OBSERVED_TOKENS: set[int] = set()
+_SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN: dict[int, float] = {}
+_SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
+_MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
+_FIRST_LIVE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
+_LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _SUBSCRIPTION_REQUESTED_EPOCH: float | None = None
 _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH: float | None = None
 _MODE_REQUEST_SUCCEEDED_EPOCH: float | None = None
@@ -165,36 +171,69 @@ def _record_subscription_requested(tokens: Sequence[int]) -> None:
     global _SUBSCRIPTION_REQUESTED_TOKENS, _SUBSCRIPTION_REQUESTED_EPOCH
     normalized = {int(token) for token in (tokens or []) if int(token) > 0}
     if normalized:
+        epoch = float(now_utc_epoch())
         _SUBSCRIPTION_REQUESTED_TOKENS.update(normalized)
-        _SUBSCRIPTION_REQUESTED_EPOCH = float(now_utc_epoch())
+        for token in normalized:
+            _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN[token] = epoch
+        _SUBSCRIPTION_REQUESTED_EPOCH = epoch
 
 
 def _record_subscription_request_succeeded(tokens: Sequence[int]) -> None:
     global _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS, _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH
     normalized = {int(token) for token in (tokens or []) if int(token) > 0}
     if normalized:
+        epoch = float(now_utc_epoch())
         _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS.update(normalized)
-        _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = float(now_utc_epoch())
+        for token in normalized:
+            _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+        _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = epoch
 
 
 def _record_mode_request_succeeded(tokens: Sequence[int]) -> None:
     global _MODE_REQUEST_SUCCEEDED_TOKENS, _MODE_REQUEST_SUCCEEDED_EPOCH
     normalized = {int(token) for token in (tokens or []) if int(token) > 0}
     if normalized:
+        epoch = float(now_utc_epoch())
         _MODE_REQUEST_SUCCEEDED_TOKENS.update(normalized)
-        _MODE_REQUEST_SUCCEEDED_EPOCH = float(now_utc_epoch())
+        for token in normalized:
+            _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+        _MODE_REQUEST_SUCCEEDED_EPOCH = epoch
 
 
 def _record_full_payload_observed(token: int) -> None:
     global _FULL_PAYLOAD_OBSERVED_TOKENS, _FULL_PAYLOAD_OBSERVED_EPOCH
     if int(token) > 0:
+        token_int = int(token)
+        epoch = float(now_utc_epoch())
         _FULL_PAYLOAD_OBSERVED_TOKENS.add(int(token))
-        _FULL_PAYLOAD_OBSERVED_EPOCH = float(now_utc_epoch())
+        _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.setdefault(token_int, epoch)
+        _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN[token_int] = epoch
+        _FULL_PAYLOAD_OBSERVED_EPOCH = epoch
+
+
+def _reset_market_event_graph_generation_evidence() -> None:
+    global _SUBSCRIPTION_REQUESTED_TOKENS, _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS, _MODE_REQUEST_SUCCEEDED_TOKENS, _FULL_PAYLOAD_OBSERVED_TOKENS
+    global _SUBSCRIPTION_REQUESTED_EPOCH, _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH, _MODE_REQUEST_SUCCEEDED_EPOCH, _FULL_PAYLOAD_OBSERVED_EPOCH
+    _SUBSCRIPTION_REQUESTED_TOKENS = set()
+    _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS = set()
+    _MODE_REQUEST_SUCCEEDED_TOKENS = set()
+    _FULL_PAYLOAD_OBSERVED_TOKENS = set()
+    _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN.clear()
+    _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.clear()
+    _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.clear()
+    _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.clear()
+    _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
+    _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
+    _SUBSCRIPTION_REQUESTED_EPOCH = None
+    _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = None
+    _MODE_REQUEST_SUCCEEDED_EPOCH = None
+    _FULL_PAYLOAD_OBSERVED_EPOCH = None
 
 
 def get_current_feed_session_identity() -> dict[str, Any]:
     return {
         "provider": "kite",
+        "token_domain": "kite_instrument_token",
         "feed_session_id": _ensure_feed_session_id(),
         "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
         "connection_start_epoch": _FEED_CONNECTION_START_EPOCH,
@@ -214,9 +253,44 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         for symbol, token in expected.items()
         if _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token))) is not None
     }
+    identity = get_current_feed_session_identity()
+    lifecycle: dict[str, dict[str, Any]] = {}
+    for symbol, token in expected.items():
+        token_int = int(token)
+        lifecycle[str(token_int)] = {
+            "symbol": symbol,
+            "instrument_token": token_int,
+            "subscription_requested_epoch": _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN.get(token_int),
+            "subscribe_call_succeeded_epoch": _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "mode_request_succeeded_epoch": _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "first_live_tick_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "latest_live_tick_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
+            "first_full_payload_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "feed_session_id": identity["feed_session_id"],
+            "reconnect_generation": identity["reconnect_generation"],
+        }
+    generation_basis = {
+        "provider": identity["provider"],
+        "token_domain": identity["token_domain"],
+        "feed_session_id": identity["feed_session_id"],
+        "reconnect_generation": identity["reconnect_generation"],
+        "tokens": sorted(int(token) for token in expected.values()),
+        "request_epochs": {
+            str(token): lifecycle[str(token)].get("subscription_requested_epoch")
+            for token in sorted(int(token) for token in expected.values())
+        },
+    }
+    snapshot_basis = {
+        **generation_basis,
+        "token_lifecycle": lifecycle,
+    }
     payload = {
-        "feed_session_id": _ensure_feed_session_id(),
-        "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+        "provider": identity["provider"],
+        "token_domain": identity["token_domain"],
+        "feed_session_id": identity["feed_session_id"],
+        "reconnect_generation": int(identity["reconnect_generation"]),
+        "connection_start_epoch": identity["connection_start_epoch"],
         "token_by_symbol": dict(expected),
         "token_resolved_symbols": ordered,
         "subscription_requested_symbols": [symbol for symbol in ordered if symbol in requested],
@@ -230,6 +304,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         "subscription_request_succeeded_epoch": _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH,
         "mode_request_succeeded_epoch": _MODE_REQUEST_SUCCEEDED_EPOCH,
         "full_payload_observed_epoch": _FULL_PAYLOAD_OBSERVED_EPOCH,
+        "token_lifecycle": lifecycle,
         "budget_status": {
             "requested_count": len(expected),
             "request_succeeded_count": len(request_succeeded),
@@ -242,9 +317,13 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         "broker_api_called": False,
         "allowed_for_live_execution": False,
     }
-    payload["subscription_evidence_id"] = hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    payload["subscription_generation_id"] = hashlib.sha256(
+        json.dumps(generation_basis, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     ).hexdigest()
+    payload["evidence_snapshot_sha256"] = hashlib.sha256(
+        json.dumps(snapshot_basis, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    payload["subscription_evidence_id"] = payload["subscription_generation_id"]
     return payload
 _AUTH_REQUIRED_LOGGED = False
 _LAST_FEED_TICK_LOG_MINUTE: int | None = None
@@ -5112,6 +5191,8 @@ def on_ticks(ws, ticks):
         last_price = t.get("last_price")
         if token_int is not None:
             _LAST_MSG_TS_BY_TOKEN[int(token_int)] = float(freshness_tick_epoch)
+            if int(token_int) in _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN:
+                _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.setdefault(int(token_int), float(freshness_tick_epoch))
         symbol = _TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None
         underlying_tick = _is_underlying_token(token_int)
         has_depth = _depth_has_bid_ask(depth)
@@ -5634,16 +5715,6 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS, _FEED_RECONNECT_GENERATION, _FEED_CONNECTION_START_EPOCH, _SUBSCRIPTION_REQUESTED_TOKENS, _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS, _MODE_REQUEST_SUCCEEDED_TOKENS, _FULL_PAYLOAD_OBSERVED_TOKENS, _SUBSCRIPTION_REQUESTED_EPOCH, _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH, _MODE_REQUEST_SUCCEEDED_EPOCH, _FULL_PAYLOAD_OBSERVED_EPOCH
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     _ensure_feed_session_id()
-    _FEED_CONNECTION_START_EPOCH = float(now_utc_epoch())
-    _FEED_RECONNECT_GENERATION += 1
-    _SUBSCRIPTION_REQUESTED_TOKENS = set()
-    _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS = set()
-    _MODE_REQUEST_SUCCEEDED_TOKENS = set()
-    _FULL_PAYLOAD_OBSERVED_TOKENS = set()
-    _SUBSCRIPTION_REQUESTED_EPOCH = None
-    _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = None
-    _MODE_REQUEST_SUCCEEDED_EPOCH = None
-    _FULL_PAYLOAD_OBSERVED_EPOCH = None
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
         try:
             reset_fd_trace(baseline_fd=process_fd_count())
@@ -5700,6 +5771,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     intended_tokens_count=_INTENDED_TOKEN_COUNT,
                 )
                 return True
+    _FEED_CONNECTION_START_EPOCH = float(now_utc_epoch())
+    _FEED_RECONNECT_GENERATION += 1
+    _reset_market_event_graph_generation_evidence()
     if not KiteTicker or not cfg.KITE_USE_DEPTH:
         _RUNTIME_STATE = "IMPORT_MISSING"
         _LAST_RUNTIME_ERROR = "kiteticker_unavailable_or_depth_disabled"

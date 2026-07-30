@@ -236,6 +236,9 @@ def _merge_live_bar_provenance(bar, provenance, tick_ts):
     bar["bar_provenance"] = {
         "source_type": source_type,
         "live_feed_session_id": payload.get("live_feed_session_id") or existing.get("live_feed_session_id"),
+        "reconnect_generation": payload.get("reconnect_generation", existing.get("reconnect_generation")),
+        "instrument_token": payload.get("instrument_token", existing.get("instrument_token")),
+        "payload_mode": payload.get("payload_mode", existing.get("payload_mode")),
         "first_live_tick_epoch": first_epoch,
         "last_live_tick_epoch": last_epoch,
         "historical_seed": bool(payload.get("historical_seed", existing.get("historical_seed", False))),

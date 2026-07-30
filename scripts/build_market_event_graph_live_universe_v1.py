@@ -13,7 +13,6 @@ import csv
 import gzip
 import hashlib
 import json
-import shutil
 import sys
 import urllib.request
 from dataclasses import dataclass
@@ -182,7 +181,19 @@ def _is_nse_cash_equity(row: Mapping[str, Any]) -> bool:
     exchange = _field(row, "exchange", "exchange_segment", "segment")
     instrument_type = _field(row, "instrument_type", "instrumentType", "instrument")
     series = _field(row, "series")
-    return exchange.upper() in {"NSE", "NSE_EQ"} and instrument_type.upper() in {"EQ", "EQUITY"} and series.upper() in {"", "EQ"}
+    segment = _field(row, "segment")
+    if exchange.upper() not in {"NSE", "NSE_EQ"}:
+        return False
+    if segment and segment.upper() not in {"NSE", "NSE_EQ"}:
+        return False
+    return instrument_type.upper() in {"EQ", "EQUITY"} and series.upper() in {"", "EQ"}
+
+
+def _token_domain_for_provider(broker_provider: str) -> str:
+    provider = str(broker_provider).strip().lower()
+    if provider == "kite":
+        return "kite_instrument_token"
+    return provider
 
 
 def crosswalk_constituents(
@@ -265,13 +276,14 @@ def build_contract(
     broker_master_path: Path,
     broker_master_sha256: str,
 ) -> dict[str, Any]:
-    token_domain = str(broker_provider).strip().lower()
+    provider = str(broker_provider).strip().lower()
+    token_domain = _token_domain_for_provider(provider)
     stable_payload = {
         "schema_version": 1,
-        "broker_provider": token_domain,
+        "broker_provider": provider,
         "token_domain": token_domain,
         "name": "NIFTY50_LIVE_UNIVERSE",
-        "version": f"{official['raw_sha256'][:16]}_{token_domain}_{broker_master_sha256[:16]}",
+        "version": f"{official['raw_sha256'][:16]}_{provider}_{broker_master_sha256[:16]}",
         "effective_date": None,
         "source_retrieval_date": official["retrieved_at_utc"][:10],
         "source_page_updated_date": official["http_metadata"].get("last_modified"),
@@ -284,7 +296,6 @@ def build_contract(
             for row in mapping_rows
         ],
         "broker_instrument_master": {
-            "path": str(broker_master_path),
             "sha256": broker_master_sha256,
         },
         "provider_native_index_identifier": index_mapping["broker_tradingsymbol"],
@@ -299,11 +310,15 @@ def build_contract(
             "parse_report": parse_report,
         },
         "mapping_summary": mapping_summary,
+        "broker_instrument_master": {
+            "path": str(broker_master_path),
+            "sha256": broker_master_sha256,
+        },
         "capture_session_id": None,
     }
     contract["canonical_sha256"] = canonical_json_sha256(stable_payload)
     contract["contract_filename"] = (
-        f"nifty50_live_universe_{token_domain}_{official['raw_sha256'][:16]}_{broker_master_sha256[:16]}_{contract['canonical_sha256'][:16]}.json"
+        f"nifty50_live_universe_{provider}_{official['raw_sha256'][:16]}_{broker_master_sha256[:16]}_{contract['canonical_sha256'][:16]}.json"
     )
     return contract
 
@@ -325,7 +340,7 @@ def main() -> int:
         report = {
             "verdict": BLOCKED_BY_KITE_INSTRUMENT_MASTER,
             "broker_provider": "kite",
-            "token_domain": "kite",
+            "token_domain": "kite_instrument_token",
             "official_source": {key: value for key, value in official.items() if key != "raw_bytes"},
             "parse_report": parse_report,
             "missing_broker_instrument_master": str(args.broker_instruments),
@@ -343,7 +358,7 @@ def main() -> int:
     report = {
         "verdict": PASS_KITE_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING if args.broker_provider == "kite" else PASS_UPSTOX_DOMAIN_MAPPING,
         "broker_provider": args.broker_provider,
-        "token_domain": args.broker_provider,
+        "token_domain": _token_domain_for_provider(args.broker_provider),
         "official_source": {key: value for key, value in official.items() if key != "raw_bytes"},
         "parse_report": parse_report,
         "broker_instrument_master": {"path": str(args.broker_instruments), "sha256": broker_hash},

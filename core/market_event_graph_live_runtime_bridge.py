@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from config import config as cfg
-from core.market_data import get_token_for_symbol, ohlc_buffer
+from core.market_data import get_token_for_symbol
+from core.market_event_graph_live_ohlc_buffer import shadow_ohlc_buffer
 from core.market_event_graph_live_source import (
     LiveCapturedMetadataExporter,
     build_live_captured_metadata_row,
@@ -34,6 +35,9 @@ BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE = "BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
 BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION = "BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION"
 BROKER_TOKEN_DOMAIN_MISMATCH = "BROKER_TOKEN_DOMAIN_MISMATCH"
 LIVE_BAR_PROVENANCE_UNPROVEN = "LIVE_BAR_PROVENANCE_UNPROVEN"
+FEED_SESSION_ID_MISMATCH = "FEED_SESSION_ID_MISMATCH"
+RECONNECT_GENERATION_MISMATCH = "RECONNECT_GENERATION_MISMATCH"
+PRE_GENERATION_TICK_PROVENANCE = "PRE_GENERATION_TICK_PROVENANCE"
 INDEX_INTERVAL_MISALIGNED = "INDEX_INTERVAL_MISALIGNED"
 SNAPSHOT_INCOMPLETE = "SNAPSHOT_INCOMPLETE"
 
@@ -232,8 +236,11 @@ class LiveSourceRuntimeBridge:
             )
         except Exception:
             return None, BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
-        provider = str(raw.get("broker_provider") or raw.get("token_domain") or "").strip().lower()
+        provider = str(raw.get("broker_provider") or "").strip().lower()
+        token_domain = str(raw.get("token_domain") or "").strip().lower()
         if provider and provider != "kite":
+            return None, BROKER_TOKEN_DOMAIN_MISMATCH
+        if token_domain and token_domain != "kite_instrument_token":
             return None, BROKER_TOKEN_DOMAIN_MISMATCH
         if provider != "kite" and raw.get("broker_provider") is not None:
             return None, BROKER_TOKEN_DOMAIN_MISMATCH
@@ -297,6 +304,36 @@ class LiveSourceRuntimeBridge:
         }
         if observed_tokens != expected_tokens:
             return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
+        token_lifecycle = evidence.get("token_lifecycle") or {}
+        if not isinstance(token_lifecycle, Mapping):
+            return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
+        evidence_session_id = str(evidence.get("feed_session_id") or "")
+        evidence_generation = int(evidence.get("reconnect_generation"))
+        for symbol in required:
+            token = int(expected_tokens[symbol])
+            row = token_lifecycle.get(str(token)) or token_lifecycle.get(token) or {}
+            if not isinstance(row, Mapping):
+                return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, (symbol,)
+            if str(row.get("feed_session_id") or "") != evidence_session_id:
+                return False, FEED_SESSION_ID_MISMATCH, (symbol,)
+            try:
+                row_generation = int(row.get("reconnect_generation"))
+            except Exception:
+                return False, RECONNECT_GENERATION_MISMATCH, (symbol,)
+            if row_generation != evidence_generation:
+                return False, RECONNECT_GENERATION_MISMATCH, (symbol,)
+            subscribe_success = _coerce_float(row.get("subscribe_call_succeeded_epoch"))
+            live_tick_first = _coerce_float(row.get("first_live_tick_epoch"))
+            mode_success = _coerce_float(row.get("mode_request_succeeded_epoch"))
+            full_first = _coerce_float(row.get("first_full_payload_epoch"))
+            if subscribe_success is None:
+                return False, "SUBSCRIPTION_REQUEST_FAILED", (symbol,)
+            if live_tick_first is None or live_tick_first < subscribe_success:
+                return False, "MISSING_POST_REQUEST_TICK", (symbol,)
+            if mode_success is None:
+                return False, "MODE_REQUEST_FAILED", (symbol,)
+            if full_first is None or full_first < mode_success:
+                return False, "MISSING_POST_MODE_FULL_PAYLOAD", (symbol,)
         for field in (
             "token_resolved_symbols",
             "subscription_requested_symbols",
@@ -373,7 +410,7 @@ class LiveSourceRuntimeBridge:
         )
 
     def _completed_bar_for(self, symbol: str, *, cycle_cutoff: datetime) -> dict[str, Any] | None:
-        bars = ohlc_buffer.get_completed_bars(symbol, as_of=cycle_cutoff)
+        bars = shadow_ohlc_buffer.get_completed_bars(symbol, as_of=cycle_cutoff)
         if not bars:
             return None
         latest = dict(bars[-1])
@@ -467,7 +504,7 @@ def canonical_live_universe_sha256(contract: LiveUniverseContract | Mapping[str,
                 "index_instrument_token": contract.index_instrument_token,
                 "provider_native_index_identifier": str(contract.provider_native_index_identifier or ""),
                 "constituents": list(contract.constituents),
-                "broker_instrument_master": dict(contract.broker_instrument_master or {}),
+                "broker_instrument_master": {"sha256": str((contract.broker_instrument_master or {}).get("sha256") or "")},
                 "source_provenance": contract.source_provenance,
             }
         )
@@ -492,7 +529,7 @@ def canonical_live_universe_sha256(contract: LiveUniverseContract | Mapping[str,
             "index_instrument_token": int(contract.get("index_instrument_token") or 0),
             "provider_native_index_identifier": str(contract.get("provider_native_index_identifier") or ""),
             "constituents": constituents,
-            "broker_instrument_master": dict(contract.get("broker_instrument_master") or {}),
+            "broker_instrument_master": {"sha256": str((contract.get("broker_instrument_master") or {}).get("sha256") or "")},
         }
         else:
             payload = {
@@ -572,11 +609,24 @@ def _bar_has_live_provenance(bar: Mapping[str, Any]) -> bool:
         return False
     if not str(prov.get("live_feed_session_id") or "").strip():
         return False
+    try:
+        int(prov.get("reconnect_generation"))
+    except Exception:
+        return False
     if bool(prov.get("historical_seed")) or bool(prov.get("replay_fixture")):
         return False
     if bool(prov.get("non_live_fallback")) or bool(prov.get("recovered_synthetic")):
         return False
     return prov.get("first_live_tick_epoch") is not None and prov.get("last_live_tick_epoch") is not None
+
+
+def _coerce_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except Exception:
+        return None
 
 
 _LIVE_SOURCE_BRIDGE: LiveSourceRuntimeBridge | None = None
@@ -620,6 +670,9 @@ __all__ = [
     "BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION",
     "LIVE_BAR_PROVENANCE_UNPROVEN",
     "LIVE_UNIVERSE_NOT_CONFIGURED",
+    "FEED_SESSION_ID_MISMATCH",
+    "RECONNECT_GENERATION_MISMATCH",
+    "PRE_GENERATION_TICK_PROVENANCE",
     "LiveSourceBridgeResult",
     "LiveSourceRuntimeBridge",
     "LiveUniverseContract",
