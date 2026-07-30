@@ -14,6 +14,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Iterable
 
+from core.market_event_graph_runtime_observer import observe_market_event_graph_runtime
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult, classify_movement_regime
 from core.no_trade_engine import NoTradeAssessment, assess_no_trade
@@ -84,10 +85,15 @@ def build_candidate_pool_report(
 
     if isinstance(ctx, dict):
         from core.movement_contract import context_from_dict
+
         ctx = context_from_dict(ctx)
     if not isinstance(ctx, StrategyContext):
         raise TypeError("candidate_pool_context_invalid")
 
+    runtime_observation = observe_market_event_graph_runtime(
+        ctx.metadata,
+        context_ts=ctx.ts_epoch,
+    )
     regime_result = regime or classify_movement_regime(ctx)
     option_assessment = option_pressure or assess_option_pressure(ctx)
     generators = tuple(candidate_generators) if candidate_generators is not None else get_default_candidate_generators()
@@ -181,6 +187,9 @@ def build_candidate_pool_report(
             "no_trade": no_trade_assessment.no_trade,
             "no_trade_primary_reason": no_trade_assessment.primary_reason,
             "default_strategy_mode": "MARKET_EVENT_GRAPH_SHADOW_ONLY",
+            "market_event_graph_runtime_status": runtime_observation["status"],
+            "market_event_graph_runtime_reason": runtime_observation["reason"],
+            "market_event_graph_runtime_observation": runtime_observation,
         },
     )
 
