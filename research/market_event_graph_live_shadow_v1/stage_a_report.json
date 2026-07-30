@@ -1,0 +1,17 @@
+{
+  "accepted_intervals": 1,
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "constituent_count": 50,
+  "future_data_violations": 0,
+  "intervals_observed": 1,
+  "is_order_action": false,
+  "observation_mode": "REPLAY",
+  "read_only": true,
+  "rejected_intervals": 0,
+  "rejection_counts": {
+    "ACCEPTED": 1
+  },
+  "valid_ratio": 1.0,
+  "verdict": "INSUFFICIENT_LIVE_BREADTH_EVIDENCE"
+}

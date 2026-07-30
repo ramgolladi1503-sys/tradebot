@@ -1,0 +1,1 @@
+python scripts/run_market_event_graph_live_shadow_v1.py --input PATH_TO_LIVE_CAPTURED_METADATA_JSONL --output research/market_event_graph_live_shadow_v1 --mode LIVE

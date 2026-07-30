@@ -1,0 +1,23 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "cooldown_minutes": 15,
+  "dataset_sha256": "30f3d399404a299da6cb99b600a3f2b7346deb74653d5f4a8ebf8849ebefe73c",
+  "frozen_graph": [
+    "breadth_down_1:HIGH",
+    "index_breadth_divergence:LOW",
+    "breadth_down_1:LOW"
+  ],
+  "frozen_spec_sha256": "75432ed1c9e3be9172079dc003ea9da38f7065cdfd4ca46ebd9538d7f863f218",
+  "holding_research_horizon_bars": 15,
+  "is_order_action": false,
+  "read_only": true,
+  "strategy_id": "market_event_graph_reversal_v1",
+  "thresholds": {
+    "breadth_high": 0.21862348178137653,
+    "breadth_low": 0.10121457489878542,
+    "divergence_low": -0.000238836424541256,
+    "min_constituents": 40
+  },
+  "timing": "A(t-2) -> B(t-1) -> C(t), entry eligibility next completed bar"
+}

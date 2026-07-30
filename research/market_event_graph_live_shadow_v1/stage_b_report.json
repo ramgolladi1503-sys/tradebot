@@ -1,0 +1,15 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "candidate_stage_rows": 13,
+  "completed_graphs": 1,
+  "graph_state_counts": {
+    "GRAPH_EMITTED": 1
+  },
+  "hypothetical_outcome_rows": 1,
+  "is_order_action": false,
+  "quote_rows": 1,
+  "read_only": true,
+  "safety_violation": false,
+  "verdict": "PASS_GRAPH_FORWARD_SHADOW_CORRECTNESS"
+}

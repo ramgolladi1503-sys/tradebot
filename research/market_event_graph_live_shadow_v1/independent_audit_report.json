@@ -1,0 +1,22 @@
+{
+  "accepted_interval_count": 1,
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "candidate_stage_rows": 13,
+  "failures": [],
+  "graph_rows": 1,
+  "interval_count": 1,
+  "is_order_action": false,
+  "ledger_hashes": {
+    "breadth_event_ledger.jsonl": "126dde90da2c5da3e49ed7bffb8369ff51834d422dea5a9bd64c8df9232c8df3",
+    "candidate_stage_trace.jsonl": "cc262f54232e5e008674a582d4776adb1846fe303cbf03f659bf2c5bb5d29077",
+    "graph_state_ledger.jsonl": "ac10e0e841201379ddfc93b4b05f15a7aca4cbd04486332dd7c64cda3aea0958",
+    "hypothetical_outcomes.jsonl": "c5d368d12ff16e84ec3f164241a8001dd4844b35ff14c042fd6b3aa956903398",
+    "interval_availability.jsonl": "13cebc2642605e6106d163e9eb4d75e5090ad28bb82346a6748df3b3e835cf5d",
+    "operational_matrix.jsonl": "84bd48721adba9abbf0e244d45deaaa3dd050ca5093f62b31bf9ce5363842d23",
+    "quote_observation_ledger.jsonl": "8e33843177537627f1d7010959e75be04fe2583400b6a6401242292999db1b1a",
+    "sample_replay_input.jsonl": "b073af00a82b2552c78ab81bb7e33ebe23b7f40fc70f9c8708e0d962cd6c9102"
+  },
+  "read_only": true,
+  "verdict": "PASS_STAGE_A_B_INDEPENDENT_AUDIT"
+}
