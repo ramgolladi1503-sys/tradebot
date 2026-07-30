@@ -1,0 +1,132 @@
+name: QA Secure KiteConnect
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: qa-secure-kite-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secure_kiteconnect_compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+      KITE_ALLOW_ENV_TOKEN_FOR_CI: "false"
+      PYTHONHASHSEED: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install baseline dependencies and audit tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pip-audit pytest
+
+      - name: Prove secure wheel builder behavior
+        run: PYTHONPATH=. pytest -q -o addopts='' tests/test_secure_kiteconnect_wheel_builder.py
+
+      - name: Build deterministic patched KiteConnect wheel
+        run: >-
+          PYTHONPATH=. python scripts/build_secure_kiteconnect_wheel.py
+          --download-cache .runtime/downloads
+          --output-dir .runtime/wheels
+
+      - name: Replace vulnerable dependency graph
+        run: |
+          python -m pip uninstall -y kiteconnect autobahn
+          python -m pip install "autobahn[twisted]==25.10.2"
+          python -m pip install --no-deps --force-reinstall .runtime/wheels/kiteconnect-5.2.0+tradebot.1-py3-none-any.whl
+          python -m pip check
+
+      - name: Verify installed patch provenance and constructors without network
+        run: |
+          mkdir -p .runtime/qa
+          python - <<'PY' | tee .runtime/qa/secure_kite_smoke.txt
+          import importlib.metadata as metadata
+          import json
+          from importlib.resources import files
+          from kiteconnect import KiteConnect, KiteTicker
+          import autobahn
+          import kiteconnect
+
+          assert metadata.version("kiteconnect") == "5.2.0+tradebot.1"
+          assert metadata.version("autobahn") == "25.10.2"
+          patch = json.loads(
+              files("kiteconnect").joinpath("TRADEBOT_SECURITY_PATCH.json").read_text(encoding="utf-8")
+          )
+          assert patch["upstream_version"] == "5.2.0"
+          assert patch["patched_version"] == "5.2.0+tradebot.1"
+          assert patch["patch"]["before"] == "==19.11.2"
+          assert patch["patch"]["after"] == ">=25.10.2,<27"
+          client = KiteConnect(api_key="qa_api_key")
+          ticker = KiteTicker("qa_api_key", "qa_access_token", reconnect=False)
+          assert client.api_key == "qa_api_key"
+          assert ticker.api_key == "qa_api_key"
+          assert kiteconnect.__version__ == "5.2.0+tradebot.1"
+          print("SECURE_KITECONNECT_SMOKE=PASS")
+          print(f"KITECONNECT_VERSION={metadata.version('kiteconnect')}")
+          print(f"AUTOBAHN_VERSION={metadata.version('autobahn')}")
+          PY
+
+      - name: Run broker and WebSocket compatibility contracts
+        run: >-
+          PYTHONPATH=. pytest -q -o addopts=''
+          tests/auth/test_auth_manager_behavior_contracts.py
+          tests/auth/test_auth_boundary_exhaustive.py
+          tests/auth/test_auth_internal_fallbacks.py
+          tests/auth/test_check_kite_auth_cli_behavior.py
+          tests/auth/test_auth_safety.py
+          tests/test_kite_client_auth_guard.py
+          tests/test_runtime_auth_freshness.py
+          tests/test_kite_depth_restart.py
+          tests/test_kite_depth_ws_stability.py
+          tests/test_feed_reconnect_safety.py
+          tests/test_feed_runtime_states.py
+          tests/test_on_connect_forces_subscribe.py
+          tests/test_pr_feed_18_ws_lifecycle_shell.py
+          tests/test_ws_handshake_credential_proof.py
+          tests/test_pr_feed_09_reconnect_policy.py
+          tests/test_feed_reconnect_quarantine.py
+          tests/test_feed_supervisor_state_machine.py
+          tests/test_manual_approval_enforcement.py
+          --junitxml=.runtime/qa/secure_kite_compatibility.xml
+          --durations=25
+
+      - name: Audit installed environment for known vulnerabilities
+        run: >-
+          pip-audit --local --format json
+          --output .runtime/qa/secure_kite_env_audit.json
+
+      - name: Upload secure KiteConnect certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secure-kiteconnect-evidence
+          if-no-files-found: error
+          path: |
+            .runtime/wheels/kiteconnect-5.2.0+tradebot.1-py3-none-any.whl
+            .runtime/wheels/kiteconnect_patch_manifest.json
+            .runtime/qa/secure_kite_smoke.txt
+            .runtime/qa/secure_kite_compatibility.xml
+            .runtime/qa/secure_kite_env_audit.json
