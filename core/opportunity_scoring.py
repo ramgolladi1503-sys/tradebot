@@ -57,6 +57,26 @@ DOWNGRADE_REASON_PENALTIES: dict[str, float] = {
     "soft_safety_evidence_requires_confirmation": 0.15,
 }
 
+REGIME_POLICY_EVIDENCE_KEYS: frozenset[str] = frozenset(
+    {
+        "entropy_state",
+        "regime_entropy",
+        "regime_entropy_normalized",
+        "regime_entropy_state",
+        "regime_status",
+        "session_bucket",
+        "stable_regime",
+        "stable_regime_confirmed",
+        "trend_state",
+        "primary_regime",
+        "volume_impulse",
+        "liquidity_quality",
+        "is_expiry_day",
+        "model_source",
+        "probability_semantics",
+    }
+)
+
 SCORE_ELIGIBLE = "SCORE_ELIGIBLE"
 NEEDS_CONFIRMATION = "NEEDS_CONFIRMATION"
 ADVISORY_ONLY = "ADVISORY_ONLY"
@@ -292,6 +312,27 @@ def _regime_policy_inputs(candidate: StrategyCandidate) -> dict[str, Any]:
     }
 
 
+def _regime_policy_is_authoritative(candidate: StrategyCandidate) -> bool:
+    """Return whether regime policy owns this candidate's scoring decision.
+
+    Production movement candidates are always governed by the policy, including
+    unknown future strategy IDs. Generic scorer-only fixtures with no canonical
+    strategy, no movement lineage, and no regime evidence retain the scorer's
+    pre-policy compatibility contract.
+    """
+    from core.strategy_regime_policy import canonical_strategy_family
+
+    evidence = dict(candidate.evidence or {})
+    lineage = dict(candidate.lineage or {})
+    source = str(lineage.get("source") or "").strip().lower()
+    has_regime_evidence = any(key in evidence for key in REGIME_POLICY_EVIDENCE_KEYS)
+    return bool(
+        canonical_strategy_family(candidate.strategy_id) is not None
+        or source == "movement_strategy"
+        or has_regime_evidence
+    )
+
+
 def score_candidate(
     candidate: StrategyCandidate,
     decision: HardDowngradeDecision,
@@ -307,17 +348,18 @@ def score_candidate(
     if candidate.strategy_id != decision.strategy_id:
         raise ValueError("candidate_and_downgrade_strategy_id_mismatch")
 
-    from core.strategy_regime_policy import evaluate_strategy_regime_policy
+    policy_result = "ELIGIBLE"
+    if _regime_policy_is_authoritative(candidate):
+        from core.strategy_regime_policy import evaluate_strategy_regime_policy
 
-    policy_inputs = _regime_policy_inputs(candidate)
-    volatility_expansion = (candidate.regime_scores or {}).get("VOLATILITY_EXPANSION", 0.0) > 0.5
-    policy_output = evaluate_strategy_regime_policy(
-        strategy=candidate.strategy_id,
-        volatility_expansion=volatility_expansion,
-        **policy_inputs,
-    )
-
-    policy_result = policy_output.get("policy_result", "ELIGIBLE")
+        policy_inputs = _regime_policy_inputs(candidate)
+        volatility_expansion = (candidate.regime_scores or {}).get("VOLATILITY_EXPANSION", 0.0) > 0.5
+        policy_output = evaluate_strategy_regime_policy(
+            strategy=candidate.strategy_id,
+            volatility_expansion=volatility_expansion,
+            **policy_inputs,
+        )
+        policy_result = policy_output.get("policy_result", "ELIGIBLE")
 
     policy_bucket = decision.downgraded_bucket
     policy_eligibility = _score_eligibility(decision)
@@ -505,6 +547,7 @@ __all__ = [
     "DOWNGRADE_REASON_PENALTIES",
     "NEEDS_CONFIRMATION",
     "NO_TRADE_ONLY",
+    "REGIME_POLICY_EVIDENCE_KEYS",
     "SCORE_ELIGIBLE",
     "SCORING_SCHEMA_VERSION",
     "SUPPRESSED_BY_DOWNGRADE",
