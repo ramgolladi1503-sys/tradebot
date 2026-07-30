@@ -1,0 +1,85 @@
+name: Observed Transition Option Validation V1
+
+on:
+  push:
+    branches:
+      - research/observed-transition-option-validation-v1
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-frozen-observed-transitions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout without broad LFS hydration
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - name: Pull bounded research evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git lfs install --local
+          git lfs pull --include="research/local_evidence_consolidation_v1/**/repaired_joint_underlying_option_warehouse.parquet,research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet,research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/upstox-expired-options-v1/**" --exclude=""
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install research dependencies
+        run: python -m pip install --disable-pip-version-check numpy pandas pyarrow scikit-learn
+
+      - name: Compile research runners
+        run: |
+          python -m py_compile \
+            scripts/run_outcome_blind_pattern_observation_v1.py \
+            scripts/run_outcome_blind_pattern_observation_stage_v1.py \
+            scripts/run_observed_transition_option_validation_v1.py
+
+      - name: Reproduce outcome-blind observation freeze
+        run: |
+          python scripts/run_outcome_blind_pattern_observation_v1.py \
+            --repo-root . \
+            --output-root runtime/research/outcome_blind_pattern_observation_v1 \
+            --stage profile
+          python scripts/run_outcome_blind_pattern_observation_stage_v1.py \
+            --repo-root . \
+            --output-root runtime/research/outcome_blind_pattern_observation_v1
+
+      - name: Validate frozen transition hypotheses
+        run: |
+          python scripts/run_observed_transition_option_validation_v1.py \
+            --repo-root . \
+            --observation-dir runtime/research/outcome_blind_pattern_observation_v1 \
+            --output-dir runtime/research/observed_transition_option_validation_v1
+
+      - name: Build evidence hashes
+        if: always()
+        shell: bash
+        run: |
+          root=runtime/research/observed_transition_option_validation_v1
+          if [ -d "$root" ]; then
+            find "$root" -maxdepth 1 -type f ! -name SHA256SUMS -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > "$root/SHA256SUMS" || true
+          fi
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: observed-transition-option-validation-v1-evidence
+          path: |
+            runtime/research/outcome_blind_pattern_observation_v1/
+            runtime/research/observed_transition_option_validation_v1/
+          if-no-files-found: error
+          retention-days: 90
