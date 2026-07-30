@@ -2,9 +2,9 @@
 
 This module collects movement strategy candidates into one report and attaches
 option-confirmation and no-trade assessment evidence. It is intentionally a
-shell: it does not rank, execute, submit orders, call brokers, touch depth
-subscriptions, mutate candidates, tune strategy thresholds, or change dashboard
-behavior.
+shell: it does not rank, execute, submit orders, call brokers, mutate candidates,
+tune strategy thresholds, or change dashboard behavior. The market-event graph
+source may request read-only market-data subscriptions when explicitly enabled.
 """
 
 from __future__ import annotations
@@ -14,6 +14,10 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Iterable
 
+from core.market_event_graph_constituent_source import (
+    attach_market_event_graph_constituent_source,
+    persist_market_event_graph_constituent_state,
+)
 from core.market_event_graph_runtime_observer import observe_market_event_graph_runtime
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult, classify_movement_regime
@@ -90,6 +94,14 @@ def build_candidate_pool_report(
     if not isinstance(ctx, StrategyContext):
         raise TypeError("candidate_pool_context_invalid")
 
+    source_metadata = attach_market_event_graph_constituent_source(
+        ctx.metadata,
+        symbol=ctx.symbol,
+        as_of_epoch=ctx.ts_epoch,
+    )
+    ctx.metadata.clear()
+    ctx.metadata.update(source_metadata)
+
     runtime_observation = observe_market_event_graph_runtime(
         ctx.metadata,
         context_ts=ctx.ts_epoch,
@@ -115,6 +127,8 @@ def build_candidate_pool_report(
                 movement_candidates.append(candidate)
             else:
                 warnings.append(f"strategy_generator_returned_non_candidate:{generator_name}")
+
+    source_state_persisted = persist_market_event_graph_constituent_state(ctx.metadata)
 
     no_trade_assessment = assess_no_trade(
         ctx,
@@ -187,6 +201,16 @@ def build_candidate_pool_report(
             "no_trade": no_trade_assessment.no_trade,
             "no_trade_primary_reason": no_trade_assessment.primary_reason,
             "default_strategy_mode": "MARKET_EVENT_GRAPH_SHADOW_ONLY",
+            "market_event_graph_constituent_source_status": ctx.metadata.get(
+                "market_event_graph_constituent_source_status"
+            ),
+            "market_event_graph_constituent_source_reason": ctx.metadata.get(
+                "market_event_graph_constituent_source_reason"
+            ),
+            "market_event_graph_constituent_source_evidence": ctx.metadata.get(
+                "market_event_graph_constituent_source_evidence", {}
+            ),
+            "market_event_graph_constituent_state_persisted": bool(source_state_persisted),
             "market_event_graph_runtime_status": runtime_observation["status"],
             "market_event_graph_runtime_reason": runtime_observation["reason"],
             "market_event_graph_runtime_observation": runtime_observation,
