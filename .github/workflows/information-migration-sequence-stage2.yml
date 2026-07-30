@@ -1,0 +1,62 @@
+name: Information Migration Sequence Stage 2
+
+on:
+  push:
+    branches:
+      - research/information-migration-sequence-v1
+    paths:
+      - '.github/workflows/information-migration-sequence-stage2.yml'
+      - 'research/information_migration_sequence_v1/run_stage1_signal_freeze.py'
+      - 'research/information_migration_sequence_v1/run_stage2_option_validation.py'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/information-migration-sequence-stage2.yml'
+      - 'research/information_migration_sequence_v1/run_stage1_signal_freeze.py'
+      - 'research/information_migration_sequence_v1/run_stage2_option_validation.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  attach-and-validate-certified-options:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout without broad LFS hydration
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - name: Pull only required research datasets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git lfs install --local
+          git lfs pull --include="research/local_evidence_consolidation_v1/**/repaired_joint_underlying_option_warehouse.parquet,research/local_evidence_consolidation_v1/**/constituent_index_5m.parquet" --exclude=""
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install research dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn
+
+      - name: Reproduce frozen outcome-blind Stage 1
+        run: python research/information_migration_sequence_v1/run_stage1_signal_freeze.py
+
+      - name: Attach certified option outcomes and validate
+        run: python research/information_migration_sequence_v1/run_stage2_option_validation.py
+
+      - name: Upload Stage 1 and Stage 2 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: information-migration-sequence-v1-stage2
+          path: |
+            information-migration-sequence-v1-stage1/
+            information-migration-sequence-v1-stage2/
+          if-no-files-found: error
