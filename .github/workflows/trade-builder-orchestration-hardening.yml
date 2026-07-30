@@ -13,11 +13,15 @@ on:
       - "core/orchestrator_stage_pipeline.py"
       - "scripts/run_architecture_hardening_campaign.py"
       - "scripts/audit_kite_candidate_replay_corpus.py"
+      - "scripts/audit_upstox_option_tick_replay.py"
+      - "scripts/evaluate_tradebuilder_orchestrator_offline_certification.py"
       - "tests/test_execution_decision_contract.py"
       - "tests/test_runtime_authority_audit.py"
       - "tests/test_architecture_hardening_proofs.py"
       - "tests/test_architecture_hardening_campaign.py"
       - "tests/test_kite_candidate_replay_corpus_audit.py"
+      - "tests/test_upstox_option_tick_replay_audit.py"
+      - "tests/test_tradebuilder_orchestrator_offline_certification.py"
       - "docs/architecture/trade_builder_orchestration_hardening_v1.md"
       - ".github/workflows/trade-builder-orchestration-hardening.yml"
   workflow_dispatch:
@@ -51,11 +55,15 @@ jobs:
             core/orchestrator_stage_pipeline.py \
             scripts/run_architecture_hardening_campaign.py \
             scripts/audit_kite_candidate_replay_corpus.py \
+            scripts/audit_upstox_option_tick_replay.py \
+            scripts/evaluate_tradebuilder_orchestrator_offline_certification.py \
             tests/test_execution_decision_contract.py \
             tests/test_runtime_authority_audit.py \
             tests/test_architecture_hardening_proofs.py \
             tests/test_architecture_hardening_campaign.py \
-            tests/test_kite_candidate_replay_corpus_audit.py
+            tests/test_kite_candidate_replay_corpus_audit.py \
+            tests/test_upstox_option_tick_replay_audit.py \
+            tests/test_tradebuilder_orchestrator_offline_certification.py
       - name: Run focused tests
         env:
           DISABLE_ML: "true"
@@ -65,7 +73,9 @@ jobs:
             tests/test_runtime_authority_audit.py \
             tests/test_architecture_hardening_proofs.py \
             tests/test_architecture_hardening_campaign.py \
-            tests/test_kite_candidate_replay_corpus_audit.py
+            tests/test_kite_candidate_replay_corpus_audit.py \
+            tests/test_upstox_option_tick_replay_audit.py \
+            tests/test_tradebuilder_orchestrator_offline_certification.py
       - name: Prove feed implementation untouched
         shell: bash
         run: |
