@@ -2681,20 +2681,33 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         try:
             if ltp and ltp > 0:
                 live_source_type = "tick_store_live" if str(ltp_source) == "tick_store" else ("live_websocket" if str(ltp_source) == "live" else "unknown")
-                ohlc_buffer.update_tick(
-                    symbol,
-                    ltp,
-                    volume=None,
-                    ts=cycle_cutoff,
-                    provenance={
-                        "source_type": live_source_type,
-                        "live_feed_session_id": os.getenv("LIVE_FEED_SESSION_ID", ""),
-                        "historical_seed": False,
-                        "replay_fixture": False,
-                        "non_live_fallback": False,
-                        "recovered_synthetic": False,
-                    },
-                )
+                live_source_enabled = bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False))
+                update_ts = cycle_cutoff
+                should_update_ohlc = True
+                if live_source_enabled:
+                    should_update_ohlc = False
+                    if live_source_type in {"live_websocket", "tick_store_live"} and isinstance(ltp_ts_epoch, (int, float)):
+                        source_tick_epoch = float(ltp_ts_epoch)
+                        last_source_tick_epoch = _DATA_CACHE.get(symbol, {}).get("last_live_source_tick_epoch_for_ohlc")
+                        if last_source_tick_epoch is None or source_tick_epoch > float(last_source_tick_epoch):
+                            update_ts = datetime.fromtimestamp(source_tick_epoch, tz=timezone.utc).astimezone(cycle_cutoff.tzinfo)
+                            _DATA_CACHE.setdefault(symbol, {})["last_live_source_tick_epoch_for_ohlc"] = source_tick_epoch
+                            should_update_ohlc = True
+                if should_update_ohlc:
+                    ohlc_buffer.update_tick(
+                        symbol,
+                        ltp,
+                        volume=None,
+                        ts=update_ts,
+                        provenance={
+                            "source_type": live_source_type,
+                            "live_feed_session_id": os.getenv("LIVE_FEED_SESSION_ID", ""),
+                            "historical_seed": False,
+                            "replay_fixture": False,
+                            "non_live_fallback": False,
+                            "recovered_synthetic": False,
+                        },
+                    )
         except Exception:
             pass
         vwap = ltp

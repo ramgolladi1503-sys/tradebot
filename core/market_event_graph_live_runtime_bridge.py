@@ -46,7 +46,7 @@ class LiveUniverseContract:
     index_instrument_token: int
     constituents: tuple[dict[str, Any], ...]
     source_provenance: str
-    capture_session_id: str
+    capture_session_id: str | None
     canonical_sha256: str
 
     @property
@@ -87,8 +87,12 @@ class LiveSourceRuntimeBridge:
         self._last_session_date: str | None = None
         self._write_failures = 0
         self._dropped_evidence_writes = 0
+        self._rejection_write_failures = 0
         self._max_queue_depth = 0
         self._diagnostics: list[dict[str, Any]] = []
+        self._rejection_path = Path(
+            getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_REJECTION_PATH", "runtime/market_event_graph_live_shadow/rejections.jsonl")
+        )
 
     def observe_cycle(
         self,
@@ -126,7 +130,7 @@ class LiveSourceRuntimeBridge:
             index_bar=snapshot["index_bar"],
             constituent_bars=snapshot["constituent_bars"],
             expected_constituents=len(contract.constituents),
-            run_id=contract.capture_session_id,
+            run_id=str(subscription.get("feed_session_id") or subscription["subscription_evidence_id"]),
             runtime_source_identifier=str(subscription["subscription_evidence_id"]),
             missing_constituents=[],
             stale_constituents=[],
@@ -194,12 +198,17 @@ class LiveSourceRuntimeBridge:
             contract = LiveUniverseContract(
                 name=str(raw["name"]),
                 version=str(raw["version"]),
-                effective_date=str(raw["effective_date"]),
+                effective_date=str(raw.get("effective_date") or ""),
                 index_symbol=str(raw["index_symbol"]).upper(),
                 index_instrument_token=int(raw["index_instrument_token"]),
                 constituents=constituents,
-                source_provenance=str(raw["source_provenance"]),
-                capture_session_id=str(raw["capture_session_id"]),
+                source_provenance=str(
+                    raw.get("source_provenance")
+                    or raw.get("official_source_provenance")
+                    or raw.get("official_source_url")
+                    or ""
+                ),
+                capture_session_id=(str(raw["capture_session_id"]) if raw.get("capture_session_id") is not None else None),
                 canonical_sha256=str(raw["canonical_sha256"]),
             )
         except Exception:
@@ -215,18 +224,26 @@ class LiveSourceRuntimeBridge:
     def _subscription_evidence(self, contract: LiveUniverseContract) -> dict[str, Any]:
         if self._subscription_evidence_provider is not None:
             return dict(self._subscription_evidence_provider(contract) or {})
-        symbols = [contract.index_symbol, *contract.constituent_symbols]
-        token_by_symbol = {symbol: self._resolve_token(symbol) for symbol in symbols}
-        return {
-            "subscription_evidence_id": "",
-            "token_resolved_symbols": [symbol for symbol, token in token_by_symbol.items() if token is not None],
-            "subscription_requested_symbols": [],
-            "subscription_callback_applied_symbols": [],
-            "mode_applied_symbols": [],
-            "live_tick_observed_symbols": [],
-            "completed_bar_available_symbols": [],
-            "token_by_symbol": token_by_symbol,
-        }
+        try:
+            from core.kite_depth_ws import market_event_graph_subscription_evidence_for_tokens
+
+            token_by_symbol = {
+                contract.index_symbol: contract.index_instrument_token,
+                **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in contract.constituents},
+            }
+            return dict(market_event_graph_subscription_evidence_for_tokens(token_by_symbol) or {})
+        except Exception as exc:
+            logger.warning("market_event_graph_subscription_evidence_provider_failed err=%s", type(exc).__name__)
+            return {
+                "subscription_evidence_id": "",
+                "token_resolved_symbols": [],
+                "subscription_requested_symbols": [],
+                "subscription_callback_applied_symbols": [],
+                "mode_applied_symbols": [],
+                "live_tick_observed_symbols": [],
+                "completed_bar_available_symbols": [],
+                "token_by_symbol": {},
+            }
 
     def _validate_subscription_evidence(
         self,
@@ -234,9 +251,27 @@ class LiveSourceRuntimeBridge:
         evidence: Mapping[str, Any],
     ) -> tuple[bool, str, tuple[str, ...]]:
         required = tuple([contract.index_symbol, *contract.constituent_symbols])
+        required_set = set(required)
         rejected: list[str] = []
         if not str(evidence.get("subscription_evidence_id") or "").strip():
             return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, required
+        if not str(evidence.get("feed_session_id") or "").strip():
+            return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, required
+        try:
+            int(evidence.get("reconnect_generation"))
+        except Exception:
+            return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, required
+        observed_tokens = {
+            str(symbol).upper(): int(token)
+            for symbol, token in (evidence.get("token_by_symbol") or {}).items()
+            if token is not None
+        }
+        expected_tokens = {
+            contract.index_symbol: contract.index_instrument_token,
+            **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in contract.constituents},
+        }
+        if observed_tokens != expected_tokens:
+            return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
         for field in (
             "token_resolved_symbols",
             "subscription_requested_symbols",
@@ -245,9 +280,14 @@ class LiveSourceRuntimeBridge:
             "live_tick_observed_symbols",
         ):
             observed = tuple(str(symbol).upper() for symbol in evidence.get(field, []) or [])
-            if observed != required:
-                missing = [symbol for symbol in required if symbol not in set(observed)]
+            observed_set = set(observed)
+            duplicate = sorted({symbol for symbol in observed if observed.count(symbol) > 1})
+            extra = sorted(observed_set - required_set)
+            missing = [symbol for symbol in required if symbol not in observed_set]
+            if duplicate or extra or missing:
                 rejected.extend(missing)
+                rejected.extend(extra)
+                rejected.extend(duplicate)
                 return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(dict.fromkeys(rejected))
         return True, "OK", ()
 
@@ -339,6 +379,7 @@ class LiveSourceRuntimeBridge:
             "allowed_for_live_execution": False,
         }
         self._diagnostics.append(row)
+        self._write_rejection(row, audit or {})
         logger.warning("market_event_graph_live_source_rejected reason=%s identities=%s", reason, ",".join(row["affected_identities"]))
         return LiveSourceBridgeResult(
             attempted=True,
@@ -357,6 +398,7 @@ class LiveSourceRuntimeBridge:
             "last_session_date": self._last_session_date,
             "write_failures": self._write_failures,
             "dropped_evidence_writes": self._dropped_evidence_writes,
+            "rejection_write_failures": self._rejection_write_failures,
             "max_queue_high_water_mark": self._max_queue_depth,
             "diagnostic_count": len(self._diagnostics),
             "latest_diagnostic": dict(self._diagnostics[-1]) if self._diagnostics else None,
@@ -366,6 +408,19 @@ class LiveSourceRuntimeBridge:
             "broker_api_called": False,
             "allowed_for_live_execution": False,
         }
+
+    def _write_rejection(self, row: Mapping[str, Any], audit: Mapping[str, Any]) -> None:
+        try:
+            self._rejection_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                **dict(row),
+                "subscription_evidence": dict(audit or {}),
+            }
+            with self._rejection_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
+        except Exception as exc:
+            self._rejection_write_failures += 1
+            logger.warning("market_event_graph_live_source_rejection_write_failed err=%s", type(exc).__name__)
 
 
 def canonical_live_universe_sha256(contract: LiveUniverseContract | Mapping[str, Any]) -> str:
@@ -378,22 +433,37 @@ def canonical_live_universe_sha256(contract: LiveUniverseContract | Mapping[str,
             "index_instrument_token": contract.index_instrument_token,
             "constituents": list(contract.constituents),
             "source_provenance": contract.source_provenance,
-            "capture_session_id": contract.capture_session_id,
         }
     else:
-        payload = {
-            "name": str(contract.get("name") or ""),
-            "version": str(contract.get("version") or ""),
-            "effective_date": str(contract.get("effective_date") or ""),
-            "index_symbol": str(contract.get("index_symbol") or "").upper(),
-            "index_instrument_token": int(contract.get("index_instrument_token") or 0),
-            "constituents": [
-                {"symbol": str(row.get("symbol") or "").upper(), "instrument_token": int(row.get("instrument_token") or 0)}
-                for row in contract.get("constituents", []) or []
-            ],
-            "source_provenance": str(contract.get("source_provenance") or ""),
-            "capture_session_id": str(contract.get("capture_session_id") or ""),
-        }
+        constituents = [
+            {"symbol": str(row.get("symbol") or "").upper(), "instrument_token": int(row.get("instrument_token") or 0)}
+            for row in contract.get("constituents", []) or []
+        ]
+        if contract.get("schema_version") is not None or contract.get("official_raw_sha256") is not None:
+            payload = {
+                "schema_version": int(contract.get("schema_version") or 1),
+                "name": str(contract.get("name") or ""),
+                "version": str(contract.get("version") or ""),
+                "effective_date": contract.get("effective_date"),
+                "source_retrieval_date": str(contract.get("source_retrieval_date") or ""),
+                "source_page_updated_date": contract.get("source_page_updated_date"),
+                "official_source_url": str(contract.get("official_source_url") or ""),
+                "official_raw_sha256": str(contract.get("official_raw_sha256") or ""),
+                "index_symbol": str(contract.get("index_symbol") or "").upper(),
+                "index_instrument_token": int(contract.get("index_instrument_token") or 0),
+                "constituents": constituents,
+                "broker_instrument_master": dict(contract.get("broker_instrument_master") or {}),
+            }
+        else:
+            payload = {
+                "name": str(contract.get("name") or ""),
+                "version": str(contract.get("version") or ""),
+                "effective_date": str(contract.get("effective_date") or ""),
+                "index_symbol": str(contract.get("index_symbol") or "").upper(),
+                "index_instrument_token": int(contract.get("index_instrument_token") or 0),
+                "constituents": constituents,
+                "source_provenance": str(contract.get("source_provenance") or ""),
+            }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 

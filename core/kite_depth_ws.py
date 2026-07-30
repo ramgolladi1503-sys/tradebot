@@ -1,5 +1,6 @@
 from config import config as cfg
 import logging
+import hashlib
 import os
 import time
 import threading
@@ -9,6 +10,7 @@ import atexit
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any, Mapping, Sequence
 from core.auth import get_kite_ticker
 from core.events import write_json_atomic
 from core.kite_client import kite_client
@@ -118,6 +120,14 @@ _STALE_PRUNE_STRIKES_BY_TOKEN: dict[int, int] = {}
 _LAST_WS_TICK_EPOCH: float = 0.0
 _LAST_MSG_TS_BY_TOKEN: dict[int, float] = {}
 _LAST_PAYLOAD_TS_BY_TOKEN: dict[int, float] = {}
+_SUBSCRIPTION_REQUESTED_TOKENS: set[int] = set()
+_SUBSCRIPTION_CALLBACK_APPLIED_TOKENS: set[int] = set()
+_MODE_FULL_APPLIED_TOKENS: set[int] = set()
+_SUBSCRIPTION_REQUESTED_EPOCH: float | None = None
+_SUBSCRIPTION_CALLBACK_EPOCH: float | None = None
+_MODE_FULL_EPOCH: float | None = None
+_FEED_SESSION_ID: str = ""
+_FEED_RECONNECT_GENERATION = 0
 _FEED_ON_TICKS_ROW_SEQ = 0
 _RESTART_LOCK = threading.RLock()
 _RESTART_ASYNC_LOCK = threading.Lock()
@@ -138,6 +148,81 @@ _STOP_REQUESTED = False
 _SCHEMA_LOG_TS = 0.0
 _INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
 _AUTH_REQUIRED_LATCH = False
+
+
+def _ensure_feed_session_id() -> str:
+    global _FEED_SESSION_ID
+    if not _FEED_SESSION_ID:
+        configured = str(os.getenv("LIVE_FEED_SESSION_ID", "") or "").strip()
+        _FEED_SESSION_ID = configured or f"kite-depth-{int(now_utc_epoch())}"
+    return _FEED_SESSION_ID
+
+
+def _record_subscription_requested(tokens: Sequence[int]) -> None:
+    global _SUBSCRIPTION_REQUESTED_TOKENS, _SUBSCRIPTION_REQUESTED_EPOCH
+    normalized = {int(token) for token in (tokens or []) if int(token) > 0}
+    if normalized:
+        _SUBSCRIPTION_REQUESTED_TOKENS.update(normalized)
+        _SUBSCRIPTION_REQUESTED_EPOCH = float(now_utc_epoch())
+
+
+def _record_subscription_callback_applied(tokens: Sequence[int]) -> None:
+    global _SUBSCRIPTION_CALLBACK_APPLIED_TOKENS, _SUBSCRIPTION_CALLBACK_EPOCH
+    normalized = {int(token) for token in (tokens or []) if int(token) > 0}
+    if normalized:
+        _SUBSCRIPTION_CALLBACK_APPLIED_TOKENS.update(normalized)
+        _SUBSCRIPTION_CALLBACK_EPOCH = float(now_utc_epoch())
+
+
+def _record_mode_full_applied(tokens: Sequence[int]) -> None:
+    global _MODE_FULL_APPLIED_TOKENS, _MODE_FULL_EPOCH
+    normalized = {int(token) for token in (tokens or []) if int(token) > 0}
+    if normalized:
+        _MODE_FULL_APPLIED_TOKENS.update(normalized)
+        _MODE_FULL_EPOCH = float(now_utc_epoch())
+
+
+def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping[str, int]) -> dict[str, Any]:
+    expected = {str(symbol).upper(): int(token) for symbol, token in (token_by_symbol or {}).items() if token is not None}
+    requested = {symbol for symbol, token in expected.items() if int(token) in _SUBSCRIPTION_REQUESTED_TOKENS}
+    callback_applied = {symbol for symbol, token in expected.items() if int(token) in _SUBSCRIPTION_CALLBACK_APPLIED_TOKENS}
+    mode_applied = {symbol for symbol, token in expected.items() if int(token) in _MODE_FULL_APPLIED_TOKENS}
+    live_tick = {symbol for symbol, token in expected.items() if _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token))) is not None}
+    ordered = list(expected.keys())
+    latest_live_tick_by_symbol = {
+        symbol: _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token)))
+        for symbol, token in expected.items()
+        if _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token))) is not None
+    }
+    payload = {
+        "feed_session_id": _ensure_feed_session_id(),
+        "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+        "token_by_symbol": dict(expected),
+        "token_resolved_symbols": ordered,
+        "subscription_requested_symbols": [symbol for symbol in ordered if symbol in requested],
+        "subscription_callback_applied_symbols": [symbol for symbol in ordered if symbol in callback_applied],
+        "mode_applied_symbols": [symbol for symbol in ordered if symbol in mode_applied],
+        "live_tick_observed_symbols": [symbol for symbol in ordered if symbol in live_tick],
+        "completed_bar_available_symbols": [],
+        "latest_live_tick_epoch_by_symbol": latest_live_tick_by_symbol,
+        "subscription_requested_epoch": _SUBSCRIPTION_REQUESTED_EPOCH,
+        "subscription_callback_epoch": _SUBSCRIPTION_CALLBACK_EPOCH,
+        "mode_full_epoch": _MODE_FULL_EPOCH,
+        "budget_status": {
+            "requested_count": len(expected),
+            "subscribed_count": len(callback_applied),
+            "mode_full_count": len(mode_applied),
+            "live_tick_count": len(live_tick),
+        },
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+    }
+    payload["subscription_evidence_id"] = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    return payload
 _AUTH_REQUIRED_LOGGED = False
 _LAST_FEED_TICK_LOG_MINUTE: int | None = None
 _LAST_FEED_HEALTH_STATE: str | None = None
@@ -5522,8 +5607,16 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
-    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
+    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS, _FEED_RECONNECT_GENERATION, _SUBSCRIPTION_REQUESTED_TOKENS, _SUBSCRIPTION_CALLBACK_APPLIED_TOKENS, _MODE_FULL_APPLIED_TOKENS, _SUBSCRIPTION_REQUESTED_EPOCH, _SUBSCRIPTION_CALLBACK_EPOCH, _MODE_FULL_EPOCH
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
+    _ensure_feed_session_id()
+    _FEED_RECONNECT_GENERATION += 1
+    _SUBSCRIPTION_REQUESTED_TOKENS = set()
+    _SUBSCRIPTION_CALLBACK_APPLIED_TOKENS = set()
+    _MODE_FULL_APPLIED_TOKENS = set()
+    _SUBSCRIPTION_REQUESTED_EPOCH = None
+    _SUBSCRIPTION_CALLBACK_EPOCH = None
+    _MODE_FULL_EPOCH = None
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
         try:
             reset_fd_trace(baseline_fd=process_fd_count())
@@ -5806,8 +5899,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             return False
         try:
             if to_subscribe:
+                _record_subscription_requested(to_subscribe)
                 ws.subscribe(to_subscribe)
+                _record_subscription_callback_applied(to_subscribe)
                 ws.set_mode(ws.MODE_FULL, to_subscribe)
+                _record_mode_full_applied(to_subscribe)
         except Exception as exc:
             _RUNTIME_STATE = "SUBSCRIBE_FAILED"
             _LAST_RUNTIME_ERROR = f"subscribe_delta:{exc}"[:1000]
@@ -5899,8 +5995,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if not desired:
             desired = sorted(set(int(t) for t in (tokens or []) if int(t) > 0))
         if desired:
+            _record_subscription_requested(desired)
             ws.subscribe(desired)
+            _record_subscription_callback_applied(desired)
             ws.set_mode(ws.MODE_FULL, desired)
+            _record_mode_full_applied(desired)
         _record_feed_restart_verify_subscribe(now_epoch=float(now_utc_epoch()))
         _LAST_TOKENS[:] = desired
         tokens[:] = desired

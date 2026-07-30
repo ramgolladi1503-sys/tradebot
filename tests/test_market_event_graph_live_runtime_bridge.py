@@ -2,6 +2,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from config import config as cfg
 from core.market_event_graph_live_runtime_bridge import (
     BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE,
@@ -15,6 +17,11 @@ from core.market_event_graph_live_runtime_bridge import (
     flush_live_source_bridge,
 )
 from core.market_event_graph_live_source import LiveCapturedMetadataExporter, load_validated_live_jsonl
+
+
+@pytest.fixture(autouse=True)
+def _sandbox_rejection_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_REJECTION_PATH", str(tmp_path / "rejections.jsonl"))
 
 
 def _symbols():
@@ -42,8 +49,15 @@ def _contract(**overrides):
 
 def _evidence(contract):
     required = [contract.index_symbol, *contract.constituent_symbols]
+    token_by_symbol = {
+        contract.index_symbol: contract.index_instrument_token,
+        **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in contract.constituents},
+    }
     return {
         "subscription_evidence_id": "sub-proof-1",
+        "feed_session_id": "feed-session-1",
+        "reconnect_generation": 1,
+        "token_by_symbol": token_by_symbol,
         "token_resolved_symbols": required,
         "subscription_requested_symbols": required,
         "subscription_callback_applied_symbols": required,
@@ -185,6 +199,77 @@ def test_exact_identity_mismatch_is_rejected_even_when_counts_match(monkeypatch,
     assert result.reason == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION
     assert result.exported is False
     assert "NIFTY_39" in result.rejected_identities
+
+
+def test_duplicate_or_extra_subscription_identity_is_rejected(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    contract_payload = _contract()
+    _install_bars(monkeypatch, contract_payload=contract_payload)
+
+    def duplicated_evidence(contract):
+        payload = _evidence(contract)
+        payload["mode_applied_symbols"] = ["NIFTY", "NIFTY", *list(_symbols()), "OUTSIDE"]
+        return payload
+
+    bridge = LiveSourceRuntimeBridge(
+        exporter=LiveCapturedMetadataExporter(tmp_path / "out.jsonl"),
+        universe_contract=contract_payload,
+        subscription_evidence_provider=duplicated_evidence,
+    )
+
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+
+    assert result.reason == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION
+    assert result.exported is False
+    assert "OUTSIDE" in result.rejected_identities
+    assert "NIFTY" in result.rejected_identities
+
+
+def test_rejection_ledger_is_durable_and_separate_from_accepted_rows(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    rejection_path = tmp_path / "rejections.jsonl"
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_REJECTION_PATH", str(rejection_path))
+    output_path = tmp_path / "accepted.jsonl"
+    bridge = LiveSourceRuntimeBridge(exporter=LiveCapturedMetadataExporter(output_path), universe_contract=_contract())
+
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+
+    assert result.reason == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION
+    assert output_path.exists() is False
+    rows = [json.loads(line) for line in rejection_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    (row,) = rows
+    assert row["reason"] == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION
+    assert row["read_only"] is True
+    assert row["broker_api_called"] is False
+
+
+def test_default_subscription_provider_reads_feed_lifecycle_snapshot(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    contract_payload = _contract()
+    _install_bars(monkeypatch, contract_payload=contract_payload)
+
+    def provider(token_by_symbol):
+        assert token_by_symbol["NIFTY"] == 1
+        return {
+            "subscription_evidence_id": "feed-proof",
+            "feed_session_id": "feed-session-1",
+            "reconnect_generation": 3,
+            "token_by_symbol": token_by_symbol,
+            "token_resolved_symbols": ["NIFTY", *list(_symbols())],
+            "subscription_requested_symbols": ["NIFTY", *list(_symbols())],
+            "subscription_callback_applied_symbols": ["NIFTY", *list(_symbols())],
+            "mode_applied_symbols": ["NIFTY", *list(_symbols())],
+            "live_tick_observed_symbols": ["NIFTY", *list(_symbols())],
+            "completed_bar_available_symbols": ["NIFTY", *list(_symbols())],
+        }
+
+    monkeypatch.setattr("core.kite_depth_ws.market_event_graph_subscription_evidence_for_tokens", provider)
+    bridge = LiveSourceRuntimeBridge(exporter=LiveCapturedMetadataExporter(tmp_path / "out.jsonl"), universe_contract=contract_payload)
+
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+
+    assert result.exported is True
+    assert result.audit["subscription_evidence"]["subscription_evidence_id"] == "feed-proof"
 
 
 def test_token_resolution_without_callback_proof_is_rejected(monkeypatch, tmp_path):
