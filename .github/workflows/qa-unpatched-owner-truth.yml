@@ -1,0 +1,74 @@
+name: QA Unpatched Owner Truth
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: qa-unpatched-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  critical_owner_modules_without_sitecustomize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+      PYTHONHASHSEED: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Remove automatic compatibility layer from checkout
+        run: |
+          mkdir -p .runtime/qa
+          mv sitecustomize.py .runtime/qa/sitecustomize.py.disabled
+          test ! -f sitecustomize.py
+
+      - name: Run critical owner-module truth tests without import-time patches
+        run: >-
+          PYTHONPATH=. pytest -q -o addopts=''
+          tests/auth/test_auth_manager_behavior_contracts.py
+          tests/auth/test_auth_safety.py
+          tests/test_kite_client_auth_guard.py
+          tests/test_runtime_auth_freshness.py
+          tests/test_opportunity_engine.py
+          tests/test_opportunity_engine_truth_guard.py
+          tests/test_edge41_fallback_execution_firewall.py
+          tests/test_market_data_warm_seed.py
+          tests/test_review_queue_live_entry.py
+          tests/test_torture_replay.py
+          --junitxml=.runtime/qa/unpatched_owner_truth.xml
+          --durations=25
+
+      - name: Upload unpatched owner-module evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unpatched-owner-truth-evidence
+          if-no-files-found: error
+          path: |
+            .runtime/qa/unpatched_owner_truth.xml
+            .runtime/qa/sitecustomize.py.disabled
