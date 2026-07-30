@@ -54,35 +54,109 @@
 
 ## Root Cause
 
-The previous heuristic mixed bounded normalized indicators with unbounded raw OI. Missing evidence could also collapse to numerical zero, which actively rewarded RANGE scoring. This could produce both artificial low entropy and persistent high-entropy uncertainty without making feature quality explicit.
+The previous heuristic mixed bounded normalized indicators with unbounded raw OI. Missing evidence could also collapse to numerical zero, which actively rewarded RANGE scoring. This could create artificial low entropy or persistent high-entropy uncertainty without exposing feature quality.
 
 ## Implementation
 
-1. Added a pure regime contract with finite-number validation, OI bounding, IV normalization, full-precision softmax, probability diagnostics, entropy-state classification, feature-quality states, and completed-bar stabilization.
-2. Reworked the heuristic model to use bounded evidence and uniform fail-closed probabilities when required inputs are absent or invalid.
-3. Added model provenance including source, path, hash, load error, inference error, and ignored inputs.
+1. Added finite-number validation, bounded OI, IV scale normalization, full-precision softmax, probability diagnostics, entropy-state classification, feature-quality states, and completed-bar stabilization.
+2. Reworked the heuristic model so absent or invalid required inputs produce uniform probabilities, `UNKNOWN`, and fail-closed status rather than fake RANGE confidence.
+3. Added model provenance: source, path, SHA-256, load error, inference error, and ignored features.
 4. Delegated uncertainty interpretation to the canonical entropy gate.
 5. Removed low entropy as an automatic blocker. Low entropy is suspicious only when paired with invalid or insufficient feature truth.
-6. Preserved a legacy raw-entropy RANGE compatibility path only for callers without a probability vector. Real probability-vector decisions do not relax entropy based on their own predicted label.
+6. Preserved legacy raw-entropy RANGE compatibility only for callers that do not supply a probability vector. Real probability-vector decisions do not relax uncertainty using their own predicted label.
 
-## High-Risk Review
+## Scope Guard
 
-Files affecting regime decisions were changed, so this branch must remain draft until broad CI and market-hours validation pass.
+In scope:
 
-The probability model and entropy gate are authoritative when this branch is run. The completed-bar stabilizer is implemented but is not wired as live routing authority. Missing or malformed required evidence yields `UNKNOWN` and unstable status. Invalid probability vectors remain blocked.
+- probability construction;
+- entropy interpretation;
+- feature-quality truth;
+- deterministic transition-stabilizer implementation;
+- focused tests and certification evidence.
 
-## Feed Isolation Proof
+Out of scope:
 
-The compare scope contains only:
+- WebSocket/feed recovery;
+- subscriptions, tick persistence, and depth persistence;
+- broker, order, execution, and risk logic;
+- strategy formulas and profitability claims;
+- live authority for the new completed-bar stabilizer.
 
-- `core/regime_contract_v2.py`
-- `core/regime_prob_model.py`
-- `core/regime_entropy_gate.py`
-- regime tests, certification script, and documentation
+The branch diff is limited to regime modules, tests, certification script, and documentation.
 
-No WebSocket, subscription, tick-store, depth-store, broker, order, execution, risk, or launcher path is modified.
+## Grill Me Review
 
-## Deterministic Evidence
+**Could this silently create more trades?**
+
+It can change regime classifications when this branch is run because the probability model and entropy gate are authoritative. It cannot bypass downstream feed, risk, broker, or execution gates. Missing and invalid evidence now blocks more explicitly.
+
+**Did the implementation merely widen thresholds?**
+
+No. Session thresholds remain. The repair changes feature truth and probability construction. The only RANGE override retained is the legacy raw-entropy-only compatibility path.
+
+**Could low entropy now pass unsafe data?**
+
+No. Low entropy passes only when feature-quality status is valid. Invalid or insufficient feature quality remains uncertain and fail-closed.
+
+**Is the stabilizer already affecting live routing?**
+
+No. It is implemented and tested but not wired as live authority.
+
+## Hermes Review
+
+Contract and architecture findings:
+
+- `RegimeProbModel` remains the existing model entry point.
+- `REGIMES` remains exported for backward compatibility.
+- `_softmax` remains exported for backward compatibility.
+- uncertainty interpretation is centralized in `evaluate_regime_entropy_gate`;
+- no feed module imports the new regime contract;
+- no new broker or order dependency exists;
+- invalid inputs produce explicit status instead of invented values.
+
+Verdict: architecture-compatible, with market-hours validation required because authoritative regime output changes on this branch.
+
+## GSD Review
+
+Delivery completed:
+
+- bounded probability contract added;
+- probability model repaired;
+- entropy gate repaired;
+- focused regression tests added;
+- deterministic certification runner added;
+- engineering and agent-review evidence added;
+- draft PR opened;
+- feed-isolation diff verified.
+
+Remaining work:
+
+- broad CI completion;
+- market-hours runtime comparison;
+- separate decision on whether to promote the completed-bar stabilizer.
+
+## QA / Safety Review
+
+- is_order_action: false
+- broker_api_called: false
+- feed_files_modified: false
+- risk_files_modified: false
+- execution_files_modified: false
+- probability_authority_changed_on_branch: true
+- stabilizer_authority_enabled: false
+- live_market_certified: false
+
+Fail-closed invariants:
+
+- missing required feature -> `INSUFFICIENT_DATA` and `UNKNOWN`;
+- invalid required feature -> `INVALID_INPUT` and `UNKNOWN`;
+- invalid probability vector -> uncertain and blocked;
+- impossible entropy -> uncertain and blocked;
+- low entropy alone -> not blocked;
+- duplicate completed bar -> no transition-count advancement.
+
+## Acceptance Proof
 
 Local focused test result:
 
@@ -90,7 +164,7 @@ Local focused test result:
 9 passed
 ```
 
-Local certification result:
+Local deterministic certification result:
 
 ```text
 DETERMINISTIC_CERTIFIED 6/6
@@ -103,26 +177,34 @@ PYTHONPATH=. pytest -q tests/test_regime_robustness_v1.py
 PYTHONPATH=. python scripts/certify_regime_robustness_v1.py
 ```
 
-## Safety Flags
+Required broad proof:
 
-- read_only_certification: true
-- is_order_action: false
-- broker_api_called: false
-- feed_files_modified: false
-- probability_authority_changed_on_branch: true
-- stabilizer_authority_enabled: false
-- live_market_certified: false
+- repository CI passes;
+- existing entropy/regime/candidate tests pass;
+- no forbidden path appears in the diff;
+- market-hours comparison shows no feed or orchestrator regression.
 
-## Runtime Proof Required
+## Runtime Proof Required After Merge
 
-Before merge, run a market-hours comparison covering NIFTY, BANKNIFTY, and SENSEX. Confirm model provenance and feature-quality evidence are present, missing inputs fail closed, no generic low-entropy rejection appears, feed latency is unchanged, and candidate starvation changes only when evidence quality improves.
+This branch should not be merged before the runtime proof, but if merged later the first market-hours run must capture NIFTY, BANKNIFTY, and SENSEX and verify:
 
-The completed-bar stabilizer must remain non-authoritative until that comparison is sealed.
+1. model provenance and feature-quality fields are present;
+2. missing evidence never becomes confident RANGE;
+3. no generic `entropy_too_low` rejection exists;
+4. high-entropy evidence includes probabilities, normalized entropy, threshold, top-two margin, and feature-quality status;
+5. feed callback latency, subscription truth, and orchestrator cadence are unchanged;
+6. candidate starvation changes only when evidence quality genuinely improves;
+7. the stabilizer remains non-authoritative unless separately approved.
 
-## What This Does Not Prove
+## What This PR Does Not Prove
 
 - It does not prove predictive edge.
 - It does not prove historical calibration.
 - It does not prove live operational acceptance.
-- It does not certify the feed-recovery PR.
-- It does not authorize merge or live execution.
+- It does not certify PR #750 or any feed repair.
+- It does not authorize live orders.
+- It does not authorize merge.
+
+## Human Approval
+
+The user explicitly approved implementation work and asked for a certified implementation. That approval covers creating this isolated branch and draft PR. It does not authorize merging, enabling live orders, or promoting the completed-bar stabilizer to live authority.
