@@ -3,7 +3,6 @@ from core.strategy_regime_policy import (
     BLOCKED,
     ELIGIBLE,
     ELIGIBLE_WITH_PENALTY,
-    WATCHLIST_ONLY,
     canonical_entropy_state,
     canonical_session_bucket,
     canonical_strategy_family,
@@ -191,7 +190,7 @@ def test_invalid_regime_truth_is_advisory_for_known_strategy():
     assert result["policy_result"] == ADVISORY_ONLY
 
 
-def test_unknown_strategy_remains_conservative():
+def test_unknown_strategy_is_never_executable_policy():
     low = evaluate(
         "unknown_alpha",
         entropy_state="LOW",
@@ -202,5 +201,6 @@ def test_unknown_strategy_remains_conservative():
         entropy_state="HIGH",
         normalized_entropy=0.90,
     )
-    assert low["policy_result"] == WATCHLIST_ONLY
+    assert low["policy_result"] == ADVISORY_ONLY
+    assert low["reason"] == "unknown_strategy_conservative_advisory"
     assert high["policy_result"] == BLOCKED
