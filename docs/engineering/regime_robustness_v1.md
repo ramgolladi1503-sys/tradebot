@@ -23,9 +23,10 @@ This branch repairs regime probability construction, entropy semantics, strategy
 13. Session, entropy, trend confirmation, stable-regime status, liquidity, event, no-trade, and unknown-strategy policies are enforced.
 14. Unknown strategies with regime context cannot inherit executable scorer buckets.
 15. Existing snapshot regime truth is preserved through StrategyContext metadata, candidate evidence, and scoring policy without new feed reads or network calls.
-16. Existing snapshot metadata, evidence, lineage, and strict boolean values remain preserved.
+16. Existing StrategyContext metadata is preserved, strategy-specific candidate evidence is merged rather than replaced, generated candidate lineage remains intact, and strict boolean values remain preserved.
 17. Regime policy authority is scoped to canonical strategies, movement-strategy lineage, or explicit regime evidence. Generic scorer-only candidates without those signals retain the established scorer contract.
-18. A completed-bar stabilizer exists with duplicate suppression, confirmation bars, dwell, and a high-evidence EVENT/PANIC fast path; it is not live-authoritative.
+18. Explicit `NO_TRADE_ONLY` decisions remain no-trade decisions even when the no-trade policy itself returns BLOCKED; they are not mislabeled as generic suppression.
+19. A completed-bar stabilizer exists with duplicate suppression, confirmation bars, dwell, and a high-evidence EVENT/PANIC fast path; it is not live-authoritative.
 
 ## Probability semantics
 
@@ -60,6 +61,8 @@ Actual runtime IDs are mapped into policy families:
 Unknown strategies with explicit regime evidence resolve to ADVISORY_ONLY for low/normal entropy and BLOCKED for high/extreme entropy. Unknown movement-strategy lineage is also governed even when regime evidence is absent, so it cannot inherit executable scorer state.
 
 Generic scorer-only fixtures and non-runtime candidates with no canonical strategy, no movement lineage, and no regime evidence remain outside regime-policy authority. This preserves the existing scorer contract without weakening runtime safety.
+
+An explicit no-trade candidate remains `NO_TRADE_ONLY` with a zero score. Policy BLOCKED semantics for a no-trade strategy express intentional non-execution and must not convert that candidate into `SUPPRESSED_BY_DOWNGRADE`.
 
 ## Runtime safety boundary
 
@@ -102,7 +105,7 @@ PYTHONPATH=. python scripts/certify_regime_robustness_v1.py
 PYTHONPATH=. python scripts/certify_strategy_regime_policy_v2.py
 ```
 
-The focused suite contains 47 tests. The two runners contain 26 independent checks covering probability truth, structural separation, mixed-state uncertainty, model schema, policy aliases, session routing, unknown-strategy policy, and completed-bar hysteresis. The focused tests additionally prove both sides of scorer policy authority: runtime movement candidates remain fail-closed, while generic scorer-only candidates retain compatibility. Final pass results must come from CI on the current branch head.
+The focused suite contains 47 tests. The two runners contain 26 independent checks covering probability truth, structural separation, mixed-state uncertainty, model schema, policy aliases, session routing, unknown-strategy policy, and completed-bar hysteresis. The focused tests additionally prove both sides of scorer policy authority: runtime movement candidates remain fail-closed, while generic scorer-only candidates retain compatibility. The repository's existing opportunity-scoring tests prove explicit no-trade preservation. Final pass results must come from CI on the current branch head.
 
 ## Known integration limits
 
@@ -126,7 +129,8 @@ A market-hours observation must cover NIFTY, BANKNIFTY, and SENSEX and prove:
 7. actual strategy IDs resolve to intended policy families;
 8. invalid and unknown policy states remain non-executable;
 9. candidate starvation changes only when evidence quality genuinely improves;
-10. the stabilizer remains shadow-only until separately approved.
+10. explicit no-trade candidates remain no-trade rather than generic suppression;
+11. the stabilizer remains shadow-only until separately approved.
 
 ## Promotion rule
 
