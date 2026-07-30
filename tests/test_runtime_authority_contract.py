@@ -18,6 +18,17 @@ def test_authority_map_has_one_execution_router():
     assert validate_runtime_authority_map(stages) == ()
 
 
+def test_authority_map_has_one_candidate_selector():
+    stages = build_runtime_authority_map()
+    selectors = [
+        stage for stage in stages
+        if stage.authority is AuthorityKind.CANDIDATE_SELECTION
+    ]
+    assert [stage.owner_module for stage in selectors] == ["core.opportunity_engine"]
+    assert [stage.callable_name for stage in selectors] == ["select_best_opportunity"]
+    assert [stage.may_call_broker for stage in selectors] == [False]
+
+
 def test_ui_stages_cannot_call_broker():
     for stage in build_runtime_authority_map():
         if stage.authority is AuthorityKind.UI_ONLY:
