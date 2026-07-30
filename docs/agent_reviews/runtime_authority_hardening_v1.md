@@ -4,6 +4,7 @@ mode: PAPER
 candidate_id: runtime-authority-hardening-v1
 decision: REVIEW_ONLY
 reason: add fail-closed authority, characterization, shadow-stage and fault-test contracts without changing the working feed or production runtime
+timestamp: 2026-07-30T22:30:00+05:30
 is_order_action: false
 broker_api_called: false
 allowed_for_live_execution: false
