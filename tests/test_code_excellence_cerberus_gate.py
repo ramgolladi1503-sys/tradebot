@@ -212,7 +212,7 @@ def test_cerberus_gate_ignores_required_field_name_constants(tmp_path):
         )
 
         def test_header_lists_required_fields():
-            header = "no_action: false\nclient_called: false"
+            header = "no_action: false\\nclient_called: false"
             for field in REQUIRED_FIELDS:
                 assert field in header
         """,
