@@ -1,8 +1,8 @@
 # Live Constituent Subscription Audit
 
-Verdict: `BLOCKED_BY_KITE_AUTH`
+Verdict: `PASS_KITE_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING`
 
-This audit is read-only. The repaired bridge no longer infers a live certification universe from `snapshot_rows`, `cfg.SYMBOLS`, token lookup, sample replay manifests, or cross-broker Upstox token domains. A Kite-domain NIFTY 50 universe contract is not yet available in this worktree because the authorized read-only Kite instruments call failed closed with `BLOCKED_BY_KITE_AUTH`.
+This audit is read-only. The repaired bridge no longer infers a live certification universe from `snapshot_rows`, `cfg.SYMBOLS`, token lookup, sample replay manifests, or cross-broker Upstox token domains. A Kite-domain NIFTY 50 universe contract is now available from a preserved Kite NSE instrument master acquired through the existing authenticated Kite client.
 
 ## Runtime Integration
 
@@ -31,8 +31,14 @@ This audit is read-only. The repaired bridge no longer infers a live certificati
 - Preserved raw source: `runtime/reference/market_event_graph/official_nse/ind_nifty50list_9fb8832853c27944.csv`
 - Previous Upstox-derived contract: invalidated for Kite by `runtime/reference/market_event_graph/invalid_cross_broker_token_domain/nifty50_live_universe_9fb8832853c27944.invalidated.json`
 - Kite master acquisition: `scripts/acquire_kite_instrument_master_v1.py`
-- Kite master status: `BLOCKED_BY_KITE_AUTH` in this run; no preserved Kite master exists in the worktree.
-- Kite-domain universe contract: not produced.
+- Kite master status: `PASS_KITE_INSTRUMENT_MASTER_ACQUIRED`
+- Kite master path: `runtime/reference/market_event_graph/kite_instruments/kite_nse_instruments_828c0c378e493972.json`
+- Kite master sidecar: `runtime/reference/market_event_graph/kite_instruments/kite_nse_instruments_828c0c378e493972.sidecar.json`
+- Kite master SHA-256: `828c0c378e4939720c34ee7e727e5ae6f0265441e0e0a1888a386f85ab9c2a93`
+- Kite master rows: `9976`
+- Kite-domain universe contract: `runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json`
+- Kite-domain reconciliation report: `runtime/reference/market_event_graph/nifty50_live_universe_reconciliation_kite_9fb8832853c27944_828c0c378e493972.json`
+- Kite-domain canonical SHA-256: `fba078a4cd7aeb520432b05071a5ac4078e164b809fec0eb80503cb7fe562371`
 - Expected future contract token domain: `kite_instrument_token`
 - Official raw SHA-256: `9fb8832853c279448d2bc05f0e7dd5f460ed2ff35332fea8c40fc1250362ad28`
 - Canonical universe SHA-256: `1e83284e578caaaef41d68f64ebf095d525c7073dd28d56f2a48609a80668992`
@@ -40,7 +46,10 @@ This audit is read-only. The repaired bridge no longer infers a live certificati
 - Parser version: `market_event_graph_live_universe_builder_v1`
 - Official rows: `50`; unique symbols: `50`; duplicates: none; required series: `EQ`
 - Upstox master SHA-256, invalid for Kite: `5da2bc38bc0f54c9fccd14ad5cd6712c6b9f066766d3c621fb82330e6292fe40`
-- Current crosswalk verdict: `BLOCKED_BY_KITE_AUTH`, before `BLOCKED_BY_KITE_INSTRUMENT_MASTER`
+- Current crosswalk verdict: `PASS_KITE_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING`
+- Kite official constituents mapped: `50`
+- Kite unique constituent tokens: `50`
+- Kite unique observation tokens including index: `51`
 - Stable universe hash excludes runtime feed session / capture session identity; `capture_session_id` remains `null` in the contract.
 
 ## Subscription Truth Status
