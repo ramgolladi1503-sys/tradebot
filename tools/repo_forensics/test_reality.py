@@ -84,7 +84,11 @@ def classify_tests(repo_root: str | Path, config: ForensicsConfig) -> TestRealit
             continue
         tests.append(_classify_test_file(root, path))
     for path in sorted((root / "tests").rglob("*.py")) if (root / "tests").exists() else []:
-        if path.name.startswith("test_") or _should_skip(path, root, config):
+        if (
+            path.name.startswith("test_")
+            or path.name == "__init__.py"
+            or _should_skip(path, root, config)
+        ):
             continue
         tests.append(_classify_test_file(root, path))
     return TestRealityReport(tests=tests)
@@ -477,6 +481,8 @@ def _risk_markers(lowered: str) -> list[str]:
 
 
 def _is_test_file_candidate(path: Path, repo_root: Path) -> bool:
+    if path.name == "__init__.py":
+        return False
     rel = path.relative_to(repo_root)
     return "tests" in rel.parts or rel.parent == Path(".")
 
