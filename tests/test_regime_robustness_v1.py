@@ -96,6 +96,22 @@ def test_probability_diagnostics_are_full_precision():
     assert diag["top_two_margin"] > 0.0
 
 
+def test_rounded_probability_vector_is_accepted_and_renormalized():
+    rounded = {
+        "TREND": 0.333333,
+        "RANGE": 0.222222,
+        "RANGE_VOLATILE": 0.166667,
+        "EVENT": 0.166667,
+        "PANIC": 0.111112,
+    }
+    assert sum(rounded.values()) == 1.000001
+    diag = probability_diagnostics(rounded)
+    assert diag["input_probability_sum"] == 1.000001
+    assert math.isclose(
+        sum(diag["probabilities"].values()), 1.0, abs_tol=1e-12
+    )
+
+
 def test_low_entropy_is_not_itself_an_error():
     diag = probability_diagnostics(
         {
