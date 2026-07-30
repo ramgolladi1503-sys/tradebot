@@ -35,6 +35,11 @@ BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE = "BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
 BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION = "BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION"
 BROKER_TOKEN_DOMAIN_MISMATCH = "BROKER_TOKEN_DOMAIN_MISMATCH"
 LIVE_BAR_PROVENANCE_UNPROVEN = "LIVE_BAR_PROVENANCE_UNPROVEN"
+BAR_PROVIDER_MISMATCH = "BAR_PROVIDER_MISMATCH"
+BAR_TOKEN_DOMAIN_MISMATCH = "BAR_TOKEN_DOMAIN_MISMATCH"
+BAR_UNIVERSE_HASH_MISMATCH = "BAR_UNIVERSE_HASH_MISMATCH"
+BAR_SYMBOL_MISMATCH = "BAR_SYMBOL_MISMATCH"
+BAR_INSTRUMENT_TOKEN_MISMATCH = "BAR_INSTRUMENT_TOKEN_MISMATCH"
 FEED_SESSION_ID_MISMATCH = "FEED_SESSION_ID_MISMATCH"
 RECONNECT_GENERATION_MISMATCH = "RECONNECT_GENERATION_MISMATCH"
 PRE_GENERATION_TICK_PROVENANCE = "PRE_GENERATION_TICK_PROVENANCE"
@@ -367,8 +372,15 @@ class LiveSourceRuntimeBridge:
         index_end = _bar_end_epoch(index_bar)
         if index_end is None:
             return None, INDEX_INTERVAL_MISALIGNED, (contract.index_symbol,)
-        if not _bar_has_live_provenance(index_bar):
-            return None, LIVE_BAR_PROVENANCE_UNPROVEN, (contract.index_symbol,)
+        ok, reason = _bar_has_live_provenance(
+            index_bar,
+            expected_symbol=contract.index_symbol,
+            expected_token=contract.index_instrument_token,
+            contract=contract,
+            subscription=subscription,
+        )
+        if not ok:
+            return None, reason, (contract.index_symbol,)
 
         constituent_bars: list[dict[str, Any]] = []
         for spec in contract.constituents:
@@ -379,8 +391,15 @@ class LiveSourceRuntimeBridge:
             end_epoch = _bar_end_epoch(bar)
             if end_epoch != index_end:
                 return None, INDEX_INTERVAL_MISALIGNED, (symbol,)
-            if not _bar_has_live_provenance(bar):
-                return None, LIVE_BAR_PROVENANCE_UNPROVEN, (symbol,)
+            ok, reason = _bar_has_live_provenance(
+                bar,
+                expected_symbol=symbol,
+                expected_token=int(spec["instrument_token"]),
+                contract=contract,
+                subscription=subscription,
+            )
+            if not ok:
+                return None, reason, (symbol,)
             bar = dict(bar)
             bar["symbol"] = symbol
             bar["instrument_token"] = int(spec["instrument_token"])
@@ -601,23 +620,55 @@ def _bar_end_epoch(bar: Mapping[str, Any], interval_seconds: int = 60) -> float 
     return float((start + timedelta(seconds=interval_seconds)).timestamp())
 
 
-def _bar_has_live_provenance(bar: Mapping[str, Any]) -> bool:
+def _bar_has_live_provenance(
+    bar: Mapping[str, Any],
+    *,
+    expected_symbol: str | None = None,
+    expected_token: int | None = None,
+    contract: LiveUniverseContract | None = None,
+    subscription: Mapping[str, Any] | None = None,
+) -> tuple[bool, str]:
     prov = bar.get("bar_provenance")
     if not isinstance(prov, Mapping):
-        return False
+        return False, LIVE_BAR_PROVENANCE_UNPROVEN
     if str(prov.get("source_type") or "").lower() not in {"live_websocket", "tick_store_live"}:
-        return False
+        return False, LIVE_BAR_PROVENANCE_UNPROVEN
     if not str(prov.get("live_feed_session_id") or "").strip():
-        return False
+        return False, LIVE_BAR_PROVENANCE_UNPROVEN
     try:
         int(prov.get("reconnect_generation"))
     except Exception:
-        return False
+        return False, LIVE_BAR_PROVENANCE_UNPROVEN
     if bool(prov.get("historical_seed")) or bool(prov.get("replay_fixture")):
-        return False
+        return False, LIVE_BAR_PROVENANCE_UNPROVEN
     if bool(prov.get("non_live_fallback")) or bool(prov.get("recovered_synthetic")):
-        return False
-    return prov.get("first_live_tick_epoch") is not None and prov.get("last_live_tick_epoch") is not None
+        return False, LIVE_BAR_PROVENANCE_UNPROVEN
+    if prov.get("first_live_tick_epoch") is None or prov.get("last_live_tick_epoch") is None:
+        return False, LIVE_BAR_PROVENANCE_UNPROVEN
+    if contract is not None:
+        if str(prov.get("provider") or "").lower() != str(contract.broker_provider or "").lower():
+            return False, BAR_PROVIDER_MISMATCH
+        if str(prov.get("token_domain") or "").lower() != str(contract.token_domain or "").lower():
+            return False, BAR_TOKEN_DOMAIN_MISMATCH
+        if str(prov.get("universe_hash") or "") != str(contract.canonical_sha256 or ""):
+            return False, BAR_UNIVERSE_HASH_MISMATCH
+    if subscription is not None:
+        if str(prov.get("live_feed_session_id") or "") != str(subscription.get("feed_session_id") or ""):
+            return False, FEED_SESSION_ID_MISMATCH
+        try:
+            if int(prov.get("reconnect_generation")) != int(subscription.get("reconnect_generation")):
+                return False, RECONNECT_GENERATION_MISMATCH
+        except Exception:
+            return False, RECONNECT_GENERATION_MISMATCH
+    if expected_symbol is not None and str(prov.get("symbol") or bar.get("symbol") or "").upper() != str(expected_symbol).upper():
+        return False, BAR_SYMBOL_MISMATCH
+    if expected_token is not None:
+        try:
+            if int(prov.get("instrument_token")) != int(expected_token):
+                return False, BAR_INSTRUMENT_TOKEN_MISMATCH
+        except Exception:
+            return False, BAR_INSTRUMENT_TOKEN_MISMATCH
+    return True, "OK"
 
 
 def _coerce_float(value: Any) -> float | None:
@@ -669,6 +720,11 @@ __all__ = [
     "BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE",
     "BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION",
     "LIVE_BAR_PROVENANCE_UNPROVEN",
+    "BAR_PROVIDER_MISMATCH",
+    "BAR_TOKEN_DOMAIN_MISMATCH",
+    "BAR_UNIVERSE_HASH_MISMATCH",
+    "BAR_SYMBOL_MISMATCH",
+    "BAR_INSTRUMENT_TOKEN_MISMATCH",
     "LIVE_UNIVERSE_NOT_CONFIGURED",
     "FEED_SESSION_ID_MISMATCH",
     "RECONNECT_GENERATION_MISMATCH",

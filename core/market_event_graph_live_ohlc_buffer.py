@@ -115,6 +115,7 @@ def record_live_source_shadow_tick(
         ts=tick_dt,
         provenance={
             "source_type": str(source_type).lower(),
+            "symbol": str(symbol).upper(),
             "live_feed_session_id": session_id,
             "reconnect_generation": generation_int,
             "instrument_token": token,

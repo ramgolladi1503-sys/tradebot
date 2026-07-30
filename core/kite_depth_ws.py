@@ -50,6 +50,7 @@ from core.market_event_graph_live_observation_registry import (
     observation_tokens,
 )
 from core.market_event_graph_live_ohlc_buffer import record_live_source_shadow_tick
+from core.market_event_graph_live_launch_plan import load_launch_plan
 from core.feed.runtime_store import write_runtime_snapshot as write_feed_runtime_snapshot
 from core.feed.runtime_store import canonicalize_feed_runtime_snapshot_truth
 from core.feed_health_duration import build_feed_health_duration_artifact
@@ -137,6 +138,7 @@ _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN: dict[int, float] = {}
 _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
 _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_LIVE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_FIRST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _SUBSCRIPTION_REQUESTED_EPOCH: float | None = None
@@ -166,6 +168,83 @@ _STOP_REQUESTED = False
 _SCHEMA_LOG_TS = 0.0
 _INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
 _AUTH_REQUIRED_LATCH = False
+_OBSERVATION_PLAN_STATE_LOCK = threading.RLock()
+_OBSERVATION_PLAN_STATE: dict[str, Any] = {
+    "enabled": False,
+    "verdict": "DISABLED",
+    "production_tokens": [],
+    "observation_tokens": [],
+    "overlap_tokens": [],
+    "observation_exclusive_tokens": [],
+    "final_union_tokens": [],
+    "missing_observation_tokens": [],
+    "configured_budget": None,
+    "feed_session_id": "",
+    "reconnect_generation": 0,
+    "plan_sha": "",
+    "decision_epoch": None,
+}
+
+
+def _observation_state_payload() -> dict[str, Any]:
+    with _OBSERVATION_PLAN_STATE_LOCK:
+        return dict(_OBSERVATION_PLAN_STATE)
+
+
+def _set_observation_plan_state(
+    *,
+    enabled: bool,
+    verdict: str,
+    production_tokens: Sequence[int] = (),
+    observation_tokens: Sequence[int] = (),
+    final_union_tokens: Sequence[int] = (),
+    missing_observation_tokens: Sequence[int] = (),
+    configured_budget: int | None = None,
+    plan_sha: str = "",
+) -> dict[str, Any]:
+    production = sorted({int(token) for token in production_tokens if int(token) > 0})
+    observation = sorted({int(token) for token in observation_tokens if int(token) > 0})
+    final_union = sorted({int(token) for token in final_union_tokens if int(token) > 0})
+    overlap = sorted(set(production) & set(observation))
+    exclusive = sorted(set(observation) - set(production))
+    with _OBSERVATION_PLAN_STATE_LOCK:
+        _OBSERVATION_PLAN_STATE.update(
+            {
+                "enabled": bool(enabled),
+                "verdict": str(verdict),
+                "production_tokens": production,
+                "observation_tokens": observation,
+                "overlap_tokens": overlap,
+                "observation_exclusive_tokens": exclusive,
+                "final_union_tokens": final_union,
+                "missing_observation_tokens": sorted({int(token) for token in missing_observation_tokens if int(token) > 0}),
+                "configured_budget": configured_budget,
+                "feed_session_id": _ensure_feed_session_id() if bool(enabled) else "",
+                "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+                "plan_sha": str(plan_sha or ""),
+                "decision_epoch": float(now_utc_epoch()),
+            }
+        )
+        return dict(_OBSERVATION_PLAN_STATE)
+
+
+def reset_market_event_graph_observation_plan_state() -> None:
+    _set_observation_plan_state(enabled=False, verdict="DISABLED")
+
+
+def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
+    verdict = str(plan.get("verdict") or "")
+    ok = bool(plan.get("ok")) and verdict == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+    return _set_observation_plan_state(
+        enabled=ok,
+        verdict=verdict if verdict else "BLOCKED_BY_LAUNCH_PLAN_IDENTITY",
+        production_tokens=plan.get("production_tokens") or (),
+        observation_tokens=plan.get("observation_tokens") or (),
+        final_union_tokens=plan.get("final_union_tokens") or (),
+        missing_observation_tokens=plan.get("missing_observation_tokens") or (),
+        configured_budget=plan.get("configured_budget"),
+        plan_sha=str(plan.get("launch_plan_sha256") or ""),
+    )
 
 
 def _ensure_feed_session_id() -> str:
@@ -231,12 +310,17 @@ def _reset_market_event_graph_generation_evidence() -> None:
     _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.clear()
     _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.clear()
     _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.clear()
+    _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.clear()
     _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
     _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
     _SUBSCRIPTION_REQUESTED_EPOCH = None
     _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = None
     _MODE_REQUEST_SUCCEEDED_EPOCH = None
     _FULL_PAYLOAD_OBSERVED_EPOCH = None
+    with _OBSERVATION_PLAN_STATE_LOCK:
+        if _OBSERVATION_PLAN_STATE.get("enabled"):
+            _OBSERVATION_PLAN_STATE["feed_session_id"] = _ensure_feed_session_id()
+            _OBSERVATION_PLAN_STATE["reconnect_generation"] = int(_FEED_RECONNECT_GENERATION)
 
 
 def get_current_feed_session_identity() -> dict[str, Any]:
@@ -272,6 +356,13 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "subscription_requested_epoch": _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN.get(token_int),
             "subscribe_call_succeeded_epoch": _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
             "mode_request_succeeded_epoch": _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "first_callback_receipt_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "latest_callback_receipt_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
+            "first_source_tick_epoch": _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "latest_source_tick_epoch": _coerce_epoch(_LAST_PAYLOAD_TS_BY_TOKEN.get(token_int)),
+            "first_post_mode_full_receipt_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "latest_post_mode_full_receipt_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            # Compatibility aliases. These are receipt-time fields, not broker-source timestamps.
             "first_live_tick_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
             "latest_live_tick_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
             "first_full_payload_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
@@ -326,6 +417,14 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         "broker_api_called": False,
         "allowed_for_live_execution": False,
     }
+    observation_state = _observation_state_payload()
+    payload["observation_plan_state"] = observation_state
+    if observation_state.get("verdict") == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET:
+        payload["observation_blocker"] = {
+            "verdict": BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET,
+            "missing_observation_tokens": list(observation_state.get("missing_observation_tokens") or []),
+            "generation_inactive": True,
+        }
     payload["subscription_generation_id"] = hashlib.sha256(
         json.dumps(generation_basis, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     ).hexdigest()
@@ -1443,13 +1542,30 @@ def build_depth_subscription_tokens(symbols=None, max_tokens=None):
         fn = globals().get(name)
         if callable(fn):
             try:
-                tokens, resolution = fn(symbols=symbols, max_tokens=max_tokens)
+                budget = int(max_tokens) if max_tokens is not None else int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150))
+                frozen_plan_path = str(os.getenv("MARKET_EVENT_GRAPH_LIVE_LAUNCH_PLAN_PATH", "") or "").strip()
+                if frozen_plan_path:
+                    plan = load_launch_plan(Path(frozen_plan_path))
+                    activate_market_event_graph_launch_plan(plan)
+                    return list(plan["final_union_tokens"]), list(plan.get("production_resolution") or [])
+                tokens, resolution = fn(symbols=symbols, max_tokens=budget)
                 obs = sorted(observation_tokens())
                 if obs:
                     decision = build_observation_subscription_merge(
-                        production_tokens=list(tokens or []), observation_tokens=obs, budget=max_tokens
+                        production_tokens=list(tokens or []), observation_tokens=obs, budget=budget
                     )
                     tokens = decision["tokens"]
+                    _set_observation_plan_state(
+                        enabled=bool(decision["ok"]),
+                        verdict="PASS_LIVE_SOURCE_PRESESSION_READINESS" if bool(decision["ok"]) else str(decision["reason"]),
+                        production_tokens=list(tokens or []),
+                        observation_tokens=obs,
+                        final_union_tokens=list(decision["tokens"]),
+                        missing_observation_tokens=list(decision.get("missing_or_pruned_observation_tokens") or []),
+                        configured_budget=budget,
+                    )
+                else:
+                    reset_market_event_graph_observation_plan_state()
                 return tokens, resolution
             except TypeError:
                 try:
@@ -5204,6 +5320,7 @@ def on_ticks(ws, ticks):
             if prev_payload is not None and payload_tick_epoch < prev_payload:
                 _log_ws("FEED_TICK_DROPPED_OUT_OF_ORDER", {"token": token_int, "payload_epoch": payload_tick_epoch, "prev_epoch": prev_payload})
                 continue
+            _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.setdefault(token_int, float(payload_tick_epoch))
             _LAST_PAYLOAD_TS_BY_TOKEN[token_int] = payload_tick_epoch
         freshness_tick_epoch = _normalized_tick_epoch(
             token_int,
@@ -5224,7 +5341,30 @@ def on_ticks(ws, ticks):
         has_depth = _depth_has_bid_ask(depth)
         tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
         tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None
-        if token_int is not None and token_int in observation_token_set and registry is not None:
+        observation_state = _observation_state_payload()
+        observation_token_allowed = (
+            token_int is not None
+            and token_int in observation_token_set
+            and registry is not None
+            and bool(observation_state.get("enabled"))
+            and str(observation_state.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+            and int(token_int) in set(int(tok) for tok in observation_state.get("observation_tokens") or [])
+            and str(observation_state.get("feed_session_id") or "") == _ensure_feed_session_id()
+            and int(observation_state.get("reconnect_generation") or -1) == int(_FEED_RECONNECT_GENERATION)
+            and int(token_int) in _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS
+        )
+        if token_int is not None and token_int in observation_token_set and registry is not None and not observation_token_allowed:
+            _log_ws(
+                "MARKET_EVENT_GRAPH_OBSERVATION_TICK_BLOCKED",
+                {
+                    "token": int(token_int),
+                    "verdict": str(observation_state.get("verdict") or "UNPROVEN"),
+                    "feed_session_id": _ensure_feed_session_id(),
+                    "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+                },
+                throttle_key=f"meg_observation_blocked:{token_int}",
+            )
+        if observation_token_allowed:
             packet_kind = "UNKNOWN"
             is_full_payload = False
             source_epoch = payload_tick_epoch
@@ -5251,7 +5391,7 @@ def on_ticks(ws, ticks):
                 )
             except Exception:
                 pass
-        if token_int is not None and token_int in observation_token_set and registry is not None:
+        if observation_token_allowed:
             mode_epoch = _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int)
             mode_effective = mode_epoch is not None and float(now_epoch) > float(mode_epoch)
             if is_full_payload and mode_effective and token_int == registry.index_token:

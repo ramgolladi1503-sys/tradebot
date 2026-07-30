@@ -12,6 +12,7 @@ from core.market_event_graph_live_runtime_bridge import (
     LIVE_BAR_PROVENANCE_UNPROVEN,
     LIVE_UNIVERSE_NOT_CONFIGURED,
     LiveSourceRuntimeBridge,
+    RECONNECT_GENERATION_MISMATCH,
     build_live_constituent_subscription_audit,
     canonical_live_universe_sha256,
     flush_live_source_bridge,
@@ -88,6 +89,8 @@ def _evidence(contract):
     }
     return {
         "subscription_evidence_id": "sub-proof-1",
+        "provider": "kite",
+        "token_domain": "kite_instrument_token",
         "feed_session_id": "feed-session-1",
         "reconnect_generation": 1,
         "token_by_symbol": token_by_symbol,
@@ -102,7 +105,7 @@ def _evidence(contract):
     }
 
 
-def _bar(ts_epoch: float, symbol: str, close: float = 100.0, *, provenance=None):
+def _bar(ts_epoch: float, symbol: str, close: float = 100.0, *, token: int | None = None, universe_hash: str = "", provenance=None):
     return {
         "ts": datetime.fromtimestamp(ts_epoch, tz=timezone.utc),
         "symbol": symbol,
@@ -116,8 +119,13 @@ def _bar(ts_epoch: float, symbol: str, close: float = 100.0, *, provenance=None)
             if provenance is not None
             else {
             "source_type": "live_websocket",
+            "symbol": str(symbol).upper(),
             "live_feed_session_id": "feed-session-1",
             "reconnect_generation": 1,
+            "instrument_token": int(token or 0),
+            "provider": "kite",
+            "token_domain": "kite_instrument_token",
+            "universe_hash": universe_hash,
             "first_live_tick_epoch": ts_epoch + 1.0,
             "last_live_tick_epoch": ts_epoch + 50.0,
             "historical_seed": False,
@@ -130,15 +138,21 @@ def _bar(ts_epoch: float, symbol: str, close: float = 100.0, *, provenance=None)
 
 
 def _install_bars(monkeypatch, *, contract_payload, index_epoch=60.0, constituent_epoch=60.0, missing_symbol=None, provenance=None):
-    symbols = {row["symbol"] for row in contract_payload["constituents"]}
+    token_by_symbol = {
+        str(contract_payload["index_symbol"]).upper(): int(contract_payload["index_instrument_token"]),
+        **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in contract_payload["constituents"]},
+    }
+    symbols = set(token_by_symbol)
+    universe_hash = str(contract_payload["canonical_sha256"])
 
     def bars(symbol, as_of):
+        symbol_upper = str(symbol).upper()
         if symbol == missing_symbol:
             return []
-        if symbol == contract_payload["index_symbol"]:
-            return [_bar(index_epoch, symbol, 25000.0, provenance=provenance)]
-        if symbol in symbols:
-            return [_bar(constituent_epoch, symbol, 100.0, provenance=provenance)]
+        if symbol_upper == str(contract_payload["index_symbol"]).upper():
+            return [_bar(index_epoch, symbol_upper, 25000.0, token=token_by_symbol[symbol_upper], universe_hash=universe_hash, provenance=provenance)]
+        if symbol_upper in symbols:
+            return [_bar(constituent_epoch, symbol_upper, 100.0, token=token_by_symbol[symbol_upper], universe_hash=universe_hash, provenance=provenance)]
         return []
 
     monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.shadow_ohlc_buffer.get_completed_bars", bars)
@@ -290,7 +304,7 @@ def test_default_subscription_provider_reads_feed_lifecycle_snapshot(monkeypatch
         payload.update({
             "subscription_evidence_id": "feed-proof",
             "feed_session_id": "feed-session-1",
-            "reconnect_generation": 3,
+            "reconnect_generation": 1,
             "token_by_symbol": token_by_symbol,
             "token_resolved_symbols": ["NIFTY", *list(_symbols())],
             "subscription_requested_symbols": ["NIFTY", *list(_symbols())],
@@ -300,8 +314,6 @@ def test_default_subscription_provider_reads_feed_lifecycle_snapshot(monkeypatch
             "full_payload_observed_symbols": ["NIFTY", *list(_symbols())],
             "completed_bar_available_symbols": ["NIFTY", *list(_symbols())],
         })
-        for row in payload["token_lifecycle"].values():
-            row["reconnect_generation"] = 3
         return payload
 
     monkeypatch.setattr("core.kite_depth_ws.market_event_graph_subscription_evidence_for_tokens", provider)
@@ -344,8 +356,13 @@ def test_history_seeded_and_fallback_bars_are_rejected(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     blocked_provenance = {
         "source_type": "historical_seed",
+        "symbol": "NIFTY",
         "live_feed_session_id": "feed-session-1",
         "reconnect_generation": 1,
+        "instrument_token": 1,
+        "provider": "kite",
+        "token_domain": "kite_instrument_token",
+        "universe_hash": "",
         "first_live_tick_epoch": 61.0,
         "last_live_tick_epoch": 119.0,
         "historical_seed": True,
@@ -364,6 +381,30 @@ def test_history_seeded_and_fallback_bars_are_rejected(monkeypatch, tmp_path):
     result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
 
     assert result.reason == LIVE_BAR_PROVENANCE_UNPROVEN
+    assert result.exported is False
+
+
+def test_reconnect_generation_stale_bar_is_rejected(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    contract_payload = _contract()
+    _install_bars(monkeypatch, contract_payload=contract_payload)
+
+    def generation_two_evidence(contract):
+        payload = _evidence(contract)
+        payload["reconnect_generation"] = 2
+        for row in payload["token_lifecycle"].values():
+            row["reconnect_generation"] = 2
+        return payload
+
+    bridge = LiveSourceRuntimeBridge(
+        exporter=LiveCapturedMetadataExporter(tmp_path / "out.jsonl"),
+        universe_contract=contract_payload,
+        subscription_evidence_provider=generation_two_evidence,
+    )
+
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+
+    assert result.reason == RECONNECT_GENERATION_MISMATCH
     assert result.exported is False
 
 
