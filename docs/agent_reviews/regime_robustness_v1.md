@@ -71,7 +71,7 @@ source: docs/agent_reviews/regime_robustness_v1.md
 
 Do not merge as live-certified. Repository tests and governance must pass on the final head, followed by market-hours shadow validation.
 
-## Root Causes Repaired
+## Root Cause
 
 1. Raw OI was mixed with normalized features and could dominate the heuristic distribution.
 2. Missing evidence could become numerical zero and fabricate RANGE confidence.
@@ -81,7 +81,7 @@ Do not merge as live-certified. Repository tests and governance must pass on the
 6. Runtime regime truth was not reliably propagated into candidate scoring.
 7. Applying regime policy unconditionally broke generic scorer-only contracts that contain neither a runtime strategy nor regime evidence.
 
-## Implementation Summary
+## Implementation
 
 - bounded and normalized feature inputs;
 - explicit missing and invalid feature states;
@@ -99,6 +99,90 @@ Do not merge as live-certified. Repository tests and governance must pass on the
   - generic scorer-only fixtures with none of those signals retain the previous scorer contract;
 - completed-bar stabilizer with duplicate suppression, confirmation, dwell, and bounded EVENT/PANIC fast path;
 - stabilizer remains non-authoritative.
+
+## Scope Guard
+
+In scope:
+
+- regime probability construction and entropy truth;
+- model provenance and feature-quality contracts;
+- canonical strategy/session routing;
+- read-only snapshot-to-candidate-to-scorer evidence propagation;
+- scorer regime-policy authority and compatibility boundary;
+- deterministic tests, certification scripts, and review evidence.
+
+Out of scope:
+
+- WebSocket/feed recovery or subscription changes;
+- tick/depth persistence;
+- broker, order, execution, and risk logic;
+- strategy formula tuning or profitability claims;
+- live authority for the completed-bar stabilizer;
+- statistical calibration and predictive-edge certification.
+
+The final diff is restricted to 15 approved regime, scorer, helper, test, script, and documentation files.
+
+## Grill Me Review
+
+**Does this just loosen entropy thresholds?**
+
+No. It changes evidence validity, bounded feature construction, probability semantics, and policy routing. Mixed evidence remains uncertain.
+
+**Can an unknown runtime strategy become executable?**
+
+No. A canonical strategy, movement-strategy lineage, or explicit regime evidence activates policy authority. Unknown governed candidates become advisory or blocked.
+
+**Did compatibility weaken runtime safety?**
+
+No. Compatibility applies only to generic scorer-only candidates with no canonical strategy, no movement lineage, and no regime evidence. Real movement candidates remain governed.
+
+**Can fallback data become executable through this PR?**
+
+No. Feed, quote-quality, downgrade, and execution ownership are unchanged. This PR does not bypass existing fallback blockers.
+
+**Is the heuristic calibrated or profitable?**
+
+No. It is explicitly labelled `HEURISTIC_STRUCTURAL_V2_UNCALIBRATED` and `deterministic_structural_pseudo_probability`.
+
+## Hermes Review
+
+Architecture findings:
+
+- `RegimeProbModel`, `REGIMES`, and existing softmax entry points remain compatible;
+- entropy interpretation has one canonical owner;
+- actual movement IDs resolve through a versioned policy registry;
+- StrategyContext metadata, candidate evidence, and lineage are preserved rather than replaced;
+- scorer authority has an explicit runtime boundary;
+- no feed module imports the new regime contract;
+- no broker, order, execution, or risk dependency is introduced;
+- malformed model schemas and probability vectors fail closed;
+- evidence propagation adds no network call or feed read.
+
+Verdict: repository architecture is consistent at the regime/scorer boundary, with live market proof still required.
+
+## GSD Review
+
+Completed:
+
+- bounded discriminative regime contract;
+- probability-model and entropy-gate repair;
+- model provenance and schema enforcement;
+- canonical strategy/session routing;
+- unknown-strategy downgrade behavior;
+- snapshot-to-context-to-candidate-to-scorer propagation;
+- scorer authority compatibility boundary;
+- 47 focused deterministic tests;
+- 26 deterministic certification checks;
+- review and engineering evidence;
+- forbidden-path isolation.
+
+Remaining:
+
+- all final-head CI/security/governance workflows green;
+- market-hours NIFTY/BANKNIFTY/SENSEX shadow proof;
+- current-cycle transition-rate timing repair in `core/market_data.py`;
+- ATR-normalized slope/acceleration wiring;
+- separate stabilizer-authority decision.
 
 ## High-Risk Path Review
 
@@ -130,7 +214,23 @@ Risks and controls:
 5. **Rollback boundary**
    - Revert this isolated PR. No feed, subscription, broker, order, execution, risk, tick-store, depth-store, or launcher file is changed.
 
-## Fail-Closed Invariants
+## QA / Safety Review
+
+- is_order_action: false
+- broker_api_called: false
+- feed_files_modified: false
+- tick_store_modified: false
+- depth_store_modified: false
+- risk_files_modified: false
+- execution_files_modified: false
+- probability_authority_changed_on_branch: true
+- strategy_policy_authority_changed_on_branch: true
+- stabilizer_authority_enabled: false
+- probability_calibrated: false
+- predictive_edge_certified: false
+- live_market_certified: false
+
+Fail-closed invariants:
 
 - missing required regime feature -> `INSUFFICIENT_DATA` and `UNKNOWN`;
 - invalid required regime feature -> `INVALID_INPUT` and `UNKNOWN`;
@@ -145,7 +245,7 @@ Risks and controls:
 - duplicate completed bar -> no transition confirmation advancement;
 - probability-vector decision -> no legacy label-based entropy bypass.
 
-## Deterministic Evidence
+## Acceptance Proof
 
 Focused suite: 47 tests across four files.
 
@@ -164,27 +264,18 @@ PYTHONPATH=. python scripts/certify_regime_robustness_v1.py
 PYTHONPATH=. python scripts/certify_strategy_regime_policy_v2.py
 ```
 
+Repository acceptance additionally requires:
+
+- both broad deterministic pytest workflows pass;
+- CodeQL, code excellence, agent evidence, repo forensics, portfolio, strategy registry, and gitleaks pass;
+- no forbidden path appears in the final diff;
+- PR remains draft and unmerged until live proof.
+
 Final pass counts must come from CI on the final commit SHA.
 
-## Safety Truth
+## Runtime Proof Required After Merge
 
-- is_order_action: false
-- broker_api_called: false
-- feed_files_modified: false
-- tick_store_modified: false
-- depth_store_modified: false
-- risk_files_modified: false
-- execution_files_modified: false
-- probability_authority_changed_on_branch: true
-- strategy_policy_authority_changed_on_branch: true
-- stabilizer_authority_enabled: false
-- probability_calibrated: false
-- predictive_edge_certified: false
-- live_market_certified: false
-
-## Tomorrow's Live Proof
-
-Market-hours shadow validation must cover NIFTY, BANKNIFTY, and SENSEX and verify:
+The PR should remain unmerged until the market-hours proof is completed. Tomorrow's shadow validation must cover NIFTY, BANKNIFTY, and SENSEX and verify:
 
 1. feed callback latency and orchestrator cadence do not regress;
 2. model source, probability semantics, feature quality, entropy threshold, and top-two margin are visible;
