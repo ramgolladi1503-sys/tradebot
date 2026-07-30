@@ -1,0 +1,87 @@
+name: runtime-authority-hardening
+
+on:
+  pull_request:
+    paths:
+      - "core/canonical_execution_decision.py"
+      - "core/runtime_authority_contract.py"
+      - "core/trade_builder_characterization.py"
+      - "core/orchestration_stage_pipeline.py"
+      - "core/ranking_authority.py"
+      - "core/orchestrator_shadowing_audit.py"
+      - "core/runtime_hardening_campaign.py"
+      - "scripts/audit_runtime_authority_hardening_v1.py"
+      - "tests/test_canonical_execution_decision.py"
+      - "tests/test_runtime_authority_contract.py"
+      - "tests/test_trade_builder_characterization.py"
+      - "tests/test_orchestration_stage_pipeline.py"
+      - "tests/test_ranking_authority.py"
+      - "tests/test_orchestrator_shadowing_audit.py"
+      - "tests/test_runtime_hardening_campaign.py"
+      - "tests/test_runtime_authority_hardening_audit.py"
+      - "docs/architecture/runtime_authority_hardening_v1.md"
+      - ".github/workflows/runtime-authority-hardening.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-hardening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install focused test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+          if [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          fi
+
+      - name: Run focused hardening tests
+        env:
+          PYTHONPATH: .
+          DISABLE_ML: "true"
+        run: |
+          python -m pytest -q \
+            tests/test_canonical_execution_decision.py \
+            tests/test_runtime_authority_contract.py \
+            tests/test_trade_builder_characterization.py \
+            tests/test_orchestration_stage_pipeline.py \
+            tests/test_ranking_authority.py \
+            tests/test_orchestrator_shadowing_audit.py \
+            tests/test_runtime_hardening_campaign.py \
+            tests/test_runtime_authority_hardening_audit.py
+
+      - name: Run authority audit
+        env:
+          PYTHONPATH: .
+          DISABLE_ML: "true"
+        run: |
+          python scripts/audit_runtime_authority_hardening_v1.py \
+            --repo-root . \
+            --base-ref origin/${{ github.base_ref }} \
+            --output-json /tmp/runtime_authority_hardening_v1.json \
+            --output-markdown /tmp/runtime_authority_hardening_v1.md
+
+      - name: Compile hardening modules
+        run: |
+          python -m py_compile \
+            core/canonical_execution_decision.py \
+            core/runtime_authority_contract.py \
+            core/trade_builder_characterization.py \
+            core/orchestration_stage_pipeline.py \
+            core/ranking_authority.py \
+            core/orchestrator_shadowing_audit.py \
+            core/runtime_hardening_campaign.py \
+            scripts/audit_runtime_authority_hardening_v1.py
