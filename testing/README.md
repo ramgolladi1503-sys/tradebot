@@ -1,30 +1,33 @@
-**Testing Directory**
-This directory contains a structured test catalog, a generator, and manual charters.
+# Testing directory
 
-**Files**
-`testing/TEST_CASES.csv` 315 structured test cases
-`testing/TEST_PLAN.md` test plan and scope
-`testing/CHARTERS.md` adhoc charters
-`testing/generate_test_cases.py` generator
-`testing/generate_pytest_skeletons.py` pytest skeleton generator
+This directory contains the structured QA requirements catalog, the enterprise test plan, and exploratory charters. It does **not** contain generated passing tests.
 
-**Regenerate Cases**
-`python testing/generate_test_cases.py`
+## Files
 
-**Generate Pytest Skeletons**
-`python testing/generate_pytest_skeletons.py`
+- `testing/TEST_CASES.csv` — 315 structured behavioral requirements/candidate cases.
+- `testing/TEST_PLAN.md` — test plan and scope.
+- `testing/CHARTERS.md` — exploratory and ad-hoc charters.
+- `testing/generate_test_cases.py` — regenerates the structured catalog.
+- `testing/generate_pytest_skeletons.py` — renders catalog rows as non-executable Markdown backlog under `testing/generated_case_backlog/`.
 
-**Run Unit Tests**
-`pytest -q tests`
+## Regenerate the catalog
 
-**Notes**
-These tests are scoped for NIFTY, BANKNIFTY, and SENSEX with manual approval only.
+```bash
+python testing/generate_test_cases.py
+```
 
-**Test Harness (No Production Code Changes)**
-These tests use monkeypatching to run one orchestrator cycle without modifying `core/orchestrator.py`.
+## Render the backlog
 
-Run:
-`pytest -q testing/tests`
+```bash
+python testing/generate_pytest_skeletons.py
+```
 
-**Notes**
-Generated skeletons are skipped by default; fill in assertions to activate them.
+The historical script name is retained for compatibility, but it must never create `test_*.py`, skipped placeholders, or unconditional assertions. A catalog row becomes automated evidence only after a real test is implemented under `tests/` with fixtures, meaningful assertions, and requirement traceability.
+
+## Run automated tests
+
+```bash
+pytest -q tests
+```
+
+The executable suite is scoped for NIFTY, BANKNIFTY, and SENSEX with manual approval safety boundaries. Some deterministic harnesses use monkeypatching to run one orchestrator cycle, but monkeypatches must replace external dependencies—not alter the behavior being certified.
