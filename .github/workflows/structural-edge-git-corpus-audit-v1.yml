@@ -17,11 +17,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Checkout repository and LFS objects
+      - name: Checkout repository without broad LFS hydration
         uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
           fetch-depth: 1
+
+      - name: Pull only required structural-edge LFS objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          git lfs install --local
+          git lfs pull --include="research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet,research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/upstox-expired-options-v1/**,research/local_evidence_consolidation_v1/**/joint_underlying_option_warehouse.parquet,research/local_evidence_consolidation_v1/**/repaired_joint_underlying_option_warehouse.parquet" --exclude=""
 
       - name: Set up Python
         uses: actions/setup-python@v5
