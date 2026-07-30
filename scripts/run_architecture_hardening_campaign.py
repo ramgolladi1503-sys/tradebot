@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from core.architecture_golden_master import compare_snapshot_files, load_snapshot_rows
-from core.execution_ranking_authority import prove_ranking_authority
-from core.execution_shadow_cycle import compare_execution_cycle
+from core.execution_ranking_authority import inspect_authority_paths
+from core.execution_shadow_cycle import compare_cycle
 from core.helper_parity_proof import prove_helper_parity
 
 
@@ -40,6 +40,25 @@ def _flatten_rows(payload: Any) -> list[dict[str, Any]]:
     return flattened
 
 
+def _helper_report(corpus: list[dict[str, Any]]) -> dict[str, Any]:
+    mismatches = prove_helper_parity(corpus)
+    return {
+        "row_count": len(corpus),
+        "comparison_count": len(corpus) * 3,
+        "mismatch_count": len(mismatches),
+        "parity_rate": 1.0 if not corpus else 1.0 - (len(mismatches) / (len(corpus) * 3)),
+        "mismatches": [
+            {
+                "index": item.index,
+                "helper": item.helper,
+                "legacy": item.legacy,
+                "canonical": item.canonical,
+            }
+            for item in mismatches
+        ],
+    }
+
+
 def run_campaign(root: Path, output: Path, manifest: Path | None = None) -> dict[str, Any]:
     files = _candidate_files(root)
     corpus: list[dict[str, Any]] = []
@@ -54,12 +73,8 @@ def run_campaign(root: Path, output: Path, manifest: Path | None = None) -> dict
         corpus.extend(rows)
         file_reports.append({"path": str(path), "loaded": True, "rows": len(rows)})
 
-    helper = prove_helper_parity(corpus).to_dict() if corpus else {
-        "rows": 0, "matched": 0, "mismatched": 0, "parity_rate": 0.0, "mismatches": []
-    }
-    shadow = compare_execution_cycle(corpus).to_dict() if corpus else {
-        "rows": 0, "matched": 0, "mismatched": 0, "parity_rate": 0.0, "state_counts": {}, "mismatches": []
-    }
+    helper = _helper_report(corpus)
+    shadow = compare_cycle(corpus)
 
     golden: list[dict[str, Any]] = []
     if manifest is not None and manifest.exists():
@@ -70,19 +85,20 @@ def run_campaign(root: Path, output: Path, manifest: Path | None = None) -> dict
             result = compare_snapshot_files(expected, actual).to_dict()
             golden.append({"name": entry.get("name") or expected.name, **result})
 
-    authority = prove_ranking_authority(
+    authority_paths = [
         root / "core" / "orchestrator.py",
         root / "strategies" / "trade_builder.py",
         root / "core" / "runtime_snapshot_producer.py",
         root / "core" / "ranking_orchestrator.py",
-    ).to_dict()
+    ]
+    authority = inspect_authority_paths(path for path in authority_paths if path.exists())
 
     verdict = {
         "corpus_present": bool(corpus),
-        "helper_parity": bool(corpus) and helper["mismatched"] == 0,
-        "shadow_parity": bool(corpus) and shadow["mismatched"] == 0,
+        "helper_parity": bool(corpus) and helper["mismatch_count"] == 0,
+        "shadow_parity": bool(corpus) and shadow["mismatch_count"] == 0,
         "golden_master": all(item["matched"] for item in golden) if golden else None,
-        "ranking_execution_authority_proven": authority["execution_authority_proven"],
+        "ranking_execution_authority_proven": authority["ranking_is_proven_execution_authority"],
     }
     payload = {
         "root": str(root),
