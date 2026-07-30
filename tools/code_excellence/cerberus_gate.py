@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator
 
 from tools.code_excellence.config import load_code_excellence_agent_parameters
 from tools.repo_forensics.config_loader import ConfigError
@@ -171,23 +172,104 @@ def _scan_file(
     except UnicodeDecodeError as exc:
         raise CerberusGateError(f"cerberus_gate_cannot_read_text path={relative}") from exc
 
-    findings: list[CerberusGateFinding] = []
+    if file_path.suffix == ".py":
+        findings = list(
+            _scan_python_source(
+                relative=relative,
+                source=text,
+                forbidden_markers=forbidden_markers,
+                required_non_action_fields=required_non_action_fields,
+            )
+        )
+    else:
+        findings = list(
+            _scan_text_source(
+                relative=relative,
+                text=text,
+                forbidden_markers=forbidden_markers,
+                required_non_action_fields=required_non_action_fields,
+            )
+        )
+
+    if not findings:
+        return (_pass_finding(relative),)
+    return tuple(findings)
+
+
+def _scan_python_source(
+    *,
+    relative: str,
+    source: str,
+    forbidden_markers: tuple[str, ...],
+    required_non_action_fields: tuple[str, ...],
+) -> Iterator[CerberusGateFinding]:
+    """Inspect executable Python syntax and ignore vocabulary in strings/comments."""
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        yield CerberusGateFinding(
+            path=relative,
+            verdict="BLOCK",
+            reason="python_source_unparseable",
+            marker="syntax_error",
+            line_number=exc.lineno or 0,
+            evidence=str(exc),
+            risks=("static_gate_blind_spot",),
+        )
+        return
+
+    for name, line_number in _python_boundary_references(tree):
+        for marker in forbidden_markers:
+            if marker and _boundary_marker_matches(name, marker):
+                yield CerberusGateFinding(
+                    path=relative,
+                    verdict="BLOCK",
+                    reason="forbidden_boundary_marker_in_scoped_file",
+                    marker=marker,
+                    line_number=line_number,
+                    evidence=name,
+                    risks=("restricted_boundary_regression",),
+                )
+
+    required = [_split_required_field(field) for field in required_non_action_fields]
+    for name, value, line_number, evidence in _python_field_assignments(tree):
+        for required_name, expected in required:
+            if name != required_name or not expected:
+                continue
+            if not _literal_matches_expected(value, expected):
+                yield CerberusGateFinding(
+                    path=relative,
+                    verdict="BLOCK",
+                    reason="non_action_field_not_explicitly_false",
+                    marker=f"{required_name}={expected}",
+                    line_number=line_number,
+                    evidence=evidence,
+                    risks=("actionability_evidence_regression",),
+                )
+
+
+def _scan_text_source(
+    *,
+    relative: str,
+    text: str,
+    forbidden_markers: tuple[str, ...],
+    required_non_action_fields: tuple[str, ...],
+) -> Iterator[CerberusGateFinding]:
     for line_number, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
         for marker in forbidden_markers:
             if marker and marker in stripped:
-                findings.append(
-                    CerberusGateFinding(
-                        path=relative,
-                        verdict="BLOCK",
-                        reason="forbidden_boundary_marker_in_scoped_file",
-                        marker=marker,
-                        line_number=line_number,
-                        evidence=stripped,
-                        risks=("restricted_boundary_regression",),
-                    )
+                yield CerberusGateFinding(
+                    path=relative,
+                    verdict="BLOCK",
+                    reason="forbidden_boundary_marker_in_scoped_file",
+                    marker=marker,
+                    line_number=line_number,
+                    evidence=stripped,
+                    risks=("restricted_boundary_regression",),
                 )
         for field in required_non_action_fields:
             name, expected = _split_required_field(field)
@@ -197,30 +279,104 @@ def _scan_file(
                 and _line_contains_required_field_assignment(stripped, name)
                 and not _line_matches_required_field(stripped, name, expected)
             ):
-                findings.append(
-                    CerberusGateFinding(
-                        path=relative,
-                        verdict="BLOCK",
-                        reason="non_action_field_not_explicitly_false",
-                        marker=field,
-                        line_number=line_number,
-                        evidence=stripped,
-                        risks=("actionability_evidence_regression",),
-                    )
+                yield CerberusGateFinding(
+                    path=relative,
+                    verdict="BLOCK",
+                    reason="non_action_field_not_explicitly_false",
+                    marker=field,
+                    line_number=line_number,
+                    evidence=stripped,
+                    risks=("actionability_evidence_regression",),
                 )
-    if not findings:
-        return (
-            CerberusGateFinding(
-                path=relative,
-                verdict="PASS",
-                reason="no_restricted_boundary_marker_found",
-                marker="",
-                line_number=0,
-                evidence="static_scan_passed",
-                risks=(),
-            ),
-        )
-    return tuple(findings)
+
+
+def _python_boundary_references(tree: ast.AST) -> Iterator[tuple[str, int]]:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            name = _qualified_name(node.func)
+            if name:
+                yield name, getattr(node, "lineno", 0)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                yield alias.name, getattr(node, "lineno", 0)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            yield node.module, getattr(node, "lineno", 0)
+            for alias in node.names:
+                yield f"{node.module}.{alias.name}", getattr(node, "lineno", 0)
+
+
+def _python_field_assignments(tree: ast.AST) -> Iterator[tuple[str, object, int, str]]:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            value = _literal_value(node.value)
+            for target in node.targets:
+                name = _assignment_target_name(target)
+                if name:
+                    yield name, value, getattr(node, "lineno", 0), ast.unparse(node)
+        elif isinstance(node, ast.AnnAssign):
+            name = _assignment_target_name(node.target)
+            if name:
+                yield name, _literal_value(node.value), getattr(node, "lineno", 0), ast.unparse(node)
+        elif isinstance(node, ast.Dict):
+            for key, value_node in zip(node.keys, node.values):
+                if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                    yield (
+                        key.value,
+                        _literal_value(value_node),
+                        getattr(key, "lineno", getattr(node, "lineno", 0)),
+                        ast.unparse(node),
+                    )
+        elif isinstance(node, ast.keyword) and node.arg:
+            yield node.arg, _literal_value(node.value), getattr(node, "lineno", 0), ast.unparse(node)
+
+
+def _qualified_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _qualified_name(node.value)
+        return f"{parent}.{node.attr}" if parent else node.attr
+    return ""
+
+
+def _assignment_target_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
+
+
+def _literal_value(node: ast.AST | None) -> object:
+    if isinstance(node, ast.Constant):
+        return node.value
+    return object()
+
+
+def _literal_matches_expected(value: object, expected: str) -> bool:
+    if expected == "false":
+        return value is False
+    if expected == "true":
+        return value is True
+    return str(value).strip().lower() == expected
+
+
+def _boundary_marker_matches(reference: str, marker: str) -> bool:
+    lowered_reference = reference.lower()
+    lowered_marker = marker.lower()
+    return lowered_reference == lowered_marker or lowered_reference.endswith(f".{lowered_marker}") or lowered_marker in lowered_reference
+
+
+def _pass_finding(relative: str) -> CerberusGateFinding:
+    return CerberusGateFinding(
+        path=relative,
+        verdict="PASS",
+        reason="no_restricted_boundary_marker_found",
+        marker="",
+        line_number=0,
+        evidence="static_scan_passed",
+        risks=(),
+    )
 
 
 def _paths_to_scan(repo_root: Path, scoped_paths: tuple[str, ...]) -> tuple[Path, ...]:
@@ -274,7 +430,7 @@ def _line_matches_required_field(line: str, name: str, expected: str) -> bool:
 
 
 def _normalize_assignment_line(line: str) -> str:
-    return line.replace(" ", "").replace("\"", "").replace("'", "").lower()
+    return line.replace(" ", "").replace('"', "").replace("'", "").lower()
 
 
 def _is_standalone_string_literal(line: str) -> bool:
