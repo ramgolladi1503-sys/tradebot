@@ -1,0 +1,151 @@
+name: Structural Edge Git LFS Corpus Audit V1
+
+on:
+  push:
+    branches:
+      - research/structural-edge-git-corpus-audit-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-corpus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository and LFS objects
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install audit dependencies
+        run: python -m pip install --disable-pip-version-check pyarrow
+
+      - name: Audit physical Git LFS corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import subprocess
+          from pathlib import Path
+
+          import pyarrow.parquet as pq
+
+          repo = Path.cwd()
+          expected_constituent = repo / "research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet"
+          evidence_root = repo / "research/local_evidence_consolidation_v1"
+
+          def sha256(path: Path) -> str:
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          def is_lfs_pointer(path: Path) -> bool:
+              try:
+                  with path.open("rb") as handle:
+                      return handle.read(80).startswith(b"version https://git-lfs.github.com/spec/v1")
+              except OSError:
+                  return False
+
+          def parquet_record(path: Path) -> dict[str, object]:
+              record: dict[str, object] = {
+                  "path": str(path.relative_to(repo)),
+                  "size": path.stat().st_size,
+                  "sha256": sha256(path),
+                  "lfs_pointer_not_hydrated": is_lfs_pointer(path),
+              }
+              if not record["lfs_pointer_not_hydrated"]:
+                  metadata = pq.ParquetFile(path).metadata
+                  record["rows"] = metadata.num_rows
+                  record["row_groups"] = metadata.num_row_groups
+                  record["columns"] = metadata.num_columns
+              return record
+
+          option_candidates = sorted(
+              path for path in evidence_root.rglob("*.parquet")
+              if "upstox-expired-options-v1" in str(path)
+          )
+          option_archives = sorted(
+              path for path in evidence_root.rglob("*.zip")
+              if "upstox-expired-options-v1" in str(path)
+          )
+          joint_candidates = sorted(
+              path for path in evidence_root.rglob("*.parquet")
+              if path.name in {
+                  "joint_underlying_option_warehouse.parquet",
+                  "repaired_joint_underlying_option_warehouse.parquet",
+              }
+          )
+
+          lfs_listing = subprocess.run(
+              ["git", "lfs", "ls-files", "--long"],
+              check=True,
+              capture_output=True,
+              text=True,
+          ).stdout.splitlines()
+
+          report = {
+              "schema_version": 1,
+              "branch": "research/structural-edge-git-corpus-audit-v1",
+              "read_only": True,
+              "allowed_for_live_execution": False,
+              "constituent": parquet_record(expected_constituent) if expected_constituent.exists() else None,
+              "option_parquet_count": len(option_candidates),
+              "option_parquets": [parquet_record(path) for path in option_candidates],
+              "option_archive_count": len(option_archives),
+              "option_archives": [
+                  {
+                      "path": str(path.relative_to(repo)),
+                      "size": path.stat().st_size,
+                      "sha256": sha256(path),
+                      "lfs_pointer_not_hydrated": is_lfs_pointer(path),
+                  }
+                  for path in option_archives
+              ],
+              "joint_warehouse_count": len(joint_candidates),
+              "joint_warehouses": [parquet_record(path) for path in joint_candidates],
+              "git_lfs_entry_count": len(lfs_listing),
+              "git_lfs_option_entries": [line for line in lfs_listing if "upstox-expired-options-v1" in line],
+              "git_lfs_constituent_entries": [line for line in lfs_listing if "constituent_index_5m.parquet" in line],
+              "git_lfs_joint_entries": [line for line in lfs_listing if "joint_underlying_option_warehouse.parquet" in line],
+          }
+
+          blockers: list[str] = []
+          if report["constituent"] is None:
+              blockers.append("missing_constituent_parquet")
+          elif report["constituent"]["lfs_pointer_not_hydrated"]:
+              blockers.append("constituent_lfs_object_not_hydrated")
+          if not option_candidates and not option_archives:
+              blockers.append("missing_option_corpus_objects")
+          if any(item["lfs_pointer_not_hydrated"] for item in report["option_parquets"]):
+              blockers.append("option_lfs_objects_not_hydrated")
+          report["blockers"] = blockers
+          report["principal_verdict"] = "GIT_LFS_CORPUS_PHYSICALLY_AVAILABLE" if not blockers else "GIT_LFS_CORPUS_AUDIT_BLOCKED"
+
+          output = Path("structural-edge-git-corpus-audit-v1.json")
+          output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(output.read_text(encoding="utf-8"))
+          if blockers:
+              raise SystemExit(1)
+          PY
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: structural-edge-git-corpus-audit-v1
+          path: structural-edge-git-corpus-audit-v1.json
+          if-no-files-found: error
