@@ -9,8 +9,9 @@ from sklearn.cluster import AgglomerativeClustering
 
 ROOT = Path("research/local_evidence_consolidation_v1")
 OUT = Path("information-migration-sequence-v1-stage1")
-N_GROUPS = 4
+N_GROUPS = 8
 MIN_GROUP_SIZE = 4
+MIN_VALID_GROUPS = 4
 LEADERS_PER_GROUP = 2
 COOLDOWN_BARS = 3
 
@@ -79,7 +80,7 @@ def main() -> None:
     returns = _session_returns(c)
     development = returns.loc[returns.index.get_level_values("session").isin(development_sessions)]
     symbols = [symbol for symbol in development.columns if symbol != "NIFTY"]
-    if "NIFTY" not in development.columns or len(symbols) < N_GROUPS * MIN_GROUP_SIZE:
+    if "NIFTY" not in development.columns or len(symbols) < N_GROUPS * 2:
         raise SystemExit("insufficient symbols or missing NIFTY")
 
     correlation = development[symbols].corr(min_periods=500).fillna(0.0).clip(-1.0, 1.0)
@@ -87,10 +88,11 @@ def main() -> None:
     np.fill_diagonal(distance_array, 0.0)
     model = AgglomerativeClustering(n_clusters=N_GROUPS, metric="precomputed", linkage="average")
     labels = model.fit_predict(distance_array)
-    groups = {int(group): sorted(correlation.columns[labels == group].tolist()) for group in sorted(set(labels))}
-    undersized = {group: members for group, members in groups.items() if len(members) < MIN_GROUP_SIZE}
-    if undersized:
-        raise SystemExit(f"degenerate communities below minimum size {MIN_GROUP_SIZE}: {undersized}")
+    discovered_groups = {int(group): sorted(correlation.columns[labels == group].tolist()) for group in sorted(set(labels))}
+    excluded_groups = {group: members for group, members in discovered_groups.items() if len(members) < MIN_GROUP_SIZE}
+    groups = {group: members for group, members in discovered_groups.items() if len(members) >= MIN_GROUP_SIZE}
+    if len(groups) < MIN_VALID_GROUPS:
+        raise SystemExit(f"insufficient valid multi-stock communities: {groups}; excluded={excluded_groups}")
 
     leader_rows: list[dict] = []
     leaders: dict[int, list[str]] = {}
@@ -167,7 +169,7 @@ def main() -> None:
     split_counts = signals["split"].value_counts().to_dict() if not signals.empty else {}
     direction_counts = signals.groupby(["split", "direction"]).size().to_dict() if not signals.empty else {}
     report = {
-        "schema_version": 2,
+        "schema_version": 3,
         "research_only": True,
         "allowed_for_live_execution": False,
         "constituent_path": str(constituent_path),
@@ -178,9 +180,11 @@ def main() -> None:
         "holdout_sessions_sealed": len(holdout_sessions),
         "holdout_first_session": holdout_sessions[0],
         "holdout_last_session": holdout_sessions[-1],
-        "community_count": N_GROUPS,
+        "discovered_community_count": N_GROUPS,
+        "valid_community_count": len(groups),
         "minimum_community_size": MIN_GROUP_SIZE,
         "communities": groups,
+        "excluded_isolated_communities": excluded_groups,
         "leaders": leaders,
         "thresholds_frozen_from_development_only": thresholds,
         "signal_count_by_split": split_counts,
