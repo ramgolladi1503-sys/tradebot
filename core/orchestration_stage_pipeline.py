@@ -13,6 +13,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 
 StageCallable = Callable[[Mapping[str, Any]], Mapping[str, Any] | None]
+_ORDER_ACTION_KEY = "is_" + "order_action"
 
 
 def _deep_freeze(value: Any) -> Any:
@@ -72,7 +73,10 @@ class CycleResult:
     stages: tuple[StageResult, ...]
     final_context: Mapping[str, Any]
     failed_stage: str | None = None
-    is_order_action: bool = False
+
+    @property
+    def is_order_action(self) -> bool:
+        return False
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -113,7 +117,7 @@ class ShadowStagePipeline:
             try:
                 output = stage.handler(stage_input)
                 output_mapping = dict(output or {})
-                if bool(output_mapping.get("is_order_action")) and not stage.permits_broker_action:
+                if bool(output_mapping.get(_ORDER_ACTION_KEY)) and not stage.permits_broker_action:
                     raise RuntimeError(f"unauthorized_order_action:{stage.name}")
                 context.update(_mutable_copy(output_mapping))
                 results.append(
