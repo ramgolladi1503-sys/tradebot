@@ -8,6 +8,8 @@ reason: implement a bounded evidence-driven investigator and post-market analyti
 timestamp: 2026-07-30T23:59:00+05:30
 is_order_action: false
 broker_api_called: false
+live_order_action: false
+broker_order_action: false
 source: docs/agent_reviews/ai_reliability_agent_v1.md
 
 ## Agent Work Contract
@@ -48,7 +50,7 @@ forbidden_paths:
   - config/**
   - dashboard/**
 forbidden_capabilities:
-  - broker order placement, modification or cancellation
+  - broker order creation, update or cancellation
   - runtime restart or reconnect
   - strategy, threshold, score or risk mutation
   - candidate promotion or suppression
@@ -130,7 +132,174 @@ query_runtime_events
 
 All four are local and read-only.
 
-## Test Evidence
+## Grill Me Review
+
+### What assumption can silently kill this change?
+
+The largest assumption is that existing runtime lineage and trade-log artifacts are sufficiently complete and semantically stable. The agent cannot recover facts that TradeBot never records. A clean AI report generated from incomplete lineage would be false confidence, so missing rows, unmatched trades, blocked candidates without reasons and generated-versus-observed discrepancies are explicit observability gaps.
+
+### What behavior is claimed but not proven?
+
+A real multi-hour market session has not yet proven:
+
+- authentication and feed behavior under live conditions;
+- trigger detection across a full market day;
+- actual candidate identity continuity through every runtime stage;
+- all real trade-log joins;
+- resource consumption and supervisor stability.
+
+Those claims remain `LIVE_CERTIFICATION_PENDING`.
+
+### What could fail even when focused tests pass?
+
+- upstream schemas may drift;
+- strategy or execution code may omit required IDs;
+- a real trade-log may use identifiers unavailable in lineage;
+- live artifacts may be written partially during reads;
+- an operator may start the supervisor with the wrong session date;
+- an external model request may fail or time out.
+
+V1 handles missing and malformed evidence fail-closed but cannot prove complete upstream instrumentation before a real campaign.
+
+### Grill Me verdict
+
+```text
+NO_FAKE_LIVE_CERTIFICATION
+SIMULATION_SCOPE_SUPPORTED
+REAL_SESSION_PROOF_REQUIRED
+```
+
+## Hermes Review
+
+### In-scope files
+
+```text
+core/ai_reliability_agent/**
+scripts/run_ai_reliability_agent.py
+tests/test_ai_reliability_*.py
+docs/architecture/ai_reliability_agent_v1.md
+docs/test-reports/ai_reliability_agent_v1_certification.*
+docs/agent_reviews/ai_reliability_agent_v1.md
+```
+
+### Out-of-scope files confirmed untouched
+
+```text
+main.py
+core/orchestrator.py
+core/auth.py
+core/market_data.py
+core/execution_engine.py
+core/execution_router.py
+core/risk_engine.py
+strategies/**
+config/**
+dashboard/**
+```
+
+### Boundary result
+
+- No broker client dependency introduced.
+- No order authority introduced.
+- No runtime strategy or gate behavior changed.
+- No risk or ranking mutation introduced.
+- No automatic patch, merge, deployment, restart or reconnect action introduced.
+
+### Hermes verdict
+
+```text
+SCOPE_PASS
+SAFETY_BOUNDARY_PASS
+UNRELATED_RUNTIME_FILES_UNTOUCHED
+```
+
+## GSD Review
+
+### Purpose
+
+Replace indefinite source-code auditing with a bounded live-observation and post-market evidence workflow.
+
+### Files changed
+
+- nine agent package modules;
+- one CLI;
+- four focused test suites;
+- architecture, certification and agent-review evidence documents.
+
+### Delivery evidence
+
+```text
+focused_tests: 131 passed
+python_compilation: PASS
+component_certification: 10/10 passed
+capability_scan: 9 files, 0 forbidden findings
+simulation_verdict: SIMULATION_CERTIFIED
+live_verdict: LIVE_CERTIFICATION_PENDING
+```
+
+### Risks
+
+- no real-session evidence yet;
+- upstream artifact completeness remains a dependency;
+- causal trade explanations remain intentionally non-authoritative;
+- repository CI must pass on the final head.
+
+### Next action
+
+Run a controlled read-only market session, finalize the report, and evaluate the live acceptance gates without changing runtime code during the session.
+
+### GSD verdict
+
+```text
+DELIVERY_COMPLETE_FOR_V1_COMPONENT_SCOPE
+DO_NOT_MERGE_UNTIL_FINAL_CI_AND_LIVE_CAMPAIGN_DECISION
+```
+
+## QA / Safety Review
+
+### Test coverage
+
+- evidence redaction and hash-chain integrity;
+- concurrent evidence appends;
+- every assertion operator and negative assertion cases;
+- unknown-tool and live-write rejection;
+- model-action parsing and API-key isolation;
+- tool exceptions and budgets;
+- actual/hypothetical/counterfactual separation;
+- rejected-target hindsight protection;
+- direction-aware option attribution;
+- trigger detection and deduplication inputs;
+- session finalization and verdict precedence;
+- actual trade-log joining and unmatched-trade detection.
+
+### Safety negatives
+
+- unknown tools cannot execute;
+- registered write tools cannot execute in live-observe mode;
+- unsupported deterministic findings cannot confirm;
+- selected degraded candidates cannot receive a truthful session verdict;
+- rejected candidates are not promoted into actual trades;
+- missing lineage invalidates the session.
+
+### Capability audit
+
+```text
+Python files scanned: 9
+broker or execution imports: 0
+broker order action calls: 0
+shell or subprocess capability: 0
+dynamic eval/exec capability: 0
+```
+
+### QA / Safety verdict
+
+```text
+FOCUSED_QA_PASS
+NEGATIVE_SAFETY_PATHS_PASS
+LIVE_SOAK_NOT_YET_PROVEN
+```
+
+## Acceptance Proof
 
 Command:
 
@@ -142,15 +311,6 @@ Result:
 
 ```text
 131 passed
-```
-
-Suites:
-
-```text
-tests/test_ai_reliability_evidence.py
-tests/test_ai_reliability_agent.py
-tests/test_ai_reliability_analytics.py
-tests/test_ai_reliability_integration.py
 ```
 
 Compilation:
@@ -165,34 +325,7 @@ Result:
 PASS
 ```
 
-## Capability Audit
-
-AST and source-text audit scope:
-
-```text
-core/ai_reliability_agent/*.py
-```
-
-Result:
-
-```text
-Python files scanned: 9
-Forbidden findings: 0
-```
-
-Confirmed absent:
-
-- Kite and broker imports;
-- execution-engine and execution-router imports;
-- order placement, modification and cancellation calls;
-- subprocess calls;
-- shell execution;
-- `eval`;
-- `exec`.
-
-## Certification Evidence
-
-Command:
+Certification:
 
 ```bash
 PYTHONPATH=. python scripts/run_ai_reliability_agent.py certify \
@@ -218,78 +351,65 @@ SIMULATION_CERTIFIED
 LIVE_CERTIFICATION_PENDING
 ```
 
-## Hallucination-Control Evidence
-
-The implementation does not claim that a language model can never hallucinate. It constrains what hallucinated output can accomplish.
-
-Certified in simulation:
-
-- malformed model actions terminate the run;
-- unknown tools do not execute;
-- live write tools do not execute;
-- missing evidence cannot confirm a finding;
-- deterministic facts without assertions cannot confirm;
-- false assertions are rejected;
-- rejected findings remain auditable;
-- unsupported trade explanations remain hypotheses or insufficient evidence;
-- rejected target touches remain unverifiable without executability evidence;
-- model output has no broker or TradeBot mutation authority.
-
-## Behavioral Simulation
-
-A synthetic session included:
-
-- an actual executed trade with a stop outcome;
-- a correct non-executable rejection;
-- a later-executable missed candidate;
-- a selected fallback candidate with a hypothetical target.
-
-The final verdict was deliberately:
+A synthetic session deliberately included a selected fallback candidate. The final verdict correctly failed closed as:
 
 ```text
 PIPELINE_EMITTED_UNTRUSTWORTHY_CANDIDATES
 ```
 
-This demonstrates that a favorable later outcome does not excuse degraded truth at approval.
+## Runtime Proof Required After Merge
 
-## Certification Boundaries
+The implementation does not require merge to run, and this PR remains draft. Before any live-certification claim, a controlled branch run must produce:
 
-Certified:
+1. a session manifest;
+2. a complete candidate-lineage artifact;
+3. runtime events;
+4. trade-log joins for actual outcomes;
+5. a valid evidence hash chain;
+6. zero invalid JSON rows;
+7. zero selected stale/fallback/recovered candidates;
+8. zero unexplained candidate disappearances;
+9. reasons for every blocked candidate;
+10. stable IDs for selected and executed records;
+11. terminal or explicitly open status for approved candidates;
+12. a final `PIPELINE_TRUTHFUL_AND_OPERATIONAL` verdict.
 
-- component contracts;
-- unit behavior;
-- behavioral integration;
-- evidence integrity and redaction;
-- live read-only tool boundary;
-- deterministic finding verification;
-- post-market scope separation;
-- simulation verdict behavior.
+The runtime observation must occur without patching TradeBot during the session.
 
-Not certified:
+## What This PR Does Not Prove
 
-- real live-market operation;
-- auth and feed behavior in the next market session;
+This PR does not prove:
+
+- live authentication or feed correctness;
 - broker connectivity;
-- multi-hour supervisor stability;
-- profitability or structural edge;
-- unique causal explanations;
-- production deployment readiness.
+- multi-hour market-session stability;
+- profitable strategy expectancy;
+- structural market edge;
+- correctness of strategy thresholds;
+- unique causality for a target or stop;
+- production deployment readiness;
+- that a language model can never emit a false statement.
 
-## Live Certification Requirements
+It proves a narrower property: unsupported model output cannot become a confirmed deterministic finding through the implemented verifier, and the agent has no registered TradeBot or broker mutation authority.
 
-`LIVE_CERTIFIED` remains prohibited until a real session proves:
+## Human Approval
 
-1. lineage and event artifacts are present and valid;
-2. zero invalid JSON rows;
-3. zero selected candidates use stale, fallback or recovered-fallback truth;
-4. zero unexplained candidate disappearances;
-5. all blocked candidates have reasons;
-6. all selected and executed records have stable identities;
-7. every actual trade joins to candidate lineage;
-8. approved candidates have terminal or explicitly open status;
-9. evidence-chain verification passes;
-10. TradeBot runtime logic remained frozen during observation;
-11. the final operational verdict is `PIPELINE_TRUTHFUL_AND_OPERATIONAL`.
+Required human decisions:
+
+- whether to run the live supervisor;
+- which branch and session date to observe;
+- whether a P0/P1 finding warrants a separate repair campaign;
+- whether a repair proposal may be implemented on an isolated branch;
+- whether any later PR may be merged or deployed.
+
+No human approval has been granted for:
+
+- production deployment;
+- automatic order authority;
+- automatic repairs;
+- automatic restart or reconnect;
+- live certification;
+- merging PR #760.
 
 ## Final Review Verdict
 
