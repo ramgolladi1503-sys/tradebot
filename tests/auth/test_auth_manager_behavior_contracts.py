@@ -166,6 +166,7 @@ def test_auth_error_classifier_does_not_misclassify_non_auth_failures(exc):
 def test_network_classifier_does_not_mask_invalid_session_as_network_error():
     assert auth_manager._is_network_error(RuntimeError("connection invalid session")) is False
     assert auth_manager._is_network_error(TimeoutError("timed out")) is True
+    assert auth_manager._is_network_error(RuntimeError("network unavailable")) is True
 
 
 def test_validate_token_happy_path_returns_verified_identity(monkeypatch, tmp_path):
@@ -266,16 +267,16 @@ def test_validate_token_auth_failure_invalidates_cache_and_requires_auth(
     assert auth_manager._CACHE == {}
 
 
-def test_validate_token_network_failure_is_explicitly_unknown(monkeypatch, tmp_path):
+def test_validate_token_network_failure_is_explicitly_unknown_and_fail_closed(
+    monkeypatch, tmp_path
+):
     monkeypatch.setenv("KITE_API_KEY", "api_key_1234")
     monkeypatch.setattr(auth_manager, "resolve_access_token", lambda **_kwargs: "token_5678")
     _install_profile_client(monkeypatch, _ProfileKite(error=TimeoutError("timed out")))
 
     result = auth_manager.validate_token(repo_root_path=tmp_path)
 
-    # This records the current contract. Callers must use auth_state and must not
-    # interpret UNKNOWN_NETWORK as proof that authentication was verified.
-    assert result["ok"] is True
+    assert result["ok"] is False
     assert result["auth_state"] == "UNKNOWN_NETWORK"
     assert result["error"] == "profile_error:TimeoutError"
 
