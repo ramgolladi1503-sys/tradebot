@@ -168,8 +168,8 @@ def test_agent_confirms_machine_verifiable_finding(tmp_path):
         session_id="S", mode=AgentMode.LIVE_OBSERVE, reasoner=reasoner,
         tools=registry, ledger=ledger,
     ).run("check")
-    assert len(result["findings"]) == 1
-    assert not result["rejected_findings"]
+    assert result["findings"][0]["verification"]["status"] == "CONFIRMED"
+    assert result["rejected_findings"] == []
 
 
 def test_agent_rejects_untrue_finding(tmp_path):
@@ -185,8 +185,8 @@ def test_agent_rejects_untrue_finding(tmp_path):
         session_id="S", mode=AgentMode.LIVE_OBSERVE, reasoner=reasoner,
         tools=registry, ledger=ledger,
     ).run("check")
-    assert not result["findings"]
-    assert len(result["rejected_findings"]) == 1
+    assert result["findings"] == []
+    assert result["rejected_findings"][0]["verification"]["status"] == "REJECTED"
 
 
 def test_agent_enforces_tool_budget(tmp_path):
