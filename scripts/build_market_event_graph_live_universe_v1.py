@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build the authoritative NIFTY 50 live-universe contract.
+"""Build the provider-specific NIFTY 50 live-universe contract.
 
-The script uses the official NSE Indices constituent CSV and an explicit local
+The script uses the official NSE Indices constituent CSV and a provider-native
 broker instrument master. It does not open broker sessions. It writes a stable
-universe contract only when every constituent and the index map uniquely.
+contract only when the requested broker provider and token domain align.
 """
 
 from __future__ import annotations
@@ -28,10 +28,14 @@ if str(REPO_ROOT) not in sys.path:
 from core.time_utils import IST_TZ
 
 OFFICIAL_NIFTY50_URL = "https://nsearchives.nseindia.com/content/indices/ind_nifty50list.csv"
-PARSER_VERSION = "market_event_graph_live_universe_builder_v1"
-PASS_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING = "PASS_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING"
+PARSER_VERSION = "market_event_graph_live_universe_builder_v2"
+PASS_KITE_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING = "PASS_KITE_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING"
+PASS_UPSTOX_DOMAIN_MAPPING = "PASS_UPSTOX_DOMAIN_MAPPING"
+INVALID_CROSS_BROKER_TOKEN_DOMAIN = "INVALID_CROSS_BROKER_TOKEN_DOMAIN"
 BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE = "BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE"
 BLOCKED_BY_BROKER_INSTRUMENT_CROSSWALK = "BLOCKED_BY_BROKER_INSTRUMENT_CROSSWALK"
+BLOCKED_BY_KITE_INSTRUMENT_MASTER = "BLOCKED_BY_KITE_INSTRUMENT_MASTER"
+BROKER_TOKEN_DOMAIN_MISMATCH = "BROKER_TOKEN_DOMAIN_MISMATCH"
 
 
 @dataclass(frozen=True)
@@ -154,7 +158,16 @@ def _field(row: Mapping[str, Any], *names: str) -> str:
     return ""
 
 
-def _token(row: Mapping[str, Any]) -> int | None:
+def _token(row: Mapping[str, Any], *, broker_provider: str) -> int | None:
+    provider = str(broker_provider).strip().lower()
+    if provider == "kite":
+        raw = _field(row, "instrument_token", "instrumentToken", "token")
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except Exception:
+            return None
     raw = _field(row, "instrument_token", "instrumentToken", "token", "instrument_key", "instrumentKey")
     digits = "".join(ch for ch in raw if ch.isdigit())
     if not digits:
@@ -176,6 +189,7 @@ def crosswalk_constituents(
     constituents: Iterable[OfficialConstituent],
     instruments: list[dict[str, Any]],
     *,
+    broker_provider: str,
     index_symbol: str,
 ) -> tuple[dict[str, Any], dict[str, Any] | None, list[dict[str, Any]]]:
     rows: list[dict[str, Any]] = []
@@ -199,7 +213,7 @@ def crosswalk_constituents(
             })
             continue
         match = matches[0]
-        token = _token(match)
+        token = _token(match, broker_provider=broker_provider)
         status = "MAPPED" if token is not None and token not in used_tokens else "DUPLICATE_TOKEN"
         if token is not None:
             used_tokens.add(token)
@@ -219,14 +233,14 @@ def crosswalk_constituents(
         and _field(row, "exchange", "exchange_segment", "segment").upper() in {"NSE", "NSE_INDEX", "NSE_EQ"}
     ]
     index_mapping = None
-    if len(index_matches) == 1 and _token(index_matches[0]) is not None:
+    if len(index_matches) == 1 and _token(index_matches[0], broker_provider=broker_provider) is not None:
         row = index_matches[0]
         index_mapping = {
             "symbol": index_symbol.upper(),
             "broker_tradingsymbol": _field(row, "tradingsymbol", "trading_symbol", "symbol"),
             "exchange": _field(row, "exchange", "exchange_segment", "segment"),
             "instrument_type": _field(row, "instrument_type", "instrumentType", "instrument"),
-            "instrument_token": _token(row),
+            "instrument_token": _token(row, broker_provider=broker_provider),
             "mapping_status": "MAPPED",
         }
     summary = {
@@ -242,6 +256,7 @@ def crosswalk_constituents(
 
 def build_contract(
     *,
+    broker_provider: str,
     official: dict[str, Any],
     parse_report: dict[str, Any],
     mapping_summary: dict[str, Any],
@@ -250,10 +265,13 @@ def build_contract(
     broker_master_path: Path,
     broker_master_sha256: str,
 ) -> dict[str, Any]:
+    token_domain = str(broker_provider).strip().lower()
     stable_payload = {
         "schema_version": 1,
+        "broker_provider": token_domain,
+        "token_domain": token_domain,
         "name": "NIFTY50_LIVE_UNIVERSE",
-        "version": official["raw_sha256"][:16],
+        "version": f"{official['raw_sha256'][:16]}_{token_domain}_{broker_master_sha256[:16]}",
         "effective_date": None,
         "source_retrieval_date": official["retrieved_at_utc"][:10],
         "source_page_updated_date": official["http_metadata"].get("last_modified"),
@@ -269,6 +287,7 @@ def build_contract(
             "path": str(broker_master_path),
             "sha256": broker_master_sha256,
         },
+        "provider_native_index_identifier": index_mapping["broker_tradingsymbol"],
     }
     contract = {
         **stable_payload,
@@ -283,11 +302,15 @@ def build_contract(
         "capture_session_id": None,
     }
     contract["canonical_sha256"] = canonical_json_sha256(stable_payload)
+    contract["contract_filename"] = (
+        f"nifty50_live_universe_{token_domain}_{official['raw_sha256'][:16]}_{broker_master_sha256[:16]}_{contract['canonical_sha256'][:16]}.json"
+    )
     return contract
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--broker-provider", required=True, choices=("kite", "upstox"))
     parser.add_argument("--nse-constituents-csv", type=Path, default=None)
     parser.add_argument("--broker-instruments", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, default=Path("runtime/reference/market_event_graph"))
@@ -297,14 +320,30 @@ def main() -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     official = retrieve_official_csv(local_path=args.nse_constituents_csv, output_dir=args.output_dir)
     constituents, parse_report = parse_official_constituents(official["raw_bytes"])
+    if args.broker_provider == "kite" and not args.broker_instruments.exists():
+        report_path = args.output_dir / f"nifty50_live_universe_reconciliation_kite_{official['raw_sha256'][:16]}_missing.json"
+        report = {
+            "verdict": BLOCKED_BY_KITE_INSTRUMENT_MASTER,
+            "broker_provider": "kite",
+            "token_domain": "kite",
+            "official_source": {key: value for key, value in official.items() if key != "raw_bytes"},
+            "parse_report": parse_report,
+            "missing_broker_instrument_master": str(args.broker_instruments),
+        }
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+        print(json.dumps({"verdict": BLOCKED_BY_KITE_INSTRUMENT_MASTER, "report_path": str(report_path)}, sort_keys=True))
+        return 2
     instruments, broker_hash = load_broker_instruments(args.broker_instruments)
     mapping_summary, index_mapping, mapping_rows = crosswalk_constituents(
         constituents,
         instruments,
+        broker_provider=args.broker_provider,
         index_symbol=args.index_symbol,
     )
     report = {
-        "verdict": PASS_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING,
+        "verdict": PASS_KITE_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING if args.broker_provider == "kite" else PASS_UPSTOX_DOMAIN_MAPPING,
+        "broker_provider": args.broker_provider,
+        "token_domain": args.broker_provider,
         "official_source": {key: value for key, value in official.items() if key != "raw_bytes"},
         "parse_report": parse_report,
         "broker_instrument_master": {"path": str(args.broker_instruments), "sha256": broker_hash},
@@ -314,12 +353,15 @@ def main() -> int:
     }
     if mapping_summary["uniquely_mapped_count"] != 50 or index_mapping is None:
         report["verdict"] = BLOCKED_BY_BROKER_INSTRUMENT_CROSSWALK
-    report_path = args.output_dir / f"nifty50_live_universe_reconciliation_{official['raw_sha256'][:16]}.json"
+    if args.broker_provider == "kite" and report["verdict"] == PASS_UPSTOX_DOMAIN_MAPPING:
+        report["verdict"] = BROKER_TOKEN_DOMAIN_MISMATCH
+    report_path = args.output_dir / f"nifty50_live_universe_reconciliation_{args.broker_provider}_{official['raw_sha256'][:16]}_{broker_hash[:16]}.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-    if report["verdict"] != PASS_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING:
+    if report["verdict"] not in {PASS_KITE_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING, PASS_UPSTOX_DOMAIN_MAPPING}:
         print(json.dumps({"verdict": report["verdict"], "report_path": str(report_path)}, sort_keys=True))
         return 2
     contract = build_contract(
+        broker_provider=args.broker_provider,
         official=official,
         parse_report=parse_report,
         mapping_summary=mapping_summary,
@@ -328,7 +370,7 @@ def main() -> int:
         broker_master_path=args.broker_instruments,
         broker_master_sha256=broker_hash,
     )
-    contract_path = args.output_dir / f"nifty50_live_universe_{official['raw_sha256'][:16]}.json"
+    contract_path = args.output_dir / contract["contract_filename"]
     if not contract_path.exists():
         contract_path.write_text(json.dumps(contract, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps({"verdict": report["verdict"], "contract_path": str(contract_path), "report_path": str(report_path), "canonical_sha256": contract["canonical_sha256"]}, sort_keys=True))

@@ -7,6 +7,7 @@ import pytest
 from scripts.build_market_event_graph_live_universe_v1 import (
     BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE,
     BLOCKED_BY_BROKER_INSTRUMENT_CROSSWALK,
+    BROKER_TOKEN_DOMAIN_MISMATCH,
     build_contract,
     crosswalk_constituents,
     load_broker_instruments,
@@ -82,6 +83,7 @@ def test_broker_crosswalk_requires_unique_cash_equity_and_index_mapping():
     summary, index_mapping, rows = crosswalk_constituents(
         constituents,
         _instrument_rows(_symbols()),
+        broker_provider="kite",
         index_symbol="NIFTY",
     )
 
@@ -96,7 +98,7 @@ def test_broker_crosswalk_blocks_missing_or_ambiguous_rows():
     constituents, _ = parse_official_constituents(_official_csv(_symbols()))
     instruments = _instrument_rows(_symbols()[1:])
     instruments.append({"tradingsymbol": "NIFTY00", "exchange": "NSE", "instrument_type": "FUT", "instrument_token": "77"})
-    summary, index_mapping, rows = crosswalk_constituents(constituents, instruments, index_symbol="NIFTY")
+    summary, index_mapping, rows = crosswalk_constituents(constituents, instruments, broker_provider="kite", index_symbol="NIFTY")
 
     assert summary["uniquely_mapped_count"] == 49
     assert summary["missing_count"] == 1
@@ -107,7 +109,7 @@ def test_broker_crosswalk_blocks_missing_or_ambiguous_rows():
 
 def test_contract_hash_excludes_capture_session_id_and_matches_bridge_validator(tmp_path):
     constituents, parse_report = parse_official_constituents(_official_csv(_symbols()))
-    summary, index_mapping, rows = crosswalk_constituents(constituents, _instrument_rows(_symbols()), index_symbol="NIFTY")
+    summary, index_mapping, rows = crosswalk_constituents(constituents, _instrument_rows(_symbols()), broker_provider="kite", index_symbol="NIFTY")
     official = {
         "raw_sha256": "a" * 64,
         "retrieved_at_utc": "2026-07-30T03:30:53Z",
@@ -122,6 +124,7 @@ def test_contract_hash_excludes_capture_session_id_and_matches_bridge_validator(
         mapping_summary=summary,
         index_mapping=index_mapping,
         mapping_rows=rows,
+        broker_provider="kite",
         broker_master_path=tmp_path / "instruments.csv",
         broker_master_sha256="b" * 64,
     )
@@ -130,6 +133,38 @@ def test_contract_hash_excludes_capture_session_id_and_matches_bridge_validator(
 
     assert canonical_live_universe_sha256(contract) == contract["canonical_sha256"]
     assert canonical_live_universe_sha256(mutated) == contract["canonical_sha256"]
+
+
+def test_provider_domain_mismatch_is_exposed_for_upstox_contract(tmp_path):
+    constituents, parse_report = parse_official_constituents(_official_csv(_symbols()))
+    summary, index_mapping, rows = crosswalk_constituents(
+        constituents,
+        _instrument_rows(_symbols()),
+        broker_provider="upstox",
+        index_symbol="NIFTY",
+    )
+    official = {
+        "raw_sha256": "a" * 64,
+        "retrieved_at_utc": "2026-07-30T03:30:53Z",
+        "retrieved_at_ist": "2026-07-30T09:00:53+05:30",
+        "http_metadata": {"last_modified": "Thu, 30 Jul 2026 03:30:53 GMT"},
+        "source_url": "file:nifty.csv",
+        "raw_path": str(tmp_path / "nifty.csv"),
+    }
+    contract = build_contract(
+        broker_provider="upstox",
+        official=official,
+        parse_report=parse_report,
+        mapping_summary=summary,
+        index_mapping=index_mapping,
+        mapping_rows=rows,
+        broker_master_path=tmp_path / "upstox_master.json",
+        broker_master_sha256="b" * 64,
+    )
+    assert contract["token_domain"] == "upstox"
+    assert contract["broker_provider"] == "upstox"
+    assert contract["contract_filename"].startswith("nifty50_live_universe_upstox_")
+    assert BROKER_TOKEN_DOMAIN_MISMATCH == "BROKER_TOKEN_DOMAIN_MISMATCH"
 
 
 def test_load_broker_instruments_reads_csv_without_broker_session(tmp_path):

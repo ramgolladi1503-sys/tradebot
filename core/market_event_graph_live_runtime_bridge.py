@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 LIVE_UNIVERSE_NOT_CONFIGURED = "LIVE_UNIVERSE_NOT_CONFIGURED"
 BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE = "BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE"
 BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION = "BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION"
+BROKER_TOKEN_DOMAIN_MISMATCH = "BROKER_TOKEN_DOMAIN_MISMATCH"
 LIVE_BAR_PROVENANCE_UNPROVEN = "LIVE_BAR_PROVENANCE_UNPROVEN"
 INDEX_INTERVAL_MISALIGNED = "INDEX_INTERVAL_MISALIGNED"
 SNAPSHOT_INCOMPLETE = "SNAPSHOT_INCOMPLETE"
@@ -39,12 +40,21 @@ SNAPSHOT_INCOMPLETE = "SNAPSHOT_INCOMPLETE"
 
 @dataclass(frozen=True)
 class LiveUniverseContract:
+    schema_version: int
+    broker_provider: str
+    token_domain: str
     name: str
     version: str
     effective_date: str
+    source_retrieval_date: str
+    source_page_updated_date: str
+    official_source_url: str
+    official_raw_sha256: str
     index_symbol: str
     index_instrument_token: int
+    provider_native_index_identifier: str
     constituents: tuple[dict[str, Any], ...]
+    broker_instrument_master: dict[str, Any]
     source_provenance: str
     capture_session_id: str | None
     canonical_sha256: str
@@ -196,12 +206,21 @@ class LiveSourceRuntimeBridge:
                 for row in raw.get("constituents", [])
             )
             contract = LiveUniverseContract(
+                schema_version=int(raw.get("schema_version") or 1),
+                broker_provider=str(raw.get("broker_provider") or raw.get("token_domain") or "").lower().strip(),
+                token_domain=str(raw.get("token_domain") or raw.get("broker_provider") or "").lower().strip(),
                 name=str(raw["name"]),
                 version=str(raw["version"]),
                 effective_date=str(raw.get("effective_date") or ""),
+                source_retrieval_date=str(raw.get("source_retrieval_date") or ""),
+                source_page_updated_date=str(raw.get("source_page_updated_date") or ""),
+                official_source_url=str(raw.get("official_source_url") or ""),
+                official_raw_sha256=str(raw.get("official_raw_sha256") or ""),
                 index_symbol=str(raw["index_symbol"]).upper(),
                 index_instrument_token=int(raw["index_instrument_token"]),
+                provider_native_index_identifier=str(raw.get("provider_native_index_identifier") or ""),
                 constituents=constituents,
+                broker_instrument_master=dict(raw.get("broker_instrument_master") or {}),
                 source_provenance=str(
                     raw.get("source_provenance")
                     or raw.get("official_source_provenance")
@@ -213,6 +232,11 @@ class LiveSourceRuntimeBridge:
             )
         except Exception:
             return None, BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
+        provider = str(raw.get("broker_provider") or raw.get("token_domain") or "").strip().lower()
+        if provider and provider != "kite":
+            return None, BROKER_TOKEN_DOMAIN_MISMATCH
+        if provider != "kite" and raw.get("broker_provider") is not None:
+            return None, BROKER_TOKEN_DOMAIN_MISMATCH
         if len(contract.constituents) < int(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_MIN_CONSTITUENTS", 40)):
             return None, BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
         if len(set(contract.constituent_symbols)) != len(contract.constituent_symbols):
@@ -238,9 +262,10 @@ class LiveSourceRuntimeBridge:
                 "subscription_evidence_id": "",
                 "token_resolved_symbols": [],
                 "subscription_requested_symbols": [],
-                "subscription_callback_applied_symbols": [],
-                "mode_applied_symbols": [],
+                "subscription_request_succeeded_symbols": [],
+                "mode_request_succeeded_symbols": [],
                 "live_tick_observed_symbols": [],
+                "full_payload_observed_symbols": [],
                 "completed_bar_available_symbols": [],
                 "token_by_symbol": {},
             }
@@ -275,9 +300,10 @@ class LiveSourceRuntimeBridge:
         for field in (
             "token_resolved_symbols",
             "subscription_requested_symbols",
-            "subscription_callback_applied_symbols",
-            "mode_applied_symbols",
+            "subscription_request_succeeded_symbols",
+            "mode_request_succeeded_symbols",
             "live_tick_observed_symbols",
+            "full_payload_observed_symbols",
         ):
             observed = tuple(str(symbol).upper() for symbol in evidence.get(field, []) or [])
             observed_set = set(observed)
@@ -425,15 +451,26 @@ class LiveSourceRuntimeBridge:
 
 def canonical_live_universe_sha256(contract: LiveUniverseContract | Mapping[str, Any]) -> str:
     if isinstance(contract, LiveUniverseContract):
-        payload = {
-            "name": contract.name,
-            "version": contract.version,
-            "effective_date": contract.effective_date,
-            "index_symbol": contract.index_symbol,
-            "index_instrument_token": contract.index_instrument_token,
-            "constituents": list(contract.constituents),
-            "source_provenance": contract.source_provenance,
-        }
+        return canonical_live_universe_sha256(
+            {
+                "schema_version": int(contract.schema_version),
+                "broker_provider": str(contract.broker_provider or "").lower(),
+                "token_domain": str(contract.token_domain or "").lower(),
+                "name": contract.name,
+                "version": contract.version,
+                "effective_date": contract.effective_date,
+                "source_retrieval_date": str(contract.source_retrieval_date or ""),
+                "source_page_updated_date": str(contract.source_page_updated_date or ""),
+                "official_source_url": str(contract.official_source_url or ""),
+                "official_raw_sha256": str(contract.official_raw_sha256 or ""),
+                "index_symbol": contract.index_symbol,
+                "index_instrument_token": contract.index_instrument_token,
+                "provider_native_index_identifier": str(contract.provider_native_index_identifier or ""),
+                "constituents": list(contract.constituents),
+                "broker_instrument_master": dict(contract.broker_instrument_master or {}),
+                "source_provenance": contract.source_provenance,
+            }
+        )
     else:
         constituents = [
             {"symbol": str(row.get("symbol") or "").upper(), "instrument_token": int(row.get("instrument_token") or 0)}
@@ -442,27 +479,39 @@ def canonical_live_universe_sha256(contract: LiveUniverseContract | Mapping[str,
         if contract.get("schema_version") is not None or contract.get("official_raw_sha256") is not None:
             payload = {
                 "schema_version": int(contract.get("schema_version") or 1),
+                "broker_provider": str(contract.get("broker_provider") or contract.get("token_domain") or "").lower(),
+                "token_domain": str(contract.get("token_domain") or contract.get("broker_provider") or "").lower(),
                 "name": str(contract.get("name") or ""),
                 "version": str(contract.get("version") or ""),
                 "effective_date": contract.get("effective_date"),
                 "source_retrieval_date": str(contract.get("source_retrieval_date") or ""),
                 "source_page_updated_date": contract.get("source_page_updated_date"),
-                "official_source_url": str(contract.get("official_source_url") or ""),
-                "official_raw_sha256": str(contract.get("official_raw_sha256") or ""),
-                "index_symbol": str(contract.get("index_symbol") or "").upper(),
-                "index_instrument_token": int(contract.get("index_instrument_token") or 0),
-                "constituents": constituents,
-                "broker_instrument_master": dict(contract.get("broker_instrument_master") or {}),
-            }
+            "official_source_url": str(contract.get("official_source_url") or ""),
+            "official_raw_sha256": str(contract.get("official_raw_sha256") or ""),
+            "index_symbol": str(contract.get("index_symbol") or "").upper(),
+            "index_instrument_token": int(contract.get("index_instrument_token") or 0),
+            "provider_native_index_identifier": str(contract.get("provider_native_index_identifier") or ""),
+            "constituents": constituents,
+            "broker_instrument_master": dict(contract.get("broker_instrument_master") or {}),
+        }
         else:
             payload = {
+                "schema_version": 1,
+                "broker_provider": "",
+                "token_domain": "",
                 "name": str(contract.get("name") or ""),
                 "version": str(contract.get("version") or ""),
                 "effective_date": str(contract.get("effective_date") or ""),
+                "source_retrieval_date": "",
+                "source_page_updated_date": "",
+                "official_source_url": "",
+                "official_raw_sha256": "",
                 "index_symbol": str(contract.get("index_symbol") or "").upper(),
                 "index_instrument_token": int(contract.get("index_instrument_token") or 0),
+                "provider_native_index_identifier": str(contract.get("provider_native_index_identifier") or ""),
                 "constituents": constituents,
                 "source_provenance": str(contract.get("source_provenance") or ""),
+                "broker_instrument_master": {},
             }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
@@ -473,8 +522,9 @@ def build_live_constituent_subscription_audit() -> dict[str, Any]:
     if contract is None:
         return {
             "verdict": reason,
-            "callback_applied_status": "UNPROVEN",
-            "mode_applied_status": "UNPROVEN",
+            "subscription_request_succeeded_status": "UNPROVEN",
+            "mode_request_succeeded_status": "UNPROVEN",
+            "full_payload_observed_status": "UNPROVEN",
             "completed_bar_availability_status": "UNPROVEN",
             "read_only": True,
             "is_order_action": False,
@@ -489,8 +539,9 @@ def build_live_constituent_subscription_audit() -> dict[str, Any]:
         "universe_version": contract.version,
         "universe_hash": contract.canonical_sha256,
         "requested_count": len([contract.index_symbol, *contract.constituent_symbols]),
-        "callback_applied_status": "APPLIED" if ok else "UNPROVEN",
-        "mode_applied_status": "APPLIED" if ok else "UNPROVEN",
+        "subscription_request_succeeded_status": "APPLIED" if ok else "UNPROVEN",
+        "mode_request_succeeded_status": "APPLIED" if ok else "UNPROVEN",
+        "full_payload_observed_status": "APPLIED" if ok else "UNPROVEN",
         "missing_or_unapplied_identities": list(rejected),
         "subscription_evidence": dict(evidence),
         "read_only": True,
@@ -574,6 +625,8 @@ __all__ = [
     "LiveUniverseContract",
     "build_live_constituent_subscription_audit",
     "canonical_live_universe_sha256",
+    "BROKER_TOKEN_DOMAIN_MISMATCH",
     "flush_live_source_bridge",
     "get_live_source_bridge",
+    "build_live_constituent_subscription_audit",
 ]

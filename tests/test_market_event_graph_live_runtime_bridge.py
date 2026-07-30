@@ -30,15 +30,24 @@ def _symbols():
 
 def _contract(**overrides):
     payload = {
+        "schema_version": 1,
+        "broker_provider": "kite",
+        "token_domain": "kite",
         "name": "NIFTY_LIVE_CONSTITUENTS",
         "version": "2026-07-30.test",
         "effective_date": "2026-07-30",
+        "source_retrieval_date": "2026-07-30",
+        "source_page_updated_date": "Thu, 30 Jul 2026 03:30:53 GMT",
+        "official_source_url": "file:nifty.csv",
+        "official_raw_sha256": "a" * 64,
         "index_symbol": "NIFTY",
         "index_instrument_token": 1,
+        "provider_native_index_identifier": "NIFTY 50",
         "constituents": [
             {"symbol": symbol, "instrument_token": 1000 + index}
             for index, symbol in enumerate(_symbols())
         ],
+        "broker_instrument_master": {"path": "runtime/kite_instruments.json", "sha256": "b" * 64},
         "source_provenance": "unit-test-authoritative-contract",
         "capture_session_id": "live-session-test",
     }
@@ -60,9 +69,10 @@ def _evidence(contract):
         "token_by_symbol": token_by_symbol,
         "token_resolved_symbols": required,
         "subscription_requested_symbols": required,
-        "subscription_callback_applied_symbols": required,
-        "mode_applied_symbols": required,
+        "subscription_request_succeeded_symbols": required,
+        "mode_request_succeeded_symbols": required,
         "live_tick_observed_symbols": required,
+        "full_payload_observed_symbols": required,
         "completed_bar_available_symbols": required,
     }
 
@@ -185,7 +195,7 @@ def test_exact_identity_mismatch_is_rejected_even_when_counts_match(monkeypatch,
 
     def mismatched_evidence(contract):
         payload = _evidence(contract)
-        payload["subscription_callback_applied_symbols"] = ["NIFTY", *list(_symbols()[:-1]), "WRONG"]
+        payload["subscription_request_succeeded_symbols"] = ["NIFTY", *list(_symbols()[:-1]), "WRONG"]
         return payload
 
     bridge = LiveSourceRuntimeBridge(
@@ -208,7 +218,7 @@ def test_duplicate_or_extra_subscription_identity_is_rejected(monkeypatch, tmp_p
 
     def duplicated_evidence(contract):
         payload = _evidence(contract)
-        payload["mode_applied_symbols"] = ["NIFTY", "NIFTY", *list(_symbols()), "OUTSIDE"]
+        payload["mode_request_succeeded_symbols"] = ["NIFTY", "NIFTY", *list(_symbols()), "OUTSIDE"]
         return payload
 
     bridge = LiveSourceRuntimeBridge(
@@ -257,9 +267,10 @@ def test_default_subscription_provider_reads_feed_lifecycle_snapshot(monkeypatch
             "token_by_symbol": token_by_symbol,
             "token_resolved_symbols": ["NIFTY", *list(_symbols())],
             "subscription_requested_symbols": ["NIFTY", *list(_symbols())],
-            "subscription_callback_applied_symbols": ["NIFTY", *list(_symbols())],
-            "mode_applied_symbols": ["NIFTY", *list(_symbols())],
+            "subscription_request_succeeded_symbols": ["NIFTY", *list(_symbols())],
+            "mode_request_succeeded_symbols": ["NIFTY", *list(_symbols())],
             "live_tick_observed_symbols": ["NIFTY", *list(_symbols())],
+            "full_payload_observed_symbols": ["NIFTY", *list(_symbols())],
             "completed_bar_available_symbols": ["NIFTY", *list(_symbols())],
         }
 
