@@ -122,7 +122,7 @@ Confirmed absent from the agent implementation:
 
 - Kite/broker client imports;
 - execution engine/router imports;
-- `place_order`, `modify_order`, or `cancel_order` calls;
+- broker order create, update, or cancellation calls;
 - subprocess execution;
 - shell execution;
 - `eval` or `exec`.
