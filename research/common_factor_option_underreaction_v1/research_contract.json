@@ -1,0 +1,14 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "campaign_id": "common_factor_option_underreaction_v1",
+  "direction_source": "completed_constituent_median_return_sign",
+  "entry_contract": "same_direction_same_strike_atm_option_exact_next_minute_open",
+  "holdout_policy": "sealed_until_oof_and_validation_pass",
+  "horizons_minutes": [5, 10, 15, 20],
+  "is_order_action": false,
+  "maximum_variants": 3,
+  "primary_friction": 0.01,
+  "research_only": true,
+  "source_strategy_reused": false
+}
