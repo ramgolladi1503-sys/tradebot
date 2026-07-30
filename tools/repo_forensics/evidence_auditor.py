@@ -13,6 +13,15 @@ from tools.repo_forensics.config_loader import ForensicsConfig
 
 NON_ACTION_FIELDS = ("is_order_action", "broker_api_called", "live_order_action", "broker_order_action")
 DEFAULT_REQUIRED_FIELDS = ("mode", "candidate_id", "decision", "reason", "timestamp", "is_order_action", "broker_api_called", "source")
+_DECISION_IDENTITY_FIELDS = {"candidate_id", "decision", *NON_ACTION_FIELDS}
+_DECISION_EVENT_MARKERS = (
+    "candidate",
+    "decision",
+    "recommendation",
+    "signal",
+    "trade_suggestion",
+    "execution_intent",
+)
 
 
 @dataclass(frozen=True)
@@ -235,8 +244,7 @@ def _audit_record(
     if _is_status_only(record):
         return [EvidenceFinding(rel, "MEDIUM", "record", f"weak_status_only:{evidence}", scope=scope)]
 
-    decision_like = _is_decision_like(record)
-    if not decision_like:
+    if not _is_decision_like(record):
         return []
 
     findings: list[EvidenceFinding] = []
@@ -367,9 +375,26 @@ def _is_status_only(record: dict[str, Any]) -> bool:
 
 
 def _is_decision_like(record: dict[str, Any]) -> bool:
+    """Classify records by decision identity, not generic metadata.
+
+    ``mode`` and ``reason`` occur in execution fills, health snapshots, and
+    operational events. They cannot, by themselves, justify applying the
+    candidate-decision schema. Strong decision fields or an explicit
+    decision/candidate/signal event type are required.
+    """
+
     keys = set(record.keys())
-    markers = {"candidate_id", "decision", "reason", "is_order_action", "broker_api_called", "live_order_action", "broker_order_action", "mode"}
-    return bool(keys & markers)
+    if keys & _DECISION_IDENTITY_FIELDS:
+        return True
+
+    event_name = str(
+        record.get("event_type")
+        or record.get("event")
+        or record.get("record_type")
+        or record.get("type")
+        or ""
+    ).strip().lower()
+    return any(marker in event_name for marker in _DECISION_EVENT_MARKERS)
 
 
 def _required_fields(config: ForensicsConfig) -> list[str]:
