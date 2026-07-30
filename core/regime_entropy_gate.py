@@ -52,6 +52,14 @@ def _threshold_for_context(
     )
 
 
+def _finite_float(value: object) -> float | None:
+    try:
+        resolved = float(value)
+    except (TypeError, ValueError):
+        return None
+    return resolved if math.isfinite(resolved) else None
+
+
 def evaluate_regime_entropy_gate(
     raw_entropy: Optional[float] = None,
     probabilities: Optional[dict] = None,
@@ -105,9 +113,9 @@ def evaluate_regime_entropy_gate(
         event_mode=event_mode,
     )
 
-    # Compatibility only for legacy callers that provide raw entropy without a
-    # probability vector. Real probability decisions do not relax uncertainty
-    # based on the classifier's own primary label because that is circular.
+    # Compatibility is deliberately limited to raw-entropy callers. Real
+    # probability-vector decisions never relax uncertainty using the model's
+    # own predicted label because that would be circular.
     resolved_regime = str(
         primary_regime
         or payload.get("primary_regime")
@@ -122,6 +130,18 @@ def evaluate_regime_entropy_gate(
     }:
         threshold = 1.0
         threshold_source += "_LEGACY_RAW_RANGE_OVERRIDE"
+    elif legacy_raw_only and resolved_regime == "TREND":
+        depth_imbalance = _finite_float(payload.get("depth_imbalance")) or 0.0
+        volume_delta_override = bool(payload.get("volume_delta_override"))
+        legacy_prob_max = _finite_float(regime_prob_max)
+        trend_override = bool(
+            volume_delta_override
+            or depth_imbalance > 0.35
+            or (legacy_prob_max is not None and legacy_prob_max > 0.60)
+        )
+        if trend_override:
+            threshold *= 1.30
+            threshold_source += "_LEGACY_RAW_TREND_OVERRIDE"
 
     threshold = min(max(float(threshold), 0.0), 1.0)
     uncertain = bool(computed_norm > threshold)
@@ -163,10 +183,7 @@ def evaluate_regime_entropy_gate(
 
     top_probability = probability_diag.get("top_probability")
     if top_probability is None and regime_prob_max is not None:
-        try:
-            top_probability = float(regime_prob_max)
-        except (TypeError, ValueError):
-            top_probability = None
+        top_probability = _finite_float(regime_prob_max)
 
     return {
         "uncertain": bool(uncertain),
@@ -190,6 +207,7 @@ def evaluate_regime_entropy_gate(
             "threshold": threshold,
             "feature_quality_status": feature_quality_status or None,
             "primary_regime": resolved_regime or None,
+            "legacy_raw_only": legacy_raw_only,
             "reasons": list(dict.fromkeys(reasons)),
         },
     }
