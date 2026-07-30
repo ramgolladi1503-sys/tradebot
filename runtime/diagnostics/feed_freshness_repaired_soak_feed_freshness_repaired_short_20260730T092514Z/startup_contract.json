@@ -1,0 +1,26 @@
+{
+  "auth_state": "OK",
+  "auth_user_present": true,
+  "auth_valid": true,
+  "auto_execution": {
+    "ALLOW_LIVE_ORDERS": "0",
+    "AUTO_ORDER": "0",
+    "AUTO_TRADE": "0",
+    "LIVE_TRADING_ENABLED": "false"
+  },
+  "broker_mode": "LIVE_BROKER_ADAPTER_ACTIVE=1",
+  "commit": "5e184de8e574ca27452b3fafa8962da0d44f397b",
+  "diagnostic_directory": "/Users/madhuram/tradebot-feed-freshness-recovery-v1/runtime/diagnostics",
+  "execution_mode_env": "LIVE",
+  "manual_approval": true,
+  "manual_approval_required_env": "1",
+  "market_session": {
+    "is_market_open": true,
+    "mode": "LIVE",
+    "source": ""
+  },
+  "repo_path": "/Users/madhuram/tradebot-feed-freshness-recovery-v1",
+  "runtime_mode": "LIVE",
+  "runtime_state_directory": "/Users/madhuram/tradebot-feed-freshness-recovery-v1/.runtime",
+  "trading_mode_env": "LIVE"
+}

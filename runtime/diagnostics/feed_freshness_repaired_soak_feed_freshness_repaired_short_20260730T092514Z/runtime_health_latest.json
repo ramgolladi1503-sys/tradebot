@@ -1,0 +1,245 @@
+{
+  "boot_epoch": 1785403533.28446,
+  "execution": {
+    "decision_breakers": {
+      "blocked": false,
+      "blocked_reasons": [],
+      "breakers": {
+        "BROKER_FAILURE": {
+          "clear_conditions": {
+            "cooldown_elapsed": true,
+            "window_healthy_enough": true
+          },
+          "clear_ratio": 0.1,
+          "cooldown_seconds": 120.0,
+          "last_evidence": {},
+          "last_transition_at": null,
+          "min_samples": 3,
+          "reason": null,
+          "trip_ratio": 0.5,
+          "tripped": false,
+          "tripped_at": null,
+          "window_samples": 53,
+          "window_seconds": 180.0,
+          "window_unhealthy": 0,
+          "window_unhealthy_ratio": 0.0
+        },
+        "PRICE_MISMATCH_RATE": {
+          "clear_conditions": {
+            "cooldown_elapsed": true,
+            "window_healthy_enough": true
+          },
+          "clear_ratio": 0.25,
+          "cooldown_seconds": 60.0,
+          "last_evidence": {},
+          "last_transition_at": null,
+          "min_samples": 5,
+          "reason": null,
+          "trip_ratio": 0.7,
+          "tripped": false,
+          "tripped_at": null,
+          "window_samples": 60,
+          "window_seconds": 120.0,
+          "window_unhealthy": 0,
+          "window_unhealthy_ratio": 0.0
+        },
+        "STALE_FEED": {
+          "clear_conditions": {
+            "cooldown_elapsed": true,
+            "window_healthy_enough": false
+          },
+          "clear_ratio": 0.2,
+          "cooldown_seconds": 45.0,
+          "last_evidence": {},
+          "last_transition_at": null,
+          "min_samples": 3,
+          "reason": null,
+          "trip_ratio": 0.6,
+          "tripped": false,
+          "tripped_at": null,
+          "window_samples": 0,
+          "window_seconds": 90.0,
+          "window_unhealthy": 0,
+          "window_unhealthy_ratio": 0.0
+        }
+      },
+      "enabled": true,
+      "ts_epoch": 1785405542.213916
+    },
+    "kill_switch_reason": null,
+    "kill_switch_triggered": false,
+    "last_spread_decision": {
+      "allowed": true,
+      "atr_ratio": null,
+      "context": {
+        "base_spread_pct": 0.03,
+        "vol_factor": 1.2
+      },
+      "illiquid": false,
+      "max_spread_pct": 0.03,
+      "opening_auction": false,
+      "reason": "spread_within_dynamic_threshold",
+      "reason_code": "OK",
+      "spread_pct": 0.0024844720496892997,
+      "stddev_ratio": null,
+      "volatility_critical": false,
+      "volatility_source": null
+    }
+  },
+  "feed": {
+    "allow_stale_quotes": false,
+    "blockers": [
+      "truth_integrity:SNAPSHOT_HASH_MISMATCH"
+    ],
+    "depth_age_sec": 0.008973121643066406,
+    "depth_max_age_sec": 6.0,
+    "depth_proof_state": "FULL",
+    "depth_required": true,
+    "feed_truth_reason_code": "LIVE",
+    "feed_truth_state": "LIVE",
+    "feed_zombie": {
+      "append": false,
+      "blockers": [],
+      "evidence": {
+        "feed_reasons": [],
+        "intended_tokens_count": 73,
+        "market_open": true,
+        "mode": "LIVE",
+        "require_live_feed": true,
+        "sla_status": "OK",
+        "subscribed_option_tokens_count": 59,
+        "subscribed_tokens_count": 62,
+        "subscriptions_count": 62,
+        "ws_connected": true
+      },
+      "is_order_action": false,
+      "is_zombie": false,
+      "read_only": true,
+      "reasons": [],
+      "source": "feed_zombie_state_v1",
+      "state": "RUNNING"
+    },
+    "full_feed_proof_blockers": [
+      "OPTION_TICKS_UNVERIFIED",
+      "WARMUP_INCOMPLETE"
+    ],
+    "full_feed_proof_ready": false,
+    "intended_tokens_count": 73,
+    "last_error": null,
+    "last_recovery_generation_id": null,
+    "last_subscription_generation_id": null,
+    "last_tick_age_sec": 0.019549131393432617,
+    "latest_option_tick_age_sec": 0.019549131393432617,
+    "latest_option_tick_ts": 1785405542.194367,
+    "ltp_age_sec": 0.032586097717285156,
+    "ltp_max_age_sec": 2.5,
+    "ltp_required": true,
+    "missing_option_tokens_count": 0,
+    "option_ticks_verified": null,
+    "reasons": [],
+    "recovery_generation_id": null,
+    "recovery_runtime": {
+      "action_hint": "no_recovery_market_closed",
+      "context": {
+        "depth_fresh": true,
+        "effective_ws_connected": null,
+        "feed_ok": null,
+        "feed_truth_reason_code": "LIVE",
+        "feed_truth_state": "LIVE",
+        "full_feed_proof_blockers": [
+          "OPTION_TICKS_UNVERIFIED",
+          "WARMUP_INCOMPLETE"
+        ],
+        "full_feed_proof_ready": false,
+        "intended_tokens_count": 73,
+        "last_depth_age_sec": null,
+        "last_recovery_generation_id": 0,
+        "last_subscription_generation_id": 0,
+        "last_tick_age_sec": 0.019549131393432617,
+        "latest_depth_age_sec": 0.008973121643066406,
+        "latest_ltp_age_sec": 0.032586097717285156,
+        "missing_option_tokens_count": 0,
+        "option_feed_block_reason": null,
+        "option_ticks_verified": false,
+        "primary_option_blocker": null,
+        "recovery_generation_id": 0,
+        "restart_count_1h": 0,
+        "runtime_state": "RUNNING",
+        "stale_strikes": 0,
+        "state_machine_reason": null,
+        "state_machine_state": null,
+        "subscribed_option_tokens_count": 59,
+        "subscribed_tokens_count": 62,
+        "subscription_generation_id": 0,
+        "underlying_tick_fresh": true,
+        "warmup_clean_cycles": 0,
+        "warmup_required_clean_cycles": 3,
+        "ws_connected": true
+      },
+      "force_full_restart": false,
+      "reason": "market_closed",
+      "recovery_state": "MARKET_CLOSED",
+      "should_attempt_recovery": false
+    },
+    "runtime_state": "RUNNING",
+    "sla_state": "LIVE",
+    "sla_status": "OK",
+    "snapshot_hash": "4f40adadc82b6168c1483aff85c7fd07332cc3a2db58d324ad7d18fe94812c96",
+    "snapshot_hash_expected": "0da2516b8f8ca0b715bb0dc3854e7e58cd51f4f4e39ec797b575e903dc06ade0",
+    "snapshot_hash_match": false,
+    "snapshot_hash_version": 1,
+    "subscribed_option_tokens_count": 59,
+    "subscribed_tokens_count": 62,
+    "subscription_generation_id": null,
+    "subscriptions_count": 62,
+    "transport_healthy": true,
+    "transport_heartbeat_age_sec": 0.0,
+    "transport_heartbeat_epoch": 1785405542.194367,
+    "transport_heartbeat_state": "CONNECTED",
+    "transport_reason": "ws_connected",
+    "transport_state": "CONNECTED",
+    "truth_integrity_alert_count": 1,
+    "truth_integrity_alerts": [
+      {
+        "code": "SNAPSHOT_HASH_MISMATCH",
+        "details": {
+          "expected_snapshot_hash": "0da2516b8f8ca0b715bb0dc3854e7e58cd51f4f4e39ec797b575e903dc06ade0",
+          "feed_truth_state": "LIVE",
+          "snapshot_hash": "4f40adadc82b6168c1483aff85c7fd07332cc3a2db58d324ad7d18fe94812c96",
+          "transport_state": "CONNECTED"
+        },
+        "message": "Feed runtime snapshot hash does not match the canonical recomputation."
+      }
+    ],
+    "truth_integrity_status": "ALERT",
+    "underlying_ltp_age_by_symbol": {
+      "BANKNIFTY": 0.0,
+      "NIFTY": 0.0,
+      "SENSEX": 0.0
+    },
+    "underlying_ltp_age_sec": 0.019549131393432617,
+    "underlying_ltp_proof_state": "STALE",
+    "underlying_ltp_stale_symbols": [],
+    "warmup_clean_cycles": null,
+    "warmup_required_clean_cycles": null,
+    "ws_connected": true
+  },
+  "market_open": true,
+  "mode": "LIVE",
+  "pid": 42514,
+  "recon": {
+    "daemon_running": true,
+    "last_cycle_ts_epoch": 1785405539.684145
+  },
+  "risk": {
+    "daily_pnl_pct": 0.0,
+    "hard_halt": false,
+    "open_risk_pct": 0.0
+  },
+  "run_id": "run-2bf6d77911f2",
+  "schema_version": 1,
+  "snapshot_age_sec": 0.0,
+  "snapshot_ts_epoch": 1785405542.213916,
+  "ts_epoch": 1785405542.213916,
+  "writer": "runtime_health"
+}

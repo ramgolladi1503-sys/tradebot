@@ -1,0 +1,84 @@
+{
+  "append": false,
+  "broker_api_called": false,
+  "by_strategy": {},
+  "by_symbol": {
+    "BANKNIFTY": {
+      "indicator_ready": true,
+      "regime_blocked": true
+    },
+    "NIFTY": {
+      "indicator_ready": true,
+      "regime_blocked": null
+    },
+    "SENSEX": {
+      "indicator_ready": true,
+      "regime_blocked": true
+    }
+  },
+  "dedup_drop_count": null,
+  "drop_reasons": {},
+  "execution_mode": "LIVE",
+  "first_zero_stage": "not_starved",
+  "gate_reasons": {
+    "NO_STRATEGY_QUALIFIED": 1,
+    "REGIME_UNSTABLE": 1
+  },
+  "generated_epoch": 1785405542.2043269,
+  "indicator_blocked_symbol_count": 0,
+  "indicator_ready_symbol_count": 3,
+  "is_order_action": false,
+  "latency_guard_action": "OK",
+  "latency_guard_age_sec": 8.106231689453125e-06,
+  "latency_guard_last_bad_at": 1785404135.827099,
+  "latency_guard_last_ok_at": 1785405542.112859,
+  "latency_guard_metric": null,
+  "latency_guard_mode": "LIVE",
+  "latency_guard_reason": "latency_within_budget",
+  "latency_guard_recovery_required": false,
+  "latency_guard_source": null,
+  "latency_guard_threshold": null,
+  "latency_guard_triggered": false,
+  "latency_guard_value": null,
+  "market_data_symbol_count": 3,
+  "market_data_symbols": [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX"
+  ],
+  "market_open": true,
+  "normalization_drop_count": null,
+  "phase2_input_candidate_count": 13,
+  "raw_candidate_count": 26,
+  "read_only": true,
+  "regime_blocked_symbol_count": 2,
+  "regime_ready_symbol_count": 1,
+  "schema_version": 1,
+  "source": "runtime_candidate_flow_trace_v1",
+  "starvation_summary": {
+    "latency_guard": {
+      "action": "OK",
+      "age_sec": 8.106231689453125e-06,
+      "last_bad_at": 1785404135.827099,
+      "last_ok_at": 1785405542.112859,
+      "metric": null,
+      "mode": "LIVE",
+      "reason": "latency_within_budget",
+      "recovery_required": false,
+      "source": null,
+      "threshold": null,
+      "triggered": false,
+      "value": null
+    },
+    "missing_counts_reason": "orchestrator_does_not_expose_drop_stage_counts",
+    "notes": [
+      "Evidence-only trace. Does not change any gates, strategies, ranking, or Phase2 behavior.",
+      "Drop counts are None unless explicitly provided by the orchestrator."
+    ]
+  },
+  "strategy_generation_attempt_count": null,
+  "validation_drop_count": null,
+  "writer_module": "core.runtime_candidate_flow_trace",
+  "writer_name": "runtime_candidate_flow_trace",
+  "writer_schema_version": 1
+}
