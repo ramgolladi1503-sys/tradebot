@@ -41,7 +41,7 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --disable-pip-version-check pandas pyarrow numpy
 
-      - name: Audit schema and causal research fields
+      - name: Audit physical schema, universe and certification
         shell: bash
         run: |
           set -euo pipefail
@@ -54,56 +54,79 @@ jobs:
           import pyarrow.parquet as pq
 
           root = Path('research/local_evidence_consolidation_v1')
-          joint = sorted(root.rglob('repaired_joint_underlying_option_warehouse.parquet'))
-          constituents = sorted(root.rglob('constituent_index_5m.parquet'))
-          if not joint:
+          joint_paths = sorted(root.rglob('repaired_joint_underlying_option_warehouse.parquet'))
+          constituent_paths = sorted(root.rglob('constituent_index_5m.parquet'))
+          if not joint_paths:
               raise SystemExit('missing repaired joint warehouse')
-          if not constituents:
+          if not constituent_paths:
               raise SystemExit('missing constituent panel')
 
-          joint_path = joint[0]
-          constituent_path = next((p for p in constituents if 'proxy_campaign_2024_2025_v2' in str(p)), constituents[0])
-
+          joint_path = joint_paths[0]
+          constituent_path = next((p for p in constituent_paths if 'proxy_campaign_2024_2025_v2' in str(p)), constituent_paths[0])
           joint_pf = pq.ParquetFile(joint_path)
           constituent_pf = pq.ParquetFile(constituent_path)
           joint_cols = joint_pf.schema.names
           constituent_cols = constituent_pf.schema.names
 
-          probe_terms = {
-              'time': ['time', 'timestamp', 'session', 'date'],
-              'underlying': ['nifty', 'spot', 'index', 'underlying', 'future'],
-              'option': ['option', 'premium', 'strike', 'expiry', 'ce', 'pe', 'ltp', 'open', 'high', 'low', 'close'],
-              'structure': ['breadth', 'dispersion', 'sector', 'leader', 'weight', 'coverage', 'return'],
-          }
-          matches = {
-              group: [c for c in joint_cols if any(term in c.lower() for term in terms)]
-              for group, terms in probe_terms.items()
-          }
+          c = pd.read_parquet(constituent_path, columns=['timestamp','session','symbol','provider','data_origin','synthetic','mock','fallback'])
+          c['timestamp'] = pd.to_datetime(c['timestamp'], utc=True, errors='coerce')
+          c['symbol'] = c['symbol'].astype(str)
+          constituent_inventory = (
+              c.groupby('symbol', dropna=False)
+               .agg(rows=('symbol','size'), sessions=('session','nunique'), first_timestamp=('timestamp','min'), last_timestamp=('timestamp','max'))
+               .reset_index()
+               .sort_values(['rows','symbol'], ascending=[False,True])
+          )
 
-          sample = pd.read_parquet(joint_path, columns=joint_cols[: min(20, len(joint_cols))]).head(5)
+          jcols = ['session_id','session_date','instrument','event_timestamp','option_type','warehouse_row_classification','certified_for_replay','certification_blocker','provenance_class','stale_price_flag','underlying_completed_bar','underlying_stale_flag']
+          j = pd.read_parquet(joint_path, columns=jcols)
+          j['event_timestamp'] = pd.to_datetime(j['event_timestamp'], utc=True, errors='coerce')
+
           report = {
-              'schema_version': 1,
+              'schema_version': 2,
               'research_only': True,
               'allowed_for_live_execution': False,
               'joint_path': str(joint_path),
-              'joint_rows': joint_pf.metadata.num_rows,
+              'joint_rows': int(joint_pf.metadata.num_rows),
               'joint_columns': joint_cols,
-              'joint_field_matches': matches,
+              'joint_date_min': str(j['event_timestamp'].min()),
+              'joint_date_max': str(j['event_timestamp'].max()),
+              'joint_sessions': int(j['session_id'].nunique()),
+              'joint_instruments': sorted(j['instrument'].dropna().astype(str).unique().tolist()),
+              'option_type_counts': {str(k): int(v) for k,v in j['option_type'].fillna('NULL').value_counts(dropna=False).items()},
+              'row_classification_counts': {str(k): int(v) for k,v in j['warehouse_row_classification'].fillna('NULL').value_counts(dropna=False).items()},
+              'certified_for_replay_counts': {str(k): int(v) for k,v in j['certified_for_replay'].fillna(False).value_counts(dropna=False).items()},
+              'certification_blocker_counts': {str(k): int(v) for k,v in j['certification_blocker'].fillna('NONE').value_counts(dropna=False).head(20).items()},
+              'provenance_class_counts': {str(k): int(v) for k,v in j['provenance_class'].fillna('NULL').value_counts(dropna=False).items()},
               'constituent_path': str(constituent_path),
-              'constituent_rows': constituent_pf.metadata.num_rows,
+              'constituent_rows': int(constituent_pf.metadata.num_rows),
               'constituent_columns': constituent_cols,
-              'sample_records': sample.astype(str).to_dict(orient='records'),
+              'constituent_date_min': str(c['timestamp'].min()),
+              'constituent_date_max': str(c['timestamp'].max()),
+              'constituent_sessions': int(c['session'].nunique()),
+              'constituent_symbol_count': int(c['symbol'].nunique()),
+              'constituent_inventory': constituent_inventory.astype(str).to_dict(orient='records'),
+              'constituent_truth_flags': {
+                  'synthetic_counts': {str(k): int(v) for k,v in c['synthetic'].fillna(False).value_counts(dropna=False).items()},
+                  'mock_counts': {str(k): int(v) for k,v in c['mock'].fillna(False).value_counts(dropna=False).items()},
+                  'fallback_counts': {str(k): int(v) for k,v in c['fallback'].fillna(False).value_counts(dropna=False).items()},
+                  'provider_counts': {str(k): int(v) for k,v in c['provider'].fillna('NULL').value_counts(dropna=False).items()},
+                  'data_origin_counts': {str(k): int(v) for k,v in c['data_origin'].fillna('NULL').value_counts(dropna=False).items()},
+              },
               'next_stage_contract': {
-                  'mechanism': 'ordered constituent_to_sector_to_index_to_option information migration',
-                  'no_old_candidate_inheritance': True,
+                  'mechanism': 'ordered constituent_to_participation_group_to_index_to_option information migration',
+                  'sector_labels_must_be_explicit_or_replaced_by_development_only_comovement_groups': True,
+                  'only_certified_option_rows_for_outcomes': True,
+                  'exclude_mock_synthetic_fallback_constituent_rows': True,
                   'entry_must_be_after_signal': True,
+                  'development_validation_holdout_split_by_session': True,
                   'holdout_must_remain_sealed': True,
                   'no_threshold_tuning_on_holdout': True,
               },
-              'principal_verdict': 'SCHEMA_READY_FOR_INFORMATION_MIGRATION_CAMPAIGN',
+              'principal_verdict': 'UNIVERSE_READY_FOR_FROZEN_STAGE_1_SPEC',
           }
           out = Path('information-migration-sequence-v1-schema-audit.json')
-          out.write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          out.write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + '\n')
           print(out.read_text())
           PY
 
@@ -114,4 +137,4 @@ jobs:
           path: information-migration-sequence-v1-schema-audit.json
           if-no-files-found: error
 
-# Trigger revision: 3
+# Trigger revision: 4
