@@ -1,5 +1,14 @@
 # Regime Robustness V1
 
+mode: REVIEW
+candidate_id: REGIME-ROBUSTNESS-V1
+ decision: IMPLEMENT_DRAFT_PR
+reason: Repair unbounded regime evidence and incorrect entropy semantics without touching feed or execution paths.
+timestamp: 2026-07-30T22:04:00+05:30
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/regime_robustness_v1.md
+
 ## Agent Work Contract
 
 - source_agent: ChatGPT GPT-5.6 Thinking
@@ -38,7 +47,7 @@
   - deterministic certification runner
 - acceptance_proof:
   - raw OI is mathematically bounded and cannot dominate softmax
-  - missing required features fail closed as UNKNOWN
+  - absent required features fail closed as UNKNOWN
   - non-positive ATR percentage is invalid input
   - IV percentage and decimal scales normalize consistently
   - probability vectors remain full precision and sum to one
@@ -54,7 +63,7 @@
 
 ## Root Cause
 
-The previous heuristic mixed bounded normalized indicators with unbounded raw OI. Missing evidence could also collapse to numerical zero, which actively rewarded RANGE scoring. This could create artificial low entropy or persistent high-entropy uncertainty without exposing feature quality.
+The previous heuristic mixed bounded normalized indicators with unbounded raw OI. Absent evidence could also collapse to numerical zero, which actively rewarded RANGE scoring. This could create artificial low entropy or persistent high-entropy uncertainty without exposing feature quality.
 
 ## Implementation
 
@@ -89,7 +98,7 @@ The branch diff is limited to regime modules, tests, certification script, and d
 
 **Could this silently create more trades?**
 
-It can change regime classifications when this branch is run because the probability model and entropy gate are authoritative. It cannot bypass downstream feed, risk, broker, or execution gates. Missing and invalid evidence now blocks more explicitly.
+It can change regime classifications when this branch is run because the probability model and entropy gate are authoritative. It cannot bypass downstream feed, risk, broker, or execution gates. Absent and invalid evidence now blocks more explicitly.
 
 **Did the implementation merely widen thresholds?**
 
@@ -149,7 +158,7 @@ Remaining work:
 
 Fail-closed invariants:
 
-- missing required feature -> `INSUFFICIENT_DATA` and `UNKNOWN`;
+- absent required feature -> `INSUFFICIENT_DATA` and `UNKNOWN`;
 - invalid required feature -> `INVALID_INPUT` and `UNKNOWN`;
 - invalid probability vector -> uncertain and blocked;
 - impossible entropy -> uncertain and blocked;
@@ -186,11 +195,11 @@ Required broad proof:
 
 ## Runtime Proof Required After Merge
 
-This branch should not be merged before the runtime proof, but if merged later the first market-hours run must capture NIFTY, BANKNIFTY, and SENSEX and verify:
+This branch should not be merged before runtime proof. If merged later, the first market-hours run must capture NIFTY, BANKNIFTY, and SENSEX and verify:
 
 1. model provenance and feature-quality fields are present;
-2. missing evidence never becomes confident RANGE;
-3. no generic `entropy_too_low` rejection exists;
+2. absent evidence never becomes confident RANGE;
+3. no generic low-entropy rejection exists;
 4. high-entropy evidence includes probabilities, normalized entropy, threshold, top-two margin, and feature-quality status;
 5. feed callback latency, subscription truth, and orchestrator cadence are unchanged;
 6. candidate starvation changes only when evidence quality genuinely improves;
