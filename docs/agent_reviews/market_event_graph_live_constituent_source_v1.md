@@ -18,6 +18,7 @@ base_commit: 17262b4b6a42eb09d4d508bfdf6fe0d649ee32af
 branch: integration/market-event-graph-live-constituent-source-v1
 scope:
   - freeze a versioned current NIFTY 50 constituent reference manifest
+  - provide an explicit official-CSV manifest refresh command with raw-source SHA-256
   - resolve exactly one NSE equity token per constituent and one NIFTY index token
   - request read-only WebSocket subscriptions only when explicitly enabled
   - reconstruct strict completed one-minute index and constituent returns from the canonical tick database
@@ -29,7 +30,9 @@ allowed_paths:
   - core/market_event_graph_tick_reader.py
   - core/market_event_graph_constituent_source.py
   - core/candidate_pool_orchestrator.py
+  - scripts/refresh_market_event_graph_nifty50_manifest.py
   - tests/test_market_event_graph_constituent_source.py
+  - tests/test_market_event_graph_manifest_refresh.py
   - docs/agent_reviews/market_event_graph_live_constituent_source_v1.md
 forbidden_paths:
   - core/execution/**
@@ -40,6 +43,7 @@ forbidden_paths:
   - live order configuration
 acceptance:
   - exactly 50 unique manifest symbols
+  - official CSV refresh records the raw-source digest and rejects duplicate/non-EQ membership
   - exact token resolution or fail closed
   - right-closed completed-minute tick semantics
   - minimum 40 same-minute constituent return pairs
@@ -57,11 +61,13 @@ In scope:
 - Explicit source, token-resolution, subscription, coverage, and interval-gap evidence.
 - An opt-in environment/metadata switch named `MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE`.
 - Session-scoped, atomic persistence of completed bars and the caller-owned graph watermark.
+- A manually invoked refresh command for the current official constituent CSV.
 
 Out of scope:
 
 - No strategy retuning.
 - No change to the graph, thresholds, next-bar delay, cooldown, or historical ledgers.
+- No automatic runtime internet download.
 - No option-contract mapping or premium-return analysis.
 - No paper approval or live execution eligibility.
 - No ranking or UI redesign.
@@ -75,6 +81,7 @@ Boundary verification:
 - [x] no strategy file changed
 - [x] source is disabled unless explicitly enabled
 - [x] source output is advisory-only
+- [x] manifest refresh is an explicit operator action, not a runtime network dependency
 
 ## High-Risk Path Review
 
@@ -91,12 +98,14 @@ Controls:
 - subscription uses the existing guarded `ensure_subscribed_tokens` API;
 - subscription contains no order or portfolio operation;
 - only NIFTY and only an explicit enable flag activate the source;
+- the canonical NIFTY token is resolved through the existing market-data resolver;
 - caller-supplied replay/test bars remain authoritative and are never replaced;
 - the tick database is opened in read-only mode and never migrated;
 - each one-minute row needs both current and prior close observations;
 - the first missing index or constituent-coverage interval stops later construction;
 - at least 40 constituent pairs are required;
 - the manifest is a current reference snapshot, not historical membership evidence;
+- the refresh command requires exactly 50 unique EQ symbols and records source bytes by SHA-256;
 - the resulting candidate remains `SHADOW_ADVISORY_ONLY`.
 
 ## Grill Me Review
@@ -110,6 +119,7 @@ Questions challenged:
 - Can an ambiguous NSE symbol be selected? No. Every constituent must resolve to exactly one EQ token.
 - Can the source run accidentally for BANKNIFTY or SENSEX? No. Non-NIFTY symbols return `NOT_APPLICABLE`.
 - Can a restart replay the same graph? The caller-owned watermark is atomically persisted after candidate generation and reloaded by session.
+- Can a malformed constituent CSV silently replace the manifest? No. The refresh command requires exactly 50 unique EQ symbols.
 - Can this source place an order? No order API is imported or called.
 
 ## Hermes Review
@@ -119,7 +129,7 @@ Verdict: PASS
 Architecture:
 
 ```text
-versioned NIFTY manifest
+official current constituent CSV --manual refresh--> versioned NIFTY manifest
 -> cached NSE token resolution
 -> guarded read-only WS subscription request
 -> canonical tick SQLite read-only query
@@ -138,13 +148,16 @@ Verdict: PASS
 
 The delivery is a bounded vertical slice. It avoids modifying the large market-data
 or execution orchestrators and attaches at the existing candidate-pool boundary.
-The design is deterministic under injected instruments, ticks, time, and state path.
+The design is deterministic under injected instruments, ticks, time, state path,
+and manifest CSV bytes.
 
 ## QA / Safety Review
 
 Required tests cover:
 
 - exactly 50 unique manifest constituents;
+- official CSV digest and atomic refresh output;
+- duplicate and non-EQ manifest rejection;
 - successful and failed token resolution;
 - right-closed minute boundaries including exact-second ticks;
 - no forward-fill for a missing token/minute;
@@ -169,6 +182,7 @@ Run:
 ```bash
 pytest -q \
   tests/test_market_event_graph_constituent_source.py \
+  tests/test_market_event_graph_manifest_refresh.py \
   tests/test_market_event_graph_runtime_observer.py \
   tests/test_market_event_graph_breadth_producer.py \
   tests/test_market_event_graph_live_adapter.py \
@@ -179,7 +193,9 @@ python -m py_compile \
   core/market_event_graph_tick_reader.py \
   core/market_event_graph_constituent_source.py \
   core/candidate_pool_orchestrator.py \
-  tests/test_market_event_graph_constituent_source.py
+  scripts/refresh_market_event_graph_nifty50_manifest.py \
+  tests/test_market_event_graph_constituent_source.py \
+  tests/test_market_event_graph_manifest_refresh.py
 
 python scripts/validate_agent_review_evidence.py
 git diff --check
@@ -208,8 +224,9 @@ Collect and reconcile:
 - complete graph identity and duplicate suppression;
 - state restoration after a controlled restart.
 
-The manifest must be refreshed from the official constituent source whenever index
-membership changes. The checked-in manifest is not valid for historical backfill.
+Before each membership-effective period, run the refresh command against the official
+CSV and review the generated diff. The checked-in manifest is not valid for historical
+backfill.
 
 ## What This PR Does Not Prove
 
