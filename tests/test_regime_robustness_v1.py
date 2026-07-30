@@ -1,9 +1,13 @@
+import json
 import math
+
+import pytest
 
 from core.regime_contract_v2 import (
     INSUFFICIENT_DATA,
     INVALID_INPUT,
     RegimeStabilizer,
+    UNCERTAIN,
     VALID,
     normalize_iv,
     normalize_oi_delta,
@@ -12,7 +16,7 @@ from core.regime_contract_v2 import (
     stable_softmax,
 )
 from core.regime_entropy_gate import evaluate_regime_entropy_gate
-from core.regime_prob_model import RegimeProbModel
+from core.regime_prob_model import REGIMES, RegimeProbModel
 
 
 def valid_features(**overrides):
@@ -37,6 +41,10 @@ def valid_features(**overrides):
     }
     row.update(overrides)
     return row
+
+
+def heuristic_model(tmp_path):
+    return RegimeProbModel(str(tmp_path / "missing.json"))
 
 
 def test_raw_oi_is_bounded_and_cannot_dominate_softmax():
@@ -65,8 +73,7 @@ def test_iv_percent_and_decimal_have_same_scale():
 
 
 def test_missing_required_feature_is_not_fake_range_evidence(tmp_path):
-    model = RegimeProbModel(str(tmp_path / "missing.json"))
-    out = model.predict(valid_features(adx=None))
+    out = heuristic_model(tmp_path).predict(valid_features(adx=None))
     assert out["regime_status"] == INSUFFICIENT_DATA
     assert out["primary_regime"] == "UNKNOWN"
     assert set(out["regime_probs"].values()) == {0.2}
@@ -74,8 +81,7 @@ def test_missing_required_feature_is_not_fake_range_evidence(tmp_path):
 
 
 def test_zero_atr_is_invalid_not_confident_range(tmp_path):
-    model = RegimeProbModel(str(tmp_path / "missing.json"))
-    out = model.predict(valid_features(atr_pct=0.0))
+    out = heuristic_model(tmp_path).predict(valid_features(atr_pct=0.0))
     assert out["regime_status"] == INVALID_INPUT
     assert out["primary_regime"] == "UNKNOWN"
     assert out["unstable_regime_flag"] is True
@@ -113,6 +119,20 @@ def test_rounded_probability_vector_is_accepted_and_renormalized():
     )
 
 
+def test_unknown_nonzero_probability_label_is_rejected():
+    with pytest.raises(ValueError, match="unknown_probability_labels:NEUTRAL"):
+        probability_diagnostics(
+            {
+                "TREND": 1.0,
+                "RANGE": 0.0,
+                "RANGE_VOLATILE": 0.0,
+                "EVENT": 0.0,
+                "PANIC": 0.0,
+                "NEUTRAL": 0.1,
+            }
+        )
+
+
 def test_low_entropy_is_not_itself_an_error():
     diag = probability_diagnostics(
         {
@@ -140,13 +160,7 @@ def test_legacy_raw_trend_override_is_preserved():
 
 def test_probability_vector_never_uses_legacy_trend_override():
     result = evaluate_regime_entropy_gate(
-        probabilities={
-            "TREND": 0.2,
-            "RANGE": 0.2,
-            "RANGE_VOLATILE": 0.2,
-            "EVENT": 0.2,
-            "PANIC": 0.2,
-        },
+        probabilities={regime: 0.2 for regime in REGIMES},
         primary_regime="TREND",
         regime_prob_max=0.65,
         market_data={
@@ -157,6 +171,128 @@ def test_probability_vector_never_uses_legacy_trend_override():
     )
     assert result["uncertain"] is True
     assert "LEGACY_RAW_TREND_OVERRIDE" not in result["threshold_source"]
+
+
+def test_clear_trend_is_discriminative_not_high_entropy(tmp_path):
+    out = heuristic_model(tmp_path).predict(
+        valid_features(
+            adx=35.0,
+            vol_z=0.5,
+            atr_pct=0.008,
+            iv_mean=0.18,
+            oi_delta=3_000_000.0,
+            oi_gross=10_000_000.0,
+            depth_imbalance=0.4,
+            x_regime_align=0.5,
+        )
+    )
+    assert out["primary_regime"] == "TREND"
+    assert out["regime_status"] == VALID
+    assert out["regime_prob_max"] >= 0.80
+    assert out["regime_entropy_normalized"] < out["regime_entropy_threshold"]
+
+
+def test_clear_range_is_discriminative_not_high_entropy(tmp_path):
+    out = heuristic_model(tmp_path).predict(
+        valid_features(
+            adx=10.0,
+            vol_z=-0.5,
+            atr_pct=0.003,
+            iv_mean=0.15,
+            oi_delta=0.0,
+            depth_imbalance=0.0,
+        )
+    )
+    assert out["primary_regime"] == "RANGE"
+    assert out["regime_status"] == VALID
+    assert out["regime_prob_max"] >= 0.90
+
+
+def test_clear_range_volatile_is_discriminative(tmp_path):
+    out = heuristic_model(tmp_path).predict(
+        valid_features(
+            adx=14.0,
+            vol_z=1.8,
+            atr_pct=0.011,
+            iv_mean=0.25,
+            oi_delta=0.0,
+            depth_imbalance=0.0,
+        )
+    )
+    assert out["primary_regime"] == "RANGE_VOLATILE"
+    assert out["regime_status"] == VALID
+    assert out["regime_prob_max"] >= 0.75
+
+
+def test_structurally_mixed_inputs_remain_uncertain(tmp_path):
+    out = heuristic_model(tmp_path).predict(
+        valid_features(
+            adx=28.0,
+            vol_z=1.4,
+            atr_pct=0.003,
+            iv_mean=0.20,
+            shock_score=0.1,
+            uncertainty_index=0.2,
+            oi_delta=0.0,
+            depth_imbalance=0.0,
+        )
+    )
+    assert out["regime_status"] == UNCERTAIN
+    assert out["regime_entropy_normalized"] > out["regime_entropy_threshold"]
+    assert out["regime_prob_max"] < 0.40
+
+
+def test_panic_requires_normalized_acceleration_and_transition_evidence(tmp_path):
+    out = heuristic_model(tmp_path).predict(
+        valid_features(
+            adx=30.0,
+            vol_z=2.5,
+            atr_pct=0.015,
+            iv_mean=0.60,
+            shock_score=0.9,
+            uncertainty_index=0.8,
+            regime_transition_rate=8.0,
+            ltp_acceleration_atr=1.0,
+            x_lead_lag=1.0,
+            macro_direction_bias=-1.0,
+        )
+    )
+    assert out["primary_regime"] == "PANIC"
+    assert out["regime_status"] == VALID
+    assert out["regime_prob_max"] >= 0.65
+
+
+def test_heuristic_provenance_explicitly_says_uncalibrated(tmp_path):
+    out = heuristic_model(tmp_path).predict(valid_features())
+    assert out["model_source"] == "HEURISTIC_STRUCTURAL_V2_UNCALIBRATED"
+    assert out["probability_calibrated"] is False
+    assert out["probability_semantics"] == (
+        "deterministic_structural_pseudo_probability"
+    )
+    assert "vwap_slope" in out["feature_quality"]["ignored_unscaled_inputs"]
+    assert "ltp_acceleration" in out["feature_quality"]["ignored_unscaled_inputs"]
+
+
+def test_gaussian_model_missing_declared_feature_fails_closed(tmp_path):
+    model_path = tmp_path / "regime_model.json"
+    payload = {
+        "feature_names": ["adx", "atr_pct"],
+        "calibrated": False,
+        "priors": {regime: 0.2 for regime in REGIMES},
+        "means": {
+            regime: {"adx": 20.0, "atr_pct": 0.005}
+            for regime in REGIMES
+        },
+        "vars": {
+            regime: {"adx": 10.0, "atr_pct": 0.0001}
+            for regime in REGIMES
+        },
+    }
+    model_path.write_text(json.dumps(payload), encoding="utf-8")
+    out = RegimeProbModel(str(model_path)).predict({"adx": 25.0})
+    assert out["regime_status"] == INSUFFICIENT_DATA
+    assert out["primary_regime"] == "UNKNOWN"
+    assert out["feature_quality"]["missing_required"] == ["atr_pct"]
 
 
 def test_stabilizer_ignores_duplicate_bar_and_requires_confirmation():
