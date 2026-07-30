@@ -24,7 +24,6 @@ def _proposal(ref, assertion):
         narrative="machine verified",
         assertions=(assertion,),
         evidence_ids=(ref.evidence_id,),
-        confidence=0.9,
     )
 
 
