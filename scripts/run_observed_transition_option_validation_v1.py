@@ -240,6 +240,15 @@ def stale_at_signal(frame: pd.DataFrame, timestamp: pd.Timestamp) -> bool:
 
 def load_observation_freeze(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
+    contract_path = path.parent / "observation_contract.json"
+    if not contract_path.exists():
+        raise CampaignError(f"missing observation contract: {contract_path}")
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    for key in ("observation_sessions", "replication_sessions", "unopened_sessions"):
+        value = contract.get(key)
+        if not isinstance(value, list) or not value:
+            raise CampaignError(f"invalid observation contract session list: {key}")
+        payload[f"{key}_list"] = [str(item) for item in value]
     if payload.get("semantic_sha256") != OBSERVATION_SEMANTIC_SHA256:
         raise CampaignError(
             f"observation semantic hash mismatch: {payload.get('semantic_sha256')} != "
@@ -270,12 +279,11 @@ def build_labeled_state(repo: Path, observation_payload: dict[str, Any]) -> pd.D
     constituent_state, _ = observe.load_constituent_state(constituent_path)
     state, _ = observe.join_states(joint_state, constituent_state)
     sessions = sorted(state["session_id"].unique().tolist())
-    expected_unopened = list(observation_payload["unopened_sessions"])
+    expected_unopened = list(observation_payload["unopened_sessions_list"])
     if not set(expected_unopened).issubset(set(sessions)):
         raise CampaignError("unopened session set is not contained in reconstructed state")
 
-    observation_count = max(70, int(len(sessions) * 0.40))
-    observation_sessions = sessions[:observation_count]
+    observation_sessions = list(observation_payload["observation_sessions_list"])
     observation = state[state["session_id"].isin(observation_sessions)].copy()
 
     surface_features = [
@@ -731,7 +739,7 @@ def main() -> int:
         observation_dir / "frozen_observed_patterns.json"
     )
     state = build_labeled_state(repo, observation_payload)
-    unopened = list(observation_payload["unopened_sessions"])
+    unopened = list(observation_payload["unopened_sessions_list"])
     validation_sessions, holdout_sessions = split_unopened(unopened)
     inventory, option_root = resolve_option_sources(repo)
     store = OptionPairStore(inventory, option_root)
