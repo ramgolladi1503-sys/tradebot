@@ -57,12 +57,20 @@ def main() -> int:
         payload = validate_token(
             repo_root_path=Path(__file__).resolve().parents[1], force=True
         )
-        ok = bool(payload.get("ok"))
-        if ok:
-            user_id = str(payload.get("user_id") or "")
+        ok = payload.get("ok") is True
+        auth_state = str(payload.get("auth_state") or "").strip().upper()
+        user_id = str(payload.get("user_id") or "").strip()
+        verified = ok and auth_state == "OK" and bool(user_id)
+        if verified:
             print(f"OK user_id={user_id}")
             return 0
-        reason = str(payload.get("error") or payload.get("auth_state") or "unknown")
+
+        reason = str(payload.get("error") or auth_state or "unknown")
+        if auth_state == "UNKNOWN_NETWORK":
+            print(f"AUTH_UNVERIFIED_NETWORK mode={mode} reason={reason}")
+            print("NEXT: restore network access and rerun python scripts/check_kite_auth.py")
+            return 5
+
         print(f"AUTH_REQUIRED mode={mode} reason={reason}")
         print("NEXT: python scripts/kite_autologin_localhost.py")
         print("THEN: python scripts/check_kite_auth.py")
