@@ -13,8 +13,8 @@ from core.runtime_authority_contract import (
 def test_authority_map_has_one_execution_router():
     stages = build_runtime_authority_map()
     execution = [stage for stage in stages if stage.authority is AuthorityKind.EXECUTION]
-    assert len(execution) == 1
-    assert execution[0].owner_module == "core.execution_router"
+    assert [stage.owner_module for stage in execution] == ["core.execution_router"]
+    assert [stage.may_call_broker for stage in execution] == [True]
     assert validate_runtime_authority_map(stages) == ()
 
 
@@ -38,7 +38,7 @@ def test_feed_boundary_guard_rejects_any_protected_change():
         )
 
 
-def test_authority_payload_is_read_only():
+def test_authority_payload_preserves_non_action_boundary():
     payload = authority_map_payload()
     assert payload["feed_boundary_frozen"] is True
     assert payload["validation_errors"] == []
