@@ -25,8 +25,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install test runner
+        run: python -m pip install pytest
+
       - name: Prove integrity auditor behavior
-        run: PYTHONPATH=. pytest -q tests/test_test_integrity_audit.py
+        run: PYTHONPATH=. python -m pytest -q tests/test_test_integrity_audit.py
 
       - name: Audit repository test integrity
         shell: bash
