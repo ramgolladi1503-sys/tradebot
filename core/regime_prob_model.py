@@ -22,7 +22,7 @@ REGIMES = list(REGIME_LABELS)
 
 
 class RegimeProbModel:
-    """Probabilistic regime model with bounded features and explicit provenance."""
+    """Regime model with bounded evidence and explicit provenance."""
 
     def __init__(self, model_path: str | None = None):
         self.model_path = (
@@ -73,6 +73,38 @@ class RegimeProbModel:
             clean[str(key)] = number
         return clean, ignored
 
+    def _model_required_features(self) -> tuple[str, ...]:
+        if not self.model:
+            return ()
+        explicit = self.model.get("feature_names")
+        if isinstance(explicit, list):
+            names = tuple(
+                sorted(
+                    {
+                        str(name).strip()
+                        for name in explicit
+                        if str(name).strip()
+                    }
+                )
+            )
+            if names:
+                return names
+
+        means = self.model.get("means", {})
+        variances = self.model.get("vars", {})
+        common: set[str] | None = None
+        for regime in REGIMES:
+            regime_means = means.get(regime)
+            regime_vars = variances.get(regime)
+            if not isinstance(regime_means, dict) or not isinstance(
+                regime_vars,
+                dict,
+            ):
+                return ()
+            keys = set(regime_means) & set(regime_vars)
+            common = keys if common is None else common & keys
+        return tuple(sorted(common or ()))
+
     def _gaussian_nb_proba(
         self,
         features: Mapping[str, Any],
@@ -80,6 +112,15 @@ class RegimeProbModel:
         if not self.model:
             raise ValueError("gaussian_model_unavailable")
         clean, _ = self._finite_features(features)
+        required = self._model_required_features()
+        if not required:
+            raise ValueError("model_feature_schema_empty")
+        missing = [name for name in required if name not in clean]
+        if missing:
+            raise ValueError(
+                "model_required_features_missing:" + ",".join(missing)
+            )
+
         priors = self.model.get("priors", {})
         means = self.model.get("means", {})
         variances = self.model.get("vars", {})
@@ -91,10 +132,8 @@ class RegimeProbModel:
             score = math.log(prior)
             regime_means = means.get(regime, {})
             regime_vars = variances.get(regime, {})
-            used = 0
-            for key, value in clean.items():
-                if key not in regime_means or key not in regime_vars:
-                    continue
+            for key in required:
+                value = clean[key]
                 mean = float(regime_means[key])
                 variance = max(float(regime_vars[key]), 1e-6)
                 if not math.isfinite(mean) or not math.isfinite(variance):
@@ -105,9 +144,6 @@ class RegimeProbModel:
                     math.log(2.0 * math.pi * variance)
                     + ((value - mean) ** 2) / variance
                 )
-                used += 1
-            if used == 0:
-                raise ValueError(f"no_matching_model_features:{regime}")
             scores[regime] = score
         return stable_softmax(scores)
 
@@ -149,33 +185,64 @@ class RegimeProbModel:
     def predict(self, features: Mapping[str, Any]) -> dict[str, Any]:
         feature_payload = dict(features or {})
         session_bucket = self._resolve_session_bucket(feature_payload)
-        model_source = "GAUSSIAN_NB_JSON" if self.model else "HEURISTIC_V2"
+        model_source = (
+            "GAUSSIAN_NB_JSON"
+            if self.model
+            else "HEURISTIC_STRUCTURAL_V2_UNCALIBRATED"
+        )
         ignored_features: list[str] = []
         feature_quality: dict[str, Any]
         inference_error: str | None = None
 
         if self.model:
             clean, ignored_features = self._finite_features(feature_payload)
-            if not clean:
+            required = self._model_required_features()
+            missing_required = [
+                name for name in required if name not in clean
+            ]
+            if not required:
+                probabilities = {
+                    regime: 1.0 / len(REGIMES) for regime in REGIMES
+                }
+                feature_quality = {
+                    "status": INVALID_INPUT,
+                    "required_features": [],
+                    "missing_required": [],
+                    "invalid_required": ["model_feature_schema_empty"],
+                    "missing_optional": ignored_features,
+                    "required_coverage": 0.0,
+                    "probability_calibrated": False,
+                }
+            elif missing_required:
                 probabilities = {
                     regime: 1.0 / len(REGIMES) for regime in REGIMES
                 }
                 feature_quality = {
                     "status": INSUFFICIENT_DATA,
-                    "missing_required": ["all_model_features"],
+                    "required_features": list(required),
+                    "missing_required": missing_required,
                     "invalid_required": [],
-                    "missing_optional": [],
-                    "required_coverage": 0.0,
+                    "missing_optional": ignored_features,
+                    "required_coverage": (
+                        (len(required) - len(missing_required)) / len(required)
+                    ),
+                    "probability_calibrated": bool(
+                        self.model.get("calibrated", False)
+                    ),
                 }
             else:
                 try:
                     probabilities = self._gaussian_nb_proba(clean)
                     feature_quality = {
                         "status": VALID,
+                        "required_features": list(required),
                         "missing_required": [],
                         "invalid_required": [],
                         "missing_optional": ignored_features,
                         "required_coverage": 1.0,
+                        "probability_calibrated": bool(
+                            self.model.get("calibrated", False)
+                        ),
                     }
                 except Exception as exc:
                     inference_error = f"{type(exc).__name__}:{exc}"
@@ -184,12 +251,14 @@ class RegimeProbModel:
                     }
                     feature_quality = {
                         "status": INVALID_INPUT,
+                        "required_features": list(required),
                         "missing_required": [],
                         "invalid_required": [
                             "gaussian_model_inference_failed"
                         ],
                         "missing_optional": ignored_features,
                         "required_coverage": 0.0,
+                        "probability_calibrated": False,
                     }
         else:
             scores, feature_quality = normalized_heuristic_scores(
@@ -228,6 +297,18 @@ class RegimeProbModel:
         if status == VALID and gate.get("uncertain"):
             status = UNCERTAIN
 
+        probability_calibrated = bool(
+            feature_quality.get("probability_calibrated", False)
+        )
+        probability_semantics = str(
+            feature_quality.get("probability_semantics")
+            or (
+                "calibrated_model_probability"
+                if probability_calibrated
+                else "uncalibrated_model_probability"
+            )
+        )
+
         return {
             "regime_probs": probabilities,
             "primary_regime": primary,
@@ -250,6 +331,8 @@ class RegimeProbModel:
             "model_load_error": self.model_load_error,
             "model_inference_error": inference_error,
             "ignored_features": ignored_features,
+            "probability_calibrated": probability_calibrated,
+            "probability_semantics": probability_semantics,
             "session_bucket": session_bucket,
             "entropy_gate": gate,
         }
