@@ -13,9 +13,9 @@ permissions:
   contents: read
 
 jobs:
-  profile-observation-universe:
+  observe-patterns:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout without broad LFS hydration
         uses: actions/checkout@v4
@@ -35,8 +35,8 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install profile dependencies
-        run: python -m pip install --disable-pip-version-check numpy pandas pyarrow
+      - name: Install observation dependencies
+        run: python -m pip install --disable-pip-version-check numpy pandas pyarrow scikit-learn
 
       - name: Profile causal observation universe
         run: |
@@ -45,10 +45,16 @@ jobs:
             --output-root runtime/research/outcome_blind_pattern_observation_v1 \
             --stage profile
 
-      - name: Upload profile evidence
+      - name: Freeze recurring patterns without outcomes
+        run: |
+          python scripts/run_outcome_blind_pattern_observation_stage_v1.py \
+            --repo-root . \
+            --output-root runtime/research/outcome_blind_pattern_observation_v1
+
+      - name: Upload observation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: outcome-blind-pattern-observation-v1-profile
-          path: runtime/research/outcome_blind_pattern_observation_v1/schema_profile.json
+          name: outcome-blind-pattern-observation-v1-evidence
+          path: runtime/research/outcome_blind_pattern_observation_v1/
           if-no-files-found: error
