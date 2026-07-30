@@ -2,7 +2,7 @@
 
 mode: REVIEW
 candidate_id: REGIME-ROBUSTNESS-V1
- decision: IMPLEMENT_DRAFT_PR
+decision: IMPLEMENT_DRAFT_PR
 reason: Repair unbounded regime evidence and incorrect entropy semantics without touching feed or execution paths.
 timestamp: 2026-07-30T22:04:00+05:30
 is_order_action: false
@@ -50,9 +50,11 @@ source: docs/agent_reviews/regime_robustness_v1.md
   - absent required features fail closed as UNKNOWN
   - non-positive ATR percentage is invalid input
   - IV percentage and decimal scales normalize consistently
-  - probability vectors remain full precision and sum to one
+  - rounded probability vectors are accepted only within the existing 1e-5 contract and are renormalized
   - low entropy with valid evidence is not rejected
   - invalid probability vectors fail closed
+  - legacy raw-only TREND overrides remain compatible
+  - probability-vector decisions cannot use legacy TREND overrides
   - duplicate completed bars do not advance transition confirmation
   - standard transitions require consecutive completed bars
   - feed and execution files remain untouched
@@ -72,7 +74,9 @@ The previous heuristic mixed bounded normalized indicators with unbounded raw OI
 3. Added model provenance: source, path, SHA-256, load error, inference error, and ignored features.
 4. Delegated uncertainty interpretation to the canonical entropy gate.
 5. Removed low entropy as an automatic blocker. Low entropy is suspicious only when paired with invalid or insufficient feature truth.
-6. Preserved legacy raw-entropy RANGE compatibility only for callers that do not supply a probability vector. Real probability-vector decisions do not relax uncertainty using their own predicted label.
+6. Preserved raw-only RANGE and TREND compatibility for legacy callers that do not supply a probability vector.
+7. Explicitly prevented real probability-vector decisions from using those legacy label-based overrides.
+8. Accepted historical six-decimal probability vectors only within the repository's existing `1e-5` tolerance, then renormalized before entropy calculations.
 
 ## Scope Guard
 
@@ -102,7 +106,7 @@ It can change regime classifications when this branch is run because the probabi
 
 **Did the implementation merely widen thresholds?**
 
-No. Session thresholds remain. The repair changes feature truth and probability construction. The only RANGE override retained is the legacy raw-entropy-only compatibility path.
+No. Session thresholds remain. The repair changes feature truth and probability construction. Label-based overrides apply only to legacy raw-entropy callers without a probability vector.
 
 **Could low entropy now pass unsafe data?**
 
@@ -122,7 +126,8 @@ Contract and architecture findings:
 - uncertainty interpretation is centralized in `evaluate_regime_entropy_gate`;
 - no feed module imports the new regime contract;
 - no new broker or order dependency exists;
-- invalid inputs produce explicit status instead of invented values.
+- invalid inputs produce explicit status instead of invented values;
+- rounded historical vectors remain compatible without accepting materially invalid sums.
 
 Verdict: architecture-compatible, with market-hours validation required because authoritative regime output changes on this branch.
 
@@ -137,13 +142,15 @@ Delivery completed:
 - deterministic certification runner added;
 - engineering and agent-review evidence added;
 - draft PR opened;
-- feed-isolation diff verified.
+- feed-isolation diff verified;
+- first broad-CI compatibility failure diagnosed and repaired without weakening the probability-vector path.
 
 Remaining work:
 
-- broad CI completion;
+- final broad CI completion on the current head;
 - market-hours runtime comparison;
-- separate decision on whether to promote the completed-bar stabilizer.
+- separate decision on whether to promote the completed-bar stabilizer;
+- separate integration repair for transition-rate timing and runtime provenance propagation.
 
 ## QA / Safety Review
 
@@ -163,21 +170,12 @@ Fail-closed invariants:
 - invalid probability vector -> uncertain and blocked;
 - impossible entropy -> uncertain and blocked;
 - low entropy alone -> not blocked;
-- duplicate completed bar -> no transition-count advancement.
+- duplicate completed bar -> no transition-count advancement;
+- probability-vector decisions -> no legacy label-based entropy override.
 
 ## Acceptance Proof
 
-Local focused test result:
-
-```text
-9 passed
-```
-
-Local deterministic certification result:
-
-```text
-DETERMINISTIC_CERTIFIED 6/6
-```
+The focused suite currently contains 12 deterministic tests. The certification runner currently contains 7 deterministic checks. Earlier local runs proved the pre-expansion suite, but final pass counts must come from CI on the current branch head and are not claimed here until that run completes.
 
 Required repository commands:
 
