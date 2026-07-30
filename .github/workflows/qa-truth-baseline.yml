@@ -1,4 +1,4 @@
-name: QA Truth Baseline
+name: QA Certification Truth
 
 on:
   push:
@@ -163,3 +163,70 @@ jobs:
           name: dependency-audit-evidence
           if-no-files-found: error
           path: .runtime/qa/pip_audit.json
+
+  runtime_shim_certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: .
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test runner
+        run: python -m pip install pytest
+
+      - name: Prove runtime shim auditor behavior
+        run: PYTHONPATH=. python -m pytest -q tests/test_runtime_shim_audit.py
+
+      - name: Require zero automatic TradeBot behavior patches
+        run: >-
+          PYTHONPATH=. python scripts/audit_runtime_shims.py
+          --report-dir .runtime/qa
+          --fail-on-active
+
+      - name: Upload runtime shim evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-shim-evidence
+          if-no-files-found: error
+          path: |
+            .runtime/qa/runtime_shim_report.json
+            .runtime/qa/runtime_shim_report.md
+
+  repo_forensics_certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: .
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run zero-debt repo forensics certification
+        run: >-
+          PYTHONPATH=. python scripts/run_repo_forensics.py
+          --repo .
+          --config .gsd-forensics.yaml
+          --out .runtime/qa/repo_forensics_full.md
+
+      - name: Upload full repo forensics evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-forensics-certification-evidence
+          if-no-files-found: error
+          path: .runtime/qa/repo_forensics_full.md
