@@ -27,8 +27,6 @@ entrypoints:
 critical_modules:
   runtime:
     - app.py
-exclude:
-  directories: []
 """,
         encoding="utf-8",
     )
