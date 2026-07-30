@@ -37,7 +37,7 @@ def test_refresh_builds_exact_current_reference_manifest(tmp_path):
         "CURRENT_REFERENCE_SNAPSHOT_REQUIRES_PERIODIC_OFFICIAL_REFRESH"
     )
     assert target.read_text(encoding="utf-8").endswith("\n")
-    assert not (tmp_path / "manifest.json.tmp").exists()
+    assert tuple(tmp_path.glob("manifest.json.tmp.*")) == ()
 
 
 def test_refresh_rejects_duplicate_or_non_eq_membership():
