@@ -41,6 +41,14 @@ from core.auth_health import get_kite_auth_health
 from core.feed_restart_guard import feed_restart_guard
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped, trip as trip_feed_breaker
 from core.market_data_monitor import get_feed_health_monitor, record_depth, record_tick
+from core.market_event_graph_live_observation_registry import (
+    BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET,
+    get_observation_registry,
+    load_observation_registry,
+    observation_budget_preflight,
+    observation_tokens,
+)
+from core.market_event_graph_live_ohlc_buffer import record_live_source_shadow_tick
 from core.feed.runtime_store import write_runtime_snapshot as write_feed_runtime_snapshot
 from core.feed.runtime_store import canonicalize_feed_runtime_snapshot_truth
 from core.feed_health_duration import build_feed_health_duration_artifact
@@ -1420,6 +1428,13 @@ def _is_index_symbol(symbol: str | None) -> bool:
     return str(symbol or "").upper() in _INDEX_SYMBOLS
 
 
+def _observation_registry_active():
+    try:
+        return load_observation_registry(force=False)
+    except Exception:
+        return None
+
+
 def build_depth_subscription_tokens(symbols=None, max_tokens=None):
     """Return instrument tokens to subscribe on WS. Compatibility shim."""
     # try to reuse related helpers
@@ -1427,7 +1442,19 @@ def build_depth_subscription_tokens(symbols=None, max_tokens=None):
         fn = globals().get(name)
         if callable(fn):
             try:
-                return fn(symbols=symbols, max_tokens=max_tokens)
+                tokens, resolution = fn(symbols=symbols, max_tokens=max_tokens)
+                obs = sorted(observation_tokens())
+                if obs:
+                    combined = list(dict.fromkeys(list(tokens or []) + obs))
+                    preflight = observation_budget_preflight(
+                        budget=max_tokens,
+                        current_tokens=list(tokens or []),
+                        overlap_tokens=set(int(t) for t in list(tokens or []) if int(t) in set(obs)),
+                    )
+                    if not bool(preflight.get("ok")):
+                        raise RuntimeError(BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET)
+                    tokens = combined
+                return tokens, resolution
             except TypeError:
                 try:
                     return fn(symbols)
@@ -5163,6 +5190,8 @@ def on_ticks(ws, ticks):
             _SCHEMA_LOG_TS = now_epoch
         except Exception:
             pass
+    registry = _observation_registry_active()
+    observation_token_set = set(int(token) for token in (registry.all_tokens if registry else []))
     for t in ticks:
         _FEED_ON_TICKS_ROW_SEQ += 1
         if not isinstance(t, dict):
@@ -5198,6 +5227,33 @@ def on_ticks(ws, ticks):
         has_depth = _depth_has_bid_ask(depth)
         tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
         tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None
+        if token_int is not None and token_int in observation_token_set and registry is not None:
+            packet_kind = "UNKNOWN"
+            is_full_payload = False
+            source_epoch = payload_tick_epoch
+            if registry.instrument_class_by_token.get(int(token_int)) == "INDEX":
+                packet_kind = "INDEX_FULL" if isinstance(t.get("ohlc"), dict) and t.get("change") is not None else "INDEX_QUOTE"
+                is_full_payload = packet_kind == "INDEX_FULL"
+            else:
+                packet_kind = "NSE_EQUITY_FULL" if has_depth else "NSE_EQUITY_QUOTE"
+                is_full_payload = has_depth
+            try:
+                record_live_source_shadow_tick(
+                    symbol=str(symbol or registry.index_symbol if token_int == registry.index_token else symbol or _TOKEN_TO_SYMBOL.get(token_int) or "").upper(),
+                    instrument_token=token_int,
+                    price=last_price,
+                    source_tick_epoch=source_epoch,
+                    source_type="live_websocket",
+                    payload_mode="full" if is_full_payload else "quote",
+                    feed_identity=get_current_feed_session_identity(),
+                    provider=registry.provider,
+                    token_domain=registry.token_domain,
+                    universe_hash=registry.canonical_sha256,
+                    packet_kind=packet_kind,
+                    is_full_payload=is_full_payload,
+                )
+            except Exception:
+                pass
         if token_int is not None and isinstance(depth, dict) and depth:
             _record_full_payload_observed(token_int)
             depth_store.update(token_int, depth)

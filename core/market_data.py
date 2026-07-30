@@ -2703,21 +2703,6 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                         "recovered_synthetic": False,
                     },
                 )
-                if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
-                    try:
-                        from core.market_event_graph_live_ohlc_buffer import record_live_source_shadow_tick
-
-                        record_live_source_shadow_tick(
-                            symbol=symbol,
-                            instrument_token=get_token_for_symbol(symbol),
-                            price=ltp,
-                            source_tick_epoch=ltp_ts_epoch,
-                            source_type=live_source_type,
-                            payload_mode="",
-                            feed_identity=feed_identity,
-                        )
-                    except Exception:
-                        pass
         except Exception:
             pass
         vwap = ltp
