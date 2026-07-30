@@ -85,6 +85,20 @@ def _first_present(*values: Any) -> Any:
     return None
 
 
+def _safe_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"true", "1", "yes", "y", "on"}:
+            return True
+        if text in {"false", "0", "no", "n", "off"}:
+            return False
+    return None
+
+
 def _regime_policy_context(data: dict[str, Any]) -> dict[str, Any]:
     regime = data.get("regime") if isinstance(data.get("regime"), dict) else {}
     feature_quality = _first_present(
@@ -124,22 +138,27 @@ def _regime_policy_context(data: dict[str, Any]) -> dict[str, Any]:
             regime.get("stable_regime"),
             data.get("stable_regime"),
         ),
-        "stable_regime_confirmed": _first_present(
-            regime.get("stable_regime_confirmed"),
-            data.get("stable_regime_confirmed"),
+        "stable_regime_confirmed": _safe_bool(
+            _first_present(
+                regime.get("stable_regime_confirmed"),
+                data.get("stable_regime_confirmed"),
+            )
         ),
         "trend_state": _first_present(
             regime.get("trend_state"),
             data.get("trend_state"),
         ),
-        "is_expiry_day": _first_present(
-            regime.get("is_expiry_day"),
-            data.get("is_expiry_day"),
-            data.get("expiry_context"),
+        "is_expiry_day": _safe_bool(
+            _first_present(
+                regime.get("is_expiry_day"),
+                data.get("is_expiry_day"),
+            )
         ),
-        "volume_impulse": _first_present(
-            regime.get("volume_impulse"),
-            data.get("volume_impulse"),
+        "volume_impulse": _safe_bool(
+            _first_present(
+                regime.get("volume_impulse"),
+                data.get("volume_impulse"),
+            )
         ),
         "liquidity_quality": _first_present(
             data.get("liquidity_quality"),
@@ -153,9 +172,11 @@ def _regime_policy_context(data: dict[str, Any]) -> dict[str, Any]:
             regime.get("model_hash"),
             data.get("model_hash"),
         ),
-        "probability_calibrated": _first_present(
-            regime.get("probability_calibrated"),
-            data.get("probability_calibrated"),
+        "probability_calibrated": _safe_bool(
+            _first_present(
+                regime.get("probability_calibrated"),
+                data.get("probability_calibrated"),
+            )
         ),
         "probability_semantics": _first_present(
             regime.get("probability_semantics"),
@@ -196,6 +217,8 @@ def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> S
     if policy_context:
         metadata["regime_policy_context"] = policy_context
     payload["metadata"] = metadata
+    payload["evidence"] = dict(data.get("evidence") or {})
+    payload["lineage"] = dict(data.get("lineage") or {"source": "market_snapshot"})
     filtered = {key: value for key, value in payload.items() if key in allowed and value is not None}
     return StrategyContext(**filtered)
 
