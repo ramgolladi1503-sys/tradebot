@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "evidence_dir": "runtime/diagnostics/feed_subscription_startup_20260730T084905Z",
+  "launch_command": "bash scripts/run_feed_freshness_instrumented_live.sh -> run_live.sh --skip-login -> python main.py",
+  "branch": "fix/feed-freshness-recovery-v1",
+  "commit": "f2d5b53598c240b833288593cfb42457b3b3c7b9",
+  "runtime_mode": "LIVE",
+  "process_identity": {
+    "wrapper_pid": 32950,
+    "main_pid_observed": 33107,
+    "mode": "LIVE"
+  },
+  "socket_generation": 1,
+  "desired_count": 73,
+  "subscribe_requested_count": 73,
+  "subscribe_callback_applied_count": 73,
+  "mode_full_requested_count": 73,
+  "mode_full_callback_applied_count": 73,
+  "unique_tick_token_count": 73,
+  "unique_depth_token_count": 70,
+  "partial_recovery_latch_observed": true,
+  "ticks_received_after_latch": true,
+  "transport_callback_activity_after_latch": true,
+  "canonical_feed_state_after_latch_before_repair": "RECOVERY_BLOCKED",
+  "six_historical_zero_tick_contracts": {
+    "15116034": "SUBSCRIBE_NOT_REQUESTED",
+    "15116290": "SUBSCRIBE_NOT_REQUESTED",
+    "16816386": "SUBSCRIBE_NOT_REQUESTED",
+    "16816642": "SUBSCRIBE_NOT_REQUESTED",
+    "292810245": "SUBSCRIBE_NOT_REQUESTED",
+    "293652741": "SUBSCRIBE_NOT_REQUESTED"
+  },
+  "implementation_decision": {
+    "implement_permanent_latch_repair": true,
+    "implement_six_token_specific_recovery": false,
+    "reason": "The current LIVE inventory was fully callback-applied for subscribe and MODE_FULL, ticks continued, and only the partial_recovery latch made the runtime terminal."
+  },
+  "safety": {
+    "is_order_action": false,
+    "broker_api_called": false,
+    "allowed_for_live_execution": false,
+    "read_only": true,
+    "append": false
+  }
+}

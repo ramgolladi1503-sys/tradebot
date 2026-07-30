@@ -1,0 +1,120 @@
+{
+  "branch": "fix/feed-freshness-recovery-v1",
+  "commit": "f2d5b53598c240b833288593cfb42457b3b3c7b9",
+  "event_counts": {
+    "FEED_AUTH_PROFILE_OK": 1,
+    "FEED_CONNECT": 1,
+    "FEED_CREDENTIAL_STATS": 1,
+    "FEED_HEALTH_OK": 1,
+    "FEED_MODE_FULL_CALLBACK_APPLIED": 1,
+    "FEED_MODE_FULL_REQUESTED": 1,
+    "FEED_ON_CONNECT_SUBSCRIBE": 1,
+    "FEED_OPTION_VERIFY_BEGIN": 2,
+    "FEED_OPTION_VERIFY_OK": 1,
+    "FEED_PATHS": 1,
+    "FEED_REBALANCE_SKIPPED": 1,
+    "FEED_RECONNECT_SUPPRESSED_RECOVERY_BLOCKED": 9,
+    "FEED_RECOVERY_BLOCKED": 9,
+    "FEED_RESUBSCRIBE": 1,
+    "FEED_RUNTIME_STAGE_TIMING": 10,
+    "FEED_SOCKET_GENERATION_STARTED": 1,
+    "FEED_SUBSCRIBE_CALLBACK_APPLIED": 1,
+    "FEED_SUBSCRIBE_REQUESTED": 1,
+    "FEED_SUBSCRIPTION_REGISTRY_SNAPSHOT": 1,
+    "FEED_TICK": 2,
+    "FEED_WARMUP_DONE": 1,
+    "FEED_WS_HANDSHAKE_CREDENTIAL_PROOF": 1,
+    "TICK_PAYLOAD_SCHEMA": 2,
+    "subscription_replay_requested": 1,
+    "ws_connected": 1,
+    "ws_start_requested": 1,
+    "ws_started": 1
+  },
+  "implementation_decision": {
+    "permanent_latch_reason": "LIVE evidence reproduced callback-applied subscription and MODE_FULL for the current 73-token inventory, followed by partial_recovery -> RECOVERY_BLOCKED despite subsequent ticks.",
+    "permanent_latch_repair_can_be_implemented": true,
+    "token_recovery_can_be_implemented": false,
+    "token_recovery_reason": "The six historical tokens were not desired/requested in this LIVE startup, so there is no missing callback application to repair for those tokens."
+  },
+  "mode_full_callback_applied_count": 73,
+  "process_identity": {
+    "command": "bash scripts/run_feed_freshness_instrumented_live.sh -> run_live.sh --skip-login -> python main.py",
+    "main_pid_observed": 33107,
+    "mode": "LIVE",
+    "wrapper_pid": 32950
+  },
+  "registry_applied_count": 73,
+  "registry_mode_full_applied_count": 73,
+  "repo_path": "/Users/madhuram/tradebot-feed-freshness-recovery-v1",
+  "schema_version": 1,
+  "six_tokens": {
+    "15116034": {
+      "classification": "SUBSCRIBE_NOT_REQUESTED",
+      "depth_count": 0,
+      "desired": false,
+      "missing_or_blocker": "token absent from current LIVE desired/subscribed inventory",
+      "mode_full_callback_applied": false,
+      "subscribe_callback_applied": false,
+      "subscribe_requested": false,
+      "tick_count": 0
+    },
+    "15116290": {
+      "classification": "SUBSCRIBE_NOT_REQUESTED",
+      "depth_count": 0,
+      "desired": false,
+      "missing_or_blocker": "token absent from current LIVE desired/subscribed inventory",
+      "mode_full_callback_applied": false,
+      "subscribe_callback_applied": false,
+      "subscribe_requested": false,
+      "tick_count": 0
+    },
+    "16816386": {
+      "classification": "SUBSCRIBE_NOT_REQUESTED",
+      "depth_count": 0,
+      "desired": false,
+      "missing_or_blocker": "token absent from current LIVE desired/subscribed inventory",
+      "mode_full_callback_applied": false,
+      "subscribe_callback_applied": false,
+      "subscribe_requested": false,
+      "tick_count": 0
+    },
+    "16816642": {
+      "classification": "SUBSCRIBE_NOT_REQUESTED",
+      "depth_count": 0,
+      "desired": false,
+      "missing_or_blocker": "token absent from current LIVE desired/subscribed inventory",
+      "mode_full_callback_applied": false,
+      "subscribe_callback_applied": false,
+      "subscribe_requested": false,
+      "tick_count": 0
+    },
+    "292810245": {
+      "classification": "SUBSCRIBE_NOT_REQUESTED",
+      "depth_count": 0,
+      "desired": false,
+      "missing_or_blocker": "token absent from current LIVE desired/subscribed inventory",
+      "mode_full_callback_applied": false,
+      "subscribe_callback_applied": false,
+      "subscribe_requested": false,
+      "tick_count": 0
+    },
+    "293652741": {
+      "classification": "SUBSCRIBE_NOT_REQUESTED",
+      "depth_count": 0,
+      "desired": false,
+      "missing_or_blocker": "token absent from current LIVE desired/subscribed inventory",
+      "mode_full_callback_applied": false,
+      "subscribe_callback_applied": false,
+      "subscribe_requested": false,
+      "tick_count": 0
+    }
+  },
+  "socket_generation": 1,
+  "subscribe_callback_applied_count": 73,
+  "subscription_request_count": 73,
+  "unique_depth_token_count": 70,
+  "unique_tick_token_count": 73,
+  "verdict": "INSTRUMENTED_LIVE_STARTUP_CAPTURED",
+  "websocket_connected": true,
+  "websocket_construction_occurred": true
+}

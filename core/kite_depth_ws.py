@@ -153,6 +153,7 @@ _STALE_OPTION_MUTATION_WINDOW_STATE: dict[str, dict[str, object]] = {}
 _DEPTH_WS_START_EPOCH: float = 0.0
 _RECONNECT_BLOCKED_REASON: str = ""
 _RECONNECT_BLOCKED_SINCE_EPOCH: float = 0.0
+_PARTIAL_RECOVERY_VERIFICATION: dict[str, object] = {}
 _LAST_DISCONNECTED_CODE: int | None = None
 _LAST_DISCONNECTED_REASON: str = ""
 _LAST_INTERNAL_RETRY_SUPPRESSION_STATE: dict[str, object] = {}
@@ -162,6 +163,12 @@ _WS1006_RECOVERABLE_ATTEMPTS: int = 0
 _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH: float = 0.0
 _WS1006_RECOVERABLE_LAST_REASON: str = ""
 _FEED_RECOVERY_COORDINATOR = get_feed_recovery_coordinator()
+
+_TOKEN_RECOVERY_MAX_ATTEMPTS = int(getattr(cfg, "TOKEN_RECOVERY_MAX_ATTEMPTS", 3) or 3)
+_TOKEN_RECOVERY_COOLDOWN_SEC = float(getattr(cfg, "TOKEN_RECOVERY_COOLDOWN_SEC", 10.0) or 10.0)
+_TOKEN_RECOVERY_VERIFY_TIMEOUT_SEC = float(getattr(cfg, "TOKEN_RECOVERY_VERIFY_TIMEOUT_SEC", 15.0) or 15.0)
+_RECOVERY_STABLE_CYCLES = max(1, int(getattr(cfg, "RECOVERY_STABLE_CYCLES", 3) or 3))
+_CORE_FEED_FRESH_QUORUM = float(getattr(cfg, "CORE_FEED_FRESH_QUORUM", 0.95) or 0.95)
 
 # LIVE-TRUTH-23: Verified post-start feed recovery gate.
 # Prevents treating a full restart as recovered unless connect + subscribe + fresh option ticks are observed.
@@ -1780,7 +1787,159 @@ def _clear_reconnect_blocked_reason() -> None:
 
 
 def _reconnect_recovery_blocked_active() -> bool:
-    return bool(str(_RECONNECT_BLOCKED_REASON or "").strip() or _REACTOR_NOT_RESTARTABLE_DETECTED)
+    blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower()
+    if blocked_reason == "partial_recovery":
+        return bool(_REACTOR_NOT_RESTARTABLE_DETECTED)
+    return bool(blocked_reason or _REACTOR_NOT_RESTARTABLE_DETECTED)
+
+
+def _token_priority_sets(current_tokens: set[int], underlying_tokens: set[int]) -> dict[str, set[int]]:
+    current = {int(token) for token in set(current_tokens or set()) if int(token) > 0}
+    critical = {int(token) for token in set(underlying_tokens or set()) if int(token) in current}
+    core = set(current - critical)
+    return {
+        "critical": critical,
+        "core": core,
+        "watch": set(),
+        "peripheral": set(),
+    }
+
+
+def _build_partial_recovery_verification(
+    *,
+    now_epoch: float,
+    current_tokens: set[int],
+    underlying_tokens: set[int],
+    last_msg_by_token: dict[int, float] | None,
+    index_threshold_sec: float,
+    option_threshold_sec: float,
+    previous_stable_cycles: int,
+) -> dict[str, object]:
+    priorities = _token_priority_sets(current_tokens, underlying_tokens)
+    last_by_token = {int(token): float(epoch) for token, epoch in dict(last_msg_by_token or {}).items() if int(token) > 0}
+    critical = priorities["critical"]
+    core = priorities["core"]
+
+    def _fresh_count(tokens: set[int], threshold: float) -> int:
+        count = 0
+        for token in tokens:
+            last_epoch = float(last_by_token.get(int(token), 0.0) or 0.0)
+            if last_epoch > 0 and max(0.0, float(now_epoch) - last_epoch) <= float(threshold):
+                count += 1
+        return count
+
+    critical_fresh_count = _fresh_count(critical, float(index_threshold_sec))
+    core_fresh_count = _fresh_count(core, float(option_threshold_sec))
+    critical_required_count = len(critical)
+    core_required_count = len(core)
+    critical_feed_fresh = critical_fresh_count == critical_required_count
+    core_fresh_ratio = 1.0 if core_required_count <= 0 else float(core_fresh_count) / float(core_required_count)
+    critical_subscribe_applied_count = len(critical - set(_PENDING_SUBSCRIBE_TOKENS or set()))
+    critical_mode_full_applied_count = len(critical - set(_PENDING_MODE_FULL_TOKENS or set()))
+    pending_critical_mutations = len(
+        critical
+        & (set(_PENDING_SUBSCRIBE_TOKENS or set()) | set(_PENDING_UNSUBSCRIBE_TOKENS or set()) | set(_PENDING_MODE_FULL_TOKENS or set()))
+    )
+    pending_core_mutations = len(
+        core
+        & (set(_PENDING_SUBSCRIBE_TOKENS or set()) | set(_PENDING_UNSUBSCRIBE_TOKENS or set()) | set(_PENDING_MODE_FULL_TOKENS or set()))
+    )
+    transport_socket_connected = _ws_connected_state()
+    last_transport_epoch = max(
+        [float(_LAST_WS_TICK_EPOCH or 0.0)] + [float(epoch) for epoch in last_by_token.values()]
+    )
+    last_tick_age = None if last_transport_epoch <= 0 else max(0.0, float(now_epoch) - last_transport_epoch)
+    registry_consistent = (
+        pending_critical_mutations == 0
+        and critical_subscribe_applied_count == critical_required_count
+        and critical_mode_full_applied_count == critical_required_count
+    )
+    failure_reasons: list[str] = []
+    if transport_socket_connected is not True:
+        failure_reasons.append("transport_socket_disconnected")
+    if not registry_consistent:
+        failure_reasons.append("subscription_registry_inconsistent")
+    if not critical_feed_fresh:
+        failure_reasons.append("critical_feed_stale")
+    if core_fresh_ratio < float(_CORE_FEED_FRESH_QUORUM):
+        failure_reasons.append("core_quorum_below_threshold")
+    if last_tick_age is None or last_tick_age > float(option_threshold_sec):
+        failure_reasons.append("transport_callback_stale")
+    stable = not failure_reasons
+    stable_cycles = int(previous_stable_cycles or 0) + 1 if stable else 0
+    return {
+        "transport_socket_connected": transport_socket_connected,
+        "active_socket_generation": int(_SOCKET_GENERATION or 0),
+        "subscription_registry_consistent": bool(registry_consistent),
+        "critical_required_count": critical_required_count,
+        "critical_subscribe_applied_count": critical_subscribe_applied_count,
+        "critical_mode_full_applied_count": critical_mode_full_applied_count,
+        "critical_fresh_count": critical_fresh_count,
+        "critical_feed_fresh": bool(critical_feed_fresh),
+        "core_required_count": core_required_count,
+        "core_fresh_count": core_fresh_count,
+        "core_fresh_ratio": core_fresh_ratio,
+        "depth_feed_fresh_ratio": core_fresh_ratio,
+        "watch_stale_count": 0,
+        "peripheral_stale_count": 0,
+        "pending_critical_mutations": pending_critical_mutations,
+        "pending_core_mutations": pending_core_mutations,
+        "last_transport_callback_age_sec": last_tick_age,
+        "last_tick_callback_age_sec": last_tick_age,
+        "stable_cycles": stable_cycles,
+        "stable_cycles_required": int(_RECOVERY_STABLE_CYCLES),
+        "verified": bool(stable and stable_cycles >= int(_RECOVERY_STABLE_CYCLES)),
+        "failure_reasons": failure_reasons,
+        "bounded_recovery": {
+            "token_recovery_max_attempts": int(_TOKEN_RECOVERY_MAX_ATTEMPTS),
+            "token_recovery_cooldown_sec": float(_TOKEN_RECOVERY_COOLDOWN_SEC),
+            "token_recovery_verify_timeout_sec": float(_TOKEN_RECOVERY_VERIFY_TIMEOUT_SEC),
+            "recovery_stable_cycles": int(_RECOVERY_STABLE_CYCLES),
+        },
+    }
+
+
+def _transition_partial_activity_recovery(
+    *,
+    now_epoch: float,
+    current_tokens: set[int],
+    underlying_tokens: set[int],
+    last_msg_by_token: dict[int, float] | None,
+    index_threshold_sec: float,
+    option_threshold_sec: float,
+) -> dict[str, object]:
+    global _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _PARTIAL_RECOVERY_VERIFICATION
+    previous_cycles = int(dict(_PARTIAL_RECOVERY_VERIFICATION or {}).get("stable_cycles") or 0)
+    verification = _build_partial_recovery_verification(
+        now_epoch=now_epoch,
+        current_tokens=current_tokens,
+        underlying_tokens=underlying_tokens,
+        last_msg_by_token=last_msg_by_token,
+        index_threshold_sec=index_threshold_sec,
+        option_threshold_sec=option_threshold_sec,
+        previous_stable_cycles=previous_cycles,
+    )
+    _PARTIAL_RECOVERY_VERIFICATION = dict(verification)
+    if bool(verification.get("verified")):
+        _clear_reconnect_blocked_reason()
+        _RUNTIME_STATE = "LIVE"
+        _LAST_RUNTIME_ERROR = ""
+    else:
+        _RUNTIME_STATE = "VERIFYING_RECOVERY" if int(verification.get("stable_cycles") or 0) > 0 else "DEGRADED_LOCAL"
+        _LAST_RUNTIME_ERROR = "partial_activity_verification_pending"
+    _log_ws(
+        "FEED_PARTIAL_RECOVERY_VERIFYING",
+        {
+            **verification,
+            "runtime_state": _RUNTIME_STATE,
+            "reconnect_blocked_reason": None,
+            "process_restart_required": False,
+            "restart_suppressed": False,
+            "no_order_action": True,
+            "order_safe": True,
+        },
+    )
+    return verification
 
 
 def _should_mutate_stale_option_symbol_subscription(
@@ -2004,6 +2163,8 @@ def _normalize_recovery_blocked_snapshot_state(
     ).strip().lower() or None
     if blocked_reason == "reactor_not_restartable":
         blocked_reason = _reactor_not_restartable_block_reason()
+    if blocked_reason == "partial_recovery":
+        blocked_reason = None
     if not blocked_reason and _REACTOR_NOT_RESTARTABLE_DETECTED:
         blocked_reason = _reactor_not_restartable_block_reason()
     effective_state = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper() or "UNKNOWN"
@@ -2026,6 +2187,74 @@ def _normalize_recovery_blocked_snapshot_state(
             )
         state_machine_row.setdefault("reason", blocked_reason)
     return effective_state, state_machine_row, effective_ws_connected, blocked_reason
+
+
+def _runtime_transport_truth_fields(
+    *,
+    now_epoch: float,
+    ws_connected: bool | None,
+    runtime_state: str,
+    last_ws_tick_epoch: float | None,
+    last_tick_age_sec: float | None,
+    last_depth_age_sec: float | None,
+    reconnect_blocked_reason: str | None,
+) -> dict[str, object]:
+    verification = dict(_PARTIAL_RECOVERY_VERIFICATION or {})
+    callback_epoch = None
+    callback_candidates = [float(_LAST_WS_TICK_EPOCH or 0.0)]
+    callback_candidates.extend(float(epoch) for epoch in dict(_LAST_MSG_TS_BY_TOKEN or {}).values())
+    if callback_candidates:
+        max_epoch = max(callback_candidates)
+        callback_epoch = max_epoch if max_epoch > 0 else None
+    tick_epoch = _coerce_epoch(last_ws_tick_epoch) or callback_epoch
+    callback_age = None if callback_epoch is None else max(0.0, float(now_epoch) - float(callback_epoch))
+    callback_activity_present = callback_age is not None and callback_age <= float(
+        getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0))
+    ) * 3.0
+    subscribed_count = len(set(int(token) for token in list(_LAST_TOKENS or []) if int(token) > 0))
+    intended_count = int(_INTENDED_TOKEN_COUNT if _INTENDED_TOKEN_COUNT > 0 else subscribed_count)
+    subscription_registry_consistent = (
+        len(_PENDING_SUBSCRIBE_TOKENS or set()) == 0
+        and len(_PENDING_UNSUBSCRIBE_TOKENS or set()) == 0
+        and len(_PENDING_MODE_FULL_TOKENS or set()) == 0
+    )
+    subscription_truth_complete = subscription_registry_consistent and (intended_count <= 0 or subscribed_count >= intended_count)
+    mode_full_truth_complete = subscription_registry_consistent and len(_PENDING_MODE_FULL_TOKENS or set()) == 0
+    critical_feed_fresh = bool(verification.get("critical_feed_fresh", True))
+    core_feed_fresh_ratio = float(verification.get("core_fresh_ratio", 1.0) or 0.0)
+    depth_ratio = float(verification.get("depth_feed_fresh_ratio", 1.0 if last_depth_age_sec is not None else 0.0) or 0.0)
+    state_text = str(runtime_state or "").strip().upper()
+    blocked_reason = str(reconnect_blocked_reason or "").strip().lower()
+    execution_feed_ready = bool(
+        ws_connected is True
+        and not blocked_reason
+        and state_text in {"RUNNING", "LIVE", "HEALTHY", "OK"}
+        and subscription_truth_complete
+        and mode_full_truth_complete
+        and critical_feed_fresh
+        and core_feed_fresh_ratio >= float(_CORE_FEED_FRESH_QUORUM)
+        and last_tick_age_sec is not None
+    )
+    canonical_state = state_text
+    if state_text == "RUNNING" and execution_feed_ready:
+        canonical_state = "LIVE"
+    elif state_text == "RUNNING" and not execution_feed_ready:
+        canonical_state = "DEGRADED_LOCAL"
+    return {
+        "transport_socket_connected": ws_connected,
+        "transport_last_callback_epoch": callback_epoch,
+        "transport_last_tick_epoch": tick_epoch,
+        "transport_callback_activity_present": bool(callback_activity_present),
+        "subscription_registry_consistent": bool(subscription_registry_consistent),
+        "subscription_truth_complete": bool(subscription_truth_complete),
+        "mode_full_truth_complete": bool(mode_full_truth_complete),
+        "critical_feed_fresh": bool(critical_feed_fresh),
+        "core_feed_fresh_ratio": core_feed_fresh_ratio,
+        "depth_feed_fresh_ratio": depth_ratio,
+        "execution_feed_ready": bool(execution_feed_ready),
+        "canonical_feed_state": canonical_state,
+        "recovery_verification": verification or None,
+    }
 
 
 def _log_tick_ingest_error(
@@ -3195,6 +3424,17 @@ def _write_feed_runtime_snapshot(
         "resubscribe_attempted": bool(restart_attempted) if restart_attempted is not None else bool(_RECOVERY_IN_PROGRESS),
         "option_feed_verification_state": str(_option_feed_verification_overlay_payload().get("state") or "IDLE"),
     }
+    payload.update(
+        _runtime_transport_truth_fields(
+            now_epoch=float(now_epoch),
+            ws_connected=ws_connected,
+            runtime_state=effective_state_text,
+            last_ws_tick_epoch=last_ws_tick_epoch,
+            last_tick_age_sec=last_tick_age_sec,
+            last_depth_age_sec=last_depth_age_sec,
+            reconnect_blocked_reason=normalized_blocked_reason,
+        )
+    )
     stage_started = _mark_stage("payload_assembly_ms", stage_started)
     if (
         internal_retry_disabled is not None
@@ -3497,6 +3737,17 @@ def _persist_runtime_snapshot_row(
         "reconnect_blocked_reason": normalized_blocked_reason,
         "restart_blocked_reason": str(restart_blocked_reason or normalized_blocked_reason or "").strip().lower() or None,
     }
+    payload.update(
+        _runtime_transport_truth_fields(
+            now_epoch=ts_epoch,
+            ws_connected=ws_connected,
+            runtime_state=effective_state_text,
+            last_ws_tick_epoch=last_ws_tick_epoch,
+            last_tick_age_sec=last_tick_age_sec,
+            last_depth_age_sec=last_depth_age_sec,
+            reconnect_blocked_reason=normalized_blocked_reason,
+        )
+    )
     if (
         internal_retry_disabled is not None
         or stop_retry_called is not None
@@ -4613,11 +4864,18 @@ def _maybe_trigger_silent_reconnect(
         backoff_min_sec=float(backoff_min_sec),
         backoff_max_sec=float(backoff_max_sec),
     )
-    # Implement partial_recovery detection and blocking
     if action.get("reason") == "partial_activity_detected":
-        _set_reconnect_blocked_reason("partial_recovery")
-    elif action.get("stale_tokens") == 0 and str(_RECONNECT_BLOCKED_REASON).strip().lower() == "partial_recovery":
+        _transition_partial_activity_recovery(
+            now_epoch=float(now_epoch),
+            current_tokens=set(current_tokens or set()),
+            underlying_tokens=set(underlying_tokens or set()),
+            last_msg_by_token=last_msg_by_token,
+            index_threshold_sec=float(index_threshold_sec),
+            option_threshold_sec=float(option_threshold_sec),
+        )
+    elif action.get("stale_tokens") == 0 and str(_RUNTIME_STATE or "").strip().upper() in {"DEGRADED_LOCAL", "VERIFYING_RECOVERY"}:
         _clear_reconnect_blocked_reason()
+        globals()["_RUNTIME_STATE"] = "LIVE"
 
     if not bool(action.get("silent_detected")):
         state["confirm_hits"] = 0

@@ -1,0 +1,16 @@
+{
+  "sealed_epoch": 1785399883.3744168,
+  "event_count": 0,
+  "files": [
+    {
+      "path": "process_identity.json",
+      "size": 536,
+      "sha256": "1e778167f0bd2e9ca37513821806a1af5b0b525ebfb216ee5c907a8484c886cc"
+    },
+    {
+      "path": "subscription_events.jsonl",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

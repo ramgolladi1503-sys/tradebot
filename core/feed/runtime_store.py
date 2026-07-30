@@ -158,6 +158,13 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
     out = dict(payload or {})
     out["ts_epoch"] = float(ts_epoch)
     reconnect_blocked_reason = str(out.get("reconnect_blocked_reason") or "").strip().lower() or None
+    if reconnect_blocked_reason == "partial_recovery":
+        reconnect_blocked_reason = None
+        out["reconnect_blocked_reason"] = None
+        out["restart_blocked_reason"] = None
+        out["process_restart_required"] = False
+        out["restart_suppressed"] = False
+        out.setdefault("runtime_state", "VERIFYING_RECOVERY")
     restart_failure_reason = str(
         out.get("restart_failure_reason")
         or out.get("restart_blocked_reason")

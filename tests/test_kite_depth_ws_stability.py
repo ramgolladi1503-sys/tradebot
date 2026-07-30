@@ -89,6 +89,7 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 0.0, raising=False)
     monkeypatch.setattr(ws, "_LAST_FEED_HEALTH_STATE", None, raising=False)
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {}, raising=False)
     monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
     monkeypatch.setattr(ws, "_RECOVERY_IN_PROGRESS", False, raising=False)
     monkeypatch.setattr(ws, "_WS1006_RECOVERABLE_ATTEMPTS", 0, raising=False)
@@ -1608,7 +1609,10 @@ def test_d_connected_but_stale(monkeypatch):
     )
 
     can_mutate, reason, _ = ws._can_mutate_ws_subscriptions(reason="unit_test", now_epoch=now)
-    assert not can_mutate
+    assert can_mutate
+    assert reason == "ok"
+    assert ws._RUNTIME_STATE == "DEGRADED_LOCAL"
+    assert ws._PARTIAL_RECOVERY_VERIFICATION["verified"] is False
 
 def test_e_partial_recovery(monkeypatch):
     """
@@ -1649,8 +1653,93 @@ def test_e_partial_recovery(monkeypatch):
     )
 
     can_mutate, reason, _ = ws._can_mutate_ws_subscriptions(reason="unit_test", now_epoch=now)
-    assert not can_mutate
-    assert reason == "partial_recovery"
+    assert can_mutate
+    assert reason == "ok"
+    assert ws._RECONNECT_BLOCKED_REASON == ""
+    assert ws._RUNTIME_STATE in {"DEGRADED_LOCAL", "VERIFYING_RECOVERY"}
+    assert ws._PARTIAL_RECOVERY_VERIFICATION["verified"] is False
+
+
+def test_partial_recovery_requires_three_stable_cycles(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ticker.on_connect(ticker, "mock_response")
+    ws._SOCKET_GENERATION = 1
+    monkeypatch.setattr(ws, "_CORE_FEED_FRESH_QUORUM", 0.5, raising=False)
+    ws._LAST_TOKENS = [101, 102, 103]
+    ws._UNDERLYING_TOKENS = {101}
+    state = {}
+    now = 100.0
+    last_by_token = {101: now, 102: now, 103: 50.0}
+
+    for expected_state in ("VERIFYING_RECOVERY", "VERIFYING_RECOVERY"):
+        ws._maybe_trigger_silent_reconnect(
+            now_epoch=now,
+            current_tokens={101, 102, 103},
+            underlying_tokens={101},
+            last_global_msg_epoch=now,
+            last_msg_by_token=last_by_token,
+            state=state,
+            index_threshold_sec=5.0,
+            option_threshold_sec=5.0,
+            confirm_needed=1,
+            backoff_min_sec=1.0,
+            backoff_max_sec=1.0,
+            force_full_restart_after_sec=None,
+            restart_cb=lambda **kwargs: None,
+        )
+        assert ws._RECONNECT_BLOCKED_REASON == ""
+        assert ws._RUNTIME_STATE == expected_state
+        assert ws._PARTIAL_RECOVERY_VERIFICATION["verified"] is False
+
+    ws._maybe_trigger_silent_reconnect(
+        now_epoch=now,
+        current_tokens={101, 102, 103},
+        underlying_tokens={101},
+        last_global_msg_epoch=now,
+        last_msg_by_token=last_by_token,
+        state=state,
+        index_threshold_sec=5.0,
+        option_threshold_sec=5.0,
+        confirm_needed=1,
+        backoff_min_sec=1.0,
+        backoff_max_sec=1.0,
+        force_full_restart_after_sec=None,
+        restart_cb=lambda **kwargs: None,
+    )
+    assert ws._PARTIAL_RECOVERY_VERIFICATION["stable_cycles"] == 3
+    assert ws._PARTIAL_RECOVERY_VERIFICATION["verified"] is True
+    assert ws._RUNTIME_STATE == "LIVE"
+
+
+def test_partial_recovery_stale_critical_stays_degraded(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ticker.on_connect(ticker, "mock_response")
+    ws._SOCKET_GENERATION = 1
+    ws._LAST_TOKENS = [101, 102, 103]
+    now = 100.0
+
+    ws._maybe_trigger_silent_reconnect(
+        now_epoch=now,
+        current_tokens={101, 102, 103},
+        underlying_tokens={101},
+        last_global_msg_epoch=now,
+        last_msg_by_token={101: 50.0, 102: now, 103: now},
+        state={},
+        index_threshold_sec=5.0,
+        option_threshold_sec=5.0,
+        confirm_needed=1,
+        backoff_min_sec=1.0,
+        backoff_max_sec=1.0,
+        force_full_restart_after_sec=None,
+        restart_cb=lambda **kwargs: None,
+    )
+
+    assert ws._RECONNECT_BLOCKED_REASON == ""
+    assert ws._RUNTIME_STATE == "DEGRADED_LOCAL"
+    assert ws._PARTIAL_RECOVERY_VERIFICATION["critical_feed_fresh"] is False
+    assert "critical_feed_stale" in ws._PARTIAL_RECOVERY_VERIFICATION["failure_reasons"]
 
 def test_f_duplicate_and_out_of_order_ticks(monkeypatch):
     _patch_common(monkeypatch)
