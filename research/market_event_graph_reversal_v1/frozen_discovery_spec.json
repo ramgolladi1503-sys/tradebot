@@ -1,0 +1,90 @@
+{
+  "dataset": {
+    "breadth_rows": 42743,
+    "dataset_file": "market_event_graph_discovery_v3/market_event_graph_dataset.parquet",
+    "dataset_sha256": "30f3d399404a299da6cb99b600a3f2b7346deb74653d5f4a8ebf8849ebefe73c",
+    "option_rows": 0,
+    "rows": 149100,
+    "sessions": 524
+  },
+  "discovery_scope": "causal ordered market-event graph discovery across breadth, participation, option response, IV, OI and liquidity",
+  "frozen_threshold_rule": {
+    "high_label": "value >= training 80th percentile",
+    "instruction": "Do not invent numeric thresholds. Recover them by computing the exact 20th/80th percentiles on the original chronological training partition of the frozen dataset using the original feature columns and quantile semantics.",
+    "low_label": "value <= training 20th percentile",
+    "method": "train-only 20th/80th percentiles",
+    "middle_values": "not selected as LOW or HIGH events",
+    "numeric_cutoffs_present_in_report": false
+  },
+  "multiple_testing": {
+    "certification_status": "DISCOVERY_ONLY",
+    "holdout_used_for_final_acceptance": true,
+    "tested_graph_direction_pairs": 11258
+  },
+  "primary_ce_candidate": {
+    "direction": "CE",
+    "entry_delay_bars": 1,
+    "graph": [
+      "breadth_down_1:HIGH",
+      "index_breadth_divergence:LOW",
+      "breadth_down_1:LOW"
+    ],
+    "holding_bars": 15,
+    "holdout": {
+      "mean": 0.0024606548,
+      "profit_factor": 4.1738554594,
+      "trades": 25,
+      "win_rate": 0.64
+    },
+    "round_trip_cost_bps": 2,
+    "train_occurrences": 168,
+    "validation": {
+      "mean": 0.0005983524,
+      "profit_factor": 2.4567905524,
+      "trades": 115,
+      "win_rate": 0.6173913043
+    }
+  },
+  "protocol": {
+    "cooldown_minutes": 15,
+    "graph": "A(t-2)->B(t-1)->C(t)",
+    "holdout_used_only_for_final acceptance": true,
+    "split": "chronological 60/20/20 by session",
+    "thresholds": "train-only 20th/80th percentiles",
+    "transaction_cost_bps": 2
+  },
+  "runtime_safety": {
+    "auto_execution_allowed": false,
+    "execution": "SHADOW_ADVISORY_ONLY",
+    "option_premium_validated": false,
+    "same_bar_entry": false
+  },
+  "schema_version": 1,
+  "secondary_pe_candidate": {
+    "direction": "PE",
+    "entry_delay_bars": 1,
+    "graph": [
+      "breadth_up_1:LOW",
+      "volume_shock_share:HIGH",
+      "breadth_mean_ret1:LOW"
+    ],
+    "holding_bars": 15,
+    "holdout": {
+      "mean": 0.0010927326,
+      "profit_factor": 2.674330225,
+      "trades": 27,
+      "win_rate": 0.6666666667
+    },
+    "round_trip_cost_bps": 2,
+    "train_occurrences": 1040,
+    "validation": {
+      "mean": 0.0005160667,
+      "profit_factor": 1.8798799154,
+      "trades": 182,
+      "win_rate": 0.543956044
+    }
+  },
+  "source_archive": "causal-market-state-v1-evidence-v3.zip",
+  "source_archive_sha256": "fde3f5c74f12bf59d80d39012bffd89a9411954b9207561f92b792ade31099b3",
+  "status": "RECOVERED_FROM_ORIGINAL_EVIDENCE_NOT_OPTION_CERTIFIED"
+}

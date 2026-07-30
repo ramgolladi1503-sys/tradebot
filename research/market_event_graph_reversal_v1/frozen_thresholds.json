@@ -1,0 +1,26 @@
+{
+  "quantile_semantics": {
+    "duplicate_handling": "all non-NaN rows retained",
+    "inequality_semantics": {
+      "HIGH": ">= p80",
+      "LOW": "<= p20"
+    },
+    "interpolation": "linear",
+    "library": "pandas.Series.quantile",
+    "nan_handling": "drop NaN values per feature",
+    "precision": "float64",
+    "q_values": [
+      0.2,
+      0.8
+    ],
+    "weighting": "per row, not per session"
+  },
+  "thresholds": {
+    "breadth_down_1_p20": 0.10121457489878542,
+    "breadth_down_1_p80": 0.21862348178137653,
+    "breadth_mean_ret1_p20": -0.00019076586779298327,
+    "breadth_up_1_p20": 0.09716599190283401,
+    "index_breadth_divergence_p20": -0.000238836424541256,
+    "volume_shock_share_p80": 0.2793522267206478
+  }
+}

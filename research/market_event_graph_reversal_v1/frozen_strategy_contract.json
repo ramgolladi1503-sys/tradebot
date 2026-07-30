@@ -1,0 +1,73 @@
+{
+  "candidate_identity": {
+    "direction": "CE",
+    "graph": [
+      "breadth_down_1:HIGH",
+      "index_breadth_divergence:LOW",
+      "breadth_down_1:LOW"
+    ]
+  },
+  "current_certification_state": [
+    "EXACT_UNDERLYING_DISCOVERY_REPRODUCED",
+    "NOT_OPTION_PREMIUM_VALIDATED",
+    "NOT_INDEPENDENTLY_CERTIFIED",
+    "SHADOW_ADVISORY_ONLY"
+  ],
+  "dataset_sha256": "30f3d399404a299da6cb99b600a3f2b7346deb74653d5f4a8ebf8849ebefe73c",
+  "feature_definitions": "columns are recovered from original frozen Parquet; no runtime discovery",
+  "frozen_discovery_spec_sha256": "75432ed1c9e3be9172079dc003ea9da38f7065cdfd4ca46ebd9538d7f863f218",
+  "inequality_rules": {
+    "HIGH": ">= p80",
+    "LOW": "<= p20"
+  },
+  "original_metrics": {
+    "direction": "CE",
+    "entry_delay_bars": 1,
+    "graph": [
+      "breadth_down_1:HIGH",
+      "index_breadth_divergence:LOW",
+      "breadth_down_1:LOW"
+    ],
+    "holding_bars": 15,
+    "holdout": {
+      "mean": 0.0024606547563865667,
+      "profit_factor": 4.173855459438617,
+      "trades": 25,
+      "win_rate": 0.64
+    },
+    "round_trip_cost_bps": 2,
+    "train_occurrences": 168,
+    "validation": {
+      "mean": 0.0005983523655742019,
+      "profit_factor": 2.456790552401809,
+      "trades": 115,
+      "win_rate": 0.6173913043478261
+    }
+  },
+  "secondary_pe_research_only": {
+    "direction": "PE",
+    "graph": [
+      "breadth_up_1:LOW",
+      "volume_shock_share:HIGH",
+      "breadth_mean_ret1:LOW"
+    ]
+  },
+  "split_manifest_sha256": "016ba53e4bdba61ae558e024ece55ea2ab129e8262ff8e5f56c0b7db83ec2b6a",
+  "strategy_id": "market_event_graph_reversal_v1",
+  "thresholds": {
+    "breadth_down_1_p20": 0.10121457489878542,
+    "breadth_down_1_p80": 0.21862348178137653,
+    "breadth_mean_ret1_p20": -0.00019076586779298327,
+    "breadth_up_1_p20": 0.09716599190283401,
+    "index_breadth_divergence_p20": -0.000238836424541256,
+    "volume_shock_share_p80": 0.2793522267206478
+  },
+  "timing": {
+    "cooldown_minutes": 15,
+    "cost_bps": 2,
+    "economics_source": "future_return_15 on signal row C(t), minus 2 bps",
+    "entry_delay_bars": 1,
+    "graph": "strict consecutive rows A(t-2)->B(t-1)->C(t)",
+    "holding_bars": 15
+  }
+}

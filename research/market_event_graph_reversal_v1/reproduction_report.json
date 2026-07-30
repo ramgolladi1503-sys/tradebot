@@ -1,0 +1,41 @@
+{
+  "exact_gate_passed": true,
+  "expected": {
+    "holdout_profit_factor": 4.173855459438617,
+    "holdout_trades": 25,
+    "train_occurrences": 168,
+    "validation_profit_factor": 2.456790552401809,
+    "validation_trades": 115
+  },
+  "limitations": [
+    "option_rows = 0",
+    "holdout was used for final candidate acceptance/ranking",
+    "11258 graph-direction combinations were tested",
+    "not independently certified",
+    "shadow advisory only"
+  ],
+  "metrics": {
+    "holdout": {
+      "mean": 0.0024606547563865667,
+      "profit_factor": 4.173855459438616,
+      "signals": 34,
+      "trades": 25,
+      "win_rate": 0.64
+    },
+    "train": {
+      "mean": 0.00024931810616286246,
+      "profit_factor": 1.6720377882808317,
+      "signals": 168,
+      "trades": 147,
+      "win_rate": 0.6326530612244898
+    },
+    "validation": {
+      "mean": 0.000598352365574202,
+      "profit_factor": 2.4567905524018094,
+      "signals": 135,
+      "trades": 115,
+      "win_rate": 0.6173913043478261
+    }
+  },
+  "verdict": "EXACT_UNDERLYING_DISCOVERY_REPRODUCED"
+}
