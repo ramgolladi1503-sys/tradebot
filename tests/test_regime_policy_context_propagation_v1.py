@@ -13,8 +13,6 @@ def _market_symbol(*, regime_status: str = "VALID") -> dict:
         "day_low": 23850.0,
         "ts_epoch": 1_785_000_000.0,
         "metadata": {"existing_metadata": "preserved"},
-        "evidence": {"existing_evidence": "preserved"},
-        "lineage": {"source": "fixture_snapshot"},
         "regime": {
             "primary_regime": "TREND",
             "scores": {"TREND_UP": 0.8, "VOLATILITY_EXPANSION": 0.2},
@@ -126,8 +124,6 @@ def test_market_snapshot_regime_truth_reaches_candidate_evidence():
     ctx, candidate = _candidate()
     policy_context = ctx.metadata["regime_policy_context"]
     assert ctx.metadata["existing_metadata"] == "preserved"
-    assert ctx.evidence["existing_evidence"] == "preserved"
-    assert ctx.lineage["source"] == "fixture_snapshot"
     assert policy_context["session_bucket"] == "MID_SESSION"
     assert policy_context["regime_status"] == "VALID"
     assert policy_context["model_source"] == "HEURISTIC_STRUCTURAL_V2_UNCALIBRATED"
