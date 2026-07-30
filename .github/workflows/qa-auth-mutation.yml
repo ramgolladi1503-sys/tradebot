@@ -1,0 +1,82 @@
+name: QA Auth Mutation
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: qa-auth-mutation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  auth_mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+      KITE_ALLOW_ENV_TOKEN_FOR_CI: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies and mutation runner
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install mutmut==3.5.0
+
+      - name: Prove focused auth baseline before mutation
+        run: >-
+          PYTHONPATH=. pytest -q -o addopts=''
+          tests/auth/test_auth_manager_behavior_contracts.py
+          tests/auth/test_auth_boundary_exhaustive.py
+          tests/auth/test_auth_internal_fallbacks.py
+          tests/auth/test_check_kite_auth_cli_behavior.py
+          tests/test_kite_client_auth_guard.py
+
+      - name: Run all configured auth mutants
+        run: |
+          mkdir -p .runtime/qa
+          rm -rf mutants
+          set -o pipefail
+          mutmut run 2>&1 | tee .runtime/qa/auth_mutation_run.txt
+
+      - name: Require no surviving, suspicious, skipped, or untested mutants
+        shell: bash
+        run: |
+          set -euo pipefail
+          mutmut results 2>&1 | tee .runtime/qa/auth_mutation_results.txt
+          if grep -Eiq 'survived|suspicious|untested|skipped|🙁|🤔|🔇' .runtime/qa/auth_mutation_results.txt; then
+            echo "AUTH MUTATION GATE FAILED: unresolved mutants remain"
+            exit 1
+          fi
+
+      - name: Upload auth mutation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-mutation-evidence
+          if-no-files-found: warn
+          path: |
+            .runtime/qa/auth_mutation_run.txt
+            .runtime/qa/auth_mutation_results.txt
+            mutants/
