@@ -10,6 +10,7 @@ source may request read-only market-data subscriptions when explicitly enabled.
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Iterable
@@ -94,10 +95,14 @@ def build_candidate_pool_report(
     if not isinstance(ctx, StrategyContext):
         raise TypeError("candidate_pool_context_invalid")
 
+    source_index_token = None
+    if ctx.symbol == "NIFTY" and _live_constituent_source_requested(ctx.metadata):
+        source_index_token = _canonical_nifty_index_token()
     source_metadata = attach_market_event_graph_constituent_source(
         ctx.metadata,
         symbol=ctx.symbol,
         as_of_epoch=ctx.ts_epoch,
+        index_token=source_index_token,
     )
     ctx.metadata.clear()
     ctx.metadata.update(source_metadata)
@@ -239,6 +244,27 @@ def _build_no_trade_candidates(
     from strategies.movement.no_trade_chop import generate_no_trade_candidates  # noqa: PLC0415
 
     return tuple(generate_no_trade_candidates(ctx, regime, movement_candidates) or ())
+
+
+def _live_constituent_source_requested(metadata: dict[str, Any]) -> bool:
+    if isinstance(metadata.get("completed_constituent_bars"), (list, tuple)):
+        return False
+    raw = metadata.get("market_event_graph_live_source_enable")
+    if raw is None:
+        raw = os.getenv("MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", "false")
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _canonical_nifty_index_token() -> int | None:
+    try:
+        from core.market_data import get_token_for_symbol
+
+        token = int(get_token_for_symbol("NIFTY"))
+    except Exception:
+        return None
+    return token if token > 0 else None
 
 
 def _generator_name(generator: CandidateGenerator) -> str:
