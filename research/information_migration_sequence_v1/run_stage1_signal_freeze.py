@@ -82,10 +82,10 @@ def main() -> None:
         raise SystemExit("insufficient symbols or missing NIFTY")
 
     correlation = development[symbols].corr(min_periods=500).fillna(0.0).clip(-1.0, 1.0)
-    distance = (1.0 - correlation).clip(0.0, 2.0)
-    np.fill_diagonal(distance.values, 0.0)
+    distance_array = np.array((1.0 - correlation).clip(0.0, 2.0), dtype=float, copy=True)
+    np.fill_diagonal(distance_array, 0.0)
     model = AgglomerativeClustering(n_clusters=N_GROUPS, metric="precomputed", linkage="average")
-    labels = model.fit_predict(distance.values)
+    labels = model.fit_predict(distance_array)
     groups = {int(group): sorted(correlation.columns[labels == group].tolist()) for group in sorted(set(labels))}
 
     leader_rows: list[dict] = []
