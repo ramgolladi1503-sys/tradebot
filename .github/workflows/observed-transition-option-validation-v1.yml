@@ -41,16 +41,11 @@ jobs:
       - name: Compile research runners
         run: |
           python -m py_compile \
-            scripts/run_outcome_blind_pattern_observation_v1.py \
             scripts/run_outcome_blind_pattern_observation_stage_v1.py \
             scripts/run_observed_transition_option_validation_v1.py
 
       - name: Reproduce outcome-blind observation freeze
         run: |
-          python scripts/run_outcome_blind_pattern_observation_v1.py \
-            --repo-root . \
-            --output-root runtime/research/outcome_blind_pattern_observation_v1 \
-            --stage profile
           python scripts/run_outcome_blind_pattern_observation_stage_v1.py \
             --repo-root . \
             --output-root runtime/research/outcome_blind_pattern_observation_v1
