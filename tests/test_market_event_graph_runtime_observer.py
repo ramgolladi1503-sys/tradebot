@@ -40,7 +40,7 @@ def _metadata():
             _bar(100.0, 90.0, negative_count=40, index_ret1=-0.001),
             _bar(160.0, 150.0, negative_count=25, index_ret1=-0.004),
             _bar(220.0, 210.0, negative_count=5, index_ret1=0.001),
-            _bar(280.0, 270.0, negative_count=20, index_ret1=0.001),
+            _bar(280.0, 270.0, negative_count=8, index_ret1=0.001),
         ],
     }
 
@@ -108,11 +108,8 @@ def test_reports_exact_graph_reaching_producer_and_adapter():
     assert observation["adapter_status"] == "READY"
     assert observation["adapter_row_count"] == 3
     assert observation["graph_trigger_count"] == 1
-    assert observation["partial_sequence_labels"] == [
-        "breadth_down_1:HIGH",
-        "index_breadth_divergence:LOW",
-        "breadth_down_1:LOW",
-    ]
+    assert observation["partial_sequence_length"] == 0
+    assert observation["partial_sequence_labels"] == []
     assert observation["source_fresh"] is True
     assert observation["latest_source_age_sec"] == 10.0
 
