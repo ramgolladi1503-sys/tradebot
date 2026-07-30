@@ -7,11 +7,11 @@ from typing import Any, Dict, FrozenSet
 # Policy results
 ELIGIBLE = "ELIGIBLE"
 ELIGIBLE_WITH_PENALTY = "ELIGIBLE_WITH_PENALTY"
-WATCHLIST_ONLY = "WATCHLIST_ONLY"
+WATCHLIST_ONLY = "WATCHLIST_ONLY"  # Legacy display label; never returned as executable policy.
 ADVISORY_ONLY = "ADVISORY_ONLY"
 BLOCKED = "BLOCKED"
 
-REGIME_POLICY_VERSION = "2.0.0"
+REGIME_POLICY_VERSION = "2.0.1"
 
 CANONICAL_ENTROPY_STATES = frozenset({"LOW", "NORMAL", "HIGH", "EXTREME", "UNKNOWN"})
 CANONICAL_SESSION_BUCKETS = frozenset(
@@ -268,9 +268,13 @@ def evaluate_strategy_regime_policy(
                 entropy_state=state,
                 candidate_generation_allowed=False,
             )
+        # The scorer currently downgrades ADVISORY_ONLY and BLOCKED. Returning a
+        # display-only WATCHLIST label here could allow an unknown strategy to
+        # inherit an executable upstream bucket, so unknown strategies are
+        # explicitly advisory regardless of low/normal entropy.
         return _result(
-            WATCHLIST_ONLY,
-            "unknown_strategy_conservative_default",
+            ADVISORY_ONLY,
+            "unknown_strategy_conservative_advisory",
             family=None,
             session_bucket=session,
             entropy_state=state,
