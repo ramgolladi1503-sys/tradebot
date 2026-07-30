@@ -12,6 +12,9 @@ def _market_symbol(*, regime_status: str = "VALID") -> dict:
         "day_high": 24050.0,
         "day_low": 23850.0,
         "ts_epoch": 1_785_000_000.0,
+        "metadata": {"existing_metadata": "preserved"},
+        "evidence": {"existing_evidence": "preserved"},
+        "lineage": {"source": "fixture_snapshot"},
         "regime": {
             "primary_regime": "TREND",
             "scores": {"TREND_UP": 0.8, "VOLATILITY_EXPANSION": 0.2},
@@ -23,6 +26,8 @@ def _market_symbol(*, regime_status: str = "VALID") -> dict:
             "stable_regime": "TREND",
             "stable_regime_confirmed": True,
             "trend_state": "STRONG",
+            "is_expiry_day": False,
+            "volume_impulse": False,
             "model_source": "HEURISTIC_STRUCTURAL_V2_UNCALIBRATED",
             "model_hash": None,
             "probability_calibrated": False,
@@ -120,6 +125,9 @@ def _candidate(*, regime_status: str = "VALID"):
 def test_market_snapshot_regime_truth_reaches_candidate_evidence():
     ctx, candidate = _candidate()
     policy_context = ctx.metadata["regime_policy_context"]
+    assert ctx.metadata["existing_metadata"] == "preserved"
+    assert ctx.evidence["existing_evidence"] == "preserved"
+    assert ctx.lineage["source"] == "fixture_snapshot"
     assert policy_context["session_bucket"] == "MID_SESSION"
     assert policy_context["regime_status"] == "VALID"
     assert policy_context["model_source"] == "HEURISTIC_STRUCTURAL_V2_UNCALIBRATED"
@@ -131,6 +139,21 @@ def test_market_snapshot_regime_truth_reaches_candidate_evidence():
     }
     assert candidate.evidence["stable_regime_confirmed"] is True
     assert candidate.evidence["probability_calibrated"] is False
+
+
+def test_string_false_values_do_not_become_true_policy_flags():
+    data = _market_symbol()
+    data["regime"]["stable_regime_confirmed"] = "false"
+    data["regime"]["probability_calibrated"] = "false"
+    data["regime"]["is_expiry_day"] = "false"
+    data["regime"]["volume_impulse"] = "false"
+    data["expiry_context"] = {"is_expiry": True}
+    ctx = _strategy_context_from_market_symbol("NIFTY", data)
+    policy_context = ctx.metadata["regime_policy_context"]
+    assert policy_context["stable_regime_confirmed"] is False
+    assert policy_context["probability_calibrated"] is False
+    assert policy_context["is_expiry_day"] is False
+    assert policy_context["volume_impulse"] is False
 
 
 def test_valid_propagated_regime_truth_can_remain_score_eligible():
