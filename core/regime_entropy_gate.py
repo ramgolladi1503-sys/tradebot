@@ -1,12 +1,56 @@
-import math
+from __future__ import annotations
+
 import logging
+import math
 from typing import Optional
 
 from config import config as cfg
-from core.entropy_contract import entropy_diagnostics
-from core.regime_prob_model import REGIMES
+from core.regime_contract_v2 import (
+    REGIME_LABELS,
+    classify_entropy_state,
+    probability_diagnostics,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _threshold_for_context(
+    *,
+    session_bucket: str,
+    expiry_day: bool,
+    event_mode: bool,
+) -> tuple[float, str]:
+    if event_mode:
+        return (
+            float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_EVENT_MODE", 0.92)),
+            "EVENT_MODE",
+        )
+    if expiry_day:
+        return (
+            float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_EXPIRY_DAY", 0.86)),
+            "EXPIRY_DAY",
+        )
+    bucket = str(session_bucket or "DEFAULT").strip().upper()
+    if bucket == "OPEN_DISCOVERY":
+        return (
+            float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_OPEN_DISCOVERY", 0.90)),
+            "OPEN_DISCOVERY",
+        )
+    if bucket == "MID_SESSION":
+        return (
+            float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_MID_SESSION", 0.78)),
+            "MID_SESSION",
+        )
+    if bucket == "CLOSING_VOL":
+        return (
+            float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_CLOSING_VOL", 0.88)),
+            "CLOSING_VOL",
+        )
+    return (
+        float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_DEFAULT", 0.80)),
+        "DEFAULT",
+    )
+
 
 def evaluate_regime_entropy_gate(
     raw_entropy: Optional[float] = None,
@@ -19,113 +63,133 @@ def evaluate_regime_entropy_gate(
     primary_regime: str = "",
     regime_prob_max: Optional[float] = None,
 ) -> dict:
-    """
-    Central gate to determine if market regime entropy exceeds bounds.
-    Removes raw_entropy thresholds from legacy codebase paths.
-    """
-    diag_reasons = []
-    invalid_probability_vector = False
+    """Canonical normalized-entropy gate.
 
-    count = regime_count or len(REGIMES)
-    max_entropy = math.log(count) if count > 0 else 1.0
+    Low entropy is never a blocker by itself. Invalid probabilities, impossible
+    raw entropy, insufficient feature quality, or entropy above the session
+    threshold remain fail-closed.
+    """
+    reasons: list[str] = []
+    invalid_probability_vector = False
+    payload = market_data or {}
+
+    count = int(regime_count or len(REGIME_LABELS))
+    max_entropy = math.log(count) if count > 1 else 0.0
+    probability_diag: dict = {}
 
     if probabilities:
         try:
-            diag = entropy_diagnostics(probabilities, labels=REGIMES if not regime_count else None)
-            computed_raw = diag.get("entropy", 0.0)
-            computed_norm = diag.get("normalized_entropy", 0.0)
-        except ValueError as e:
+            probability_diag = probability_diagnostics(probabilities)
+            computed_raw = float(probability_diag["entropy"])
+            computed_norm = float(probability_diag["normalized_entropy"])
+        except ValueError as exc:
             invalid_probability_vector = True
-            diag_reasons.append(f"invalid_probability_vector: {str(e)}")
-            computed_raw = 999.0
+            reasons.append(f"invalid_probability_vector:{exc}")
+            computed_raw = max_entropy
             computed_norm = 1.0
     else:
-        computed_raw = raw_entropy if raw_entropy is not None else 0.0
-        if computed_raw > 0 and max_entropy > 0:
-            computed_norm = computed_raw / max_entropy
-        else:
-            computed_norm = 0.0
+        try:
+            computed_raw = float(raw_entropy) if raw_entropy is not None else 0.0
+        except (TypeError, ValueError):
+            computed_raw = -1.0
+        computed_norm = (
+            computed_raw / max_entropy
+            if max_entropy > 0.0 and computed_raw > 0.0
+            else 0.0
+        )
+        computed_norm = min(max(computed_norm, 0.0), 1.0)
 
-    # Safety clamp
-    computed_norm = min(max(computed_norm, 0.0), 1.0)
+    threshold, threshold_source = _threshold_for_context(
+        session_bucket=session_bucket,
+        expiry_day=expiry_day,
+        event_mode=event_mode,
+    )
 
-    # Determine thresholds based on config and session bounds
-    if event_mode:
-        threshold = float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_EVENT_MODE", 0.92))
-        threshold_source = "EVENT_MODE"
-    elif expiry_day:
-        threshold = float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_EXPIRY_DAY", 0.86))
-        threshold_source = "EXPIRY_DAY"
-    else:
-        sb = str(session_bucket).upper()
-        if sb == "OPEN_DISCOVERY":
-            threshold = float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_OPEN_DISCOVERY", 0.90))
-            threshold_source = "OPEN_DISCOVERY"
-        elif sb == "MID_SESSION":
-            threshold = float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_MID_SESSION", 0.78))
-            threshold_source = "MID_SESSION"
-        elif sb == "CLOSING_VOL":
-            threshold = float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_CLOSING_VOL", 0.88))
-            threshold_source = "CLOSING_VOL"
-        else:
-            threshold = float(getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_DEFAULT", 0.80))
-            threshold_source = "DEFAULT"
+    # Compatibility only for legacy callers that provide raw entropy without a
+    # probability vector. Real probability decisions do not relax uncertainty
+    # based on the classifier's own primary label because that is circular.
+    resolved_regime = str(
+        primary_regime
+        or payload.get("primary_regime")
+        or payload.get("regime")
+        or ""
+    ).upper()
+    legacy_raw_only = not bool(probabilities) and raw_entropy is not None
+    if legacy_raw_only and resolved_regime in {
+        "RANGE",
+        "RANGE_VOLATILE",
+        "SIDEWAYS",
+    }:
+        threshold = 1.0
+        threshold_source += "_LEGACY_RAW_RANGE_OVERRIDE"
 
-    md = market_data or {}
-    depth_imb = float(md.get("depth_imbalance") or 0.0)
-    volume_delta = bool(md.get("volume_delta_override") or False)
-    
-    if regime_prob_max is not None:
-        prob_max = float(regime_prob_max)
-    else:
-        prob_max = float(md.get("regime_prob_max") or md.get("regime_probs_max") or 0.0)
-        
-    resolved_regime = primary_regime or md.get("primary_regime") or md.get("regime") or ""
-
-    if resolved_regime == "TREND" and (volume_delta or depth_imb > 0.35 or prob_max > 0.60):
-        threshold *= 1.30
-        threshold_source += "_TREND_OVERRIDE"
-
-    # Dynamic Entropy Override for Ranging Regimes
-    if resolved_regime in {"RANGE", "RANGE_VOLATILE", "SIDEWAYS"}:
-        threshold *= 2.0
-        threshold_source += "_RANGE_OVERRIDE"
-
-    # Safety clamp for threshold
-    threshold = min(max(threshold, 0.0), 1.0)
-
+    threshold = min(max(float(threshold), 0.0), 1.0)
     uncertain = bool(computed_norm > threshold)
 
-    diagnostics = []
-    if computed_raw > max_entropy + 0.001:
-        diagnostics.append(f"raw_entropy ({computed_raw:.4f}) exceeded max theoretical bound ({max_entropy:.4f})")
+    if computed_raw < 0.0:
+        reasons.append(f"raw_entropy_negative:{computed_raw:.6f}")
         uncertain = True
-    elif computed_raw < 0:
-        diagnostics.append(f"raw_entropy ({computed_raw:.4f}) is negative")
+    elif max_entropy > 0.0 and computed_raw > max_entropy + 1e-6:
+        reasons.append(
+            "raw_entropy_exceeds_theoretical_max:"
+            f"{computed_raw:.6f}>{max_entropy:.6f}"
+        )
         uncertain = True
 
-    if uncertain:
-        diagnostics.append(f"market_regime_uncertain=True (norm {computed_norm:.4f} > limit {threshold:.4f} @ {threshold_source})")
-        
+    feature_quality_status = str(
+        payload.get("feature_quality_status") or ""
+    ).upper()
+    if feature_quality_status in {"INSUFFICIENT_DATA", "INVALID_INPUT"}:
+        reasons.append(f"feature_quality:{feature_quality_status.lower()}")
+        uncertain = True
+
     if invalid_probability_vector:
-        is_uncertain = True
-    else:
-        is_uncertain = uncertain
+        uncertain = True
+
+    entropy_state = classify_entropy_state(computed_norm, threshold)
+    low_entropy_suspect = bool(
+        computed_norm <= 0.01
+        and feature_quality_status in {"INSUFFICIENT_DATA", "INVALID_INPUT"}
+    )
+    if low_entropy_suspect:
+        reasons.append("low_entropy_with_invalid_feature_quality")
+        uncertain = True
+
+    if uncertain and computed_norm > threshold:
+        reasons.append(
+            f"entropy_above_limit:{computed_norm:.6f}>"
+            f"{threshold:.6f}@{threshold_source}"
+        )
+
+    top_probability = probability_diag.get("top_probability")
+    if top_probability is None and regime_prob_max is not None:
+        try:
+            top_probability = float(regime_prob_max)
+        except (TypeError, ValueError):
+            top_probability = None
 
     return {
-        "uncertain": is_uncertain,
+        "uncertain": bool(uncertain),
+        "gate_passed": not bool(uncertain),
         "raw_entropy": computed_raw,
         "max_entropy": max_entropy,
         "normalized_entropy": computed_norm,
+        "entropy_state": entropy_state,
+        "low_entropy_suspect": low_entropy_suspect,
         "threshold": threshold,
         "threshold_source": threshold_source,
         "probability_valid": not invalid_probability_vector,
+        "top_probability": top_probability,
+        "second_probability": probability_diag.get("second_probability"),
+        "top_two_margin": probability_diag.get("top_two_margin"),
         "diagnostics": {
             "source": threshold_source,
             "max_entropy": max_entropy,
             "computed_raw": computed_raw,
             "computed_norm": computed_norm,
             "threshold": threshold,
-            "reasons": diag_reasons,
-        }
+            "feature_quality_status": feature_quality_status or None,
+            "primary_regime": resolved_regime or None,
+            "reasons": list(dict.fromkeys(reasons)),
+        },
     }
