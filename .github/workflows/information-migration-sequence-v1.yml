@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - research/information-migration-sequence-v1
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/information-migration-sequence-v1.yml'
+      - 'research/information_migration_sequence_v1/**'
   workflow_dispatch:
 
 permissions:
@@ -108,4 +114,4 @@ jobs:
           path: information-migration-sequence-v1-schema-audit.json
           if-no-files-found: error
 
-# Trigger revision: 2
+# Trigger revision: 3
