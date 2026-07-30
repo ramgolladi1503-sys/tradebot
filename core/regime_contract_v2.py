@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 REGIME_LABELS: tuple[str, ...] = ("TREND", "RANGE", "RANGE_VOLATILE", "EVENT", "PANIC")
+PROBABILITY_SUM_TOLERANCE = 1e-5
 
 VALID = "VALID"
 UNCERTAIN = "UNCERTAIN"
@@ -86,8 +87,13 @@ def probability_diagnostics(probabilities: Mapping[str, Any]) -> dict[str, Any]:
             raise ValueError(f"negative_probability:{label}")
         probs[label] = value
     total = sum(probs.values())
-    if not math.isclose(total, 1.0, abs_tol=1e-8):
+    if not math.isclose(total, 1.0, abs_tol=PROBABILITY_SUM_TOLERANCE):
         raise ValueError(f"probabilities_do_not_sum_to_one:{total}")
+    if total <= 0.0:
+        raise ValueError("probability_sum_non_positive")
+    # Existing runtime evidence may be rounded to six decimals. Accept only the
+    # repository's established small tolerance, then renormalize before entropy.
+    probs = {label: value / total for label, value in probs.items()}
     entropy = -sum(p * math.log(p) for p in probs.values() if p > 0.0)
     max_entropy = math.log(len(REGIME_LABELS))
     normalized = clamp(entropy / max_entropy if max_entropy else 0.0, 0.0, 1.0)
@@ -96,6 +102,7 @@ def probability_diagnostics(probabilities: Mapping[str, Any]) -> dict[str, Any]:
     second_label, second_probability = ordered[1]
     return {
         "probabilities": probs,
+        "input_probability_sum": total,
         "entropy": entropy,
         "max_entropy": max_entropy,
         "normalized_entropy": normalized,
