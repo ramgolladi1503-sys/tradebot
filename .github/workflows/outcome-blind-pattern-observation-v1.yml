@@ -1,0 +1,51 @@
+name: Outcome-Blind Pattern Observation V1
+
+on:
+  push:
+    branches:
+      - research/outcome-blind-pattern-observation-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  profile-observation-universe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout without broad LFS hydration
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - name: Pull only observation evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git lfs install --local
+          git lfs pull --include="research/local_evidence_consolidation_v1/**/event_universe_5m.parquet,research/local_evidence_consolidation_v1/**/repaired_joint_underlying_option_warehouse.parquet,research/local_evidence_consolidation_v1/**/constituent_index_5m.parquet" --exclude=""
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install profile dependencies
+        run: python -m pip install --disable-pip-version-check numpy pandas pyarrow
+
+      - name: Profile causal observation universe
+        run: |
+          python scripts/run_outcome_blind_pattern_observation_v1.py \
+            --repo-root . \
+            --output-root runtime/research/outcome_blind_pattern_observation_v1 \
+            --stage profile
+
+      - name: Upload profile evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: outcome-blind-pattern-observation-v1-profile
+          path: runtime/research/outcome_blind_pattern_observation_v1/schema_profile.json
+          if-no-files-found: error
