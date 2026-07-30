@@ -12,6 +12,7 @@ from core.regime_contract_v2 import (
     RegimeStabilizer,
     VALID,
     normalized_heuristic_scores,
+    probability_diagnostics,
     stable_softmax,
 )
 from core.regime_entropy_gate import evaluate_regime_entropy_gate
@@ -67,6 +68,33 @@ def certify() -> dict:
                 "max_probability": max(probabilities.values()),
                 "probability_sum": sum(probabilities.values()),
             },
+        }
+    )
+
+    rounded = {
+        "TREND": 0.333333,
+        "RANGE": 0.222222,
+        "RANGE_VOLATILE": 0.166667,
+        "EVENT": 0.166667,
+        "PANIC": 0.111112,
+    }
+    rounded_diag = probability_diagnostics(rounded)
+    checks.append(
+        {
+            "name": "rounded_probability_compatibility",
+            "passed": bool(
+                math.isclose(
+                    sum(rounded_diag["probabilities"].values()),
+                    1.0,
+                    abs_tol=1e-12,
+                )
+                and math.isclose(
+                    rounded_diag["input_probability_sum"],
+                    1.000001,
+                    abs_tol=1e-12,
+                )
+            ),
+            "evidence": rounded_diag,
         }
     )
 
