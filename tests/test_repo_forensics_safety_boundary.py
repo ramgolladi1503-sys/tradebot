@@ -50,11 +50,24 @@ def test_safety_boundary_flags_order_action_in_paper_path(tmp_path):
 
     report = audit_safety_boundaries(tmp_path, config)
 
-    assert report.critical
+    assert len(report.critical) == 1
     assert report.critical[0].boundary == "order_action_call"
 
 
-def test_safety_boundary_flags_readonly_action_fields(tmp_path):
+def test_execution_owner_is_allowed_to_own_order_action_call(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(
+        tmp_path / "core" / "execution_engine.py",
+        f"def route(client):\n    return client.{ORDER_CALL}()\n",
+    )
+    config = load_config(_write_profile(tmp_path))
+
+    report = audit_safety_boundaries(tmp_path, config)
+
+    assert report.findings == []
+
+
+def test_safety_boundary_flags_readonly_action_fields_once_each(tmp_path):
     _write(tmp_path / "app.py", "x = 1\n")
     _write(
         tmp_path / "dashboard" / "report.py",
@@ -64,8 +77,14 @@ def test_safety_boundary_flags_readonly_action_fields(tmp_path):
 
     report = audit_safety_boundaries(tmp_path, config)
 
-    boundaries = {item.boundary for item in report.critical}
-    assert "unsafe_action_field" in boundaries
+    assert [item.boundary for item in report.critical] == [
+        "unsafe_action_field",
+        "unsafe_action_field",
+    ]
+    assert {item.evidence for item in report.critical} == {
+        f"{ACTION_FIELD}=true",
+        f"{BROKER_FIELD}=true",
+    }
 
 
 def test_safety_boundary_flags_readonly_import_of_broker_client(tmp_path):
@@ -79,7 +98,7 @@ def test_safety_boundary_flags_readonly_import_of_broker_client(tmp_path):
     assert [item.boundary for item in report.high] == ["readonly_execution_import"]
 
 
-def test_safety_boundary_flags_paper_path_to_broker_order_call_graph(tmp_path):
+def test_paper_broker_import_is_high_but_reachable_order_call_is_critical(tmp_path):
     _write(tmp_path / "app.py", "x = 1\n")
     _write(tmp_path / KITE_CLIENT_PATH, "class KiteClient:\n    pass\n")
     _write(
@@ -92,9 +111,43 @@ def test_safety_boundary_flags_paper_path_to_broker_order_call_graph(tmp_path):
 
     report = audit_safety_boundaries(tmp_path, config)
 
-    boundaries = {item.boundary for item in report.critical}
-    assert "paper_sim_broker_import" in boundaries
-    assert "paper_sim_live_broker_call_path" in boundaries
+    assert [item.boundary for item in report.high] == ["paper_sim_broker_import"]
+    assert {item.boundary for item in report.critical} == {
+        "order_action_call",
+        "paper_sim_live_broker_call_path",
+    }
+
+
+def test_import_from_broker_module_is_not_duplicated_by_imported_symbol(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(tmp_path / KITE_CLIENT_PATH, "class KiteClient:\n    pass\n")
+    _write(
+        tmp_path / "paper" / "paper_monitor.py",
+        f"from {KITE_CLIENT} import KiteClient, another_symbol\n",
+    )
+    config = load_config(_write_profile(tmp_path))
+
+    report = audit_safety_boundaries(tmp_path, config)
+
+    assert len(report.high) == 1
+    assert report.high[0].boundary == "paper_sim_broker_import"
+    assert report.critical == []
+
+
+def test_shell_live_marker_produces_one_finding_on_its_actual_line(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(
+        tmp_path / "scripts" / "unsafe_start.sh",
+        "#!/usr/bin/env bash\necho preparing\nEXECUTION_MODE=LIVE\necho started\n",
+    )
+    config = load_config(_write_profile(tmp_path))
+
+    report = audit_safety_boundaries(tmp_path, config)
+
+    assert len(report.high) == 1
+    finding = report.high[0]
+    assert finding.boundary == "live_mode_default"
+    assert finding.line == 3
 
 
 def test_safety_boundary_does_not_flag_order_words_inside_string_fixture(tmp_path):
