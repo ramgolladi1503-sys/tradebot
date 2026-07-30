@@ -1,0 +1,15 @@
+{
+  "credential_status": {
+    "KITE_ACCESS_TOKEN_present": false,
+    "KITE_API_KEY_present": true,
+    "KITE_API_SECRET_present": true,
+    "secrets_printed": false
+  },
+  "dependency_state": "not pinned by this acquisition script",
+  "evidence_root": "/Users/madhuram/tradebot-ml-evidence/sensex_late_session_convexity_data_v1",
+  "python_version": "3.12.2",
+  "source_branch": "research/sensex-convexity-data-acquisition-v1",
+  "source_commit": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
+  "start_timestamp_ist": "2026-07-30T22:09:23.708282+05:30",
+  "worktree_path": "/Users/madhuram/tradebot-sensex-convexity-data-v1"
+}

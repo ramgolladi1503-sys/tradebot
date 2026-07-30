@@ -1,0 +1,20 @@
+{
+  "contracts_found": 0,
+  "duplicate_conflicting_token_mappings": 0,
+  "earliest_expiry": null,
+  "expiries_covered": [],
+  "failed_kite_lookups": 0,
+  "failure_classes": {
+    "invalid_token": 0,
+    "not_attempted": 0,
+    "permission_failure": 0,
+    "temporary_api_failure": 0,
+    "unavailable_history": 0
+  },
+  "latest_expiry": null,
+  "missing_expiry_regimes": [
+    "UNRESOLVED"
+  ],
+  "successful_kite_lookups": 0,
+  "weekly_versus_monthly_coverage": "NONE"
+}

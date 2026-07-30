@@ -1,0 +1,12 @@
+{
+  "compared_bars": 0,
+  "compared_sessions": 0,
+  "exact_matches": 0,
+  "likely_cause": "No newly acquired one-minute SENSEX source available in this run.",
+  "maximum_absolute_difference": null,
+  "maximum_relative_difference": null,
+  "missing_bars": 0,
+  "ohlc_mismatches": 0,
+  "timestamp_offset_mismatches": 0,
+  "volume_mismatches": 0
+}

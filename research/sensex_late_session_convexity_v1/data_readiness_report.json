@@ -1,0 +1,71 @@
+{
+  "blockers": [
+    "Inventory was bounded to the active clean worktree and known immutable evidence subtrees; exhaustive traversal of every prior worktree/evidence file was too large for this interactive run.",
+    "No complete historically valid SENSEX constituent membership and weight table was proven.",
+    "SENSEX option token recovery did not verify any Kite historical lookups in this run.",
+    "No complete one-minute raw/canonical acquisition was certified by the independent audit.",
+    "Historical bid/ask is unavailable, so executable option certification remains impossible from OHLCV alone."
+  ],
+  "expiry_regimes_covered": [
+    "UNRESOLVED"
+  ],
+  "final_readiness_verdict": "INVALID_DATA_ACQUISITION",
+  "inventory_summary": {
+    "instrument_registry_sources": 13,
+    "sensex_like_sources": 1626,
+    "sources_indexed": 1638
+  },
+  "kite_limitation_findings": [
+    {
+      "finding": "Kite historical candles are fetched by instrument_token.",
+      "implication": "Symbol-only recovery is insufficient for historical candles.",
+      "status": "DOCUMENTED"
+    },
+    {
+      "finding": "The current Kite instrument master describes currently tradable instruments.",
+      "implication": "Current dumps are not a complete registry of expired derivatives.",
+      "status": "DOCUMENTED"
+    },
+    {
+      "finding": "Expired futures and options receive contract-specific instrument tokens.",
+      "implication": "A token cannot be inferred from the underlying symbol alone.",
+      "status": "DOCUMENTED"
+    },
+    {
+      "finding": "Expired option tokens generally cannot be rediscovered from the current instruments dump.",
+      "implication": "Historical option acquisition needs cached old dumps, sidecars, old files, or still-live contracts.",
+      "status": "DOCUMENTED"
+    },
+    {
+      "finding": "Kite continuous history does not solve intraday expired-option retrieval.",
+      "implication": "Continuous mode is not a substitute for expired option token authority.",
+      "status": "DOCUMENTED"
+    },
+    {
+      "finding": "Current contracts must not be substituted for expired contracts.",
+      "implication": "Any option lane without recovered contract tokens remains blocked.",
+      "status": "DOCUMENTED"
+    }
+  ],
+  "option_registry_report": {
+    "contracts_found": 0,
+    "duplicate_conflicting_token_mappings": 0,
+    "earliest_expiry": null,
+    "expiries_covered": [],
+    "failed_kite_lookups": 0,
+    "failure_classes": {
+      "invalid_token": 0,
+      "not_attempted": 0,
+      "permission_failure": 0,
+      "temporary_api_failure": 0,
+      "unavailable_history": 0
+    },
+    "latest_expiry": null,
+    "missing_expiry_regimes": [
+      "UNRESOLVED"
+    ],
+    "successful_kite_lookups": 0,
+    "weekly_versus_monthly_coverage": "NONE"
+  },
+  "sensex_underlying_coverage": "NOT_PROVEN_COMPLETE"
+}

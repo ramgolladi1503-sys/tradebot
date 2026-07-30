@@ -1,0 +1,9 @@
+{
+  "constituent_coverage_recomputed": false,
+  "five_minute_sample_recomputed": false,
+  "option_registry_rows": 0,
+  "option_token_mapping_unique": true,
+  "reason": "Readiness-blocking data acquisition gaps remain; independent audit found no complete verified constituent panel or option OHLCV lane.",
+  "source_count": 1638,
+  "verdict": "FAIL"
+}

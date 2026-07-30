@@ -1,0 +1,46 @@
+{
+  "constituent_mapping_authority_order": [
+    "official BSE/SP BSE historical constituent or weight records already available",
+    "repository-cached official files",
+    "reproducible archived reference data",
+    "current membership fallback labelled non-historical"
+  ],
+  "date_range": {
+    "end": "2026-07-30",
+    "exclude_current_incomplete_session": true,
+    "start": "2024-07-01"
+  },
+  "derived_intervals": [
+    "3minute_optional",
+    "5minute"
+  ],
+  "forbidden_claims": [
+    "option certification",
+    "executable bid/ask reconstruction",
+    "profitability",
+    "production readiness"
+  ],
+  "instrument_groups": [
+    "SENSEX underlying",
+    "available SENSEX constituents",
+    "SENSEX futures where token history permits",
+    "SENSEX options where token history permits",
+    "NIFTY 50 underlying control",
+    "BANKNIFTY underlying control"
+  ],
+  "quality_gates": {
+    "minimum_constituents": 27,
+    "minimum_weight_coverage": 0.9,
+    "no_future_constituent_candles": true,
+    "same_completed_bar_boundary_as_sensex": true
+  },
+  "research_name": "SENSEX Late-Session Convexity Ignition V1",
+  "scope": "DATA_ACQUISITION_ONLY",
+  "session": {
+    "bar_label": "bar_open",
+    "end": "15:30:00",
+    "start": "09:15:00",
+    "timezone": "Asia/Kolkata"
+  },
+  "source_interval": "minute"
+}
