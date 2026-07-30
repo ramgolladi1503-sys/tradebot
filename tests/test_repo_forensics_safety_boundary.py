@@ -117,3 +117,65 @@ def test_safety_boundary_allows_safe_regular_file(tmp_path):
     report = audit_safety_boundaries(tmp_path, config)
 
     assert report.findings == []
+
+
+def test_repo_forensics_constants_do_not_self_trigger_runtime_import_finding(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(
+        tmp_path / "tools" / "repo_forensics" / "scanner.py",
+        "FORBIDDEN = ['core.market_data', 'core.orchestrator', 'strategies.trade_builder']\n",
+    )
+    config = load_config(_write_profile(tmp_path))
+
+    report = audit_safety_boundaries(tmp_path, config)
+
+    assert report.critical == []
+
+
+def test_repo_forensics_actual_runtime_import_remains_critical(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(tmp_path / "core" / "market_data.py", "VALUE = 1\n")
+    _write(
+        tmp_path / "tools" / "repo_forensics" / "bad_scanner.py",
+        "import core.market_data\n",
+    )
+    config = load_config(_write_profile(tmp_path))
+
+    report = audit_safety_boundaries(tmp_path, config)
+
+    assert len(report.critical) == 1
+    finding = report.critical[0]
+    assert finding.boundary == "forensics_runtime_import"
+    assert finding.evidence == "forensics_imports_runtime_module:core.market_data"
+    assert finding.line == 1
+
+
+def test_dry_run_proof_import_does_not_equal_direct_broker_capability(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(
+        tmp_path / "core" / "live_dry_run_broker_payload_gate.py",
+        "def broker_payload_dry_run_approved():\n    return True\n",
+    )
+    _write(
+        tmp_path / "core" / "broker_reconciliation_dry_run_proof.py",
+        "from core.live_dry_run_broker_payload_gate import broker_payload_dry_run_approved\n",
+    )
+    config = load_config(_write_profile(tmp_path))
+
+    report = audit_safety_boundaries(tmp_path, config)
+
+    assert report.critical == []
+
+
+def test_test_import_of_direct_broker_subject_is_not_product_runtime_finding(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(tmp_path / KITE_CLIENT_PATH, "class KiteClient:\n    pass\n")
+    _write(
+        tmp_path / "tests" / "test_paper_kite_client.py",
+        f"import {KITE_CLIENT}\n\ndef test_subject_import():\n    assert {KITE_CLIENT.split('.')[-1]} is not None\n",
+    )
+    config = load_config(_write_profile(tmp_path))
+
+    report = audit_safety_boundaries(tmp_path, config)
+
+    assert report.findings == []
