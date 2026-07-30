@@ -13,6 +13,24 @@ _BROKER_FIELD = "broker" + "_api_called"
 _KITE_CLIENT_MODULE = "core." + "kite_client"
 _KITE_CLIENT_PATH = "core/" + "kite_client.py"
 
+# These modules expose a direct broker or execution capability. Names such as
+# "broker_payload_gate" and "broker_reconciliation_proof" are intentionally not
+# included: a filename containing "broker" is not evidence of broker capability.
+_DIRECT_BROKER_MODULE_PREFIXES = (
+    _KITE_CLIENT_MODULE,
+    "core.execution_engine",
+    "core.execution_router",
+    "kiteconnect",
+    "upstox_client",
+)
+
+_REPO_FORENSICS_FORBIDDEN_IMPORT_PREFIXES = (
+    _KITE_CLIENT_MODULE,
+    "core.market_data",
+    "core.orchestrator",
+    "strategies.trade_builder",
+)
+
 
 @dataclass(frozen=True)
 class SafetyFinding:
@@ -71,11 +89,12 @@ def audit_safety_boundaries(repo_root: str | Path, config: ForensicsConfig) -> S
 
 
 def _audit_python_file(path: str, source: str) -> list[SafetyFinding]:
-    lowered = source.lower()
-    findings: list[SafetyFinding] = []
-    if _is_repo_forensics_path(path):
-        findings.extend(_repo_forensics_safety_findings(path, lowered))
-        return findings
+    # Product safety findings must describe production code. Test-code realism,
+    # broker mocking, and firewall strength are audited by dedicated test-reality
+    # and broker-firewall gates. Treating a test import as a production broker
+    # leak inflates critical counts without proving a runtime path.
+    if _is_test_path(path):
+        return []
 
     try:
         tree = ast.parse(source)
@@ -83,6 +102,10 @@ def _audit_python_file(path: str, source: str) -> list[SafetyFinding]:
         return [SafetyFinding(path, "UNKNOWN", "python_parse", "syntax_error_unparsed")]
 
     imported_modules = _imported_modules(tree)
+    if _is_repo_forensics_path(path):
+        return _repo_forensics_safety_findings(path, imported_modules)
+
+    findings: list[SafetyFinding] = []
     called_names = _called_names(tree)
     assigned_fields = _assigned_literal_fields(tree)
 
@@ -111,17 +134,25 @@ def _audit_shell_file(path: str, source: str) -> list[SafetyFinding]:
     return findings
 
 
-def _repo_forensics_safety_findings(path: str, lowered: str) -> list[SafetyFinding]:
+def _repo_forensics_safety_findings(
+    path: str,
+    modules: tuple[tuple[str, int | None], ...],
+) -> list[SafetyFinding]:
     findings: list[SafetyFinding] = []
-    forbidden_runtime_modules = [
-        _KITE_CLIENT_MODULE,
-        "core.market_data",
-        "core.orchestrator",
-        "strategies.trade_builder",
-    ]
-    for module in forbidden_runtime_modules:
-        if module in lowered:
-            findings.append(SafetyFinding(path, "CRITICAL", "forensics_runtime_import", f"forensics_references_runtime_module:{module}"))
+    for module, line in modules:
+        lowered = module.lower()
+        for forbidden in _REPO_FORENSICS_FORBIDDEN_IMPORT_PREFIXES:
+            if lowered == forbidden or lowered.startswith(f"{forbidden}."):
+                findings.append(
+                    SafetyFinding(
+                        path,
+                        "CRITICAL",
+                        "forensics_runtime_import",
+                        f"forensics_imports_runtime_module:{lowered}",
+                        line,
+                    )
+                )
+                break
     return findings
 
 
@@ -209,12 +240,22 @@ def _assigned_literal_fields(tree: ast.AST) -> tuple[tuple[str, object, int | No
 
 def _is_broker_adjacent_import(module: str) -> bool:
     lowered = module.lower()
-    return any(marker in lowered for marker in ("kite", "broker", "execution_engine", _KITE_CLIENT_MODULE))
+    return any(
+        lowered == prefix or lowered.startswith(f"{prefix}.")
+        for prefix in _DIRECT_BROKER_MODULE_PREFIXES
+    )
 
 
 def _is_execution_adjacent_import(module: str) -> bool:
     lowered = module.lower()
-    return "execution_engine" in lowered or "kite_client" in lowered or lowered == _KITE_CLIENT_MODULE
+    return any(
+        lowered == prefix or lowered.startswith(f"{prefix}.")
+        for prefix in (
+            _KITE_CLIENT_MODULE,
+            "core.execution_engine",
+            "core.execution_router",
+        )
+    )
 
 
 def _is_order_action_name(name: str) -> bool:
@@ -235,6 +276,16 @@ def _looks_read_only_path(path: str) -> bool:
 
 def _is_repo_forensics_path(path: str) -> bool:
     return path.startswith("tools/repo_forensics/") or path == "scripts/run_repo_forensics.py"
+
+
+def _is_test_path(path: str) -> bool:
+    normalized = path.replace("\\", "/")
+    return (
+        normalized.startswith("tests/")
+        or normalized.startswith("testing/tests/")
+        or "/tests/" in normalized
+        or Path(normalized).name.startswith("test_")
+    )
 
 
 def _call_name(node: ast.Call) -> str:
