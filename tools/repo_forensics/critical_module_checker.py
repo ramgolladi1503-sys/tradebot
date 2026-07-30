@@ -23,15 +23,39 @@ class CriticalModuleReport:
 
     @property
     def missing(self) -> list[CriticalModuleStatus]:
-        return [item for items in self.statuses.values() for item in items if item.status == "MISSING"]
+        return [
+            item
+            for items in self.statuses.values()
+            for item in items
+            if item.status == "MISSING"
+        ]
 
     @property
     def test_only(self) -> list[CriticalModuleStatus]:
-        return [item for items in self.statuses.values() for item in items if item.status == "TEST_ONLY"]
+        return [
+            item
+            for items in self.statuses.values()
+            for item in items
+            if item.status == "TEST_ONLY"
+        ]
 
     @property
     def unreferenced(self) -> list[CriticalModuleStatus]:
-        return [item for items in self.statuses.values() for item in items if item.status == "UNREFERENCED"]
+        return [
+            item
+            for items in self.statuses.values()
+            for item in items
+            if item.status == "UNREFERENCED"
+        ]
+
+    @property
+    def entrypoints(self) -> list[CriticalModuleStatus]:
+        return [
+            item
+            for items in self.statuses.values()
+            for item in items
+            if item.status == "ENTRYPOINT"
+        ]
 
 
 def check_critical_modules(
@@ -41,13 +65,25 @@ def check_critical_modules(
 ) -> CriticalModuleReport:
     root = Path(repo_root).resolve()
     reference_graph = graph or build_reference_graph(root, config)
+    configured_entrypoints = {
+        path.strip().lstrip("./")
+        for path in (*config.required_entrypoints, *config.optional_entrypoints)
+    }
     grouped: dict[str, list[CriticalModuleStatus]] = {}
 
     for group, paths in config.critical_modules.items():
         grouped[group] = []
         for module_path in paths:
             normalized = module_path.strip().lstrip("./")
-            grouped[group].append(_status_for_module(root, group, normalized, reference_graph))
+            grouped[group].append(
+                _status_for_module(
+                    root,
+                    group,
+                    normalized,
+                    reference_graph,
+                    is_entrypoint=normalized in configured_entrypoints,
+                )
+            )
     return CriticalModuleReport(statuses=grouped)
 
 
@@ -56,6 +92,8 @@ def _status_for_module(
     group: str,
     module_path: str,
     graph: FileReferenceGraph,
+    *,
+    is_entrypoint: bool = False,
 ) -> CriticalModuleStatus:
     if not (repo_root / module_path).exists():
         return CriticalModuleStatus(
@@ -68,6 +106,15 @@ def _status_for_module(
     production_callers = sorted(graph.production_callers(module_path))
     test_callers = sorted(graph.test_callers(module_path))
 
+    if is_entrypoint:
+        return CriticalModuleStatus(
+            group=group,
+            path=module_path,
+            status="ENTRYPOINT",
+            production_callers=production_callers,
+            test_callers=test_callers,
+            evidence="configured_entrypoint_is_runtime_root",
+        )
     if production_callers:
         return CriticalModuleStatus(
             group=group,
