@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "source": "google_drive",
+  "synthetic": false,
+  "mock": false,
+  "fallback": false,
+  "files": [
+    {
+      "fixture_name": "ticks_1784023500.parquet",
+      "original_name": "ticks_1784023500.parquet",
+      "size_bytes": 26292,
+      "sha256": "09926b5fff860e8fb0173f51b420a34c0e9e58b3bf3cedfee49e0c534778c011",
+      "google_drive_file_id": "1qtC8ZVaT4G1_Mpg14wFnkkhcWoYRz_hp",
+      "session_date": "20260714",
+      "modified_time": "2026-07-14T10:05:00.643Z",
+      "source_folder": "upstox_market_data/20260714"
+    },
+    {
+      "fixture_name": "ticks_1784526682.parquet",
+      "original_name": "ticks_1784526682.parquet",
+      "size_bytes": 113115,
+      "sha256": "b9261d057ba04038831cd951f7f0e34d5d7a5d81fcd839515663840de85d658d",
+      "google_drive_file_id": "1ijX57H-n1NAiMNXn6xlNEjA2Jnsk1xFw",
+      "session_date": "20260720",
+      "modified_time": "2026-07-20T05:51:22.605Z",
+      "source_folder": "upstox_market_data/20260720"
+    }
+  ]
+}
