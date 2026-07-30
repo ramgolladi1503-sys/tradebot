@@ -66,19 +66,18 @@ source: docs/agent_reviews/regime_robustness_v1.md
   - both deterministic certification runners
 - acceptance_proof:
   - unbounded OI cannot dominate regime logits
-  - absent or invalid required evidence fails closed as UNKNOWN
+  - absent or invalid evidence fails closed as UNKNOWN
   - rounded probability vectors are accepted only within the existing 1e-5 contract
   - unexpected non-zero regime labels fail closed
-  - raw unscaled VWAP slope and acceleration do not create cross-symbol bias
+  - raw unscaled slope and acceleration do not create cross-symbol bias
   - low entropy with valid evidence is not rejected
   - clear structural scenarios separate while mixed evidence remains uncertain
   - model calibration and provenance are explicit
   - trained-model schemas fail closed when incomplete
-  - actual movement strategy IDs resolve to canonical policy families
-  - legacy session aliases resolve to canonical session buckets
+  - actual movement IDs resolve to canonical policy families
   - unknown strategies cannot inherit executable scorer buckets
-  - market snapshot regime truth reaches StrategyContext, candidate evidence, and scoring policy
-  - existing snapshot metadata, evidence, and lineage remain preserved
+  - snapshot regime truth reaches StrategyContext, candidate evidence, and scoring policy
+  - existing metadata, evidence, and lineage remain preserved
   - feed and execution files remain untouched
 
 ## Principal Verdict
@@ -87,110 +86,64 @@ source: docs/agent_reviews/regime_robustness_v1.md
 
 ## Root Cause
 
-The previous regime path had four independent failure classes:
-
-1. bounded indicators were mixed with unbounded raw OI;
-2. absent evidence became numerical zero and could reward RANGE;
-3. positive score accumulation produced near-uniform distributions and persistent high entropy even for clear structural inputs;
-4. actual strategy IDs and runtime regime evidence were not consistently connected to the strategy-policy scorer, so real candidates could enter unknown or incomplete policy paths.
-
-Raw VWAP slope and acceleration were also cross-symbol point values, not comparable dimensionless features.
+The previous path mixed bounded indicators with unbounded OI, treated absent evidence as meaningful zero, produced near-uniform distributions for clear inputs, used cross-symbol point features, and failed to connect actual strategy IDs and runtime regime truth consistently to scoring policy.
 
 ## Implementation
 
-1. Added finite-number validation, OI bounding, IV normalization, full-precision softmax, vector validation, feature-quality states, and completed-bar stabilization.
-2. Replaced additive score pile-up with bounded structural supports for TREND, RANGE, RANGE_VOLATILE, EVENT, and PANIC.
-3. Clear evidence separates; mixed evidence deliberately stays high entropy and fail-closed.
-4. Raw slope and acceleration are ignored until ATR-normalized forms are supplied.
-5. Missing or invalid core evidence returns uniform probabilities, UNKNOWN, and explicit status.
-6. Model source, hash, load/inference errors, feature schema, probability semantics, and calibration status are exposed.
-7. Entropy interpretation is centralized; low entropy is not a defect by itself.
-8. Legacy raw-only TREND/RANGE overrides remain compatible, while probability-vector decisions cannot use those circular overrides.
-9. Real movement strategy IDs and legacy session names are mapped to canonical policy families and session buckets.
-10. Policy requirements for session, entropy, stable-regime status, trend confirmation, liquidity, event handling, no-trade, and unknown strategies are enforced.
-11. Unknown strategies resolve to ADVISORY_ONLY or BLOCKED and cannot inherit executable scorer state.
-12. Existing snapshot regime truth is preserved in StrategyContext metadata, merged into candidate evidence, and consumed by scoring policy without new feed reads or network calls.
-13. Existing snapshot metadata, evidence, lineage, and strict boolean semantics are preserved.
+1. Added bounded, validated feature and probability contracts.
+2. Replaced additive score pile-up with structural supports for TREND, RANGE, RANGE_VOLATILE, EVENT, and PANIC.
+3. Missing or invalid evidence returns uniform probabilities, UNKNOWN, and explicit fail-closed status.
+4. Raw point slope and acceleration are ignored until ATR-normalized inputs exist.
+5. Model source, hash, errors, feature schema, probability semantics, and calibration status are exposed.
+6. Entropy interpretation is centralized; low entropy is not a defect by itself.
+7. Legacy raw-only overrides remain compatible, while probability-vector decisions cannot use circular label overrides.
+8. Real movement IDs and legacy session names map to canonical policy families and buckets.
+9. Session, entropy, stability, trend-confirmation, liquidity, event, no-trade, and unknown-strategy requirements are enforced.
+10. Unknown strategies are advisory or blocked and cannot inherit executable scorer state.
+11. Existing snapshot truth flows through StrategyContext metadata and candidate evidence into scoring policy without new feed reads.
+12. Existing metadata, evidence, lineage, and strict boolean semantics are preserved.
 
 ## Scope Guard
 
-In scope:
+In scope: regime truth, model provenance, strategy-policy routing, read-only evidence propagation, deterministic stabilization, tests, and certification.
 
-- regime probability and entropy truth;
-- model provenance and feature-quality contracts;
-- strategy-policy aliases and routing;
-- read-only snapshot-to-candidate-to-scorer evidence propagation;
-- deterministic stabilization and certification.
+Out of scope: feed recovery, subscriptions, tick/depth persistence, broker/order/execution/risk logic, strategy formulas, profitability, statistical calibration, and live stabilizer authority.
 
-Out of scope:
+## High-Risk Path Review
 
-- WebSocket/feed recovery and subscription state;
-- tick/depth persistence;
-- broker, order, execution, and risk logic;
-- strategy formula changes and profitability claims;
-- live authority for the completed-bar stabilizer;
-- statistical calibration and predictive-edge certification.
+High-risk changed paths:
+
+- `strategies/movement/_utils.py`: candidate evidence construction is changed only to merge existing read-only regime-policy context when present. Strategy-specific evidence retains precedence through `setdefault`. Strategy formulas, signals, entries, stops, targets, and broker behavior are unchanged.
+- `core/opportunity_scoring.py`: policy context extraction and downgrade behavior change. This can downgrade candidates to advisory or suppressed; it cannot upgrade a blocked candidate or bypass feed, risk, promotion, or hard-downgrade truth.
+- `core/runtime_snapshot_producer.py`: existing regime fields are copied into StrategyContext metadata. No WebSocket, subscription, broker, or network call is added. Existing metadata, evidence, and lineage are preserved.
+- `core/strategy_regime_policy.py`: canonical routing authority changes. Unknown, invalid, incompatible-session, and unsupported states are made more conservative, not less.
+
+Primary risks and controls:
+
+1. **Candidate starvation risk:** clear structural scenarios are tested separately from mixed uncertainty; market-hours shadow proof remains required.
+2. **False promotion risk:** unknown strategies are explicitly advisory or blocked, and scorer integration proves they cannot inherit executable state.
+3. **Feed regression risk:** no feed or subscription file is changed; runtime propagation reads only the already-built snapshot.
+4. **Compatibility risk:** legacy raw-only entropy overrides, session aliases, `REGIMES`, `_softmax`, StrategyContext metadata/evidence/lineage, and six-decimal vectors are preserved.
+5. **Rollback:** revert this branch/PR; PR #750 and `main` are untouched. The draft remains unmerged.
+
+Verdict: high-risk paths are bounded and fail-closed, but market-hours acceptance is still mandatory.
 
 ## Grill Me Review
 
-**Does this merely loosen entropy thresholds?**
-
-No. Session thresholds remain. The repair changes evidence validity, probability construction, and routing contracts.
-
-**Could the heuristic overstate confidence?**
-
-Its source is explicitly `HEURISTIC_STRUCTURAL_V2_UNCALIBRATED`; output semantics are `deterministic_structural_pseudo_probability`. No statistical calibration claim is made.
-
-**Could this create more trades?**
-
-It can change regime classifications and policy routing on this branch. It cannot bypass downstream feed, risk, broker, or execution gates. Missing, invalid, unknown, and incompatible states are explicitly downgraded or blocked.
-
-**Could unknown strategies become executable?**
-
-No. Policy returns ADVISORY_ONLY for low/normal unknown strategies and BLOCKED for high/extreme unknown strategies; scorer integration tests prove executable upstream buckets are downgraded.
-
-**Is the stabilizer live-authoritative?**
-
-No. It is implemented and tested but not wired as live routing authority.
+- Thresholds were not simply widened; evidence construction and routing contracts changed.
+- The heuristic is explicitly `HEURISTIC_STRUCTURAL_V2_UNCALIBRATED`; no probability-calibration claim is made.
+- Classification may change, but downstream feed, risk, broker, execution, and promotion gates remain authoritative.
+- The stabilizer is implemented but not live-authoritative.
 
 ## Hermes Review
 
-Contract findings:
-
-- existing `RegimeProbModel`, `REGIMES`, and `_softmax` entry points remain;
-- uncertainty ownership is centralized;
-- actual movement IDs resolve through a versioned canonical policy;
-- existing StrategyContext metadata/evidence/lineage are preserved;
-- no feed module imports the new contract;
-- no broker or order dependency is introduced;
-- incomplete model schemas and invalid probability vectors fail closed;
-- read-only regime evidence reaches the scorer without additional feed calls.
-
-Verdict: repository architecture remains isolated from feed and execution paths; live integration proof is still required.
+Existing model entry points remain. Uncertainty ownership is centralized. Actual strategy IDs resolve through a versioned policy. StrategyContext contracts are preserved. No feed module imports the new contract and no broker/order dependency is introduced.
 
 ## GSD Review
 
-Completed:
+Completed: probability and entropy repair, canonical routing, scorer downgrade, snapshot-to-candidate propagation, 45 focused tests, 26 certification checks, draft PR, and feed-isolation evidence.
 
-- bounded, discriminative regime contract;
-- probability-model and entropy-gate repair;
-- model provenance and schema enforcement;
-- canonical strategy/session routing policy;
-- scorer downgrade for unknown and invalid regime truth;
-- runtime snapshot to StrategyContext to candidate to scorer evidence propagation;
-- 45 focused deterministic tests across four files;
-- 26 independent certification checks across two runners;
-- draft PR and evidence documentation;
-- feed-path isolation verification;
-- legacy compatibility repair after an earlier broad-CI failure.
-
-Remaining:
-
-- final broad CI on the current head;
-- market-hours comparison;
-- transition-rate timing repair in `core/market_data.py`;
-- ATR-normalized slope and acceleration wiring;
-- separate stabilizer-authority decision.
+Remaining: final CI, market-hours comparison, current-cycle transition-rate timing repair, ATR-normalized slope/acceleration wiring, and separate stabilizer promotion.
 
 ## QA / Safety Review
 
@@ -208,22 +161,9 @@ Remaining:
 - live_market_certified: false
 - predictive_edge_certified: false
 
-Fail-closed invariants:
-
-- absent required feature -> INSUFFICIENT_DATA and UNKNOWN;
-- invalid required feature -> INVALID_INPUT and UNKNOWN;
-- incomplete trained-model schema -> fail closed;
-- invalid or unexpected probability vector -> uncertain and blocked;
-- low entropy alone -> not blocked;
-- mixed structural evidence -> high entropy;
-- unknown strategy -> advisory or blocked, never executable;
-- invalid propagated regime truth -> scorer advisory downgrade;
-- duplicate completed bar -> no transition-count advancement;
-- probability-vector decision -> no legacy label-based override.
+Fail-closed invariants include missing/invalid evidence, incomplete model schemas, invalid vectors, mixed structural uncertainty, unknown strategy downgrade, invalid propagated regime downgrade, duplicate-bar suppression, and no legacy override for real probability vectors.
 
 ## Acceptance Proof
-
-Focused deterministic suite:
 
 ```bash
 PYTHONPATH=. pytest -q \
@@ -231,47 +171,21 @@ PYTHONPATH=. pytest -q \
   tests/test_strategy_regime_policy_v2.py \
   tests/test_strategy_regime_policy_scoring_v2.py \
   tests/test_regime_policy_context_propagation_v1.py
-```
 
-Certification runners:
-
-```bash
 PYTHONPATH=. python scripts/certify_regime_robustness_v1.py
 PYTHONPATH=. python scripts/certify_strategy_regime_policy_v2.py
 ```
 
-The focused suite contains 45 tests and the runners contain 26 checks. Final pass results must come from CI on the current branch head.
-
-Required broad proof:
-
-- all repository CI and security/governance checks pass;
-- existing entropy/regime/scoring/ranking/candidate tests pass;
-- no forbidden path appears in the diff;
-- market-hours comparison shows no feed or orchestrator regression.
+The focused suite contains 45 tests and the runners contain 26 checks. Final pass results must come from CI on the current head. Broad repository, security, governance, and market-hours proof remain required.
 
 ## Runtime Proof Required After Merge
 
-This branch should not be merged before runtime proof. A market-hours run must cover NIFTY, BANKNIFTY, and SENSEX and verify:
-
-1. model provenance, probability semantics, feature quality, entropy threshold, and top-two margin are visible;
-2. missing evidence never becomes confident RANGE;
-3. no generic entropy-too-low rejection exists;
-4. clear structural conditions do not remain permanently high entropy;
-5. strategy IDs resolve to intended policy families;
-6. invalid and unknown policy states remain non-executable;
-7. feed callback latency, registry truth, and orchestrator cadence are unchanged;
-8. candidate starvation changes only when evidence quality genuinely improves;
-9. the stabilizer remains non-authoritative unless separately approved.
+Do not merge before runtime proof. A market-hours run must cover NIFTY, BANKNIFTY, and SENSEX; expose provenance, feature quality, entropy, margin, and routing; show no feed/orchestrator regression; keep invalid and unknown states non-executable; and leave the stabilizer non-authoritative.
 
 ## What This PR Does Not Prove
 
-- It does not prove predictive edge.
-- It does not prove statistical calibration.
-- It does not prove market-hours operational acceptance.
-- It does not certify PR #750 or any feed repair.
-- It does not authorize live orders.
-- It does not authorize merge.
+It does not prove predictive edge, statistical calibration, profitability, market-hours acceptance, PR #750 correctness, or authorization to merge or place live orders.
 
 ## Human Approval
 
-The user explicitly approved implementation work and requested certified evidence. That approval covers this isolated branch and draft PR. It does not authorize merging, enabling live orders, or promoting the completed-bar stabilizer.
+The user approved isolated implementation and certification work. That does not authorize merge, live orders, or stabilizer promotion.
