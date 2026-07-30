@@ -32,6 +32,7 @@ from core.market_event_graph_contract import (
     thresholds_match_frozen,
 )
 from core.market_event_graph_live_adapter import attach_market_event_graph_history
+from core.market_event_graph_live_source import validate_live_captured_metadata_row
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
 from strategies.movement.market_event_graph_reversal import (
@@ -151,7 +152,7 @@ def run_campaign(
     breadth_rows: list[dict[str, Any]] = []
 
     for raw in snapshots:
-        metadata = _metadata_from_snapshot(raw, runtime)
+        metadata = _metadata_from_snapshot(raw, runtime, live_schema_required=cfg.observation_mode == "LIVE")
         interval = classify_interval(metadata, runtime, cfg)
         interval_rows.append(interval)
         _append_jsonl(output_dir / "interval_availability.jsonl", interval)
@@ -380,8 +381,20 @@ def _interval_rejection_code(
     return ACCEPTED
 
 
-def _metadata_from_snapshot(raw: Mapping[str, Any], runtime: RuntimeState) -> dict[str, Any]:
+def _metadata_from_snapshot(
+    raw: Mapping[str, Any],
+    runtime: RuntimeState,
+    *,
+    live_schema_required: bool = False,
+) -> dict[str, Any]:
     metadata = dict(raw.get("metadata") or raw)
+    if live_schema_required:
+        validation = validate_live_captured_metadata_row(metadata)
+        if not validation.accepted:
+            raise ValueError(
+                "live captured metadata schema validation failed: "
+                f"{validation.reason}:{','.join(validation.details)}"
+            )
     metadata = _normalize_interval_metadata(metadata)
     metadata.setdefault("market_event_graph_runtime_state", runtime.producer_state)
     metadata.setdefault("index_bar_available", metadata.get("index_ret1") is not None)

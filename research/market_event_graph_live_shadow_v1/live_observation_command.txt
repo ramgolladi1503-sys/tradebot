@@ -1,1 +1,1 @@
-python scripts/run_market_event_graph_live_shadow_v1.py --input PATH_TO_LIVE_CAPTURED_METADATA_JSONL --output research/market_event_graph_live_shadow_v1 --mode LIVE
+python scripts/run_market_event_graph_live_shadow_v1.py --input runtime/market_event_graph_live_shadow/captured_metadata.jsonl --output research/market_event_graph_live_shadow_v1/live_NEXT_FULL_SESSION_YYYYMMDD --mode LIVE --session-date YYYY-MM-DD --symbol NIFTY
