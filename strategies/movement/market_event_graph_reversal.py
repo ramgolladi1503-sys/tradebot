@@ -18,6 +18,7 @@ from core.market_event_graph_contract import (
     FROZEN_DISCOVERY_SPEC_SHA256,
 )
 from core.market_event_graph_breadth_producer import attach_completed_constituent_breadth_snapshots
+from core.market_event_graph_breadth_producer import mark_market_event_graph_emitted
 from core.market_event_graph_live_adapter import build_market_event_graph_history
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
@@ -50,9 +51,11 @@ def generate_market_event_graph_reversal_candidates(
         return ()
     if not _entry_delay_satisfied(history[-1], ctx.ts_epoch):
         return ()
+    state = _runtime_state(ctx.metadata, history[-1])
+    if state is None:
+        return ()
     triplet_id = str(history[-1].get("market_event_graph_triplet_id") or "").strip()
-    emitted = ctx.metadata.get("market_event_graph_emitted_triplet_ids") if isinstance(ctx.metadata, dict) else None
-    if triplet_id and isinstance(emitted, (list, tuple, set)) and triplet_id in {str(item) for item in emitted}:
+    if not triplet_id:
         return ()
 
     side = side_evidence(ctx, "BUY_CALL")
@@ -77,6 +80,7 @@ def generate_market_event_graph_reversal_candidates(
         "frozen_spec_sha256": FROZEN_DISCOVERY_SPEC_SHA256,
         "delayed_entry_bar_ts_epoch": history[-1].get("market_event_graph_entry_bar_ts_epoch"),
         "triplet_id": triplet_id,
+        "idempotency_key": triplet_id,
         "allowed_for_live_execution": False,
         "is_order_action": False,
         "broker_api_called": False,
@@ -122,6 +126,12 @@ def generate_market_event_graph_reversal_candidates(
         params_hash=None,
         promotion_state="ADVISORY_ONLY",
     )
+    mark_market_event_graph_emitted(
+        state,
+        session_date=str(history[-1]["session_date"]),
+        entry_bar_ts_epoch=float(history[-1]["market_event_graph_entry_bar_ts_epoch"]),
+        triplet_id=triplet_id,
+    )
     return (candidate,)
 
 
@@ -153,6 +163,33 @@ def _entry_delay_satisfied(row: dict[str, Any], context_ts: float | None) -> boo
     except (KeyError, TypeError, ValueError):
         return False
     return signal_ts < entry_ts <= now_ts
+
+
+def _runtime_state(metadata: dict[str, Any], row: dict[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(metadata, dict):
+        return None
+    state = metadata.get("market_event_graph_runtime_state")
+    if not isinstance(state, dict):
+        return None
+    if int(state.get("schema_version", -1)) != 1:
+        return None
+    if str(state.get("strategy_id") or "") != STRATEGY_ID:
+        return None
+    if str(state.get("frozen_spec_sha256") or "") != FROZEN_DISCOVERY_SPEC_SHA256:
+        return None
+    session_date = str(row.get("session_date") or "")
+    if not session_date or str(state.get("session_date") or "") != session_date:
+        return None
+    if str(state.get("last_emitted_triplet_id") or "") == str(row.get("market_event_graph_triplet_id") or ""):
+        return None
+    watermark = state.get("last_processed_entry_bar_ts_epoch")
+    if watermark is not None:
+        try:
+            if float(row["market_event_graph_entry_bar_ts_epoch"]) <= float(watermark):
+                return None
+        except (KeyError, TypeError, ValueError):
+            return None
+    return state
 
 
 __all__ = [
