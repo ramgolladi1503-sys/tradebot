@@ -3,29 +3,47 @@
   "claims": [
     {
       "claim_id": "CLM-764-001",
-      "statement": "The GitHub-first loop framework focused tests and committed example-task validation pass at code checkpoint 7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225.",
+      "statement": "The GitHub-first loop framework focused tests and both committed loop-task validations pass at code checkpoint cf9276c75e1f53617723c8d598c428c04652adca.",
       "status": "PROVEN",
       "proof_ids": [
-        "CI-LOOP-GATE-7BF82DD6"
+        "CI-LOOP-GATE-CF9276C7"
       ],
       "owner": "chatgpt",
       "requires_live_evidence": false
     },
     {
       "claim_id": "CLM-764-002",
-      "statement": "The repository Agent Review Evidence Gate accepts the scoped safety and review contract for PR #764.",
+      "statement": "The repository review, code-excellence, forensics, registry, CodeQL, portfolio, and independent tests gates accept the scoped implementation at code checkpoint cf9276c75e1f53617723c8d598c428c04652adca.",
       "status": "PROVEN",
       "proof_ids": [
-        "CI-AGENT-REVIEW-7BF82DD6"
+        "CI-AGENT-REVIEW-CF9276C7",
+        "CI-CODE-EXCELLENCE-CF9276C7",
+        "CI-FORENSICS-CF9276C7",
+        "CI-REGISTRY-CF9276C7",
+        "CI-CODEQL-CF9276C7",
+        "CI-PORTFOLIO-CF9276C7",
+        "CI-TESTS-CF9276C7"
       ],
       "owner": "chatgpt",
       "requires_live_evidence": false
     },
     {
       "claim_id": "CLM-764-003",
-      "statement": "Every final-head PR workflow passes and the final diff remains inside the frozen infrastructure-only scope.",
-      "status": "UNPROVEN",
-      "proof_ids": [],
+      "statement": "The final PR diff remains inside the frozen infrastructure-only scope and does not modify TradeBot runtime, feed, broker, risk, execution, strategy, credential, PR #748, or PR #750 runtime paths.",
+      "status": "PROVEN",
+      "proof_ids": [
+        "PR-DIFF-SCOPE-764-CF9276C7"
+      ],
+      "owner": "chatgpt",
+      "requires_live_evidence": false
+    },
+    {
+      "claim_id": "CLM-764-004",
+      "statement": "Every final-head PR workflow passes.",
+      "status": "REJECTED",
+      "proof_ids": [
+        "CI-TIMEOUT-CF9276C7"
+      ],
       "owner": "chatgpt",
       "requires_live_evidence": false
     }
