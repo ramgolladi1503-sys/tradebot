@@ -161,7 +161,9 @@ def _human_gate_ids(contract: Mapping[str, Any]) -> set[str]:
 
 
 def _pattern_match(path: str, pattern: str) -> bool:
-    normalized = pattern.strip().lstrip("./")
+    normalized = pattern.strip()
+    if normalized.startswith("./"):
+        normalized = normalized[2:]
     if not normalized:
         return False
     if normalized.endswith("/**"):
