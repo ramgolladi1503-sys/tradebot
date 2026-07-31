@@ -1,0 +1,141 @@
+name: QA Apply Whole TradeBot Repairs V2
+
+on:
+  push:
+    branches:
+      - qa/whole-tradebot-certification-v1
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qa-apply-whole-tradebot-repairs-v2
+  cancel-in-progress: true
+
+jobs:
+  apply_repairs:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      TRADING_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v4
+        with:
+          ref: qa/whole-tradebot-certification-v1
+          fetch-depth: 0
+
+      - name: Repair harness ambiguity only in workspace
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply_whole_tradebot_qa_repairs_v1.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"replace_once path={path} count={count} old={old[:100]!r}")
+    target.write_text(text.replace(old, new, 1), encoding="utf-8")
+'''
+          new = '''    count = text.count(old)
+    expected = 2 if old == "[item.to_dict() for item in original]" else 1
+    if count != expected:
+        raise RuntimeError(f"replace_once path={path} count={count} expected={expected} old={old[:100]!r}")
+    target.write_text(text.replace(old, new, 1), encoding="utf-8")
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'harness patch count={text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Apply exact product repairs
+        run: python scripts/apply_whole_tradebot_qa_repairs_v1.py
+
+      - name: Harden reject-shadow fallback handling
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          module = Path('core/reject_shadow.py')
+          text = module.read_text(encoding='utf-8')
+          old = '        except sqlite3.OperationalError:\n            continue\n'
+          new = '        except (OSError, sqlite3.Error):\n            continue\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'reject-shadow exception patch count={text.count(old)}')
+          module.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies and scanner
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit
+
+      - name: Run focused behavior and negative controls
+        run: >-
+          PYTHONPATH=. pytest -q -o addopts=''
+          tests/qa/test_whole_tradebot_cross_module_truth.py
+          tests/qa/test_whole_tradebot_security_boundaries.py
+          tests/test_news_ingestor.py
+          tests/test_db_guard.py
+          tests/test_evidence_replay_report.py
+          --durations=30
+
+      - name: Scan repaired security boundaries
+        run: >-
+          bandit -r
+          core/opportunity_engine.py
+          core/evidence_replay_report.py
+          core/news_ingestor.py
+          core/db_guard.py
+          core/ai_certification/gemini_client.py
+          core/intelligence/fetchers/http_fetcher.py
+          core/reject_shadow.py
+          core/analytics/schema.py
+          core/candidate_journal.py
+          core/expectancy/edge_ranking.py
+          core/expectancy/setup_fingerprint.py
+          core/intelligence/extractors/hardened_base.py
+          core/trade_identity.py
+          dashboard/ui/components.py
+          dashboard/ui/table_model.py
+          -ll
+
+      - name: Commit only validated product changes
+        run: |
+          git checkout -- scripts/apply_whole_tradebot_qa_repairs_v1.py
+          git diff --check
+          git config user.name "tradebot-qa-bot"
+          git config user.email "tradebot-qa-bot@users.noreply.github.com"
+          git add \
+            core/opportunity_engine.py \
+            core/evidence_replay_report.py \
+            core/news_ingestor.py \
+            core/db_guard.py \
+            core/ai_certification/gemini_client.py \
+            core/intelligence/fetchers/http_fetcher.py \
+            core/reject_shadow.py \
+            core/analytics/schema.py \
+            core/candidate_journal.py \
+            core/expectancy/edge_ranking.py \
+            core/expectancy/setup_fingerprint.py \
+            core/intelligence/extractors/hardened_base.py \
+            core/trade_identity.py \
+            dashboard/ui/components.py \
+            dashboard/ui/table_model.py \
+            scripts/build_secure_kiteconnect_wheel.py \
+            requirements.txt \
+            tests/qa/test_whole_tradebot_cross_module_truth.py \
+            tests/qa/test_whole_tradebot_security_boundaries.py
+          test -n "$(git diff --cached --name-only)"
+          git commit -m "fix: harden whole-tradebot truth and security boundaries"
+          git push origin HEAD:qa/whole-tradebot-certification-v1
