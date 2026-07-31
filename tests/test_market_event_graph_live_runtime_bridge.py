@@ -439,6 +439,22 @@ def test_reconnect_generation_stale_bar_is_rejected(monkeypatch, tmp_path):
     assert result.exported is False
 
 
+def test_live_provenance_with_kite_contract_is_accepted(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    contract_payload = _contract()
+    _install_bars(monkeypatch, contract_payload=contract_payload)
+    bridge = LiveSourceRuntimeBridge(
+        exporter=LiveCapturedMetadataExporter(tmp_path / "out.jsonl"),
+        universe_contract=contract_payload,
+        subscription_evidence_provider=_evidence,
+    )
+
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+
+    assert result.exported is True
+    assert result.reason == "OK"
+
+
 def test_index_constituent_source_interval_mismatch_is_rejected(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     contract_payload = _contract()
