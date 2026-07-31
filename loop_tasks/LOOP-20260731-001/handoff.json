@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "task_id": "LOOP-20260731-001",
+  "worker": "chatgpt",
+  "code_sha": "7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225",
+  "branch": "infra/github-first-loop-engineering-v1",
+  "pr_number": 764,
+  "changed_paths": [
+    ".github/workflows/loop-handoff-gate.yml",
+    ".loop/README.md",
+    ".loop/policies/evidence_policy.json",
+    ".loop/policies/transitions.json",
+    ".loop/schemas/checkpoint.schema.json",
+    ".loop/schemas/claim.schema.json",
+    ".loop/schemas/task_contract.schema.json",
+    ".loop/templates/checkpoint.example.json",
+    ".loop/templates/task_contract.example.json",
+    ".loop/templates/worker_prompt.md",
+    "docs/agent_reviews/pr764_github_first_loop_engineering_v1.md",
+    "docs/engineering/github_first_loop_engineering_v1.md",
+    "loop_tasks/README.md",
+    "loop_tasks/examples/LOOP-EXAMPLE/CONTINUE.md",
+    "loop_tasks/examples/LOOP-EXAMPLE/claims.json",
+    "loop_tasks/examples/LOOP-EXAMPLE/contract.json",
+    "loop_tasks/examples/LOOP-EXAMPLE/evidence/example_test_summary.txt",
+    "loop_tasks/examples/LOOP-EXAMPLE/evidence/manifest.json",
+    "loop_tasks/examples/LOOP-EXAMPLE/handoff.json",
+    "loop_tasks/examples/LOOP-EXAMPLE/state.json",
+    "scripts/loop/build_context.py",
+    "scripts/loop/checkpoint.py",
+    "scripts/loop/init_task.py",
+    "scripts/loop/loop_core.py",
+    "scripts/loop/next_action.py",
+    "scripts/loop/record_command.py",
+    "scripts/loop/validate_task.py",
+    "tests/loop/test_loop_framework.py"
+  ],
+  "files_intentionally_not_touched": [
+    "main.py",
+    "run_live.sh",
+    "config/",
+    "core/",
+    "strategies/",
+    "credentials.py",
+    "PR #748 runtime implementation",
+    "PR #750 runtime implementation"
+  ],
+  "commands": [
+    {
+      "command_id": "CI-LOOP-1",
+      "command": ["GitHub Actions", "Loop Handoff Gate"],
+      "working_directory": ".",
+      "exit_code": 0,
+      "required": true,
+      "code_sha": "7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225",
+      "github_run_id": 30615138176
+    },
+    {
+      "command_id": "CI-REVIEW-1",
+      "command": ["GitHub Actions", "Agent Review Evidence Gate"],
+      "working_directory": ".",
+      "exit_code": 0,
+      "required": true,
+      "code_sha": "7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225",
+      "github_run_id": 30615138232
+    }
+  ],
+  "test_results": [
+    {
+      "test_id": "TEST-LOOP-FOCUSED",
+      "command": "pytest -q tests/loop",
+      "required": true,
+      "exit_code": 0,
+      "passed": 21,
+      "failed": 0,
+      "github_run_id": 30615138176
+    },
+    {
+      "test_id": "TEST-EXAMPLE-VALIDATION",
+      "command": "python3 scripts/loop/validate_task.py loop_tasks/examples/LOOP-EXAMPLE",
+      "required": true,
+      "exit_code": 0,
+      "github_run_id": 30615138176
+    },
+    {
+      "test_id": "TEST-AGENT-REVIEW",
+      "command": "python scripts/validate_agent_review_evidence.py",
+      "required": true,
+      "exit_code": 0,
+      "github_run_id": 30615138232
+    }
+  ],
+  "claims_created": [
+    "CLM-764-001",
+    "CLM-764-002"
+  ],
+  "claims_retired": [],
+  "unresolved_findings": [
+    "All remaining final-head repository workflows must complete successfully.",
+    "A final changed-path and PR-diff scope review remains required before any merge recommendation."
+  ],
+  "blockers": [],
+  "next_action": "Verify every workflow on the checkpoint head and complete the final diff scope review. Keep PR #764 draft and unmerged.",
+  "next_worker": "chatgpt",
+  "local_only_evidence": [],
+  "all_continuation_critical_artifacts_in_github": true,
+  "checkpointed_at_utc": "2026-07-31T08:12:00Z"
+}
