@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "task_id": "LOOP-20260731-001",
+  "state": "TESTING",
+  "previous_state": "IMPLEMENTING",
+  "cycle": 1,
+  "code_sha": "0123456789abcdef0123456789abcdef01234567",
+  "base_sha": "89abcdef0123456789abcdef0123456789abcdef",
+  "branch": "task/example",
+  "worker": "codex",
+  "started_at_utc": "2026-07-31T00:00:00Z",
+  "checkpointed_at_utc": "2026-07-31T01:00:00Z",
+  "completed_gate_ids": [],
+  "failed_gate_ids": [],
+  "blockers": [],
+  "next_action": "Run the focused required tests and record evidence.",
+  "next_worker": "codex",
+  "human_approval_required": false
+}
