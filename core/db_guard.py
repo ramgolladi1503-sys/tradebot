@@ -45,15 +45,15 @@ def normalize_db_path(raw_path: str) -> Path:
 
 def _ensure_permissions(db_path: Path) -> None:
     parent = db_path.parent
-    parent.mkdir(parents=True, exist_ok=True)
+    parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
-        os.chmod(parent, 0o775)
+        os.chmod(parent, 0o700)
     except Exception:
         pass
     if not db_path.exists():
         db_path.open("a").close()
     try:
-        os.chmod(db_path, 0o664)
+        os.chmod(db_path, 0o600)
     except Exception:
         pass
 
