@@ -9,7 +9,9 @@
   },
   "broker_api_called": false,
   "campaign": "unified_live_validation_pr748_756_v1",
-  "composition_manifest_sha256": "31842075bdd3f98222bb26c56d034c2a44682a6fa04e80ac79c34029552ed32e",
+  "campaign_runtime_wired": false,
+  "composition_manifest_sha256": "3fdc5278e7e928977d33354b9b101bec62597aeb5ff96c804c35f61c78b4e9b5",
+  "corrected_verdict": "BLOCKED_BY_RUNTIME_WIRING",
   "forward_observation_only_prs": [
     751,
     752,
@@ -18,6 +20,7 @@
   ],
   "integrated_commit_sha": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
   "is_order_action": false,
+  "live_observers_registered_in_tradebot_runtime": false,
   "live_runtime_prs": [
     748,
     749,
@@ -39,7 +42,9 @@
     "755": "5768cee9d104752c5070a46d47e57f4c22026172",
     "756": "d51fbdcfee5330805d1b8d4893eca0898858a604"
   },
+  "presession_run_id_rejected": true,
   "read_only": true,
+  "recorder_instantiated_by_tradebot_runtime": false,
   "safety_constraints": [
     "no broker/order imports",
     "no websocket creation",
@@ -49,5 +54,8 @@
   ],
   "schema_version": 1,
   "selected_live_constituent_producer": "pr_749_constituent_source_feeds_pr_748_validator_exporter",
-  "session_date": "2026-07-31"
+  "session_date": "2026-07-31",
+  "shutdown_seal_registered_for_launcher_smoke_only": true,
+  "single_runtime_process_proven_for_smoke_only": true,
+  "single_websocket_path_proven": false
 }

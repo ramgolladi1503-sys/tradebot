@@ -1,0 +1,18 @@
+{
+  "allowed_for_live_execution": false,
+  "blockers": [
+    "CURRENT_LAUNCH_COMMAND_DOES_NOT_ACTIVATE_CAMPAIGN",
+    "TradeBot runtime does not import or call campaign recorder observers"
+  ],
+  "broker_api_called": false,
+  "campaign_runtime_wired": false,
+  "is_order_action": false,
+  "live_observers_registered": false,
+  "presession_run_id_rejected": true,
+  "read_only": true,
+  "recorder_instantiated": false,
+  "shutdown_seal_registered": true,
+  "single_runtime_process_proven": false,
+  "single_websocket_path_proven": false,
+  "state": "BLOCKED_BY_RUNTIME_WIRING"
+}

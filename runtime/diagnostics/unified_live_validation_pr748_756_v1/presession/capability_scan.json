@@ -1,41 +1,14 @@
 {
   "allowed_for_live_execution": false,
   "broker_api_called": false,
-  "capability_hits": [],
+  "command": "rg -n \"from .*broker|import .*broker|KiteConnect|kiteconnect|place_order|modify_order|cancel_order|exit_order|order_id\" <changed-files>",
   "files_scanned": [
     "core/unified_live_validation_pr748_756/campaign_contract.py",
-    "core/unified_live_validation_pr748_756/recorder.py",
-    "core/unified_live_validation_pr748_756/validators.py",
-    "core/unified_live_validation_pr748_756/seal.py",
+    "runtime/diagnostics/unified_live_validation_pr748_756_v1/presession/composition_manifest.json",
     "scripts/run_unified_live_validation_pr748_756_v1.py",
-    "scripts/audit_unified_live_validation_pr748_756_v1.py"
+    "tests/test_unified_live_validation_pr748_756_v1.py"
   ],
-  "forbidden_terms": [
-    "place_order",
-    "modify_order",
-    "cancel_order",
-    "exit_order",
-    "KiteConnect",
-    "kiteconnect",
-    "broker",
-    "order_id",
-    "run_live.sh"
-  ],
-  "hits": [
-    {
-      "file": "core/unified_live_validation_pr748_756/campaign_contract.py",
-      "term": "broker"
-    },
-    {
-      "file": "scripts/run_unified_live_validation_pr748_756_v1.py",
-      "term": "broker"
-    },
-    {
-      "file": "scripts/run_unified_live_validation_pr748_756_v1.py",
-      "term": "run_live.sh"
-    }
-  ],
-  "interpretation": "Text hits are safety declarations or the human launch command; no KiteConnect/import/order function capability was found in the campaign package.",
+  "hits": [],
   "is_order_action": false,
   "read_only": true,
   "verdict": "PASS_NO_BROKER_OR_ORDER_CAPABILITY"

@@ -1,4 +1,7 @@
 from pathlib import Path
+import json
+import subprocess
+import sys
 
 import pytest
 
@@ -9,7 +12,12 @@ from core.unified_live_validation_pr748_756.campaign_contract import (
     build_composition_manifest,
     campaign_enabled,
     enrich_row,
+    reject_presession_live_run_id,
     require_campaign_enabled,
+)
+from core.unified_live_validation_pr748_756.launcher import (
+    build_child_environment,
+    launch_runtime_child,
 )
 from core.unified_live_validation_pr748_756.recorder import AppendOnlyRecorder
 from core.unified_live_validation_pr748_756.seal import seal_evidence_root
@@ -59,7 +67,7 @@ def test_enrich_row_overwrites_unsafe_inputs_fail_closed(tmp_path):
         pr_number=748,
     )
 
-    assert row["run_id"] == "unified-pr748-756-20260731-ffffffffffff-test"
+    assert row["run_id"] == "unified-pr748-756-20260731-ffffffffffff-presession-test"
     assert row["read_only"] is True
     assert row["is_order_action"] is False
     assert row["broker_api_called"] is False
@@ -105,3 +113,96 @@ def test_seal_writes_manifest_hash_and_prevents_reseal(tmp_path):
     with pytest.raises(RuntimeError):
         seal_evidence_root(root)
 
+
+def test_presession_run_id_cannot_launch_live(tmp_path):
+    identity = build_campaign_identity(
+        evidence_root=tmp_path,
+        campaign_commit_sha="abc",
+        composition_manifest_sha="2" * 64,
+        nonce="blocked",
+    )
+
+    with pytest.raises(ValueError):
+        reject_presession_live_run_id(identity.run_id)
+
+
+def test_enabled_live_identity_sets_exact_child_environment(tmp_path):
+    identity = build_campaign_identity(
+        evidence_root=tmp_path,
+        campaign_commit_sha="abc",
+        composition_manifest_sha="3" * 64,
+        nonce="env",
+        live=True,
+    )
+
+    env = build_child_environment(identity, base_env={})
+
+    assert "presession" not in identity.run_id
+    assert env["UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE"] == "true"
+    assert env["UNIFIED_LIVE_VALIDATION_PR748_756_RUN_ID"] == identity.run_id
+    assert env["UNIFIED_LIVE_VALIDATION_PR748_756_EVIDENCE_ROOT"] == identity.evidence_root
+    assert env["UNIFIED_LIVE_VALIDATION_PR748_756_COMPOSITION_SHA"] == "3" * 64
+    assert env["TRADEBOT_READ_ONLY"] == "true"
+
+
+def test_process_level_smoke_launches_one_child_records_and_seals(tmp_path):
+    identity = build_campaign_identity(
+        evidence_root=tmp_path,
+        campaign_commit_sha="abc",
+        composition_manifest_sha="4" * 64,
+        nonce="smoke",
+        live=True,
+    )
+
+    result = launch_runtime_child(
+        identity,
+        [sys.executable, "-m", "core.unified_live_validation_pr748_756.launcher"],
+        cwd=Path.cwd(),
+        timeout_sec=10,
+    )
+
+    root = Path(result.evidence_root)
+    assert result.exit_code == 0
+    assert result.child_pid is not None
+    assert result.sealed is True
+    assert result.artifact_manifest_sha256
+    assert (root / "SEALED").exists()
+    process_identity = json.loads((root / "live" / "process_identity.json").read_text(encoding="utf-8"))
+    assert process_identity["child_pid"] == result.child_pid
+    heartbeat = validate_jsonl_file(root / "live" / "heartbeat.jsonl", expected_run_id=identity.run_id)
+    feed_sample = validate_jsonl_file(
+        root / "live" / "feed_truth_samples.jsonl",
+        expected_run_id=identity.run_id,
+    )
+    assert heartbeat["pass"] is True
+    assert heartbeat["rows"] >= 1
+    assert feed_sample["pass"] is True
+    assert feed_sample["rows"] == 1
+
+
+def test_governed_wrapper_rejects_unwired_run_live_launch(tmp_path):
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_unified_live_validation_pr748_756_v1.py",
+            "--origin-main-sha",
+            "abc",
+            "--launch-live",
+            "--nonce",
+            "blocked",
+            "--evidence-root",
+            str(tmp_path),
+        ],
+        cwd=Path.cwd(),
+        env={"PYTHONPATH": ".", "UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE": "true"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    payload = json.loads(result.stdout)
+    assert payload["state"] == "BLOCKED_BY_RUNTIME_WIRING"
+    assert payload["campaign_runtime_wired"] is False
+    assert payload["recorder_instantiated"] is False
+    assert payload["single_runtime_process_proven"] is False
+    assert "CURRENT_LAUNCH_COMMAND_DOES_NOT_ACTIVATE_CAMPAIGN" in payload["blockers"]

@@ -19,6 +19,9 @@ from typing import Any, Mapping
 CAMPAIGN_SCHEMA_VERSION = 1
 CAMPAIGN_NAME = "unified_live_validation_pr748_756_v1"
 ENABLE_ENV = "UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE"
+RUN_ID_ENV = "UNIFIED_LIVE_VALIDATION_PR748_756_RUN_ID"
+EVIDENCE_ROOT_ENV = "UNIFIED_LIVE_VALIDATION_PR748_756_EVIDENCE_ROOT"
+COMPOSITION_SHA_ENV = "UNIFIED_LIVE_VALIDATION_PR748_756_COMPOSITION_SHA"
 SESSION_DATE = "2026-07-31"
 READ_ONLY_FLAGS = {
     "read_only": True,
@@ -129,9 +132,11 @@ def build_campaign_identity(
     campaign_commit_sha: str,
     composition_manifest_sha: str,
     nonce: str | None = None,
+    live: bool = False,
 ) -> CampaignIdentity:
     suffix = nonce or secrets.token_hex(4)
-    run_id = f"unified-pr748-756-20260731-{composition_manifest_sha[:12]}-{suffix}"
+    phase = "live" if live else "presession"
+    run_id = f"unified-pr748-756-20260731-{composition_manifest_sha[:12]}-{phase}-{suffix}"
     return CampaignIdentity(
         run_id=run_id,
         schema_version=CAMPAIGN_SCHEMA_VERSION,
@@ -140,6 +145,11 @@ def build_campaign_identity(
         composition_manifest_sha=composition_manifest_sha,
         evidence_root=str(evidence_root / run_id),
     )
+
+
+def reject_presession_live_run_id(run_id: str) -> None:
+    if "presession" in str(run_id):
+        raise ValueError("presession_run_id_rejected_for_live_launch")
 
 
 def enrich_row(identity: CampaignIdentity, row: Mapping[str, Any], *, pr_number: int) -> dict[str, Any]:
@@ -158,4 +168,3 @@ def enrich_row(identity: CampaignIdentity, row: Mapping[str, Any], *, pr_number:
     payload.update(dict(row))
     payload.update(READ_ONLY_FLAGS)
     return payload
-
