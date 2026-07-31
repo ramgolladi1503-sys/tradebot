@@ -1,0 +1,104 @@
+name: QA Build Remaining Repair Artifact
+
+on:
+  pull_request:
+    branches:
+      - agent/enterprise-qa-foundation-v1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-build-remaining-repair-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build_and_validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      TRADING_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build deterministic repair bundle
+        run: python scripts/build_remaining_whole_tradebot_repairs.py
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies and scanner
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit
+
+      - name: Run focused ranking archive and fallback proofs
+        run: >-
+          PYTHONPATH=. pytest -q -o addopts=''
+          tests/qa/test_whole_tradebot_cross_module_truth.py
+          tests/qa/test_remaining_whole_tradebot_security.py
+          tests/test_evidence_replay_report.py
+          --durations=30
+
+      - name: Scan repaired modules
+        run: >-
+          bandit -r
+          core/opportunity_engine.py
+          core/evidence_replay_report.py
+          core/reject_shadow.py
+          core/analytics/schema.py
+          core/candidate_journal.py
+          core/expectancy/edge_ranking.py
+          core/expectancy/setup_fingerprint.py
+          core/intelligence/extractors/hardened_base.py
+          core/trade_identity.py
+          dashboard/ui/components.py
+          dashboard/ui/table_model.py
+          -ll
+
+      - name: Stage exact validated files
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.runtime/qa/remaining_repair_bundle
+          mkdir -p "$root"
+          files=(
+            core/opportunity_engine.py
+            core/evidence_replay_report.py
+            core/reject_shadow.py
+            core/analytics/schema.py
+            core/candidate_journal.py
+            core/expectancy/edge_ranking.py
+            core/expectancy/setup_fingerprint.py
+            core/intelligence/extractors/hardened_base.py
+            core/trade_identity.py
+            dashboard/ui/components.py
+            dashboard/ui/table_model.py
+            tests/qa/test_whole_tradebot_cross_module_truth.py
+            tests/qa/test_remaining_whole_tradebot_security.py
+          )
+          for file in "${files[@]}"; do
+            mkdir -p "$root/$(dirname "$file")"
+            cp "$file" "$root/$file"
+          done
+          git diff --check
+          git diff -- "${files[@]}" > "$root/validated.patch"
+          git diff --name-only -- "${files[@]}" > "$root/files.txt"
+          test "$(wc -l < "$root/files.txt")" -eq "${#files[@]}"
+
+      - name: Upload validated repair bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: remaining-whole-tradebot-repair-bundle
+          if-no-files-found: error
+          include-hidden-files: true
+          path: .runtime/qa/remaining_repair_bundle/
