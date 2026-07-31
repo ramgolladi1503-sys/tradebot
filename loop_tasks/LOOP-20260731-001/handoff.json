@@ -2,7 +2,7 @@
   "schema_version": 1,
   "task_id": "LOOP-20260731-001",
   "worker": "chatgpt",
-  "code_sha": "7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225",
+  "code_sha": "cf9276c75e1f53617723c8d598c428c04652adca",
   "branch": "infra/github-first-loop-engineering-v1",
   "pr_number": 764,
   "changed_paths": [
@@ -18,6 +18,12 @@
     ".loop/templates/worker_prompt.md",
     "docs/agent_reviews/pr764_github_first_loop_engineering_v1.md",
     "docs/engineering/github_first_loop_engineering_v1.md",
+    "loop_tasks/LOOP-20260731-001/CONTINUE.md",
+    "loop_tasks/LOOP-20260731-001/claims.json",
+    "loop_tasks/LOOP-20260731-001/contract.json",
+    "loop_tasks/LOOP-20260731-001/evidence/manifest.json",
+    "loop_tasks/LOOP-20260731-001/handoff.json",
+    "loop_tasks/LOOP-20260731-001/state.json",
     "loop_tasks/README.md",
     "loop_tasks/examples/LOOP-EXAMPLE/CONTINUE.md",
     "loop_tasks/examples/LOOP-EXAMPLE/claims.json",
@@ -33,7 +39,7 @@
     "scripts/loop/next_action.py",
     "scripts/loop/record_command.py",
     "scripts/loop/validate_task.py",
-    "tests/loop/test_loop_framework.py"
+    "tests/loop/test_loop_framework_v2.py"
   ],
   "files_intentionally_not_touched": [
     "main.py",
@@ -42,64 +48,150 @@
     "core/",
     "strategies/",
     "credentials.py",
+    "runtime/live/",
     "PR #748 runtime implementation",
     "PR #750 runtime implementation"
   ],
   "commands": [
     {
-      "command_id": "CI-LOOP-1",
+      "command_id": "CI-LOOP-FINAL",
       "command": ["GitHub Actions", "Loop Handoff Gate"],
       "working_directory": ".",
       "exit_code": 0,
       "required": true,
-      "code_sha": "7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225",
-      "github_run_id": 30615138176
+      "code_sha": "cf9276c75e1f53617723c8d598c428c04652adca",
+      "github_run_id": 30617389287
     },
     {
-      "command_id": "CI-REVIEW-1",
+      "command_id": "CI-AGENT-REVIEW-FINAL",
       "command": ["GitHub Actions", "Agent Review Evidence Gate"],
       "working_directory": ".",
       "exit_code": 0,
       "required": true,
-      "code_sha": "7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225",
-      "github_run_id": 30615138232
+      "code_sha": "cf9276c75e1f53617723c8d598c428c04652adca",
+      "github_run_id": 30617389357
+    },
+    {
+      "command_id": "CI-TESTS-FINAL",
+      "command": ["GitHub Actions", "tests"],
+      "working_directory": ".",
+      "exit_code": 0,
+      "required": true,
+      "code_sha": "cf9276c75e1f53617723c8d598c428c04652adca",
+      "github_run_id": 30617389255
+    },
+    {
+      "command_id": "CI-CODE-EXCELLENCE-FINAL",
+      "command": ["GitHub Actions", "Code Excellence Gates"],
+      "working_directory": ".",
+      "exit_code": 0,
+      "required": true,
+      "code_sha": "cf9276c75e1f53617723c8d598c428c04652adca",
+      "github_run_id": 30617389389
+    },
+    {
+      "command_id": "CI-FORENSICS-FINAL",
+      "command": ["GitHub Actions", "Repo Forensics PR Gate"],
+      "working_directory": ".",
+      "exit_code": 0,
+      "required": true,
+      "code_sha": "cf9276c75e1f53617723c8d598c428c04652adca",
+      "github_run_id": 30617389408
+    },
+    {
+      "command_id": "CI-REGISTRY-FINAL",
+      "command": ["GitHub Actions", "Verify Strategy Registry"],
+      "working_directory": ".",
+      "exit_code": 0,
+      "required": true,
+      "code_sha": "cf9276c75e1f53617723c8d598c428c04652adca",
+      "github_run_id": 30617389406
+    },
+    {
+      "command_id": "CI-CODEQL-FINAL",
+      "command": ["GitHub Actions", "CodeQL Advanced"],
+      "working_directory": ".",
+      "exit_code": 0,
+      "required": true,
+      "code_sha": "cf9276c75e1f53617723c8d598c428c04652adca",
+      "github_run_id": 30617389295
+    },
+    {
+      "command_id": "CI-PORTFOLIO-FINAL",
+      "command": ["GitHub Actions", "Portfolio CI"],
+      "working_directory": ".",
+      "exit_code": 0,
+      "required": true,
+      "code_sha": "cf9276c75e1f53617723c8d598c428c04652adca",
+      "github_run_id": 30617389214
+    },
+    {
+      "command_id": "CI-DUPLICATE-TIMEOUT",
+      "command": ["GitHub Actions", "ci"],
+      "working_directory": ".",
+      "exit_code": 124,
+      "required": true,
+      "code_sha": "cf9276c75e1f53617723c8d598c428c04652adca",
+      "github_run_id": 30617389326,
+      "conclusion": "cancelled",
+      "reason": "The unit_tests job exceeded the workflow's fixed 15-minute timeout at 69% progress with no reported test failure."
     }
   ],
   "test_results": [
     {
-      "test_id": "TEST-LOOP-FOCUSED",
+      "test_id": "TEST-LOOP-FOCUSED-FINAL",
       "command": "pytest -q tests/loop",
       "required": true,
       "exit_code": 0,
-      "passed": 21,
+      "passed": 15,
       "failed": 0,
-      "github_run_id": 30615138176
+      "github_run_id": 30617389287
     },
     {
-      "test_id": "TEST-EXAMPLE-VALIDATION",
+      "test_id": "TEST-EXAMPLE-VALIDATION-FINAL",
       "command": "python3 scripts/loop/validate_task.py loop_tasks/examples/LOOP-EXAMPLE",
       "required": true,
       "exit_code": 0,
-      "github_run_id": 30615138176
+      "github_run_id": 30617389287
     },
     {
-      "test_id": "TEST-AGENT-REVIEW",
-      "command": "python scripts/validate_agent_review_evidence.py",
+      "test_id": "TEST-REAL-TASK-VALIDATION-FINAL",
+      "command": "python3 scripts/loop/validate_task.py loop_tasks/LOOP-20260731-001",
       "required": true,
       "exit_code": 0,
-      "github_run_id": 30615138232
+      "github_run_id": 30617389287
+    },
+    {
+      "test_id": "TEST-REPOSITORY-FULL-SUITE",
+      "command": "GitHub Actions tests workflow",
+      "required": true,
+      "exit_code": 0,
+      "github_run_id": 30617389255
+    },
+    {
+      "test_id": "TEST-DUPLICATE-CI-WORKFLOW",
+      "command": "GitHub Actions ci workflow",
+      "required": true,
+      "exit_code": 124,
+      "github_run_id": 30617389326,
+      "conclusion": "cancelled",
+      "reason": "Repository-wide workflow timeout, not a test assertion failure."
     }
   ],
   "claims_created": [
     "CLM-764-001",
-    "CLM-764-002"
+    "CLM-764-002",
+    "CLM-764-003",
+    "CLM-764-004"
   ],
   "claims_retired": [],
   "unresolved_findings": [],
-  "blockers": [],
-  "next_action": "Verify every workflow on the checkpoint head and complete the final diff scope review. Keep PR #764 draft and unmerged.",
-  "next_worker": "chatgpt",
+  "blockers": [
+    "EXTERNAL_CI_TIMEOUT: .github/workflows/ci.yml limits unit_tests to 15 minutes; run 30617389326 was cancelled at 69% with no test failure, while the independent tests workflow 30617389255 completed successfully. Fixing that repository-wide timeout is outside this task's frozen scope."
+  ],
+  "next_action": "Create a separate bounded CI-maintenance task to increase or restructure the 15-minute ci workflow, or obtain an explicit human decision that the successful tests workflow is the authoritative full-suite oracle for PR #764. Keep this PR draft and unmerged.",
+  "next_worker": "human",
   "local_only_evidence": [],
   "all_continuation_critical_artifacts_in_github": true,
-  "checkpointed_at_utc": "2026-07-31T08:12:00Z"
+  "checkpointed_at_utc": "2026-07-31T09:05:00Z"
 }
