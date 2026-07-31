@@ -6775,8 +6775,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             return False
         try:
             if to_subscribe:
+                _record_subscription_requested(to_subscribe)
                 ws.subscribe(to_subscribe)
+                _record_subscription_request_succeeded(to_subscribe)
                 ws.set_mode(ws.MODE_FULL, to_subscribe)
+                _record_mode_request_succeeded(to_subscribe)
         except Exception as exc:
             _RUNTIME_STATE = "SUBSCRIBE_FAILED"
             _LAST_RUNTIME_ERROR = f"subscribe_delta:{exc}"[:1000]
@@ -6878,10 +6881,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 "reason": reason,
             }
             _log_ws("FEED_SUBSCRIBE_REQUESTED", {**event_base, "result": "requested"})
+            _record_subscription_requested(desired)
             ws.subscribe(desired)
+            _record_subscription_request_succeeded(desired)
             _log_ws("FEED_SUBSCRIBE_CALLBACK_APPLIED", {**event_base, "result": "applied"})
             _log_ws("FEED_MODE_FULL_REQUESTED", {**event_base, "result": "requested"})
             ws.set_mode(ws.MODE_FULL, desired)
+            _record_mode_request_succeeded(desired)
             _log_ws("FEED_MODE_FULL_CALLBACK_APPLIED", {**event_base, "result": "applied"})
         _record_feed_restart_verify_subscribe(now_epoch=float(now_utc_epoch()))
         _LAST_TOKENS[:] = desired

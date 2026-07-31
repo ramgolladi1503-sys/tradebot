@@ -156,3 +156,35 @@ def test_budget_blocked_observation_overlap_does_not_write_shadow_bar(monkeypatc
     assert shadow.shadow_ohlc_buffer.get_bars("NIFTY") == []
     evidence = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})
     assert evidence["observation_blocker"]["verdict"] == "BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET"
+
+
+def test_subscription_evidence_records_successful_int_token_subscription(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    ws._reset_market_event_graph_generation_evidence()
+    ws._FEED_SESSION_ID = "session-evidence"
+    ws._FEED_RECONNECT_GENERATION = 11
+
+    tokens = [registry.index_token, registry.token_by_symbol["RELIANCE"], registry.token_by_symbol["HDFCBANK"]]
+    ws._record_subscription_requested(tokens)
+    ws._record_subscription_request_succeeded(tokens)
+    ws._record_mode_request_succeeded(tokens)
+
+    evidence = ws.market_event_graph_subscription_evidence_for_tokens(
+        {
+            "NIFTY": registry.index_token,
+            "RELIANCE": registry.token_by_symbol["RELIANCE"],
+            "HDFCBANK": registry.token_by_symbol["HDFCBANK"],
+        }
+    )
+
+    assert evidence["feed_session_id"] == "session-evidence"
+    assert evidence["reconnect_generation"] == 11
+    assert evidence["subscription_requested_symbols"] == ["NIFTY", "RELIANCE", "HDFCBANK"]
+    assert evidence["subscription_request_succeeded_symbols"] == ["NIFTY", "RELIANCE", "HDFCBANK"]
+    assert evidence["mode_request_succeeded_symbols"] == ["NIFTY", "RELIANCE", "HDFCBANK"]
+    assert evidence["budget_status"]["request_succeeded_count"] == 3
