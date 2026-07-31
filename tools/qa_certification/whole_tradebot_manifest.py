@@ -93,7 +93,7 @@ WHOLE_TRADEBOT_AREAS: tuple[CertificationArea, ...] = (
             "core/decision_breakers.py",
             "core/slippage_guard.py",
             "core/slo_guard.py",
-            "core/review_queue_contract.py",
+            "core/review_queue.py",
             "core/execution_engine.py",
             "core/execution_router.py",
         ),
