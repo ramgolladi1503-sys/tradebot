@@ -77,8 +77,10 @@ jobs:
         run: |
           set -euo pipefail
           root=.runtime/qa/remaining_repair_bundle
+          rm -rf "$root"
           mkdir -p "$root"
-          files=(
+
+          allowed_files=(
             core/opportunity_engine.py
             core/evidence_replay_report.py
             core/reject_shadow.py
@@ -94,14 +96,48 @@ jobs:
             tests/qa/test_whole_tradebot_cross_module_truth.py
             tests/qa/test_remaining_whole_tradebot_security.py
           )
-          for file in "${files[@]}"; do
+          required_changed=(
+            core/opportunity_engine.py
+            core/evidence_replay_report.py
+            core/reject_shadow.py
+            dashboard/streamlit_app_runtime.py
+            tests/qa/test_whole_tradebot_cross_module_truth.py
+            tests/qa/test_remaining_whole_tradebot_security.py
+          )
+
+          git diff --check
+          git diff --name-only -- "${allowed_files[@]}" | sort -u > "$root/files.txt"
+          test -s "$root/files.txt"
+
+          for required in "${required_changed[@]}"; do
+            grep -Fxq "$required" "$root/files.txt" || {
+              echo "required validated repair missing from diff: $required" >&2
+              exit 1
+            }
+          done
+
+          while IFS= read -r file; do
+            allowed=false
+            for candidate in "${allowed_files[@]}"; do
+              if [[ "$file" == "$candidate" ]]; then
+                allowed=true
+                break
+              fi
+            done
+            [[ "$allowed" == true ]] || {
+              echo "unexpected repaired file: $file" >&2
+              exit 1
+            }
             mkdir -p "$root/$(dirname "$file")"
             cp "$file" "$root/$file"
-          done
-          git diff --check
-          git diff -- "${files[@]}" > "$root/validated.patch"
-          git diff --name-only -- "${files[@]}" > "$root/files.txt"
-          test "$(wc -l < "$root/files.txt")" -eq "${#files[@]}"
+          done < "$root/files.txt"
+
+          git diff -- "${allowed_files[@]}" > "$root/validated.patch"
+          test -s "$root/validated.patch"
+          sha256sum "$root/validated.patch" > "$root/validated.patch.sha256"
+          while IFS= read -r file; do
+            sha256sum "$file"
+          done < "$root/files.txt" > "$root/file_sha256s.txt"
 
       - name: Upload validated repair bundle
         uses: actions/upload-artifact@v4
