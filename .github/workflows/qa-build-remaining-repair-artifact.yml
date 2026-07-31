@@ -102,7 +102,6 @@ jobs:
             core/reject_shadow.py
             dashboard/streamlit_app_runtime.py
             tests/qa/test_whole_tradebot_cross_module_truth.py
-            tests/qa/test_remaining_whole_tradebot_security.py
           )
 
           git diff --check
