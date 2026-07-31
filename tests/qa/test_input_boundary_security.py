@@ -3,9 +3,11 @@ from __future__ import annotations
 import os
 import socket
 import stat
+import urllib.request
 
 import pytest
 
+from core.ai_certification.gemini_client import GeminiClientError, _validate_google_request
 from core.db_guard import _ensure_permissions
 from core.intelligence.fetchers import http_fetcher
 from core.news_ingestor import _parse_rss
@@ -93,3 +95,20 @@ def test_redirect_handler_validates_target_before_following(monkeypatch):
             headers={},
             newurl="https://example.com/internal",
         )
+
+
+def test_gemini_transport_rejects_non_google_or_non_https_endpoint():
+    with pytest.raises(GeminiClientError, match="HTTPS"):
+        _validate_google_request(
+            urllib.request.Request("http://generativelanguage.googleapis.com/v1beta/models/x")
+        )
+    with pytest.raises(GeminiClientError, match="host"):
+        _validate_google_request(urllib.request.Request("https://evil.example/v1beta/models/x"))
+    with pytest.raises(GeminiClientError, match="port"):
+        _validate_google_request(
+            urllib.request.Request("https://generativelanguage.googleapis.com:8443/v1beta/models/x")
+        )
+
+    _validate_google_request(
+        urllib.request.Request("https://generativelanguage.googleapis.com/v1beta/models/x")
+    )
