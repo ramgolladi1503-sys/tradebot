@@ -142,7 +142,7 @@ def build_event_id(
     except Exception:
         ts_int = 0
     payload = f"{trade_key}|{str(event_kind)}|{ts_int}|{str(source)}|{str(discriminator)}"
-    return "evt_" + hashlib.sha1(payload.encode("utf-8")).hexdigest()[:24]
+    return "evt_" + hashlib.sha1(payload.encode("utf-8"), usedforsecurity=False).hexdigest()[:24]
 
 
 def _safe_float(value: Any) -> float | None:

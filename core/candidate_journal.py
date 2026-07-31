@@ -222,7 +222,7 @@ def _candidate_id(payload: Mapping[str, Any], created_at: str) -> str:
         "entry": payload.get("entry"),
         "created_at_bucket": created_at[:16],
     }
-    digest = hashlib.sha1(json.dumps(fingerprint, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha1(json.dumps(fingerprint, sort_keys=True, default=str).encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
     return f"cand_{digest}"
 
 

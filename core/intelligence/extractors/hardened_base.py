@@ -33,7 +33,7 @@ class HardenedBaseExtractor(ABC):
 
     def compute_hash(self, raw_content: str) -> str:
         """Deterministic hashing for duplicate detection."""
-        return hashlib.md5(raw_content.encode('utf-8')).hexdigest()
+        return hashlib.md5(raw_content.encode('utf-8'), usedforsecurity=False).hexdigest()
 
     def canonicalize_link(self, raw_link: str) -> str:
         if raw_link.startswith("http"):

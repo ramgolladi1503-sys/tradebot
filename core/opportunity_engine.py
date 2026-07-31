@@ -537,13 +537,9 @@ def _derive_candidate_class(candidate: Any, *, metrics: dict[str, Any] | None = 
     tradable = bool(_get_value(candidate, "tradable", False))
 
     if source_flags.get("quote_source") == "REST_RECOVERY" or source_flags.get("recovered_fallback"):
+        # Classification is pure. Trade is frozen, and truth evaluation must
+        # never mutate the candidate it inspects.
         execution_allowed = False
-        if isinstance(candidate, dict):
-            candidate["execution_allowed"] = False
-            candidate["mode"] = "advisory_only"
-        elif hasattr(candidate, "execution_allowed"):
-            setattr(candidate, "execution_allowed", False)
-            setattr(candidate, "mode", "advisory_only")
     executable_truth = bool(metrics.get("executable_truth")) if "executable_truth" in metrics else _is_executable_opportunity(candidate)
     execution_ok = True if metrics.get("execution_ok") is None else bool(metrics.get("execution_ok"))
     display_entry = _safe_float(_get_value(candidate, "display_entry"))
@@ -559,10 +555,8 @@ def _derive_candidate_class(candidate: Any, *, metrics: dict[str, Any] | None = 
             if not ml_result.get("pass", True):
                 new_blockers = set(str(code) for code in (_get_value(candidate, "tradable_reasons_blocking", []) or []) if str(code).strip())
                 new_blockers.add("ml_probability_too_low")
-                if isinstance(candidate, dict):
-                    candidate["tradable_reasons_blocking"] = list(new_blockers)
-                else:
-                    setattr(candidate, "tradable_reasons_blocking", list(new_blockers))
+                metrics["ml_acceptance_blocker"] = "ml_probability_too_low"
+                metrics["ml_tradable_reasons_blocking"] = list(new_blockers)
                 return "NEAR_EXECUTABLE"
         except Exception as exc:
             logger.error("ml_acceptance_gate_execution_failed err=%s", exc)
@@ -1340,8 +1334,10 @@ def annotate_relative_opportunity_ranks(
             -item[0][3],
             -item[0][4],
             -item[0][5],
-            item[0][6],
-            item[0][7],
+            -item[0][6],
+            -item[0][7],
+            item[0][8],
+            item[0][9],
         )
     )
     per_symbol_rank: dict[str, int] = {}
@@ -1753,13 +1749,9 @@ def _base_execution_truth(candidate: Any, force_block: bool = False, exception_b
     tradable = bool(_get_value(candidate, "tradable", False))
 
     if source_flags.get("quote_source") == "REST_RECOVERY" or source_flags.get("recovered_fallback"):
+        # Classification is pure. Trade is frozen, and truth evaluation must
+        # never mutate the candidate it inspects.
         execution_allowed = False
-        if isinstance(candidate, dict):
-            candidate["execution_allowed"] = False
-            candidate["mode"] = "advisory_only"
-        elif hasattr(candidate, "execution_allowed"):
-            setattr(candidate, "execution_allowed", False)
-            setattr(candidate, "mode", "advisory_only")
 
     execution_truth = bool(
         execution_entry is not None
@@ -1865,8 +1857,10 @@ def select_top_opportunities(
             -item[0][3],
             -item[0][4],
             -item[0][5],
-            item[0][6],
-            item[0][7],
+            -item[0][6],
+            -item[0][7],
+            item[0][8],
+            item[0][9],
         )
     )
     top_executable: list[Any] = []

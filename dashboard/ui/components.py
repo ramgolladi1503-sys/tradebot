@@ -85,7 +85,7 @@ def loading_state(lines: int = 3):
 
 
 def _stable_key(df, salt: str | None = None):
-    h = hashlib.md5()
+    h = hashlib.md5(usedforsecurity=False)
     h.update(str(df.columns.tolist()).encode("utf-8"))
     h.update(str(len(df)).encode("utf-8"))
     if salt:

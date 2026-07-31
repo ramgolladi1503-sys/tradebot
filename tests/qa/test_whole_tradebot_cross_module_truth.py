@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import asdict
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -170,14 +171,14 @@ def test_ranked_candidate_replay_is_deterministic_and_does_not_mutate_input():
         _trade(trade_id="replay-weak", confidence=0.51, bid=120.0, ask=121.5, volume=900),
         _trade(trade_id="replay-strong", confidence=0.84, bid=120.0, ask=120.2, volume=22_000),
     ]
-    frozen_before = [item.to_dict() for item in original]
+    frozen_before = [asdict(item) for item in original]
 
     first = annotate_ranked_opportunities(deepcopy(original), scope="replay:deterministic", top_n=1)
     second = annotate_ranked_opportunities(deepcopy(original), scope="replay:deterministic", top_n=1)
 
-    assert [item.to_dict() for item in first] == [item.to_dict() for item in second]
+    assert [asdict(item) for item in first] == [asdict(item) for item in second]
     assert [item.trade_id for item in first] == ["replay-strong", "replay-weak"]
-    assert [item.to_dict() for item in original] == frozen_before
+    assert [asdict(item) for item in original] == frozen_before
 
 
 @pytest.mark.chaos

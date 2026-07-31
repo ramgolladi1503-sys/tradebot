@@ -13,8 +13,10 @@ from datetime import datetime, time as dtime, timedelta
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 import sqlite3
+import tempfile
 from typing import Any
 from zoneinfo import ZoneInfo
 from collections import defaultdict
@@ -162,7 +164,12 @@ def _primary_db_path(desk: str) -> Path:
 
 
 def _fallback_db_path(desk: str) -> Path:
-    return Path("/tmp/tradebot_shadow") / f"{desk}.sqlite"
+    safe_desk = "".join(
+        char if char.isalnum() or char in {"-", "_"} else "_"
+        for char in str(desk)
+    ) or "DEFAULT"
+    uid = os.getuid() if hasattr(os, "getuid") else os.getpid()
+    return Path(tempfile.gettempdir()) / f"tradebot_shadow_{uid}" / f"{safe_desk}.sqlite"
 
 
 def _connect_db(desk: str) -> tuple[sqlite3.Connection, Path, str | None]:
@@ -170,14 +177,17 @@ def _connect_db(desk: str) -> tuple[sqlite3.Connection, Path, str | None]:
     primary = _primary_db_path(desk)
     for path in (primary, _fallback_db_path(desk)):
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.chmod(path.parent, 0o700)
             conn = sqlite3.connect(path)
+            if path != Path(":memory:"):
+                os.chmod(path, 0o600)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=3000")
             if path != primary:
                 warning = "primary_db_readonly_or_unwritable"
             return conn, path, warning
-        except sqlite3.OperationalError:
+        except (OSError, sqlite3.Error):
             continue
     # Final fallback in-memory (degraded but non-crashing).
     conn = sqlite3.connect(":memory:")

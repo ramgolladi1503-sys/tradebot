@@ -210,4 +210,4 @@ def compute_trade_key(
     sde = _norm_text(side) or "UNKNOWN"
     strat = derive_strategy_id(strategy_id)
     raw = f"{sym}|{exp}|{stk}|{opt}|{sde}|{strat}"
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+    return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()

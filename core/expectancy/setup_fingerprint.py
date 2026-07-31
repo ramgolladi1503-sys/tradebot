@@ -221,7 +221,8 @@ def build_setup_fingerprint(record: Any) -> SetupFingerprint:
                     index_bucket,
                     option_type_bucket,
                 )
-            ).encode("utf-8")
+            ).encode("utf-8"),
+            usedforsecurity=False,
         ).hexdigest()[:16]
     return SetupFingerprint(
         schema_version=SETUP_FINGERPRINT_SCHEMA_VERSION,

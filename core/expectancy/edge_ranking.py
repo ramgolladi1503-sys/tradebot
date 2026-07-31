@@ -202,7 +202,7 @@ def _stable_setup_id(row: Mapping[str, Any]) -> str:
                 _text(row.get("time_of_day_bucket")),
             ]
         )
-        return sha1(canonical.encode("utf-8")).hexdigest()[:12]
+        return sha1(canonical.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
 
 
 def _lookup_candidates(row: Mapping[str, Any], expectancy_lookup: Any = None) -> list[Any]:

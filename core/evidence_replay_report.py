@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import tarfile
 import tempfile
 from collections import Counter
@@ -213,6 +215,50 @@ def _infer_today(source: Path, options: EvidenceReplayOptions) -> date:
     return datetime.now().date()
 
 
+_MAX_ARCHIVE_MEMBERS = 10_000
+_MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
+
+
+def _safe_extract_tar(archive: tarfile.TarFile, root: Path) -> None:
+    root_resolved = root.resolve()
+    members = archive.getmembers()
+    if len(members) > _MAX_ARCHIVE_MEMBERS:
+        raise ValueError("evidence_archive_member_limit_exceeded")
+
+    total_size = 0
+    validated: list[tuple[tarfile.TarInfo, Path]] = []
+    for member in members:
+        if member.issym() or member.islnk():
+            raise ValueError(f"evidence_archive_link_rejected:{member.name}")
+        if not (member.isdir() or member.isfile()):
+            raise ValueError(f"evidence_archive_special_member_rejected:{member.name}")
+        if member.size < 0:
+            raise ValueError(f"evidence_archive_negative_size:{member.name}")
+        total_size += int(member.size)
+        if total_size > _MAX_ARCHIVE_BYTES:
+            raise ValueError("evidence_archive_size_limit_exceeded")
+        target = (root_resolved / member.name).resolve()
+        try:
+            target.relative_to(root_resolved)
+        except ValueError as exc:
+            raise ValueError(f"evidence_archive_path_traversal:{member.name}") from exc
+        validated.append((member, target))
+
+    for member, target in validated:
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.chmod(target, 0o700)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(target.parent, 0o700)
+        source = archive.extractfile(member)
+        if source is None:
+            raise ValueError(f"evidence_archive_member_unreadable:{member.name}")
+        with source, target.open("xb") as handle:
+            shutil.copyfileobj(source, handle)
+        os.chmod(target, 0o600)
+
+
 @contextmanager
 def _evidence_root(source: str | Path) -> Iterator[Path]:
     path = Path(source)
@@ -223,7 +269,7 @@ def _evidence_root(source: str | Path) -> Iterator[Path]:
         with tempfile.TemporaryDirectory(prefix="tradebot_evidence_") as tmp:
             root = Path(tmp)
             with tarfile.open(path, "r:*") as archive:
-                archive.extractall(root)
+                _safe_extract_tar(archive, root)
             yield root
         return
     raise FileNotFoundError(f"evidence source not found or unsupported: {path}")

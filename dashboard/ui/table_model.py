@@ -307,7 +307,7 @@ def compute_trade_key(df: pd.DataFrame) -> pd.DataFrame:
             str(row.get("opt_type") or "").upper(),
             str(row.get("side") or "").upper(),
         ]
-        return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()
+        return hashlib.sha1("|".join(parts).encode("utf-8"), usedforsecurity=False).hexdigest()
 
     out["trade_key"] = out.apply(_build, axis=1)
     return out

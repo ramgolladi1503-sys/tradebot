@@ -1255,11 +1255,13 @@ def _load_top_opportunities_frames(limit: int = 25) -> dict[str, pd.DataFrame]:
         read_snapshot_payload,
         RANKED_PIPELINE_LATEST_PATH,
     )
-    if str(snapshot.get("state") or "") != "ok":
-        import streamlit as st
-        st.error("canonical ranked pipeline missing")
-        return {"top_executable": pd.DataFrame(), "top_advisory": pd.DataFrame()}
-    if str(snapshot.get("state") or "") != "ok":
+    if not isinstance(snapshot, dict) or str(snapshot.get("state") or "") != "ok":
+        try:
+            import streamlit as st
+
+            st.error("canonical ranked pipeline missing")
+        except Exception:
+            logger.warning("dashboard_canonical_ranked_pipeline_missing")
         return {"top_executable": pd.DataFrame(), "top_advisory": pd.DataFrame()}
     payload = snapshot.get("payload") if isinstance(snapshot, dict) else {}
     if not isinstance(payload, dict):
