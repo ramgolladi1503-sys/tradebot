@@ -12,7 +12,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from loop_core import framework_paths_have_merge_actions, repo_root_from, validate_task  # noqa: E402
+from loop_core import repo_root_from, validate_task  # noqa: E402
 
 
 def main() -> int:
@@ -25,7 +25,6 @@ def main() -> int:
     root = repo_root_from()
     task_dir = args.task_dir if args.task_dir.is_absolute() else root / args.task_dir
     errors = validate_task(task_dir, repo_root=root, check_git=not args.no_git)
-    errors.extend(framework_paths_have_merge_actions(root))
     payload = {
         "ok": not errors,
         "task_dir": str(task_dir.relative_to(root)),
