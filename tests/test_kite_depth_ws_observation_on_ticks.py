@@ -658,3 +658,35 @@ def test_build_subscription_tokens_activates_observation_plan(monkeypatch):
     assert set(registry.all_tokens).issubset(set(ws._LAST_DESIRED_TOKENS))
     assert ws._TOKEN_TO_SYMBOL[registry.index_token] == "NIFTY"
     assert ws._TOKEN_TO_SYMBOL[registry.token_by_symbol["RELIANCE"]] == "RELIANCE"
+
+
+def test_depth_subscription_engine_activates_observation_plan(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    engine = importlib.import_module("core.depth_subscription_engine")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 1, raising=False)
+    monkeypatch.setattr(ws, "get_sticky_tokens", lambda: set())
+    monkeypatch.setattr(ws, "_underlying_ltp", lambda symbol, token=None: (25000.0, "test"))
+    monkeypatch.setattr(ws.kite_client, "resolve_index_token", lambda symbol: 256265)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda symbol, exchange="NFO": date(2026, 8, 6))
+    monkeypatch.setattr(
+        ws.kite_client,
+        "resolve_option_tokens_window",
+        lambda **_kwargs: [920001, 920002, 920003, 920004],
+    )
+    registry_mod.reset_observation_registry()
+    ws._reset_market_event_graph_generation_evidence()
+
+    tokens, _resolution = engine.build_subscription_tokens(symbols=["NIFTY"], max_tokens=150)
+    registry = registry_mod.load_observation_registry(force=True)
+    state = ws._observation_state_payload()
+
+    assert state["enabled"] is True
+    assert state["verdict"] == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+    assert set(registry.all_tokens).issubset(set(tokens))
+    assert set(registry.all_tokens).issubset(set(ws._LAST_DESIRED_TOKENS))

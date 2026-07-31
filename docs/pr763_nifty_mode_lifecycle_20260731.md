@@ -143,6 +143,14 @@ Updated focused result:
 62 passed in 6.40s
 ```
 
+After the second short proof showed the live process was patched through `core.depth_subscription_engine`, the same activation invariant was added to that engine and covered directly.
+
+Updated focused result:
+
+```text
+63 passed in 5.47s
+```
+
 ## Short Proof Run 1
 
 - Run ID: `unified-pr748-756-20260731-fd1a9da3a6a7-live-0ce9ea51`
@@ -174,3 +182,31 @@ MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE=true
 ```
 
 The fix now activates the observation plan inside `build_subscription_tokens(...)` after production-token pruning/budgeting and before desired tokens are frozen. The union is only applied when the existing configured budget accepts the 51-token observation universe.
+
+## Short Proof Run 2
+
+- Run ID: `unified-pr748-756-20260731-65fbbf0292bb-live-1b68ac35`
+- Campaign commit: `0cc35b62b`
+- Artifact manifest SHA256: `e6732027f8e90d8ee03f937753a44ae487a59946459113aac012c55d1158cfd7`
+- Sealed: `true`
+- Verdict: `OBSERVATION_PLAN_STILL_DISABLED_IN_RUNTIME_ENTRYPOINT`
+
+NIFTY command sequence again showed only the production 73-token subscription:
+
+```text
+subscribe 73 tokens
+set_mode FULL 73 tokens
+no later NIFTY subscribe
+final local NIFTY mode full
+```
+
+The observation plan state was still:
+
+```text
+enabled=false
+verdict=DISABLED
+observation_tokens=[]
+final_union_tokens=[]
+```
+
+This proved the first activation fix was placed in `core.kite_depth_ws.build_subscription_tokens(...)`, but the live runtime path was using the `core.depth_subscription_engine` patched builder. The engine now performs the same observation-union activation before freezing `_LAST_DESIRED_TOKENS`.
