@@ -1,0 +1,375 @@
+name: QA Whole TradeBot Certification
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: qa-whole-tradebot-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  manifest_contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: .
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test runner
+        run: python -m pip install pytest
+
+      - name: Prove manifest and evaluator behavior
+        run: >-
+          PYTHONPATH=. python -m pytest -q -o addopts=''
+          tests/qa/test_whole_tradebot_coverage_evaluator.py
+
+      - name: Require every configured production module to exist
+        run: |
+          PYTHONPATH=. python - <<'PY'
+          from pathlib import Path
+          from tools.qa_certification.whole_tradebot_manifest import WHOLE_TRADEBOT_AREAS
+
+          missing = []
+          duplicates = []
+          seen = set()
+          for area in WHOLE_TRADEBOT_AREAS:
+              for module in area.modules:
+                  if module in seen:
+                      duplicates.append(module)
+                  seen.add(module)
+                  if not Path(module).is_file():
+                      missing.append(module)
+          print(f"areas={len(WHOLE_TRADEBOT_AREAS)} modules={len(seen)}")
+          if duplicates:
+              raise SystemExit(f"duplicate manifest modules: {sorted(set(duplicates))}")
+          if missing:
+              raise SystemExit(f"missing configured modules: {missing}")
+          PY
+
+  full_deterministic_coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      TRADING_MODE: PAPER
+      KITE_USE_API: "false"
+      KITE_ALLOW_ENV_TOKEN_FOR_CI: "false"
+      PYTHONHASHSEED: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "/usr/local/share/boost" || true
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies and coverage tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov
+
+      - name: Remove automatic compatibility behavior from the checkout
+        run: |
+          mkdir -p .runtime/qa/whole_tradebot
+          if [[ -f sitecustomize.py ]]; then
+            mv sitecustomize.py .runtime/qa/whole_tradebot/sitecustomize.py.disabled
+          fi
+          test ! -f sitecustomize.py
+
+      - name: Run full deterministic suite and evaluate every critical module
+        shell: bash
+        run: |
+          set +e
+          mkdir -p .runtime/qa/whole_tradebot
+          PYTHONPATH=. pytest -q -o addopts='' \
+            -m "not integration and not feed_smoke and not feed_soak and not certification" \
+            --cov=core --cov=strategies --cov=dashboard --cov=ml \
+            --cov-branch \
+            --cov-report=term-missing \
+            --cov-report=json:.runtime/qa/whole_tradebot/coverage.json \
+            --junitxml=.runtime/qa/whole_tradebot/full_deterministic.xml \
+            --durations=75
+          pytest_rc=$?
+          PYTHONPATH=. python -m tools.qa_certification.evaluate_coverage \
+            --coverage-json .runtime/qa/whole_tradebot/coverage.json \
+            --repo-root . \
+            --out-json .runtime/qa/whole_tradebot/coverage_certification.json \
+            --out-md .runtime/qa/whole_tradebot/coverage_certification.md
+          coverage_rc=$?
+          if [[ $pytest_rc -ne 0 || $coverage_rc -ne 0 ]]; then
+            echo "whole_tradebot_gate_failed pytest_rc=$pytest_rc coverage_rc=$coverage_rc"
+            exit 1
+          fi
+
+      - name: Upload deterministic and coverage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whole-tradebot-deterministic-coverage
+          if-no-files-found: error
+          path: |
+            .runtime/qa/whole_tradebot/coverage.json
+            .runtime/qa/whole_tradebot/coverage_certification.json
+            .runtime/qa/whole_tradebot/coverage_certification.md
+            .runtime/qa/whole_tradebot/full_deterministic.xml
+            .runtime/qa/whole_tradebot/sitecustomize.py.disabled
+
+  test_family_truth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        marker:
+          - behavior
+          - safety
+          - edge
+          - regression
+          - ui_read_model
+          - replay
+          - chaos
+          - broker_firewall
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Require marker family to collect real tests
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p .runtime/qa/whole_tradebot/markers
+          PYTHONPATH=. pytest -q -o addopts='' --collect-only \
+            -m "${{ matrix.marker }}" \
+            | tee ".runtime/qa/whole_tradebot/markers/${{ matrix.marker }}.txt"
+          grep -Eq '[1-9][0-9]* tests? collected|collected [1-9][0-9]* items?' \
+            ".runtime/qa/whole_tradebot/markers/${{ matrix.marker }}.txt"
+
+      - name: Upload marker-family evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: marker-family-${{ matrix.marker }}
+          if-no-files-found: error
+          path: .runtime/qa/whole_tradebot/markers/${{ matrix.marker }}.txt
+
+  cross_module_truth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      TRADING_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run authoritative cross-module contracts
+        run: >-
+          PYTHONPATH=. pytest -q -o addopts=''
+          tests/qa/test_whole_tradebot_cross_module_truth.py
+          --junitxml=.runtime/qa/whole_tradebot/cross_module_truth.xml
+          --durations=30
+
+      - name: Upload cross-module evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whole-tradebot-cross-module-truth
+          if-no-files-found: error
+          path: .runtime/qa/whole_tradebot/cross_module_truth.xml
+
+  feed_resource_certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+      PYTHONHASHSEED: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "/usr/local/share/boost" || true
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run same-SHA 1000-cycle resource and reconnect certification
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p .runtime/qa/whole_tradebot
+          PYTHONPATH=. pytest -q -o addopts='' \
+            tests/test_feed_reconnect_resource_soak.py \
+            -m "certification" \
+            --junitxml=.runtime/qa/whole_tradebot/feed_1000_cycle.xml \
+            --durations=25 \
+            | tee .runtime/qa/whole_tradebot/feed_1000_cycle.log
+
+      - name: Upload feed certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whole-tradebot-feed-certification
+          if-no-files-found: error
+          path: |
+            .runtime/qa/whole_tradebot/feed_1000_cycle.xml
+            .runtime/qa/whole_tradebot/feed_1000_cycle.log
+
+  static_security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install security scanners
+        run: pip install bandit pip-audit
+
+      - name: Scan authoritative runtime packages
+        shell: bash
+        run: |
+          mkdir -p .runtime/qa/whole_tradebot
+          bandit -r core strategies dashboard ml -ll \
+            -f json -o .runtime/qa/whole_tradebot/bandit.json
+          pip-audit -r requirements.txt --format json \
+            --output .runtime/qa/whole_tradebot/pip_audit.json
+
+      - name: Upload security evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whole-tradebot-security
+          if-no-files-found: error
+          path: |
+            .runtime/qa/whole_tradebot/bandit.json
+            .runtime/qa/whole_tradebot/pip_audit.json
+
+  certification_verdict:
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - manifest_contract
+      - full_deterministic_coverage
+      - test_family_truth
+      - cross_module_truth
+      - feed_resource_certification
+      - static_security
+    steps:
+      - name: Require every whole-system prerequisite to pass
+        shell: bash
+        run: |
+          mkdir -p .runtime/qa/whole_tradebot
+          cat > .runtime/qa/whole_tradebot/CERTIFICATE.md <<EOF
+          # Whole-TradeBot QA Certificate
+
+          Commit: `${GITHUB_SHA}`
+          Workflow run: `${GITHUB_RUN_ID}`
+
+          - manifest_contract: `${{ needs.manifest_contract.result }}`
+          - full_deterministic_coverage: `${{ needs.full_deterministic_coverage.result }}`
+          - test_family_truth: `${{ needs.test_family_truth.result }}`
+          - cross_module_truth: `${{ needs.cross_module_truth.result }}`
+          - feed_resource_certification: `${{ needs.feed_resource_certification.result }}`
+          - static_security: `${{ needs.static_security.result }}`
+          EOF
+
+          failures=0
+          for result in \
+            "${{ needs.manifest_contract.result }}" \
+            "${{ needs.full_deterministic_coverage.result }}" \
+            "${{ needs.test_family_truth.result }}" \
+            "${{ needs.cross_module_truth.result }}" \
+            "${{ needs.feed_resource_certification.result }}" \
+            "${{ needs.static_security.result }}"; do
+            if [[ "$result" != "success" ]]; then
+              failures=$((failures + 1))
+            fi
+          done
+          if [[ $failures -ne 0 ]]; then
+            echo "" >> .runtime/qa/whole_tradebot/CERTIFICATE.md
+            echo "Verdict: **NOT_CERTIFIED**" >> .runtime/qa/whole_tradebot/CERTIFICATE.md
+            echo "whole_tradebot_not_certified failed_prerequisites=$failures"
+            exit 1
+          fi
+          echo "" >> .runtime/qa/whole_tradebot/CERTIFICATE.md
+          echo "Verdict: **QA_CERTIFIED**" >> .runtime/qa/whole_tradebot/CERTIFICATE.md
+          echo "whole_tradebot_qa_certified sha=${GITHUB_SHA}"
+
+      - name: Upload certificate attempt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whole-tradebot-certificate
+          if-no-files-found: error
+          path: .runtime/qa/whole_tradebot/CERTIFICATE.md
