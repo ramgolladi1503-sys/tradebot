@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "task_id": "LOOP-20260731-001",
+  "state": "REVIEWING",
+  "previous_state": "TESTING",
+  "cycle": 2,
+  "code_sha": "7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225",
+  "base_sha": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
+  "branch": "infra/github-first-loop-engineering-v1",
+  "worker": "chatgpt",
+  "started_at_utc": "2026-07-31T07:40:00Z",
+  "checkpointed_at_utc": "2026-07-31T08:12:00Z",
+  "completed_gate_ids": [
+    "framework_focused_tests_pass",
+    "example_task_validates",
+    "agent_review_gate_pass"
+  ],
+  "failed_gate_ids": [],
+  "blockers": [],
+  "next_action": "Wait for every workflow on the checkpoint head, inspect any exact failure, repair only contract-scoped defects, then complete the final diff scope review.",
+  "next_worker": "chatgpt",
+  "human_approval_required": false
+}
