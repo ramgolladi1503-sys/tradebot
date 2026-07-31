@@ -136,6 +136,16 @@ def test_allowed_and_forbidden_path_decisions():
     assert path_in_scope("core/feed/runtime.py", ["docs/**"], [])[1] == "outside_allowed_paths"
 
 
+def test_dot_prefixed_scope_patterns_are_preserved():
+    assert path_in_scope(".loop/README.md", [".loop/**"], [])[0] is True
+    assert path_in_scope(
+        ".github/workflows/loop-handoff-gate.yml",
+        [".github/workflows/loop-handoff-gate.yml"],
+        [],
+    )[0] is True
+    assert path_in_scope(".env", ["**"], [".env"])[1] == "forbidden"
+
+
 def test_proven_claim_without_proof_is_rejected(tmp_path):
     task_dir = _task(tmp_path)
     _write(task_dir / "claims.json", {"schema_version": 1, "claims": [{"claim_id": "CLM-1", "statement": "Claim", "status": "PROVEN", "proof_ids": []}]})
