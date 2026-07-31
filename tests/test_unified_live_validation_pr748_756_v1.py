@@ -35,6 +35,7 @@ from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
 from core.opportunity_scoring import score_opportunities
 from core.unified_live_validation_pr748_756 import runtime_observer
+import main as tradebot_main
 
 
 def test_campaign_is_disabled_by_default_and_requires_explicit_env():
@@ -316,3 +317,21 @@ def test_dry_integration_real_paths_record_and_seal(tmp_path, monkeypatch):
     ):
         assert (root / relative).exists(), relative
     assert validate_jsonl_file(root / "live/market_event_graph_intervals.jsonl", expected_run_id=identity.run_id)["pass"]
+
+
+def test_main_unified_campaign_shutdown_helper_is_idempotent(monkeypatch, capsys):
+    calls = []
+
+    def fake_shutdown_current(*, seal: bool, state: str):
+        calls.append({"seal": seal, "state": state})
+        if len(calls) == 1:
+            return {"sealed": True}
+        return None
+
+    monkeypatch.setattr(tradebot_main._unified_live_campaign, "shutdown_current", fake_shutdown_current)
+
+    tradebot_main._shutdown_unified_live_campaign()
+    tradebot_main._shutdown_unified_live_campaign(state="STOPPED")
+
+    assert calls == [{"seal": True, "state": "PROCESS_EXIT"}, {"seal": True, "state": "STOPPED"}]
+    assert "[UNIFIED_LIVE_VALIDATION] shutdown sealed=True" in capsys.readouterr().out

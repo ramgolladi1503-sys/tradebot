@@ -123,6 +123,15 @@ def _record_startup_lifecycle(event_name: str, *, details: dict | None = None, e
         pass
 
 
+def _shutdown_unified_live_campaign(state: str = "PROCESS_EXIT") -> None:
+    try:
+        result = _unified_live_campaign.shutdown_current(seal=True, state=state)
+        if result is not None:
+            print(f"[UNIFIED_LIVE_VALIDATION] shutdown sealed={result.get('sealed')}")
+    except Exception as exc:
+        print(f"[UNIFIED_LIVE_VALIDATION_WARN] shutdown_failed: {exc}")
+
+
 def main():
     repo_root = Path(__file__).resolve().parent
     print(f"[BOOT] repo_root={repo_root}")
@@ -134,6 +143,7 @@ def main():
         campaign_observer = _unified_live_campaign.init_from_env()
         if campaign_observer is not None:
             campaign_observer.write_process_identity({"exec_mode": exec_mode, "repo_root": str(repo_root)})
+            atexit.register(_shutdown_unified_live_campaign)
             print("[UNIFIED_LIVE_VALIDATION] runtime observer initialized")
     except Exception as exc:
         print(f"[UNIFIED_LIVE_VALIDATION_ERROR] {exc}")
@@ -478,12 +488,7 @@ def main():
             print("[RECON] reconciliation daemon stopped")
         except Exception as exc:
             print(f"[RECON_WARN] failed_to_stop_reconciliation_daemon: {exc}")
-        try:
-            result = _unified_live_campaign.shutdown_current(seal=True, state="STOPPED")
-            if result is not None:
-                print(f"[UNIFIED_LIVE_VALIDATION] shutdown sealed={result.get('sealed')}")
-        except Exception as exc:
-            print(f"[UNIFIED_LIVE_VALIDATION_WARN] shutdown_failed: {exc}")
+        _shutdown_unified_live_campaign(state="STOPPED")
 
 
 if __name__ == "__main__":
