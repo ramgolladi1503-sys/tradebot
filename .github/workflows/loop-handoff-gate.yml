@@ -1,0 +1,74 @@
+name: Loop Handoff Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.loop/**'
+      - 'loop_tasks/**'
+      - 'scripts/loop/**'
+      - 'tests/loop/**'
+      - 'docs/engineering/github_first_loop_engineering_v1.md'
+      - '.github/workflows/loop-handoff-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-loop-handoffs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused test dependency
+        run: python -m pip install --disable-pip-version-check pytest
+
+      - name: Compile loop framework
+        run: python -m compileall -q scripts/loop tests/loop
+
+      - name: Run loop framework tests
+        run: pytest -q tests/loop
+
+      - name: Validate committed loop tasks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .loop-ci/contexts
+          : > .loop-ci/validation.txt
+          found=0
+          while IFS= read -r contract; do
+            found=1
+            task_dir="$(dirname "$contract")"
+            echo "VALIDATE $task_dir" | tee -a .loop-ci/validation.txt
+            python3 scripts/loop/validate_task.py "$task_dir" --json | tee -a .loop-ci/validation.txt
+            safe_name="$(echo "$task_dir" | tr '/ ' '__')"
+            python3 scripts/loop/build_context.py \
+              --task-dir "$task_dir" \
+              --output ".loop-ci/contexts/${safe_name}.md" \
+              --max-bytes 8192
+          done < <(find loop_tasks -type f -name contract.json -print | sort)
+          if [[ "$found" -eq 0 ]]; then
+            echo "No committed loop task contracts found." | tee -a .loop-ci/validation.txt
+          fi
+
+      - name: Check patch formatting
+        run: git diff --check
+
+      - name: Upload bounded validation packet
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loop-handoff-validation-${{ github.sha }}
+          path: .loop-ci/
+          if-no-files-found: warn
+          retention-days: 30
