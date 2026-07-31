@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ramgolladi1503-sys/tradebot/.loop/schemas/checkpoint.schema.json",
+  "title": "TradeBot Loop Checkpoint State",
+  "type": "object",
+  "required": [
+    "schema_version", "task_id", "state", "cycle", "code_sha", "base_sha",
+    "branch", "worker", "checkpointed_at_utc", "completed_gate_ids",
+    "failed_gate_ids", "blockers", "next_action", "next_worker",
+    "human_approval_required"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_id": {"type": "string"},
+    "state": {
+      "enum": [
+        "NEW", "IMPLEMENTING", "TESTING", "REVIEWING", "REPAIRING",
+        "OFFLINE_CERTIFIED", "WAITING_FOR_HUMAN", "LIVE_VALIDATING",
+        "EVIDENCE_AUDIT", "READY_FOR_CONFIRMATION",
+        "READY_FOR_MERGE_RECOMMENDATION", "BLOCKED", "FAILED", "DONE", "CANCELLED"
+      ]
+    },
+    "previous_state": {"type": ["string", "null"]},
+    "cycle": {"type": "integer", "minimum": 0},
+    "code_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "base_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "branch": {"type": "string", "minLength": 1},
+    "worker": {"type": "string", "minLength": 1},
+    "completed_gate_ids": {"type": "array", "items": {"type": "string"}},
+    "failed_gate_ids": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array"},
+    "next_action": {"type": "string"},
+    "next_worker": {"type": "string"},
+    "human_approval_required": {"type": "boolean"}
+  },
+  "additionalProperties": true
+}
