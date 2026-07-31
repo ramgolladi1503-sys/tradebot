@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "task_id": "LOOP-20260731-001",
+  "title": "One bounded engineering objective",
+  "objective": "Implement and prove one scoped behavior without expanding runtime risk.",
+  "repository": "ramgolladi1503-sys/tradebot",
+  "base_branch": "main",
+  "work_branch": "task/example",
+  "pr_number": null,
+  "owner": "human",
+  "preferred_worker": "codex",
+  "reviewer": "chatgpt-or-antigravity",
+  "allowed_paths": ["docs/example/**", "tests/example/**"],
+  "forbidden_paths": ["credentials.py", ".env", "runtime/live/**"],
+  "acceptance_gates": ["focused_tests_pass", "independent_review_pass"],
+  "required_tests": ["pytest -q tests/example"],
+  "human_gates": ["push_persistent_branch", "merge_pull_request"],
+  "stop_conditions": ["workspace_permission_denied", "credentials_missing", "retry_budget_exhausted"],
+  "max_implementation_cycles": 3,
+  "max_review_cycles": 2,
+  "created_at_utc": "2026-07-31T00:00:00Z",
+  "frozen": true
+}
