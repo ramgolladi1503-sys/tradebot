@@ -235,6 +235,204 @@ def _activate_observation_for_tokens(ws, registry, *, session_id="session-full",
     )
 
 
+def test_reconnect_generation_coercion_preserves_zero_and_fails_closed():
+    ws = importlib.import_module("core.kite_depth_ws")
+
+    assert ws._coerce_generation(0, default=-1) == 0
+    assert ws._coerce_generation("0", default=-1) == 0
+    assert ws._coerce_generation(1, default=-1) == 1
+    assert ws._coerce_generation("1", default=-1) == 1
+    assert ws._coerce_generation(None, default=-1) == -1
+    assert ws._coerce_generation("not-a-generation", default=-1) == -1
+
+
+def test_reconnect_generation_zero_matches_feed_zero_for_nifty_full_callback(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    shadow.reset_live_source_shadow_buffer()
+    _activate_observation_for_tokens(ws, registry, session_id="session-zero", generation=0)
+
+    ws.on_ticks(None, [{
+        "instrument_token": registry.index_token,
+        "tradable": False,
+        "mode": "full",
+        "last_price": 25000.0,
+        "exchange_timestamp": 200.0,
+        "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+        "change": 0.1,
+    }])
+
+    lifecycle = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})[
+        "token_lifecycle"
+    ][str(registry.index_token)]
+    packet = lifecycle["latest_observation_packet"]
+    assert packet["reconnect_generation_matches"] is True
+    assert packet["accepted_for_shadow_bar"] is True
+    assert packet["rejection_reason"] == "CALLBACK_SEEN_FULL_PACKET"
+    assert lifecycle["post_mode_full_count"] == 1
+    assert lifecycle["first_full_payload_epoch"] is not None
+    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY")
+
+
+def test_reconnect_generation_one_matches_feed_one_for_nifty_full_callback(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    _activate_observation_for_tokens(ws, registry, session_id="session-one", generation=1)
+
+    ws.on_ticks(None, [{
+        "instrument_token": registry.index_token,
+        "tradable": False,
+        "mode": "full",
+        "last_price": 25000.0,
+        "exchange_timestamp": 200.0,
+        "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+        "change": 0.1,
+    }])
+
+    lifecycle = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})[
+        "token_lifecycle"
+    ][str(registry.index_token)]
+    assert lifecycle["latest_observation_packet"]["reconnect_generation_matches"] is True
+    assert lifecycle["latest_observation_packet"]["accepted_for_shadow_bar"] is True
+
+
+def test_reconnect_generation_zero_rejects_feed_one(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    shadow.reset_live_source_shadow_buffer()
+    _activate_observation_for_tokens(ws, registry, session_id="session-zero-stale", generation=0)
+    ws._FEED_RECONNECT_GENERATION = 1
+
+    ws.on_ticks(None, [{
+        "instrument_token": registry.index_token,
+        "tradable": False,
+        "mode": "full",
+        "last_price": 25000.0,
+        "exchange_timestamp": 200.0,
+        "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+        "change": 0.1,
+    }])
+
+    lifecycle = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})[
+        "token_lifecycle"
+    ][str(registry.index_token)]
+    packet = lifecycle["latest_observation_packet"]
+    assert packet["reconnect_generation_matches"] is False
+    assert packet["rejection_reason"] == "CALLBACK_SEEN_GENERATION_MISMATCH"
+    assert packet["accepted_for_shadow_bar"] is False
+    assert lifecycle["first_full_payload_epoch"] is None
+    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY") == []
+
+
+def test_missing_observation_generation_does_not_match_feed_zero(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    shadow.reset_live_source_shadow_buffer()
+    _activate_observation_for_tokens(ws, registry, session_id="session-missing-generation", generation=0)
+    with ws._OBSERVATION_PLAN_STATE_LOCK:
+        ws._OBSERVATION_PLAN_STATE["reconnect_generation"] = None
+
+    ws.on_ticks(None, [{
+        "instrument_token": registry.index_token,
+        "tradable": False,
+        "mode": "full",
+        "last_price": 25000.0,
+        "exchange_timestamp": 200.0,
+        "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+        "change": 0.1,
+    }])
+
+    lifecycle = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})[
+        "token_lifecycle"
+    ][str(registry.index_token)]
+    assert lifecycle["latest_observation_packet"]["reconnect_generation_matches"] is False
+    assert lifecycle["latest_observation_packet"]["rejection_reason"] == "CALLBACK_SEEN_GENERATION_MISMATCH"
+    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY") == []
+
+
+def test_invalid_observation_generation_fails_closed(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    shadow.reset_live_source_shadow_buffer()
+    _activate_observation_for_tokens(ws, registry, session_id="session-invalid-generation", generation=0)
+    with ws._OBSERVATION_PLAN_STATE_LOCK:
+        ws._OBSERVATION_PLAN_STATE["reconnect_generation"] = "invalid"
+
+    ws.on_ticks(None, [{
+        "instrument_token": registry.index_token,
+        "tradable": False,
+        "mode": "full",
+        "last_price": 25000.0,
+        "exchange_timestamp": 200.0,
+        "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+        "change": 0.1,
+    }])
+
+    lifecycle = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})[
+        "token_lifecycle"
+    ][str(registry.index_token)]
+    assert lifecycle["latest_observation_packet"]["reconnect_generation_matches"] is False
+    assert lifecycle["latest_observation_packet"]["rejection_reason"] == "CALLBACK_SEEN_GENERATION_MISMATCH"
+    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY") == []
+
+
+def test_reconnect_generation_zero_matches_feed_zero_for_equity_full_callback(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    shadow.reset_live_source_shadow_buffer()
+    _activate_observation_for_tokens(ws, registry, session_id="session-equity-zero", generation=0)
+    token = registry.token_by_symbol["RELIANCE"]
+
+    ws.on_ticks(None, [{
+        "instrument_token": token,
+        "tradable": True,
+        "mode": "full",
+        "last_price": 1420.0,
+        "exchange_timestamp": 200.0,
+        "depth": {"buy": [{"price": 1419.5}], "sell": [{"price": 1420.5}]},
+    }])
+
+    lifecycle = ws.market_event_graph_subscription_evidence_for_tokens({"RELIANCE": token})[
+        "token_lifecycle"
+    ][str(token)]
+    packet = lifecycle["latest_observation_packet"]
+    assert packet["reconnect_generation_matches"] is True
+    assert packet["accepted_for_shadow_bar"] is True
+    assert packet["rejection_reason"] == "CALLBACK_SEEN_FULL_PACKET"
+    assert lifecycle["post_mode_full_count"] == 1
+    assert lifecycle["first_full_payload_epoch"] is not None
+    assert shadow.shadow_ohlc_buffer.get_bars("RELIANCE")
+
+
 def test_nifty_quote_with_ohlc_and_change_does_not_pass_as_full(monkeypatch):
     ws = importlib.import_module("core.kite_depth_ws")
     shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")

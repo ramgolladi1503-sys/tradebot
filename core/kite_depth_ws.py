@@ -6199,6 +6199,15 @@ def _state_identity_payload() -> dict[str, object]:
     }
 
 
+def _coerce_generation(value: object, *, default: int = -1) -> int:
+    if value is None:
+        return int(default)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
+
+
 def _record_observation_callback_truth(
     *,
     tick: Mapping[str, Any],
@@ -6234,15 +6243,15 @@ def _record_observation_callback_truth(
         source_tick_epoch=source_tick_epoch,
         mode_success_epoch=mode_epoch,
         feed_session_id=str(feed_identity.get("feed_session_id") or ""),
-        reconnect_generation=int(feed_identity.get("reconnect_generation") or 0),
+        reconnect_generation=_coerce_generation(feed_identity.get("reconnect_generation"), default=-1),
         has_depth=has_depth,
     )
     active_plan_tokens = set(int(tok) for tok in (observation_state.get("observation_tokens") or []))
     token_in_active_plan = token_int in active_plan_tokens
     feed_session_matches = str(observation_state.get("feed_session_id") or "") == str(feed_identity.get("feed_session_id") or "")
-    reconnect_generation_matches = int(observation_state.get("reconnect_generation") or -1) == int(
-        feed_identity.get("reconnect_generation") or 0
-    )
+    plan_generation = _coerce_generation(observation_state.get("reconnect_generation"), default=-1)
+    feed_generation = _coerce_generation(feed_identity.get("reconnect_generation"), default=-1)
+    reconnect_generation_matches = plan_generation == feed_generation
     subscription_send_recorded = token_int in _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS
     mode_full_is_final = token_int in _MODE_COMMAND_FINAL_FULL_TOKENS
     post_mode_callback = bool(mode_epoch is not None and float(callback_receipt_epoch) > float(mode_epoch))
@@ -6420,6 +6429,8 @@ def on_ticks(ws, ticks):
         tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
         tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None
         observation_state = _observation_state_payload()
+        plan_generation = _coerce_generation(observation_state.get("reconnect_generation"), default=-1)
+        feed_generation = _coerce_generation(_FEED_RECONNECT_GENERATION, default=-1)
         observation_token_allowed = (
             token_int is not None
             and int(token_int) in observation_token_set
@@ -6428,7 +6439,7 @@ def on_ticks(ws, ticks):
             and str(observation_state.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
             and int(token_int) in set(int(tok) for tok in (observation_state.get("observation_tokens") or []))
             and str(observation_state.get("feed_session_id") or "") == _ensure_feed_session_id()
-            and int(observation_state.get("reconnect_generation") or -1) == int(_FEED_RECONNECT_GENERATION)
+            and plan_generation == feed_generation
             and int(token_int) in _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS
         )
         if token_int is not None and isinstance(depth, dict) and depth:
