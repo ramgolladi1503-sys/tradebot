@@ -8,9 +8,11 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 
 _SECRET_KEY_RE = re.compile(r"(?:api[_-]?key|token|secret|password|authorization)", re.I)
+_GEMINI_API_HOST = "generativelanguage.googleapis.com"
 
 
 class GeminiClientError(RuntimeError):
@@ -31,8 +33,21 @@ def redact_secrets(value: Any) -> Any:
     return value
 
 
+def _validate_google_request(request: urllib.request.Request) -> None:
+    parsed = urlsplit(request.full_url)
+    if parsed.scheme.lower() != "https":
+        raise GeminiClientError("Gemini endpoint must use HTTPS")
+    if parsed.hostname != _GEMINI_API_HOST:
+        raise GeminiClientError("Gemini endpoint host is not allowed")
+    if parsed.username is not None or parsed.password is not None:
+        raise GeminiClientError("Gemini endpoint credentials are not allowed")
+    if parsed.port not in (None, 443):
+        raise GeminiClientError("Gemini endpoint port is not allowed")
+
+
 def _default_transport(request: urllib.request.Request, timeout: float) -> bytes:
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed Google endpoint
+    _validate_google_request(request)
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310 - exact HTTPS host and port are validated above
         return response.read()
 
 
