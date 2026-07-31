@@ -135,3 +135,42 @@ Result before bounded proof run:
 61 passed in 4.74s
 ```
 
+After the first short proof exposed a disabled observation plan, an additional regression was added for `build_subscription_tokens(...)` activating the PR #749 observation plan and merging all 51 observation identities into `_LAST_DESIRED_TOKENS`.
+
+Updated focused result:
+
+```text
+62 passed in 6.40s
+```
+
+## Short Proof Run 1
+
+- Run ID: `unified-pr748-756-20260731-fd1a9da3a6a7-live-0ce9ea51`
+- Campaign commit: `af4f66768`
+- Artifact manifest SHA256: `67fc1347a8fbce6e3232f86517d59c0fc562cf284d4f222a694cedd43f604dc1`
+- Sealed: `true`
+- Verdict: `OBSERVATION_PLAN_DISABLED_MODE_LIFECYCLE_PARTIAL`
+
+NIFTY command sequence recorded:
+
+| Sequence | Callsite | Operation | Result | Client mode before | Client mode after | Token count |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `_resubscribe_full` | `subscribe` | `dispatched` | `null` | `null` | 73 |
+| 2 | `_resubscribe_full` | `subscribe` | `succeeded` | `null` | `quote` | 73 |
+| 3 | `_resubscribe_full` | `set_mode` | `dispatched` | `quote` | `null` | 73 |
+| 4 | `_resubscribe_full` | `set_mode` | `succeeded` | `quote` | `full` | 73 |
+
+This proves no later NIFTY subscribe reset the local mode during that short run. It also proves the subscribed set was the normal 73-token production set, not the PR #749 observation union.
+
+First causal break in that run:
+
+```text
+MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE=true
+-> authoritative universe resolvable by bridge
+-> WebSocket observation plan state remained DISABLED
+-> 51 observation identities not merged into _LAST_DESIRED_TOKENS
+-> observation-specific callback classifier did not stamp latest_observation_packet
+-> constituent diagnostic progress stayed hidden behind INDEX_FULL_PACKET_NOT_OBSERVED
+```
+
+The fix now activates the observation plan inside `build_subscription_tokens(...)` after production-token pruning/budgeting and before desired tokens are frozen. The union is only applied when the existing configured budget accepts the 51-token observation universe.
