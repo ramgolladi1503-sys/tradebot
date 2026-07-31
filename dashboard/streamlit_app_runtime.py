@@ -1759,6 +1759,11 @@ def _select_executable_suggestion_rows(df: pd.DataFrame) -> pd.DataFrame:
     return out[executable_mask].copy()
 
 
+def _show_executable_primary(show_advisory_candidates: bool) -> bool:
+    """Keep executable opportunities primary unless the operator explicitly opens diagnostics."""
+    return not bool(show_advisory_candidates)
+
+
 def _select_advisory_table_source(
     *,
     show_exec_only: bool,
@@ -7477,11 +7482,16 @@ if nav == "Home":
                 raise _SkipSection()
             status_payload = _load_live_suggestions_status()
             suggested_live_df = _load_live_suggestions_df(limit=100)
-            show_exec_only = st.checkbox(
-                "Executable only",
+            show_advisory_candidates = st.checkbox(
+                "Show advisory/debug candidates",
                 value=False,
-                key="suggested_trades_exec_only",
+                key="suggested_trades_show_advisory",
+                help=(
+                    "Executable opportunities remain the primary view. Advisory, recovered-fallback, "
+                    "and near-executable rows never receive execution authority or capital."
+                ),
             )
+            show_exec_only = _show_executable_primary(show_advisory_candidates)
             st.caption(
                 "Main table shows engine-ranked opportunities from persisted top-opportunity snapshots. "
                 "If snapshots are missing or empty, the table falls back to raw advisory rows."
