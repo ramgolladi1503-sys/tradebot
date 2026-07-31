@@ -30,6 +30,7 @@ jobs:
         run: |
           python scripts/build_remaining_whole_tradebot_repairs.py
           python scripts/build_dashboard_runtime_guard_repair.py
+          python scripts/build_ranking_tiebreak_repair.py
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -47,6 +48,7 @@ jobs:
         run: >-
           PYTHONPATH=. pytest -q -o addopts=''
           tests/qa/test_whole_tradebot_cross_module_truth.py
+          tests/qa/test_ranking_tiebreak_determinism.py
           tests/qa/test_remaining_whole_tradebot_security.py
           tests/qa/test_dashboard_operator_truth.py
           tests/test_dashboard_canonical_ranked_source.py
