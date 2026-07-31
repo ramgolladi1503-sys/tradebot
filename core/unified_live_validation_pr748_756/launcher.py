@@ -149,22 +149,27 @@ def launch_runtime_child(
                 },
                 pr_number=750,
             )
-    recorder.append(
-        "live/feed_truth_samples.jsonl",
-        {
-            "source_timestamp": time.time(),
-            "receipt_timestamp": time.time(),
-            "source": "governed_launcher",
-            "event": "runtime_feed_source_unavailable_to_campaign",
-            "blocker": "CURRENT_LAUNCH_COMMAND_DOES_NOT_ACTIVATE_CAMPAIGN",
-            "feed_session_id": None,
-            "reconnect_generation": None,
-            "symbol": None,
-            "instrument_token": None,
-            "source_provenance_type": "explicit_source_unavailable_blocker",
-        },
-        pr_number=750,
-    )
+    if exit_code != 0 or list(command) != ["./run_live.sh"]:
+        recorder.append(
+            "live/feed_truth_samples.jsonl",
+            {
+                "source_timestamp": time.time(),
+                "receipt_timestamp": time.time(),
+                "source": "governed_launcher",
+                "event": "runtime_feed_source_unavailable_to_smoke"
+                if exit_code == 0
+                else "runtime_exited_before_feed_truth_sample_verified",
+                "blocker": "NON_MARKET_SMOKE_HAS_NO_LIVE_FEED_SOURCE"
+                if exit_code == 0
+                else "RUNTIME_EXITED_BEFORE_FEED_TRUTH_SAMPLE",
+                "feed_session_id": None,
+                "reconnect_generation": None,
+                "symbol": None,
+                "instrument_token": None,
+                "source_provenance_type": "launcher_process_supervision",
+            },
+            pr_number=750,
+        )
     (live / "process_identity.json").write_text(
         json.dumps({**process_identity, "child_pid": child_pid, "exit_code": exit_code, "end_epoch": time.time()}, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

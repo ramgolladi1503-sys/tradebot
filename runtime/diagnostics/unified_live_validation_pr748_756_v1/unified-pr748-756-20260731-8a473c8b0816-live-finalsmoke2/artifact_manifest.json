@@ -1,0 +1,40 @@
+{
+  "artifact_count": 7,
+  "artifacts": [
+    {
+      "bytes": 839,
+      "path": "live/feed_truth_samples.jsonl",
+      "sha256": "4d412489ff72fe0bbc88b784df59c304c2daeaf79b1cdd8579c59e1aa954edfc"
+    },
+    {
+      "bytes": 783,
+      "path": "live/heartbeat.jsonl",
+      "sha256": "3544bdbcac37b08a93429f9b95004b7691f5b441902fb60af00d562deee87225"
+    },
+    {
+      "bytes": 437,
+      "path": "live/process_identity.json",
+      "sha256": "e8417eca6a595a62ff70916eda97e11b5f8579e84359ce58e5973929d71298cb"
+    },
+    {
+      "bytes": 0,
+      "path": "live/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 345,
+      "path": "live/stdout.log",
+      "sha256": "85fc77a9345c129c5767f444af1b45503033c421a6e3d85a565056cd13bf3dc9"
+    },
+    {
+      "bytes": 551,
+      "path": "presession/campaign_identity.json",
+      "sha256": "65bb4d1068a36494057e5c137fb36f65bba57a4c6caa2f3e10826ec934e9e3bc"
+    },
+    {
+      "bytes": 968,
+      "path": "presession/launch_preflight.json",
+      "sha256": "c0ab19dbf827aa727a12dae22f5bcf0ab0b3354ebd04c5a0834f16a86ae98cf6"
+    }
+  ]
+}

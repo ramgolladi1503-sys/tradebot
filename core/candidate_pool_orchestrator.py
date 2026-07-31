@@ -2,18 +2,23 @@
 
 This module collects movement strategy candidates into one report and attaches
 option-confirmation and no-trade assessment evidence. It is intentionally a
-shell: it does not rank, execute, submit orders, call brokers, touch depth
-subscriptions, mutate candidates, tune strategy thresholds, or change dashboard
-behavior.
+shell: it does not rank, execute, submit orders, call brokers, mutate candidates,
+tune strategy thresholds, or change dashboard behavior. The market-event graph
+source may request read-only market-data subscriptions when explicitly enabled.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Iterable
 
+from core.market_event_graph_constituent_source import (
+    attach_market_event_graph_constituent_source,
+    persist_market_event_graph_constituent_state,
+)
 from core.market_event_graph_runtime_observer import observe_market_event_graph_runtime
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult, classify_movement_regime
@@ -90,10 +95,37 @@ def build_candidate_pool_report(
     if not isinstance(ctx, StrategyContext):
         raise TypeError("candidate_pool_context_invalid")
 
+    source_index_token = None
+    if ctx.symbol == "NIFTY" and _live_constituent_source_requested(ctx.metadata):
+        source_index_token = _canonical_nifty_index_token()
+    source_metadata = attach_market_event_graph_constituent_source(
+        ctx.metadata,
+        symbol=ctx.symbol,
+        as_of_epoch=ctx.ts_epoch,
+        index_token=source_index_token,
+    )
+    ctx.metadata.clear()
+    ctx.metadata.update(source_metadata)
+
     runtime_observation = observe_market_event_graph_runtime(
         ctx.metadata,
         context_ts=ctx.ts_epoch,
     )
+    try:
+        from core.unified_live_validation_pr748_756.runtime_observer import safe_call
+
+        safe_call(
+            "observe_constituent_source",
+            ctx.metadata,
+            source="core.candidate_pool_orchestrator.attach_market_event_graph_constituent_source",
+        )
+        safe_call(
+            "observe_market_event_graph",
+            runtime_observation,
+            source="core.candidate_pool_orchestrator.observe_market_event_graph_runtime",
+        )
+    except Exception:
+        pass
     regime_result = regime or classify_movement_regime(ctx)
     option_assessment = option_pressure or assess_option_pressure(ctx)
     generators = tuple(candidate_generators) if candidate_generators is not None else get_default_candidate_generators()
@@ -115,6 +147,8 @@ def build_candidate_pool_report(
                 movement_candidates.append(candidate)
             else:
                 warnings.append(f"strategy_generator_returned_non_candidate:{generator_name}")
+
+    source_state_persisted = persist_market_event_graph_constituent_state(ctx.metadata)
 
     no_trade_assessment = assess_no_trade(
         ctx,
@@ -158,7 +192,7 @@ def build_candidate_pool_report(
     eligible_before_suppression = sum(1 for candidate in movement_candidates if candidate.executable_eligible)
     report_executable_count = 0 if no_trade_assessment.no_trade else eligible_before_suppression
 
-    return CandidatePoolReport(
+    report = CandidatePoolReport(
         schema_version=REPORT_SCHEMA_VERSION,
         symbol=ctx.symbol,
         read_only=True,
@@ -187,11 +221,28 @@ def build_candidate_pool_report(
             "no_trade": no_trade_assessment.no_trade,
             "no_trade_primary_reason": no_trade_assessment.primary_reason,
             "default_strategy_mode": "MARKET_EVENT_GRAPH_SHADOW_ONLY",
+            "market_event_graph_constituent_source_status": ctx.metadata.get(
+                "market_event_graph_constituent_source_status"
+            ),
+            "market_event_graph_constituent_source_reason": ctx.metadata.get(
+                "market_event_graph_constituent_source_reason"
+            ),
+            "market_event_graph_constituent_source_evidence": ctx.metadata.get(
+                "market_event_graph_constituent_source_evidence", {}
+            ),
+            "market_event_graph_constituent_state_persisted": bool(source_state_persisted),
             "market_event_graph_runtime_status": runtime_observation["status"],
             "market_event_graph_runtime_reason": runtime_observation["reason"],
             "market_event_graph_runtime_observation": runtime_observation,
         },
     )
+    try:
+        from core.unified_live_validation_pr748_756.runtime_observer import safe_call
+
+        safe_call("observe_candidate_pool", report, source="core.candidate_pool_orchestrator.build_candidate_pool_report")
+    except Exception:
+        pass
+    return report
 
 
 def get_default_candidate_generators() -> tuple[CandidateGenerator, ...]:
@@ -215,6 +266,27 @@ def _build_no_trade_candidates(
     from strategies.movement.no_trade_chop import generate_no_trade_candidates  # noqa: PLC0415
 
     return tuple(generate_no_trade_candidates(ctx, regime, movement_candidates) or ())
+
+
+def _live_constituent_source_requested(metadata: dict[str, Any]) -> bool:
+    if isinstance(metadata.get("completed_constituent_bars"), (list, tuple)):
+        return False
+    raw = metadata.get("market_event_graph_live_source_enable")
+    if raw is None:
+        raw = os.getenv("MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", "false")
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _canonical_nifty_index_token() -> int | None:
+    try:
+        from core.market_data import get_token_for_symbol
+
+        token = int(get_token_for_symbol("NIFTY"))
+    except Exception:
+        return None
+    return token if token > 0 else None
 
 
 def _generator_name(generator: CandidateGenerator) -> str:

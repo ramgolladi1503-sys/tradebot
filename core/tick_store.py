@@ -13,7 +13,6 @@ from core.fs_utils import ensure_parent_dir
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.time_utils import compute_age_sec, normalize_epoch_seconds, now_utc_epoch
-from contextlib import contextmanager
 
 _tick_window = deque(maxlen=200000)
 _LAST_TICK_EPOCH = None
@@ -151,7 +150,6 @@ def _flush_batch_size() -> int:
         return 1000
 
 
-@contextmanager
 def _conn():
     db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
     conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
@@ -161,11 +159,7 @@ def _conn():
         conn.execute("PRAGMA synchronous=NORMAL")
     except Exception:
         pass
-    try:
-        with conn:
-            yield conn
-    finally:
-        conn.close()
+    return conn
 
 
 def _tick_columns(conn: sqlite3.Connection) -> set[str]:
@@ -729,6 +723,28 @@ def reset_audit_counters() -> None:
     _FLUSH_THREAD_TERMINATED = False
     with _WRITE_QUEUE_LOCK:
         _WRITE_QUEUE.clear()
+
+
+def reset_runtime_state_for_tests() -> None:
+    """Reset the process-wide tick persistence singleton between tests.
+
+    Tests that exercise shutdown intentionally close write acceptance. Cache-only
+    cleanup is insufficient because the next test then inherits a terminal worker
+    lifecycle. This helper is deliberately explicit and must not be called by live
+    runtime code.
+    """
+    global _FLUSH_THREAD, _FLUSH_THREAD_IDENT, _FLUSH_THREAD_NAME, _LAST_TICK_EPOCH
+    shutdown_persistence_worker(deadline_seconds=1.0)
+    reset_audit_counters()
+    clear_replay_pressure_hook()
+    set_replay_pressure_immediate_flush_enabled(True)
+    set_replay_pressure_read_flush_enabled(True)
+    _LAST_TICK_EPOCH = None
+    _LAST_TICK_BY_TOKEN.clear()
+    _tick_window.clear()
+    _FLUSH_THREAD = None
+    _FLUSH_THREAD_IDENT = None
+    _FLUSH_THREAD_NAME = None
 
 
 def _flush_loop() -> None:

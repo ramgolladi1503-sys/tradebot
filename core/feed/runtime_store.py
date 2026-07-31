@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Iterator
-from contextlib import contextmanager
+from typing import Any
 
 from config import config as cfg
 from core.events import write_json_atomic
@@ -26,8 +25,7 @@ def _db_path() -> Path:
     return ensure_parent_dir(trade_db_path(desk_id))
 
 
-@contextmanager
-def _conn() -> Iterator[sqlite3.Connection]:
+def _conn() -> sqlite3.Connection:
     conn = sqlite3.connect(str(_db_path()), timeout=30.0, check_same_thread=False)
     try:
         conn.execute("PRAGMA busy_timeout=30000")
@@ -35,11 +33,7 @@ def _conn() -> Iterator[sqlite3.Connection]:
         conn.execute("PRAGMA synchronous=NORMAL")
     except Exception:
         pass
-    try:
-        with conn:
-            yield conn
-    finally:
-        conn.close()
+    return conn
 
 
 def init_feed_runtime_table() -> None:
@@ -164,6 +158,13 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
     out = dict(payload or {})
     out["ts_epoch"] = float(ts_epoch)
     reconnect_blocked_reason = str(out.get("reconnect_blocked_reason") or "").strip().lower() or None
+    if reconnect_blocked_reason == "partial_recovery":
+        reconnect_blocked_reason = None
+        out["reconnect_blocked_reason"] = None
+        out["restart_blocked_reason"] = None
+        out["process_restart_required"] = False
+        out["restart_suppressed"] = False
+        out.setdefault("runtime_state", "VERIFYING_RECOVERY")
     restart_failure_reason = str(
         out.get("restart_failure_reason")
         or out.get("restart_blocked_reason")

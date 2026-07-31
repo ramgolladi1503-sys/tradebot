@@ -8,7 +8,7 @@ class OhlcBuffer:
     def __init__(self):
         self._bars = defaultdict(lambda: deque(maxlen=getattr(cfg, "OHLC_BUFFER_MAX_BARS", 500)))
 
-    def update_tick(self, symbol, price, volume=None, ts=None):
+    def update_tick(self, symbol, price, volume=None, ts=None, provenance=None):
         if price is None:
             return {
                 "accepted": False,
@@ -43,6 +43,7 @@ class OhlcBuffer:
                 bar["close"] = price
                 if volume is not None:
                     bar["volume"] += volume or 0
+                _merge_live_bar_provenance(bar, provenance, ts)
                 return {
                     "accepted": True,
                     "status": "UPDATED_CURRENT_BAR",
@@ -51,14 +52,16 @@ class OhlcBuffer:
                     "current_tail_bucket": tail_bucket,
                 }
             else:
-                bars.append({
+                row = {
                     "ts": bucket,
                     "open": price,
                     "high": price,
                     "low": price,
                     "close": price,
                     "volume": volume if volume is not None else 0,
-                })
+                }
+                _merge_live_bar_provenance(row, provenance, ts)
+                bars.append(row)
                 return {
                     "accepted": True,
                     "status": "NEW_BAR",
@@ -154,6 +157,16 @@ class OhlcBuffer:
                     "low": low_val,
                     "close": close_val,
                     "volume": vol_val,
+                    "bar_provenance": {
+                        "source_type": "historical_seed",
+                        "live_feed_session_id": None,
+                        "first_live_tick_epoch": None,
+                        "last_live_tick_epoch": None,
+                        "historical_seed": True,
+                        "replay_fixture": False,
+                        "non_live_fallback": False,
+                        "recovered_synthetic": False,
+                    },
                 })
 
             if not normalized:
@@ -196,3 +209,40 @@ class OhlcBuffer:
             return {"accepted": False, "status": "INVALID_SEED_BATCH", "symbol": symbol, "seeded_bars": 0, "overlap_preserved": 0}
 
 ohlc_buffer = OhlcBuffer()
+
+
+def _merge_live_bar_provenance(bar, provenance, tick_ts):
+    payload = dict(provenance or {})
+    if not payload:
+        payload = {
+            "source_type": "unknown",
+            "live_feed_session_id": None,
+            "historical_seed": False,
+            "replay_fixture": False,
+            "non_live_fallback": False,
+            "recovered_synthetic": False,
+        }
+    try:
+        tick_epoch = float(tick_ts.timestamp()) if hasattr(tick_ts, "timestamp") else float(tick_ts)
+    except Exception:
+        tick_epoch = None
+    existing = dict(bar.get("bar_provenance") or {})
+    first_epoch = existing.get("first_live_tick_epoch")
+    last_epoch = existing.get("last_live_tick_epoch")
+    source_type = str(payload.get("source_type") or existing.get("source_type") or "unknown")
+    if tick_epoch is not None and source_type.lower() in {"live_websocket", "tick_store_live"}:
+        first_epoch = tick_epoch if first_epoch is None else min(float(first_epoch), tick_epoch)
+        last_epoch = tick_epoch if last_epoch is None else max(float(last_epoch), tick_epoch)
+    bar["bar_provenance"] = {
+        "source_type": source_type,
+        "live_feed_session_id": payload.get("live_feed_session_id") or existing.get("live_feed_session_id"),
+        "reconnect_generation": payload.get("reconnect_generation", existing.get("reconnect_generation")),
+        "instrument_token": payload.get("instrument_token", existing.get("instrument_token")),
+        "payload_mode": payload.get("payload_mode", existing.get("payload_mode")),
+        "first_live_tick_epoch": first_epoch,
+        "last_live_tick_epoch": last_epoch,
+        "historical_seed": bool(payload.get("historical_seed", existing.get("historical_seed", False))),
+        "replay_fixture": bool(payload.get("replay_fixture", existing.get("replay_fixture", False))),
+        "non_live_fallback": bool(payload.get("non_live_fallback", existing.get("non_live_fallback", False))),
+        "recovered_synthetic": bool(payload.get("recovered_synthetic", existing.get("recovered_synthetic", False))),
+    }

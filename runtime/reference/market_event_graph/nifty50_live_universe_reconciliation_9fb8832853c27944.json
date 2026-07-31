@@ -1,0 +1,545 @@
+{
+  "broker_instrument_master": {
+    "path": "runtime/upstox_instruments/complete.json",
+    "sha256": "5da2bc38bc0f54c9fccd14ad5cd6712c6b9f066766d3c621fb82330e6292fe40"
+  },
+  "index_mapping": {
+    "broker_tradingsymbol": "NIFTY",
+    "exchange": "NSE",
+    "instrument_token": 50,
+    "instrument_type": "INDEX",
+    "mapping_status": "MAPPED",
+    "symbol": "NIFTY"
+  },
+  "mapping_rows": [
+    {
+      "broker_tradingsymbol": "ADANIENT",
+      "exchange": "NSE",
+      "instrument_token": 42301024,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "ADANIENT",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "ADANIPORTS",
+      "exchange": "NSE",
+      "instrument_token": 74201042,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "ADANIPORTS",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "APOLLOHOSP",
+      "exchange": "NSE",
+      "instrument_token": 43701024,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "APOLLOHOSP",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "ASIANPAINT",
+      "exchange": "NSE",
+      "instrument_token": 2101026,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "ASIANPAINT",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "AXISBANK",
+      "exchange": "NSE",
+      "instrument_token": 23801034,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "AXISBANK",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "BAJAJ-AUTO",
+      "exchange": "NSE",
+      "instrument_token": 91701010,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "BAJAJ-AUTO",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "BAJFINANCE",
+      "exchange": "NSE",
+      "instrument_token": 29601032,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "BAJFINANCE",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "BAJAJFINSV",
+      "exchange": "NSE",
+      "instrument_token": 91801026,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "BAJAJFINSV",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "BEL",
+      "exchange": "NSE",
+      "instrument_token": 26301024,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "BEL",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "BHARTIARTL",
+      "exchange": "NSE",
+      "instrument_token": 39701024,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "BHARTIARTL",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "CIPLA",
+      "exchange": "NSE",
+      "instrument_token": 5901026,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "CIPLA",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "COALINDIA",
+      "exchange": "NSE",
+      "instrument_token": 52201014,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "COALINDIA",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "DRREDDY",
+      "exchange": "NSE",
+      "instrument_token": 8901031,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "DRREDDY",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "EICHERMOT",
+      "exchange": "NSE",
+      "instrument_token": 6601021,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "EICHERMOT",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "ETERNAL",
+      "exchange": "NSE",
+      "instrument_token": 75801015,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "ETERNAL",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "GRASIM",
+      "exchange": "NSE",
+      "instrument_token": 4701021,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "GRASIM",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "HCLTECH",
+      "exchange": "NSE",
+      "instrument_token": 86001027,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "HCLTECH",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "HDFCBANK",
+      "exchange": "NSE",
+      "instrument_token": 4001034,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "HDFCBANK",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "HDFCLIFE",
+      "exchange": "NSE",
+      "instrument_token": 79501014,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "HDFCLIFE",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "HINDALCO",
+      "exchange": "NSE",
+      "instrument_token": 3801020,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "HINDALCO",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "HINDUNILVR",
+      "exchange": "NSE",
+      "instrument_token": 3001027,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "HINDUNILVR",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "ICICIBANK",
+      "exchange": "NSE",
+      "instrument_token": 9001021,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "ICICIBANK",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "ITC",
+      "exchange": "NSE",
+      "instrument_token": 15401025,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "ITC",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "INFY",
+      "exchange": "NSE",
+      "instrument_token": 901021,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "INFY",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "INDIGO",
+      "exchange": "NSE",
+      "instrument_token": 64601027,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "INDIGO",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "JSWSTEEL",
+      "exchange": "NSE",
+      "instrument_token": 1901038,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "JSWSTEEL",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "JIOFIN",
+      "exchange": "NSE",
+      "instrument_token": 75801017,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "JIOFIN",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "KOTAKBANK",
+      "exchange": "NSE",
+      "instrument_token": 23701036,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "KOTAKBANK",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "LT",
+      "exchange": "NSE",
+      "instrument_token": 1801030,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "LT",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "M&M",
+      "exchange": "NSE",
+      "instrument_token": 10101026,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "M&M",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "MARUTI",
+      "exchange": "NSE",
+      "instrument_token": 58501010,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "MARUTI",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "MAXHEALTH",
+      "exchange": "NSE",
+      "instrument_token": 2701010,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "MAXHEALTH",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "NTPC",
+      "exchange": "NSE",
+      "instrument_token": 73301010,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "NTPC",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "NESTLEIND",
+      "exchange": "NSE",
+      "instrument_token": 23901024,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "NESTLEIND",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "ONGC",
+      "exchange": "NSE",
+      "instrument_token": 21301029,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "ONGC",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "POWERGRID",
+      "exchange": "NSE",
+      "instrument_token": 75201010,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "POWERGRID",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "RELIANCE",
+      "exchange": "NSE",
+      "instrument_token": 201018,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "RELIANCE",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "SBILIFE",
+      "exchange": "NSE",
+      "instrument_token": 12301016,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "SBILIFE",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "SHRIRAMFIN",
+      "exchange": "NSE",
+      "instrument_token": 72101047,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "SHRIRAMFIN",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "SBIN",
+      "exchange": "NSE",
+      "instrument_token": 6201020,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "SBIN",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "SUNPHARMA",
+      "exchange": "NSE",
+      "instrument_token": 4401036,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "SUNPHARMA",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "TCS",
+      "exchange": "NSE",
+      "instrument_token": 46701029,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "TCS",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "TATACONSUM",
+      "exchange": "NSE",
+      "instrument_token": 19201025,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "TATACONSUM",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "TMPV",
+      "exchange": "NSE",
+      "instrument_token": 15501022,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "TMPV",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "TATASTEEL",
+      "exchange": "NSE",
+      "instrument_token": 8101020,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "TATASTEEL",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "TECHM",
+      "exchange": "NSE",
+      "instrument_token": 66901036,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "TECHM",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "TITAN",
+      "exchange": "NSE",
+      "instrument_token": 28001028,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "TITAN",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "TRENT",
+      "exchange": "NSE",
+      "instrument_token": 84901020,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "TRENT",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "ULTRACEMCO",
+      "exchange": "NSE",
+      "instrument_token": 48101011,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "ULTRACEMCO",
+      "series": "EQ"
+    },
+    {
+      "broker_tradingsymbol": "WIPRO",
+      "exchange": "NSE",
+      "instrument_token": 7501022,
+      "instrument_type": "EQ",
+      "mapping_reason": "exact_nse_cash_equity_tradingsymbol",
+      "mapping_status": "MAPPED",
+      "official_symbol": "WIPRO",
+      "series": "EQ"
+    }
+  ],
+  "mapping_summary": {
+    "ambiguous_count": 0,
+    "duplicate_token_count": 0,
+    "index_mapping_status": "MAPPED",
+    "missing_count": 0,
+    "official_constituent_count": 50,
+    "uniquely_mapped_count": 50
+  },
+  "official_source": {
+    "http_metadata": {
+      "content_type": "text/csv",
+      "etag": "W/\"3352-1785382253738\"",
+      "last_modified": "Thu, 30 Jul 2026 03:30:53 GMT",
+      "status": 200
+    },
+    "raw_path": "runtime/reference/market_event_graph/official_nse/ind_nifty50list_9fb8832853c27944.csv",
+    "raw_sha256": "9fb8832853c279448d2bc05f0e7dd5f460ed2ff35332fea8c40fc1250362ad28",
+    "retrieved_at_ist": "2026-07-30T15:30:39.098468+05:30",
+    "retrieved_at_utc": "2026-07-30T10:00:39.098468Z",
+    "source_url": "https://nsearchives.nseindia.com/content/indices/ind_nifty50list.csv"
+  },
+  "parse_report": {
+    "duplicate_symbols": [],
+    "invalid_symbols": [],
+    "parser_version": "market_event_graph_live_universe_builder_v1",
+    "row_count": 50,
+    "unique_symbol_count": 50
+  },
+  "verdict": "PASS_AUTHORITATIVE_LIVE_UNIVERSE_MAPPING"
+}

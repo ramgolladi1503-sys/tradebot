@@ -39,6 +39,7 @@ from core.runtime_bootstrap import (
     global_readiness_blocker_sets as _global_readiness_blocker_sets,
     is_global_readiness_blocker as _is_global_readiness_blocker,
 )
+from core.unified_live_validation_pr748_756 import runtime_observer as _unified_live_campaign
 
 _ACTION_FLAG_KEY = "is_" + "order_action"
 
@@ -128,6 +129,15 @@ def main():
     exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
     print(f"[BOOT] exec_mode={exec_mode}")
     _validate_runtime_mode_config_alignment(exec_mode)
+    campaign_observer = None
+    try:
+        campaign_observer = _unified_live_campaign.init_from_env()
+        if campaign_observer is not None:
+            campaign_observer.write_process_identity({"exec_mode": exec_mode, "repo_root": str(repo_root)})
+            print("[UNIFIED_LIVE_VALIDATION] runtime observer initialized")
+    except Exception as exc:
+        print(f"[UNIFIED_LIVE_VALIDATION_ERROR] {exc}")
+        raise SystemExit(2)
 
     try:
         boot_safety = enforce_runtime_boot_safety(mode=exec_mode, config=cfg)
@@ -452,6 +462,9 @@ def main():
 
     try:
         orchestrator.live_monitoring()
+    except Exception as exc:
+        _unified_live_campaign.safe_call("observe_exception", exc, source="main.orchestrator")
+        raise
     finally:
         if broker_truth_reconciler is not None:
             try:
@@ -465,6 +478,12 @@ def main():
             print("[RECON] reconciliation daemon stopped")
         except Exception as exc:
             print(f"[RECON_WARN] failed_to_stop_reconciliation_daemon: {exc}")
+        try:
+            result = _unified_live_campaign.shutdown_current(seal=True, state="STOPPED")
+            if result is not None:
+                print(f"[UNIFIED_LIVE_VALIDATION] shutdown sealed={result.get('sealed')}")
+        except Exception as exc:
+            print(f"[UNIFIED_LIVE_VALIDATION_WARN] shutdown_failed: {exc}")
 
 
 if __name__ == "__main__":

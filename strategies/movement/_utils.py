@@ -249,6 +249,46 @@ def regime_alignment_score(regime: MovementRegimeResult, direction: str) -> floa
     return 0.0
 
 
+def _regime_policy_evidence(ctx: StrategyContext) -> dict[str, Any]:
+    metadata = ctx.metadata if isinstance(ctx.metadata, dict) else {}
+    policy = metadata.get("regime_policy_context")
+    if not isinstance(policy, dict):
+        return {}
+
+    out: dict[str, Any] = {}
+    raw_entropy = policy.get("regime_entropy")
+    normalized_entropy = policy.get("regime_entropy_normalized")
+    state = policy.get("regime_entropy_state")
+    if any(value is not None for value in (raw_entropy, normalized_entropy, state)):
+        out["entropy_state"] = {
+            "current_value": raw_entropy,
+            "normalized": normalized_entropy,
+            "state": state or "UNKNOWN",
+        }
+
+    for key in (
+        "session_bucket",
+        "regime_status",
+        "primary_regime",
+        "stable_regime",
+        "stable_regime_confirmed",
+        "trend_state",
+        "is_expiry_day",
+        "volume_impulse",
+        "liquidity_quality",
+        "model_source",
+        "model_hash",
+        "probability_calibrated",
+        "probability_semantics",
+        "regime_top_two_margin",
+        "feature_quality",
+    ):
+        value = policy.get(key)
+        if value is not None:
+            out[key] = value
+    return out
+
+
 def make_candidate(
     *,
     ctx: StrategyContext,
@@ -280,6 +320,9 @@ def make_candidate(
     raw_score = confluence_score
     confidence_score = clamp_score(raw_score * (1.0 - (trap_risk_score * 0.25)))
     status = "RAW_CANDIDATE"
+    merged_evidence = dict(evidence or {})
+    for key, value in _regime_policy_evidence(ctx).items():
+        merged_evidence.setdefault(key, value)
     return StrategyCandidate(
         schema_version=1,
         strategy_id=strategy_id,
@@ -307,7 +350,7 @@ def make_candidate(
         suppression_tags=suppression_tags,
         source_signals=(strategy_id, movement_type),
         regime_scores=regime.scores,
-        evidence=evidence,
+        evidence=merged_evidence,
         lineage={
             "source": "movement_strategy",
             "strategy_id": strategy_id,

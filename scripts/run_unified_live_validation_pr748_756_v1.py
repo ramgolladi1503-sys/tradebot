@@ -30,6 +30,17 @@ def _runtime_wired() -> bool:
     return False
 
 
+def _single_websocket_path_proven() -> bool:
+    text = Path("core/unified_live_validation_pr748_756/launcher.py").read_text(
+        encoding="utf-8",
+        errors="ignore",
+    )
+    campaign_has_ws = "KiteTicker" in text or "start_depth_ws(" in text or "kiteconnect" in text
+    run_live = Path("run_live.sh").read_text(encoding="utf-8", errors="ignore")
+    main_text = Path("main.py").read_text(encoding="utf-8", errors="ignore")
+    return (not campaign_has_ws) and "main.py" in run_live and "Orchestrator(" in main_text
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-root", default="runtime/diagnostics/unified_live_validation_pr748_756_v1")
@@ -67,7 +78,8 @@ def main() -> int:
         encoding="utf-8",
     )
     wired = _runtime_wired()
-    state = "READY_FOR_LIVE_START" if wired else "BLOCKED_BY_RUNTIME_WIRING"
+    single_ws = _single_websocket_path_proven()
+    state = "READY_FOR_LIVE_START" if wired and single_ws else "BLOCKED_BY_RUNTIME_WIRING"
     command = list(args.runtime_command or ["./run_live.sh"])
     launch = {
         "state": state,
@@ -79,10 +91,21 @@ def main() -> int:
         "recorder_instantiated": False,
         "live_observers_registered": wired,
         "single_runtime_process_proven": False,
-        "single_websocket_path_proven": False,
+        "single_websocket_path_proven": single_ws,
         "shutdown_seal_registered": True,
         "presession_run_id_rejected": True,
-        "blockers": ([] if wired else ["CURRENT_LAUNCH_COMMAND_DOES_NOT_ACTIVATE_CAMPAIGN"]),
+        "blockers": (
+            []
+            if wired and single_ws
+            else [
+                blocker
+                for blocker, active in (
+                    ("CURRENT_LAUNCH_COMMAND_DOES_NOT_ACTIVATE_CAMPAIGN", not wired),
+                    ("SINGLE_WEBSOCKET_PATH_NOT_PROVEN", not single_ws),
+                )
+                if active
+            ]
+        ),
         "read_only": True,
         "is_order_action": False,
         "broker_api_called": False,
@@ -96,7 +119,13 @@ def main() -> int:
         if not wired and command == ["./run_live.sh"]:
             print(json.dumps(launch, indent=2, sort_keys=True))
             return 2
-        result = launch_runtime_child(identity, command, cwd=Path("."), timeout_sec=args.timeout_sec)
+        result = launch_runtime_child(
+            identity,
+            command,
+            cwd=Path("."),
+            timeout_sec=args.timeout_sec,
+            seal_on_exit=(command != ["./run_live.sh"]),
+        )
         launch.update(
             {
                 "recorder_instantiated": True,
@@ -107,6 +136,19 @@ def main() -> int:
                 "sealed": result.sealed,
             }
         )
+        if not all(
+            bool(launch.get(key))
+            for key in (
+                "campaign_runtime_wired",
+                "recorder_instantiated",
+                "live_observers_registered",
+                "single_runtime_process_proven",
+                "single_websocket_path_proven",
+                "shutdown_seal_registered",
+                "presession_run_id_rejected",
+            )
+        ):
+            launch["state"] = "BLOCKED_BY_RUNTIME_WIRING"
         (run_root / "presession" / "launch_preflight.json").write_text(
             json.dumps(launch, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",

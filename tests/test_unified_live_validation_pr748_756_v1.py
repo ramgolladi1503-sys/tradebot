@@ -25,6 +25,16 @@ from core.unified_live_validation_pr748_756.validators import (
     scan_preoutcome_fields,
     validate_jsonl_file,
 )
+from core.candidate_pool_orchestrator import build_candidate_pool_report
+from core.hard_downgrade_engine import HardDowngradeDecision
+from core.market_event_graph_breadth_producer import (
+    frozen_threshold_metadata,
+    initial_market_event_graph_runtime_state,
+)
+from core.movement_contract import StrategyContext
+from core.movement_regime import MovementRegimeResult
+from core.opportunity_scoring import score_opportunities
+from core.unified_live_validation_pr748_756 import runtime_observer
 
 
 def test_campaign_is_disabled_by_default_and_requires_explicit_env():
@@ -180,16 +190,15 @@ def test_process_level_smoke_launches_one_child_records_and_seals(tmp_path):
     assert feed_sample["rows"] == 1
 
 
-def test_governed_wrapper_rejects_unwired_run_live_launch(tmp_path):
+def test_governed_wrapper_reports_runtime_wired_without_launching_market_process(tmp_path):
     result = subprocess.run(
         [
             sys.executable,
             "scripts/run_unified_live_validation_pr748_756_v1.py",
             "--origin-main-sha",
             "abc",
-            "--launch-live",
             "--nonce",
-            "blocked",
+            "dry",
             "--evidence-root",
             str(tmp_path),
         ],
@@ -199,10 +208,111 @@ def test_governed_wrapper_rejects_unwired_run_live_launch(tmp_path):
         text=True,
     )
 
-    assert result.returncode == 2
+    assert result.returncode == 0
     payload = json.loads(result.stdout)
-    assert payload["state"] == "BLOCKED_BY_RUNTIME_WIRING"
-    assert payload["campaign_runtime_wired"] is False
+    assert payload["state"] == "READY_FOR_LIVE_START"
+    assert payload["campaign_runtime_wired"] is True
     assert payload["recorder_instantiated"] is False
     assert payload["single_runtime_process_proven"] is False
-    assert "CURRENT_LAUNCH_COMMAND_DOES_NOT_ACTIVATE_CAMPAIGN" in payload["blockers"]
+    assert payload["presession_run_id_rejected"] is True
+
+
+def _returns(negative_count: int, total: int = 50, value: float = 0.001):
+    return [-value] * negative_count + [value] * (total - negative_count)
+
+
+def _bar(ts_epoch: float, source_bar_end_epoch: float, *, negative_count: int, index_ret1: float):
+    return {
+        "ts_epoch": ts_epoch,
+        "source_bar_end_epoch": source_bar_end_epoch,
+        "session_date": "2026-07-31",
+        "index_ret1": index_ret1,
+        "constituent_ret1": _returns(negative_count),
+        "completed": True,
+    }
+
+
+def test_dry_integration_real_paths_record_and_seal(tmp_path, monkeypatch):
+    identity = build_campaign_identity(
+        evidence_root=tmp_path,
+        campaign_commit_sha="abc",
+        composition_manifest_sha="5" * 64,
+        nonce="dry",
+        live=True,
+    )
+    monkeypatch.setenv("UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE", "true")
+    monkeypatch.setenv("TRADEBOT_READ_ONLY", "true")
+    monkeypatch.setenv("UNIFIED_LIVE_VALIDATION_PR748_756_RUN_ID", identity.run_id)
+    monkeypatch.setenv("UNIFIED_LIVE_VALIDATION_PR748_756_EVIDENCE_ROOT", identity.evidence_root)
+    monkeypatch.setenv("UNIFIED_LIVE_VALIDATION_PR748_756_COMPOSITION_SHA", identity.composition_manifest_sha)
+
+    observer = runtime_observer.init_from_env()
+    observer.write_process_identity({"exec_mode": "SIM_DRY_INTEGRATION"})
+    metadata = {
+        **frozen_threshold_metadata(),
+        "market_event_graph_runtime_state": initial_market_event_graph_runtime_state("2026-07-31"),
+        "completed_constituent_bars": [
+            _bar(100.0, 90.0, negative_count=40, index_ret1=-0.001),
+            _bar(160.0, 150.0, negative_count=25, index_ret1=-0.004),
+            _bar(220.0, 210.0, negative_count=5, index_ret1=0.001),
+            _bar(280.0, 270.0, negative_count=8, index_ret1=0.001),
+        ],
+    }
+    ctx = StrategyContext(
+        symbol="NIFTY",
+        ts_epoch=280.0,
+        spot_ltp=22550.0,
+        option_ce_ltp=120.0,
+        option_pe_ltp=90.0,
+        ce_premium_change=14.0,
+        pe_premium_change=-2.0,
+        ce_spread_pct=0.8,
+        pe_spread_pct=0.9,
+        ce_depth=1200.0,
+        pe_depth=1000.0,
+        option_ltp_age_sec=0.4,
+        quote_source="live_option_tick",
+        fallback_used=False,
+        metadata=metadata,
+    )
+    regime = MovementRegimeResult(schema_version=1, primary_regime="TREND_UP", scores={"TREND_UP": 0.8})
+    report = build_candidate_pool_report(ctx, regime, include_no_trade_candidate=False)
+    candidate = report.candidates[0]
+    decision = HardDowngradeDecision(
+        strategy_id=candidate.strategy_id,
+        symbol=candidate.symbol,
+        direction=candidate.direction,
+        movement_type=candidate.movement_type,
+        original_bucket="ADVISORY_CANDIDATE",
+        downgraded_bucket="ADVISORY_CANDIDATE",
+        downgraded=False,
+        executable_candidate=False,
+        downgrade_reasons=(),
+        blockers=(),
+        hard_blockers=(),
+        warnings=(),
+        safety_flags=(),
+        evidence_flags=(),
+    )
+    score_opportunities([candidate], [decision])
+    accounting = runtime_observer.shutdown_current(seal=True, state="DRY_INTEGRATION_COMPLETE")
+
+    root = Path(identity.evidence_root)
+    assert accounting["sealed"] is True
+    for relative in (
+        "live/process_identity.json",
+        "live/heartbeat.jsonl",
+        "live/constituent_completed_bars.jsonl",
+        "live/market_event_graph_intervals.jsonl",
+        "live/market_event_graph_states.jsonl",
+        "live/regime_outputs.jsonl",
+        "live/regime_policy_decisions.jsonl",
+        "live/candidate_lineage.jsonl",
+        "live/ranking_decisions.jsonl",
+        "live/execution_eligibility.jsonl",
+        "live/research_preoutcome_states.jsonl",
+        "postmarket/evidence_accounting.json",
+        "SEALED",
+    ):
+        assert (root / relative).exists(), relative
+    assert validate_jsonl_file(root / "live/market_event_graph_intervals.jsonl", expected_run_id=identity.run_id)["pass"]

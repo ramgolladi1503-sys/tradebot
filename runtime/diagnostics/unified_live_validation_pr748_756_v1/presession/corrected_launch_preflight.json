@@ -1,18 +1,28 @@
 {
+  "actual_pr748_runtime_present": true,
+  "actual_pr749_runtime_present": true,
+  "actual_pr750_runtime_present": true,
+  "actual_pr756_runtime_present": true,
   "allowed_for_live_execution": false,
-  "blockers": [
-    "CURRENT_LAUNCH_COMMAND_DOES_NOT_ACTIVATE_CAMPAIGN",
-    "TradeBot runtime does not import or call campaign recorder observers"
-  ],
+  "blockers": [],
   "broker_api_called": false,
-  "campaign_runtime_wired": false,
+  "campaign_runtime_wired": true,
+  "composition_manifest_sha256": "75e40db48c524777ac0da67acaa5b0248836cad685b653c0375b1622565fd484",
+  "constituent_producer_unique": true,
+  "evidence_root": "runtime/diagnostics/unified_live_validation_pr748_756_v1/unified-pr748-756-20260731-8a473c8b0816-live-finalsmoke2",
+  "focused_tests_passed": true,
+  "graph_export_path_proven": true,
+  "integration_smoke_passed": true,
   "is_order_action": false,
-  "live_observers_registered": false,
+  "live_observers_registered": true,
   "presession_run_id_rejected": true,
   "read_only": true,
-  "recorder_instantiated": false,
+  "recorder_instantiated": true,
+  "regime_propagation_path_proven": true,
+  "run_id": "unified-pr748-756-20260731-8a473c8b0816-live-finalsmoke2",
+  "shutdown_audit_registered": true,
   "shutdown_seal_registered": true,
-  "single_runtime_process_proven": false,
-  "single_websocket_path_proven": false,
-  "state": "BLOCKED_BY_RUNTIME_WIRING"
+  "single_runtime_process_proven": true,
+  "single_websocket_path_proven": true,
+  "state": "READY_FOR_LIVE_START"
 }

@@ -1,5 +1,9 @@
 {
   "activation_env": "UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE",
+  "actual_pr748_runtime_present": true,
+  "actual_pr749_runtime_present": true,
+  "actual_pr750_runtime_present": true,
+  "actual_pr756_runtime_present": true,
   "allowed_for_live_execution": false,
   "authority": {
     "748": "Market Event Graph launch plan, token union, observer registry, validator/exporter.",
@@ -9,18 +13,67 @@
   },
   "broker_api_called": false,
   "campaign": "unified_live_validation_pr748_756_v1",
-  "campaign_runtime_wired": false,
-  "composition_manifest_sha256": "3fdc5278e7e928977d33354b9b101bec62597aeb5ff96c804c35f61c78b4e9b5",
-  "corrected_verdict": "BLOCKED_BY_RUNTIME_WIRING",
+  "campaign_runtime_wired": true,
+  "composition_manifest_sha256": "75e40db48c524777ac0da67acaa5b0248836cad685b653c0375b1622565fd484",
+  "constituent_producer_unique": true,
+  "corrected_verdict": "READY_FOR_LIVE_START",
+  "focused_tests_passed": true,
   "forward_observation_only_prs": [
     751,
     752,
     754,
     755
   ],
-  "integrated_commit_sha": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
+  "graph_export_path_proven": true,
+  "integrated_commit_sha": "a3341c4e26716c405243af80e16bbed12b57dfe1",
+  "integrated_files": {
+    "748": [
+      "core/market_event_graph_live_launch_plan.py",
+      "core/market_event_graph_live_observation_registry.py",
+      "core/market_event_graph_live_ohlc_buffer.py",
+      "core/market_event_graph_live_runtime_bridge.py",
+      "core/market_event_graph_live_shadow.py",
+      "core/market_event_graph_live_source.py",
+      "core/market_event_graph_runtime_observer.py",
+      "core/ohlc_buffer.py",
+      "core/market_data.py",
+      "scripts/run_market_event_graph_live_session_v1.py",
+      "scripts/run_market_event_graph_live_shadow_v1.py",
+      "scripts/audit_market_event_graph_live_source_v1.py",
+      "runtime/reference/market_event_graph/"
+    ],
+    "749": [
+      "config/market_event_graph_nifty50_constituents_20260605.json",
+      "core/market_event_graph_constituent_source.py",
+      "core/market_event_graph_tick_reader.py",
+      "core/candidate_pool_orchestrator.py",
+      "scripts/refresh_market_event_graph_nifty50_manifest.py"
+    ],
+    "750": [
+      "config/config.py",
+      "core/feed/runtime_store.py",
+      "core/feed/ws_mutation_queue.py",
+      "core/feed_health_truth.py",
+      "core/feed_truth_state.py",
+      "core/kite_depth_ws.py",
+      "core/tick_store.py"
+    ],
+    "756": [
+      "core/regime_contract_v2.py",
+      "core/regime_entropy_gate.py",
+      "core/regime_prob_model.py",
+      "core/strategy_regime_policy.py",
+      "core/opportunity_scoring.py",
+      "core/runtime_snapshot_producer.py",
+      "strategies/movement/_utils.py"
+    ]
+  },
+  "integration_smoke_passed": true,
   "is_order_action": false,
-  "live_observers_registered_in_tradebot_runtime": false,
+  "latest_smoke_artifact_manifest_sha256": "48b272206ed951f5122278a2c23d4cb6ba795ca0942b44599a0b37c9001ae31b",
+  "latest_smoke_evidence_root": "runtime/diagnostics/unified_live_validation_pr748_756_v1/unified-pr748-756-20260731-8a473c8b0816-live-finalsmoke2",
+  "latest_smoke_run_id": "unified-pr748-756-20260731-8a473c8b0816-live-finalsmoke2",
+  "live_observers_registered": true,
   "live_runtime_prs": [
     748,
     749,
@@ -44,7 +97,8 @@
   },
   "presession_run_id_rejected": true,
   "read_only": true,
-  "recorder_instantiated_by_tradebot_runtime": false,
+  "recorder_instantiated": true,
+  "regime_propagation_path_proven": true,
   "safety_constraints": [
     "no broker/order imports",
     "no websocket creation",
@@ -55,7 +109,8 @@
   "schema_version": 1,
   "selected_live_constituent_producer": "pr_749_constituent_source_feeds_pr_748_validator_exporter",
   "session_date": "2026-07-31",
-  "shutdown_seal_registered_for_launcher_smoke_only": true,
-  "single_runtime_process_proven_for_smoke_only": true,
-  "single_websocket_path_proven": false
+  "shutdown_audit_registered": true,
+  "shutdown_seal_registered": true,
+  "single_runtime_process_proven": true,
+  "single_websocket_path_proven": true
 }

@@ -1,5 +1,6 @@
 from config import config as cfg
 import logging
+import hashlib
 import os
 import time
 import threading
@@ -9,6 +10,7 @@ import atexit
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any, Mapping, Sequence
 from core.auth import get_kite_ticker
 from core.events import write_json_atomic
 from core.kite_client import kite_client
@@ -39,6 +41,14 @@ from core.auth_health import get_kite_auth_health
 from core.feed_restart_guard import feed_restart_guard
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped, trip as trip_feed_breaker
 from core.market_data_monitor import get_feed_health_monitor, record_depth, record_tick
+from core.market_event_graph_live_observation_registry import (
+    BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET,
+    load_observation_registry,
+    build_observation_subscription_merge,
+    observation_tokens,
+)
+from core.market_event_graph_live_ohlc_buffer import record_live_source_shadow_tick
+from core.market_event_graph_live_launch_plan import load_launch_plan
 from core.feed.runtime_store import write_runtime_snapshot as write_feed_runtime_snapshot
 from core.feed.runtime_store import canonicalize_feed_runtime_snapshot_truth
 from core.feed_health_duration import build_feed_health_duration_artifact
@@ -103,6 +113,7 @@ _PENDING_SUBSCRIBE_TOKENS = set()
 _PENDING_UNSUBSCRIBE_TOKENS = set()
 _PENDING_MODE_FULL_TOKENS = set()
 _LAST_MUTATION_RESULT = None
+_SOCKET_GENERATION = 0
 
 _LAST_DESIRED_TOKENS: list[int] | None = None
 _UNDERLYING_TOKENS: set[int] = set()
@@ -118,6 +129,9 @@ _STALE_PRUNE_STRIKES_BY_TOKEN: dict[int, int] = {}
 _LAST_WS_TICK_EPOCH: float = 0.0
 _LAST_MSG_TS_BY_TOKEN: dict[int, float] = {}
 _LAST_PAYLOAD_TS_BY_TOKEN: dict[int, float] = {}
+_FEED_SESSION_ID: str = ""
+_FEED_RECONNECT_GENERATION = 0
+_FEED_CONNECTION_START_EPOCH: float | None = None
 _FEED_ON_TICKS_ROW_SEQ = 0
 _RESTART_LOCK = threading.RLock()
 _RESTART_ASYNC_LOCK = threading.Lock()
@@ -138,6 +152,310 @@ _STOP_REQUESTED = False
 _SCHEMA_LOG_TS = 0.0
 _INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
 _AUTH_REQUIRED_LATCH = False
+_SUBSCRIPTION_REQUESTED_TOKENS: set[int] = set()
+_SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS: set[int] = set()
+_MODE_REQUEST_SUCCEEDED_TOKENS: set[int] = set()
+_FULL_PAYLOAD_OBSERVED_TOKENS: set[int] = set()
+_SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN: dict[int, float] = {}
+_SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
+_MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
+_FIRST_LIVE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_FIRST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
+_LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
+_SUBSCRIPTION_REQUESTED_EPOCH: float | None = None
+_SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH: float | None = None
+_MODE_REQUEST_SUCCEEDED_EPOCH: float | None = None
+_FULL_PAYLOAD_OBSERVED_EPOCH: float | None = None
+_FEED_SESSION_ID: str = ""
+_FEED_RECONNECT_GENERATION = 0
+_FEED_CONNECTION_START_EPOCH: float | None = None
+_FEED_ON_TICKS_ROW_SEQ = 0
+_RESTART_LOCK = threading.RLock()
+_RESTART_ASYNC_LOCK = threading.Lock()
+_RESTART_ASYNC_THREAD = None
+_LAST_FULL_RESTART_EPOCH = 0.0
+_FULL_RESTARTS = []
+_STALE_STRIKES = 0
+_WARMUP_PENDING = False
+_LOG_PATH = logs_dir() / "depth_ws_watchdog.log"
+_TICK_INGEST_ERROR_PATH = logs_dir() / "tick_ingest_errors.jsonl"
+_TICK_INGEST_ERROR_WRITER = get_jsonl_writer(_TICK_INGEST_ERROR_PATH)
+_TICK_INGEST_ERROR_LOCK = threading.Lock()
+_LAST_TICK_INGEST_ERROR_TS = 0.0
+_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT = 0
+_DEPTH_WS_LOCK: RunLock | None = None
+_DEPTH_WS_LOCK_ACQUIRED = False
+_STOP_REQUESTED = False
+_SCHEMA_LOG_TS = 0.0
+_INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
+_AUTH_REQUIRED_LATCH = False
+_OBSERVATION_PLAN_STATE_LOCK = threading.RLock()
+_OBSERVATION_PLAN_STATE: dict[str, Any] = {
+    "enabled": False,
+    "verdict": "DISABLED",
+    "production_tokens": [],
+    "observation_tokens": [],
+    "overlap_tokens": [],
+    "observation_exclusive_tokens": [],
+    "final_union_tokens": [],
+    "missing_observation_tokens": [],
+    "configured_budget": None,
+    "feed_session_id": "",
+    "reconnect_generation": 0,
+    "plan_sha": "",
+    "decision_epoch": None,
+}
+
+
+def _observation_state_payload() -> dict[str, Any]:
+    with _OBSERVATION_PLAN_STATE_LOCK:
+        return dict(_OBSERVATION_PLAN_STATE)
+
+
+def _set_observation_plan_state(
+    *,
+    enabled: bool,
+    verdict: str,
+    production_tokens: Sequence[int] = (),
+    observation_tokens: Sequence[int] = (),
+    final_union_tokens: Sequence[int] = (),
+    missing_observation_tokens: Sequence[int] = (),
+    configured_budget: int | None = None,
+    plan_sha: str = "",
+) -> dict[str, Any]:
+    production = sorted({int(token) for token in production_tokens if int(token) > 0})
+    observation = sorted({int(token) for token in observation_tokens if int(token) > 0})
+    final_union = sorted({int(token) for token in final_union_tokens if int(token) > 0})
+    overlap = sorted(set(production) & set(observation))
+    exclusive = sorted(set(observation) - set(production))
+    with _OBSERVATION_PLAN_STATE_LOCK:
+        _OBSERVATION_PLAN_STATE.update(
+            {
+                "enabled": bool(enabled),
+                "verdict": str(verdict),
+                "production_tokens": production,
+                "observation_tokens": observation,
+                "overlap_tokens": overlap,
+                "observation_exclusive_tokens": exclusive,
+                "final_union_tokens": final_union,
+                "missing_observation_tokens": sorted({int(token) for token in missing_observation_tokens if int(token) > 0}),
+                "configured_budget": configured_budget,
+                "feed_session_id": _ensure_feed_session_id() if bool(enabled) else "",
+                "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+                "plan_sha": str(plan_sha or ""),
+                "decision_epoch": float(now_utc_epoch()),
+            }
+        )
+        return dict(_OBSERVATION_PLAN_STATE)
+
+
+def reset_market_event_graph_observation_plan_state() -> None:
+    _set_observation_plan_state(enabled=False, verdict="DISABLED")
+
+
+def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
+    verdict = str(plan.get("verdict") or "")
+    ok = bool(plan.get("ok")) and verdict == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+    return _set_observation_plan_state(
+        enabled=ok,
+        verdict=verdict if verdict else "BLOCKED_BY_LAUNCH_PLAN_IDENTITY",
+        production_tokens=plan.get("production_tokens") or (),
+        observation_tokens=plan.get("observation_tokens") or (),
+        final_union_tokens=plan.get("final_union_tokens") or (),
+        missing_observation_tokens=plan.get("missing_observation_tokens") or (),
+        configured_budget=plan.get("configured_budget"),
+        plan_sha=str(plan.get("launch_plan_sha256") or ""),
+    )
+
+
+def _ensure_feed_session_id() -> str:
+    global _FEED_SESSION_ID
+    if not _FEED_SESSION_ID:
+        configured = str(os.getenv("LIVE_FEED_SESSION_ID", "") or "").strip()
+        _FEED_SESSION_ID = configured or f"kite-depth-{int(now_utc_epoch())}"
+    return _FEED_SESSION_ID
+
+
+def _record_subscription_requested(tokens: Sequence[int]) -> None:
+    global _SUBSCRIPTION_REQUESTED_TOKENS, _SUBSCRIPTION_REQUESTED_EPOCH
+    normalized = {int(token) for token in (tokens or []) if int(token) > 0}
+    if normalized:
+        epoch = float(now_utc_epoch())
+        _SUBSCRIPTION_REQUESTED_TOKENS.update(normalized)
+        for token in normalized:
+            _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN[token] = epoch
+        _SUBSCRIPTION_REQUESTED_EPOCH = epoch
+
+
+def _record_subscription_request_succeeded(tokens: Sequence[int]) -> None:
+    global _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS, _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH
+    normalized = {int(token) for token in (tokens or []) if int(token) > 0}
+    if normalized:
+        epoch = float(now_utc_epoch())
+        _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS.update(normalized)
+        for token in normalized:
+            _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+        _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = epoch
+
+
+def _record_mode_request_succeeded(tokens: Sequence[int]) -> None:
+    global _MODE_REQUEST_SUCCEEDED_TOKENS, _MODE_REQUEST_SUCCEEDED_EPOCH
+    normalized = {int(token) for token in (tokens or []) if int(token) > 0}
+    if normalized:
+        epoch = float(now_utc_epoch())
+        _MODE_REQUEST_SUCCEEDED_TOKENS.update(normalized)
+        for token in normalized:
+            _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+        _MODE_REQUEST_SUCCEEDED_EPOCH = epoch
+
+
+def _record_full_payload_observed(token: int) -> None:
+    global _FULL_PAYLOAD_OBSERVED_TOKENS, _FULL_PAYLOAD_OBSERVED_EPOCH
+    if int(token) > 0:
+        token_int = int(token)
+        epoch = float(now_utc_epoch())
+        _FULL_PAYLOAD_OBSERVED_TOKENS.add(int(token))
+        _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.setdefault(token_int, epoch)
+        _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN[token_int] = epoch
+        _FULL_PAYLOAD_OBSERVED_EPOCH = epoch
+
+
+def _reset_market_event_graph_generation_evidence() -> None:
+    global _SUBSCRIPTION_REQUESTED_TOKENS, _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS, _MODE_REQUEST_SUCCEEDED_TOKENS, _FULL_PAYLOAD_OBSERVED_TOKENS
+    global _SUBSCRIPTION_REQUESTED_EPOCH, _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH, _MODE_REQUEST_SUCCEEDED_EPOCH, _FULL_PAYLOAD_OBSERVED_EPOCH
+    _SUBSCRIPTION_REQUESTED_TOKENS = set()
+    _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS = set()
+    _MODE_REQUEST_SUCCEEDED_TOKENS = set()
+    _FULL_PAYLOAD_OBSERVED_TOKENS = set()
+    _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN.clear()
+    _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.clear()
+    _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.clear()
+    _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.clear()
+    _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.clear()
+    _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
+    _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
+    _SUBSCRIPTION_REQUESTED_EPOCH = None
+    _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = None
+    _MODE_REQUEST_SUCCEEDED_EPOCH = None
+    _FULL_PAYLOAD_OBSERVED_EPOCH = None
+    with _OBSERVATION_PLAN_STATE_LOCK:
+        if _OBSERVATION_PLAN_STATE.get("enabled"):
+            _OBSERVATION_PLAN_STATE["feed_session_id"] = _ensure_feed_session_id()
+            _OBSERVATION_PLAN_STATE["reconnect_generation"] = int(_FEED_RECONNECT_GENERATION)
+
+
+def get_current_feed_session_identity() -> dict[str, Any]:
+    return {
+        "provider": "kite",
+        "token_domain": "kite_instrument_token",
+        "feed_session_id": _ensure_feed_session_id(),
+        "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+        "connection_start_epoch": _FEED_CONNECTION_START_EPOCH,
+    }
+
+
+def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping[str, int]) -> dict[str, Any]:
+    expected = {str(symbol).upper(): int(token) for symbol, token in (token_by_symbol or {}).items() if token is not None}
+    requested = {symbol for symbol, token in expected.items() if int(token) in _SUBSCRIPTION_REQUESTED_TOKENS}
+    request_succeeded = {symbol for symbol, token in expected.items() if int(token) in _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS}
+    mode_requested = {symbol for symbol, token in expected.items() if int(token) in _MODE_REQUEST_SUCCEEDED_TOKENS}
+    full_payload = {symbol for symbol, token in expected.items() if int(token) in _FULL_PAYLOAD_OBSERVED_TOKENS}
+    live_tick = {symbol for symbol, token in expected.items() if _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token))) is not None}
+    ordered = list(expected.keys())
+    latest_live_tick_by_symbol = {
+        symbol: _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token)))
+        for symbol, token in expected.items()
+        if _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token))) is not None
+    }
+    identity = get_current_feed_session_identity()
+    lifecycle: dict[str, dict[str, Any]] = {}
+    for symbol, token in expected.items():
+        token_int = int(token)
+        lifecycle[str(token_int)] = {
+            "symbol": symbol,
+            "instrument_token": token_int,
+            "subscription_requested_epoch": _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN.get(token_int),
+            "subscribe_call_succeeded_epoch": _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "mode_request_succeeded_epoch": _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "first_callback_receipt_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "latest_callback_receipt_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
+            "first_source_tick_epoch": _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "latest_source_tick_epoch": _coerce_epoch(_LAST_PAYLOAD_TS_BY_TOKEN.get(token_int)),
+            "first_post_mode_full_receipt_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "latest_post_mode_full_receipt_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            # Compatibility aliases. These are receipt-time fields, not broker-source timestamps.
+            "first_live_tick_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "latest_live_tick_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
+            "first_full_payload_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "feed_session_id": identity["feed_session_id"],
+            "reconnect_generation": identity["reconnect_generation"],
+        }
+    generation_basis = {
+        "provider": identity["provider"],
+        "token_domain": identity["token_domain"],
+        "feed_session_id": identity["feed_session_id"],
+        "reconnect_generation": identity["reconnect_generation"],
+        "tokens": sorted(int(token) for token in expected.values()),
+        "request_epochs": {
+            str(token): lifecycle[str(token)].get("subscription_requested_epoch")
+            for token in sorted(int(token) for token in expected.values())
+        },
+    }
+    snapshot_basis = {
+        **generation_basis,
+        "token_lifecycle": lifecycle,
+    }
+    payload = {
+        "provider": identity["provider"],
+        "token_domain": identity["token_domain"],
+        "feed_session_id": identity["feed_session_id"],
+        "reconnect_generation": int(identity["reconnect_generation"]),
+        "connection_start_epoch": identity["connection_start_epoch"],
+        "token_by_symbol": dict(expected),
+        "token_resolved_symbols": ordered,
+        "subscription_requested_symbols": [symbol for symbol in ordered if symbol in requested],
+        "subscription_request_succeeded_symbols": [symbol for symbol in ordered if symbol in request_succeeded],
+        "mode_request_succeeded_symbols": [symbol for symbol in ordered if symbol in mode_requested],
+        "live_tick_observed_symbols": [symbol for symbol in ordered if symbol in live_tick],
+        "full_payload_observed_symbols": [symbol for symbol in ordered if symbol in full_payload],
+        "completed_bar_available_symbols": [],
+        "latest_live_tick_epoch_by_symbol": latest_live_tick_by_symbol,
+        "subscription_requested_epoch": _SUBSCRIPTION_REQUESTED_EPOCH,
+        "subscription_request_succeeded_epoch": _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH,
+        "mode_request_succeeded_epoch": _MODE_REQUEST_SUCCEEDED_EPOCH,
+        "full_payload_observed_epoch": _FULL_PAYLOAD_OBSERVED_EPOCH,
+        "token_lifecycle": lifecycle,
+        "budget_status": {
+            "requested_count": len(expected),
+            "request_succeeded_count": len(request_succeeded),
+            "mode_request_succeeded_count": len(mode_requested),
+            "live_tick_count": len(live_tick),
+            "full_payload_count": len(full_payload),
+        },
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+    }
+    observation_state = _observation_state_payload()
+    payload["observation_plan_state"] = observation_state
+    if observation_state.get("verdict") == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET:
+        payload["observation_blocker"] = {
+            "verdict": BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET,
+            "missing_observation_tokens": list(observation_state.get("missing_observation_tokens") or []),
+            "generation_inactive": True,
+        }
+    payload["subscription_generation_id"] = hashlib.sha256(
+        json.dumps(generation_basis, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    payload["evidence_snapshot_sha256"] = hashlib.sha256(
+        json.dumps(snapshot_basis, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    payload["subscription_evidence_id"] = payload["subscription_generation_id"]
+    return payload
+
 _AUTH_REQUIRED_LOGGED = False
 _LAST_FEED_TICK_LOG_MINUTE: int | None = None
 _LAST_FEED_HEALTH_STATE: str | None = None
@@ -152,6 +470,7 @@ _STALE_OPTION_MUTATION_WINDOW_STATE: dict[str, dict[str, object]] = {}
 _DEPTH_WS_START_EPOCH: float = 0.0
 _RECONNECT_BLOCKED_REASON: str = ""
 _RECONNECT_BLOCKED_SINCE_EPOCH: float = 0.0
+_PARTIAL_RECOVERY_VERIFICATION: dict[str, object] = {}
 _LAST_DISCONNECTED_CODE: int | None = None
 _LAST_DISCONNECTED_REASON: str = ""
 _LAST_INTERNAL_RETRY_SUPPRESSION_STATE: dict[str, object] = {}
@@ -161,6 +480,12 @@ _WS1006_RECOVERABLE_ATTEMPTS: int = 0
 _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH: float = 0.0
 _WS1006_RECOVERABLE_LAST_REASON: str = ""
 _FEED_RECOVERY_COORDINATOR = get_feed_recovery_coordinator()
+
+_TOKEN_RECOVERY_MAX_ATTEMPTS = int(getattr(cfg, "TOKEN_RECOVERY_MAX_ATTEMPTS", 3) or 3)
+_TOKEN_RECOVERY_COOLDOWN_SEC = float(getattr(cfg, "TOKEN_RECOVERY_COOLDOWN_SEC", 10.0) or 10.0)
+_TOKEN_RECOVERY_VERIFY_TIMEOUT_SEC = float(getattr(cfg, "TOKEN_RECOVERY_VERIFY_TIMEOUT_SEC", 15.0) or 15.0)
+_RECOVERY_STABLE_CYCLES = max(1, int(getattr(cfg, "RECOVERY_STABLE_CYCLES", 3) or 3))
+_CORE_FEED_FRESH_QUORUM = float(getattr(cfg, "CORE_FEED_FRESH_QUORUM", 0.95) or 0.95)
 
 # LIVE-TRUTH-23: Verified post-start feed recovery gate.
 # Prevents treating a full restart as recovered unless connect + subscribe + fresh option ticks are observed.
@@ -1056,6 +1381,310 @@ def _mark_auth_required(reason: str, code=None, *, source: str = "kite_depth_ws"
 def _clear_auth_required_latch() -> None:
     global _AUTH_REQUIRED_LATCH, _AUTH_REQUIRED_LOGGED, _LAST_RUNTIME_ERROR
     _AUTH_REQUIRED_LATCH = False
+_SUBSCRIPTION_REQUESTED_TOKENS: set[int] = set()
+_SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS: set[int] = set()
+_MODE_REQUEST_SUCCEEDED_TOKENS: set[int] = set()
+_FULL_PAYLOAD_OBSERVED_TOKENS: set[int] = set()
+_SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN: dict[int, float] = {}
+_SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
+_MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
+_FIRST_LIVE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_FIRST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
+_LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
+_SUBSCRIPTION_REQUESTED_EPOCH: float | None = None
+_SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH: float | None = None
+_MODE_REQUEST_SUCCEEDED_EPOCH: float | None = None
+_FULL_PAYLOAD_OBSERVED_EPOCH: float | None = None
+_FEED_SESSION_ID: str = ""
+_FEED_RECONNECT_GENERATION = 0
+_FEED_CONNECTION_START_EPOCH: float | None = None
+_FEED_ON_TICKS_ROW_SEQ = 0
+_RESTART_LOCK = threading.RLock()
+_RESTART_ASYNC_LOCK = threading.Lock()
+_RESTART_ASYNC_THREAD = None
+_LAST_FULL_RESTART_EPOCH = 0.0
+_FULL_RESTARTS = []
+_STALE_STRIKES = 0
+_WARMUP_PENDING = False
+_LOG_PATH = logs_dir() / "depth_ws_watchdog.log"
+_TICK_INGEST_ERROR_PATH = logs_dir() / "tick_ingest_errors.jsonl"
+_TICK_INGEST_ERROR_WRITER = get_jsonl_writer(_TICK_INGEST_ERROR_PATH)
+_TICK_INGEST_ERROR_LOCK = threading.Lock()
+_LAST_TICK_INGEST_ERROR_TS = 0.0
+_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT = 0
+_DEPTH_WS_LOCK: RunLock | None = None
+_DEPTH_WS_LOCK_ACQUIRED = False
+_STOP_REQUESTED = False
+_SCHEMA_LOG_TS = 0.0
+_INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
+_AUTH_REQUIRED_LATCH = False
+_OBSERVATION_PLAN_STATE_LOCK = threading.RLock()
+_OBSERVATION_PLAN_STATE: dict[str, Any] = {
+    "enabled": False,
+    "verdict": "DISABLED",
+    "production_tokens": [],
+    "observation_tokens": [],
+    "overlap_tokens": [],
+    "observation_exclusive_tokens": [],
+    "final_union_tokens": [],
+    "missing_observation_tokens": [],
+    "configured_budget": None,
+    "feed_session_id": "",
+    "reconnect_generation": 0,
+    "plan_sha": "",
+    "decision_epoch": None,
+}
+
+
+def _observation_state_payload() -> dict[str, Any]:
+    with _OBSERVATION_PLAN_STATE_LOCK:
+        return dict(_OBSERVATION_PLAN_STATE)
+
+
+def _set_observation_plan_state(
+    *,
+    enabled: bool,
+    verdict: str,
+    production_tokens: Sequence[int] = (),
+    observation_tokens: Sequence[int] = (),
+    final_union_tokens: Sequence[int] = (),
+    missing_observation_tokens: Sequence[int] = (),
+    configured_budget: int | None = None,
+    plan_sha: str = "",
+) -> dict[str, Any]:
+    production = sorted({int(token) for token in production_tokens if int(token) > 0})
+    observation = sorted({int(token) for token in observation_tokens if int(token) > 0})
+    final_union = sorted({int(token) for token in final_union_tokens if int(token) > 0})
+    overlap = sorted(set(production) & set(observation))
+    exclusive = sorted(set(observation) - set(production))
+    with _OBSERVATION_PLAN_STATE_LOCK:
+        _OBSERVATION_PLAN_STATE.update(
+            {
+                "enabled": bool(enabled),
+                "verdict": str(verdict),
+                "production_tokens": production,
+                "observation_tokens": observation,
+                "overlap_tokens": overlap,
+                "observation_exclusive_tokens": exclusive,
+                "final_union_tokens": final_union,
+                "missing_observation_tokens": sorted({int(token) for token in missing_observation_tokens if int(token) > 0}),
+                "configured_budget": configured_budget,
+                "feed_session_id": _ensure_feed_session_id() if bool(enabled) else "",
+                "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+                "plan_sha": str(plan_sha or ""),
+                "decision_epoch": float(now_utc_epoch()),
+            }
+        )
+        return dict(_OBSERVATION_PLAN_STATE)
+
+
+def reset_market_event_graph_observation_plan_state() -> None:
+    _set_observation_plan_state(enabled=False, verdict="DISABLED")
+
+
+def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
+    verdict = str(plan.get("verdict") or "")
+    ok = bool(plan.get("ok")) and verdict == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+    return _set_observation_plan_state(
+        enabled=ok,
+        verdict=verdict if verdict else "BLOCKED_BY_LAUNCH_PLAN_IDENTITY",
+        production_tokens=plan.get("production_tokens") or (),
+        observation_tokens=plan.get("observation_tokens") or (),
+        final_union_tokens=plan.get("final_union_tokens") or (),
+        missing_observation_tokens=plan.get("missing_observation_tokens") or (),
+        configured_budget=plan.get("configured_budget"),
+        plan_sha=str(plan.get("launch_plan_sha256") or ""),
+    )
+
+
+def _ensure_feed_session_id() -> str:
+    global _FEED_SESSION_ID
+    if not _FEED_SESSION_ID:
+        configured = str(os.getenv("LIVE_FEED_SESSION_ID", "") or "").strip()
+        _FEED_SESSION_ID = configured or f"kite-depth-{int(now_utc_epoch())}"
+    return _FEED_SESSION_ID
+
+
+def _record_subscription_requested(tokens: Sequence[int]) -> None:
+    global _SUBSCRIPTION_REQUESTED_TOKENS, _SUBSCRIPTION_REQUESTED_EPOCH
+    normalized = {int(token) for token in (tokens or []) if int(token) > 0}
+    if normalized:
+        epoch = float(now_utc_epoch())
+        _SUBSCRIPTION_REQUESTED_TOKENS.update(normalized)
+        for token in normalized:
+            _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN[token] = epoch
+        _SUBSCRIPTION_REQUESTED_EPOCH = epoch
+
+
+def _record_subscription_request_succeeded(tokens: Sequence[int]) -> None:
+    global _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS, _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH
+    normalized = {int(token) for token in (tokens or []) if int(token) > 0}
+    if normalized:
+        epoch = float(now_utc_epoch())
+        _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS.update(normalized)
+        for token in normalized:
+            _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+        _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = epoch
+
+
+def _record_mode_request_succeeded(tokens: Sequence[int]) -> None:
+    global _MODE_REQUEST_SUCCEEDED_TOKENS, _MODE_REQUEST_SUCCEEDED_EPOCH
+    normalized = {int(token) for token in (tokens or []) if int(token) > 0}
+    if normalized:
+        epoch = float(now_utc_epoch())
+        _MODE_REQUEST_SUCCEEDED_TOKENS.update(normalized)
+        for token in normalized:
+            _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+        _MODE_REQUEST_SUCCEEDED_EPOCH = epoch
+
+
+def _record_full_payload_observed(token: int) -> None:
+    global _FULL_PAYLOAD_OBSERVED_TOKENS, _FULL_PAYLOAD_OBSERVED_EPOCH
+    if int(token) > 0:
+        token_int = int(token)
+        epoch = float(now_utc_epoch())
+        _FULL_PAYLOAD_OBSERVED_TOKENS.add(int(token))
+        _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.setdefault(token_int, epoch)
+        _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN[token_int] = epoch
+        _FULL_PAYLOAD_OBSERVED_EPOCH = epoch
+
+
+def _reset_market_event_graph_generation_evidence() -> None:
+    global _SUBSCRIPTION_REQUESTED_TOKENS, _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS, _MODE_REQUEST_SUCCEEDED_TOKENS, _FULL_PAYLOAD_OBSERVED_TOKENS
+    global _SUBSCRIPTION_REQUESTED_EPOCH, _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH, _MODE_REQUEST_SUCCEEDED_EPOCH, _FULL_PAYLOAD_OBSERVED_EPOCH
+    _SUBSCRIPTION_REQUESTED_TOKENS = set()
+    _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS = set()
+    _MODE_REQUEST_SUCCEEDED_TOKENS = set()
+    _FULL_PAYLOAD_OBSERVED_TOKENS = set()
+    _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN.clear()
+    _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.clear()
+    _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.clear()
+    _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.clear()
+    _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.clear()
+    _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
+    _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
+    _SUBSCRIPTION_REQUESTED_EPOCH = None
+    _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = None
+    _MODE_REQUEST_SUCCEEDED_EPOCH = None
+    _FULL_PAYLOAD_OBSERVED_EPOCH = None
+    with _OBSERVATION_PLAN_STATE_LOCK:
+        if _OBSERVATION_PLAN_STATE.get("enabled"):
+            _OBSERVATION_PLAN_STATE["feed_session_id"] = _ensure_feed_session_id()
+            _OBSERVATION_PLAN_STATE["reconnect_generation"] = int(_FEED_RECONNECT_GENERATION)
+
+
+def get_current_feed_session_identity() -> dict[str, Any]:
+    return {
+        "provider": "kite",
+        "token_domain": "kite_instrument_token",
+        "feed_session_id": _ensure_feed_session_id(),
+        "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+        "connection_start_epoch": _FEED_CONNECTION_START_EPOCH,
+    }
+
+
+def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping[str, int]) -> dict[str, Any]:
+    expected = {str(symbol).upper(): int(token) for symbol, token in (token_by_symbol or {}).items() if token is not None}
+    requested = {symbol for symbol, token in expected.items() if int(token) in _SUBSCRIPTION_REQUESTED_TOKENS}
+    request_succeeded = {symbol for symbol, token in expected.items() if int(token) in _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS}
+    mode_requested = {symbol for symbol, token in expected.items() if int(token) in _MODE_REQUEST_SUCCEEDED_TOKENS}
+    full_payload = {symbol for symbol, token in expected.items() if int(token) in _FULL_PAYLOAD_OBSERVED_TOKENS}
+    live_tick = {symbol for symbol, token in expected.items() if _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token))) is not None}
+    ordered = list(expected.keys())
+    latest_live_tick_by_symbol = {
+        symbol: _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token)))
+        for symbol, token in expected.items()
+        if _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token))) is not None
+    }
+    identity = get_current_feed_session_identity()
+    lifecycle: dict[str, dict[str, Any]] = {}
+    for symbol, token in expected.items():
+        token_int = int(token)
+        lifecycle[str(token_int)] = {
+            "symbol": symbol,
+            "instrument_token": token_int,
+            "subscription_requested_epoch": _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN.get(token_int),
+            "subscribe_call_succeeded_epoch": _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "mode_request_succeeded_epoch": _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "first_callback_receipt_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "latest_callback_receipt_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
+            "first_source_tick_epoch": _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "latest_source_tick_epoch": _coerce_epoch(_LAST_PAYLOAD_TS_BY_TOKEN.get(token_int)),
+            "first_post_mode_full_receipt_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "latest_post_mode_full_receipt_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            # Compatibility aliases. These are receipt-time fields, not broker-source timestamps.
+            "first_live_tick_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "latest_live_tick_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
+            "first_full_payload_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "feed_session_id": identity["feed_session_id"],
+            "reconnect_generation": identity["reconnect_generation"],
+        }
+    generation_basis = {
+        "provider": identity["provider"],
+        "token_domain": identity["token_domain"],
+        "feed_session_id": identity["feed_session_id"],
+        "reconnect_generation": identity["reconnect_generation"],
+        "tokens": sorted(int(token) for token in expected.values()),
+        "request_epochs": {
+            str(token): lifecycle[str(token)].get("subscription_requested_epoch")
+            for token in sorted(int(token) for token in expected.values())
+        },
+    }
+    snapshot_basis = {
+        **generation_basis,
+        "token_lifecycle": lifecycle,
+    }
+    payload = {
+        "provider": identity["provider"],
+        "token_domain": identity["token_domain"],
+        "feed_session_id": identity["feed_session_id"],
+        "reconnect_generation": int(identity["reconnect_generation"]),
+        "connection_start_epoch": identity["connection_start_epoch"],
+        "token_by_symbol": dict(expected),
+        "token_resolved_symbols": ordered,
+        "subscription_requested_symbols": [symbol for symbol in ordered if symbol in requested],
+        "subscription_request_succeeded_symbols": [symbol for symbol in ordered if symbol in request_succeeded],
+        "mode_request_succeeded_symbols": [symbol for symbol in ordered if symbol in mode_requested],
+        "live_tick_observed_symbols": [symbol for symbol in ordered if symbol in live_tick],
+        "full_payload_observed_symbols": [symbol for symbol in ordered if symbol in full_payload],
+        "completed_bar_available_symbols": [],
+        "latest_live_tick_epoch_by_symbol": latest_live_tick_by_symbol,
+        "subscription_requested_epoch": _SUBSCRIPTION_REQUESTED_EPOCH,
+        "subscription_request_succeeded_epoch": _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH,
+        "mode_request_succeeded_epoch": _MODE_REQUEST_SUCCEEDED_EPOCH,
+        "full_payload_observed_epoch": _FULL_PAYLOAD_OBSERVED_EPOCH,
+        "token_lifecycle": lifecycle,
+        "budget_status": {
+            "requested_count": len(expected),
+            "request_succeeded_count": len(request_succeeded),
+            "mode_request_succeeded_count": len(mode_requested),
+            "live_tick_count": len(live_tick),
+            "full_payload_count": len(full_payload),
+        },
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+    }
+    observation_state = _observation_state_payload()
+    payload["observation_plan_state"] = observation_state
+    if observation_state.get("verdict") == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET:
+        payload["observation_blocker"] = {
+            "verdict": BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET,
+            "missing_observation_tokens": list(observation_state.get("missing_observation_tokens") or []),
+            "generation_inactive": True,
+        }
+    payload["subscription_generation_id"] = hashlib.sha256(
+        json.dumps(generation_basis, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    payload["evidence_snapshot_sha256"] = hashlib.sha256(
+        json.dumps(snapshot_basis, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    payload["subscription_evidence_id"] = payload["subscription_generation_id"]
+    return payload
+
     _AUTH_REQUIRED_LOGGED = False
     _LAST_RUNTIME_ERROR = ""
     try:
@@ -1524,11 +2153,19 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
             restart_attempted=False,
             reconnect_blocked_reason=None,
         )
+        if (not _reconnect_recovery_blocked_active()
+                and not feed_breaker_tripped()
+                and _restart_count_1h(now_epoch) < _ws_max_recoveries_per_window()):
+            _schedule_restart_depth_ws(
+                reason=f"ws1006_recovery_full:{source}",
+                ignore_cooldown=True,
+                force_full_restart=True,
+                source="ws1006_recovery",
+            )
         return True
 
     if _use_native_reconnect():
         soft_ok = _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
-
         if not soft_ok:
             _log_ws(
                 "FEED_WS_1006_RECOVERY_SOFT_RECONNECT_FAILED",
@@ -1555,7 +2192,15 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
                 restart_attempted=False,
                 reconnect_blocked_reason=None,
             )
-            return True
+            if (not _reconnect_recovery_blocked_active()
+                    and not feed_breaker_tripped()
+                    and _restart_count_1h(now_epoch) < _ws_max_recoveries_per_window()):
+                _schedule_restart_depth_ws(
+                    reason=f"ws1006_recovery_full:{source}",
+                    ignore_cooldown=True,
+                    force_full_restart=True,
+                    source="ws1006_recovery",
+                )
     else:
         _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
     return True
@@ -1763,7 +2408,159 @@ def _clear_reconnect_blocked_reason() -> None:
 
 
 def _reconnect_recovery_blocked_active() -> bool:
-    return bool(str(_RECONNECT_BLOCKED_REASON or "").strip() or _REACTOR_NOT_RESTARTABLE_DETECTED)
+    blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower()
+    if blocked_reason == "partial_recovery":
+        return bool(_REACTOR_NOT_RESTARTABLE_DETECTED)
+    return bool(blocked_reason or _REACTOR_NOT_RESTARTABLE_DETECTED)
+
+
+def _token_priority_sets(current_tokens: set[int], underlying_tokens: set[int]) -> dict[str, set[int]]:
+    current = {int(token) for token in set(current_tokens or set()) if int(token) > 0}
+    critical = {int(token) for token in set(underlying_tokens or set()) if int(token) in current}
+    core = set(current - critical)
+    return {
+        "critical": critical,
+        "core": core,
+        "watch": set(),
+        "peripheral": set(),
+    }
+
+
+def _build_partial_recovery_verification(
+    *,
+    now_epoch: float,
+    current_tokens: set[int],
+    underlying_tokens: set[int],
+    last_msg_by_token: dict[int, float] | None,
+    index_threshold_sec: float,
+    option_threshold_sec: float,
+    previous_stable_cycles: int,
+) -> dict[str, object]:
+    priorities = _token_priority_sets(current_tokens, underlying_tokens)
+    last_by_token = {int(token): float(epoch) for token, epoch in dict(last_msg_by_token or {}).items() if int(token) > 0}
+    critical = priorities["critical"]
+    core = priorities["core"]
+
+    def _fresh_count(tokens: set[int], threshold: float) -> int:
+        count = 0
+        for token in tokens:
+            last_epoch = float(last_by_token.get(int(token), 0.0) or 0.0)
+            if last_epoch > 0 and max(0.0, float(now_epoch) - last_epoch) <= float(threshold):
+                count += 1
+        return count
+
+    critical_fresh_count = _fresh_count(critical, float(index_threshold_sec))
+    core_fresh_count = _fresh_count(core, float(option_threshold_sec))
+    critical_required_count = len(critical)
+    core_required_count = len(core)
+    critical_feed_fresh = critical_fresh_count == critical_required_count
+    core_fresh_ratio = 1.0 if core_required_count <= 0 else float(core_fresh_count) / float(core_required_count)
+    critical_subscribe_applied_count = len(critical - set(_PENDING_SUBSCRIBE_TOKENS or set()))
+    critical_mode_full_applied_count = len(critical - set(_PENDING_MODE_FULL_TOKENS or set()))
+    pending_critical_mutations = len(
+        critical
+        & (set(_PENDING_SUBSCRIBE_TOKENS or set()) | set(_PENDING_UNSUBSCRIBE_TOKENS or set()) | set(_PENDING_MODE_FULL_TOKENS or set()))
+    )
+    pending_core_mutations = len(
+        core
+        & (set(_PENDING_SUBSCRIBE_TOKENS or set()) | set(_PENDING_UNSUBSCRIBE_TOKENS or set()) | set(_PENDING_MODE_FULL_TOKENS or set()))
+    )
+    transport_socket_connected = _ws_connected_state()
+    last_transport_epoch = max(
+        [float(_LAST_WS_TICK_EPOCH or 0.0)] + [float(epoch) for epoch in last_by_token.values()]
+    )
+    last_tick_age = None if last_transport_epoch <= 0 else max(0.0, float(now_epoch) - last_transport_epoch)
+    registry_consistent = (
+        pending_critical_mutations == 0
+        and critical_subscribe_applied_count == critical_required_count
+        and critical_mode_full_applied_count == critical_required_count
+    )
+    failure_reasons: list[str] = []
+    if transport_socket_connected is not True:
+        failure_reasons.append("transport_socket_disconnected")
+    if not registry_consistent:
+        failure_reasons.append("subscription_registry_inconsistent")
+    if not critical_feed_fresh:
+        failure_reasons.append("critical_feed_stale")
+    if core_fresh_ratio < float(_CORE_FEED_FRESH_QUORUM):
+        failure_reasons.append("core_quorum_below_threshold")
+    if last_tick_age is None or last_tick_age > float(option_threshold_sec):
+        failure_reasons.append("transport_callback_stale")
+    stable = not failure_reasons
+    stable_cycles = int(previous_stable_cycles or 0) + 1 if stable else 0
+    return {
+        "transport_socket_connected": transport_socket_connected,
+        "active_socket_generation": int(_SOCKET_GENERATION or 0),
+        "subscription_registry_consistent": bool(registry_consistent),
+        "critical_required_count": critical_required_count,
+        "critical_subscribe_applied_count": critical_subscribe_applied_count,
+        "critical_mode_full_applied_count": critical_mode_full_applied_count,
+        "critical_fresh_count": critical_fresh_count,
+        "critical_feed_fresh": bool(critical_feed_fresh),
+        "core_required_count": core_required_count,
+        "core_fresh_count": core_fresh_count,
+        "core_fresh_ratio": core_fresh_ratio,
+        "depth_feed_fresh_ratio": core_fresh_ratio,
+        "watch_stale_count": 0,
+        "peripheral_stale_count": 0,
+        "pending_critical_mutations": pending_critical_mutations,
+        "pending_core_mutations": pending_core_mutations,
+        "last_transport_callback_age_sec": last_tick_age,
+        "last_tick_callback_age_sec": last_tick_age,
+        "stable_cycles": stable_cycles,
+        "stable_cycles_required": int(_RECOVERY_STABLE_CYCLES),
+        "verified": bool(stable and stable_cycles >= int(_RECOVERY_STABLE_CYCLES)),
+        "failure_reasons": failure_reasons,
+        "bounded_recovery": {
+            "token_recovery_max_attempts": int(_TOKEN_RECOVERY_MAX_ATTEMPTS),
+            "token_recovery_cooldown_sec": float(_TOKEN_RECOVERY_COOLDOWN_SEC),
+            "token_recovery_verify_timeout_sec": float(_TOKEN_RECOVERY_VERIFY_TIMEOUT_SEC),
+            "recovery_stable_cycles": int(_RECOVERY_STABLE_CYCLES),
+        },
+    }
+
+
+def _transition_partial_activity_recovery(
+    *,
+    now_epoch: float,
+    current_tokens: set[int],
+    underlying_tokens: set[int],
+    last_msg_by_token: dict[int, float] | None,
+    index_threshold_sec: float,
+    option_threshold_sec: float,
+) -> dict[str, object]:
+    global _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _PARTIAL_RECOVERY_VERIFICATION
+    previous_cycles = int(dict(_PARTIAL_RECOVERY_VERIFICATION or {}).get("stable_cycles") or 0)
+    verification = _build_partial_recovery_verification(
+        now_epoch=now_epoch,
+        current_tokens=current_tokens,
+        underlying_tokens=underlying_tokens,
+        last_msg_by_token=last_msg_by_token,
+        index_threshold_sec=index_threshold_sec,
+        option_threshold_sec=option_threshold_sec,
+        previous_stable_cycles=previous_cycles,
+    )
+    _PARTIAL_RECOVERY_VERIFICATION = dict(verification)
+    if bool(verification.get("verified")):
+        _clear_reconnect_blocked_reason()
+        _RUNTIME_STATE = "LIVE"
+        _LAST_RUNTIME_ERROR = ""
+    else:
+        _RUNTIME_STATE = "VERIFYING_RECOVERY" if int(verification.get("stable_cycles") or 0) > 0 else "DEGRADED_LOCAL"
+        _LAST_RUNTIME_ERROR = "partial_activity_verification_pending"
+    _log_ws(
+        "FEED_PARTIAL_RECOVERY_VERIFYING",
+        {
+            **verification,
+            "runtime_state": _RUNTIME_STATE,
+            "reconnect_blocked_reason": None,
+            "process_restart_required": False,
+            "restart_suppressed": False,
+            "no_order_action": True,
+            "order_safe": True,
+        },
+    )
+    return verification
 
 
 def _should_mutate_stale_option_symbol_subscription(
@@ -1987,6 +2784,8 @@ def _normalize_recovery_blocked_snapshot_state(
     ).strip().lower() or None
     if blocked_reason == "reactor_not_restartable":
         blocked_reason = _reactor_not_restartable_block_reason()
+    if blocked_reason == "partial_recovery":
+        blocked_reason = None
     if not blocked_reason and _REACTOR_NOT_RESTARTABLE_DETECTED:
         blocked_reason = _reactor_not_restartable_block_reason()
     effective_state = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper() or "UNKNOWN"
@@ -2009,6 +2808,74 @@ def _normalize_recovery_blocked_snapshot_state(
             )
         state_machine_row.setdefault("reason", blocked_reason)
     return effective_state, state_machine_row, effective_ws_connected, blocked_reason
+
+
+def _runtime_transport_truth_fields(
+    *,
+    now_epoch: float,
+    ws_connected: bool | None,
+    runtime_state: str,
+    last_ws_tick_epoch: float | None,
+    last_tick_age_sec: float | None,
+    last_depth_age_sec: float | None,
+    reconnect_blocked_reason: str | None,
+) -> dict[str, object]:
+    verification = dict(_PARTIAL_RECOVERY_VERIFICATION or {})
+    callback_epoch = None
+    callback_candidates = [float(_LAST_WS_TICK_EPOCH or 0.0)]
+    callback_candidates.extend(float(epoch) for epoch in dict(_LAST_MSG_TS_BY_TOKEN or {}).values())
+    if callback_candidates:
+        max_epoch = max(callback_candidates)
+        callback_epoch = max_epoch if max_epoch > 0 else None
+    tick_epoch = _coerce_epoch(last_ws_tick_epoch) or callback_epoch
+    callback_age = None if callback_epoch is None else max(0.0, float(now_epoch) - float(callback_epoch))
+    callback_activity_present = callback_age is not None and callback_age <= float(
+        getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0))
+    ) * 3.0
+    subscribed_count = len(set(int(token) for token in list(_LAST_TOKENS or []) if int(token) > 0))
+    intended_count = int(_INTENDED_TOKEN_COUNT if _INTENDED_TOKEN_COUNT > 0 else subscribed_count)
+    subscription_registry_consistent = (
+        len(_PENDING_SUBSCRIBE_TOKENS or set()) == 0
+        and len(_PENDING_UNSUBSCRIBE_TOKENS or set()) == 0
+        and len(_PENDING_MODE_FULL_TOKENS or set()) == 0
+    )
+    subscription_truth_complete = subscription_registry_consistent and (intended_count <= 0 or subscribed_count >= intended_count)
+    mode_full_truth_complete = subscription_registry_consistent and len(_PENDING_MODE_FULL_TOKENS or set()) == 0
+    critical_feed_fresh = bool(verification.get("critical_feed_fresh", True))
+    core_feed_fresh_ratio = float(verification.get("core_fresh_ratio", 1.0) or 0.0)
+    depth_ratio = float(verification.get("depth_feed_fresh_ratio", 1.0 if last_depth_age_sec is not None else 0.0) or 0.0)
+    state_text = str(runtime_state or "").strip().upper()
+    blocked_reason = str(reconnect_blocked_reason or "").strip().lower()
+    execution_feed_ready = bool(
+        ws_connected is True
+        and not blocked_reason
+        and state_text in {"RUNNING", "LIVE", "HEALTHY", "OK"}
+        and subscription_truth_complete
+        and mode_full_truth_complete
+        and critical_feed_fresh
+        and core_feed_fresh_ratio >= float(_CORE_FEED_FRESH_QUORUM)
+        and last_tick_age_sec is not None
+    )
+    canonical_state = state_text
+    if state_text == "RUNNING" and execution_feed_ready:
+        canonical_state = "LIVE"
+    elif state_text == "RUNNING" and not execution_feed_ready:
+        canonical_state = "DEGRADED_LOCAL"
+    return {
+        "transport_socket_connected": ws_connected,
+        "transport_last_callback_epoch": callback_epoch,
+        "transport_last_tick_epoch": tick_epoch,
+        "transport_callback_activity_present": bool(callback_activity_present),
+        "subscription_registry_consistent": bool(subscription_registry_consistent),
+        "subscription_truth_complete": bool(subscription_truth_complete),
+        "mode_full_truth_complete": bool(mode_full_truth_complete),
+        "critical_feed_fresh": bool(critical_feed_fresh),
+        "core_feed_fresh_ratio": core_feed_fresh_ratio,
+        "depth_feed_fresh_ratio": depth_ratio,
+        "execution_feed_ready": bool(execution_feed_ready),
+        "canonical_feed_state": canonical_state,
+        "recovery_verification": verification or None,
+    }
 
 
 def _log_tick_ingest_error(
@@ -2062,8 +2929,7 @@ def _latest_db_tick_epoch() -> float | None:
     if not db_path.exists():
         return None
     try:
-        from contextlib import closing
-        with closing(sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)) as conn:
+        with sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False) as conn:
             conn.execute("PRAGMA busy_timeout=30000")
             try:
                 conn.execute("PRAGMA journal_mode=WAL")
@@ -3179,6 +4045,17 @@ def _write_feed_runtime_snapshot(
         "resubscribe_attempted": bool(restart_attempted) if restart_attempted is not None else bool(_RECOVERY_IN_PROGRESS),
         "option_feed_verification_state": str(_option_feed_verification_overlay_payload().get("state") or "IDLE"),
     }
+    payload.update(
+        _runtime_transport_truth_fields(
+            now_epoch=float(now_epoch),
+            ws_connected=ws_connected,
+            runtime_state=effective_state_text,
+            last_ws_tick_epoch=last_ws_tick_epoch,
+            last_tick_age_sec=last_tick_age_sec,
+            last_depth_age_sec=last_depth_age_sec,
+            reconnect_blocked_reason=normalized_blocked_reason,
+        )
+    )
     stage_started = _mark_stage("payload_assembly_ms", stage_started)
     if (
         internal_retry_disabled is not None
@@ -3481,6 +4358,17 @@ def _persist_runtime_snapshot_row(
         "reconnect_blocked_reason": normalized_blocked_reason,
         "restart_blocked_reason": str(restart_blocked_reason or normalized_blocked_reason or "").strip().lower() or None,
     }
+    payload.update(
+        _runtime_transport_truth_fields(
+            now_epoch=ts_epoch,
+            ws_connected=ws_connected,
+            runtime_state=effective_state_text,
+            last_ws_tick_epoch=last_ws_tick_epoch,
+            last_tick_age_sec=last_tick_age_sec,
+            last_depth_age_sec=last_depth_age_sec,
+            reconnect_blocked_reason=normalized_blocked_reason,
+        )
+    )
     if (
         internal_retry_disabled is not None
         or stop_retry_called is not None
@@ -4597,11 +5485,18 @@ def _maybe_trigger_silent_reconnect(
         backoff_min_sec=float(backoff_min_sec),
         backoff_max_sec=float(backoff_max_sec),
     )
-    # Implement partial_recovery detection and blocking
     if action.get("reason") == "partial_activity_detected":
-        _set_reconnect_blocked_reason("partial_recovery")
-    elif action.get("stale_tokens") == 0 and str(_RECONNECT_BLOCKED_REASON).strip().lower() == "partial_recovery":
+        _transition_partial_activity_recovery(
+            now_epoch=float(now_epoch),
+            current_tokens=set(current_tokens or set()),
+            underlying_tokens=set(underlying_tokens or set()),
+            last_msg_by_token=last_msg_by_token,
+            index_threshold_sec=float(index_threshold_sec),
+            option_threshold_sec=float(option_threshold_sec),
+        )
+    elif action.get("stale_tokens") == 0 and str(_RUNTIME_STATE or "").strip().upper() in {"DEGRADED_LOCAL", "VERIFYING_RECOVERY"}:
         _clear_reconnect_blocked_reason()
+        globals()["_RUNTIME_STATE"] = "LIVE"
 
     if not bool(action.get("silent_detected")):
         state["confirm_hits"] = 0
@@ -4798,13 +5693,6 @@ def _close_ticker_instance(instance):
                 method()
             except Exception as exc:
                 _log_ws("FEED_CLOSE_ERROR", {"method": method_name, "error": str(exc)})
-    # Break reference cycles by clearing callbacks
-    for cb in ("on_connect", "on_close", "on_error", "on_reconnect", "on_ticks", "on_noreconnect", "on_order_update", "on_message"):
-        if hasattr(instance, cb):
-            try:
-                setattr(instance, cb, None)
-            except Exception:
-                pass
 
 
 def _join_thread_safe(thread_obj, timeout_sec: float) -> None:
@@ -4836,7 +5724,6 @@ def _schedule_restart_depth_ws(
     source: str,
 ) -> bool:
     global _RESTART_ASYNC_THREAD
-
     if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
         _log_ws(
             "FEED_RECOVERY_ALREADY_IN_PROGRESS",
@@ -4976,6 +5863,11 @@ def on_ticks(ws, ticks):
             _SCHEMA_LOG_TS = now_epoch
         except Exception:
             pass
+    try:
+        observation_registry = load_observation_registry(force=False)
+    except Exception:
+        observation_registry = None
+    observation_token_set = set(int(token) for token in (getattr(observation_registry, "all_tokens", []) or []))
     for t in ticks:
         _FEED_ON_TICKS_ROW_SEQ += 1
         if not isinstance(t, dict):
@@ -5004,11 +5896,32 @@ def on_ticks(ws, ticks):
         last_price = t.get("last_price")
         if token_int is not None:
             _LAST_MSG_TS_BY_TOKEN[int(token_int)] = float(freshness_tick_epoch)
-        symbol = _TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None
+        if token_int is not None:
+            _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.setdefault(int(token_int), float(now_epoch))
+            if payload_tick_epoch is not None:
+                _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.setdefault(int(token_int), float(payload_tick_epoch))
+        observation_identity = (
+            observation_registry.observation_identity(token_int)
+            if observation_registry is not None and token_int is not None
+            else None
+        )
+        symbol = (observation_identity or {}).get("symbol") or (_TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None)
         underlying_tick = _is_underlying_token(token_int)
         has_depth = _depth_has_bid_ask(depth)
         tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
         tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None
+        observation_state = _observation_state_payload()
+        observation_token_allowed = (
+            token_int is not None
+            and int(token_int) in observation_token_set
+            and observation_registry is not None
+            and bool(observation_state.get("enabled"))
+            and str(observation_state.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+            and int(token_int) in set(int(tok) for tok in (observation_state.get("observation_tokens") or []))
+            and str(observation_state.get("feed_session_id") or "") == _ensure_feed_session_id()
+            and int(observation_state.get("reconnect_generation") or -1) == int(_FEED_RECONNECT_GENERATION)
+            and int(token_int) in _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS
+        )
         if token_int is not None and isinstance(depth, dict) and depth:
             depth_store.update(token_int, depth)
         if token_int is not None and token_int in _UNDERLYING_TOKEN_TO_SYMBOL:
@@ -5031,6 +5944,36 @@ def on_ticks(ws, ticks):
                     last_price=last_price,
                     volume=t.get("volume") if t.get("volume") is not None else t.get("volume_traded"),
                 )
+        if observation_token_allowed and last_price is not None:
+            packet_kind = "UNKNOWN"
+            is_full_payload = False
+            if observation_identity and observation_identity.get("instrument_class") == "INDEX":
+                packet_kind = "INDEX_FULL" if isinstance(t.get("ohlc"), dict) and t.get("change") is not None else "INDEX_QUOTE"
+                is_full_payload = packet_kind == "INDEX_FULL"
+            else:
+                packet_kind = "NSE_EQUITY_FULL" if has_depth else "NSE_EQUITY_QUOTE"
+                is_full_payload = has_depth
+            try:
+                record_live_source_shadow_tick(
+                    symbol=str(symbol or "").upper(),
+                    instrument_token=token_int,
+                    price=last_price,
+                    source_tick_epoch=payload_tick_epoch,
+                    source_type="live_websocket",
+                    payload_mode="full" if is_full_payload else "quote",
+                    feed_identity=get_current_feed_session_identity(),
+                    provider="kite",
+                    token_domain="kite_instrument_token",
+                    universe_hash=str(getattr(observation_registry, "canonical_sha256", "") or ""),
+                    packet_kind=packet_kind,
+                    is_full_payload=is_full_payload,
+                )
+            except Exception:
+                pass
+            if is_full_payload:
+                mode_epoch = _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(int(token_int))
+                if mode_epoch is not None and float(now_epoch) > float(mode_epoch):
+                    _record_full_payload_observed(int(token_int))
             elif last_price is not None:
                 _update_index_quote_cache(
                     symbol=symbol,
@@ -5302,7 +6245,6 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
 
     _log_ws("feed_restart_required", {"reason": reason})
-
     if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
         _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
         return False
@@ -5522,7 +6464,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
-    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
+    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
         try:
@@ -5781,6 +6723,17 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             _WATCHDOG_STOP.set()
         _WATCHDOG_STOP = threading.Event()
         kws = get_kite_ticker(api_key=api_key, access_token=access_token, debug=False)
+        _SOCKET_GENERATION += 1
+        socket_generation = int(_SOCKET_GENERATION)
+        _log_ws(
+            "FEED_SOCKET_GENERATION_STARTED",
+            {
+                "socket_generation": socket_generation,
+                "token_count": len(tokens),
+                "timestamp": float(now_utc_epoch()),
+                "result": "started",
+            },
+        )
         if hasattr(kws, "auto_reconnect"):
             try:
                 kws.auto_reconnect = _use_native_reconnect()
@@ -5795,6 +6748,22 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         _KITE_TICKER = kws
 
     handshake_soft_reset_used = False
+
+    def _generation_is_current(callback: str) -> bool:
+        if socket_generation == int(_SOCKET_GENERATION):
+            return True
+        _log_ws(
+            "FEED_OLD_GENERATION_CALLBACK_IGNORED",
+            {
+                "socket_generation": socket_generation,
+                "active_generation": int(_SOCKET_GENERATION),
+                "callback": callback,
+                "callback_thread": threading.current_thread().name,
+                "timestamp": float(now_utc_epoch()),
+                "result": "ignored",
+            },
+        )
+        return False
 
     def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
         global _LAST_TOKENS, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
@@ -5899,8 +6868,21 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if not desired:
             desired = sorted(set(int(t) for t in (tokens or []) if int(t) > 0))
         if desired:
+            event_base = {
+                "socket_generation": socket_generation,
+                "token_count": len(desired),
+                "token_ids": list(desired),
+                "desired_count": len(desired),
+                "callback_thread": threading.current_thread().name,
+                "timestamp": float(now_utc_epoch()),
+                "reason": reason,
+            }
+            _log_ws("FEED_SUBSCRIBE_REQUESTED", {**event_base, "result": "requested"})
             ws.subscribe(desired)
+            _log_ws("FEED_SUBSCRIBE_CALLBACK_APPLIED", {**event_base, "result": "applied"})
+            _log_ws("FEED_MODE_FULL_REQUESTED", {**event_base, "result": "requested"})
             ws.set_mode(ws.MODE_FULL, desired)
+            _log_ws("FEED_MODE_FULL_CALLBACK_APPLIED", {**event_base, "result": "applied"})
         _record_feed_restart_verify_subscribe(now_epoch=float(now_utc_epoch()))
         _LAST_TOKENS[:] = desired
         tokens[:] = desired
@@ -5929,19 +6911,12 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             requested_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
             subscribed_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
         )
-        replayed_tokens = sorted(set(int(t) for t in getattr(ws, "tokens", []) if int(t) > 0))
-        exact_subscription_replay = replayed_tokens == desired
-        option_verification_required = any(
-            int(count or 0) > 0 for count in dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}).values()
-        )
         _log_ws(
             "FEED_ON_CONNECT_SUBSCRIBE",
             {
                 "reason": reason,
                 "tokens": len(desired),
                 "final_token_count_before_subscribe": len(desired),
-                "exact_subscription_replay": bool(exact_subscription_replay),
-                "option_verification_required": bool(option_verification_required),
                 "subscription_requested_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
                 "resolved_option_tokens_count_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
                 "subscribed_option_tokens_count_by_symbol": dict(option_state.get("subscribed_count_by_symbol") or {}),
@@ -5949,13 +6924,6 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 **selection_payload,
             },
         )
-        if exact_subscription_replay and not option_verification_required:
-            _FEED_RECOVERY_COORDINATOR.clear_recovery(
-                source="subscription_replay_exact",
-                reason=reason,
-            )
-            _sync_ws1006_recovery_state_from_coordinator()
-        return exact_subscription_replay
         _log_ws(
             "FEED_RESUBSCRIBE",
             {
@@ -5982,6 +6950,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_connect(ws, response):
         global _STALE_STRIKES, _WARMUP_PENDING, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
+            if not _generation_is_current("on_connect"):
+                return
             _clear_last_disconnected_info()
             _record_feed_restart_verify_connect(now_epoch=float(now_utc_epoch()))
             _log_ws("ws_connected", {"response": str(response), "ws_lifecycle_state": "CONNECTED"})
@@ -6002,7 +6972,18 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     book["ts_epoch"] = None
                     book["ts"] = None
             _resubscribe_full(ws, reason="connect")
-
+            _log_ws(
+                "FEED_SUBSCRIPTION_REGISTRY_SNAPSHOT",
+                {
+                    "socket_generation": socket_generation,
+                    "desired_count": len(_LAST_DESIRED_TOKENS or []),
+                    "applied_count": len(_LAST_TOKENS or []),
+                    "mode_full_applied_count": len(_LAST_TOKENS or []),
+                    "queued_count": len(_PENDING_SUBSCRIBE_TOKENS),
+                    "timestamp": float(now_utc_epoch()),
+                    "result": "snapshot",
+                },
+            )
             _RUNTIME_STATE = "RUNNING"
             _LAST_RUNTIME_ERROR = ""
             _persist_runtime_snapshot_row(
@@ -6024,6 +7005,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
 
     def on_reconnect(ws, attempts):
         try:
+            if not _generation_is_current("on_reconnect"):
+                return
             _log_ws("ws_reconnect_attempt", {"attempts": attempts, "ws_lifecycle_state": "RECONNECTING"})
             _log_ws("FEED_RECONNECTING", {"attempts": attempts})
         except Exception as exc:
@@ -6034,6 +7017,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_error(ws, code, reason):
         nonlocal handshake_soft_reset_used, ws_fault_seen
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+        if not _generation_is_current("on_error"):
+            return
         reason_text = str(reason)
         code_int = None
         try:
@@ -6134,6 +7119,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_close(ws, code, reason):
         nonlocal ws_fault_seen
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+        if not _generation_is_current("on_close"):
+            return
         code_int = None
         try:
             code_int = int(code) if code is not None else None
@@ -6247,7 +7234,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 return
             restart_depth_ws(reason=f"ws_close:{code}", ignore_cooldown=ignore_cooldown)
 
-    def _watchdog(stop_event):
+    def _watchdog():
         global _STALE_STRIKES, _WARMUP_PENDING
         max_age = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)))
         soft_cooldown = float(getattr(cfg, "FEED_RECONNECT_COOLDOWN_SEC", 30))
@@ -6350,7 +7337,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             )
 
         while True:
-            if stop_event is None or stop_event.is_set():
+            if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
                 break
             if _reconnect_recovery_blocked_active():
                 blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
@@ -6358,7 +7345,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     source="watchdog:recovery_blocked",
                     reason=blocked_reason,
                 )
-                while not (stop_event is None or stop_event.is_set()):
+                while not (_WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set()):
                     time.sleep(5.0)
                     _emit_reconnect_recovery_blocked_snapshot(
                         source="watchdog:monitoring_fatal",
@@ -6366,11 +7353,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     )
                     if not _reconnect_recovery_blocked_active():
                         break
-                if stop_event is None or stop_event.is_set():
+                if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
                     break
                 continue
             time.sleep(max(0.5, watchdog_poll_sec))
-            if stop_event is None or stop_event.is_set():
+            if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
                 break
             if _reconnect_recovery_blocked_active():
                 blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
@@ -6378,7 +7365,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     source="watchdog:recovery_blocked_after_sleep",
                     reason=blocked_reason,
                 )
-                while not (stop_event is None or stop_event.is_set()):
+                while not (_WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set()):
                     time.sleep(5.0)
                     _emit_reconnect_recovery_blocked_snapshot(
                         source="watchdog:monitoring_fatal",
@@ -6386,7 +7373,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     )
                     if not _reconnect_recovery_blocked_active():
                         break
-                if stop_event is None or stop_event.is_set():
+                if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
                     break
                 continue
             now_loop = float(time.time())
@@ -6739,13 +7726,15 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     kws.on_reconnect = on_reconnect
     kws.on_error = on_error
     kws.on_close = on_close
-    kws.on_ticks = on_ticks
-    watchdog_thread = threading.Thread(
-        target=_watchdog,
-        args=(_WATCHDOG_STOP,),
-    )
+    def on_ticks_current(ws, ticks):
+        if not _generation_is_current("on_ticks"):
+            return
+        on_ticks(ws, ticks)
+
+    kws.on_ticks = on_ticks_current
+    watchdog_thread = threading.Thread(target=_watchdog)
     try:
-        watchdog_thread.name = f"kite-depth-watchdog-{kws.generation_id}"
+        watchdog_thread.name = "kite-depth-watchdog"
     except Exception:
         pass
     try:

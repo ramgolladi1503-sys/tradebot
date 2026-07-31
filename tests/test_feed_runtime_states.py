@@ -28,6 +28,7 @@ def _reset_depth_ws_test_state(monkeypatch):
         "_LAST_FEED_HEALTH_STATE": None,
         "_RECONNECT_BLOCKED_REASON": "",
         "_RECONNECT_BLOCKED_SINCE_EPOCH": 0.0,
+        "_PARTIAL_RECOVERY_VERIFICATION": {},
         "_REACTOR_NOT_RESTARTABLE_DETECTED": False,
         "_AUTH_REQUIRED_LATCH": False,
         "_AUTH_REQUIRED_LOGGED": False,
@@ -807,6 +808,33 @@ def test_write_feed_runtime_snapshot_includes_reconnect_blocked_reason(monkeypat
     assert feed["reconnect_blocked_reason"] == "reactor_not_restartable_process_restart_required"
     assert feed["feed_ok"] is False
     assert health["feed"]["runtime_state"] == "RECOVERY_BLOCKED"
+
+
+def test_partial_recovery_snapshot_preserves_transport_truth():
+    payload = runtime_store._canonical_runtime_artifact_payload(
+        {
+            "runtime_state": "VERIFYING_RECOVERY",
+            "ws_connected": True,
+            "market_open": True,
+            "last_tick_age_sec": 1.0,
+            "last_depth_age_sec": 1.0,
+            "subscribed_option_tokens_count": 73,
+            "reconnect_blocked_reason": "partial_recovery",
+            "process_restart_required": True,
+            "state_machine": {"state": "LIVE", "reason": "ticks_flowing"},
+            "transport_socket_connected": True,
+            "transport_callback_activity_present": True,
+            "execution_feed_ready": False,
+        },
+        ts_epoch=200.0,
+    )
+
+    assert payload["runtime_state"] == "VERIFYING_RECOVERY"
+    assert payload["ws_connected"] is True
+    assert payload["reconnect_blocked_reason"] is None
+    assert payload["process_restart_required"] is False
+    assert payload["restart_suppressed"] is False
+    assert payload["feed_truth_state"] == "VERIFYING_RECOVERY"
 
 
 def test_write_feed_runtime_snapshot_heals_stale_feed_overlay_after_recovery(monkeypatch, tmp_path):

@@ -57,6 +57,26 @@ DOWNGRADE_REASON_PENALTIES: dict[str, float] = {
     "soft_safety_evidence_requires_confirmation": 0.15,
 }
 
+REGIME_POLICY_EVIDENCE_KEYS: frozenset[str] = frozenset(
+    {
+        "entropy_state",
+        "regime_entropy",
+        "regime_entropy_normalized",
+        "regime_entropy_state",
+        "regime_status",
+        "session_bucket",
+        "stable_regime",
+        "stable_regime_confirmed",
+        "trend_state",
+        "primary_regime",
+        "volume_impulse",
+        "liquidity_quality",
+        "is_expiry_day",
+        "model_source",
+        "probability_semantics",
+    }
+)
+
 SCORE_ELIGIBLE = "SCORE_ELIGIBLE"
 NEEDS_CONFIRMATION = "NEEDS_CONFIRMATION"
 ADVISORY_ONLY = "ADVISORY_ONLY"
@@ -219,7 +239,7 @@ def score_opportunities(
     warnings = tuple(sorted(set(warning for record in records for warning in record.warnings)))
     safety_flags = tuple(sorted(set(flag for record in records for flag in record.safety_flags)))
 
-    return OpportunityScoreReport(
+    report = OpportunityScoreReport(
         schema_version=SCORING_SCHEMA_VERSION,
         read_only=True,
         append=False,
@@ -245,6 +265,79 @@ def score_opportunities(
             else None,
         },
     )
+    try:
+        from core.unified_live_validation_pr748_756.runtime_observer import safe_call
+
+        safe_call("observe_scoring_report", report, source="core.opportunity_scoring.score_candidates")
+    except Exception:
+        pass
+    return report
+
+
+def _regime_policy_inputs(candidate: StrategyCandidate) -> dict[str, Any]:
+    """Resolve canonical regime-policy inputs from candidate evidence.
+
+    The resolver supports the legacy nested ``entropy_state`` object and the
+    explicit Regime Robustness V1 fields. It does not invent missing evidence.
+    """
+    evidence = dict(candidate.evidence or {})
+    nested_entropy = evidence.get("entropy_state")
+    if isinstance(nested_entropy, Mapping):
+        raw_entropy = nested_entropy.get("current_value")
+        normalized_entropy = nested_entropy.get("normalized")
+        entropy_state = nested_entropy.get("state")
+    else:
+        raw_entropy = evidence.get("regime_entropy", evidence.get("entropy_value", 0.0))
+        normalized_entropy = evidence.get(
+            "regime_entropy_normalized",
+            evidence.get("normalized_entropy", 0.0),
+        )
+        entropy_state = evidence.get(
+            "regime_entropy_state",
+            nested_entropy if nested_entropy is not None else "UNKNOWN",
+        )
+
+    stable_raw = evidence.get("stable_regime_confirmed")
+    stable_regime = stable_raw if isinstance(stable_raw, bool) else None
+    trend_state = (
+        evidence.get("trend_state")
+        or evidence.get("stable_regime")
+        or evidence.get("primary_regime")
+        or "UNKNOWN"
+    )
+    return {
+        "session_bucket": evidence.get("session_bucket", "DEFAULT"),
+        "entropy_value": raw_entropy if raw_entropy is not None else 0.0,
+        "normalized_entropy": normalized_entropy if normalized_entropy is not None else 0.0,
+        "entropy_state": entropy_state or "UNKNOWN",
+        "trend_state": trend_state,
+        "volume_impulse": bool(evidence.get("volume_impulse", False)),
+        "liquidity_quality": evidence.get("liquidity_quality", "UNKNOWN"),
+        "is_expiry_day": bool(evidence.get("is_expiry_day", False)),
+        "regime_status": evidence.get("regime_status"),
+        "stable_regime": stable_regime,
+    }
+
+
+def _regime_policy_is_authoritative(candidate: StrategyCandidate) -> bool:
+    """Return whether regime policy owns this candidate's scoring decision.
+
+    Production movement candidates are always governed by the policy, including
+    unknown future strategy IDs. Generic scorer-only fixtures with no canonical
+    strategy, no movement lineage, and no regime evidence retain the scorer's
+    pre-policy compatibility contract.
+    """
+    from core.strategy_regime_policy import canonical_strategy_family
+
+    evidence = dict(candidate.evidence or {})
+    lineage = dict(candidate.lineage or {})
+    source = str(lineage.get("source") or "").strip().lower()
+    has_regime_evidence = any(key in evidence for key in REGIME_POLICY_EVIDENCE_KEYS)
+    return bool(
+        canonical_strategy_family(candidate.strategy_id) is not None
+        or source == "movement_strategy"
+        or has_regime_evidence
+    )
 
 
 def score_candidate(
@@ -262,30 +355,24 @@ def score_candidate(
     if candidate.strategy_id != decision.strategy_id:
         raise ValueError("candidate_and_downgrade_strategy_id_mismatch")
 
-    from core.strategy_regime_policy import evaluate_strategy_regime_policy
-    evidence = candidate.evidence or {}
-    entropy_state = evidence.get("entropy_state")
-    entropy_value = entropy_state.get("current_value", 0.0) if isinstance(entropy_state, dict) else 0.0
-    normalized_entropy = entropy_state.get("normalized", 0.0) if isinstance(entropy_state, dict) else 0.0
-    entropy_state_str = entropy_state.get("state", "UNKNOWN") if isinstance(entropy_state, dict) else str(entropy_state) if entropy_state else "UNKNOWN"
+    policy_result = "ELIGIBLE"
+    if _regime_policy_is_authoritative(candidate):
+        from core.strategy_regime_policy import evaluate_strategy_regime_policy
 
-    volatility_expansion = (candidate.regime_scores or {}).get("VOLATILITY_EXPANSION", 0.0) > 0.5
-    policy_output = evaluate_strategy_regime_policy(
-        strategy=candidate.strategy_id,
-        session_bucket=evidence.get("session_bucket", "DEFAULT"),
-        entropy_value=entropy_value,
-        normalized_entropy=normalized_entropy,
-        entropy_state=entropy_state_str,
-        volatility_expansion=volatility_expansion,
-    )
-
-    policy_result = policy_output.get("policy_result", "ELIGIBLE")
+        policy_inputs = _regime_policy_inputs(candidate)
+        volatility_expansion = (candidate.regime_scores or {}).get("VOLATILITY_EXPANSION", 0.0) > 0.5
+        policy_output = evaluate_strategy_regime_policy(
+            strategy=candidate.strategy_id,
+            volatility_expansion=volatility_expansion,
+            **policy_inputs,
+        )
+        policy_result = policy_output.get("policy_result", "ELIGIBLE")
 
     policy_bucket = decision.downgraded_bucket
     policy_eligibility = _score_eligibility(decision)
     safety_flags = list(decision.safety_flags)
 
-    if policy_result == "BLOCKED":
+    if policy_result == "BLOCKED" and policy_eligibility != NO_TRADE_ONLY:
         policy_bucket = "SUPPRESSED_CANDIDATE"
         policy_eligibility = "SUPPRESSED_BY_DOWNGRADE"
     elif policy_result == "ADVISORY_ONLY":
@@ -467,6 +554,7 @@ __all__ = [
     "DOWNGRADE_REASON_PENALTIES",
     "NEEDS_CONFIRMATION",
     "NO_TRADE_ONLY",
+    "REGIME_POLICY_EVIDENCE_KEYS",
     "SCORE_ELIGIBLE",
     "SCORING_SCHEMA_VERSION",
     "SUPPRESSED_BY_DOWNGRADE",
