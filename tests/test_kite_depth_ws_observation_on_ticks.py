@@ -582,9 +582,117 @@ def test_observation_packet_truth_records_without_bar_price(monkeypatch):
     evidence = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})
     lifecycle = evidence["token_lifecycle"][str(registry.index_token)]
     assert lifecycle["post_mode_callback_count"] == 1
+    assert lifecycle["registered_observation_callback_count"] == 1
+    assert lifecycle["latest_observation_packet"]["callback_seen"] is True
+    assert lifecycle["latest_observation_packet"]["has_last_price"] is False
     assert lifecycle["latest_observation_packet"]["parsed_mode"] == "quote"
     assert lifecycle["latest_observation_packet"]["structured_reason"] == "INDEX_FULL_PACKET_NOT_OBSERVED"
     assert shadow.shadow_ohlc_buffer.get_bars("NIFTY") == []
+
+
+def test_observation_packet_truth_records_at_timestamp_boundary(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    _activate_observation_for_tokens(ws, registry)
+
+    ws.on_ticks(None, [{
+        "instrument_token": registry.index_token,
+        "tradable": False,
+        "mode": "quote",
+        "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+        "change": 0.1,
+    }])
+
+    lifecycle = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})[
+        "token_lifecycle"
+    ][str(registry.index_token)]
+    packet = lifecycle["latest_observation_packet"]
+    assert lifecycle["latest_callback_receipt_epoch"] is not None
+    assert packet
+    assert packet["callback_seen"] is True
+    assert packet["raw_packet_kind"] == "INDEX_QUOTE"
+    assert packet["rejection_reason"] == "CALLBACK_SEEN_QUOTE_PACKET"
+    assert packet["state_identity"]["last_msg_state_id"] == id(ws._LAST_MSG_TS_BY_TOKEN)
+    assert packet["state_identity"]["latest_observation_packet_state_id"] == id(ws._LATEST_OBSERVATION_PACKET_BY_TOKEN)
+
+
+def test_rejected_observation_context_still_records_raw_callback(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    shadow.reset_live_source_shadow_buffer()
+    _activate_observation_for_tokens(ws, registry, generation=50)
+    ws._FEED_RECONNECT_GENERATION = 51
+
+    ws.on_ticks(None, [{
+        "instrument_token": registry.index_token,
+        "tradable": False,
+        "mode": "full",
+        "last_price": 25000.0,
+        "exchange_timestamp": 200.0,
+        "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+        "change": 0.1,
+    }])
+
+    lifecycle = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})[
+        "token_lifecycle"
+    ][str(registry.index_token)]
+    packet = lifecycle["latest_observation_packet"]
+    assert lifecycle["registered_observation_callback_count"] == 1
+    assert lifecycle["post_mode_callback_count"] == 1
+    assert packet["callback_seen"] is True
+    assert packet["raw_full_payload"] is True
+    assert packet["accepted_for_shadow_bar"] is False
+    assert packet["rejection_reason"] == "CALLBACK_SEEN_GENERATION_MISMATCH"
+    assert lifecycle["first_full_payload_epoch"] is None
+    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY") == []
+
+
+def test_equity_full_callback_records_raw_packet_truth(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    _activate_observation_for_tokens(ws, registry)
+    token = registry.token_by_symbol["RELIANCE"]
+
+    ws.on_ticks(None, [{
+        "instrument_token": token,
+        "tradable": True,
+        "mode": "full",
+        "exchange_timestamp": 200.0,
+        "depth": {"buy": [{"price": 1419.5}], "sell": [{"price": 1420.5}]},
+    }])
+
+    lifecycle = ws.market_event_graph_subscription_evidence_for_tokens({"RELIANCE": token})[
+        "token_lifecycle"
+    ][str(token)]
+    packet = lifecycle["latest_observation_packet"]
+    assert lifecycle["registered_observation_callback_count"] == 1
+    assert packet["callback_seen"] is True
+    assert packet["raw_packet_kind"] == "NSE_EQUITY_FULL"
+    assert packet["raw_full_payload"] is True
+    assert packet["accepted_for_shadow_bar"] is False
+    assert lifecycle["first_full_payload_epoch"] is not None
+
+
+def test_depth_subscription_engine_uses_shared_kite_depth_ws_state():
+    ws = importlib.import_module("core.kite_depth_ws")
+    engine = importlib.import_module("core.depth_subscription_engine")
+
+    assert engine._ws_module() is ws
+    assert callable(ws._record_observation_callback_truth)
+    assert ws._state_identity_payload()["module_id"] == id(ws)
 
 
 def test_constituent_lifecycle_accounting_continues_when_nifty_blocked(monkeypatch):

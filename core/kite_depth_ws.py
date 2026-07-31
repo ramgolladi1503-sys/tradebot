@@ -173,6 +173,7 @@ _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LATEST_OBSERVATION_PACKET_BY_TOKEN: dict[int, dict[str, object]] = {}
+_OBSERVATION_CALLBACK_COUNT_BY_TOKEN: dict[int, int] = {}
 _POST_MODE_CALLBACK_COUNT_BY_TOKEN: dict[int, int] = {}
 _POST_MODE_QUOTE_COUNT_BY_TOKEN: dict[int, int] = {}
 _POST_MODE_FULL_COUNT_BY_TOKEN: dict[int, int] = {}
@@ -525,6 +526,7 @@ def _reset_market_event_graph_generation_evidence() -> None:
     _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
     _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
     _LATEST_OBSERVATION_PACKET_BY_TOKEN.clear()
+    _OBSERVATION_CALLBACK_COUNT_BY_TOKEN.clear()
     _SUBSCRIPTION_REQUESTED_EPOCH = None
     _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = None
     _MODE_REQUEST_SUCCEEDED_EPOCH = None
@@ -578,6 +580,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "final_current_generation_local_mode_is_full": token_int in _MODE_COMMAND_FINAL_FULL_TOKENS,
             "latest_mode_command": dict(_LATEST_MODE_COMMAND_BY_TOKEN.get(token_int) or {}),
             "post_mode_callback_count": int(_POST_MODE_CALLBACK_COUNT_BY_TOKEN.get(token_int) or 0),
+            "registered_observation_callback_count": int(_OBSERVATION_CALLBACK_COUNT_BY_TOKEN.get(token_int) or 0),
             "post_mode_quote_count": int(_POST_MODE_QUOTE_COUNT_BY_TOKEN.get(token_int) or 0),
             "post_mode_full_count": int(_POST_MODE_FULL_COUNT_BY_TOKEN.get(token_int) or 0),
             "first_post_mode_callback_epoch": _FIRST_POST_MODE_CALLBACK_EPOCH_BY_TOKEN.get(token_int),
@@ -1801,6 +1804,7 @@ def _reset_market_event_graph_generation_evidence() -> None:
     _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
     _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
     _LATEST_OBSERVATION_PACKET_BY_TOKEN.clear()
+    _OBSERVATION_CALLBACK_COUNT_BY_TOKEN.clear()
     _POST_MODE_CALLBACK_COUNT_BY_TOKEN.clear()
     _POST_MODE_QUOTE_COUNT_BY_TOKEN.clear()
     _POST_MODE_FULL_COUNT_BY_TOKEN.clear()
@@ -1860,6 +1864,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "final_current_generation_local_mode_is_full": token_int in _MODE_COMMAND_FINAL_FULL_TOKENS,
             "latest_mode_command": dict(_LATEST_MODE_COMMAND_BY_TOKEN.get(token_int) or {}),
             "post_mode_callback_count": int(_POST_MODE_CALLBACK_COUNT_BY_TOKEN.get(token_int) or 0),
+            "registered_observation_callback_count": int(_OBSERVATION_CALLBACK_COUNT_BY_TOKEN.get(token_int) or 0),
             "post_mode_quote_count": int(_POST_MODE_QUOTE_COUNT_BY_TOKEN.get(token_int) or 0),
             "post_mode_full_count": int(_POST_MODE_FULL_COUNT_BY_TOKEN.get(token_int) or 0),
             "first_post_mode_callback_epoch": _FIRST_POST_MODE_CALLBACK_EPOCH_BY_TOKEN.get(token_int),
@@ -6181,6 +6186,132 @@ def _should_ignore_restart_cooldown_for_ws_fault(*, code: int | None, reason_tex
     return False
 
 
+def _state_identity_payload() -> dict[str, object]:
+    import sys
+
+    module = sys.modules.get("core.kite_depth_ws")
+    return {
+        "module_name": __name__,
+        "module_file": __file__,
+        "module_id": id(module),
+        "last_msg_state_id": id(_LAST_MSG_TS_BY_TOKEN),
+        "latest_observation_packet_state_id": id(_LATEST_OBSERVATION_PACKET_BY_TOKEN),
+    }
+
+
+def _record_observation_callback_truth(
+    *,
+    tick: Mapping[str, Any],
+    instrument_token: int,
+    callback_receipt_epoch: float,
+    source_tick_epoch: float | None,
+) -> dict[str, object] | None:
+    try:
+        token_int = int(instrument_token)
+    except Exception:
+        return None
+    try:
+        observation_registry = load_observation_registry(force=False)
+    except Exception:
+        observation_registry = None
+    if observation_registry is None:
+        return None
+    observation_identity = observation_registry.observation_identity(token_int)
+    if observation_identity is None:
+        return None
+    observation_state = _observation_state_payload()
+    feed_identity = get_current_feed_session_identity()
+    symbol = str((observation_identity or {}).get("symbol") or "").upper()
+    instrument_class = str((observation_identity or {}).get("instrument_class") or "UNKNOWN")
+    depth = tick.get("depth") if isinstance(tick, Mapping) else None
+    has_depth = _depth_has_bid_ask(depth)
+    mode_epoch = _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int)
+    packet_kind, raw_full_payload, packet_detail = _observation_packet_full_status(
+        dict(tick),
+        instrument_token=token_int,
+        instrument_class=instrument_class,
+        receipt_epoch=float(callback_receipt_epoch),
+        source_tick_epoch=source_tick_epoch,
+        mode_success_epoch=mode_epoch,
+        feed_session_id=str(feed_identity.get("feed_session_id") or ""),
+        reconnect_generation=int(feed_identity.get("reconnect_generation") or 0),
+        has_depth=has_depth,
+    )
+    active_plan_tokens = set(int(tok) for tok in (observation_state.get("observation_tokens") or []))
+    token_in_active_plan = token_int in active_plan_tokens
+    feed_session_matches = str(observation_state.get("feed_session_id") or "") == str(feed_identity.get("feed_session_id") or "")
+    reconnect_generation_matches = int(observation_state.get("reconnect_generation") or -1) == int(
+        feed_identity.get("reconnect_generation") or 0
+    )
+    subscription_send_recorded = token_int in _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS
+    mode_full_is_final = token_int in _MODE_COMMAND_FINAL_FULL_TOKENS
+    post_mode_callback = bool(mode_epoch is not None and float(callback_receipt_epoch) > float(mode_epoch))
+    plan_enabled = bool(observation_state.get("enabled")) and str(observation_state.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+    accepted_context = bool(
+        plan_enabled
+        and token_in_active_plan
+        and feed_session_matches
+        and reconnect_generation_matches
+        and subscription_send_recorded
+        and mode_full_is_final
+        and post_mode_callback
+    )
+    if not plan_enabled:
+        rejection_reason = "CALLBACK_SEEN_PLAN_DISABLED"
+    elif not feed_session_matches:
+        rejection_reason = "CALLBACK_SEEN_SESSION_MISMATCH"
+    elif not reconnect_generation_matches:
+        rejection_reason = "CALLBACK_SEEN_GENERATION_MISMATCH"
+    elif not subscription_send_recorded:
+        rejection_reason = "CALLBACK_SEEN_SUBSCRIPTION_UNPROVEN"
+    elif not mode_full_is_final:
+        rejection_reason = "CALLBACK_SEEN_MODE_NOT_FINAL_FULL"
+    elif not raw_full_payload:
+        rejection_reason = "CALLBACK_SEEN_QUOTE_PACKET"
+    else:
+        rejection_reason = "CALLBACK_SEEN_FULL_PACKET"
+    _OBSERVATION_CALLBACK_COUNT_BY_TOKEN[token_int] = int(_OBSERVATION_CALLBACK_COUNT_BY_TOKEN.get(token_int) or 0) + 1
+    if post_mode_callback:
+        _POST_MODE_CALLBACK_COUNT_BY_TOKEN[token_int] = int(_POST_MODE_CALLBACK_COUNT_BY_TOKEN.get(token_int) or 0) + 1
+        _FIRST_POST_MODE_CALLBACK_EPOCH_BY_TOKEN.setdefault(token_int, float(callback_receipt_epoch))
+        if raw_full_payload:
+            _POST_MODE_FULL_COUNT_BY_TOKEN[token_int] = int(_POST_MODE_FULL_COUNT_BY_TOKEN.get(token_int) or 0) + 1
+            _FIRST_POST_MODE_FULL_EPOCH_BY_TOKEN.setdefault(token_int, float(callback_receipt_epoch))
+        else:
+            _POST_MODE_QUOTE_COUNT_BY_TOKEN[token_int] = int(_POST_MODE_QUOTE_COUNT_BY_TOKEN.get(token_int) or 0) + 1
+            _FIRST_POST_MODE_QUOTE_EPOCH_BY_TOKEN.setdefault(token_int, float(callback_receipt_epoch))
+    packet_detail.update(
+        {
+            "callback_seen": True,
+            "symbol": symbol,
+            "tick_keys": sorted(str(key) for key in dict(tick).keys()),
+            "has_last_price": tick.get("last_price") is not None,
+            "raw_packet_kind": packet_kind,
+            "raw_full_payload": bool(raw_full_payload),
+            "socket_generation": int(_SOCKET_GENERATION),
+            "plan_enabled": bool(plan_enabled),
+            "plan_verdict": str(observation_state.get("verdict") or ""),
+            "token_in_observation_registry": True,
+            "token_in_active_plan": bool(token_in_active_plan),
+            "feed_session_matches": bool(feed_session_matches),
+            "reconnect_generation_matches": bool(reconnect_generation_matches),
+            "subscription_send_recorded": bool(subscription_send_recorded),
+            "mode_full_is_final_local_command": bool(mode_full_is_final),
+            "post_mode_callback": bool(post_mode_callback),
+            "accepted_for_shadow_bar": bool(accepted_context and tick.get("last_price") is not None),
+            "rejection_reason": rejection_reason,
+            "final_current_generation_local_mode_is_full": bool(mode_full_is_final),
+            "latest_subscribe_sequence_number": _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN.get(token_int),
+            "latest_mode_command_sequence_number": _LATEST_MODE_COMMAND_SEQUENCE_BY_TOKEN.get(token_int),
+            "state_identity": _state_identity_payload(),
+        }
+    )
+    _LATEST_OBSERVATION_PACKET_BY_TOKEN[token_int] = dict(packet_detail)
+    if accepted_context and raw_full_payload:
+        _record_full_payload_observed(token_int)
+    return packet_detail
+
+
 def on_ticks(ws, ticks):
     global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _FEED_ON_TICKS_ROW_SEQ
     _ = ws
@@ -6268,6 +6399,12 @@ def on_ticks(ws, ticks):
         last_price = t.get("last_price")
         if token_int is not None:
             _LAST_MSG_TS_BY_TOKEN[int(token_int)] = float(freshness_tick_epoch)
+            _record_observation_callback_truth(
+                tick=t,
+                instrument_token=int(token_int),
+                callback_receipt_epoch=float(now_epoch),
+                source_tick_epoch=payload_tick_epoch,
+            )
         if token_int is not None:
             _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.setdefault(int(token_int), float(now_epoch))
             if payload_tick_epoch is not None:
@@ -6317,36 +6454,14 @@ def on_ticks(ws, ticks):
                     volume=t.get("volume") if t.get("volume") is not None else t.get("volume_traded"),
                 )
         if observation_token_allowed:
-            mode_epoch = _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(int(token_int))
             feed_identity = get_current_feed_session_identity()
             instrument_class = str((observation_identity or {}).get("instrument_class") or "UNKNOWN")
-            packet_kind, is_full_payload, packet_detail = _observation_packet_full_status(
-                t,
-                instrument_token=int(token_int),
-                instrument_class=instrument_class,
-                receipt_epoch=float(now_epoch),
-                source_tick_epoch=payload_tick_epoch,
-                mode_success_epoch=mode_epoch,
-                feed_session_id=str(feed_identity.get("feed_session_id") or ""),
-                reconnect_generation=int(feed_identity.get("reconnect_generation") or 0),
-                has_depth=has_depth,
-            )
+            packet_detail = dict(_LATEST_OBSERVATION_PACKET_BY_TOKEN.get(int(token_int)) or {})
+            packet_kind = str(packet_detail.get("raw_packet_kind") or "")
+            if not packet_kind:
+                packet_kind = "INDEX_QUOTE" if instrument_class.upper() == "INDEX" else "NSE_EQUITY_QUOTE"
+            is_full_payload = bool(packet_detail.get("raw_full_payload"))
             final_local_full = int(token_int) in _MODE_COMMAND_FINAL_FULL_TOKENS
-            if mode_epoch is not None and float(now_epoch) > float(mode_epoch):
-                _POST_MODE_CALLBACK_COUNT_BY_TOKEN[int(token_int)] = int(
-                    _POST_MODE_CALLBACK_COUNT_BY_TOKEN.get(int(token_int)) or 0
-                ) + 1
-                _FIRST_POST_MODE_CALLBACK_EPOCH_BY_TOKEN.setdefault(int(token_int), float(now_epoch))
-                if is_full_payload:
-                    _POST_MODE_FULL_COUNT_BY_TOKEN[int(token_int)] = int(
-                        _POST_MODE_FULL_COUNT_BY_TOKEN.get(int(token_int)) or 0
-                    ) + 1
-                    _FIRST_POST_MODE_FULL_EPOCH_BY_TOKEN.setdefault(int(token_int), float(now_epoch))
-                else:
-                    _POST_MODE_QUOTE_COUNT_BY_TOKEN[int(token_int)] = int(
-                        _POST_MODE_QUOTE_COUNT_BY_TOKEN.get(int(token_int)) or 0
-                    ) + 1
-                    _FIRST_POST_MODE_QUOTE_EPOCH_BY_TOKEN.setdefault(int(token_int), float(now_epoch))
             packet_detail["final_current_generation_local_mode_is_full"] = bool(final_local_full)
             packet_detail["latest_subscribe_sequence_number"] = _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN.get(int(token_int))
             packet_detail["latest_mode_command_sequence_number"] = _LATEST_MODE_COMMAND_SEQUENCE_BY_TOKEN.get(int(token_int))
@@ -6373,9 +6488,7 @@ def on_ticks(ws, ticks):
                 )
             except Exception:
                 pass
-            if is_full_payload:
-                _record_full_payload_observed(int(token_int))
-            elif last_price is not None:
+            if last_price is not None and not is_full_payload:
                 _update_index_quote_cache(
                     symbol=symbol,
                     bid=None,
