@@ -1,85 +1,10 @@
 name: Dynamic Trend Overlay Edge PR V1
 
 on:
-  pull_request:
-    branches:
-      - main
-
-permissions:
-  contents: read
+  workflow_dispatch:
 
 jobs:
-  research:
+  retired:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
     steps:
-      - name: Checkout without broad LFS hydration
-        uses: actions/checkout@v4
-        with:
-          lfs: false
-          fetch-depth: 1
-
-      - name: Pull bounded research corpus
-        shell: bash
-        run: |
-          set -euo pipefail
-          git lfs install --local
-          git lfs pull --include="research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet,research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/upstox-expired-options-v1/**" --exclude=""
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install bounded dependencies
-        run: python -m pip install --disable-pip-version-check numpy pandas pyarrow
-
-      - name: Extract and causally repair frozen runner
-        shell: bash
-        run: |
-          python - <<'PY'
-          import ast
-          import base64
-          import gzip
-          import re
-          from pathlib import Path
-
-          workflow = Path('.github/workflows/dynamic-trend-overlay-edge-v1.yml').read_text(encoding='utf-8')
-          match = re.search(r'payload = \(\n(?P<body>.*?)\n\s*\)', workflow, flags=re.S)
-          if not match:
-              raise SystemExit('frozen_payload_not_found')
-          chunks = [ast.literal_eval(line.strip()) for line in match.group('body').splitlines() if line.strip()]
-          source = gzip.decompress(base64.b64decode(''.join(chunks))).decode('utf-8')
-          old = base64.b64decode('ICAgIGh0Zl9zb3VyY2UgPSBpbmRleC5zZXRfaW5kZXgoInNpZ25hbF90aW1lc3RhbXAiKVtbIm9wZW4iLCAiaGlnaCIsICJsb3ciLCAiY2xvc2UiXV0uc29ydF9pbmRleCgpCiAgICBodGYgPSBodGZfc291cmNlLnJlc2FtcGxlKCIxNW1pbiIsIGNsb3NlZD0icmlnaHQiLCBsYWJlbD0icmlnaHQiLCBvcmlnaW49InN0YXJ0X2RheSIpLmFnZygKICAgICAgICB7Im9wZW4iOiAiZmlyc3QiLCAiaGlnaCI6ICJtYXgiLCAibG93IjogIm1pbiIsICJjbG9zZSI6ICJsYXN0In0KICAgICkuZHJvcG5hKCkKICAgIGh0Zlsic2Vzc2lvbiJdID0gaHRmLmluZGV4LnR6X2NvbnZlcnQoVElNRVpPTkUpLmRhdGUuYXN0eXBlKHN0cikKICAgIGh0ZiA9IGFkZF90cmFpbChodGYucmVzZXRfaW5kZXgoKSwgImh0ZiIsIGVtYV9sZW49OCwgYXRyX2xlbj04LCBtdWx0aXBsaWVyPTIuMCkKICAgIGh0ZiA9IGh0Zi5yZW5hbWUoY29sdW1ucz17InNpZ25hbF90aW1lc3RhbXAiOiAiaHRmX2NvbXBsZXRlZF90aW1lc3RhbXAifSkK').decode('utf-8')
-          new = base64.b64decode('ICAgIGh0Zl9wYXJ0czogbGlzdFtwZC5EYXRhRnJhbWVdID0gW10KICAgIGZvciBzZXNzaW9uLCBkYXkgaW4gaW5kZXguZ3JvdXBieSgic2Vzc2lvbiIsIHNvcnQ9VHJ1ZSk6CiAgICAgICAgaHRmX3NvdXJjZSA9IGRheS5zZXRfaW5kZXgoInNpZ25hbF90aW1lc3RhbXAiKVtbIm9wZW4iLCAiaGlnaCIsICJsb3ciLCAiY2xvc2UiXV0uc29ydF9pbmRleCgpCiAgICAgICAgaHRmX2RheSA9IGh0Zl9zb3VyY2UucmVzYW1wbGUoIjE1bWluIiwgY2xvc2VkPSJyaWdodCIsIGxhYmVsPSJyaWdodCIsIG9yaWdpbj0ic3RhcnRfZGF5IikuYWdnKAogICAgICAgICAgICB7Im9wZW4iOiAiZmlyc3QiLCAiaGlnaCI6ICJtYXgiLCAibG93IjogIm1pbiIsICJjbG9zZSI6ICJsYXN0In0KICAgICAgICApLmRyb3BuYSgpCiAgICAgICAgaHRmX2RheSA9IGFkZF90cmFpbChodGZfZGF5LnJlc2V0X2luZGV4KCksICJodGYiLCBlbWFfbGVuPTgsIGF0cl9sZW49OCwgbXVsdGlwbGllcj0yLjApCiAgICAgICAgaHRmX2RheVsic2Vzc2lvbiJdID0gc3RyKHNlc3Npb24pCiAgICAgICAgaHRmX3BhcnRzLmFwcGVuZChodGZfZGF5KQogICAgaHRmID0gcGQuY29uY2F0KGh0Zl9wYXJ0cywgaWdub3JlX2luZGV4PVRydWUpCiAgICBodGYgPSBodGYucmVuYW1lKGNvbHVtbnM9eyJzaWduYWxfdGltZXN0YW1wIjogImh0Zl9jb21wbGV0ZWRfdGltZXN0YW1wIn0pCg==').decode('utf-8')
-          if old not in source:
-              raise SystemExit('htf_session_isolation_patch_target_missing')
-          target = Path('/tmp/run_dynamic_trend_overlay_edge_v1.py')
-          target.write_text(source.replace(old, new), encoding='utf-8')
-          print(f'runner_bytes={target.stat().st_size}')
-          PY
-          python -m py_compile /tmp/run_dynamic_trend_overlay_edge_v1.py
-
-      - name: Run falsification campaign
-        shell: bash
-        run: |
-          set -o pipefail
-          mkdir -p runtime/research/dynamic_trend_overlay_edge_v1
-          cp /tmp/run_dynamic_trend_overlay_edge_v1.py runtime/research/dynamic_trend_overlay_edge_v1/frozen_runner.py
-          sha256sum /tmp/run_dynamic_trend_overlay_edge_v1.py | tee runtime/research/dynamic_trend_overlay_edge_v1/frozen_runner.sha256
-          python /tmp/run_dynamic_trend_overlay_edge_v1.py --repo-root . 2>&1 | tee runtime/research/dynamic_trend_overlay_edge_v1/workflow.log
-
-      - name: Print result
-        if: always()
-        shell: bash
-        run: |
-          if [ -f runtime/research/dynamic_trend_overlay_edge_v1/RESULT.md ]; then cat runtime/research/dynamic_trend_overlay_edge_v1/RESULT.md; fi
-          if [ -f runtime/research/dynamic_trend_overlay_edge_v1/result.json ]; then cat runtime/research/dynamic_trend_overlay_edge_v1/result.json; fi
-
-      - name: Upload research evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dynamic-trend-overlay-edge-v1
-          path: runtime/research/dynamic_trend_overlay_edge_v1
-          if-no-files-found: error
+      - run: echo "V1 was diagnostic and is retained only for manual evidence reproduction."
