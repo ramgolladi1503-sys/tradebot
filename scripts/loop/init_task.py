@@ -23,6 +23,14 @@ from loop_core import (  # noqa: E402
 )
 
 
+def _display_path(path: Path, root: Path) -> Path:
+    """Prefer a repository-relative path without rejecting external test roots."""
+    try:
+        return path.relative_to(root)
+    except ValueError:
+        return path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--task-id", required=True)
@@ -54,7 +62,7 @@ def main() -> int:
         errors = validate_contract(contract)
         if errors:
             parser.error("existing task is invalid: " + "; ".join(errors))
-        print(task_dir.relative_to(root))
+        print(_display_path(task_dir, root))
         return 0
 
     now = utc_now()
@@ -135,7 +143,7 @@ def main() -> int:
     write_json(task_dir / "claims.json", {"schema_version": 1, "claims": []})
     write_json(task_dir / "evidence" / "manifest.json", {"schema_version": 1, "task_id": args.task_id, "proofs": []})
     (task_dir / "CONTINUE.md").write_text(render_context(task_dir), encoding="utf-8")
-    print(task_dir.relative_to(root))
+    print(_display_path(task_dir, root))
     return 0
 
 
