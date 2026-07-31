@@ -163,6 +163,7 @@ _FIRST_LIVE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
+_LATEST_OBSERVATION_PACKET_BY_TOKEN: dict[int, dict[str, object]] = {}
 _SUBSCRIPTION_REQUESTED_EPOCH: float | None = None
 _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH: float | None = None
 _MODE_REQUEST_SUCCEEDED_EPOCH: float | None = None
@@ -321,6 +322,87 @@ def _record_full_payload_observed(token: int) -> None:
         _FULL_PAYLOAD_OBSERVED_EPOCH = epoch
 
 
+def _observation_packet_detail(
+    tick: dict,
+    *,
+    instrument_token: int,
+    instrument_class: str,
+    receipt_epoch: float,
+    source_tick_epoch: float | None,
+    mode_success_epoch: float | None,
+    feed_session_id: str,
+    reconnect_generation: int,
+    has_depth: bool,
+) -> dict[str, object]:
+    parsed_mode = str(tick.get("mode") or "").strip().lower()
+    has_exchange_timestamp = tick.get("exchange_timestamp") is not None
+    has_ohlc = isinstance(tick.get("ohlc"), dict)
+    has_change = tick.get("change") is not None
+    detail = {
+        "instrument_class": str(instrument_class or "UNKNOWN"),
+        "instrument_token": int(instrument_token),
+        "parsed_mode": parsed_mode or None,
+        "has_ohlc": has_ohlc,
+        "has_change": has_change,
+        "has_exchange_timestamp": has_exchange_timestamp,
+        "has_depth": bool(has_depth),
+        "tradable": tick.get("tradable"),
+        "callback_receipt_epoch": float(receipt_epoch),
+        "source_tick_epoch": source_tick_epoch,
+        "mode_request_succeeded_epoch": mode_success_epoch,
+        "feed_session_id": str(feed_session_id or ""),
+        "reconnect_generation": int(reconnect_generation),
+    }
+    if mode_success_epoch is None:
+        detail["structured_reason"] = "MODE_REQUEST_FAILED"
+    elif float(receipt_epoch) <= float(mode_success_epoch):
+        detail["structured_reason"] = "POST_MODE_CALLBACK_NOT_OBSERVED"
+    elif str(instrument_class or "").upper() == "INDEX":
+        if parsed_mode == "full" or (not parsed_mode and has_exchange_timestamp):
+            detail["structured_reason"] = "OK"
+        elif parsed_mode:
+            detail["structured_reason"] = "INDEX_FULL_PACKET_NOT_OBSERVED"
+        else:
+            detail["structured_reason"] = "INDEX_PACKET_MODE_UNPROVEN"
+    elif parsed_mode == "full" or has_depth:
+        detail["structured_reason"] = "OK"
+    else:
+        detail["structured_reason"] = "EQUITY_FULL_DEPTH_NOT_OBSERVED"
+    return detail
+
+
+def _observation_packet_full_status(
+    tick: dict,
+    *,
+    instrument_token: int,
+    instrument_class: str,
+    receipt_epoch: float,
+    source_tick_epoch: float | None,
+    mode_success_epoch: float | None,
+    feed_session_id: str,
+    reconnect_generation: int,
+    has_depth: bool,
+) -> tuple[str, bool, dict[str, object]]:
+    detail = _observation_packet_detail(
+        tick,
+        instrument_token=instrument_token,
+        instrument_class=instrument_class,
+        receipt_epoch=receipt_epoch,
+        source_tick_epoch=source_tick_epoch,
+        mode_success_epoch=mode_success_epoch,
+        feed_session_id=feed_session_id,
+        reconnect_generation=reconnect_generation,
+        has_depth=has_depth,
+    )
+    is_index = str(instrument_class or "").upper() == "INDEX"
+    is_full = detail["structured_reason"] == "OK"
+    if is_index:
+        packet_kind = "INDEX_FULL" if is_full else "INDEX_QUOTE"
+    else:
+        packet_kind = "NSE_EQUITY_FULL" if is_full else "NSE_EQUITY_QUOTE"
+    return packet_kind, bool(is_full), detail
+
+
 def _reset_market_event_graph_generation_evidence() -> None:
     global _SUBSCRIPTION_REQUESTED_TOKENS, _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS, _MODE_REQUEST_SUCCEEDED_TOKENS, _FULL_PAYLOAD_OBSERVED_TOKENS
     global _SUBSCRIPTION_REQUESTED_EPOCH, _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH, _MODE_REQUEST_SUCCEEDED_EPOCH, _FULL_PAYLOAD_OBSERVED_EPOCH
@@ -335,6 +417,7 @@ def _reset_market_event_graph_generation_evidence() -> None:
     _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.clear()
     _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
     _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
+    _LATEST_OBSERVATION_PACKET_BY_TOKEN.clear()
     _SUBSCRIPTION_REQUESTED_EPOCH = None
     _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = None
     _MODE_REQUEST_SUCCEEDED_EPOCH = None
@@ -389,6 +472,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "latest_live_tick_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
             "first_full_payload_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
             "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "latest_observation_packet": dict(_LATEST_OBSERVATION_PACKET_BY_TOKEN.get(token_int) or {}),
             "feed_session_id": identity["feed_session_id"],
             "reconnect_generation": identity["reconnect_generation"],
         }
@@ -1618,6 +1702,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "latest_live_tick_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
             "first_full_payload_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
             "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "latest_observation_packet": dict(_LATEST_OBSERVATION_PACKET_BY_TOKEN.get(token_int) or {}),
             "feed_session_id": identity["feed_session_id"],
             "reconnect_generation": identity["reconnect_generation"],
         }
@@ -5945,14 +6030,21 @@ def on_ticks(ws, ticks):
                     volume=t.get("volume") if t.get("volume") is not None else t.get("volume_traded"),
                 )
         if observation_token_allowed and last_price is not None:
-            packet_kind = "UNKNOWN"
-            is_full_payload = False
-            if observation_identity and observation_identity.get("instrument_class") == "INDEX":
-                packet_kind = "INDEX_FULL" if isinstance(t.get("ohlc"), dict) and t.get("change") is not None else "INDEX_QUOTE"
-                is_full_payload = packet_kind == "INDEX_FULL"
-            else:
-                packet_kind = "NSE_EQUITY_FULL" if has_depth else "NSE_EQUITY_QUOTE"
-                is_full_payload = has_depth
+            mode_epoch = _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(int(token_int))
+            feed_identity = get_current_feed_session_identity()
+            instrument_class = str((observation_identity or {}).get("instrument_class") or "UNKNOWN")
+            packet_kind, is_full_payload, packet_detail = _observation_packet_full_status(
+                t,
+                instrument_token=int(token_int),
+                instrument_class=instrument_class,
+                receipt_epoch=float(now_epoch),
+                source_tick_epoch=payload_tick_epoch,
+                mode_success_epoch=mode_epoch,
+                feed_session_id=str(feed_identity.get("feed_session_id") or ""),
+                reconnect_generation=int(feed_identity.get("reconnect_generation") or 0),
+                has_depth=has_depth,
+            )
+            _LATEST_OBSERVATION_PACKET_BY_TOKEN[int(token_int)] = dict(packet_detail)
             try:
                 record_live_source_shadow_tick(
                     symbol=str(symbol or "").upper(),
@@ -5961,7 +6053,7 @@ def on_ticks(ws, ticks):
                     source_tick_epoch=payload_tick_epoch,
                     source_type="live_websocket",
                     payload_mode="full" if is_full_payload else "quote",
-                    feed_identity=get_current_feed_session_identity(),
+                    feed_identity=feed_identity,
                     provider="kite",
                     token_domain="kite_instrument_token",
                     universe_hash=str(getattr(observation_registry, "canonical_sha256", "") or ""),
@@ -5971,9 +6063,7 @@ def on_ticks(ws, ticks):
             except Exception:
                 pass
             if is_full_payload:
-                mode_epoch = _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(int(token_int))
-                if mode_epoch is not None and float(now_epoch) > float(mode_epoch):
-                    _record_full_payload_observed(int(token_int))
+                _record_full_payload_observed(int(token_int))
             elif last_price is not None:
                 _update_index_quote_cache(
                     symbol=symbol,

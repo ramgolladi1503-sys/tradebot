@@ -331,6 +331,8 @@ class LiveSourceRuntimeBridge:
             live_tick_first = _coerce_float(row.get("first_live_tick_epoch"))
             mode_success = _coerce_float(row.get("mode_request_succeeded_epoch"))
             full_first = _coerce_float(row.get("first_full_payload_epoch"))
+            latest_packet = row.get("latest_observation_packet") if isinstance(row.get("latest_observation_packet"), Mapping) else {}
+            instrument_class = str((latest_packet or {}).get("instrument_class") or ("INDEX" if symbol == contract.index_symbol else "NSE_EQUITY")).upper()
             if subscribe_success is None:
                 return False, "SUBSCRIPTION_REQUEST_FAILED", (symbol,)
             if live_tick_first is None or live_tick_first < subscribe_success:
@@ -338,7 +340,15 @@ class LiveSourceRuntimeBridge:
             if mode_success is None:
                 return False, "MODE_REQUEST_FAILED", (symbol,)
             if full_first is None or full_first < mode_success:
-                return False, "MISSING_POST_MODE_FULL_PAYLOAD", (symbol,)
+                latest_callback = _coerce_float(row.get("latest_callback_receipt_epoch"))
+                if latest_callback is None or latest_callback <= mode_success:
+                    return False, "POST_MODE_CALLBACK_NOT_OBSERVED", (symbol,)
+                structured_reason = str((latest_packet or {}).get("structured_reason") or "").strip()
+                if instrument_class == "INDEX":
+                    if structured_reason == "INDEX_PACKET_MODE_UNPROVEN":
+                        return False, "INDEX_PACKET_MODE_UNPROVEN", (symbol,)
+                    return False, "INDEX_FULL_PACKET_NOT_OBSERVED", (symbol,)
+                return False, "EQUITY_FULL_DEPTH_NOT_OBSERVED", (symbol,)
         for field in (
             "token_resolved_symbols",
             "subscription_requested_symbols",
