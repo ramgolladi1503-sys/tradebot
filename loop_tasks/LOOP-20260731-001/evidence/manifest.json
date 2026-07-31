@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task_id": "LOOP-20260731-001",
+  "proofs": [
+    {
+      "proof_id": "CI-LOOP-GATE-7BF82DD6",
+      "tier": "B",
+      "evidence_class": "ci",
+      "evidence_type": "github_actions_run",
+      "reference": "github-actions:run-30615138176/Loop-Handoff-Gate",
+      "artifact_name": "loop-handoff-validation-7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225",
+      "producing_command": "compile loop framework; pytest -q tests/loop; validate committed loop tasks; build compact context; git diff --check",
+      "exit_code": 0,
+      "timestamp_utc": "2026-07-31T08:10:00Z",
+      "code_sha": "7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225",
+      "required": true,
+      "continuation_critical": true,
+      "retention_warning": "GitHub Actions artifact retention is temporary; the committed handoff records the durable conclusion."
+    },
+    {
+      "proof_id": "CI-AGENT-REVIEW-7BF82DD6",
+      "tier": "B",
+      "evidence_class": "review",
+      "evidence_type": "github_actions_run",
+      "reference": "github-actions:run-30615138232/Agent-Review-Evidence-Gate",
+      "producing_command": "python scripts/validate_agent_review_evidence.py",
+      "exit_code": 0,
+      "timestamp_utc": "2026-07-31T08:10:00Z",
+      "code_sha": "7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225",
+      "required": true,
+      "continuation_critical": true
+    }
+  ]
+}
