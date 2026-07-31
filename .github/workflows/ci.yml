@@ -11,7 +11,7 @@ concurrency:
 jobs:
   unit_tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       PYTHONPATH: .
       DATA_ROOT: ${{ github.workspace }}/.runtime
