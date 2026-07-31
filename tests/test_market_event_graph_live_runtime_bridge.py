@@ -217,6 +217,23 @@ def test_no_explicit_live_universe_contract_exports_nothing(monkeypatch, tmp_pat
     assert output_path.exists() is False
 
 
+def test_checked_in_authoritative_live_universe_loads(monkeypatch):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(
+        cfg,
+        "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH",
+        "runtime/reference/market_event_graph/"
+        "nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json",
+    )
+
+    contract, reason = LiveSourceRuntimeBridge()._load_universe_contract()
+
+    assert reason == "OK"
+    assert contract is not None
+    assert contract.token_domain == "kite_instrument_token"
+    assert len(contract.constituents) == 50
+
+
 def test_two_symbol_self_declared_universe_is_blocked(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     small = _contract(constituents=[{"symbol": "AAA", "instrument_token": 10}, {"symbol": "BBB", "instrument_token": 11}])
