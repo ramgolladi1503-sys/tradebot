@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - qa/whole-tradebot-certification-v1
+  pull_request:
+    branches:
+      - agent/enterprise-qa-foundation-v1
 
 permissions:
   contents: write
 
 concurrency:
-  group: qa-apply-whole-tradebot-repairs-v2
+  group: qa-apply-whole-tradebot-repairs-v2-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
