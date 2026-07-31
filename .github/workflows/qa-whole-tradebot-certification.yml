@@ -138,19 +138,7 @@ jobs:
 
   test_family_truth:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        marker:
-          - behavior
-          - safety
-          - edge
-          - regression
-          - ui_read_model
-          - replay
-          - chaos
-          - broker_firewall
+    timeout-minutes: 25
     env:
       PYTHONPATH: .
       DATA_ROOT: ${{ github.workspace }}/.runtime
@@ -166,29 +154,67 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install dependencies once
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Require marker family to collect real tests
+      - name: Require every assurance family to own real tests
         shell: bash
         run: |
-          set -o pipefail
+          set +e
           mkdir -p .runtime/qa/whole_tradebot/markers
-          PYTHONPATH=. pytest -q -o addopts='' --collect-only \
-            -m "${{ matrix.marker }}" \
-            | tee ".runtime/qa/whole_tradebot/markers/${{ matrix.marker }}.txt"
-          grep -Eq '[1-9][0-9]* tests? collected|collected [1-9][0-9]* items?' \
-            ".runtime/qa/whole_tradebot/markers/${{ matrix.marker }}.txt"
+          failures=0
+          markers=(behavior safety edge regression ui_read_model replay chaos broker_firewall)
+          for marker in "${markers[@]}"; do
+            output=".runtime/qa/whole_tradebot/markers/${marker}.txt"
+            PYTHONPATH=. pytest -q -o addopts='' --collect-only -m "$marker" >"$output" 2>&1
+            collect_rc=$?
+            count=$(grep -c '::' "$output" || true)
+            printf '%s\n' "marker=$marker collected=$count pytest_rc=$collect_rc"
+            if [[ $collect_rc -ne 0 || $count -eq 0 ]]; then
+              failures=$((failures + 1))
+            fi
+          done
+          MARKER_FAILURES="$failures" PYTHONPATH=. python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
 
-      - name: Upload marker-family evidence
+          root = Path('.runtime/qa/whole_tradebot/markers')
+          rows = []
+          for path in sorted(root.glob('*.txt')):
+              text = path.read_text(encoding='utf-8', errors='replace')
+              count = sum(1 for line in text.splitlines() if '::' in line)
+              rows.append({
+                  'marker': path.stem,
+                  'collected': count,
+                  'passed': count > 0,
+              })
+          payload = {
+              'schema_version': 1,
+              'verdict': 'PASS' if int(os.environ['MARKER_FAILURES']) == 0 else 'FAIL',
+              'families': rows,
+              'failure_count': int(os.environ['MARKER_FAILURES']),
+          }
+          (root / 'test_family_summary.json').write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          print(json.dumps(payload, sort_keys=True))
+          PY
+          if [[ $failures -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload assurance-family evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: marker-family-${{ matrix.marker }}
+          name: whole-tradebot-test-families
           if-no-files-found: error
-          path: .runtime/qa/whole_tradebot/markers/${{ matrix.marker }}.txt
+          path: .runtime/qa/whole_tradebot/markers/
 
   cross_module_truth:
     runs-on: ubuntu-latest
@@ -282,7 +308,7 @@ jobs:
 
   static_security:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -295,14 +321,60 @@ jobs:
       - name: Install security scanners
         run: pip install bandit pip-audit
 
-      - name: Scan authoritative runtime packages
+      - name: Run code and dependency scans independently
         shell: bash
         run: |
+          set +e
           mkdir -p .runtime/qa/whole_tradebot
           bandit -r core strategies dashboard ml -ll \
             -f json -o .runtime/qa/whole_tradebot/bandit.json
+          bandit_rc=$?
           pip-audit -r requirements.txt --format json \
             --output .runtime/qa/whole_tradebot/pip_audit.json
+          audit_rc=$?
+          BANDIT_RC="$bandit_rc" AUDIT_RC="$audit_rc" python - <<'PY'
+          import json
+          import os
+          from collections import Counter
+          from pathlib import Path
+
+          root = Path('.runtime/qa/whole_tradebot')
+          bandit_path = root / 'bandit.json'
+          audit_path = root / 'pip_audit.json'
+          bandit = json.loads(bandit_path.read_text(encoding='utf-8')) if bandit_path.exists() else {}
+          audit = json.loads(audit_path.read_text(encoding='utf-8')) if audit_path.exists() else {}
+          severity = Counter(str(item.get('issue_severity') or 'UNKNOWN') for item in bandit.get('results', []))
+          dependency_vulns = []
+          dependencies = audit.get('dependencies', []) if isinstance(audit, dict) else []
+          for dependency in dependencies:
+              for vuln in dependency.get('vulns', []) or []:
+                  dependency_vulns.append({
+                      'name': dependency.get('name'),
+                      'version': dependency.get('version'),
+                      'id': vuln.get('id'),
+                      'fix_versions': vuln.get('fix_versions') or [],
+                  })
+          bandit_rc = int(os.environ['BANDIT_RC'])
+          audit_rc = int(os.environ['AUDIT_RC'])
+          payload = {
+              'schema_version': 1,
+              'verdict': 'PASS' if bandit_rc == 0 and audit_rc == 0 else 'FAIL',
+              'bandit_exit_code': bandit_rc,
+              'pip_audit_exit_code': audit_rc,
+              'bandit_findings_by_severity': dict(sorted(severity.items())),
+              'bandit_finding_count': sum(severity.values()),
+              'dependency_vulnerability_count': len(dependency_vulns),
+              'dependency_vulnerabilities': dependency_vulns,
+          }
+          (root / 'security_summary.json').write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          print(json.dumps(payload, sort_keys=True))
+          PY
+          if [[ $bandit_rc -ne 0 || $audit_rc -ne 0 ]]; then
+            exit 1
+          fi
 
       - name: Upload security evidence
         if: always()
@@ -313,6 +385,7 @@ jobs:
           path: |
             .runtime/qa/whole_tradebot/bandit.json
             .runtime/qa/whole_tradebot/pip_audit.json
+            .runtime/qa/whole_tradebot/security_summary.json
 
   certification_verdict:
     if: ${{ always() }}
