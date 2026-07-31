@@ -258,7 +258,7 @@ Behavioral coverage includes:
 - explicit checkpoint push requirement;
 - no merge or auto-merge invocation.
 
-## Acceptance Evidence
+## Acceptance Proof
 
 The framework has already demonstrated:
 
