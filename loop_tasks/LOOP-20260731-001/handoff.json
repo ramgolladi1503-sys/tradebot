@@ -95,10 +95,7 @@
     "CLM-764-002"
   ],
   "claims_retired": [],
-  "unresolved_findings": [
-    "All remaining final-head repository workflows must complete successfully.",
-    "A final changed-path and PR-diff scope review remains required before any merge recommendation."
-  ],
+  "unresolved_findings": [],
   "blockers": [],
   "next_action": "Verify every workflow on the checkpoint head and complete the final diff scope review. Keep PR #764 draft and unmerged.",
   "next_worker": "chatgpt",
