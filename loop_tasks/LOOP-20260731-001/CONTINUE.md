@@ -3,48 +3,42 @@
 Read root `AGENTS.md` first. GitHub is authoritative; local-only work is not proof.
 
 ## Objective
-Certify GitHub-First Loop Engineering V1 without modifying TradeBot runtime, feeds, risk, execution, broker, or strategy behavior.
+Implement and certify GitHub-First Loop Engineering V1 without modifying TradeBot runtime, feeds, broker, risk, execution, strategies, credentials, PR #748, or PR #750 runtime code.
 
-## State
-- State: `REVIEWING`
-- Code SHA: `7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225`
+## Current state
+- State: `BLOCKED`
+- Code SHA: `cf9276c75e1f53617723c8d598c428c04652adca`
 - Branch: `infra/github-first-loop-engineering-v1`
 - PR: `#764`
-- Cycle: `2`
+- Cycle: `3`
+- Human decision required: `true`
 
 ## Completed proof
-- Loop Handoff Gate passed at the code checkpoint.
-- `21` focused loop tests passed.
-- The committed example task validated.
+- Loop Handoff Gate passed.
+- `15` focused loop tests passed.
+- Both committed loop tasks validated.
+- The bounded validation/context artifact was uploaded and is referenced in `evidence/manifest.json`.
 - Agent Review Evidence Gate passed.
+- Code Excellence and Minerva passed.
+- Repo Forensics passed.
+- Strategy Registry verification passed.
+- CodeQL passed.
+- Portfolio CI passed.
+- The independent repository `tests` workflow, including its health gate, passed.
+- Final changed-file inventory is confined to the declared infrastructure-only scope.
+
+## External blocker
+The duplicate repository workflow `.github/workflows/ci.yml` sets `timeout-minutes: 15` for its `unit_tests` job. Run `30617389326` was cancelled at 69% with no reported assertion failure because it exceeded that fixed timeout. The independent `tests` workflow `30617389255` completed successfully.
+
+Fixing the repository-wide `ci` timeout is outside this task's frozen allowed paths.
 
 ## Next action
-Verify every workflow on the checkpoint head. Inspect any exact failing job and repair only defects inside the contract scope. Then perform the final changed-path and PR-diff scope review.
+Choose one:
 
-## Allowed paths
-- `.loop/**`
-- `scripts/loop/**`
-- `tests/loop/**`
-- `loop_tasks/README.md`
-- `loop_tasks/examples/**`
-- `.github/workflows/loop-handoff-gate.yml`
-- `docs/engineering/github_first_loop_engineering_v1.md`
-- `docs/agent_reviews/pr764_github_first_loop_engineering_v1.md`
+1. Create a separate bounded CI-maintenance loop task to increase or restructure the 15-minute `ci` workflow, then rerun PR #764; or
+2. Make an explicit human policy decision that the successful `tests` workflow is the authoritative full-suite oracle for this infrastructure PR despite the duplicate timed-out workflow.
 
-The current task directory itself may be updated as checkpoint metadata.
+Until that decision, keep PR #764 draft and unmerged.
 
-## Forbidden paths
-- `main.py`
-- `run_live.sh`
-- `config/**`
-- `core/**`
-- `strategies/**`
-- credentials and environment files
-- PR #748 and PR #750 runtime implementations
-
-## Remaining gates
-- all final-head workflows pass;
-- final diff scope review passes.
-
-## Safety
-Keep PR #764 draft and unmerged. Do not deploy, start live trading, call brokers, use credentials, approve, or merge.
+## Safety boundary
+Do not modify or run TradeBot live runtime, brokers, orders, execution, risk, feeds, strategies, credentials, PR #748, or PR #750 as part of this task. Do not approve, deploy, auto-merge, or merge PR #764.
