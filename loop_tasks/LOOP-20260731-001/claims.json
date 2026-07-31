@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "claims": [
+    {
+      "claim_id": "CLM-764-001",
+      "statement": "The GitHub-first loop framework focused tests and committed example-task validation pass at code checkpoint 7bf82dd6555b99eeae2df4fa4fa42eb3bebc2225.",
+      "status": "PROVEN",
+      "proof_ids": [
+        "CI-LOOP-GATE-7BF82DD6"
+      ],
+      "owner": "chatgpt",
+      "requires_live_evidence": false
+    },
+    {
+      "claim_id": "CLM-764-002",
+      "statement": "The repository Agent Review Evidence Gate accepts the scoped safety and review contract for PR #764.",
+      "status": "PROVEN",
+      "proof_ids": [
+        "CI-AGENT-REVIEW-7BF82DD6"
+      ],
+      "owner": "chatgpt",
+      "requires_live_evidence": false
+    },
+    {
+      "claim_id": "CLM-764-003",
+      "statement": "Every final-head PR workflow passes and the final diff remains inside the frozen infrastructure-only scope.",
+      "status": "UNPROVEN",
+      "proof_ids": [],
+      "owner": "chatgpt",
+      "requires_live_evidence": false
+    }
+  ]
+}
