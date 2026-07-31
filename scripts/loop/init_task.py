@@ -4,9 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-from scripts.loop.loop_core import (
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from loop_core import (  # noqa: E402
     current_branch,
     current_head,
     read_json,
