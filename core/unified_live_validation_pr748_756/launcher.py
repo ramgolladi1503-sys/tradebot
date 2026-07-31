@@ -43,6 +43,7 @@ def build_child_environment(identity: CampaignIdentity, base_env: dict[str, str]
     env = dict(os.environ if base_env is None else base_env)
     env[ENABLE_ENV] = "true"
     env["TRADEBOT_READ_ONLY"] = "true"
+    env["MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE"] = "true"
     env[RUN_ID_ENV] = identity.run_id
     env[EVIDENCE_ROOT_ENV] = identity.evidence_root
     env[COMPOSITION_SHA_ENV] = identity.composition_manifest_sha

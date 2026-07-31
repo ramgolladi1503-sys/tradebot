@@ -154,6 +154,7 @@ def test_enabled_live_identity_sets_exact_child_environment(tmp_path):
     assert env["UNIFIED_LIVE_VALIDATION_PR748_756_EVIDENCE_ROOT"] == identity.evidence_root
     assert env["UNIFIED_LIVE_VALIDATION_PR748_756_COMPOSITION_SHA"] == "3" * 64
     assert env["TRADEBOT_READ_ONLY"] == "true"
+    assert env["MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE"] == "true"
 
 
 def test_process_level_smoke_launches_one_child_records_and_seals(tmp_path):
