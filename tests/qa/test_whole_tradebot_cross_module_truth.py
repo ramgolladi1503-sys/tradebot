@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -64,7 +65,6 @@ def _trade(
         capital_at_risk=8.5,
         expected_slippage=0.2,
         confidence=confidence,
-        confidence_final=confidence,
         strategy="UNIT_TREND",
         regime="TREND",
         builder_confidence=confidence,
@@ -105,6 +105,7 @@ def _trade(
     return trade
 
 
+@pytest.mark.broker_firewall
 def test_fallback_truth_cannot_receive_execution_selection_or_capital():
     fallback = _trade(
         trade_id="fallback",
@@ -163,6 +164,23 @@ def test_ranking_separates_real_quality_instead_of_echoing_input_order():
     assert ranked[1].selected_for_execution is False
 
 
+@pytest.mark.replay
+def test_ranked_candidate_replay_is_deterministic_and_does_not_mutate_input():
+    original = [
+        _trade(trade_id="replay-weak", confidence=0.51, bid=120.0, ask=121.5, volume=900),
+        _trade(trade_id="replay-strong", confidence=0.84, bid=120.0, ask=120.2, volume=22_000),
+    ]
+    frozen_before = [item.to_dict() for item in original]
+
+    first = annotate_ranked_opportunities(deepcopy(original), scope="replay:deterministic", top_n=1)
+    second = annotate_ranked_opportunities(deepcopy(original), scope="replay:deterministic", top_n=1)
+
+    assert [item.to_dict() for item in first] == [item.to_dict() for item in second]
+    assert [item.trade_id for item in first] == ["replay-strong", "replay-weak"]
+    assert [item.to_dict() for item in original] == frozen_before
+
+
+@pytest.mark.chaos
 def test_late_risk_revalidation_overrides_prior_top_rank(monkeypatch):
     trade = _trade(trade_id="ranked-then-risk-blocked", confidence=0.90)
     ranked = annotate_ranked_opportunities([trade], scope="unit:main", top_n=1)
@@ -195,6 +213,7 @@ def test_late_risk_revalidation_overrides_prior_top_rank(monkeypatch):
     assert "daily_loss_limit" in decision.reason
 
 
+@pytest.mark.broker_firewall
 def test_order_approval_is_consumed_exactly_once(tmp_path, monkeypatch):
     db_path = tmp_path / "tradebot.sqlite"
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
@@ -226,6 +245,8 @@ def test_order_approval_is_consumed_exactly_once(tmp_path, monkeypatch):
     assert second == (False, "approval_used")
 
 
+@pytest.mark.ui_read_model
+@pytest.mark.broker_firewall
 def test_operator_pools_never_present_fallback_as_executable():
     real = _trade(trade_id="real", confidence=0.80)
     fallback = _trade(
