@@ -50,32 +50,12 @@ jobs:
               raise SystemExit('frozen_payload_not_found')
           chunks = [ast.literal_eval(line.strip()) for line in match.group('body').splitlines() if line.strip()]
           source = gzip.decompress(base64.b64decode(''.join(chunks))).decode('utf-8')
-
-          old = '''    htf_source = index.set_index("signal_timestamp")[["open", "high", "low", "close"]].sort_index()
-    htf = htf_source.resample("15min", closed="right", label="right", origin="start_day").agg(
-        {"open": "first", "high": "max", "low": "min", "close": "last"}
-    ).dropna()
-    htf["session"] = htf.index.tz_convert(TIMEZONE).date.astype(str)
-    htf = add_trail(htf.reset_index(), "htf", ema_len=8, atr_len=8, multiplier=2.0)
-    htf = htf.rename(columns={"signal_timestamp": "htf_completed_timestamp"})
-'''
-          new = '''    htf_parts: list[pd.DataFrame] = []
-    for session, day in index.groupby("session", sort=True):
-        htf_source = day.set_index("signal_timestamp")[["open", "high", "low", "close"]].sort_index()
-        htf_day = htf_source.resample("15min", closed="right", label="right", origin="start_day").agg(
-            {"open": "first", "high": "max", "low": "min", "close": "last"}
-        ).dropna()
-        htf_day = add_trail(htf_day.reset_index(), "htf", ema_len=8, atr_len=8, multiplier=2.0)
-        htf_day["session"] = str(session)
-        htf_parts.append(htf_day)
-    htf = pd.concat(htf_parts, ignore_index=True)
-    htf = htf.rename(columns={"signal_timestamp": "htf_completed_timestamp"})
-'''
+          old = base64.b64decode('ICAgIGh0Zl9zb3VyY2UgPSBpbmRleC5zZXRfaW5kZXgoInNpZ25hbF90aW1lc3RhbXAiKVtbIm9wZW4iLCAiaGlnaCIsICJsb3ciLCAiY2xvc2UiXV0uc29ydF9pbmRleCgpCiAgICBodGYgPSBodGZfc291cmNlLnJlc2FtcGxlKCIxNW1pbiIsIGNsb3NlZD0icmlnaHQiLCBsYWJlbD0icmlnaHQiLCBvcmlnaW49InN0YXJ0X2RheSIpLmFnZygKICAgICAgICB7Im9wZW4iOiAiZmlyc3QiLCAiaGlnaCI6ICJtYXgiLCAibG93IjogIm1pbiIsICJjbG9zZSI6ICJsYXN0In0KICAgICkuZHJvcG5hKCkKICAgIGh0Zlsic2Vzc2lvbiJdID0gaHRmLmluZGV4LnR6X2NvbnZlcnQoVElNRVpPTkUpLmRhdGUuYXN0eXBlKHN0cikKICAgIGh0ZiA9IGFkZF90cmFpbChodGYucmVzZXRfaW5kZXgoKSwgImh0ZiIsIGVtYV9sZW49OCwgYXRyX2xlbj04LCBtdWx0aXBsaWVyPTIuMCkKICAgIGh0ZiA9IGh0Zi5yZW5hbWUoY29sdW1ucz17InNpZ25hbF90aW1lc3RhbXAiOiAiaHRmX2NvbXBsZXRlZF90aW1lc3RhbXAifSkK').decode('utf-8')
+          new = base64.b64decode('ICAgIGh0Zl9wYXJ0czogbGlzdFtwZC5EYXRhRnJhbWVdID0gW10KICAgIGZvciBzZXNzaW9uLCBkYXkgaW4gaW5kZXguZ3JvdXBieSgic2Vzc2lvbiIsIHNvcnQ9VHJ1ZSk6CiAgICAgICAgaHRmX3NvdXJjZSA9IGRheS5zZXRfaW5kZXgoInNpZ25hbF90aW1lc3RhbXAiKVtbIm9wZW4iLCAiaGlnaCIsICJsb3ciLCAiY2xvc2UiXV0uc29ydF9pbmRleCgpCiAgICAgICAgaHRmX2RheSA9IGh0Zl9zb3VyY2UucmVzYW1wbGUoIjE1bWluIiwgY2xvc2VkPSJyaWdodCIsIGxhYmVsPSJyaWdodCIsIG9yaWdpbj0ic3RhcnRfZGF5IikuYWdnKAogICAgICAgICAgICB7Im9wZW4iOiAiZmlyc3QiLCAiaGlnaCI6ICJtYXgiLCAibG93IjogIm1pbiIsICJjbG9zZSI6ICJsYXN0In0KICAgICAgICApLmRyb3BuYSgpCiAgICAgICAgaHRmX2RheSA9IGFkZF90cmFpbChodGZfZGF5LnJlc2V0X2luZGV4KCksICJodGYiLCBlbWFfbGVuPTgsIGF0cl9sZW49OCwgbXVsdGlwbGllcj0yLjApCiAgICAgICAgaHRmX2RheVsic2Vzc2lvbiJdID0gc3RyKHNlc3Npb24pCiAgICAgICAgaHRmX3BhcnRzLmFwcGVuZChodGZfZGF5KQogICAgaHRmID0gcGQuY29uY2F0KGh0Zl9wYXJ0cywgaWdub3JlX2luZGV4PVRydWUpCiAgICBodGYgPSBodGYucmVuYW1lKGNvbHVtbnM9eyJzaWduYWxfdGltZXN0YW1wIjogImh0Zl9jb21wbGV0ZWRfdGltZXN0YW1wIn0pCg==').decode('utf-8')
           if old not in source:
               raise SystemExit('htf_session_isolation_patch_target_missing')
-          source = source.replace(old, new)
           target = Path('/tmp/run_dynamic_trend_overlay_edge_v1.py')
-          target.write_text(source, encoding='utf-8')
+          target.write_text(source.replace(old, new), encoding='utf-8')
           print(f'runner_bytes={target.stat().st_size}')
           PY
           python -m py_compile /tmp/run_dynamic_trend_overlay_edge_v1.py
