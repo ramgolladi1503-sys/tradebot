@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ramgolladi1503-sys/tradebot/.loop/schemas/claim.schema.json",
+  "title": "TradeBot Loop Claim",
+  "type": "object",
+  "required": ["claim_id", "statement", "status", "proof_ids", "owner"],
+  "properties": {
+    "claim_id": {"type": "string", "minLength": 1},
+    "statement": {"type": "string", "minLength": 1},
+    "status": {"enum": ["UNPROVEN", "PROVEN", "REJECTED", "RETIRED"]},
+    "proof_ids": {"type": "array", "items": {"type": "string"}},
+    "owner": {"type": "string", "minLength": 1},
+    "requires_live_evidence": {"type": "boolean"}
+  },
+  "additionalProperties": true
+}
