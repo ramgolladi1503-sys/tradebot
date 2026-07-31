@@ -47,15 +47,32 @@ jobs:
           import hashlib
           from pathlib import Path
 
-          root = Path("research/dynamic_trend_overlay_edge_v1/v4_payload")
+          root = Path("research/dynamic_trend_overlay_edge_v1/v3_payload")
           payload = "".join((root / f"part{i:02d}.txt").read_text(encoding="utf-8").strip() for i in range(7))
-          assert len(payload) == 15596, len(payload)
-          assert hashlib.sha256(payload.encode()).hexdigest() == "3ba9a6e77a1bcaefe050c4cb998dd857481fa4d214cf72be6a298460e6f9e56e"
-          raw = gzip.decompress(base64.b64decode(payload))
-          assert hashlib.sha256(raw).hexdigest() == "eea3fd88d813acd14770f74a96ddefd85f8158d3d1dc4d5b251b6e0d787a0317"
+          assert len(payload) == 15156, len(payload)
+          assert hashlib.sha256(payload.encode()).hexdigest() == "e2e39a7fd38a6498c36718b0a31d26a145d30b5463a47f9a8dcedc19df93afb3"
+          source = gzip.decompress(base64.b64decode(payload)).decode("utf-8")
+          assert hashlib.sha256(source.encode()).hexdigest() == "875aefba6d64b72638c2cfdcbfae705d07ddfb9a88351e6190eaa4a93ef6e84f"
+
+          replacement = base64.b64decode("ZGVmIGJ1aWxkX2luZGV4X2ZlYXR1cmVzKGJhcnM6IHBkLkRhdGFGcmFtZSwgaW5kZXhfc3ltYm9sOiBzdHIpIC0+IHBkLkRhdGFGcmFtZToKICAgICIiIkJ1aWxkIHRoZSBmaW5hbCBwcmUtZGVjbGFyZWQgY29udGludW91cy1zdGF0ZSBEVE8gaW50ZXJwcmV0YXRpb24uCgogICAgRU1BLCBBVFIsIFN0b2NoUlNJIGFuZCB0cmFpbCBkaXJlY3Rpb24gcmV0YWluIG9ubHkgcGFzdCBzdGF0ZSBhY3Jvc3Mgc2Vzc2lvbgogICAgYm91bmRhcmllcywgbWF0Y2hpbmcgdGhlIG5vcm1hbCBiZWhhdmlvdXIgb2YgYSBwZXJzaXN0ZW50IFRyYWRpbmdWaWV3CiAgICBvdmVybGF5LiBJbnRyYWRheSByZXR1cm5zLCBicmVha291dCB3aW5kb3dzIGFuZCBjb21wcmVzc2lvbiB3aW5kb3dzIHN0aWxsCiAgICByZXNldCBieSBzZXNzaW9uIHNvIG5vIG92ZXJuaWdodCBtb3ZlIGlzIG1pc2xhYmVsbGVkIGFzIGFuIGludHJhZGF5IGV2ZW50LgogICAgIiIiCiAgICBpbmRleCA9IGJhcnNbYmFyc1sic3ltYm9sIl0gPT0gaW5kZXhfc3ltYm9sXS5jb3B5KCkuc29ydF92YWx1ZXMoInRpbWVzdGFtcCIsIGtpbmQ9Im1lcmdlc29ydCIpLnJlc2V0X2luZGV4KGRyb3A9VHJ1ZSkKICAgIGluZGV4WyJzaWduYWxfdGltZXN0YW1wIl0gPSBpbmRleFsidGltZXN0YW1wIl0gKyBwZC5UaW1lZGVsdGEobWludXRlcz01KQogICAgaW5kZXhbImluZGV4X3JldF8xIl0gPSBpbmRleC5ncm91cGJ5KCJzZXNzaW9uIiwgc29ydD1GYWxzZSlbImNsb3NlIl0ucGN0X2NoYW5nZShmaWxsX21ldGhvZD1Ob25lKQoKICAgICMgUGVyc2lzdGVudCwgc3RyaWN0bHkgYmFja3dhcmQtbG9va2luZyBpbmRpY2F0b3Igc3RhdGUuCiAgICBpbmRleCA9IGFkZF90cmFpbChpbmRleCwgImN0ZiIsIGVtYV9sZW49MTAsIGF0cl9sZW49MTAsIG11bHRpcGxpZXI9MS44KQogICAgaW5kZXggPSBhZGRfcnNpX3N0b2NoKGluZGV4KQogICAgaW5kZXhbInRyZW5kX2FnZSJdID0gY29uc2VjdXRpdmVfYWdlKGluZGV4WyJjdGZfZGlyZWN0aW9uIl0pCiAgICBpbmRleFsiZGlyZWN0aW9uX2ZsaXAiXSA9IGluZGV4WyJjdGZfZGlyZWN0aW9uIl0ubmUoaW5kZXhbImN0Zl9kaXJlY3Rpb24iXS5zaGlmdCgxKSkgJiBpbmRleFsiY3RmX2RpcmVjdGlvbiJdLm5lKDApCiAgICBpbmRleFsicHVsbGJhY2tfdG91Y2hfbG9uZyJdID0gKAogICAgICAgIChpbmRleFsibG93Il0gPD0gaW5kZXhbImN0Zl9iYXNpcyJdICsgMC4yNSAqIGluZGV4WyJjdGZfYXRyIl0pCiAgICAgICAgJiAoaW5kZXhbImNsb3NlIl0gPiBpbmRleFsiY3RmX3RyYWlsIl0pCiAgICAgICAgJiBpbmRleFsiY3RmX2RpcmVjdGlvbiJdLmVxKDEpCiAgICApCiAgICBpbmRleFsicHVsbGJhY2tfdG91Y2hfc2hvcnQiXSA9ICgKICAgICAgICAoaW5kZXhbImhpZ2giXSA+PSBpbmRleFsiY3RmX2Jhc2lzIl0gLSAwLjI1ICogaW5kZXhbImN0Zl9hdHIiXSkKICAgICAgICAmIChpbmRleFsiY2xvc2UiXSA8IGluZGV4WyJjdGZfdHJhaWwiXSkKICAgICAgICAmIGluZGV4WyJjdGZfZGlyZWN0aW9uIl0uZXEoLTEpCiAgICApCiAgICBpbmRleFsiZGlzdGFuY2VfY3RmX2F0ciJdID0gKGluZGV4WyJjbG9zZSJdIC0gaW5kZXhbImN0Zl9iYXNpcyJdKS5hYnMoKSAvIGluZGV4WyJjdGZfYXRyIl0ucmVwbGFjZSgwLjAsIG5wLm5hbikKICAgIGluZGV4WyJib2R5X2F0ciJdID0gKGluZGV4WyJjbG9zZSJdIC0gaW5kZXhbIm9wZW4iXSkuYWJzKCkgLyBpbmRleFsiY3RmX2F0ciJdLnJlcGxhY2UoMC4wLCBucC5uYW4pCgogICAgIyBFdmVudCBnZW9tZXRyeSByZW1haW5zIGludHJhZGF5LW9ubHkuCiAgICBpbnRyYWRheV9wYXJ0czogbGlzdFtwZC5EYXRhRnJhbWVdID0gW10KICAgIGZvciBfLCBkYXkgaW4gaW5kZXguZ3JvdXBieSgic2Vzc2lvbiIsIHNvcnQ9VHJ1ZSk6CiAgICAgICAgZGF5ID0gZGF5LnNvcnRfdmFsdWVzKCJ0aW1lc3RhbXAiLCBraW5kPSJtZXJnZXNvcnQiKS5jb3B5KCkKICAgICAgICBkYXlbInByaW9yXzNfaGlnaCJdID0gZGF5WyJoaWdoIl0uc2hpZnQoMSkucm9sbGluZygzLCBtaW5fcGVyaW9kcz0zKS5tYXgoKQogICAgICAgIGRheVsicHJpb3JfM19sb3ciXSA9IGRheVsibG93Il0uc2hpZnQoMSkucm9sbGluZygzLCBtaW5fcGVyaW9kcz0zKS5taW4oKQogICAgICAgIHNob3J0X3JhbmdlID0gZGF5WyJoaWdoIl0ucm9sbGluZygzLCBtaW5fcGVyaW9kcz0zKS5tYXgoKSAtIGRheVsibG93Il0ucm9sbGluZygzLCBtaW5fcGVyaW9kcz0zKS5taW4oKQogICAgICAgIGxvbmdfcmFuZ2UgPSBkYXlbImhpZ2giXS5yb2xsaW5nKDEyLCBtaW5fcGVyaW9kcz0xMikubWF4KCkgLSBkYXlbImxvdyJdLnJvbGxpbmcoMTIsIG1pbl9wZXJpb2RzPTEyKS5taW4oKQogICAgICAgIGRheVsiY29tcHJlc3Npb25fcmF0aW8iXSA9IChzaG9ydF9yYW5nZSAvIGxvbmdfcmFuZ2UucmVwbGFjZSgwLjAsIG5wLm5hbikpLnNoaWZ0KDEpCiAgICAgICAgaW50cmFkYXlfcGFydHMuYXBwZW5kKGRheSkKICAgIGluZGV4ID0gcGQuY29uY2F0KGludHJhZGF5X3BhcnRzLCBpZ25vcmVfaW5kZXg9VHJ1ZSkuc29ydF92YWx1ZXMoInNpZ25hbF90aW1lc3RhbXAiLCBraW5kPSJtZXJnZXNvcnQiKQoKICAgICMgQ29tcGxldGVkIDE1LW1pbnV0ZSBzdGF0ZSBhbHNvIHBlcnNpc3RzIGNhdXNhbGx5IGFjcm9zcyBzZXNzaW9ucy4KICAgIGh0Zl9zb3VyY2UgPSBpbmRleC5zZXRfaW5kZXgoInNpZ25hbF90aW1lc3RhbXAiKVtbIm9wZW4iLCAiaGlnaCIsICJsb3ciLCAiY2xvc2UiXV0uc29ydF9pbmRleCgpCiAgICBodGYgPSBodGZfc291cmNlLnJlc2FtcGxlKCIxNW1pbiIsIGNsb3NlZD0icmlnaHQiLCBsYWJlbD0icmlnaHQiLCBvcmlnaW49InN0YXJ0X2RheSIpLmFnZygKICAgICAgICB7Im9wZW4iOiAiZmlyc3QiLCAiaGlnaCI6ICJtYXgiLCAibG93IjogIm1pbiIsICJjbG9zZSI6ICJsYXN0In0KICAgICkuZHJvcG5hKCkKICAgIGh0ZiA9IGFkZF90cmFpbChodGYucmVzZXRfaW5kZXgoKSwgImh0ZiIsIGVtYV9sZW49OCwgYXRyX2xlbj04LCBtdWx0aXBsaWVyPTIuMCkKICAgIGh0ZiA9IGh0Zi5yZW5hbWUoY29sdW1ucz17InNpZ25hbF90aW1lc3RhbXAiOiAiaHRmX2NvbXBsZXRlZF90aW1lc3RhbXAifSkKICAgIGtlZXAgPSBbImh0Zl9jb21wbGV0ZWRfdGltZXN0YW1wIiwgImh0Zl9iYXNpcyIsICJodGZfYXRyIiwgImh0Zl9kaXJlY3Rpb24iLCAiaHRmX3RyYWlsIl0KICAgIGluZGV4ID0gcGQubWVyZ2VfYXNvZigKICAgICAgICBpbmRleC5zb3J0X3ZhbHVlcygic2lnbmFsX3RpbWVzdGFtcCIpLAogICAgICAgIGh0ZltrZWVwXS5zb3J0X3ZhbHVlcygiaHRmX2NvbXBsZXRlZF90aW1lc3RhbXAiKSwKICAgICAgICBsZWZ0X29uPSJzaWduYWxfdGltZXN0YW1wIiwKICAgICAgICByaWdodF9vbj0iaHRmX2NvbXBsZXRlZF90aW1lc3RhbXAiLAogICAgICAgIGRpcmVjdGlvbj0iYmFja3dhcmQiLAogICAgICAgIGFsbG93X2V4YWN0X21hdGNoZXM9VHJ1ZSwKICAgICkKICAgIGluZGV4WyJodGZfZGlzdGFuY2VfYXRyIl0gPSAoaW5kZXhbImNsb3NlIl0gLSBpbmRleFsiaHRmX2Jhc2lzIl0pLmFicygpIC8gaW5kZXhbImh0Zl9hdHIiXS5yZXBsYWNlKDAuMCwgbnAubmFuKQogICAgcmV0dXJuIGluZGV4Cg==").decode("utf-8")
+          source = source.replace('CAMPAIGN = "dynamic_trend_overlay_edge_v3"', 'CAMPAIGN = "dynamic_trend_overlay_edge_v4"')
+          source = source.replace('# Dynamic Trend Overlay Edge V3 — Result', '# Dynamic Trend Overlay Edge V4 — Result')
+          source = source.replace('Path("runtime/research/dynamic_trend_overlay_edge_v2")', 'Path("runtime/research/dynamic_trend_overlay_edge_v4")')
+          start = source.index("def build_index_features(")
+          end = source.index("\ndef build_market_frame(", start)
+          source = source[:start] + replacement + source[end:]
+          source = source.replace(
+              '"trail uses a causal ratcheting EMA/ATR Supertrend-style initialization",',
+              '"trail uses a causal ratcheting EMA/ATR Supertrend-style initialization",\n            "final semantic alternative preserves only past indicator state across sessions",',
+          )
+          source = source.replace(
+              '"coverage_policy": "at least two replayable hourly ATM CE/PE windows per session",',
+              '"coverage_policy": "at least two replayable hourly ATM CE/PE windows per session",\n            "indicator_state_policy": "continuous causal CTF and HTF state; intraday event windows reset by session",',
+          )
+          assert hashlib.sha256(source.encode()).hexdigest() == "eea3fd88d813acd14770f74a96ddefd85f8158d3d1dc4d5b251b6e0d787a0317"
           target = Path("/tmp/run_dynamic_trend_overlay_edge_v4.py")
-          target.write_bytes(raw)
-          print(f"runner_bytes={len(raw)}")
+          target.write_text(source, encoding="utf-8")
+          print(f"runner_bytes={target.stat().st_size}")
           PY
           python -m py_compile /tmp/run_dynamic_trend_overlay_edge_v4.py
 
