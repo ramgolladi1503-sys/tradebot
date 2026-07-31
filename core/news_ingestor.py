@@ -8,9 +8,9 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
 from urllib.parse import urlparse
-import xml.etree.ElementTree as ET
 
 import requests
+from defusedxml import ElementTree as ET
 
 from config import config as cfg
 
@@ -150,4 +150,3 @@ def ingest_headlines(
         }
         for h in rows
     ]
-
