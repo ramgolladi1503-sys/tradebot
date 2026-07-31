@@ -1,0 +1,10 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "evidence_root": "runtime/diagnostics/unified_live_validation_pr748_756_v1/unified-pr748-756-20260731-31842075bdd3-presession",
+  "is_order_action": false,
+  "launch_command": "UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE=true TRADEBOT_READ_ONLY=true UNIFIED_LIVE_VALIDATION_PR748_756_RUN_ID=unified-pr748-756-20260731-31842075bdd3-presession ./run_live.sh",
+  "read_only": true,
+  "run_id": "unified-pr748-756-20260731-31842075bdd3-presession",
+  "state": "READY_FOR_LIVE_START"
+}

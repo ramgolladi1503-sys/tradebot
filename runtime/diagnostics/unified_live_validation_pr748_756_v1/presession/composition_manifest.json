@@ -1,0 +1,53 @@
+{
+  "activation_env": "UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE",
+  "allowed_for_live_execution": false,
+  "authority": {
+    "748": "Market Event Graph launch plan, token union, observer registry, validator/exporter.",
+    "749": "Authoritative live NIFTY constituent interval producer.",
+    "750": "Feed truth, recovery states, execution-feed readiness, registry consistency.",
+    "756": "Regime probability truth, feature quality, policy propagation, fail-closed scoring."
+  },
+  "broker_api_called": false,
+  "campaign": "unified_live_validation_pr748_756_v1",
+  "composition_manifest_sha256": "31842075bdd3f98222bb26c56d034c2a44682a6fa04e80ac79c34029552ed32e",
+  "forward_observation_only_prs": [
+    751,
+    752,
+    754,
+    755
+  ],
+  "integrated_commit_sha": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
+  "is_order_action": false,
+  "live_runtime_prs": [
+    748,
+    749,
+    750,
+    756
+  ],
+  "offline_only_prs": [
+    753
+  ],
+  "origin_main_sha": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
+  "pr_heads": {
+    "748": "246e694ca9f4b5c0933659ddcecc6c363d4aa852",
+    "749": "f51119a67005b5efab185167055bb18681211ffc",
+    "750": "6d572b728b95ff8148d3c99b3a927e8d370fccd2",
+    "751": "410576ac2f0ee3c941b8bdebc0487fbd209439b9",
+    "752": "14507f7e93b08f1dadac3625f687454c18c41643",
+    "753": "881b70be448241bbef9a481805d27fe541adea14",
+    "754": "0a8d61048e06c9d48ff4ea14588d803200147e33",
+    "755": "5768cee9d104752c5070a46d47e57f4c22026172",
+    "756": "d51fbdcfee5330805d1b8d4893eca0898858a604"
+  },
+  "read_only": true,
+  "safety_constraints": [
+    "no broker/order imports",
+    "no websocket creation",
+    "no runtime strategy registration",
+    "no threshold or ranking mutation",
+    "no production readiness or profitability certification"
+  ],
+  "schema_version": 1,
+  "selected_live_constituent_producer": "pr_749_constituent_source_feeds_pr_748_validator_exporter",
+  "session_date": "2026-07-31"
+}
