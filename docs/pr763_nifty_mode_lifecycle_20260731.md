@@ -257,3 +257,39 @@ generic live tick timestamps advanced for all 51 identities
 ```
 
 The code path required `last_price is not None` before recording packet-mode truth. That conflated packet delivery diagnostics with bar publication. The fix now records packet-mode truth for every allowed observation callback and only gates `record_live_source_shadow_tick(...)` on price availability.
+
+## Short Proof Run 4
+
+- Run ID: `unified-pr748-756-20260731-bfe922768f2a-live-0a227e84`
+- Campaign commit: `53b1b97b`
+- Artifact manifest SHA256: `10f89b621bcaa7dc8f0a9768a9f948f50d64047c7c4fad190d29c0684c00f7b7`
+- Sealed: `true`
+- Verdict: `OBSERVATION_UNION_ACTIVE_FULL_DELIVERY_NOT_OBSERVED_PACKET_CLASSIFIER_EMPTY`
+
+This run preserved the activation proof:
+
+| Field | Value |
+| --- | --- |
+| observation plan | `PASS_LIVE_SOURCE_PRESESSION_READINESS` |
+| requested observation identities | `51` |
+| local mode-send observation identities | `51` |
+| live-tick observation identities | `51` |
+| constituent live-tick identities | `50` |
+| constituent full-payload identities | `0` |
+| NIFTY final local mode | `full` |
+| NIFTY post-mode callback count | `0` |
+| NIFTY post-mode quote count | `0` |
+| NIFTY post-mode full count | `0` |
+| NIFTY exchange timestamp result | not stamped |
+
+The run does not prove broker index full delivery. It also does not yet prove parsed quote delivery for NIFTY, because the observation packet classifier still produced `{}` while generic tick timestamps advanced. No long run should start from this state.
+
+Remaining blocker:
+
+```text
+OBSERVATION_UNION_ACTIVE
+-> all 51 observation identities have live tick timestamps
+-> no observation identity has full-payload evidence
+-> NIFTY latest_observation_packet remains {}
+-> packet-mode classifier still not receiving or stamping the callback object used for tick timestamps
+```
