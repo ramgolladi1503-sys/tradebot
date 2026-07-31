@@ -560,6 +560,33 @@ def test_post_mode_quote_callback_does_not_satisfy_delivery(monkeypatch):
     assert lifecycle["mode_delivery_observed_epoch"] is None
 
 
+def test_observation_packet_truth_records_without_bar_price(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    shadow.reset_live_source_shadow_buffer()
+    _activate_observation_for_tokens(ws, registry)
+
+    ws.on_ticks(None, [{
+        "instrument_token": registry.index_token,
+        "tradable": False,
+        "mode": "quote",
+        "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+        "change": 0.1,
+    }])
+
+    evidence = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})
+    lifecycle = evidence["token_lifecycle"][str(registry.index_token)]
+    assert lifecycle["post_mode_callback_count"] == 1
+    assert lifecycle["latest_observation_packet"]["parsed_mode"] == "quote"
+    assert lifecycle["latest_observation_packet"]["structured_reason"] == "INDEX_FULL_PACKET_NOT_OBSERVED"
+    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY") == []
+
+
 def test_constituent_lifecycle_accounting_continues_when_nifty_blocked(monkeypatch):
     ws = importlib.import_module("core.kite_depth_ws")
     shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")

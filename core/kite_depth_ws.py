@@ -6316,7 +6316,7 @@ def on_ticks(ws, ticks):
                     last_price=last_price,
                     volume=t.get("volume") if t.get("volume") is not None else t.get("volume_traded"),
                 )
-        if observation_token_allowed and last_price is not None:
+        if observation_token_allowed:
             mode_epoch = _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(int(token_int))
             feed_identity = get_current_feed_session_identity()
             instrument_class = str((observation_identity or {}).get("instrument_class") or "UNKNOWN")
@@ -6355,6 +6355,7 @@ def on_ticks(ws, ticks):
                 packet_detail["structured_reason"] = "MODE_COMMAND_SUPERSEDED_BY_SUBSCRIBE"
                 packet_kind = "INDEX_QUOTE" if instrument_class.upper() == "INDEX" else "NSE_EQUITY_QUOTE"
             _LATEST_OBSERVATION_PACKET_BY_TOKEN[int(token_int)] = dict(packet_detail)
+        if observation_token_allowed and last_price is not None:
             try:
                 record_live_source_shadow_tick(
                     symbol=str(symbol or "").upper(),

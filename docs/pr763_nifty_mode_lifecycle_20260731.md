@@ -151,6 +151,14 @@ Updated focused result:
 63 passed in 5.47s
 ```
 
+After the third short proof showed live ticks for all 51 identities but no `latest_observation_packet`, packet-mode diagnostics were separated from bar publication. Packet truth now records for every allowed observation callback; one-minute bar publication still requires a usable price.
+
+Updated focused result:
+
+```text
+64 passed in 5.73s
+```
+
 ## Short Proof Run 1
 
 - Run ID: `unified-pr748-756-20260731-fd1a9da3a6a7-live-0ce9ea51`
@@ -210,3 +218,42 @@ final_union_tokens=[]
 ```
 
 This proved the first activation fix was placed in `core.kite_depth_ws.build_subscription_tokens(...)`, but the live runtime path was using the `core.depth_subscription_engine` patched builder. The engine now performs the same observation-union activation before freezing `_LAST_DESIRED_TOKENS`.
+
+## Short Proof Run 3
+
+- Run ID: `unified-pr748-756-20260731-597adaa9d70f-live-aac02220`
+- Campaign commit: `d911e2456`
+- Artifact manifest SHA256: `74c00a9053b0d44fe470e841789438d4a6a1035470cb4b7ad314a784c38ec624`
+- Sealed: `true`
+- Verdict: `OBSERVATION_UNION_ACTIVE_CALLBACK_MODE_TRUTH_NOT_STAMPED`
+
+This run proved the observation union activation fix worked:
+
+| Field | Value |
+| --- | --- |
+| subscribed token count | `150` |
+| NIFTY lifecycle subscribe token count | `123` |
+| observation plan | `PASS_LIVE_SOURCE_PRESESSION_READINESS` |
+| requested observation identities | `51` |
+| local mode-send observation identities | `51` |
+| live-tick observation identities | `51` |
+| full-payload observation identities | `0` |
+
+NIFTY final local command state:
+
+```text
+subscribe 123 tokens
+set_mode FULL 123 tokens
+no later NIFTY subscribe observed
+final local NIFTY mode full
+```
+
+The remaining diagnostic break in that run was:
+
+```text
+generic live tick timestamps advanced for all 51 identities
+-> latest_observation_packet remained {}
+-> post_mode_callback_count remained 0
+```
+
+The code path required `last_price is not None` before recording packet-mode truth. That conflated packet delivery diagnostics with bar publication. The fix now records packet-mode truth for every allowed observation callback and only gates `record_live_source_shadow_tick(...)` on price availability.
