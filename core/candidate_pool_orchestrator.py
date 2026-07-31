@@ -15,9 +15,9 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Iterable
 
-from core.market_event_graph_constituent_source import (
-    attach_market_event_graph_constituent_source,
-    persist_market_event_graph_constituent_state,
+from core.market_event_graph_constituent_refresh import (
+    persist_market_event_graph_constituent_refresh_state,
+    refresh_market_event_graph_constituent_source,
 )
 from core.market_event_graph_runtime_observer import observe_market_event_graph_runtime
 from core.movement_contract import StrategyCandidate, StrategyContext
@@ -98,12 +98,15 @@ def build_candidate_pool_report(
     source_index_token = None
     if ctx.symbol == "NIFTY" and _live_constituent_source_requested(ctx.metadata):
         source_index_token = _canonical_nifty_index_token()
-    source_metadata = attach_market_event_graph_constituent_source(
-        ctx.metadata,
+    source_refresh = refresh_market_event_graph_constituent_source(
         symbol=ctx.symbol,
         as_of_epoch=ctx.ts_epoch,
+        metadata=ctx.metadata,
         index_token=source_index_token,
     )
+    source_metadata = source_refresh.get("producer_metadata")
+    if not isinstance(source_metadata, dict):
+        source_metadata = ctx.metadata
     ctx.metadata.clear()
     ctx.metadata.update(source_metadata)
 
@@ -117,7 +120,7 @@ def build_candidate_pool_report(
         safe_call(
             "observe_constituent_source",
             ctx.metadata,
-            source="core.candidate_pool_orchestrator.attach_market_event_graph_constituent_source",
+            source="core.candidate_pool_orchestrator.refresh_market_event_graph_constituent_source",
         )
         safe_call(
             "observe_market_event_graph",
@@ -148,7 +151,7 @@ def build_candidate_pool_report(
             else:
                 warnings.append(f"strategy_generator_returned_non_candidate:{generator_name}")
 
-    source_state_persisted = persist_market_event_graph_constituent_state(ctx.metadata)
+    source_state_persisted = bool(source_refresh.get("state_persisted"))
 
     no_trade_assessment = assess_no_trade(
         ctx,
@@ -165,6 +168,9 @@ def build_candidate_pool_report(
         confirm_candidate_option_pressure(candidate, ctx)
         for candidate in movement_candidates
         if candidate.direction in {"BUY_CALL", "BUY_PUT"}
+    )
+    source_state_persisted = bool(
+        persist_market_event_graph_constituent_refresh_state(ctx.metadata) or source_state_persisted
     )
     blockers = tuple(
         sorted(

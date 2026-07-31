@@ -117,7 +117,12 @@ class UnifiedLiveRuntimeObserver:
     def observe_constituent_source(self, metadata: Mapping[str, Any] | None, *, source: str) -> None:
         if not isinstance(metadata, Mapping):
             return
+        refresh = metadata.get("market_event_graph_constituent_refresh")
+        if isinstance(refresh, Mapping):
+            self._append("live/constituent_source_refresh.jsonl", self._row(refresh, source=source), pr_number=749)
         evidence = metadata.get("market_event_graph_constituent_source_evidence")
+        if isinstance(evidence, Mapping):
+            self._append("live/constituent_source_states.jsonl", self._row(evidence, source=source), pr_number=749)
         self.observe_subscription(evidence if isinstance(evidence, Mapping) else {}, source=source)
         for row in list(metadata.get("completed_constituent_bars") or [])[-4:]:
             if isinstance(row, Mapping):

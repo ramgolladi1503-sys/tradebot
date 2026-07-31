@@ -170,3 +170,39 @@ def test_candidate_pool_report_is_json_serializable():
 
     assert "candidate_pool_orchestrator_shell" in payload
     assert "BUY_CALL" in payload
+
+
+def test_candidate_pool_preserves_caller_supplied_completed_bars():
+    supplied = [
+        {
+            "ts_epoch": 1785451020.0,
+            "source_bar_end_epoch": 1785451020.0,
+            "session_date": "2026-07-31",
+            "index_ret1": 0.001,
+            "constituent_ret1": [0.001] * 40,
+            "constituent_ret1_by_symbol": {f"S{i}": 0.001 for i in range(40)},
+            "participation_count": 40,
+            "completed": True,
+            "allowed_for_live_execution": False,
+            "is_order_action": False,
+            "broker_api_called": False,
+        }
+    ]
+
+    report = build_candidate_pool_report(
+        _context(
+            ts_epoch=1785451080.0,
+            metadata={
+                "market_event_graph_live_source_enable": True,
+                "completed_constituent_bars": supplied,
+            },
+        ),
+        _regime(primary="RANGE", RANGE=0.8),
+        candidate_generators=[],
+        include_no_trade_candidate=False,
+    )
+
+    assert report.metadata["market_event_graph_constituent_source_status"] == "EXTERNAL_INPUT_PRESERVED"
+    assert report.metadata["market_event_graph_constituent_source_reason"] == "caller_supplied_completed_bars"
+    assert report.metadata["market_event_graph_constituent_source_evidence"]["completed_bar_count"] == 1
+    assert report.candidate_count == 0

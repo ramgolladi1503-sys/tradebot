@@ -155,12 +155,16 @@ def attach_market_event_graph_constituent_source(
         )
         target_ends = _target_boundaries(start_end, latest_completed_end)
         build_failures: list[dict[str, Any]] = []
+        reader_visible_row_count = 0
 
         if target_ends:
             boundaries = sorted({end for target in target_ends for end in (target - 60, target)})
             reader = tick_reader or _default_tick_reader
             try:
                 ticks_by_minute = reader(all_tokens, boundaries)
+                reader_visible_row_count = sum(
+                    len(rows) for rows in ticks_by_minute.values() if isinstance(rows, Mapping)
+                )
             except Exception as exc:
                 ticks_by_minute = {}
                 build_failures.append(
@@ -198,6 +202,9 @@ def attach_market_event_graph_constituent_source(
         state["bars"] = bars
         state["last_refresh_epoch"] = now_epoch
         state["last_completed_boundary_epoch"] = latest_completed_end
+        state["last_target_boundaries"] = list(target_ends)
+        state["last_target_boundary_count"] = len(target_ends)
+        state["last_reader_visible_row_count"] = reader_visible_row_count
         state["last_build_failures"] = build_failures
         state["manifest"] = {
             "path": str(manifest_file),
@@ -613,6 +620,9 @@ def _source_evidence(
         "subscription_ok": bool(subscribed),
         "completed_bar_count": len(bars),
         "latest_completed_boundary_epoch": latest_completed_end,
+        "target_boundary_count": int(state.get("last_target_boundary_count") or 0),
+        "target_boundaries": list(state.get("last_target_boundaries") or []),
+        "reader_visible_row_count": int(state.get("last_reader_visible_row_count") or 0),
         "latest_bar_end_epoch": latest_bar_end,
         "latest_participation_count": latest_participation,
         "last_build_failures": list(state.get("last_build_failures") or []),
