@@ -1,12 +1,16 @@
 name: Dynamic Trend Overlay Edge V3
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - research/dynamic-trend-overlay-edge-v3-execution
 
 permissions:
   contents: read
+
+concurrency:
+  group: dynamic-trend-overlay-edge-v3-execution
+  cancel-in-progress: true
 
 jobs:
   research:
