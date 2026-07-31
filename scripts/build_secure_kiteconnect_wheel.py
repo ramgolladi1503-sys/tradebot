@@ -21,7 +21,7 @@ UPSTREAM_URL = (
     "https://files.pythonhosted.org/packages/e8/a5/306de933a705fd65b336fda98b5c10a591e04e36aa46559f175bd3431498/"
     "kiteconnect-5.2.0-py3-none-any.whl"
 )
-UPSTREAM_SHA256 = "8670ad5d8c53c6cab58c284b2583fdd278f7fe9e22612574f213eff5f35fe510"
+UPSTREAM_SHA256 = "4601a48355aeeae4ac8857d44f292aef3847351840e0c18aa8f5d3c5afcf92a7"
 AUTOBAN_RANGE = ">=25.10.2,<27"
 OUTPUT_NAME = f"kiteconnect-{PATCHED_VERSION}-py3-none-any.whl"
 _PATCH_FILE = "kiteconnect/TRADEBOT_SECURITY_PATCH.json"
