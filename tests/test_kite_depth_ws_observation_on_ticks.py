@@ -5,6 +5,29 @@ from config import config as cfg
 UNIVERSE = "runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json"
 
 
+class DummyKiteSocket:
+    MODE_FULL = "full"
+    MODE_QUOTE = "quote"
+
+    def __init__(self):
+        self.ws = object()
+        self.subscribed_tokens = {}
+        self.subscribe_calls = []
+        self.set_mode_calls = []
+
+    def subscribe(self, tokens):
+        normalized = [int(token) for token in tokens]
+        self.subscribe_calls.append(normalized)
+        for token in normalized:
+            self.subscribed_tokens[int(token)] = self.MODE_QUOTE
+
+    def set_mode(self, mode, tokens):
+        normalized = [int(token) for token in tokens]
+        self.set_mode_calls.append((mode, normalized))
+        for token in normalized:
+            self.subscribed_tokens[int(token)] = mode
+
+
 def test_on_ticks_routes_observation_tokens_into_shadow_buffer(monkeypatch):
     ws = importlib.import_module("core.kite_depth_ws")
     shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")
@@ -391,3 +414,212 @@ def test_authoritative_universe_lifecycle_contains_all_constituents(monkeypatch)
     assert evidence["budget_status"]["requested_count"] == 51
     assert evidence["budget_status"]["request_succeeded_count"] == 51
     assert evidence["budget_status"]["mode_request_succeeded_count"] == 51
+
+
+def test_later_subscribe_supersedes_local_full_mode_for_nifty(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    ws._reset_market_event_graph_generation_evidence()
+    token = registry.index_token
+
+    ws._record_subscription_requested([token])
+    ws._record_subscription_request_succeeded([token])
+    ws._record_mode_request_succeeded([token])
+    assert token in ws._MODE_COMMAND_FINAL_FULL_TOKENS
+
+    ws._record_subscription_request_succeeded([token])
+
+    evidence = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": token})
+    lifecycle = evidence["token_lifecycle"][str(token)]
+    assert token not in ws._MODE_COMMAND_FINAL_FULL_TOKENS
+    assert lifecycle["final_current_generation_local_mode_is_full"] is False
+
+
+def test_wrapper_reapplies_full_after_subscription_containing_nifty(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+    mutation_queue = importlib.import_module("core.feed.ws_mutation_queue")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    socket = DummyKiteSocket()
+    ws._reset_market_event_graph_generation_evidence()
+    ws._KITE_TICKER = socket
+    ws._LAST_TOKENS = []
+    monkeypatch.setattr(ws, "_can_mutate_ws_subscriptions", lambda **_kwargs: (True, "ok", {}))
+    monkeypatch.setattr(mutation_queue, "_check_socket_health", lambda _ws: (True, True, None))
+
+    assert ws.ensure_subscribed_tokens([registry.index_token], reason="test_nifty_subscription")
+
+    evidence = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})
+    lifecycle = evidence["token_lifecycle"][str(registry.index_token)]
+    assert socket.subscribe_calls == [[registry.index_token]]
+    assert socket.set_mode_calls == [("full", [registry.index_token])]
+    assert socket.subscribed_tokens[registry.index_token] == "full"
+    assert lifecycle["final_current_generation_local_mode_is_full"] is True
+    assert lifecycle["mode_delivery_observed_epoch"] is None
+
+
+def test_no_unnecessary_full_reapplication_when_no_new_observation_subscription(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+    mutation_queue = importlib.import_module("core.feed.ws_mutation_queue")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    socket = DummyKiteSocket()
+    socket.subscribe([registry.index_token])
+    socket.set_mode(socket.MODE_FULL, [registry.index_token])
+    ws._reset_market_event_graph_generation_evidence()
+    ws._KITE_TICKER = socket
+    ws._LAST_TOKENS = [registry.index_token]
+    monkeypatch.setattr(ws, "_can_mutate_ws_subscriptions", lambda **_kwargs: (True, "ok", {}))
+    monkeypatch.setattr(mutation_queue, "_check_socket_health", lambda _ws: (True, True, None))
+
+    assert ws.ensure_subscribed_tokens([registry.index_token], reason="already_present")
+
+    assert socket.subscribe_calls == [[registry.index_token]]
+    assert socket.set_mode_calls == [("full", [registry.index_token])]
+
+
+def test_reconnect_generation_reset_invalidates_mode_delivery_evidence(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    _activate_observation_for_tokens(ws, registry, generation=41)
+    ws.on_ticks(None, [{
+        "instrument_token": registry.index_token,
+        "tradable": False,
+        "mode": "full",
+        "last_price": 25000.0,
+        "exchange_timestamp": 200.0,
+        "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+        "change": 0.1,
+    }])
+    assert ws._FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN[registry.index_token] is not None
+
+    ws._FEED_RECONNECT_GENERATION = 42
+    ws._reset_market_event_graph_generation_evidence()
+
+    evidence = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})
+    lifecycle = evidence["token_lifecycle"][str(registry.index_token)]
+    assert lifecycle["first_full_payload_epoch"] is None
+    assert lifecycle["final_current_generation_local_mode_is_full"] is False
+
+
+def test_local_full_command_success_does_not_equal_broker_delivery(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    _activate_observation_for_tokens(ws, registry)
+
+    evidence = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})
+    lifecycle = evidence["token_lifecycle"][str(registry.index_token)]
+    assert lifecycle["final_current_generation_local_mode_is_full"] is True
+    assert lifecycle["mode_command_local_send_succeeded_epoch"] is not None
+    assert lifecycle["mode_delivery_observed_epoch"] is None
+    assert lifecycle["first_full_payload_epoch"] is None
+
+
+def test_post_mode_quote_callback_does_not_satisfy_delivery(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    _activate_observation_for_tokens(ws, registry)
+
+    ws.on_ticks(None, [{
+        "instrument_token": registry.index_token,
+        "tradable": False,
+        "mode": "quote",
+        "last_price": 25000.0,
+        "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+        "change": 0.1,
+    }])
+
+    evidence = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})
+    lifecycle = evidence["token_lifecycle"][str(registry.index_token)]
+    assert lifecycle["post_mode_callback_count"] == 1
+    assert lifecycle["post_mode_quote_count"] == 1
+    assert lifecycle["post_mode_full_count"] == 0
+    assert lifecycle["mode_delivery_observed_epoch"] is None
+
+
+def test_constituent_lifecycle_accounting_continues_when_nifty_blocked(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    shadow.reset_live_source_shadow_buffer()
+    _activate_observation_for_tokens(ws, registry)
+    reliance = registry.token_by_symbol["RELIANCE"]
+
+    ws.on_ticks(None, [
+        {
+            "instrument_token": registry.index_token,
+            "tradable": False,
+            "mode": "quote",
+            "last_price": 25000.0,
+            "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+            "change": 0.1,
+        },
+        {
+            "instrument_token": reliance,
+            "tradable": True,
+            "mode": "full",
+            "last_price": 1420.0,
+            "exchange_timestamp": 200.0,
+            "depth": {"buy": [{"price": 1419.5}], "sell": [{"price": 1420.5}]},
+        },
+    ])
+
+    evidence = ws.market_event_graph_subscription_evidence_for_tokens(
+        {"NIFTY": registry.index_token, "RELIANCE": reliance}
+    )
+    assert "RELIANCE" in evidence["live_tick_observed_symbols"]
+    assert "RELIANCE" in evidence["full_payload_observed_symbols"]
+    assert "NIFTY" not in evidence["full_payload_observed_symbols"]
+
+
+def test_no_second_websocket_or_execution_capability_for_lifecycle_tracking(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    registry_mod = importlib.import_module("core.market_event_graph_live_observation_registry")
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", UNIVERSE)
+    registry = registry_mod.load_observation_registry(force=True)
+    original_socket = DummyKiteSocket()
+    ws._reset_market_event_graph_generation_evidence()
+    ws._KITE_TICKER = original_socket
+    ws._record_ws_subscription_operation(
+        original_socket,
+        [registry.index_token],
+        callsite="test",
+        operation="subscribe",
+        reason="audit",
+        local_call_result="succeeded",
+    )
+    evidence = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})
+
+    assert ws._KITE_TICKER is original_socket
+    assert evidence["read_only"] is True
+    assert evidence["is_order_action"] is False
+    assert evidence["broker_api_called"] is False
+    assert evidence["allowed_for_live_execution"] is False

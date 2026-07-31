@@ -49,6 +49,7 @@ from core.market_event_graph_live_observation_registry import (
 )
 from core.market_event_graph_live_ohlc_buffer import record_live_source_shadow_tick
 from core.market_event_graph_live_launch_plan import load_launch_plan
+from core.unified_live_validation_pr748_756.campaign_contract import EVIDENCE_ROOT_ENV
 from core.feed.runtime_store import write_runtime_snapshot as write_feed_runtime_snapshot
 from core.feed.runtime_store import canonicalize_feed_runtime_snapshot_truth
 from core.feed_health_duration import build_feed_health_duration_artifact
@@ -156,14 +157,28 @@ _SUBSCRIPTION_REQUESTED_TOKENS: set[int] = set()
 _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS: set[int] = set()
 _MODE_REQUEST_SUCCEEDED_TOKENS: set[int] = set()
 _FULL_PAYLOAD_OBSERVED_TOKENS: set[int] = set()
+_MODE_COMMAND_LOCAL_SEND_SUCCEEDED_TOKENS: set[int] = set()
+_MODE_COMMAND_FINAL_FULL_TOKENS: set[int] = set()
 _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN: dict[int, float] = {}
 _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
 _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
+_MODE_COMMAND_LOCAL_SEND_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
+_LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN: dict[int, int] = {}
+_LATEST_MODE_COMMAND_SEQUENCE_BY_TOKEN: dict[int, int] = {}
+_LATEST_MODE_COMMAND_BY_TOKEN: dict[int, dict[str, object]] = {}
+_NIFTY_MODE_LIFECYCLE_SEQUENCE = 0
+_NIFTY_MODE_LIFECYCLE_LOCK = threading.Lock()
 _FIRST_LIVE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LATEST_OBSERVATION_PACKET_BY_TOKEN: dict[int, dict[str, object]] = {}
+_POST_MODE_CALLBACK_COUNT_BY_TOKEN: dict[int, int] = {}
+_POST_MODE_QUOTE_COUNT_BY_TOKEN: dict[int, int] = {}
+_POST_MODE_FULL_COUNT_BY_TOKEN: dict[int, int] = {}
+_FIRST_POST_MODE_CALLBACK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_FIRST_POST_MODE_QUOTE_EPOCH_BY_TOKEN: dict[int, float] = {}
+_FIRST_POST_MODE_FULL_EPOCH_BY_TOKEN: dict[int, float] = {}
 _SUBSCRIPTION_REQUESTED_EPOCH: float | None = None
 _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH: float | None = None
 _MODE_REQUEST_SUCCEEDED_EPOCH: float | None = None
@@ -278,6 +293,79 @@ def _ensure_feed_session_id() -> str:
     return _FEED_SESSION_ID
 
 
+def _nifty_mode_lifecycle_path() -> Path | None:
+    root = str(os.getenv(EVIDENCE_ROOT_ENV, "") or "").strip()
+    if not root:
+        return None
+    return Path(root) / "live" / "nifty_mode_lifecycle.jsonl"
+
+
+def _client_mode_for_token(ws: Any, token: int) -> object:
+    try:
+        subscribed_tokens = getattr(ws, "subscribed_tokens", None)
+        if isinstance(subscribed_tokens, Mapping):
+            return subscribed_tokens.get(int(token)) or subscribed_tokens.get(str(int(token)))
+    except Exception:
+        return None
+    return None
+
+
+def _record_ws_subscription_operation(
+    ws: Any,
+    tokens: Sequence[int],
+    *,
+    callsite: str,
+    operation: str,
+    requested_mode: str | None = None,
+    local_call_result: str = "not_attempted",
+    exception_type: str | None = None,
+    reason: str = "",
+    client_mode_before: object = None,
+    client_mode_after: object = None,
+    socket_generation: int | None = None,
+) -> dict[str, object] | None:
+    global _NIFTY_MODE_LIFECYCLE_SEQUENCE
+    normalized = sorted({int(token) for token in (tokens or []) if int(token) > 0})
+    contains_nifty = 256265 in normalized
+    if not contains_nifty:
+        return None
+    with _NIFTY_MODE_LIFECYCLE_LOCK:
+        _NIFTY_MODE_LIFECYCLE_SEQUENCE += 1
+        sequence_number = int(_NIFTY_MODE_LIFECYCLE_SEQUENCE)
+    receipt_epoch = float(now_utc_epoch())
+    payload = {
+        "sequence_number": sequence_number,
+        "receipt_epoch": receipt_epoch,
+        "callsite": str(callsite),
+        "operation": str(operation),
+        "socket_generation": int(socket_generation if socket_generation is not None else _SOCKET_GENERATION),
+        "feed_session_id": _ensure_feed_session_id(),
+        "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+        "thread_name": threading.current_thread().name,
+        "token_count": len(normalized),
+        "contains_nifty": True,
+        "requested_mode": requested_mode,
+        "client_mode_before": client_mode_before,
+        "client_mode_after": client_mode_after,
+        "local_call_result": str(local_call_result),
+        "exception_type": exception_type,
+        "reason": str(reason or ""),
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+    }
+    path = _nifty_mode_lifecycle_path()
+    if path is not None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str) + "\n")
+        except Exception:
+            pass
+    return payload
+
+
 def _record_subscription_requested(tokens: Sequence[int]) -> None:
     global _SUBSCRIPTION_REQUESTED_TOKENS, _SUBSCRIPTION_REQUESTED_EPOCH
     normalized = {int(token) for token in (tokens or []) if int(token) > 0}
@@ -297,6 +385,9 @@ def _record_subscription_request_succeeded(tokens: Sequence[int]) -> None:
         _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS.update(normalized)
         for token in normalized:
             _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+            _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN[token] = int(_NIFTY_MODE_LIFECYCLE_SEQUENCE)
+            if token in _MODE_COMMAND_FINAL_FULL_TOKENS:
+                _MODE_COMMAND_FINAL_FULL_TOKENS.discard(token)
         _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = epoch
 
 
@@ -306,8 +397,24 @@ def _record_mode_request_succeeded(tokens: Sequence[int]) -> None:
     if normalized:
         epoch = float(now_utc_epoch())
         _MODE_REQUEST_SUCCEEDED_TOKENS.update(normalized)
+        _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_TOKENS.update(normalized)
         for token in normalized:
             _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+            _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+            mode_seq = int(_NIFTY_MODE_LIFECYCLE_SEQUENCE)
+            _LATEST_MODE_COMMAND_SEQUENCE_BY_TOKEN[token] = mode_seq
+            _MODE_COMMAND_FINAL_FULL_TOKENS.add(token)
+            _LATEST_MODE_COMMAND_BY_TOKEN[token] = {
+                "operation": "set_mode",
+                "requested_mode": "full",
+                "sequence_number": mode_seq,
+                "receipt_epoch": epoch,
+                "socket_generation": int(_SOCKET_GENERATION),
+                "feed_session_id": _ensure_feed_session_id(),
+                "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+                "local_call_result": "succeeded",
+                "broker_delivery_proven": False,
+            }
         _MODE_REQUEST_SUCCEEDED_EPOCH = epoch
 
 
@@ -460,6 +567,22 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "instrument_token": token_int,
             "subscription_requested_epoch": _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN.get(token_int),
             "subscribe_call_succeeded_epoch": _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "mode_command_dispatched_epoch": _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "mode_command_local_send_succeeded_epoch": _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "mode_delivery_observed_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "latest_subscribe_sequence_number": _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN.get(token_int),
+            "latest_mode_command_sequence_number": _LATEST_MODE_COMMAND_SEQUENCE_BY_TOKEN.get(token_int),
+            "final_current_generation_local_mode": (
+                "full" if token_int in _MODE_COMMAND_FINAL_FULL_TOKENS else None
+            ),
+            "final_current_generation_local_mode_is_full": token_int in _MODE_COMMAND_FINAL_FULL_TOKENS,
+            "latest_mode_command": dict(_LATEST_MODE_COMMAND_BY_TOKEN.get(token_int) or {}),
+            "post_mode_callback_count": int(_POST_MODE_CALLBACK_COUNT_BY_TOKEN.get(token_int) or 0),
+            "post_mode_quote_count": int(_POST_MODE_QUOTE_COUNT_BY_TOKEN.get(token_int) or 0),
+            "post_mode_full_count": int(_POST_MODE_FULL_COUNT_BY_TOKEN.get(token_int) or 0),
+            "first_post_mode_callback_epoch": _FIRST_POST_MODE_CALLBACK_EPOCH_BY_TOKEN.get(token_int),
+            "first_post_mode_quote_epoch": _FIRST_POST_MODE_QUOTE_EPOCH_BY_TOKEN.get(token_int),
+            "first_post_mode_full_epoch": _FIRST_POST_MODE_FULL_EPOCH_BY_TOKEN.get(token_int),
             "mode_request_succeeded_epoch": _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
             "first_callback_receipt_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
             "latest_callback_receipt_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
@@ -501,6 +624,10 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         "token_resolved_symbols": ordered,
         "subscription_requested_symbols": [symbol for symbol in ordered if symbol in requested],
         "subscription_request_succeeded_symbols": [symbol for symbol in ordered if symbol in request_succeeded],
+        "mode_command_dispatched_symbols": [symbol for symbol in ordered if int(expected[symbol]) in _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_TOKENS],
+        "mode_command_local_send_succeeded_symbols": [symbol for symbol in ordered if int(expected[symbol]) in _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_TOKENS],
+        "mode_delivery_observed_symbols": [symbol for symbol in ordered if symbol in full_payload],
+        "final_current_generation_full_mode_symbols": [symbol for symbol in ordered if int(expected[symbol]) in _MODE_COMMAND_FINAL_FULL_TOKENS],
         "mode_request_succeeded_symbols": [symbol for symbol in ordered if symbol in mode_requested],
         "live_tick_observed_symbols": [symbol for symbol in ordered if symbol in live_tick],
         "full_payload_observed_symbols": [symbol for symbol in ordered if symbol in full_payload],
@@ -1609,6 +1736,9 @@ def _record_subscription_request_succeeded(tokens: Sequence[int]) -> None:
         _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS.update(normalized)
         for token in normalized:
             _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+            _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN[token] = int(_NIFTY_MODE_LIFECYCLE_SEQUENCE)
+            if token in _MODE_COMMAND_FINAL_FULL_TOKENS:
+                _MODE_COMMAND_FINAL_FULL_TOKENS.discard(token)
         _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = epoch
 
 
@@ -1618,8 +1748,24 @@ def _record_mode_request_succeeded(tokens: Sequence[int]) -> None:
     if normalized:
         epoch = float(now_utc_epoch())
         _MODE_REQUEST_SUCCEEDED_TOKENS.update(normalized)
+        _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_TOKENS.update(normalized)
         for token in normalized:
             _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+            _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
+            mode_seq = int(_NIFTY_MODE_LIFECYCLE_SEQUENCE)
+            _LATEST_MODE_COMMAND_SEQUENCE_BY_TOKEN[token] = mode_seq
+            _MODE_COMMAND_FINAL_FULL_TOKENS.add(token)
+            _LATEST_MODE_COMMAND_BY_TOKEN[token] = {
+                "operation": "set_mode",
+                "requested_mode": "full",
+                "sequence_number": mode_seq,
+                "receipt_epoch": epoch,
+                "socket_generation": int(_SOCKET_GENERATION),
+                "feed_session_id": _ensure_feed_session_id(),
+                "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+                "local_call_result": "succeeded",
+                "broker_delivery_proven": False,
+            }
         _MODE_REQUEST_SUCCEEDED_EPOCH = epoch
 
 
@@ -1641,13 +1787,26 @@ def _reset_market_event_graph_generation_evidence() -> None:
     _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS = set()
     _MODE_REQUEST_SUCCEEDED_TOKENS = set()
     _FULL_PAYLOAD_OBSERVED_TOKENS = set()
+    _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_TOKENS.clear()
+    _MODE_COMMAND_FINAL_FULL_TOKENS.clear()
     _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN.clear()
     _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.clear()
     _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.clear()
+    _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_EPOCH_BY_TOKEN.clear()
+    _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN.clear()
+    _LATEST_MODE_COMMAND_SEQUENCE_BY_TOKEN.clear()
+    _LATEST_MODE_COMMAND_BY_TOKEN.clear()
     _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.clear()
     _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.clear()
     _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
     _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
+    _LATEST_OBSERVATION_PACKET_BY_TOKEN.clear()
+    _POST_MODE_CALLBACK_COUNT_BY_TOKEN.clear()
+    _POST_MODE_QUOTE_COUNT_BY_TOKEN.clear()
+    _POST_MODE_FULL_COUNT_BY_TOKEN.clear()
+    _FIRST_POST_MODE_CALLBACK_EPOCH_BY_TOKEN.clear()
+    _FIRST_POST_MODE_QUOTE_EPOCH_BY_TOKEN.clear()
+    _FIRST_POST_MODE_FULL_EPOCH_BY_TOKEN.clear()
     _SUBSCRIPTION_REQUESTED_EPOCH = None
     _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = None
     _MODE_REQUEST_SUCCEEDED_EPOCH = None
@@ -1690,6 +1849,22 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "instrument_token": token_int,
             "subscription_requested_epoch": _SUBSCRIPTION_REQUESTED_EPOCH_BY_TOKEN.get(token_int),
             "subscribe_call_succeeded_epoch": _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "mode_command_dispatched_epoch": _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "mode_command_local_send_succeeded_epoch": _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
+            "mode_delivery_observed_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
+            "latest_subscribe_sequence_number": _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN.get(token_int),
+            "latest_mode_command_sequence_number": _LATEST_MODE_COMMAND_SEQUENCE_BY_TOKEN.get(token_int),
+            "final_current_generation_local_mode": (
+                "full" if token_int in _MODE_COMMAND_FINAL_FULL_TOKENS else None
+            ),
+            "final_current_generation_local_mode_is_full": token_int in _MODE_COMMAND_FINAL_FULL_TOKENS,
+            "latest_mode_command": dict(_LATEST_MODE_COMMAND_BY_TOKEN.get(token_int) or {}),
+            "post_mode_callback_count": int(_POST_MODE_CALLBACK_COUNT_BY_TOKEN.get(token_int) or 0),
+            "post_mode_quote_count": int(_POST_MODE_QUOTE_COUNT_BY_TOKEN.get(token_int) or 0),
+            "post_mode_full_count": int(_POST_MODE_FULL_COUNT_BY_TOKEN.get(token_int) or 0),
+            "first_post_mode_callback_epoch": _FIRST_POST_MODE_CALLBACK_EPOCH_BY_TOKEN.get(token_int),
+            "first_post_mode_quote_epoch": _FIRST_POST_MODE_QUOTE_EPOCH_BY_TOKEN.get(token_int),
+            "first_post_mode_full_epoch": _FIRST_POST_MODE_FULL_EPOCH_BY_TOKEN.get(token_int),
             "mode_request_succeeded_epoch": _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
             "first_callback_receipt_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
             "latest_callback_receipt_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
@@ -1731,6 +1906,10 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         "token_resolved_symbols": ordered,
         "subscription_requested_symbols": [symbol for symbol in ordered if symbol in requested],
         "subscription_request_succeeded_symbols": [symbol for symbol in ordered if symbol in request_succeeded],
+        "mode_command_dispatched_symbols": [symbol for symbol in ordered if int(expected[symbol]) in _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_TOKENS],
+        "mode_command_local_send_succeeded_symbols": [symbol for symbol in ordered if int(expected[symbol]) in _MODE_COMMAND_LOCAL_SEND_SUCCEEDED_TOKENS],
+        "mode_delivery_observed_symbols": [symbol for symbol in ordered if symbol in full_payload],
+        "final_current_generation_full_mode_symbols": [symbol for symbol in ordered if int(expected[symbol]) in _MODE_COMMAND_FINAL_FULL_TOKENS],
         "mode_request_succeeded_symbols": [symbol for symbol in ordered if symbol in mode_requested],
         "live_tick_observed_symbols": [symbol for symbol in ordered if symbol in live_tick],
         "full_payload_observed_symbols": [symbol for symbol in ordered if symbol in full_payload],
@@ -5735,8 +5914,57 @@ def ensure_subscribed_tokens(tokens: list[int], reason: str = "on_demand", symbo
         if not new_tokens:
             return True
         try:
+            client_mode_before = _client_mode_for_token(_KITE_TICKER, 256265)
+            _record_ws_subscription_operation(
+                _KITE_TICKER,
+                new_tokens,
+                callsite="ensure_subscribed_tokens",
+                operation="subscribe",
+                reason=reason,
+                local_call_result="dispatched",
+                client_mode_before=client_mode_before,
+                socket_generation=int(_SOCKET_GENERATION),
+            )
             _KITE_TICKER.subscribe(new_tokens)
+            _record_subscription_request_succeeded(new_tokens)
+            client_mode_after_subscribe = _client_mode_for_token(_KITE_TICKER, 256265)
+            _record_ws_subscription_operation(
+                _KITE_TICKER,
+                new_tokens,
+                callsite="ensure_subscribed_tokens",
+                operation="subscribe",
+                reason=reason,
+                local_call_result="succeeded",
+                client_mode_before=client_mode_before,
+                client_mode_after=client_mode_after_subscribe,
+                socket_generation=int(_SOCKET_GENERATION),
+            )
+            client_mode_before_mode = _client_mode_for_token(_KITE_TICKER, 256265)
+            _record_ws_subscription_operation(
+                _KITE_TICKER,
+                new_tokens,
+                callsite="ensure_subscribed_tokens",
+                operation="set_mode",
+                requested_mode="full",
+                reason=reason,
+                local_call_result="dispatched",
+                client_mode_before=client_mode_before_mode,
+                socket_generation=int(_SOCKET_GENERATION),
+            )
             _KITE_TICKER.set_mode(_KITE_TICKER.MODE_FULL, new_tokens)
+            _record_mode_request_succeeded(new_tokens)
+            _record_ws_subscription_operation(
+                _KITE_TICKER,
+                new_tokens,
+                callsite="ensure_subscribed_tokens",
+                operation="set_mode",
+                requested_mode="full",
+                reason=reason,
+                local_call_result="succeeded",
+                client_mode_before=client_mode_before_mode,
+                client_mode_after=_client_mode_for_token(_KITE_TICKER, 256265),
+                socket_generation=int(_SOCKET_GENERATION),
+            )
             _LAST_TOKENS = list(existing.union(set(new_tokens)))
             if symbol:
                 for tok in new_tokens:
@@ -5744,6 +5972,17 @@ def ensure_subscribed_tokens(tokens: list[int], reason: str = "on_demand", symbo
             _log_ws("FEED_SUBSCRIBE_OK", {"reason": reason, "tokens": len(new_tokens)})
             return True
         except Exception as exc:
+            _record_ws_subscription_operation(
+                _KITE_TICKER,
+                new_tokens,
+                callsite="ensure_subscribed_tokens",
+                operation="subscribe_or_set_mode",
+                requested_mode="full",
+                reason=reason,
+                local_call_result="exception",
+                exception_type=type(exc).__name__,
+                socket_generation=int(_SOCKET_GENERATION),
+            )
             _log_ws("FEED_SUBSCRIBE_ERROR", {"reason": reason, "error": str(exc)})
             return False
 
@@ -6044,6 +6283,29 @@ def on_ticks(ws, ticks):
                 reconnect_generation=int(feed_identity.get("reconnect_generation") or 0),
                 has_depth=has_depth,
             )
+            final_local_full = int(token_int) in _MODE_COMMAND_FINAL_FULL_TOKENS
+            if mode_epoch is not None and float(now_epoch) > float(mode_epoch):
+                _POST_MODE_CALLBACK_COUNT_BY_TOKEN[int(token_int)] = int(
+                    _POST_MODE_CALLBACK_COUNT_BY_TOKEN.get(int(token_int)) or 0
+                ) + 1
+                _FIRST_POST_MODE_CALLBACK_EPOCH_BY_TOKEN.setdefault(int(token_int), float(now_epoch))
+                if is_full_payload:
+                    _POST_MODE_FULL_COUNT_BY_TOKEN[int(token_int)] = int(
+                        _POST_MODE_FULL_COUNT_BY_TOKEN.get(int(token_int)) or 0
+                    ) + 1
+                    _FIRST_POST_MODE_FULL_EPOCH_BY_TOKEN.setdefault(int(token_int), float(now_epoch))
+                else:
+                    _POST_MODE_QUOTE_COUNT_BY_TOKEN[int(token_int)] = int(
+                        _POST_MODE_QUOTE_COUNT_BY_TOKEN.get(int(token_int)) or 0
+                    ) + 1
+                    _FIRST_POST_MODE_QUOTE_EPOCH_BY_TOKEN.setdefault(int(token_int), float(now_epoch))
+            packet_detail["final_current_generation_local_mode_is_full"] = bool(final_local_full)
+            packet_detail["latest_subscribe_sequence_number"] = _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN.get(int(token_int))
+            packet_detail["latest_mode_command_sequence_number"] = _LATEST_MODE_COMMAND_SEQUENCE_BY_TOKEN.get(int(token_int))
+            if is_full_payload and not final_local_full:
+                is_full_payload = False
+                packet_detail["structured_reason"] = "MODE_COMMAND_SUPERSEDED_BY_SUBSCRIBE"
+                packet_kind = "INDEX_QUOTE" if instrument_class.upper() == "INDEX" else "NSE_EQUITY_QUOTE"
             _LATEST_OBSERVATION_PACKET_BY_TOKEN[int(token_int)] = dict(packet_detail)
             try:
                 record_live_source_shadow_tick(
@@ -6866,10 +7128,57 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         try:
             if to_subscribe:
                 _record_subscription_requested(to_subscribe)
+                client_mode_before = _client_mode_for_token(ws, 256265)
+                _record_ws_subscription_operation(
+                    ws,
+                    to_subscribe,
+                    callsite="_apply_subscription_delta",
+                    operation="subscribe",
+                    reason=reason,
+                    local_call_result="dispatched",
+                    client_mode_before=client_mode_before,
+                    socket_generation=socket_generation,
+                )
                 ws.subscribe(to_subscribe)
                 _record_subscription_request_succeeded(to_subscribe)
+                client_mode_after_subscribe = _client_mode_for_token(ws, 256265)
+                _record_ws_subscription_operation(
+                    ws,
+                    to_subscribe,
+                    callsite="_apply_subscription_delta",
+                    operation="subscribe",
+                    reason=reason,
+                    local_call_result="succeeded",
+                    client_mode_before=client_mode_before,
+                    client_mode_after=client_mode_after_subscribe,
+                    socket_generation=socket_generation,
+                )
+                client_mode_before_mode = _client_mode_for_token(ws, 256265)
+                _record_ws_subscription_operation(
+                    ws,
+                    to_subscribe,
+                    callsite="_apply_subscription_delta",
+                    operation="set_mode",
+                    requested_mode=str(getattr(ws, "MODE_FULL", "full")),
+                    reason=reason,
+                    local_call_result="dispatched",
+                    client_mode_before=client_mode_before_mode,
+                    socket_generation=socket_generation,
+                )
                 ws.set_mode(ws.MODE_FULL, to_subscribe)
                 _record_mode_request_succeeded(to_subscribe)
+                _record_ws_subscription_operation(
+                    ws,
+                    to_subscribe,
+                    callsite="_apply_subscription_delta",
+                    operation="set_mode",
+                    requested_mode=str(getattr(ws, "MODE_FULL", "full")),
+                    reason=reason,
+                    local_call_result="succeeded",
+                    client_mode_before=client_mode_before_mode,
+                    client_mode_after=_client_mode_for_token(ws, 256265),
+                    socket_generation=socket_generation,
+                )
         except Exception as exc:
             _RUNTIME_STATE = "SUBSCRIBE_FAILED"
             _LAST_RUNTIME_ERROR = f"subscribe_delta:{exc}"[:1000]
@@ -6919,9 +7228,45 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         if _LAST_TOKENS:
             try:
+                client_mode_before_final = _client_mode_for_token(ws, 256265)
+                _record_ws_subscription_operation(
+                    ws,
+                    _LAST_TOKENS,
+                    callsite="_apply_subscription_delta:final_full",
+                    operation="set_mode",
+                    requested_mode=str(getattr(ws, "MODE_FULL", "full")),
+                    reason=reason,
+                    local_call_result="dispatched",
+                    client_mode_before=client_mode_before_final,
+                    socket_generation=socket_generation,
+                )
                 ws.set_mode(ws.MODE_FULL, _LAST_TOKENS)
-            except Exception:
-                pass
+                _record_mode_request_succeeded(_LAST_TOKENS)
+                _record_ws_subscription_operation(
+                    ws,
+                    _LAST_TOKENS,
+                    callsite="_apply_subscription_delta:final_full",
+                    operation="set_mode",
+                    requested_mode=str(getattr(ws, "MODE_FULL", "full")),
+                    reason=reason,
+                    local_call_result="succeeded",
+                    client_mode_before=client_mode_before_final,
+                    client_mode_after=_client_mode_for_token(ws, 256265),
+                    socket_generation=socket_generation,
+                )
+            except Exception as exc:
+                _record_ws_subscription_operation(
+                    ws,
+                    _LAST_TOKENS,
+                    callsite="_apply_subscription_delta:final_full",
+                    operation="set_mode",
+                    requested_mode=str(getattr(ws, "MODE_FULL", "full")),
+                    reason=reason,
+                    local_call_result="exception",
+                    exception_type=type(exc).__name__,
+                    client_mode_before=client_mode_before_final,
+                    socket_generation=socket_generation,
+                )
         _log_ws(
             "FEED_REBALANCE_APPLIED",
             {
@@ -6972,12 +7317,59 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             }
             _log_ws("FEED_SUBSCRIBE_REQUESTED", {**event_base, "result": "requested"})
             _record_subscription_requested(desired)
+            client_mode_before = _client_mode_for_token(ws, 256265)
+            _record_ws_subscription_operation(
+                ws,
+                desired,
+                callsite="_resubscribe_full",
+                operation="subscribe",
+                reason=reason,
+                local_call_result="dispatched",
+                client_mode_before=client_mode_before,
+                socket_generation=socket_generation,
+            )
             ws.subscribe(desired)
             _record_subscription_request_succeeded(desired)
+            client_mode_after_subscribe = _client_mode_for_token(ws, 256265)
+            _record_ws_subscription_operation(
+                ws,
+                desired,
+                callsite="_resubscribe_full",
+                operation="subscribe",
+                reason=reason,
+                local_call_result="succeeded",
+                client_mode_before=client_mode_before,
+                client_mode_after=client_mode_after_subscribe,
+                socket_generation=socket_generation,
+            )
             _log_ws("FEED_SUBSCRIBE_CALLBACK_APPLIED", {**event_base, "result": "applied"})
             _log_ws("FEED_MODE_FULL_REQUESTED", {**event_base, "result": "requested"})
+            client_mode_before_mode = _client_mode_for_token(ws, 256265)
+            _record_ws_subscription_operation(
+                ws,
+                desired,
+                callsite="_resubscribe_full",
+                operation="set_mode",
+                requested_mode=str(getattr(ws, "MODE_FULL", "full")),
+                reason=reason,
+                local_call_result="dispatched",
+                client_mode_before=client_mode_before_mode,
+                socket_generation=socket_generation,
+            )
             ws.set_mode(ws.MODE_FULL, desired)
             _record_mode_request_succeeded(desired)
+            _record_ws_subscription_operation(
+                ws,
+                desired,
+                callsite="_resubscribe_full",
+                operation="set_mode",
+                requested_mode=str(getattr(ws, "MODE_FULL", "full")),
+                reason=reason,
+                local_call_result="succeeded",
+                client_mode_before=client_mode_before_mode,
+                client_mode_after=_client_mode_for_token(ws, 256265),
+                socket_generation=socket_generation,
+            )
             _log_ws("FEED_MODE_FULL_CALLBACK_APPLIED", {**event_base, "result": "applied"})
         _record_feed_restart_verify_subscribe(now_epoch=float(now_utc_epoch()))
         _LAST_TOKENS[:] = desired

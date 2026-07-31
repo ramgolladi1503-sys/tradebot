@@ -339,6 +339,8 @@ class LiveSourceRuntimeBridge:
                 return False, "MISSING_POST_REQUEST_TICK", (symbol,)
             if mode_success is None:
                 return False, "MODE_REQUEST_FAILED", (symbol,)
+            if not bool(row.get("final_current_generation_local_mode_is_full")):
+                return False, "MODE_COMMAND_SUPERSEDED_BY_SUBSCRIBE", (symbol,)
             if full_first is None or full_first < mode_success:
                 latest_callback = _coerce_float(row.get("latest_callback_receipt_epoch"))
                 if latest_callback is None or latest_callback <= mode_success:
