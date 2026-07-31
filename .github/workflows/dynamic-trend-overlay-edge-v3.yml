@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: dynamic-trend-overlay-edge-v3-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   research:
     runs-on: ubuntu-latest
@@ -62,7 +66,7 @@ jobs:
           mkdir -p runtime/research/dynamic_trend_overlay_edge_v3
           cp /tmp/run_dynamic_trend_overlay_edge_v3.py runtime/research/dynamic_trend_overlay_edge_v3/frozen_runner.py
           sha256sum /tmp/run_dynamic_trend_overlay_edge_v3.py | tee runtime/research/dynamic_trend_overlay_edge_v3/frozen_runner.sha256
-          python /tmp/run_dynamic_trend_overlay_edge_v3.py --repo-root . 2>&1 | tee runtime/research/dynamic_trend_overlay_edge_v3/workflow.log
+          python /tmp/run_dynamic_trend_overlay_edge_v3.py --repo-root . --output-root runtime/research/dynamic_trend_overlay_edge_v3 2>&1 | tee runtime/research/dynamic_trend_overlay_edge_v3/workflow.log
 
       - name: Print result
         if: always()
