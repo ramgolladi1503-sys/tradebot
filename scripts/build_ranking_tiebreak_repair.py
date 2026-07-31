@@ -38,10 +38,10 @@ def main() -> int:
     )
 '''
     count = text.count(old)
-    if count != 1:
+    if count != 2:
         raise RuntimeError(f"ranking_tiebreak_match_mismatch:{count}")
-    path.write_text(text.replace(old, new, 1), encoding="utf-8")
-    print("ranking_tiebreak_repair_built")
+    path.write_text(text.replace(old, new), encoding="utf-8")
+    print("ranking_tiebreak_repair_built:2")
     return 0
 
 
