@@ -155,6 +155,10 @@ def test_enabled_live_identity_sets_exact_child_environment(tmp_path):
     assert env["UNIFIED_LIVE_VALIDATION_PR748_756_COMPOSITION_SHA"] == "3" * 64
     assert env["TRADEBOT_READ_ONLY"] == "true"
     assert env["MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE"] == "true"
+    assert env["MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH"] == (
+        "runtime/reference/market_event_graph/"
+        "nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json"
+    )
 
 
 def test_process_level_smoke_launches_one_child_records_and_seals(tmp_path):

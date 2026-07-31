@@ -27,6 +27,11 @@ from core.unified_live_validation_pr748_756.campaign_contract import (
 from core.unified_live_validation_pr748_756.recorder import AppendOnlyRecorder
 from core.unified_live_validation_pr748_756.seal import seal_evidence_root
 
+LIVE_UNIVERSE_PATH = (
+    "runtime/reference/market_event_graph/"
+    "nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json"
+)
+
 
 @dataclass(frozen=True)
 class RuntimeLaunchResult:
@@ -44,6 +49,7 @@ def build_child_environment(identity: CampaignIdentity, base_env: dict[str, str]
     env[ENABLE_ENV] = "true"
     env["TRADEBOT_READ_ONLY"] = "true"
     env["MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE"] = "true"
+    env["MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH"] = LIVE_UNIVERSE_PATH
     env[RUN_ID_ENV] = identity.run_id
     env[EVIDENCE_ROOT_ENV] = identity.evidence_root
     env[COMPOSITION_SHA_ENV] = identity.composition_manifest_sha

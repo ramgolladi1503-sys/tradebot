@@ -99,6 +99,7 @@ The governed launcher now sets:
 
 ```text
 MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE=true
+MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH=runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json
 ```
 
 in the supervised child environment, alongside the existing campaign and read-only flags. This activates PR #749's read-only live constituent-source path without changing thresholds, feed gates, validation rules, order behavior, broker behavior, or strategy parameters.
