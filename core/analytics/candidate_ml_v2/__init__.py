@@ -17,6 +17,7 @@ from .dataset import (
     validate_candidate_dataset,
 )
 from .evaluation import counterfactual_shadow_report, drift_report, population_stability_index
+from .features import build_temporal_candidate_features
 from .model import CandidateMLBundle, bundle_manifest, fit_candidate_ml
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "PredictionStatus",
     "build_candidate_dataset",
     "build_candidate_row",
+    "build_temporal_candidate_features",
     "bundle_manifest",
     "chronological_split",
     "counterfactual_shadow_report",
