@@ -2,85 +2,98 @@
 
 ## Status
 
-This component is an offline, read-only evidence system. It is not an execution authority and it does not modify TradeBuilder, Orchestrator, ranking, strategy thresholds, broker, feed, risk, order, or live configuration.
+Candidate ML V2 is an offline, read-only evidence and certification system. It has no production inference, ranking, sizing, broker, risk, order, or execution authority.
 
 ```text
 read_only=true
 is_order_action=false
 broker_api_called=false
 allowed_for_live_execution=false
+allowed_for_paper_execution=false
 append=false
 ```
 
 ## Objective
 
-Train and evaluate machine-learning models on one row per emitted TradeBot candidate, using only information available at the candidate decision timestamp and outcomes resolved later by the existing analytics outcome-replay boundary.
+Evaluate whether causal context available when a frozen TradeBot strategy emits a candidate improves target-before-stop selection and post-cost expectancy over the rule-only candidate stream.
 
-The component answers a narrow question:
+This is deliberately narrower than predicting the next price. It does not claim that ML creates an edge, that a probability is executable, or that complexity can compensate for weak data.
 
-> Given that a frozen strategy emitted a candidate, does the historical candidate context improve the probability and post-cost value estimate of target-before-stop outcomes?
+## Causal feature construction
 
-It does not claim that raw candles alone predict the market, that ML discovers an edge, or that a probability is executable.
+`build_temporal_candidate_features()` derives features only from rows at or before the decision timestamp. A supplied future row is rejected rather than silently trimmed.
 
-## Implemented contracts
-
-### Causal temporal feature construction
-
-`build_temporal_candidate_features()` derives deterministic features from completed historical rows at or before the decision timestamp. It rejects any supplied future row instead of silently trimming it.
-
-The feature set includes:
+It constructs:
 
 - underlying returns over 1, 3, and 5 rows;
-- recent underlying volatility, relative volume, and ATR-normalised VWAP distance;
-- weighted constituent breadth up/down, weighted mean return, dispersion, acceleration, leadership concentration, and constituent count;
+- recent underlying volatility and relative volume;
+- ATR-normalised distance from VWAP;
+- weighted constituent breadth up/down and weighted mean return;
+- breadth dispersion and acceleration;
+- leadership concentration and constituent count;
 - index-versus-breadth divergence;
-- option returns, acceleration, relative volume, OI change, bid/ask spread, and quote age;
-- mirror-wing response and same-strike response gap;
-- minutes to expiry and exact source timestamp provenance.
+- option return over 1, 3, and 5 rows;
+- option acceleration and relative volume;
+- option OI change, bid/ask spread, and quote age;
+- mirror-wing response and response gap;
+- minutes to expiry;
+- exact decision, feature-cutoff, and maximum source timestamps.
 
-These are deterministic measurements, not trading rules or confidence heuristics.
+These are deterministic measurements, not hand-written confidence scores.
 
-### Candidate-level temporal dataset
+## Candidate-level dataset
 
-`build_candidate_dataset()` joins TradeBot intent events to replayed outcomes by event ID or trade key. Every row records the decision timestamp, feature cutoff, later outcome resolution, strategy and instrument identity, causal numeric event metrics, target-before-stop label, executable-feasibility truth, MFE, MAE, and post-friction R.
+`build_candidate_dataset()` joins recorded candidate events to later outcome-replay records by event ID or trade key. Each training row contains candidate identity, strategy and instrument context, causal features, decision and resolution timestamps, executable-feasibility truth, and evaluation-only outcomes.
 
-The dataset fails closed when the outcome predates the decision, the feature cutoff exceeds the decision, rows are not chronological, or any feature key contains future/outcome/target/P&L/exit/label semantics.
-
-### Outcome labels
-
-Primary target:
+Primary label:
 
 ```text
-1 = replay outcome hit_target and exec_feasible=true
+1 = outcome is hit_target and exec_feasible=true
 0 = otherwise
 ```
 
-Stop-hit, future MFE, future MAE, and future net R are retained only for evaluation and are excluded from model features.
+Future MFE, MAE, net R, stop status, resolution timestamp, target, P&L, and outcome fields are excluded from model features. Feature keys containing future or outcome semantics fail closed.
 
-### Chronological validation
+## Immutable source provenance
 
-- whole-session chronological train/validation split;
-- configurable row purge before validation;
-- expanding purged walk-forward split helper;
-- minimum training, validation, positive-class, and per-strategy support gates;
-- no random row shuffle.
+Before reading the data, `build_input_manifest()` records for both events and outcomes:
 
-### Model comparison and calibration
+- resolved path;
+- SHA-256;
+- byte size;
+- record count;
+- file format;
+- code SHA supplied to the campaign;
+- a semantic source-contract hash.
 
-Each model unit contains:
+Source mutation, unsupported format, symlink input, and path escape fail closed. `verify_input_manifest()` reopens and rehashes the physical files.
 
-- standardised, class-balanced logistic regression baseline;
-- regularised histogram gradient boosting classifier;
-- validation-only Platt calibration for tree probability;
-- ensemble probability only when the models agree;
-- cost-aware probability threshold selected on a separate validation slice;
-- Brier score, log loss, and ROC AUC where defined.
+## Locked holdout
 
-A global model is always attempted. Strategy-specific models are trained only with sufficient independent support.
+`seal_locked_holdout()` separates the latest chronological session block before model certification. It writes a dedicated parquet file plus a sidecar containing physical and semantic hashes, row count, session count, and date boundaries.
 
-### Abstention
+The holdout cannot be opened without the exact acknowledgement token:
 
-Prediction returns an explicit state instead of substituting a neutral-looking probability:
+```text
+OPEN_CANDIDATE_ML_V2_LOCKED_HOLDOUT
+```
+
+Research certification reports `holdout_metrics_consumed=false`. Opening the holdout is a separate explicit act after research gates pass; the ordinary training and certification path does not consume it.
+
+## Models and calibration
+
+Every model unit compares:
+
+- standardised class-balanced logistic regression;
+- regularised histogram gradient boosting.
+
+The tree probability is calibrated using a validation-only Platt calibrator. An ensemble probability is emitted only when the two models agree within the configured bound. Per-strategy models require independent support; otherwise the global model or an abstention state is used.
+
+Metrics include Brier score, log loss, ROC AUC where defined, expected calibration error during certification, selected support, post-cost expectancy, and lift over the accept-all rule-only stream.
+
+## Abstention
+
+The model never substitutes a neutral-looking probability for missing or unreliable evidence. It returns one of:
 
 - `PREDICTION_VALID`;
 - `MODEL_UNAVAILABLE`;
@@ -90,31 +103,53 @@ Prediction returns an explicit state instead of substituting a neutral-looking p
 - `MODEL_DISAGREEMENT`;
 - `BELOW_VALUE_THRESHOLD`.
 
-Even `PREDICTION_VALID` remains shadow evidence and has no execution authority.
+Even `PREDICTION_VALID` remains offline shadow evidence.
 
-### Cost-aware value
+## Cost-aware decision value
 
 ```text
-P(win) * average_win_R - (1 - P(win)) * average_loss_R - cost_R
+expected_value_R = P(win) * average_win_R
+                 - (1 - P(win)) * average_loss_R
+                 - cost_R
 ```
 
-Threshold selection penalises unstable selected-return dispersion and requires minimum selected support.
+The probability threshold is selected on a separate validation slice and penalises unstable selected-return dispersion. Accuracy alone is not an acceptance metric.
 
-### Explanations
+## Certification
 
-The logistic baseline records the largest positive and negative standardised feature contributions. These are diagnostics, not causal explanations.
+`certify_candidate_ml()` runs nested, purged, chronological walk-forward folds. For every fold, the inner period trains and calibrates the model and the later period remains out of sample.
 
-### Drift quarantine
+Certification includes:
 
-`drift_report()` calculates population stability index per feature:
+- lift over the unfiltered rule-only candidate stream;
+- selected support per fold;
+- positive-expectancy fold fraction;
+- expected calibration error;
+- Brier score and ROC AUC where defined;
+- top-five winner concentration;
+- best-session concentration;
+- deterministic label-permutation control;
+- one-row delayed-feature control;
+- feature-removal ablations.
 
-- `STABLE` below 0.10 maximum PSI;
-- `DEGRADED` from 0.10 to below 0.25;
-- `QUARANTINE_REQUIRED` at or above 0.25.
+Possible verdicts:
 
-No automatic retraining or promotion exists.
+```text
+INSUFFICIENT_EVIDENCE
+NO_OUT_OF_SAMPLE_ML_LIFT
+ML_EVIDENCE_QUARANTINED
+READY_FOR_LOCKED_HOLDOUT
+```
 
-### Counterfactual shadow analysis
+None of these verdicts grants PAPER or LIVE authority.
+
+## Drift and counterfactuals
+
+`drift_report()` computes feature PSI:
+
+- below 0.10: `STABLE`;
+- 0.10 to below 0.25: `DEGRADED`;
+- 0.25 or above: `QUARANTINE_REQUIRED`.
 
 `counterfactual_shadow_report()` keeps actual and hypothetical decisions separate:
 
@@ -124,7 +159,11 @@ No automatic retraining or promotion exists.
 - actual reject / ML reject;
 - unresolved.
 
-It reports counts and future net-R summaries without rewriting actual history.
+No counterfactual result rewrites actual execution history.
+
+## Explanations
+
+The logistic baseline records the largest positive and negative standardised feature contributions for candidate diagnostics. These are not presented as causal explanations.
 
 ## CLI
 
@@ -132,38 +171,33 @@ It reports counts and future net-R summaries without rewriting actual history.
 PYTHONPATH=. python scripts/run_candidate_ml_v2.py \
   --events path/to/trade_intent_events.jsonl \
   --outcomes path/to/outcome_replay.json \
+  --allowed-input-root path/to/frozen_inputs \
+  --code-sha <immutable_sha> \
   --output-root research/candidate_ml_v2/run_001
 ```
 
 Outputs:
 
-- `candidate_ml_dataset.parquet`;
+- `candidate_ml_input_manifest.json`;
+- `candidate_ml_full_join.parquet`;
+- `candidate_ml_research_dataset.parquet`;
+- `candidate_ml_holdout_LOCKED.parquet` and hash sidecar;
+- `candidate_ml_certification.json`;
 - `candidate_ml_bundle.joblib`;
 - `candidate_ml_manifest.json`.
 
-The CLI consumes recorded evidence only. It does not call a broker or market-data provider.
+The CLI uses recorded files only and performs no provider, broker, or order call.
 
 ## Deliberately excluded
 
-- runtime/live scoring integration;
-- candidate ranking authority;
-- capital allocation;
+- production or live model wiring;
+- ranking and capital-allocation authority;
 - strategy threshold changes;
 - automatic online retraining;
 - LSTM, Transformer, or reinforcement learning;
-- profitability or structural-edge claims;
+- synthetic profitability evidence;
 - paper/live promotion.
 
-## Promotion gate
+## Promotion boundary
 
-A separate future PR may add shadow runtime scoring only after immutable real evidence proves:
-
-1. no future-data leakage;
-2. sufficient support across sessions and strategies;
-3. positive walk-forward lift over the rule-only baseline after costs;
-4. probability calibration stability;
-5. no winner or session concentration failure;
-6. delayed-entry and feature-ablation controls;
-7. drift and missing-feature abstention;
-8. exact same-SHA artifact and code provenance;
-9. no execution authority.
+A separate shadow-runtime PR is allowed only after an immutable real TradeBot candidate/outcome corpus demonstrates stable, positive out-of-sample post-cost lift, acceptable calibration, adequate support, control survival, low concentration, feature availability, and drift-safe behaviour. A failed gate means quarantine, not tuning against the same holdout.
