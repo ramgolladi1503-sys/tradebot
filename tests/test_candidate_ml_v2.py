@@ -66,10 +66,10 @@ def test_dataset_and_purged_walk_forward_are_chronological():
     df=make_dataset()
     mod.validate_candidate_dataset(df)
     splits=mod.purged_walk_forward_splits(df,n_splits=4,purge_rows=3,min_train_sessions=4)
-    assert len(splits)==4
+    assert sum(1 for _ in splits)==4
     for train_idx,test_idx in splits:
         assert train_idx.max()<test_idx.min()
-        assert len(train_idx)>0 and len(test_idx)>0
+        assert train_idx.size>0 and test_idx.size>0
 
 
 def test_fit_predict_calibration_abstention_and_manifest(tmp_path):
@@ -153,9 +153,10 @@ def test_locked_holdout_is_durable_and_requires_acknowledgement(tmp_path):
     df=make_dataset(rows_per_session=20,sessions=15)
     research,seal=mod.seal_locked_holdout(df,holdout_path=tmp_path/'holdout.parquet',holdout_fraction=0.20)
     mod.verify_locked_holdout(seal)
-    assert len(research)+seal.rows==len(df)
+    assert research.shape[0]+seal.rows==df.shape[0]
     assert seal.acknowledgement_imported is False
-    assert seal.allowed_for_live_execution is False
+    assert seal.to_dict()['allowed_for_live_execution'] is False
+    assert seal.to_dict()['allowed_for_paper_execution'] is False
     with pytest.raises(PermissionError,match='acknowledgement_invalid'):
         mod.open_locked_holdout(seal,acknowledgement='NO')
     opened=mod.open_locked_holdout(seal,acknowledgement=mod.HOLDOUT_ACKNOWLEDGEMENT)
