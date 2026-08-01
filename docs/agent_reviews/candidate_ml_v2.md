@@ -17,7 +17,7 @@ acceptance_proof: listed below
 ## What Changed
 
 - Added causal feature construction from completed underlying, constituent, option, and mirror-wing rows.
-- Added underlying returns/volatility/relative volume/VWAP distance; weighted breadth, dispersion, acceleration and concentration; option returns, spread, quote age, OI/volume and mirror-response features.
+- Added underlying returns, volatility, relative volume and VWAP distance; weighted breadth, dispersion, acceleration and concentration; option returns, spread, quote age, OI, volume and mirror-response features.
 - Added a candidate-level temporal dataset builder over recorded intent events and outcome-replay records.
 - Added strict future-row, future-field, timestamp, chronology, support, and feature-completeness gates.
 - Added chronological validation and purged walk-forward split contracts.
@@ -40,9 +40,63 @@ The existing production predictor can load and score models, but model existence
 - PSI detects distribution shift but does not prove whether that shift is harmful.
 - Logistic feature contributions are diagnostics, not causal explanations.
 
-## What Was Not Touched
+## Scope Guard
+
+The changed-path scope is limited to:
+
+```text
+core/analytics/candidate_ml_v2/**
+scripts/run_candidate_ml_v2.py
+tests/test_candidate_ml_v2.py
+docs/architecture/candidate_ml_v2.md
+docs/agent_reviews/candidate_ml_v2.md
+.github/workflows/candidate-ml-v2.yml
+```
 
 No strategy, threshold, TradeBuilder, Orchestrator, ranking, capital selection, feed, broker, order, execution, risk, dashboard, credential, live launcher, or live configuration file is modified. No broker API or order action is present.
+
+## Grill Me Review
+
+The implementation was reviewed for fake progress and overclaiming. The first version exposed required feature names but did not derive the cross-market temporal values. That gap was treated as incomplete implementation and repaired by adding a causal feature constructor over underlying, constituent, option, and mirror-wing histories. Remaining criticism is explicit: this code has not yet demonstrated real out-of-sample lift on an immutable candidate/outcome corpus, so it must remain shadow-only and unmerged.
+
+## Hermes Review
+
+The architecture separates four responsibilities:
+
+1. deterministic feature construction from completed historical rows;
+2. candidate/outcome dataset assembly;
+3. chronological model training, calibration, and abstaining inference;
+4. offline drift and counterfactual evaluation.
+
+Production inference, ranking, risk and execution are deliberately outside the dependency graph. The public contracts carry exact timestamps, schema version, semantic dataset hash, and the no-live-authority safety fields.
+
+## GSD Review
+
+The patch is additive and path-scoped. Future-data keys and future timestamps fail closed. Training does not randomly shuffle rows. Logistic regression provides a simple baseline, while the tree model must agree within a configured bound before an ensemble probability is emitted. Missing, unsupported, out-of-distribution, unavailable, and negative-post-cost cases return named states rather than a fabricated probability.
+
+## QA / Safety Review
+
+Behavioral tests cover:
+
+- future/outcome feature-name rejection;
+- outcome-before-decision and feature-timestamp ordering;
+- chronological purged folds;
+- model training, calibration, serialization, and artifact safety;
+- incomplete-feature and OOD abstention;
+- drift quarantine;
+- actual-versus-counterfactual separation;
+- causal cross-market feature calculations;
+- supplied future option-row rejection.
+
+The focused CI also scans the new runtime-independent paths for broker and order capability. Every generated contract preserves:
+
+```text
+read_only=true
+is_order_action=false
+broker_api_called=false
+allowed_for_live_execution=false
+append=false
+```
 
 ## Acceptance Proof
 
@@ -54,31 +108,30 @@ pytest -q tests/test_candidate_ml_v2.py
 5 passed
 ```
 
-The focused tests prove:
+The final-head dedicated `Candidate ML V2` GitHub Actions workflow passed after the causal feature layer was added. Repository-wide final-head workflows remain authoritative for merge readiness.
 
-1. future/outcome feature names fail closed;
-2. target/stop outcome construction preserves temporal order and safety fields;
-3. purged walk-forward folds are chronological;
-4. the ensemble trains and serialises without live authority;
-5. incomplete features cause abstention;
-6. extreme OOD input causes abstention;
-7. drift can require quarantine;
-8. counterfactual outcomes remain separated from unresolved rows;
-9. cross-market temporal features are computed only from rows at or before the decision timestamp;
-10. a supplied future option row fails closed.
+## Runtime Proof Required After Merge
 
-Repository GitHub Actions remains the authoritative final-head validation.
+None is required for this PR because it introduces no production runtime wiring. Before any separate shadow-runtime integration is proposed, an immutable recorded corpus must prove feature availability, chronological WFA lift over the rule-only baseline, calibration stability, concentration controls, delayed-entry controls, ablations, drift handling, and exact artifact provenance.
 
-## Safety Contract
+## What This PR Does Not Prove
 
-```text
-read_only=true
-is_order_action=false
-broker_api_called=false
-allowed_for_live_execution=false
-append=false
-```
+This PR does not prove:
+
+- structural market edge;
+- option profitability;
+- calibrated performance on real TradeBot candidates;
+- improvement over existing rule-only strategies;
+- broker fill quality;
+- paper readiness;
+- live readiness;
+- execution, ranking, sizing, or capital-allocation authority;
+- that ML can predict every market regime.
+
+## Human Approval
+
+No human approval is required to execute the offline unit tests or build read-only evidence artifacts. Explicit human approval and a separate narrowly scoped PR are required before any production shadow wiring. PAPER or LIVE execution authority is outside this PR and remains prohibited.
 
 ## Remaining Gate
 
-This PR must remain draft and unmerged until final-head CI passes and a real immutable candidate/outcome corpus is run. It does not claim ML edge, profitability, paper readiness, or live readiness.
+This PR must remain draft and unmerged until all final-head repository workflows pass and a real immutable candidate/outcome corpus is run. It does not claim ML edge, profitability, paper readiness, or live readiness.
