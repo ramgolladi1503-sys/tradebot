@@ -85,7 +85,9 @@ jobs:
           runtime/market_data/upstox/20260716/ticks_1784189980.parquet
           runtime/market_data/upstox/20260716/ticks_1784192404.parquet
           runtime/market_data/upstox/20260716/ticks_1784194853.parquet
-          runtime/market_data/upstox/20260717/*.parquet
+          runtime/market_data/upstox/20260717/ticks_1784264*.parquet
+          runtime/market_data/upstox/20260717/ticks_1784271*.parquet
+          runtime/market_data/upstox/20260717/ticks_1784282*.parquet
           EOF
           )
           git lfs pull --include="$include_paths" --exclude=""
@@ -98,8 +100,9 @@ jobs:
                   continue
               for path in root.rglob("*.parquet"):
                   try:
-                      if path.read_bytes()[:4] == b"PAR1":
-                          materialized.append(str(path))
+                      with path.open("rb") as handle:
+                          if handle.read(4) == b"PAR1":
+                              materialized.append(str(path))
                   except OSError:
                       continue
           Path(".runtime/candidate_ml_market_corpus").mkdir(parents=True, exist_ok=True)
