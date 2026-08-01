@@ -24,6 +24,22 @@ It does not claim that raw candles alone predict the market, that ML discovers a
 
 ## Implemented contracts
 
+### Causal temporal feature construction
+
+`build_temporal_candidate_features()` derives deterministic features from completed historical rows at or before the decision timestamp. It rejects any supplied future row instead of silently trimming it.
+
+The feature set includes:
+
+- underlying returns over 1, 3, and 5 rows;
+- recent underlying volatility, relative volume, and ATR-normalised VWAP distance;
+- weighted constituent breadth up/down, weighted mean return, dispersion, acceleration, leadership concentration, and constituent count;
+- index-versus-breadth divergence;
+- option returns, acceleration, relative volume, OI change, bid/ask spread, and quote age;
+- mirror-wing response and same-strike response gap;
+- minutes to expiry and exact source timestamp provenance.
+
+These are deterministic measurements, not trading rules or confidence heuristics.
+
 ### Candidate-level temporal dataset
 
 `build_candidate_dataset()` joins TradeBot intent events to replayed outcomes by event ID or trade key. Every row records the decision timestamp, feature cutoff, later outcome resolution, strategy and instrument identity, causal numeric event metrics, target-before-stop label, executable-feasibility truth, MFE, MAE, and post-friction R.
