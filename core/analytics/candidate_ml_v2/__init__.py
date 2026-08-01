@@ -31,6 +31,7 @@ from .holdout import (
     verify_locked_holdout,
 )
 from .model import CandidateMLBundle, bundle_manifest, fit_candidate_ml
+from .provenance import SourceFileEvidence, build_input_manifest, inspect_source_file, verify_input_manifest
 
 __all__ = [
     "DEFAULT_REQUIRED_FEATURES",
@@ -44,8 +45,10 @@ __all__ = [
     "CandidatePrediction",
     "LockedHoldoutSeal",
     "PredictionStatus",
+    "SourceFileEvidence",
     "build_candidate_dataset",
     "build_candidate_row",
+    "build_input_manifest",
     "build_temporal_candidate_features",
     "bundle_manifest",
     "certify_candidate_ml",
@@ -55,11 +58,13 @@ __all__ = [
     "expected_calibration_error",
     "feature_columns",
     "fit_candidate_ml",
+    "inspect_source_file",
     "open_locked_holdout",
     "population_stability_index",
     "purged_walk_forward_splits",
     "seal_locked_holdout",
     "semantic_dataset_hash",
     "validate_candidate_dataset",
+    "verify_input_manifest",
     "verify_locked_holdout",
 ]
