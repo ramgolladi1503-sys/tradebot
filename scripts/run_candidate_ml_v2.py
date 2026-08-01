@@ -9,11 +9,13 @@ from core.analytics.candidate_ml_v2 import (
     CandidateMLCertificationConfig,
     CandidateMLConfig,
     build_candidate_dataset,
+    build_input_manifest,
     bundle_manifest,
     certify_candidate_ml,
     fit_candidate_ml,
     seal_locked_holdout,
     semantic_dataset_hash,
+    verify_input_manifest,
     verify_locked_holdout,
 )
 
@@ -50,6 +52,8 @@ def main() -> int:
     parser.add_argument("--events", required=True, type=Path)
     parser.add_argument("--outcomes", required=True, type=Path)
     parser.add_argument("--output-root", required=True, type=Path)
+    parser.add_argument("--allowed-input-root", type=Path)
+    parser.add_argument("--code-sha", default="")
     parser.add_argument("--friction-r", type=float, default=0.10)
     parser.add_argument("--holdout-fraction", type=float, default=0.20)
     parser.add_argument("--certification-splits", type=int, default=5)
@@ -62,6 +66,15 @@ def main() -> int:
 
     output_root = args.output_root
     output_root.mkdir(parents=True, exist_ok=True)
+    input_manifest_path = output_root / "candidate_ml_input_manifest.json"
+    input_manifest = build_input_manifest(
+        {"events": args.events, "outcomes": args.outcomes},
+        allowed_root=args.allowed_input_root,
+        code_sha=str(args.code_sha),
+    )
+    verify_input_manifest(input_manifest)
+    input_manifest_path.write_text(json.dumps(input_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
     events = _read_records(args.events)
     outcomes = _read_records(args.outcomes)
     full_dataset = build_candidate_dataset(events, outcomes, friction_r=float(args.friction_r))
@@ -103,6 +116,8 @@ def main() -> int:
     manifest = bundle_manifest(bundle)
     manifest.update(
         {
+            "input_manifest_path": str(input_manifest_path),
+            "input_source_contract_sha256": input_manifest["source_contract_sha256"],
             "full_dataset_rows": int(len(full_dataset)),
             "research_dataset_rows": int(len(research_dataset)),
             "research_dataset_sessions": int(research_dataset["session_date"].nunique()),
