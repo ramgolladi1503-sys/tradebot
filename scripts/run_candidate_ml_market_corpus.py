@@ -16,11 +16,11 @@ from core.analytics.candidate_ml_v2 import (
     bundle_manifest,
     certify_candidate_ml,
     fit_candidate_ml,
-    load_market_tick_corpus,
     market_corpus_summary,
     seal_locked_holdout,
     verify_locked_holdout,
 )
+from core.analytics.candidate_ml_v2.corpus_loader import load_market_tick_corpus_resilient
 
 
 def _discover_files(patterns: list[str]) -> list[Path]:
@@ -82,7 +82,7 @@ def main() -> int:
         min_option_instruments_per_bar=int(args.min_option_instruments),
     )
     try:
-        ticks, source_manifest = load_market_tick_corpus(files)
+        ticks, source_manifest = load_market_tick_corpus_resilient(files)
         audit = audit_market_tick_corpus(ticks, config)
         dataset = build_market_response_pretraining_dataset(ticks, config)
     except Exception as exc:
