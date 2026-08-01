@@ -1,5 +1,14 @@
 # Candidate ML Evidence V2 Agent Review
 
+mode: CANDIDATE_ML_V2_OFFLINE_CERTIFICATION
+candidate_id: CANDIDATE_ML_V2
+decision: IMPLEMENTATION_COMPLETE_REAL_CORPUS_MISSING
+reason: authoritative_candidate_lineage_and_trade_outcome_corpus_not_found
+timestamp: 2026-08-01T19:53:00+05:30
+is_order_action: false
+broker_api_called: false
+source: PR_767_BRANCH_AGENT_CANDIDATE_ML_EVIDENCE_V2
+
 ## Agent Work Contract
 
 ```text
@@ -10,7 +19,7 @@ scope: Offline temporal features, source provenance, candidate dataset, locked h
 requested_paths: core/analytics/candidate_ml_v2/**; scripts/run_candidate_ml_v2.py; tests/test_candidate_ml_v2*.py; docs/architecture/candidate_ml_v2.md; docs/agent_reviews/candidate_ml_v2.md; .github/workflows/candidate-ml-v2.yml
 allowed_paths: same as requested_paths
 forbidden_paths: main.py; run_live.sh; config/; credentials; broker; order; execution; risk; feed; strategies; ranking; dashboard; runtime/live; production ML inference; secrets
-expected_tests: focused Candidate ML V2 tests; Python compilation; broker/order capability scan; repository CI
+expected_tests: focused Candidate ML V2 tests; Python compilation; repository Code Excellence and safety gates; repository CI
 acceptance_proof: listed below
 ```
 
@@ -104,7 +113,7 @@ The focused behavioral suite covers:
 - nested WFA, permutation, delayed-feature, and ablation report generation without holdout consumption;
 - input source hashing, mutation detection, path escape, and symlink rejection.
 
-The dedicated workflow compiles the package, runs all `tests/test_candidate_ml_v2*.py`, and scans the new code for broker/order capabilities.
+The dedicated workflow compiles the package and runs all `tests/test_candidate_ml_v2*.py`. Repository Code Excellence and Cerberus inspect the final changed paths for weak tests and restricted action boundaries.
 
 Every generated contract preserves:
 
@@ -119,7 +128,7 @@ append=false
 
 ## Acceptance Proof
 
-Final focused GitHub Actions proof on the completed implementation:
+Focused GitHub Actions proof on the completed implementation before the Code Excellence repair:
 
 ```text
 python -m py_compile \
@@ -129,11 +138,9 @@ python -m py_compile \
 
 pytest -q tests/test_candidate_ml_v2*.py
 9 passed in 12.52s
-
-broker/order capability scan: PASS
 ```
 
-The dedicated `Candidate ML V2` workflow completed successfully. Agent Review Evidence Gate, Portfolio CI, and Repo Forensics had also passed on the prior final-scope head; all workflows must be re-evaluated on the current documentation head before merge consideration.
+The first final-head Code Excellence run correctly rejected three proof-format defects: weak `assert len(...)` patterns, literal restricted-action markers inside the workflow's own grep command, and typed dataclass safety defaults that were not syntactically explicit to Cerberus. It also rejected this review because six required traceability fields were absent. Those defects were repaired without reducing runtime or test assertions. The repaired final head must pass all repository workflows before merge consideration.
 
 ## Runtime Proof Required After Merge
 
