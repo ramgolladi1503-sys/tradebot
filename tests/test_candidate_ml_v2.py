@@ -147,3 +147,50 @@ def test_temporal_feature_builder_is_causal_and_computes_cross_market_features()
             constituent_rows=constituents,
             option_rows=contaminated,
         )
+
+
+def test_locked_holdout_is_durable_and_requires_acknowledgement(tmp_path):
+    df=make_dataset(rows_per_session=20,sessions=15)
+    research,seal=mod.seal_locked_holdout(df,holdout_path=tmp_path/'holdout.parquet',holdout_fraction=0.20)
+    mod.verify_locked_holdout(seal)
+    assert len(research)+seal.rows==len(df)
+    assert seal.acknowledgement_imported is False
+    assert seal.allowed_for_live_execution is False
+    with pytest.raises(PermissionError,match='acknowledgement_invalid'):
+        mod.open_locked_holdout(seal,acknowledgement='NO')
+    opened=mod.open_locked_holdout(seal,acknowledgement=mod.HOLDOUT_ACKNOWLEDGEMENT)
+    assert mod.semantic_dataset_hash(opened)==seal.semantic_sha256
+
+
+def test_certification_reports_wfa_controls_without_consuming_holdout(tmp_path):
+    full=make_dataset(rows_per_session=25,sessions=22)
+    research,seal=mod.seal_locked_holdout(full,holdout_path=tmp_path/'locked.parquet',holdout_fraction=0.20)
+    model_cfg=mod.CandidateMLConfig(
+        min_train_rows=60,
+        min_validation_rows=20,
+        min_strategy_rows=100,
+        min_positive_rows=5,
+        purge_rows=1,
+        max_missing_ratio=0.25,
+        ood_z_threshold=8.0,
+    )
+    cert_cfg=mod.CandidateMLCertificationConfig(
+        n_splits=3,
+        min_train_sessions=5,
+        min_selected_per_fold=1,
+        min_positive_fold_fraction=0.33,
+        max_ece=0.99,
+        max_top_five_positive_contribution=1.0,
+        max_best_session_positive_contribution=1.0,
+        min_permutation_gap_r=-10.0,
+        min_delayed_mean_lift_r=-10.0,
+        max_ablation_features=1,
+    )
+    report=mod.certify_candidate_ml(research,model_config=model_cfg,certification_config=cert_cfg)
+    assert report['verdict'] in {'READY_FOR_LOCKED_HOLDOUT','ML_EVIDENCE_QUARANTINED','NO_OUT_OF_SAMPLE_ML_LIFT','INSUFFICIENT_EVIDENCE'}
+    assert report['holdout_metrics_consumed'] is False
+    assert report['allowed_for_live_execution'] is False
+    assert report['base_walk_forward']['summary']['folds']>=1
+    assert report['label_permutation_control']['summary']['folds']>=1
+    assert report['one_row_delayed_feature_control']['summary']['folds']>=1
+    mod.verify_locked_holdout(seal)
