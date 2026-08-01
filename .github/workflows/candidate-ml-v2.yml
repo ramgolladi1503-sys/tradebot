@@ -5,7 +5,7 @@ on:
     paths:
       - "core/analytics/candidate_ml_v2/**"
       - "scripts/run_candidate_ml_v2.py"
-      - "tests/test_candidate_ml_v2.py"
+      - "tests/test_candidate_ml_v2*.py"
       - "docs/architecture/candidate_ml_v2.md"
       - "docs/agent_reviews/candidate_ml_v2.md"
       - ".github/workflows/candidate-ml-v2.yml"
@@ -33,11 +33,11 @@ jobs:
           python -m py_compile \
             core/analytics/candidate_ml_v2/*.py \
             scripts/run_candidate_ml_v2.py \
-            tests/test_candidate_ml_v2.py
+            tests/test_candidate_ml_v2*.py
       - name: Focused behavioral tests
         env:
           PYTHONPATH: .
-        run: pytest -q tests/test_candidate_ml_v2.py
+        run: pytest -q tests/test_candidate_ml_v2*.py
       - name: Safety scan
         run: |
           if grep -RInE "place_order|modify_order|cancel_order|exit_order|kiteconnect|upstox" \
