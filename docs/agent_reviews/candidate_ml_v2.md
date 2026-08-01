@@ -5,114 +5,148 @@
 ```text
 source_agent: ChatGPT GPT-5.6 Thinking
 action: GENERATE_PATCH
-title: Add candidate-level temporal ML evidence system
-scope: Offline temporal features, candidate dataset, model validation, abstention, drift, counterfactual reporting, tests, documentation, and focused CI only.
-requested_paths: core/analytics/candidate_ml_v2/**; scripts/run_candidate_ml_v2.py; tests/test_candidate_ml_v2.py; docs/architecture/candidate_ml_v2.md; docs/agent_reviews/candidate_ml_v2.md; .github/workflows/candidate-ml-v2.yml
+title: Add candidate-level temporal ML evidence and certification
+scope: Offline temporal features, source provenance, candidate dataset, locked holdout, model validation, certification, abstention, drift, counterfactual reporting, tests, documentation, and focused CI only.
+requested_paths: core/analytics/candidate_ml_v2/**; scripts/run_candidate_ml_v2.py; tests/test_candidate_ml_v2*.py; docs/architecture/candidate_ml_v2.md; docs/agent_reviews/candidate_ml_v2.md; .github/workflows/candidate-ml-v2.yml
 allowed_paths: same as requested_paths
-forbidden_paths: main.py; run_live.sh; config/; credentials; broker; order; execution; risk; feed; strategies; ranking; dashboard; runtime/live; secrets
-expected_tests: focused Candidate ML V2 tests; Python compilation; repository CI
+forbidden_paths: main.py; run_live.sh; config/; credentials; broker; order; execution; risk; feed; strategies; ranking; dashboard; runtime/live; production ML inference; secrets
+expected_tests: focused Candidate ML V2 tests; Python compilation; broker/order capability scan; repository CI
 acceptance_proof: listed below
 ```
 
 ## What Changed
 
-- Added causal feature construction from completed underlying, constituent, option, and mirror-wing rows.
-- Added underlying returns, volatility, relative volume and VWAP distance; weighted breadth, dispersion, acceleration and concentration; option returns, spread, quote age, OI, volume and mirror-response features.
-- Added a candidate-level temporal dataset builder over recorded intent events and outcome-replay records.
-- Added strict future-row, future-field, timestamp, chronology, support, and feature-completeness gates.
-- Added chronological validation and purged walk-forward split contracts.
-- Added logistic-regression and gradient-boosting comparison, validation-only calibration, model-disagreement abstention, and post-cost threshold selection.
-- Added explicit missing-feature, OOD, insufficient-support, unavailable-model, disagreement, and non-positive-value states.
-- Added candidate-level linear contribution diagnostics.
-- Added population-stability drift reporting with fail-closed quarantine status.
-- Added actual-versus-ML counterfactual shadow reporting with unresolved separation.
-- Added artifact safety validation and deterministic semantic dataset hashing.
+- Added causal feature construction from completed underlying, constituent, option, and mirror-wing histories.
+- Added candidate-level event/outcome dataset construction with strict timestamp and future-field rejection.
+- Added immutable JSON/JSONL input manifests with SHA-256, byte count, record count, code SHA, path-root enforcement, and source mutation detection.
+- Added a physically separated, hash-sealed latest-session holdout requiring an exact acknowledgement token before opening.
+- Added chronological whole-session splitting and purged walk-forward folds.
+- Added a class-balanced logistic-regression baseline and regularised histogram-gradient-boosting model.
+- Added validation-only Platt calibration and model-disagreement abstention.
+- Added explicit missing, OOD, unsupported, unavailable, disagreement, and below-post-cost-value states.
+- Added nested WFA certification with lift over the rule-only candidate stream, calibration, support, concentration, permutation, one-row-delay, and ablation controls.
+- Added cost-aware thresholding and expected-value calculation.
+- Added logistic contribution diagnostics, PSI drift quarantine, and actual-versus-counterfactual shadow reporting.
+- Added deterministic semantic hashes and fail-closed model, source, and holdout artifact validation.
 
 ## Why This Moves Readiness Forward
 
-The existing production predictor can load and score models, but model existence is not evidence of predictive value. This patch creates an isolated research owner that can construct causal cross-market features and prove or falsify candidate-level ML lift without modifying production inference or execution. It also removes the unsafe ambiguity where unavailable evidence can look like a neutral probability.
+The production predictor can load and score a model, but that does not prove causality, calibration, or trading value. This patch creates a separate evidence owner that constructs time-aligned cross-market inputs, seals source and holdout boundaries, compares a simple baseline with a non-linear model, and refuses to emit a trustworthy probability when evidence is incomplete or unsupported.
+
+It also makes a negative result operationally useful: failure produces `NO_OUT_OF_SAMPLE_ML_LIFT`, `ML_EVIDENCE_QUARANTINED`, or `INSUFFICIENT_EVIDENCE` rather than another tuned model being promoted.
 
 ## Risks
 
-- Historical artifacts may not contain all inputs needed for every temporal feature.
-- Outcome quality is limited by recorded option series and executable-feasibility evidence.
-- A model can still overfit despite chronological splits; walk-forward, concentration, ablation, delay, and sealed-holdout evidence remain mandatory before promotion.
-- PSI detects distribution shift but does not prove whether that shift is harmful.
-- Logistic feature contributions are diagnostics, not causal explanations.
+- The repository and connected Drive currently do not contain a recorded real candidate-lineage/event/trade-outcome corpus adequate for this certification campaign.
+- Raw market ticks and candles cannot reconstruct which candidates were actually generated, rejected, ranked, approved, or resolved without manufacturing history.
+- Historical option outcome quality remains bounded by recorded quote/fill realism and `exec_feasible` evidence.
+- WFA and controls reduce overfitting risk but cannot prove future profitability.
+- PSI indicates distribution shift; it does not identify whether the shift is beneficial or harmful.
+- Linear contribution diagnostics are not causal explanations.
 
 ## Scope Guard
 
-The changed-path scope is limited to:
+The final changed-path scope is limited to:
 
 ```text
+.github/workflows/candidate-ml-v2.yml
 core/analytics/candidate_ml_v2/**
+docs/agent_reviews/candidate_ml_v2.md
+docs/architecture/candidate_ml_v2.md
 scripts/run_candidate_ml_v2.py
 tests/test_candidate_ml_v2.py
-docs/architecture/candidate_ml_v2.md
-docs/agent_reviews/candidate_ml_v2.md
-.github/workflows/candidate-ml-v2.yml
+tests/test_candidate_ml_v2_provenance.py
 ```
 
-No strategy, threshold, TradeBuilder, Orchestrator, ranking, capital selection, feed, broker, order, execution, risk, dashboard, credential, live launcher, or live configuration file is modified. No broker API or order action is present.
+The comparison against `main` contains 15 new files and no modification to production runtime paths. No strategy, threshold, TradeBuilder, Orchestrator, production model, ranking, capital selection, feed, broker, order, execution, risk, dashboard, credential, or live-launcher file is changed.
 
 ## Grill Me Review
 
-The implementation was reviewed for fake progress and overclaiming. The first version exposed required feature names but did not derive the cross-market temporal values. That gap was treated as incomplete implementation and repaired by adding a causal feature constructor over underlying, constituent, option, and mirror-wing histories. Remaining criticism is explicit: this code has not yet demonstrated real out-of-sample lift on an immutable candidate/outcome corpus, so it must remain shadow-only and unmerged.
+The first implementation exposed required feature names but did not actually derive the temporal cross-market values. That was incomplete, so the branch was extended with completed-row feature construction and future-row rejection.
+
+The next incomplete boundary was validation quality. A simple train/validation split was not sufficient, so the same PR was extended with nested purged walk-forward testing, calibration error, accept-all baseline lift, label permutation, one-row delay, feature ablations, concentration controls, and a physically sealed holdout.
+
+The final unresolved issue is data, not code: no authoritative real candidate-lineage/outcome corpus was found. Using raw ticks or synthetic candidates to claim success would invalidate the entire exercise. The PR therefore remains draft, offline, and unmerged.
 
 ## Hermes Review
 
-The architecture separates four responsibilities:
+The architecture has independent layers for:
 
-1. deterministic feature construction from completed historical rows;
-2. candidate/outcome dataset assembly;
-3. chronological model training, calibration, and abstaining inference;
-4. offline drift and counterfactual evaluation.
+1. immutable source provenance;
+2. causal feature construction;
+3. candidate/outcome dataset assembly;
+4. chronological train/calibration and abstaining inference;
+5. research-only nested WFA certification;
+6. locked-holdout custody;
+7. drift and counterfactual evaluation.
 
-Production inference, ranking, risk and execution are deliberately outside the dependency graph. The public contracts carry exact timestamps, schema version, semantic dataset hash, and the no-live-authority safety fields.
+Production model loading, orchestration, ranking, sizing, risk, and execution are outside the dependency graph. Every evidence object carries schema and safety truth; the locked holdout and source inputs carry physical hashes.
 
 ## GSD Review
 
-The patch is additive and path-scoped. Future-data keys and future timestamps fail closed. Training does not randomly shuffle rows. Logistic regression provides a simple baseline, while the tree model must agree within a configured bound before an ensemble probability is emitted. Missing, unsupported, out-of-distribution, unavailable, and negative-post-cost cases return named states rather than a fabricated probability.
+The patch is additive and path-scoped. Future feature names, future history rows, outcome-before-decision rows, unsafe model artifacts, source mutation, symlinks, path escapes, and holdout mutation fail closed.
+
+Training is chronological and does not shuffle rows. Logistic regression is the mandatory simple baseline. The tree model is accepted only with independent support and probability agreement. Certification can return only an evidence verdict; it has no method to route an order, allocate capital, alter a strategy, or promote itself.
 
 ## QA / Safety Review
 
-Behavioral tests cover:
+The focused behavioral suite covers:
 
-- future/outcome feature-name rejection;
-- outcome-before-decision and feature-timestamp ordering;
+- future/outcome feature rejection;
+- causal decision, feature-cutoff, source, and outcome timestamps;
+- target-before-stop and executable-feasibility labels;
 - chronological purged folds;
 - model training, calibration, serialization, and artifact safety;
-- incomplete-feature and OOD abstention;
-- drift quarantine;
-- actual-versus-counterfactual separation;
-- causal cross-market feature calculations;
-- supplied future option-row rejection.
+- incomplete-feature, OOD, unsupported, disagreement, and value abstention paths;
+- cross-market feature construction and future-row rejection;
+- drift quarantine and counterfactual separation;
+- locked-holdout hashing, acknowledgement, and content verification;
+- nested WFA, permutation, delayed-feature, and ablation report generation without holdout consumption;
+- input source hashing, mutation detection, path escape, and symlink rejection.
 
-The focused CI also scans the new runtime-independent paths for broker and order capability. Every generated contract preserves:
+The dedicated workflow compiles the package, runs all `tests/test_candidate_ml_v2*.py`, and scans the new code for broker/order capabilities.
+
+Every generated contract preserves:
 
 ```text
 read_only=true
 is_order_action=false
 broker_api_called=false
 allowed_for_live_execution=false
+allowed_for_paper_execution=false
 append=false
 ```
 
 ## Acceptance Proof
 
-Local focused validation performed before publication:
+Final focused GitHub Actions proof on the completed implementation:
 
 ```text
-python -m py_compile core/analytics/candidate_ml_v2/*.py scripts/run_candidate_ml_v2.py tests/test_candidate_ml_v2.py
-pytest -q tests/test_candidate_ml_v2.py
-5 passed
+python -m py_compile \
+  core/analytics/candidate_ml_v2/*.py \
+  scripts/run_candidate_ml_v2.py \
+  tests/test_candidate_ml_v2*.py
+
+pytest -q tests/test_candidate_ml_v2*.py
+9 passed in 12.52s
+
+broker/order capability scan: PASS
 ```
 
-The final-head dedicated `Candidate ML V2` GitHub Actions workflow passed after the causal feature layer was added. Repository-wide final-head workflows remain authoritative for merge readiness.
+The dedicated `Candidate ML V2` workflow completed successfully. Agent Review Evidence Gate, Portfolio CI, and Repo Forensics had also passed on the prior final-scope head; all workflows must be re-evaluated on the current documentation head before merge consideration.
 
 ## Runtime Proof Required After Merge
 
-None is required for this PR because it introduces no production runtime wiring. Before any separate shadow-runtime integration is proposed, an immutable recorded corpus must prove feature availability, chronological WFA lift over the rule-only baseline, calibration stability, concentration controls, delayed-entry controls, ablations, drift handling, and exact artifact provenance.
+None for this PR because it introduces no production runtime wiring. Before a separate shadow-runtime integration is proposed, a real immutable candidate/outcome corpus must produce:
+
+- sufficient feature and session support;
+- stable positive post-cost WFA lift over the rule-only stream;
+- acceptable calibration;
+- control survival;
+- acceptable winner and session concentration;
+- no locked-holdout leakage;
+- exact source, code, dataset, and model provenance;
+- drift-safe abstention.
 
 ## What This PR Does Not Prove
 
@@ -121,17 +155,25 @@ This PR does not prove:
 - structural market edge;
 - option profitability;
 - calibrated performance on real TradeBot candidates;
-- improvement over existing rule-only strategies;
+- improvement over existing strategies;
 - broker fill quality;
-- paper readiness;
-- live readiness;
-- execution, ranking, sizing, or capital-allocation authority;
-- that ML can predict every market regime.
+- paper or live readiness;
+- ranking, sizing, capital-allocation, or execution authority;
+- that any market model can be near-perfect.
 
 ## Human Approval
 
-No human approval is required to execute the offline unit tests or build read-only evidence artifacts. Explicit human approval and a separate narrowly scoped PR are required before any production shadow wiring. PAPER or LIVE execution authority is outside this PR and remains prohibited.
+No human approval is required to run offline tests or generate read-only evidence. Explicit human approval and a separate narrowly scoped PR are required before production shadow wiring. PAPER and LIVE authority are prohibited in this PR.
 
 ## Remaining Gate
 
-This PR must remain draft and unmerged until all final-head repository workflows pass and a real immutable candidate/outcome corpus is run. It does not claim ML edge, profitability, paper readiness, or live readiness.
+The implementation and control framework are complete. Evidence completion is blocked because no authoritative recorded candidate-lineage/event/trade-outcome corpus is currently available in the repository or connected Drive. Until such a corpus exists and passes certification, this PR must remain draft and unmerged with status:
+
+```text
+IMPLEMENTATION_COMPLETE
+REAL_CORPUS_MISSING
+ML_LIFT_UNPROVEN
+HOLDOUT_UNOPENED
+SHADOW_ONLY
+DO_NOT_MERGE
+```
