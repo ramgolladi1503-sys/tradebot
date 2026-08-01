@@ -22,7 +22,7 @@ REPLAY_LEDGER_REQUIRED_FEATURES = (
     "htf_bullish",
     "rejection_quality",
     "cost_hurdle_margin_r",
-    "planned_target_r",
+    "planned_reward_r",
     "entry_gap_r",
     "failed_level_distance_r",
     "wick_ratio",
@@ -122,7 +122,6 @@ def _row_to_candidate(row: Mapping[str, Any]) -> dict[str, Any]:
 
     entry = _number(row, "entry_price", _number(row, "entry_open"))
     signal_close = _number(row, "signal_close", entry)
-    stop = _number(row, "stop_loss")
     target_price = _number(row, "target")
     failed_level = _number(row, "failed_level", signal_close)
     reclaim_level = _number(row, "reclaim_or_reject_level", signal_close)
@@ -135,7 +134,7 @@ def _row_to_candidate(row: Mapping[str, Any]) -> dict[str, Any]:
     local = signal_ts.tz_convert("Asia/Kolkata")
     minutes_since_open = max(0.0, float(local.hour * 60 + local.minute - (9 * 60 + 15)))
     angle = 2.0 * math.pi * minutes_since_open / 375.0
-    planned_target_r = abs(target_price - entry) / risk
+    planned_reward_r = abs(target_price - entry) / risk
     cost_margin = _number(row, "cost_hurdle_margin")
 
     target_hit = int(exit_reason == "TARGET")
@@ -168,7 +167,7 @@ def _row_to_candidate(row: Mapping[str, Any]) -> dict[str, Any]:
         "htf_bearish": int("BEARISH" in htf_regime),
         "rejection_quality": _number(row, "rejection_quality"),
         "cost_hurdle_margin_r": float(cost_margin / risk),
-        "planned_target_r": float(planned_target_r),
+        "planned_reward_r": float(planned_reward_r),
         "entry_gap_r": float((entry - signal_close) / risk),
         "failed_level_distance_r": float(abs(signal_close - failed_level) / risk),
         "reclaim_distance_r": float(abs(signal_close - reclaim_level) / risk),
