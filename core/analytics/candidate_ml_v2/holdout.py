@@ -28,14 +28,13 @@ class LockedHoldoutSeal:
     first_session: str
     last_session: str
     acknowledgement_imported: bool = False
-    read_only: bool = True
-    is_order_action: bool = False
-    broker_api_called: bool = False
-    allowed_for_live_execution: bool = False
-    append: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            **asdict(self),
+            **SAFETY_CONTRACT,
+            "allowed_for_paper_execution": False,
+        }
 
 
 def _file_sha256(path: Path) -> str:
@@ -84,6 +83,7 @@ def seal_locked_holdout(
         "last_session": str(holdout["session_date"].astype(str).max()),
         "acknowledgement_imported": False,
         **SAFETY_CONTRACT,
+        "allowed_for_paper_execution": False,
     }
     sidecar.write_text(json.dumps(sidecar_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     seal = LockedHoldoutSeal(
@@ -114,6 +114,8 @@ def verify_locked_holdout(seal: LockedHoldoutSeal) -> None:
         raise ValueError("locked_holdout_sidecar_claims_opened")
     if payload.get("allowed_for_live_execution") is not False:
         raise ValueError("locked_holdout_unsafe_authority")
+    if payload.get("allowed_for_paper_execution") is not False:
+        raise ValueError("locked_holdout_unsafe_paper_authority")
 
 
 def open_locked_holdout(
