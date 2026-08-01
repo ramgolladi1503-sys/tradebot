@@ -110,3 +110,40 @@ def test_drift_and_counterfactual_reporting():
     assert shadow['summary']['ACTUAL_ACCEPT_ML_ACCEPT']['rows']==1
     assert shadow['summary']['ACTUAL_ACCEPT_ML_REJECT']['mean_future_net_r']==-1.0
     assert shadow['summary']['UNRESOLVED']['rows']==1
+
+
+def test_temporal_feature_builder_is_causal_and_computes_cross_market_features():
+    decision=1_700_000_600_000
+    underlying=[]
+    option=[]
+    mirror=[]
+    for index in range(7):
+        ts=decision-(6-index)*60_000
+        underlying.append({'ts_epoch_ms':ts,'close':100+index,'vwap':101,'atr':2,'volume':1000+100*index})
+        option.append({'ts_epoch_ms':ts,'mark_price':50+2*index,'bid':61 if index==6 else 49+2*index,'ask':63 if index==6 else 51+2*index,'volume':100+20*index,'oi':1000+10*index})
+        mirror.append({'ts_epoch_ms':ts,'mark_price':55-index,'bid':48,'ask':50,'volume':100,'oi':1000})
+    constituents=[]
+    for offset,ts in enumerate((decision-60_000,decision)):
+        for symbol,ret,weight in [('A',0.01+offset*0.002,0.5),('B',-0.004,0.3),('C',0.006,0.2)]:
+            constituents.append({'ts_epoch_ms':ts,'symbol':symbol,'return_1':ret,'weight':weight})
+    features=mod.build_temporal_candidate_features(
+        decision_ts_epoch_ms=decision,
+        underlying_rows=underlying,
+        constituent_rows=constituents,
+        option_rows=option,
+        mirror_option_rows=mirror,
+        expiry_ts_epoch_ms=decision+180*60_000,
+    )
+    assert features['feature_source_max_ts_epoch_ms']<=decision
+    assert features['breadth_up_1']>features['breadth_down_1']
+    assert features['spread_pct']>0
+    assert features['option_mirror_response_gap'] is not None
+    assert features['minutes_to_expiry']==180
+    contaminated=list(option)+[{'ts_epoch_ms':decision+1,'mark_price':999}]
+    with pytest.raises(ValueError,match='option_future_row'):
+        mod.build_temporal_candidate_features(
+            decision_ts_epoch_ms=decision,
+            underlying_rows=underlying,
+            constituent_rows=constituents,
+            option_rows=contaminated,
+        )
