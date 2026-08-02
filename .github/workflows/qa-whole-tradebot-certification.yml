@@ -60,7 +60,7 @@ jobs:
 
   full_deterministic_coverage:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     env:
       PYTHONPATH: .
       DATA_ROOT: ${{ github.workspace }}/.runtime
@@ -84,11 +84,11 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies and coverage tooling
+      - name: Install verified production graph and coverage tooling
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest-cov
+          python scripts/install_tradebot_dependencies.py
+          python -m pip install pytest-cov
 
       - name: Remove automatic compatibility behavior from the checkout
         run: |
@@ -135,10 +135,11 @@ jobs:
             .runtime/qa/whole_tradebot/coverage_certification.md
             .runtime/qa/whole_tradebot/full_deterministic.xml
             .runtime/qa/whole_tradebot/sitecustomize.py.disabled
+            .runtime/wheels/kiteconnect_patch_manifest.json
 
   test_family_truth:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       PYTHONPATH: .
       DATA_ROOT: ${{ github.workspace }}/.runtime
@@ -148,16 +149,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "/usr/local/share/boost" || true
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies once
+      - name: Install verified production graph
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python scripts/install_tradebot_dependencies.py
 
       - name: Require every assurance family to own real tests
         shell: bash
@@ -179,7 +185,6 @@ jobs:
           MARKER_FAILURES="$failures" PYTHONPATH=. python - <<'PY'
           import json
           import os
-          import re
           from pathlib import Path
 
           root = Path('.runtime/qa/whole_tradebot/markers')
@@ -187,11 +192,7 @@ jobs:
           for path in sorted(root.glob('*.txt')):
               text = path.read_text(encoding='utf-8', errors='replace')
               count = sum(1 for line in text.splitlines() if '::' in line)
-              rows.append({
-                  'marker': path.stem,
-                  'collected': count,
-                  'passed': count > 0,
-              })
+              rows.append({'marker': path.stem, 'collected': count, 'passed': count > 0})
           payload = {
               'schema_version': 1,
               'verdict': 'PASS' if int(os.environ['MARKER_FAILURES']) == 0 else 'FAIL',
@@ -214,11 +215,13 @@ jobs:
         with:
           name: whole-tradebot-test-families
           if-no-files-found: error
-          path: .runtime/qa/whole_tradebot/markers/
+          path: |
+            .runtime/qa/whole_tradebot/markers/
+            .runtime/wheels/kiteconnect_patch_manifest.json
 
   cross_module_truth:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       PYTHONPATH: .
       DATA_ROOT: ${{ github.workspace }}/.runtime
@@ -229,23 +232,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "/usr/local/share/boost" || true
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install verified production graph
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python scripts/install_tradebot_dependencies.py
 
       - name: Run authoritative cross-module contracts
-        run: >-
-          PYTHONPATH=. pytest -q -o addopts=''
-          tests/qa/test_whole_tradebot_cross_module_truth.py
-          --junitxml=.runtime/qa/whole_tradebot/cross_module_truth.xml
-          --durations=30
+        run: |
+          mkdir -p .runtime/qa/whole_tradebot
+          PYTHONPATH=. pytest -q -o addopts='' \
+            tests/qa/test_whole_tradebot_cross_module_truth.py \
+            --junitxml=.runtime/qa/whole_tradebot/cross_module_truth.xml \
+            --durations=30
 
       - name: Upload cross-module evidence
         if: always()
@@ -253,11 +262,13 @@ jobs:
         with:
           name: whole-tradebot-cross-module-truth
           if-no-files-found: error
-          path: .runtime/qa/whole_tradebot/cross_module_truth.xml
+          path: |
+            .runtime/qa/whole_tradebot/cross_module_truth.xml
+            .runtime/wheels/kiteconnect_patch_manifest.json
 
   feed_resource_certification:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 65
     env:
       PYTHONPATH: .
       DATA_ROOT: ${{ github.workspace }}/.runtime
@@ -279,10 +290,10 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install verified production graph
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python scripts/install_tradebot_dependencies.py
 
       - name: Run same-SHA 1000-cycle resource and reconnect certification
         shell: bash
@@ -305,23 +316,38 @@ jobs:
           path: |
             .runtime/qa/whole_tradebot/feed_1000_cycle.xml
             .runtime/qa/whole_tradebot/feed_1000_cycle.log
+            .runtime/wheels/kiteconnect_patch_manifest.json
 
   static_security:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "/usr/local/share/boost" || true
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
-      - name: Install security scanners
-        run: pip install bandit pip-audit
+      - name: Install verified production graph and security scanners
+        run: |
+          python -m pip install --upgrade pip
+          python scripts/install_tradebot_dependencies.py
+          python -m pip install bandit pip-audit
 
-      - name: Run code and dependency scans independently
+      - name: Run code and installed-environment scans independently
         shell: bash
         run: |
           set +e
@@ -329,10 +355,11 @@ jobs:
           bandit -r core strategies dashboard ml -ll \
             -f json -o .runtime/qa/whole_tradebot/bandit.json
           bandit_rc=$?
-          pip-audit -r requirements.txt --format json \
+          pip-audit --local --format json \
             --output .runtime/qa/whole_tradebot/pip_audit.json
           audit_rc=$?
           BANDIT_RC="$bandit_rc" AUDIT_RC="$audit_rc" python - <<'PY'
+          import importlib.metadata as metadata
           import json
           import os
           from collections import Counter
@@ -365,6 +392,8 @@ jobs:
               'bandit_finding_count': sum(severity.values()),
               'dependency_vulnerability_count': len(dependency_vulns),
               'dependency_vulnerabilities': dependency_vulns,
+              'kiteconnect_version': metadata.version('kiteconnect'),
+              'autobahn_version': metadata.version('autobahn'),
           }
           (root / 'security_summary.json').write_text(
               json.dumps(payload, indent=2, sort_keys=True) + '\n',
@@ -386,6 +415,7 @@ jobs:
             .runtime/qa/whole_tradebot/bandit.json
             .runtime/qa/whole_tradebot/pip_audit.json
             .runtime/qa/whole_tradebot/security_summary.json
+            .runtime/wheels/kiteconnect_patch_manifest.json
 
   certification_verdict:
     if: ${{ always() }}
