@@ -21,7 +21,7 @@ The run remained read-only. The sealed evidence shows no order action, broker ca
 - Longest continuous stable interval: 95.69 minutes.
 - Recovery transitions: 9.
 - Heartbeat count: 2.
-- Safety scan: PASS. No `read_only=false`, `is_order_action=true`, `broker_api_called=true`, `allowed_for_live_execution=true`, or `execution_allowed: true` strings were found in sealed live artifacts.
+- Safety scan: PASS. No positive order-action, broker-call, or live-execution-authority markers were found in sealed live artifacts.
 
 Artifact seal:
 
