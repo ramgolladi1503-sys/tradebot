@@ -9,7 +9,7 @@ from core.analytics.candidate_ml_v2.replay_ledger import (
 )
 
 
-def _records(days: int = 40) -> list[dict]:
+def _records(days: int = 120) -> list[dict]:
     records: list[dict] = []
     base = pd.Timestamp("2024-07-01 09:30:00", tz="Asia/Kolkata")
     for day in range(days):
@@ -60,8 +60,8 @@ def _records(days: int = 40) -> list[dict]:
 def test_replay_ledger_builds_causal_candidate_dataset_and_model():
     dataset, evidence = build_replay_ledger_dataset(_records())
 
-    assert dataset.shape[0] == 40
-    assert dataset["session_date"].nunique() == 40
+    assert dataset.shape[0] == 120
+    assert dataset["session_date"].nunique() == 120
     assert dataset["target"].nunique() == 2
     assert (dataset["outcome_ts_epoch_ms"] > dataset["decision_ts_epoch_ms"]).all()
     assert dataset["is_order_action"].eq(False).all()
@@ -73,16 +73,18 @@ def test_replay_ledger_builds_causal_candidate_dataset_and_model():
     bundle = fit_candidate_ml(
         dataset,
         CandidateMLConfig(
-            min_train_rows=25,
-            min_validation_rows=8,
+            min_train_rows=80,
+            min_validation_rows=20,
             min_strategy_rows=10_000,
-            min_positive_rows=5,
+            min_positive_rows=10,
             validation_fraction=0.20,
             purge_rows=0,
             required_features=tuple(REPLAY_LEDGER_REQUIRED_FEATURES),
         ),
     )
     assert bundle.global_model is not None
+    assert bundle.global_model.train_rows >= 80
+    assert bundle.global_model.positive_rows >= 10
     assert bundle.safety["allowed_for_live_execution"] is False
 
 
