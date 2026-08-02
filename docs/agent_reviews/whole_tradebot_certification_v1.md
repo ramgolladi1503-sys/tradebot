@@ -12,7 +12,7 @@ runtime_change_authority: no_live_orders
 
 ## Agent Work Contract
 
-Mission: establish a fail-closed certification campaign for the complete authoritative TradeBot runtime. Authentication is one prerequisite, not the certificate.
+Mission: establish a fail-closed certification campaign for the complete authoritative TradeBot runtime. Authentication is one prerequisite, not the project certificate.
 
 Hard constraints:
 
@@ -21,7 +21,7 @@ Hard constraints:
 - no threshold reduction merely to obtain green CI;
 - no skipped, fake, empty or test-shim-based proof;
 - no `QA_CERTIFIED` verdict unless every mandatory gate passes on one immutable SHA;
-- every failure must be classified as product defect, test defect, tooling defect, dependency defect or missing environment evidence.
+- every failure is classified as product, test, tooling, dependency, repository or environment evidence debt.
 
 ## Purpose
 
@@ -45,18 +45,7 @@ Research-only utilities remain outside the production certificate unless they ar
 
 ## Files Changed
 
-- `.github/workflows/qa-whole-tradebot-certification.yml`
-- `.github/workflows/qa-apply-whole-tradebot-repairs-v1.yml`
-- `.github/workflows/qa-apply-whole-tradebot-repairs-v2.yml`
-- `tools/qa_certification/__init__.py`
-- `tools/qa_certification/whole_tradebot_manifest.py`
-- `tools/qa_certification/evaluate_coverage.py`
-- `scripts/apply_whole_tradebot_qa_repairs_v1.py`
-- `tests/qa/test_whole_tradebot_coverage_evaluator.py`
-- `tests/qa/test_whole_tradebot_cross_module_truth.py`
-- `docs/agent_reviews/whole_tradebot_certification_v1.md`
-
-The validated repair runner may add focused product fixes and negative security tests only after its focused test and Bandit checks pass.
+The current PR includes certification workflows, coverage and mutation tooling, focused high-risk tests, secure dependency installation, input-boundary hardening, ranking/UI contracts and supporting review evidence. The authoritative changed-file list remains the Git diff against `agent/enterprise-qa-foundation-v1`.
 
 ## Scope Guard
 
@@ -71,36 +60,64 @@ Protected boundaries:
 - evidence persistence and reconciliation;
 - dashboard read-model truth.
 
-The campaign does not modify strategy profitability assumptions, loosen execution gates, bypass human approval or introduce live behavior.
+The campaign does not modify strategy profitability assumptions, loosen execution gates, bypass human approval or introduce live order behavior.
+
+## High-Risk Path Review
+
+### Authentication authority
+
+`core/auth.py` and `core/auth_manager.py` remain fail closed. Missing API key, missing token, credential drift, invalid profile state and broker-client absence return explicit failure states or raise explicit errors. Network uncertainty is represented as `UNKNOWN_NETWORK` with `ok=False`; it is never treated as authenticated.
+
+Feed-startup telemetry is loaded lazily so credential tests do not import the feed runtime. The public telemetry patch point remains available for existing contracts. The lazy wrapper and its private compatibility delegate are included in the 100% line/branch coverage lane.
+
+The auth mutation lane now runs an isolated contract suite rather than importing the broker/feed runtime. It has progressed from setup failure to real mutant execution. The first completed run produced 415 surviving mutants; exact behavioral contracts reduced this to 255. Logging and redaction-only expressions are excluded with explicit Mutmut pragmas, while credential authority, state transitions, return payloads, broker construction and ticker lifecycle remain mutation-active. The mutation gate remains red until meaningful survivors are eliminated or individually justified as equivalent behavior.
+
+### Dependency and broker SDK supply chain
+
+The ordinary requirements file no longer directly resolves KiteConnect or Autobahn. `scripts/install_tradebot_dependencies.py` is the canonical path: it removes any existing broker SDK graph, installs base requirements, verifies the official KiteConnect 5.2.0 wheel hash, builds the provenance-bearing `5.2.0+tradebot.1` wheel with a secure Autobahn constraint, installs it and runs `pip check`.
+
+The verified path is wired into ordinary CI, the test workflow, unpatched owner truth, whole-system certification and Docker builds. Dependency certification audits the installed environment, including the patched broker SDK, rather than auditing only a requirements file that intentionally excludes the broker package.
+
+### Execution, risk and state safety
+
+No live order call was introduced. Candidate fallback truth is evaluated without mutating immutable inputs. Focused tests cover runtime boot-safety mapping and environment branches, disabled/unknown decision-breaker states, corrupt risk-halt state and persistence of a halt when incident notification fails.
+
+The same-SHA 1,000-cycle feed/reconnect certification remains required. Manual approval, late-risk revalidation, fallback exclusion from executable pools and exactly-once approval consumption remain mandatory cross-module contracts.
+
+### Input and SQL boundaries
+
+Dynamic SQLite table selection in feed self-test code was replaced with a literal approved-query registry. Unknown or malicious identifiers fail closed, and injection-shaped values are covered by negative tests. Remaining scanner findings are reviewed individually; repository-wide suppression is prohibited.
+
+### Current high-risk conclusion
+
+The high-risk changes are correctly isolated and tested more deeply than the prior baseline, but whole-system certification is not granted. Remaining red gates include mutation survivors, repository-forensics debt, critical-module coverage debt, malformed Git LFS state, security findings outside the repaired slice and controlled-live evidence.
 
 ## Grill Me Review
 
 ### Weak assumptions challenged
 
-1. **“Thousands of tests mean the whole bot is covered.”** False. The measured baseline is about 73% statement coverage and 61% branch coverage across the scanned packages. Fifty-six of 59 configured critical modules miss their assigned threshold.
-2. **“Fallback is already advisory-only, so the UI issue is cosmetic.”** False. A cross-module test proved that `opportunity_engine` mutates a frozen `Trade` while applying the fallback firewall, causing `FrozenInstanceError` exactly when the engine should fail closed.
-3. **“A separate secure dependency experiment makes the application secure.”** False. The default requirements path still resolves vulnerable Autobahn 19.11.2.
-4. **“Bandit is noisy, so its findings can be ignored.”** False. The scan exposed unsafe archive extraction, untrusted XML parsing, unrestricted URL handling, permissive filesystem modes and predictable shared temporary paths.
-5. **“A non-empty test marker proves a domain.”** False. The first inventory contained only one replay, one chaos and one UI-read-model test. Ownership depth must be strengthened.
+1. **“Thousands of tests mean the whole bot is covered.”** False. Most configured critical modules remain below their assigned line/branch thresholds.
+2. **“Fallback is already advisory-only, so the UI issue is cosmetic.”** False. Cross-module truth must prove fallback rows cannot obtain execution authority, capital or primary operator-pool visibility.
+3. **“A separate secure dependency experiment makes the application secure.”** False. Security is credible only when every normal install path uses the verified broker graph.
+4. **“Bandit is noisy, so its findings can be ignored.”** False. Dynamic SQL, archive, XML, URL, filesystem and broker-boundary findings require code proof or narrow evidence-backed classification.
+5. **“High coverage proves strong tests.”** False. Mutation testing exposed hundreds of changes that the previous auth assertions did not detect.
 
-### Failure modes
+### Failure modes under review
 
-- fallback classification crashes and bypasses a clean advisory result;
-- dashboard/operator pools misrepresent advisory rows as equivalent to executable opportunities;
+- fallback classification crashes or leaks execution authority;
+- dashboard pools misrepresent advisory rows as executable opportunities;
 - stale or fallback truth receives capital after a late-state mismatch;
 - approval is reused after execution or a race;
-- archive traversal writes outside the evidence directory;
-- malicious XML expands external entities;
-- network fetchers accept non-HTTP or local metadata URLs;
-- database or fallback evidence is group/world accessible;
-- dynamic SQL accepts an identifier that was not validated or quoted;
-- a green deterministic suite hides untested restart, concurrency or reconciliation branches.
+- credential uncertainty is mislabeled authenticated;
+- dependency installation silently restores a vulnerable broker graph;
+- dynamic SQL accepts an unapproved identifier;
+- a green deterministic suite hides restart, concurrency or reconciliation branches.
 
-### Grill Me verdict
+### Grill Me result
 
 `BLOCK`
 
-The complete runtime is not certified. The campaign and evidence gates are valid, but known defects and untested critical branches remain.
+The complete runtime is not certified. The campaign and evidence gates are valid, but the remaining red gates prohibit a release certificate.
 
 ## Hermes Review
 
@@ -108,53 +125,50 @@ The complete runtime is not certified. The campaign and evidence gates are valid
 
 `PASS` for the QA campaign scope.
 
-### Boundary violations found
+### Boundary review
 
-- No live broker call or order action was introduced by this PR.
-- One existing fallback-truth implementation violates immutable candidate ownership by mutating a frozen dataclass.
-- The ordinary dependency install path violates the security boundary by retaining a vulnerable Autobahn version.
-- Several input-handling modules do not yet fail closed against malicious archives, XML or URL schemes.
+- No live broker call or order action was introduced.
+- Secure dependency installation is now a canonical path rather than a special experiment.
+- Authentication telemetry imports were decoupled without changing credential authority.
+- Strategy thresholds, broker credentials, order placement semantics and profitability logic remain outside this remediation batch.
 
-### Files not to touch check
+### Hermes result
 
-Strategy thresholds, broker credentials, live configuration, order placement semantics and profitability logic remain outside this remediation batch.
+`PASS_WITH_REMAINING_GATES`
 
-### Hermes verdict
-
-`PASS_WITH_BLOCKERS`
-
-The work is correctly isolated, but merging is prohibited while certification gates remain red.
+The work is correctly isolated, but merging remains prohibited while certification prerequisites are red.
 
 ## GSD Review
 
-### Delivery verdict
+### Delivery status
 
 `PARTIAL_DELIVERY_NOT_CERTIFIED`
 
 ### Evidence summary
 
-- Nine-area manifest resolves to real modules without duplicate targets.
-- Full deterministic candidate run collected 6,869 tests; three failures were recorded: two manifestations of the frozen fallback defect and one replay-test serialization defect.
-- Same-SHA 1,000-cycle feed/reconnect resource certification passed.
-- Assurance-family inventory collected behavior, safety, edge, regression, replay, chaos, broker-firewall and UI-read-model tests, but several families remain thin.
-- Per-module coverage gate failed 56 of 59 critical modules.
-- Static security failed with 41 medium/high Bandit findings and one dependency vulnerability.
-- Final certificate artifact correctly reported `NOT_CERTIFIED`.
+- The nine-area manifest resolves to real modules without duplicate targets.
+- The deterministic suite previously reached 6,877 passing tests with two stale input-mutation expectations; those tests were corrected to assert pure fail-closed behavior.
+- Same-SHA 1,000-cycle feed/reconnect resource certification has passed on prior candidates and remains a mandatory lane on the final SHA.
+- Test-integrity and runtime-shim gates are green on recent candidates.
+- Auth line/branch coverage remains fixed at a 100% threshold; the lazy telemetry test has been added to the workflow after a 99.13% run exposed the omission.
+- Mutation execution is functioning and has produced real survivor evidence.
+- The final certificate artifact remains `NOT_CERTIFIED` while any prerequisite is red.
 
 ### Next action
 
-Repair the immutable fallback path and high-severity security boundaries, re-run focused proof, then use the coverage debt report to certify Tier-A areas one at a time without weakening thresholds.
+Re-run the corrected auth coverage and mutation lanes, clear truthful repository-forensics classifications, then use the coverage debt report to certify Tier-A areas one at a time without weakening thresholds.
 
 ## QA / Safety Review
 
 ### Test-quality review
 
-- Generated skipped skeletons and unconditional `assert True` tests were previously removed from the executable suite.
+- Generated skipped skeletons and unconditional `assert True` tests were removed from the executable suite.
 - `sitecustomize.py` behavior patches were retired and the deterministic suite is exercised without automatic runtime rewriting.
-- New cross-module tests use real immutable `Trade` objects, late-risk rejection, exactly-once approval consumption and canonical executable/advisory pools.
-- New security controls require negative tests, not scanner suppression alone.
+- Cross-module tests use immutable candidates, late-risk rejection, exactly-once approval consumption and canonical executable/advisory pools.
+- Security controls require negative tests, not scanner suppression alone.
+- Mutation exclusions are limited to observability-only expressions and use explicit source markers.
 
-### Safety verdict
+### Safety status
 
 `FAIL_CLOSED_NOT_CERTIFIED`
 
@@ -168,16 +182,16 @@ A valid whole-TradeBot certificate requires all of the following on the same com
 2. full deterministic suite passes without `sitecustomize.py` behavior patches;
 3. every Tier-A module has 100% line and branch coverage;
 4. every Tier-B module has at least 95% line and 90% branch coverage;
-5. required mutation thresholds pass with zero high-risk surviving mutants;
+5. required mutation thresholds pass with no high-risk surviving mutants;
 6. behavior, safety, edge, regression, replay, chaos, broker-firewall and UI-read-model portfolios meet reviewed ownership requirements;
 7. cross-module fallback, ranking, late-risk, approval and operator-pool contracts pass;
 8. same-SHA 1,000-cycle feed/reconnect certification passes;
-9. static security and dependency audits contain no unresolved high/medium blocker;
+9. static security and dependency audits contain no unresolved medium/high release issue;
 10. restart, persistence, reconciliation and exactly-once evidence passes;
 11. controlled-live observation proves feed and decision truth without unauthorized order placement;
 12. independent human QA lead reviews and signs the evidence.
 
-Current acceptance result: `FAIL`.
+Current acceptance result: `NOT_CERTIFIED`.
 
 ## Runtime Proof Required After Merge
 
@@ -198,8 +212,8 @@ This draft must not be merged as a certificate. After offline gates clear, an op
 - live broker compatibility under every market condition;
 - zero operational incidents;
 - correctness of unmeasured branches;
-- safety of the current vulnerable default dependency graph;
-- controlled-live certification.
+- controlled-live certification;
+- human release approval.
 
 ## Human Approval
 
@@ -207,4 +221,4 @@ Human QA lead approval: **NOT GRANTED**.
 
 Merge approval: **NOT GRANTED**.
 
-Certification verdict: **NOT_CERTIFIED**.
+Certification status: **NOT_CERTIFIED**.
