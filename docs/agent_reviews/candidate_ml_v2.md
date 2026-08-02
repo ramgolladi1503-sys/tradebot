@@ -235,7 +235,7 @@ append=false
 
 ## Acceptance Proof
 
-Final evidence-producing Candidate ML workflow:
+Evidence-producing Candidate ML workflow before the final documentation-only commits:
 
 ```text
 GitHub Actions run: 30729058806
