@@ -7,6 +7,7 @@ from typing import Any, Optional, Tuple
 from config import config as cfg
 from core.depth_store import depth_store
 from core.freshness_sla import get_freshness_status
+from core.sqlite_query_registry import max_timestamp_query
 from core.tick_store import last_tick_epoch as mem_last_tick_epoch
 from core.time_utils import compute_age_sec, now_utc_epoch, is_market_open_ist
 
@@ -36,8 +37,8 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
 
 def _query_max_epoch(conn: sqlite3.Connection, table: str) -> Optional[float]:
     try:
-        row = conn.execute(f"SELECT MAX(timestamp_epoch) FROM {table}").fetchone()
-    except Exception:
+        row = conn.execute(max_timestamp_query(table)).fetchone()
+    except (sqlite3.Error, ValueError):
         return None
     if not row:
         return None
