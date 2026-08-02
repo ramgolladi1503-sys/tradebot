@@ -497,15 +497,51 @@ class ResourceSoakRunner:
             return False, ticker, new_generation_id
         if not bool(getattr(ticker, "connected", False)):
             return False, ticker, new_generation_id
-        if bool(getattr(ws, "_RECOVERY_IN_PROGRESS", False)):
+        recovery_state = getattr(ws._FEED_RECOVERY_COORDINATOR, "state", None)
+        if bool(getattr(recovery_state, "terminal_failure", False)):
             return False, ticker, new_generation_id
-        if bool(getattr(ws._FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
+        if bool(getattr(recovery_state, "process_restart_required", False)):
+            return False, ticker, new_generation_id
+        if bool(getattr(recovery_state, "recovery_blocked", False)):
             return False, ticker, new_generation_id
         if bool(getattr(ws, "_DEPTH_WS_LOCK_ACQUIRED", False)):
             return False, ticker, new_generation_id
         if not self._exact_subscription_match(ticker):
             return False, ticker, new_generation_id
         return True, ticker, new_generation_id
+
+    def _release_synthetic_recovery_owner(self, cycle_index: int) -> bool:
+        """Close the synthetic recovery owner after transport verification.
+
+        This harness intentionally does not inject live option ticks, so it cannot
+        satisfy the production live-data verification phase. Resource-soak success
+        is therefore bounded to a new connected generation, exact subscription
+        replay, no terminal/block state, and no lock/resource leak. The synthetic
+        owner is cleared only after those transport conditions are proven.
+        """
+        try:
+            ws._FEED_RECOVERY_COORDINATOR.clear_recovery(
+                source="resource_soak_transport_verified",
+                reason=f"cycle_{cycle_index}_transport_verified",
+            )
+            ws._sync_ws1006_recovery_state_from_coordinator()
+        except Exception as exc:
+            self.metrics["hard_failures"] += 1
+            self.metrics["terminal_failure_count"] += 1
+            self._set_first_mismatch(
+                f"cycle_{cycle_index}_recovery_owner_release_failed:"
+                f"{type(exc).__name__}:{exc}"
+            )
+            return False
+        coordinator_active = bool(
+            getattr(ws._FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)
+        )
+        if bool(getattr(ws, "_RECOVERY_IN_PROGRESS", False)) or coordinator_active:
+            self.metrics["hard_failures"] += 1
+            self.metrics["terminal_failure_count"] += 1
+            self._set_first_mismatch(f"cycle_{cycle_index}_recovery_owner_not_released")
+            return False
+        return True
 
     def _request_controlled_recovery(self, cycle_index: int):
         decision = ws._FEED_RECOVERY_COORDINATOR.request_recovery(
@@ -583,6 +619,8 @@ class ResourceSoakRunner:
         while time.time() < deadline:
             success, new_ticker, new_generation_id = self._cycle_success_conditions_met(old_generation_id)
             if success:
+                if not self._release_synthetic_recovery_owner(cycle_index):
+                    return "failed"
                 self.metrics["final_generation_id"] = new_generation_id
                 self.metrics["generation_transition_count"] += 1
                 self.metrics["websocket_generations_created"] += 1
