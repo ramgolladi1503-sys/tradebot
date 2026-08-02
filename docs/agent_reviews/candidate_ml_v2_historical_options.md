@@ -71,6 +71,20 @@ The implementation fails closed on absent files, malformed schemas, empty or dup
 
 The focused tests prove exact/proxy separation, post-cost R construction, future-field exclusion, duplicate rejection and causal timing rejection. The workflow compiles the new CLI and executes the full Candidate ML V2 focused test pattern.
 
+## QA / Safety Review
+
+The new tests cover exact-versus-proxy physical separation, post-cost label construction, normalized R, signal-time feature selection, duplicate trade identity rejection and noncausal entry rejection. Existing Candidate ML tests continue to cover chronological validation, holdout custody, artifact integrity, calibration, abstention, drift and counterfactual separation.
+
+Every generated model and report retains the non-action contract:
+
+```text
+read_only=true
+is_order_action=false
+broker_api_called=false
+allowed_for_live_execution=false
+allowed_for_paper_execution=false
+```
+
 ## Risks
 
 - Historical minute candles do not contain bid/ask, depth, actual slippage, partial-fill or quote-age evidence.
@@ -82,6 +96,10 @@ The focused tests prove exact/proxy separation, post-cost R construction, future
 ## Acceptance Proof
 
 At this checkpoint, implementation proof is limited to repository tests because the connected environment does not contain materialized copies of the full local archives. A real-data report must record source hashes, intent/trade/blocker counts, exact/proxy counts, independent sessions, class support, holdout seal and certification verdict.
+
+## Runtime Proof Required After Merge
+
+None for this PR. It adds an offline command and no production dependency. Before a later shadow integration can be considered, the local campaign must produce immutable exact-ATM evidence that survives all Candidate ML research gates while keeping the holdout sealed until eligibility.
 
 ## What This PR Does Not Prove
 
