@@ -49,6 +49,7 @@ jobs:
           tests/auth/test_check_kite_auth_cli_behavior.py
           tests/auth/test_auth_feed_event_boundary.py
           tests/auth_mutation/test_auth_mutation_contracts.py
+          tests/auth_mutation/test_auth_mutation_survivors.py
           tests/test_kite_client_auth_guard.py
 
       - name: Run all configured auth mutants
