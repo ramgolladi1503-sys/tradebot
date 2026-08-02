@@ -3,7 +3,9 @@ pytest
 hypothesis
 streamlit
 streamlit-autorefresh
-kiteconnect
+# KiteConnect and Autobahn are installed only through
+# scripts/install_tradebot_dependencies.py, which verifies the official
+# KiteConnect 5.2.0 wheel hash and patches its vulnerable Autobahn constraint.
 tensorflow
 gymnasium
 flask
