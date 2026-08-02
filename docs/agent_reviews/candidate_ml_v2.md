@@ -204,6 +204,38 @@ tests/test_candidate_ml_v2_replay_ledger.py
 
 No strategy, threshold, TradeBuilder, Orchestrator, production model, ranking, capital selection, feed, broker, order, execution, risk, dashboard, credential, or live-launcher file is changed.
 
+## Grill Me Review
+
+The initial investigation incorrectly stopped at “authoritative candidate corpus missing.” That conclusion was challenged rather than preserved. A deeper repository and LFS inventory found both the raw Upstox corpus and the 525-day replay history containing 145 resolved candidate rows. The two sources were not merged into one claim: raw ticks support only market-response pretraining, while the replay ledger supports only a mocked-contract proxy selector.
+
+The implementation also exposed two methodological defects during review. The first replay test used fewer validation rows than the contract allowed; the fixture was expanded instead of lowering the 20-row minimum. The first WFA layout began before the sparse ledger could satisfy the 70-row training and 20-row validation requirements; the fold start was made data-aware instead of weakening either threshold.
+
+Finally, the presence of a serialized model was not treated as success. Its negative lift, weak calibration, and near-zero selected support produced `NO_OUT_OF_SAMPLE_ML_LIFT`, and the holdout remained sealed. No parameter search was performed against the failed result.
+
+## Hermes Review
+
+The architecture maintains independent evidence lanes:
+
+1. immutable candidate-event and executable-outcome joins;
+2. historical replay-ledger proxy selection;
+3. raw-market response pretraining;
+4. model fitting and calibrated abstention;
+5. nested chronological certification;
+6. locked-holdout custody;
+7. drift and counterfactual evaluation.
+
+Each lane has explicit authority metadata. The raw lane cannot claim candidate lineage. The replay lane cannot claim real option execution or profitability. The candidate event/outcome lane remains the only path capable of supporting future execution-grade certification.
+
+Production inference, ranking, strategy selection, sizing, broker integration, and execution remain outside the dependency graph. The package cannot promote its own artifacts or route an order.
+
+## GSD Review
+
+The patch is additive and limited to the declared ML evidence paths. Future timestamps, future-semantic feature names, outcome-before-decision rows, incompatible parquet schemas, Git LFS pointer stubs, mutated sources, unsafe artifacts, symlinks, path escapes, and holdout mutations fail closed.
+
+Training is chronological. The mandatory linear baseline remains alongside the nonlinear model. The adaptive WFA resolver records the requested and effective fold boundaries and proves `support_gates_lowered=false`. Failed calibration, insufficient selected support, negative lift, delayed-feature failure, and concentration failures remain visible in the final verdict.
+
+No production strategy, threshold, TradeBuilder, Orchestrator, ranking, feed, risk, broker, order, dashboard, or live configuration was modified.
+
 ## QA / Safety Review
 
 The focused behavioral suite covers:
@@ -262,6 +294,12 @@ artifact digest: sha256:7515ff77b5d355f6d1a4c0a8f30664223df69af721f5305fd466d4fe
 ```
 
 The final documentation head must pass all repository workflows before merge consideration.
+
+## Runtime Proof Required After Merge
+
+None for this PR. It adds no production runtime wiring and must remain draft and unmerged because the tested model failed the research gates.
+
+A future, separate shadow-runtime PR would require an immutable execution-grade candidate/outcome corpus with real option contract identity, causal bid/ask quotes, quote age, spread, slippage, fill feasibility, target/stop path, costs, and unresolved-outcome handling. Before any runtime wiring, that corpus must demonstrate adequate independent support, positive and stable post-cost WFA lift, acceptable calibration, control survival, low winner/session concentration, sealed-holdout eligibility, and drift-safe abstention.
 
 ## What This PR Does Not Prove
 
