@@ -26,6 +26,62 @@ def _normalized_counter(values) -> Counter:
     return Counter(impl._normalize_tokens(values))
 
 
+def _failure_diagnostic(
+    runner: "ResourceSoakRunner",
+    args: argparse.Namespace,
+    *,
+    result: dict | None = None,
+    exc: BaseException | None = None,
+) -> dict:
+    result = result or {}
+    final = result.get("final") or {}
+    baseline = result.get("post_warmup_baseline") or {}
+    resource_delta = {
+        "fd_count": final.get("fd_count", 0) - baseline.get("fd_count", 0)
+        if final and baseline
+        else None,
+        "python_thread_count": final.get("python_thread_count", 0)
+        - baseline.get("python_thread_count", 0)
+        if final and baseline
+        else None,
+    }
+    return {
+        "event": "SOAK_RUN_FAILURE",
+        "profile": args.profile,
+        "cycles": args.cycles,
+        "exception_type": type(exc).__name__ if exc is not None else None,
+        "exception": str(exc) if exc is not None else None,
+        "verdict": result.get("verdict"),
+        "failure_counters": result.get("failure_counters"),
+        "reconnect_counters": result.get("reconnect_counters"),
+        "first_mismatch": result.get("first_mismatch")
+        or getattr(runner, "first_mismatch", None),
+        "errors": result.get("errors")
+        or list(getattr(runner, "errors", []))[-10:],
+        "resource_delta": resource_delta,
+        "last_cycle_condition_snapshot": dict(
+            getattr(runner, "last_cycle_condition_snapshot", {})
+        ),
+        "timeline_tail": list(getattr(runner, "timeline", []))[-5:],
+    }
+
+
+def _emit_failure_diagnostic(
+    runner: "ResourceSoakRunner",
+    args: argparse.Namespace,
+    *,
+    result: dict | None = None,
+    exc: BaseException | None = None,
+) -> None:
+    payload = _failure_diagnostic(runner, args, result=result, exc=exc)
+    print(
+        "SOAK_FAILURE_DIAGNOSTIC="
+        + json.dumps(payload, sort_keys=True, default=str),
+        file=sys.stderr,
+        flush=True,
+    )
+
+
 class ResourceSoakRunner(impl.ResourceSoakRunner):
     """Resource-soak runner with a clean baseline and predicate diagnostics."""
 
@@ -45,7 +101,7 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
             pass
 
         # Initialize the same logger/runtime/socket resources used by measured
-        # cycles, but do not create an unmeasured recovery owner.  Recovery is
+        # cycles, but do not create an unmeasured recovery owner. Recovery is
         # exercised only inside _run_reconnect_cycle(), where it is counted and
         # verified.
         try:
@@ -70,8 +126,12 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
             pass
 
         post_warmup = impl._resource_snapshot()
-        self.timeline.append({"stage": "process_start_baseline", "snapshot": process_start})
-        self.timeline.append({"stage": "post_warmup_baseline", "snapshot": post_warmup})
+        self.timeline.append(
+            {"stage": "process_start_baseline", "snapshot": process_start}
+        )
+        self.timeline.append(
+            {"stage": "post_warmup_baseline", "snapshot": post_warmup}
+        )
         return post_warmup
 
     def _cycle_condition_snapshot(self, old_generation_id: int) -> dict:
@@ -86,15 +146,22 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
             "old_generation_id": old_generation_id,
             "current_generation_id": current_generation_id,
             "generation_advanced": bool(
-                current_generation_id is not None and current_generation_id != old_generation_id
+                current_generation_id is not None
+                and current_generation_id != old_generation_id
             ),
             "ticker_present": ticker is not None,
-            "ticker_connected": bool(getattr(ticker, "connected", False)) if ticker else False,
-            "terminal_failure": bool(getattr(recovery_state, "terminal_failure", False)),
+            "ticker_connected": bool(getattr(ticker, "connected", False))
+            if ticker
+            else False,
+            "terminal_failure": bool(
+                getattr(recovery_state, "terminal_failure", False)
+            ),
             "process_restart_required": bool(
                 getattr(recovery_state, "process_restart_required", False)
             ),
-            "recovery_blocked": bool(getattr(recovery_state, "recovery_blocked", False)),
+            "recovery_blocked": bool(
+                getattr(recovery_state, "recovery_blocked", False)
+            ),
             "recovery_in_progress": bool(
                 getattr(recovery_state, "recovery_in_progress", False)
             ),
@@ -132,7 +199,9 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
 
     def run(self):
         result = super().run()
-        result["last_cycle_condition_snapshot"] = dict(self.last_cycle_condition_snapshot)
+        result["last_cycle_condition_snapshot"] = dict(
+            self.last_cycle_condition_snapshot
+        )
         return result
 
 
@@ -175,12 +244,19 @@ def main() -> None:
         fail_every=args.reconnect_failure_every,
         sample_every=args.sample_every,
     )
-    result = runner.run()
+    try:
+        result = runner.run()
+    except BaseException as exc:
+        _emit_failure_diagnostic(runner, args, exc=exc)
+        raise
 
     with open(args.output_json, "w") as handle:
         json.dump(result, handle, indent=2)
 
-    fd_leak = result["final"]["fd_count"] - result["post_warmup_baseline"]["fd_count"]
+    fd_leak = (
+        result["final"]["fd_count"]
+        - result["post_warmup_baseline"]["fd_count"]
+    )
     thread_leak = (
         result["final"]["python_thread_count"]
         - result["post_warmup_baseline"]["python_thread_count"]
@@ -190,7 +266,10 @@ def main() -> None:
         f"FD Leak vs Warmup: {fd_leak}, Thread Leak: {thread_leak}, "
         f"Verdict: {result['verdict']}"
     )
-    sys.exit(determine_exit_code(result, args.profile))
+    exit_code = determine_exit_code(result, args.profile)
+    if exit_code:
+        _emit_failure_diagnostic(runner, args, result=result)
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
