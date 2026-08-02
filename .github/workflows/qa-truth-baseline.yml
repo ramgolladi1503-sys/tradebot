@@ -78,11 +78,11 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies and coverage tooling
+      - name: Install focused verified auth dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest-cov
+          python -m pip install pytest pytest-cov python-dotenv
+          python scripts/install_tradebot_dependencies.py --skip-base
 
       - name: Disable automatic compatibility layer for honest coverage
         run: |
@@ -118,6 +118,7 @@ jobs:
             .runtime/qa/auth_coverage.json
             .runtime/qa/auth_pytest.xml
             .runtime/qa/sitecustomize.py.disabled
+            .runtime/wheels/kiteconnect_patch_manifest.json
 
   auth_static_security:
     runs-on: ubuntu-latest
@@ -149,23 +150,45 @@ jobs:
 
   dependency_vulnerability_audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "/usr/local/share/boost" || true
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
-      - name: Install pip-audit
-        run: pip install pip-audit
+      - name: Install exact production dependency graph and audit tool
+        run: |
+          python -m pip install --upgrade pip
+          python scripts/install_tradebot_dependencies.py
+          python -m pip install pip-audit
 
-      - name: Audit declared dependencies
+      - name: Audit installed environment including patched broker SDK
         run: |
           mkdir -p .runtime/qa
-          pip-audit -r requirements.txt --format json --output .runtime/qa/pip_audit.json
+          pip-audit --local --format json --output .runtime/qa/pip_audit.json
+          python - <<'PY' > .runtime/qa/dependency_versions.json
+          import importlib.metadata as metadata
+          import json
+          print(json.dumps({
+              "kiteconnect": metadata.version("kiteconnect"),
+              "autobahn": metadata.version("autobahn"),
+          }, sort_keys=True))
+          PY
 
       - name: Upload dependency audit evidence
         if: always()
@@ -173,7 +196,10 @@ jobs:
         with:
           name: dependency-audit-evidence
           if-no-files-found: error
-          path: .runtime/qa/pip_audit.json
+          path: |
+            .runtime/qa/pip_audit.json
+            .runtime/qa/dependency_versions.json
+            .runtime/wheels/kiteconnect_patch_manifest.json
 
   runtime_shim_certification:
     runs-on: ubuntu-latest
