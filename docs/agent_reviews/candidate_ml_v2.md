@@ -32,7 +32,7 @@ acceptance_proof: listed below
 - Added chronological whole-session splitting and purged walk-forward folds.
 - Added a class-balanced logistic-regression baseline and regularised histogram-gradient-boosting model.
 - Added validation-only Platt calibration and model-disagreement abstention.
-- Added explicit missing, OOD, unsupported, unavailable, disagreement, and below-post-cost-value states.
+- Added explicit incomplete-feature, OOD, unsupported, unavailable, disagreement, and below-post-cost-value states.
 - Added nested WFA certification with lift over the rule-only candidate stream, calibration, support, concentration, permutation, one-row-delay, and ablation controls.
 - Added a data-aware walk-forward start resolver that advances the first fold until the unchanged minimum train and validation row gates are satisfied. It never lowers those gates.
 - Added cost-aware thresholding and expected-value calculation.
@@ -206,7 +206,7 @@ No strategy, threshold, TradeBuilder, Orchestrator, production model, ranking, c
 
 ## Grill Me Review
 
-The initial investigation incorrectly stopped at “authoritative candidate corpus missing.” That conclusion was challenged rather than preserved. A deeper repository and LFS inventory found both the raw Upstox corpus and the 525-day replay history containing 145 resolved candidate rows. The two sources were not merged into one claim: raw ticks support only market-response pretraining, while the replay ledger supports only a mocked-contract proxy selector.
+The initial investigation incorrectly concluded that no authoritative historical lineage corpus was available. That conclusion was challenged rather than preserved. A deeper repository and LFS inventory found both the raw Upstox corpus and the 525-day replay history containing 145 resolved candidate rows. The two sources were not merged into one claim: raw ticks support only market-response pretraining, while the replay ledger supports only a mocked-contract proxy selector.
 
 The implementation also exposed two methodological defects during review. The first replay test used fewer validation rows than the contract allowed; the fixture was expanded instead of lowering the 20-row minimum. The first WFA layout began before the sparse ledger could satisfy the 70-row training and 20-row validation requirements; the fold start was made data-aware instead of weakening either threshold.
 
