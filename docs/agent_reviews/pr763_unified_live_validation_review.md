@@ -1,5 +1,16 @@
 # PR #763 Agent Review Evidence
 
+## Machine-Readable Evidence Contract
+
+- mode: PAPER_OBSERVE_ONLY
+- candidate_id: PR763_CI_READINESS_REPAIR_20260802
+- decision: HOLD_MERGE_AND_REPAIR_OBSERVE_ONLY_VALIDATION_LANE
+- reason: GitHub Actions exposed a synthetic reconnect resource-soak contract mismatch and missing review traceability; production live-tick recovery remains unproven and live execution remains blocked.
+- timestamp: 2026-08-02T06:45:42Z
+- is_order_action: false
+- broker_api_called: false
+- source: GitHub Actions run 30736411238 on PR 763 head d885482183cb5e7b3c4546ee691c281dc00a9130
+
 ## Agent Work Contract
 
 Objective: make the unified live-validation branch observable and safe enough for an **observe-only** market session. The immediate repair in commit `0f0a836bdc4a4ea976c69c43f908bbea54b3ba99` corrects the offline reconnect resource-soak contract so it verifies transport lifecycle separately from production live-tick recovery.
