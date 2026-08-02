@@ -191,6 +191,10 @@ def test_certification_reports_wfa_controls_without_consuming_holdout(tmp_path):
     assert report['verdict'] in {'READY_FOR_LOCKED_HOLDOUT','ML_EVIDENCE_QUARANTINED','NO_OUT_OF_SAMPLE_ML_LIFT','INSUFFICIENT_EVIDENCE'}
     assert report['holdout_metrics_consumed'] is False
     assert report['allowed_for_live_execution'] is False
+    assert report['walk_forward_support']['support_gates_lowered'] is False
+    assert report['walk_forward_support']['effective_min_train_sessions'] >= cert_cfg.min_train_sessions
+    assert report['walk_forward_support']['nested_train_rows'] >= model_cfg.min_train_rows
+    assert report['walk_forward_support']['nested_validation_rows'] >= model_cfg.min_validation_rows
     assert report['base_walk_forward']['summary']['folds']>=1
     assert report['label_permutation_control']['summary']['folds']>=1
     assert report['one_row_delayed_feature_control']['summary']['folds']>=1
