@@ -38,11 +38,11 @@ def canonicalise_frame(raw: pd.DataFrame, source: Path) -> pd.DataFrame | None:
     elif d: x = raw[d]
     elif isinstance(raw.index,pd.DatetimeIndex): x = pd.Series(raw.index,index=raw.index)
     else: return None
-    parsed = pd.to_datetime(x,errors="coerce")
+    parsed = pd.to_datetime(x,errors="coerce",dayfirst=bool(d))
     try:
         parsed = parsed.dt.tz_localize("Asia/Kolkata",ambiguous="NaT",nonexistent="shift_forward") if parsed.dt.tz is None else parsed.dt.tz_convert("Asia/Kolkata")
     except (AttributeError,TypeError,ValueError):
-        parsed = pd.to_datetime(x,errors="coerce",utc=True).dt.tz_convert("Asia/Kolkata")
+        parsed = pd.to_datetime(x,errors="coerce",utc=True,dayfirst=bool(d)).dt.tz_convert("Asia/Kolkata")
     df = pd.DataFrame({"timestamp":parsed,"open":pd.to_numeric(raw[o],errors="coerce"),"high":pd.to_numeric(raw[h],errors="coerce"),"low":pd.to_numeric(raw[l],errors="coerce"),"close":pd.to_numeric(raw[c],errors="coerce")})
     df["symbol"] = raw[sym].astype(str).values if sym else source.stem
     df = df.dropna().loc[lambda z:(z[["open","high","low","close"]]>0).all(axis=1)]
@@ -94,7 +94,7 @@ def resolve(df: pd.DataFrame,i:int,side:str,stop:float,target:float,hold:int)->t
     return end,float(df.at[end,"close"]),"TIME_OR_SESSION_EXIT"
 
 def _resolve_exit(df: pd.DataFrame, i: int, side: str, entry: float, stop: float, target: float, hold: int) -> tuple[int,float,str]:
-    return resolve(df, i, side, stop, target, hold)
+    return resolve(df, i, side, stop,target,hold)
 
 def build(df:pd.DataFrame,source:str,symbol:str,setup:str,side:str,i:int,p:Params)->dict[str,object]|None:
     e=i+1
@@ -110,8 +110,9 @@ def build(df:pd.DataFrame,source:str,symbol:str,setup:str,side:str,i:int,p:Param
 def generate(frame:pd.DataFrame,source:str,p:Params,setup:str="TRAP")->list[dict[str,object]]:
     trades=[]
     for symbol,sdf in frame.groupby("symbol",sort=True):
-      for _,day in sdf.groupby("session",sort=True):
-        df=indicators(day,p); until=-1; bull=None; bear=None
+      prepared=indicators(sdf,p)
+      for _,day in prepared.groupby("session",sort=True):
+        df=day.reset_index(drop=True); until=-1; bull=None; bear=None
         for i in range(len(df)):
           if i<=until or pd.isna(df.at[i,"atr"]):continue
           close,upper,lower=float(df.at[i,"close"]),float(df.at[i,"upper"]),float(df.at[i,"lower"]); signal=None
