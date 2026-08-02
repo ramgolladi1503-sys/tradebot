@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from config import config as cfg
+import core
 import core.auth as auth
 import core.auth_manager as auth_manager
 
@@ -38,6 +39,7 @@ def _install_security_guard(monkeypatch, calls=None):
 
     module.enforce_no_repo_token_artifacts = enforce
     monkeypatch.setitem(sys.modules, "core.security_guard", module)
+    monkeypatch.setattr(core, "security_guard", module, raising=False)
 
 
 def _install_kite_client_module(monkeypatch, *, raw_client=None, singleton=None):
@@ -45,6 +47,7 @@ def _install_kite_client_module(monkeypatch, *, raw_client=None, singleton=None)
     module._RAW_KITECONNECT = raw_client
     module.kite_client = singleton
     monkeypatch.setitem(sys.modules, "core.kite_client", module)
+    monkeypatch.setattr(core, "kite_client", module, raising=False)
     return module
 
 
@@ -52,6 +55,7 @@ def _install_depth_module(monkeypatch, ticker_cls):
     module = types.ModuleType("core.kite_depth_ws")
     module.KiteTicker = ticker_cls
     monkeypatch.setitem(sys.modules, "core.kite_depth_ws", module)
+    monkeypatch.setattr(core, "kite_depth_ws", module, raising=False)
     return module
 
 
@@ -208,6 +212,7 @@ def test_lazy_feed_event_wrapper_delegates(monkeypatch):
     module = types.ModuleType("core.feed_startup_lifecycle")
     module.record_feed_startup_event = lambda *args, **kwargs: calls.append((args, kwargs)) or "ok"
     monkeypatch.setitem(sys.modules, "core.feed_startup_lifecycle", module)
+    monkeypatch.setattr(core, "feed_startup_lifecycle", module, raising=False)
 
     assert auth.record_feed_startup_event("EVENT", source="mutation") == "ok"
     assert auth._record_feed_startup_event("PRIVATE", source="mutation") == "ok"
@@ -400,6 +405,7 @@ def test_auth_state_persistence_and_runtime_snapshot(monkeypatch, tmp_path):
         "health": latest_health_payload,
     }
     monkeypatch.setitem(sys.modules, "core.runtime_auth_freshness", freshness)
+    monkeypatch.setattr(core, "runtime_auth_freshness", freshness, raising=False)
     path.write_text(json.dumps({"status": "AUTH_REQUIRED"}), encoding="utf-8")
     snapshot = auth_manager.runtime_auth_snapshot(repo_root_path=tmp_path)
     assert snapshot == {
