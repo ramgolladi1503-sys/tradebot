@@ -5,7 +5,7 @@
 - mode: PAPER_OBSERVE_ONLY
 - candidate_id: PR763_CI_READINESS_REPAIR_20260802
 - decision: HOLD_MERGE_AND_REPAIR_OBSERVE_ONLY_VALIDATION_LANE
-- reason: GitHub Actions exposed a synthetic reconnect resource-soak contract mismatch and missing review traceability; production live-tick recovery remains unproven and live execution remains blocked.
+- reason: GitHub Actions exposed a synthetic reconnect resource-soak contract mismatch and incomplete review traceability; production live-tick recovery remains unproven and live execution remains blocked.
 - timestamp: 2026-08-02T06:45:42Z
 - is_order_action: false
 - broker_api_called: false
