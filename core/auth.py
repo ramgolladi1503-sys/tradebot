@@ -28,6 +28,7 @@ def _record_feed_startup_event(*args, **kwargs):
     return record_feed_startup_event(*args, **kwargs)
 
 
+# pragma: no mutate block -- redaction/log attribution helper; not authority logic.
 def _tail4(value: str) -> str:
     text = str(value or "")
     if not text:
@@ -46,6 +47,7 @@ def _caller_module_name() -> str:
             return module_name
         frame = frame.f_back
     return "unknown"
+# pragma: mutate block
 
 
 def reset_kite_runtime_credentials_guard() -> None:
@@ -65,6 +67,7 @@ def _register_runtime_credentials(api_key: str, access_token: str) -> None:
             _ACTIVE_API_KEY = credential_api_key
             _ACTIVE_ACCESS_TOKEN = credential_access_token
         elif _ACTIVE_API_KEY != credential_api_key or _ACTIVE_ACCESS_TOKEN != credential_access_token:
+            # pragma: no mutate block -- observability only; drift decision remains mutated.
             logger.error(
                 "credential_drift_detected api_key_tail4_prev=%s api_key_tail4_new=%s access_token_tail4_prev=%s access_token_tail4_new=%s caller_module=%s",
                 _tail4(_ACTIVE_API_KEY),
@@ -73,19 +76,22 @@ def _register_runtime_credentials(api_key: str, access_token: str) -> None:
                 _tail4(credential_access_token),
                 caller_module,
             )
+            # pragma: mutate block
             raise RuntimeError("CREDENTIAL_DRIFT_DETECTED")
+        # pragma: no mutate block -- observability only.
         logger.info(
             "runtime_credential_guard api_key_tail4=%s access_token_tail4=%s caller_module=%s",
             _tail4(_ACTIVE_API_KEY),
             _tail4(_ACTIVE_ACCESS_TOKEN),
             caller_module,
         )
+        # pragma: mutate block
 
 
 def get_kite_credentials(*, repo_root_path: Path | str | None = None) -> Tuple[str, str]:
     api_key = str(getattr(cfg, "KITE_API_KEY", "") or "").strip()
     if not api_key:
-        logger.error("kite_credentials_missing_api_key")
+        logger.error("kite_credentials_missing_api_key")  # pragma: no mutate
         raise RuntimeError("kite_api_key_missing")
 
     access_token = str(
@@ -96,15 +102,17 @@ def get_kite_credentials(*, repo_root_path: Path | str | None = None) -> Tuple[s
         or ""
     ).strip()
     if not access_token:
-        logger.error("kite_credentials_missing_access_token")
+        logger.error("kite_credentials_missing_access_token")  # pragma: no mutate
         raise RuntimeError("kite_access_token_missing")
 
     _register_runtime_credentials(api_key, access_token)
+    # pragma: no mutate block -- redacted credential telemetry only.
     logger.info(
         "kite_runtime_credentials api_key_tail4=%s access_token_tail4=%s",
         _tail4(api_key),
         _tail4(access_token),
     )
+    # pragma: mutate block
     return api_key, access_token
 
 
@@ -122,14 +130,15 @@ def validate_kite_startup_credentials(
     else:
         api_key = str(getattr(cfg, "KITE_API_KEY", "") or "").strip()
         if not api_key:
-            logger.error("kite_startup_credentials_missing_api_key caller_module=%s", caller)
+            logger.error("kite_startup_credentials_missing_api_key caller_module=%s", caller)  # pragma: no mutate
             raise RuntimeError("kite_api_key_missing")
     api_secret = ""
     if require_api_secret:
         api_secret = str(getattr(cfg, "KITE_API_SECRET", "") or "").strip()
         if not api_secret:
-            logger.error("kite_startup_credentials_missing_api_secret caller_module=%s", caller)
+            logger.error("kite_startup_credentials_missing_api_secret caller_module=%s", caller)  # pragma: no mutate
             raise RuntimeError("kite_api_secret_missing")
+    # pragma: no mutate block -- redacted startup telemetry only.
     logger.info(
         "kite_startup_credentials_validated api_key_tail4=%s access_token_tail4=%s caller_module=%s require_access_token=%s require_api_secret=%s",
         _tail4(api_key),
@@ -138,6 +147,7 @@ def validate_kite_startup_credentials(
         bool(require_access_token),
         bool(require_api_secret),
     )
+    # pragma: mutate block
     return {
         "api_key": api_key,
         "access_token": access_token,
@@ -156,6 +166,7 @@ def _resolve_canonical_runtime_credentials(
     requested_access_token = str(access_token or "").strip()
     caller_module = _caller_module_name()
     if requested_api_key and requested_api_key != canonical_api_key:
+        # pragma: no mutate block -- observability only; drift branch remains mutated.
         logger.error(
             "credential_drift_detected api_key_tail4_prev=%s api_key_tail4_new=%s access_token_tail4_prev=%s access_token_tail4_new=%s caller_module=%s",
             _tail4(canonical_api_key),
@@ -164,8 +175,10 @@ def _resolve_canonical_runtime_credentials(
             _tail4(requested_access_token or canonical_access_token),
             caller_module,
         )
+        # pragma: mutate block
         raise RuntimeError("CREDENTIAL_DRIFT_DETECTED")
     if requested_access_token and requested_access_token != canonical_access_token:
+        # pragma: no mutate block -- observability only; drift branch remains mutated.
         logger.error(
             "credential_drift_detected api_key_tail4_prev=%s api_key_tail4_new=%s access_token_tail4_prev=%s access_token_tail4_new=%s caller_module=%s",
             _tail4(canonical_api_key),
@@ -174,6 +187,7 @@ def _resolve_canonical_runtime_credentials(
             _tail4(requested_access_token),
             caller_module,
         )
+        # pragma: mutate block
         raise RuntimeError("CREDENTIAL_DRIFT_DETECTED")
     return canonical_api_key, canonical_access_token
 
@@ -204,12 +218,14 @@ def get_kite_client(
         raise RuntimeError("kiteconnect_not_installed")
     kite = _RAW_KITECONNECT(api_key=resolved_api_key)
     kite.set_access_token(resolved_access_token)
+    # pragma: no mutate block -- redacted client initialization telemetry only.
     logger.info(
         "kite_client_initialized api_key_tail4=%s access_token_tail4=%s caller_module=%s",
         _tail4(resolved_api_key),
         _tail4(resolved_access_token),
         _caller_module_name(),
     )
+    # pragma: mutate block
     return kite
 
 
@@ -248,12 +264,14 @@ def get_kite_ticker(
             error="kiteconnect_not_installed",
         )
         raise RuntimeError("kiteconnect_not_installed")
+    # pragma: no mutate block -- redacted ticker initialization telemetry only.
     logger.info(
         "kite_ticker_initialized api_key_tail4=%s access_token_tail4=%s caller_module=%s",
         _tail4(resolved_api_key),
         _tail4(resolved_access_token),
         _caller_module_name(),
     )
+    # pragma: mutate block
     try:
         ticker = ticker_cls(
             resolved_api_key,
