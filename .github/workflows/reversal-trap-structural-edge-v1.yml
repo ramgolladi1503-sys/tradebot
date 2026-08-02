@@ -3,7 +3,7 @@ name: Reversal Trap Description-Derived V2
 on:
   pull_request:
     paths:
-      - "scripts/run_reversal_trap_description_derived_v2.py.gz.b64"
+      - "scripts/reversal_trap_description_v2_parts/**"
       - "tests/research/test_reversal_trap_description_derived_v2.py"
       - "docs/research/reversal_trap_description_derived_strategy_v1.md"
       - ".github/workflows/reversal-trap-structural-edge-v1.yml"
@@ -25,7 +25,7 @@ jobs:
         run: python -m pip install numpy pandas numba pytest
       - name: Decode immutable research runner
         run: |
-          base64 --decode scripts/run_reversal_trap_description_derived_v2.py.gz.b64 | gzip --decompress > /tmp/run_reversal_trap_description_derived_v2.py
+          cat scripts/reversal_trap_description_v2_parts/part*.b64 | base64 --decode | gzip --decompress > /tmp/run_reversal_trap_description_derived_v2.py
           echo "313cb8e0010e8e5343d1d69abc18964b64e305f8803c7b2969fe3d107e865cbc  /tmp/run_reversal_trap_description_derived_v2.py" | sha256sum --check
           python -m py_compile /tmp/run_reversal_trap_description_derived_v2.py
       - name: Focused causal tests
