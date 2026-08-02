@@ -16,10 +16,15 @@ _ACTIVE_API_KEY = ""
 _ACTIVE_ACCESS_TOKEN = ""
 
 
-def _record_feed_startup_event(*args, **kwargs):
+def record_feed_startup_event(*args, **kwargs):
     """Load feed evidence only when ticker lifecycle work actually occurs."""
-    from core.feed_startup_lifecycle import record_feed_startup_event
+    from core.feed_startup_lifecycle import record_feed_startup_event as recorder
 
+    return recorder(*args, **kwargs)
+
+
+def _record_feed_startup_event(*args, **kwargs):
+    """Backward-compatible private delegate for focused boundary tests."""
     return record_feed_startup_event(*args, **kwargs)
 
 
@@ -223,7 +228,7 @@ def get_kite_ticker(
 
     import core.kite_depth_ws as ws
 
-    _record_feed_startup_event(
+    record_feed_startup_event(
         "KITE_TICKER_CREATE_ATTEMPTED",
         source="core.auth.get_kite_ticker",
         details={
@@ -237,7 +242,7 @@ def get_kite_ticker(
     )
     ticker_cls = getattr(ws, "KiteTicker", None)
     if ticker_cls is None:
-        _record_feed_startup_event(
+        record_feed_startup_event(
             "KITE_TICKER_CREATE_FAILED",
             source="core.auth.get_kite_ticker",
             error="kiteconnect_not_installed",
@@ -259,13 +264,13 @@ def get_kite_ticker(
             reconnect_max_delay=60,
         )
     except Exception as exc:
-        _record_feed_startup_event(
+        record_feed_startup_event(
             "KITE_TICKER_CREATE_FAILED",
             source="core.auth.get_kite_ticker",
             error=f"{type(exc).__name__}:{exc}",
         )
         raise
-    _record_feed_startup_event(
+    record_feed_startup_event(
         "KITE_TICKER_CREATED",
         source="core.auth.get_kite_ticker",
         details={"kite_id": id(ticker)},
