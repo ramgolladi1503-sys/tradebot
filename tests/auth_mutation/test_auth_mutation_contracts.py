@@ -64,12 +64,20 @@ def test_auth_helpers_and_caller_fallbacks(monkeypatch):
     assert auth._tail4("abc") == "abc"
     assert auth._tail4("abcdef") == "cdef"
 
-    monkeypatch.setattr(auth.inspect, "currentframe", lambda: None)
+    monkeypatch.setattr(
+        auth,
+        "inspect",
+        SimpleNamespace(currentframe=lambda: None),
+    )
     assert auth._caller_module_name() == "unknown"
 
     terminal = SimpleNamespace(f_globals={}, f_back=None)
     initial = SimpleNamespace(f_globals={}, f_back=terminal)
-    monkeypatch.setattr(auth.inspect, "currentframe", lambda: initial)
+    monkeypatch.setattr(
+        auth,
+        "inspect",
+        SimpleNamespace(currentframe=lambda: initial),
+    )
     assert auth._caller_module_name() == "unknown"
 
 
