@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import pytest
 
+import core.runtime_safety_boot_guard as boot_guard
 from core.runtime_safety_boot_guard import (
     assess_runtime_boot_safety,
     enforce_runtime_boot_safety,
@@ -161,20 +162,67 @@ def test_enforce_runtime_boot_safety_raises_and_writes_report_on_live_failure(tm
     assert payload["mode"] == "LIVE"
     assert payload["fatal_reasons"] == ["LIVE_UNSAFE_FLAG:DISABLE_RISK_GATE"]
 
+
 def test_live_fails_without_broker_adapter():
     decision = assess_runtime_boot_safety(
         mode="LIVE",
         config=_Config(),
-        env={"MAX_DAILY_LOSS_PCT": "0.02"} # missing LIVE_BROKER_ADAPTER_ACTIVE
+        env={"MAX_DAILY_LOSS_PCT": "0.02"},
     )
     assert decision.allowed is False
     assert "LIVE_BROKER_ADAPTER_NOT_CONFIGURED" in decision.fatal_reasons
+
 
 def test_live_fails_without_drawdown_limit():
     decision = assess_runtime_boot_safety(
         mode="LIVE",
         config=_Config(),
-        env={"LIVE_BROKER_ADAPTER_ACTIVE": "true", "MAX_DAILY_LOSS_PCT": "0.10"} # 10% is > 5% allowed
+        env={"LIVE_BROKER_ADAPTER_ACTIVE": "true", "MAX_DAILY_LOSS_PCT": "0.10"},
     )
     assert decision.allowed is False
     assert "LIVE_GLOBAL_DRAWDOWN_LIMIT_UNSAFE" in decision.fatal_reasons
+
+
+def test_mapping_config_is_supported_and_environment_can_be_none():
+    config = {
+        "EXECUTION_MODE": "PAPER",
+        "ALLOW_SYNTHETIC_CHAIN": True,
+    }
+
+    assert boot_guard._env_value(None, "EXECUTION_MODE") is None
+    decision = assess_runtime_boot_safety(mode=None, config=config, env={})
+
+    assert decision.mode == "PAPER"
+    assert decision.allowed is True
+    assert decision.unsafe_sources["ALLOW_SYNTHETIC_OPTION_QUOTES"] == ["ALLOW_SYNTHETIC_CHAIN"]
+
+
+def test_explicit_false_environment_value_overrides_true_config_alias():
+    config = {"ALLOW_STALE_QUOTES": True}
+
+    decision = assess_runtime_boot_safety(
+        mode="PAPER",
+        config=config,
+        env={"ALLOW_STALE_QUOTES": "false"},
+    )
+
+    assert decision.allowed is True
+    assert "ALLOW_STALE_QUOTES" not in decision.unsafe_flags
+
+
+def test_startup_event_failure_cannot_override_safe_boot_decision(monkeypatch, tmp_path):
+    import core.runtime_startup_lifecycle as lifecycle
+
+    def fail_record(*_args, **_kwargs):
+        raise RuntimeError("telemetry unavailable")
+
+    monkeypatch.setattr(lifecycle, "record_runtime_startup_event", fail_record)
+
+    decision = enforce_runtime_boot_safety(
+        mode="PAPER",
+        config=_Config(),
+        env={},
+        report_path=tmp_path / "boot.json",
+    )
+
+    assert decision.allowed is True
