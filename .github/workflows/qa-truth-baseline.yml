@@ -97,6 +97,7 @@ jobs:
           tests/auth/test_auth_boundary_exhaustive.py
           tests/auth/test_auth_internal_fallbacks.py
           tests/auth/test_check_kite_auth_cli_behavior.py
+          tests/auth/test_auth_feed_event_boundary.py
           tests/auth/test_auth_safety.py
           tests/test_kite_client_auth_guard.py
           tests/test_runtime_auth_freshness.py
