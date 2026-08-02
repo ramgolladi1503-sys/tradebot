@@ -8,13 +8,19 @@ from typing import Tuple
 
 from config import config as cfg
 from core.auth_manager import resolve_access_token
-from core.feed_startup_lifecycle import record_feed_startup_event
 
 logger = logging.getLogger(__name__)
 
 _CREDENTIAL_LOCK = threading.Lock()
 _ACTIVE_API_KEY = ""
 _ACTIVE_ACCESS_TOKEN = ""
+
+
+def _record_feed_startup_event(*args, **kwargs):
+    """Load feed evidence only when ticker lifecycle work actually occurs."""
+    from core.feed_startup_lifecycle import record_feed_startup_event
+
+    return record_feed_startup_event(*args, **kwargs)
 
 
 def _tail4(value: str) -> str:
@@ -217,7 +223,7 @@ def get_kite_ticker(
 
     import core.kite_depth_ws as ws
 
-    record_feed_startup_event(
+    _record_feed_startup_event(
         "KITE_TICKER_CREATE_ATTEMPTED",
         source="core.auth.get_kite_ticker",
         details={
@@ -231,7 +237,7 @@ def get_kite_ticker(
     )
     ticker_cls = getattr(ws, "KiteTicker", None)
     if ticker_cls is None:
-        record_feed_startup_event(
+        _record_feed_startup_event(
             "KITE_TICKER_CREATE_FAILED",
             source="core.auth.get_kite_ticker",
             error="kiteconnect_not_installed",
@@ -248,16 +254,18 @@ def get_kite_ticker(
             resolved_api_key,
             resolved_access_token,
             debug=debug,
-            reconnect=True, reconnect_max_tries=300, reconnect_max_delay=60,
+            reconnect=True,
+            reconnect_max_tries=300,
+            reconnect_max_delay=60,
         )
     except Exception as exc:
-        record_feed_startup_event(
+        _record_feed_startup_event(
             "KITE_TICKER_CREATE_FAILED",
             source="core.auth.get_kite_ticker",
             error=f"{type(exc).__name__}:{exc}",
         )
         raise
-    record_feed_startup_event(
+    _record_feed_startup_event(
         "KITE_TICKER_CREATED",
         source="core.auth.get_kite_ticker",
         details={"kite_id": id(ticker)},
