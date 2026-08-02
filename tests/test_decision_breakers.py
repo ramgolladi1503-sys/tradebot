@@ -97,3 +97,31 @@ def test_broker_failure_breaker_auto_recovers_after_healthy_window(monkeypatch):
     blocked, reasons = breakers.should_block_decisions(now_ts=25.0)
     assert blocked is False
     assert BREAKER_BROKER_FAILURE not in reasons
+
+
+def test_unknown_breaker_name_is_rejected_without_state_mutation(monkeypatch):
+    _configure_for_test(monkeypatch)
+    breakers = DecisionCircuitBreakers(now_fn=lambda: 10.0)
+    before = breakers.snapshot(now_ts=10.0)
+
+    transitions = breakers._record("UNKNOWN_BREAKER", True, evidence={"unexpected": True}, now_ts=11.0)
+
+    assert transitions == []
+    after = breakers.snapshot(now_ts=10.0)
+    assert after["breakers"] == before["breakers"]
+
+
+def test_disabled_breakers_never_block_even_when_state_is_tripped(monkeypatch):
+    _configure_for_test(monkeypatch)
+    breakers = DecisionCircuitBreakers(now_fn=lambda: 0.0)
+    breakers.observe_broker_failure(True, now_ts=0.0)
+    breakers.observe_broker_failure(True, now_ts=1.0)
+    assert breakers.snapshot(now_ts=1.0)["blocked"] is True
+
+    breakers.enabled = False
+
+    assert breakers.should_block_decisions(now_ts=2.0) == (False, [])
+    snapshot = breakers.snapshot(now_ts=2.0)
+    assert snapshot["enabled"] is False
+    assert snapshot["blocked"] is False
+    assert snapshot["blocked_reasons"] == []
