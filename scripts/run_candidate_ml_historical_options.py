@@ -89,10 +89,15 @@ def main() -> int:
     }
     _write_json(output_root / "historical_option_source_manifest.json", source_manifest)
     _write_json(output_root / "historical_option_corpus_evidence.json", corpus_evidence)
-    exact_path = output_root / "historical_option_exact_atm_dataset.parquet"
-    proxy_path = output_root / "historical_option_nearest_strike_proxy_dataset.parquet"
-    exact.to_parquet(exact_path, index=False)
-    proxy.to_parquet(proxy_path, index=False)
+
+    exact_path: Path | None = None
+    proxy_path: Path | None = None
+    if not exact.empty:
+        exact_path = output_root / "historical_option_exact_atm_dataset.parquet"
+        exact.to_parquet(exact_path, index=False)
+    if not proxy.empty:
+        proxy_path = output_root / "historical_option_nearest_strike_proxy_dataset.parquet"
+        proxy.to_parquet(proxy_path, index=False)
 
     config = CandidateMLConfig(
         min_train_rows=int(args.min_train_rows),
@@ -202,8 +207,8 @@ def main() -> int:
     report = {
         **corpus_evidence,
         "verdict": verdict,
-        "exact_dataset_path": str(exact_path),
-        "nearest_proxy_dataset_path": str(proxy_path),
+        "exact_dataset_path": str(exact_path) if exact_path else None,
+        "nearest_proxy_dataset_path": str(proxy_path) if proxy_path else None,
         "source_manifest_path": str(output_root / "historical_option_source_manifest.json"),
         "model_trained": model_trained,
         "training_reason": training_reason,

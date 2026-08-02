@@ -23,6 +23,15 @@ from .dataset import (
 )
 from .evaluation import counterfactual_shadow_report, drift_report, population_stability_index
 from .features import build_temporal_candidate_features
+from .historical_option_reconstruction import (
+    HISTORICAL_OPTION_LANE,
+    HISTORICAL_OPTION_REQUIRED_FEATURES,
+    HistoricalOptionDataError,
+    build_historical_option_datasets,
+    load_canonical_intents,
+    load_option_replay_blockers,
+    load_option_trade_ledger,
+)
 from .holdout import (
     HOLDOUT_ACKNOWLEDGEMENT,
     LockedHoldoutSeal,
@@ -48,6 +57,8 @@ from .provenance import SourceFileEvidence, build_input_manifest, inspect_source
 __all__ = [
     "DEFAULT_REQUIRED_FEATURES",
     "FORBIDDEN_FEATURE_TOKENS",
+    "HISTORICAL_OPTION_LANE",
+    "HISTORICAL_OPTION_REQUIRED_FEATURES",
     "HOLDOUT_ACKNOWLEDGEMENT",
     "MARKET_CORPUS_LANE",
     "PRETRAINING_REQUIRED_FEATURES",
@@ -57,6 +68,7 @@ __all__ = [
     "CandidateMLCertificationConfig",
     "CandidateMLConfig",
     "CandidatePrediction",
+    "HistoricalOptionDataError",
     "LockedHoldoutSeal",
     "MarketCorpusConfig",
     "PredictionStatus",
@@ -64,6 +76,7 @@ __all__ = [
     "audit_market_tick_corpus",
     "build_candidate_dataset",
     "build_candidate_row",
+    "build_historical_option_datasets",
     "build_input_manifest",
     "build_market_response_pretraining_dataset",
     "build_market_state_frame",
@@ -77,7 +90,10 @@ __all__ = [
     "feature_columns",
     "fit_candidate_ml",
     "inspect_source_file",
+    "load_canonical_intents",
     "load_market_tick_corpus",
+    "load_option_replay_blockers",
+    "load_option_trade_ledger",
     "market_corpus_summary",
     "normalize_tick_frame",
     "open_locked_holdout",

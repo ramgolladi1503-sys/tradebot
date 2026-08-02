@@ -7,9 +7,12 @@ on:
       - "scripts/run_candidate_ml_v2.py"
       - "scripts/run_candidate_ml_market_corpus.py"
       - "scripts/run_candidate_ml_replay_ledger.py"
+      - "scripts/run_candidate_ml_historical_options.py"
       - "tests/test_candidate_ml_v2*.py"
       - "docs/architecture/candidate_ml_v2.md"
+      - "docs/architecture/candidate_ml_v2_historical_options.md"
       - "docs/agent_reviews/candidate_ml_v2.md"
+      - "docs/agent_reviews/candidate_ml_v2_historical_options.md"
       - ".github/workflows/candidate-ml-v2.yml"
   workflow_dispatch:
 
@@ -37,6 +40,7 @@ jobs:
             scripts/run_candidate_ml_v2.py \
             scripts/run_candidate_ml_market_corpus.py \
             scripts/run_candidate_ml_replay_ledger.py \
+            scripts/run_candidate_ml_historical_options.py \
             tests/test_candidate_ml_v2*.py
       - name: Focused behavioral tests
         env:
