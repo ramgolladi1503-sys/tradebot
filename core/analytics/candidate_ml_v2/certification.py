@@ -92,6 +92,64 @@ def _nested_model(
     )
 
 
+def _ordered_sessions(frame: pd.DataFrame) -> list[str]:
+    return list(dict.fromkeys(frame["session_date"].astype(str).tolist()))
+
+
+def _resolve_supported_min_train_sessions(
+    research_df: pd.DataFrame,
+    model_config: CandidateMLConfig,
+    certification_config: CandidateMLCertificationConfig,
+) -> tuple[int, dict[str, Any]]:
+    """Find the first chronological prefix that can satisfy the unchanged model gates.
+
+    The certification configuration expresses a minimum number of sessions, while
+    the model contract also requires minimum train and validation row counts. Sparse
+    candidate ledgers can therefore satisfy the session count but still be unable to
+    fit a nested model. This resolver advances the fold boundary until the existing
+    row-support gates pass; it never reduces those gates.
+    """
+
+    sessions = _ordered_sessions(research_df)
+    requested = int(certification_config.min_train_sessions)
+    latest_start = len(sessions) - int(certification_config.n_splits)
+    if latest_start < requested:
+        raise ValueError("insufficient_sessions_for_supported_walk_forward")
+
+    attempts: list[dict[str, Any]] = []
+    for session_count in range(requested, latest_start + 1):
+        prefix_sessions = set(sessions[:session_count])
+        prefix = research_df[
+            research_df["session_date"].astype(str).isin(prefix_sessions)
+        ].copy()
+        try:
+            inner_train, inner_validation = chronological_split(prefix, model_config)
+        except ValueError as exc:
+            attempts.append(
+                {
+                    "sessions": int(session_count),
+                    "rows": int(len(prefix)),
+                    "reason": str(exc),
+                }
+            )
+            continue
+        evidence = {
+            "requested_min_train_sessions": requested,
+            "effective_min_train_sessions": int(session_count),
+            "prefix_rows": int(len(prefix)),
+            "nested_train_rows": int(len(inner_train)),
+            "nested_validation_rows": int(len(inner_validation)),
+            "remaining_test_sessions": int(len(sessions) - session_count),
+            "model_min_train_rows": int(model_config.min_train_rows),
+            "model_min_validation_rows": int(model_config.min_validation_rows),
+            "support_gates_lowered": False,
+            "attempted_prefixes": attempts,
+        }
+        return int(session_count), evidence
+
+    raise ValueError("no_chronological_prefix_satisfies_model_support")
+
+
 def _score_frame(bundle: CandidateMLBundle, frame: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for _, source in frame.iterrows():
@@ -219,8 +277,21 @@ def _ablation_report(
     research_df: pd.DataFrame,
     model_config: CandidateMLConfig,
     certification_config: CandidateMLCertificationConfig,
+    *,
+    supported_train_sessions: int,
 ) -> dict[str, Any]:
-    train, validation = chronological_split(research_df, model_config)
+    sessions = _ordered_sessions(research_df)
+    train_sessions = set(sessions[:supported_train_sessions])
+    test_sessions = set(sessions[supported_train_sessions:])
+    train = research_df[
+        research_df["session_date"].astype(str).isin(train_sessions)
+    ].copy().reset_index(drop=True)
+    validation = research_df[
+        research_df["session_date"].astype(str).isin(test_sessions)
+    ].copy().reset_index(drop=True)
+    if validation.empty:
+        raise ValueError("ablation_test_block_empty")
+
     all_features = feature_columns(train)
     base_bundle = _nested_model(train, model_config, features=all_features)
     base_metrics = _fold_metrics(_score_frame(base_bundle, validation))
@@ -243,7 +314,14 @@ def _ablation_report(
             }
         except Exception as exc:
             results[feature] = {"error": f"{type(exc).__name__}:{exc}"}
-    return {"base": base_metrics, "feature_ablations": results}
+    return {
+        "train_sessions": int(supported_train_sessions),
+        "train_rows": int(len(train)),
+        "test_sessions": int(len(test_sessions)),
+        "test_rows": int(len(validation)),
+        "base": base_metrics,
+        "feature_ablations": results,
+    }
 
 
 def certify_candidate_ml(
@@ -255,11 +333,16 @@ def certify_candidate_ml(
     validate_candidate_dataset(research_df)
     model_cfg = model_config or CandidateMLConfig()
     cert_cfg = certification_config or CandidateMLCertificationConfig()
+    effective_train_sessions, support_evidence = _resolve_supported_min_train_sessions(
+        research_df,
+        model_cfg,
+        cert_cfg,
+    )
     splits = purged_walk_forward_splits(
         research_df,
         n_splits=cert_cfg.n_splits,
         purge_rows=model_cfg.purge_rows,
-        min_train_sessions=cert_cfg.min_train_sessions,
+        min_train_sessions=effective_train_sessions,
     )
     base_folds: list[dict[str, Any]] = []
     permutation_folds: list[dict[str, Any]] = []
@@ -275,6 +358,8 @@ def certify_candidate_ml(
             base_metrics = _fold_metrics(_score_frame(base_bundle, test_frame))
             base_metrics["fold_index"] = fold_index
             base_metrics["train_rows"] = int(len(train_frame))
+            base_metrics["train_sessions"] = int(train_frame["session_date"].nunique())
+            base_metrics["test_sessions"] = int(test_frame["session_date"].nunique())
             base_folds.append(base_metrics)
 
             permuted = _permute_targets(train_frame, cert_cfg.random_state + fold_index)
@@ -336,7 +421,12 @@ def certify_candidate_ml(
 
     ablations: dict[str, Any]
     try:
-        ablations = _ablation_report(research_df, model_cfg, cert_cfg)
+        ablations = _ablation_report(
+            research_df,
+            model_cfg,
+            cert_cfg,
+            supported_train_sessions=effective_train_sessions,
+        )
     except Exception as exc:
         ablations = {"error": f"{type(exc).__name__}:{exc}"}
 
@@ -348,6 +438,7 @@ def certify_candidate_ml(
         "dataset_sessions": int(research_df["session_date"].nunique()),
         "model_config": model_cfg.to_dict(),
         "certification_config": cert_cfg.to_dict(),
+        "walk_forward_support": support_evidence,
         "gates": gates,
         "base_walk_forward": {"summary": base_summary, "folds": base_folds},
         "label_permutation_control": {"summary": permutation_summary, "folds": permutation_folds},
