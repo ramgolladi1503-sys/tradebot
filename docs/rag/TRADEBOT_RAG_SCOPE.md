@@ -22,7 +22,7 @@ Provide a local, read-only question-answering surface over TradeBot repository e
 - Live market recommendations or profitability claims.
 - Web crawling and external document ingestion.
 - Multi-agent orchestration, knowledge graphs, autonomous repair, and self-modifying prompts.
-- Runtime secrets, `.env` files, logs, model binaries, market datasets, and files outside the repository.
+- Runtime secrets, `.env` files, logs, model binaries, market datasets, imported `external_local_dirs`, raw process/environment/credential dumps, and files outside the repository.
 - Generative model calls in V1. The default answerer is extractive to keep unsupported claims impossible by construction.
 
 These exclusions are scope controls, not missing architecture. A generative model should be added only after retrieval evaluation is stable and only behind the same citation and refusal contract.
@@ -62,7 +62,7 @@ streamlit run dashboard/tradebot_rag_app.py
 ## Production acceptance gates
 
 1. Unit tests cover source allowlisting, line-addressable chunking, incremental updates, deletion cleanup, retrieval, citations, and unsupported-question refusal.
-2. `rag/eval_cases.json` reaches `hit@5 >= 0.80`.
+2. `rag/eval_cases.json` reaches `hit@5 >= 0.80` and unsupported-question refusal accuracy `= 1.00`.
 3. Index artifacts remain under ignored `.runtime/` paths.
 4. No imported or called code path reaches broker, strategy execution, risk mutation, or live market feeds.
 5. Every non-refusal answer contains at least one source citation.
