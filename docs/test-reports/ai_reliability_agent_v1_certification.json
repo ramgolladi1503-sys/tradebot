@@ -1,0 +1,101 @@
+{
+  "certification_level": "SIMULATION_CERTIFIED",
+  "gate_count": 10,
+  "gates": [
+    {
+      "evidence": {"evidence_id": "EV-2ebe7ac084524ba1bf98e2cfc06389cc"},
+      "gate_id": "EVIDENCE_REDACTION",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "errors": [],
+        "last_sha256": "5555e9e2aec104869076af6a452a276d5522fea6fc8310735b3f0a904b9c59a8",
+        "row_count": 3
+      },
+      "gate_id": "IMMUTABLE_HASH_CHAIN",
+      "passed": true
+    },
+    {
+      "evidence": {"read_success": true, "write_error_code": "LIVE_MODE_WRITE_TOOL_BLOCKED"},
+      "gate_id": "LIVE_READ_ONLY_BOUNDARY",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "contradictory_evidence_ids": [],
+        "evaluated_assertions": 1,
+        "passed_assertions": 1,
+        "reasons": [],
+        "status": "CONFIRMED"
+      },
+      "gate_id": "SUPPORTED_FINDING_CONFIRMED",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "contradictory_evidence_ids": [],
+        "evaluated_assertions": 1,
+        "passed_assertions": 0,
+        "reasons": ["assertion_0:failed:payload.stale:eq"],
+        "status": "REJECTED"
+      },
+      "gate_id": "UNSUPPORTED_FINDING_REJECTED",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "bad_win": "BAD_DECISION_GOOD_OUTCOME",
+        "good_loss": "GOOD_DECISION_BAD_OUTCOME"
+      },
+      "gate_id": "DECISION_OUTCOME_SEPARATION",
+      "passed": true
+    },
+    {
+      "evidence": {"verdict": "PIPELINE_EMITTED_UNTRUSTWORTHY_CANDIDATES"},
+      "gate_id": "UNTRUSTWORTHY_EMISSION_FAILS_CLOSED",
+      "passed": true
+    },
+    {
+      "evidence": {"actual": "ACTUAL", "counterfactual": "COUNTERFACTUAL"},
+      "gate_id": "OUTCOME_SCOPE_SEPARATION",
+      "passed": true
+    },
+    {
+      "evidence": {"rejection_verdict": "UNVERIFIABLE"},
+      "gate_id": "REJECTED_TARGET_NOT_AUTOMATIC_MISSED_OPPORTUNITY",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "ce_wrong_factors": ["NORMAL_VARIANCE"],
+        "pe_right_factors": ["IV_CONTRACTION"]
+      },
+      "gate_id": "DIRECTION_AWARE_OPTION_ATTRIBUTION",
+      "passed": true
+    }
+  ],
+  "generated_at": "2026-07-30T18:19:17.942139+00:00",
+  "live_certification": "LIVE_CERTIFICATION_PENDING",
+  "not_certified_by_this_report": [
+    "live-market operability",
+    "broker connectivity",
+    "strategy profitability",
+    "causal market explanations",
+    "production deployment readiness"
+  ],
+  "passed": true,
+  "passed_gate_count": 10,
+  "schema_version": 1,
+  "scope": [
+    "component contracts",
+    "evidence redaction and integrity",
+    "live read-only boundary",
+    "machine-verifiable finding acceptance/rejection",
+    "decision-quality versus outcome separation",
+    "fail-closed session verdict",
+    "actual versus counterfactual outcome separation",
+    "rejected-target hindsight protection",
+    "direction-aware option attribution"
+  ]
+}

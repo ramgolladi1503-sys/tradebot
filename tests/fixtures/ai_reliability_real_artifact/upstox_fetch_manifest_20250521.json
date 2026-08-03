@@ -1,0 +1,14 @@
+{
+  "date": "20250521",
+  "provider": "upstox",
+  "capture_timestamp": "2026-07-18T00:14:23.974005",
+  "data_type": "UPSTOX_OPTION_CANDLE_ONLY",
+  "fetch_status": "UPSTOX_FETCH_SUCCEEDED_REAL_CANDLES",
+  "data_origin": "upstox_api",
+  "synthetic": false,
+  "mock": false,
+  "fallback": false,
+  "token_logged": false,
+  "certification_eligible": true,
+  "deprecated_endpoint": false
+}
