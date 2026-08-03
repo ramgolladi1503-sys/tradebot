@@ -7,6 +7,8 @@ import json
 import os
 from pathlib import Path
 import queue
+import sys
+import traceback
 import threading
 import time
 from datetime import datetime, timezone
@@ -46,6 +48,7 @@ _STATE = {
 _PROCESS_THREAD: threading.Thread | None = None
 _REACTOR_CALL = None
 _REGISTRY_PATH = "diagnostic_wiring_registry.jsonl"
+_ACTIVE = {"sequence": 0, "stage": None, "entry_ns": None, "reactor_ident": None, "last_reactor_ns": None, "episode": None, "snapshots": set()}
 
 
 def _enabled() -> bool:
@@ -159,6 +162,7 @@ def start_process_heartbeat() -> None:
                            "diagnostic_writer_alive": bool(_THREAD and _THREAD.is_alive()),
                            "diagnostic_queue_depth": _QUEUE.qsize(),
                            "diagnostic_queue_capacity": _QUEUE.maxsize}
+                _watchdog_snapshot_locked()
             _enqueue("process_heartbeat_timeline.jsonl", payload)
     _PROCESS_THREAD = threading.Thread(target=loop, name="campaign-process-heartbeat", daemon=True)
     _PROCESS_THREAD.start()
@@ -177,6 +181,8 @@ def start_reactor_heartbeat(reactor: object) -> None:
         actual = time.monotonic()
         drift_ms = max(0.0, (actual - expected) * 1000.0)
         with _LOCK:
+            _ACTIVE["reactor_ident"] = threading.get_ident()
+            _ACTIVE["last_reactor_ns"] = time.monotonic_ns()
             _STATE["reactor_heartbeat_count"] += 1
             _STATE["maximum_reactor_drift_ms"] = max(float(_STATE["maximum_reactor_drift_ms"]), drift_ms)
             payload = {**_identity(), **_STATE, "event_type": "reactor_heartbeat",
@@ -224,6 +230,11 @@ def on_ticks_entry(batch_size: int) -> int | None:
         _STATE["on_ticks_inflight"] += 1
         _STATE["last_on_ticks_entry_monotonic_ns"] = now
         _STATE["decoded_tick_count"] += int(batch_size)
+        _ACTIVE["sequence"] = int(_ACTIVE["sequence"]) + 1
+        _ACTIVE["stage"] = "ON_TICKS"
+        _ACTIVE["entry_ns"] = now
+        _ACTIVE["episode"] = f"{os.getpid()}-{_ACTIVE['sequence']}"
+        _ACTIVE["snapshots"] = set()
     _sample("on_ticks_entry", None)
     return now
 
@@ -241,6 +252,9 @@ def on_ticks_exit(start_ns: int | None, *, exception: bool = False) -> None:
             _STATE["maximum_callback_duration_ms"] = max(
                 float(_STATE["maximum_callback_duration_ms"]), (now - start_ns) / 1_000_000.0
             )
+        _ACTIVE["stage"] = None
+        _ACTIVE["entry_ns"] = None
+        _ACTIVE["episode"] = None
     _sample("on_ticks_exit", None)
 
 
@@ -257,6 +271,36 @@ def _sample(event: str, previous_ns: int | None) -> None:
             payload["intermessage_gap_ms"] = (payload["monotonic_ns"] - previous_ns) / 1_000_000.0
     _enqueue("predecode_raw_message_timeline.jsonl", payload)
     _enqueue("callback_execution_timeline.jsonl", payload)
+
+
+def _watchdog_snapshot_locked() -> None:
+    now = time.monotonic_ns()
+    entry = _ACTIVE.get("entry_ns")
+    reactor_last = _ACTIVE.get("last_reactor_ns")
+    if entry is None:
+        return
+    callback_age = (now - int(entry)) / 1_000_000_000.0
+    reactor_age = (now - int(reactor_last)) / 1_000_000_000.0 if reactor_last else callback_age
+    threshold = next((value for value in (5, 15, 30) if value not in _ACTIVE["snapshots"] and max(callback_age, reactor_age) >= value), None)
+    if threshold is None:
+        return
+    _ACTIVE["snapshots"].add(threshold)
+    thread_ident = _ACTIVE.get("reactor_ident")
+    frames = sys._current_frames()
+    frame = frames.get(thread_ident) if thread_ident else None
+    reason = "ACTIVE_CALLBACK_STAGE_OVERDUE" if callback_age >= threshold else "NO_ACTIVE_CALLBACK_REACTOR_OVERDUE"
+    if frame is None:
+        reason = "REACTOR_THREAD_FRAME_UNAVAILABLE"
+    formatted = "".join(traceback.format_stack(frame)) if frame is not None else ""
+    top = traceback.extract_stack(frame)[-1] if frame is not None else None
+    _enqueue("reactor_stall_stack_snapshots.jsonl", {**_identity(), "stall_episode_id": _ACTIVE.get("episode"),
+        "trigger_reason": reason, "snapshot_threshold_sec": threshold, "wall_ts_utc": time.time(),
+        "monotonic_ns": now, "process_heartbeat_age_ms": 0.0, "reactor_heartbeat_age_ms": reactor_age * 1000,
+        "callback_inflight_age_ms": callback_age * 1000, "active_callback_sequence": _ACTIVE.get("sequence"),
+        "active_callback_stage": _ACTIVE.get("stage"), "reactor_thread_ident": thread_ident,
+        "reactor_thread_name": "Thread-2 (run)", "formatted_stack": formatted,
+        "top_frame_file": top.filename if top else None, "top_frame_function": top.name if top else None,
+        "top_frame_line": top.lineno if top else None})
 
 
 def shutdown() -> None:
