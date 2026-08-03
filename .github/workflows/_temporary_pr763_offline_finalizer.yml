@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - campaign/unified-live-validation-pr748-756-v1
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
