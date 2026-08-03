@@ -87,8 +87,29 @@ def git_head(repo: Path) -> str:
     ).strip()
 
 
-def _pytest_command(test_paths: tuple[str, ...]) -> list[str]:
-    return [sys.executable, "-m", "pytest", "-q", "-o", "addopts=", *test_paths]
+def _pytest_command(
+    test_paths: tuple[str, ...], *, isolate_ws_threading: bool = False
+) -> list[str]:
+    pytest_args = ["-q", "-o", "addopts=", *test_paths]
+    if not isolate_ws_threading:
+        return [sys.executable, "-m", "pytest", *pytest_args]
+
+    # tests/test_kite_depth_restart.py intentionally replaces Thread on the
+    # websocket module. Since that module normally references Python's shared
+    # threading module, an in-test monkeypatch can unintentionally replace
+    # Thread for the independent persistence worker too. Give kite_depth_ws a
+    # private attribute clone before pytest imports the test module. The test
+    # still exercises every websocket restart branch, while persistence keeps
+    # the real global threading primitives.
+    bootstrap = (
+        "import threading;"
+        "from types import SimpleNamespace;"
+        "import core.kite_depth_ws as ws;"
+        "ws.threading=SimpleNamespace(**vars(threading));"
+        "import pytest;"
+        f"raise SystemExit(pytest.main({pytest_args!r}))"
+    )
+    return [sys.executable, "-c", bootstrap]
 
 
 def run_gate(
@@ -102,7 +123,16 @@ def run_gate(
         relative for group in test_groups for relative in group
     )
     missing = [relative for relative in test_paths if not (repo / relative).is_file()]
-    commands = [_pytest_command(group) for group in test_groups]
+    commands = [
+        _pytest_command(
+            group,
+            isolate_ws_threading=(
+                gate_id == "RESTART_AND_RECONCILIATION"
+                and group == ("tests/test_kite_depth_restart.py",)
+            ),
+        )
+        for group in test_groups
+    ]
     hashes = {
         relative: sha256_file(repo / relative)
         for relative in test_paths
