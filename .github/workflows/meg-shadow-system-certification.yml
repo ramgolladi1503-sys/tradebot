@@ -1,0 +1,150 @@
+name: MEG Shadow System Certification
+
+on:
+  pull_request:
+    paths:
+      - "core/qa_certification/**"
+      - "core/ai_reliability_agent/**"
+      - "core/runtime_authority_cutover.py"
+      - "core/canonical_execution_decision.py"
+      - "core/runtime_authority_contract.py"
+      - "core/ranking_authority.py"
+      - "core/auth_manager.py"
+      - "scripts/run_meg_shadow_offline_certification.py"
+      - "scripts/assemble_meg_shadow_system_certificate.py"
+      - "scripts/audit_test_integrity.py"
+      - "tests/auth/**"
+      - "tests/qa/**"
+      - "tests/test_ai_reliability*.py"
+      - "tests/test_runtime_authority*.py"
+      - "tests/test_canonical_execution_decision.py"
+      - "tests/test_ranking_authority.py"
+      - "tests/test_test_integrity_audit.py"
+      - "docs/qa/**"
+      - "docs/agent_reviews/meg_shadow_system_certification_v1.md"
+      - ".github/workflows/meg-shadow-system-certification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: .
+      TRADEBOT_READ_ONLY: "true"
+      EXECUTION_MODE: "SIM"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Initialize evidence root
+        run: |
+          mkdir -p .runtime/meg-shadow-certification
+          printf 'head_sha=%s\n' "$(git rev-parse HEAD)" \
+            > .runtime/meg-shadow-certification/workflow_identity.txt
+
+      - name: Install deterministic certification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            pytest pandas numpy pyarrow scikit-learn \
+            python-dotenv requests openai kiteconnect holidays
+
+      - name: Compile certification paths
+        run: |
+          python -m compileall -q core/qa_certification core/ai_reliability_agent
+          python -m py_compile \
+            core/auth_manager.py \
+            core/runtime_authority_cutover.py \
+            scripts/run_meg_shadow_offline_certification.py \
+            scripts/assemble_meg_shadow_system_certificate.py \
+            scripts/run_ai_reliability_pr763_session.py \
+            scripts/audit_test_integrity.py
+
+      - name: Audit changed certification tests
+        run: |
+          BASE='${{ github.event.pull_request.base.sha }}'
+          if [ -z "$BASE" ]; then
+            BASE="$(git rev-parse HEAD^)"
+          fi
+          python scripts/audit_test_integrity.py \
+            --roots \
+              tests/auth \
+              tests/qa \
+              tests/test_ai_reliability_pr763_session.py \
+              tests/test_runtime_authority_cutover_v1.py \
+              tests/test_test_integrity_audit.py \
+            --changed-base "$BASE" \
+            --report-dir .runtime/meg-shadow-certification/test-integrity
+
+      - name: Run same-SHA offline certification
+        run: |
+          python scripts/run_meg_shadow_offline_certification.py \
+            --repo . \
+            --output-dir .runtime/meg-shadow-certification \
+            --timeout-seconds 720
+
+      - name: Assemble truthful pending certificate
+        run: |
+          python scripts/assemble_meg_shadow_system_certificate.py \
+            --offline-report .runtime/meg-shadow-certification/meg_shadow_offline_certification.json \
+            --output-dir .runtime/meg-shadow-certification/final
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('.runtime/meg-shadow-certification/final/meg_shadow_system_certificate.json')
+          report = json.loads(path.read_text(encoding='utf-8'))
+          assert report['verdict'] == 'IMPLEMENTATION_COMPLETE_LIVE_EVIDENCE_PENDING', report
+          assert report['remaining_gate'] == 'FRESH_PR763_MARKET_SESSION', report
+          assert report['order_authority'] is False, report
+          assert report['broker_write_authority'] is False, report
+          assert report['allowed_for_live_execution'] is False, report
+          assert report['allowed_for_paper_execution'] is False, report
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Validate changed-path safety
+        run: |
+          python - <<'PY'
+          import subprocess
+          base = '${{ github.event.pull_request.base.sha }}'
+          if not base:
+              base = subprocess.check_output(['git', 'rev-parse', 'HEAD^'], text=True).strip()
+          changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+          forbidden = (
+              'core/market_data.py',
+              'core/kite_depth_ws.py',
+              'core/feed/',
+              'core/market_event_graph',
+              'core/tick_store.py',
+              'core/depth_store.py',
+              'core/persistence_durability.py',
+              'strategies/',
+              'core/risk',
+              'core/broker',
+          )
+          bad = [path for path in changed if any(path == prefix or path.startswith(prefix) for prefix in forbidden)]
+          if bad:
+              raise SystemExit(f'FORBIDDEN_CERTIFICATION_SCOPE:{bad}')
+          print(f'certification scope paths={len(changed)}')
+          PY
+
+      - name: Upload certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meg-shadow-system-certification-${{ github.sha }}
+          path: .runtime/meg-shadow-certification
+          if-no-files-found: warn
+          retention-days: 30

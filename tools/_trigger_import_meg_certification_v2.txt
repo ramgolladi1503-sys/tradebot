@@ -1,2 +1,0 @@
-Trigger the self-removing import of the 14 curated PR #776 certification files.
-Retrigger after the workflow is present on the branch.
