@@ -86,6 +86,27 @@ def _truthy(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on", "y"}
 
 
+def _explicit_boolean(value: Any) -> bool | None:
+    """Return a caller's explicit boolean assertion, or ``None`` if absent.
+
+    Legacy status labels are lower authority than explicit execution booleans.
+    This distinction lets an explicit fail-closed denial suppress stale positive
+    labels without hiding a genuine true/false contradiction.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in {0, 1}:
+        return bool(value)
+    if value in _MISSING:
+        return None
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on", "y"}:
+        return True
+    if text in {"0", "false", "no", "off", "n"}:
+        return False
+    return None
+
+
 def _positive_number(value: Any) -> bool:
     try:
         return float(value) > 0.0
@@ -94,38 +115,74 @@ def _positive_number(value: Any) -> bool:
 
 
 def _legacy_signals(candidate: Any) -> dict[str, Any]:
+    execution_allowed_raw = _get(candidate, "execution_allowed")
+    eligible_raw = _get(candidate, "eligible_for_execution")
     return {
         "candidate_status": _get(candidate, "candidate_status"),
         "execution_status": _get(candidate, "execution_status"),
         "execution_entry_status": _get(candidate, "execution_entry_status"),
         "permission": _get(candidate, "permission"),
         "final_action": _get(candidate, "final_action"),
-        "readiness": _get(candidate, "readiness"),
-        "execution_allowed": _truthy(_get(candidate, "execution_allowed")),
+        "readiness": _get(candidate, "readiness", _get(candidate, "readiness_status")),
+        "execution_allowed_raw": _explicit_boolean(execution_allowed_raw),
+        "eligible_for_execution_raw": _explicit_boolean(eligible_raw),
+        "execution_allowed": _truthy(execution_allowed_raw),
         "eligible_for_execution": _truthy(
-            _get(candidate, "eligible_for_execution", _get(candidate, "execution_allowed"))
+            eligible_raw if eligible_raw not in _MISSING else execution_allowed_raw
         ),
         "tradable": _truthy(_get(candidate, "tradable")),
         "execution_blocked": _truthy(_get(candidate, "execution_blocked")),
         "execution_entry_present": _positive_number(_get(candidate, "execution_entry")),
-        "hard_blockers": tuple(str(v) for v in (_get(candidate, "hard_blockers", ()) or ()) if str(v)),
-        "blockers": tuple(str(v) for v in (_get(candidate, "blockers", ()) or ()) if str(v)),
+        "hard_blockers": tuple(
+            str(v)
+            for v in (_get(candidate, "hard_blockers", ()) or ())
+            if str(v)
+        ),
+        "blockers": tuple(
+            str(v)
+            for v in (
+                _get(candidate, "blockers", _get(candidate, "execution_blockers", ()))
+                or ()
+            )
+            if str(v)
+        ),
     }
 
 
 def _legacy_contradictions(signals: Mapping[str, Any]) -> tuple[str, ...]:
     contradictions: list[str] = []
-    positive = bool(
-        signals["execution_allowed"]
-        or signals["eligible_for_execution"]
-        or _upper(signals["execution_status"]) == "EXECUTABLE"
+    explicit_values = tuple(
+        value
+        for value in (
+            signals.get("execution_allowed_raw"),
+            signals.get("eligible_for_execution_raw"),
+        )
+        if value is not None
+    )
+    explicit_allow = any(value is True for value in explicit_values)
+    explicit_deny = any(value is False for value in explicit_values)
+
+    status_positive = bool(
+        _upper(signals["execution_status"]) == "EXECUTABLE"
         or _upper(signals["execution_entry_status"]) == "EXECUTABLE"
         or _upper(signals["permission"]) == "EXECUTE"
         or _upper(signals["final_action"]) == "EXECUTE"
         or _upper(signals["readiness"]) == "READY"
     )
+    if explicit_allow and explicit_deny:
+        contradictions.append("legacy_positive_and_negative_execution_signals")
+        positive = True
+    elif explicit_deny:
+        # Explicit negative authority is the fail-closed source of truth. Older
+        # positive labels may remain on the object for diagnostics, but they do
+        # not transform a blocked candidate into a contradictory one.
+        positive = False
+    else:
+        positive = bool(explicit_allow or status_positive)
+
     negative = bool(
-        signals["execution_blocked"]
+        explicit_deny
+        or signals["execution_blocked"]
         or signals["hard_blockers"]
         or signals["blockers"]
         or _upper(signals["candidate_status"]) in _NON_EXECUTABLE_VALUES
@@ -134,17 +191,29 @@ def _legacy_contradictions(signals: Mapping[str, Any]) -> tuple[str, ...]:
         or _upper(signals["final_action"]) in _NON_EXECUTABLE_VALUES
         or _upper(signals["readiness"]) in _NON_EXECUTABLE_VALUES
     )
-    if positive and negative:
+    if positive and negative and "legacy_positive_and_negative_execution_signals" not in contradictions:
         contradictions.append("legacy_positive_and_negative_execution_signals")
     if signals["execution_allowed"] and not signals["execution_entry_present"]:
         contradictions.append("execution_allowed_without_execution_entry")
-    if _upper(signals["execution_entry_status"]) == "EXECUTABLE" and not signals["execution_entry_present"]:
+    if (
+        _upper(signals["execution_entry_status"]) == "EXECUTABLE"
+        and not signals["execution_entry_present"]
+        and not explicit_deny
+    ):
         contradictions.append("executable_entry_status_without_execution_entry")
-    if _upper(signals["final_action"]) == "EXECUTE" and _upper(signals["permission"]) in _NON_EXECUTABLE_VALUES:
+    if (
+        _upper(signals["final_action"]) == "EXECUTE"
+        and _upper(signals["permission"]) in _NON_EXECUTABLE_VALUES
+        and not explicit_deny
+    ):
         contradictions.append("execute_action_with_non_executable_permission")
-    if _upper(signals["readiness"]) == "READY" and signals["execution_blocked"]:
+    if (
+        _upper(signals["readiness"]) == "READY"
+        and signals["execution_blocked"]
+        and not explicit_deny
+    ):
         contradictions.append("ready_while_execution_blocked")
-    return tuple(contradictions)
+    return tuple(dict.fromkeys(contradictions))
 
 
 def derive_canonical_execution_decision(candidate: Any) -> CanonicalExecutionDecision:
@@ -153,7 +222,9 @@ def derive_canonical_execution_decision(candidate: Any) -> CanonicalExecutionDec
     signals = _legacy_signals(candidate)
     contradictions = _legacy_contradictions(signals)
 
-    truth_reasons = tuple(str(reason) for reason in (truth.reasons or ()) if str(reason))
+    truth_reasons = tuple(
+        str(reason) for reason in (truth.reasons or ()) if str(reason)
+    )
     explicit_blockers = tuple(
         dict.fromkeys(
             truth_reasons
@@ -166,6 +237,8 @@ def derive_canonical_execution_decision(candidate: Any) -> CanonicalExecutionDec
         signals["execution_blocked"]
         or signals["hard_blockers"]
         or signals["blockers"]
+        or signals.get("execution_allowed_raw") is False
+        or signals.get("eligible_for_execution_raw") is False
         or _upper(signals["candidate_status"]) in _EXPLICIT_BLOCK_VALUES
         or _upper(signals["execution_status"]) in _EXPLICIT_BLOCK_VALUES
         or _upper(signals["permission"]) in _EXPLICIT_BLOCK_VALUES
@@ -187,7 +260,12 @@ def derive_canonical_execution_decision(candidate: Any) -> CanonicalExecutionDec
         and _upper(signals["candidate_status"]) not in _NON_EXECUTABLE_VALUES
     )
 
-    if truth.execution_allowed and execution_fields_complete and lifecycle_allows_execution and not contradictions:
+    if (
+        truth.execution_allowed
+        and execution_fields_complete
+        and lifecycle_allows_execution
+        and not contradictions
+    ):
         return CanonicalExecutionDecision(
             state=ExecutionState.EXECUTABLE,
             allowed=True,
@@ -221,7 +299,11 @@ def derive_canonical_execution_decision(candidate: Any) -> CanonicalExecutionDec
         dict.fromkeys(
             explicit_blockers
             + contradictions
-            + (() if state is ExecutionState.ADVISORY_ONLY else (primary_reason,))
+            + (
+                ()
+                if state is ExecutionState.ADVISORY_ONLY
+                else (primary_reason,)
+            )
         )
     )
     return CanonicalExecutionDecision(
