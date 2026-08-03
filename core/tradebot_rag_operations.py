@@ -1,8 +1,8 @@
 """Operational hardening for the local TradeBot evidence RAG index.
 
 This module does not change retrieval, ranking, or answer behavior. It adds an
-atomic build lock for supported entrypoints and a read-only integrity doctor for
-production operations.
+atomic build lock plus read-only status and integrity inspection for production
+operations.
 """
 
 from __future__ import annotations
@@ -234,6 +234,77 @@ def _table_names(connection: sqlite3.Connection) -> set[str]:
     }
 
 
+def _open_read_only(path: Path) -> sqlite3.Connection:
+    connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5.0)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
+def read_only_index_status(index_path: Path | str) -> dict[str, object]:
+    """Read index metadata without creating tables, rebuilding FTS, or mutating files."""
+
+    path = Path(index_path).expanduser()
+    if not path.exists() or not path.is_file():
+        return {"exists": False, "index_path": str(path), "readable": False}
+
+    try:
+        connection = _open_read_only(path)
+    except sqlite3.Error as exc:
+        return {
+            "exists": True,
+            "index_path": str(path),
+            "readable": False,
+            "error": f"{type(exc).__name__}:{exc}",
+        }
+
+    try:
+        tables = _table_names(connection)
+        required = {"rag_meta", "rag_documents", "rag_chunks"}
+        missing = sorted(required - tables)
+        if missing:
+            return {
+                "exists": True,
+                "index_path": str(path),
+                "readable": False,
+                "error": "missing_tables:" + ",".join(missing),
+            }
+        metadata = {
+            str(row["key"]): str(row["value"])
+            for row in connection.execute("SELECT key, value FROM rag_meta")
+        }
+        document_count = int(connection.execute("SELECT COUNT(*) FROM rag_documents").fetchone()[0])
+        chunk_count = int(connection.execute("SELECT COUNT(*) FROM rag_chunks").fetchone()[0])
+        try:
+            include_paths = json.loads(metadata.get("include_paths", "[]"))
+        except json.JSONDecodeError:
+            include_paths = []
+        try:
+            schema_version = int(metadata.get("schema_version", "0"))
+        except ValueError:
+            schema_version = 0
+        return {
+            "exists": True,
+            "index_path": str(path),
+            "readable": True,
+            "document_count": document_count,
+            "chunk_count": chunk_count,
+            "schema_version": schema_version,
+            "fts_enabled": metadata.get("fts_enabled") == "1",
+            "last_built_at_utc": metadata.get("last_built_at_utc"),
+            "include_paths": include_paths,
+            "build_lock_present": build_lock_path(path).exists(),
+        }
+    except (sqlite3.Error, TypeError, ValueError) as exc:
+        return {
+            "exists": True,
+            "index_path": str(path),
+            "readable": False,
+            "error": f"{type(exc).__name__}:{exc}",
+        }
+    finally:
+        connection.close()
+
+
 def doctor_index(index_path: Path | str) -> IndexDoctorReport:
     """Inspect index consistency without creating, repairing, or mutating it."""
 
@@ -255,8 +326,7 @@ def doctor_index(index_path: Path | str) -> IndexDoctorReport:
     )
 
     try:
-        connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5.0)
-        connection.row_factory = sqlite3.Row
+        connection = _open_read_only(path)
     except sqlite3.Error as exc:
         checks.append(_check("sqlite_open_read_only", False, f"{type(exc).__name__}:{exc}"))
         return IndexDoctorReport(str(path), False, tuple(checks), checked_at)
@@ -394,4 +464,5 @@ __all__ = [
     "build_lock_path",
     "doctor_index",
     "exclusive_build_lock",
+    "read_only_index_status",
 ]
