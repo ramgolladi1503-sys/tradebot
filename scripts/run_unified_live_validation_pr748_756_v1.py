@@ -8,7 +8,10 @@ import hashlib
 import json
 import inspect
 import os
+import subprocess
 import pathlib
+import sys
+import time
 import kiteconnect
 from kiteconnect import KiteTicker
 import kiteconnect.ticker as kite_ticker
@@ -92,7 +95,15 @@ def main() -> int:
     parser.add_argument("--runtime-command", nargs=argparse.REMAINDER)
     parser.add_argument("--timeout-sec", type=float)
     parser.add_argument("--session-date")
+    parser.add_argument("--custodian", action="store_true")
+    parser.add_argument("--status-run-id")
     args = parser.parse_args()
+
+    if args.status_run_id:
+        status_root = Path(args.evidence_root) / args.status_run_id
+        status_path = status_root / "custodian_status.json"
+        print(status_path.read_text(encoding="utf-8") if status_path.exists() else json.dumps({"state": "UNKNOWN", "run_id": args.status_run_id}))
+        return 0 if status_path.exists() else 2
 
     require_campaign_enabled()
     root = Path(args.evidence_root)
@@ -169,6 +180,7 @@ def main() -> int:
         "is_order_action": False,
         "broker_api_called": False,
         "allowed_for_live_execution": False,
+        "custodian_requested": args.custodian,
     }
     (run_root / "presession" / "launch_preflight.json").write_text(
         json.dumps(launch, indent=2, sort_keys=True) + "\n",
@@ -178,6 +190,33 @@ def main() -> int:
         if not wired and command == ["./run_live.sh"]:
             print(json.dumps(launch, indent=2, sort_keys=True))
             return 2
+        if args.custodian:
+            custodian_command = [
+                sys.executable, "-B", "scripts/run_unified_live_validation_custodian_v1.py",
+                "--run-id", identity.run_id, "--run-root", str(run_root),
+                "--session-date", identity.session_date, "--commit-sha", commit,
+                "--composition-sha", identity.composition_manifest_sha,
+                "--origin-main-sha", args.origin_main_sha,
+                "--timeout-sec", str(args.timeout_sec or 1200), "--cwd", str(Path.cwd()),
+            ]
+            custodian_env = dict(os.environ)
+            custodian_env.update({
+                "UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE": "true",
+                "TRADEBOT_READ_ONLY": "true",
+            })
+            process = subprocess.Popen(custodian_command, cwd=str(Path.cwd()), env=custodian_env, start_new_session=True)
+            _write_custodian = {
+                "custodian_pid": process.pid,
+                "custodian_command": custodian_command,
+                "status_command": f"python3 -B scripts/run_unified_live_validation_pr748_756_v1.py --evidence-root {args.evidence_root} --status-run-id {identity.run_id}",
+                "follow_command": f"tail -f {run_root / 'live' / 'shutdown_lifecycle.jsonl'}",
+                "timeout_deadline": time.time() + float(args.timeout_sec or 1200),
+            }
+            launch.update(_write_custodian)
+            launch["state"] = "CUSTODIAN_RUNNING"
+            (run_root / "presession" / "launch_preflight.json").write_text(json.dumps(launch, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            print(json.dumps(launch, indent=2, sort_keys=True))
+            return 0
         result = launch_runtime_child(
             identity,
             command,
