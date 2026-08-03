@@ -41,6 +41,20 @@ Status: `GATE_1_REAL_CALLBACK_PERSISTENCE_TRIPWIRE_PASS`
 - Callback entries/exits: `1/1`; callback exceptions: `0`; duration: below 5 seconds.
 - Optional observation/constituent/MEG/candidate hooks remain governed by their existing campaign configuration and were not enabled by this fixture.
 
+## Final Gate 1 closure evidence
+
+The registered live-shaped fixture now trips the mandatory tick, depth, and
+runtime enqueue boundaries while wrapping synchronous repository targets:
+`tick_store._conn`, `tick_store._write_rows`, `tick_store.init_ticks`,
+`trade_store._conn`, `trade_store.insert_depth_snapshot`,
+`runtime_store._conn`, `runtime_store._write_runtime_snapshot_sync`, and
+`events.write_json_atomic`. Callback-thread violations were zero. Runtime
+negative controls detected injected tick, depth, runtime, event, SQLite, and
+scoped filesystem operations. The fixture explicitly checks the launcher
+source sets `UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE` and
+`MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE` to true; optional observer details
+remain configuration-governed.
+
 Cutover unresolved count for certification: non-zero. The implementation has
 bounded worker routing, but this record does not claim live readiness.
 
