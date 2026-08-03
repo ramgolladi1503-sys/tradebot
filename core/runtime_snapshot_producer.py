@@ -29,6 +29,7 @@ from core.runtime_snapshot_store import (
     write_snapshot_atomic,
 )
 from core.observability import ObservabilityMetricsRegistry, build_default_metrics_registry
+from core.runtime_authority_cutover import apply_runtime_authority, authority_allows_execution
 from core.runtime_snapshot_stages import (
     build_advisory_latest_payload as stages_build_advisory_latest_payload,
     build_feed_health_truth_latest_payload as stages_build_feed_health_truth_latest_payload,
@@ -458,6 +459,10 @@ def _candidate_decision_to_advisory_row(payload: dict[str, Any]) -> dict[str, An
     advisory_payload.setdefault("source_bucket", "candidate_decisions")
     advisory_payload.setdefault("row_kind", "canonical_suggestion")
     advisory_payload.setdefault("non_canonical_levels", False)
+    advisory_payload = apply_runtime_authority(
+        advisory_payload,
+        mode=str(getattr(cfg, 'EXECUTION_MODE', 'SIM') or 'SIM'),
+    )
     return serialize_advisory_row(advisory_payload, allow_legacy=True)
 
 
@@ -500,6 +505,10 @@ def _build_and_write_canonical_ranked_snapshot(
                 rank_dict["ranked_report_id"] = getattr(report.ranking, "ranked_report_id", None)
                 rank_dict["generated_epoch"] = report.generated_epoch
                 row = adapt_candidate_rank_record_to_ui(rank_dict)
+                row = apply_runtime_authority(
+                    row,
+                    mode=str(getattr(cfg, 'EXECUTION_MODE', 'SIM') or 'SIM'),
+                )
 
                 # Check for fake entry prices (Point 3)
                 has_entry = rank.outcome_contract and rank.outcome_contract.entry_price
@@ -508,7 +517,7 @@ def _build_and_write_canonical_ranked_snapshot(
                     row["display_entry"] = row["entry"]
 
                 # Executable classification (Point 2)
-                if rank.bucket == "EXECUTABLE_CANDIDATE" and has_entry:
+                if authority_allows_execution(row) and has_entry:
                     row["execution_status"] = "executable"
                     row["readiness"] = "READY"
                     top_executable.append(row)
