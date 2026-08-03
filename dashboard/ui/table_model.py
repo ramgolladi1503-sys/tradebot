@@ -197,11 +197,33 @@ def _stamp_ui_execution_truth(out: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _authority_record_value(value):
+    """Normalize dataframe missing scalars before authority classification.
+
+    Pandas materializes a column that exists on only some rows with NaN/NaT/
+    pd.NA on the other rows. Numeric NaN is truthy in Python, so passing it to
+    boolean fallback fields can falsely classify a clean row as fallback-driven.
+    Container values are preserved because pd.isna(container) is vectorized.
+    """
+    if isinstance(value, (dict, list, tuple, set)):
+        return value
+    try:
+        if bool(pd.isna(value)):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return value
+
+
 def _stamp_runtime_authority(out: pd.DataFrame) -> pd.DataFrame:
     if out.empty:
         return out
     mode = str(getattr(__import__("config.config", fromlist=["EXECUTION_MODE"]), "EXECUTION_MODE", "SIM") or "SIM")
-    rows = [apply_runtime_authority(row, mode=mode) for row in out.to_dict(orient="records")]
+    records = [
+        {key: _authority_record_value(value) for key, value in row.items()}
+        for row in out.to_dict(orient="records")
+    ]
+    rows = [apply_runtime_authority(row, mode=mode) for row in records]
     stamped = pd.DataFrame(rows, index=out.index)
     # Preserve all original columns and expose authority fields as additional
     # operator truth. Non-executable rows retain diagnostic/opportunity scores,

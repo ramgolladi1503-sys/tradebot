@@ -1,1 +1,0 @@
-Trigger the self-removing UI missing-scalar authority fix and scope restoration.
