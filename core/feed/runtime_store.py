@@ -33,6 +33,7 @@ _RUNTIME_REJECTED = 0
 _RUNTIME_FAILURES = 0
 _RUNTIME_DEGRADED = False
 _RUNTIME_PERSISTED = 0
+_RUNTIME_SHUTDOWN = False
 
 
 def _db_path() -> Path:
@@ -377,9 +378,15 @@ def _ensure_runtime_worker() -> None:
 
 
 def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
-    global _RUNTIME_ENQUEUED, _RUNTIME_REJECTED, _RUNTIME_DEGRADED
+    global _RUNTIME_ENQUEUED, _RUNTIME_REJECTED, _RUNTIME_DEGRADED, _RUNTIME_SHUTDOWN
     if not isinstance(payload, dict):
         return False
+    with _RUNTIME_LOCK:
+        if _RUNTIME_SHUTDOWN:
+            _RUNTIME_REJECTED += 1
+            _RUNTIME_DEGRADED = True
+            record_degradation('runtime', 'RUNTIME_PERSISTENCE_SHUTDOWN')
+            return False
     _ensure_runtime_worker()
     try:
         _RUNTIME_WRITE_QUEUE.put_nowait(deepcopy(payload))
@@ -396,6 +403,9 @@ def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
 
 
 def shutdown_runtime_persistence(deadline_seconds: float = 2.0) -> dict:
+    global _RUNTIME_SHUTDOWN
+    with _RUNTIME_LOCK:
+        _RUNTIME_SHUTDOWN = True
     deadline = time.monotonic() + max(0.0, float(deadline_seconds))
     while _RUNTIME_WRITE_QUEUE.unfinished_tasks and time.monotonic() < deadline:
         time.sleep(0.01)
@@ -411,6 +421,26 @@ def shutdown_runtime_persistence(deadline_seconds: float = 2.0) -> dict:
     return state
 
 
+def reset_runtime_persistence_for_tests() -> None:
+    """Reset the terminal runtime persistence lifecycle between tests only."""
+    global _RUNTIME_WRITE_QUEUE, _RUNTIME_WORKER, _RUNTIME_ENQUEUED
+    global _RUNTIME_REJECTED, _RUNTIME_FAILURES, _RUNTIME_DEGRADED
+    global _RUNTIME_PERSISTED, _RUNTIME_SHUTDOWN
+    result = shutdown_runtime_persistence(deadline_seconds=1.0)
+    if result.get('worker_alive'):
+        raise RuntimeError('runtime persistence worker did not stop for test reset')
+    with _RUNTIME_LOCK:
+        _RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=2048)
+        _RUNTIME_STOP.clear()
+        _RUNTIME_WORKER = None
+        _RUNTIME_ENQUEUED = 0
+        _RUNTIME_REJECTED = 0
+        _RUNTIME_FAILURES = 0
+        _RUNTIME_DEGRADED = False
+        _RUNTIME_PERSISTED = 0
+        _RUNTIME_SHUTDOWN = False
+
+
 def runtime_persistence_state() -> dict:
     with _RUNTIME_LOCK:
         return {
@@ -421,6 +451,7 @@ def runtime_persistence_state() -> dict:
             "pending": _RUNTIME_WRITE_QUEUE.qsize(),
             "worker_alive": bool(_RUNTIME_WORKER and _RUNTIME_WORKER.is_alive()),
             "worker_ident": _RUNTIME_WORKER.ident if _RUNTIME_WORKER else None,
+            "shutdown": bool(_RUNTIME_SHUTDOWN),
         }
 
 

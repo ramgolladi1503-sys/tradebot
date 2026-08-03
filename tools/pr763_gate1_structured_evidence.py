@@ -138,7 +138,10 @@ def _positive_case(root: Path) -> dict[str, Any]:
             cert.tick_store.reset_runtime_state_for_tests()
         else:
             cert.tick_store.reset_audit_counters()
-        runtime_mod.shutdown_runtime_persistence(deadline_seconds=1.0)
+        if hasattr(runtime_mod, 'reset_runtime_persistence_for_tests'):
+            runtime_mod.reset_runtime_persistence_for_tests()
+        else:
+            runtime_mod.shutdown_runtime_persistence(deadline_seconds=1.0)
         cert.depth_ws.depth_store.shutdown_persistence(deadline_seconds=1.0)
         cert.depth_ws.depth_store = cert.depth_store_module.DepthStore()
         depth_store = cert.depth_ws.depth_store

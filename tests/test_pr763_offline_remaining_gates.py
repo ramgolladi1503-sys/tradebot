@@ -39,6 +39,8 @@ def _reset_runtime_persistence() -> None:
     runtime_store._RUNTIME_FAILURES = 0
     runtime_store._RUNTIME_DEGRADED = False
     runtime_store._RUNTIME_PERSISTED = 0
+    if hasattr(runtime_store, '_RUNTIME_SHUTDOWN'):
+        runtime_store._RUNTIME_SHUTDOWN = False
 
 
 def _clear_callback_truth(depth_ws) -> None:
@@ -70,10 +72,11 @@ def test_gate3_authority_local_fifo_and_immutable_envelopes(tmp_path, monkeypatc
     tick_store.reset_runtime_state_for_tests()
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "tick.db"), raising=False)
     tick_rows = []
+    real_tick_writer = tick_store._write_rows
 
     def capture_tick_rows(rows, *, worker_owned=False):
         tick_rows.extend(list(rows))
-        return True
+        return real_tick_writer(rows, worker_owned=worker_owned)
 
     monkeypatch.setattr(tick_store, "_write_rows", capture_tick_rows)
     for seq in (1, 2, 3):
@@ -296,7 +299,7 @@ def test_gate8_seal_is_immutable_and_hashes_remain_authoritative(tmp_path):
         evidence_root=str(root),
     )
     recorder = AppendOnlyRecorder(identity)
-    artifact = recorder.append("live/events.jsonl", {"event": "before_seal"}, pr_number=763)
+    artifact = recorder.append("live/events.jsonl", {"event": "before_seal"}, pr_number=750)
     manifest = seal_evidence_root(root)
 
     expected_hash = next(row["sha256"] for row in manifest["artifacts"] if row["path"] == "live/events.jsonl")
@@ -304,7 +307,7 @@ def test_gate8_seal_is_immutable_and_hashes_remain_authoritative(tmp_path):
     before = artifact.read_bytes()
 
     with pytest.raises(RuntimeError, match="evidence_root_already_sealed"):
-        recorder.append("live/events.jsonl", {"event": "after_seal"}, pr_number=763)
+        recorder.append("live/events.jsonl", {"event": "after_seal"}, pr_number=750)
     with pytest.raises(RuntimeError, match="evidence_root_already_sealed"):
         seal_evidence_root(root)
 

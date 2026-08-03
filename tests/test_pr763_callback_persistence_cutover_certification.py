@@ -412,6 +412,8 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
     monkeypatch.setattr(depth_store_module, "insert_depth_snapshot", depth_write)
 
     import core.feed.runtime_store as runtime_store
+    if hasattr(runtime_store, 'reset_runtime_persistence_for_tests'):
+        runtime_store.reset_runtime_persistence_for_tests()
     real_runtime = runtime_store.write_runtime_snapshot
     def runtime_enqueue(payload):
         counts["runtime"] += 1
@@ -455,7 +457,7 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
     monkeypatch.setattr(runtime_store, "write_runtime_snapshot", runtime_enqueue)
     def filesystem_tripwire(operation, original):
         def wrapped(path, *args, **kwargs):
-            candidate = Path(path).resolve()
+            candidate = Path(os.path.abspath(os.fsdecode(path)))
             if (monitored_root == candidate or monitored_root in candidate.parents) and "runtime/logs" not in str(candidate):
                 if callback_active and threading.get_ident() == callback_ident:
                     violations.append(("filesystem", operation, str(candidate), threading.get_ident(), threading.current_thread().name))
@@ -467,7 +469,7 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
         monkeypatch.setattr(Path, operation, filesystem_tripwire(f"Path.{operation}", original))
     real_open = builtins.open
     def builtin_open(path, *args, **kwargs):
-        candidate = Path(path).resolve() if isinstance(path, (str, bytes, os.PathLike)) else None
+        candidate = Path(os.path.abspath(os.fsdecode(path))) if isinstance(path, (str, bytes, os.PathLike)) else None
         if candidate is not None and (monitored_root == candidate or monitored_root in candidate.parents) and "runtime/logs" not in str(candidate) and callback_active and threading.get_ident() == callback_ident:
             violations.append(("filesystem", "builtins.open", str(candidate), threading.get_ident(), threading.current_thread().name))
         return real_open(path, *args, **kwargs)
