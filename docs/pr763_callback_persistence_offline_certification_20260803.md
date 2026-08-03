@@ -55,6 +55,8 @@ source sets `UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE` and
 `MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE` to true; optional observer details
 remain configuration-governed.
 
+Final Gate-1 worker reconciliation: `test_registered_callback_all_persistence_workers_are_off_thread_and_reconciled` captures callback and tick/depth/runtime worker IDs and names, asserts every worker differs from the callback thread, requires accepted work to persist with zero pending envelopes and zero worker failures, and requires complete shutdown/drain for all three authorities. The full dedicated certification module passes `32` tests.
+
 Cutover unresolved count for certification: non-zero. The implementation has
 bounded worker routing, but this record does not claim live readiness.
 

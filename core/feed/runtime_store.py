@@ -32,6 +32,7 @@ _RUNTIME_ENQUEUED = 0
 _RUNTIME_REJECTED = 0
 _RUNTIME_FAILURES = 0
 _RUNTIME_DEGRADED = False
+_RUNTIME_PERSISTED = 0
 
 
 def _db_path() -> Path:
@@ -346,7 +347,7 @@ def _write_runtime_snapshot_sync(payload: dict[str, Any]) -> bool:
 
 
 def _runtime_write_loop() -> None:
-    global _RUNTIME_FAILURES, _RUNTIME_DEGRADED
+    global _RUNTIME_FAILURES, _RUNTIME_DEGRADED, _RUNTIME_PERSISTED
     while not _RUNTIME_STOP.is_set() or not _RUNTIME_WRITE_QUEUE.empty():
         try:
             payload = _RUNTIME_WRITE_QUEUE.get(timeout=0.1)
@@ -359,6 +360,9 @@ def _runtime_write_loop() -> None:
                     _RUNTIME_DEGRADED = True
                     record_degradation("runtime", "RUNTIME_PERSISTENCE_FAILURE")
                 logger.warning("feed_runtime_snapshot_persist_failed")
+            else:
+                with _RUNTIME_LOCK:
+                    _RUNTIME_PERSISTED += 1
         finally:
             _RUNTIME_WRITE_QUEUE.task_done()
 
@@ -405,6 +409,19 @@ def shutdown_runtime_persistence(deadline_seconds: float = 2.0) -> dict:
                  "failures": _RUNTIME_FAILURES, "durability_degraded": _RUNTIME_DEGRADED}
     state["complete"] = state["queue_depth"] == 0 and not state["worker_alive"]
     return state
+
+
+def runtime_persistence_state() -> dict:
+    with _RUNTIME_LOCK:
+        return {
+            "enqueued": _RUNTIME_ENQUEUED,
+            "persisted": _RUNTIME_PERSISTED,
+            "rejected": _RUNTIME_REJECTED,
+            "failures": _RUNTIME_FAILURES,
+            "pending": _RUNTIME_WRITE_QUEUE.qsize(),
+            "worker_alive": bool(_RUNTIME_WORKER and _RUNTIME_WORKER.is_alive()),
+            "worker_ident": _RUNTIME_WORKER.ident if _RUNTIME_WORKER else None,
+        }
 
 
 def read_latest_runtime_snapshot() -> dict[str, Any] | None:
