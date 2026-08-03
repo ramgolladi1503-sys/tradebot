@@ -59,6 +59,7 @@ from core.runtime_status_overlay import (
     publish_feed_unhealthy_status_overlay,
 )
 from core.feed_truth_state import classify_feed_truth_state
+from core import campaign_raw_diagnostics
 from core.feed_execution_truth import attach_feed_execution_truth
 from core import risk_halt
 from core.paths import repo_root, logs_dir, runtime_dir
@@ -6722,6 +6723,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
     Stop watchdog and close existing KiteTicker instance.
     """
     global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
+    campaign_raw_diagnostics.shutdown()
     _reset_feed_restart_verification(reason=f"stop_depth_ws:{reason}")
     _reset_option_feed_verification(reason=f"stop_depth_ws:{reason}")
     watchdog_thread = None
@@ -8387,10 +8389,23 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     kws.on_reconnect = on_reconnect
     kws.on_error = on_error
     kws.on_close = on_close
+    previous_on_message = getattr(kws, "on_message", None)
+    def on_message_current(ws, payload, is_binary):
+        campaign_raw_diagnostics.observe_raw_message(payload, is_binary)
+        if previous_on_message is not None:
+            previous_on_message(ws, payload, is_binary)
+
+    kws.on_message = on_message_current
     def on_ticks_current(ws, ticks):
         if not _generation_is_current("on_ticks"):
             return
-        on_ticks(ws, ticks)
+        diagnostic_start = campaign_raw_diagnostics.on_ticks_entry(len(ticks or []))
+        try:
+            on_ticks(ws, ticks)
+        except Exception:
+            campaign_raw_diagnostics.on_ticks_exit(diagnostic_start, exception=True)
+            raise
+        campaign_raw_diagnostics.on_ticks_exit(diagnostic_start)
 
     kws.on_ticks = on_ticks_current
     watchdog_thread = threading.Thread(target=_watchdog)
