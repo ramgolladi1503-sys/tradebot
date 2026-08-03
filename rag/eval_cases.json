@@ -18,5 +18,33 @@
     "query": "Where are the release checklist and branch protection policy documented?",
     "expected_paths": ["README.md"],
     "expected_terms": ["release checklist", "branch protection"]
+  },
+  {
+    "query": "How does EDGE-60 handle unknown or missing direction?",
+    "expected_paths": ["docs/agent_reviews/edge_60_buy_pe_ce_directional_bias_audit.md"],
+    "expected_terms": ["unknown direction", "fail-closed warning"]
+  },
+  {
+    "query": "How does EDGE-60 separate fallback and advisory candidates from executable candidates?",
+    "expected_paths": ["docs/agent_reviews/edge_60_buy_pe_ce_directional_bias_audit.md"],
+    "expected_terms": ["fallback", "advisory", "executable"]
+  },
+  {
+    "query": "What allocation does EDGE-61 assign to fallback or advisory candidates?",
+    "expected_paths": ["docs/agent_reviews/edge_61_capital_selection_policy_contract.md"],
+    "expected_terms": ["zero allocation", "fallback", "advisory"]
+  },
+  {
+    "query": "Which concrete reasons explain eligible candidates skipped by EDGE-61?",
+    "expected_paths": ["docs/agent_reviews/edge_61_capital_selection_policy_contract.md"],
+    "expected_terms": ["selection_limit_reached", "symbol_cap_reached", "family_cap_reached"]
+  },
+  {
+    "query": "What is the capital of Peru?",
+    "expect_refusal": true
+  },
+  {
+    "query": "Who won the fictional Mars cricket league?",
+    "expect_refusal": true
   }
 ]
