@@ -109,6 +109,20 @@ def test_incremental_build_updates_and_removes_documents(tmp_path: Path) -> None
     assert not search_index(index, "Beta", top_k=3)
 
 
+def test_changed_document_that_becomes_undecodable_is_removed(tmp_path: Path) -> None:
+    report = tmp_path / "docs" / "report.md"
+    _write(report, "# Report\nTrusted alpha evidence")
+    index = tmp_path / ".runtime" / "rag.sqlite"
+    build_index(tmp_path, index, include_paths=("docs",))
+
+    report.write_bytes(b"\xff\xfe\x00")
+    rebuilt = build_index(tmp_path, index, include_paths=("docs",))
+
+    assert rebuilt.removed_files == 1
+    assert index_status(index)["document_count"] == 0
+    assert not search_index(index, "alpha", top_k=3)
+
+
 def test_no_answer_when_retrieval_has_no_support(tmp_path: Path) -> None:
     _write(tmp_path / "README.md", "# TradeBot\nOnly feed freshness evidence is documented.")
     index = tmp_path / ".runtime" / "rag.sqlite"
