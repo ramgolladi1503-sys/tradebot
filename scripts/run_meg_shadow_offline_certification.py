@@ -18,45 +18,49 @@ from core.qa_certification.meg_shadow_system import (
 )
 
 
-GATE_TESTS: dict[str, tuple[str, ...]] = {
-    "AUTHENTICATION_AND_STARTUP": (
+GATE_TEST_GROUPS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "AUTHENTICATION_AND_STARTUP": ((
         "tests/auth/test_auth_manager_behavior_contracts.py",
         "tests/test_manual_approval_enforcement.py",
-    ),
-    "FEED_AND_SUBSCRIPTION_TRUTH": (
+    ),),
+    "FEED_AND_SUBSCRIPTION_TRUTH": ((
         "tests/test_market_event_graph_live_launch_plan.py",
         "tests/test_kite_depth_ws_market_event_graph_lifecycle.py",
         "tests/test_kite_depth_ws_observation_on_ticks.py",
         "tests/test_feed_subscription_generation.py",
-    ),
-    "PERSISTENCE_AND_SHUTDOWN": (
+    ),),
+    "PERSISTENCE_AND_SHUTDOWN": ((
         "tests/test_pr763_callback_persistence_cutover_certification.py",
         "tests/test_pr763_offline_remaining_gates.py",
         "tests/test_tick_store.py",
         "tests/test_depth_store_rate_limit.py",
-    ),
-    "MARKET_EVENT_GRAPH_OBSERVATION": (
+    ),),
+    "MARKET_EVENT_GRAPH_OBSERVATION": ((
         "tests/test_market_event_graph_live_source.py",
         "tests/test_market_event_graph_live_ohlc_buffer.py",
         "tests/test_market_event_graph_live_runtime_bridge.py",
         "tests/test_run_market_event_graph_live_session_v1.py",
-    ),
-    "AUTHORITY_RANKING_AND_UI": (
+    ),),
+    "AUTHORITY_RANKING_AND_UI": ((
         "tests/test_canonical_execution_decision.py",
         "tests/test_runtime_authority_contract.py",
         "tests/test_ranking_authority.py",
         "tests/test_runtime_authority_cutover_v1.py",
-    ),
-    "MANUAL_APPROVAL_AND_BROKER_FIREWALL": (
+    ),),
+    "MANUAL_APPROVAL_AND_BROKER_FIREWALL": ((
         "tests/test_manual_approval_enforcement.py",
         "tests/test_runtime_authority_cutover_v1.py",
-    ),
+    ),),
+    # These files exercise intentionally terminal process state. Running them
+    # in one pytest interpreter lets a legitimate shutdown in one file poison
+    # the next file. Separate subprocesses preserve the production contract
+    # while keeping all three proofs under one certification gate.
     "RESTART_AND_RECONCILIATION": (
-        "tests/test_kite_depth_restart.py",
-        "tests/test_pr763_offline_remaining_gates.py",
-        "tests/test_feed_runtime_store_lifecycle.py",
+        ("tests/test_kite_depth_restart.py",),
+        ("tests/test_pr763_offline_remaining_gates.py",),
+        ("tests/test_feed_runtime_store_lifecycle.py",),
     ),
-    "AI_RELIABILITY_AND_EVIDENCE_INTEGRITY": (
+    "AI_RELIABILITY_AND_EVIDENCE_INTEGRITY": ((
         "tests/test_ai_reliability_agent.py",
         "tests/test_ai_reliability_analytics.py",
         "tests/test_ai_reliability_evidence.py",
@@ -65,7 +69,7 @@ GATE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_ai_reliability_integration.py",
         "tests/test_ai_reliability_pr763_session.py",
         "tests/test_test_integrity_audit.py",
-    ),
+    ),),
 }
 
 
@@ -78,18 +82,27 @@ def sha256_file(path: Path) -> str:
 
 
 def git_head(repo: Path) -> str:
-    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+    return subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+    ).strip()
+
+
+def _pytest_command(test_paths: tuple[str, ...]) -> list[str]:
+    return [sys.executable, "-m", "pytest", "-q", "-o", "addopts=", *test_paths]
 
 
 def run_gate(
     *,
     repo: Path,
     gate_id: str,
-    test_paths: tuple[str, ...],
+    test_groups: tuple[tuple[str, ...], ...],
     timeout_seconds: int,
 ) -> dict[str, Any]:
+    test_paths = tuple(
+        relative for group in test_groups for relative in group
+    )
     missing = [relative for relative in test_paths if not (repo / relative).is_file()]
-    command = [sys.executable, "-m", "pytest", "-q", "-o", "addopts=", *test_paths]
+    commands = [_pytest_command(group) for group in test_groups]
     hashes = {
         relative: sha256_file(repo / relative)
         for relative in test_paths
@@ -102,7 +115,8 @@ def run_gate(
             "return_code": 2,
             "timed_out": False,
             "duration_seconds": 0.0,
-            "command": command,
+            "command": commands[0] if len(commands) == 1 else [],
+            "commands": commands,
             "test_file_sha256": hashes,
             "stdout_tail": "",
             "stderr_tail": "missing_test_files:" + ",".join(missing),
@@ -119,36 +133,75 @@ def run_gate(
     )
     started = time.monotonic()
     timed_out = False
-    try:
-        completed = subprocess.run(
-            command,
-            cwd=repo,
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=timeout_seconds,
-            check=False,
-        )
-        return_code = int(completed.returncode)
-        stdout = completed.stdout or ""
-        stderr = completed.stderr or ""
-    except subprocess.TimeoutExpired as exc:
-        timed_out = True
-        return_code = 124
-        stdout = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-        stderr = (exc.stderr or "") if isinstance(exc.stderr, str) else ""
-        stderr += f"\nTIMEOUT_AFTER_{timeout_seconds}_SECONDS"
+    return_codes: list[int] = []
+    stdout_parts: list[str] = []
+    stderr_parts: list[str] = []
+
+    for index, command in enumerate(commands, start=1):
+        elapsed = time.monotonic() - started
+        remaining = max(1, int(timeout_seconds - elapsed))
+        if remaining <= 1 and elapsed >= timeout_seconds:
+            timed_out = True
+            return_codes.append(124)
+            stderr_parts.append(
+                f"group_{index}:TIMEOUT_BEFORE_START_AFTER_{timeout_seconds}_SECONDS"
+            )
+            break
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=repo,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=remaining,
+                check=False,
+            )
+            return_codes.append(int(completed.returncode))
+            stdout_parts.append(
+                f"=== group {index}/{len(commands)}: {' '.join(command)} ===\n"
+                + (completed.stdout or "")
+            )
+            stderr = completed.stderr or ""
+            if stderr:
+                stderr_parts.append(
+                    f"=== group {index}/{len(commands)} ===\n{stderr}"
+                )
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            return_codes.append(124)
+            stdout = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+            stderr = (exc.stderr or "") if isinstance(exc.stderr, str) else ""
+            stdout_parts.append(
+                f"=== group {index}/{len(commands)} timeout ===\n{stdout}"
+            )
+            stderr_parts.append(
+                f"=== group {index}/{len(commands)} timeout ===\n"
+                f"{stderr}\nTIMEOUT_AFTER_{remaining}_SECONDS"
+            )
+            break
+
     duration = time.monotonic() - started
+    passed = (
+        not timed_out
+        and len(return_codes) == len(commands)
+        and all(code == 0 for code in return_codes)
+    )
+    return_code = next((code for code in return_codes if code != 0), 0)
+    stdout_text = "\n".join(stdout_parts)
+    stderr_text = "\n".join(stderr_parts)
     return {
         "gate_id": gate_id,
-        "passed": return_code == 0 and not timed_out,
+        "passed": passed,
         "return_code": return_code,
+        "return_codes": return_codes,
         "timed_out": timed_out,
         "duration_seconds": round(duration, 6),
-        "command": command,
+        "command": commands[0] if len(commands) == 1 else [],
+        "commands": commands,
         "test_file_sha256": hashes,
-        "stdout_tail": stdout[-12000:],
-        "stderr_tail": stderr[-12000:],
+        "stdout_tail": stdout_text[-24000:],
+        "stderr_tail": stderr_text[-12000:],
     }
 
 
@@ -165,7 +218,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         "## Gates",
         "",
     ]
-    details = {gate["gate_id"]: gate for gate in report.get("gate_details") or []}
+    details = {
+        gate["gate_id"]: gate for gate in report.get("gate_details") or []
+    }
     for gate_id in REQUIRED_OFFLINE_GATES:
         gate = details.get(gate_id, {})
         status = "PASS" if gate.get("passed") else "FAIL"
@@ -174,9 +229,19 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- Return code: `{gate.get('return_code')}`")
         lines.append(f"- Timed out: `{gate.get('timed_out')}`")
         lines.append(f"- Duration seconds: `{gate.get('duration_seconds')}`")
-        lines.append(f"- Command: `{' '.join(gate.get('command') or [])}`")
+        commands = gate.get("commands") or []
+        if commands:
+            lines.append("- Commands:")
+            for command in commands:
+                lines.append(f"  - `{' '.join(command)}`")
+        else:
+            lines.append(
+                f"- Command: `{' '.join(gate.get('command') or [])}`"
+            )
         if gate.get("stderr_tail"):
-            lines.extend(["", "```text", str(gate.get("stderr_tail"))[-3000:], "```"])
+            lines.extend(
+                ["", "```text", str(gate.get("stderr_tail"))[-3000:], "```"]
+            )
         lines.append("")
     lines.extend(
         [
@@ -209,15 +274,20 @@ def main() -> int:
         run_gate(
             repo=repo,
             gate_id=gate_id,
-            test_paths=GATE_TESTS[gate_id],
+            test_groups=GATE_TEST_GROUPS[gate_id],
             timeout_seconds=args.timeout_seconds,
         )
         for gate_id in selected
     ]
-    report = build_offline_report(head_sha=git_head(repo), gate_results=results)
+    report = build_offline_report(
+        head_sha=git_head(repo), gate_results=results
+    )
     json_path = output / "meg_shadow_offline_certification.json"
     md_path = output / "meg_shadow_offline_certification.md"
-    json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    json_path.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     md_path.write_text(render_markdown(report), encoding="utf-8")
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["verdict"] == OFFLINE_PASS_VERDICT else 1
