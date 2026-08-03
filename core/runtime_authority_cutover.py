@@ -162,7 +162,8 @@ def authority_payload(
 
 def _updates(candidate: Any, *, mode: str | None = None) -> dict[str, Any]:
     row = _mapping(candidate)
-    payload = authority_payload(row, mode=mode)
+    runtime_mode = _mode(mode)
+    payload = authority_payload(row, mode=runtime_mode)
     allowed = bool(payload["allowed"])
     state = str(payload["state"])
     bucket = str(payload["operator_bucket"])
@@ -205,6 +206,18 @@ def _updates(candidate: Any, *, mode: str | None = None) -> dict[str, Any]:
                 ),
             }
         )
+        # Preserve the legacy display-only reason contract in non-live modes.
+        # LIVE/REAL authority continues to fail closed from canonical evidence;
+        # this field is diagnostic only and cannot restore execution authority.
+        if runtime_mode not in {"LIVE", "REAL"} and _get(row, "reason") in (
+            None,
+            "",
+            "None",
+        ):
+            selection_reason = str(
+                _get(row, "selection_reason") or "not_execution_eligible"
+            )
+            updates["reason"] = f"opportunity_{selection_reason}"
     return updates
 
 
