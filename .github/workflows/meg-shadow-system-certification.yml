@@ -58,7 +58,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install \
-            pytest pandas numpy pyarrow scikit-learn \
+            pytest pandas numpy pyarrow scikit-learn streamlit \
             python-dotenv requests openai kiteconnect holidays
 
       - name: Compile certification paths
@@ -71,6 +71,48 @@ jobs:
             scripts/assemble_meg_shadow_system_certificate.py \
             scripts/run_ai_reliability_pr763_session.py \
             scripts/audit_test_integrity.py
+
+      - name: Verify certified PR782 reliability evidence
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          path = Path('docs/test-reports/ai_reliability_pr763_offline_certification.json')
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          fields = (
+              'schema_version', 'verdict', 'offline_passed',
+              'live_evidence_complete', 'tested_head_sha',
+              'runtime_authority_head_sha', 'outcomes', 'read_only',
+              'order_authority', 'broker_write_authority',
+              'allowed_for_live_execution', 'allowed_for_paper_execution',
+          )
+          missing = [field for field in fields if field not in payload]
+          if missing:
+              raise SystemExit(f'RELIABILITY_CERT_FIELDS_MISSING:{missing}')
+          semantic = {field: payload[field] for field in fields}
+          actual = hashlib.sha256(
+              json.dumps(semantic, sort_keys=True, separators=(',', ':')).encode()
+          ).hexdigest()
+          if actual != payload.get('semantic_sha256'):
+              raise SystemExit('RELIABILITY_CERT_SEMANTIC_HASH_MISMATCH')
+          if payload.get('verdict') != 'IMPLEMENTATION_COMPLETE_LIVE_EVIDENCE_PENDING':
+              raise SystemExit(f"RELIABILITY_CERT_WRONG_VERDICT:{payload.get('verdict')}")
+          if payload.get('offline_passed') is not True:
+              raise SystemExit('RELIABILITY_CERT_OFFLINE_NOT_PASS')
+          if payload.get('live_evidence_complete') is not False:
+              raise SystemExit('RELIABILITY_CERT_FALSE_LIVE_CLAIM')
+          for field in (
+              'order_authority', 'broker_write_authority',
+              'allowed_for_live_execution', 'allowed_for_paper_execution',
+          ):
+              if payload.get(field) is not False:
+                  raise SystemExit(f'RELIABILITY_CERT_UNSAFE:{field}')
+          if payload.get('read_only') is not True:
+              raise SystemExit('RELIABILITY_CERT_NOT_READ_ONLY')
+          print(f'reliability_certificate_semantic_sha256={actual}')
+          PY
 
       - name: Audit changed certification tests
         run: |
