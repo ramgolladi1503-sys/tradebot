@@ -237,8 +237,6 @@ def derive_canonical_execution_decision(candidate: Any) -> CanonicalExecutionDec
         signals["execution_blocked"]
         or signals["hard_blockers"]
         or signals["blockers"]
-        or signals.get("execution_allowed_raw") is False
-        or signals.get("eligible_for_execution_raw") is False
         or _upper(signals["candidate_status"]) in _EXPLICIT_BLOCK_VALUES
         or _upper(signals["execution_status"]) in _EXPLICIT_BLOCK_VALUES
         or _upper(signals["permission"]) in _EXPLICIT_BLOCK_VALUES
