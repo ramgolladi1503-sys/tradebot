@@ -411,3 +411,29 @@ def test_live_identity_binds_commit_and_fresh_root_is_fail_closed(tmp_path):
     require_fresh_evidence_root(first)
     with pytest.raises(RuntimeError, match="RUN_ROOT_ALREADY_EXISTS"):
         require_fresh_evidence_root(first)
+
+
+def test_governed_timeout_auto_seals_exact_root(tmp_path):
+    identity = build_campaign_identity(
+        evidence_root=tmp_path,
+        campaign_commit_sha="75f259e3c72b4abc25f91c0cbc7946ceb5fc37ee",
+        composition_manifest_sha="b" * 64,
+        nonce="timeout",
+        live=True,
+    )
+    require_fresh_evidence_root(identity)
+    for child in ("live", "presession", "postmarket", "per_pr"):
+        (Path(identity.evidence_root) / child).mkdir()
+    result = launch_runtime_child(
+        identity,
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        cwd=Path.cwd(),
+        timeout_sec=0.1,
+    )
+    root = Path(result.evidence_root)
+    assert result.sealed is True
+    assert (root / "SEALED").is_file()
+    lifecycle = (root / "live" / "shutdown_lifecycle.jsonl").read_text()
+    assert "TIMEOUT_EXPIRED" in lifecycle
+    assert "GRACEFUL_SIGNAL_SENT" in lifecycle
+    assert "PARENT_SEAL_VERIFIED" in lifecycle

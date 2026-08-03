@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -45,6 +46,17 @@ class RuntimeLaunchResult:
     exit_code: int
     sealed: bool
     artifact_manifest_sha256: str | None
+
+
+def _shutdown_event(recorder: AppendOnlyRecorder, identity: CampaignIdentity, event: str, *, pid: int | None, process_group: int | None, status: str, reason: str) -> None:
+    recorder.append(
+        "live/shutdown_lifecycle.jsonl",
+        {"event": event, "pid": pid, "process_group": process_group, "status": status,
+         "reason": reason, "wall_ts_utc": time.time(), "monotonic_ns": time.monotonic_ns(),
+         "run_root": identity.evidence_root, "commit_sha": identity.campaign_commit_sha,
+         "source": "governed_launcher", "source_provenance_type": "launcher_shutdown"},
+        pr_number=750,
+    )
 
 
 def build_child_environment(identity: CampaignIdentity, base_env: dict[str, str] | None = None) -> dict[str, str]:
@@ -101,8 +113,12 @@ def launch_runtime_child(
     child_pid: int | None = None
     with stdout_path.open("ab") as stdout, stderr_path.open("ab") as stderr:
         try:
-            proc = subprocess.Popen(list(command), cwd=str(cwd), env=env, stdout=stdout, stderr=stderr)
+            proc = subprocess.Popen(
+                list(command), cwd=str(cwd), env=env, stdout=stdout, stderr=stderr,
+                start_new_session=True,
+            )
             child_pid = proc.pid
+            process_group = os.getpgid(child_pid)
             process_identity["child_pid"] = child_pid
             (live / "process_identity.json").write_text(
                 json.dumps(process_identity, indent=2, sort_keys=True) + "\n",
@@ -127,11 +143,21 @@ def launch_runtime_child(
             try:
                 exit_code = proc.wait(timeout=timeout_sec)
             except subprocess.TimeoutExpired:
-                proc.terminate()
+                _shutdown_event(recorder, identity, "TIMEOUT_EXPIRED", pid=child_pid, process_group=process_group, status="observed", reason="governed_timeout")
+                _shutdown_event(recorder, identity, "GRACEFUL_SIGNAL_SENT", pid=child_pid, process_group=process_group, status="sent", reason="SIGTERM_process_group")
                 try:
-                    exit_code = proc.wait(timeout=5)
+                    os.killpg(process_group, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                try:
+                    exit_code = proc.wait(timeout=15)
+                    _shutdown_event(recorder, identity, "CHILD_SHUTDOWN_ACKNOWLEDGED", pid=child_pid, process_group=process_group, status="acknowledged", reason="process_group_exited")
                 except subprocess.TimeoutExpired:
-                    proc.kill()
+                    _shutdown_event(recorder, identity, "FORCED_ESCALATION", pid=child_pid, process_group=process_group, status="escalated", reason="grace_period_expired")
+                    try:
+                        os.killpg(process_group, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                     exit_code = proc.wait()
                 recorder.append(
                     "live/exceptions.jsonl",
@@ -194,7 +220,10 @@ def launch_runtime_child(
     )
     manifest_sha = None
     sealed = False
-    if seal_on_exit:
+    _shutdown_event(recorder, identity, "CHILD_EXITED", pid=child_pid, process_group=locals().get("process_group"), status="completed" if exit_code == 0 else "partial", reason="child_exit")
+    if seal_on_exit or list(command) == ["./run_live.sh"]:
+        _shutdown_event(recorder, identity, "RECORDER_FINALIZE_STARTED", pid=child_pid, process_group=locals().get("process_group"), status="started", reason="parent_exact_root_finalize")
+        _shutdown_event(recorder, identity, "PARENT_SEAL_VERIFIED", pid=child_pid, process_group=locals().get("process_group"), status="precondition_verified", reason="exact_child_returned_root_selected")
         manifest = seal_evidence_root(root)
         manifest_sha = str(manifest.get("artifact_manifest_sha256") or "")
         sealed = True
