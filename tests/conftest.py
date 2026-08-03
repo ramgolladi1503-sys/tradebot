@@ -20,6 +20,11 @@ _FEED_RESOURCE_CERTIFICATION_TESTS = {
     "test_control_1000_has_no_cycle_correlated_fd_growth",
     "test_reconnect_stress_1000_has_bounded_resources",
 }
+_PR763_CERTIFICATION_FILES = {
+    "test_pr763_callback_persistence_cutover_certification.py",
+    "test_pr763_gate1_structured_evidence.py",
+    "test_pr763_offline_remaining_gates.py",
+}
 
 
 def pytest_collection_modifyitems(items):
@@ -112,6 +117,15 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
             with contextlib.suppress(Exception):
                 sie._default_recorder.shutdown()
             sie._default_recorder = None
+
+    # Runtime persistence has a terminal production shutdown latch. PR #763
+    # certification tests intentionally exercise shutdown repeatedly in one
+    # pytest process, so each test starts from the explicit test-only reset.
+    if Path(str(request.node.fspath)).name in _PR763_CERTIFICATION_FILES:
+        with contextlib.suppress(Exception):
+            import core.feed.runtime_store as runtime_store
+            if hasattr(runtime_store, "reset_runtime_persistence_for_tests"):
+                runtime_store.reset_runtime_persistence_for_tests()
 
     # PR #763 callback-negative controls reuse fixed synthetic timestamps. The
     # immediately preceding positive reconciliation test records those tokens in
