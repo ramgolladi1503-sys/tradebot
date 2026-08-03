@@ -13,7 +13,7 @@
 
 This change is an isolated read-only sidecar. It may read a completed evidence root and authority snapshot files after the session. It cannot subscribe to a feed, run a broker client, alter candidates, assign capital, approve trades, or place/cancel/modify orders. Source files copied from PR #760 are restricted to `core/ai_reliability_agent/**`, its scripts, tests, fixtures, architecture documents, and certification reports.
 
-## Grill Me
+## Grill Me Review
 
 - Can the agent declare a session valid from an unsealed directory? No. Missing or invalid `SEALED`, `artifact_manifest.json`, or `SHA256SUMS` fails closed.
 - Can it ignore a modified artifact? No. Every declared artifact is checked for path safety, size, SHA-256, and exact manifest membership.
@@ -21,7 +21,7 @@ This change is an isolated read-only sidecar. It may read a completed evidence r
 - Can it call a broker or influence the live loop? No. The new verifier is path-driven and post-market only; PR #760's LIVE tool registry also blocks non-read-only tools.
 - Can it claim profitability? No. Strategy edge, profitability, and causal market explanations remain explicit exclusions.
 
-## Hermes
+## Hermes Review
 
 The durable evidence chain is:
 
@@ -36,11 +36,11 @@ PR #763 sealed root
 
 The report records each gate, evidence counts, errors, input hashes, and the strongest truthful verdict. Missing live semantics yields `IMPLEMENTATION_COMPLETE_LIVE_EVIDENCE_PENDING`, not success.
 
-## GSD
+## GSD Review
 
 The implementation reuses PR #760's evidence ledger, analytics, and component-certification sidecar. It adds only the missing system boundary: independent verification of PR #763 session evidence and PR #771 operator/execution authority. It does not add another runtime agent or duplicate the PR #763 recorder.
 
-## QA/Safety
+## QA / Safety Review
 
 Focused tests cover:
 
