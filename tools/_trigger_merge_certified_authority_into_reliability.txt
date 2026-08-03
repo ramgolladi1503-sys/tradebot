@@ -1,0 +1,1 @@
+Trigger the self-removing two-parent merge of certified PR #771 authority into PR #772.
