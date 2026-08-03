@@ -54,7 +54,7 @@ os.environ.setdefault("ANALYTICS_RUNTIME_DIR", str(_TEST_RUNTIME_ROOT / "analyti
 
 
 @pytest.fixture(autouse=True)
-def _isolate_runtime_state(monkeypatch, tmp_path):
+def _isolate_runtime_state(monkeypatch, tmp_path, request):
     """Evidence contract: every test gets isolated runtime state.
 
     The suite frequently monkeypatches cfg.EXECUTION_MODE directly. A leftover
@@ -112,6 +112,28 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
             with contextlib.suppress(Exception):
                 sie._default_recorder.shutdown()
             sie._default_recorder = None
+
+    # PR #763 callback-negative controls reuse fixed synthetic timestamps. The
+    # immediately preceding positive reconciliation test records those tokens in
+    # process-wide receipt/payload maps, which can cause the next callback to be
+    # rejected before its deliberately injected persistence operation is reached.
+    # Clear only callback freshness/provenance state for the exact affected test;
+    # the production assertion and injected operation remain unchanged.
+    if request.node.name == "test_runtime_tripwire_detects_injected_callback_thread_sqlite_call":
+        with contextlib.suppress(Exception):
+            import core.kite_depth_ws as depth_ws
+
+            for name in (
+                "_LAST_MSG_TS_BY_TOKEN",
+                "_LAST_PAYLOAD_TS_BY_TOKEN",
+                "_FIRST_LIVE_TICK_EPOCH_BY_TOKEN",
+                "_FIRST_SOURCE_TICK_EPOCH_BY_TOKEN",
+                "_LATEST_OBSERVATION_PACKET_BY_TOKEN",
+            ):
+                value = getattr(depth_ws, name, None)
+                if hasattr(value, "clear"):
+                    value.clear()
+            depth_ws._LAST_WS_TICK_EPOCH = 0.0
 
     import json
     feed_path = runtime_root / "logs" / "feed_runtime_latest.json"
