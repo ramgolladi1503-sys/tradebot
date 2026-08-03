@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build, query, evaluate, and inspect the local TradeBot RAG index."""
+"""Build, query, evaluate, diagnose, and inspect the local TradeBot RAG index."""
 
 from __future__ import annotations
 
@@ -11,10 +11,15 @@ from pathlib import Path
 from core.tradebot_rag import (
     DEFAULT_INCLUDE_PATHS,
     ask_index,
-    build_index,
     default_index_path,
-    index_status,
     search_index,
+)
+from core.tradebot_rag_operations import (
+    BuildLockError,
+    DEFAULT_STALE_LOCK_SECONDS,
+    build_index_safely,
+    doctor_index,
+    read_only_index_status,
 )
 
 
@@ -29,13 +34,14 @@ def _print_json(payload: object) -> None:
 def _build(args: argparse.Namespace) -> int:
     root = Path(args.repo_root).expanduser().resolve()
     index_path = Path(args.index).expanduser() if args.index else default_index_path(root)
-    report = build_index(
+    report = build_index_safely(
         root,
         index_path,
         include_paths=tuple(args.include),
         max_file_bytes=args.max_file_bytes,
         max_chunk_chars=args.chunk_chars,
         overlap_lines=args.overlap_lines,
+        stale_lock_seconds=args.stale_lock_seconds,
     )
     _print_json(report.__dict__)
     return 0
@@ -62,9 +68,17 @@ def _query(args: argparse.Namespace) -> int:
 def _status(args: argparse.Namespace) -> int:
     root = Path(args.repo_root).expanduser().resolve()
     index_path = Path(args.index).expanduser() if args.index else default_index_path(root)
-    payload = index_status(index_path)
+    payload = read_only_index_status(index_path)
     _print_json(payload)
-    return 0 if payload["exists"] else 2
+    return 0 if payload.get("exists") and payload.get("readable") else 2
+
+
+def _doctor(args: argparse.Namespace) -> int:
+    root = Path(args.repo_root).expanduser().resolve()
+    index_path = Path(args.index).expanduser() if args.index else default_index_path(root)
+    report = doctor_index(index_path)
+    _print_json(report.to_dict())
+    return 0 if report.healthy else 1
 
 
 def _evaluate(args: argparse.Namespace) -> int:
@@ -156,6 +170,7 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--max-file-bytes", type=int, default=2_000_000)
     build.add_argument("--chunk-chars", type=int, default=1_800)
     build.add_argument("--overlap-lines", type=int, default=3)
+    build.add_argument("--stale-lock-seconds", type=int, default=DEFAULT_STALE_LOCK_SECONDS)
     build.set_defaults(handler=_build)
 
     query = subparsers.add_parser("query", help="Ask a grounded question")
@@ -166,8 +181,11 @@ def _parser() -> argparse.ArgumentParser:
     query.add_argument("--json", action="store_true")
     query.set_defaults(handler=_query)
 
-    status = subparsers.add_parser("status", help="Inspect index metadata")
+    status = subparsers.add_parser("status", help="Inspect index metadata without mutation")
     status.set_defaults(handler=_status)
+
+    doctor = subparsers.add_parser("doctor", help="Run read-only index integrity checks")
+    doctor.set_defaults(handler=_doctor)
 
     evaluate = subparsers.add_parser("evaluate", help="Run deterministic retrieval evaluation")
     evaluate.add_argument("--cases", default=str(_repo_root() / "rag" / "eval_cases.json"))
@@ -183,7 +201,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return int(args.handler(args))
-    except (FileNotFoundError, ValueError) as exc:
+    except (BuildLockError, FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
