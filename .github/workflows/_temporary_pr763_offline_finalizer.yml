@@ -29,6 +29,23 @@ jobs:
         shell: bash
         run: |
           python tools/apply_pr763_offline_repairs.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("tests/test_pr763_callback_persistence_cutover_certification.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''def test_runtime_queue_saturation_is_bounded_and_fail_closed(monkeypatch):
+              durability.reset()
+              runtime_store.shutdown_runtime_persistence()
+          '''
+          new = '''def test_runtime_queue_saturation_is_bounded_and_fail_closed(monkeypatch):
+              durability.reset()
+              runtime_store.reset_runtime_persistence_for_tests()
+          '''
+          if new not in text:
+              if old not in text:
+                  raise RuntimeError("PR763_GATE6_RESET_CONTEXT_MISSING")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
           if git diff --quiet -- \
             core/tick_store.py \
             core/feed/runtime_store.py \
@@ -45,7 +62,7 @@ jobs:
               tests/test_pr763_callback_persistence_cutover_certification.py \
               tests/test_pr763_offline_remaining_gates.py \
               tools/pr763_gate1_structured_evidence.py
-            git commit -m "fix: close PR763 offline persistence lifecycle gaps"
+            git commit -m "fix: align PR763 saturation test with terminal shutdown"
             git push origin HEAD:campaign/unified-live-validation-pr748-756-v1
             echo "pushed=true" >> "$GITHUB_OUTPUT"
           fi
@@ -139,11 +156,11 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo "legacy_gate1=${{ steps.gate1.outcome }}"
-          echo "structured_gate1=${{ steps.structured.outcome }}"
-          echo "remaining_gates=${{ steps.remaining.outcome }}"
-          echo "evidence_runner=${{ steps.runner.outcome }}"
-          test "${{ steps.gate1.outcome }}" = "success"
-          test "${{ steps.structured.outcome }}" = "success"
-          test "${{ steps.remaining.outcome }}" = "success"
-          test "${{ steps.runner.outcome }}" = "success"
+          echo "legacy_gate1=${{ steps.gate1.outputs.status }}"
+          echo "structured_gate1=${{ steps.structured.outputs.status }}"
+          echo "remaining_gates=${{ steps.remaining.outputs.status }}"
+          echo "evidence_runner=${{ steps.runner.outputs.status }}"
+          test "${{ steps.gate1.outputs.status }}" = "0"
+          test "${{ steps.structured.outputs.status }}" = "0"
+          test "${{ steps.remaining.outputs.status }}" = "0"
+          test "${{ steps.runner.outputs.status }}" = "0"
