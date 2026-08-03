@@ -12,7 +12,6 @@ from core.tradebot_rag import (
     DEFAULT_INCLUDE_PATHS,
     ask_index,
     default_index_path,
-    index_status,
     search_index,
 )
 from core.tradebot_rag_operations import (
@@ -20,6 +19,7 @@ from core.tradebot_rag_operations import (
     DEFAULT_STALE_LOCK_SECONDS,
     build_index_safely,
     doctor_index,
+    read_only_index_status,
 )
 
 
@@ -68,9 +68,9 @@ def _query(args: argparse.Namespace) -> int:
 def _status(args: argparse.Namespace) -> int:
     root = Path(args.repo_root).expanduser().resolve()
     index_path = Path(args.index).expanduser() if args.index else default_index_path(root)
-    payload = index_status(index_path)
+    payload = read_only_index_status(index_path)
     _print_json(payload)
-    return 0 if payload["exists"] else 2
+    return 0 if payload.get("exists") and payload.get("readable") else 2
 
 
 def _doctor(args: argparse.Namespace) -> int:
@@ -181,7 +181,7 @@ def _parser() -> argparse.ArgumentParser:
     query.add_argument("--json", action="store_true")
     query.set_defaults(handler=_query)
 
-    status = subparsers.add_parser("status", help="Inspect index metadata")
+    status = subparsers.add_parser("status", help="Inspect index metadata without mutation")
     status.set_defaults(handler=_status)
 
     doctor = subparsers.add_parser("doctor", help="Run read-only index integrity checks")
