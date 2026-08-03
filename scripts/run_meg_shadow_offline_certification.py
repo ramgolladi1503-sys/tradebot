@@ -51,14 +51,21 @@ GATE_TEST_GROUPS: dict[str, tuple[tuple[str, ...], ...]] = {
         "tests/test_manual_approval_enforcement.py",
         "tests/test_runtime_authority_cutover_v1.py",
     ),),
-    # These files exercise intentionally terminal process state. Running them
-    # in one pytest interpreter lets a legitimate shutdown in one file poison
-    # the next file. Separate subprocesses preserve the production contract
-    # while keeping all three proofs under one certification gate.
+    # Restart and shutdown are intentionally terminal within one interpreter.
+    # Keep each lifecycle proof in an independent process so one successful
+    # shutdown cannot make a later independent startup test fail spuriously.
     "RESTART_AND_RECONCILIATION": (
         ("tests/test_kite_depth_restart.py",),
         ("tests/test_pr763_offline_remaining_gates.py",),
-        ("tests/test_feed_runtime_store_lifecycle.py",),
+        (
+            "tests/test_feed_runtime_store_lifecycle.py::test_write_runtime_snapshot_records_start_and_snapshot_events",
+        ),
+        (
+            "tests/test_feed_runtime_store_lifecycle.py::test_write_runtime_snapshot_records_auth_blocked_event",
+        ),
+        (
+            "tests/test_feed_runtime_store_lifecycle.py::test_runtime_snapshot_is_deep_copied_before_worker_persistence",
+        ),
     ),
     "AI_RELIABILITY_AND_EVIDENCE_INTEGRITY": ((
         "tests/test_ai_reliability_agent.py",
@@ -71,6 +78,10 @@ GATE_TEST_GROUPS: dict[str, tuple[tuple[str, ...], ...]] = {
         "tests/test_test_integrity_audit.py",
     ),),
 }
+
+
+def _test_file(relative_or_node: str) -> str:
+    return relative_or_node.split("::", 1)[0]
 
 
 def sha256_file(path: Path) -> str:
@@ -119,10 +130,11 @@ def run_gate(
     test_groups: tuple[tuple[str, ...], ...],
     timeout_seconds: int,
 ) -> dict[str, Any]:
-    test_paths = tuple(
+    test_nodes = tuple(
         relative for group in test_groups for relative in group
     )
-    missing = [relative for relative in test_paths if not (repo / relative).is_file()]
+    test_files = tuple(dict.fromkeys(_test_file(node) for node in test_nodes))
+    missing = [relative for relative in test_files if not (repo / relative).is_file()]
     commands = [
         _pytest_command(
             group,
@@ -135,7 +147,7 @@ def run_gate(
     ]
     hashes = {
         relative: sha256_file(repo / relative)
-        for relative in test_paths
+        for relative in test_files
         if (repo / relative).is_file()
     }
     if missing:
