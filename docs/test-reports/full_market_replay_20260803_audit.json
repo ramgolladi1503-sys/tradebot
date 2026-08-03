@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "verdict": "FULL_SESSION_REPLAY_ACCEPTED_LIVE_KITE_AND_MEG_BLOCKERS_REMAIN",
+  "source": {
+    "provider": "Upstox",
+    "session_date": "2026-08-03",
+    "drive_folder_url": "https://drive.google.com/drive/folders/1GKI5aaYoJvomIqC-u2YFF9aQqDn6mxI6",
+    "file_count": 40,
+    "compressed_size_bytes": 284611838,
+    "manifest_sha256": "ad3defeaf18de72fac85b89331d93864a75ed56d1c90718dee1d11ab7f6fc1d7",
+    "corpus_fingerprint_sha256": "2eeb4b595280117c568c2d84fdd7b542c589eba6788c7c3b6ff68cbd34347538"
+  },
+  "manifest": {
+    "session_date": "20260803",
+    "total_messages": 156927,
+    "dropped_messages": 0,
+    "parse_failures": 0,
+    "reconnects": 3,
+    "coverage_keys": 722,
+    "finalized_at": "2026-08-03T15:35:00.767564"
+  },
+  "session": {
+    "row_count": 10016996,
+    "schema_columns": [
+      "ts",
+      "instrument_key",
+      "ltp",
+      "bid_price",
+      "ask_price",
+      "delta",
+      "theta",
+      "gamma",
+      "vega",
+      "iv",
+      "volume",
+      "oi"
+    ],
+    "first_ts_ist": "2026-08-03T09:00:05.538508+05:30",
+    "last_ts_ist": "2026-08-03T15:35:00.268600+05:30",
+    "actual_coverage_keys": 722,
+    "coverage_matches_manifest": true,
+    "unique_keys_including_market_info": 723,
+    "prefix_key_counts": {
+      "NSE_FO": 484,
+      "BSE_FO": 234,
+      "NSE_INDEX": 3,
+      "BSE_INDEX": 1,
+      "marketInfo": 1,
+      "NSE_EQ": 0
+    },
+    "prefix_row_counts": {
+      "NSE_FO": 5460924,
+      "BSE_FO": 4296194,
+      "NSE_INDEX": 236237,
+      "BSE_INDEX": 23607,
+      "marketInfo": 34,
+      "NSE_EQ": 0
+    },
+    "exact_duplicate_ts_key_rows": 0,
+    "timestamp_order_violations": 1,
+    "meg_constituent_replay_eligible": false
+  },
+  "ordering_warning": {
+    "file_name": "ticks_1785744048.parquet",
+    "row_index": 4212,
+    "backward_delta_seconds": -0.00000476837158203125,
+    "classification": "MICROSECOND_CAPTURE_ORDER_WARNING"
+  },
+  "nifty_cadence": {
+    "rows": 94568,
+    "median_gap_seconds": 0.28484201431274414,
+    "p95_gap_seconds": 0.3747224330902099,
+    "p99_gap_seconds": 0.599170069694519,
+    "gaps_gt_5s": 4,
+    "gaps_gt_10s": 2,
+    "max_gap_seconds": 31.9301700592041
+  },
+  "recorded_interruption_recovery": [
+    {
+      "gap_seconds": 31.776633977890015,
+      "gap_start_ist": "2026-08-03T11:32:25.124979+05:30",
+      "gap_end_ist": "2026-08-03T11:32:56.901613+05:30",
+      "active_keys_pre_gap": 648,
+      "keys_recovered_within_120s": 648,
+      "recovery_delay_p50_seconds": 0.24592113494873047,
+      "recovery_delay_p90_seconds": 6.9549620151519775,
+      "recovery_delay_max_seconds": 6.955395936965942
+    },
+    {
+      "gap_seconds": 16.443055152893066,
+      "gap_start_ist": "2026-08-03T11:30:59.461748+05:30",
+      "gap_end_ist": "2026-08-03T11:31:15.904803+05:30",
+      "active_keys_pre_gap": 676,
+      "keys_recovered_within_120s": 676,
+      "recovery_delay_p50_seconds": 0.5271029472351074,
+      "recovery_delay_p90_seconds": 26.118042945861816,
+      "recovery_delay_max_seconds": 107.95216393470764
+    }
+  ],
+  "blocker_matrix": {
+    "multi_strategy_shadow": {
+      "status": "DEPRIORITIZED_BY_USER_AND_RESEARCH_EVIDENCE"
+    },
+    "full_session_replay_corpus_available": {
+      "status": "CLOSED"
+    },
+    "collector_drop_and_parse_integrity": {
+      "status": "CLOSED_FOR_RECORDED_UPSTOX_CORPUS"
+    },
+    "replay_schema_and_partition_integrity": {
+      "status": "CLOSED_WITH_WARNING"
+    },
+    "recorded_feed_recovery_after_interruptions": {
+      "status": "PARTIALLY_CLOSED_FOR_REPLAY"
+    },
+    "kite_subscription_registry_truth": {
+      "status": "OPEN_REQUIRES_LIVE_KITE_EVIDENCE"
+    },
+    "kite_post_mode_full_packet_delivery": {
+      "status": "OPEN_REQUIRES_LIVE_KITE_EVIDENCE"
+    },
+    "nifty50_constituent_bar_and_meg_traversal": {
+      "status": "OPEN_REQUIRES_LIVE_OR_NSE_EQ_REPLAY"
+    },
+    "pr763_governed_live_session": {
+      "status": "OPEN"
+    }
+  },
+  "claim_boundaries": [
+    "Recorded Upstox replay is not a live Kite WebSocket session.",
+    "No expected subscription set, subscription ACK, reconnect generation or Kite packet mode is present.",
+    "No NSE_EQ constituent universe is present, so Market Event Graph breadth cannot be certified.",
+    "No candidate, ranking, approval, fill, execution or order evidence is inferred from market ticks."
+  ]
+}
