@@ -48,6 +48,12 @@ jobs:
           python-version: "3.11"
           cache: pip
 
+      - name: Initialize evidence root
+        run: |
+          mkdir -p .runtime/meg-shadow-certification
+          printf 'head_sha=%s\n' "$(git rev-parse HEAD)" \
+            > .runtime/meg-shadow-certification/workflow_identity.txt
+
       - name: Install deterministic certification dependencies
         run: |
           python -m pip install --upgrade pip
@@ -65,6 +71,22 @@ jobs:
             scripts/assemble_meg_shadow_system_certificate.py \
             scripts/run_ai_reliability_pr763_session.py \
             scripts/audit_test_integrity.py
+
+      - name: Audit changed certification tests
+        run: |
+          BASE='${{ github.event.pull_request.base.sha }}'
+          if [ -z "$BASE" ]; then
+            BASE="$(git rev-parse HEAD^)"
+          fi
+          python scripts/audit_test_integrity.py \
+            --roots \
+              tests/auth \
+              tests/qa \
+              tests/test_ai_reliability_pr763_session.py \
+              tests/test_runtime_authority_cutover_v1.py \
+              tests/test_test_integrity_audit.py \
+            --changed-base "$BASE" \
+            --report-dir .runtime/meg-shadow-certification/test-integrity
 
       - name: Run same-SHA offline certification
         run: |
@@ -86,7 +108,9 @@ jobs:
           assert report['verdict'] == 'IMPLEMENTATION_COMPLETE_LIVE_EVIDENCE_PENDING', report
           assert report['remaining_gate'] == 'FRESH_PR763_MARKET_SESSION', report
           assert report['order_authority'] is False, report
+          assert report['broker_write_authority'] is False, report
           assert report['allowed_for_live_execution'] is False, report
+          assert report['allowed_for_paper_execution'] is False, report
           print(json.dumps(report, indent=2, sort_keys=True))
           PY
 
@@ -122,5 +146,5 @@ jobs:
         with:
           name: meg-shadow-system-certification-${{ github.sha }}
           path: .runtime/meg-shadow-certification
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
