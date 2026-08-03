@@ -13,6 +13,8 @@ import json
 import os
 import secrets
 import subprocess
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, Mapping
 
 
@@ -22,7 +24,9 @@ ENABLE_ENV = "UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE"
 RUN_ID_ENV = "UNIFIED_LIVE_VALIDATION_PR748_756_RUN_ID"
 EVIDENCE_ROOT_ENV = "UNIFIED_LIVE_VALIDATION_PR748_756_EVIDENCE_ROOT"
 COMPOSITION_SHA_ENV = "UNIFIED_LIVE_VALIDATION_PR748_756_COMPOSITION_SHA"
-SESSION_DATE = "2026-07-31"
+SESSION_DATE_ENV = "UNIFIED_LIVE_VALIDATION_PR748_756_SESSION_DATE"
+STATE_PATH_ENV = "MARKET_EVENT_GRAPH_LIVE_STATE_PATH"
+IST = ZoneInfo("Asia/Kolkata")
 READ_ONLY_FLAGS = {
     "read_only": True,
     "is_order_action": False,
@@ -86,16 +90,27 @@ def stable_json_sha256(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def resolve_session_date(explicit: str | None = None, env: Mapping[str, str] | None = None) -> str:
+    source = os.environ if env is None else env
+    raw = str(explicit or source.get(SESSION_DATE_ENV) or datetime.now(IST).date().isoformat()).strip()
+    try:
+        parsed = datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise ValueError("invalid_session_date:expected_YYYY-MM-DD") from exc
+    return parsed.isoformat()
+
+
 def build_composition_manifest(
     *,
     origin_main_sha: str,
     integrated_commit_sha: str,
+    session_date: str | None = None,
     selected_constituent_producer: str = "pr_749_constituent_source_feeds_pr_748_validator_exporter",
 ) -> dict[str, Any]:
     manifest = {
         "schema_version": CAMPAIGN_SCHEMA_VERSION,
         "campaign": CAMPAIGN_NAME,
-        "session_date": SESSION_DATE,
+        "session_date": resolve_session_date(session_date),
         "origin_main_sha": origin_main_sha,
         "integrated_commit_sha": integrated_commit_sha,
         "activation_env": ENABLE_ENV,
@@ -133,14 +148,16 @@ def build_campaign_identity(
     composition_manifest_sha: str,
     nonce: str | None = None,
     live: bool = False,
+    session_date: str | None = None,
 ) -> CampaignIdentity:
     suffix = nonce or secrets.token_hex(4)
     phase = "live" if live else "presession"
-    run_id = f"unified-pr748-756-20260731-{composition_manifest_sha[:12]}-{phase}-{suffix}"
+    canonical_session_date = resolve_session_date(session_date)
+    run_id = f"unified-pr748-756-{canonical_session_date.replace('-', '')}-{composition_manifest_sha[:12]}-{phase}-{suffix}"
     return CampaignIdentity(
         run_id=run_id,
         schema_version=CAMPAIGN_SCHEMA_VERSION,
-        session_date=SESSION_DATE,
+        session_date=canonical_session_date,
         campaign_commit_sha=campaign_commit_sha,
         composition_manifest_sha=composition_manifest_sha,
         evidence_root=str(evidence_root / run_id),

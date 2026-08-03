@@ -14,6 +14,7 @@ from core.unified_live_validation_pr748_756.campaign_contract import (
     current_commit_sha,
     reject_presession_live_run_id,
     require_campaign_enabled,
+    resolve_session_date,
 )
 from core.unified_live_validation_pr748_756.launcher import launch_runtime_child
 
@@ -49,12 +50,18 @@ def main() -> int:
     parser.add_argument("--launch-live", action="store_true")
     parser.add_argument("--runtime-command", nargs=argparse.REMAINDER)
     parser.add_argument("--timeout-sec", type=float)
+    parser.add_argument("--session-date")
     args = parser.parse_args()
 
     require_campaign_enabled()
     root = Path(args.evidence_root)
     commit = current_commit_sha(".")
-    manifest = build_composition_manifest(origin_main_sha=args.origin_main_sha, integrated_commit_sha=commit)
+    session_date = resolve_session_date(args.session_date)
+    manifest = build_composition_manifest(
+        origin_main_sha=args.origin_main_sha,
+        integrated_commit_sha=commit,
+        session_date=session_date,
+    )
     presession = root / "presession"
     presession.mkdir(parents=True, exist_ok=True)
     (presession / "composition_manifest.json").write_text(
@@ -67,6 +74,7 @@ def main() -> int:
         composition_manifest_sha=manifest["composition_manifest_sha256"],
         nonce=args.nonce,
         live=args.launch_live,
+        session_date=session_date,
     )
     if args.launch_live:
         reject_presession_live_run_id(identity.run_id)
@@ -85,6 +93,9 @@ def main() -> int:
         "state": state,
         "run_id": identity.run_id,
         "evidence_root": str(run_root),
+        "session_date": identity.session_date,
+        "state_path": str(run_root / "state" / "constituent_source_state.json"),
+        "previous_state_reused": False,
         "launch_command": f"PYTHONPATH=. {ENABLE_ENV}=true python3 -B scripts/run_unified_live_validation_pr748_756_v1.py --origin-main-sha {args.origin_main_sha} --launch-live",
         "runtime_command": command,
         "campaign_runtime_wired": wired,

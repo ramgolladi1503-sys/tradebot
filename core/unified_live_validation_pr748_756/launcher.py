@@ -23,6 +23,8 @@ from core.unified_live_validation_pr748_756.campaign_contract import (
     RUN_ID_ENV,
     CampaignIdentity,
     reject_presession_live_run_id,
+    SESSION_DATE_ENV,
+    STATE_PATH_ENV,
 )
 from core.unified_live_validation_pr748_756.recorder import AppendOnlyRecorder
 from core.unified_live_validation_pr748_756.seal import seal_evidence_root
@@ -53,6 +55,9 @@ def build_child_environment(identity: CampaignIdentity, base_env: dict[str, str]
     env[RUN_ID_ENV] = identity.run_id
     env[EVIDENCE_ROOT_ENV] = identity.evidence_root
     env[COMPOSITION_SHA_ENV] = identity.composition_manifest_sha
+    env[SESSION_DATE_ENV] = identity.session_date
+    env[STATE_PATH_ENV] = str(Path(identity.evidence_root) / "state" / "constituent_source_state.json")
+    env["UNIFIED_LIVE_VALIDATION_PR748_756_COMMIT_SHA"] = identity.campaign_commit_sha
     env["PYTHONUNBUFFERED"] = "1"
     return env
 

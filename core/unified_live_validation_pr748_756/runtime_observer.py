@@ -15,6 +15,7 @@ from core.unified_live_validation_pr748_756.campaign_contract import (
     RUN_ID_ENV,
     CampaignIdentity,
     reject_presession_live_run_id,
+    resolve_session_date,
 )
 from core.unified_live_validation_pr748_756.recorder import AppendOnlyRecorder
 from core.unified_live_validation_pr748_756.seal import seal_evidence_root
@@ -52,13 +53,16 @@ class UnifiedLiveRuntimeObserver:
         run_id = str(source.get(RUN_ID_ENV) or "").strip()
         evidence_root = str(source.get(EVIDENCE_ROOT_ENV) or "").strip()
         composition_sha = str(source.get(COMPOSITION_SHA_ENV) or "").strip()
+        session_date = resolve_session_date(env=source)
         if not run_id or not evidence_root or not composition_sha:
             raise RuntimeError("campaign_identity_env_missing")
+        if f"-{session_date.replace('-', '')}-" not in run_id:
+            raise RuntimeError("SESSION_DATE_MISMATCH")
         reject_presession_live_run_id(run_id)
         identity = CampaignIdentity(
             run_id=run_id,
             schema_version=1,
-            session_date="2026-07-31",
+            session_date=session_date,
             campaign_commit_sha=str(source.get("UNIFIED_LIVE_VALIDATION_PR748_756_COMMIT_SHA") or ""),
             composition_manifest_sha=composition_sha,
             evidence_root=evidence_root,

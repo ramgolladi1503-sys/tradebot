@@ -313,7 +313,14 @@ def _observe_refresh(result: Mapping[str, Any], metadata: Mapping[str, Any]) -> 
 
 
 def _state_path(metadata: Mapping[str, Any], explicit: Any) -> Path:
-    raw = explicit or metadata.get("market_event_graph_constituent_source_state_path") or DEFAULT_STATE_PATH
+    import os
+
+    raw = (
+        explicit
+        or metadata.get("market_event_graph_constituent_source_state_path")
+        or os.getenv("MARKET_EVENT_GRAPH_LIVE_STATE_PATH")
+        or DEFAULT_STATE_PATH
+    )
     return Path(raw).expanduser().resolve()
 
 

@@ -14,6 +14,7 @@ from core.unified_live_validation_pr748_756.campaign_contract import (
     enrich_row,
     reject_presession_live_run_id,
     require_campaign_enabled,
+    resolve_session_date,
 )
 from core.unified_live_validation_pr748_756.launcher import (
     build_child_environment,
@@ -78,7 +79,7 @@ def test_enrich_row_overwrites_unsafe_inputs_fail_closed(tmp_path):
         pr_number=748,
     )
 
-    assert row["run_id"] == "unified-pr748-756-20260731-ffffffffffff-presession-test"
+    assert row["run_id"] == "unified-pr748-756-" + __import__("datetime").datetime.now().strftime("%Y%m%d") + "-ffffffffffff-presession-test"
     assert row["read_only"] is True
     assert row["is_order_action"] is False
     assert row["broker_api_called"] is False
@@ -159,6 +160,55 @@ def test_enabled_live_identity_sets_exact_child_environment(tmp_path):
         "runtime/reference/market_event_graph/"
         "nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json"
     )
+    assert env["UNIFIED_LIVE_VALIDATION_PR748_756_SESSION_DATE"] == identity.session_date
+    assert env["MARKET_EVENT_GRAPH_LIVE_STATE_PATH"].endswith(
+        f"/{identity.run_id}/state/constituent_source_state.json"
+    )
+
+
+def test_session_identity_uses_explicit_date_and_rejects_invalid_date(tmp_path):
+    identity = build_campaign_identity(
+        evidence_root=tmp_path,
+        campaign_commit_sha="abc",
+        composition_manifest_sha="a" * 64,
+        nonce="date",
+        live=True,
+        session_date="2026-08-03",
+    )
+    assert identity.session_date == "2026-08-03"
+    assert "20260803" in identity.run_id
+    manifest = build_composition_manifest(
+        origin_main_sha="origin",
+        integrated_commit_sha="abc",
+        session_date="2026-08-03",
+    )
+    assert manifest["session_date"] == "2026-08-03"
+    with pytest.raises(ValueError, match="invalid_session_date"):
+        resolve_session_date("08/03/2026")
+
+
+def test_session_identity_uses_ist_date_from_environment(monkeypatch):
+    monkeypatch.setenv("UNIFIED_LIVE_VALIDATION_PR748_756_SESSION_DATE", "2026-08-03")
+    assert resolve_session_date() == "2026-08-03"
+
+
+def test_runtime_observer_rejects_session_date_mismatch(tmp_path, monkeypatch):
+    identity = build_campaign_identity(
+        evidence_root=tmp_path,
+        campaign_commit_sha="abc",
+        composition_manifest_sha="b" * 64,
+        nonce="mismatch",
+        live=True,
+        session_date="2026-07-31",
+    )
+    monkeypatch.setenv("UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE", "true")
+    monkeypatch.setenv("TRADEBOT_READ_ONLY", "true")
+    monkeypatch.setenv("UNIFIED_LIVE_VALIDATION_PR748_756_SESSION_DATE", "2026-08-03")
+    monkeypatch.setenv("UNIFIED_LIVE_VALIDATION_PR748_756_RUN_ID", identity.run_id)
+    monkeypatch.setenv("UNIFIED_LIVE_VALIDATION_PR748_756_EVIDENCE_ROOT", identity.evidence_root)
+    monkeypatch.setenv("UNIFIED_LIVE_VALIDATION_PR748_756_COMPOSITION_SHA", identity.composition_manifest_sha)
+    with pytest.raises(RuntimeError, match="SESSION_DATE_MISMATCH"):
+        runtime_observer.UnifiedLiveRuntimeObserver.from_env()
 
 
 def test_process_level_smoke_launches_one_child_records_and_seals(tmp_path):

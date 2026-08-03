@@ -51,6 +51,27 @@ def test_refresh_creates_state_and_completed_rows_without_candidates(tmp_path):
     assert persisted["last_target_boundary_count"] == 5
 
 
+def test_refresh_uses_run_local_state_path_from_campaign_environment(tmp_path, monkeypatch):
+    reset_market_event_graph_constituent_refresh_state()
+    manifest = _manifest()
+    fixture = _tick_fixture(manifest)
+    state_path = tmp_path / "20260803" / "run-a" / "constituent_state.json"
+    monkeypatch.setenv("MARKET_EVENT_GRAPH_LIVE_STATE_PATH", str(state_path))
+
+    result = refresh_market_event_graph_constituent_source(
+        symbol="NIFTY",
+        as_of_epoch=float(_minute_end(9, 20) + 10),
+        metadata={"market_event_graph_live_source_enable": True, "owner": "NIFTY"},
+        instrument_provider=lambda: _instrument_rows(manifest),
+        subscription_fn=lambda tokens: True,
+        tick_reader=_reader(fixture),
+    )
+
+    assert result["state_path"] == str(state_path.resolve())
+    assert result["state_created"] is True
+    assert state_path.is_file()
+
+
 def test_refresh_is_idempotent_within_boundary_and_rechecks_on_reconnect(tmp_path):
     reset_market_event_graph_constituent_refresh_state()
     manifest = _manifest()
