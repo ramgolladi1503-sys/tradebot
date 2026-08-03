@@ -6,7 +6,8 @@ from pathlib import Path
 
 import streamlit as st
 
-from core.tradebot_rag import ask_index, build_index, default_index_path, index_status
+from core.tradebot_rag import ask_index, default_index_path, index_status
+from core.tradebot_rag_operations import BuildLockError, build_index_safely, doctor_index
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INDEX_PATH = default_index_path(REPO_ROOT)
@@ -24,16 +25,26 @@ with st.sidebar:
     if status.get("exists"):
         st.success(f"{status['document_count']} documents / {status['chunk_count']} chunks")
         st.caption(f"Last built: {status.get('last_built_at_utc') or 'unknown'}")
+        doctor = doctor_index(INDEX_PATH)
+        if doctor.healthy:
+            st.caption("Integrity: healthy")
+        else:
+            failed = [check.name for check in doctor.checks if not check.passed]
+            st.error("Integrity failed: " + ", ".join(failed))
     else:
         st.warning("Index not built")
     if st.button("Build / refresh index", use_container_width=True):
-        with st.spinner("Indexing README.md, docs/, and research/..."):
-            report = build_index(REPO_ROOT, INDEX_PATH)
-        st.success(
-            f"Indexed {report.indexed_files}; unchanged {report.unchanged_files}; "
-            f"removed {report.removed_files}; chunks {report.chunk_count}."
-        )
-        st.rerun()
+        try:
+            with st.spinner("Indexing README.md, docs/, and research/..."):
+                report = build_index_safely(REPO_ROOT, INDEX_PATH)
+        except BuildLockError as exc:
+            st.error(str(exc))
+        else:
+            st.success(
+                f"Indexed {report.indexed_files}; unchanged {report.unchanged_files}; "
+                f"removed {report.removed_files}; chunks {report.chunk_count}."
+            )
+            st.rerun()
 
     top_k = st.slider("Retrieved evidence", min_value=3, max_value=15, value=8)
     path_prefix = st.selectbox("Limit sources", ("All", "docs", "research", "README.md"))
