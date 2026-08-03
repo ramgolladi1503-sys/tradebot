@@ -1,0 +1,39 @@
+name: Temporary PR763 Offline Finalizer
+
+on:
+  push:
+    branches:
+      - campaign/unified-live-validation-pr748-756-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TRADEBOT_READ_ONLY: "true"
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest python-dotenv requests kiteconnect holidays pandas numpy pyarrow websockets protobuf
+      - name: Compile certification paths
+        run: |
+          python -m py_compile \
+            core/kite_depth_ws.py \
+            core/tick_store.py \
+            core/depth_store.py \
+            core/feed/runtime_store.py \
+            tests/test_pr763_callback_persistence_cutover_certification.py \
+            scripts/run_pr763_gate1_offline_certification.py
+      - name: Run current Gate 1 suite
+        run: python -m pytest -q tests/test_pr763_callback_persistence_cutover_certification.py
