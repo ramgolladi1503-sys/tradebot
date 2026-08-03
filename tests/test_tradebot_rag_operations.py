@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+import socket
 import sqlite3
 import time
 from pathlib import Path
@@ -68,6 +70,31 @@ def test_stale_lock_is_recovered(tmp_path: Path) -> None:
     assert not lock.exists()
 
 
+def test_old_lock_owned_by_live_local_process_is_not_reclaimed(tmp_path: Path) -> None:
+    _write(tmp_path / "README.md", "# TradeBot\nEvidence\n")
+    index = tmp_path / ".runtime" / "rag.sqlite"
+    lock = build_lock_path(index)
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(
+        json.dumps(
+            {
+                "token": "live",
+                "pid": os.getpid(),
+                "hostname": socket.gethostname(),
+                "started_at_utc": "2000-01-01T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    old = time.time() - 120
+    os.utime(lock, (old, old))
+
+    with pytest.raises(BuildLockError, match="owner_alive=true"):
+        build_index_safely(tmp_path, index, stale_lock_seconds=1)
+
+    assert lock.exists()
+
+
 def test_doctor_accepts_healthy_index(tmp_path: Path) -> None:
     index = _build_fixture(tmp_path)
 
@@ -85,6 +112,16 @@ def test_doctor_reports_missing_index(tmp_path: Path) -> None:
 
     assert report.healthy is False
     assert _failed_checks(report) == {"index_exists"}
+
+
+def test_doctor_reports_active_build_lock(tmp_path: Path) -> None:
+    index = _build_fixture(tmp_path)
+
+    with exclusive_build_lock(index):
+        report = doctor_index(index)
+
+    assert report.healthy is False
+    assert "build_lock_absent" in _failed_checks(report)
 
 
 def test_doctor_detects_document_chunk_count_mismatch(tmp_path: Path) -> None:
