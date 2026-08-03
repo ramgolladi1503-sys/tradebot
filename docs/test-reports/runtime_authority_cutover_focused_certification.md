@@ -1,10 +1,11 @@
 # Runtime Authority Cutover Focused Certification
 
 - Verdict: `FAILED_RUNTIME_AUTHORITY_CUTOVER_FOCUSED_CERTIFICATION`
-- Tested parent SHA: `013a44b053f8a3d19c4545f60a77741c23306bc3`
-- Semantic SHA-256: `52b0a3fb1949c8874990421ac516000c29bccf1dd25852f0ab2a01e09a8edf1a`
+- Tested head SHA: `668bd2ed5e381830c2f2743479079e7df17c01d2`
+- Semantic SHA-256: `154df5ddf13459d89c8fe6d7c1f0be9170198659a170f3e92f249e13abb53daa`
 - Read only: `True`
 - Order authority: `False`
+- Broker-write authority: `False`
 
 ## Outcomes
 
