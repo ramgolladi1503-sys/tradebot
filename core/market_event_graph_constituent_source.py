@@ -213,7 +213,13 @@ def attach_market_event_graph_constituent_source(
 
         state["bars"] = bars
         state["last_refresh_epoch"] = now_epoch
-        state["last_completed_boundary_epoch"] = latest_completed_end
+        if bars:
+            state["last_completed_boundary_epoch"] = int(bars[-1]["source_bar_end_epoch"])
+        else:
+            state["last_completed_boundary_epoch"] = state.get("last_completed_boundary_epoch")
+        state["last_attempted_boundary_epoch"] = target_ends[-1] if target_ends else state.get(
+            "last_attempted_boundary_epoch"
+        )
         state["last_target_boundaries"] = list(target_ends)
         state["last_target_boundary_count"] = len(target_ends)
         state["last_reader_visible_row_count"] = reader_visible_row_count
@@ -406,6 +412,8 @@ def _new_state(session_date: str, manifest_sha256: str) -> dict[str, Any]:
         "token_resolution": None,
         "subscription": {},
         "last_build_failures": [],
+        "last_completed_boundary_epoch": None,
+        "last_attempted_boundary_epoch": None,
     }
 
 

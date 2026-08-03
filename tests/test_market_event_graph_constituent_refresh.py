@@ -100,11 +100,17 @@ def test_refresh_is_idempotent_within_boundary_and_rechecks_on_reconnect(tmp_pat
     third = refresh_market_event_graph_constituent_source(**{**kwargs, "metadata": third_metadata})
 
     assert first["status"] == "READY"
-    assert second["status"] == "SKIPPED_SAME_BOUNDARY"
+    assert second["status"] == "NO_NEW_COMPLETED_BOUNDARY"
+    assert second["classification"] == "idempotent_noop"
+    assert second["accepted"] is False
+    assert second["completed_bar_produced"] is False
     assert second["invoked"] is False
     assert third["invoked"] is True
     assert third["subscription_ensure_count"] == 2
     assert len(subscription_calls) == 2
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))
+    assert persisted["last_completed_boundary_epoch"] == _minute_end(9, 20)
+    assert persisted["last_attempted_boundary_epoch"] == _minute_end(9, 20)
 
 
 def test_refresh_failure_emits_explicit_fail_closed_status(tmp_path):

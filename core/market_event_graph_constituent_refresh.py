@@ -89,8 +89,8 @@ def refresh_market_event_graph_constituent_source(
             if prior_boundary is not None and boundary <= prior_boundary:
                 result = _result(
                     invoked=False,
-                    status="SKIPPED_SAME_BOUNDARY",
-                    reason="completed_boundary_already_processed",
+                    status="NO_NEW_COMPLETED_BOUNDARY",
+                    reason="same_boundary_no_new_evidence",
                     symbol=symbol,
                     owner=owner,
                     as_of_epoch=parsed_epoch,
@@ -105,6 +105,9 @@ def refresh_market_event_graph_constituent_source(
                     state_persisted=False,
                     producer_metadata=base_metadata,
                 )
+                result["classification"] = "idempotent_noop"
+                result["accepted"] = False
+                result["completed_bar_produced"] = False
                 _observe_refresh(result, base_metadata)
                 return result
             _COUNTERS["refresh_invocation_count"] += 1
