@@ -71,9 +71,11 @@ def resolve_access_token(
 def _is_network_error(exc: Exception) -> bool:
     name = type(exc).__name__.lower()
     msg = str(exc).lower()
+    if "invalid session" in msg:
+        return False
     if any(k in name for k in ("timeout", "connection", "network", "request")):
         return True
-    return ("timed out" in msg) or ("connection" in msg and "invalid session" not in msg)
+    return ("timed out" in msg) or ("connection" in msg) or ("network" in msg)
 
 
 def is_auth_error(exc: Exception | None = None, *, code: int | None = None, reason_text: str | None = None) -> bool:
@@ -172,7 +174,7 @@ def validate_token(
             }
         if _is_network_error(exc):
             return {
-                "ok": True,
+                "ok": False,
                 "auth_state": "UNKNOWN_NETWORK",
                 "error": f"profile_error:{type(exc).__name__}",
                 "ts_epoch": now_epoch,
