@@ -1,0 +1,22 @@
+[
+  {
+    "query": "What must remain explainable before a TradeBot change is release-ready?",
+    "expected_paths": ["README.md"],
+    "expected_terms": ["executable", "advisory-only", "blocked"]
+  },
+  {
+    "query": "Which deterministic offline command runs the strict health gate?",
+    "expected_paths": ["README.md"],
+    "expected_terms": ["core.health_gate", "strict"]
+  },
+  {
+    "query": "Which failure modes include stale market data and contract resolution failure?",
+    "expected_paths": ["README.md"],
+    "expected_terms": ["stale", "contract-resolution"]
+  },
+  {
+    "query": "Where are the release checklist and branch protection policy documented?",
+    "expected_paths": ["README.md"],
+    "expected_terms": ["release checklist", "branch protection"]
+  }
+]
