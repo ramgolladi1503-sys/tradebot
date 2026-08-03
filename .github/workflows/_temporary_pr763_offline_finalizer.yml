@@ -15,7 +15,7 @@ permissions:
 jobs:
   offline-certification:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
       TRADEBOT_READ_ONLY: "true"
       PYTHONPATH: .
@@ -36,12 +36,15 @@ jobs:
             core/tick_store.py \
             core/depth_store.py \
             core/feed/runtime_store.py \
+            core/unified_live_validation_pr748_756/recorder.py \
             tools/pr763_gate1_structured_evidence.py \
             tests/test_pr763_callback_persistence_cutover_certification.py \
             tests/test_pr763_gate1_structured_evidence.py \
+            tests/test_pr763_offline_remaining_gates.py \
             scripts/run_pr763_gate1_offline_certification.py
-      - name: Run current Gate 1 suite
+      - name: Run legacy Gate 1 suite
         id: gate1
+        continue-on-error: true
         shell: bash
         run: |
           set +e
@@ -52,13 +55,67 @@ jobs:
           status=${PIPESTATUS[0]}
           echo "status=${status}" >> "$GITHUB_OUTPUT"
           exit ${status}
-      - name: Upload Gate 1 diagnostics
+      - name: Run structured Gate 1 authority
+        id: structured
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          python -m pytest -vv --tb=long \
+            --junitxml=pr763-structured-junit.xml \
+            tests/test_pr763_gate1_structured_evidence.py \
+            2>&1 | tee pr763-structured-pytest.log
+          status=${PIPESTATUS[0]}
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          exit ${status}
+      - name: Run remaining offline gates
+        id: remaining
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          python -m pytest -vv --tb=long \
+            --junitxml=pr763-remaining-junit.xml \
+            tests/test_pr763_offline_remaining_gates.py \
+            2>&1 | tee pr763-remaining-pytest.log
+          status=${PIPESTATUS[0]}
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          exit ${status}
+      - name: Run exact Gate 1 evidence generator
+        id: runner
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          python scripts/run_pr763_gate1_offline_certification.py \
+            2>&1 | tee pr763-runner.log
+          status=${PIPESTATUS[0]}
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          cp docs/pr763_gate1_evidence_20260803.json pr763-generated-evidence.json || true
+          cp docs/pr763_callback_persistence_offline_certification_20260803.md pr763-generated-certification.md || true
+          exit ${status}
+      - name: Upload PR763 diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pr763-gate1-diagnostics
+          name: pr763-offline-diagnostics
           path: |
-            pr763-gate1-junit.xml
-            pr763-gate1-pytest.log
+            pr763-*-junit.xml
+            pr763-*-pytest.log
+            pr763-runner.log
+            pr763-generated-evidence.json
+            pr763-generated-certification.md
           if-no-files-found: error
           retention-days: 3
+      - name: Enforce offline certification results
+        if: always()
+        shell: bash
+        run: |
+          echo "legacy_gate1=${{ steps.gate1.outputs.status }}"
+          echo "structured_gate1=${{ steps.structured.outputs.status }}"
+          echo "remaining_gates=${{ steps.remaining.outputs.status }}"
+          echo "evidence_runner=${{ steps.runner.outputs.status }}"
+          test "${{ steps.gate1.outputs.status }}" = "0"
+          test "${{ steps.structured.outputs.status }}" = "0"
+          test "${{ steps.remaining.outputs.status }}" = "0"
+          test "${{ steps.runner.outputs.status }}" = "0"
