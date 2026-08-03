@@ -1,2 +1,0 @@
-Trigger the self-removing AI reliability offline certification workflow.
-Retrigger after the workflow is present on the branch.

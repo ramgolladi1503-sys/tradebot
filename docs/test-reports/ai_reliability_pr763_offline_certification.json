@@ -1,0 +1,30 @@
+{
+  "allowed_for_live_execution": false,
+  "allowed_for_paper_execution": false,
+  "broker_write_authority": false,
+  "live_evidence_complete": false,
+  "logs": {
+    "authority": "authority_certificate_semantic_sha256=aca5ba7db017bd0ac8e2096df8f0aeb324abc9f0c943e204a069acd916f9c6f3\n",
+    "cleanliness": "UNEXPECTED_TEST_MUTATION:[' M runtime/strategy_validation/resolved_option_ticks_20260702.parquet']\n",
+    "compile": "",
+    "diff": "docs/architecture/ai_reliability_agent_v1.md:3: trailing whitespace.\n+**Status:** Implemented on `feature/ai-pipeline-reliability-agent-v1`  \ndocs/architecture/ai_reliability_agent_v1.md:4: trailing whitespace.\n+**Component certification:** `SIMULATION_CERTIFIED`  \ndocs/architecture/ai_reliability_agent_v1.md:5: trailing whitespace.\n+**Live certification:** `LIVE_CERTIFICATION_PENDING`  \ndocs/architecture/ai_reliability_agent_v1.md:6: trailing whitespace.\n+**Order authority:** None  \ndocs/test-reports/ai_reliability_agent_v1_certification.md:3: trailing whitespace.\n+**Date:** 2026-07-30  \ndocs/test-reports/ai_reliability_agent_v1_certification.md:4: trailing whitespace.\n+**Branch:** `feature/ai-pipeline-reliability-agent-v1`  \ndocs/test-reports/ai_reliability_agent_v1_certification.md:5: trailing whitespace.\n+**Result:** `SIMULATION_CERTIFIED`  \n",
+    "scope": "changed_paths=45 sidecar_scope_clean=true\n",
+    "tests": "........................................................................ [ 43%]\n........................................................................ [ 87%]\n....................                                                     [100%]\n164 passed in 1.65s\n"
+  },
+  "offline_passed": false,
+  "order_authority": false,
+  "outcomes": {
+    "authority_certificate": "success",
+    "cleanliness": "failure",
+    "compile": "success",
+    "diff": "success",
+    "scope": "success",
+    "tests": "success"
+  },
+  "read_only": true,
+  "runtime_authority_head_sha": "5934968bed198e4c80fcb9900b99d2142912b5c4",
+  "schema_version": 1,
+  "semantic_sha256": "046fdae03fd069226e5497a539e907274a9afecf1b0dc1274aee2bc15443f299",
+  "tested_head_sha": "642fbd164a7f4cefed347af689e080f4fc0a69e3",
+  "verdict": "FAILED_AI_RELIABILITY_OFFLINE_CERTIFICATION"
+}
