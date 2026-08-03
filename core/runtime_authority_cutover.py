@@ -1,17 +1,20 @@
 """Authoritative execution-selection and operator-view cutover.
 
 This module converts fragmented candidate fields into one immutable authority
-answer.  It is feed-agnostic: it reads existing quote/feed evidence but never
+answer. It is feed-agnostic: it reads existing quote/feed evidence but never
 subscribes, reconnects, places orders, or mutates MEG state.
 """
 from __future__ import annotations
 
 import copy
-from dataclasses import fields, is_dataclass, replace
+from dataclasses import fields, is_dataclass
 from typing import Any, Iterable, Mapping
 
 from config import config as cfg
-from core.canonical_execution_decision import ExecutionState, derive_canonical_execution_decision
+from core.canonical_execution_decision import (
+    ExecutionState,
+    derive_canonical_execution_decision,
+)
 from core.live_fallback_execution_contract import (
     enforce_live_fallback_execution_contract,
     is_fallback_execution_candidate,
@@ -41,7 +44,18 @@ def _mapping(candidate: Any) -> dict[str, Any]:
     if isinstance(candidate, Mapping):
         return dict(candidate)
     if is_dataclass(candidate):
-        return {item.name: getattr(candidate, item.name) for item in fields(candidate)}
+        row = {
+            item.name: getattr(candidate, item.name)
+            for item in fields(candidate)
+        }
+        # Frozen dataclasses used by the runtime are not slotted. Authority
+        # evidence is attached to a shallow copy via object.__setattr__, so
+        # include those dynamic attributes when the router reads the object.
+        try:
+            row.update(vars(candidate))
+        except Exception:
+            pass
+        return row
     try:
         return dict(vars(candidate))
     except Exception:
@@ -57,7 +71,9 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
 
 
 def _mode(mode: str | None) -> str:
-    return str(mode or getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").strip().upper()
+    return str(
+        mode or getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"
+    ).strip().upper()
 
 
 def _diagnostic_score(row: Mapping[str, Any]) -> float:
@@ -99,7 +115,9 @@ def has_runtime_authority_evidence(candidate: Any) -> bool:
     return any(field in row for field in _AUTHORITY_EVIDENCE_FIELDS)
 
 
-def _operator_bucket(row: Mapping[str, Any], state: ExecutionState) -> str:
+def _operator_bucket(
+    row: Mapping[str, Any], state: ExecutionState
+) -> str:
     if state is ExecutionState.EXECUTABLE:
         return "TOP_EXECUTABLE"
     # Fallback rows remain visible as advisory evidence, never as executable.
@@ -110,14 +128,19 @@ def _operator_bucket(row: Mapping[str, Any], state: ExecutionState) -> str:
     return "BLOCKED_DEBUG"
 
 
-def authority_payload(candidate: Any, *, mode: str | None = None) -> dict[str, Any]:
+def authority_payload(
+    candidate: Any, *, mode: str | None = None
+) -> dict[str, Any]:
     runtime_mode = _mode(mode)
     row = _mapping(candidate)
     if runtime_mode in {"LIVE", "REAL"}:
         row = enforce_live_fallback_execution_contract(row, runtime_mode)
     decision = derive_canonical_execution_decision(row)
     diagnostic = _diagnostic_score(row)
-    opportunity = max(0.0, _safe_float(row.get("opportunity_score"), diagnostic))
+    opportunity = max(
+        0.0,
+        _safe_float(row.get("opportunity_score"), diagnostic),
+    )
     selection = _selection_score(row) if decision.allowed else 0.0
     bucket = _operator_bucket(row, decision.state)
     return {
@@ -174,32 +197,55 @@ def _updates(candidate: Any, *, mode: str | None = None) -> dict[str, Any]:
                 "final_action": "QUEUE_ONLY",
                 "max_final_action": "QUEUE_ONLY",
                 "execution_status": "not_executable",
-                "candidate_status": "advisory" if bucket == "ADVISORY_ONLY" else "blocked",
+                "execution_entry_status": "not_executable",
+                "candidate_status": (
+                    "advisory"
+                    if bucket == "ADVISORY_ONLY"
+                    else "blocked"
+                ),
             }
         )
     return updates
 
 
-def apply_runtime_authority(candidate: Any, *, mode: str | None = None) -> Any:
-    """Return a same-shape candidate stamped with authoritative execution truth."""
+def _stamp_dataclass_copy(
+    candidate: Any, updates: Mapping[str, Any]
+) -> Any:
+    """Stamp a frozen dataclass copy without re-running ``__post_init__``.
+
+    ``dataclasses.replace`` is unsafe for the repository's frozen Trade model:
+    its post-init compatibility normalization writes metadata. A shallow copy
+    preserves class identity and existing normalized fields; object.__setattr__
+    then applies authority truth only to the copy.
+    """
+    out = copy.copy(candidate)
+    deferred: dict[str, Any] = {}
+    for key, value in updates.items():
+        try:
+            object.__setattr__(out, key, value)
+        except Exception:
+            deferred[key] = value
+    if deferred and hasattr(out, "metadata"):
+        metadata = dict(getattr(out, "metadata", {}) or {})
+        metadata.update(deferred)
+        try:
+            object.__setattr__(out, "metadata", metadata)
+        except Exception:
+            pass
+    return out
+
+
+def apply_runtime_authority(
+    candidate: Any, *, mode: str | None = None
+) -> Any:
+    """Return a same-shape candidate stamped with authoritative truth."""
     updates = _updates(candidate, mode=mode)
     if isinstance(candidate, Mapping):
         out = dict(candidate)
         out.update(updates)
         return out
     if is_dataclass(candidate):
-        valid = {item.name for item in fields(candidate)}
-        applicable = {key: value for key, value in updates.items() if key in valid}
-        out = replace(candidate, **applicable)
-        # Non-field authority evidence is attached only when the object permits it.
-        for key, value in updates.items():
-            if key in applicable:
-                continue
-            try:
-                object.__setattr__(out, key, value)
-            except Exception:
-                pass
-        return out
+        return _stamp_dataclass_copy(candidate, updates)
     try:
         out = copy.copy(candidate)
     except Exception:
@@ -218,11 +264,16 @@ def authority_allows_execution(candidate: Any) -> bool:
     ).upper() == ExecutionState.EXECUTABLE.value
 
 
-def normalize_selection_result(result: Any, *, mode: str | None = None) -> Any:
+def normalize_selection_result(
+    result: Any, *, mode: str | None = None
+) -> Any:
     if result is None:
         return None
     if isinstance(result, tuple):
-        return tuple(normalize_selection_result(item, mode=mode) for item in result)
+        return tuple(
+            normalize_selection_result(item, mode=mode)
+            for item in result
+        )
     if isinstance(result, list):
         return [apply_runtime_authority(item, mode=mode) for item in result]
     if isinstance(result, Mapping) or hasattr(result, "__dict__"):
@@ -233,13 +284,35 @@ def normalize_selection_result(result: Any, *, mode: str | None = None) -> Any:
 def partition_operator_candidates(
     candidates: Iterable[Any], *, mode: str | None = None
 ) -> dict[str, list[Any]]:
-    stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in candidates]
-    executable = [row for row in stamped if authority_allows_execution(row)]
-    advisory = [row for row in stamped if _get(row, "operator_bucket") == "ADVISORY_ONLY"]
-    blocked = [row for row in stamped if _get(row, "operator_bucket") == "BLOCKED_DEBUG"]
-    executable.sort(key=lambda row: _safe_float(_get(row, "selection_score")), reverse=True)
-    advisory.sort(key=lambda row: _safe_float(_get(row, "diagnostic_score")), reverse=True)
-    blocked.sort(key=lambda row: _safe_float(_get(row, "diagnostic_score")), reverse=True)
+    stamped = [
+        apply_runtime_authority(candidate, mode=mode)
+        for candidate in candidates
+    ]
+    executable = [
+        row for row in stamped if authority_allows_execution(row)
+    ]
+    advisory = [
+        row
+        for row in stamped
+        if _get(row, "operator_bucket") == "ADVISORY_ONLY"
+    ]
+    blocked = [
+        row
+        for row in stamped
+        if _get(row, "operator_bucket") == "BLOCKED_DEBUG"
+    ]
+    executable.sort(
+        key=lambda row: _safe_float(_get(row, "selection_score")),
+        reverse=True,
+    )
+    advisory.sort(
+        key=lambda row: _safe_float(_get(row, "diagnostic_score")),
+        reverse=True,
+    )
+    blocked.sort(
+        key=lambda row: _safe_float(_get(row, "diagnostic_score")),
+        reverse=True,
+    )
     return {
         "top_executable": executable,
         "advisory": advisory,
@@ -248,8 +321,10 @@ def partition_operator_candidates(
     }
 
 
-def preflight_execution_authority(candidate: Any, *, mode: str | None = None) -> dict[str, Any] | None:
-    """Final router firewall for candidates emitted by the authority-cutover path.
+def preflight_execution_authority(
+    candidate: Any, *, mode: str | None = None
+) -> dict[str, Any] | None:
+    """Final router firewall for cutover-stamped candidates.
 
     Legacy tests/tools that do not yet carry authority evidence retain their old
     behavior. Every candidate emitted by the cutover is stamped, so runtime
