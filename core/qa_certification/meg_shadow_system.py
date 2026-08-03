@@ -1,7 +1,7 @@
 """Machine-verifiable certification for the supervised MEG shadow system.
 
 The module separates deterministic same-SHA contract proof from real market
-proof.  Passing tests alone can produce only the offline contract verdict.  A
+proof. Passing tests alone can produce only the offline contract verdict. A
 final read-only system certificate additionally requires a fresh passing
 post-market certificate generated from PR #763 evidence by PR #772.
 """
@@ -31,9 +31,26 @@ REQUIRED_OFFLINE_GATES = (
     "AI_RELIABILITY_AND_EVIDENCE_INTEGRITY",
 )
 
+_POST_MARKET_SEMANTIC_FIELDS = (
+    "schema_version",
+    "verdict",
+    "implementation_complete",
+    "live_evidence_complete",
+    "read_only",
+    "order_authority",
+    "broker_write_authority",
+    "gates",
+    "limitations",
+)
+
 
 def _canonical_sha(payload: Mapping[str, Any]) -> str:
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -51,8 +68,15 @@ def _gate_semantic(gate: Mapping[str, Any]) -> dict[str, Any]:
         "return_code": int(gate.get("return_code") or 0),
         "timed_out": gate.get("timed_out") is True,
         "command": [str(part) for part in (gate.get("command") or [])],
-        "test_file_sha256": dict(sorted((gate.get("test_file_sha256") or {}).items())),
+        "test_file_sha256": dict(
+            sorted((gate.get("test_file_sha256") or {}).items())
+        ),
     }
+
+
+def _post_market_semantic(report: Mapping[str, Any]) -> dict[str, Any]:
+    """Reconstruct the exact PR #772 semantic payload before trusting it."""
+    return {field: report.get(field) for field in _POST_MARKET_SEMANTIC_FIELDS}
 
 
 def build_offline_report(
@@ -61,17 +85,25 @@ def build_offline_report(
     gate_results: Sequence[Mapping[str, Any]],
     generated_at: str | None = None,
 ) -> dict[str, Any]:
-    normalized = [_gate_semantic(gate) | {
-        "duration_seconds": float(gate.get("duration_seconds") or 0.0),
-        "stdout_tail": str(gate.get("stdout_tail") or ""),
-        "stderr_tail": str(gate.get("stderr_tail") or ""),
-    } for gate in gate_results]
+    normalized = [
+        _gate_semantic(gate)
+        | {
+            "duration_seconds": float(gate.get("duration_seconds") or 0.0),
+            "stdout_tail": str(gate.get("stdout_tail") or ""),
+            "stderr_tail": str(gate.get("stderr_tail") or ""),
+        }
+        for gate in gate_results
+    ]
     by_id = {gate["gate_id"]: gate for gate in normalized if gate["gate_id"]}
-    missing = [gate_id for gate_id in REQUIRED_OFFLINE_GATES if gate_id not in by_id]
+    missing = [
+        gate_id for gate_id in REQUIRED_OFFLINE_GATES if gate_id not in by_id
+    ]
     extras = sorted(set(by_id) - set(REQUIRED_OFFLINE_GATES))
     duplicate_ids = sorted(
         gate_id
-        for gate_id in set(gate["gate_id"] for gate in normalized if gate["gate_id"])
+        for gate_id in set(
+            gate["gate_id"] for gate in normalized if gate["gate_id"]
+        )
         if sum(1 for gate in normalized if gate["gate_id"] == gate_id) > 1
     )
     failed = [
@@ -84,7 +116,13 @@ def build_offline_report(
             or by_id[gate_id]["timed_out"] is True
         )
     ]
-    passed = bool(head_sha) and not missing and not extras and not duplicate_ids and not failed
+    passed = (
+        bool(head_sha)
+        and not missing
+        and not extras
+        and not duplicate_ids
+        and not failed
+    )
     semantic = {
         "schema_version": 1,
         "head_sha": str(head_sha),
@@ -97,7 +135,11 @@ def build_offline_report(
         "extra_gate_ids": extras,
         "duplicate_gate_ids": duplicate_ids,
         "failed_gate_ids": failed,
-        "gates": [_gate_semantic(by_id[gate_id]) for gate_id in REQUIRED_OFFLINE_GATES if gate_id in by_id],
+        "gates": [
+            _gate_semantic(by_id[gate_id])
+            for gate_id in REQUIRED_OFFLINE_GATES
+            if gate_id in by_id
+        ],
         "claim_boundary": {
             "strategy_profitability_certified": False,
             "structural_edge_certified": False,
@@ -108,7 +150,8 @@ def build_offline_report(
     }
     return {
         **semantic,
-        "generated_at": generated_at or datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": generated_at
+        or datetime.now(tz=timezone.utc).isoformat(),
         "semantic_sha256": _canonical_sha(semantic),
         "gate_details": normalized,
     }
@@ -183,7 +226,9 @@ def validate_offline_report(report: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def validate_post_market_certificate(report: Mapping[str, Any]) -> dict[str, Any]:
+def validate_post_market_certificate(
+    report: Mapping[str, Any],
+) -> dict[str, Any]:
     errors: list[str] = []
     verdict = str(report.get("verdict") or "")
     if report.get("read_only") is not True:
@@ -192,8 +237,14 @@ def validate_post_market_certificate(report: Mapping[str, Any]) -> dict[str, Any
         errors.append("post_market_order_authority_not_false")
     if report.get("broker_write_authority") is not False:
         errors.append("post_market_broker_write_authority_not_false")
-    if not str(report.get("semantic_sha256") or ""):
+
+    expected_semantic_sha = _canonical_sha(_post_market_semantic(report))
+    supplied_semantic_sha = str(report.get("semantic_sha256") or "")
+    if not supplied_semantic_sha:
         errors.append("post_market_semantic_sha_missing")
+    elif supplied_semantic_sha != expected_semantic_sha:
+        errors.append("post_market_semantic_sha_mismatch")
+
     if verdict == FAILED_VERDICT:
         errors.append("post_market_failed_closed")
     elif verdict not in {POST_MARKET_PASS_VERDICT, PENDING_VERDICT}:
@@ -209,7 +260,7 @@ def validate_post_market_certificate(report: Mapping[str, Any]) -> dict[str, Any
         "pending": not errors and verdict == PENDING_VERDICT,
         "verdict": verdict,
         "errors": errors,
-        "semantic_sha256": str(report.get("semantic_sha256") or ""),
+        "semantic_sha256": expected_semantic_sha,
     }
 
 
@@ -220,7 +271,11 @@ def assemble_system_certificate(
     output_dir: str | Path | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
-    offline = _load_json(offline_report) if isinstance(offline_report, (str, Path)) else dict(offline_report)
+    offline = (
+        _load_json(offline_report)
+        if isinstance(offline_report, (str, Path))
+        else dict(offline_report)
+    )
     offline_check = validate_offline_report(offline)
     post: dict[str, Any] | None
     if post_market_certificate is None:
@@ -260,13 +315,25 @@ def assemble_system_certificate(
         "broker_write_authority": False,
         "allowed_for_live_execution": False,
         "allowed_for_paper_execution": False,
-        "offline_report_semantic_sha256": str(offline.get("semantic_sha256") or ""),
+        "offline_report_semantic_sha256": str(
+            offline.get("semantic_sha256") or ""
+        ),
         "post_market_semantic_sha256": post_check["semantic_sha256"],
         "errors": [
-            *[f"offline:{error}" for error in offline_check["errors"]],
-            *[f"post_market:{error}" for error in post_check["errors"]],
+            *[
+                f"offline:{error}"
+                for error in offline_check["errors"]
+            ],
+            *[
+                f"post_market:{error}"
+                for error in post_check["errors"]
+            ],
         ],
-        "remaining_gate": None if verdict in {CERTIFIED_VERDICT, FAILED_VERDICT} else "FRESH_PR763_MARKET_SESSION",
+        "remaining_gate": (
+            None
+            if verdict in {CERTIFIED_VERDICT, FAILED_VERDICT}
+            else "FRESH_PR763_MARKET_SESSION"
+        ),
         "claim_boundary": {
             "strategy_profitability_certified": False,
             "structural_edge_certified": False,
@@ -278,7 +345,8 @@ def assemble_system_certificate(
     }
     certificate = {
         **semantic,
-        "generated_at": generated_at or datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": generated_at
+        or datetime.now(tz=timezone.utc).isoformat(),
         "semantic_sha256": _canonical_sha(semantic),
         "offline_validation": offline_check,
         "post_market_validation": post_check,
@@ -288,8 +356,14 @@ def assemble_system_certificate(
         target.mkdir(parents=True, exist_ok=True)
         json_path = target / "meg_shadow_system_certificate.json"
         md_path = target / "meg_shadow_system_certificate.md"
-        json_path.write_text(json.dumps(certificate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        md_path.write_text(render_certificate_markdown(certificate), encoding="utf-8")
+        json_path.write_text(
+            json.dumps(certificate, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        md_path.write_text(
+            render_certificate_markdown(certificate),
+            encoding="utf-8",
+        )
         certificate["json_path"] = str(json_path)
         certificate["markdown_path"] = str(md_path)
     return certificate
@@ -302,14 +376,27 @@ def render_certificate_markdown(certificate: Mapping[str, Any]) -> str:
         f"- Verdict: `{certificate.get('verdict')}`",
         f"- Target: `{certificate.get('target')}`",
         f"- Repository SHA: `{certificate.get('head_sha')}`",
-        f"- Offline contracts passed: `{certificate.get('offline_contracts_passed')}`",
-        f"- Post-market reliability passed: `{certificate.get('post_market_reliability_passed')}`",
+        (
+            "- Offline contracts passed: "
+            f"`{certificate.get('offline_contracts_passed')}`"
+        ),
+        (
+            "- Post-market reliability passed: "
+            f"`{certificate.get('post_market_reliability_passed')}`"
+        ),
         f"- Order authority: `{certificate.get('order_authority')}`",
         f"- Semantic SHA-256: `{certificate.get('semantic_sha256')}`",
         "",
     ]
     if certificate.get("remaining_gate"):
-        lines.extend(["## Remaining gate", "", f"- `{certificate.get('remaining_gate')}`", ""])
+        lines.extend(
+            [
+                "## Remaining gate",
+                "",
+                f"- `{certificate.get('remaining_gate')}`",
+                "",
+            ]
+        )
     if certificate.get("errors"):
         lines.extend(["## Errors", ""])
         for error in certificate.get("errors") or []:
@@ -319,7 +406,12 @@ def render_certificate_markdown(certificate: Mapping[str, Any]) -> str:
         [
             "## Claim boundary",
             "",
-            "This certificate covers supervised, read-only Market Event Graph shadow operation only. It does not certify profitability, structural edge, broker connectivity, real fills, paper/live execution, or unattended autonomy.",
+            (
+                "This certificate covers supervised, read-only Market Event "
+                "Graph shadow operation only. It does not certify "
+                "profitability, structural edge, broker connectivity, real "
+                "fills, paper/live execution, or unattended autonomy."
+            ),
             "",
         ]
     )
