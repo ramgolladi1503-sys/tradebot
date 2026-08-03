@@ -25,6 +25,8 @@ def test_discovery_is_allowlisted_and_skips_secrets(tmp_path: Path) -> None:
     _write(tmp_path / "docs" / ".env", "TOKEN=secret")
     _write(tmp_path / "logs" / "runtime.md", "must not index")
     _write(tmp_path / "docs" / "binary.bin", "not supported")
+    _write(tmp_path / "research" / "external_local_dirs" / "copied.md", "private local copy")
+    _write(tmp_path / "research" / "run" / "process_memory_raw.txt", "raw process dump")
 
     files, skipped = discover_source_files(tmp_path)
 
@@ -32,7 +34,7 @@ def test_discovery_is_allowlisted_and_skips_secrets(tmp_path: Path) -> None:
         "README.md",
         "docs/report.md",
     ]
-    assert skipped >= 2
+    assert skipped >= 4
 
 
 def test_discovery_skips_symlinked_sources(tmp_path: Path) -> None:
@@ -60,7 +62,7 @@ def test_chunking_preserves_line_ranges_and_overlap() -> None:
     text = "# Heading\n" + "\n".join(f"line {index} evidence" for index in range(1, 30))
     chunks = chunk_text("docs/example.md", text, max_chars=220, overlap_lines=2)
 
-    assert len(chunks) >= 2
+    assert chunks[1].ordinal == 1
     assert chunks[0].start_line == 1
     assert chunks[0].end_line >= chunks[1].start_line
     assert all(chunk.section == "Heading" for chunk in chunks)
@@ -123,8 +125,27 @@ def test_changed_document_that_becomes_undecodable_is_removed(tmp_path: Path) ->
     assert not search_index(index, "alpha", top_k=3)
 
 
+def test_fts_index_is_rebuilt_when_rows_are_missing(tmp_path: Path) -> None:
+    _write(tmp_path / "README.md", "# TradeBot\nFeed freshness contract evidence")
+    index = tmp_path / ".runtime" / "rag.sqlite"
+    report = build_index(tmp_path, index)
+    if not report.fts_enabled:
+        pytest.skip("SQLite FTS5 unavailable")
+
+    import sqlite3
+
+    with sqlite3.connect(index) as connection:
+        connection.execute("DELETE FROM rag_chunks_fts")
+        connection.commit()
+
+    hits = search_index(index, "feed freshness contract", top_k=3)
+
+    assert hits[0].path == "README.md"
+    assert "freshness" in hits[0].text.lower()
+
+
 def test_no_answer_when_retrieval_has_no_support(tmp_path: Path) -> None:
-    _write(tmp_path / "README.md", "# TradeBot\nOnly feed freshness evidence is documented.")
+    _write(tmp_path / "README.md", "# TradeBot\nOnly feed freshness and capital selection evidence is documented.")
     index = tmp_path / ".runtime" / "rag.sqlite"
     build_index(tmp_path, index)
 
