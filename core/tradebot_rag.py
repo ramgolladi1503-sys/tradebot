@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import os
 import re
 import sqlite3
@@ -120,14 +119,19 @@ def _is_within(root: Path, candidate: Path) -> bool:
         return False
 
 
-def _is_allowed_file(path: Path, *, max_file_bytes: int) -> bool:
+def _is_allowed_file(
+    path: Path,
+    *,
+    relative_parts: Sequence[str],
+    max_file_bytes: int,
+) -> bool:
     if path.is_symlink() or not path.is_file():
         return False
     if path.suffix.lower() not in SUPPORTED_SUFFIXES:
         return False
-    if any(part in EXCLUDED_DIR_NAMES for part in path.parts):
+    if any(part in EXCLUDED_DIR_NAMES for part in relative_parts):
         return False
-    if any(part.startswith(".") and part not in {"."} for part in path.parts):
+    if any(part.startswith(".") for part in relative_parts):
         return False
     try:
         size = path.stat().st_size
@@ -161,12 +165,24 @@ def discover_source_files(
         else:
             candidates = include.rglob("*")
         for path in candidates:
+            if path.is_symlink():
+                skipped += 1
+                continue
             resolved = path.resolve()
-            if not _is_within(root, resolved) or not _is_allowed_file(resolved, max_file_bytes=max_file_bytes):
+            if not _is_within(root, resolved):
                 if path.is_file():
                     skipped += 1
                 continue
-            relative = resolved.relative_to(root).as_posix()
+            relative_path = resolved.relative_to(root)
+            if not _is_allowed_file(
+                resolved,
+                relative_parts=relative_path.parts,
+                max_file_bytes=max_file_bytes,
+            ):
+                if path.is_file():
+                    skipped += 1
+                continue
+            relative = relative_path.as_posix()
             discovered[relative] = resolved
 
     ordered = [discovered[key] for key in sorted(discovered)]
