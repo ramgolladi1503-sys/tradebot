@@ -29,16 +29,36 @@ jobs:
           cache: pip
 
       - name: Install focused dependencies
+        id: deps
+        continue-on-error: true
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest pandas numpy python-dotenv requests kiteconnect holidays pyarrow
+          set -o pipefail
+          python -m pip install --upgrade pip 2>&1 | tee /tmp/cutover-deps.log
+          python -m pip install pytest pandas numpy python-dotenv requests kiteconnect holidays pyarrow 2>&1 | tee -a /tmp/cutover-deps.log
+
+      - name: Fetch exact source refs
+        id: refs
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          git fetch origin \
+            refs/heads/agent/runtime-authority-hardening-v1:refs/remotes/origin/agent/runtime-authority-hardening-v1 \
+            refs/heads/hardening/trade-builder-orchestration-v1:refs/remotes/origin/hardening/trade-builder-orchestration-v1 \
+            2>&1 | tee /tmp/cutover-refs.log
 
       - name: Apply cutover
-        run: python tools/_temporary_apply_runtime_authority_cutover_v1.py
+        id: apply
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python tools/_temporary_apply_runtime_authority_cutover_v1.py 2>&1 | tee /tmp/cutover-apply.log
 
       - name: Verify protected boundaries
+        id: scope
+        continue-on-error: true
         run: |
-          python - <<'PY'
+          set -o pipefail
+          python - <<'PY' 2>&1 | tee /tmp/cutover-scope.log
           import subprocess
           protected = (
               'core/market_data.py',
@@ -64,7 +84,10 @@ jobs:
           PY
 
       - name: Compile authority paths
+        id: compile
+        continue-on-error: true
         run: |
+          set -o pipefail
           python -m py_compile \
             core/canonical_execution_decision.py \
             core/runtime_authority_contract.py \
@@ -73,30 +96,61 @@ jobs:
             core/opportunity_engine.py \
             core/execution_router.py \
             core/runtime_snapshot_producer.py \
-            dashboard/ui/table_model.py
+            dashboard/ui/table_model.py \
+            2>&1 | tee /tmp/cutover-compile.log
 
       - name: Run focused authority tests
+        id: tests
+        continue-on-error: true
         run: |
+          set -o pipefail
           pytest -q -o addopts='' \
             tests/test_canonical_execution_decision.py \
             tests/test_runtime_authority_contract.py \
             tests/test_ranking_authority.py \
             tests/test_runtime_authority_cutover_v1.py \
             tests/test_manual_approval_enforcement.py \
-            tests/test_opportunity_engine.py
+            tests/test_opportunity_engine.py \
+            2>&1 | tee /tmp/cutover-tests.log
 
       - name: Validate diff
-        run: git diff --check
+        id: diff
+        continue-on-error: true
+        run: git diff --check 2>&1 | tee /tmp/cutover-diff.log
 
-      - name: Commit implementation and remove temporary machinery
+      - name: Commit result and remove temporary workflow
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm \
-            .github/workflows/_temporary_runtime_authority_cutover_v1.yml \
-            tools/_temporary_apply_runtime_authority_cutover_v1.py
-          git add -A
-          git commit -m "feat: cut over canonical runtime authority"
+          mkdir -p docs/test-reports
+          {
+            echo "deps=${{ steps.deps.outcome }}"
+            echo "refs=${{ steps.refs.outcome }}"
+            echo "apply=${{ steps.apply.outcome }}"
+            echo "scope=${{ steps.scope.outcome }}"
+            echo "compile=${{ steps.compile.outcome }}"
+            echo "tests=${{ steps.tests.outcome }}"
+            echo "diff=${{ steps.diff.outcome }}"
+            for file in /tmp/cutover-*.log; do
+              echo
+              echo "===== ${file} ====="
+              cat "${file}" || true
+            done
+          } > docs/test-reports/runtime_authority_cutover_workflow.log
+          git rm .github/workflows/_temporary_runtime_authority_cutover_v1.yml
+          if [ "${{ steps.deps.outcome }}" = "success" ] && \
+             [ "${{ steps.refs.outcome }}" = "success" ] && \
+             [ "${{ steps.apply.outcome }}" = "success" ] && \
+             [ "${{ steps.scope.outcome }}" = "success" ] && \
+             [ "${{ steps.compile.outcome }}" = "success" ] && \
+             [ "${{ steps.tests.outcome }}" = "success" ] && \
+             [ "${{ steps.diff.outcome }}" = "success" ]; then
+            git rm tools/_temporary_apply_runtime_authority_cutover_v1.py
+            git add -A
+            git commit -m "feat: cut over canonical runtime authority"
+          else
+            git add -A
+            git commit -m "evidence: record runtime authority cutover failure"
+          fi
           git push origin HEAD:post-pr763/runtime-authority-cutover-v1
-
-# trigger: workflow already existed in the parent commit
