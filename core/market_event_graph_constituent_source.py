@@ -185,6 +185,18 @@ def attach_market_event_graph_constituent_source(
                         manifest_sha256=manifest_sha,
                     )
                     if row is None:
+                        if not bars and failure.get("reason") == "index_tick_pair_missing":
+                            build_failures.append(
+                                {
+                                    **failure,
+                                    "reason": "warmup_boundary_skipped:index_tick_pair_missing",
+                                    "classification": "leading_warmup_gap",
+                                    "skipped": True,
+                                    "accepted": False,
+                                    "completed_bar_produced": False,
+                                }
+                            )
+                            continue
                         build_failures.append(failure)
                         break
                     if bars and float(row["source_bar_end_epoch"]) != float(
@@ -230,7 +242,7 @@ def attach_market_event_graph_constituent_source(
         out["market_event_graph_constituent_source_state_path"] = str(source_state_path)
         out["market_event_graph_constituent_source_managed"] = True
 
-        if build_failures:
+        if build_failures and not all(failure.get("skipped") is True for failure in build_failures):
             return _with_status(out, "INTERVAL_GAP_BLOCKED", build_failures[0]["reason"])
         if not bars:
             return _with_status(out, "NO_COMPLETED_BARS", "tick_rows_not_available")

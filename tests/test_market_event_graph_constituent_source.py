@@ -302,6 +302,44 @@ def test_gap_blocks_later_intervals_instead_of_collapsing_time(tmp_path):
     assert failure["participation_count"] == 0
 
 
+def test_initial_missing_index_pair_is_skipped_as_warmup_but_later_bars_proceed(tmp_path):
+    manifest = _manifest()
+    fixture = _tick_fixture(manifest)
+    first_target_boundary = _minute_end(9, 16)
+    fixture[first_target_boundary].pop(INDEX_TOKEN, None)
+    state_path = tmp_path / "warmup_state.json"
+
+    metadata = attach_market_event_graph_constituent_source(
+        {},
+        symbol="NIFTY",
+        as_of_epoch=float(_minute_end(9, 20) + 10),
+        enabled=True,
+        state_path=state_path,
+        instrument_provider=lambda: _instrument_rows(manifest),
+        subscription_fn=lambda tokens: True,
+        tick_reader=_reader(fixture),
+    )
+
+    assert metadata["market_event_graph_constituent_source_status"] == "PARTIAL_HISTORY"
+    assert metadata["market_event_graph_constituent_source_reason"] == (
+        "fewer_than_four_completed_intervals"
+    )
+    bars = metadata["completed_constituent_bars"]
+    assert len(bars) == 3
+    assert tuple(int(row["source_bar_end_epoch"]) for row in bars) == tuple(
+        _minute_end(9, minute) for minute in range(18, 21)
+    )
+    failures = metadata["market_event_graph_constituent_source_evidence"]["last_build_failures"]
+    assert [failure["reason"] for failure in failures] == [
+        "warmup_boundary_skipped:index_tick_pair_missing",
+        "warmup_boundary_skipped:index_tick_pair_missing",
+    ]
+    assert all(failure["skipped"] is True for failure in failures)
+    assert all(failure["classification"] == "leading_warmup_gap" for failure in failures)
+    assert all(failure["accepted"] is False for failure in failures)
+    assert all(failure["completed_bar_produced"] is False for failure in failures)
+
+
 def test_candidate_pool_persists_emitted_triplet_across_new_context(tmp_path):
     manifest = _manifest()
     fixture = _tick_fixture(manifest)
