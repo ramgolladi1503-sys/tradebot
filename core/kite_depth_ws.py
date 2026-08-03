@@ -6718,6 +6718,25 @@ def on_ticks(ws, ticks):
     )
 
 
+def _register_on_ticks_callback(kws, generation_is_current, delegate=None):
+    """Install the exact registered callback wrapper used by the live ticker."""
+    callback_delegate = delegate or on_ticks
+
+    def on_ticks_current(ws, ticks):
+        if not generation_is_current("on_ticks"):
+            return
+        diagnostic_start = campaign_raw_diagnostics.on_ticks_entry(len(ticks or []))
+        try:
+            callback_delegate(ws, ticks)
+        except Exception:
+            campaign_raw_diagnostics.on_ticks_exit(diagnostic_start, exception=True)
+            raise
+        campaign_raw_diagnostics.on_ticks_exit(diagnostic_start)
+
+    kws.on_ticks = on_ticks_current
+    return on_ticks_current
+
+
 def stop_depth_ws(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
@@ -8401,18 +8420,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             previous_on_message(ws, payload, is_binary)
 
     kws.on_message = on_message_current
-    def on_ticks_current(ws, ticks):
-        if not _generation_is_current("on_ticks"):
-            return
-        diagnostic_start = campaign_raw_diagnostics.on_ticks_entry(len(ticks or []))
-        try:
-            on_ticks(ws, ticks)
-        except Exception:
-            campaign_raw_diagnostics.on_ticks_exit(diagnostic_start, exception=True)
-            raise
-        campaign_raw_diagnostics.on_ticks_exit(diagnostic_start)
-
-    kws.on_ticks = on_ticks_current
+    _register_on_ticks_callback(kws, _generation_is_current, on_ticks)
     watchdog_thread = threading.Thread(target=_watchdog)
     try:
         watchdog_thread.name = "kite-depth-watchdog"

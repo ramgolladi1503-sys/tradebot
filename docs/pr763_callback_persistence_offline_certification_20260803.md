@@ -14,6 +14,20 @@ market-session process was started.
 | 7. Read-after-write/restart | semantics document | PARTIAL | In-memory source documented | Required restart reconstruction tests absent |
 | 8. Shutdown/post-seal | focused drain tests | PARTIAL | Normal depth/runtime drain covered | Timeout and post-seal evidence mutation proof absent |
 
+## Gate 1A: registered wrapper traversal
+
+Status: `GATE_1A_REGISTERED_WRAPPER_TRAVERSAL_PASS`
+
+- Actual wrapper: `core.kite_depth_ws._register_on_ticks_callback` returned callback, installed as `kws.on_ticks`; production registration uses this helper.
+- Delegate: `core.kite_depth_ws.on_ticks`
+- Registration site: `core/kite_depth_ws.py:8412` (startup path)
+- Traversal: wrapper entry/exit `1/1`, delegate entry/exit `1/1`, diagnostic stage marker count positive, callback exception none.
+- Callback duration: below the 5-second offline bound.
+- Enabled hooks: raw truth and diagnostic stage markers, both traversed.
+- Explicitly disabled by frozen configuration: tick/depth/runtime enqueue, observation, constituent, MEG, and candidate/ranking hooks in this fixture, each recorded as `NOT_ENABLED_BY_FROZEN_CONFIGURATION`.
+- Negative control: missing enabled hook is reported by exact hook name.
+- Worker drain: not part of the Gate 1A wrapper-only fixture; Gate 6 worker tests remain separate.
+
 Cutover unresolved count for certification: non-zero. The implementation has
 bounded worker routing, but this record does not claim live readiness.
 

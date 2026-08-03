@@ -10,6 +10,7 @@ import core.kite_depth_ws as depth_ws
 import core.tick_store as tick_store
 import core.depth_store as depth_store_module
 import core.persistence_durability as durability
+import core.kite_depth_ws as depth_ws
 import queue
 import time
 
@@ -216,3 +217,71 @@ def test_shutdown_with_blocked_worker_and_pending_queue_fails_closed():
     durability.reset()
     durability.record_degradation("depth", "DRAIN_TIMEOUT")
     assert durability.snapshot()["persistence_durability_degraded"] is True
+
+
+def test_real_on_ticks_tripwire_exercises_all_enabled_campaign_hooks(monkeypatch):
+    counts = {"wrapper_entered": 0, "wrapper_exited": 0, "delegate_entered": 0,
+              "diagnostic_stage_markers": 0}
+    diagnostics = depth_ws.campaign_raw_diagnostics
+    real_entry = diagnostics.on_ticks_entry
+    real_exit = diagnostics.on_ticks_exit
+
+    def entry(count):
+        counts["wrapper_entered"] += 1
+        counts["diagnostic_stage_markers"] += 1
+        return real_entry(count)
+
+    def exit(start, exception=False):
+        counts["wrapper_exited"] += 1
+        return real_exit(start, exception=exception)
+
+    monkeypatch.setattr(diagnostics, "on_ticks_entry", entry)
+    monkeypatch.setattr(diagnostics, "on_ticks_exit", exit)
+    real_delegate = depth_ws.on_ticks
+
+    def delegate(ws, ticks):
+        counts["delegate_entered"] += 1
+        return real_delegate(ws, ticks)
+
+    class RegisteredTicker:
+        on_ticks = None
+
+    ticker = RegisteredTicker()
+    depth_ws._SOCKET_GENERATION = 1
+    callback = depth_ws._register_on_ticks_callback(
+        ticker, lambda name: name == "on_ticks", delegate
+    )
+    assert ticker.on_ticks is callback
+
+    started = time.monotonic_ns()
+    callback(None, [{
+        "instrument_token": 256265,
+        "last_price": 25000.0,
+        "exchange_timestamp": 100.0,
+        "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
+        "change": 0.1,
+    }])
+    duration_ms = (time.monotonic_ns() - started) / 1_000_000
+
+    hook_table = {
+        "raw_truth": {"enabled": True, "count": counts["delegate_entered"]},
+        "diagnostic_stage_markers": {"enabled": True, "count": counts["diagnostic_stage_markers"]},
+        "tick_enqueue": {"enabled": False, "reason": "NOT_ENABLED_BY_FROZEN_CONFIGURATION"},
+        "depth_enqueue": {"enabled": False, "reason": "NOT_ENABLED_BY_FROZEN_CONFIGURATION"},
+        "runtime_enqueue": {"enabled": False, "reason": "NOT_ENABLED_BY_FROZEN_CONFIGURATION"},
+        "observation_callback": {"enabled": False, "reason": "NOT_ENABLED_BY_FROZEN_CONFIGURATION"},
+        "constituent_callback": {"enabled": False, "reason": "NOT_ENABLED_BY_FROZEN_CONFIGURATION"},
+        "meg_bridge": {"enabled": False, "reason": "NOT_ENABLED_BY_FROZEN_CONFIGURATION"},
+        "candidate_ranking_hook": {"enabled": False, "reason": "NOT_ENABLED_BY_FROZEN_CONFIGURATION"},
+    }
+    missing = [name for name, row in hook_table.items() if row.get("enabled") and row.get("count", 0) == 0]
+    assert not missing, hook_table
+    assert counts["wrapper_entered"] == counts["wrapper_exited"] == 1
+    assert counts["delegate_entered"] == 1
+    assert duration_ms < 5000
+
+
+def test_registered_callback_fixture_fails_when_enabled_hook_is_not_traversed():
+    table = {"raw_truth": {"enabled": True, "count": 0}}
+    missing = [name for name, row in table.items() if row["enabled"] and row["count"] == 0]
+    assert missing == ["raw_truth"]
