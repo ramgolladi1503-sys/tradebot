@@ -369,9 +369,29 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
             runtime_store._conn()
             return original_tick(**kwargs)
         monkeypatch.setattr(depth_ws, "insert_tick", injected)
+    elif injection == "tick_sync":
+        def injected(**kwargs):
+            tick_store._write_rows([], worker_owned=True)
+            return original_tick(**kwargs)
+        monkeypatch.setattr(depth_ws, "insert_tick", injected)
     elif injection == "store":
         def injected(**kwargs):
             trade_store.insert_depth_snapshot("x", 1, "{}", 1.0)
+            return original_tick(**kwargs)
+        monkeypatch.setattr(depth_ws, "insert_tick", injected)
+    elif injection == "depth_sync":
+        def injected(**kwargs):
+            trade_store.insert_depth_snapshot("x", 1, "{}", 1.0)
+            return original_tick(**kwargs)
+        monkeypatch.setattr(depth_ws, "insert_tick", injected)
+    elif injection == "runtime_sync":
+        def injected(**kwargs):
+            runtime_store._write_runtime_snapshot_sync({"source": "injected"})
+            return original_tick(**kwargs)
+        monkeypatch.setattr(depth_ws, "insert_tick", injected)
+    elif injection == "event_json":
+        def injected(**kwargs):
+            events.write_json_atomic(tmp_path / "injected-event.json", {"source": "injected"})
             return original_tick(**kwargs)
         monkeypatch.setattr(depth_ws, "insert_tick", injected)
     elif injection == "filesystem":
@@ -453,28 +473,52 @@ def test_registered_live_callback_workers_may_persist_off_callback_thread(tmp_pa
 
 def test_registered_callback_all_persistence_workers_are_off_thread_and_reconciled(tmp_path, monkeypatch):
     callback_thread = threading.get_ident()
-    _, counts, violations, duration_ms, runtime_store, depth_store, worker_ids = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
-    runtime_result = runtime_store.shutdown_runtime_persistence()
+    tick_store.reset_audit_counters()
+    runtime_before = runtime_store.runtime_persistence_state()
+    depth_before = depth_ws.depth_store.persistence_state()
+    _, counts, violations, duration_ms, runtime_mod, depth_store, worker_ids = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    runtime_result = runtime_mod.shutdown_runtime_persistence()
     tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
     depth_result = depth_store.shutdown_persistence(deadline_seconds=2.0)
     tick_state = tick_store.get_audit_counters()
     depth_state = depth_store.persistence_state()
-    runtime_state = runtime_store.runtime_persistence_state()
+    runtime_state = runtime_mod.runtime_persistence_state()
+    tick_before = {"accepted": 0, "persisted": 0, "rejected": 0, "failures": 0}
+    tick_after = {"accepted": tick_state["rows_enqueued"], "persisted": tick_store.write_flush_count(),
+                  "rejected": tick_state["writes_rejected_after_shutdown"], "failures": tick_state["worker_failures"]}
+    depth_delta = {"accepted": depth_state["enqueued"] - depth_before["enqueued"],
+                   "persisted": depth_state["persisted"] - depth_before["persisted"],
+                   "rejected": depth_state["rejected"] - depth_before["rejected"],
+                   "failures": depth_state["failures"] - depth_before["failures"]}
+    runtime_delta = {"accepted": runtime_state["enqueued"] - runtime_before["enqueued"],
+                     "persisted": runtime_state["persisted"] - runtime_before["persisted"],
+                     "rejected": runtime_state["rejected"] - runtime_before["rejected"],
+                     "failures": runtime_state["failures"] - runtime_before["failures"]}
 
     assert counts["tick"] >= 1 and counts["depth"] >= 1 and counts["runtime"] >= 1
     assert set(worker_ids) == {"tick", "depth", "runtime"}
     assert all(ident != callback_thread for ident, _ in worker_ids.values())
+    assert tick_after["accepted"] - tick_before["accepted"] >= 1
+    assert tick_after["persisted"] - tick_before["persisted"] == tick_after["accepted"] - tick_before["accepted"]
+    assert tick_after["rejected"] - tick_before["rejected"] == 0
+    assert tick_after["failures"] - tick_before["failures"] == 0
     assert tick_result["pending_writes"] == 0
     assert tick_result["worker_failures"] == 0
     assert tick_result["status"] == "COMPLETE_DRAIN"
     assert depth_result["complete"] is True
     assert depth_state["queue_depth"] == 0
     assert depth_state["failures"] == 0
-    assert depth_state["persisted"] >= 1
+    assert depth_delta["accepted"] >= 1
+    assert depth_delta["persisted"] == depth_delta["accepted"]
+    assert depth_delta["rejected"] == 0
+    assert depth_delta["failures"] == 0
     assert runtime_result["complete"] is True
     assert runtime_state["pending"] == 0
     assert runtime_state["failures"] == 0
-    assert runtime_state["persisted"] >= 1
+    assert runtime_delta["accepted"] >= 1
+    assert runtime_delta["persisted"] == runtime_delta["accepted"]
+    assert runtime_delta["rejected"] == 0
+    assert runtime_delta["failures"] == 0
     assert tick_state["worker_failures"] == 0
     assert violations == []
     assert duration_ms < 5000
@@ -486,6 +530,30 @@ def test_runtime_tripwire_detects_injected_callback_thread_sqlite_call(tmp_path,
     runtime_store.shutdown_runtime_persistence()
     tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
     depth_store.shutdown_persistence()
+
+
+def test_tripwire_detects_injected_tick_sync_write(tmp_path, monkeypatch):
+    _, _, violations, _, runtime_mod, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "tick_sync")
+    assert any(v[1] == "tick_store._write_rows" for v in violations)
+    runtime_mod.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
+
+
+def test_tripwire_detects_injected_depth_sync_write(tmp_path, monkeypatch):
+    _, _, violations, _, runtime_mod, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "depth_sync")
+    assert any(v[1] == "trade_store.insert_depth_snapshot" for v in violations)
+    runtime_mod.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
+
+
+def test_tripwire_detects_injected_runtime_sync_write(tmp_path, monkeypatch):
+    _, _, violations, _, runtime_mod, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "runtime_sync")
+    assert any(v[1] == "runtime_store._write_runtime_snapshot_sync" for v in violations)
+    runtime_mod.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
+
+
+def test_tripwire_detects_injected_event_json_write(tmp_path, monkeypatch):
+    _, _, violations, _, runtime_mod, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "event_json")
+    assert any(v[1] == "events.write_json_atomic" for v in violations)
+    runtime_mod.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
 
 
 def test_runtime_tripwire_detects_injected_callback_thread_store_call(tmp_path, monkeypatch):
