@@ -40,8 +40,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install \
-            pytest pandas numpy pyarrow scikit-learn \
+            pytest pandas numpy pyarrow scikit-learn streamlit \
             python-dotenv openai requests kiteconnect holidays
+
+      - name: Resolve current runtime-authority base
+        run: |
+          BASE_SHA="$(git merge-base origin/post-pr763/runtime-authority-cutover-v1 HEAD)"
+          test -n "$BASE_SHA"
+          echo "RELIABILITY_BASE_SHA=$BASE_SHA" >> "$GITHUB_ENV"
+          echo "reliability base: $BASE_SHA"
 
       - name: Compile reliability sidecar
         run: |
@@ -58,9 +65,12 @@ jobs:
       - name: Verify read-only sidecar scope
         run: |
           python - <<'PY'
+          import os
           import subprocess
-          base = '0d44bedfe5dc52a4d63d2ae60b552107cba2f489'
-          changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+          base = os.environ['RELIABILITY_BASE_SHA']
+          changed = subprocess.check_output(
+              ['git', 'diff', '--name-only', base, 'HEAD'], text=True
+          ).splitlines()
           allowed = (
               'core/ai_reliability_agent/',
               'scripts/run_ai_reliability',
@@ -83,4 +93,4 @@ jobs:
           test ! -e .github/workflows/_temporary_ai_reliability_completion_v1.yml
 
       - name: Validate diff
-        run: git diff --check 0d44bedfe5dc52a4d63d2ae60b552107cba2f489 HEAD
+        run: git diff --check "$RELIABILITY_BASE_SHA" HEAD
