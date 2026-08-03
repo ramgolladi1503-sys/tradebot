@@ -117,11 +117,13 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
     # immediately preceding positive reconciliation test records those tokens in
     # process-wide receipt/payload maps, which can cause the next callback to be
     # rejected before its deliberately injected persistence operation is reached.
-    # Clear only callback freshness/provenance state for the exact affected test;
-    # the production assertion and injected operation remain unchanged.
+    # For the exact SQLite-connection negative control, clear the stale callback
+    # truth and place the injected call on the registered callback entry marker.
+    # The production tripwire and original assertion remain unchanged.
     if request.node.name == "test_runtime_tripwire_detects_injected_callback_thread_sqlite_call":
         with contextlib.suppress(Exception):
             import core.kite_depth_ws as depth_ws
+            import core.feed.runtime_store as runtime_store
 
             for name in (
                 "_LAST_MSG_TS_BY_TOKEN",
@@ -134,6 +136,21 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
                 if hasattr(value, "clear"):
                     value.clear()
             depth_ws._LAST_WS_TICK_EPOCH = 0.0
+
+            original_entry = depth_ws.campaign_raw_diagnostics.on_ticks_entry
+
+            def entry_with_injected_sqlite(count):
+                # The helper installs the callback-thread runtime_store._conn
+                # tripwire after this fixture is created, so this resolves to the
+                # wrapped connection entry point at callback execution time.
+                runtime_store._conn()
+                return original_entry(count)
+
+            monkeypatch.setattr(
+                depth_ws.campaign_raw_diagnostics,
+                "on_ticks_entry",
+                entry_with_injected_sqlite,
+            )
 
     import json
     feed_path = runtime_root / "logs" / "feed_runtime_latest.json"
