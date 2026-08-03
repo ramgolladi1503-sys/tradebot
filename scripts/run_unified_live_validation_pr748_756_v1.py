@@ -7,11 +7,13 @@ import argparse
 import hashlib
 import json
 import inspect
+import os
 import pathlib
 import kiteconnect
 from kiteconnect import KiteTicker
 import kiteconnect.ticker as kite_ticker
 from pathlib import Path
+from core import campaign_raw_diagnostics
 
 from core.unified_live_validation_pr748_756.campaign_contract import (
     ENABLE_ENV,
@@ -19,6 +21,7 @@ from core.unified_live_validation_pr748_756.campaign_contract import (
     build_composition_manifest,
     current_commit_sha,
     reject_presession_live_run_id,
+    require_fresh_evidence_root,
     require_campaign_enabled,
     resolve_session_date,
 )
@@ -68,6 +71,18 @@ def _predecode_diagnostic_contract() -> dict[str, object]:
     }
 
 
+def _run_diagnostic_self_test(identity) -> bool:
+    os.environ["UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE"] = "true"
+    os.environ["TRADEBOT_READ_ONLY"] = "true"
+    os.environ["UNIFIED_LIVE_VALIDATION_PR748_756_RUN_ID"] = identity.run_id
+    os.environ["UNIFIED_LIVE_VALIDATION_PR748_756_EVIDENCE_ROOT"] = identity.evidence_root
+    os.environ["UNIFIED_LIVE_VALIDATION_PR748_756_SESSION_DATE"] = identity.session_date
+    os.environ["UNIFIED_LIVE_VALIDATION_PR748_756_COMMIT_SHA"] = identity.campaign_commit_sha
+    passed = campaign_raw_diagnostics.run_diagnostic_self_test()
+    campaign_raw_diagnostics.shutdown()
+    return passed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-root", default="runtime/diagnostics/unified_live_validation_pr748_756_v1")
@@ -105,8 +120,9 @@ def main() -> int:
     if args.launch_live:
         reject_presession_live_run_id(identity.run_id)
     run_root = Path(identity.evidence_root)
+    require_fresh_evidence_root(identity)
     for child in ("presession", "live", "postmarket", "per_pr"):
-        (run_root / child).mkdir(parents=True, exist_ok=True)
+        (run_root / child).mkdir(parents=True, exist_ok=False)
     (run_root / "presession" / "campaign_identity.json").write_text(
         json.dumps(identity.to_dict(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -114,7 +130,8 @@ def main() -> int:
     wired = _runtime_wired()
     single_ws = _single_websocket_path_proven()
     diagnostic_contract = _predecode_diagnostic_contract()
-    state = "READY_FOR_LIVE_START" if wired and single_ws else "BLOCKED_BY_RUNTIME_WIRING"
+    diagnostic_self_test_passed = _run_diagnostic_self_test(identity)
+    state = "READY_FOR_LIVE_START" if wired and single_ws and diagnostic_self_test_passed else "BLOCKED_BY_RUNTIME_WIRING"
     command = list(args.runtime_command or ["./run_live.sh"])
     launch = {
         "state": state,
@@ -124,6 +141,8 @@ def main() -> int:
         "state_path": str(run_root / "state" / "constituent_source_state.json"),
         "previous_state_reused": False,
         **diagnostic_contract,
+        "diagnostic_self_test_passed": diagnostic_self_test_passed,
+        "wiring_registry_complete": diagnostic_self_test_passed,
         "launch_command": f"PYTHONPATH=. {ENABLE_ENV}=true python3 -B scripts/run_unified_live_validation_pr748_756_v1.py --origin-main-sha {args.origin_main_sha} --launch-live",
         "runtime_command": command,
         "campaign_runtime_wired": wired,
@@ -135,12 +154,13 @@ def main() -> int:
         "presession_run_id_rejected": True,
         "blockers": (
             []
-            if wired and single_ws
+            if wired and single_ws and diagnostic_self_test_passed
             else [
                 blocker
                 for blocker, active in (
                     ("CURRENT_LAUNCH_COMMAND_DOES_NOT_ACTIVATE_CAMPAIGN", not wired),
                     ("SINGLE_WEBSOCKET_PATH_NOT_PROVEN", not single_ws),
+                    ("CALLBACK_EVIDENCE_PATH_DISCONNECTED", not diagnostic_self_test_passed),
                 )
                 if active
             ]
@@ -195,7 +215,7 @@ def main() -> int:
         print(json.dumps(launch, indent=2, sort_keys=True))
         return result.exit_code if result.exit_code else (0 if wired else 2)
     print(json.dumps(launch, indent=2, sort_keys=True))
-    return 0 if wired else 2
+    return 0 if wired and diagnostic_self_test_passed else 2
 
 
 if __name__ == "__main__":

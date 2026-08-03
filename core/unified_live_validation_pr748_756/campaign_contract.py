@@ -150,10 +150,14 @@ def build_campaign_identity(
     live: bool = False,
     session_date: str | None = None,
 ) -> CampaignIdentity:
-    suffix = nonce or secrets.token_hex(4)
+    suffix = nonce or secrets.token_hex(16)
     phase = "live" if live else "presession"
     canonical_session_date = resolve_session_date(session_date)
-    run_id = f"unified-pr748-756-{canonical_session_date.replace('-', '')}-{composition_manifest_sha[:12]}-{phase}-{suffix}"
+    raw_commit = str(campaign_commit_sha).strip()
+    commit_component = raw_commit[:12] if len(raw_commit) >= 12 else composition_manifest_sha[:12]
+    if not raw_commit:
+        raise ValueError("campaign_commit_sha_required_for_run_identity")
+    run_id = f"unified-pr748-756-{canonical_session_date.replace('-', '')}-{commit_component}-{phase}-{suffix}"
     return CampaignIdentity(
         run_id=run_id,
         schema_version=CAMPAIGN_SCHEMA_VERSION,
@@ -167,6 +171,15 @@ def build_campaign_identity(
 def reject_presession_live_run_id(run_id: str) -> None:
     if "presession" in str(run_id):
         raise ValueError("presession_run_id_rejected_for_live_launch")
+
+
+def require_fresh_evidence_root(identity: CampaignIdentity) -> Path:
+    root = Path(identity.evidence_root)
+    if root.exists():
+        raise RuntimeError("RUN_ROOT_ALREADY_EXISTS")
+    root.parent.mkdir(parents=True, exist_ok=True)
+    root.mkdir()
+    return root
 
 
 def enrich_row(identity: CampaignIdentity, row: Mapping[str, Any], *, pr_number: int) -> dict[str, Any]:

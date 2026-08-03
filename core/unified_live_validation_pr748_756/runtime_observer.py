@@ -19,6 +19,7 @@ from core.unified_live_validation_pr748_756.campaign_contract import (
 )
 from core.unified_live_validation_pr748_756.recorder import AppendOnlyRecorder
 from core.unified_live_validation_pr748_756.seal import seal_evidence_root
+from core.unified_live_validation_pr748_756.campaign_contract import current_commit_sha
 
 
 _OBSERVER: "UnifiedLiveRuntimeObserver | None" = None
@@ -70,6 +71,10 @@ class UnifiedLiveRuntimeObserver:
         return cls(identity)
 
     def write_process_identity(self, payload: Mapping[str, Any] | None = None) -> None:
+        observed_sha = current_commit_sha(Path(__file__).resolve().parents[2])
+        expected_sha = os.getenv("UNIFIED_LIVE_VALIDATION_PR748_756_EXPECTED_CHILD_SHA", "")
+        if expected_sha and observed_sha != expected_sha:
+            raise RuntimeError("CHILD_COMMIT_SHA_MISMATCH")
         body = {
             "run_id": self.identity.run_id,
             "pid": os.getpid(),
@@ -80,6 +85,9 @@ class UnifiedLiveRuntimeObserver:
             "is_order_action": False,
             "broker_api_called": False,
             "allowed_for_live_execution": False,
+            "launcher_expected_sha": expected_sha,
+            "child_observed_sha": observed_sha,
+            "runtime_observer_fingerprint": f"pid:{os.getpid()}:observer:{id(self):x}",
         }
         body.update(dict(payload or {}))
         self._write_json("live/process_identity.json", body)

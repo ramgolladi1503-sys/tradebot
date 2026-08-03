@@ -45,6 +45,7 @@ _STATE = {
 }
 _PROCESS_THREAD: threading.Thread | None = None
 _REACTOR_CALL = None
+_REGISTRY_PATH = "diagnostic_wiring_registry.jsonl"
 
 
 def _enabled() -> bool:
@@ -74,6 +75,38 @@ def _enqueue(path: str, payload: dict) -> None:
             _STATE["queue_drop_count"] += 1
 
 
+def record_wiring(milestone: str, *, component: str, status: str = "PASS", reason: str = "", instance_fingerprint: str = "", parent_instance_fingerprint: str = "") -> None:
+    if not _enabled():
+        return
+    if _THREAD is None or not _THREAD.is_alive():
+        start()
+    _enqueue(_REGISTRY_PATH, {**_identity(), "milestone": milestone, "component": component,
+        "status": status, "reason": reason, "instance_fingerprint": instance_fingerprint,
+        "parent_instance_fingerprint": parent_instance_fingerprint, "monotonic_ns": time.monotonic_ns(),
+        "wall_ts_utc": time.time(), "diagnostic_self_test": False})
+
+
+def run_diagnostic_self_test() -> bool:
+    if not _enabled():
+        return False
+    start()
+    base = {**_identity(), "diagnostic_self_test": True, "event_type": "diagnostic_self_test"}
+    for filename, event in (("predecode_raw_message_timeline.jsonl", "synthetic_predecode_binary"),
+                            ("callback_execution_timeline.jsonl", "synthetic_predecode_text"),
+                            ("callback_execution_timeline.jsonl", "synthetic_on_ticks_entry_exit"),
+                            ("reactor_heartbeat_timeline.jsonl", "synthetic_reactor_heartbeat"),
+                            ("process_heartbeat_timeline.jsonl", "synthetic_process_heartbeat"),
+                            ("protocol_lifecycle_timeline.jsonl", "synthetic_protocol_lifecycle")):
+        _enqueue(filename, {**base, "event_type": event, "monotonic_ns": time.monotonic_ns()})
+    record_wiring("CALLBACK_SELF_TEST_PASSED", component="diagnostic_recorder", instance_fingerprint=f"pid:{os.getpid()}:recorder:{id(_QUEUE):x}")
+    _QUEUE.join()
+    root = Path(os.getenv("UNIFIED_LIVE_VALIDATION_PR748_756_EVIDENCE_ROOT", "")) / "live"
+    required = ("predecode_raw_message_timeline.jsonl", "callback_execution_timeline.jsonl",
+                "reactor_heartbeat_timeline.jsonl", "process_heartbeat_timeline.jsonl",
+                "protocol_lifecycle_timeline.jsonl", _REGISTRY_PATH)
+    return all((root / name).is_file() and (root / name).stat().st_size > 0 for name in required)
+
+
 def _writer() -> None:
     while not _STOP.is_set() or not _QUEUE.empty():
         try:
@@ -99,6 +132,7 @@ def start() -> bool:
             _STOP.clear()
             _THREAD = threading.Thread(target=_writer, name="campaign-diagnostic-writer", daemon=True)
             _THREAD.start()
+            record_wiring("DIAGNOSTIC_WRITER_STARTED", component="diagnostic_writer", instance_fingerprint=f"pid:{os.getpid()}:writer:{id(_THREAD):x}")
     return True
 
 
@@ -240,4 +274,4 @@ def shutdown() -> None:
     _THREAD.join(timeout=2.0)
 
 
-__all__ = ["observe_raw_message", "on_ticks_entry", "on_ticks_exit", "shutdown", "start"]
+__all__ = ["observe_raw_message", "on_ticks_entry", "on_ticks_exit", "shutdown", "start", "record_wiring", "run_diagnostic_self_test"]

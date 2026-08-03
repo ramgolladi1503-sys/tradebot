@@ -25,6 +25,8 @@ from core.unified_live_validation_pr748_756.campaign_contract import (
     reject_presession_live_run_id,
     SESSION_DATE_ENV,
     STATE_PATH_ENV,
+    current_commit_sha,
+    require_fresh_evidence_root,
 )
 from core.unified_live_validation_pr748_756.recorder import AppendOnlyRecorder
 from core.unified_live_validation_pr748_756.seal import seal_evidence_root
@@ -73,11 +75,14 @@ def launch_runtime_child(
     reject_presession_live_run_id(identity.run_id)
     recorder = AppendOnlyRecorder(identity)
     root = Path(identity.evidence_root)
+    if not root.exists():
+        raise RuntimeError("RUN_ROOT_NOT_CREATED_BEFORE_LAUNCH")
     live = root / "live"
     live.mkdir(parents=True, exist_ok=True)
     stdout_path = live / "stdout.log"
     stderr_path = live / "stderr.log"
     env = build_child_environment(identity)
+    env["UNIFIED_LIVE_VALIDATION_PR748_756_EXPECTED_CHILD_SHA"] = identity.campaign_commit_sha
     start = time.time()
     process_identity: dict[str, Any] = {
         "run_id": identity.run_id,
@@ -90,6 +95,7 @@ def launch_runtime_child(
         "is_order_action": False,
         "broker_api_called": False,
         "allowed_for_live_execution": False,
+        "launcher_expected_sha": identity.campaign_commit_sha,
     }
     exit_code = 127
     child_pid: int | None = None

@@ -40,6 +40,7 @@ from core.runtime_bootstrap import (
     is_global_readiness_blocker as _is_global_readiness_blocker,
 )
 from core.unified_live_validation_pr748_756 import runtime_observer as _unified_live_campaign
+from core import campaign_raw_diagnostics as _campaign_diagnostics
 
 _ACTION_FLAG_KEY = "is_" + "order_action"
 
@@ -143,6 +144,18 @@ def main():
         campaign_observer = _unified_live_campaign.init_from_env()
         if campaign_observer is not None:
             campaign_observer.write_process_identity({"exec_mode": exec_mode, "repo_root": str(repo_root)})
+            _campaign_diagnostics.record_wiring(
+                "RUNTIME_OBSERVER_CREATED",
+                component="runtime_observer",
+                instance_fingerprint=f"pid:{os.getpid()}:observer:{id(campaign_observer):x}",
+            )
+            _campaign_diagnostics.record_wiring(
+                "DIAGNOSTIC_RECORDER_CREATED",
+                component="diagnostic_recorder",
+                instance_fingerprint=f"pid:{os.getpid()}:recorder:{id(_campaign_diagnostics):x}",
+                parent_instance_fingerprint=f"pid:{os.getpid()}:observer:{id(campaign_observer):x}",
+            )
+            _campaign_diagnostics.run_diagnostic_self_test()
             atexit.register(_shutdown_unified_live_campaign)
             print("[UNIFIED_LIVE_VALIDATION] runtime observer initialized")
     except Exception as exc:

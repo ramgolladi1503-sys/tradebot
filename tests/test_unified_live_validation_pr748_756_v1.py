@@ -13,6 +13,7 @@ from core.unified_live_validation_pr748_756.campaign_contract import (
     campaign_enabled,
     enrich_row,
     reject_presession_live_run_id,
+    require_fresh_evidence_root,
     require_campaign_enabled,
     resolve_session_date,
 )
@@ -390,3 +391,23 @@ def test_main_unified_campaign_shutdown_helper_is_idempotent(monkeypatch, capsys
 
     assert calls == [{"seal": True, "state": "PROCESS_EXIT"}, {"seal": True, "state": "STOPPED"}]
     assert "[UNIFIED_LIVE_VALIDATION] shutdown sealed=True" in capsys.readouterr().out
+
+
+def test_live_identity_binds_commit_and_fresh_root_is_fail_closed(tmp_path):
+    first = build_campaign_identity(
+        evidence_root=tmp_path,
+        campaign_commit_sha="75f259e3c72b4abc25f91c0cbc7946ceb5fc37ee",
+        composition_manifest_sha="a" * 64,
+        live=True,
+    )
+    second = build_campaign_identity(
+        evidence_root=tmp_path,
+        campaign_commit_sha="75f259e3c72b4abc25f91c0cbc7946ceb5fc37ee",
+        composition_manifest_sha="a" * 64,
+        live=True,
+    )
+    assert "-75f259e3c72b-live-" in first.run_id
+    assert first.run_id != second.run_id
+    require_fresh_evidence_root(first)
+    with pytest.raises(RuntimeError, match="RUN_ROOT_ALREADY_EXISTS"):
+        require_fresh_evidence_root(first)
