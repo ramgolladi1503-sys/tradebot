@@ -1,0 +1,1 @@
+Trigger the self-removing clean runtime authority certification workflow.
