@@ -12,6 +12,7 @@ Harden the existing local evidence RAG against concurrent index builds and silen
 - Protection against reclaiming an old lock owned by a live process on the same machine.
 - Unique lock ownership tokens so cleanup cannot delete a replacement lock.
 - Safe cleanup when lock creation succeeds but lock metadata cannot be written.
+- Read-only `status` inspection that cannot create schema or rebuild FTS rows.
 - `doctor` CLI command using a read-only SQLite connection.
 - Integrity checks for:
   - SQLite `quick_check`.
@@ -25,6 +26,7 @@ Harden the existing local evidence RAG against concurrent index builds and silen
   - foreign-key violations.
   - active build lock presence.
 - Streamlit build action routed through the safe builder.
+- Streamlit inventory/status display routed through the read-only status path.
 - Streamlit integrity scan available only on demand.
 - CI evidence artifact for the doctor report.
 
@@ -33,7 +35,7 @@ Harden the existing local evidence RAG against concurrent index builds and silen
 - Embeddings, vector databases, rerankers, agents, or generative answers.
 - Retrieval-scoring changes.
 - New source formats or source directories.
-- Automatic database repair by the doctor command.
+- Automatic database repair by the doctor or status commands.
 - Broker, strategy, risk, execution, approval, or live runtime changes.
 - Background schedulers or remote services.
 
@@ -43,7 +45,7 @@ Harden the existing local evidence RAG against concurrent index builds and silen
 2. A competing build must fail with `rag_build_in_progress`; it must not wait indefinitely or modify the index.
 3. A stale lock may be reclaimed only when no live same-host owner is detected.
 4. Lock cleanup must remove only the lock carrying the current build token.
-5. `doctor` must never create or repair an index.
+5. `status` and `doctor` must never create or repair an index.
 6. `doctor` exits successfully only when every configured invariant passes.
 7. Existing retrieval evaluation thresholds and refusal behavior remain unchanged.
 
@@ -53,6 +55,7 @@ Harden the existing local evidence RAG against concurrent index builds and silen
 PYTHONPATH=. pytest -q -o addopts='' tests/test_tradebot_rag.py tests/test_tradebot_rag_operations.py
 PYTHONPATH=. python scripts/tradebot_rag.py build
 PYTHONPATH=. python scripts/tradebot_rag.py doctor
+PYTHONPATH=. python scripts/tradebot_rag.py status
 PYTHONPATH=. python scripts/tradebot_rag.py evaluate --min-hit-at-k 0.80 --min-refusal-accuracy 1.00
 ```
 
