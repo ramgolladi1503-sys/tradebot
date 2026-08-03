@@ -10,6 +10,7 @@ from config import config as cfg
 from core.trade_store import insert_depth_snapshot
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
+from core.persistence_durability import record_degradation
 
 _ERROR_LOG_PATH = logs_dir() / "depth_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
@@ -46,6 +47,7 @@ class DepthStore:
                 with self._persist_lock:
                     self._persist_failures += 1
                     self._persist_degraded = True
+                    record_degradation("depth", "DEPTH_PERSISTENCE_FAILURE")
                 logger.warning("depth_persistence_failed error=%s", type(exc).__name__)
             finally:
                 self._persist_queue.task_done()
@@ -86,6 +88,7 @@ class DepthStore:
                     if self._persist_shutdown:
                         self._persist_rejected += 1
                         self._persist_degraded = True
+                        record_degradation("depth", "DEPTH_PERSISTENCE_SHUTDOWN")
                         raise RuntimeError("depth persistence is shut down")
                 try:
                     self._persist_queue.put_nowait((
@@ -96,6 +99,7 @@ class DepthStore:
                     with self._persist_lock:
                         self._persist_rejected += 1
                         self._persist_degraded = True
+                        record_degradation("depth", "DEPTH_QUEUE_FULL")
                     logger.error("depth_persistence_queue_full")
                     raise
                 with self._persist_lock:

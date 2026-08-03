@@ -10,12 +10,21 @@ market-session process was started.
 | 3. Envelopes/sequences | `test_runtime_envelope_is_deeply_immutable` | PARTIAL | Runtime nested mutation blocked | Tick/depth sequence envelopes not proven |
 | 4. Worker ownership | `test_runtime_worker_is_not_simulated_reactor_thread` | PARTIAL | Worker thread differs from reactor | Connection/filesystem ownership matrix absent |
 | 5. Slow-store matrix | focused worker tests | PARTIAL | Depth/runtime enqueue behavior tested | Full real-callback matrix and drift measurements absent |
-| 6. Saturation/durability | existing bounded queues | FAIL | No complete per-authority saturation proof | Aggregate fail-closed execution state absent |
+| 6. Saturation/durability | Gate-6 tests in `test_pr763_callback_persistence_cutover_certification.py` | PASS | 20 dedicated certification tests; bounded `put_nowait`; aggregate degradation and execution fail-closed checks pass | Per-envelope production counters remain authority-local |
 | 7. Read-after-write/restart | semantics document | PARTIAL | In-memory source documented | Required restart reconstruction tests absent |
 | 8. Shutdown/post-seal | focused drain tests | PARTIAL | Normal depth/runtime drain covered | Timeout and post-seal evidence mutation proof absent |
 
 Cutover unresolved count for certification: non-zero. The implementation has
 bounded worker routing, but this record does not claim live readiness.
+
+## Gate 6 results
+
+| authority | capacity | saturation result | degradation |
+| --- | ---: | --- | --- |
+| tick | 1 in test | rejection is bounded and recorded | aggregate degraded; execution false |
+| depth | 1 in test | rejection is bounded and recorded | aggregate degraded; execution false |
+| runtime | 1 in test | rejection is bounded and recorded | aggregate degraded; execution false |
+| combined | 1 per authority in fixture | no callback deadlock | `degraded_authorities` is deterministic and deduplicated |
 
 ## Safety
 

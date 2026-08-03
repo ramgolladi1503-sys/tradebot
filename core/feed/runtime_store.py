@@ -20,6 +20,7 @@ from core.fs_utils import ensure_parent_dir
 from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.paths import repo_root, trade_db_path
 from core.time_utils import now_utc_epoch
+from core.persistence_durability import record_degradation
 
 logger = logging.getLogger(__name__)
 
@@ -356,6 +357,7 @@ def _runtime_write_loop() -> None:
                 with _RUNTIME_LOCK:
                     _RUNTIME_FAILURES += 1
                     _RUNTIME_DEGRADED = True
+                    record_degradation("runtime", "RUNTIME_PERSISTENCE_FAILURE")
                 logger.warning("feed_runtime_snapshot_persist_failed")
         finally:
             _RUNTIME_WRITE_QUEUE.task_done()
@@ -381,6 +383,7 @@ def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
         with _RUNTIME_LOCK:
             _RUNTIME_REJECTED += 1
             _RUNTIME_DEGRADED = True
+            record_degradation("runtime", "RUNTIME_QUEUE_FULL")
         logger.error("feed_runtime_snapshot_queue_full")
         return False
     with _RUNTIME_LOCK:

@@ -13,6 +13,7 @@ from core.fs_utils import ensure_parent_dir
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.time_utils import compute_age_sec, normalize_epoch_seconds, now_utc_epoch
+from core.persistence_durability import record_degradation
 
 _tick_window = deque(maxlen=200000)
 _LAST_TICK_EPOCH = None
@@ -24,6 +25,7 @@ _INIT_DONE = False
 _INIT_DB_PATH = None
 _INIT_LOCK = threading.Lock()
 _WRITE_QUEUE: deque[tuple[str, int | None, float | None, float | None, float | None, float, str]] = deque()
+_WRITE_QUEUE_CAPACITY = 10000
 _WRITE_QUEUE_LOCK = threading.Lock()
 _FLUSH_THREAD: threading.Thread | None = None
 _FLUSH_THREAD_STOP = threading.Event()
@@ -53,6 +55,7 @@ _AUDIT_COUNTERS = {
     "committed_batches": 0,
     "worker_failures": 0,
     "writes_rejected_after_shutdown": 0,
+    "writes_rejected_queue_full": 0,
 }
 _WRITE_ENQUEUE_COUNT = 0
 _WRITE_FLUSH_COUNT = 0
@@ -789,6 +792,10 @@ def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float |
     with _WRITE_QUEUE_LOCK:
         if not _ACCEPTING_WRITES:
             _AUDIT_COUNTERS["writes_rejected_after_shutdown"] += 1
+            return False
+        if len(_WRITE_QUEUE) >= _WRITE_QUEUE_CAPACITY:
+            _AUDIT_COUNTERS["writes_rejected_queue_full"] += 1
+            record_degradation("tick", "TICK_QUEUE_FULL")
             return False
         _WRITE_QUEUE.append(row)
         _AUDIT_COUNTERS["rows_enqueued"] += 1
