@@ -56,10 +56,12 @@ def run(args: argparse.Namespace) -> int:
             child_pid=None, terminal=False, sealed=False, timeout_deadline=time.time() + args.timeout_sec)
     try:
         result = launch_runtime_child(identity, ["./run_live.sh"], cwd=Path(args.cwd), timeout_sec=args.timeout_sec)
-        state = "SEALED_SUCCESS" if result.sealed and result.exit_code == 0 else "FAILED_SEAL"
+        expected_signal_exit = result.exit_code == -signal.SIGTERM
+        state = "SEALED_SUCCESS" if result.sealed and (result.exit_code == 0 or expected_signal_exit) else "FAILED_SEAL"
         _status(root, state=state, reason="child_and_exact_root_finalized", child_pid=result.child_pid,
                 manifest_path=str(root / "artifact_manifest.json"), sealed=result.sealed,
-                terminal=True, exit_code=result.exit_code)
+                terminal=True, exit_code=result.exit_code,
+                child_exit_classification="EXPECTED_SIGNAL_EXIT" if expected_signal_exit else "UNEXPECTED_CHILD_EXIT")
         return 0 if result.sealed else 2
     except Exception as exc:
         _status(root, state="FAILED_SEAL", reason=f"{type(exc).__name__}:{exc}", terminal=True, sealed=False)

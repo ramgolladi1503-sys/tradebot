@@ -214,8 +214,13 @@ def launch_runtime_child(
             },
             pr_number=750,
         )
+    existing_identity = {}
+    try:
+        existing_identity = json.loads((live / "process_identity.json").read_text(encoding="utf-8"))
+    except Exception:
+        pass
     (live / "process_identity.json").write_text(
-        json.dumps({**process_identity, "child_pid": child_pid, "exit_code": exit_code, "end_epoch": time.time()}, indent=2, sort_keys=True) + "\n",
+        json.dumps({**existing_identity, **process_identity, "child_pid": child_pid, "exit_code": exit_code, "end_epoch": time.time()}, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     manifest_sha = None
