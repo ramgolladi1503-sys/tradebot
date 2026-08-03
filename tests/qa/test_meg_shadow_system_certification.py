@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+
 from core.qa_certification.meg_shadow_system import (
     CERTIFIED_VERDICT,
     FAILED_VERDICT,
@@ -34,9 +37,19 @@ def _offline() -> dict:
     )
 
 
+def _semantic_sha(payload: dict) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _post_market(verdict: str) -> dict:
     passed = verdict == "PASS_READ_ONLY_POST_MARKET_RELIABILITY"
-    return {
+    semantic = {
         "schema_version": 1,
         "verdict": verdict,
         "implementation_complete": True,
@@ -44,21 +57,31 @@ def _post_market(verdict: str) -> dict:
         "read_only": True,
         "order_authority": False,
         "broker_write_authority": False,
-        "semantic_sha256": "b" * 64,
+        "gates": [],
+        "limitations": [
+            "No strategy profitability or structural edge is certified.",
+            "No broker connectivity, real fill quality, or production deployment is certified.",
+            "Observed market contributors are not asserted as unique causes.",
+        ],
     }
+    return {**semantic, "semantic_sha256": _semantic_sha(semantic)}
 
 
 def test_all_eight_offline_gates_produce_pass_report():
     report = _offline()
     assert report["verdict"] == OFFLINE_PASS_VERDICT
     assert validate_offline_report(report)["passed"] is True
-    assert [gate["gate_id"] for gate in report["gates"]] == list(REQUIRED_OFFLINE_GATES)
+    assert [gate["gate_id"] for gate in report["gates"]] == list(
+        REQUIRED_OFFLINE_GATES
+    )
 
 
 def test_missing_offline_gate_fails_closed():
     report = build_offline_report(
         head_sha="1" * 40,
-        gate_results=[_gate(gate_id) for gate_id in REQUIRED_OFFLINE_GATES[:-1]],
+        gate_results=[
+            _gate(gate_id) for gate_id in REQUIRED_OFFLINE_GATES[:-1]
+        ],
         generated_at="2026-08-03T00:00:00+00:00",
     )
     assert report["verdict"] == FAILED_VERDICT
@@ -97,7 +120,9 @@ def test_pending_post_market_certificate_cannot_become_green():
 def test_real_post_market_pass_produces_read_only_system_certificate():
     certificate = assemble_system_certificate(
         offline_report=_offline(),
-        post_market_certificate=_post_market("PASS_READ_ONLY_POST_MARKET_RELIABILITY"),
+        post_market_certificate=_post_market(
+            "PASS_READ_ONLY_POST_MARKET_RELIABILITY"
+        ),
         generated_at="2026-08-03T00:00:00+00:00",
     )
     assert certificate["verdict"] == CERTIFIED_VERDICT
@@ -117,7 +142,25 @@ def test_order_authority_in_post_market_certificate_fails_closed():
         generated_at="2026-08-03T00:00:00+00:00",
     )
     assert certificate["verdict"] == FAILED_VERDICT
-    assert any("post_market_order_authority_not_false" in error for error in certificate["errors"])
+    assert any(
+        "post_market_order_authority_not_false" in error
+        for error in certificate["errors"]
+    )
+
+
+def test_stale_post_market_semantic_hash_fails_closed():
+    post = _post_market("PASS_READ_ONLY_POST_MARKET_RELIABILITY")
+    post["live_evidence_complete"] = False
+    certificate = assemble_system_certificate(
+        offline_report=_offline(),
+        post_market_certificate=post,
+        generated_at="2026-08-03T00:00:00+00:00",
+    )
+    assert certificate["verdict"] == FAILED_VERDICT
+    assert any(
+        "post_market_semantic_sha_mismatch" in error
+        for error in certificate["errors"]
+    )
 
 
 def test_failed_offline_gate_overrides_real_live_pass():
@@ -131,7 +174,9 @@ def test_failed_offline_gate_overrides_real_live_pass():
     )
     certificate = assemble_system_certificate(
         offline_report=failed,
-        post_market_certificate=_post_market("PASS_READ_ONLY_POST_MARKET_RELIABILITY"),
+        post_market_certificate=_post_market(
+            "PASS_READ_ONLY_POST_MARKET_RELIABILITY"
+        ),
         generated_at="2026-08-03T00:00:00+00:00",
     )
     assert certificate["verdict"] == FAILED_VERDICT
