@@ -21,6 +21,19 @@ st.caption(
 
 with st.sidebar:
     st.subheader("Index")
+    index_exists = INDEX_PATH.exists()
+
+    if st.button("Run integrity check", use_container_width=True, disabled=not index_exists):
+        with st.spinner("Checking index integrity..."):
+            doctor = doctor_index(INDEX_PATH)
+        if doctor.healthy:
+            st.success("Index integrity is healthy.")
+        else:
+            failed = [check.name for check in doctor.checks if not check.passed]
+            st.error("Integrity failed: " + ", ".join(failed))
+        with st.expander("Integrity details"):
+            st.json(doctor.to_dict())
+
     status = index_status(INDEX_PATH)
     if status.get("exists"):
         st.success(f"{status['document_count']} documents / {status['chunk_count']} chunks")
@@ -40,17 +53,6 @@ with st.sidebar:
                 f"removed {report.removed_files}; chunks {report.chunk_count}."
             )
             st.rerun()
-
-    if st.button("Run integrity check", use_container_width=True, disabled=not status.get("exists")):
-        with st.spinner("Checking index integrity..."):
-            doctor = doctor_index(INDEX_PATH)
-        if doctor.healthy:
-            st.success("Index integrity is healthy.")
-        else:
-            failed = [check.name for check in doctor.checks if not check.passed]
-            st.error("Integrity failed: " + ", ".join(failed))
-        with st.expander("Integrity details"):
-            st.json(doctor.to_dict())
 
     top_k = st.slider("Retrieved evidence", min_value=3, max_value=15, value=8)
     path_prefix = st.selectbox("Limit sources", ("All", "docs", "research", "README.md"))
