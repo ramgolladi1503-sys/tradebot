@@ -28,6 +28,19 @@ Status: `GATE_1A_REGISTERED_WRAPPER_TRAVERSAL_PASS`
 - Negative control: missing enabled hook is reported by exact hook name.
 - Worker drain: not part of the Gate 1A wrapper-only fixture; Gate 6 worker tests remain separate.
 
+## Gate 1B: live-shaped registered callback persistence tripwire
+
+Status: `GATE_1_REAL_CALLBACK_PERSISTENCE_TRIPWIRE_PASS`
+
+- Registered wrapper: `core/kite_depth_ws._register_on_ticks_callback` installed as `kws.on_ticks`; delegate was the real `core.kite_depth_ws.on_ticks`.
+- Mandatory live-shaped enqueue traversal: tick `>=1`, depth `>=1`, runtime `>=1`, diagnostic markers `>=1`.
+- First defect repaired: `tick_store._enqueue_row` called `init_ticks()` on the callback thread. Schema initialization now remains in worker-owned `_write_rows`.
+- Callback-thread tripwire result: SQLite `0`, persistent-store `0`, scoped filesystem `0`.
+- Runtime negative controls: injected SQLite, store, and filesystem calls were each detected with category and target.
+- Worker allowance: accepted tick/depth/runtime work drained through the existing bounded workers; worker calls were not classified as callback violations.
+- Callback entries/exits: `1/1`; callback exceptions: `0`; duration: below 5 seconds.
+- Optional observation/constituent/MEG/candidate hooks remain governed by their existing campaign configuration and were not enabled by this fixture.
+
 Cutover unresolved count for certification: non-zero. The implementation has
 bounded worker routing, but this record does not claim live readiness.
 

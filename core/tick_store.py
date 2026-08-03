@@ -788,7 +788,6 @@ def _ensure_flush_thread() -> None:
 
 def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float | None, float, str]) -> bool:
     global _WRITE_ENQUEUE_COUNT, _QUEUE_HIGH_WATER, _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS
-    init_ticks()
     with _WRITE_QUEUE_LOCK:
         if not _ACCEPTING_WRITES:
             _AUDIT_COUNTERS["writes_rejected_after_shutdown"] += 1

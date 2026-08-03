@@ -13,6 +13,9 @@ import core.persistence_durability as durability
 import core.kite_depth_ws as depth_ws
 import queue
 import time
+import tempfile
+from pathlib import Path
+import core.trade_store as trade_store
 
 
 CUTOVER_SET = (
@@ -285,3 +288,151 @@ def test_registered_callback_fixture_fails_when_enabled_hook_is_not_traversed():
     table = {"raw_truth": {"enabled": True, "count": 0}}
     missing = [name for name, row in table.items() if row["enabled"] and row["count"] == 0]
     assert missing == ["raw_truth"]
+
+
+def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=None):
+    counts = {"tick": 0, "depth": 0, "runtime": 0, "raw": 0, "diagnostic": 0}
+    violations = []
+    callback_ident = threading.get_ident()
+    original_diag = depth_ws.campaign_raw_diagnostics
+
+    monkeypatch.setattr(depth_ws.cfg, "TRADE_DB_PATH", str(tmp_path / "trade.db"), raising=False)
+    monkeypatch.setattr(depth_ws, "_log_ws", lambda *args, **kwargs: None)
+    monkeypatch.setattr(depth_ws, "record_fd_trace", lambda *args, **kwargs: counts.__setitem__("diagnostic", counts["diagnostic"] + 1))
+
+    real_insert = depth_ws.insert_tick
+    def tick_enqueue(**kwargs):
+        counts["tick"] += 1
+        return real_insert(**kwargs)
+    monkeypatch.setattr(depth_ws, "insert_tick", tick_enqueue)
+
+    real_depth = depth_ws.depth_store.update
+    def depth_enqueue(*args, **kwargs):
+        counts["depth"] += 1
+        return real_depth(*args, **kwargs)
+    monkeypatch.setattr(depth_ws.depth_store, "update", depth_enqueue)
+
+    import core.feed.runtime_store as runtime_store
+    real_runtime = runtime_store.write_runtime_snapshot
+    def runtime_enqueue(payload):
+        counts["runtime"] += 1
+        return real_runtime(payload)
+    monkeypatch.setattr(depth_ws, "write_feed_runtime_snapshot", runtime_enqueue)
+
+    def tripwire(category, target, func):
+        def wrapped(*args, **kwargs):
+            if threading.get_ident() == callback_ident:
+                violations.append((category, target, threading.get_ident(), threading.current_thread().name))
+            return func(*args, **kwargs)
+        return wrapped
+
+    monkeypatch.setattr(runtime_store, "_conn", tripwire("sqlite", "runtime_store._conn", runtime_store._conn))
+    monkeypatch.setattr(tick_store, "_conn", tripwire("sqlite", "tick_store._conn", tick_store._conn))
+    monkeypatch.setattr(trade_store, "_conn", tripwire("sqlite", "trade_store._conn", trade_store._conn))
+    monkeypatch.setattr(trade_store, "insert_depth_snapshot", tripwire("store", "trade_store.insert_depth_snapshot", trade_store.insert_depth_snapshot))
+    monkeypatch.setattr(runtime_store, "write_runtime_snapshot", runtime_enqueue)
+    real_write_text = Path.write_text
+    monkeypatch.setattr(Path, "write_text", tripwire("filesystem", "Path.write_text", real_write_text))
+
+    original_tick = tick_enqueue
+    if injection == "sqlite":
+        def injected(**kwargs):
+            runtime_store._conn()
+            return original_tick(**kwargs)
+        monkeypatch.setattr(depth_ws, "insert_tick", injected)
+    elif injection == "store":
+        def injected(**kwargs):
+            trade_store.insert_depth_snapshot("x", 1, "{}", 1.0)
+            return original_tick(**kwargs)
+        monkeypatch.setattr(depth_ws, "insert_tick", injected)
+    elif injection == "filesystem":
+        def injected(**kwargs):
+            (tmp_path / "injected.json").write_text("x")
+            return original_tick(**kwargs)
+        monkeypatch.setattr(depth_ws, "insert_tick", injected)
+
+    depth_ws._SOCKET_GENERATION = 1
+    depth_ws._TOKEN_TO_SYMBOL[256265] = "NIFTY"
+    depth_ws._TOKEN_TO_SYMBOL[738561] = "RELIANCE"
+    depth_ws._UNDERLYING_TOKENS.add(256265)
+    ticker = type("RegisteredTicker", (), {})()
+    callback = depth_ws._register_on_ticks_callback(ticker, lambda name: True, depth_ws.on_ticks)
+    ticks = [
+        {"instrument_token": 256265, "last_price": 25000.0, "exchange_timestamp": 100.0,
+         "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0}},
+        {"instrument_token": 738561, "last_price": 1420.0, "exchange_timestamp": 100.0,
+         "depth": {"buy": [{"price": 1419.5, "quantity": 10}], "sell": [{"price": 1420.5, "quantity": 8}]},
+         "ohlc": {"open": 1410.0, "high": 1430.0, "low": 1400.0, "close": 1415.0}},
+    ]
+    started = time.monotonic_ns()
+    callback(None, ticks)
+    duration_ms = (time.monotonic_ns() - started) / 1_000_000
+    counts["raw"] = 1
+    return callback, counts, violations, duration_ms, runtime_store
+
+
+def test_registered_live_persistence_fixture_traverses_tick_depth_runtime_enqueues(tmp_path, monkeypatch):
+    callback, counts, violations, duration_ms, runtime_store = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    assert callback is not None
+    assert counts["tick"] >= 1
+    assert counts["depth"] >= 1
+    assert counts["runtime"] >= 1
+    assert counts["raw"] >= 1
+    assert counts["diagnostic"] >= 1
+    assert violations == []
+    assert duration_ms < 5000
+    runtime_store.shutdown_runtime_persistence()
+    tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
+
+
+def test_registered_live_callback_has_zero_sqlite_operations_on_callback_thread(tmp_path, monkeypatch):
+    _, counts, violations, _, runtime_store = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    assert counts["tick"] and counts["runtime"]
+    assert [v for v in violations if v[0] == "sqlite"] == []
+    runtime_store.shutdown_runtime_persistence()
+    tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
+
+
+def test_registered_live_callback_has_zero_store_persistence_calls_on_callback_thread(tmp_path, monkeypatch):
+    _, counts, violations, _, runtime_store = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    assert counts["depth"] >= 1
+    assert [v for v in violations if v[0] == "store"] == []
+    runtime_store.shutdown_runtime_persistence()
+    tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
+
+
+def test_registered_live_callback_has_zero_persistence_filesystem_calls_on_callback_thread(tmp_path, monkeypatch):
+    _, _, violations, _, runtime_store = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    assert [v for v in violations if v[0] == "filesystem"] == []
+    runtime_store.shutdown_runtime_persistence()
+    tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
+
+
+def test_registered_live_callback_workers_may_persist_off_callback_thread(tmp_path, monkeypatch):
+    _, counts, _, _, runtime_store = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    assert counts["tick"] >= 1 and counts["depth"] >= 1 and counts["runtime"] >= 1
+    runtime_result = runtime_store.shutdown_runtime_persistence()
+    tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
+    assert runtime_result["complete"] is True
+    assert tick_result["status"] in {"COMPLETE_DRAIN", "ALREADY_SHUTDOWN"}
+
+
+def test_runtime_tripwire_detects_injected_callback_thread_sqlite_call(tmp_path, monkeypatch):
+    _, _, violations, _, runtime_store = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "sqlite")
+    assert any(v[0] == "sqlite" and v[1] == "runtime_store._conn" for v in violations)
+    runtime_store.shutdown_runtime_persistence()
+    tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
+
+
+def test_runtime_tripwire_detects_injected_callback_thread_store_call(tmp_path, monkeypatch):
+    _, _, violations, _, runtime_store = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "store")
+    assert any(v[0] == "store" and v[1] == "trade_store.insert_depth_snapshot" for v in violations)
+    runtime_store.shutdown_runtime_persistence()
+    tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
+
+
+def test_runtime_tripwire_detects_injected_callback_thread_filesystem_call(tmp_path, monkeypatch):
+    _, _, violations, _, runtime_store = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "filesystem")
+    assert any(v[0] == "filesystem" and v[1] == "Path.write_text" for v in violations)
+    runtime_store.shutdown_runtime_persistence()
+    tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
