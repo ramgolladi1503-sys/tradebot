@@ -15,6 +15,7 @@ from core.tradebot_rag_operations import (
     build_lock_path,
     doctor_index,
     exclusive_build_lock,
+    read_only_index_status,
 )
 
 
@@ -109,6 +110,51 @@ def test_old_lock_owned_by_live_local_process_is_not_reclaimed(tmp_path: Path) -
         build_index_safely(tmp_path, index, stale_lock_seconds=1)
 
     assert lock.exists()
+
+
+def test_read_only_status_reports_inventory(tmp_path: Path) -> None:
+    index = _build_fixture(tmp_path)
+
+    status = read_only_index_status(index)
+
+    assert status["exists"] is True
+    assert status["readable"] is True
+    assert status["document_count"] == 2
+    assert status["chunk_count"] >= 2
+    assert status["build_lock_present"] is False
+
+
+def test_read_only_status_missing_index_does_not_create_it(tmp_path: Path) -> None:
+    index = tmp_path / "missing.sqlite"
+
+    status = read_only_index_status(index)
+
+    assert status == {"exists": False, "index_path": str(index), "readable": False}
+    assert not index.exists()
+
+
+def test_read_only_status_does_not_repair_fts_row_loss(tmp_path: Path) -> None:
+    index = _build_fixture(tmp_path)
+    with sqlite3.connect(index) as connection:
+        fts_enabled = connection.execute(
+            "SELECT value FROM rag_meta WHERE key = 'fts_enabled'"
+        ).fetchone()[0]
+        if fts_enabled != "1":
+            pytest.skip("SQLite FTS5 unavailable")
+        chunk_count = int(connection.execute("SELECT COUNT(*) FROM rag_chunks").fetchone()[0])
+        connection.execute(
+            "DELETE FROM rag_chunks_fts WHERE rowid = (SELECT MIN(id) FROM rag_chunks)"
+        )
+        connection.commit()
+
+    status = read_only_index_status(index)
+
+    with sqlite3.connect(index) as connection:
+        remaining_fts = int(connection.execute("SELECT COUNT(*) FROM rag_chunks_fts").fetchone()[0])
+
+    assert status["readable"] is True
+    assert status["chunk_count"] == chunk_count
+    assert remaining_fts == chunk_count - 1
 
 
 def test_doctor_accepts_healthy_index(tmp_path: Path) -> None:
