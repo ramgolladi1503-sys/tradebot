@@ -55,6 +55,22 @@ def test_fresh_lock_blocks_nested_build(tmp_path: Path) -> None:
     assert not build_lock_path(index).exists()
 
 
+def test_failed_lock_metadata_write_removes_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    index = tmp_path / ".runtime" / "rag.sqlite"
+    lock = build_lock_path(index)
+
+    def fail_write(_descriptor: int, _payload: bytes) -> int:
+        raise OSError("simulated_lock_write_failure")
+
+    monkeypatch.setattr("core.tradebot_rag_operations.os.write", fail_write)
+
+    with pytest.raises(OSError, match="simulated_lock_write_failure"):
+        with exclusive_build_lock(index):
+            pytest.fail("lock acquisition should not complete")
+
+    assert not lock.exists()
+
+
 def test_stale_lock_is_recovered(tmp_path: Path) -> None:
     _write(tmp_path / "README.md", "# TradeBot\nRecovered build evidence\n")
     index = tmp_path / ".runtime" / "rag.sqlite"
