@@ -32,8 +32,16 @@ EXCLUDED_DIR_NAMES = frozenset(
         "logs",
         "data",
         "models",
+        "external_local_dirs",
     }
 )
+EXCLUDED_FILE_STEMS = frozenset({
+    "process_memory_raw",
+    "environment_raw",
+    "credentials_raw",
+    "secrets_raw",
+    "tokens_raw",
+})
 DEFAULT_MAX_FILE_BYTES = 2_000_000
 DEFAULT_CHUNK_CHARS = 1_800
 DEFAULT_OVERLAP_LINES = 3
@@ -128,6 +136,8 @@ def _is_allowed_file(
     if path.is_symlink() or not path.is_file():
         return False
     if path.suffix.lower() not in SUPPORTED_SUFFIXES:
+        return False
+    if path.stem.lower() in EXCLUDED_FILE_STEMS:
         return False
     if any(part in EXCLUDED_DIR_NAMES for part in relative_parts):
         return False
@@ -324,6 +334,14 @@ def _ensure_schema(connection: sqlite3.Connection) -> bool:
             "CREATE VIRTUAL TABLE IF NOT EXISTS rag_chunks_fts "
             "USING fts5(text, path UNINDEXED, section UNINDEXED, tokenize='porter unicode61')"
         )
+        chunk_count = int(connection.execute("SELECT COUNT(*) FROM rag_chunks").fetchone()[0])
+        fts_count = int(connection.execute("SELECT COUNT(*) FROM rag_chunks_fts").fetchone()[0])
+        if fts_count != chunk_count:
+            connection.execute("DELETE FROM rag_chunks_fts")
+            connection.execute(
+                "INSERT INTO rag_chunks_fts(rowid, text, path, section) "
+                "SELECT id, text, path, section FROM rag_chunks"
+            )
     except sqlite3.OperationalError:
         fts_enabled = False
     connection.execute(
@@ -579,11 +597,11 @@ def search_index(
         )
         path_overlap = len(query_token_set & set(_query_tokens(row["path"]))) / max(1, len(query_token_set))
         score = (
-            0.48 * position_score
-            + 0.34 * coverage
+            0.45 * position_score * coverage
+            + 0.40 * coverage
             + 0.08 * exact_phrase
-            + 0.07 * identifier_match
-            + 0.03 * path_overlap
+            + 0.05 * identifier_match
+            + 0.02 * path_overlap
         )
         score = max(0.0, min(1.0, score))
         scored.append(
@@ -630,6 +648,21 @@ def _best_excerpt(hit: SearchHit, query_tokens: set[str], *, max_chars: int = 42
     return compact
 
 
+def _has_minimum_lexical_support(query: str, hit: SearchHit) -> bool:
+    query_tokens = set(_query_tokens(query))
+    if not query_tokens:
+        return False
+    searchable_tokens = set(_query_tokens(f"{hit.path}\n{hit.section}\n{hit.text}"))
+    overlap_count = len(query_tokens & searchable_tokens)
+    if len(query_tokens) == 1:
+        return overlap_count == 1
+    if overlap_count < 2:
+        return False
+    if len(query_tokens) >= 4:
+        return overlap_count / len(query_tokens) >= 0.30
+    return True
+
+
 def synthesize_answer(
     query: str,
     hits: Sequence[SearchHit],
@@ -639,7 +672,11 @@ def synthesize_answer(
 ) -> GroundedAnswer:
     """Create an extractive answer that cannot introduce unsupported facts."""
 
-    usable = [hit for hit in hits if hit.score >= min_score]
+    usable = [
+        hit
+        for hit in hits
+        if hit.score >= min_score and _has_minimum_lexical_support(query, hit)
+    ]
     if not usable:
         return GroundedAnswer(
             query=query,
