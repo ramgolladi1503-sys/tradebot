@@ -4,6 +4,7 @@ import time
 import json
 import threading
 from dataclasses import dataclass, asdict
+from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime, timezone
 from collections import deque
@@ -153,16 +154,21 @@ def _flush_batch_size() -> int:
         return 1000
 
 
+@contextmanager
 def _conn():
     db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
     conn = sqlite3.connect(str(db_path), timeout=30.0)
     try:
-        conn.execute("PRAGMA busy_timeout=30000")
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-    except Exception:
-        pass
-    return conn
+        try:
+            conn.execute("PRAGMA busy_timeout=30000")
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+        except Exception:
+            pass
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def _tick_columns(conn: sqlite3.Connection) -> set[str]:
