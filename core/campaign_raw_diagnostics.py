@@ -37,7 +37,14 @@ _STATE = {
     "last_on_ticks_exit_monotonic_ns": None,
     "maximum_callback_duration_ms": 0.0,
     "queue_drop_count": 0,
+    "reactor_heartbeat_count": 0,
+    "maximum_reactor_drift_ms": 0.0,
+    "process_heartbeat_count": 0,
+    "ping_count": 0,
+    "pong_count": 0,
 }
+_PROCESS_THREAD: threading.Thread | None = None
+_REACTOR_CALL = None
 
 
 def _enabled() -> bool:
@@ -93,6 +100,68 @@ def start() -> bool:
             _THREAD = threading.Thread(target=_writer, name="campaign-diagnostic-writer", daemon=True)
             _THREAD.start()
     return True
+
+
+def observe_protocol(event_type: str, *, code: object = None, reason: object = None) -> None:
+    if not _enabled():
+        return
+    start()
+    payload = {**_identity(), "event_type": event_type, "monotonic_ns": time.monotonic_ns(),
+               "close_code": code, "close_reason_category": str(reason or "")[:80]}
+    _enqueue("protocol_lifecycle_timeline.jsonl", payload)
+
+
+def start_process_heartbeat() -> None:
+    global _PROCESS_THREAD
+    if not _enabled() or (_PROCESS_THREAD and _PROCESS_THREAD.is_alive()):
+        return
+    start()
+    def loop() -> None:
+        while not _STOP.wait(1.0):
+            with _LOCK:
+                _STATE["process_heartbeat_count"] += 1
+                payload = {**_identity(), **_STATE, "event_type": "process_heartbeat",
+                           "process_heartbeat_monotonic_ns": time.monotonic_ns(),
+                           "diagnostic_writer_alive": bool(_THREAD and _THREAD.is_alive()),
+                           "diagnostic_queue_depth": _QUEUE.qsize(),
+                           "diagnostic_queue_capacity": _QUEUE.maxsize}
+            _enqueue("process_heartbeat_timeline.jsonl", payload)
+    _PROCESS_THREAD = threading.Thread(target=loop, name="campaign-process-heartbeat", daemon=True)
+    _PROCESS_THREAD.start()
+
+
+def start_reactor_heartbeat(reactor: object) -> None:
+    global _REACTOR_CALL
+    if not _enabled() or reactor is None:
+        return
+    start()
+    expected = time.monotonic()
+    def beat() -> None:
+        nonlocal expected
+        if _STOP.is_set():
+            return
+        actual = time.monotonic()
+        drift_ms = max(0.0, (actual - expected) * 1000.0)
+        with _LOCK:
+            _STATE["reactor_heartbeat_count"] += 1
+            _STATE["maximum_reactor_drift_ms"] = max(float(_STATE["maximum_reactor_drift_ms"]), drift_ms)
+            payload = {**_identity(), **_STATE, "event_type": "reactor_heartbeat",
+                       "scheduled_monotonic_ns": int(expected * 1_000_000_000),
+                       "executed_monotonic_ns": time.monotonic_ns(),
+                       "reactor_drift_ms": drift_ms, "reactor_running": bool(getattr(reactor, "running", True)),
+                       "reactor_thread_name": threading.current_thread().name,
+                       "reactor_thread_ident": threading.get_ident()}
+        _enqueue("reactor_heartbeat_timeline.jsonl", payload)
+        expected = expected + 1.0
+        try:
+            global _REACTOR_CALL
+            _REACTOR_CALL = reactor.callLater(max(0.0, expected - time.monotonic()), beat)
+        except Exception:
+            return
+    try:
+        _REACTOR_CALL = reactor.callLater(1.0, beat)
+    except Exception:
+        _REACTOR_CALL = None
 
 
 def observe_raw_message(payload: object, is_binary: bool) -> None:
@@ -160,6 +229,14 @@ def shutdown() -> None:
     if _THREAD is None:
         return
     _STOP.set()
+    if _REACTOR_CALL is not None:
+        try:
+            if _REACTOR_CALL.active():
+                _REACTOR_CALL.cancel()
+        except Exception:
+            pass
+    if _PROCESS_THREAD is not None:
+        _PROCESS_THREAD.join(timeout=2.0)
     _THREAD.join(timeout=2.0)
 
 

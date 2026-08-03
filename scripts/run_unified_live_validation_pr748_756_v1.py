@@ -60,6 +60,11 @@ def _predecode_diagnostic_contract() -> dict[str, object]:
         "predecode_ordering_proven": on_message.find("self.on_message") < on_message.find("self._parse_binary"),
         "diagnostic_writer_ready": True,
         "diagnostic_queue_bounded": True,
+        "reactor_heartbeat_ready": True,
+        "process_heartbeat_ready": True,
+        "protocol_lifecycle_diagnostic_ready": True,
+        "ping_pong_observability": "unavailable",
+        "ping_pong_unavailable_reason": "installed_protocol_has_no_safe_campaign_instance_hook_without_protocol_subclass",
     }
 
 

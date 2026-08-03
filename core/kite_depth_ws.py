@@ -7613,6 +7613,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_connect(ws, response):
         global _STALE_STRIKES, _WARMUP_PENDING, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
+            campaign_raw_diagnostics.observe_protocol("open")
+            campaign_raw_diagnostics.start_process_heartbeat()
+            campaign_raw_diagnostics.start_reactor_heartbeat(getattr(getattr(ws, "factory", None), "reactor", None))
             if not _generation_is_current("on_connect"):
                 return
             _clear_last_disconnected_info()
@@ -7682,6 +7685,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         if not _generation_is_current("on_error"):
             return
+        campaign_raw_diagnostics.observe_protocol("error", code=code, reason=reason)
         reason_text = str(reason)
         code_int = None
         try:
@@ -7784,6 +7788,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         if not _generation_is_current("on_close"):
             return
+        campaign_raw_diagnostics.observe_protocol("close", code=code, reason=reason)
         code_int = None
         try:
             code_int = int(code) if code is not None else None
