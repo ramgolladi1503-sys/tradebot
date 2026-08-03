@@ -28,7 +28,11 @@ jobs:
         shell: bash
         run: |
           python tools/apply_pr763_offline_repairs.py
-          if git diff --quiet; then
+          if git diff --quiet -- \
+            core/feed/runtime_store.py \
+            tests/test_pr763_callback_persistence_cutover_certification.py \
+            tests/test_pr763_offline_remaining_gates.py \
+            tools/pr763_gate1_structured_evidence.py; then
             echo "pushed=false" >> "$GITHUB_OUTPUT"
           else
             git config user.name "github-actions[bot]"
