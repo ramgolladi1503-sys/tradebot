@@ -30,7 +30,7 @@ Status: `GATE_1A_REGISTERED_WRAPPER_TRAVERSAL_PASS`
 
 ## Gate 1B: live-shaped registered callback persistence tripwire
 
-Status: `GATE_1_REAL_CALLBACK_PERSISTENCE_TRIPWIRE_PASS`
+Status: `REAL_CALLBACK_PERSISTENCE_GATE_FAILED`
 
 - Registered wrapper: `core/kite_depth_ws._register_on_ticks_callback` installed as `kws.on_ticks`; delegate was the real `core.kite_depth_ws.on_ticks`.
 - Mandatory live-shaped enqueue traversal: tick `>=1`, depth `>=1`, runtime `>=1`, diagnostic markers `>=1`.
@@ -55,7 +55,17 @@ source sets `UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE` and
 `MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE` to true; optional observer details
 remain configuration-governed.
 
-Final Gate-1 worker reconciliation: `test_registered_callback_all_persistence_workers_are_off_thread_and_reconciled` captures callback and tick/depth/runtime worker IDs and names, asserts every worker differs from the callback thread, requires accepted work to persist with zero pending envelopes and zero worker failures, and requires complete shutdown/drain for all three authorities. The full dedicated certification module passes `32` tests.
+The previous closure claim is withdrawn. The dedicated module passed its
+existing tests, but those tests do not retain exact machine-readable worker
+identities, per-authority accepted/persisted deltas, numeric callback timing,
+or executed launcher effective hook state. They also do not provide dedicated
+tick/runtime/event negative controls, SQLite operation-level proxy coverage,
+or scoped `builtins.open`/`Path.open` coverage.
+
+Machine-readable evidence: `docs/pr763_gate1_evidence_20260803.json`.
+
+Gate 1 remains blocked until every missing control listed in that artifact is
+implemented and independently passing.
 
 Cutover unresolved count for certification: non-zero. The implementation has
 bounded worker routing, but this record does not claim live readiness.

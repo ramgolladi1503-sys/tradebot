@@ -1,0 +1,28 @@
+{
+  "certified_sha": "b5e653252b5ad7d5d491c3a419d4297899af8296",
+  "verdict": "REAL_CALLBACK_PERSISTENCE_GATE_FAILED",
+  "live_started": false,
+  "observed": {
+    "registered_wrapper_tests": 32,
+    "callback_thread": "not retained as machine-readable evidence",
+    "worker_threads": {
+      "tick": "not retained as machine-readable evidence",
+      "depth": "not retained as machine-readable evidence",
+      "runtime": "not retained as machine-readable evidence"
+    }
+  },
+  "missing_controls": [
+    "dedicated tick synchronous-writer negative control",
+    "dedicated runtime synchronous-writer negative control",
+    "dedicated event JSON-writer negative control",
+    "SQLite operation proxy for execute/executemany/commit/rollback/close",
+    "scoped builtins.open or Path.open negative control",
+    "exact accepted/persisted pre-post deltas for tick/depth/runtime",
+    "executed launcher effective optional-hook state",
+    "retained numeric callback duration",
+    "per-authority machine-readable worker identities"
+  ],
+  "test_commands": {
+    "dedicated_module": "passed previously, but does not satisfy the missing-control requirements"
+  }
+}
