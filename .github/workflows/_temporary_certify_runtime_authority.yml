@@ -1,0 +1,153 @@
+name: Temporary Certify Runtime Authority Cutover
+
+on:
+  push:
+    branches:
+      - post-pr763/runtime-authority-cutover-v1
+
+permissions:
+  contents: write
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .
+      TRADEBOT_READ_ONLY: "true"
+      EXECUTION_MODE: "SIM"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: post-pr763/runtime-authority-cutover-v1
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Remove temporary machinery from tested tree
+        run: |
+          TESTED_PARENT="$(git rev-parse HEAD)"
+          echo "$TESTED_PARENT" > /tmp/runtime-authority-tested-parent.txt
+          git rm \
+            .github/workflows/_temporary_certify_runtime_authority.yml \
+            tools/_trigger_runtime_authority_certification.txt
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pandas numpy python-dotenv requests kiteconnect holidays pyarrow
+
+      - name: Compile modified authority paths
+        id: compile
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python -m py_compile \
+            core/canonical_execution_decision.py \
+            core/runtime_authority_contract.py \
+            core/ranking_authority.py \
+            core/runtime_authority_cutover.py \
+            core/opportunity_engine.py \
+            core/execution_router.py \
+            core/runtime_snapshot_producer.py \
+            dashboard/ui/table_model.py \
+            2>&1 | tee /tmp/runtime-authority-compile.log
+
+      - name: Run focused authority proof
+        id: tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pytest -q -o addopts='' \
+            tests/test_canonical_execution_decision.py \
+            tests/test_runtime_authority_contract.py \
+            tests/test_ranking_authority.py \
+            tests/test_runtime_authority_cutover_v1.py \
+            tests/test_manual_approval_enforcement.py \
+            tests/test_opportunity_engine.py \
+            2>&1 | tee /tmp/runtime-authority-tests.log
+
+      - name: Verify PR763 protected paths
+        id: scope
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python - <<'PY' 2>&1 | tee /tmp/runtime-authority-scope.log
+          import subprocess
+          base = '1241418cafbefba8fd3d1142e5ae578d9b97cd70'
+          changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+          protected = (
+              'core/market_data.py', 'core/kite_depth_ws.py', 'core/feed/',
+              'core/feed_runtime.py', 'core/feed_health_truth.py',
+              'core/feed_hold_gate.py', 'core/recovery_state_machine.py',
+              'core/kite_ws_subprocess.py', 'core/market_event_graph',
+              'core/tick_store.py', 'core/depth_store.py',
+              'core/persistence_durability.py', 'strategies/',
+          )
+          bad = [path for path in changed if any(path == prefix or path.startswith(prefix) for prefix in protected)]
+          if bad:
+              raise SystemExit(f'PROTECTED_PR763_PATH_CHANGED:{bad}')
+          print(f'changed_paths={len(changed)} protected_paths_unchanged=true')
+          PY
+
+      - name: Validate diff
+        id: diff
+        continue-on-error: true
+        run: git diff --check 1241418cafbefba8fd3d1142e5ae578d9b97cd70 HEAD 2>&1 | tee /tmp/runtime-authority-diff.log
+
+      - name: Write and commit certification evidence
+        if: always()
+        run: |
+          mkdir -p docs/test-reports
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          outcomes = {
+              'compile': '${{ steps.compile.outcome }}',
+              'tests': '${{ steps.tests.outcome }}',
+              'scope': '${{ steps.scope.outcome }}',
+              'diff': '${{ steps.diff.outcome }}',
+          }
+          passed = all(value == 'success' for value in outcomes.values())
+          payload = {
+              'schema_version': 1,
+              'verdict': 'PASS_RUNTIME_AUTHORITY_CUTOVER_FOCUSED_CERTIFICATION' if passed else 'FAILED_RUNTIME_AUTHORITY_CUTOVER_FOCUSED_CERTIFICATION',
+              'passed': passed,
+              'tested_parent_sha': Path('/tmp/runtime-authority-tested-parent.txt').read_text().strip(),
+              'pr763_base_sha': '1241418cafbefba8fd3d1142e5ae578d9b97cd70',
+              'outcomes': outcomes,
+              'read_only': True,
+              'order_authority': False,
+              'broker_write_authority': False,
+              'logs': {},
+          }
+          for name in ('compile', 'tests', 'scope', 'diff'):
+              path = Path(f'/tmp/runtime-authority-{name}.log')
+              text = path.read_text(errors='replace') if path.exists() else ''
+              payload['logs'][name] = text[-20000:]
+          semantic = {key: payload[key] for key in ('schema_version','verdict','passed','tested_parent_sha','pr763_base_sha','outcomes','read_only','order_authority','broker_write_authority')}
+          payload['semantic_sha256'] = hashlib.sha256(json.dumps(semantic, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+          out = Path('docs/test-reports/runtime_authority_cutover_focused_certification.json')
+          out.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n')
+          md = Path('docs/test-reports/runtime_authority_cutover_focused_certification.md')
+          md.write_text(
+              '# Runtime Authority Cutover Focused Certification\n\n'
+              f"- Verdict: `{payload['verdict']}`\n"
+              f"- Tested parent SHA: `{payload['tested_parent_sha']}`\n"
+              f"- Semantic SHA-256: `{payload['semantic_sha256']}`\n"
+              f"- Read only: `{payload['read_only']}`\n"
+              f"- Order authority: `{payload['order_authority']}`\n\n"
+              '## Outcomes\n\n' + '\n'.join(f'- `{key}`: `{value}`' for key, value in outcomes.items()) + '\n'
+          )
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "evidence: certify runtime authority cutover"
+          git push origin HEAD:post-pr763/runtime-authority-cutover-v1
