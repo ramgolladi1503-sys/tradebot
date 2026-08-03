@@ -1,0 +1,40 @@
+name: Temporary Restore PR763 Runtime Artifacts
+
+on:
+  push:
+    branches:
+      - post-pr763/runtime-authority-cutover-v1
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: post-pr763/runtime-authority-cutover-v1
+          fetch-depth: 0
+          lfs: false
+
+      - name: Restore exact frozen-base runtime files
+        run: |
+          git checkout 1241418cafbefba8fd3d1142e5ae578d9b97cd70 -- \
+            runtime/strategy_validation/regime_timeline.jsonl \
+            runtime/strategy_validation/resolved_option_ticks_20260702.parquet
+
+      - name: Remove temporary machinery and commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm \
+            .github/workflows/_temporary_restore_pr763_runtime_artifacts.yml \
+            tools/_trigger_restore_pr763_runtime_artifacts.txt
+          git add \
+            runtime/strategy_validation/regime_timeline.jsonl \
+            runtime/strategy_validation/resolved_option_ticks_20260702.parquet
+          git diff --cached --check
+          git commit -m "chore: restore PR763 runtime artifacts unchanged"
+          git push origin HEAD:post-pr763/runtime-authority-cutover-v1
