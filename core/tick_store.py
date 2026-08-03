@@ -152,7 +152,7 @@ def _flush_batch_size() -> int:
 
 def _conn():
     db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
-    conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
+    conn = sqlite3.connect(str(db_path), timeout=30.0)
     try:
         conn.execute("PRAGMA busy_timeout=30000")
         conn.execute("PRAGMA journal_mode=WAL")

@@ -1,0 +1,24 @@
+# PR #763 Offline Persistence Certification
+
+This is an offline certification record. No broker, Kite, live WebSocket, or
+market-session process was started.
+
+| Gate | Tests | Result | Measured values | Remaining defect |
+| --- | --- | --- | --- | --- |
+| 1. Real callback tripwire | `test_callback_reachable_sources_have_no_direct_persistence_calls` | PARTIAL | 0 direct forbidden calls in `on_ticks` AST | Full registered-hook runtime tripwire not implemented |
+| 2. Static guard | `test_static_guard_detects_injected_forbidden_call` | PASS | Injected `sqlite3.connect` detected | Guard scope remains narrow |
+| 3. Envelopes/sequences | `test_runtime_envelope_is_deeply_immutable` | PARTIAL | Runtime nested mutation blocked | Tick/depth sequence envelopes not proven |
+| 4. Worker ownership | `test_runtime_worker_is_not_simulated_reactor_thread` | PARTIAL | Worker thread differs from reactor | Connection/filesystem ownership matrix absent |
+| 5. Slow-store matrix | focused worker tests | PARTIAL | Depth/runtime enqueue behavior tested | Full real-callback matrix and drift measurements absent |
+| 6. Saturation/durability | existing bounded queues | FAIL | No complete per-authority saturation proof | Aggregate fail-closed execution state absent |
+| 7. Read-after-write/restart | semantics document | PARTIAL | In-memory source documented | Required restart reconstruction tests absent |
+| 8. Shutdown/post-seal | focused drain tests | PARTIAL | Normal depth/runtime drain covered | Timeout and post-seal evidence mutation proof absent |
+
+Cutover unresolved count for certification: non-zero. The implementation has
+bounded worker routing, but this record does not claim live readiness.
+
+## Safety
+
+`TRADEBOT_READ_ONLY=true` was preserved. No broker API, order action,
+execution enablement, feed/MEG/strategy/risk/subscription change, or evidence
+mutation was performed.

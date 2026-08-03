@@ -42,7 +42,7 @@ def _db_path() -> Path:
 
 
 def _conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(_db_path()), timeout=30.0, check_same_thread=False)
+    conn = sqlite3.connect(str(_db_path()), timeout=30.0)
     try:
         conn.execute("PRAGMA busy_timeout=30000")
         conn.execute("PRAGMA journal_mode=WAL")
