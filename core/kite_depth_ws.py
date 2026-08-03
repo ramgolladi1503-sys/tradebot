@@ -20,6 +20,7 @@ from core.tick_store import (
     get_ltp,
     get_max_tick_epoch,
     insert_tick,
+    last_tick_epoch,
     record_tick_epoch,
     write_enqueue_count,
     write_flush_count,
@@ -3195,20 +3196,9 @@ def _coerce_epoch(value) -> float | None:
 
 
 def _latest_db_tick_epoch() -> float | None:
-    db_path = Path(str(getattr(cfg, "TRADE_DB_PATH", "") or "")).expanduser()
-    if not db_path.exists():
-        return None
-    try:
-        with sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False) as conn:
-            conn.execute("PRAGMA busy_timeout=30000")
-            try:
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA synchronous=NORMAL")
-            except Exception:
-                pass
-            return _coerce_epoch(get_max_tick_epoch(conn))
-    except Exception:
-        return None
+    # Callback-time health snapshots must use the in-memory watermark. Reading
+    # SQLite here would reintroduce reactor persistence work into on_ticks.
+    return _coerce_epoch(last_tick_epoch())
 
 
 def _ws_connected_state() -> bool | None:

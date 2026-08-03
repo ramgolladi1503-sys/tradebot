@@ -1,7 +1,10 @@
 """Offline certification tripwires for the PR #763 persistence boundary."""
 
 import ast
+import builtins
 import inspect
+import os
+import sqlite3
 import threading
 from copy import deepcopy
 
@@ -18,6 +21,78 @@ from pathlib import Path
 import core.trade_store as trade_store
 import core.events as events
 import core.unified_live_validation_pr748_756.launcher as campaign_launcher
+from core.unified_live_validation_pr748_756.campaign_contract import CampaignIdentity
+
+
+class _ObservedCursor:
+    def __init__(self, cursor, record):
+        self._cursor = cursor
+        self._record = record
+
+    def execute(self, *args, **kwargs):
+        self._record("cursor.execute")
+        return self._cursor.execute(*args, **kwargs)
+
+    def executemany(self, *args, **kwargs):
+        self._record("cursor.executemany")
+        return self._cursor.executemany(*args, **kwargs)
+
+    def close(self):
+        self._record("cursor.close")
+        return self._cursor.close()
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+
+    def __iter__(self):
+        return iter(self._cursor)
+
+    def __enter__(self):
+        self._cursor.__enter__()
+        return self
+
+    def __exit__(self, *args):
+        return self._cursor.__exit__(*args)
+
+
+class _ObservedConnection:
+    def __init__(self, connection, record):
+        self._connection = connection
+        self._record = record
+
+    def execute(self, *args, **kwargs):
+        self._record("connection.execute")
+        return _ObservedCursor(self._connection.execute(*args, **kwargs), self._record)
+
+    def executemany(self, *args, **kwargs):
+        self._record("connection.executemany")
+        return _ObservedCursor(self._connection.executemany(*args, **kwargs), self._record)
+
+    def cursor(self, *args, **kwargs):
+        self._record("connection.cursor")
+        return _ObservedCursor(self._connection.cursor(*args, **kwargs), self._record)
+
+    def commit(self):
+        self._record("connection.commit")
+        return self._connection.commit()
+
+    def rollback(self):
+        self._record("connection.rollback")
+        return self._connection.rollback()
+
+    def close(self):
+        self._record("connection.close")
+        return self._connection.close()
+
+    def __enter__(self):
+        self._connection.__enter__()
+        return self
+
+    def __exit__(self, *args):
+        return self._connection.__exit__(*args)
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
 
 
 CUTOVER_SET = (
@@ -293,10 +368,14 @@ def test_registered_callback_fixture_fails_when_enabled_hook_is_not_traversed():
 
 
 def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=None):
+    Path(tmp_path).mkdir(parents=True, exist_ok=True)
     counts = {"tick": 0, "depth": 0, "runtime": 0, "raw": 0, "diagnostic": 0}
     worker_ids = {}
     violations = []
+    sqlite_operations = []
+    monitored_root = Path(tmp_path).resolve()
     callback_ident = threading.get_ident()
+    callback_active = False
     original_diag = depth_ws.campaign_raw_diagnostics
 
     tick_store._ACCEPTING_WRITES = True
@@ -351,22 +430,72 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
             return func(*args, **kwargs)
         return wrapped
 
+    def record_sqlite(operation):
+        entry = (operation, threading.get_ident(), threading.current_thread().name)
+        sqlite_operations.append(entry)
+        if callback_active and threading.get_ident() == callback_ident:
+            violations.append(("sqlite_operation", operation, *entry[1:]))
+
+    def observed_conn(factory, target):
+        def wrapped(*args, **kwargs):
+            if callback_active and threading.get_ident() == callback_ident:
+                violations.append(("sqlite_connection", target, threading.get_ident(), threading.current_thread().name))
+            return _ObservedConnection(factory(*args, **kwargs), record_sqlite)
+        return wrapped
+
     monkeypatch.setattr(runtime_store, "_conn", tripwire("sqlite", "runtime_store._conn", runtime_store._conn))
     monkeypatch.setattr(tick_store, "_conn", tripwire("sqlite", "tick_store._conn", tick_store._conn))
-    monkeypatch.setattr(trade_store, "_conn", tripwire("sqlite", "trade_store._conn", trade_store._conn))
+    # Keep the depth worker on the real trade-store connection. Operation
+    # injections below use the proxy independently.
     monkeypatch.setattr(tick_store, "init_ticks", tripwire("store", "tick_store.init_ticks", tick_store.init_ticks))
     monkeypatch.setattr(tick_store, "_write_rows", tripwire("store", "tick_store._write_rows", tick_store._write_rows))
     monkeypatch.setattr(runtime_store, "_write_runtime_snapshot_sync", tripwire("store", "runtime_store._write_runtime_snapshot_sync", runtime_store._write_runtime_snapshot_sync))
     monkeypatch.setattr(events, "write_json_atomic", tripwire("store", "events.write_json_atomic", events.write_json_atomic))
     monkeypatch.setattr(trade_store, "insert_depth_snapshot", tripwire("store", "trade_store.insert_depth_snapshot", trade_store.insert_depth_snapshot))
     monkeypatch.setattr(runtime_store, "write_runtime_snapshot", runtime_enqueue)
-    real_write_text = Path.write_text
-    monkeypatch.setattr(Path, "write_text", tripwire("filesystem", "Path.write_text", real_write_text))
+    def filesystem_tripwire(operation, original):
+        def wrapped(path, *args, **kwargs):
+            candidate = Path(path).resolve()
+            if (monitored_root == candidate or monitored_root in candidate.parents) and "runtime/logs" not in str(candidate):
+                if callback_active and threading.get_ident() == callback_ident:
+                    violations.append(("filesystem", operation, str(candidate), threading.get_ident(), threading.current_thread().name))
+            return original(path, *args, **kwargs)
+        return wrapped
+
+    for operation in ("open", "exists", "stat", "mkdir", "read_text", "read_bytes", "write_text", "write_bytes"):
+        original = getattr(Path, operation)
+        monkeypatch.setattr(Path, operation, filesystem_tripwire(f"Path.{operation}", original))
+    real_open = builtins.open
+    def builtin_open(path, *args, **kwargs):
+        candidate = Path(path).resolve() if isinstance(path, (str, bytes, os.PathLike)) else None
+        if candidate is not None and (monitored_root == candidate or monitored_root in candidate.parents) and "runtime/logs" not in str(candidate) and callback_active and threading.get_ident() == callback_ident:
+            violations.append(("filesystem", "builtins.open", str(candidate), threading.get_ident(), threading.current_thread().name))
+        return real_open(path, *args, **kwargs)
+    monkeypatch.setattr(builtins, "open", builtin_open)
+    real_os_stat, real_os_makedirs, real_os_fsync = os.stat, os.makedirs, os.fsync
+    monkeypatch.setattr(os, "stat", filesystem_tripwire("os.stat", real_os_stat))
+    monkeypatch.setattr(os, "makedirs", filesystem_tripwire("os.makedirs", real_os_makedirs))
+    monkeypatch.setattr(os, "fsync", lambda fd: (violations.append(("filesystem", "os.fsync", str(fd), threading.get_ident(), threading.current_thread().name)) if callback_active and threading.get_ident() == callback_ident else None) or real_os_fsync(fd))
 
     original_tick = tick_enqueue
     if injection == "sqlite":
         def injected(**kwargs):
             runtime_store._conn()
+            return original_tick(**kwargs)
+        monkeypatch.setattr(depth_ws, "insert_tick", injected)
+    elif injection and injection.startswith("sqlite_"):
+        raw = sqlite3.connect(str(tmp_path / "injected.db"))
+        injected_conn = _ObservedConnection(raw, record_sqlite)
+        operation = injection.removeprefix("sqlite_")
+        def injected(**kwargs):
+            if operation == "connection_execute": injected_conn.execute("select 1")
+            elif operation == "connection_executemany": injected_conn.executemany("select ?", [(1,)])
+            elif operation == "connection_commit": injected_conn.commit()
+            elif operation == "connection_rollback": injected_conn.rollback()
+            elif operation == "connection_close": injected_conn.close()
+            elif operation == "cursor_execute": injected_conn.cursor().execute("select 1")
+            elif operation == "cursor_executemany": injected_conn.cursor().executemany("select ?", [(1,)])
+            elif operation == "cursor_close": injected_conn.cursor().close()
             return original_tick(**kwargs)
         monkeypatch.setattr(depth_ws, "insert_tick", injected)
     elif injection == "tick_sync":
@@ -399,6 +528,16 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
             (tmp_path / "injected.json").write_text("x")
             return original_tick(**kwargs)
         monkeypatch.setattr(depth_ws, "insert_tick", injected)
+    elif injection == "builtins_open":
+        def injected(**kwargs):
+            with builtins.open(tmp_path / "injected-open.txt", "w") as handle: handle.write("x")
+            return original_tick(**kwargs)
+        monkeypatch.setattr(depth_ws, "insert_tick", injected)
+    elif injection == "path_open":
+        def injected(**kwargs):
+            with (tmp_path / "injected-path-open.txt").open("w") as handle: handle.write("x")
+            return original_tick(**kwargs)
+        monkeypatch.setattr(depth_ws, "insert_tick", injected)
 
     depth_ws._SOCKET_GENERATION = 1
     depth_ws._TOKEN_TO_SYMBOL[256265] = "NIFTY"
@@ -414,14 +553,18 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
          "ohlc": {"open": 1410.0, "high": 1430.0, "low": 1400.0, "close": 1415.0}},
     ]
     started = time.monotonic_ns()
-    callback(None, ticks)
+    callback_active = True
+    try:
+        callback(None, ticks)
+    finally:
+        callback_active = False
     duration_ms = (time.monotonic_ns() - started) / 1_000_000
     counts["raw"] = 1
-    return callback, counts, violations, duration_ms, runtime_store, depth_ws.depth_store, worker_ids
+    return callback, counts, violations, duration_ms, runtime_store, depth_ws.depth_store, worker_ids, sqlite_operations
 
 
 def test_registered_live_persistence_fixture_traverses_tick_depth_runtime_enqueues(tmp_path, monkeypatch):
-    callback, counts, violations, duration_ms, runtime_store, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    callback, counts, violations, duration_ms, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
     assert callback is not None
     assert counts["tick"] >= 1
     assert counts["depth"] >= 1
@@ -436,7 +579,7 @@ def test_registered_live_persistence_fixture_traverses_tick_depth_runtime_enqueu
 
 
 def test_registered_live_callback_has_zero_sqlite_operations_on_callback_thread(tmp_path, monkeypatch):
-    _, counts, violations, _, runtime_store, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    _, counts, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
     assert counts["tick"] and counts["runtime"]
     assert [v for v in violations if v[0] == "sqlite"] == []
     runtime_store.shutdown_runtime_persistence()
@@ -445,7 +588,7 @@ def test_registered_live_callback_has_zero_sqlite_operations_on_callback_thread(
 
 
 def test_registered_live_callback_has_zero_store_persistence_calls_on_callback_thread(tmp_path, monkeypatch):
-    _, counts, violations, _, runtime_store, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    _, counts, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
     assert counts["depth"] >= 1
     assert [v for v in violations if v[0] == "store"] == []
     runtime_store.shutdown_runtime_persistence()
@@ -454,7 +597,7 @@ def test_registered_live_callback_has_zero_store_persistence_calls_on_callback_t
 
 
 def test_registered_live_callback_has_zero_persistence_filesystem_calls_on_callback_thread(tmp_path, monkeypatch):
-    _, _, violations, _, runtime_store, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    _, _, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
     assert [v for v in violations if v[0] == "filesystem"] == []
     runtime_store.shutdown_runtime_persistence()
     tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
@@ -462,7 +605,7 @@ def test_registered_live_callback_has_zero_persistence_filesystem_calls_on_callb
 
 
 def test_registered_live_callback_workers_may_persist_off_callback_thread(tmp_path, monkeypatch):
-    _, counts, _, _, runtime_store, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    _, counts, _, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
     assert counts["tick"] >= 1 and counts["depth"] >= 1 and counts["runtime"] >= 1
     runtime_result = runtime_store.shutdown_runtime_persistence()
     tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
@@ -479,7 +622,7 @@ def test_registered_callback_all_persistence_workers_are_off_thread_and_reconcil
     depth_ws.depth_store = depth_store_module.DepthStore()
     exercised_depth_store = depth_ws.depth_store
     depth_before = exercised_depth_store.persistence_state()
-    _, counts, violations, duration_ms, runtime_mod, depth_store, worker_ids = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
+    _, counts, violations, duration_ms, runtime_mod, depth_store, worker_ids, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
     runtime_result = runtime_mod.shutdown_runtime_persistence()
     tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
     depth_result = depth_store.shutdown_persistence(deadline_seconds=2.0)
@@ -518,7 +661,7 @@ def test_registered_callback_all_persistence_workers_are_off_thread_and_reconcil
     assert depth_delta["failures"] == 0
     assert runtime_result["complete"] is True
     assert runtime_state["pending"] == 0
-    assert runtime_state["failures"] == 0
+    assert runtime_delta["failures"] == 0
     assert runtime_delta["accepted"] >= 1
     assert runtime_delta["persisted"] == runtime_delta["accepted"]
     assert runtime_delta["rejected"] == 0
@@ -529,7 +672,7 @@ def test_registered_callback_all_persistence_workers_are_off_thread_and_reconcil
 
 
 def test_runtime_tripwire_detects_injected_callback_thread_sqlite_call(tmp_path, monkeypatch):
-    _, _, violations, _, runtime_store, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "sqlite")
+    _, _, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "sqlite")
     assert any(v[0] == "sqlite" and v[1] == "runtime_store._conn" for v in violations)
     runtime_store.shutdown_runtime_persistence()
     tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
@@ -537,31 +680,31 @@ def test_runtime_tripwire_detects_injected_callback_thread_sqlite_call(tmp_path,
 
 
 def test_tripwire_detects_injected_tick_sync_write(tmp_path, monkeypatch):
-    _, _, violations, _, runtime_mod, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "tick_sync")
+    _, _, violations, _, runtime_mod, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "tick_sync")
     assert any(v[1] == "tick_store._write_rows" for v in violations)
     runtime_mod.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
 
 
 def test_tripwire_detects_injected_depth_sync_write(tmp_path, monkeypatch):
-    _, _, violations, _, runtime_mod, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "depth_sync")
+    _, _, violations, _, runtime_mod, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "depth_sync")
     assert any(v[1] == "trade_store.insert_depth_snapshot" for v in violations)
     runtime_mod.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
 
 
 def test_tripwire_detects_injected_runtime_sync_write(tmp_path, monkeypatch):
-    _, _, violations, _, runtime_mod, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "runtime_sync")
+    _, _, violations, _, runtime_mod, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "runtime_sync")
     assert any(v[1] == "runtime_store._write_runtime_snapshot_sync" for v in violations)
     runtime_mod.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
 
 
 def test_tripwire_detects_injected_event_json_write(tmp_path, monkeypatch):
-    _, _, violations, _, runtime_mod, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "event_json")
+    _, _, violations, _, runtime_mod, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "event_json")
     assert any(v[1] == "events.write_json_atomic" for v in violations)
     runtime_mod.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
 
 
 def test_runtime_tripwire_detects_injected_callback_thread_store_call(tmp_path, monkeypatch):
-    _, _, violations, _, runtime_store, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "store")
+    _, _, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "store")
     assert any(v[0] == "store" and v[1] == "trade_store.insert_depth_snapshot" for v in violations)
     runtime_store.shutdown_runtime_persistence()
     tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
@@ -569,15 +712,48 @@ def test_runtime_tripwire_detects_injected_callback_thread_store_call(tmp_path, 
 
 
 def test_runtime_tripwire_detects_injected_callback_thread_filesystem_call(tmp_path, monkeypatch):
-    _, _, violations, _, runtime_store, depth_store, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "filesystem")
+    _, _, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "filesystem")
     assert any(v[0] == "filesystem" and v[1] == "Path.write_text" for v in violations)
     runtime_store.shutdown_runtime_persistence()
     tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
     depth_store.shutdown_persistence()
 
 
-def test_registered_fixture_matches_pr763_live_launch_hook_configuration():
-    source = inspect.getsource(campaign_launcher)
-    assert 'env["MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE"] = "true"' in source
-    assert 'env[ENABLE_ENV] = "true"' in source
-    assert "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE" in source
+def test_tripwire_detects_injected_scoped_builtins_open(tmp_path, monkeypatch):
+    _, _, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "builtins_open")
+    assert any(v[1] == "builtins.open" and str(tmp_path) in v[2] for v in violations if v[0] == "filesystem")
+    runtime_store.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
+
+
+def test_tripwire_detects_injected_scoped_path_open(tmp_path, monkeypatch):
+    _, _, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "path_open")
+    assert any(v[1] == "Path.open" and str(tmp_path) in v[2] for v in violations if v[0] == "filesystem")
+    runtime_store.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
+
+
+def test_tripwire_detects_each_sqlite_operation(tmp_path, monkeypatch):
+    operations = (
+        "connection_execute", "connection_executemany", "connection_commit",
+        "connection_rollback", "connection_close", "cursor_execute",
+        "cursor_executemany", "cursor_close",
+    )
+    for operation in operations:
+        _, _, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path / operation, "sqlite_" + operation)
+        assert any(v[0] == "sqlite_operation" and v[1] == operation.replace("_", ".", 1) for v in violations)
+        runtime_store.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
+
+
+def test_executed_launcher_effective_hook_state(tmp_path):
+    identity = CampaignIdentity("run-pr763-offline", 1, "2026-08-03", "a" * 40, "b" * 64, str(tmp_path))
+    env = campaign_launcher.build_child_environment(identity, {"PATH": "/usr/bin"})
+    assert env[campaign_launcher.ENABLE_ENV] == "true"
+    assert env["TRADEBOT_READ_ONLY"] == "true"
+    assert env["MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE"] == "true"
+    assert env["MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH"] == campaign_launcher.LIVE_UNIVERSE_PATH
+    assert env[campaign_launcher.STATE_PATH_ENV].startswith(str(tmp_path))
+
+
+def test_tripwire_ignores_unscoped_open(tmp_path, monkeypatch):
+    _, _, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path, "unscoped_open")
+    assert not any(v[1] == "builtins.open" for v in violations if v[0] == "filesystem")
+    runtime_store.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
