@@ -124,10 +124,13 @@ def test_doctor_accepts_healthy_index(tmp_path: Path) -> None:
 
 
 def test_doctor_reports_missing_index(tmp_path: Path) -> None:
-    report = doctor_index(tmp_path / "missing.sqlite")
+    index = tmp_path / "missing.sqlite"
+
+    report = doctor_index(index)
 
     assert report.healthy is False
     assert _failed_checks(report) == {"index_exists"}
+    assert not index.exists()
 
 
 def test_doctor_reports_active_build_lock(tmp_path: Path) -> None:
@@ -153,7 +156,7 @@ def test_doctor_detects_document_chunk_count_mismatch(tmp_path: Path) -> None:
     assert "per_document_chunk_counts" in _failed_checks(report)
 
 
-def test_doctor_detects_fts_row_loss(tmp_path: Path) -> None:
+def test_doctor_detects_fts_row_loss_without_repairing_it(tmp_path: Path) -> None:
     index = _build_fixture(tmp_path)
     with sqlite3.connect(index) as connection:
         fts_enabled = connection.execute(
@@ -161,6 +164,7 @@ def test_doctor_detects_fts_row_loss(tmp_path: Path) -> None:
         ).fetchone()[0]
         if fts_enabled != "1":
             pytest.skip("SQLite FTS5 unavailable")
+        chunk_count = int(connection.execute("SELECT COUNT(*) FROM rag_chunks").fetchone()[0])
         connection.execute(
             "DELETE FROM rag_chunks_fts WHERE rowid = (SELECT MIN(id) FROM rag_chunks)"
         )
@@ -168,10 +172,14 @@ def test_doctor_detects_fts_row_loss(tmp_path: Path) -> None:
 
     report = doctor_index(index)
 
+    with sqlite3.connect(index) as connection:
+        remaining_fts = int(connection.execute("SELECT COUNT(*) FROM rag_chunks_fts").fetchone()[0])
+
     assert report.healthy is False
     failed = _failed_checks(report)
     assert "fts_row_count" in failed
     assert "fts_missing_rows" in failed
+    assert remaining_fts == chunk_count - 1
 
 
 def test_doctor_reports_non_database_file(tmp_path: Path) -> None:
