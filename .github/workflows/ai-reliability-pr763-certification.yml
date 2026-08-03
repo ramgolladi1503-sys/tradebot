@@ -1,0 +1,100 @@
+name: AI Reliability PR763 Certification
+
+on:
+  pull_request:
+    paths:
+      - "core/ai_reliability_agent/**"
+      - "scripts/run_ai_reliability_*.py"
+      - "tests/test_ai_reliability*.py"
+      - "tests/fixtures/ai_reliability_real_artifact/**"
+      - "docs/agent_reviews/ai_reliability*.md"
+      - "docs/architecture/ai_reliability_agent_v1.md"
+      - "docs/test-reports/ai_reliability_agent_v1_certification.*"
+      - ".github/workflows/ai-reliability-pr763-certification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: .
+      TRADEBOT_READ_ONLY: "true"
+      EXECUTION_MODE: "SIM"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            pytest pandas numpy pyarrow scikit-learn \
+            python-dotenv openai requests kiteconnect holidays
+
+      - name: Compile reliability sidecar
+        run: |
+          python -m compileall -q core/ai_reliability_agent
+          python -m py_compile \
+            scripts/run_ai_reliability_agent.py \
+            scripts/run_ai_reliability_historical_replay.py \
+            scripts/run_ai_reliability_historical_candle_replay.py \
+            scripts/run_ai_reliability_pr763_session.py
+
+      - name: Run focused component and evidence proof
+        run: pytest -q -o addopts='' tests/test_ai_reliability*.py
+
+      - name: Verify read-only sidecar scope
+        run: |
+          python - <<'PY'
+          import subprocess
+          base = '0d44bedfe5dc52a4d63d2ae60b552107cba2f489'
+          changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+          allowed = (
+              'core/ai_reliability_agent/',
+              'scripts/run_ai_reliability',
+              'tests/test_ai_reliability',
+              'tests/fixtures/ai_reliability_real_artifact/',
+              'docs/agent_reviews/ai_reliability',
+              'docs/architecture/ai_reliability',
+              'docs/test-reports/ai_reliability',
+              '.github/workflows/ai-reliability-pr763-certification.yml',
+              '.github/workflows/runtime-authority-cutover.yml',
+              'core/qa_certification/',
+              'scripts/run_meg_shadow_offline_certification.py',
+              'scripts/assemble_meg_shadow_system_certificate.py',
+              'scripts/audit_test_integrity.py',
+              'tests/qa/',
+              'tests/test_test_integrity_audit.py',
+              'tests/auth/test_auth_manager_behavior_contracts.py',
+              'docs/qa/',
+              'docs/agent_reviews/meg_shadow_system_certification_v1.md',
+              '.github/workflows/meg-shadow-system-certification.yml',
+              'core/auth_manager.py',
+          )
+          bad = [path for path in changed if not any(path.startswith(prefix) for prefix in allowed)]
+          if bad:
+              raise SystemExit(f'RELIABILITY_SCOPE_VIOLATION:{bad}')
+          print(f'final-stack reliability-compatible paths={len(changed)}')
+          PY
+
+      - name: Verify temporary machinery absent
+        run: |
+          test ! -e tools/_temporary_import_ai_reliability_v1.py
+          test ! -e .github/workflows/_temporary_ai_reliability_completion_v1.yml
+          test ! -e tools/_temporary_curate_pr761_for_meg_certification.py
+          test ! -e .github/workflows/_temporary_curate_pr761_meg_certification.yml
+
+      - name: Validate diff
+        run: git diff --check 0d44bedfe5dc52a4d63d2ae60b552107cba2f489 HEAD
