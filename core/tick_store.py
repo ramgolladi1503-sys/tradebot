@@ -1076,13 +1076,9 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
 
     row = (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso)
     if _async_db_writes_enabled():
-        ok = _enqueue_row(row)
-        # Keep async mode, but guarantee immediate table creation and read-after-write
-        # visibility for lightweight tests/diagnostics that inspect SQLite right after
-        # WS ingestion. Larger live bursts are still drained by the background flusher.
-        if not _REPLAY_PRESSURE_SUPPRESS_IMMEDIATE_FLUSH:
-            _flush_pending_ticks(max_rows=1, worker_owned=False)
-        return ok
+        # The reactor only enqueues. SQLite connections and flushes belong to the
+        # single persistence worker; waiting for read-after-write here stalls Twisted.
+        return _enqueue_row(row)
 
     return _write_rows([row])
 
