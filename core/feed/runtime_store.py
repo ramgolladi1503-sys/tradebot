@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import queue
+import threading
+import time
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +19,15 @@ from core.fs_utils import ensure_parent_dir
 from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.paths import repo_root, trade_db_path
 from core.time_utils import now_utc_epoch
+
+logger = logging.getLogger(__name__)
+
+_RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=2048)
+_RUNTIME_STOP = threading.Event()
+_RUNTIME_LOCK = threading.Lock()
+_RUNTIME_WORKER = None
+_RUNTIME_ENQUEUED = 0
+_RUNTIME_REJECTED = 0
 
 
 def _db_path() -> Path:
@@ -246,7 +259,7 @@ def _write_canonical_runtime_artifacts(payload: dict[str, Any], *, ts_epoch: flo
             pass
 
 
-def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
+def _write_runtime_snapshot_sync(payload: dict[str, Any]) -> bool:
     if not isinstance(payload, dict):
         return False
     init_feed_runtime_table()
@@ -326,6 +339,59 @@ def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
         now_epoch=ts_epoch,
     )
     return True
+
+
+def _runtime_write_loop() -> None:
+    while not _RUNTIME_STOP.is_set() or not _RUNTIME_WRITE_QUEUE.empty():
+        try:
+            payload = _RUNTIME_WRITE_QUEUE.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        try:
+            if not _write_runtime_snapshot_sync(payload):
+                logger.warning("feed_runtime_snapshot_persist_failed")
+        finally:
+            _RUNTIME_WRITE_QUEUE.task_done()
+
+
+def _ensure_runtime_worker() -> None:
+    global _RUNTIME_WORKER
+    with _RUNTIME_LOCK:
+        if _RUNTIME_WORKER is None or not _RUNTIME_WORKER.is_alive():
+            _RUNTIME_STOP.clear()
+            _RUNTIME_WORKER = threading.Thread(target=_runtime_write_loop, name="feed-runtime-persistence", daemon=True)
+            _RUNTIME_WORKER.start()
+
+
+def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
+    global _RUNTIME_ENQUEUED, _RUNTIME_REJECTED
+    if not isinstance(payload, dict):
+        return False
+    _ensure_runtime_worker()
+    try:
+        _RUNTIME_WRITE_QUEUE.put_nowait(dict(payload))
+    except queue.Full:
+        with _RUNTIME_LOCK:
+            _RUNTIME_REJECTED += 1
+        logger.error("feed_runtime_snapshot_queue_full")
+        return False
+    with _RUNTIME_LOCK:
+        _RUNTIME_ENQUEUED += 1
+    return True
+
+
+def shutdown_runtime_persistence(deadline_seconds: float = 2.0) -> dict:
+    deadline = time.monotonic() + max(0.0, float(deadline_seconds))
+    while _RUNTIME_WRITE_QUEUE.unfinished_tasks and time.monotonic() < deadline:
+        time.sleep(0.01)
+    _RUNTIME_STOP.set()
+    worker = _RUNTIME_WORKER
+    if worker is not None:
+        worker.join(max(0.0, deadline - time.monotonic()))
+    state = {"queue_depth": _RUNTIME_WRITE_QUEUE.qsize(), "worker_alive": bool(worker and worker.is_alive()),
+             "enqueued": _RUNTIME_ENQUEUED, "rejected": _RUNTIME_REJECTED}
+    state["complete"] = state["queue_depth"] == 0 and not state["worker_alive"]
+    return state
 
 
 def read_latest_runtime_snapshot() -> dict[str, Any] | None:

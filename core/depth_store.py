@@ -1,4 +1,6 @@
 from collections import defaultdict, deque
+import queue
+import threading
 import time
 import json
 import logging
@@ -18,6 +20,33 @@ class DepthStore:
         self.books = defaultdict(dict)
         self._ts_window = deque(maxlen=10000)
         self._last_persist_epoch_by_token = defaultdict(float)
+        self._persist_queue = queue.Queue(maxsize=2048)
+        self._persist_stop = threading.Event()
+        self._persist_lock = threading.Lock()
+        self._persist_enqueued = 0
+        self._persisted = 0
+        self._persist_rejected = 0
+        self._persist_failures = 0
+        self._persist_shutdown = False
+        self._persist_thread = threading.Thread(target=self._persist_loop, name="depth-store-persistence", daemon=True)
+        self._persist_thread.start()
+
+    def _persist_loop(self):
+        while not self._persist_stop.is_set() or not self._persist_queue.empty():
+            try:
+                item = self._persist_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            try:
+                insert_depth_snapshot(*item)
+                with self._persist_lock:
+                    self._persisted += 1
+            except Exception as exc:
+                with self._persist_lock:
+                    self._persist_failures += 1
+                logger.warning("depth_persistence_failed error=%s", type(exc).__name__)
+            finally:
+                self._persist_queue.task_done()
 
     def _should_persist_snapshot(self, instrument_token, now_epoch: float) -> bool:
         min_interval_sec = max(
@@ -51,12 +80,22 @@ class DepthStore:
             if buy_qty + sell_qty > 0:
                 imbalance = (buy_qty - sell_qty) / (buy_qty + sell_qty)
             if self._should_persist_snapshot(instrument_token, now_epoch):
-                insert_depth_snapshot(
-                    now_iso,
-                    instrument_token,
-                    json.dumps({"depth": depth, "imbalance": imbalance}),
-                    now_epoch,
-                )
+                with self._persist_lock:
+                    if self._persist_shutdown:
+                        self._persist_rejected += 1
+                        raise RuntimeError("depth persistence is shut down")
+                try:
+                    self._persist_queue.put_nowait((
+                        now_iso, instrument_token,
+                        json.dumps({"depth": depth, "imbalance": imbalance}), now_epoch,
+                    ))
+                except queue.Full:
+                    with self._persist_lock:
+                        self._persist_rejected += 1
+                    logger.error("depth_persistence_queue_full")
+                    raise
+                with self._persist_lock:
+                    self._persist_enqueued += 1
             # alert on spikes (optional)
             if getattr(cfg, "IMBALANCE_ALERT_ENABLE", False):
                 if abs(imbalance) > getattr(cfg, "IMBALANCE_ALERT", 0.6):
@@ -74,6 +113,30 @@ class DepthStore:
                     logger.error("depth_store_error_log_write_failed path=%s", _ERROR_LOG_PATH)
             except Exception as log_exc:
                 logger.error("depth_store_error_log_failed path=%s err=%s:%s", _ERROR_LOG_PATH, type(log_exc).__name__, log_exc)
+
+    def persistence_state(self) -> dict:
+        with self._persist_lock:
+            return {
+                "queue_depth": self._persist_queue.qsize(),
+                "enqueued": self._persist_enqueued,
+                "persisted": self._persisted,
+                "rejected": self._persist_rejected,
+                "failures": self._persist_failures,
+                "shutdown": self._persist_shutdown,
+                "worker_alive": self._persist_thread.is_alive(),
+            }
+
+    def shutdown_persistence(self, deadline_seconds: float = 2.0) -> dict:
+        with self._persist_lock:
+            self._persist_shutdown = True
+        deadline = time.monotonic() + max(0.0, float(deadline_seconds))
+        while self._persist_queue.unfinished_tasks and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self._persist_stop.set()
+        self._persist_thread.join(max(0.0, deadline - time.monotonic()))
+        state = self.persistence_state()
+        state["complete"] = state["queue_depth"] == 0 and not state["worker_alive"]
+        return state
 
     def get(self, instrument_token):
         return self.books.get(instrument_token)

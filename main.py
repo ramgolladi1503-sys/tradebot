@@ -126,6 +126,15 @@ def _record_startup_lifecycle(event_name: str, *, details: dict | None = None, e
 
 def _shutdown_unified_live_campaign(state: str = "PROCESS_EXIT") -> None:
     try:
+        from core.depth_store import depth_store
+        from core.feed import runtime_store
+        depth_result = depth_store.shutdown_persistence(deadline_seconds=2.0)
+        runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=2.0)
+        if not depth_result.get("complete") or not runtime_result.get("complete"):
+            print(f"[PERSISTENCE_WARN] shutdown_incomplete depth={depth_result} runtime={runtime_result}")
+    except Exception as exc:
+        print(f"[PERSISTENCE_WARN] shutdown_failed: {exc}")
+    try:
         result = _unified_live_campaign.shutdown_current(seal=True, state=state)
         if result is not None:
             print(f"[UNIFIED_LIVE_VALIDATION] shutdown sealed={result.get('sealed')}")

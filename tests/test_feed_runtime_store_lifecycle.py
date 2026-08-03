@@ -25,6 +25,7 @@ def test_write_runtime_snapshot_records_start_and_snapshot_events(tmp_path, monk
     )
 
     assert ok is True
+    store.shutdown_runtime_persistence()
     latest = json.loads((tmp_path / "feed_startup_lifecycle_latest.json").read_text())
     assert latest["run_id"] == "run-runtime-store-lifecycle"
     assert latest["last_event"] == "FEED_RUNTIME_SNAPSHOT_WRITTEN"
@@ -57,6 +58,7 @@ def test_write_runtime_snapshot_records_auth_blocked_event(tmp_path, monkeypatch
     )
 
     assert ok is True
+    store.shutdown_runtime_persistence()
     latest = json.loads((tmp_path / "feed_startup_lifecycle_latest.json").read_text())
     assert [event["event"] for event in latest["events"]] == [
         "AUTH_BLOCKED",
