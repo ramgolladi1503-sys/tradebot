@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator, Sequence
+from typing import Iterator, Mapping, Sequence
 
 from core.tradebot_rag import (
     DEFAULT_CHUNK_CHARS,
@@ -73,15 +73,53 @@ def _lock_age_seconds(lock_path: Path) -> float:
         return 0.0
 
 
-def _read_lock_description(lock_path: Path) -> str:
+def _read_lock_payload(lock_path: Path) -> dict[str, object]:
     try:
         payload = json.loads(lock_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, Mapping):
+        return {}
+    return {str(key): value for key, value in payload.items()}
+
+
+def _lock_description(payload: Mapping[str, object]) -> str:
+    if not payload:
         return "unreadable_lock"
     owner = payload.get("hostname", "unknown-host")
     pid = payload.get("pid", "unknown-pid")
     started = payload.get("started_at_utc", "unknown-time")
     return f"owner={owner} pid={pid} started_at_utc={started}"
+
+
+def _local_lock_owner_is_alive(payload: Mapping[str, object]) -> bool:
+    if payload.get("hostname") != socket.gethostname():
+        return False
+    try:
+        pid = int(payload["pid"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _remove_owned_lock(lock_path: Path, token: str) -> None:
+    current = _read_lock_payload(lock_path)
+    if current.get("token") != token:
+        return
+    try:
+        lock_path.unlink()
+    except FileNotFoundError:
+        pass
 
 
 @contextmanager
@@ -92,9 +130,9 @@ def exclusive_build_lock(
 ) -> Iterator[Path]:
     """Acquire an atomic lock for one supported index build.
 
-    A fresh existing lock fails closed. A stale lock is removed and acquisition is
-    retried once. Cleanup removes the lock only when its unique token still matches,
-    preventing one process from deleting a replacement lock.
+    A fresh existing lock fails closed. A stale lock is reclaimed only when it is
+    not owned by a live process on this machine. Cleanup removes a lock only when
+    its unique token still matches, preventing deletion of a replacement lock.
     """
 
     if stale_after_seconds <= 0:
@@ -118,7 +156,9 @@ def exclusive_build_lock(
             descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError as exc:
             age = _lock_age_seconds(lock_path)
-            if attempt == 0 and age >= stale_after_seconds:
+            existing_payload = _read_lock_payload(lock_path)
+            owner_alive = _local_lock_owner_is_alive(existing_payload)
+            if attempt == 0 and age >= stale_after_seconds and not owner_alive:
                 try:
                     lock_path.unlink()
                 except FileNotFoundError:
@@ -128,15 +168,22 @@ def exclusive_build_lock(
                         f"rag_build_lock_stale_but_not_removable path={lock_path} age_seconds={age:.1f}"
                     ) from unlink_error
                 continue
-            description = _read_lock_description(lock_path)
+            description = _lock_description(existing_payload)
+            owner_state = "owner_alive=true" if owner_alive else "owner_alive=unknown_or_false"
             raise BuildLockError(
-                f"rag_build_in_progress path={lock_path} age_seconds={age:.1f} {description}"
+                f"rag_build_in_progress path={lock_path} age_seconds={age:.1f} {owner_state} {description}"
             ) from exc
         else:
             try:
                 os.write(descriptor, encoded)
                 os.fsync(descriptor)
-            finally:
+            except BaseException:
+                try:
+                    os.close(descriptor)
+                finally:
+                    _remove_owned_lock(lock_path, token)
+                raise
+            else:
                 os.close(descriptor)
             acquired = True
             break
@@ -147,15 +194,7 @@ def exclusive_build_lock(
     try:
         yield lock_path
     finally:
-        try:
-            current = json.loads(lock_path.read_text(encoding="utf-8"))
-        except (FileNotFoundError, UnicodeDecodeError, json.JSONDecodeError, OSError):
-            current = {}
-        if current.get("token") == token:
-            try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                pass
+        _remove_owned_lock(lock_path, token)
 
 
 def build_index_safely(
@@ -203,6 +242,15 @@ def doctor_index(index_path: Path | str) -> IndexDoctorReport:
         return IndexDoctorReport(str(path), False, tuple(checks), checked_at)
 
     checks.append(_check("index_exists", True, str(path)))
+    lock_path = build_lock_path(path)
+    checks.append(
+        _check(
+            "build_lock_absent",
+            not lock_path.exists(),
+            "absent" if not lock_path.exists() else f"present:{lock_path}",
+        )
+    )
+
     try:
         connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5.0)
         connection.row_factory = sqlite3.Row
