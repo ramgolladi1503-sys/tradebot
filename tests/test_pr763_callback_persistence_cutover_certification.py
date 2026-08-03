@@ -475,7 +475,10 @@ def test_registered_callback_all_persistence_workers_are_off_thread_and_reconcil
     callback_thread = threading.get_ident()
     tick_store.reset_audit_counters()
     runtime_before = runtime_store.runtime_persistence_state()
-    depth_before = depth_ws.depth_store.persistence_state()
+    depth_ws.depth_store.shutdown_persistence(deadline_seconds=1.0)
+    depth_ws.depth_store = depth_store_module.DepthStore()
+    exercised_depth_store = depth_ws.depth_store
+    depth_before = exercised_depth_store.persistence_state()
     _, counts, violations, duration_ms, runtime_mod, depth_store, worker_ids = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
     runtime_result = runtime_mod.shutdown_runtime_persistence()
     tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
@@ -505,6 +508,7 @@ def test_registered_callback_all_persistence_workers_are_off_thread_and_reconcil
     assert tick_result["pending_writes"] == 0
     assert tick_result["worker_failures"] == 0
     assert tick_result["status"] == "COMPLETE_DRAIN"
+    assert depth_store is exercised_depth_store
     assert depth_result["complete"] is True
     assert depth_state["queue_depth"] == 0
     assert depth_state["failures"] == 0
