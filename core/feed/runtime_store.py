@@ -7,6 +7,7 @@ import threading
 import time
 import logging
 from copy import deepcopy
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -44,15 +45,20 @@ def _db_path() -> Path:
     return ensure_parent_dir(trade_db_path(desk_id))
 
 
-def _conn() -> sqlite3.Connection:
+@contextmanager
+def _conn():
     conn = sqlite3.connect(str(_db_path()), timeout=30.0)
     try:
-        conn.execute("PRAGMA busy_timeout=30000")
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-    except Exception:
-        pass
-    return conn
+        try:
+            conn.execute("PRAGMA busy_timeout=30000")
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+        except Exception:
+            pass
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def init_feed_runtime_table() -> None:

@@ -340,3 +340,123 @@ def test_gate8_shutdown_rejects_post_shutdown_writes(tmp_path, monkeypatch):
     assert runtime_drain["complete"] is True
     assert runtime_store.write_runtime_snapshot({"source": "after_shutdown"}) is False
     assert runtime_store.runtime_persistence_state()["rejected"] >= 1
+
+def test_gate4_sqlite_connection_lifecycle_is_worker_owned(tmp_path, monkeypatch):
+    """Create/execute/commit/close stay on each authority's persistence worker."""
+
+    import sqlite3 as stdlib_sqlite
+
+    callback_thread = threading.get_ident()
+    real_connect = stdlib_sqlite.connect
+
+    class ObservedConnection:
+        def __init__(self, raw, events, authority):
+            self._raw = raw
+            self._events = events
+            self._authority = authority
+
+        def _record(self, operation):
+            self._events.append((self._authority, operation, threading.get_ident(), threading.current_thread().name))
+
+        def execute(self, *args, **kwargs):
+            self._record("execute")
+            return self._raw.execute(*args, **kwargs)
+
+        def executemany(self, *args, **kwargs):
+            self._record("executemany")
+            return self._raw.executemany(*args, **kwargs)
+
+        def commit(self):
+            self._record("commit")
+            return self._raw.commit()
+
+        def rollback(self):
+            self._record("rollback")
+            return self._raw.rollback()
+
+        def close(self):
+            self._record("close")
+            return self._raw.close()
+
+        def cursor(self, *args, **kwargs):
+            return self._raw.cursor(*args, **kwargs)
+
+        def __enter__(self):
+            self._raw.__enter__()
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self._record("rollback" if exc_type else "commit")
+            return self._raw.__exit__(exc_type, exc, tb)
+
+        def __getattr__(self, name):
+            return getattr(self._raw, name)
+
+    def run_authority(authority, module, exercise, drain):
+        events = []
+        local_mp = pytest.MonkeyPatch()
+
+        def connect(*args, **kwargs):
+            events.append((authority, "create", threading.get_ident(), threading.current_thread().name))
+            return ObservedConnection(real_connect(*args, **kwargs), events, authority)
+
+        try:
+            local_mp.setattr(module.sqlite3, "connect", connect)
+            exercise()
+            result = drain()
+            assert result
+        finally:
+            local_mp.undo()
+        assert events
+        operations = {row[1] for row in events}
+        assert "create" in operations
+        assert "execute" in operations or "executemany" in operations
+        assert "commit" in operations
+        assert "close" in operations
+        owner_ids = {row[2] for row in events}
+        assert len(owner_ids) == 1
+        owner_id = next(iter(owner_ids))
+        assert owner_id != callback_thread
+        return events
+
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "gate4.db"), raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+    trade_store._DB_SCHEMA_INIT_PATH = None
+
+    tick_store.reset_runtime_state_for_tests()
+    tick_events = run_authority(
+        "tick",
+        tick_store,
+        lambda: tick_store.insert_tick(ts="2026-08-03T10:30:00Z", token=94_001, last_price=101.0),
+        lambda: tick_store.shutdown_persistence_worker(deadline_seconds=2.0),
+    )
+
+    runtime_store.reset_runtime_persistence_for_tests()
+    file_writer_threads = []
+    real_json_writer = runtime_store.write_json_atomic
+
+    def observed_json_writer(*args, **kwargs):
+        file_writer_threads.append((threading.get_ident(), threading.current_thread().name))
+        return real_json_writer(*args, **kwargs)
+
+    monkeypatch.setattr(runtime_store, "write_json_atomic", observed_json_writer)
+    runtime_events = run_authority(
+        "runtime",
+        runtime_store,
+        lambda: runtime_store.write_runtime_snapshot({"source": "gate4", "runtime_state": "RUNNING"}),
+        lambda: runtime_store.shutdown_runtime_persistence(deadline_seconds=2.0),
+    )
+    assert file_writer_threads
+    assert {row[0] for row in file_writer_threads} == {runtime_events[0][2]}
+
+    store = DepthStore()
+    depth_events = run_authority(
+        "depth",
+        trade_store,
+        lambda: store.update(94_002, {"buy": [{"quantity": 2}], "sell": [{"quantity": 1}]}),
+        lambda: store.shutdown_persistence(deadline_seconds=2.0),
+    )
+
+    assert {row[2] for row in tick_events} != {callback_thread}
+    assert {row[2] for row in runtime_events} != {callback_thread}
+    assert {row[2] for row in depth_events} != {callback_thread}
