@@ -1,0 +1,93 @@
+name: Temporary Merge Certified Authority Into Reliability
+
+on:
+  push:
+    branches:
+      - post-pr763/ai-reliability-live-evidence-v1
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: post-pr763/ai-reliability-live-evidence-v1
+          fetch-depth: 0
+          lfs: false
+
+      - name: Merge certified authority with explicit resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUTH_SHA="5934968bed198e4c80fcb9900b99d2142912b5c4"
+          PR763_SHA="1241418cafbefba8fd3d1142e5ae578d9b97cd70"
+          REL_SHA="$(git rev-parse HEAD)"
+
+          git fetch origin post-pr763/runtime-authority-cutover-v1
+          git merge --no-commit --no-ff "$AUTH_SHA" || true
+
+          certified_paths=(
+            .github/workflows/runtime-authority-cutover.yml
+            core/canonical_execution_decision.py
+            core/execution_router.py
+            core/live_fallback_execution_contract.py
+            core/opportunity_engine.py
+            core/ranking_authority.py
+            core/runtime_authority_contract.py
+            core/runtime_authority_cutover.py
+            core/runtime_snapshot_producer.py
+            dashboard/ui/table_model.py
+            docs/agent_reviews/runtime_authority_cutover_v1.md
+            docs/architecture/runtime_authority_cutover_v1.md
+            docs/test-reports/runtime_authority_cutover_focused_certification.json
+            docs/test-reports/runtime_authority_cutover_focused_certification.md
+            tests/test_canonical_execution_decision.py
+            tests/test_ranking_authority.py
+            tests/test_runtime_authority_contract.py
+            tests/test_runtime_authority_cutover_v1.py
+          )
+          git checkout "$AUTH_SHA" -- "${certified_paths[@]}"
+
+          # Preserve the reliability branch's dynamic-base workflow.
+          git checkout "$REL_SHA" -- .github/workflows/ai-reliability-pr763-certification.yml
+
+          # Reassert the frozen PR763 runtime artifacts exactly. The parquet is
+          # restored at Git-object level to avoid LFS clean/smudge conversion.
+          git update-index --cacheinfo \
+            100644,aeba49ecddeea4976c87a294e15335bb018a5b89,runtime/strategy_validation/resolved_option_ticks_20260702.parquet
+          git checkout "$PR763_SHA" -- runtime/strategy_validation/regime_timeline.jsonl
+
+          git rm -f \
+            .github/workflows/_temporary_merge_certified_authority_into_reliability.yml \
+            tools/_trigger_merge_certified_authority_into_reliability.txt \
+            docs/test-reports/.sync_marker_runtime_authority_771.txt
+
+          unresolved="$(git diff --name-only --diff-filter=U)"
+          if [[ -n "$unresolved" ]]; then
+            echo "UNRESOLVED_MERGE_PATHS"
+            echo "$unresolved"
+            exit 1
+          fi
+
+          # Certified authority paths must be byte-identical to PR771.
+          git diff --quiet "$AUTH_SHA" -- "${certified_paths[@]}" || {
+            echo "CERTIFIED_AUTHORITY_PATH_DRIFT"
+            git diff --name-only "$AUTH_SHA" -- "${certified_paths[@]}"
+            exit 1
+          }
+
+          # Reliability workflow must remain byte-identical to its pre-merge head.
+          git diff --quiet "$REL_SHA" -- .github/workflows/ai-reliability-pr763-certification.yml || {
+            echo "RELIABILITY_WORKFLOW_DRIFT"
+            exit 1
+          }
+
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "merge: synchronize certified runtime authority into reliability"
+          git push origin HEAD:post-pr763/ai-reliability-live-evidence-v1
