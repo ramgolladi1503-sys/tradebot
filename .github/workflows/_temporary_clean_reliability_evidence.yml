@@ -1,0 +1,52 @@
+name: Temporary Clean Reliability Evidence
+
+on:
+  push:
+    branches:
+      - post-pr763/ai-reliability-live-evidence-v2
+
+permissions:
+  contents: write
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: post-pr763/ai-reliability-live-evidence-v2
+          fetch-depth: 0
+          lfs: false
+
+      - name: Remove trailing whitespace from imported evidence docs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for raw in (
+              'docs/architecture/ai_reliability_agent_v1.md',
+              'docs/test-reports/ai_reliability_agent_v1_certification.md',
+          ):
+              path = Path(raw)
+              lines = path.read_text(encoding='utf-8').splitlines()
+              path.write_text('\n'.join(line.rstrip() for line in lines) + '\n', encoding='utf-8')
+          PY
+
+      - name: Remove failed certificate and temporary machinery
+        run: |
+          git rm \
+            .github/workflows/_temporary_clean_reliability_evidence.yml \
+            tools/_trigger_clean_reliability_evidence.txt \
+            docs/test-reports/ai_reliability_pr763_offline_certification.json \
+            docs/test-reports/ai_reliability_pr763_offline_certification.md
+
+      - name: Commit bounded cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            docs/architecture/ai_reliability_agent_v1.md \
+            docs/test-reports/ai_reliability_agent_v1_certification.md
+          git diff --cached --check
+          git commit -m "chore: clean AI reliability evidence scope"
+          git push origin HEAD:post-pr763/ai-reliability-live-evidence-v2
