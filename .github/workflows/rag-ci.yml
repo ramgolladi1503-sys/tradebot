@@ -1,0 +1,75 @@
+name: TradeBot RAG CI
+
+on:
+  push:
+    paths:
+      - "core/tradebot_rag.py"
+      - "scripts/tradebot_rag.py"
+      - "dashboard/tradebot_rag_app.py"
+      - "tests/test_tradebot_rag.py"
+      - "rag/**"
+      - "docs/**"
+      - "research/**"
+      - "README.md"
+      - ".github/workflows/rag-ci.yml"
+  pull_request:
+    paths:
+      - "core/tradebot_rag.py"
+      - "scripts/tradebot_rag.py"
+      - "dashboard/tradebot_rag_app.py"
+      - "tests/test_tradebot_rag.py"
+      - "rag/**"
+      - "docs/**"
+      - "research/**"
+      - "README.md"
+      - ".github/workflows/rag-ci.yml"
+
+concurrency:
+  group: rag-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  retrieval_contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install focused test dependency
+        run: python -m pip install pytest
+
+      - name: Run deterministic RAG tests
+        run: pytest -q -o addopts='' tests/test_tradebot_rag.py
+
+      - name: Build repository evidence index
+        run: |
+          mkdir -p .runtime/rag
+          python scripts/tradebot_rag.py build | tee .runtime/rag/build_report.json
+
+      - name: Evaluate repository retrieval
+        run: python scripts/tradebot_rag.py evaluate --min-hit-at-k 0.80 | tee .runtime/rag/evaluation_report.json
+
+      - name: Record index status
+        run: python scripts/tradebot_rag.py status | tee .runtime/rag/status_report.json
+
+      - name: Upload RAG evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tradebot-rag-evidence
+          if-no-files-found: error
+          path: |
+            .runtime/rag/build_report.json
+            .runtime/rag/evaluation_report.json
+            .runtime/rag/status_report.json
