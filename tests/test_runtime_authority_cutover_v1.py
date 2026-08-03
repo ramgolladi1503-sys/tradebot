@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from types import SimpleNamespace
 
 import pandas as pd
@@ -13,13 +14,34 @@ from core.runtime_authority_cutover import (
 
 
 def _executable(candidate_id: str, score: float) -> dict:
+    now = time.time()
     return {
         "trade_id": candidate_id,
         "symbol": "NIFTY",
+        "tradingsymbol": "NIFTY26AUG25000CE",
+        "option_token": 123456,
+        "market_mode": "LIVE",
+        "strategy_family": "MARKET_EVENT_GRAPH",
+        "side": "BUY",
+        "signal_score": 0.82,
         "quote_source": "LIVE",
+        "spread_source": "LIVE",
+        "quote_completeness": "FULL",
         "best_bid": 100.0,
         "best_ask": 101.0,
+        "ltp": 100.5,
         "quote_age_sec": 0.1,
+        "ltp_age_sec": 0.1,
+        "bid_age_sec": 0.1,
+        "ask_age_sec": 0.1,
+        "chain_snapshot_age_sec": 0.1,
+        "last_option_tick_epoch": now,
+        "option_ltp_timestamp": now,
+        "quote_ts_epoch": now,
+        "option_feed_block_reason": "OK",
+        "fresh_quote_ok": True,
+        "spread_ok": True,
+        "liquidity_ok": True,
         "execution_allowed": True,
         "eligible_for_execution": True,
         "tradable": True,
@@ -63,9 +85,16 @@ def test_operator_partition_ranks_only_executable_by_selection_score():
     weak = _executable("weak", 0.51)
     advisory = _executable("advisory", 0.97)
     advisory["recovered_fallback"] = True
-    partition = partition_operator_candidates([weak, advisory, strong], mode="LIVE")
-    assert [row["trade_id"] for row in partition["top_executable"]] == ["strong", "weak"]
-    assert [row["trade_id"] for row in partition["advisory"]] == ["advisory"]
+    partition = partition_operator_candidates(
+        [weak, advisory, strong],
+        mode="LIVE",
+    )
+    assert [
+        row["trade_id"] for row in partition["top_executable"]
+    ] == ["strong", "weak"]
+    assert [row["trade_id"] for row in partition["advisory"]] == [
+        "advisory"
+    ]
     assert partition["advisory"][0]["selection_score"] == 0.0
 
 
@@ -75,10 +104,17 @@ def test_actual_opportunity_selector_never_receives_advisory(monkeypatch):
     captured = {}
 
     def fake_legacy(candidates, *args, **kwargs):
-        captured["ids"] = [getattr(row, "trade_id", row.get("trade_id")) for row in candidates]
+        captured["ids"] = [
+            getattr(row, "trade_id", row.get("trade_id"))
+            for row in candidates
+        ]
         return candidates[0] if candidates else None
 
-    monkeypatch.setattr(engine, "_RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY", fake_legacy)
+    monkeypatch.setattr(
+        engine,
+        "_RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY",
+        fake_legacy,
+    )
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     advisory = _executable("advisory", 0.99)
     advisory["recovered_fallback"] = True
@@ -93,10 +129,15 @@ def test_actual_opportunity_selector_never_receives_advisory(monkeypatch):
 def test_execution_router_authority_firewall_runs_before_order_or_approval():
     from core.execution_router import ExecutionRouter
 
-    trade = SimpleNamespace(**apply_runtime_authority({
-        **_executable("blocked-router", 0.9),
-        "recovered_fallback": True,
-    }, mode="LIVE"))
+    trade = SimpleNamespace(
+        **apply_runtime_authority(
+            {
+                **_executable("blocked-router", 0.9),
+                "recovered_fallback": True,
+            },
+            mode="LIVE",
+        )
+    )
     router = object.__new__(ExecutionRouter)
     filled, price, report = router.execute(
         trade,
@@ -106,37 +147,43 @@ def test_execution_router_authority_firewall_runs_before_order_or_approval():
     )
     assert filled is False
     assert price is None
-    assert report["reason_if_aborted"].startswith("runtime_authority_blocked:")
+    assert report["reason_if_aborted"].startswith(
+        "runtime_authority_blocked:"
+    )
     assert report["runtime_authority"]["allowed"] is False
 
 
-def test_dashboard_model_separates_operator_truth_and_zeroes_selection_score(monkeypatch):
+def test_dashboard_model_separates_operator_truth_and_zeroes_selection_score(
+    monkeypatch,
+):
     from dashboard.ui.table_model import normalize_df
 
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
-    frame = pd.DataFrame([
-        {
-            **_executable("ui-valid", 0.73),
-            "timestamp": "2026-08-03T10:00:00+05:30",
-            "instrument_type": "OPT",
-            "option_type": "CE",
-            "strike": 25000,
-            "expiry_date": "2026-08-04",
-            "side": "BUY",
-            "status": "READY",
-        },
-        {
-            **_executable("ui-advisory", 0.95),
-            "recovered_fallback": True,
-            "timestamp": "2026-08-03T10:00:00+05:30",
-            "instrument_type": "OPT",
-            "option_type": "CE",
-            "strike": 25100,
-            "expiry_date": "2026-08-04",
-            "side": "BUY",
-            "status": "ADVISORY_ONLY",
-        },
-    ])
+    frame = pd.DataFrame(
+        [
+            {
+                **_executable("ui-valid", 0.73),
+                "timestamp": "2026-08-03T10:00:00+05:30",
+                "instrument_type": "OPT",
+                "option_type": "CE",
+                "strike": 25000,
+                "expiry_date": "2026-08-04",
+                "side": "BUY",
+                "status": "READY",
+            },
+            {
+                **_executable("ui-advisory", 0.95),
+                "recovered_fallback": True,
+                "timestamp": "2026-08-03T10:00:00+05:30",
+                "instrument_type": "OPT",
+                "option_type": "CE",
+                "strike": 25100,
+                "expiry_date": "2026-08-04",
+                "side": "BUY",
+                "status": "ADVISORY_ONLY",
+            },
+        ]
+    )
     out = normalize_df(frame)
     valid = out.loc[out["trade_id"] == "ui-valid"].iloc[0]
     advisory = out.loc[out["trade_id"] == "ui-advisory"].iloc[0]
