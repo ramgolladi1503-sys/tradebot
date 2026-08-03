@@ -1,0 +1,148 @@
+name: Temporary PR763 Evidence Commit
+
+on:
+  push:
+    branches:
+      - campaign/unified-live-validation-pr748-756-v1
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  commit-certified-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: campaign/unified-live-validation-pr748-756-v1
+      - name: Download certified artifact
+        run: |
+          mkdir -p /tmp/pr763-certified
+          gh run download 30822994914 \
+            --repo ramgolladi1503-sys/tradebot \
+            --name pr763-offline-diagnostics \
+            --dir /tmp/pr763-certified
+      - name: Validate and prepare evidence
+        run: |
+          python - <<'PY'
+          import json
+          import xml.etree.ElementTree as ET
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          source = Path('/tmp/pr763-certified')
+          gate1 = json.loads((source / 'pr763-generated-evidence.json').read_text(encoding='utf-8'))
+          assert gate1['verdict'] == 'REAL_CALLBACK_PERSISTENCE_GATE_CLOSED', gate1['verdict']
+          assert gate1['missing_controls'] == [], gate1['missing_controls']
+          assert gate1['implementation_sha'] == 'eda4a92561c903b2c60eafab75d4b4b61b578063'
+          assert gate1['live_started'] is False
+
+          def suite(name):
+              root = ET.parse(source / name).getroot()
+              node = root if root.tag == 'testsuite' else list(root)[0]
+              row = {
+                  'tests': int(node.attrib.get('tests', 0)),
+                  'failures': int(node.attrib.get('failures', 0)),
+                  'errors': int(node.attrib.get('errors', 0)),
+                  'skipped': int(node.attrib.get('skipped', 0)),
+                  'duration_seconds': float(node.attrib.get('time', 0.0)),
+              }
+              assert row['failures'] == row['errors'] == 0, row
+              return row
+
+          suites = {
+              'legacy_gate1': suite('pr763-gate1-junit.xml'),
+              'structured_gate1': suite('pr763-structured-junit.xml'),
+              'remaining_offline': suite('pr763-remaining-junit.xml'),
+          }
+          gates = {
+              '1': {'status': 'PASS', 'verdict': gate1['verdict'], 'evidence': 'docs/pr763_gate1_evidence_20260803.json'},
+              '2': {'status': 'PASS', 'proof': 'static callback guard and injected forbidden-call control'},
+              '3': {'status': 'PASS', 'proof': 'authority-local FIFO and immutable envelopes; no cross-authority total order claimed'},
+              '4': {'status': 'PASS', 'proof': 'SQLite create/execute-or-executemany/commit/close and runtime JSON writer owned by persistence workers'},
+              '5': {'status': 'PASS', 'proof': 'registered callback 2x2x2 slow-writer matrix; complete drains and callback below frozen SLA'},
+              '6': {'status': 'PASS', 'proof': gate1['validation']['gate6']},
+              '7': {'status': 'PASS', 'proof': 'tick, depth, and runtime durable restart reconstruction'},
+              '8': {'status': 'PASS', 'proof': 'terminal shutdown rejection, immutable sealed root, authoritative hashes'},
+          }
+          live_boundary = [
+              'fresh governed market-session run from the certified implementation SHA',
+              'actual post-mode FULL NIFTY packet delivery',
+              'completed constituent bars and required Market Event Graph traversal',
+              'fresh evidence root only; do not mix earlier partial-session roots',
+              'read-only campaign only; no execution or order authority',
+          ]
+          payload = {
+              'schema_version': 1,
+              'generated_at': datetime.now(timezone.utc).isoformat(),
+              'implementation_sha': gate1['implementation_sha'],
+              'certification_workflow_run_id': '30822994914',
+              'artifact_digest': 'sha256:c33e917d706eb8057c115b67ab6abe269a4813c781988c14e3b377b3d137ccd8',
+              'offline_verdict': 'OFFLINE_GATES_CLOSED_LIVE_VERIFICATION_REQUIRED',
+              'live_started': False,
+              'suites': suites,
+              'gates': gates,
+              'live_verification_boundary': live_boundary,
+          }
+          Path('docs/pr763_gate1_evidence_20260803.json').write_text(
+              json.dumps(gate1, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          Path('docs/pr763_callback_persistence_offline_certification_20260803.md').write_text(
+              (source / 'pr763-generated-certification.md').read_text(encoding='utf-8'), encoding='utf-8'
+          )
+          Path('docs/pr763_offline_certification_20260803.json').write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          lines = [
+              '# PR #763 Offline Certification Complete',
+              '',
+              f"- Certified implementation SHA: `{gate1['implementation_sha']}`",
+              '- Offline verdict: `OFFLINE_GATES_CLOSED_LIVE_VERIFICATION_REQUIRED`',
+              '- Live process started: `false`',
+              '- PR state: draft, open, unmerged.',
+              '',
+              '## Gate status',
+              '',
+              '| Gate | Status | Proof |',
+              '| --- | --- | --- |',
+          ]
+          for gate, row in gates.items():
+              proof = row.get('proof') or row.get('verdict')
+              if isinstance(proof, dict):
+                  proof = f"returncode={proof.get('returncode')}"
+              lines.append(f"| {gate} | {row['status']} | {proof} |")
+          lines.extend(['', '## Test suites', ''])
+          for name, row in suites.items():
+              lines.append(
+                  f"- {name}: `{row['tests']} tests`, `{row['failures']} failures`, "
+                  f"`{row['errors']} errors`, `{row['duration_seconds']:.3f}s`."
+              )
+          lines.extend(['', '## Live verification boundary', ''])
+          lines.extend(f'- {item}' for item in live_boundary)
+          lines.extend([
+              '',
+              'No additional offline audit is authorized unless concrete contradictory evidence appears.',
+              'Do not merge or claim production readiness from this offline certification.',
+              '',
+          ])
+          Path('docs/pr763_offline_certification_20260803.md').write_text('\n'.join(lines), encoding='utf-8')
+          PY
+      - name: Commit evidence and remove temporary machinery
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            docs/pr763_gate1_evidence_20260803.json \
+            docs/pr763_callback_persistence_offline_certification_20260803.md \
+            docs/pr763_offline_certification_20260803.json \
+            docs/pr763_offline_certification_20260803.md
+          git rm \
+            .github/workflows/_temporary_pr763_offline_finalizer.yml \
+            .github/workflows/_temporary_pr763_evidence_commit.yml \
+            tools/apply_pr763_offline_repairs.py
+          git commit -m "docs: certify PR763 offline gates and stop at live boundary"
+          git push origin HEAD:campaign/unified-live-validation-pr748-756-v1
