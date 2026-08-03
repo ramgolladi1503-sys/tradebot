@@ -12,7 +12,7 @@
 
 This PR is stacked on PR #763 and does not change the PR #763 branch. The implementation is limited to canonical authority modules, the existing opportunity selector, the runtime snapshot projection, the UI table model, the execution-router preflight, focused tests, and documentation. Feed, WebSocket, persistence, and Market Event Graph paths are unchanged.
 
-## Grill Me
+## Grill Me Review
 
 - Could a high-confidence fallback row still reach selection? No. Every input is normalized before the legacy selector, and only candidates whose canonical state is `EXECUTABLE` are passed to it.
 - Could an advisory row retain a useful analytical score? Yes. `diagnostic_score` and `opportunity_score` remain available, but `selection_score`, capital allocation, and execution flags are forced to zero/false.
@@ -20,7 +20,7 @@ This PR is stacked on PR #763 and does not change the PR #763 branch. The implem
 - Does this replace PR #763 live proof? No. It is downstream authority hardening and does not certify packet delivery, constituent bars, or MEG traversal.
 - Does it add live order capability? No. The existing live broker path remains unimplemented and this PR adds no broker write call.
 
-## Hermes
+## Hermes Review
 
 The evidence chain is explicit and reviewable:
 
@@ -36,7 +36,7 @@ candidate fields
 
 The same authority payload includes state, primary reason, blockers, contradictions, operator bucket, analytical scores, selection score, and a no-order-action marker. Tests exercise both mapping and object candidates and verify the selection and router boundaries.
 
-## GSD
+## GSD Review
 
 The change follows the smallest effective cutover instead of refactoring the legacy TradeBuilder or Orchestrator:
 
@@ -48,7 +48,7 @@ The change follows the smallest effective cutover instead of refactoring the leg
 
 PR #758's useful proof themes—fallback/stale blocking, contradictions, object support, deterministic behavior, and protected feed boundaries—are absorbed through tests rather than by adding a second competing authority system.
 
-## QA/Safety
+## QA / Safety Review
 
 Focused proof covers:
 
