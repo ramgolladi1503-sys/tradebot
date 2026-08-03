@@ -207,7 +207,7 @@ def test_depth_queue_saturation_is_bounded_and_fail_closed(monkeypatch):
 
 def test_runtime_queue_saturation_is_bounded_and_fail_closed(monkeypatch):
     durability.reset()
-    runtime_store.shutdown_runtime_persistence()
+    runtime_store.reset_runtime_persistence_for_tests()
     runtime_store._RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=1)
     runtime_store._RUNTIME_WORKER = None
     monkeypatch.setattr(runtime_store, "_ensure_runtime_worker", lambda: None)
