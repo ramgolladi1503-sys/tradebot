@@ -1,9 +1,9 @@
 # TradeBot AI Reliability and Decision-Analytics Agent V1
 
-**Status:** Implemented on `feature/ai-pipeline-reliability-agent-v1`  
-**Component certification:** `SIMULATION_CERTIFIED`  
-**Live certification:** `LIVE_CERTIFICATION_PENDING`  
-**Order authority:** None  
+**Status:** Implemented on `feature/ai-pipeline-reliability-agent-v1`
+**Component certification:** `SIMULATION_CERTIFIED`
+**Live certification:** `LIVE_CERTIFICATION_PENDING`
+**Order authority:** None
 **Broker-write authority:** None
 
 ## 1. Executive definition

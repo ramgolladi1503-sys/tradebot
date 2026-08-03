@@ -1,8 +1,8 @@
 # TradeBot AI Reliability Agent V1 — Certification Report
 
-**Date:** 2026-07-30  
-**Branch:** `feature/ai-pipeline-reliability-agent-v1`  
-**Result:** `SIMULATION_CERTIFIED`  
+**Date:** 2026-07-30
+**Branch:** `feature/ai-pipeline-reliability-agent-v1`
+**Result:** `SIMULATION_CERTIFIED`
 **Live status:** `LIVE_CERTIFICATION_PENDING`
 
 ## Executive verdict
