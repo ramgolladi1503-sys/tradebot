@@ -1,8 +1,10 @@
 # Agent Review — TradeBot Evidence RAG V1
 
 mode: PAPER
+candidate_id: tradebot_evidence_rag_v1
 decision: APPROVED_FOR_REVIEW_AFTER_CI
 reason: Adds a local read-only evidence retrieval surface without broker, strategy, risk, approval, or execution behavior.
+timestamp: 2026-08-03T16:22:01Z
 is_order_action: false
 broker_api_called: false
 source: docs/agent_reviews/tradebot_evidence_rag_v1.md
@@ -33,7 +35,8 @@ Answer: Discovery is allowlisted and rejects hidden files, symlinks, excluded ru
 
 ## Hermes Review
 
-The public surface is narrow: index build, search, grounded ask, status, and default index path. Outputs are immutable dataclasses. SQL values are parameterized. The system is additive and does not import TradeBot runtime, broker, strategy, execution, or risk modules.
+The public surface is narrow: index build, search, grounded ask, index inspection, and default index path.
+Outputs are immutable dataclasses. SQL values are parameterized. The system is additive and does not import TradeBot runtime, broker, strategy, execution, or risk modules.
 
 ## GSD Review
 
@@ -70,13 +73,15 @@ Human approval is required before merge. The reviewer must verify the PR remains
 
 ## High-Risk Path Review
 
-N/A. No configured high-risk runtime path is changed.
+No configured high-risk runtime path is changed.
 
 ## Evidence Contract
 
 - mode: PAPER
+- candidate_id: tradebot_evidence_rag_v1
 - decision: PASS_PENDING_REQUIRED_CI
 - reason: Scoped implementation and local proof complete; repository CI is authoritative for merge readiness.
+- timestamp: 2026-08-03T16:22:01Z
 - is_order_action: false
 - broker_api_called: false
 - live_order_action: false
