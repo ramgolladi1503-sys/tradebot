@@ -6,6 +6,7 @@ import queue
 import threading
 import time
 import logging
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,8 @@ _RUNTIME_LOCK = threading.Lock()
 _RUNTIME_WORKER = None
 _RUNTIME_ENQUEUED = 0
 _RUNTIME_REJECTED = 0
+_RUNTIME_FAILURES = 0
+_RUNTIME_DEGRADED = False
 
 
 def _db_path() -> Path:
@@ -342,6 +345,7 @@ def _write_runtime_snapshot_sync(payload: dict[str, Any]) -> bool:
 
 
 def _runtime_write_loop() -> None:
+    global _RUNTIME_FAILURES, _RUNTIME_DEGRADED
     while not _RUNTIME_STOP.is_set() or not _RUNTIME_WRITE_QUEUE.empty():
         try:
             payload = _RUNTIME_WRITE_QUEUE.get(timeout=0.1)
@@ -349,6 +353,9 @@ def _runtime_write_loop() -> None:
             continue
         try:
             if not _write_runtime_snapshot_sync(payload):
+                with _RUNTIME_LOCK:
+                    _RUNTIME_FAILURES += 1
+                    _RUNTIME_DEGRADED = True
                 logger.warning("feed_runtime_snapshot_persist_failed")
         finally:
             _RUNTIME_WRITE_QUEUE.task_done()
@@ -364,15 +371,16 @@ def _ensure_runtime_worker() -> None:
 
 
 def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
-    global _RUNTIME_ENQUEUED, _RUNTIME_REJECTED
+    global _RUNTIME_ENQUEUED, _RUNTIME_REJECTED, _RUNTIME_DEGRADED
     if not isinstance(payload, dict):
         return False
     _ensure_runtime_worker()
     try:
-        _RUNTIME_WRITE_QUEUE.put_nowait(dict(payload))
+        _RUNTIME_WRITE_QUEUE.put_nowait(deepcopy(payload))
     except queue.Full:
         with _RUNTIME_LOCK:
             _RUNTIME_REJECTED += 1
+            _RUNTIME_DEGRADED = True
         logger.error("feed_runtime_snapshot_queue_full")
         return False
     with _RUNTIME_LOCK:
@@ -388,8 +396,10 @@ def shutdown_runtime_persistence(deadline_seconds: float = 2.0) -> dict:
     worker = _RUNTIME_WORKER
     if worker is not None:
         worker.join(max(0.0, deadline - time.monotonic()))
-    state = {"queue_depth": _RUNTIME_WRITE_QUEUE.qsize(), "worker_alive": bool(worker and worker.is_alive()),
-             "enqueued": _RUNTIME_ENQUEUED, "rejected": _RUNTIME_REJECTED}
+    with _RUNTIME_LOCK:
+        state = {"queue_depth": _RUNTIME_WRITE_QUEUE.qsize(), "worker_alive": bool(worker and worker.is_alive()),
+                 "enqueued": _RUNTIME_ENQUEUED, "rejected": _RUNTIME_REJECTED,
+                 "failures": _RUNTIME_FAILURES, "durability_degraded": _RUNTIME_DEGRADED}
     state["complete"] = state["queue_depth"] == 0 and not state["worker_alive"]
     return state
 

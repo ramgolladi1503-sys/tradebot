@@ -27,6 +27,7 @@ class DepthStore:
         self._persisted = 0
         self._persist_rejected = 0
         self._persist_failures = 0
+        self._persist_degraded = False
         self._persist_shutdown = False
         self._persist_thread = threading.Thread(target=self._persist_loop, name="depth-store-persistence", daemon=True)
         self._persist_thread.start()
@@ -44,6 +45,7 @@ class DepthStore:
             except Exception as exc:
                 with self._persist_lock:
                     self._persist_failures += 1
+                    self._persist_degraded = True
                 logger.warning("depth_persistence_failed error=%s", type(exc).__name__)
             finally:
                 self._persist_queue.task_done()
@@ -83,6 +85,7 @@ class DepthStore:
                 with self._persist_lock:
                     if self._persist_shutdown:
                         self._persist_rejected += 1
+                        self._persist_degraded = True
                         raise RuntimeError("depth persistence is shut down")
                 try:
                     self._persist_queue.put_nowait((
@@ -92,6 +95,7 @@ class DepthStore:
                 except queue.Full:
                     with self._persist_lock:
                         self._persist_rejected += 1
+                        self._persist_degraded = True
                     logger.error("depth_persistence_queue_full")
                     raise
                 with self._persist_lock:
@@ -122,6 +126,7 @@ class DepthStore:
                 "persisted": self._persisted,
                 "rejected": self._persist_rejected,
                 "failures": self._persist_failures,
+                "durability_degraded": self._persist_degraded,
                 "shutdown": self._persist_shutdown,
                 "worker_alive": self._persist_thread.is_alive(),
             }
