@@ -1,1 +1,2 @@
 Trigger the self-removing two-parent merge of certified PR #771 authority into PR #772.
+Retrigger after the workflow is present on the branch.
