@@ -25,14 +25,9 @@ with st.sidebar:
     if status.get("exists"):
         st.success(f"{status['document_count']} documents / {status['chunk_count']} chunks")
         st.caption(f"Last built: {status.get('last_built_at_utc') or 'unknown'}")
-        doctor = doctor_index(INDEX_PATH)
-        if doctor.healthy:
-            st.caption("Integrity: healthy")
-        else:
-            failed = [check.name for check in doctor.checks if not check.passed]
-            st.error("Integrity failed: " + ", ".join(failed))
     else:
         st.warning("Index not built")
+
     if st.button("Build / refresh index", use_container_width=True):
         try:
             with st.spinner("Indexing README.md, docs/, and research/..."):
@@ -45,6 +40,17 @@ with st.sidebar:
                 f"removed {report.removed_files}; chunks {report.chunk_count}."
             )
             st.rerun()
+
+    if st.button("Run integrity check", use_container_width=True, disabled=not status.get("exists")):
+        with st.spinner("Checking index integrity..."):
+            doctor = doctor_index(INDEX_PATH)
+        if doctor.healthy:
+            st.success("Index integrity is healthy.")
+        else:
+            failed = [check.name for check in doctor.checks if not check.passed]
+            st.error("Integrity failed: " + ", ".join(failed))
+        with st.expander("Integrity details"):
+            st.json(doctor.to_dict())
 
     top_k = st.slider("Retrieved evidence", min_value=3, max_value=15, value=8)
     path_prefix = st.selectbox("Limit sources", ("All", "docs", "research", "README.md"))
