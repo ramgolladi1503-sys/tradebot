@@ -10,7 +10,13 @@ from core.unified_live_validation_pr748_756.campaign_contract import CampaignIde
 
 
 class AppendOnlyRecorder:
-    """Small append-only writer with per-row safety fields."""
+    """Small append-only writer with per-row safety fields.
+
+    The evidence root becomes immutable once ``SEALED`` exists.  Callers must
+    finish all persistence drains and append operations before sealing; any
+    later mutation attempt fails closed instead of silently invalidating the
+    manifest and SHA256SUMS authority.
+    """
 
     def __init__(self, identity: CampaignIdentity):
         self.identity = identity
@@ -20,6 +26,8 @@ class AppendOnlyRecorder:
     def append(self, relative_path: str, row: Mapping[str, Any], *, pr_number: int) -> Path:
         if relative_path.startswith("/") or ".." in Path(relative_path).parts:
             raise ValueError("relative_path_must_stay_inside_evidence_root")
+        if (self.root / "SEALED").exists():
+            raise RuntimeError("evidence_root_already_sealed")
         path = self.root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = enrich_row(self.identity, row, pr_number=pr_number)
@@ -27,4 +35,3 @@ class AppendOnlyRecorder:
             handle.write(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str))
             handle.write("\n")
         return path
-
