@@ -77,9 +77,30 @@ def _evaluate(args: argparse.Namespace) -> int:
 
     results = []
     reciprocal_ranks = []
-    hit_count = 0
+    positive_count = 0
+    positive_hits = 0
+    refusal_count = 0
+    refusal_hits = 0
     for case in cases:
         query = str(case["query"])
+        expect_refusal = bool(case.get("expect_refusal", False))
+        if expect_refusal:
+            refusal_count += 1
+            answer = ask_index(index_path, query, top_k=args.top_k)
+            passed = answer.refusal_reason is not None and not answer.citations
+            refusal_hits += int(passed)
+            results.append(
+                {
+                    "query": query,
+                    "case_type": "refusal",
+                    "passed": passed,
+                    "refusal_reason": answer.refusal_reason,
+                    "citations": list(answer.citations),
+                }
+            )
+            continue
+
+        positive_count += 1
         expected_paths = tuple(str(item) for item in case.get("expected_paths", []))
         expected_terms = tuple(str(item).lower() for item in case.get("expected_terms", []))
         hits = search_index(index_path, query, top_k=args.top_k)
@@ -91,29 +112,37 @@ def _evaluate(args: argparse.Namespace) -> int:
                 rank = index
                 break
         passed = rank is not None
-        hit_count += int(passed)
+        positive_hits += int(passed)
         reciprocal_ranks.append(0.0 if rank is None else 1.0 / rank)
         results.append(
             {
                 "query": query,
+                "case_type": "retrieval",
                 "passed": passed,
                 "rank": rank,
                 "top_paths": [hit.path for hit in hits],
             }
         )
 
-    total = len(cases)
+    hit_at_k = positive_hits / positive_count if positive_count else 1.0
+    mrr = sum(reciprocal_ranks) / positive_count if positive_count else 1.0
+    refusal_accuracy = refusal_hits / refusal_count if refusal_count else 1.0
+    passed = hit_at_k >= args.min_hit_at_k and refusal_accuracy >= args.min_refusal_accuracy
     summary = {
-        "case_count": total,
-        "hit_at_k": hit_count / total,
-        "mrr": sum(reciprocal_ranks) / total,
+        "case_count": len(cases),
+        "positive_case_count": positive_count,
+        "refusal_case_count": refusal_count,
+        "hit_at_k": hit_at_k,
+        "mrr": mrr,
+        "refusal_accuracy": refusal_accuracy,
         "top_k": args.top_k,
         "minimum_hit_at_k": args.min_hit_at_k,
-        "passed": (hit_count / total) >= args.min_hit_at_k,
+        "minimum_refusal_accuracy": args.min_refusal_accuracy,
+        "passed": passed,
         "results": results,
     }
     _print_json(summary)
-    return 0 if summary["passed"] else 1
+    return 0 if passed else 1
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -144,6 +173,7 @@ def _parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--cases", default=str(_repo_root() / "rag" / "eval_cases.json"))
     evaluate.add_argument("--top-k", type=int, default=5)
     evaluate.add_argument("--min-hit-at-k", type=float, default=0.8)
+    evaluate.add_argument("--min-refusal-accuracy", type=float, default=1.0)
     evaluate.set_defaults(handler=_evaluate)
     return parser
 
