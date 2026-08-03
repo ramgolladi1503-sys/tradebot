@@ -98,3 +98,5 @@ jobs:
           git add -A
           git commit -m "feat: cut over canonical runtime authority"
           git push origin HEAD:post-pr763/runtime-authority-cutover-v1
+
+# trigger: workflow already existed in the parent commit
