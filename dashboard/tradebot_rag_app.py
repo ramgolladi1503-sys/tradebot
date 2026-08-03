@@ -6,8 +6,13 @@ from pathlib import Path
 
 import streamlit as st
 
-from core.tradebot_rag import ask_index, default_index_path, index_status
-from core.tradebot_rag_operations import BuildLockError, build_index_safely, doctor_index
+from core.tradebot_rag import ask_index, default_index_path
+from core.tradebot_rag_operations import (
+    BuildLockError,
+    build_index_safely,
+    doctor_index,
+    read_only_index_status,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INDEX_PATH = default_index_path(REPO_ROOT)
@@ -21,7 +26,8 @@ st.caption(
 
 with st.sidebar:
     st.subheader("Index")
-    index_exists = INDEX_PATH.exists()
+    status = read_only_index_status(INDEX_PATH)
+    index_exists = bool(status.get("exists"))
 
     if st.button("Run integrity check", use_container_width=True, disabled=not index_exists):
         with st.spinner("Checking index integrity..."):
@@ -34,10 +40,13 @@ with st.sidebar:
         with st.expander("Integrity details"):
             st.json(doctor.to_dict())
 
-    status = index_status(INDEX_PATH)
-    if status.get("exists"):
+    if status.get("readable"):
         st.success(f"{status['document_count']} documents / {status['chunk_count']} chunks")
         st.caption(f"Last built: {status.get('last_built_at_utc') or 'unknown'}")
+        if status.get("build_lock_present"):
+            st.warning("An index build lock is present.")
+    elif index_exists:
+        st.error(f"Index exists but is not readable: {status.get('error') or 'unknown error'}")
     else:
         st.warning("Index not built")
 
