@@ -1,2 +1,0 @@
-Trigger the self-removing restart test threading-isolation patch.
-Retrigger after the workflow is present on the branch.
