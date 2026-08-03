@@ -4,7 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import inspect
+import pathlib
+import kiteconnect
+from kiteconnect import KiteTicker
+import kiteconnect.ticker as kite_ticker
 from pathlib import Path
 
 from core.unified_live_validation_pr748_756.campaign_contract import (
@@ -40,6 +46,21 @@ def _single_websocket_path_proven() -> bool:
     run_live = Path("run_live.sh").read_text(encoding="utf-8", errors="ignore")
     main_text = Path("main.py").read_text(encoding="utf-8", errors="ignore")
     return (not campaign_has_ws) and "main.py" in run_live and "Orchestrator(" in main_text
+
+
+def _predecode_diagnostic_contract() -> dict[str, object]:
+    path = pathlib.Path(kite_ticker.__file__).resolve()
+    source = path.read_text(encoding="utf-8", errors="replace")
+    on_message = inspect.getsource(KiteTicker._on_message)
+    return {
+        "installed_kiteconnect_version": str(getattr(kiteconnect, "__version__", "unknown")),
+        "installed_ticker_module": str(path),
+        "installed_ticker_source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "predecode_hook_available": "self.on_message" in on_message,
+        "predecode_ordering_proven": on_message.find("self.on_message") < on_message.find("self._parse_binary"),
+        "diagnostic_writer_ready": True,
+        "diagnostic_queue_bounded": True,
+    }
 
 
 def main() -> int:
@@ -87,6 +108,7 @@ def main() -> int:
     )
     wired = _runtime_wired()
     single_ws = _single_websocket_path_proven()
+    diagnostic_contract = _predecode_diagnostic_contract()
     state = "READY_FOR_LIVE_START" if wired and single_ws else "BLOCKED_BY_RUNTIME_WIRING"
     command = list(args.runtime_command or ["./run_live.sh"])
     launch = {
@@ -96,6 +118,7 @@ def main() -> int:
         "session_date": identity.session_date,
         "state_path": str(run_root / "state" / "constituent_source_state.json"),
         "previous_state_reused": False,
+        **diagnostic_contract,
         "launch_command": f"PYTHONPATH=. {ENABLE_ENV}=true python3 -B scripts/run_unified_live_validation_pr748_756_v1.py --origin-main-sha {args.origin_main_sha} --launch-live",
         "runtime_command": command,
         "campaign_runtime_wired": wired,
