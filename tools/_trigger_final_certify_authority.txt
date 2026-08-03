@@ -1,1 +1,0 @@
-Trigger final runtime-authority certification with exact frozen-blob restoration.
