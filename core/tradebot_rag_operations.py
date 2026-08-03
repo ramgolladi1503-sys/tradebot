@@ -181,7 +181,10 @@ def exclusive_build_lock(
                 try:
                     os.close(descriptor)
                 finally:
-                    _remove_owned_lock(lock_path, token)
+                    try:
+                        lock_path.unlink()
+                    except FileNotFoundError:
+                        pass
                 raise
             else:
                 os.close(descriptor)
