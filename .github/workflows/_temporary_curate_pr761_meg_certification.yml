@@ -122,3 +122,5 @@ jobs:
           PY
           git commit -m "qa: curate auth and test-integrity foundation for MEG shadow"
           git push origin HEAD:post-pr763/meg-shadow-system-certification-v1
+
+# trigger: workflow exists in parent commit
