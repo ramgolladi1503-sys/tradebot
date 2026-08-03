@@ -131,3 +131,5 @@ jobs:
           PY
           git commit -m "feat: complete read-only PR763 reliability evidence chain"
           git push origin HEAD:post-pr763/ai-reliability-live-evidence-v1
+
+# trigger: workflow exists in parent commit
