@@ -24,7 +24,6 @@ jobs:
         with:
           ref: campaign/unified-live-validation-pr748-756-v1
       - name: Apply guarded offline repairs
-        if: github.event_name == 'push'
         id: repairs
         shell: bash
         run: |
