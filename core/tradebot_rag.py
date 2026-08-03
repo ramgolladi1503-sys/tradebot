@@ -380,7 +380,14 @@ def build_index(
         for source in sources:
             relative = source.relative_to(root).as_posix()
             discovered_paths.add(relative)
-            raw = source.read_bytes()
+            try:
+                raw = source.read_bytes()
+            except OSError:
+                if relative in existing:
+                    _delete_document(connection, relative, fts_enabled=fts_enabled)
+                    removed_files += 1
+                skipped_files += 1
+                continue
             digest = _sha256_bytes(raw)
             if existing.get(relative) == digest:
                 unchanged_files += 1
@@ -388,6 +395,9 @@ def build_index(
             try:
                 text = raw.decode("utf-8")
             except UnicodeDecodeError:
+                if relative in existing:
+                    _delete_document(connection, relative, fts_enabled=fts_enabled)
+                    removed_files += 1
                 skipped_files += 1
                 continue
             chunks = chunk_text(
@@ -397,6 +407,9 @@ def build_index(
                 overlap_lines=overlap_lines,
             )
             if not chunks:
+                if relative in existing:
+                    _delete_document(connection, relative, fts_enabled=fts_enabled)
+                    removed_files += 1
                 skipped_files += 1
                 continue
 
