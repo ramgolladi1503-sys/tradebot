@@ -1,3 +1,4 @@
+# Final API-triggered rerun after Gate-4 ownership repair.
 name: Temporary PR763 Offline Finalizer
 
 on:
