@@ -160,6 +160,20 @@ def test_manifest_resolves_exactly_one_nse_equity_token_per_constituent():
     )
 
 
+def test_manifest_resolves_kite_index_row_when_segment_is_indices_and_type_is_eq():
+    manifest = _manifest()
+    rows = _instrument_rows(manifest)
+    for row in rows:
+        if row["tradingsymbol"] == "NIFTY 50":
+            row["instrument_type"] = "EQ"
+            row["segment"] = "INDICES"
+
+    resolution = resolve_constituent_tokens(manifest, rows)
+
+    assert resolution["status"] == "READY"
+    assert resolution["index_token"] == INDEX_TOKEN
+
+
 def test_manifest_resolution_fails_closed_for_missing_and_ambiguous_tokens():
     manifest = _manifest()
     rows = _instrument_rows(manifest)

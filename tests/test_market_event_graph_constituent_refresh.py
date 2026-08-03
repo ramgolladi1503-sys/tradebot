@@ -105,6 +105,23 @@ def test_refresh_failure_emits_explicit_fail_closed_status(tmp_path):
     assert result["allowed_for_live_execution"] is False
 
 
+def test_refresh_invalid_context_time_is_explicit_not_exception(tmp_path):
+    reset_market_event_graph_constituent_refresh_state()
+
+    result = refresh_market_event_graph_constituent_source(
+        symbol="NIFTY",
+        as_of_epoch=None,
+        metadata={"market_event_graph_live_source_enable": True},
+        state_path=tmp_path / "invalid_time_state.json",
+    )
+
+    assert result["invoked"] is True
+    assert result["status"] == "INVALID_CONTEXT_TIME"
+    assert result["producer_status"] == "INVALID_CONTEXT_TIME"
+    assert result["state_created"] is False
+    assert result["broker_api_called"] is False
+
+
 def test_process_level_fast_cycle_refreshes_with_no_candidates(monkeypatch, tmp_path):
     reset_market_event_graph_constituent_refresh_state()
     manifest = _manifest()

@@ -53,8 +53,31 @@ def refresh_market_event_graph_constituent_source(
     state_existed_before = state_path.is_file()
     try:
         parsed_epoch = float(as_of_epoch)
-        if not math.isfinite(parsed_epoch) or parsed_epoch <= 0.0:
-            raise ValueError("as_of_epoch_missing_or_invalid")
+    except (TypeError, ValueError):
+        parsed_epoch = 0.0
+    if not math.isfinite(parsed_epoch) or parsed_epoch <= 0.0:
+        result = _result(
+            invoked=True,
+            status="INVALID_CONTEXT_TIME",
+            reason="as_of_epoch_missing_or_invalid",
+            symbol=symbol,
+            owner=owner,
+            as_of_epoch=as_of_epoch,
+            session_date=None,
+            feed_session_id=base_metadata.get("feed_session_id"),
+            reconnect_generation=_optional_int(base_metadata.get("reconnect_generation")),
+            mutation_generation=base_metadata.get("mutation_generation"),
+            latest_completed_boundary_epoch=None,
+            state_path=state_path,
+            state_existed_before=state_existed_before,
+            state_exists_after=state_path.is_file(),
+            state_persisted=False,
+            producer_metadata=base_metadata,
+        )
+        result["duration_ms"] = round((time.time() - started_epoch) * 1000.0, 3)
+        _observe_refresh(result, base_metadata)
+        return result
+    try:
         session_date = datetime.fromtimestamp(parsed_epoch, tz=IST_TZ).date().isoformat()
         reconnect_generation = _optional_int(base_metadata.get("reconnect_generation"))
         feed_session_id = base_metadata.get("feed_session_id")

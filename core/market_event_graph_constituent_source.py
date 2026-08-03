@@ -289,6 +289,7 @@ def resolve_constituent_tokens(
         exchange = str(raw.get("exchange") or "").upper()
         tradingsymbol = str(raw.get("tradingsymbol") or "").strip().upper()
         instrument_type = str(raw.get("instrument_type") or "").strip().upper()
+        segment = str(raw.get("segment") or "").strip().upper()
         try:
             token = int(raw.get("instrument_token"))
         except (TypeError, ValueError):
@@ -297,7 +298,9 @@ def resolve_constituent_tokens(
             continue
         if tradingsymbol in candidates and instrument_type in {"EQ", "EQUITY"}:
             candidates[tradingsymbol].append(token)
-        if tradingsymbol == index_tradingsymbol and instrument_type in {"INDEX", "INDICES"}:
+        if tradingsymbol == index_tradingsymbol and (
+            instrument_type in {"INDEX", "INDICES"} or segment == "INDICES"
+        ):
             index_candidates.append(token)
 
     missing = sorted(symbol for symbol, values in candidates.items() if not values)
