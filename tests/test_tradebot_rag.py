@@ -35,6 +35,27 @@ def test_discovery_is_allowlisted_and_skips_secrets(tmp_path: Path) -> None:
     assert skipped >= 2
 
 
+def test_discovery_skips_symlinked_sources(tmp_path: Path) -> None:
+    _write(tmp_path / "README.md", "# TradeBot\nSafe evidence")
+    _write(tmp_path / "outside.md", "# Outside\nDo not duplicate")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "linked.md").symlink_to(tmp_path / "outside.md")
+
+    files, skipped = discover_source_files(tmp_path)
+
+    assert "docs/linked.md" not in [path.relative_to(tmp_path).as_posix() for path in files]
+    assert skipped >= 1
+
+
+def test_hidden_parent_directory_does_not_hide_repository_sources(tmp_path: Path) -> None:
+    repo = tmp_path / ".worktrees" / "tradebot"
+    _write(repo / "README.md", "# TradeBot\nVisible evidence")
+
+    files, _ = discover_source_files(repo)
+
+    assert [path.relative_to(repo).as_posix() for path in files] == ["README.md"]
+
+
 def test_chunking_preserves_line_ranges_and_overlap() -> None:
     text = "# Heading\n" + "\n".join(f"line {index} evidence" for index in range(1, 30))
     chunks = chunk_text("docs/example.md", text, max_chars=220, overlap_lines=2)
