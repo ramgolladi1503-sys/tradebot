@@ -187,7 +187,20 @@ def test_dashboard_model_separates_operator_truth_and_zeroes_selection_score(
     out = normalize_df(frame)
     valid = out.loc[out["trade_id"] == "ui-valid"].iloc[0]
     advisory = out.loc[out["trade_id"] == "ui-advisory"].iloc[0]
-    assert valid["operator_bucket"] == "TOP_EXECUTABLE"
+    diagnostic = {
+        "authority_state": valid.get("authority_state"),
+        "authority_reason": valid.get("authority_reason"),
+        "authority_blockers": valid.get("authority_blockers"),
+        "canonical_execution_decision": valid.get(
+            "canonical_execution_decision"
+        ),
+        "execution_allowed": valid.get("execution_allowed"),
+        "eligible_for_execution": valid.get("eligible_for_execution"),
+        "execution_entry_status": valid.get("execution_entry_status"),
+        "permission": valid.get("permission"),
+        "final_action": valid.get("final_action"),
+    }
+    assert valid["operator_bucket"] == "TOP_EXECUTABLE", diagnostic
     assert float(valid["selection_score"]) == 0.73
     assert advisory["operator_bucket"] == "ADVISORY_ONLY"
     assert float(advisory["selection_score"]) == 0.0
