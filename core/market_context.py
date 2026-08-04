@@ -16,10 +16,25 @@ SESSION_PRE_OPEN_MATCHING = "PRE_OPEN_MATCHING"
 SESSION_OPEN_WARMUP = "OPEN_WARMUP"
 SESSION_POST_CLOSE = "POST_CLOSE"
 SESSION_CLOSED = "CLOSED"
+SESSION_CAS_REFERENCE_TRANSITION = "CAS_REFERENCE_TRANSITION"
+SESSION_CAS_ORDER_DISCOVERY = "CAS_ORDER_DISCOVERY"
+SESSION_CAS_RANDOM_CLOSE_WINDOW = "CAS_RANDOM_CLOSE_WINDOW"
+SESSION_CAS_MATCHING = "CAS_MATCHING"
+SESSION_DERIVATIVE_CONVERGENCE = "DERIVATIVE_CONVERGENCE"
 
 
 from config import config as cfg
 from config.profile import resolve_trading_mode
+from core.cas_close_structure import (
+    PHASE_CAS_MATCHING,
+    PHASE_CAS_ORDER_DISCOVERY,
+    PHASE_CAS_RANDOM_CLOSE_WINDOW,
+    PHASE_CAS_REFERENCE_TRANSITION,
+    PHASE_DERIVATIVE_CONVERGENCE,
+    PHASE_NORMAL_CONTINUOUS,
+    PHASE_POST_CLOSE,
+    classify_nse_close_phase,
+)
 from core.time_utils import is_market_open_ist, now_ist
 
 logger = logging.getLogger(__name__)
@@ -108,13 +123,37 @@ def _extract_symbol_instrument(snapshot_or_config: Mapping[str, Any] | Any = Non
 
 def derive_session_state_ist(current_time=None, **kwargs) -> str:
     from datetime import time
+
     now_time = current_time or now_ist()
     t = now_time.time()
-    if t < time(9, 0): return SESSION_PRE_OPEN
-    if t < time(9, 8): return SESSION_PRE_OPEN_MATCHING
-    if t < time(9, 15): return SESSION_OPEN_WARMUP
-    if t < time(15, 30): return SESSION_NORMAL_OPEN
-    if t <= time(16, 0): return SESSION_POST_CLOSE
+    if t < time(9, 0):
+        return SESSION_PRE_OPEN
+    if t < time(9, 8):
+        return SESSION_PRE_OPEN_MATCHING
+    if t < time(9, 15):
+        return SESSION_OPEN_WARMUP
+
+    segment = str(kwargs.get("segment") or getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")).strip().upper()
+    if segment in {"NSE_EQ", "NSE_FNO", "NSE_CASH", "CASH", "CM", "NFO", "FNO", "DERIVATIVES"}:
+        phase = classify_nse_close_phase(now_time, segment=segment)
+        phase_to_state = {
+            PHASE_NORMAL_CONTINUOUS: SESSION_NORMAL_OPEN,
+            PHASE_CAS_REFERENCE_TRANSITION: SESSION_CAS_REFERENCE_TRANSITION,
+            PHASE_CAS_ORDER_DISCOVERY: SESSION_CAS_ORDER_DISCOVERY,
+            PHASE_CAS_RANDOM_CLOSE_WINDOW: SESSION_CAS_RANDOM_CLOSE_WINDOW,
+            PHASE_CAS_MATCHING: SESSION_CAS_MATCHING,
+            PHASE_DERIVATIVE_CONVERGENCE: SESSION_DERIVATIVE_CONVERGENCE,
+            PHASE_POST_CLOSE: SESSION_POST_CLOSE,
+        }
+        state = phase_to_state.get(phase, SESSION_POST_CLOSE)
+        if state == SESSION_POST_CLOSE and t > time(16, 0):
+            return SESSION_CLOSED
+        return state
+
+    if t < time(15, 30):
+        return SESSION_NORMAL_OPEN
+    if t <= time(16, 0):
+        return SESSION_POST_CLOSE
     return SESSION_CLOSED
 
 
