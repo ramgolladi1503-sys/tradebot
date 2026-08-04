@@ -84,6 +84,8 @@ def parse_args():
     parser.add_argument("--nifty-spot", type=float, help="NIFTY 50 spot price")
     parser.add_argument("--weights-file", type=Path, help="Path to official constituent weights CSV/JSON file")
     parser.add_argument("--dry-run", action="store_true", help="Perform dry run validation")
+    parser.add_argument("--campaign-id", help="Target campaign identity")
+    parser.add_argument("--output-root", help="Root directory for capture output")
     return parser.parse_args()
 
 def main():
@@ -113,7 +115,10 @@ def main():
     print(f"NIFTY Spot Price: {nifty_spot} (Source: {spot_price_source})")
 
     worktree_root = Path(__file__).resolve().parents[2]
-    evidence_root = worktree_root / "runtime" / "market_data" / "upstox" / session_date / "full_day_replay_v1"
+    if args.output_root and args.campaign_id:
+        evidence_root = Path(args.output_root) / args.campaign_id
+    else:
+        evidence_root = worktree_root / "runtime" / "market_data" / "upstox" / session_date / "full_day_replay_v1"
     
     master_dest_dir = evidence_root / "upstox_instruments"
     constituents_dest_dir = evidence_root / "constituents"

@@ -334,9 +334,17 @@ def main():
     signal.signal(signal.SIGTERM, shutdown)
 
     if args.preconnect_only:
-        logger.info("Preconnect setup complete (--preconnect-only mode). Shutting down.")
-        shutdown()
-        return
+        logger.info("Preconnect setup complete (--preconnect-only mode). Shutting down cleanly.")
+        if raw_writer:
+            raw_writer.close()
+        if norm_writer:
+            norm_writer.close()
+            
+        reconcile_report = norm_writer.get_reconciliation_report()
+        logger.info(f"Preconnect durability report: {json.dumps(reconcile_report)}")
+        
+        ledger.log_event("PRECONNECT_PASS", {"run_id": run_id, "reconciliation": reconcile_report})
+        sys.exit(0)
 
     log_sub_event("CONNECT", "ALL", "INITIATED")
     streamer.connect()
