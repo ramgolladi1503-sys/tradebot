@@ -7,6 +7,7 @@ import os
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -120,6 +121,81 @@ def write_authority_snapshot(candidate: Mapping[str, Any], path: Path) -> dict[s
     return payload
 
 
+class ObservationLifecycle:
+    """Own the read-only feed lifecycle and prove an ordered, idempotent drain."""
+
+    def __init__(self, feed: Any, *, drain_deadline_seconds: float = 5.0) -> None:
+        self.feed = feed
+        self.drain_deadline_seconds = float(drain_deadline_seconds)
+        self.accepting = False
+        self._stop_requested = threading.Event()
+        self._shutdown_lock = threading.Lock()
+        self._shutdown_report: dict[str, Any] | None = None
+
+    def start(self, tokens: list[int]) -> None:
+        if self._shutdown_report is not None:
+            raise RuntimeError("READ_ONLY_LIFECYCLE_ALREADY_SHUT_DOWN")
+        if not tokens or any(not isinstance(token, int) or token <= 0 for token in tokens):
+            raise RuntimeError("READ_ONLY_LIFECYCLE_INVALID_TOKENS")
+        if not self.feed.start_depth_ws(tokens, profile_verified=True, skip_lock=True):
+            raise RuntimeError("READ_ONLY_KITE_FEED_START_FAILED")
+        self.accepting = True
+
+    def request_stop(self, reason: str = "read_only_observation_shutdown") -> None:
+        self.accepting = False
+        self._stop_requested.set()
+        self.feed.stop_depth_ws(reason=reason)
+
+    def should_stop(self) -> bool:
+        return self._stop_requested.is_set()
+
+    def shutdown(self, reason: str = "read_only_observation_shutdown") -> dict[str, Any]:
+        with self._shutdown_lock:
+            if self._shutdown_report is not None:
+                return dict(self._shutdown_report)
+            self.request_stop(reason)
+            deadline = self.drain_deadline_seconds
+            import core.tick_store as tick_store
+            import core.depth_store as depth_store
+            import core.feed.runtime_store as runtime_store
+            bridge_module = __import__("core.market_event_graph_live_runtime_bridge", fromlist=["flush_live_source_bridge"])
+            runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=deadline)
+            tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=deadline)
+            depth_result = depth_store.depth_store.shutdown_persistence(deadline_seconds=deadline)
+            bridge_result = bridge_module.flush_live_source_bridge()
+            tick_state = tick_store.get_persistence_worker_state()
+            runtime_state = runtime_store.runtime_persistence_state()
+            depth_state = depth_store.depth_store.persistence_state()
+            complete = bool(
+                runtime_result.get("complete")
+                and tick_result.get("complete", tick_state.get("queue_depth_at_shutdown") == 0)
+                and depth_result.get("complete")
+                and not runtime_state.get("worker_alive")
+                and not depth_state.get("worker_alive")
+                and tick_state.get("worker_join_completed") is True
+            )
+            self._shutdown_report = {
+                "proof_kind": "PR763_LIVE_ACCEPTANCE",
+                "shutdown_drain_complete": complete,
+                "persistence_drain_complete": complete,
+                "accepting": self.accepting,
+                "feed_close_requested": True,
+                "late_callback_policy": "REJECTED_AFTER_ACCEPTING_FALSE",
+                "runtime_persistence": runtime_result,
+                "tick_persistence": tick_result,
+                "depth_persistence": depth_result,
+                "runtime_state": runtime_state,
+                "tick_state": tick_state,
+                "depth_state": depth_state,
+                "meg_bridge_flush": bridge_result,
+                "read_only": True,
+                "is_order_action": False,
+                "broker_api_called": False,
+                "allowed_for_live_execution": False,
+            }
+            return dict(self._shutdown_report)
+
+
 def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None = None) -> int:
     env = safe_environment()
     contract = safety_contract(env, child_command=[sys.executable, "-B", "core.kite_read_only_observation_runtime.py"])
@@ -141,16 +217,23 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     tokens = list(launch_plan.get("final_union_tokens") or [])
     if not tokens:
         raise RuntimeError("READ_ONLY_LAUNCH_PLAN_EMPTY")
-    started = kite_depth_ws.start_depth_ws(tokens, profile_verified=True, skip_lock=True)
-    if not started:
-        raise RuntimeError("READ_ONLY_KITE_FEED_START_FAILED")
-    stop = threading.Event()
+    from core.market_event_graph_live_runtime_bridge import get_live_source_bridge
+
+    lifecycle = ObservationLifecycle(kite_depth_ws)
+    lifecycle.start(tokens)
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
     try:
-        while not stop.wait(0.05 if deadline is not None else 1.0):
+        while not lifecycle.should_stop():
             produce_and_store_runtime_snapshots(market_snapshot=None, producer="kite_read_only_observation")
+            get_live_source_bridge().observe_cycle([], cycle_cutoff=datetime.now(timezone.utc))
             if deadline is not None and time.monotonic() >= deadline:
                 break
+            time.sleep(0.05 if deadline is not None else 1.0)
     finally:
-        kite_depth_ws.stop_depth_ws(reason="read_only_observation_shutdown")
+        report = lifecycle.shutdown()
+        (output_root / "shutdown_drain.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
+        )
+        if not report["shutdown_drain_complete"]:
+            raise RuntimeError("READ_ONLY_SHUTDOWN_DRAIN_INCOMPLETE")
     return 0

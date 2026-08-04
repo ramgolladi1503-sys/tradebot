@@ -5,11 +5,73 @@ import pytest
 
 from core.kite_read_only_observation_runtime import (
     BrokerWriteFirewall,
+    ObservationLifecycle,
     assert_import_boundary,
     safety_contract,
     safe_environment,
     write_authority_snapshot,
 )
+
+
+def test_lifecycle_shutdown_is_idempotent_and_rejects_late_start(monkeypatch):
+    calls = []
+
+    class Feed:
+        def start_depth_ws(self, tokens, **kwargs):
+            calls.append(("start", list(tokens), kwargs))
+            return True
+
+        def stop_depth_ws(self, **kwargs):
+            calls.append(("stop", kwargs))
+
+    import core.tick_store as tick_store
+    import core.depth_store as depth_store
+    import core.feed.runtime_store as runtime_store
+    monkeypatch.setattr(runtime_store, "shutdown_runtime_persistence", lambda **_: {"complete": True, "queue_depth": 0, "worker_alive": False})
+    monkeypatch.setattr(runtime_store, "runtime_persistence_state", lambda: {"worker_alive": False, "pending": 0})
+    monkeypatch.setattr(tick_store, "shutdown_persistence_worker", lambda **_: {"complete": True})
+    monkeypatch.setattr(tick_store, "get_persistence_worker_state", lambda: {"worker_join_completed": True, "queue_depth_at_shutdown": 0})
+    monkeypatch.setattr(depth_store.depth_store, "shutdown_persistence", lambda **_: {"complete": True})
+    monkeypatch.setattr(depth_store.depth_store, "persistence_state", lambda: {"worker_alive": False, "queue_depth": 0})
+    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.flush_live_source_bridge", lambda: {"flushed": True})
+
+    lifecycle = ObservationLifecycle(Feed(), drain_deadline_seconds=1.0)
+    lifecycle.start([256265, 738561])
+    first = lifecycle.shutdown()
+    second = lifecycle.shutdown("late_callback")
+    assert first == second
+    assert first["accepting"] is False
+    assert first["late_callback_policy"] == "REJECTED_AFTER_ACCEPTING_FALSE"
+    assert [call[0] for call in calls] == ["start", "stop"]
+    with pytest.raises(RuntimeError, match="ALREADY_SHUT_DOWN"):
+        lifecycle.start([256265])
+
+
+def test_lifecycle_drain_report_uses_real_persistence_shutdown_apis(monkeypatch):
+    class Feed:
+        def start_depth_ws(self, tokens, **kwargs):
+            return True
+
+        def stop_depth_ws(self, **kwargs):
+            return None
+
+    import core.tick_store as tick_store
+    import core.depth_store as depth_store
+    import core.feed.runtime_store as runtime_store
+    monkeypatch.setattr(runtime_store, "shutdown_runtime_persistence", lambda **_: {"complete": True, "queue_depth": 0, "worker_alive": False})
+    monkeypatch.setattr(runtime_store, "runtime_persistence_state", lambda: {"worker_alive": False, "pending": 0})
+    monkeypatch.setattr(tick_store, "shutdown_persistence_worker", lambda **_: {"complete": True})
+    monkeypatch.setattr(tick_store, "get_persistence_worker_state", lambda: {"worker_join_completed": True, "queue_depth_at_shutdown": 0})
+    monkeypatch.setattr(depth_store.depth_store, "shutdown_persistence", lambda **_: {"complete": True})
+    monkeypatch.setattr(depth_store.depth_store, "persistence_state", lambda: {"worker_alive": False, "queue_depth": 0})
+    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.flush_live_source_bridge", lambda: {"flushed": True})
+
+    lifecycle = ObservationLifecycle(Feed())
+    lifecycle.start([256265])
+    report = lifecycle.shutdown()
+    assert report["shutdown_drain_complete"] is True
+    assert report["feed_close_requested"] is True
+    assert report["meg_bridge_flush"]["flushed"] is True
 
 
 def test_safe_environment_overwrites_inherited_live_values():
