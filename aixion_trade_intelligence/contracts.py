@@ -110,14 +110,14 @@ class CanonicalEvent:
 
         if receive_time > parse_time or parse_time > persist_time:
             raise EventValidationError("invalid_processing_time_order")
-        if event_time > persist_time:
-            raise EventValidationError("event_after_persist_time")
-        if available_time > persist_time:
-            raise EventValidationError("available_after_persist_time")
         if event_type in _DECISION_EVENT_TYPES and available_time > event_time:
             raise EventValidationError("available_after_decision_time")
         if event_type in _SOURCE_OBSERVATION_EVENT_TYPES and available_time < event_time:
             raise EventValidationError("observation_available_before_event_time")
+        if event_time > persist_time:
+            raise EventValidationError("event_after_persist_time")
+        if available_time > persist_time:
+            raise EventValidationError("available_after_persist_time")
 
         object.__setattr__(self, "event_type", event_type)
         object.__setattr__(self, "event_time", event_time)
