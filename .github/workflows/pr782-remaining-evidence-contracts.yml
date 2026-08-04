@@ -53,13 +53,11 @@ jobs:
             core/read_only_live_evidence.py \
             core/kite_read_only_observation_runtime.py \
             scripts/seal_pr763_read_only_evidence.py \
-            tests/test_pr782_remaining_evidence_contracts.py
+            tests/test_pr782_remaining_evidence_contracts.py \
+            tests/test_kite_read_only_observation_runtime.py
 
       - name: Run focused evidence contracts
         run: |
-          # The observer import-boundary suite intentionally requires a clean
-          # Python process. Run every suite separately so unrelated tests cannot
-          # preload broker mocks and create a false boundary failure.
           pytest -q -o addopts='' tests/test_kite_read_only_observation_runtime.py
           pytest -q -o addopts='' tests/test_pr782_remaining_evidence_contracts.py
           pytest -q -o addopts='' tests/test_ai_reliability_pr763_session.py
@@ -84,6 +82,7 @@ jobs:
               'core/kite_read_only_observation_runtime.py',
               'scripts/seal_pr763_read_only_evidence.py',
               'tests/test_pr782_remaining_evidence_contracts.py',
+              'tests/test_kite_read_only_observation_runtime.py',
               'docs/agent_reviews/pr782_remaining_evidence_contracts_v1.md',
               'docs/certification/pr782_remaining_evidence_contracts_v1.md',
               'research/pr782_remaining_evidence_contracts_v1/offline_closure.json',
