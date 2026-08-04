@@ -75,7 +75,7 @@ def test_option_entry_is_strictly_after_completed_signal():
         "vol": [1.0, 2.0, 3.0],
     })
     mapped = gw.map_diagnostic_options(events, gw.canonicalise_ticks(raw), gw.FrozenSpec())
-    assert len(mapped) == 1
+    assert mapped.shape[0] == 1
     assert pd.Timestamp(mapped.entry_time.iloc[0]) > signal
     assert mapped.strike_identity.iloc[0] == "EXACT_ATM"
 
