@@ -41,7 +41,10 @@ def _write_database(path: Path, *, rows: list[tuple[int, float, str]]) -> Path:
         connection.executemany("INSERT INTO ticks VALUES (?, ?, ?)", rows)
         connection.executemany(
             "INSERT INTO depth_snapshots VALUES (?, ?)",
-            [(row[0], row[1]) for row in rows[:2]],
+            [
+                (row[0], row[1])
+                for row in sorted(rows, key=lambda item: item[1])[:2]
+            ],
         )
         connection.commit()
     finally:
