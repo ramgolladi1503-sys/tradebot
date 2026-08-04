@@ -13,6 +13,20 @@ def _load(path: str | Path) -> dict[str, Any]:
     return payload
 
 
+def _session_payload(payload: Mapping[str, object]) -> tuple[Mapping[str, object], Mapping[str, object]]:
+    nested = payload.get("session_analysis")
+    if isinstance(nested, Mapping):
+        monitor = {
+            "monitoring_verdict": payload.get("monitoring_verdict"),
+            "monitoring_valid": payload.get("monitoring_valid"),
+            "monitoring_only": payload.get("monitoring_only"),
+            "final_session_complete": payload.get("final_session_complete"),
+            "blockers": payload.get("blockers"),
+        }
+        return nested, monitor
+    return payload, {}
+
+
 def _authority_rows(cockpit: Mapping[str, object]) -> list[dict[str, object]]:
     authorities = cockpit.get("authorities")
     if not isinstance(authorities, Mapping):
@@ -46,7 +60,8 @@ def main() -> int:
         import streamlit as st
     except ImportError as exc:
         raise RuntimeError("streamlit_not_installed") from exc
-    session = _load(args.session_report)
+    session_input = _load(args.session_report)
+    session, monitor = _session_payload(session_input)
     campaign = _load(args.campaign_report) if args.campaign_report else None
     elite = _load(args.elite_cockpit) if args.elite_cockpit else None
     st.set_page_config(page_title="Aixion Trade Intelligence", layout="wide")
@@ -57,9 +72,17 @@ def main() -> int:
     readiness = session.get("outcome_readiness") if isinstance(session.get("outcome_readiness"), dict) else {}
     first, second, third, fourth = st.columns(4)
     first.metric("Session", manifest.get("session_id") or "unknown")
-    second.metric("Verdict", manifest.get("verdict") or "unknown")
+    second.metric("Verdict", monitor.get("monitoring_verdict") or manifest.get("verdict") or "unknown")
     third.metric("Events", manifest.get("event_count") or 0)
     fourth.metric("Candidates", funnel.get("candidate_count") or 0)
+
+    if monitor:
+        st.subheader("Live monitoring state")
+        if bool(monitor.get("monitoring_valid")):
+            st.success(str(monitor.get("monitoring_verdict") or "LIVE_MONITORING_HEALTHY"))
+        else:
+            st.error(str(monitor.get("monitoring_verdict") or "LIVE_MONITORING_BLOCKED"))
+        st.json(dict(monitor))
 
     if elite is not None:
         st.subheader("Elite authority matrix")
