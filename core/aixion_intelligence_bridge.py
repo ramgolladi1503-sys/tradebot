@@ -20,7 +20,7 @@ class BridgeStatus:
 
 _LOCK = threading.Lock()
 _PUBLISHERS: dict[tuple[str, str], Any] = {}
-_SEQUENCE: dict[tuple[str, str], int] = {}
+_SEQUENCE: dict[tuple[str, str, str], int] = {}
 
 
 def _truthy(name: str) -> bool:
@@ -28,10 +28,7 @@ def _truthy(name: str) -> bool:
 
 
 def _enabled() -> bool:
-    """Direct publishing is explicit and mutually exclusive with file tailing."""
-    return _truthy("AIXION_INTELLIGENCE_ENABLED") and _truthy(
-        "AIXION_INTELLIGENCE_DIRECT_BRIDGE_ENABLED"
-    )
+    return _truthy("AIXION_INTELLIGENCE_ENABLED") and _truthy("AIXION_INTELLIGENCE_DIRECT_BRIDGE_ENABLED")
 
 
 def _mode() -> str:
@@ -55,23 +52,34 @@ def _publisher(session_id: str, run_id: str):
         from aixion_trade_intelligence.publisher import FileEventPublisher
         from aixion_trade_intelligence.safe_publish import NonBlockingPublisher
 
-        root = Path(
-            os.getenv(
-                "AIXION_INTELLIGENCE_EVIDENCE_ROOT",
-                "runtime/aixion_trade_intelligence/evidence",
-            )
-        ).expanduser()
+        root = Path(os.getenv("AIXION_INTELLIGENCE_EVIDENCE_ROOT", "runtime/aixion_trade_intelligence/evidence")).expanduser()
         publisher = NonBlockingPublisher(FileEventPublisher(root, fsync=True))
         _PUBLISHERS[key] = publisher
-        _SEQUENCE.setdefault(key, 0)
         return publisher
 
 
-def _next_sequence(key: tuple[str, str]) -> int:
+def _next_sequence(session_id: str, run_id: str, component: str) -> int:
+    key = (session_id, run_id, component)
     with _LOCK:
         value = _SEQUENCE.get(key, 0) + 1
         _SEQUENCE[key] = value
         return value
+
+
+def _candidate_component(row: Mapping[str, Any]) -> str:
+    return str(
+        row.get("source_file_or_component")
+        or row.get("source_component")
+        or "core.candidate_lineage_ledger"
+    ).strip()
+
+
+def _publish_status(publisher: Any, event: Any) -> tuple[bool, bool]:
+    before = publisher.stats()
+    persisted = bool(publisher.publish(event))
+    after = publisher.stats()
+    failed = after.failures > before.failures
+    return persisted, failed
 
 
 def publish_candidate_lineage_rows(rows: Iterable[Mapping[str, Any]]) -> BridgeStatus:
@@ -83,7 +91,6 @@ def publish_candidate_lineage_rows(rows: Iterable[Mapping[str, Any]]) -> BridgeS
         return BridgeStatus(False, 0, 0, 0, 0, f"MODE_NOT_ALLOWED:{mode or 'UNKNOWN'}")
     try:
         session_id, run_id = _identity()
-        key = (session_id, run_id)
         publisher = _publisher(session_id, run_id)
         from aixion_trade_intelligence.tradebot_adapter import candidate_lineage_to_event
 
@@ -91,22 +98,29 @@ def publish_candidate_lineage_rows(rows: Iterable[Mapping[str, Any]]) -> BridgeS
         for row in materialized:
             attempted += 1
             now = datetime.now(tz=timezone.utc)
+            component = _candidate_component(row)
             try:
+                normalized = dict(row)
+                normalized.setdefault("source_file_or_component", component)
                 event = candidate_lineage_to_event(
-                    row,
+                    normalized,
                     session_id=session_id,
                     run_id=run_id,
                     receive_time=now,
                     persist_time=now,
-                    producer_sequence=_next_sequence(key),
+                    producer_sequence=_next_sequence(session_id, run_id, component),
                 )
-                if publisher.publish(event):
+                did_persist, did_fail = _publish_status(publisher, event)
+                if did_persist:
                     persisted += 1
+                elif did_fail:
+                    failed += 1
                 else:
                     duplicates += 1
             except Exception:
                 failed += 1
-        return BridgeStatus(True, attempted, persisted, duplicates, failed, "PUBLISHED")
+        reason = "PUBLISHED" if failed == 0 else "PARTIAL_FAILURE"
+        return BridgeStatus(True, attempted, persisted, duplicates, failed, reason)
     except Exception as exc:
         return BridgeStatus(True, len(materialized), 0, 0, len(materialized), f"BRIDGE_FAILURE:{type(exc).__name__}")
 
@@ -125,7 +139,6 @@ def publish_runtime_truth(
         return BridgeStatus(False, 0, 0, 0, 0, f"MODE_NOT_ALLOWED:{mode or 'UNKNOWN'}")
     try:
         session_id, run_id = _identity()
-        key = (session_id, run_id)
         publisher = _publisher(session_id, run_id)
         from aixion_trade_intelligence.tradebot_adapter import truth_snapshot_to_event
 
@@ -140,10 +153,13 @@ def publish_runtime_truth(
             event_time=occurred,
             receive_time=now,
             persist_time=now,
-            producer_sequence=_next_sequence(key),
+            producer_sequence=_next_sequence(session_id, run_id, source_component),
         )
-        if publisher.publish(event):
+        did_persist, did_fail = _publish_status(publisher, event)
+        if did_persist:
             return BridgeStatus(True, 1, 1, 0, 0, "PUBLISHED")
+        if did_fail:
+            return BridgeStatus(True, 1, 0, 0, 1, "PUBLISH_FAILURE")
         return BridgeStatus(True, 1, 0, 1, 0, "DUPLICATE")
     except Exception as exc:
         return BridgeStatus(True, 1, 0, 0, 1, f"BRIDGE_FAILURE:{type(exc).__name__}")
