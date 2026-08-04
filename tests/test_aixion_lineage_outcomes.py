@@ -9,8 +9,7 @@ from aixion_trade_intelligence.replay import replay
 def test_candidate_lineage_is_joined_end_to_end():
     ordered = replay(build_fixture()).ordered_events
     rows = build_candidate_lineage(ordered)
-    assert len(rows) == 1
-    row = rows[0]
+    row, = rows
     assert row.strategy_id == "OFFLINE_CAUSAL_CONTRACT"
     assert row.selected_option_instrument == "NSE_FO|OFFLINE_ATM_CE"
     assert row.approval_decision == "APPROVED"
