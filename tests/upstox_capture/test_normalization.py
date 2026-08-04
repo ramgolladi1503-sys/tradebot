@@ -6,7 +6,7 @@ from core.upstox_capture.schemas import NORMALIZED_TICK_SCHEMA
 
 def test_normalized_writer_partitioning(tmp_path):
     run_id = "test_run"
-    writer = NormalizedWriter(tmp_path, run_id=run_id, flush_interval_secs=1, max_buffer_size=2)
+    writer = NormalizedWriter(tmp_path, run_id=run_id, flush_interval_sec=1.0, max_buffer_size=2)
 
     # 1. Write dummy normalized records
     record1 = {
@@ -49,14 +49,12 @@ def test_normalized_writer_partitioning(tmp_path):
     writer.write_record(record2)  # Hits max_buffer_size and flushes partition
 
     # 2. Check that the partitioned parquet file is created
-    # Partition path: asset_class=option/trade_date=2026-08-03/provider=upstox/instrument_family=NIFTY/hour=09/ticks_test_run.parquet
+    # Partition path: asset_class=option/trade_date=2026-08-03/provider=upstox/instrument_family=NIFTY/hour=09/ticks_test_run_1.parquet
     pq_dir = tmp_path / "normalized" / "asset_class=option" / "trade_date=2026-08-03" / "provider=upstox" / "instrument_family=NIFTY" / "hour=09"
-    pq_file = pq_dir / f"ticks_{run_id}.parquet"
+    pq_file = pq_dir / f"ticks_{run_id}_1.parquet"
 
     assert pq_file.exists()
 
     table = pq.read_table(pq_file, partitioning=None)
     assert len(table) == 2
-    
-    # Check schema matches NORMALIZED_TICK_SCHEMA
     assert table.schema.names == NORMALIZED_TICK_SCHEMA.names

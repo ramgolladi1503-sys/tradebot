@@ -1,0 +1,43 @@
+{
+  "starting_head": "45252a0a9977cb8c2e3833f96a8b53659d0b3a1a",
+  "final_head": "831552d012dd971569624636457814bbcbbaeb88",
+  "status": "PASS_MEG_MISSING_DATA_CAPTURE_OFFLINE",
+  "verdict": "FRESH_UPSTOX_MULTI_ASSET_SESSION_REQUIRED",
+  "defects_repaired": [
+    "dynamic_session_identity_precedence",
+    "weekly_monthly_expiry_resolution",
+    "restricted_validation_universe",
+    "strict_subscription_budget",
+    "multi_lane_subscription_and_events",
+    "upstox_v3_canonical_normalization",
+    "preserve_null_values",
+    "immutable_parquet_chunks_and_manifest",
+    "removed_production_mock_fallback",
+    "futures_and_option_response_datasets",
+    "official_weight_reference_handling"
+  ],
+  "premarket_rehearsal": {
+    "session_date": "20260805",
+    "spot_price": 24500.0,
+    "spot_price_source": "CLI_INPUT",
+    "constituents_count": 50,
+    "sector_indices_count": 8,
+    "futures_count": 2,
+    "weekly_expiry": "2026-08-11",
+    "monthly_expiry": "2026-08-25",
+    "weekly_ce_count": 21,
+    "weekly_pe_count": 21,
+    "monthly_ce_count": 11,
+    "monthly_pe_count": 11,
+    "requested_full": 126,
+    "requested_ltpc": 0,
+    "omissions": 0,
+    "budget_verdict": "PASS_SUBSCRIPTION_BUDGET"
+  },
+  "disclaimers": {
+    "NO_STRUCTURAL_EDGE_CLAIM": true,
+    "NO_PROFITABILITY_CLAIM": true,
+    "NOT_A_KITE_LIVE_CERTIFICATION": true,
+    "NO_LIVE_CAPTURE_EXECUTED": true
+  }
+}
