@@ -36,7 +36,7 @@ def _normalize_filters(value: object) -> tuple[tuple[str, tuple[str, ...]], ...]
         field = str(raw_field).strip()
         if not field:
             raise ValueError("source_file_spec_filter_field_missing")
-        if isinstance(raw_allowed, list):
+        if isinstance(raw_allowed, (list, tuple, set)):
             values = tuple(str(item).strip() for item in raw_allowed if str(item).strip())
         else:
             single = str(raw_allowed).strip()
