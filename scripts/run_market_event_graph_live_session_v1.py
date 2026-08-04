@@ -284,10 +284,18 @@ def main() -> int:
         "broker_api_called": False,
         "broker_metadata_called": bool(broker_metadata_called),
         "allowed_for_live_execution": False,
+        "runtime_entrypoint": "run_kite_read_only_observation_v1.py",
+        "runtime_mode": "SIM",
+        "real_market_data": True,
+        "broker_adapter_active": False,
+        "order_authority": False,
+        "broker_write_authority": False,
+        "allowed_for_paper_execution": False,
     }
     (capture_dir / "presession_manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     log_path = capture_dir / "live_observation.log"
     env = dict(os.environ)
+    token_path = Path(os.environ.get("TRADING_BOT_TOKEN_PATH", str(REPO_ROOT / ".runtime" / "kite_access_token"))).expanduser().resolve()
     env.update(
         {
             "RUN_ID": run_id,
@@ -298,7 +306,14 @@ def main() -> int:
         }
     )
     with log_path.open("w", encoding="utf-8") as log_file:
-        proc = subprocess.run(["bash", "run_live.sh"], cwd=REPO_ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT)
+        proc = subprocess.run([
+            sys.executable, "-B", "scripts/run_kite_read_only_observation_v1.py",
+            "--session-date", session_date,
+            "--output-root", str(capture_dir),
+            "--kite-instruments-file", str(master_path),
+            "--launch-plan", str(launch_plan_path),
+            "--token-path", str(token_path),
+        ], cwd=REPO_ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT)
     return int(proc.returncode)
 
 
