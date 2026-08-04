@@ -1,0 +1,27 @@
+{
+  "artifact_version": "1.0",
+  "decision": "PIPELINE_OFFLINE_CERTIFIED",
+  "strategy_edge_certified": false,
+  "test_count": 45,
+  "fixture": {
+    "events_sha256": "35ff2f3e118af570d31901b762c1411c4e551a7fec9bbe77077b145f04a92250",
+    "certification_sha256": "6f926689a96476f5c71cbdd094b36a411cc001f5639bb93db305304ca5895c6e",
+    "report_sha256": "cad71e7f6a6b6c4e1200b16d355c01d0ee5d69b66c990d6cacb05191fae3da78"
+  },
+  "real_corpus_20260803": {
+    "event_count": 18014,
+    "quote_event_count": 18009,
+    "nifty_quote_count": 12987,
+    "selected_option_quote_count": 5022,
+    "candidate_count": 1,
+    "outcome_count": 2,
+    "classification_counts": {
+      "UNDERLYING_WRONG": 2
+    },
+    "events_sha256": "feda2a03f01eee87d4e296c543b7d3bfd888d2971479e24a4b2b4dec2f7578e2",
+    "certification_sha256": "8e13446337afbb5def72efb48bcf8a8d6214a778e969c0775fd71a8dd901d01a",
+    "report_sha256": "852d20acedbb5e6836d9c35a6cf21c5b2b10f4f7b51f875816932dc214e6b902",
+    "replay_sha256": "810be6487959e58a0bde8263288476f7dbc6fb30a07360b5e30872ebb5882575"
+  },
+  "boundary": "Pipeline integrity only; no profitability, fill calibration, capacity, holdout, or live-edge certification."
+}
