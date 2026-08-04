@@ -1,0 +1,90 @@
+name: Upstox 20260804 Corpus Audit
+
+on:
+  pull_request:
+    paths:
+      - "core/upstox_corpus_audit.py"
+      - "scripts/audit_upstox_20260804_corpus.py"
+      - "tests/test_upstox_corpus_audit.py"
+      - "docs/agent_reviews/upstox_20260804_corpus_audit_v1.md"
+      - "docs/research/upstox_20260804_corpus_audit_v1.md"
+      - "research/upstox_20260804_corpus_audit_v1/**"
+      - ".github/workflows/upstox-20260804-corpus-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .
+      TRADEBOT_READ_ONLY: "true"
+      TRADING_MODE: "SIM"
+      EXECUTION_MODE: "SIM"
+      LIVE_BROKER_ADAPTER_ACTIVE: "0"
+      ALLOW_LIVE_ORDERS: "0"
+      PAPER_TRADING_ENABLED: "false"
+      LIVE_TRADING_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pyarrow zstandard
+
+      - name: Compile audit paths
+        run: |
+          python -m py_compile \
+            core/upstox_corpus_audit.py \
+            scripts/audit_upstox_20260804_corpus.py \
+            tests/test_upstox_corpus_audit.py
+
+      - name: Run audit tests
+        run: |
+          pytest -q -o addopts='' tests/test_upstox_corpus_audit.py
+          pytest -q -o addopts='' tests/test_pr782_remaining_evidence_contracts.py
+
+      - name: Run reverse order
+        run: |
+          pytest -q -o addopts='' tests/test_pr782_remaining_evidence_contracts.py
+          pytest -q -o addopts='' tests/test_upstox_corpus_audit.py
+
+      - name: Verify scope
+        run: |
+          python - <<'PY'
+          import subprocess
+          base = subprocess.check_output(
+              ['git', 'merge-base', 'origin/fix/pr782-remaining-evidence-contracts-v1', 'HEAD'],
+              text=True,
+          ).strip()
+          changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+          allowed = {
+              'core/upstox_corpus_audit.py',
+              'scripts/audit_upstox_20260804_corpus.py',
+              'tests/test_upstox_corpus_audit.py',
+              'docs/agent_reviews/upstox_20260804_corpus_audit_v1.md',
+              'docs/research/upstox_20260804_corpus_audit_v1.md',
+              'research/upstox_20260804_corpus_audit_v1/offline_closure.json',
+              'research/upstox_20260804_corpus_audit_v1/offline_closure.md',
+              '.github/workflows/upstox-20260804-corpus-audit.yml',
+          }
+          unexpected = sorted(set(changed) - allowed)
+          if unexpected:
+              raise SystemExit(f'PROTECTED_RUNTIME_DRIFT:{unexpected}')
+          print(f'changed_paths={len(changed)} protected_runtime_drift=false')
+          PY
+
+      - name: Validate diff
+        run: git diff --check origin/fix/pr782-remaining-evidence-contracts-v1...HEAD
