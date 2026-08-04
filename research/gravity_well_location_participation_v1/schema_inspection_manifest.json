@@ -1,0 +1,47 @@
+[
+  {
+    "source": "/mnt/data/ticks_20260701.parquet.bin",
+    "sha256": "53341f21db27ab3f20e7a4ed8f183ab2b4aca03fae446779af04fe4987579243",
+    "size_bytes": 65051297,
+    "parquet_rows": 3718993,
+    "columns": ["ts", "token", "symbol", "ltp", "bid", "ask", "vol"],
+    "symbol_scan": "COMPLETE",
+    "unique_symbols": 176,
+    "nifty_constituent_rows": 0,
+    "analysis_status": "PARTIAL_SESSION_EXTRACT_EVALUATED"
+  },
+  {
+    "source": "/mnt/data/upstox_full_ticks_20260709.parquet.bin",
+    "sha256": "62410f680b0621c836e3b18e8a509126e3dfbcf40c61e3cc23d5c2bc30b95139",
+    "size_bytes": 48832347,
+    "parquet_rows": 2778666,
+    "columns": ["ts", "token", "symbol", "ltp", "bid", "ask", "vol", "oi", "depth"],
+    "symbol_scan": "COMPLETE",
+    "unique_symbols": 129,
+    "nifty_constituent_rows": 0,
+    "analysis_status": "FULL_SESSION_EXTRACT_EVALUATED"
+  },
+  {
+    "source": "/mnt/data/ticks_1784090271.parquet.bin",
+    "sha256": "8a12e1658be48f83ec6ea513fe443f92756a8931ecaf41d469344e73eac8bf1d",
+    "size_bytes": 6593571,
+    "parquet_rows": 295795,
+    "columns": ["ts", "instrument_key", "ltp", "bid_price", "ask_price", "delta", "theta", "gamma", "vega", "iv", "volume", "oi"],
+    "symbol_scan": "COMPLETE",
+    "unique_instrument_keys": 866,
+    "instrument_prefixes": ["NSE_FO", "NSE_INDEX"],
+    "nifty_constituent_rows": 0,
+    "analysis_status": "TEN_MINUTE_SCHEMA_INSPECTION_ONLY"
+  },
+  {
+    "source": "/mnt/data/upstox_full_ticks_20260716.parquet.bin",
+    "sha256": "a183f3b7b23093155a0a38b1187bf56bb59516506e23b6a3c500dd145241d570",
+    "size_bytes": 60761520,
+    "parquet_rows": 3339192,
+    "columns": ["ts", "token", "symbol", "ltp", "bid", "ask", "vol", "oi", "depth"],
+    "symbol_scan": "COMPLETE",
+    "unique_symbols": 129,
+    "nifty_constituent_rows": 0,
+    "analysis_status": "SCHEMA_AND_SYMBOL_INSPECTION_ONLY"
+  }
+]
