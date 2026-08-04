@@ -86,7 +86,7 @@ def validate_normalized_ticks(run_dir: Path) -> dict:
 
     for f in parquet_files:
         try:
-            table = pq.read_table(f)
+            table = pq.read_table(f, partitioning=None)
             df = table.to_pandas()
             total_rows += len(df)
 
@@ -106,7 +106,8 @@ def validate_normalized_ticks(run_dir: Path) -> dict:
 
             # 3. Future timestamps or impossible times
             if "receive_wall_ts_utc" in df.columns:
-                df['dt'] = pd.to_datetime(df['receive_wall_ts_utc'])
+                from datetime import timezone
+                df['dt'] = pd.to_datetime(df['receive_wall_ts_utc'], format='ISO8601')
                 now_ts = pd.Timestamp.now(tz=timezone.utc) if df['dt'].dt.tz is not None else pd.Timestamp.now()
                 future_ticks = df[df['dt'] > now_ts + pd.Timedelta(seconds=60)]
                 if not future_ticks.empty:

@@ -33,12 +33,27 @@ class ReplayAdapter:
         tables = [pq.read_table(f, partitioning=None) for f in parquet_files]
         self.df = pd.concat([t.to_pandas() for t in tables], ignore_index=True)
         
+        # Build token mapping from complete.json
+        import json
+        master_path = Path("/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/upstox_instruments/complete.json")
+        key_to_token = {}
+        if master_path.exists():
+            logger.info(f"Loading BOD master from {master_path} for token resolution...")
+            with open(master_path) as f:
+                master = json.load(f)
+                for item in master:
+                    ikey = item.get("instrument_key")
+                    etoken = item.get("exchange_token")
+                    if ikey and etoken and etoken.isdigit():
+                        key_to_token[ikey] = int(etoken)
+        self.key_to_token = key_to_token
+
         # Sort deterministically
         # Primary: receive_wall_ts_utc (represented as float or string)
         # Secondary: source_exchange_ts when valid
         # Tertiary: connection_id
         # Quaternary: local_sequence
-        self.df['sort_ts'] = pd.to_datetime(self.df['receive_wall_ts_utc']).astype('int64')
+        self.df['sort_ts'] = pd.to_datetime(self.df['receive_wall_ts_utc'], format='ISO8601').astype('int64')
         self.df['source_ts'] = self.df['source_exchange_ts'].fillna(0).astype('int64')
         
         self.df.sort_values(
@@ -77,13 +92,16 @@ class ReplayAdapter:
             last_record_time = current_time
 
             # Parse common fields
-            token_str = row['exchange_token']
-            if not token_str or pd.isna(token_str):
-                continue
-            try:
-                token = int(token_str)
-            except ValueError:
-                continue
+            ikey = row['instrument_key']
+            token = self.key_to_token.get(ikey)
+            if token is None:
+                token_str = row['exchange_token']
+                if not token_str or pd.isna(token_str):
+                    continue
+                try:
+                    token = int(token_str)
+                except ValueError:
+                    continue
 
             # Check if this is a tick update
             ltp = row['ltp']
