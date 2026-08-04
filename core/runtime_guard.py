@@ -57,5 +57,34 @@ def _record_boot_boundary(root: Path) -> None:
         pass
 
 
+def _start_aixion_intelligence_boundary(root: Path) -> None:
+    """Start the opt-in read-only evidence tailer without affecting startup."""
+
+    try:
+        from aixion_trade_intelligence.runtime_tailer import (
+            start_runtime_tailer_if_enabled,
+        )
+
+        start_runtime_tailer_if_enabled(root)
+    except Exception as exc:
+        # The analytics sidecar is never allowed to abort or alter TradeBot.
+        try:
+            from core.runtime_startup_lifecycle import record_runtime_startup_event
+
+            record_runtime_startup_event(
+                "AIXION_INTELLIGENCE_START_FAILED",
+                source="core.runtime_guard",
+                details={
+                    "repo_root": str(root),
+                    "error": f"{type(exc).__name__}:{exc}",
+                    "is_order_action": False,
+                    "read_only": True,
+                },
+            )
+        except Exception:
+            pass
+
+
 _repo_root = ensure_runtime_repo_guard()
 _record_boot_boundary(_repo_root)
+_start_aixion_intelligence_boundary(_repo_root)
