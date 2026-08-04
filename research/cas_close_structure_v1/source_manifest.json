@@ -1,0 +1,11 @@
+{
+  "study_id": "cas_close_structure_v1",
+  "rule_effective_date": "2026-08-03",
+  "official_nse_faq": "https://nsearchives.nseindia.com/web/mediaattachment/2026-07/FAQs_on_Closing_Auction_Session_CAS_in_the_CM_and_changes_in_FO_Segment_ver1_20260706173436.pdf",
+  "drive_sources": {
+    "20260804_full_day_replay": "TradeBot_Data/market_data/20260804/full_day_replay_v1",
+    "20260803_raw_partitions": "TradeBot_Data/upstox_market_data/20260803"
+  },
+  "authority": "SHADOW_ADVISORY_ONLY",
+  "execution_eligible": false
+}
