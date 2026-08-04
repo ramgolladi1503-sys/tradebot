@@ -1,0 +1,32 @@
+{
+  "nifty_files": 493,
+  "nifty_rows": 36849,
+  "session_count": 493,
+  "start": "2024-07-09T09:15:00+05:30",
+  "end": "2026-07-08T15:25:00+05:30",
+  "volume_nonzero_rows": 0,
+  "synthetic_rows": 0,
+  "fallback_rows": 0,
+  "mock_rows": 0,
+  "instruments_present": [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX"
+  ],
+  "constituents_present": false,
+  "real_option_contracts_present": false,
+  "source_archive_name": "kite_candidate_replay(11).zip",
+  "source_archive_sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d",
+  "parquet_files_total": 1509,
+  "parquet_files_parsed": 1509,
+  "parquet_parse_failures": 0,
+  "underlying_files": 1479,
+  "option_files": 30,
+  "total_rows": 120282,
+  "underlying_rows": 110547,
+  "option_rows": 9735,
+  "option_paths_all_explicitly_mock_named": true,
+  "option_contract_identity_columns_present": false,
+  "authority_grade": "UNDERLYING_PRICE_ONLY_DIAGNOSTIC",
+  "certification_eligible": false
+}
