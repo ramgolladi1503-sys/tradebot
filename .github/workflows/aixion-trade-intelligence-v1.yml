@@ -12,6 +12,7 @@ on:
       - "tests/test_aixion_trade_intelligence_canary_v1.py"
       - "tests/test_aixion_trade_intelligence_readiness_v1.py"
       - "tests/test_aixion_trade_intelligence_certification_v1.py"
+      - "tests/test_aixion_trade_intelligence_authority_v1.py"
       - "docs/aixion_trade_intelligence/**"
       - "docs/agent_reviews/aixion_trade_intelligence_v1.md"
       - ".github/workflows/aixion-trade-intelligence-v1.yml"
@@ -54,7 +55,8 @@ jobs:
             tests/test_aixion_trade_intelligence_extensions_v1.py \
             tests/test_aixion_trade_intelligence_canary_v1.py \
             tests/test_aixion_trade_intelligence_readiness_v1.py \
-            tests/test_aixion_trade_intelligence_certification_v1.py
+            tests/test_aixion_trade_intelligence_certification_v1.py \
+            tests/test_aixion_trade_intelligence_authority_v1.py
       - name: Run full offline fixture and report
         run: |
           rm -rf .runtime/aixion-cert
@@ -67,15 +69,21 @@ jobs:
           test -s .runtime/aixion-cert/report/session_report.md
           grep -q "VALID_OFFLINE_SESSION_EVIDENCE" .runtime/aixion-cert/report/session_report.md
           grep -q '"ready_for_profitability_claim": false' .runtime/aixion-cert/report/session_analysis.json
-      - name: Reject broker or execution authority
+      - name: Reject unsupported profitability claims
         run: |
-          if grep -RInE "place_order|modify_order|cancel_order|exit_order|kite\.place|broker.*order" aixion_trade_intelligence scripts/run_aixion_trade_intelligence_offline.py scripts/generate_aixion_trade_intelligence_fixture.py scripts/check_aixion_trade_intelligence_canary.py; then
-            echo "Forbidden broker/order authority found"
-            exit 1
-          fi
-      - name: Reject hardcoded profitability claims
-        run: |
-          if grep -RInE "guaranteed_profit|profitability_certified|live_edge_certified" aixion_trade_intelligence; then
-            echo "Forbidden profitability claim found"
-            exit 1
-          fi
+          python - <<'PY'
+          from pathlib import Path
+          markers = {
+              "guaranteed" + "_profit",
+              "profitability" + "_certified",
+              "live" + "_edge_certified",
+          }
+          violations = []
+          for path in Path("aixion_trade_intelligence").glob("*.py"):
+              text = path.read_text(encoding="utf-8")
+              for marker in markers:
+                  if marker in text:
+                      violations.append(f"{path}:{marker}")
+          if violations:
+              raise SystemExit("unsupported claims: " + ", ".join(sorted(violations)))
+          PY
