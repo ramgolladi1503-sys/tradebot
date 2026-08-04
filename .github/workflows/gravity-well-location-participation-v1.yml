@@ -1,0 +1,27 @@
+name: gravity-well-location-participation-v1
+
+on:
+  pull_request:
+    paths:
+      - "scripts/run_gravity_well_location_participation_v1.py"
+      - "tests/research/test_gravity_well_location_participation_v1.py"
+      - "research/gravity_well_location_participation_v1/**"
+      - "docs/agent_reviews/gravity_well_location_participation_v1.md"
+      - ".github/workflows/gravity-well-location-participation-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  causal-contract-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install numpy pandas pytest
+      - run: python -m py_compile scripts/run_gravity_well_location_participation_v1.py
+      - run: pytest -q tests/research/test_gravity_well_location_participation_v1.py
