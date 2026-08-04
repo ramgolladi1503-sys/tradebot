@@ -62,6 +62,8 @@ class SourceContinuityCheckpoint:
             if value < 0:
                 raise ValueError(f"{name}_negative")
             object.__setattr__(self, name, value)
+        if self.duplicate_events > self.observed_events:
+            raise ValueError("duplicate_events_exceed_observed_events")
         if (self.first_sequence is None) != (self.last_sequence is None):
             raise ValueError("continuity_sequence_bounds_must_be_paired")
         if self.first_sequence is not None and self.last_sequence is not None:
@@ -115,6 +117,7 @@ class SourceContinuityCheckpoint:
 class SourceContinuityReport:
     source_name: str
     observed_events: int
+    unique_observed_events: int
     inferred_sequence_span: int | None
     coverage_ratio: float | None
     sequence_loss_rate: float
@@ -130,6 +133,7 @@ class SourceContinuityReport:
         return {
             "source_name": self.source_name,
             "observed_events": self.observed_events,
+            "unique_observed_events": self.unique_observed_events,
             "inferred_sequence_span": self.inferred_sequence_span,
             "coverage_ratio": self.coverage_ratio,
             "sequence_loss_rate": self.sequence_loss_rate,
@@ -149,17 +153,19 @@ def build_source_continuity_report(
     evaluation_time: datetime,
 ) -> SourceContinuityReport:
     now = _aware(evaluation_time, name="evaluation_time")
+    unique_observed = checkpoint.observed_events - checkpoint.duplicate_events
     span: int | None = None
     coverage: float | None = None
     if checkpoint.first_sequence is not None and checkpoint.last_sequence is not None:
         span = checkpoint.last_sequence - checkpoint.first_sequence + 1
         if span <= 0:
             raise ValueError("continuity_sequence_span_nonpositive")
-        coverage = min(1.0, checkpoint.observed_events / span)
-    denominator = checkpoint.observed_events + checkpoint.sequence_gap_events
+        coverage = min(1.0, unique_observed / span)
+    denominator = unique_observed + checkpoint.sequence_gap_events
     sequence_loss_rate = checkpoint.sequence_gap_events / denominator if denominator else 0.0
     duplicate_rate = checkpoint.duplicate_events / checkpoint.observed_events if checkpoint.observed_events else 0.0
-    malformed_rate = checkpoint.malformed_events / checkpoint.observed_events if checkpoint.observed_events else 0.0
+    total_rows = checkpoint.observed_events + checkpoint.malformed_events
+    malformed_rate = checkpoint.malformed_events / total_rows if total_rows else 0.0
     source_age = None
     if checkpoint.latest_source_time is not None:
         source_age = (now - checkpoint.latest_source_time).total_seconds()
@@ -174,13 +180,15 @@ def build_source_continuity_report(
     missing = tuple(sorted(set(checkpoint.required_event_types) - set(checkpoint.observed_event_types)))
     integrity_valid = (
         checkpoint.sequence_gap_events == 0
+        and checkpoint.duplicate_events == 0
         and checkpoint.malformed_events == 0
         and not missing
-        and checkpoint.observed_events > 0
+        and unique_observed > 0
     )
     return SourceContinuityReport(
         source_name=checkpoint.source_name,
         observed_events=checkpoint.observed_events,
+        unique_observed_events=unique_observed,
         inferred_sequence_span=span,
         coverage_ratio=coverage,
         sequence_loss_rate=sequence_loss_rate,
