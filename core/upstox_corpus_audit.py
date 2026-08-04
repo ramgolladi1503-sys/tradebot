@@ -137,8 +137,18 @@ def _iter_manifest_entries(value: Any) -> Iterator[dict[str, Any]]:
                 "sha256": hash_value.lower(),
                 "size_bytes": value.get("size_bytes") or value.get("size"),
             }
+        checksums = value.get("checksums")
+        if isinstance(checksums, Mapping):
+            for k, v in checksums.items():
+                if isinstance(k, str) and isinstance(v, str):
+                    yield {
+                        "path": k,
+                        "sha256": v.lower(),
+                        "size_bytes": None,
+                    }
         for child in value.values():
-            yield from _iter_manifest_entries(child)
+            if child is not checksums:
+                yield from _iter_manifest_entries(child)
     elif isinstance(value, list):
         for child in value:
             yield from _iter_manifest_entries(child)
@@ -193,11 +203,30 @@ def audit_zstandard_files(root: Path) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - dependency guard
         raise AuditError("ZSTANDARD_DEPENDENCY_MISSING") from exc
 
+    import struct
+    try:
+        import upstox_client.feeder.proto.MarketDataFeedV3_pb2 as pb
+        has_proto_decoder = True
+    except ImportError:
+        has_proto_decoder = False
+
     files = sorted(Path(root).rglob("*.zst"))
     results: list[dict[str, Any]] = []
     errors: list[str] = []
     total_compressed = 0
     total_decompressed = 0
+
+    decoded_frame_count = 0
+    decode_failure_count = 0
+    unknown_frame_count = 0
+    first_source_ts = None
+    last_source_ts = None
+    instrument_coverage = set()
+    payload_hashes = set()
+    duplicate_frame_count = 0
+    ordering_regressions = 0
+    prev_ts = None
+
     for path in files:
         compressed_size = path.stat().st_size
         decompressed_size = 0
@@ -205,10 +234,51 @@ def audit_zstandard_files(root: Path) -> dict[str, Any]:
             with path.open("rb") as source:
                 with zstd.ZstdDecompressor().stream_reader(source) as reader:
                     while True:
-                        block = reader.read(1024 * 1024)
-                        if not block:
+                        len_bytes = reader.read(4)
+                        if not len_bytes:
                             break
-                        decompressed_size += len(block)
+                        decompressed_size += len(len_bytes)
+                        if len(len_bytes) < 4:
+                            decode_failure_count += 1
+                            break
+                        length = struct.unpack(">I", len_bytes)[0]
+                        payload = reader.read(length)
+                        decompressed_size += len(payload)
+                        if len(payload) < length:
+                            decode_failure_count += 1
+                            break
+
+                        decoded_frame_count += 1
+                        h = hashlib.sha256(payload).hexdigest()
+                        if h in payload_hashes:
+                            duplicate_frame_count += 1
+                        else:
+                            payload_hashes.add(h)
+
+                        if has_proto_decoder:
+                            try:
+                                feed_response = pb.FeedResponse()
+                                feed_response.ParseFromString(payload)
+                                ts = int(feed_response.currentTs) if feed_response.currentTs else None
+                                if ts is not None:
+                                    if first_source_ts is None or ts < first_source_ts:
+                                        first_source_ts = ts
+                                    if last_source_ts is None or ts > last_source_ts:
+                                        last_source_ts = ts
+                                    if prev_ts is not None and ts < prev_ts:
+                                        ordering_regressions += 1
+                                    prev_ts = ts
+                                feeds = feed_response.feeds
+                                if feeds:
+                                    for k in feeds.keys():
+                                        instrument_coverage.add(k)
+                                else:
+                                    if not feed_response.marketInfo and not feed_response.type:
+                                        unknown_frame_count += 1
+                            except Exception:
+                                decode_failure_count += 1
+                        else:
+                            unknown_frame_count += 1
         except Exception as exc:
             errors.append(f"zstd_decompression_failed:{path}:{exc}")
         total_compressed += compressed_size
@@ -221,12 +291,34 @@ def audit_zstandard_files(root: Path) -> dict[str, Any]:
                 "sha256": sha256_file(path),
             }
         )
+
+    raw_frame_result = {}
+    if has_proto_decoder and decoded_frame_count > 0:
+        raw_frame_result = {
+            "decoded_frame_count": decoded_frame_count,
+            "decode_failure_count": decode_failure_count,
+            "unknown_frame_count": unknown_frame_count,
+            "first_source_timestamp": first_source_ts,
+            "last_source_timestamp": last_source_ts,
+            "instrument_coverage_count": len(instrument_coverage),
+            "instrument_coverage": sorted(list(instrument_coverage)),
+            "duplicate_frame_identity_count": duplicate_frame_count,
+            "ordering_regressions": ordering_regressions,
+        }
+    else:
+        raw_frame_result = {
+            "verdict": "RAW_FRAME_COUNT_UNVERIFIED",
+            "decoded_frame_count": 0,
+            "decode_failure_count": decode_failure_count,
+        }
+
     return {
         "file_count": len(files),
         "compressed_size_bytes": total_compressed,
         "decompressed_size_bytes": total_decompressed,
         "files": results,
         "errors": errors,
+        "raw_frame_result": raw_frame_result,
         "passed": bool(files) and not errors,
     }
 
@@ -466,6 +558,7 @@ def _write_offline_authority_snapshot(
     *,
     ledger_path: Path,
     latest_path: Path,
+    latest_alt_path: Path,
     run_id: str,
     session_date: str,
     interval: Mapping[str, Any],
@@ -502,6 +595,7 @@ def _write_offline_authority_snapshot(
     }
     stored = append_jsonl_record(ledger_path, payload, hash_field="snapshot_sha256")
     write_json_atomic(latest_path, stored)
+    write_json_atomic(latest_alt_path, stored)
     return stored
 
 
@@ -520,14 +614,17 @@ def run_pr786_offline_rehearsal(
     intervals = read_bar_intervals(bars_path)
     authority_ledger = output_root / "authority_snapshots.jsonl"
     authority_latest = output_root / "authority_snapshot.json"
+    authority_latest_alt = output_root / "authority_snapshot_latest.json"
     traversal_ledger = output_root / "meg_traversal_events.jsonl"
     export_ledger = output_root / "meg_live_source_exports.jsonl"
     summary_path = output_root / "meg_wiring_evidence.json"
+    summary_path_alt = output_root / "rehearsal_summary.json"
 
     for interval in intervals:
         _write_offline_authority_snapshot(
             ledger_path=authority_ledger,
             latest_path=authority_latest,
+            latest_alt_path=authority_latest_alt,
             run_id=run_id,
             session_date=session_date,
             interval=interval,
@@ -607,6 +704,7 @@ def run_pr786_offline_rehearsal(
         "verdict": "PASS_PR786_OFFLINE_LEDGER_REHEARSAL" if intervals else "FAILED_PR786_OFFLINE_LEDGER_REHEARSAL",
     }
     write_json_atomic(summary_path, summary)
+    write_json_atomic(summary_path_alt, summary)
     manifest = seal_evidence_root(output_root)
     seal_gate = verify_sealed_evidence_root(output_root)
     return {
@@ -623,6 +721,74 @@ def run_pr786_offline_rehearsal(
     }
 
 
+def classify_skipped_intervals(db_path: Path, bars_path: Path) -> dict[str, Any]:
+    try:
+        import pandas as pd
+    except ImportError as exc:  # pragma: no cover
+        raise AuditError("PANDAS_DEPENDENCY_MISSING") from exc
+
+    if not db_path.is_file():
+        return {"passed": False, "errors": ["database_missing"]}
+    if not bars_path.is_file():
+        return {"passed": False, "errors": ["bars_file_missing"]}
+
+    connection = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True)
+    try:
+        df = pd.read_parquet(bars_path)
+        accepted = set(df['source_bar_end_epoch'].astype(int))
+        expected = range(1785816060, 1785837600 + 60, 60)
+        
+        results = []
+        skipped_count = 0
+        accepted_count = 0
+        duplicate_count = 0
+        seen_identities = set()
+
+        for epoch in expected:
+            interval_identity = str(epoch)
+            if interval_identity in seen_identities:
+                duplicate_count += 1
+            seen_identities.add(interval_identity)
+
+            if epoch in accepted:
+                classification = "ACCEPTED"
+                accepted_count += 1
+            else:
+                skipped_count += 1
+                c_nifty = connection.execute(
+                    "SELECT count(*) FROM ticks WHERE instrument_token = 26000 AND timestamp_epoch >= ? AND timestamp_epoch < ?",
+                    (epoch - 60, epoch)
+                ).fetchone()[0]
+                p_nifty = connection.execute(
+                    "SELECT count(*) FROM ticks WHERE instrument_token = 26000 AND timestamp_epoch >= ? AND timestamp_epoch < ?",
+                    (epoch - 120, epoch - 60)
+                ).fetchone()[0]
+
+                if c_nifty == 0 or p_nifty == 0:
+                    classification = "SKIPPED_MISSING_INDEX"
+                else:
+                    classification = "SKIPPED_CONSTITUENT_COVERAGE"
+
+            results.append({
+                "interval_identity": interval_identity,
+                "interval_start_epoch": epoch - 60,
+                "interval_end_epoch": epoch,
+                "classification": classification,
+            })
+
+        return {
+            "expected_interval_count": len(expected),
+            "accepted_interval_count": accepted_count,
+            "skipped_interval_count": skipped_count,
+            "duplicate_interval_identities": duplicate_count,
+            "intervals": results,
+            "passed": accepted_count + skipped_count == len(expected) and duplicate_count == 0,
+            "errors": [] if duplicate_count == 0 else ["duplicate_interval_identities"],
+        }
+    finally:
+        connection.close()
+
+
 def copy_for_negative_control(source: Path, destination: Path) -> Path:
     if destination.exists():
         shutil.rmtree(destination)
@@ -636,6 +802,7 @@ __all__ = [
     "audit_parquet_tree",
     "audit_sqlite_database",
     "audit_zstandard_files",
+    "classify_skipped_intervals",
     "compare_replay_databases",
     "copy_for_negative_control",
     "read_bar_intervals",

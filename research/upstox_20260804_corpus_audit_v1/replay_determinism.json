@@ -1,0 +1,96 @@
+{
+  "errors": [],
+  "passed": true,
+  "run_a": {
+    "database_semantic_sha256": "008ab2227b0913e96237ceb2d5beb9124f9be3cf2485d1812aa9ec06b60ab4ae",
+    "errors": [],
+    "file_sha256": "15c5f0197d9656e02103eeefb5c30925e14cd80d08e566b94a779559ab6cc128",
+    "passed": true,
+    "path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/replay_verification.db",
+    "size_bytes": 120598528,
+    "tables": {
+      "broker_fills": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "daily_stats": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "depth_snapshots": {
+        "ordered_row_sha256": "0574bec9ba3dee4490d5f473b6afacd598888ef1d363fe3d0742c807398b9901",
+        "row_count": 10352
+      },
+      "execution_stats": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "outcomes": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "ticks": {
+        "ordered_row_sha256": "bce4d13a92a9563627b156cfa82f7cf891a82775dd11dcdd923b84e7b909cb62",
+        "row_count": 1041807
+      },
+      "trade_legs": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "trades": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "trail_events": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      }
+    }
+  },
+  "run_b": {
+    "database_semantic_sha256": "008ab2227b0913e96237ceb2d5beb9124f9be3cf2485d1812aa9ec06b60ab4ae",
+    "errors": [],
+    "file_sha256": "15c5f0197d9656e02103eeefb5c30925e14cd80d08e566b94a779559ab6cc128",
+    "passed": true,
+    "path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/replay_verification.db",
+    "size_bytes": 120598528,
+    "tables": {
+      "broker_fills": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "daily_stats": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "depth_snapshots": {
+        "ordered_row_sha256": "0574bec9ba3dee4490d5f473b6afacd598888ef1d363fe3d0742c807398b9901",
+        "row_count": 10352
+      },
+      "execution_stats": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "outcomes": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "ticks": {
+        "ordered_row_sha256": "bce4d13a92a9563627b156cfa82f7cf891a82775dd11dcdd923b84e7b909cb62",
+        "row_count": 1041807
+      },
+      "trade_legs": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "trades": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      },
+      "trail_events": {
+        "ordered_row_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "row_count": 0
+      }
+    }
+  }
+}

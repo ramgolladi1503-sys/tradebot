@@ -1,0 +1,11 @@
+{
+  "depth_row_count": 10352,
+  "depth_rows_overlap_tick_domain": true,
+  "errors": [],
+  "explained_non_tick_rows": 21,
+  "normalized_event_count": 1041828,
+  "passed": true,
+  "tick_difference": 21,
+  "tick_row_count": 1041807,
+  "unexplained_rows": 0
+}

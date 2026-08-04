@@ -1,0 +1,2339 @@
+{
+  "manifests": [
+    {
+      "entries": [
+        {
+          "actual_sha256": "e18e9a36705db9a29550e686a27befff3b5225edcc75d604e2c82317b4dcbd08",
+          "actual_size_bytes": 429869,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=04/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=04/ticks_093005.parquet",
+          "sha256": "e18e9a36705db9a29550e686a27befff3b5225edcc75d604e2c82317b4dcbd08",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "140b7d3bd0bf7a591a5489e15049de1c7e93c50e3b72036dd399316dd03d47d8",
+          "actual_size_bytes": 426989,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=05/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=05/ticks_093005.parquet",
+          "sha256": "140b7d3bd0bf7a591a5489e15049de1c7e93c50e3b72036dd399316dd03d47d8",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "96691aba7ffb4676178db30cd81dbcec588d87f5409cde12e860ebcf3a341027",
+          "actual_size_bytes": 427658,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=06/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=06/ticks_093005.parquet",
+          "sha256": "96691aba7ffb4676178db30cd81dbcec588d87f5409cde12e860ebcf3a341027",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "689cc07b09c6a01e094b4b91bd6692c69ddc33cd8f2bb390edf52c8874be1c2d",
+          "actual_size_bytes": 427896,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=07/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=07/ticks_093005.parquet",
+          "sha256": "689cc07b09c6a01e094b4b91bd6692c69ddc33cd8f2bb390edf52c8874be1c2d",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "67aaa6aa590fbefed04878a4329e465d283793a39a480d5dfbe048560b6285a4",
+          "actual_size_bytes": 429137,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=08/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=08/ticks_093005.parquet",
+          "sha256": "67aaa6aa590fbefed04878a4329e465d283793a39a480d5dfbe048560b6285a4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "4b3ece1d69de45532a3cac2c9662f154ef544be98f333f2a67cbcccc30ce88db",
+          "actual_size_bytes": 416820,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=09/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=09/ticks_093005.parquet",
+          "sha256": "4b3ece1d69de45532a3cac2c9662f154ef544be98f333f2a67cbcccc30ce88db",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "121fe3420d8e11a11fffddb1089e94360aac81847f8076933425351c8ec1a212",
+          "actual_size_bytes": 49616,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=10/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=10/ticks_093005.parquet",
+          "sha256": "121fe3420d8e11a11fffddb1089e94360aac81847f8076933425351c8ec1a212",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "7a8d2d27a63ad5ea9cd242116340acc22d0b3e5c4b17e4906849f993c46432fc",
+          "actual_size_bytes": 208309,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=04/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=04/ticks_093005.parquet",
+          "sha256": "7a8d2d27a63ad5ea9cd242116340acc22d0b3e5c4b17e4906849f993c46432fc",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "c0600a73b571731d8e6bc2f5e5cfbb9a8d5f8da2b6e5b7d7052ff4aeb3defde9",
+          "actual_size_bytes": 208487,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=05/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=05/ticks_093005.parquet",
+          "sha256": "c0600a73b571731d8e6bc2f5e5cfbb9a8d5f8da2b6e5b7d7052ff4aeb3defde9",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "62449748ea905b748df8f92258b979eba525aa097ef539a38051dc515f6ab34b",
+          "actual_size_bytes": 208948,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=06/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=06/ticks_093005.parquet",
+          "sha256": "62449748ea905b748df8f92258b979eba525aa097ef539a38051dc515f6ab34b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "72c0591dfedd0f8062aa2ced7006bec3dfc2280762355f4b9893d021796a4ceb",
+          "actual_size_bytes": 209377,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=07/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=07/ticks_093005.parquet",
+          "sha256": "72c0591dfedd0f8062aa2ced7006bec3dfc2280762355f4b9893d021796a4ceb",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "e9785be0268d9f8b33b5d308078f29c86fbf3b5c6c6cfe378da92edd7538aef0",
+          "actual_size_bytes": 209372,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=08/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=08/ticks_093005.parquet",
+          "sha256": "e9785be0268d9f8b33b5d308078f29c86fbf3b5c6c6cfe378da92edd7538aef0",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "f1fcfe4811f57fee43c485ceef2317c576abe0ce805f4d9dfeebb85d624a5592",
+          "actual_size_bytes": 209285,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=09/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=09/ticks_093005.parquet",
+          "sha256": "f1fcfe4811f57fee43c485ceef2317c576abe0ce805f4d9dfeebb85d624a5592",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b51f5d3493d5ba3b4de50482c3ac6940fc61effcafb2ec53f9d66e8306c1138b",
+          "actual_size_bytes": 34804,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=10/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=10/ticks_093005.parquet",
+          "sha256": "b51f5d3493d5ba3b4de50482c3ac6940fc61effcafb2ec53f9d66e8306c1138b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "a9084719db4aac7aaf6befa671059bfdedf4e1c343c71ad75b61a7e96588431d",
+          "actual_size_bytes": 418956,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=04/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=04/ticks_093005.parquet",
+          "sha256": "a9084719db4aac7aaf6befa671059bfdedf4e1c343c71ad75b61a7e96588431d",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "8b14ea59b04baf8d9dcbfce4051c6956cc89da0468742b233078ee75131a460b",
+          "actual_size_bytes": 416193,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=05/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=05/ticks_093005.parquet",
+          "sha256": "8b14ea59b04baf8d9dcbfce4051c6956cc89da0468742b233078ee75131a460b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "12210e3707b5ba3f27bb1aa0f9e70cc0bae341b6b3ff802cbb31ad6ec9187f3e",
+          "actual_size_bytes": 420583,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=06/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=06/ticks_093005.parquet",
+          "sha256": "12210e3707b5ba3f27bb1aa0f9e70cc0bae341b6b3ff802cbb31ad6ec9187f3e",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "56043af152a9ff74ba278ae993f3fec3866734b759ebb2daea89fc88d60f634a",
+          "actual_size_bytes": 416863,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=07/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=07/ticks_093005.parquet",
+          "sha256": "56043af152a9ff74ba278ae993f3fec3866734b759ebb2daea89fc88d60f634a",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "89fa369c6e1819323cd0d59f216eb199f9c26594010c89d68ce3f7a68cb5e2f3",
+          "actual_size_bytes": 420077,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=08/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=08/ticks_093005.parquet",
+          "sha256": "89fa369c6e1819323cd0d59f216eb199f9c26594010c89d68ce3f7a68cb5e2f3",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "3f1aee8cb0dcc56a9315bdf3f9d711f84edb7034f921c5d779a6981e7359f880",
+          "actual_size_bytes": 411696,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=09/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=09/ticks_093005.parquet",
+          "sha256": "3f1aee8cb0dcc56a9315bdf3f9d711f84edb7034f921c5d779a6981e7359f880",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "cce31f8ddefb63c3d6636a75b412a6e73e839443edefe514b4e36d2556984b54",
+          "actual_size_bytes": 49558,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=10/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=10/ticks_093005.parquet",
+          "sha256": "cce31f8ddefb63c3d6636a75b412a6e73e839443edefe514b4e36d2556984b54",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "d812a2c0a400517da108b59e7e8ab64e1be3218b78d63c82ff17056c130e6737",
+          "actual_size_bytes": 6798609,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=04/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=04/ticks_093005.parquet",
+          "sha256": "d812a2c0a400517da108b59e7e8ab64e1be3218b78d63c82ff17056c130e6737",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "d4d5c47cee93e656af2c22e5d5c45a52e8edbc8338c17ec1c9419bdb9e6bc2b1",
+          "actual_size_bytes": 7847055,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=05/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=05/ticks_093005.parquet",
+          "sha256": "d4d5c47cee93e656af2c22e5d5c45a52e8edbc8338c17ec1c9419bdb9e6bc2b1",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "ba9abdfb492e44d43087d2ff749a16d9f2a270f4f2a1fbd2d367870a2394c44d",
+          "actual_size_bytes": 8399013,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=06/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=06/ticks_093005.parquet",
+          "sha256": "ba9abdfb492e44d43087d2ff749a16d9f2a270f4f2a1fbd2d367870a2394c44d",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "9e3674b5ad31ec73d9ebdc04798af7e1a17418d490a99bfae8ecf287a1b7c72c",
+          "actual_size_bytes": 8660850,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=07/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=07/ticks_093005.parquet",
+          "sha256": "9e3674b5ad31ec73d9ebdc04798af7e1a17418d490a99bfae8ecf287a1b7c72c",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "085746acb8c0d455653203575b4f1629e0c8a07246e1bf6b11d99e68b4a1751e",
+          "actual_size_bytes": 9509004,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=08/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=08/ticks_093005.parquet",
+          "sha256": "085746acb8c0d455653203575b4f1629e0c8a07246e1bf6b11d99e68b4a1751e",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "19e0e0d12222038cb45b40b3bdb481e8c249ca6b827e98b41dc310270e31e151",
+          "actual_size_bytes": 6694810,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=09/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=09/ticks_093005.parquet",
+          "sha256": "19e0e0d12222038cb45b40b3bdb481e8c249ca6b827e98b41dc310270e31e151",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "934c0310319615924ef30647807a79d963cbccbe9e35e49193ddb6e2f5e2e241",
+          "actual_size_bytes": 23409,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=10/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=10/ticks_093005.parquet",
+          "sha256": "934c0310319615924ef30647807a79d963cbccbe9e35e49193ddb6e2f5e2e241",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1f952977388484768121ab86a3d1ed9df6a3fd2eb0a1cbe37f5c5755dc9f455b",
+          "actual_size_bytes": 131580,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=04/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=04/ticks_093005.parquet",
+          "sha256": "1f952977388484768121ab86a3d1ed9df6a3fd2eb0a1cbe37f5c5755dc9f455b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "3adfae359aa532ef955231117eac7d246c845ce2f8f26715b45f9910608f0ec4",
+          "actual_size_bytes": 129247,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=05/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=05/ticks_093005.parquet",
+          "sha256": "3adfae359aa532ef955231117eac7d246c845ce2f8f26715b45f9910608f0ec4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "49e57b8a62a17c2eb8466503992b4fe7f39591be412711c35d041829df540da7",
+          "actual_size_bytes": 130507,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=06/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=06/ticks_093005.parquet",
+          "sha256": "49e57b8a62a17c2eb8466503992b4fe7f39591be412711c35d041829df540da7",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "509e5f04fd17067ab7ae69d4eb3f11f31d7dcef113c6a8f084c6b080cf727598",
+          "actual_size_bytes": 129514,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=07/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=07/ticks_093005.parquet",
+          "sha256": "509e5f04fd17067ab7ae69d4eb3f11f31d7dcef113c6a8f084c6b080cf727598",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1344b3f1d6dfee8bdc4fdfd5288668dd6107d44a0a1b2a6c1ee1f5c84aa14cce",
+          "actual_size_bytes": 130204,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=08/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=08/ticks_093005.parquet",
+          "sha256": "1344b3f1d6dfee8bdc4fdfd5288668dd6107d44a0a1b2a6c1ee1f5c84aa14cce",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "d0cea31b7a9a3e98ece93da547ed728cced21a716b1cdd50a5bb896c9f55f2c6",
+          "actual_size_bytes": 126914,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=09/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=09/ticks_093005.parquet",
+          "sha256": "d0cea31b7a9a3e98ece93da547ed728cced21a716b1cdd50a5bb896c9f55f2c6",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1b799adac29c4a92720fde6aa6847c15fe1ed6d207805151b1ccb8599a0b0733",
+          "actual_size_bytes": 26969,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=10/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=10/ticks_093005.parquet",
+          "sha256": "1b799adac29c4a92720fde6aa6847c15fe1ed6d207805151b1ccb8599a0b0733",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "0bd21d25b815baeecce64ed5012aa44cc2bb25f17f940d130006bc25d2ca7f1a",
+          "actual_size_bytes": 658301,
+          "path": "quality_metrics.jsonl",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/quality_metrics.jsonl",
+          "sha256": "0bd21d25b815baeecce64ed5012aa44cc2bb25f17f940d130006bc25d2ca7f1a",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "9dcd189707ce11faf6bff6470daac782c3d43ee3adecfd837c5d081a661c2ae4",
+          "actual_size_bytes": 1408467,
+          "path": "raw/conn_a/frames_000001.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000001.bin.zst",
+          "sha256": "9dcd189707ce11faf6bff6470daac782c3d43ee3adecfd837c5d081a661c2ae4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "a9e9378b226872f31ec765e3b1e0fac7de5dfb5659e298bff959506baba27535",
+          "actual_size_bytes": 614578,
+          "path": "raw/conn_a/frames_000001.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000001.index.parquet",
+          "sha256": "a9e9378b226872f31ec765e3b1e0fac7de5dfb5659e298bff959506baba27535",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "9561fff9093348e7a6300c7b4329f4cd9abef2d03ac213c3419aa8aef38d3dc8",
+          "actual_size_bytes": 1312134,
+          "path": "raw/conn_a/frames_000002.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000002.bin.zst",
+          "sha256": "9561fff9093348e7a6300c7b4329f4cd9abef2d03ac213c3419aa8aef38d3dc8",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "457a1b26ac9f059aaf77b1ca0dbd6115d2ae34dce8d5ee07699e9f00a81e06d5",
+          "actual_size_bytes": 562329,
+          "path": "raw/conn_a/frames_000002.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000002.index.parquet",
+          "sha256": "457a1b26ac9f059aaf77b1ca0dbd6115d2ae34dce8d5ee07699e9f00a81e06d5",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "5aa2cab95f3beff94cb55692f4135c5af8494d545e537edb991c662b27a7831d",
+          "actual_size_bytes": 1241848,
+          "path": "raw/conn_a/frames_000003.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000003.bin.zst",
+          "sha256": "5aa2cab95f3beff94cb55692f4135c5af8494d545e537edb991c662b27a7831d",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "a40c199efcb50a48d197ae0155b599cfa21b919d206c57c2eb4f19150d5fed90",
+          "actual_size_bytes": 536070,
+          "path": "raw/conn_a/frames_000003.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000003.index.parquet",
+          "sha256": "a40c199efcb50a48d197ae0155b599cfa21b919d206c57c2eb4f19150d5fed90",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "dc93e0fba8c4e17631b109dda1ccff0b7bb20844c9d58e94a1a18d6fba0184ee",
+          "actual_size_bytes": 1197143,
+          "path": "raw/conn_a/frames_000004.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000004.bin.zst",
+          "sha256": "dc93e0fba8c4e17631b109dda1ccff0b7bb20844c9d58e94a1a18d6fba0184ee",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "4b2033ece65ccef013e03d4077bd786e5836186c04d1ea2bbcbfbffcba3f22f9",
+          "actual_size_bytes": 518973,
+          "path": "raw/conn_a/frames_000004.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000004.index.parquet",
+          "sha256": "4b2033ece65ccef013e03d4077bd786e5836186c04d1ea2bbcbfbffcba3f22f9",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "c5c732fa45252cd767a408f2d0145dbf7b9bedf5875c1222db0d2ed0251ef90b",
+          "actual_size_bytes": 1159706,
+          "path": "raw/conn_a/frames_000005.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000005.bin.zst",
+          "sha256": "c5c732fa45252cd767a408f2d0145dbf7b9bedf5875c1222db0d2ed0251ef90b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1472dc8bbd1751916a755d6c0aa1f4e5a0966b50c8963b928ae518c4ea13a527",
+          "actual_size_bytes": 513232,
+          "path": "raw/conn_a/frames_000005.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000005.index.parquet",
+          "sha256": "1472dc8bbd1751916a755d6c0aa1f4e5a0966b50c8963b928ae518c4ea13a527",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "65ff1d10dc3fc6dd256e3ce744ee0f01f049d545a4cb89114b13d03fb8463f6e",
+          "actual_size_bytes": 1150839,
+          "path": "raw/conn_a/frames_000006.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000006.bin.zst",
+          "sha256": "65ff1d10dc3fc6dd256e3ce744ee0f01f049d545a4cb89114b13d03fb8463f6e",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "baffdc2ecea326f37b9bac67e60a0fc59e09c5b77f51c06ee1213db722f6e46f",
+          "actual_size_bytes": 504338,
+          "path": "raw/conn_a/frames_000006.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000006.index.parquet",
+          "sha256": "baffdc2ecea326f37b9bac67e60a0fc59e09c5b77f51c06ee1213db722f6e46f",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "868a210bff936595b61d558499f87f63959d018b1a56512a6bf12777eff830b6",
+          "actual_size_bytes": 1165991,
+          "path": "raw/conn_a/frames_000007.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000007.bin.zst",
+          "sha256": "868a210bff936595b61d558499f87f63959d018b1a56512a6bf12777eff830b6",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "6095a4cdd82551508e1810f9f8c6a931e25e897ed741c0d4d5dfb3de82b9453e",
+          "actual_size_bytes": 498730,
+          "path": "raw/conn_a/frames_000007.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000007.index.parquet",
+          "sha256": "6095a4cdd82551508e1810f9f8c6a931e25e897ed741c0d4d5dfb3de82b9453e",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "20c975fff350c2d2c2e5a8f2c2e3aac6b706e37418c777e1acec35abe73d4afb",
+          "actual_size_bytes": 1123177,
+          "path": "raw/conn_a/frames_000008.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000008.bin.zst",
+          "sha256": "20c975fff350c2d2c2e5a8f2c2e3aac6b706e37418c777e1acec35abe73d4afb",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1846a7a4e1952b880c841c78271fa925235a31355d968b227c2f800d8c28139c",
+          "actual_size_bytes": 424968,
+          "path": "raw/conn_a/frames_000008.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000008.index.parquet",
+          "sha256": "1846a7a4e1952b880c841c78271fa925235a31355d968b227c2f800d8c28139c",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b37f4d47012646fc499963c19784b27c30e0e4e4d329426b2f0a54a398750328",
+          "actual_size_bytes": 1115780,
+          "path": "raw/conn_a/frames_000009.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000009.bin.zst",
+          "sha256": "b37f4d47012646fc499963c19784b27c30e0e4e4d329426b2f0a54a398750328",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "dcb59750d8476dbcab72f12d03052043ce2b6f9b67ad937c42576ebbd9dbff12",
+          "actual_size_bytes": 473222,
+          "path": "raw/conn_a/frames_000009.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000009.index.parquet",
+          "sha256": "dcb59750d8476dbcab72f12d03052043ce2b6f9b67ad937c42576ebbd9dbff12",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "292e40d7b0545f0fd65664be19719b03710961ae2fc1f2234826d2fb11dc9566",
+          "actual_size_bytes": 1168331,
+          "path": "raw/conn_a/frames_000010.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000010.bin.zst",
+          "sha256": "292e40d7b0545f0fd65664be19719b03710961ae2fc1f2234826d2fb11dc9566",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "9de64eae22c50c99e98d208a5f6aafb284df1ec165e67026d71aa473923aec4f",
+          "actual_size_bytes": 485440,
+          "path": "raw/conn_a/frames_000010.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000010.index.parquet",
+          "sha256": "9de64eae22c50c99e98d208a5f6aafb284df1ec165e67026d71aa473923aec4f",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "5b8241679141d0b31e0278d0ac1d2457a5a5285586ac76a9378ef14b6c78f39b",
+          "actual_size_bytes": 1171711,
+          "path": "raw/conn_a/frames_000011.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000011.bin.zst",
+          "sha256": "5b8241679141d0b31e0278d0ac1d2457a5a5285586ac76a9378ef14b6c78f39b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "c853649c155d9889b7317e378fabe82aa191cbd96032be920895462bebf35ed9",
+          "actual_size_bytes": 435670,
+          "path": "raw/conn_a/frames_000011.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000011.index.parquet",
+          "sha256": "c853649c155d9889b7317e378fabe82aa191cbd96032be920895462bebf35ed9",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "5df1c2e891f941039a155d4f4c7b629f2f72469da13388c0ac610a5e1e07e7bc",
+          "actual_size_bytes": 1127194,
+          "path": "raw/conn_a/frames_000012.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000012.bin.zst",
+          "sha256": "5df1c2e891f941039a155d4f4c7b629f2f72469da13388c0ac610a5e1e07e7bc",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "e2ad38436bae6cfdbc41c51776144afde384c4b123a8a8aa0d0c22d2fcd9b1ed",
+          "actual_size_bytes": 442870,
+          "path": "raw/conn_a/frames_000012.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000012.index.parquet",
+          "sha256": "e2ad38436bae6cfdbc41c51776144afde384c4b123a8a8aa0d0c22d2fcd9b1ed",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b3b17c3870682dd41c5936d9accc98eeafb1a3708a7054d54f9f81ba1629d77a",
+          "actual_size_bytes": 1128206,
+          "path": "raw/conn_a/frames_000013.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000013.bin.zst",
+          "sha256": "b3b17c3870682dd41c5936d9accc98eeafb1a3708a7054d54f9f81ba1629d77a",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "04e8681348b1aee6c297dd3b6122c74cae5aa03cd3cec36d3e7b146e655d5826",
+          "actual_size_bytes": 418426,
+          "path": "raw/conn_a/frames_000013.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000013.index.parquet",
+          "sha256": "04e8681348b1aee6c297dd3b6122c74cae5aa03cd3cec36d3e7b146e655d5826",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "4e0bf3709085d6f1ca620130c0c888fd95f8e6e823c3332e33c4c663bafaf292",
+          "actual_size_bytes": 1111848,
+          "path": "raw/conn_a/frames_000014.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000014.bin.zst",
+          "sha256": "4e0bf3709085d6f1ca620130c0c888fd95f8e6e823c3332e33c4c663bafaf292",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b477a99d99ec36ceb2cf7816908898851a41a04869d12ef791f930d2f3b3f712",
+          "actual_size_bytes": 444301,
+          "path": "raw/conn_a/frames_000014.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000014.index.parquet",
+          "sha256": "b477a99d99ec36ceb2cf7816908898851a41a04869d12ef791f930d2f3b3f712",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "ee77906290d36a9c22aec36e83cb0239504616c6545525bcde2bdecdfce57f3b",
+          "actual_size_bytes": 1109064,
+          "path": "raw/conn_a/frames_000015.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000015.bin.zst",
+          "sha256": "ee77906290d36a9c22aec36e83cb0239504616c6545525bcde2bdecdfce57f3b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "cbb9e0cd24e4e5dfbc852b416d44f800b9f42e120bd84fc5388e4353692c9be9",
+          "actual_size_bytes": 468706,
+          "path": "raw/conn_a/frames_000015.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000015.index.parquet",
+          "sha256": "cbb9e0cd24e4e5dfbc852b416d44f800b9f42e120bd84fc5388e4353692c9be9",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "662500c43bcd22d53666e0d129cebe0bcc19dfe380c91b948cdddcf16d550f85",
+          "actual_size_bytes": 1100906,
+          "path": "raw/conn_a/frames_000016.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000016.bin.zst",
+          "sha256": "662500c43bcd22d53666e0d129cebe0bcc19dfe380c91b948cdddcf16d550f85",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "e3f2946612216551843d268e2e15bde5cca63a8c5f32f02ee4dec379789765cf",
+          "actual_size_bytes": 432357,
+          "path": "raw/conn_a/frames_000016.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000016.index.parquet",
+          "sha256": "e3f2946612216551843d268e2e15bde5cca63a8c5f32f02ee4dec379789765cf",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "3724af2f6fccba7886165cc348da7d6107dde41e69e40f5a37518566d954f624",
+          "actual_size_bytes": 1108796,
+          "path": "raw/conn_a/frames_000017.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000017.bin.zst",
+          "sha256": "3724af2f6fccba7886165cc348da7d6107dde41e69e40f5a37518566d954f624",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "44112c4d77f10f05212c9eeb8fe33102307d771bb047a8a85fd51bbaf17405cd",
+          "actual_size_bytes": 453727,
+          "path": "raw/conn_a/frames_000017.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000017.index.parquet",
+          "sha256": "44112c4d77f10f05212c9eeb8fe33102307d771bb047a8a85fd51bbaf17405cd",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "f543c1d7b56d1bb0cf2125be8f36150fb3465e6fed9e7e5d0967b8cc14b2c6a4",
+          "actual_size_bytes": 1115209,
+          "path": "raw/conn_a/frames_000018.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000018.bin.zst",
+          "sha256": "f543c1d7b56d1bb0cf2125be8f36150fb3465e6fed9e7e5d0967b8cc14b2c6a4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "f2c3507dbd082e0b26458aaf4ea29054fedde0c6223a459a832a4009d8efb820",
+          "actual_size_bytes": 434107,
+          "path": "raw/conn_a/frames_000018.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000018.index.parquet",
+          "sha256": "f2c3507dbd082e0b26458aaf4ea29054fedde0c6223a459a832a4009d8efb820",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "996a9a92d255701059be243987dedade7dad4c652edd57afd051944507edfd82",
+          "actual_size_bytes": 1121846,
+          "path": "raw/conn_a/frames_000019.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000019.bin.zst",
+          "sha256": "996a9a92d255701059be243987dedade7dad4c652edd57afd051944507edfd82",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "73383f0d72dec23f71c7a381c9e7d76cbd73002dae626922f1c0bed9fc87f41c",
+          "actual_size_bytes": 406030,
+          "path": "raw/conn_a/frames_000019.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000019.index.parquet",
+          "sha256": "73383f0d72dec23f71c7a381c9e7d76cbd73002dae626922f1c0bed9fc87f41c",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "eb826e77afcae2584074942d582a9fd64a139af18a4799319b7d3d47ce9c8b75",
+          "actual_size_bytes": 1122882,
+          "path": "raw/conn_a/frames_000020.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000020.bin.zst",
+          "sha256": "eb826e77afcae2584074942d582a9fd64a139af18a4799319b7d3d47ce9c8b75",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "102eb8eac537b1b55fbf9fc65bd278aee271f02dd3f09619f00570daa0c036e4",
+          "actual_size_bytes": 403035,
+          "path": "raw/conn_a/frames_000020.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000020.index.parquet",
+          "sha256": "102eb8eac537b1b55fbf9fc65bd278aee271f02dd3f09619f00570daa0c036e4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "bb863a74ca700dc0fb1dfdff8bc89b33c49efd440bf5b236a9fc5a89e615082f",
+          "actual_size_bytes": 1120281,
+          "path": "raw/conn_a/frames_000021.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000021.bin.zst",
+          "sha256": "bb863a74ca700dc0fb1dfdff8bc89b33c49efd440bf5b236a9fc5a89e615082f",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "7835aa84ec1431e09ee2245de85762e30c82b79f83a1364c045c2609eb2fa461",
+          "actual_size_bytes": 430509,
+          "path": "raw/conn_a/frames_000021.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000021.index.parquet",
+          "sha256": "7835aa84ec1431e09ee2245de85762e30c82b79f83a1364c045c2609eb2fa461",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b1c8eea2d6f4e54924f36a3d732054eccf0a8f38b97cd9e4adf4d9d793aac276",
+          "actual_size_bytes": 1209453,
+          "path": "raw/conn_a/frames_000022.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000022.bin.zst",
+          "sha256": "b1c8eea2d6f4e54924f36a3d732054eccf0a8f38b97cd9e4adf4d9d793aac276",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "2da5fbea43430ae339b579a2918968fc0cc94d5d06a766826f4300f03966616c",
+          "actual_size_bytes": 380950,
+          "path": "raw/conn_a/frames_000022.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000022.index.parquet",
+          "sha256": "2da5fbea43430ae339b579a2918968fc0cc94d5d06a766826f4300f03966616c",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "642c79791bf465151db0df5b54b4fb18b4bfa13aefb5b9bc9484c41843b1b0a4",
+          "actual_size_bytes": 1172489,
+          "path": "raw/conn_a/frames_000023.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000023.bin.zst",
+          "sha256": "642c79791bf465151db0df5b54b4fb18b4bfa13aefb5b9bc9484c41843b1b0a4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "df49bb58573c677f3b65dfc28a2dc800d936bf837915cb5f27dcc1f60d2d9aaf",
+          "actual_size_bytes": 401153,
+          "path": "raw/conn_a/frames_000023.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000023.index.parquet",
+          "sha256": "df49bb58573c677f3b65dfc28a2dc800d936bf837915cb5f27dcc1f60d2d9aaf",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "d5d95e499c1b926811e4f1bbbf2422bd04d56f86854bd919a592648be3b8a1bf",
+          "actual_size_bytes": 1186452,
+          "path": "raw/conn_a/frames_000024.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000024.bin.zst",
+          "sha256": "d5d95e499c1b926811e4f1bbbf2422bd04d56f86854bd919a592648be3b8a1bf",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "789446b6f6c64435752ab59d6f40edfac172ced73649d47326f45a1f70b293d7",
+          "actual_size_bytes": 431050,
+          "path": "raw/conn_a/frames_000024.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000024.index.parquet",
+          "sha256": "789446b6f6c64435752ab59d6f40edfac172ced73649d47326f45a1f70b293d7",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "e2e7892275c51cc06d9b9eca5056972faa61fa1927584fe8a8f595e8a0156e98",
+          "actual_size_bytes": 1231573,
+          "path": "raw/conn_a/frames_000025.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000025.bin.zst",
+          "sha256": "e2e7892275c51cc06d9b9eca5056972faa61fa1927584fe8a8f595e8a0156e98",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "cad55c21c48c4879a62f90591ede3b8e1ce5ece884bc973f6028e2e81808cf4c",
+          "actual_size_bytes": 366252,
+          "path": "raw/conn_a/frames_000025.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000025.index.parquet",
+          "sha256": "cad55c21c48c4879a62f90591ede3b8e1ce5ece884bc973f6028e2e81808cf4c",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "e0e4a7352cc572be4ccd0795dbc12b116bef57f15d738bfbb985dc2c6b6e5792",
+          "actual_size_bytes": 1261743,
+          "path": "raw/conn_a/frames_000026.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000026.bin.zst",
+          "sha256": "e0e4a7352cc572be4ccd0795dbc12b116bef57f15d738bfbb985dc2c6b6e5792",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "96ce38e46ea5e8b518572ba655db1c79707a5989b87771a475d42733a57c5c9b",
+          "actual_size_bytes": 400893,
+          "path": "raw/conn_a/frames_000026.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000026.index.parquet",
+          "sha256": "96ce38e46ea5e8b518572ba655db1c79707a5989b87771a475d42733a57c5c9b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "94b7285fcdb5f6368cecc13d7716953f1ea34e4c59b70a07232f3879267800c1",
+          "actual_size_bytes": 1249804,
+          "path": "raw/conn_a/frames_000027.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000027.bin.zst",
+          "sha256": "94b7285fcdb5f6368cecc13d7716953f1ea34e4c59b70a07232f3879267800c1",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "ee599591df37f9385ea27a130835a647b0861b326964e2b65fb804c09f2b1234",
+          "actual_size_bytes": 450251,
+          "path": "raw/conn_a/frames_000027.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000027.index.parquet",
+          "sha256": "ee599591df37f9385ea27a130835a647b0861b326964e2b65fb804c09f2b1234",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "7b1261e1c6f877a19b69acda8902409fdbdc4757a8b427287668bb92bb17ac18",
+          "actual_size_bytes": 1303207,
+          "path": "raw/conn_a/frames_000028.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000028.bin.zst",
+          "sha256": "7b1261e1c6f877a19b69acda8902409fdbdc4757a8b427287668bb92bb17ac18",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "5eef22aa33495a55c7e24b64468e053229562420418706d7b3f0db6f792c4e39",
+          "actual_size_bytes": 445123,
+          "path": "raw/conn_a/frames_000028.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000028.index.parquet",
+          "sha256": "5eef22aa33495a55c7e24b64468e053229562420418706d7b3f0db6f792c4e39",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b31504cb357f4cd1d8a928322542b35c734dc484327bff8f977f358620edf233",
+          "actual_size_bytes": 1390583,
+          "path": "raw/conn_a/frames_000029.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000029.bin.zst",
+          "sha256": "b31504cb357f4cd1d8a928322542b35c734dc484327bff8f977f358620edf233",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "41697c226c0c15c03e9dce28c83a27d593186665a057daefe05fcac335fd6cc5",
+          "actual_size_bytes": 495190,
+          "path": "raw/conn_a/frames_000029.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000029.index.parquet",
+          "sha256": "41697c226c0c15c03e9dce28c83a27d593186665a057daefe05fcac335fd6cc5",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "71185fa3d687ee93d6770908e03eae3b992b9be135434acaad2d92c2131e7e9a",
+          "actual_size_bytes": 191235,
+          "path": "raw/conn_a/frames_000030.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000030.bin.zst",
+          "sha256": "71185fa3d687ee93d6770908e03eae3b992b9be135434acaad2d92c2131e7e9a",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "456e8a21b5b01d92ff4e49bdeca280802243b164d2debee82c2b9eeb5cb1bf13",
+          "actual_size_bytes": 691979,
+          "path": "raw/conn_a/frames_000030.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000030.index.parquet",
+          "sha256": "456e8a21b5b01d92ff4e49bdeca280802243b164d2debee82c2b9eeb5cb1bf13",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1398bf00a50226bfb22451476961eaf1abc22f4628e9daeaf38f2d863dab291e",
+          "actual_size_bytes": 335,
+          "path": "session_lifecycle.jsonl",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/session_lifecycle.jsonl",
+          "sha256": "1398bf00a50226bfb22451476961eaf1abc22f4628e9daeaf38f2d863dab291e",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "ac13972397d8ed8cc87da0244858cf0a7892f8a00c133dd0977c5ef43362cb30",
+          "actual_size_bytes": 259,
+          "path": "validation_report.json",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/validation_report.json",
+          "sha256": "ac13972397d8ed8cc87da0244858cf0a7892f8a00c133dd0977c5ef43362cb30",
+          "size_bytes": null
+        }
+      ],
+      "entry_count": 98,
+      "errors": [],
+      "manifest_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/session_manifest.json",
+      "manifest_sha256": "68eb2b71ce4133c6577695df5409e5b7fa95018547e1115da5a239f3aec4c589",
+      "passed": true,
+      "resolved_count": 98
+    },
+    {
+      "entries": [
+        {
+          "actual_sha256": "e18e9a36705db9a29550e686a27befff3b5225edcc75d604e2c82317b4dcbd08",
+          "actual_size_bytes": 429869,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=04/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=04/ticks_093005.parquet",
+          "sha256": "e18e9a36705db9a29550e686a27befff3b5225edcc75d604e2c82317b4dcbd08",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "140b7d3bd0bf7a591a5489e15049de1c7e93c50e3b72036dd399316dd03d47d8",
+          "actual_size_bytes": 426989,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=05/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=05/ticks_093005.parquet",
+          "sha256": "140b7d3bd0bf7a591a5489e15049de1c7e93c50e3b72036dd399316dd03d47d8",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "96691aba7ffb4676178db30cd81dbcec588d87f5409cde12e860ebcf3a341027",
+          "actual_size_bytes": 427658,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=06/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=06/ticks_093005.parquet",
+          "sha256": "96691aba7ffb4676178db30cd81dbcec588d87f5409cde12e860ebcf3a341027",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "689cc07b09c6a01e094b4b91bd6692c69ddc33cd8f2bb390edf52c8874be1c2d",
+          "actual_size_bytes": 427896,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=07/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=07/ticks_093005.parquet",
+          "sha256": "689cc07b09c6a01e094b4b91bd6692c69ddc33cd8f2bb390edf52c8874be1c2d",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "67aaa6aa590fbefed04878a4329e465d283793a39a480d5dfbe048560b6285a4",
+          "actual_size_bytes": 429137,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=08/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=08/ticks_093005.parquet",
+          "sha256": "67aaa6aa590fbefed04878a4329e465d283793a39a480d5dfbe048560b6285a4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "4b3ece1d69de45532a3cac2c9662f154ef544be98f333f2a67cbcccc30ce88db",
+          "actual_size_bytes": 416820,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=09/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=09/ticks_093005.parquet",
+          "sha256": "4b3ece1d69de45532a3cac2c9662f154ef544be98f333f2a67cbcccc30ce88db",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "121fe3420d8e11a11fffddb1089e94360aac81847f8076933425351c8ec1a212",
+          "actual_size_bytes": 49616,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=10/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=10/ticks_093005.parquet",
+          "sha256": "121fe3420d8e11a11fffddb1089e94360aac81847f8076933425351c8ec1a212",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "7a8d2d27a63ad5ea9cd242116340acc22d0b3e5c4b17e4906849f993c46432fc",
+          "actual_size_bytes": 208309,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=04/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=04/ticks_093005.parquet",
+          "sha256": "7a8d2d27a63ad5ea9cd242116340acc22d0b3e5c4b17e4906849f993c46432fc",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "c0600a73b571731d8e6bc2f5e5cfbb9a8d5f8da2b6e5b7d7052ff4aeb3defde9",
+          "actual_size_bytes": 208487,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=05/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=05/ticks_093005.parquet",
+          "sha256": "c0600a73b571731d8e6bc2f5e5cfbb9a8d5f8da2b6e5b7d7052ff4aeb3defde9",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "62449748ea905b748df8f92258b979eba525aa097ef539a38051dc515f6ab34b",
+          "actual_size_bytes": 208948,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=06/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=06/ticks_093005.parquet",
+          "sha256": "62449748ea905b748df8f92258b979eba525aa097ef539a38051dc515f6ab34b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "72c0591dfedd0f8062aa2ced7006bec3dfc2280762355f4b9893d021796a4ceb",
+          "actual_size_bytes": 209377,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=07/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=07/ticks_093005.parquet",
+          "sha256": "72c0591dfedd0f8062aa2ced7006bec3dfc2280762355f4b9893d021796a4ceb",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "e9785be0268d9f8b33b5d308078f29c86fbf3b5c6c6cfe378da92edd7538aef0",
+          "actual_size_bytes": 209372,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=08/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=08/ticks_093005.parquet",
+          "sha256": "e9785be0268d9f8b33b5d308078f29c86fbf3b5c6c6cfe378da92edd7538aef0",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "f1fcfe4811f57fee43c485ceef2317c576abe0ce805f4d9dfeebb85d624a5592",
+          "actual_size_bytes": 209285,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=09/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=09/ticks_093005.parquet",
+          "sha256": "f1fcfe4811f57fee43c485ceef2317c576abe0ce805f4d9dfeebb85d624a5592",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b51f5d3493d5ba3b4de50482c3ac6940fc61effcafb2ec53f9d66e8306c1138b",
+          "actual_size_bytes": 34804,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=10/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=10/ticks_093005.parquet",
+          "sha256": "b51f5d3493d5ba3b4de50482c3ac6940fc61effcafb2ec53f9d66e8306c1138b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "a9084719db4aac7aaf6befa671059bfdedf4e1c343c71ad75b61a7e96588431d",
+          "actual_size_bytes": 418956,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=04/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=04/ticks_093005.parquet",
+          "sha256": "a9084719db4aac7aaf6befa671059bfdedf4e1c343c71ad75b61a7e96588431d",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "8b14ea59b04baf8d9dcbfce4051c6956cc89da0468742b233078ee75131a460b",
+          "actual_size_bytes": 416193,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=05/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=05/ticks_093005.parquet",
+          "sha256": "8b14ea59b04baf8d9dcbfce4051c6956cc89da0468742b233078ee75131a460b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "12210e3707b5ba3f27bb1aa0f9e70cc0bae341b6b3ff802cbb31ad6ec9187f3e",
+          "actual_size_bytes": 420583,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=06/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=06/ticks_093005.parquet",
+          "sha256": "12210e3707b5ba3f27bb1aa0f9e70cc0bae341b6b3ff802cbb31ad6ec9187f3e",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "56043af152a9ff74ba278ae993f3fec3866734b759ebb2daea89fc88d60f634a",
+          "actual_size_bytes": 416863,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=07/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=07/ticks_093005.parquet",
+          "sha256": "56043af152a9ff74ba278ae993f3fec3866734b759ebb2daea89fc88d60f634a",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "89fa369c6e1819323cd0d59f216eb199f9c26594010c89d68ce3f7a68cb5e2f3",
+          "actual_size_bytes": 420077,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=08/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=08/ticks_093005.parquet",
+          "sha256": "89fa369c6e1819323cd0d59f216eb199f9c26594010c89d68ce3f7a68cb5e2f3",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "3f1aee8cb0dcc56a9315bdf3f9d711f84edb7034f921c5d779a6981e7359f880",
+          "actual_size_bytes": 411696,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=09/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=09/ticks_093005.parquet",
+          "sha256": "3f1aee8cb0dcc56a9315bdf3f9d711f84edb7034f921c5d779a6981e7359f880",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "cce31f8ddefb63c3d6636a75b412a6e73e839443edefe514b4e36d2556984b54",
+          "actual_size_bytes": 49558,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=10/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=10/ticks_093005.parquet",
+          "sha256": "cce31f8ddefb63c3d6636a75b412a6e73e839443edefe514b4e36d2556984b54",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "d812a2c0a400517da108b59e7e8ab64e1be3218b78d63c82ff17056c130e6737",
+          "actual_size_bytes": 6798609,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=04/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=04/ticks_093005.parquet",
+          "sha256": "d812a2c0a400517da108b59e7e8ab64e1be3218b78d63c82ff17056c130e6737",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "d4d5c47cee93e656af2c22e5d5c45a52e8edbc8338c17ec1c9419bdb9e6bc2b1",
+          "actual_size_bytes": 7847055,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=05/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=05/ticks_093005.parquet",
+          "sha256": "d4d5c47cee93e656af2c22e5d5c45a52e8edbc8338c17ec1c9419bdb9e6bc2b1",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "ba9abdfb492e44d43087d2ff749a16d9f2a270f4f2a1fbd2d367870a2394c44d",
+          "actual_size_bytes": 8399013,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=06/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=06/ticks_093005.parquet",
+          "sha256": "ba9abdfb492e44d43087d2ff749a16d9f2a270f4f2a1fbd2d367870a2394c44d",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "9e3674b5ad31ec73d9ebdc04798af7e1a17418d490a99bfae8ecf287a1b7c72c",
+          "actual_size_bytes": 8660850,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=07/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=07/ticks_093005.parquet",
+          "sha256": "9e3674b5ad31ec73d9ebdc04798af7e1a17418d490a99bfae8ecf287a1b7c72c",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "085746acb8c0d455653203575b4f1629e0c8a07246e1bf6b11d99e68b4a1751e",
+          "actual_size_bytes": 9509004,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=08/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=08/ticks_093005.parquet",
+          "sha256": "085746acb8c0d455653203575b4f1629e0c8a07246e1bf6b11d99e68b4a1751e",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "19e0e0d12222038cb45b40b3bdb481e8c249ca6b827e98b41dc310270e31e151",
+          "actual_size_bytes": 6694810,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=09/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=09/ticks_093005.parquet",
+          "sha256": "19e0e0d12222038cb45b40b3bdb481e8c249ca6b827e98b41dc310270e31e151",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "934c0310319615924ef30647807a79d963cbccbe9e35e49193ddb6e2f5e2e241",
+          "actual_size_bytes": 23409,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=10/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=10/ticks_093005.parquet",
+          "sha256": "934c0310319615924ef30647807a79d963cbccbe9e35e49193ddb6e2f5e2e241",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1f952977388484768121ab86a3d1ed9df6a3fd2eb0a1cbe37f5c5755dc9f455b",
+          "actual_size_bytes": 131580,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=04/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=04/ticks_093005.parquet",
+          "sha256": "1f952977388484768121ab86a3d1ed9df6a3fd2eb0a1cbe37f5c5755dc9f455b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "3adfae359aa532ef955231117eac7d246c845ce2f8f26715b45f9910608f0ec4",
+          "actual_size_bytes": 129247,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=05/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=05/ticks_093005.parquet",
+          "sha256": "3adfae359aa532ef955231117eac7d246c845ce2f8f26715b45f9910608f0ec4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "49e57b8a62a17c2eb8466503992b4fe7f39591be412711c35d041829df540da7",
+          "actual_size_bytes": 130507,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=06/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=06/ticks_093005.parquet",
+          "sha256": "49e57b8a62a17c2eb8466503992b4fe7f39591be412711c35d041829df540da7",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "509e5f04fd17067ab7ae69d4eb3f11f31d7dcef113c6a8f084c6b080cf727598",
+          "actual_size_bytes": 129514,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=07/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=07/ticks_093005.parquet",
+          "sha256": "509e5f04fd17067ab7ae69d4eb3f11f31d7dcef113c6a8f084c6b080cf727598",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1344b3f1d6dfee8bdc4fdfd5288668dd6107d44a0a1b2a6c1ee1f5c84aa14cce",
+          "actual_size_bytes": 130204,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=08/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=08/ticks_093005.parquet",
+          "sha256": "1344b3f1d6dfee8bdc4fdfd5288668dd6107d44a0a1b2a6c1ee1f5c84aa14cce",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "d0cea31b7a9a3e98ece93da547ed728cced21a716b1cdd50a5bb896c9f55f2c6",
+          "actual_size_bytes": 126914,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=09/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=09/ticks_093005.parquet",
+          "sha256": "d0cea31b7a9a3e98ece93da547ed728cced21a716b1cdd50a5bb896c9f55f2c6",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1b799adac29c4a92720fde6aa6847c15fe1ed6d207805151b1ccb8599a0b0733",
+          "actual_size_bytes": 26969,
+          "path": "normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=10/ticks_093005.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=10/ticks_093005.parquet",
+          "sha256": "1b799adac29c4a92720fde6aa6847c15fe1ed6d207805151b1ccb8599a0b0733",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "0bd21d25b815baeecce64ed5012aa44cc2bb25f17f940d130006bc25d2ca7f1a",
+          "actual_size_bytes": 658301,
+          "path": "quality_metrics.jsonl",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/quality_metrics.jsonl",
+          "sha256": "0bd21d25b815baeecce64ed5012aa44cc2bb25f17f940d130006bc25d2ca7f1a",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "9dcd189707ce11faf6bff6470daac782c3d43ee3adecfd837c5d081a661c2ae4",
+          "actual_size_bytes": 1408467,
+          "path": "raw/conn_a/frames_000001.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000001.bin.zst",
+          "sha256": "9dcd189707ce11faf6bff6470daac782c3d43ee3adecfd837c5d081a661c2ae4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "a9e9378b226872f31ec765e3b1e0fac7de5dfb5659e298bff959506baba27535",
+          "actual_size_bytes": 614578,
+          "path": "raw/conn_a/frames_000001.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000001.index.parquet",
+          "sha256": "a9e9378b226872f31ec765e3b1e0fac7de5dfb5659e298bff959506baba27535",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "9561fff9093348e7a6300c7b4329f4cd9abef2d03ac213c3419aa8aef38d3dc8",
+          "actual_size_bytes": 1312134,
+          "path": "raw/conn_a/frames_000002.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000002.bin.zst",
+          "sha256": "9561fff9093348e7a6300c7b4329f4cd9abef2d03ac213c3419aa8aef38d3dc8",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "457a1b26ac9f059aaf77b1ca0dbd6115d2ae34dce8d5ee07699e9f00a81e06d5",
+          "actual_size_bytes": 562329,
+          "path": "raw/conn_a/frames_000002.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000002.index.parquet",
+          "sha256": "457a1b26ac9f059aaf77b1ca0dbd6115d2ae34dce8d5ee07699e9f00a81e06d5",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "5aa2cab95f3beff94cb55692f4135c5af8494d545e537edb991c662b27a7831d",
+          "actual_size_bytes": 1241848,
+          "path": "raw/conn_a/frames_000003.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000003.bin.zst",
+          "sha256": "5aa2cab95f3beff94cb55692f4135c5af8494d545e537edb991c662b27a7831d",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "a40c199efcb50a48d197ae0155b599cfa21b919d206c57c2eb4f19150d5fed90",
+          "actual_size_bytes": 536070,
+          "path": "raw/conn_a/frames_000003.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000003.index.parquet",
+          "sha256": "a40c199efcb50a48d197ae0155b599cfa21b919d206c57c2eb4f19150d5fed90",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "dc93e0fba8c4e17631b109dda1ccff0b7bb20844c9d58e94a1a18d6fba0184ee",
+          "actual_size_bytes": 1197143,
+          "path": "raw/conn_a/frames_000004.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000004.bin.zst",
+          "sha256": "dc93e0fba8c4e17631b109dda1ccff0b7bb20844c9d58e94a1a18d6fba0184ee",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "4b2033ece65ccef013e03d4077bd786e5836186c04d1ea2bbcbfbffcba3f22f9",
+          "actual_size_bytes": 518973,
+          "path": "raw/conn_a/frames_000004.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000004.index.parquet",
+          "sha256": "4b2033ece65ccef013e03d4077bd786e5836186c04d1ea2bbcbfbffcba3f22f9",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "c5c732fa45252cd767a408f2d0145dbf7b9bedf5875c1222db0d2ed0251ef90b",
+          "actual_size_bytes": 1159706,
+          "path": "raw/conn_a/frames_000005.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000005.bin.zst",
+          "sha256": "c5c732fa45252cd767a408f2d0145dbf7b9bedf5875c1222db0d2ed0251ef90b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1472dc8bbd1751916a755d6c0aa1f4e5a0966b50c8963b928ae518c4ea13a527",
+          "actual_size_bytes": 513232,
+          "path": "raw/conn_a/frames_000005.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000005.index.parquet",
+          "sha256": "1472dc8bbd1751916a755d6c0aa1f4e5a0966b50c8963b928ae518c4ea13a527",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "65ff1d10dc3fc6dd256e3ce744ee0f01f049d545a4cb89114b13d03fb8463f6e",
+          "actual_size_bytes": 1150839,
+          "path": "raw/conn_a/frames_000006.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000006.bin.zst",
+          "sha256": "65ff1d10dc3fc6dd256e3ce744ee0f01f049d545a4cb89114b13d03fb8463f6e",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "baffdc2ecea326f37b9bac67e60a0fc59e09c5b77f51c06ee1213db722f6e46f",
+          "actual_size_bytes": 504338,
+          "path": "raw/conn_a/frames_000006.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000006.index.parquet",
+          "sha256": "baffdc2ecea326f37b9bac67e60a0fc59e09c5b77f51c06ee1213db722f6e46f",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "868a210bff936595b61d558499f87f63959d018b1a56512a6bf12777eff830b6",
+          "actual_size_bytes": 1165991,
+          "path": "raw/conn_a/frames_000007.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000007.bin.zst",
+          "sha256": "868a210bff936595b61d558499f87f63959d018b1a56512a6bf12777eff830b6",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "6095a4cdd82551508e1810f9f8c6a931e25e897ed741c0d4d5dfb3de82b9453e",
+          "actual_size_bytes": 498730,
+          "path": "raw/conn_a/frames_000007.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000007.index.parquet",
+          "sha256": "6095a4cdd82551508e1810f9f8c6a931e25e897ed741c0d4d5dfb3de82b9453e",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "20c975fff350c2d2c2e5a8f2c2e3aac6b706e37418c777e1acec35abe73d4afb",
+          "actual_size_bytes": 1123177,
+          "path": "raw/conn_a/frames_000008.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000008.bin.zst",
+          "sha256": "20c975fff350c2d2c2e5a8f2c2e3aac6b706e37418c777e1acec35abe73d4afb",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1846a7a4e1952b880c841c78271fa925235a31355d968b227c2f800d8c28139c",
+          "actual_size_bytes": 424968,
+          "path": "raw/conn_a/frames_000008.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000008.index.parquet",
+          "sha256": "1846a7a4e1952b880c841c78271fa925235a31355d968b227c2f800d8c28139c",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b37f4d47012646fc499963c19784b27c30e0e4e4d329426b2f0a54a398750328",
+          "actual_size_bytes": 1115780,
+          "path": "raw/conn_a/frames_000009.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000009.bin.zst",
+          "sha256": "b37f4d47012646fc499963c19784b27c30e0e4e4d329426b2f0a54a398750328",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "dcb59750d8476dbcab72f12d03052043ce2b6f9b67ad937c42576ebbd9dbff12",
+          "actual_size_bytes": 473222,
+          "path": "raw/conn_a/frames_000009.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000009.index.parquet",
+          "sha256": "dcb59750d8476dbcab72f12d03052043ce2b6f9b67ad937c42576ebbd9dbff12",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "292e40d7b0545f0fd65664be19719b03710961ae2fc1f2234826d2fb11dc9566",
+          "actual_size_bytes": 1168331,
+          "path": "raw/conn_a/frames_000010.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000010.bin.zst",
+          "sha256": "292e40d7b0545f0fd65664be19719b03710961ae2fc1f2234826d2fb11dc9566",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "9de64eae22c50c99e98d208a5f6aafb284df1ec165e67026d71aa473923aec4f",
+          "actual_size_bytes": 485440,
+          "path": "raw/conn_a/frames_000010.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000010.index.parquet",
+          "sha256": "9de64eae22c50c99e98d208a5f6aafb284df1ec165e67026d71aa473923aec4f",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "5b8241679141d0b31e0278d0ac1d2457a5a5285586ac76a9378ef14b6c78f39b",
+          "actual_size_bytes": 1171711,
+          "path": "raw/conn_a/frames_000011.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000011.bin.zst",
+          "sha256": "5b8241679141d0b31e0278d0ac1d2457a5a5285586ac76a9378ef14b6c78f39b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "c853649c155d9889b7317e378fabe82aa191cbd96032be920895462bebf35ed9",
+          "actual_size_bytes": 435670,
+          "path": "raw/conn_a/frames_000011.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000011.index.parquet",
+          "sha256": "c853649c155d9889b7317e378fabe82aa191cbd96032be920895462bebf35ed9",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "5df1c2e891f941039a155d4f4c7b629f2f72469da13388c0ac610a5e1e07e7bc",
+          "actual_size_bytes": 1127194,
+          "path": "raw/conn_a/frames_000012.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000012.bin.zst",
+          "sha256": "5df1c2e891f941039a155d4f4c7b629f2f72469da13388c0ac610a5e1e07e7bc",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "e2ad38436bae6cfdbc41c51776144afde384c4b123a8a8aa0d0c22d2fcd9b1ed",
+          "actual_size_bytes": 442870,
+          "path": "raw/conn_a/frames_000012.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000012.index.parquet",
+          "sha256": "e2ad38436bae6cfdbc41c51776144afde384c4b123a8a8aa0d0c22d2fcd9b1ed",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b3b17c3870682dd41c5936d9accc98eeafb1a3708a7054d54f9f81ba1629d77a",
+          "actual_size_bytes": 1128206,
+          "path": "raw/conn_a/frames_000013.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000013.bin.zst",
+          "sha256": "b3b17c3870682dd41c5936d9accc98eeafb1a3708a7054d54f9f81ba1629d77a",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "04e8681348b1aee6c297dd3b6122c74cae5aa03cd3cec36d3e7b146e655d5826",
+          "actual_size_bytes": 418426,
+          "path": "raw/conn_a/frames_000013.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000013.index.parquet",
+          "sha256": "04e8681348b1aee6c297dd3b6122c74cae5aa03cd3cec36d3e7b146e655d5826",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "4e0bf3709085d6f1ca620130c0c888fd95f8e6e823c3332e33c4c663bafaf292",
+          "actual_size_bytes": 1111848,
+          "path": "raw/conn_a/frames_000014.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000014.bin.zst",
+          "sha256": "4e0bf3709085d6f1ca620130c0c888fd95f8e6e823c3332e33c4c663bafaf292",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b477a99d99ec36ceb2cf7816908898851a41a04869d12ef791f930d2f3b3f712",
+          "actual_size_bytes": 444301,
+          "path": "raw/conn_a/frames_000014.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000014.index.parquet",
+          "sha256": "b477a99d99ec36ceb2cf7816908898851a41a04869d12ef791f930d2f3b3f712",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "ee77906290d36a9c22aec36e83cb0239504616c6545525bcde2bdecdfce57f3b",
+          "actual_size_bytes": 1109064,
+          "path": "raw/conn_a/frames_000015.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000015.bin.zst",
+          "sha256": "ee77906290d36a9c22aec36e83cb0239504616c6545525bcde2bdecdfce57f3b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "cbb9e0cd24e4e5dfbc852b416d44f800b9f42e120bd84fc5388e4353692c9be9",
+          "actual_size_bytes": 468706,
+          "path": "raw/conn_a/frames_000015.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000015.index.parquet",
+          "sha256": "cbb9e0cd24e4e5dfbc852b416d44f800b9f42e120bd84fc5388e4353692c9be9",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "662500c43bcd22d53666e0d129cebe0bcc19dfe380c91b948cdddcf16d550f85",
+          "actual_size_bytes": 1100906,
+          "path": "raw/conn_a/frames_000016.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000016.bin.zst",
+          "sha256": "662500c43bcd22d53666e0d129cebe0bcc19dfe380c91b948cdddcf16d550f85",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "e3f2946612216551843d268e2e15bde5cca63a8c5f32f02ee4dec379789765cf",
+          "actual_size_bytes": 432357,
+          "path": "raw/conn_a/frames_000016.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000016.index.parquet",
+          "sha256": "e3f2946612216551843d268e2e15bde5cca63a8c5f32f02ee4dec379789765cf",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "3724af2f6fccba7886165cc348da7d6107dde41e69e40f5a37518566d954f624",
+          "actual_size_bytes": 1108796,
+          "path": "raw/conn_a/frames_000017.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000017.bin.zst",
+          "sha256": "3724af2f6fccba7886165cc348da7d6107dde41e69e40f5a37518566d954f624",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "44112c4d77f10f05212c9eeb8fe33102307d771bb047a8a85fd51bbaf17405cd",
+          "actual_size_bytes": 453727,
+          "path": "raw/conn_a/frames_000017.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000017.index.parquet",
+          "sha256": "44112c4d77f10f05212c9eeb8fe33102307d771bb047a8a85fd51bbaf17405cd",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "f543c1d7b56d1bb0cf2125be8f36150fb3465e6fed9e7e5d0967b8cc14b2c6a4",
+          "actual_size_bytes": 1115209,
+          "path": "raw/conn_a/frames_000018.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000018.bin.zst",
+          "sha256": "f543c1d7b56d1bb0cf2125be8f36150fb3465e6fed9e7e5d0967b8cc14b2c6a4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "f2c3507dbd082e0b26458aaf4ea29054fedde0c6223a459a832a4009d8efb820",
+          "actual_size_bytes": 434107,
+          "path": "raw/conn_a/frames_000018.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000018.index.parquet",
+          "sha256": "f2c3507dbd082e0b26458aaf4ea29054fedde0c6223a459a832a4009d8efb820",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "996a9a92d255701059be243987dedade7dad4c652edd57afd051944507edfd82",
+          "actual_size_bytes": 1121846,
+          "path": "raw/conn_a/frames_000019.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000019.bin.zst",
+          "sha256": "996a9a92d255701059be243987dedade7dad4c652edd57afd051944507edfd82",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "73383f0d72dec23f71c7a381c9e7d76cbd73002dae626922f1c0bed9fc87f41c",
+          "actual_size_bytes": 406030,
+          "path": "raw/conn_a/frames_000019.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000019.index.parquet",
+          "sha256": "73383f0d72dec23f71c7a381c9e7d76cbd73002dae626922f1c0bed9fc87f41c",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "eb826e77afcae2584074942d582a9fd64a139af18a4799319b7d3d47ce9c8b75",
+          "actual_size_bytes": 1122882,
+          "path": "raw/conn_a/frames_000020.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000020.bin.zst",
+          "sha256": "eb826e77afcae2584074942d582a9fd64a139af18a4799319b7d3d47ce9c8b75",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "102eb8eac537b1b55fbf9fc65bd278aee271f02dd3f09619f00570daa0c036e4",
+          "actual_size_bytes": 403035,
+          "path": "raw/conn_a/frames_000020.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000020.index.parquet",
+          "sha256": "102eb8eac537b1b55fbf9fc65bd278aee271f02dd3f09619f00570daa0c036e4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "bb863a74ca700dc0fb1dfdff8bc89b33c49efd440bf5b236a9fc5a89e615082f",
+          "actual_size_bytes": 1120281,
+          "path": "raw/conn_a/frames_000021.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000021.bin.zst",
+          "sha256": "bb863a74ca700dc0fb1dfdff8bc89b33c49efd440bf5b236a9fc5a89e615082f",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "7835aa84ec1431e09ee2245de85762e30c82b79f83a1364c045c2609eb2fa461",
+          "actual_size_bytes": 430509,
+          "path": "raw/conn_a/frames_000021.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000021.index.parquet",
+          "sha256": "7835aa84ec1431e09ee2245de85762e30c82b79f83a1364c045c2609eb2fa461",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b1c8eea2d6f4e54924f36a3d732054eccf0a8f38b97cd9e4adf4d9d793aac276",
+          "actual_size_bytes": 1209453,
+          "path": "raw/conn_a/frames_000022.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000022.bin.zst",
+          "sha256": "b1c8eea2d6f4e54924f36a3d732054eccf0a8f38b97cd9e4adf4d9d793aac276",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "2da5fbea43430ae339b579a2918968fc0cc94d5d06a766826f4300f03966616c",
+          "actual_size_bytes": 380950,
+          "path": "raw/conn_a/frames_000022.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000022.index.parquet",
+          "sha256": "2da5fbea43430ae339b579a2918968fc0cc94d5d06a766826f4300f03966616c",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "642c79791bf465151db0df5b54b4fb18b4bfa13aefb5b9bc9484c41843b1b0a4",
+          "actual_size_bytes": 1172489,
+          "path": "raw/conn_a/frames_000023.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000023.bin.zst",
+          "sha256": "642c79791bf465151db0df5b54b4fb18b4bfa13aefb5b9bc9484c41843b1b0a4",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "df49bb58573c677f3b65dfc28a2dc800d936bf837915cb5f27dcc1f60d2d9aaf",
+          "actual_size_bytes": 401153,
+          "path": "raw/conn_a/frames_000023.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000023.index.parquet",
+          "sha256": "df49bb58573c677f3b65dfc28a2dc800d936bf837915cb5f27dcc1f60d2d9aaf",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "d5d95e499c1b926811e4f1bbbf2422bd04d56f86854bd919a592648be3b8a1bf",
+          "actual_size_bytes": 1186452,
+          "path": "raw/conn_a/frames_000024.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000024.bin.zst",
+          "sha256": "d5d95e499c1b926811e4f1bbbf2422bd04d56f86854bd919a592648be3b8a1bf",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "789446b6f6c64435752ab59d6f40edfac172ced73649d47326f45a1f70b293d7",
+          "actual_size_bytes": 431050,
+          "path": "raw/conn_a/frames_000024.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000024.index.parquet",
+          "sha256": "789446b6f6c64435752ab59d6f40edfac172ced73649d47326f45a1f70b293d7",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "e2e7892275c51cc06d9b9eca5056972faa61fa1927584fe8a8f595e8a0156e98",
+          "actual_size_bytes": 1231573,
+          "path": "raw/conn_a/frames_000025.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000025.bin.zst",
+          "sha256": "e2e7892275c51cc06d9b9eca5056972faa61fa1927584fe8a8f595e8a0156e98",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "cad55c21c48c4879a62f90591ede3b8e1ce5ece884bc973f6028e2e81808cf4c",
+          "actual_size_bytes": 366252,
+          "path": "raw/conn_a/frames_000025.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000025.index.parquet",
+          "sha256": "cad55c21c48c4879a62f90591ede3b8e1ce5ece884bc973f6028e2e81808cf4c",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "e0e4a7352cc572be4ccd0795dbc12b116bef57f15d738bfbb985dc2c6b6e5792",
+          "actual_size_bytes": 1261743,
+          "path": "raw/conn_a/frames_000026.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000026.bin.zst",
+          "sha256": "e0e4a7352cc572be4ccd0795dbc12b116bef57f15d738bfbb985dc2c6b6e5792",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "96ce38e46ea5e8b518572ba655db1c79707a5989b87771a475d42733a57c5c9b",
+          "actual_size_bytes": 400893,
+          "path": "raw/conn_a/frames_000026.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000026.index.parquet",
+          "sha256": "96ce38e46ea5e8b518572ba655db1c79707a5989b87771a475d42733a57c5c9b",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "94b7285fcdb5f6368cecc13d7716953f1ea34e4c59b70a07232f3879267800c1",
+          "actual_size_bytes": 1249804,
+          "path": "raw/conn_a/frames_000027.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000027.bin.zst",
+          "sha256": "94b7285fcdb5f6368cecc13d7716953f1ea34e4c59b70a07232f3879267800c1",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "ee599591df37f9385ea27a130835a647b0861b326964e2b65fb804c09f2b1234",
+          "actual_size_bytes": 450251,
+          "path": "raw/conn_a/frames_000027.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000027.index.parquet",
+          "sha256": "ee599591df37f9385ea27a130835a647b0861b326964e2b65fb804c09f2b1234",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "7b1261e1c6f877a19b69acda8902409fdbdc4757a8b427287668bb92bb17ac18",
+          "actual_size_bytes": 1303207,
+          "path": "raw/conn_a/frames_000028.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000028.bin.zst",
+          "sha256": "7b1261e1c6f877a19b69acda8902409fdbdc4757a8b427287668bb92bb17ac18",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "5eef22aa33495a55c7e24b64468e053229562420418706d7b3f0db6f792c4e39",
+          "actual_size_bytes": 445123,
+          "path": "raw/conn_a/frames_000028.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000028.index.parquet",
+          "sha256": "5eef22aa33495a55c7e24b64468e053229562420418706d7b3f0db6f792c4e39",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "b31504cb357f4cd1d8a928322542b35c734dc484327bff8f977f358620edf233",
+          "actual_size_bytes": 1390583,
+          "path": "raw/conn_a/frames_000029.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000029.bin.zst",
+          "sha256": "b31504cb357f4cd1d8a928322542b35c734dc484327bff8f977f358620edf233",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "41697c226c0c15c03e9dce28c83a27d593186665a057daefe05fcac335fd6cc5",
+          "actual_size_bytes": 495190,
+          "path": "raw/conn_a/frames_000029.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000029.index.parquet",
+          "sha256": "41697c226c0c15c03e9dce28c83a27d593186665a057daefe05fcac335fd6cc5",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "71185fa3d687ee93d6770908e03eae3b992b9be135434acaad2d92c2131e7e9a",
+          "actual_size_bytes": 191235,
+          "path": "raw/conn_a/frames_000030.bin.zst",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000030.bin.zst",
+          "sha256": "71185fa3d687ee93d6770908e03eae3b992b9be135434acaad2d92c2131e7e9a",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "456e8a21b5b01d92ff4e49bdeca280802243b164d2debee82c2b9eeb5cb1bf13",
+          "actual_size_bytes": 691979,
+          "path": "raw/conn_a/frames_000030.index.parquet",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000030.index.parquet",
+          "sha256": "456e8a21b5b01d92ff4e49bdeca280802243b164d2debee82c2b9eeb5cb1bf13",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "1398bf00a50226bfb22451476961eaf1abc22f4628e9daeaf38f2d863dab291e",
+          "actual_size_bytes": 335,
+          "path": "session_lifecycle.jsonl",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/session_lifecycle.jsonl",
+          "sha256": "1398bf00a50226bfb22451476961eaf1abc22f4628e9daeaf38f2d863dab291e",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "ac13972397d8ed8cc87da0244858cf0a7892f8a00c133dd0977c5ef43362cb30",
+          "actual_size_bytes": 259,
+          "path": "validation_report.json",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/validation_report.json",
+          "sha256": "ac13972397d8ed8cc87da0244858cf0a7892f8a00c133dd0977c5ef43362cb30",
+          "size_bytes": null
+        }
+      ],
+      "entry_count": 98,
+      "errors": [],
+      "manifest_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/session_manifest.json",
+      "manifest_sha256": "68eb2b71ce4133c6577695df5409e5b7fa95018547e1115da5a239f3aec4c589",
+      "passed": true,
+      "resolved_count": 98
+    },
+    {
+      "entries": [
+        {
+          "actual_sha256": "7480cabf0ffcb9e00c45eef9213341eebd38c77120cc1b5fe2c36bd220e28b9c",
+          "actual_size_bytes": 8998,
+          "path": "constituents/nifty50_constituents_20260804.json",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/constituents/nifty50_constituents_20260804.json",
+          "sha256": "7480cabf0ffcb9e00c45eef9213341eebd38c77120cc1b5fe2c36bd220e28b9c",
+          "size_bytes": 8998
+        },
+        {
+          "actual_sha256": "dda8e6583cec67ef0dc4a7eb172dcecbe927f71df2b794499a873ae55ebfb69d",
+          "actual_size_bytes": 4277,
+          "path": "constituents/nifty50_constituents_20260804.parquet",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/constituents/nifty50_constituents_20260804.parquet",
+          "sha256": "dda8e6583cec67ef0dc4a7eb172dcecbe927f71df2b794499a873ae55ebfb69d",
+          "size_bytes": 4277
+        },
+        {
+          "actual_sha256": "fbc87a985677cb0c12ad1061fe2d9ad9d56aaee6f28dea6ffa5f81d7ee6938eb",
+          "actual_size_bytes": 1810,
+          "path": "constituents/nifty50_upstox_identity_map_20260804.json",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/constituents/nifty50_upstox_identity_map_20260804.json",
+          "sha256": "fbc87a985677cb0c12ad1061fe2d9ad9d56aaee6f28dea6ffa5f81d7ee6938eb",
+          "size_bytes": 1810
+        },
+        {
+          "actual_sha256": "e9b6b44aa9859a96f6d7bc7414006fbfcde866f3d10e58bd00860d283dc674e7",
+          "actual_size_bytes": 1779,
+          "path": "constituents/nifty50_upstox_identity_map_20260804.parquet",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/constituents/nifty50_upstox_identity_map_20260804.parquet",
+          "sha256": "e9b6b44aa9859a96f6d7bc7414006fbfcde866f3d10e58bd00860d283dc674e7",
+          "size_bytes": 1779
+        },
+        {
+          "actual_sha256": "7b9038c6d4602067c8cd2142b5af1e397e1045557210c48b1ffd1d5505a0bd80",
+          "actual_size_bytes": 60886665,
+          "path": "instrument_master/complete.json",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/instrument_master/complete.json",
+          "sha256": "7b9038c6d4602067c8cd2142b5af1e397e1045557210c48b1ffd1d5505a0bd80",
+          "size_bytes": 60886665
+        },
+        {
+          "actual_sha256": "c867c43e11dcfe0b28b683d6c903a812ce220fae69460484cb24168f49102733",
+          "actual_size_bytes": 3329967,
+          "path": "instrument_master/complete.json.gz",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/instrument_master/complete.json.gz",
+          "sha256": "c867c43e11dcfe0b28b683d6c903a812ce220fae69460484cb24168f49102733",
+          "size_bytes": 3329967
+        },
+        {
+          "actual_sha256": "3291de864682ef26886e1faf724e2b1bed747c34dd0a4771f86b6db2a20c46d8",
+          "actual_size_bytes": 772,
+          "path": "instrument_master/instrument_master_manifest.json",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/instrument_master/instrument_master_manifest.json",
+          "sha256": "3291de864682ef26886e1faf724e2b1bed747c34dd0a4771f86b6db2a20c46d8",
+          "size_bytes": 772
+        },
+        {
+          "actual_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "actual_size_bytes": 2,
+          "path": "meg/meg_replay_evidence_20260804.json",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/meg/meg_replay_evidence_20260804.json",
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "size_bytes": 2
+        },
+        {
+          "actual_sha256": "e34b0545cdae9a332945946868a36a61971f2839551bf9bcd88343b2035504ff",
+          "actual_size_bytes": 154166,
+          "path": "meg/nifty50_constituent_bars_1m.parquet",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/meg/nifty50_constituent_bars_1m.parquet",
+          "sha256": "e34b0545cdae9a332945946868a36a61971f2839551bf9bcd88343b2035504ff",
+          "size_bytes": 154166
+        },
+        {
+          "actual_sha256": "15c5f0197d9656e02103eeefb5c30925e14cd80d08e566b94a779559ab6cc128",
+          "actual_size_bytes": 120598528,
+          "path": "replay_verification.db",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/replay_verification.db",
+          "sha256": "15c5f0197d9656e02103eeefb5c30925e14cd80d08e566b94a779559ab6cc128",
+          "size_bytes": 120598528
+        },
+        {
+          "actual_sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+          "actual_size_bytes": 32768,
+          "path": "replay_verification.db-shm",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/replay_verification.db-shm",
+          "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+          "size_bytes": 32768
+        },
+        {
+          "actual_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "actual_size_bytes": 0,
+          "path": "replay_verification.db-wal",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/replay_verification.db-wal",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "size_bytes": null
+        },
+        {
+          "actual_sha256": "68eb2b71ce4133c6577695df5409e5b7fa95018547e1115da5a239f3aec4c589",
+          "actual_size_bytes": 13905,
+          "path": "session_manifest.json",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/session_manifest.json",
+          "sha256": "68eb2b71ce4133c6577695df5409e5b7fa95018547e1115da5a239f3aec4c589",
+          "size_bytes": 13905
+        },
+        {
+          "actual_sha256": "79aa813ed9e5cbed64cc3127e9c3eb1844e511f86716404411d3f741d9c304d4",
+          "actual_size_bytes": 65,
+          "path": "session_manifest.sha256",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/session_manifest.sha256",
+          "sha256": "79aa813ed9e5cbed64cc3127e9c3eb1844e511f86716404411d3f741d9c304d4",
+          "size_bytes": 65
+        },
+        {
+          "actual_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "actual_size_bytes": 2,
+          "path": "subscription/subscription_exclusions_20260804.json",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/subscription/subscription_exclusions_20260804.json",
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "size_bytes": 2
+        },
+        {
+          "actual_sha256": "ba253bcb16c304b8b22a1908fb0b8db17fa969cefd529095edfe6bb0413f5cbb",
+          "actual_size_bytes": 24505,
+          "path": "subscription/subscription_identities_20260804.json",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/subscription/subscription_identities_20260804.json",
+          "sha256": "ba253bcb16c304b8b22a1908fb0b8db17fa969cefd529095edfe6bb0413f5cbb",
+          "size_bytes": 24505
+        },
+        {
+          "actual_sha256": "16cb8ec61e9db7f19507c7ec0bd58e8574ee5149b62eba512230a90251ff71a3",
+          "actual_size_bytes": 7005,
+          "path": "subscription/subscription_identities_20260804.parquet",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/subscription/subscription_identities_20260804.parquet",
+          "sha256": "16cb8ec61e9db7f19507c7ec0bd58e8574ee5149b62eba512230a90251ff71a3",
+          "size_bytes": 7005
+        },
+        {
+          "actual_sha256": "859a58114e734c9640f2f14815e4b9bb262ad7fe96f002e19b9fbe3b6a0731e8",
+          "actual_size_bytes": 1516,
+          "path": "subscription/subscription_plan_20260804.json",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/subscription/subscription_plan_20260804.json",
+          "sha256": "859a58114e734c9640f2f14815e4b9bb262ad7fe96f002e19b9fbe3b6a0731e8",
+          "size_bytes": 1516
+        },
+        {
+          "actual_sha256": "fc1fda018ef103fcecd743847016b22edc4f421e28b6eaa9ee069e8f9fe428f5",
+          "actual_size_bytes": 1332,
+          "path": "subscription/subscription_plan_20260804.parquet",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/subscription/subscription_plan_20260804.parquet",
+          "sha256": "fc1fda018ef103fcecd743847016b22edc4f421e28b6eaa9ee069e8f9fe428f5",
+          "size_bytes": 1332
+        },
+        {
+          "actual_sha256": "a3c6621f427d87a2d74b0bdc8ce35a07dbae3a4547c5e0f245477c356af7dd4a",
+          "actual_size_bytes": 243,
+          "path": "subscription/subscription_plan_diff_vs_20260803.json",
+          "resolved_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/subscription/subscription_plan_diff_vs_20260803.json",
+          "sha256": "a3c6621f427d87a2d74b0bdc8ce35a07dbae3a4547c5e0f245477c356af7dd4a",
+          "size_bytes": 243
+        },
+        {
+          "actual_sha256": "ac13972397d8ed8cc87da0244858cf0a7892f8a00c133dd0977c5ef43362cb30",
+          "actual_size_bytes": 259,
+          "path": "validation_report.json",
+          "resolved_path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/validation_report.json",
+          "sha256": "ac13972397d8ed8cc87da0244858cf0a7892f8a00c133dd0977c5ef43362cb30",
+          "size_bytes": 259
+        }
+      ],
+      "entry_count": 21,
+      "errors": [],
+      "manifest_path": "/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/20260804/full_day_replay_v1/artifact_manifest.json",
+      "manifest_sha256": "1710c8556aae4e7d53bea6b875520139b82a95ce3b786770def8dacf7affbc69",
+      "passed": true,
+      "resolved_count": 21
+    }
+  ],
+  "normalized_files": [
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=04/ticks_093005.parquet",
+      "row_count": 14337,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "e18e9a36705db9a29550e686a27befff3b5225edcc75d604e2c82317b4dcbd08",
+      "size_bytes": 429869,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T04:59:59.841586Z",
+      "timestamp_min": "2026-08-04T04:00:06.339936Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=05/ticks_093005.parquet",
+      "row_count": 14370,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "140b7d3bd0bf7a591a5489e15049de1c7e93c50e3b72036dd399316dd03d47d8",
+      "size_bytes": 426989,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T05:59:59.678313Z",
+      "timestamp_min": "2026-08-04T05:00:00.175367Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=06/ticks_093005.parquet",
+      "row_count": 14361,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "96691aba7ffb4676178db30cd81dbcec588d87f5409cde12e860ebcf3a341027",
+      "size_bytes": 427658,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T06:59:56.848144Z",
+      "timestamp_min": "2026-08-04T06:00:00.014743Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=07/ticks_093005.parquet",
+      "row_count": 14385,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "689cc07b09c6a01e094b4b91bd6692c69ddc33cd8f2bb390edf52c8874be1c2d",
+      "size_bytes": 427896,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T07:59:59.990964Z",
+      "timestamp_min": "2026-08-04T07:00:01.612262Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=08/ticks_093005.parquet",
+      "row_count": 14374,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "67aaa6aa590fbefed04878a4329e465d283793a39a480d5dfbe048560b6285a4",
+      "size_bytes": 429137,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T08:59:59.887197Z",
+      "timestamp_min": "2026-08-04T08:00:00.336554Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=09/ticks_093005.parquet",
+      "row_count": 14374,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "4b3ece1d69de45532a3cac2c9662f154ef544be98f333f2a67cbcccc30ce88db",
+      "size_bytes": 416820,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T09:59:59.722518Z",
+      "timestamp_min": "2026-08-04T09:00:00.214973Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=BANKNIFTY/hour=10/ticks_093005.parquet",
+      "row_count": 1205,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "121fe3420d8e11a11fffddb1089e94360aac81847f8076933425351c8ec1a212",
+      "size_bytes": 49616,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T10:05:00.742165Z",
+      "timestamp_min": "2026-08-04T10:00:00.343650Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=04/ticks_093005.parquet",
+      "row_count": 7174,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "7a8d2d27a63ad5ea9cd242116340acc22d0b3e5c4b17e4906849f993c46432fc",
+      "size_bytes": 208309,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T04:59:59.533258Z",
+      "timestamp_min": "2026-08-04T04:00:06.340248Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=05/ticks_093005.parquet",
+      "row_count": 7189,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "c0600a73b571731d8e6bc2f5e5cfbb9a8d5f8da2b6e5b7d7052ff4aeb3defde9",
+      "size_bytes": 208487,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T05:59:59.537033Z",
+      "timestamp_min": "2026-08-04T05:00:00.115199Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=06/ticks_093005.parquet",
+      "row_count": 7180,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "62449748ea905b748df8f92258b979eba525aa097ef539a38051dc515f6ab34b",
+      "size_bytes": 208948,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T06:59:56.787797Z",
+      "timestamp_min": "2026-08-04T06:00:00.014887Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=07/ticks_093005.parquet",
+      "row_count": 7199,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "72c0591dfedd0f8062aa2ced7006bec3dfc2280762355f4b9893d021796a4ceb",
+      "size_bytes": 209377,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T07:59:59.845798Z",
+      "timestamp_min": "2026-08-04T07:00:01.612558Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=08/ticks_093005.parquet",
+      "row_count": 7191,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "e9785be0268d9f8b33b5d308078f29c86fbf3b5c6c6cfe378da92edd7538aef0",
+      "size_bytes": 209372,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T08:59:59.695175Z",
+      "timestamp_min": "2026-08-04T08:00:00.457525Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=09/ticks_093005.parquet",
+      "row_count": 7188,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "f1fcfe4811f57fee43c485ceef2317c576abe0ce805f4d9dfeebb85d624a5592",
+      "size_bytes": 209285,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T09:59:59.856860Z",
+      "timestamp_min": "2026-08-04T09:00:00.215019Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=INDIA_VIX/hour=10/ticks_093005.parquet",
+      "row_count": 602,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "b51f5d3493d5ba3b4de50482c3ac6940fc61effcafb2ec53f9d66e8306c1138b",
+      "size_bytes": 34804,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T10:05:00.887470Z",
+      "timestamp_min": "2026-08-04T10:00:00.412095Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=04/ticks_093005.parquet",
+      "row_count": 14359,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "a9084719db4aac7aaf6befa671059bfdedf4e1c343c71ad75b61a7e96588431d",
+      "size_bytes": 418956,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T04:59:59.841667Z",
+      "timestamp_min": "2026-08-04T04:00:06.339485Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=05/ticks_093005.parquet",
+      "row_count": 14387,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "8b14ea59b04baf8d9dcbfce4051c6956cc89da0468742b233078ee75131a460b",
+      "size_bytes": 416193,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T05:59:59.845103Z",
+      "timestamp_min": "2026-08-04T05:00:00.110817Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=06/ticks_093005.parquet",
+      "row_count": 14365,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "12210e3707b5ba3f27bb1aa0f9e70cc0bae341b6b3ff802cbb31ad6ec9187f3e",
+      "size_bytes": 420583,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T06:59:56.848300Z",
+      "timestamp_min": "2026-08-04T06:00:00.014997Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=07/ticks_093005.parquet",
+      "row_count": 14388,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "56043af152a9ff74ba278ae993f3fec3866734b759ebb2daea89fc88d60f634a",
+      "size_bytes": 416863,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T07:59:59.991139Z",
+      "timestamp_min": "2026-08-04T07:00:00.760170Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=08/ticks_093005.parquet",
+      "row_count": 14387,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "89fa369c6e1819323cd0d59f216eb199f9c26594010c89d68ce3f7a68cb5e2f3",
+      "size_bytes": 420077,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T08:59:59.888393Z",
+      "timestamp_min": "2026-08-04T08:00:00.336461Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=09/ticks_093005.parquet",
+      "row_count": 14387,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "3f1aee8cb0dcc56a9315bdf3f9d711f84edb7034f921c5d779a6981e7359f880",
+      "size_bytes": 411696,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T09:59:59.857129Z",
+      "timestamp_min": "2026-08-04T09:00:00.000785Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=10/ticks_093005.parquet",
+      "row_count": 1205,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "cce31f8ddefb63c3d6636a75b412a6e73e839443edefe514b4e36d2556984b54",
+      "size_bytes": 49558,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T10:05:00.742445Z",
+      "timestamp_min": "2026-08-04T10:00:00.352809Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=04/ticks_093005.parquet",
+      "row_count": 108639,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "d812a2c0a400517da108b59e7e8ab64e1be3218b78d63c82ff17056c130e6737",
+      "size_bytes": 6798609,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T04:59:59.841706Z",
+      "timestamp_min": "2026-08-04T04:00:06.268966Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=05/ticks_093005.parquet",
+      "row_count": 130929,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "d4d5c47cee93e656af2c22e5d5c45a52e8edbc8338c17ec1c9419bdb9e6bc2b1",
+      "size_bytes": 7847055,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T05:59:59.845148Z",
+      "timestamp_min": "2026-08-04T05:00:00.110184Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=06/ticks_093005.parquet",
+      "row_count": 142231,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "ba9abdfb492e44d43087d2ff749a16d9f2a270f4f2a1fbd2d367870a2394c44d",
+      "size_bytes": 8399013,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T06:59:56.848367Z",
+      "timestamp_min": "2026-08-04T06:00:00.014833Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=07/ticks_093005.parquet",
+      "row_count": 147125,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "9e3674b5ad31ec73d9ebdc04798af7e1a17418d490a99bfae8ecf287a1b7c72c",
+      "size_bytes": 8660850,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T07:59:59.991184Z",
+      "timestamp_min": "2026-08-04T07:00:00.759887Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=08/ticks_093005.parquet",
+      "row_count": 161580,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "085746acb8c0d455653203575b4f1629e0c8a07246e1bf6b11d99e68b4a1751e",
+      "size_bytes": 9509004,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T08:59:59.889419Z",
+      "timestamp_min": "2026-08-04T08:00:00.138439Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=09/ticks_093005.parquet",
+      "row_count": 110772,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "19e0e0d12222038cb45b40b3bdb481e8c249ca6b827e98b41dc310270e31e151",
+      "size_bytes": 6694810,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T09:59:30.066734Z",
+      "timestamp_min": "2026-08-04T09:00:00.000546Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=OTHER/hour=10/ticks_093005.parquet",
+      "row_count": 104,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "934c0310319615924ef30647807a79d963cbccbe9e35e49193ddb6e2f5e2e241",
+      "size_bytes": 23409,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T10:02:03.896373Z",
+      "timestamp_min": "2026-08-04T10:00:00.361550Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=04/ticks_093005.parquet",
+      "row_count": 3585,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "1f952977388484768121ab86a3d1ed9df6a3fd2eb0a1cbe37f5c5755dc9f455b",
+      "size_bytes": 131580,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T04:59:59.841447Z",
+      "timestamp_min": "2026-08-04T04:00:06.339122Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=05/ticks_093005.parquet",
+      "row_count": 3590,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "3adfae359aa532ef955231117eac7d246c845ce2f8f26715b45f9910608f0ec4",
+      "size_bytes": 129247,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T05:59:59.844762Z",
+      "timestamp_min": "2026-08-04T05:00:00.884135Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=06/ticks_093005.parquet",
+      "row_count": 3584,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "49e57b8a62a17c2eb8466503992b4fe7f39591be412711c35d041829df540da7",
+      "size_bytes": 130507,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T06:59:56.813498Z",
+      "timestamp_min": "2026-08-04T06:00:00.872727Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=07/ticks_093005.parquet",
+      "row_count": 3592,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "509e5f04fd17067ab7ae69d4eb3f11f31d7dcef113c6a8f084c6b080cf727598",
+      "size_bytes": 129514,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T07:59:59.546842Z",
+      "timestamp_min": "2026-08-04T07:00:05.455575Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=08/ticks_093005.parquet",
+      "row_count": 3595,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "1344b3f1d6dfee8bdc4fdfd5288668dd6107d44a0a1b2a6c1ee1f5c84aa14cce",
+      "size_bytes": 130204,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T08:59:59.408388Z",
+      "timestamp_min": "2026-08-04T08:00:00.607560Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=09/ticks_093005.parquet",
+      "row_count": 3593,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "d0cea31b7a9a3e98ece93da547ed728cced21a716b1cdd50a5bb896c9f55f2c6",
+      "size_bytes": 126914,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T09:59:59.435427Z",
+      "timestamp_min": "2026-08-04T09:00:00.464124Z"
+    },
+    {
+      "instrument_field": "instrument_key",
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=SENSEX/hour=10/ticks_093005.parquet",
+      "row_count": 302,
+      "schema_sha256": "3e7796568f811c3476338de4bfb94a1391cbfa62eee882a98e874b95f31dcbfa",
+      "sha256": "1b799adac29c4a92720fde6aa6847c15fe1ed6d207805151b1ccb8599a0b0733",
+      "size_bytes": 26969,
+      "timestamp_field": "receive_wall_ts_utc",
+      "timestamp_max": "2026-08-04T10:05:00.742343Z",
+      "timestamp_min": "2026-08-04T10:00:00.444911Z"
+    }
+  ],
+  "raw_files": [
+    {
+      "compressed_size_bytes": 1408467,
+      "decompressed_size_bytes": 10486078,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000001.bin.zst",
+      "sha256": "9dcd189707ce11faf6bff6470daac782c3d43ee3adecfd837c5d081a661c2ae4"
+    },
+    {
+      "compressed_size_bytes": 1312134,
+      "decompressed_size_bytes": 10488056,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000002.bin.zst",
+      "sha256": "9561fff9093348e7a6300c7b4329f4cd9abef2d03ac213c3419aa8aef38d3dc8"
+    },
+    {
+      "compressed_size_bytes": 1241848,
+      "decompressed_size_bytes": 10487949,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000003.bin.zst",
+      "sha256": "5aa2cab95f3beff94cb55692f4135c5af8494d545e537edb991c662b27a7831d"
+    },
+    {
+      "compressed_size_bytes": 1197143,
+      "decompressed_size_bytes": 10492439,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000004.bin.zst",
+      "sha256": "dc93e0fba8c4e17631b109dda1ccff0b7bb20844c9d58e94a1a18d6fba0184ee"
+    },
+    {
+      "compressed_size_bytes": 1159706,
+      "decompressed_size_bytes": 10485906,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000005.bin.zst",
+      "sha256": "c5c732fa45252cd767a408f2d0145dbf7b9bedf5875c1222db0d2ed0251ef90b"
+    },
+    {
+      "compressed_size_bytes": 1150839,
+      "decompressed_size_bytes": 10491215,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000006.bin.zst",
+      "sha256": "65ff1d10dc3fc6dd256e3ce744ee0f01f049d545a4cb89114b13d03fb8463f6e"
+    },
+    {
+      "compressed_size_bytes": 1165991,
+      "decompressed_size_bytes": 10494745,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000007.bin.zst",
+      "sha256": "868a210bff936595b61d558499f87f63959d018b1a56512a6bf12777eff830b6"
+    },
+    {
+      "compressed_size_bytes": 1123177,
+      "decompressed_size_bytes": 10489807,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000008.bin.zst",
+      "sha256": "20c975fff350c2d2c2e5a8f2c2e3aac6b706e37418c777e1acec35abe73d4afb"
+    },
+    {
+      "compressed_size_bytes": 1115780,
+      "decompressed_size_bytes": 10487796,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000009.bin.zst",
+      "sha256": "b37f4d47012646fc499963c19784b27c30e0e4e4d329426b2f0a54a398750328"
+    },
+    {
+      "compressed_size_bytes": 1168331,
+      "decompressed_size_bytes": 10487585,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000010.bin.zst",
+      "sha256": "292e40d7b0545f0fd65664be19719b03710961ae2fc1f2234826d2fb11dc9566"
+    },
+    {
+      "compressed_size_bytes": 1171711,
+      "decompressed_size_bytes": 10494342,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000011.bin.zst",
+      "sha256": "5b8241679141d0b31e0278d0ac1d2457a5a5285586ac76a9378ef14b6c78f39b"
+    },
+    {
+      "compressed_size_bytes": 1127194,
+      "decompressed_size_bytes": 10489185,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000012.bin.zst",
+      "sha256": "5df1c2e891f941039a155d4f4c7b629f2f72469da13388c0ac610a5e1e07e7bc"
+    },
+    {
+      "compressed_size_bytes": 1128206,
+      "decompressed_size_bytes": 10486745,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000013.bin.zst",
+      "sha256": "b3b17c3870682dd41c5936d9accc98eeafb1a3708a7054d54f9f81ba1629d77a"
+    },
+    {
+      "compressed_size_bytes": 1111848,
+      "decompressed_size_bytes": 10486188,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000014.bin.zst",
+      "sha256": "4e0bf3709085d6f1ca620130c0c888fd95f8e6e823c3332e33c4c663bafaf292"
+    },
+    {
+      "compressed_size_bytes": 1109064,
+      "decompressed_size_bytes": 10486604,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000015.bin.zst",
+      "sha256": "ee77906290d36a9c22aec36e83cb0239504616c6545525bcde2bdecdfce57f3b"
+    },
+    {
+      "compressed_size_bytes": 1100906,
+      "decompressed_size_bytes": 10486579,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000016.bin.zst",
+      "sha256": "662500c43bcd22d53666e0d129cebe0bcc19dfe380c91b948cdddcf16d550f85"
+    },
+    {
+      "compressed_size_bytes": 1108796,
+      "decompressed_size_bytes": 10488563,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000017.bin.zst",
+      "sha256": "3724af2f6fccba7886165cc348da7d6107dde41e69e40f5a37518566d954f624"
+    },
+    {
+      "compressed_size_bytes": 1115209,
+      "decompressed_size_bytes": 10486182,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000018.bin.zst",
+      "sha256": "f543c1d7b56d1bb0cf2125be8f36150fb3465e6fed9e7e5d0967b8cc14b2c6a4"
+    },
+    {
+      "compressed_size_bytes": 1121846,
+      "decompressed_size_bytes": 10490923,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000019.bin.zst",
+      "sha256": "996a9a92d255701059be243987dedade7dad4c652edd57afd051944507edfd82"
+    },
+    {
+      "compressed_size_bytes": 1122882,
+      "decompressed_size_bytes": 10486068,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000020.bin.zst",
+      "sha256": "eb826e77afcae2584074942d582a9fd64a139af18a4799319b7d3d47ce9c8b75"
+    },
+    {
+      "compressed_size_bytes": 1120281,
+      "decompressed_size_bytes": 10488265,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000021.bin.zst",
+      "sha256": "bb863a74ca700dc0fb1dfdff8bc89b33c49efd440bf5b236a9fc5a89e615082f"
+    },
+    {
+      "compressed_size_bytes": 1209453,
+      "decompressed_size_bytes": 10485797,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000022.bin.zst",
+      "sha256": "b1c8eea2d6f4e54924f36a3d732054eccf0a8f38b97cd9e4adf4d9d793aac276"
+    },
+    {
+      "compressed_size_bytes": 1172489,
+      "decompressed_size_bytes": 10485847,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000023.bin.zst",
+      "sha256": "642c79791bf465151db0df5b54b4fb18b4bfa13aefb5b9bc9484c41843b1b0a4"
+    },
+    {
+      "compressed_size_bytes": 1186452,
+      "decompressed_size_bytes": 10488757,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000024.bin.zst",
+      "sha256": "d5d95e499c1b926811e4f1bbbf2422bd04d56f86854bd919a592648be3b8a1bf"
+    },
+    {
+      "compressed_size_bytes": 1231573,
+      "decompressed_size_bytes": 10485883,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000025.bin.zst",
+      "sha256": "e2e7892275c51cc06d9b9eca5056972faa61fa1927584fe8a8f595e8a0156e98"
+    },
+    {
+      "compressed_size_bytes": 1261743,
+      "decompressed_size_bytes": 10486604,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000026.bin.zst",
+      "sha256": "e0e4a7352cc572be4ccd0795dbc12b116bef57f15d738bfbb985dc2c6b6e5792"
+    },
+    {
+      "compressed_size_bytes": 1249804,
+      "decompressed_size_bytes": 10487459,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000027.bin.zst",
+      "sha256": "94b7285fcdb5f6368cecc13d7716953f1ea34e4c59b70a07232f3879267800c1"
+    },
+    {
+      "compressed_size_bytes": 1303207,
+      "decompressed_size_bytes": 10487059,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000028.bin.zst",
+      "sha256": "7b1261e1c6f877a19b69acda8902409fdbdc4757a8b427287668bb92bb17ac18"
+    },
+    {
+      "compressed_size_bytes": 1390583,
+      "decompressed_size_bytes": 10486054,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000029.bin.zst",
+      "sha256": "b31504cb357f4cd1d8a928322542b35c734dc484327bff8f977f358620edf233"
+    },
+    {
+      "compressed_size_bytes": 191235,
+      "decompressed_size_bytes": 3550063,
+      "path": "/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1/2026-08-04/093005/raw/conn_a/frames_000030.bin.zst",
+      "sha256": "71185fa3d687ee93d6770908e03eae3b992b9be135434acaad2d92c2131e7e9a"
+    }
+  ]
+}

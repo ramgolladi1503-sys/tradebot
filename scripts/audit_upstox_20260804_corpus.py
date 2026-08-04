@@ -14,6 +14,7 @@ from core.upstox_corpus_audit import (
     audit_parquet_tree,
     audit_sqlite_database,
     audit_zstandard_files,
+    classify_skipped_intervals,
     compare_replay_databases,
     read_bar_intervals,
     reconcile_normalized_and_replay_counts,
@@ -157,6 +158,7 @@ def main() -> int:
     replay_comparison: dict[str, Any] | None = None
     reconciliation: dict[str, Any] | None = None
     bars: dict[str, Any] | None = None
+    skipped_intervals_audit: dict[str, Any] | None = None
     rehearsal: dict[str, Any] | None = None
     runtime_errors: list[str] = []
 
@@ -213,6 +215,12 @@ def main() -> int:
                 run_id="upstox-replay-2026-08-04-offline-rehearsal",
                 session_date="2026-08-04",
             )
+
+        if args.replay_db_a and bars_path.is_file():
+            skipped_intervals_audit = classify_skipped_intervals(
+                db_path=args.replay_db_a.expanduser().resolve(),
+                bars_path=bars_path,
+            )
     except AuditError as exc:
         runtime_errors.append(str(exc))
 
@@ -228,14 +236,25 @@ def main() -> int:
         "errors": [error for item in manifests for error in item.get("errors", [])],
         "manifests": manifests,
     }
+    raw_gate = {
+        "passed": bool(raw_audit) and raw_audit.get("passed") and (
+            raw_audit.get("raw_frame_result", {}).get("decode_failure_count", 0) == 0
+        ),
+        "errors": (raw_audit.get("errors", []) if raw_audit else []) + (
+            ["protobuf_frame_decoding_failed"]
+            if raw_audit and raw_audit.get("raw_frame_result", {}).get("decode_failure_count", 0) > 0
+            else []
+        ),
+    }
     gates = [
         _gate("SOURCE_IMMUTABLE", source_immutable),
-        _gate("RAW_ZSTD_DECOMPRESSIBLE", raw_audit),
+        _gate("RAW_ZSTD_DECOMPRESSIBLE", raw_gate),
         _gate("NORMALIZED_PARQUET_READABLE", normalized_audit),
         _gate("MANIFEST_HASH_LINEAGE", manifest_gate),
         _gate("DETERMINISTIC_REPLAY", replay_comparison),
         _gate("REPLAY_ROW_RECONCILIATION", reconciliation),
         _gate("BAR_INTERVAL_IDENTITIES", bars),
+        _gate("BAR_INTERVAL_CLASSIFICATION", skipped_intervals_audit),
         _gate("PR786_OFFLINE_REHEARSAL", rehearsal),
     ]
     all_passed = all(gate["passed"] for gate in gates) and not runtime_errors
@@ -258,6 +277,7 @@ def main() -> int:
         "replay_comparison": replay_comparison,
         "row_reconciliation": reconciliation,
         "bars": bars,
+        "skipped_intervals": skipped_intervals_audit,
         "pr786_offline_rehearsal": rehearsal,
         "runtime_errors": runtime_errors,
         "gates": gates,
@@ -274,13 +294,42 @@ def main() -> int:
         "allowed_for_live_execution": False,
         "allowed_for_paper_execution": False,
         "verdict": (
-            "UPSTOX_CORPUS_INDEPENDENTLY_VERIFIED_PR786_OFFLINE_REHEARSAL_PASS"
+            "PASS_UPSTOX_20260804_REAL_CORPUS_AUDIT"
             if all_passed
-            else "UPSTOX_CORPUS_VERIFICATION_INCOMPLETE"
+            else "FAIL_UPSTOX_20260804_REAL_CORPUS_AUDIT"
         ),
     }
+
+    # Write audit root reports
     _write_json(audit_root / "final_report.json", report)
     (audit_root / "final_report.md").write_text(_markdown(report), encoding="utf-8")
+
+    # Write compact reports under research/upstox_20260804_corpus_audit_v1/
+    research_dir = Path("research/upstox_20260804_corpus_audit_v1")
+    research_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(research_dir / "real_corpus_audit.json", report)
+    (research_dir / "real_corpus_audit.md").write_text(_markdown(report), encoding="utf-8")
+
+    # Source Inventory Report
+    source_inventory = {
+        "raw_files": (raw_audit or {}).get("files", []),
+        "normalized_files": (normalized_audit or {}).get("files", []),
+        "manifests": manifests,
+    }
+    _write_json(research_dir / "source_inventory.json", source_inventory)
+
+    # Event Reconciliation Report
+    _write_json(research_dir / "event_reconciliation.json", reconciliation or {})
+
+    # Interval Classification Report
+    _write_json(research_dir / "interval_classification.json", skipped_intervals_audit or {})
+
+    # Replay Determinism Report
+    _write_json(research_dir / "replay_determinism.json", replay_comparison or {})
+
+    # PR #786 Offline Rehearsal Summary
+    _write_json(research_dir / "pr786_offline_rehearsal_summary.json", rehearsal or {})
+
     print(json.dumps(report, indent=2, sort_keys=True, default=str))
     return 0 if all_passed else 2
 

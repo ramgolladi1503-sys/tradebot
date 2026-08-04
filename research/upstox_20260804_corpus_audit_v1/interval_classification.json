@@ -1,0 +1,2170 @@
+{
+  "accepted_interval_count": 353,
+  "duplicate_interval_identities": 0,
+  "errors": [],
+  "expected_interval_count": 360,
+  "intervals": [
+    {
+      "classification": "SKIPPED_MISSING_INDEX",
+      "interval_end_epoch": 1785816060,
+      "interval_identity": "1785816060",
+      "interval_start_epoch": 1785816000
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816120,
+      "interval_identity": "1785816120",
+      "interval_start_epoch": 1785816060
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816180,
+      "interval_identity": "1785816180",
+      "interval_start_epoch": 1785816120
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816240,
+      "interval_identity": "1785816240",
+      "interval_start_epoch": 1785816180
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816300,
+      "interval_identity": "1785816300",
+      "interval_start_epoch": 1785816240
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816360,
+      "interval_identity": "1785816360",
+      "interval_start_epoch": 1785816300
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816420,
+      "interval_identity": "1785816420",
+      "interval_start_epoch": 1785816360
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816480,
+      "interval_identity": "1785816480",
+      "interval_start_epoch": 1785816420
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816540,
+      "interval_identity": "1785816540",
+      "interval_start_epoch": 1785816480
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816600,
+      "interval_identity": "1785816600",
+      "interval_start_epoch": 1785816540
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816660,
+      "interval_identity": "1785816660",
+      "interval_start_epoch": 1785816600
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816720,
+      "interval_identity": "1785816720",
+      "interval_start_epoch": 1785816660
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816780,
+      "interval_identity": "1785816780",
+      "interval_start_epoch": 1785816720
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816840,
+      "interval_identity": "1785816840",
+      "interval_start_epoch": 1785816780
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816900,
+      "interval_identity": "1785816900",
+      "interval_start_epoch": 1785816840
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785816960,
+      "interval_identity": "1785816960",
+      "interval_start_epoch": 1785816900
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817020,
+      "interval_identity": "1785817020",
+      "interval_start_epoch": 1785816960
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817080,
+      "interval_identity": "1785817080",
+      "interval_start_epoch": 1785817020
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817140,
+      "interval_identity": "1785817140",
+      "interval_start_epoch": 1785817080
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817200,
+      "interval_identity": "1785817200",
+      "interval_start_epoch": 1785817140
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817260,
+      "interval_identity": "1785817260",
+      "interval_start_epoch": 1785817200
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817320,
+      "interval_identity": "1785817320",
+      "interval_start_epoch": 1785817260
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817380,
+      "interval_identity": "1785817380",
+      "interval_start_epoch": 1785817320
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817440,
+      "interval_identity": "1785817440",
+      "interval_start_epoch": 1785817380
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817500,
+      "interval_identity": "1785817500",
+      "interval_start_epoch": 1785817440
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817560,
+      "interval_identity": "1785817560",
+      "interval_start_epoch": 1785817500
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817620,
+      "interval_identity": "1785817620",
+      "interval_start_epoch": 1785817560
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817680,
+      "interval_identity": "1785817680",
+      "interval_start_epoch": 1785817620
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817740,
+      "interval_identity": "1785817740",
+      "interval_start_epoch": 1785817680
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817800,
+      "interval_identity": "1785817800",
+      "interval_start_epoch": 1785817740
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817860,
+      "interval_identity": "1785817860",
+      "interval_start_epoch": 1785817800
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817920,
+      "interval_identity": "1785817920",
+      "interval_start_epoch": 1785817860
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785817980,
+      "interval_identity": "1785817980",
+      "interval_start_epoch": 1785817920
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818040,
+      "interval_identity": "1785818040",
+      "interval_start_epoch": 1785817980
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818100,
+      "interval_identity": "1785818100",
+      "interval_start_epoch": 1785818040
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818160,
+      "interval_identity": "1785818160",
+      "interval_start_epoch": 1785818100
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818220,
+      "interval_identity": "1785818220",
+      "interval_start_epoch": 1785818160
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818280,
+      "interval_identity": "1785818280",
+      "interval_start_epoch": 1785818220
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818340,
+      "interval_identity": "1785818340",
+      "interval_start_epoch": 1785818280
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818400,
+      "interval_identity": "1785818400",
+      "interval_start_epoch": 1785818340
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818460,
+      "interval_identity": "1785818460",
+      "interval_start_epoch": 1785818400
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818520,
+      "interval_identity": "1785818520",
+      "interval_start_epoch": 1785818460
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818580,
+      "interval_identity": "1785818580",
+      "interval_start_epoch": 1785818520
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818640,
+      "interval_identity": "1785818640",
+      "interval_start_epoch": 1785818580
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818700,
+      "interval_identity": "1785818700",
+      "interval_start_epoch": 1785818640
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818760,
+      "interval_identity": "1785818760",
+      "interval_start_epoch": 1785818700
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818820,
+      "interval_identity": "1785818820",
+      "interval_start_epoch": 1785818760
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818880,
+      "interval_identity": "1785818880",
+      "interval_start_epoch": 1785818820
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785818940,
+      "interval_identity": "1785818940",
+      "interval_start_epoch": 1785818880
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819000,
+      "interval_identity": "1785819000",
+      "interval_start_epoch": 1785818940
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819060,
+      "interval_identity": "1785819060",
+      "interval_start_epoch": 1785819000
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819120,
+      "interval_identity": "1785819120",
+      "interval_start_epoch": 1785819060
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819180,
+      "interval_identity": "1785819180",
+      "interval_start_epoch": 1785819120
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819240,
+      "interval_identity": "1785819240",
+      "interval_start_epoch": 1785819180
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819300,
+      "interval_identity": "1785819300",
+      "interval_start_epoch": 1785819240
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819360,
+      "interval_identity": "1785819360",
+      "interval_start_epoch": 1785819300
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819420,
+      "interval_identity": "1785819420",
+      "interval_start_epoch": 1785819360
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819480,
+      "interval_identity": "1785819480",
+      "interval_start_epoch": 1785819420
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819540,
+      "interval_identity": "1785819540",
+      "interval_start_epoch": 1785819480
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819600,
+      "interval_identity": "1785819600",
+      "interval_start_epoch": 1785819540
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819660,
+      "interval_identity": "1785819660",
+      "interval_start_epoch": 1785819600
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819720,
+      "interval_identity": "1785819720",
+      "interval_start_epoch": 1785819660
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819780,
+      "interval_identity": "1785819780",
+      "interval_start_epoch": 1785819720
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819840,
+      "interval_identity": "1785819840",
+      "interval_start_epoch": 1785819780
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819900,
+      "interval_identity": "1785819900",
+      "interval_start_epoch": 1785819840
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785819960,
+      "interval_identity": "1785819960",
+      "interval_start_epoch": 1785819900
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820020,
+      "interval_identity": "1785820020",
+      "interval_start_epoch": 1785819960
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820080,
+      "interval_identity": "1785820080",
+      "interval_start_epoch": 1785820020
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820140,
+      "interval_identity": "1785820140",
+      "interval_start_epoch": 1785820080
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820200,
+      "interval_identity": "1785820200",
+      "interval_start_epoch": 1785820140
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820260,
+      "interval_identity": "1785820260",
+      "interval_start_epoch": 1785820200
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820320,
+      "interval_identity": "1785820320",
+      "interval_start_epoch": 1785820260
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820380,
+      "interval_identity": "1785820380",
+      "interval_start_epoch": 1785820320
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820440,
+      "interval_identity": "1785820440",
+      "interval_start_epoch": 1785820380
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820500,
+      "interval_identity": "1785820500",
+      "interval_start_epoch": 1785820440
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820560,
+      "interval_identity": "1785820560",
+      "interval_start_epoch": 1785820500
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820620,
+      "interval_identity": "1785820620",
+      "interval_start_epoch": 1785820560
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820680,
+      "interval_identity": "1785820680",
+      "interval_start_epoch": 1785820620
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820740,
+      "interval_identity": "1785820740",
+      "interval_start_epoch": 1785820680
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820800,
+      "interval_identity": "1785820800",
+      "interval_start_epoch": 1785820740
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820860,
+      "interval_identity": "1785820860",
+      "interval_start_epoch": 1785820800
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820920,
+      "interval_identity": "1785820920",
+      "interval_start_epoch": 1785820860
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785820980,
+      "interval_identity": "1785820980",
+      "interval_start_epoch": 1785820920
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821040,
+      "interval_identity": "1785821040",
+      "interval_start_epoch": 1785820980
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821100,
+      "interval_identity": "1785821100",
+      "interval_start_epoch": 1785821040
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821160,
+      "interval_identity": "1785821160",
+      "interval_start_epoch": 1785821100
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821220,
+      "interval_identity": "1785821220",
+      "interval_start_epoch": 1785821160
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821280,
+      "interval_identity": "1785821280",
+      "interval_start_epoch": 1785821220
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821340,
+      "interval_identity": "1785821340",
+      "interval_start_epoch": 1785821280
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821400,
+      "interval_identity": "1785821400",
+      "interval_start_epoch": 1785821340
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821460,
+      "interval_identity": "1785821460",
+      "interval_start_epoch": 1785821400
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821520,
+      "interval_identity": "1785821520",
+      "interval_start_epoch": 1785821460
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821580,
+      "interval_identity": "1785821580",
+      "interval_start_epoch": 1785821520
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821640,
+      "interval_identity": "1785821640",
+      "interval_start_epoch": 1785821580
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821700,
+      "interval_identity": "1785821700",
+      "interval_start_epoch": 1785821640
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821760,
+      "interval_identity": "1785821760",
+      "interval_start_epoch": 1785821700
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821820,
+      "interval_identity": "1785821820",
+      "interval_start_epoch": 1785821760
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821880,
+      "interval_identity": "1785821880",
+      "interval_start_epoch": 1785821820
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785821940,
+      "interval_identity": "1785821940",
+      "interval_start_epoch": 1785821880
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822000,
+      "interval_identity": "1785822000",
+      "interval_start_epoch": 1785821940
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822060,
+      "interval_identity": "1785822060",
+      "interval_start_epoch": 1785822000
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822120,
+      "interval_identity": "1785822120",
+      "interval_start_epoch": 1785822060
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822180,
+      "interval_identity": "1785822180",
+      "interval_start_epoch": 1785822120
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822240,
+      "interval_identity": "1785822240",
+      "interval_start_epoch": 1785822180
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822300,
+      "interval_identity": "1785822300",
+      "interval_start_epoch": 1785822240
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822360,
+      "interval_identity": "1785822360",
+      "interval_start_epoch": 1785822300
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822420,
+      "interval_identity": "1785822420",
+      "interval_start_epoch": 1785822360
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822480,
+      "interval_identity": "1785822480",
+      "interval_start_epoch": 1785822420
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822540,
+      "interval_identity": "1785822540",
+      "interval_start_epoch": 1785822480
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822600,
+      "interval_identity": "1785822600",
+      "interval_start_epoch": 1785822540
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822660,
+      "interval_identity": "1785822660",
+      "interval_start_epoch": 1785822600
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822720,
+      "interval_identity": "1785822720",
+      "interval_start_epoch": 1785822660
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822780,
+      "interval_identity": "1785822780",
+      "interval_start_epoch": 1785822720
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822840,
+      "interval_identity": "1785822840",
+      "interval_start_epoch": 1785822780
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822900,
+      "interval_identity": "1785822900",
+      "interval_start_epoch": 1785822840
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785822960,
+      "interval_identity": "1785822960",
+      "interval_start_epoch": 1785822900
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823020,
+      "interval_identity": "1785823020",
+      "interval_start_epoch": 1785822960
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823080,
+      "interval_identity": "1785823080",
+      "interval_start_epoch": 1785823020
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823140,
+      "interval_identity": "1785823140",
+      "interval_start_epoch": 1785823080
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823200,
+      "interval_identity": "1785823200",
+      "interval_start_epoch": 1785823140
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823260,
+      "interval_identity": "1785823260",
+      "interval_start_epoch": 1785823200
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823320,
+      "interval_identity": "1785823320",
+      "interval_start_epoch": 1785823260
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823380,
+      "interval_identity": "1785823380",
+      "interval_start_epoch": 1785823320
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823440,
+      "interval_identity": "1785823440",
+      "interval_start_epoch": 1785823380
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823500,
+      "interval_identity": "1785823500",
+      "interval_start_epoch": 1785823440
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823560,
+      "interval_identity": "1785823560",
+      "interval_start_epoch": 1785823500
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823620,
+      "interval_identity": "1785823620",
+      "interval_start_epoch": 1785823560
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823680,
+      "interval_identity": "1785823680",
+      "interval_start_epoch": 1785823620
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823740,
+      "interval_identity": "1785823740",
+      "interval_start_epoch": 1785823680
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823800,
+      "interval_identity": "1785823800",
+      "interval_start_epoch": 1785823740
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823860,
+      "interval_identity": "1785823860",
+      "interval_start_epoch": 1785823800
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823920,
+      "interval_identity": "1785823920",
+      "interval_start_epoch": 1785823860
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785823980,
+      "interval_identity": "1785823980",
+      "interval_start_epoch": 1785823920
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824040,
+      "interval_identity": "1785824040",
+      "interval_start_epoch": 1785823980
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824100,
+      "interval_identity": "1785824100",
+      "interval_start_epoch": 1785824040
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824160,
+      "interval_identity": "1785824160",
+      "interval_start_epoch": 1785824100
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824220,
+      "interval_identity": "1785824220",
+      "interval_start_epoch": 1785824160
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824280,
+      "interval_identity": "1785824280",
+      "interval_start_epoch": 1785824220
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824340,
+      "interval_identity": "1785824340",
+      "interval_start_epoch": 1785824280
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824400,
+      "interval_identity": "1785824400",
+      "interval_start_epoch": 1785824340
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824460,
+      "interval_identity": "1785824460",
+      "interval_start_epoch": 1785824400
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824520,
+      "interval_identity": "1785824520",
+      "interval_start_epoch": 1785824460
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824580,
+      "interval_identity": "1785824580",
+      "interval_start_epoch": 1785824520
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824640,
+      "interval_identity": "1785824640",
+      "interval_start_epoch": 1785824580
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824700,
+      "interval_identity": "1785824700",
+      "interval_start_epoch": 1785824640
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824760,
+      "interval_identity": "1785824760",
+      "interval_start_epoch": 1785824700
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824820,
+      "interval_identity": "1785824820",
+      "interval_start_epoch": 1785824760
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824880,
+      "interval_identity": "1785824880",
+      "interval_start_epoch": 1785824820
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785824940,
+      "interval_identity": "1785824940",
+      "interval_start_epoch": 1785824880
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825000,
+      "interval_identity": "1785825000",
+      "interval_start_epoch": 1785824940
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825060,
+      "interval_identity": "1785825060",
+      "interval_start_epoch": 1785825000
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825120,
+      "interval_identity": "1785825120",
+      "interval_start_epoch": 1785825060
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825180,
+      "interval_identity": "1785825180",
+      "interval_start_epoch": 1785825120
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825240,
+      "interval_identity": "1785825240",
+      "interval_start_epoch": 1785825180
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825300,
+      "interval_identity": "1785825300",
+      "interval_start_epoch": 1785825240
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825360,
+      "interval_identity": "1785825360",
+      "interval_start_epoch": 1785825300
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825420,
+      "interval_identity": "1785825420",
+      "interval_start_epoch": 1785825360
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825480,
+      "interval_identity": "1785825480",
+      "interval_start_epoch": 1785825420
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825540,
+      "interval_identity": "1785825540",
+      "interval_start_epoch": 1785825480
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825600,
+      "interval_identity": "1785825600",
+      "interval_start_epoch": 1785825540
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825660,
+      "interval_identity": "1785825660",
+      "interval_start_epoch": 1785825600
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825720,
+      "interval_identity": "1785825720",
+      "interval_start_epoch": 1785825660
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825780,
+      "interval_identity": "1785825780",
+      "interval_start_epoch": 1785825720
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825840,
+      "interval_identity": "1785825840",
+      "interval_start_epoch": 1785825780
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825900,
+      "interval_identity": "1785825900",
+      "interval_start_epoch": 1785825840
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785825960,
+      "interval_identity": "1785825960",
+      "interval_start_epoch": 1785825900
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826020,
+      "interval_identity": "1785826020",
+      "interval_start_epoch": 1785825960
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826080,
+      "interval_identity": "1785826080",
+      "interval_start_epoch": 1785826020
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826140,
+      "interval_identity": "1785826140",
+      "interval_start_epoch": 1785826080
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826200,
+      "interval_identity": "1785826200",
+      "interval_start_epoch": 1785826140
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826260,
+      "interval_identity": "1785826260",
+      "interval_start_epoch": 1785826200
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826320,
+      "interval_identity": "1785826320",
+      "interval_start_epoch": 1785826260
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826380,
+      "interval_identity": "1785826380",
+      "interval_start_epoch": 1785826320
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826440,
+      "interval_identity": "1785826440",
+      "interval_start_epoch": 1785826380
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826500,
+      "interval_identity": "1785826500",
+      "interval_start_epoch": 1785826440
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826560,
+      "interval_identity": "1785826560",
+      "interval_start_epoch": 1785826500
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826620,
+      "interval_identity": "1785826620",
+      "interval_start_epoch": 1785826560
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826680,
+      "interval_identity": "1785826680",
+      "interval_start_epoch": 1785826620
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826740,
+      "interval_identity": "1785826740",
+      "interval_start_epoch": 1785826680
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826800,
+      "interval_identity": "1785826800",
+      "interval_start_epoch": 1785826740
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826860,
+      "interval_identity": "1785826860",
+      "interval_start_epoch": 1785826800
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826920,
+      "interval_identity": "1785826920",
+      "interval_start_epoch": 1785826860
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785826980,
+      "interval_identity": "1785826980",
+      "interval_start_epoch": 1785826920
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827040,
+      "interval_identity": "1785827040",
+      "interval_start_epoch": 1785826980
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827100,
+      "interval_identity": "1785827100",
+      "interval_start_epoch": 1785827040
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827160,
+      "interval_identity": "1785827160",
+      "interval_start_epoch": 1785827100
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827220,
+      "interval_identity": "1785827220",
+      "interval_start_epoch": 1785827160
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827280,
+      "interval_identity": "1785827280",
+      "interval_start_epoch": 1785827220
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827340,
+      "interval_identity": "1785827340",
+      "interval_start_epoch": 1785827280
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827400,
+      "interval_identity": "1785827400",
+      "interval_start_epoch": 1785827340
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827460,
+      "interval_identity": "1785827460",
+      "interval_start_epoch": 1785827400
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827520,
+      "interval_identity": "1785827520",
+      "interval_start_epoch": 1785827460
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827580,
+      "interval_identity": "1785827580",
+      "interval_start_epoch": 1785827520
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827640,
+      "interval_identity": "1785827640",
+      "interval_start_epoch": 1785827580
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827700,
+      "interval_identity": "1785827700",
+      "interval_start_epoch": 1785827640
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827760,
+      "interval_identity": "1785827760",
+      "interval_start_epoch": 1785827700
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827820,
+      "interval_identity": "1785827820",
+      "interval_start_epoch": 1785827760
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827880,
+      "interval_identity": "1785827880",
+      "interval_start_epoch": 1785827820
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785827940,
+      "interval_identity": "1785827940",
+      "interval_start_epoch": 1785827880
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828000,
+      "interval_identity": "1785828000",
+      "interval_start_epoch": 1785827940
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828060,
+      "interval_identity": "1785828060",
+      "interval_start_epoch": 1785828000
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828120,
+      "interval_identity": "1785828120",
+      "interval_start_epoch": 1785828060
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828180,
+      "interval_identity": "1785828180",
+      "interval_start_epoch": 1785828120
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828240,
+      "interval_identity": "1785828240",
+      "interval_start_epoch": 1785828180
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828300,
+      "interval_identity": "1785828300",
+      "interval_start_epoch": 1785828240
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828360,
+      "interval_identity": "1785828360",
+      "interval_start_epoch": 1785828300
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828420,
+      "interval_identity": "1785828420",
+      "interval_start_epoch": 1785828360
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828480,
+      "interval_identity": "1785828480",
+      "interval_start_epoch": 1785828420
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828540,
+      "interval_identity": "1785828540",
+      "interval_start_epoch": 1785828480
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828600,
+      "interval_identity": "1785828600",
+      "interval_start_epoch": 1785828540
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828660,
+      "interval_identity": "1785828660",
+      "interval_start_epoch": 1785828600
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828720,
+      "interval_identity": "1785828720",
+      "interval_start_epoch": 1785828660
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828780,
+      "interval_identity": "1785828780",
+      "interval_start_epoch": 1785828720
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828840,
+      "interval_identity": "1785828840",
+      "interval_start_epoch": 1785828780
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828900,
+      "interval_identity": "1785828900",
+      "interval_start_epoch": 1785828840
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785828960,
+      "interval_identity": "1785828960",
+      "interval_start_epoch": 1785828900
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829020,
+      "interval_identity": "1785829020",
+      "interval_start_epoch": 1785828960
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829080,
+      "interval_identity": "1785829080",
+      "interval_start_epoch": 1785829020
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829140,
+      "interval_identity": "1785829140",
+      "interval_start_epoch": 1785829080
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829200,
+      "interval_identity": "1785829200",
+      "interval_start_epoch": 1785829140
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829260,
+      "interval_identity": "1785829260",
+      "interval_start_epoch": 1785829200
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829320,
+      "interval_identity": "1785829320",
+      "interval_start_epoch": 1785829260
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829380,
+      "interval_identity": "1785829380",
+      "interval_start_epoch": 1785829320
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829440,
+      "interval_identity": "1785829440",
+      "interval_start_epoch": 1785829380
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829500,
+      "interval_identity": "1785829500",
+      "interval_start_epoch": 1785829440
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829560,
+      "interval_identity": "1785829560",
+      "interval_start_epoch": 1785829500
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829620,
+      "interval_identity": "1785829620",
+      "interval_start_epoch": 1785829560
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829680,
+      "interval_identity": "1785829680",
+      "interval_start_epoch": 1785829620
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829740,
+      "interval_identity": "1785829740",
+      "interval_start_epoch": 1785829680
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829800,
+      "interval_identity": "1785829800",
+      "interval_start_epoch": 1785829740
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829860,
+      "interval_identity": "1785829860",
+      "interval_start_epoch": 1785829800
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829920,
+      "interval_identity": "1785829920",
+      "interval_start_epoch": 1785829860
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785829980,
+      "interval_identity": "1785829980",
+      "interval_start_epoch": 1785829920
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830040,
+      "interval_identity": "1785830040",
+      "interval_start_epoch": 1785829980
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830100,
+      "interval_identity": "1785830100",
+      "interval_start_epoch": 1785830040
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830160,
+      "interval_identity": "1785830160",
+      "interval_start_epoch": 1785830100
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830220,
+      "interval_identity": "1785830220",
+      "interval_start_epoch": 1785830160
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830280,
+      "interval_identity": "1785830280",
+      "interval_start_epoch": 1785830220
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830340,
+      "interval_identity": "1785830340",
+      "interval_start_epoch": 1785830280
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830400,
+      "interval_identity": "1785830400",
+      "interval_start_epoch": 1785830340
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830460,
+      "interval_identity": "1785830460",
+      "interval_start_epoch": 1785830400
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830520,
+      "interval_identity": "1785830520",
+      "interval_start_epoch": 1785830460
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830580,
+      "interval_identity": "1785830580",
+      "interval_start_epoch": 1785830520
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830640,
+      "interval_identity": "1785830640",
+      "interval_start_epoch": 1785830580
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830700,
+      "interval_identity": "1785830700",
+      "interval_start_epoch": 1785830640
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830760,
+      "interval_identity": "1785830760",
+      "interval_start_epoch": 1785830700
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830820,
+      "interval_identity": "1785830820",
+      "interval_start_epoch": 1785830760
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830880,
+      "interval_identity": "1785830880",
+      "interval_start_epoch": 1785830820
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785830940,
+      "interval_identity": "1785830940",
+      "interval_start_epoch": 1785830880
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831000,
+      "interval_identity": "1785831000",
+      "interval_start_epoch": 1785830940
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831060,
+      "interval_identity": "1785831060",
+      "interval_start_epoch": 1785831000
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831120,
+      "interval_identity": "1785831120",
+      "interval_start_epoch": 1785831060
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831180,
+      "interval_identity": "1785831180",
+      "interval_start_epoch": 1785831120
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831240,
+      "interval_identity": "1785831240",
+      "interval_start_epoch": 1785831180
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831300,
+      "interval_identity": "1785831300",
+      "interval_start_epoch": 1785831240
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831360,
+      "interval_identity": "1785831360",
+      "interval_start_epoch": 1785831300
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831420,
+      "interval_identity": "1785831420",
+      "interval_start_epoch": 1785831360
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831480,
+      "interval_identity": "1785831480",
+      "interval_start_epoch": 1785831420
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831540,
+      "interval_identity": "1785831540",
+      "interval_start_epoch": 1785831480
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831600,
+      "interval_identity": "1785831600",
+      "interval_start_epoch": 1785831540
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831660,
+      "interval_identity": "1785831660",
+      "interval_start_epoch": 1785831600
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831720,
+      "interval_identity": "1785831720",
+      "interval_start_epoch": 1785831660
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831780,
+      "interval_identity": "1785831780",
+      "interval_start_epoch": 1785831720
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831840,
+      "interval_identity": "1785831840",
+      "interval_start_epoch": 1785831780
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831900,
+      "interval_identity": "1785831900",
+      "interval_start_epoch": 1785831840
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785831960,
+      "interval_identity": "1785831960",
+      "interval_start_epoch": 1785831900
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832020,
+      "interval_identity": "1785832020",
+      "interval_start_epoch": 1785831960
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832080,
+      "interval_identity": "1785832080",
+      "interval_start_epoch": 1785832020
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832140,
+      "interval_identity": "1785832140",
+      "interval_start_epoch": 1785832080
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832200,
+      "interval_identity": "1785832200",
+      "interval_start_epoch": 1785832140
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832260,
+      "interval_identity": "1785832260",
+      "interval_start_epoch": 1785832200
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832320,
+      "interval_identity": "1785832320",
+      "interval_start_epoch": 1785832260
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832380,
+      "interval_identity": "1785832380",
+      "interval_start_epoch": 1785832320
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832440,
+      "interval_identity": "1785832440",
+      "interval_start_epoch": 1785832380
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832500,
+      "interval_identity": "1785832500",
+      "interval_start_epoch": 1785832440
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832560,
+      "interval_identity": "1785832560",
+      "interval_start_epoch": 1785832500
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832620,
+      "interval_identity": "1785832620",
+      "interval_start_epoch": 1785832560
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832680,
+      "interval_identity": "1785832680",
+      "interval_start_epoch": 1785832620
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832740,
+      "interval_identity": "1785832740",
+      "interval_start_epoch": 1785832680
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832800,
+      "interval_identity": "1785832800",
+      "interval_start_epoch": 1785832740
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832860,
+      "interval_identity": "1785832860",
+      "interval_start_epoch": 1785832800
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832920,
+      "interval_identity": "1785832920",
+      "interval_start_epoch": 1785832860
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785832980,
+      "interval_identity": "1785832980",
+      "interval_start_epoch": 1785832920
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833040,
+      "interval_identity": "1785833040",
+      "interval_start_epoch": 1785832980
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833100,
+      "interval_identity": "1785833100",
+      "interval_start_epoch": 1785833040
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833160,
+      "interval_identity": "1785833160",
+      "interval_start_epoch": 1785833100
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833220,
+      "interval_identity": "1785833220",
+      "interval_start_epoch": 1785833160
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833280,
+      "interval_identity": "1785833280",
+      "interval_start_epoch": 1785833220
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833340,
+      "interval_identity": "1785833340",
+      "interval_start_epoch": 1785833280
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833400,
+      "interval_identity": "1785833400",
+      "interval_start_epoch": 1785833340
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833460,
+      "interval_identity": "1785833460",
+      "interval_start_epoch": 1785833400
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833520,
+      "interval_identity": "1785833520",
+      "interval_start_epoch": 1785833460
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833580,
+      "interval_identity": "1785833580",
+      "interval_start_epoch": 1785833520
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833640,
+      "interval_identity": "1785833640",
+      "interval_start_epoch": 1785833580
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833700,
+      "interval_identity": "1785833700",
+      "interval_start_epoch": 1785833640
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833760,
+      "interval_identity": "1785833760",
+      "interval_start_epoch": 1785833700
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833820,
+      "interval_identity": "1785833820",
+      "interval_start_epoch": 1785833760
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833880,
+      "interval_identity": "1785833880",
+      "interval_start_epoch": 1785833820
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785833940,
+      "interval_identity": "1785833940",
+      "interval_start_epoch": 1785833880
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834000,
+      "interval_identity": "1785834000",
+      "interval_start_epoch": 1785833940
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834060,
+      "interval_identity": "1785834060",
+      "interval_start_epoch": 1785834000
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834120,
+      "interval_identity": "1785834120",
+      "interval_start_epoch": 1785834060
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834180,
+      "interval_identity": "1785834180",
+      "interval_start_epoch": 1785834120
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834240,
+      "interval_identity": "1785834240",
+      "interval_start_epoch": 1785834180
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834300,
+      "interval_identity": "1785834300",
+      "interval_start_epoch": 1785834240
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834360,
+      "interval_identity": "1785834360",
+      "interval_start_epoch": 1785834300
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834420,
+      "interval_identity": "1785834420",
+      "interval_start_epoch": 1785834360
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834480,
+      "interval_identity": "1785834480",
+      "interval_start_epoch": 1785834420
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834540,
+      "interval_identity": "1785834540",
+      "interval_start_epoch": 1785834480
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834600,
+      "interval_identity": "1785834600",
+      "interval_start_epoch": 1785834540
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834660,
+      "interval_identity": "1785834660",
+      "interval_start_epoch": 1785834600
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834720,
+      "interval_identity": "1785834720",
+      "interval_start_epoch": 1785834660
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834780,
+      "interval_identity": "1785834780",
+      "interval_start_epoch": 1785834720
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834840,
+      "interval_identity": "1785834840",
+      "interval_start_epoch": 1785834780
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834900,
+      "interval_identity": "1785834900",
+      "interval_start_epoch": 1785834840
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785834960,
+      "interval_identity": "1785834960",
+      "interval_start_epoch": 1785834900
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835020,
+      "interval_identity": "1785835020",
+      "interval_start_epoch": 1785834960
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835080,
+      "interval_identity": "1785835080",
+      "interval_start_epoch": 1785835020
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835140,
+      "interval_identity": "1785835140",
+      "interval_start_epoch": 1785835080
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835200,
+      "interval_identity": "1785835200",
+      "interval_start_epoch": 1785835140
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835260,
+      "interval_identity": "1785835260",
+      "interval_start_epoch": 1785835200
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835320,
+      "interval_identity": "1785835320",
+      "interval_start_epoch": 1785835260
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835380,
+      "interval_identity": "1785835380",
+      "interval_start_epoch": 1785835320
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835440,
+      "interval_identity": "1785835440",
+      "interval_start_epoch": 1785835380
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835500,
+      "interval_identity": "1785835500",
+      "interval_start_epoch": 1785835440
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835560,
+      "interval_identity": "1785835560",
+      "interval_start_epoch": 1785835500
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835620,
+      "interval_identity": "1785835620",
+      "interval_start_epoch": 1785835560
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835680,
+      "interval_identity": "1785835680",
+      "interval_start_epoch": 1785835620
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835740,
+      "interval_identity": "1785835740",
+      "interval_start_epoch": 1785835680
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835800,
+      "interval_identity": "1785835800",
+      "interval_start_epoch": 1785835740
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835860,
+      "interval_identity": "1785835860",
+      "interval_start_epoch": 1785835800
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835920,
+      "interval_identity": "1785835920",
+      "interval_start_epoch": 1785835860
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785835980,
+      "interval_identity": "1785835980",
+      "interval_start_epoch": 1785835920
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836040,
+      "interval_identity": "1785836040",
+      "interval_start_epoch": 1785835980
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836100,
+      "interval_identity": "1785836100",
+      "interval_start_epoch": 1785836040
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836160,
+      "interval_identity": "1785836160",
+      "interval_start_epoch": 1785836100
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836220,
+      "interval_identity": "1785836220",
+      "interval_start_epoch": 1785836160
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836280,
+      "interval_identity": "1785836280",
+      "interval_start_epoch": 1785836220
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836340,
+      "interval_identity": "1785836340",
+      "interval_start_epoch": 1785836280
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836400,
+      "interval_identity": "1785836400",
+      "interval_start_epoch": 1785836340
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836460,
+      "interval_identity": "1785836460",
+      "interval_start_epoch": 1785836400
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836520,
+      "interval_identity": "1785836520",
+      "interval_start_epoch": 1785836460
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836580,
+      "interval_identity": "1785836580",
+      "interval_start_epoch": 1785836520
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836640,
+      "interval_identity": "1785836640",
+      "interval_start_epoch": 1785836580
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836700,
+      "interval_identity": "1785836700",
+      "interval_start_epoch": 1785836640
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785836760,
+      "interval_identity": "1785836760",
+      "interval_start_epoch": 1785836700
+    },
+    {
+      "classification": "SKIPPED_CONSTITUENT_COVERAGE",
+      "interval_end_epoch": 1785836820,
+      "interval_identity": "1785836820",
+      "interval_start_epoch": 1785836760
+    },
+    {
+      "classification": "SKIPPED_CONSTITUENT_COVERAGE",
+      "interval_end_epoch": 1785836880,
+      "interval_identity": "1785836880",
+      "interval_start_epoch": 1785836820
+    },
+    {
+      "classification": "SKIPPED_CONSTITUENT_COVERAGE",
+      "interval_end_epoch": 1785836940,
+      "interval_identity": "1785836940",
+      "interval_start_epoch": 1785836880
+    },
+    {
+      "classification": "SKIPPED_CONSTITUENT_COVERAGE",
+      "interval_end_epoch": 1785837000,
+      "interval_identity": "1785837000",
+      "interval_start_epoch": 1785836940
+    },
+    {
+      "classification": "SKIPPED_CONSTITUENT_COVERAGE",
+      "interval_end_epoch": 1785837060,
+      "interval_identity": "1785837060",
+      "interval_start_epoch": 1785837000
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785837120,
+      "interval_identity": "1785837120",
+      "interval_start_epoch": 1785837060
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785837180,
+      "interval_identity": "1785837180",
+      "interval_start_epoch": 1785837120
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785837240,
+      "interval_identity": "1785837240",
+      "interval_start_epoch": 1785837180
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785837300,
+      "interval_identity": "1785837300",
+      "interval_start_epoch": 1785837240
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785837360,
+      "interval_identity": "1785837360",
+      "interval_start_epoch": 1785837300
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785837420,
+      "interval_identity": "1785837420",
+      "interval_start_epoch": 1785837360
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785837480,
+      "interval_identity": "1785837480",
+      "interval_start_epoch": 1785837420
+    },
+    {
+      "classification": "ACCEPTED",
+      "interval_end_epoch": 1785837540,
+      "interval_identity": "1785837540",
+      "interval_start_epoch": 1785837480
+    },
+    {
+      "classification": "SKIPPED_CONSTITUENT_COVERAGE",
+      "interval_end_epoch": 1785837600,
+      "interval_identity": "1785837600",
+      "interval_start_epoch": 1785837540
+    }
+  ],
+  "passed": true,
+  "skipped_interval_count": 7
+}
