@@ -42,6 +42,8 @@ class JsonlSource:
     def __post_init__(self) -> None:
         if self.source_type not in {"candidate_lineage", "truth"}:
             raise ValueError("unsupported_source_type")
+        if not self.source_component.strip():
+            raise ValueError("source_component_missing")
         if self.source_type == "truth" and not self.event_type:
             raise ValueError("truth_source_requires_event_type")
 
@@ -158,12 +160,13 @@ class LiveSidecar:
         self.publisher = publisher
         self.clock = clock or (lambda: datetime.now(tz=timezone.utc))
         self.tailer = JsonlTailer()
-        self._sequence = 0
+        self._sequence_by_component: dict[str, int] = {}
         self._started = False
 
-    def _next_sequence(self) -> int:
-        self._sequence += 1
-        return self._sequence
+    def _next_sequence(self, component: str) -> int:
+        value = self._sequence_by_component.get(component, 0) + 1
+        self._sequence_by_component[component] = value
+        return value
 
     def _boundary_time(self, event_type: str) -> datetime:
         if event_type == "SESSION_STARTED" and self.config.session_start_time is not None:
@@ -173,6 +176,7 @@ class LiveSidecar:
         return self.clock()
 
     def _publish_lifecycle(self, event_type: str) -> None:
+        component = "aixion_trade_intelligence.live_sidecar"
         occurred = self._boundary_time(event_type)
         now = self.clock()
         if now < occurred:
@@ -182,11 +186,11 @@ class LiveSidecar:
             event_type=event_type,
             session_id=self.config.session_id,
             run_id=self.config.run_id,
-            source_component="aixion_trade_intelligence.live_sidecar",
+            source_component=component,
             event_time=occurred,
             receive_time=now,
             persist_time=now,
-            producer_sequence=self._next_sequence(),
+            producer_sequence=self._next_sequence(component),
         )
         self.publisher.publish(event)
 
@@ -226,15 +230,16 @@ class LiveSidecar:
         return {"attempted": attempted, "persisted": persisted, "failed": failed}
 
     def _convert(self, source: JsonlSource, row: Mapping[str, Any], now: datetime) -> CanonicalEvent:
-        sequence = self._next_sequence()
         if source.source_type == "candidate_lineage":
+            normalized = dict(row)
+            normalized.setdefault("source_file_or_component", source.source_component)
             return candidate_lineage_to_event(
-                row,
+                normalized,
                 session_id=self.config.session_id,
                 run_id=self.config.run_id,
                 receive_time=now,
                 persist_time=now,
-                producer_sequence=sequence,
+                producer_sequence=self._next_sequence(source.source_component),
             )
         event_time_value = row.get("event_time") or row.get("timestamp")
         if not event_time_value:
@@ -249,7 +254,7 @@ class LiveSidecar:
             event_time=event_time,
             receive_time=now,
             persist_time=now,
-            producer_sequence=sequence,
+            producer_sequence=self._next_sequence(source.source_component),
         )
 
     def run_forever(self, should_stop: Callable[[], bool]) -> None:
