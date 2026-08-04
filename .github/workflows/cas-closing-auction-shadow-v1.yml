@@ -1,0 +1,27 @@
+name: cas-closing-auction-shadow-v1
+
+on:
+  pull_request:
+    paths:
+      - "scripts/run_cas_closing_auction_shadow_v1.py"
+      - "tests/research/test_cas_closing_auction_shadow_v1.py"
+      - "research/cas_closing_auction_shadow_v1/**"
+      - "docs/agent_reviews/cas_closing_auction_shadow_v1.md"
+      - ".github/workflows/cas-closing-auction-shadow-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semantic-contract-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install numpy pandas pyarrow pytest
+      - run: python -m py_compile scripts/run_cas_closing_auction_shadow_v1.py
+      - run: pytest -q tests/research/test_cas_closing_auction_shadow_v1.py
