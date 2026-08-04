@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "branch": "audit/upstox-20260804-pr786-rehearsal-v1",
+  "validated_implementation_head": "475817aa93f6dbfe5b9a8f775f2971dff35b0798",
+  "focused_workflow_run_id": 30914476277,
+  "focused_job_id": 92008989354,
+  "scope": "Upstox 2026-08-04 corpus audit tooling and PR786 offline evidence-contract rehearsal",
+  "forward_tests": {
+    "upstox_corpus_audit": 6,
+    "pr782_remaining_evidence_contracts": 5,
+    "total": 11,
+    "passed": true
+  },
+  "reverse_tests": {
+    "pr782_remaining_evidence_contracts": 5,
+    "upstox_corpus_audit": 6,
+    "total": 11,
+    "passed": true
+  },
+  "compile_passed": true,
+  "protected_runtime_drift": false,
+  "diff_check_passed": true,
+  "agent_review_evidence_gate_passed": true,
+  "gitleaks_passed": true,
+  "real_corpus_available_to_connected_runtime": false,
+  "reported_local_branch_available_on_github": false,
+  "reported_local_commit_available_on_github": false,
+  "real_corpus_audit_executed": false,
+  "unverified_reported_values": [
+    "143646 raw frames",
+    "1041828 normalized events",
+    "1041807 replay ticks",
+    "10352 depth snapshots",
+    "21-row replay difference",
+    "353 accepted intervals",
+    "7 skipped boundaries",
+    "0 leadership events",
+    "reported inventory hash"
+  ],
+  "not_a_kite_live_certification": true,
+  "not_an_option_corpus": true,
+  "no_structural_edge_claim": true,
+  "fresh_governed_kite_session_still_required": true,
+  "verdicts": [
+    "PASS_UPSTOX_CORPUS_AUDIT_TOOLING_OFFLINE",
+    "REAL_CORPUS_AUDIT_NOT_EXECUTED",
+    "LOCAL_CORPUS_EXECUTION_REQUIRED"
+  ]
+}
