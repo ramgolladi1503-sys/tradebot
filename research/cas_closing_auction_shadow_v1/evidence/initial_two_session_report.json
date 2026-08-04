@@ -110,7 +110,7 @@
     "edge_validated": false,
     "reason": "two sessions and no official indicative-close/imbalance stream"
   },
-  "evidence_sha256": "82296589878eaa13a376642da8341c368938ad0a1f18867400dea9c6c47205ed",
+  "source_analysis_sha256": "82296589878eaa13a376642da8341c368938ad0a1f18867400dea9c6c47205ed",
   "verdict": [
     "CAS_MECHANISM_CONFIRMED_IN_TWO_SESSIONS",
     "DIRECTIONAL_EDGE_NOT_VALIDATED",
