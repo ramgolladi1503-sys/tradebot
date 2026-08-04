@@ -14,6 +14,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# The repository's automatic sitecustomize hooks may preload CI-only broker
+# fixtures before this entrypoint executes. They are forbidden in the
+# read-only child and are not part of its runtime dependency graph.
+for _module_name in tuple(sys.modules):
+    if _module_name == "core.broker" or _module_name.startswith("core.broker."):
+        sys.modules.pop(_module_name, None)
+
 from core.kite_read_only_observation_runtime import run_observation, safe_environment
 from core.market_event_graph_live_launch_plan import load_launch_plan
 
