@@ -1,66 +1,62 @@
-# Agent Review — Gravity-Well Location + Participation V1
+# Agent Review — Historical Custom Extension V1
 
 ## Agent Work Contract
 
-Implement a research-only, fail-closed falsification lane for the three frozen Gravity-Well/location/participation families. Do not register a strategy, change runtime behavior, place orders, or claim edge without development, validation and sealed-holdout evidence.
+Preserve the original location/participation research lane as historical evidence while preventing it from being represented as a faithful evaluation of the published Gravity Well Trend modes.
 
 ## Scope Guard
 
-Allowed scope is limited to the dedicated research runner, focused tests, workflow, manifests, evidence and review documents. Production strategy, TradeBuilder, ranking, dashboard, feed runtime, risk, approval, broker, order, execution and live-launcher paths are excluded.
+This document covers only the legacy custom families and their data blockers. Current source-mode correctness is owned by `gravity_well_source_mode_correctness_v2.md`.
 
 ## Grill Me Review
 
-The study does not treat indicator language as a mechanism proof. Tick count is not volume, option activity is not constituent breadth, and missing contract identity cannot be repaired by filenames or inferred strikes. Price-only controls cannot certify the full hypothesis.
+The original work mixed custom escape, failed-escape and HTF-cluster hypotheses with the Gravity-Well narrative. It omitted the published Midline and Bands reclaim state machines. Its result must therefore not be used as a source-indicator verdict.
 
 ## Hermes Review
 
-The causal sequence is explicit: completed underlying state, prior-completed HTF location, trailing centre state, timestamp-aligned participation, then strictly later option entry. Current HTF extremes and future bars cannot rewrite earlier features.
+The V1 lane remains research-only and fail-closed. No production strategy, TradeBuilder, ranking, risk, broker, order, execution or dashboard path is changed.
 
 ## GSD Review
 
-The implementation is bounded to three predeclared families and explicit baselines. It stops at a truthful data-blocked or no-edge verdict instead of opening an architecture expansion or post-validation parameter search.
+Retain V1 artifacts for traceability, but mark them superseded for source fidelity. The V2 source-mode runner and evidence are authoritative for the current PR conclusion.
 
 ## QA / Safety Review
 
-- no runtime strategy registration;
-- no TradeBuilder or candidate-ranking mutation;
-- no dashboard, risk, approval, broker, order, execution, or live-launcher change;
-- no external order action;
-- no paper/live authority;
-- no structural-edge claim;
-- mock, fallback or identity-incomplete option evidence cannot certify P&L;
-- holdout remains sealed unless a validation survivor exists.
+- V1 primary mechanism remained blocked by zero underlying volume and missing constituents;
+- mock or identity-incomplete option evidence was excluded;
+- no broker or order action occurred;
+- V1 custom-family results are historical only;
+- V2 source-mode tests and evidence are the current acceptance proof.
 
 ## Acceptance Proof
 
-The dedicated workflow compiles the research runner and executes the focused causal contract tests. The multi-session update additionally records 10/10 integrity checks, deterministic event/certification hashes, 493 NIFTY sessions and no price-only validation survivor.
+The corrected V2 audit demonstrates that V1 did not evaluate all published modes and replaces the current verdict with separately tested Trend, Midline and Bands proxy results.
 
 ## Runtime Proof Required After Merge
 
-None for this research-only draft because it has no runtime authority and should not be merged as a production feature. Any later strategy promotion would require a separate shadow campaign with real constituents, trustworthy centre input, real option identity and execution-grade evidence.
+None. This PR remains research-only, draft and unmerged.
 
 ## What This PR Does Not Prove
 
-It does not prove the complete Gravity-Well mechanism profitable or unprofitable. It does not prove option edge, bid/ask executability, live fills, production readiness, unattended autonomy or incremental value over the existing Market Event Graph on the missing constituent corpus.
+V1 does not prove or disprove the published Gravity Well indicator, true VWMA edge, option profitability or production readiness.
 
 ## Human Approval
 
-The user explicitly approved continuing and executing the research. Human approval to merge or promote a strategy has not been given; keep the PR draft and unmerged.
+The user requested the correctness correction. No approval was given to merge, register or trade any family.
 
 ## Final Review Verdict
 
 ```text
-DATA_BLOCKED_MISSING_VOLUME_CONSTITUENTS_AND_REAL_OPTIONS
-NO_PRICE_ONLY_VALIDATION_SURVIVOR
-HOLDOUT_SEALED
+HISTORICAL_CUSTOM_EXTENSION_ONLY
+SUPERSEDED_FOR_SOURCE_FIDELITY_BY_V2
 NO_STRATEGY_INTEGRATION
 ```
 
 mode: RESEARCH
-candidate_id: GRAVITY_WELL_LOCATION_PARTICIPATION_V1
-decision: FAIL_CLOSED
-reason: Required nonzero underlying volume, constituents and real option identity are unavailable; the price-only diagnostic produced no validation survivor.
-timestamp: 2026-08-04T14:19:00+05:30
+candidate_id: GRAVITY_WELL_LOCATION_PARTICIPATION_V1_HISTORY
+decision: SUPERSEDED
+reason: The V1 custom-family evidence is retained for traceability but cannot represent the published indicator modes.
+timestamp: 2026-08-04T16:16:00+05:30
 is_order_action: false
 broker_api_called: false
 source: agent
