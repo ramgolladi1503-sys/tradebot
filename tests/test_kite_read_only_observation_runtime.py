@@ -13,6 +13,36 @@ from core.kite_read_only_observation_runtime import (
 )
 
 
+_FORBIDDEN_OBSERVER_PREFIXES = (
+    "core.broker",
+    "core.execution_adapter",
+    "core.execution_engine",
+    "core.execution_router",
+    "core.paper_broker",
+    "core.paper_fill",
+    "core.paper_order",
+)
+
+
+@pytest.fixture
+def clean_observer_import_boundary():
+    """Temporarily remove test-preloaded broker mocks without weakening runtime checks."""
+    saved = {
+        name: module
+        for name, module in list(sys.modules.items())
+        if name.startswith(_FORBIDDEN_OBSERVER_PREFIXES)
+    }
+    for name in saved:
+        sys.modules.pop(name, None)
+    try:
+        yield
+    finally:
+        for name in list(sys.modules):
+            if name.startswith(_FORBIDDEN_OBSERVER_PREFIXES):
+                sys.modules.pop(name, None)
+        sys.modules.update(saved)
+
+
 def test_lifecycle_shutdown_is_idempotent_and_rejects_late_start(monkeypatch):
     calls = []
 
@@ -90,7 +120,7 @@ def test_safe_environment_overwrites_inherited_live_values():
     assert "TRADING_MODE" in contract["unsafe_inherited_values"]
 
 
-def test_import_boundary_has_no_broker_or_execution_modules():
+def test_import_boundary_has_no_broker_or_execution_modules(clean_observer_import_boundary):
     assert_import_boundary()
 
 
@@ -128,7 +158,11 @@ def test_authority_snapshot_uses_canonical_serializer_and_pr782_parser(tmp_path)
     assert row["capital_assigned"] == 0.0
 
 
-def test_real_composition_wires_launch_plan_to_feed_start(monkeypatch, tmp_path):
+def test_real_composition_wires_launch_plan_to_feed_start(
+    monkeypatch,
+    tmp_path,
+    clean_observer_import_boundary,
+):
     import core.auth as auth
     import core.kite_depth_ws as feed
     import core.runtime_snapshot_producer as snapshots
