@@ -1,0 +1,140 @@
+{
+  "study_id": "gravity_well_location_participation_v1",
+  "generated_at": "2026-08-04T07:01:04.412452+00:00",
+  "verdict": "DATA_BLOCKED_INSUFFICIENT_SESSIONS_AND_MISSING_UNDERLYING_VOLUME_AND_MISSING_CONSTITUENTS",
+  "blockers": [
+    "INSUFFICIENT_INDEPENDENT_COMPLETE_SESSIONS_1_LT_30",
+    "MISSING_CAUSAL_NIFTY_UNDERLYING_VOLUME",
+    "MISSING_NIFTY_CONSTITUENT_PARTICIPATION"
+  ],
+  "claim_boundary": {
+    "structural_edge_claimed": false,
+    "holdout_opened": false,
+    "production_strategy_modified": false,
+    "broker_api_called": false,
+    "order_action": false,
+    "diagnostic_price_control_can_certify": false
+  },
+  "frozen_spec": {
+    "event_bar_minutes": 5,
+    "htf_minutes": [15, 30],
+    "center_length": 20,
+    "center_neighbours": [15, 30],
+    "atr_length": 14,
+    "displacement_atr": 1.5,
+    "displacement_neighbour": 2.0,
+    "escape_persistence_bars": 2,
+    "cluster_lookback_bars": 20,
+    "cluster_tolerance_atr": 0.25,
+    "minimum_constituents": 40,
+    "participation_threshold": 0.6,
+    "option_hold_minutes": 10,
+    "primary_friction_pct": 1.0,
+    "severe_friction_pct": 1.5,
+    "minimum_sessions": 30,
+    "minimum_total_trades": 200,
+    "minimum_test_trades": 50
+  },
+  "source_inventory": [
+    {
+      "path": "/mnt/data/gravity_work/local_extracts/ticks_20260701.parquet.csv",
+      "sha256": "8ca61a903dfa290d517435e624c105f267b20fea42e60309d1ba86c0453e6876",
+      "size_bytes": 65567958,
+      "rows": 1036264,
+      "sessions": 1,
+      "symbols": 35,
+      "start_timestamp": "2026-07-01T09:09:06.464514017+05:30",
+      "end_timestamp": "2026-07-01T11:41:50.973783016+05:30",
+      "timezone": "Asia/Kolkata",
+      "index_rows": 57751,
+      "option_rows": 978513,
+      "constituent_rows": 0,
+      "positive_index_volume_rows": 0,
+      "complete_market_sessions": 0,
+      "authority_grade": "DIAGNOSTIC_ONLY",
+      "rejection_reasons": [
+        "NO_POSITIVE_NIFTY_INDEX_VOLUME",
+        "NO_NIFTY_CONSTITUENT_ROWS",
+        "NO_COMPLETE_MARKET_SESSION"
+      ]
+    },
+    {
+      "path": "/mnt/data/gravity_work/local_extracts/upstox_full_ticks_20260709.parquet.csv",
+      "sha256": "66f36b56c0633648937bada670d64709c645d316464dd362d9310513f6ea7e97",
+      "size_bytes": 50902961,
+      "rows": 873854,
+      "sessions": 1,
+      "symbols": 35,
+      "start_timestamp": "2026-07-09T09:26:45.740724087+05:30",
+      "end_timestamp": "2026-07-09T15:39:01.652374029+05:30",
+      "timezone": "Asia/Kolkata",
+      "index_rows": 71125,
+      "option_rows": 802729,
+      "constituent_rows": 0,
+      "positive_index_volume_rows": 0,
+      "complete_market_sessions": 1,
+      "authority_grade": "DIAGNOSTIC_ONLY",
+      "rejection_reasons": [
+        "NO_POSITIVE_NIFTY_INDEX_VOLUME",
+        "NO_NIFTY_CONSTITUENT_ROWS"
+      ]
+    }
+  ],
+  "aggregate": {
+    "source_files": 2,
+    "input_rows": 1910118,
+    "unique_sessions": 2,
+    "complete_sessions": 1,
+    "index_rows": 128876,
+    "option_rows": 1781242,
+    "constituent_rows": 0,
+    "positive_index_volume_rows": 0,
+    "five_minute_index_bars": 92,
+    "five_minute_constituent_bars": 0,
+    "participation_available_rows": 0,
+    "primary_event_rows": 0
+  },
+  "primary_events": {
+    "event_counts": [],
+    "option_metrics": []
+  },
+  "diagnostic_controls": {
+    "event_counts": [
+      {"family": "LOCATION_ONLY_CLUSTER_BREAK_CONTROL", "side": "LONG", "count": 2},
+      {"family": "LOCATION_ONLY_CLUSTER_BREAK_CONTROL", "side": "SHORT", "count": 1},
+      {"family": "PRICE_ONLY_ESCAPE_CONTROL", "side": "LONG", "count": 6},
+      {"family": "PRICE_ONLY_ESCAPE_CONTROL", "side": "SHORT", "count": 4},
+      {"family": "PRICE_ONLY_FAILED_ESCAPE_CONTROL", "side": "LONG", "count": 1},
+      {"family": "PRICE_ONLY_FAILED_ESCAPE_CONTROL", "side": "SHORT", "count": 3}
+    ],
+    "option_metrics": [
+      {
+        "family": "PRICE_ONLY_ESCAPE_CONTROL",
+        "side": "LONG",
+        "strike_identity": "EXACT_ATM",
+        "trades": 1,
+        "sessions": 1,
+        "mean_net_return_pct": -5.300489929232432,
+        "median_net_return_pct": -5.300489929232432,
+        "win_rate": 0.0
+      }
+    ]
+  },
+  "next_legitimate_step": "Supply an immutable multi-session NIFTY constituent corpus joined to completed five-minute index bars and retain real expired-option quotes. Do not substitute option volume, tick count, or synthetic breadth.",
+  "raw_source_lineage": [
+    {
+      "analysis_extract": "/mnt/data/gravity_work/local_extracts/ticks_20260701.parquet.csv",
+      "analysis_extract_sha256": "8ca61a903dfa290d517435e624c105f267b20fea42e60309d1ba86c0453e6876",
+      "raw_source": "/mnt/data/ticks_20260701.parquet.bin",
+      "raw_source_sha256": "53341f21db27ab3f20e7a4ed8f183ab2b4aca03fae446779af04fe4987579243",
+      "raw_source_size_bytes": 65051297
+    },
+    {
+      "analysis_extract": "/mnt/data/gravity_work/local_extracts/upstox_full_ticks_20260709.parquet.csv",
+      "analysis_extract_sha256": "66f36b56c0633648937bada670d64709c645d316464dd362d9310513f6ea7e97",
+      "raw_source": "/mnt/data/upstox_full_ticks_20260709.parquet.bin",
+      "raw_source_sha256": "62410f680b0621c836e3b18e8a509126e3dfbcf40c61e3cc23d5c2bc30b95139",
+      "raw_source_size_bytes": 48832347
+    }
+  ]
+}
