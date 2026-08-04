@@ -11,6 +11,7 @@ class LiveSessionSnapshot:
     monitoring_valid: bool
     monitoring_verdict: str
     final_session_complete: bool
+    final_session_valid: bool
     monitoring_only: bool
     blockers: tuple[str, ...]
     verification: dict[str, object]
@@ -21,6 +22,7 @@ class LiveSessionSnapshot:
             "monitoring_valid": self.monitoring_valid,
             "monitoring_verdict": self.monitoring_verdict,
             "final_session_complete": self.final_session_complete,
+            "final_session_valid": self.final_session_valid,
             "monitoring_only": self.monitoring_only,
             "blockers": list(self.blockers),
             "verification": dict(self.verification),
@@ -50,11 +52,16 @@ def build_live_session_snapshot(
         blockers.append("EVENT_LOG_VERIFICATION_FAILED")
     if int(verification.get("session_count") or 0) != 1:
         blockers.append("EVENT_LOG_SESSION_COUNT_INVALID")
-    if not bool(lifecycle.get("SESSION_STARTED")):
+    session_started = bool(lifecycle.get("SESSION_STARTED"))
+    session_ended = bool(lifecycle.get("SESSION_ENDED"))
+    if not session_started:
         blockers.append("SESSION_START_MISSING_OR_DUPLICATE")
-    final_complete = bool(manifest.get("valid"))
+    final_complete = session_started and session_ended
+    final_valid = bool(manifest.get("valid"))
     allowed_active_error = lifecycle_errors == ("SESSION_ENDED_COUNT=0",)
     if not final_complete and not allowed_active_error:
+        blockers.extend(f"LIFECYCLE:{value}" for value in lifecycle_errors)
+    if final_complete and lifecycle_errors:
         blockers.extend(f"LIFECYCLE:{value}" for value in lifecycle_errors)
     if int(manifest.get("producer_sequence_gap_total") or 0) != 0:
         blockers.append("PRODUCER_SEQUENCE_GAP")
@@ -64,10 +71,12 @@ def build_live_session_snapshot(
         blockers.append("INVALID_DATA_QUALITY")
     if int(manifest.get("partial_quality_event_count") or 0) != 0:
         blockers.append("PARTIAL_DATA_QUALITY")
+    if final_complete and not final_valid:
+        blockers.append("FINAL_SESSION_EVIDENCE_INVALID")
     monitoring_valid = not blockers
-    if final_complete and monitoring_valid:
+    if final_complete and final_valid and monitoring_valid:
         verdict = "FINAL_SESSION_COMPLETE"
-    elif monitoring_valid:
+    elif not final_complete and monitoring_valid:
         verdict = "LIVE_MONITORING_HEALTHY"
     else:
         verdict = "LIVE_MONITORING_BLOCKED"
@@ -75,6 +84,7 @@ def build_live_session_snapshot(
         monitoring_valid=monitoring_valid,
         monitoring_verdict=verdict,
         final_session_complete=final_complete,
+        final_session_valid=final_valid,
         monitoring_only=not final_complete,
         blockers=tuple(dict.fromkeys(blockers)),
         verification=dict(verification),
