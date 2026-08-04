@@ -67,7 +67,7 @@ def _read_jsonl(path: Path) -> tuple[list[Mapping[str, object]], str]:
 
 
 def _group_cycles(path: Path, rows: Sequence[Mapping[str, object]]) -> dict[str, list[CandidateScoreObservation]]:
-    grouped: dict[str, list[CandidateScoreObservation]] = {}
+    latest_by_cycle: dict[str, dict[str, CandidateScoreObservation]] = {}
     for row in rows:
         score_value = row.get("final_score") if row.get("final_score") is not None else row.get("score")
         if score_value is None or not bool(row.get("rankable")):
@@ -86,10 +86,13 @@ def _group_cycles(path: Path, rows: Sequence[Mapping[str, object]]) -> dict[str,
             stale_quote=observation.stale_quote,
             outcome_value=observation.outcome_value,
         )
-        grouped.setdefault(unique_cycle_id, []).append(normalized)
-    if not grouped:
+        latest_by_cycle.setdefault(unique_cycle_id, {})[normalized.candidate_id] = normalized
+    if not latest_by_cycle:
         raise ValueError(f"baseline_source_has_no_rankable_scored_cycles path={path}")
-    return grouped
+    return {
+        cycle_id: list(candidate_map.values())
+        for cycle_id, candidate_map in latest_by_cycle.items()
+    }
 
 
 def build_ranking_baseline(
