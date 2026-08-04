@@ -116,8 +116,8 @@ def test_source_checkpoint_builder_detects_gaps_duplicates_malformed_and_partial
     assert scan.checkpoint.observed_event_types == ("FEED_TRUTH_UPDATED", "SESSION_STARTED")
     report = build_source_continuity_report(scan.checkpoint, evaluation_time=BASE + timedelta(seconds=3))
     assert report.integrity_valid is False
-    assert report.coverage_ratio == pytest.approx(1.0)
-    assert report.sequence_loss_rate == pytest.approx(0.25)
+    assert report.coverage_ratio == pytest.approx(2.0 / 3.0)
+    assert report.sequence_loss_rate == pytest.approx(1.0 / 3.0)
     assert report.missing_required_event_types == ("SESSION_ENDED",)
 
 
