@@ -8,6 +8,7 @@ from aixion_trade_intelligence.analyst_workflow import (
     build_optional_langgraph_workflow,
 )
 from aixion_trade_intelligence.dashboard_read_model import build_dashboard_read_model
+from scripts.run_aixion_trade_intelligence_dashboard import _authority_rows, _session_payload
 
 
 def test_controlled_analyst_accepts_only_cited_noncontradictory_claims():
@@ -114,3 +115,65 @@ def test_dashboard_read_model_preserves_certification_boundary():
     assert record["session"]["valid"] is True
     assert record["research_status"]["ready_for_profitability_claim"] is False
     assert record["research_status"]["certification_verdict"] == "INSUFFICIENT_EVIDENCE"
+
+
+def test_dashboard_session_payload_accepts_final_session_analysis():
+    final = {
+        "manifest": {"session_id": "s1", "valid": True},
+        "candidate_funnel": {"candidate_count": 2},
+        "outcome_readiness": {"ready_for_strategy_diagnosis": True},
+        "runtime_timeline": [],
+    }
+    session, monitor = _session_payload(final)
+    assert session is final
+    assert monitor == {}
+
+
+def test_dashboard_session_payload_accepts_active_live_snapshot_wrapper():
+    nested = {
+        "manifest": {"session_id": "s1", "valid": False, "verdict": "INCOMPLETE_SESSION"},
+        "candidate_funnel": {"candidate_count": 2},
+        "outcome_readiness": {"ready_for_strategy_diagnosis": False},
+        "runtime_timeline": [],
+    }
+    session, monitor = _session_payload(
+        {
+            "monitoring_verdict": "LIVE_MONITORING_HEALTHY",
+            "monitoring_valid": True,
+            "monitoring_only": True,
+            "final_session_complete": False,
+            "blockers": [],
+            "session_analysis": nested,
+        }
+    )
+    assert session is nested
+    assert monitor["monitoring_verdict"] == "LIVE_MONITORING_HEALTHY"
+    assert monitor["monitoring_valid"] is True
+    assert monitor["monitoring_only"] is True
+    assert monitor["final_session_complete"] is False
+
+
+def test_elite_authority_rows_reject_missing_gate_and_preserve_reasons():
+    cockpit = {
+        "authorities": {
+            name: {
+                "verdict": f"{name.upper()}_VERDICT",
+                "passed": name == "observation",
+                "reasons": [f"{name}_reason"],
+            }
+            for name in ("observation", "diagnosis", "strategy_change", "profitability_claim")
+        }
+    }
+    rows = _authority_rows(cockpit)
+    assert [row["authority"] for row in rows] == [
+        "observation",
+        "diagnosis",
+        "strategy_change",
+        "profitability_claim",
+    ]
+    assert rows[0]["passed"] is True
+    assert rows[0]["reasons"] == "observation_reason"
+    broken = {"authorities": dict(cockpit["authorities"])}
+    broken["authorities"].pop("diagnosis")
+    with pytest.raises(ValueError, match="elite_dashboard_authority_missing=diagnosis"):
+        _authority_rows(broken)
