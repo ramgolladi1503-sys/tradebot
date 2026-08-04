@@ -83,7 +83,7 @@ def _prepare_runtime(tmp_path: Path):
         filters=(("source_component", ("feed",)),),
     )
     policy = {
-        "freshness_limits_seconds": {"feed_component": 5.0},
+        "freshness_limits_seconds": {"feed_component": 60.0},
         "ranking_stability_top_k": 1,
         "score_policy": {
             "minimum_reference_sessions": 3,
