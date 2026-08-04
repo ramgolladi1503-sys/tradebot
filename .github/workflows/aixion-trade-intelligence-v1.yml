@@ -5,7 +5,8 @@ on:
     paths:
       - "aixion_trade_intelligence/**"
       - "core/aixion_intelligence_bridge.py"
-      - "scripts/*aixion_trade_intelligence*.py"
+      - "core/runtime_guard.py"
+      - "scripts/*aixion*.py"
       - "tests/test_aixion_trade_intelligence_*.py"
       - "docs/aixion_trade_intelligence/**"
       - "docs/agent_reviews/aixion_trade_intelligence_v1.md"
@@ -18,20 +19,30 @@ permissions:
 jobs:
   offline-evidence-certification:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip pytest
+
       - name: Compile intelligence surface
         run: |
           python -m compileall -q aixion_trade_intelligence
-          python -m py_compile core/aixion_intelligence_bridge.py
-          python -m py_compile scripts/*aixion_trade_intelligence*.py
+          python -m py_compile core/aixion_intelligence_bridge.py core/runtime_guard.py
+          python -m py_compile \
+            scripts/check_aixion_trade_intelligence_canary.py \
+            scripts/generate_aixion_trade_intelligence_fixture.py \
+            scripts/run_aixion_trade_intelligence_offline.py \
+            scripts/run_aixion_trade_intelligence_sidecar.py \
+            scripts/build_aixion_campaign.py \
+            scripts/ingest_aixion_evidence.py \
+            scripts/run_aixion_trade_intelligence_dashboard.py
+
       - name: Run focused certification tests
         run: pytest -q tests/test_aixion_trade_intelligence_*.py
+
       - name: Run full offline fixture and report
         run: |
           rm -rf .runtime/aixion-cert
@@ -44,6 +55,7 @@ jobs:
           test -s .runtime/aixion-cert/report/session_report.md
           grep -q "VALID_OFFLINE_SESSION_EVIDENCE" .runtime/aixion-cert/report/session_report.md
           grep -q '"ready_for_profitability_claim": false' .runtime/aixion-cert/report/session_analysis.json
+
       - name: Run sidecar-to-report integration
         run: |
           mkdir -p .runtime/aixion-sidecar/source
@@ -61,6 +73,51 @@ jobs:
             --event-log .runtime/aixion-sidecar/evidence/SIDECAR-CERT-001/events.jsonl \
             --output-dir .runtime/aixion-sidecar/report
           grep -q "VALID_OFFLINE_SESSION_EVIDENCE" .runtime/aixion-sidecar/report/session_report.md
+
+      - name: Run RAG ingestion and campaign aggregation
+        run: |
+          python scripts/ingest_aixion_evidence.py \
+            .runtime/aixion-cert/report/session_analysis.json \
+            .runtime/aixion-cert/report/session_report.md \
+            --output .runtime/aixion-cert/evidence_chunks.jsonl \
+            --max-characters-per-chunk 500
+          test -s .runtime/aixion-cert/evidence_chunks.jsonl
+          mkdir -p .runtime/aixion-campaign
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('.runtime/aixion-campaign')
+          for index, expiry in enumerate((True, False)):
+              payload = {
+                  'manifest': {
+                      'session_id': f'CAMPAIGN-{index}',
+                      'verdict': 'VALID_OFFLINE_SESSION_EVIDENCE',
+                      'valid': True,
+                  },
+                  'outcome_readiness': {'ready_for_strategy_diagnosis': True},
+                  'metadata': {
+                      'expiry_session': expiry,
+                      'live_shadow_consistent': True,
+                  },
+              }
+              (root / f'session-{index}.json').write_text(
+                  json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8'
+              )
+          PY
+          python scripts/build_aixion_campaign.py \
+            .runtime/aixion-campaign/session-0.json \
+            .runtime/aixion-campaign/session-1.json \
+            --output .runtime/aixion-campaign/summary.json \
+            --minimum-valid-sessions 2 \
+            --minimum-expiry-sessions 1 \
+            --minimum-non-expiry-sessions 1 \
+            --require-all-diagnosis-ready \
+            --require-live-shadow-for-all-valid
+          grep -q '"ready_for_multi_session_review": true' .runtime/aixion-campaign/summary.json
+
+      - name: Reject broker or execution authority
+        run: pytest -q tests/test_aixion_trade_intelligence_authority_v1.py
+
       - name: Reject unsupported profitability claims
         run: |
           python - <<'PY'
@@ -71,7 +128,12 @@ jobs:
               "live" + "_edge_certified",
           }
           violations = []
-          for path in Path("aixion_trade_intelligence").glob("*.py"):
+          paths = list(Path("aixion_trade_intelligence").glob("*.py"))
+          paths.extend([
+              Path("core/aixion_intelligence_bridge.py"),
+              Path("core/runtime_guard.py"),
+          ])
+          for path in paths:
               text = path.read_text(encoding="utf-8")
               for marker in markers:
                   if marker in text:
