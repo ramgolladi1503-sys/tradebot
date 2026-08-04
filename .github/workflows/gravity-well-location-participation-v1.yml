@@ -4,9 +4,12 @@ on:
   pull_request:
     paths:
       - "scripts/run_gravity_well_location_participation_v1.py"
+      - "scripts/run_gravity_well_source_modes_v2.py"
       - "tests/research/test_gravity_well_location_participation_v1.py"
+      - "tests/research/test_gravity_well_source_modes_v2.py"
       - "research/gravity_well_location_participation_v1/**"
       - "docs/agent_reviews/gravity_well_location_participation_v1.md"
+      - "docs/agent_reviews/gravity_well_source_mode_correctness_v2.md"
       - ".github/workflows/gravity-well-location-participation-v1.yml"
   workflow_dispatch:
 
@@ -23,5 +26,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install numpy pandas pytest
-      - run: python -m py_compile scripts/run_gravity_well_location_participation_v1.py
-      - run: pytest -q tests/research/test_gravity_well_location_participation_v1.py
+      - run: |
+          python -m py_compile scripts/run_gravity_well_location_participation_v1.py
+          python -m py_compile scripts/run_gravity_well_source_modes_v2.py
+      - run: |
+          pytest -q \
+            tests/research/test_gravity_well_location_participation_v1.py \
+            tests/research/test_gravity_well_source_modes_v2.py
