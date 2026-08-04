@@ -117,6 +117,8 @@ def build_elite_analytics_cockpit(
         diagnosis_reasons.append("CANDIDATE_OUTCOME_COVERAGE_INCOMPLETE")
     if score_report is None:
         diagnosis_reasons.append("RANKING_DIAGNOSTICS_MISSING")
+    if int(empirical_summary["evaluated_metric_count"]) == 0:
+        diagnosis_reasons.append("RANKING_EMPIRICAL_POLICY_NOT_EVALUATED")
     if empirical_summary["insufficient_reference_evidence"]:
         diagnosis_reasons.append("RANKING_BASELINE_INSUFFICIENT")
     diagnosis_passed = not diagnosis_reasons
