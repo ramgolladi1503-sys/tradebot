@@ -3,6 +3,7 @@ import importlib.util
 import sys
 
 import pandas as pd
+import pytest
 
 MODULE = Path(__file__).parents[2] / "scripts" / "run_cas_closing_auction_shadow_v1.py"
 spec = importlib.util.spec_from_file_location("cas_shadow", MODULE)
@@ -25,6 +26,53 @@ def test_phase_boundaries_are_explicit():
         assert cas.classify_phase(pd.Timestamp(timestamp), contract) == expected
 
 
+def test_numeric_epoch_seconds_are_not_treated_as_nanoseconds():
+    frame = pd.DataFrame(
+        {
+            "ts": [1785749455.0],
+            "instrument_key": ["NSE_INDEX|Nifty 50"],
+            "ltp": [24500.0],
+        }
+    )
+    normalized = cas.normalize_ticks(frame)
+    assert normalized.timestamp.iloc[0].year == 2026
+    assert normalized.timestamp.iloc[0].hour == 15
+
+
+def test_exact_index_identity_rejects_option_substring():
+    frame = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(["2026-08-04 15:15:00+05:30"]),
+            "symbol": ["NIFTY 24600 CE 04 AUG 26"],
+            "price": [40.0],
+        }
+    )
+    with pytest.raises(ValueError, match="exact_nifty_index_identity_not_found"):
+        cas.build_index_timeline(frame, cas.CasWindowContract())
+
+
+def test_exact_index_selected_among_option_rows():
+    frame = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [
+                    "2026-08-04 15:15:00+05:30",
+                    "2026-08-04 15:14:00+05:30",
+                    "2026-08-04 15:15:00+05:30",
+                ]
+            ),
+            "symbol": [
+                "NIFTY 24600 CE 04 AUG 26",
+                "NSE_INDEX|Nifty 50",
+                "NSE_INDEX|Nifty 50",
+            ],
+            "price": [40.0, 24400.0, 24410.0],
+        }
+    )
+    timeline = cas.build_index_timeline(frame, cas.CasWindowContract())
+    assert set(timeline.symbol) == {"NSE_INDEX|Nifty 50"}
+
+
 def test_nifty_timeline_anchors_to_last_pre_1515_price():
     frame = pd.DataFrame(
         {
@@ -44,23 +92,22 @@ def test_nifty_timeline_anchors_to_last_pre_1515_price():
     assert timeline.iloc[-1].return_from_1515_bps > 0.0
 
 
-def test_constituent_breadth_detects_concentration():
+def test_constituent_tick_breadth_detects_concentration():
     rows = []
     for index in range(40):
-        symbol = f"S{index:02d}"
-        start = 100.0
+        symbol = f"NSE_EQ|S{index:02d}"
         end = 120.0 if index < 3 else 100.1
         rows.extend(
             [
                 {
-                    "timestamp": "2026-08-04 15:15:00+05:30",
-                    "symbol": symbol,
-                    "close": start,
+                    "receive_wall_ts_utc": "2026-08-04T09:44:59Z",
+                    "instrument_key": symbol,
+                    "ltp": 100.0,
                 },
                 {
-                    "timestamp": "2026-08-04 15:35:00+05:30",
-                    "symbol": symbol,
-                    "close": end,
+                    "receive_wall_ts_utc": "2026-08-04T10:00:00Z",
+                    "instrument_key": symbol,
+                    "ltp": end,
                 },
             ]
         )
@@ -71,6 +118,29 @@ def test_constituent_breadth_detects_concentration():
     assert result["broad_move"] is False
 
 
-def test_claim_boundary_never_certifies_two_sessions():
-    contract = cas.CasWindowContract()
-    assert contract.derivative_end == "15:40:00"
+def test_constituent_tick_breadth_counts_direction():
+    rows = []
+    for index in range(40):
+        symbol = f"NSE_EQ|S{index:02d}"
+        end = 101.0 if index < 35 else 99.0
+        rows.extend(
+            [
+                {
+                    "receive_wall_ts_utc": "2026-08-04T09:44:59Z",
+                    "instrument_key": symbol,
+                    "ltp": 100.0,
+                },
+                {
+                    "receive_wall_ts_utc": "2026-08-04T10:00:00Z",
+                    "instrument_key": symbol,
+                    "ltp": end,
+                },
+            ]
+        )
+    result = cas.constituent_breadth(pd.DataFrame(rows), cas.CasWindowContract())
+    assert result["positive_count"] == 35
+    assert result["negative_count"] == 5
+
+
+def test_contract_preserves_derivative_close_boundary():
+    assert cas.CasWindowContract().derivative_end == "15:40:00"
