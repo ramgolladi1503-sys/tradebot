@@ -10,9 +10,10 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -27,10 +28,33 @@ from core.market_event_graph_live_launch_plan import (
 from core.market_event_graph_live_observation_registry import load_observation_registry
 from core.session_calendar import is_open
 
+NSE_FNO_2026_HOLIDAYS = frozenset({
+    date(2026, 1, 26), date(2026, 3, 3), date(2026, 3, 26),
+    date(2026, 3, 31), date(2026, 4, 3), date(2026, 4, 14),
+    date(2026, 5, 1), date(2026, 5, 28), date(2026, 6, 26),
+    date(2026, 9, 14), date(2026, 10, 2), date(2026, 10, 20),
+    date(2026, 11, 10), date(2026, 11, 24), date(2026, 12, 25),
+})
+NSE_FNO_HOLIDAY_SOURCE = "https://nsearchives.nseindia.com/content/circulars/FAOP71777.pdf"
+
+
+def validate_nse_session_day(session_date: date, *, segment: str = "NSE_FNO") -> dict[str, Any]:
+    if segment != "NSE_FNO":
+        raise ValueError(f"unsupported session-day segment: {segment}")
+    listed_as_holiday = session_date in NSE_FNO_2026_HOLIDAYS
+    return {
+        "session_date": session_date.isoformat(),
+        "segment": segment,
+        "official_source": NSE_FNO_HOLIDAY_SOURCE,
+        "listed_as_trading_holiday": listed_as_holiday,
+        "session_day_allowed": session_date.weekday() < 5 and not listed_as_holiday,
+        "verification_errors": [],
+    }
+
 
 def _validate_session_date(session_date: str) -> str:
     parsed = datetime.strptime(session_date, "%Y-%m-%d")
-    if parsed.weekday() >= 5:
+    if not validate_nse_session_day(parsed.date())["session_day_allowed"]:
         raise SystemExit("BLOCKED_BY_NSE_SESSION_CALENDAR")
     return parsed.date().isoformat()
 
@@ -98,11 +122,16 @@ def _static_preflight_payload(*, session_date: str, registry: Any, master_path: 
         capture_dir / "live_observation.log",
     ]
     output_unused = not capture_dir.exists() and not any(path.exists() for path in governed_files)
+    session_day = validate_nse_session_day(datetime.strptime(session_date, "%Y-%m-%d").date())
+    now_ist = datetime.now(tz=ZoneInfo("Asia/Kolkata"))
     return {
         "ok": bool(output_unused),
         "verdict": PASS_STATIC_LIVE_SOURCE_PREFLIGHT if output_unused else "BLOCKED_BY_GOVERNED_OUTPUT_COLLISION",
         "session_date": session_date,
-        "session_day_open": bool(is_open(datetime.strptime(session_date, "%Y-%m-%d"))),
+        "session_day_open": bool(session_day["session_day_allowed"]),
+        "session_day_allowed": bool(session_day["session_day_allowed"]),
+        "intraday_market_open_at_preflight": bool(is_open(now_ist, segment="NSE_FNO")),
+        "session_day_verification_source": session_day["official_source"],
         "contract_path": registry.contract_path,
         "contract_sha256": _sha256(Path(registry.contract_path)),
         "canonical_universe_sha256": registry.canonical_sha256,
