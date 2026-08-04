@@ -1,0 +1,69 @@
+{
+  "study_id": "gravity_well_location_participation_v1",
+  "frozen_at": "2026-08-04T14:19:00+05:30",
+  "primary_campaign": {
+    "required_mechanism": "volume_weighted_centre + completed_HTF_location + constituent_participation + real_expired_option_outcome",
+    "authority_rule": "fail_closed",
+    "allowed_final_verdicts": [
+      "STRUCTURAL_EDGE_SUPPORTED",
+      "VALIDATION_SURVIVOR_FAILED_HOLDOUT",
+      "NO_INCREMENTAL_EDGE_OVER_EXISTING_MEG",
+      "NO_EDGE_IN_TESTED_GRAVITY_WELL_FAMILY",
+      "DATA_BLOCKED_EXACT_REASON"
+    ]
+  },
+  "observed_blockers_before_outcomes": [
+    "UNDERLYING_VOLUME_ZERO_FOR_ALL_ROWS",
+    "NIFTY_CONSTITUENT_BARS_ABSENT",
+    "REAL_EXPIRED_OPTION_OHLC_WITH_CONTRACT_IDENTITY_ABSENT",
+    "OPTION_FILES_EXPLICITLY_NAMED_OPT_MOCK",
+    "EXPIRY_METADATA_ABSENT"
+  ],
+  "diagnostic_lane": {
+    "name": "EMA_GRAVITY_PRICE_ONLY_PROXY",
+    "claim_boundary": "underlying directional precursor diagnostic only; not Gravity Well replication; not option edge; not structural certification",
+    "bar_interval_minutes": 5,
+    "centre": "EMA_CLOSE",
+    "canonical_centre_length": 20,
+    "neighbour_centre_lengths": [14, 30],
+    "atr_length": 14,
+    "outer_band_atr": 1.5,
+    "extreme_band_atr": 2.0,
+    "slope_persistence_bars": 2,
+    "escape_pullback_window_bars": 6,
+    "pullback_tolerance_atr": 0.25,
+    "minimum_room_atr": 0.75,
+    "failed_escape_return_window_bars": 4,
+    "failed_escape_level_distance_atr": 0.5,
+    "cluster_tolerance_atr": 0.25,
+    "cluster_break_buffer_atr": 0.1,
+    "compression_lookback_bars": 4,
+    "compression_range_atr": 1.5,
+    "fixed_outcome_horizons_bars": [3, 6, 12],
+    "primary_outcome_horizon_bars": 6,
+    "cost_stress_bps": [0.0, 2.0, 5.0],
+    "entry": "next_bar_open_after_completed_event",
+    "session_crossing": "prohibited",
+    "max_events_per_family_side_session": 2,
+    "cooldown_bars": 4
+  },
+  "htf_location": {
+    "timeframes_minutes": [15, 30],
+    "rolling_lookback_bars": {"15": 8, "30": 4},
+    "previous_session_high_low": true,
+    "forming_htf_bar_allowed": false,
+    "level_shift": 1
+  },
+  "chronology": {
+    "split": [0.6, 0.2, 0.2],
+    "unit": "independent_session",
+    "holdout_rule": "do_not_calculate_performance_unless_validation_survivor_exists",
+    "minimum_validation_trades": 50,
+    "minimum_validation_sessions": 30
+  },
+  "random_baseline": {
+    "replications": 2000,
+    "seed": 20260804,
+    "matching": ["split", "direction", "30_minute_time_bucket"]
+  }
+}
