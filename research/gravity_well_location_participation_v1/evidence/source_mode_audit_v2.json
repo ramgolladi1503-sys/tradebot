@@ -1,0 +1,111 @@
+{
+  "study_id": "gravity_well_published_description_modes_v2",
+  "generated_at": "2026-08-04T16:16:00+05:30",
+  "source_archive": {
+    "nifty_sessions": 493,
+    "nifty_five_minute_rows": 36849,
+    "development_sessions": 295,
+    "validation_sessions": 99,
+    "holdout_sealed_sessions": 99,
+    "nonzero_volume_rows": 0,
+    "synthetic_rows": 0,
+    "fallback_rows": 0,
+    "mock_underlying_rows": 0
+  },
+  "claim_boundary": {
+    "published_description_semantics_reproduced": true,
+    "exact_source_code_replication": false,
+    "true_vwma_executed": false,
+    "real_option_evidence_available": false,
+    "holdout_opened": false,
+    "state_preserved_across_sessions": true,
+    "outcomes_forced_same_session": true
+  },
+  "validation_net2_bps": {
+    "UNIFORM_VOLUME_SMA": {
+      "SOURCE_TREND_SLOPE": {
+        "trades": 181,
+        "sessions": 85,
+        "expectancy_bps": -1.7749,
+        "profit_factor": 0.7278,
+        "bootstrap_95pct": [-3.0225, 1.8312],
+        "severe_cost_expectancy_bps": -4.7749
+      },
+      "SOURCE_TREND_ACCEL_STRICT": {
+        "trades": 179,
+        "sessions": 85,
+        "expectancy_bps": -1.6879,
+        "profit_factor": 0.7402,
+        "bootstrap_95pct": [-2.9154, 1.8448],
+        "severe_cost_expectancy_bps": -4.6879
+      },
+      "SOURCE_MIDLINE": {
+        "trades": 808,
+        "sessions": 99,
+        "expectancy_bps": -1.8061,
+        "profit_factor": 0.6425,
+        "bootstrap_95pct": [-1.1663, 1.0907],
+        "severe_cost_expectancy_bps": -4.8061
+      },
+      "SOURCE_BANDS_RECLAIM": {
+        "trades": 181,
+        "sessions": 86,
+        "expectancy_bps": -2.3591,
+        "profit_factor": 0.6537,
+        "bootstrap_95pct": [-5.3306, -1.0302],
+        "severe_cost_expectancy_bps": -5.3591
+      }
+    },
+    "EMA_SENSITIVITY": {
+      "SOURCE_TREND_SLOPE": {
+        "trades": 152,
+        "sessions": 78,
+        "expectancy_bps": -1.9194,
+        "profit_factor": 0.6925,
+        "bootstrap_95pct": [-3.1195, 2.4068],
+        "severe_cost_expectancy_bps": -4.9194
+      },
+      "SOURCE_TREND_ACCEL_STRICT": {
+        "trades": 152,
+        "sessions": 78,
+        "expectancy_bps": -1.9194,
+        "profit_factor": 0.6925,
+        "bootstrap_95pct": [-3.1195, 2.4068],
+        "severe_cost_expectancy_bps": -4.9194
+      },
+      "SOURCE_MIDLINE": {
+        "trades": 811,
+        "sessions": 99,
+        "expectancy_bps": -1.8107,
+        "profit_factor": 0.6507,
+        "bootstrap_95pct": [-1.4520, 0.6633],
+        "severe_cost_expectancy_bps": -4.8107
+      },
+      "SOURCE_BANDS_RECLAIM": {
+        "trades": 151,
+        "sessions": 80,
+        "expectancy_bps": -4.8191,
+        "profit_factor": 0.3856,
+        "bootstrap_95pct": [-9.0789, -4.0899],
+        "severe_cost_expectancy_bps": -7.8191
+      }
+    }
+  },
+  "integrity": {
+    "focused_tests_passed": 7,
+    "focused_tests_total": 7,
+    "event_ledger_rows": 10971,
+    "true_vwma_fails_closed_without_positive_volume": true,
+    "next_bar_entry": true,
+    "same_session_outcomes": true
+  },
+  "verdict": [
+    "PREVIOUS_SOURCE_FIDELITY_CLAIM_INVALID",
+    "PUBLISHED_DESCRIPTION_MODES_REBUILT",
+    "NO_PRICE_ONLY_PUBLISHED_MODE_VALIDATION_SURVIVOR",
+    "TRUE_VWMA_HYPOTHESIS_NOT_EVALUATED",
+    "REAL_OPTION_EDGE_NOT_EVALUATED",
+    "HOLDOUT_SEALED",
+    "NO_STRATEGY_INTEGRATION"
+  ]
+}
