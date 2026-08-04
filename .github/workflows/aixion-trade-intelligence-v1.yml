@@ -6,7 +6,9 @@ on:
       - "aixion_trade_intelligence/**"
       - "scripts/run_aixion_trade_intelligence_offline.py"
       - "tests/test_aixion_trade_intelligence_v1.py"
+      - "tests/test_aixion_trade_intelligence_extensions_v1.py"
       - "docs/aixion_trade_intelligence/**"
+      - "docs/agent_reviews/aixion_trade_intelligence_v1.md"
       - ".github/workflows/aixion-trade-intelligence-v1.yml"
   workflow_dispatch:
 
@@ -31,9 +33,15 @@ jobs:
             aixion_trade_intelligence/storage.py \
             aixion_trade_intelligence/session.py \
             aixion_trade_intelligence/report.py \
+            aixion_trade_intelligence/tradebot_adapter.py \
+            aixion_trade_intelligence/outcomes.py \
+            aixion_trade_intelligence/evidence_search.py \
             scripts/run_aixion_trade_intelligence_offline.py
       - name: Run focused certification tests
-        run: pytest -q tests/test_aixion_trade_intelligence_v1.py
+        run: |
+          pytest -q \
+            tests/test_aixion_trade_intelligence_v1.py \
+            tests/test_aixion_trade_intelligence_extensions_v1.py
       - name: Reject broker or execution authority
         run: |
           if grep -RInE "place_order|modify_order|cancel_order|exit_order|kite\.place|broker.*order" aixion_trade_intelligence scripts/run_aixion_trade_intelligence_offline.py; then
