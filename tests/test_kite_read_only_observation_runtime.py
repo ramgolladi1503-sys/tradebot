@@ -149,3 +149,93 @@ def test_real_composition_wires_launch_plan_to_feed_start(monkeypatch, tmp_path)
     assert observed["tokens"] == [256265, 6401]
     assert observed["kwargs"]["profile_verified"] is True
     assert observed["stopped"] is True
+
+
+def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tmp_path):
+    """Drive the real registered callback with a network-free KiteTicker boundary."""
+    import importlib
+    import json
+    import time
+    from config import config as cfg
+
+    feed = importlib.import_module("core.kite_depth_ws")
+    bridge_mod = importlib.import_module("core.market_event_graph_live_runtime_bridge")
+    shadow = importlib.import_module("core.market_event_graph_live_ohlc_buffer")
+    from core.ai_reliability_agent.pr763_session import discover_live_semantics
+    from core.market_event_graph_live_runtime_bridge import LiveSourceRuntimeBridge
+    from core.market_event_graph_live_source import LiveCapturedMetadataExporter
+
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", "runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json")
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_OBSERVATION_REGISTRY_PATH", "runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json", raising=False)
+    registry = importlib.import_module("core.market_event_graph_live_observation_registry").load_observation_registry(force=True)
+    shadow.reset_live_source_shadow_buffer()
+    feed.stop_depth_ws(reason="packet_proof_reset")
+    feed._reset_market_event_graph_generation_evidence()
+    feed._FEED_SESSION_ID = "packet-proof-session"
+    feed._FEED_RECONNECT_GENERATION = 1
+    token_by_symbol = {"NIFTY": registry.index_token, **registry.token_by_symbol}
+    feed._TOKEN_TO_SYMBOL.update(token_by_symbol)
+    feed._UNDERLYING_TOKENS.add(registry.index_token)
+    tokens = list(registry.all_tokens)
+    plan = {"final_union_tokens": tokens, "observation_tokens": tokens, "production_tokens": [registry.index_token], "launch_plan_sha256": registry.canonical_sha256}
+    feed._set_observation_plan_state(enabled=True, verdict="PASS_LIVE_SOURCE_PRESESSION_READINESS", production_tokens=[registry.index_token], observation_tokens=tokens, final_union_tokens=tokens, configured_budget=150)
+
+    export_path = tmp_path / "captured_live_source.jsonl"
+    rejection_path = tmp_path / "rejections.jsonl"
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_REJECTION_PATH", str(rejection_path))
+    universe_path = __import__("pathlib").Path("runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json")
+    bridge = LiveSourceRuntimeBridge(exporter=LiveCapturedMetadataExporter(export_path), universe_contract=json.loads(universe_path.read_text()))
+    monkeypatch.setattr(bridge_mod, "_LIVE_SOURCE_BRIDGE", bridge)
+
+    class FakeTicker:
+        MODE_FULL = "full"
+        MODE_QUOTE = "quote"
+        def __init__(self):
+            self.subscribed = set()
+            self.modes = {}
+            self.on_connect = None
+            self.on_ticks = None
+        def subscribe(self, values):
+            self.subscribed.update(int(v) for v in values)
+        def set_mode(self, mode, values):
+            for value in values:
+                self.modes[int(value)] = mode
+        def connect(self, threaded=True):
+            self.on_connect(self, {})
+            base = float(int(time.time() // 60) * 60 - 120)
+            for offset in (0, 60, 120):
+                packet = []
+                for token in tokens:
+                    packet.append({"instrument_token": int(token), "last_price": 100.0 + (int(token) % 17) + offset / 100.0, "exchange_timestamp": base + offset + 1, "mode": "full", "volume": 10, "change": 0.1, "ohlc": {"open": 99.0, "high": 101.0, "low": 98.0, "close": 100.0}, "depth": {"buy": [{"price": 99.5, "quantity": 10}], "sell": [{"price": 100.5, "quantity": 10}]}})
+                self.on_ticks(self, packet)
+        def close(self):
+            return None
+
+    class FakeClient:
+        _active_api_key = "api-key"
+        _active_access_token = "access-token"
+        def ensure(self): return self
+        def profile(self): return {"user_id": "proof"}
+
+    fake = FakeTicker()
+    monkeypatch.setattr(feed, "get_kite_ticker", lambda **_: fake)
+    monkeypatch.setattr(feed, "kite_client", FakeClient())
+    monkeypatch.setattr(feed, "get_kite_auth_health", lambda **_: {"ok": True})
+    monkeypatch.setattr(cfg, "KITE_API_KEY", "api-key")
+    monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True)
+    assert feed.start_depth_ws(tokens, profile_verified=True, skip_lock=True, skip_guard=True)
+    result = bridge.observe_cycle([], cycle_cutoff=__import__("datetime").datetime.now(__import__("datetime").timezone.utc))
+    assert result.attempted is True and result.exported is True
+    assert result.accepted_constituent_count == 50
+    row = json.loads(export_path.read_text().splitlines()[0])
+    assert len(row["constituent_bar_details"]) == 50
+    assert row["read_only"] is True
+    from core.kite_read_only_observation_runtime import write_meg_wiring_evidence
+    write_meg_wiring_evidence(bridge=bridge, result=result, output_path=tmp_path / "meg_wiring_evidence.json", cycle_count=1)
+    from core.kite_read_only_observation_runtime import ObservationLifecycle
+    shutdown = ObservationLifecycle(feed).shutdown()
+    (tmp_path / "shutdown_drain.json").write_text(json.dumps(shutdown) + "\n")
+    semantics = discover_live_semantics(tmp_path)
+    assert semantics.passed is True, semantics.evidence
+    feed.stop_depth_ws(reason="packet_proof_complete")

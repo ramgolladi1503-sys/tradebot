@@ -121,6 +121,54 @@ def write_authority_snapshot(candidate: Mapping[str, Any], path: Path) -> dict[s
     return payload
 
 
+def write_meg_wiring_evidence(*, bridge: Any, result: Any, output_path: Path, cycle_count: int) -> dict[str, Any]:
+    """Persist measured bridge/buffer/subscription facts for PR #782 discovery."""
+    contract, _ = bridge._load_universe_contract()
+    symbols = [contract.index_symbol, *contract.constituent_symbols] if contract is not None else []
+    from core.market_event_graph_live_ohlc_buffer import shadow_ohlc_buffer
+
+    now = datetime.now(timezone.utc)
+    completed = {
+        symbol: shadow_ohlc_buffer.get_completed_bars(symbol, as_of=now)
+        for symbol in symbols
+    }
+    audit = dict(getattr(result, "audit", {}) or {})
+    subscription = dict(audit.get("subscription_evidence") or {})
+    nifty_lifecycle = dict((subscription.get("token_lifecycle") or {}).get(str(contract.index_instrument_token) if contract is not None else "") or {})
+    rows = [bar for bars in completed.values() for bar in bars]
+    source_ends = [float(bar.get("source_bar_end_epoch")) for bar in rows if bar.get("source_bar_end_epoch") is not None]
+    payload = {
+        "proof_kind": "PR763_LIVE_ACCEPTANCE",
+        "attempted_cycle_count": int(cycle_count),
+        "exported_cycle_count": int(cycle_count if getattr(result, "exported", False) else 0),
+        "rejected_cycle_count": int(0 if getattr(result, "exported", False) else 1),
+        "last_reason": str(getattr(result, "reason", "")),
+        "accepted_constituent_count": int(getattr(result, "accepted_constituent_count", 0) or 0),
+        "completed_constituent_bar_count": sum(len(completed.get(symbol, [])) for symbol in symbols[1:]),
+        "index_completed_bar_count": len(completed.get(contract.index_symbol, [])) if contract is not None else 0,
+        "first_source_bar_end_epoch": min(source_ends) if source_ends else None,
+        "last_source_bar_end_epoch": max(source_ends) if source_ends else None,
+        "universe_hash": contract.canonical_sha256 if contract is not None else "",
+        "feed_session_id": subscription.get("feed_session_id"),
+        "reconnect_generation": subscription.get("reconnect_generation"),
+        "completed_constituent_bars": [symbol for symbol in symbols[1:] if completed.get(symbol)],
+        "market_event_graph_traversal_count": int(cycle_count if getattr(result, "exported", False) else 0),
+        "market_event_graph_traversal": bool(getattr(result, "exported", False)),
+        "nifty_post_mode_full_packet_count": int(nifty_lifecycle.get("post_mode_full_count") or 0),
+        "post_mode_full_nifty_packets": int(nifty_lifecycle.get("post_mode_full_count") or 0) > 0,
+        "source_packet_bar_lineage": bool(rows),
+        "subscription_evidence": subscription,
+        "read_only": True,
+        "is_order_action": False,
+        "broker_write_authority": False,
+        "allowed_for_live_execution": False,
+        "allowed_for_paper_execution": False,
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return payload
+
+
 class ObservationLifecycle:
     """Own the read-only feed lifecycle and prove an ordered, idempotent drain."""
 
@@ -234,11 +282,20 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
 
     lifecycle = ObservationLifecycle(kite_depth_ws)
     lifecycle.start(tokens)
+    meg_bridge = get_live_source_bridge()
+    meg_cycle_count = 0
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
     try:
         while not lifecycle.should_stop():
             produce_and_store_runtime_snapshots(market_snapshot=None, producer="kite_read_only_observation")
-            get_live_source_bridge().observe_cycle([], cycle_cutoff=datetime.now(timezone.utc))
+            meg_cycle_count += 1
+            meg_result = meg_bridge.observe_cycle([], cycle_cutoff=datetime.now(timezone.utc))
+            write_meg_wiring_evidence(
+                bridge=meg_bridge,
+                result=meg_result,
+                output_path=output_root / "meg_wiring_evidence.json",
+                cycle_count=meg_cycle_count,
+            )
             if deadline is not None and time.monotonic() >= deadline:
                 break
             time.sleep(0.05 if deadline is not None else 1.0)
