@@ -1,0 +1,45 @@
+[
+  {
+    "path": "/mnt/data/gravity_work/local_extracts/ticks_20260701.parquet.csv",
+    "sha256": "8ca61a903dfa290d517435e624c105f267b20fea42e60309d1ba86c0453e6876",
+    "size_bytes": 65567958,
+    "rows": 1036264,
+    "sessions": 1,
+    "symbols": 35,
+    "start_timestamp": "2026-07-01T09:09:06.464514017+05:30",
+    "end_timestamp": "2026-07-01T11:41:50.973783016+05:30",
+    "timezone": "Asia/Kolkata",
+    "index_rows": 57751,
+    "option_rows": 978513,
+    "constituent_rows": 0,
+    "positive_index_volume_rows": 0,
+    "complete_market_sessions": 0,
+    "authority_grade": "DIAGNOSTIC_ONLY",
+    "rejection_reasons": [
+      "NO_POSITIVE_NIFTY_INDEX_VOLUME",
+      "NO_NIFTY_CONSTITUENT_ROWS",
+      "NO_COMPLETE_MARKET_SESSION"
+    ]
+  },
+  {
+    "path": "/mnt/data/gravity_work/local_extracts/upstox_full_ticks_20260709.parquet.csv",
+    "sha256": "66f36b56c0633648937bada670d64709c645d316464dd362d9310513f6ea7e97",
+    "size_bytes": 50902961,
+    "rows": 873854,
+    "sessions": 1,
+    "symbols": 35,
+    "start_timestamp": "2026-07-09T09:26:45.740724087+05:30",
+    "end_timestamp": "2026-07-09T15:39:01.652374029+05:30",
+    "timezone": "Asia/Kolkata",
+    "index_rows": 71125,
+    "option_rows": 802729,
+    "constituent_rows": 0,
+    "positive_index_volume_rows": 0,
+    "complete_market_sessions": 1,
+    "authority_grade": "DIAGNOSTIC_ONLY",
+    "rejection_reasons": [
+      "NO_POSITIVE_NIFTY_INDEX_VOLUME",
+      "NO_NIFTY_CONSTITUENT_ROWS"
+    ]
+  }
+]
