@@ -106,33 +106,38 @@ class SessionAnalyzer:
         for component, sequences in producer_sequences.items():
             sequence_gaps[component] = sum(max(current - previous - 1, 0) for previous, current in zip(sequences, sequences[1:]))
 
+        start_events = [event for event in ordered if event.event_type == "SESSION_STARTED"]
+        end_events = [event for event in ordered if event.event_type == "SESSION_ENDED"]
         required_lifecycle = {
-            "SESSION_STARTED": event_counts["SESSION_STARTED"] > 0,
-            "SESSION_ENDED": event_counts["SESSION_ENDED"] > 0,
+            "SESSION_STARTED": len(start_events) == 1,
+            "SESSION_ENDED": len(end_events) == 1,
         }
-        invalid_quality_events = sum(
-            count
-            for state, count in quality_counts.items()
-            if state.upper().startswith("INVALID")
-            or state.upper() in self._HARD_INVALID_QUALITY_STATES
-        )
-        partial_quality_events = sum(
-            count
-            for state, count in quality_counts.items()
-            if state.upper() in self._PARTIAL_QUALITY_STATES
-        )
+        lifecycle_errors: list[str] = []
+        if len(start_events) != 1:
+            lifecycle_errors.append(f"SESSION_STARTED_COUNT={len(start_events)}")
+        if len(end_events) != 1:
+            lifecycle_errors.append(f"SESSION_ENDED_COUNT={len(end_events)}")
+        if len(start_events) == 1 and len(end_events) == 1:
+            start_time = start_events[0].event_time
+            end_time = end_events[0].event_time
+            if end_time < start_time:
+                lifecycle_errors.append("SESSION_END_BEFORE_START")
+            outside = [event.event_id for event in ordered if event.event_type not in {"SESSION_STARTED", "SESSION_ENDED"} and not (start_time <= event.event_time <= end_time)]
+            if outside:
+                lifecycle_errors.append(f"EVENTS_OUTSIDE_SESSION={len(outside)}")
         lifecycle_complete = all(required_lifecycle.values())
+        lifecycle_order_valid = lifecycle_complete and not lifecycle_errors
+
+        invalid_quality_events = sum(count for state, count in quality_counts.items() if state.upper().startswith("INVALID") or state.upper() in self._HARD_INVALID_QUALITY_STATES)
+        partial_quality_events = sum(count for state, count in quality_counts.items() if state.upper() in self._PARTIAL_QUALITY_STATES)
         sequence_gap_total = sum(sequence_gaps.values())
-        manifest_valid = (
-            lifecycle_complete
-            and invalid_quality_events == 0
-            and partial_quality_events == 0
-            and sequence_gap_total == 0
-        )
+        manifest_valid = lifecycle_order_valid and invalid_quality_events == 0 and partial_quality_events == 0 and sequence_gap_total == 0
         if manifest_valid:
             verdict = "VALID_OFFLINE_SESSION_EVIDENCE"
         elif not lifecycle_complete:
             verdict = "INCOMPLETE_SESSION"
+        elif not lifecycle_order_valid:
+            verdict = "INVALID_LIFECYCLE_ORDER"
         elif sequence_gap_total:
             verdict = "INVALID_SEQUENCE_COVERAGE"
         elif invalid_quality_events:
@@ -153,6 +158,8 @@ class SessionAnalyzer:
             "instrument_count": len(instrument_keys),
             "strategy_versions": strategy_versions,
             "required_lifecycle": required_lifecycle,
+            "lifecycle_order_valid": lifecycle_order_valid,
+            "lifecycle_errors": lifecycle_errors,
             "producer_sequence_gaps": dict(sorted(sequence_gaps.items())),
             "producer_sequence_gap_total": sequence_gap_total,
             "invalid_quality_event_count": invalid_quality_events,
@@ -213,14 +220,7 @@ class SessionAnalyzer:
                 "payload": event.payload,
             }
             for event in ordered
-            if event.event_type in {
-                "SESSION_STARTED",
-                "SESSION_ENDED",
-                "FEED_TRUTH_UPDATED",
-                "RUNTIME_HEALTH_UPDATED",
-                "RISK_STATE_CHANGED",
-                "INCIDENT_RAISED",
-            }
+            if event.event_type in {"SESSION_STARTED", "SESSION_ENDED", "FEED_TRUTH_UPDATED", "RUNTIME_HEALTH_UPDATED", "RISK_STATE_CHANGED", "INCIDENT_RAISED"}
         ]
 
         candidate_created = stage_counts["candidate_created"]
