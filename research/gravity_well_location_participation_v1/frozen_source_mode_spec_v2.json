@@ -1,0 +1,31 @@
+{
+  "study_id": "gravity_well_published_description_modes_v2",
+  "source_page": "https://www.tradingview.com/script/H80GVoRt-Gravity-Well-Trend-Lyro-RS/",
+  "families": [
+    "SOURCE_TREND_SLOPE",
+    "SOURCE_TREND_ACCEL_STRICT",
+    "SOURCE_MIDLINE",
+    "SOURCE_BANDS_RECLAIM"
+  ],
+  "centre_modes": [
+    "TRUE_VWMA",
+    "UNIFORM_VOLUME_SMA",
+    "EMA_SENSITIVITY"
+  ],
+  "parameters": {
+    "centre_length": 20,
+    "atr_length": 14,
+    "escape_distance_atr": 1.5,
+    "band_width_atr": 1.5,
+    "max_hold_bars": 6,
+    "primary_cost_bps": 2.0,
+    "severe_cost_bps": 5.0
+  },
+  "state_preserved_across_sessions": true,
+  "entry": "next_bar_open",
+  "exit": "next_opposite_entry_open_or_30m_or_eod",
+  "outcome_cross_session_allowed": false,
+  "holdout_opened": false,
+  "exact_source_code_replication": false,
+  "proxy_can_certify_true_vwma": false
+}
