@@ -52,7 +52,7 @@ def _read_jsonl(path: Path) -> list[Mapping[str, object]]:
 
 
 def _score_cycles(rows: Iterable[Mapping[str, object]]) -> tuple[list[CandidateScoreObservation], list[CandidateScoreObservation] | None]:
-    grouped: dict[str, list[CandidateScoreObservation]] = {}
+    grouped: dict[str, dict[str, CandidateScoreObservation]] = {}
     cycle_order: list[str] = []
     for row in rows:
         score_value = row.get("final_score") if row.get("final_score") is not None else row.get("score")
@@ -60,13 +60,13 @@ def _score_cycles(rows: Iterable[Mapping[str, object]]) -> tuple[list[CandidateS
             continue
         observation = CandidateScoreObservation.from_mapping(row)
         if observation.cycle_id not in grouped:
-            grouped[observation.cycle_id] = []
+            grouped[observation.cycle_id] = {}
             cycle_order.append(observation.cycle_id)
-        grouped[observation.cycle_id].append(observation)
+        grouped[observation.cycle_id][observation.candidate_id] = observation
     if not cycle_order:
         raise ValueError("candidate_lineage_has_no_rankable_scored_cycle")
-    current = grouped[cycle_order[-1]]
-    previous = grouped[cycle_order[-2]] if len(cycle_order) > 1 else None
+    current = list(grouped[cycle_order[-1]].values())
+    previous = list(grouped[cycle_order[-2]].values()) if len(cycle_order) > 1 else None
     return current, previous
 
 
