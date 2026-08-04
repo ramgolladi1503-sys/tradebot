@@ -38,7 +38,11 @@ jobs:
             scripts/run_aixion_trade_intelligence_sidecar.py \
             scripts/build_aixion_campaign.py \
             scripts/build_aixion_elite_cockpit.py \
+            scripts/build_aixion_live_snapshot.py \
+            scripts/build_aixion_ranking_baseline.py \
+            scripts/build_aixion_source_checkpoints.py \
             scripts/ingest_aixion_evidence.py \
+            scripts/run_aixion_elite_monitor.py \
             scripts/run_aixion_trade_intelligence_dashboard.py
 
       - name: Run focused certification tests
