@@ -192,9 +192,9 @@ def test_evidence_index_retrieves_exact_artifact_and_filters(tmp_path):
         "stale option depth",
         metadata_filters={"session_id": "session-1"},
     )
-    assert len(results) == 1
     assert results[0]["source_path"] == first.as_posix()
-    assert set(results[0]["matched_terms"]) == {"depth", "option", "stale"}
+    assert results[0]["matched_terms"] == ["depth", "option", "stale"]
+    assert results[1:] == []
 
 
 def test_evidence_index_refuses_empty_query(tmp_path):
