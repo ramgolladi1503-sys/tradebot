@@ -29,11 +29,11 @@ def _called_attribute_names(path: Path) -> set[str]:
 def test_sidecar_has_no_broker_order_authority():
     repository_root = Path(__file__).resolve().parents[1]
     inspected = sorted((repository_root / "aixion_trade_intelligence").glob("*.py"))
+    inspected.extend(sorted((repository_root / "scripts").glob("*aixion*.py")))
     inspected.extend(
         [
-            repository_root / "scripts" / "run_aixion_trade_intelligence_offline.py",
-            repository_root / "scripts" / "generate_aixion_trade_intelligence_fixture.py",
-            repository_root / "scripts" / "check_aixion_trade_intelligence_canary.py",
+            repository_root / "core" / "aixion_intelligence_bridge.py",
+            repository_root / "core" / "runtime_guard.py",
         ]
     )
     violations: dict[str, list[str]] = {}
