@@ -4,8 +4,6 @@
 
 Study the new NSE closing-auction regime separately from the previous continuous-market late-session structure.
 
-This lane is designed for the post-August-3, 2026 market sequence:
-
 ```text
 14:45–15:15  NORMAL_LATE_SESSION
 15:15–15:20  CAS_REFERENCE_TRANSITION
@@ -16,9 +14,26 @@ This lane is designed for the post-August-3, 2026 market sequence:
 
 No existing breakout, VWAP, ORB, MEG, risk, broker or execution path is changed.
 
-## Google Drive evidence inspected
+## Google Drive evidence executed
 
-Drive root:
+### August 3, 2026
+
+Source:
+
+```text
+TradeBot_Data/upstox_market_data/20260803
+```
+
+Six raw ten-minute Parquet chunks covering approximately 14:40–15:35 IST were decoded. The corpus contains:
+
+- exact `NSE_INDEX|Nifty 50` observations;
+- immutable NSE_FO option keys;
+- August 4 expiry CE/PE paths;
+- LTP, bid, ask, volume and OI columns.
+
+### August 4, 2026
+
+Source:
 
 ```text
 TradeBot_Data/evidence/upstox/20260804/full_day_replay_v1
@@ -26,63 +41,104 @@ TradeBot_Data/evidence/upstox/20260804/full_day_replay_v1
 
 Validated manifest facts:
 
-- session date: `2026-08-04`;
 - 143,646 raw frames;
 - 1,041,828 normalized rows;
-- raw validation: passed;
-- normalized validation: passed;
-- validation issues: zero;
+- raw and normalized validation passed;
+- zero validation issues;
 - sealed package: 98 files;
-- normalized NIFTY partitions include UTC hours 09 and 10, covering the Indian closing period;
-- one-minute NIFTY-50 constituent bars are present;
-- MEG replay evidence file is empty (`{}`), so this corpus does not prove completed MEG traversal;
-- the Upstox archive does not contain NSE's official indicative closing-index stream.
+- exact NIFTY index partitions through approximately 15:35 IST;
+- NSE_EQ constituent partitions with all 50 NIFTY constituents;
+- official indicative-close and imbalance streams absent;
+- inspected normalized partitions do not contain the expiry-option path.
 
-The consolidated SQLite replay file is 120,598,528 bytes, which is above the connected Drive tool's 100 MiB single-download limit. The research runner therefore accepts the normalized partition tree and the compact constituent parquet directly.
+## Initial two-session result
 
-## What the runner measures
+| Session | Type | Pre-15:15 NIFTY | Final observed NIFTY | Post-15:15 move | Jump minute |
+|---|---|---:|---:|---:|---:|
+| 2026-08-03 | Non-expiry, DTE 1 | 24,575.10 | 24,774.30 | +199.20 points | 15:29 |
+| 2026-08-04 | Weekly expiry | 24,465.05 | 24,614.90 | +149.85 points | 15:28 |
 
-- NIFTY movement in each closing phase;
-- movement relative to the final pre-15:15 observation;
-- whether data extends through 15:40;
-- constituent positive/negative breadth from 15:15 to 15:35;
-- median constituent return;
-- top-three contribution concentration proxy;
-- whether the closing move is broad or concentrated.
+The first result is therefore an **auction-finalization event**, not a conventional 15:15 breakout. Both index changes occurred almost entirely near 15:28–15:29 after several minutes of nearly unchanged index values.
 
-## What it cannot yet measure
+August 3 frozen ATM response:
 
-- official indicative NIFTY closing value;
-- official CAS order imbalance;
-- auction equilibrium price revisions;
-- exact futures-versus-indicative-close convergence;
-- certified option P&L from real immutable contract identities;
-- a structural edge from only August 3 and August 4.
+```text
+strike: 24,600
+CE: 44.75 → 53.95  (+20.56%)
+PE: 75.40 → 59.00  (-21.75%)
+authority: LTP_PATH_ONLY_NOT_EXECUTABLE
+```
+
+August 4 constituent evidence:
+
+```text
+47 positive / 2 negative / 1 unchanged
+positive fraction: 94%
+median move: +67.91 bps
+equal-weight mean: +65.76 bps
+top-three absolute-move share: 15.48%
+```
+
+The August 4 move was broad in the captured constituent universe, not dominated by only a few heavyweight stocks.
+
+Detailed evidence:
+
+```text
+INITIAL_TWO_SESSION_FINDINGS.md
+evidence/initial_two_session_report.json
+```
+
+## Correctness repairs
+
+The runner now:
+
+- accepts ISO timestamps and numeric epoch-second timestamps;
+- requires an exact NIFTY index identity;
+- refuses substring matches to NIFTY options or futures;
+- supports normalized Drive partitions and raw Upstox replay chunks;
+- supports raw NSE_EQ constituent tick breadth;
+- optionally freezes an ATM CE/PE pair from an immutable instrument master;
+- labels option LTP response as non-executable evidence;
+- reports when data does not extend through the 15:40 derivatives close.
 
 ## Frozen claim boundary
 
 ```text
-CAS_STRUCTURE_OBSERVED_NOT_EDGE_VALIDATED
+CAS_MECHANISM_CONFIRMED_IN_TWO_SESSIONS
+AUCTION_FINALIZATION_EVENT_NOT_1515_BREAKOUT
+DIRECTIONAL_EDGE_NOT_VALIDATED
 SHADOW_ONLY
 NO_STRATEGY_INTEGRATION
 NO_BROKER_CALL
 NO_ORDER_ACTION
 ```
 
-## Required next evidence
+## Required continuation
 
-- copy the August 3 normalized partition tree into the governed evidence layout;
-- add future CAS sessions without changing the analysis contract;
-- ingest NSE indicative closing-index updates if an authorized source becomes available;
+- append future sessions without changing the phase contract;
 - keep expiry and non-expiry sessions separate;
-- require at least 20 ordinary sessions and 8 expiry sessions before evaluating a directional hypothesis;
-- evaluate options only after deterministic expiry, strike, CE/PE and next-bar fill mapping exists.
+- capture official indicative-close and imbalance updates if an authorized source becomes available;
+- capture futures and real bid/ask option response through 15:40;
+- require at least 20 ordinary sessions and 8 expiry sessions before evaluating directional persistence;
+- preserve broker square-off timing separately from exchange close.
 
-## Command
+## Commands
+
+Normalized evidence:
 
 ```bash
 python scripts/run_cas_closing_auction_shadow_v1.py \
-  --tick-root /path/to/normalized/trade_date=2026-08-04/provider=upstox/segment=NSE_FO/instrument_family=NIFTY \
-  --constituent-file /path/to/nifty50_constituent_bars_1m.parquet \
+  --tick-root /path/to/instrument_family=NIFTY \
+  --constituent-root /path/to/nse_eq_constituent_partitions \
   --output-dir runtime/research/cas_closing_auction_shadow_v1/20260804
+```
+
+Raw replay with option response:
+
+```bash
+python scripts/run_cas_closing_auction_shadow_v1.py \
+  --tick-root /path/to/20260803_late_chunks \
+  --instrument-master /path/to/complete.json.gz \
+  --option-expiry 2026-08-04 \
+  --output-dir runtime/research/cas_closing_auction_shadow_v1/20260803
 ```
