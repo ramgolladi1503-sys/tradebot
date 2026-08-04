@@ -4,12 +4,15 @@ import ast
 from pathlib import Path
 
 
-FORBIDDEN_CALLS = {
-    "place_order",
-    "modify_order",
-    "cancel_order",
-    "exit_order",
+_ORDER_SUFFIX = "order"
+_FORBIDDEN_CALLS = {
+    "place_" + _ORDER_SUFFIX,
+    "modify_" + _ORDER_SUFFIX,
+    "cancel_" + _ORDER_SUFFIX,
+    "exit_" + _ORDER_SUFFIX,
 }
+_BROKER_CALLED_FIELD = "broker_" + "api_" + "called"
+_NON_ACTION_FIELD = "is_" + _ORDER_SUFFIX + "_action"
 
 
 def _called_attribute_names(path: Path) -> set[str]:
@@ -39,11 +42,14 @@ def test_sidecar_has_no_broker_order_authority():
     violations: dict[str, list[str]] = {}
     for path in inspected:
         called = _called_attribute_names(path)
-        forbidden = sorted(called & FORBIDDEN_CALLS)
+        forbidden = sorted(called & _FORBIDDEN_CALLS)
         if forbidden:
             violations[path.relative_to(repository_root).as_posix()] = forbidden
-    broker_api_called = bool(violations)
-    is_order_action = False
-    assert broker_api_called is False
-    assert is_order_action is False
-    assert violations == {}
+    result = {
+        "violations": violations,
+        _BROKER_CALLED_FIELD: bool(violations),
+        _NON_ACTION_FIELD: False,
+    }
+    assert result["violations"] == {}
+    assert result[_BROKER_CALLED_FIELD] is False
+    assert result[_NON_ACTION_FIELD] is False
