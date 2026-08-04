@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -56,8 +57,7 @@ def test_ranking_baseline_is_deterministic_and_uses_latest_scored_candidate_stat
     assert baseline_a.ranking_metrics["score_range"] == pytest.approx((0.4, 0.4))
     assert baseline_a.ranking_metrics["executable_rate"] == pytest.approx((0.5, 0.5))
     assert baseline_a.sources[0].row_count == 3
-    assert baseline_a.sources[0].sha256
-    assert len(baseline_a.sources[0].sha256) == 64
+    assert re.fullmatch(r"[0-9a-f]{64}", baseline_a.sources[0].sha256)
 
 
 def test_ranking_baseline_id_changes_when_source_evidence_changes(tmp_path):
@@ -139,7 +139,7 @@ def test_source_checkpoint_bundle_is_deterministic_and_provenance_hashed(tmp_pat
     second = build_source_checkpoint_bundle([spec])
     assert first.bundle_id == second.bundle_id
     assert first.to_record() == second.to_record()
-    assert first.sources[0].sha256
+    assert re.fullmatch(r"[0-9a-f]{64}", first.sources[0].sha256)
     assert first.sources[0].checkpoint.malformed_events == 0
     assert first.sources[0].checkpoint.sequence_gap_events == 0
 
