@@ -60,6 +60,25 @@ def _milliseconds(later: datetime, earlier: datetime) -> float:
     return (later - earlier).total_seconds() * 1000.0
 
 
+def _producer_sequence_integrity(
+    events: Iterable[CanonicalEvent],
+) -> tuple[dict[str, int], dict[str, int]]:
+    by_component: dict[str, list[int]] = defaultdict(list)
+    for event in events:
+        if event.producer_sequence is not None:
+            by_component[event.source_component].append(event.producer_sequence)
+    gaps: dict[str, int] = {}
+    duplicates: dict[str, int] = {}
+    for component, values in by_component.items():
+        unique = sorted(set(values))
+        duplicate_count = len(values) - len(unique)
+        missing = unique[0] - 1 if unique else 0
+        missing += sum(max(current - previous - 1, 0) for previous, current in zip(unique, unique[1:]))
+        gaps[component] = missing
+        duplicates[component] = duplicate_count
+    return gaps, duplicates
+
+
 class SessionAnalyzer:
     """Deterministic, fail-closed session evidence analyzer."""
 
@@ -97,21 +116,11 @@ class SessionAnalyzer:
         source_receive_latency = [_milliseconds(event.receive_time, event.source_time) for event in ordered if event.source_time is not None and event.receive_time >= event.source_time]
         receive_persist_latency = [_milliseconds(event.persist_time, event.receive_time) for event in ordered if event.persist_time >= event.receive_time]
         event_gaps_ms = [_milliseconds(current.event_time, previous.event_time) for previous, current in zip(ordered, ordered[1:]) if current.event_time >= previous.event_time]
-
-        producer_sequences: dict[str, list[int]] = defaultdict(list)
-        for event in ordered:
-            if event.producer_sequence is not None:
-                producer_sequences[event.source_component].append(event.producer_sequence)
-        sequence_gaps: dict[str, int] = {}
-        for component, sequences in producer_sequences.items():
-            sequence_gaps[component] = sum(max(current - previous - 1, 0) for previous, current in zip(sequences, sequences[1:]))
+        sequence_gaps, sequence_duplicates = _producer_sequence_integrity(ordered)
 
         start_events = [event for event in ordered if event.event_type == "SESSION_STARTED"]
         end_events = [event for event in ordered if event.event_type == "SESSION_ENDED"]
-        required_lifecycle = {
-            "SESSION_STARTED": len(start_events) == 1,
-            "SESSION_ENDED": len(end_events) == 1,
-        }
+        required_lifecycle = {"SESSION_STARTED": len(start_events) == 1, "SESSION_ENDED": len(end_events) == 1}
         lifecycle_errors: list[str] = []
         if len(start_events) != 1:
             lifecycle_errors.append(f"SESSION_STARTED_COUNT={len(start_events)}")
@@ -131,14 +140,16 @@ class SessionAnalyzer:
         invalid_quality_events = sum(count for state, count in quality_counts.items() if state.upper().startswith("INVALID") or state.upper() in self._HARD_INVALID_QUALITY_STATES)
         partial_quality_events = sum(count for state, count in quality_counts.items() if state.upper() in self._PARTIAL_QUALITY_STATES)
         sequence_gap_total = sum(sequence_gaps.values())
-        manifest_valid = lifecycle_order_valid and invalid_quality_events == 0 and partial_quality_events == 0 and sequence_gap_total == 0
+        sequence_duplicate_total = sum(sequence_duplicates.values())
+        sequence_valid = sequence_gap_total == 0 and sequence_duplicate_total == 0
+        manifest_valid = lifecycle_order_valid and invalid_quality_events == 0 and partial_quality_events == 0 and sequence_valid
         if manifest_valid:
             verdict = "VALID_OFFLINE_SESSION_EVIDENCE"
         elif not lifecycle_complete:
             verdict = "INCOMPLETE_SESSION"
         elif not lifecycle_order_valid:
             verdict = "INVALID_LIFECYCLE_ORDER"
-        elif sequence_gap_total:
+        elif not sequence_valid:
             verdict = "INVALID_SEQUENCE_COVERAGE"
         elif invalid_quality_events:
             verdict = "INVALID_DATA_QUALITY"
@@ -161,7 +172,9 @@ class SessionAnalyzer:
             "lifecycle_order_valid": lifecycle_order_valid,
             "lifecycle_errors": lifecycle_errors,
             "producer_sequence_gaps": dict(sorted(sequence_gaps.items())),
+            "producer_sequence_duplicates": dict(sorted(sequence_duplicates.items())),
             "producer_sequence_gap_total": sequence_gap_total,
+            "producer_sequence_duplicate_total": sequence_duplicate_total,
             "invalid_quality_event_count": invalid_quality_events,
             "partial_quality_event_count": partial_quality_events,
             "source_to_receive_latency_ms": {
@@ -212,13 +225,7 @@ class SessionAnalyzer:
         }
 
         runtime_timeline = [
-            {
-                "event_time": event.event_time.isoformat(),
-                "event_type": event.event_type,
-                "source_component": event.source_component,
-                "data_quality_state": event.data_quality_state,
-                "payload": event.payload,
-            }
+            {"event_time": event.event_time.isoformat(), "event_type": event.event_type, "source_component": event.source_component, "data_quality_state": event.data_quality_state, "payload": event.payload}
             for event in ordered
             if event.event_type in {"SESSION_STARTED", "SESSION_ENDED", "FEED_TRUTH_UPDATED", "RUNTIME_HEALTH_UPDATED", "RISK_STATE_CHANGED", "INCIDENT_RAISED"}
         ]
