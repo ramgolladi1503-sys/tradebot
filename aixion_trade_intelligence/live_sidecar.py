@@ -214,8 +214,13 @@ class LiveSidecar:
                 now = self.clock()
                 try:
                     event = self._convert(source, row, now)
-                    if publisher_result := self.publisher.publish(event):
-                        persisted += int(publisher_result)
+                    before = self.publisher.stats()
+                    did_persist = self.publisher.publish(event)
+                    after = self.publisher.stats()
+                    if did_persist:
+                        persisted += 1
+                    elif after.failures > before.failures:
+                        failed += 1
                 except (EventValidationError, ValueError, TypeError):
                     failed += 1
         return {"attempted": attempted, "persisted": persisted, "failed": failed}
