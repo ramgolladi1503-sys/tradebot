@@ -59,7 +59,7 @@ NO_STRATEGY_INTEGRATION
 mode: RESEARCH
 candidate_id: GRAVITY_WELL_LOCATION_PARTICIPATION_V1
 decision: FAIL_CLOSED
-reason: Missing nonzero underlying volume, constituents and real option identity; price-only diagnostic produced no validation survivor.
+reason: Required nonzero underlying volume, constituents and real option identity are unavailable; the price-only diagnostic produced no validation survivor.
 timestamp: 2026-08-04T14:19:00+05:30
 is_order_action: false
 broker_api_called: false
