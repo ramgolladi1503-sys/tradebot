@@ -6,7 +6,7 @@ import signal
 import logging
 import argparse
 from pathlib import Path
-from datetime import datetime, time as datetime_time
+from datetime import datetime, time as datetime_time, timezone
 from google.protobuf import json_format
 import json
 
