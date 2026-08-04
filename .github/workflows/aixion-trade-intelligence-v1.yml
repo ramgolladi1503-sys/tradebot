@@ -11,6 +11,7 @@ on:
       - "tests/test_aixion_trade_intelligence_extensions_v1.py"
       - "tests/test_aixion_trade_intelligence_canary_v1.py"
       - "tests/test_aixion_trade_intelligence_readiness_v1.py"
+      - "tests/test_aixion_trade_intelligence_certification_v1.py"
       - "docs/aixion_trade_intelligence/**"
       - "docs/agent_reviews/aixion_trade_intelligence_v1.md"
       - ".github/workflows/aixion-trade-intelligence-v1.yml"
@@ -42,6 +43,7 @@ jobs:
             aixion_trade_intelligence/outcomes.py \
             aixion_trade_intelligence/evidence_search.py \
             aixion_trade_intelligence/readiness.py \
+            aixion_trade_intelligence/certification.py \
             scripts/generate_aixion_trade_intelligence_fixture.py \
             scripts/run_aixion_trade_intelligence_offline.py \
             scripts/check_aixion_trade_intelligence_canary.py
@@ -51,7 +53,8 @@ jobs:
             tests/test_aixion_trade_intelligence_v1.py \
             tests/test_aixion_trade_intelligence_extensions_v1.py \
             tests/test_aixion_trade_intelligence_canary_v1.py \
-            tests/test_aixion_trade_intelligence_readiness_v1.py
+            tests/test_aixion_trade_intelligence_readiness_v1.py \
+            tests/test_aixion_trade_intelligence_certification_v1.py
       - name: Run full offline fixture and report
         run: |
           rm -rf .runtime/aixion-cert
