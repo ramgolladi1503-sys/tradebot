@@ -11,6 +11,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from core.read_only_live_evidence import (
+    MegIntervalScheduler,
+    extract_candidate_rows,
+    latest_completed_index_interval,
+    persist_meg_cycle,
+    write_authority_snapshot_bundle,
+    write_json_atomic,
+)
+
 
 UNSAFE_IMPORT_PREFIXES = (
     "core.broker",
@@ -112,6 +121,7 @@ def write_authority_snapshot(candidate: Mapping[str, Any], path: Path) -> dict[s
         "read_only": True,
         "is_order_action": False,
         "broker_write_authority": False,
+        "order_authority": False,
         "allowed_for_live_execution": False,
         "allowed_for_paper_execution": False,
     })
@@ -121,8 +131,7 @@ def write_authority_snapshot(candidate: Mapping[str, Any], path: Path) -> dict[s
     return payload
 
 
-def write_meg_wiring_evidence(*, bridge: Any, result: Any, output_path: Path, cycle_count: int) -> dict[str, Any]:
-    """Persist measured bridge/buffer/subscription facts for PR #782 discovery."""
+def _measured_meg_facts(*, bridge: Any, result: Any) -> dict[str, Any]:
     contract, _ = bridge._load_universe_contract()
     symbols = [contract.index_symbol, *contract.constituent_symbols] if contract is not None else []
     from core.market_event_graph_live_ohlc_buffer import shadow_ohlc_buffer
@@ -134,15 +143,19 @@ def write_meg_wiring_evidence(*, bridge: Any, result: Any, output_path: Path, cy
     }
     audit = dict(getattr(result, "audit", {}) or {})
     subscription = dict(audit.get("subscription_evidence") or {})
-    nifty_lifecycle = dict((subscription.get("token_lifecycle") or {}).get(str(contract.index_instrument_token) if contract is not None else "") or {})
+    nifty_lifecycle = dict(
+        (subscription.get("token_lifecycle") or {}).get(
+            str(contract.index_instrument_token) if contract is not None else ""
+        )
+        or {}
+    )
     rows = [bar for bars in completed.values() for bar in bars]
-    source_ends = [float(bar.get("source_bar_end_epoch")) for bar in rows if bar.get("source_bar_end_epoch") is not None]
-    payload = {
-        "proof_kind": "PR763_LIVE_ACCEPTANCE",
-        "attempted_cycle_count": int(cycle_count),
-        "exported_cycle_count": int(cycle_count if getattr(result, "exported", False) else 0),
-        "rejected_cycle_count": int(0 if getattr(result, "exported", False) else 1),
-        "last_reason": str(getattr(result, "reason", "")),
+    source_ends = [
+        float(bar.get("source_bar_end_epoch"))
+        for bar in rows
+        if bar.get("source_bar_end_epoch") is not None
+    ]
+    return {
         "accepted_constituent_count": int(getattr(result, "accepted_constituent_count", 0) or 0),
         "completed_constituent_bar_count": sum(len(completed.get(symbol, [])) for symbol in symbols[1:]),
         "index_completed_bar_count": len(completed.get(contract.index_symbol, [])) if contract is not None else 0,
@@ -152,8 +165,6 @@ def write_meg_wiring_evidence(*, bridge: Any, result: Any, output_path: Path, cy
         "feed_session_id": subscription.get("feed_session_id"),
         "reconnect_generation": subscription.get("reconnect_generation"),
         "completed_constituent_bars": [symbol for symbol in symbols[1:] if completed.get(symbol)],
-        "market_event_graph_traversal_count": int(cycle_count if getattr(result, "exported", False) else 0),
-        "market_event_graph_traversal": bool(getattr(result, "exported", False)),
         "nifty_post_mode_full_packet_count": int(nifty_lifecycle.get("post_mode_full_count") or 0),
         "post_mode_full_nifty_packets": int(nifty_lifecycle.get("post_mode_full_count") or 0) > 0,
         "source_packet_bar_lineage": bool(rows),
@@ -161,11 +172,47 @@ def write_meg_wiring_evidence(*, bridge: Any, result: Any, output_path: Path, cy
         "read_only": True,
         "is_order_action": False,
         "broker_write_authority": False,
+        "order_authority": False,
         "allowed_for_live_execution": False,
         "allowed_for_paper_execution": False,
     }
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+
+
+def write_meg_wiring_evidence(
+    *,
+    bridge: Any,
+    result: Any,
+    output_path: Path,
+    cycle_count: int,
+    session_date: str | None = None,
+    run_id: str | None = None,
+    interval_end_epoch: float | None = None,
+    producer_commit: str = "",
+) -> dict[str, Any]:
+    """Persist latest measured facts plus append-only traversal/export ledgers."""
+    resolved_session = session_date or datetime.now(timezone.utc).date().isoformat()
+    resolved_run_id = run_id or str(os.environ.get("RUN_ID") or "read-only-observation")
+    if interval_end_epoch is None:
+        interval_end_epoch = latest_completed_index_interval(
+            bridge,
+            cycle_cutoff=datetime.now(timezone.utc),
+        )
+    payload = persist_meg_cycle(
+        bridge=bridge,
+        result=result,
+        summary_path=output_path,
+        traversal_path=output_path.with_name("meg_traversal_events.jsonl"),
+        export_ledger_path=output_path.with_name("meg_live_source_exports.jsonl"),
+        cycle_count=cycle_count,
+        session_date=resolved_session,
+        run_id=resolved_run_id,
+        interval_end_epoch=interval_end_epoch,
+        producer_commit=producer_commit,
+    )
+    payload.update(_measured_meg_facts(bridge=bridge, result=result))
+    payload["market_event_graph_traversal_count"] = int(payload.get("cumulative_session_export_count") or 0)
+    payload["market_event_graph_traversal"] = payload["market_event_graph_traversal_count"] > 0
+    write_json_atomic(output_path, payload)
     return payload
 
 
@@ -252,7 +299,10 @@ class ObservationLifecycle:
                 "read_only": True,
                 "is_order_action": False,
                 "broker_api_called": False,
+                "broker_write_authority": False,
+                "order_authority": False,
                 "allowed_for_live_execution": False,
+                "allowed_for_paper_execution": False,
             }
             return dict(self._shutdown_report)
 
@@ -283,23 +333,77 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     lifecycle = ObservationLifecycle(kite_depth_ws)
     lifecycle.start(tokens)
     meg_bridge = get_live_source_bridge()
+    scheduler = MegIntervalScheduler()
     meg_cycle_count = 0
+    authority_intervals: set[str] = set()
+    latest_runtime_outputs: Any = {}
+    run_id = str(os.environ.get("RUN_ID") or launch_plan.get("run_id") or f"kite-read-only-{session_date}")
+    producer_commit = str(
+        launch_plan.get("commit_sha")
+        or os.environ.get("TRADEBOT_COMMIT_SHA")
+        or ""
+    )
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
     try:
         while not lifecycle.should_stop():
-            produce_and_store_runtime_snapshots(market_snapshot=None, producer="kite_read_only_observation")
-            meg_cycle_count += 1
-            meg_result = meg_bridge.observe_cycle([], cycle_cutoff=datetime.now(timezone.utc))
-            write_meg_wiring_evidence(
-                bridge=meg_bridge,
-                result=meg_result,
-                output_path=output_root / "meg_wiring_evidence.json",
-                cycle_count=meg_cycle_count,
+            latest_runtime_outputs = produce_and_store_runtime_snapshots(
+                market_snapshot=None,
+                producer="kite_read_only_observation",
             )
+            cycle_cutoff = datetime.now(timezone.utc)
+            interval_end = latest_completed_index_interval(
+                meg_bridge,
+                cycle_cutoff=cycle_cutoff,
+            )
+            if scheduler.should_attempt(interval_end):
+                meg_cycle_count += 1
+                meg_result = meg_bridge.observe_cycle([], cycle_cutoff=cycle_cutoff)
+                write_meg_wiring_evidence(
+                    bridge=meg_bridge,
+                    result=meg_result,
+                    output_path=output_root / "meg_wiring_evidence.json",
+                    cycle_count=meg_cycle_count,
+                    session_date=session_date,
+                    run_id=run_id,
+                    interval_end_epoch=interval_end,
+                    producer_commit=producer_commit,
+                )
+                if interval_end is not None:
+                    interval_identity = f"{session_date}:{int(float(interval_end))}"
+                    if interval_identity not in authority_intervals:
+                        write_authority_snapshot_bundle(
+                            extract_candidate_rows(latest_runtime_outputs),
+                            ledger_path=output_root / "authority_snapshots.jsonl",
+                            latest_path=output_root / "authority_snapshot.json",
+                            run_id=run_id,
+                            session_date=session_date,
+                            interval_identity=interval_identity,
+                            interval_end_epoch=float(interval_end),
+                            cycle_count=meg_cycle_count,
+                            producer_commit=producer_commit,
+                        )
+                        authority_intervals.add(interval_identity)
+                    scheduler.record(
+                        float(interval_end),
+                        reason=str(getattr(meg_result, "reason", "")),
+                        exported=bool(getattr(meg_result, "exported", False)),
+                    )
             if deadline is not None and time.monotonic() >= deadline:
                 break
             time.sleep(0.05 if deadline is not None else 1.0)
     finally:
+        if not (output_root / "authority_snapshot.json").is_file():
+            write_authority_snapshot_bundle(
+                extract_candidate_rows(latest_runtime_outputs),
+                ledger_path=output_root / "authority_snapshots.jsonl",
+                latest_path=output_root / "authority_snapshot.json",
+                run_id=run_id,
+                session_date=session_date,
+                interval_identity=f"{session_date}:final:no-canonical-interval",
+                interval_end_epoch=None,
+                cycle_count=meg_cycle_count,
+                producer_commit=producer_commit,
+            )
         report = lifecycle.shutdown()
         (output_root / "shutdown_drain.json").write_text(
             json.dumps(report, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
