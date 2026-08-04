@@ -21,12 +21,57 @@ import logging
 from pathlib import Path
 from datetime import datetime, timezone
 
-from core.upstox_capture.upstox_auth import UpstoxAuthManager
-from core.upstox_capture.upstox_streamer import ReplayQualityStreamer
-from core.upstox_capture.zstd_raw_writer import ZstdRawWriter
+from google.protobuf import json_format
+import upstox_client
+from upstox_client import MarketDataStreamerV3
+from core.upstox_capture.authorization import preflight_auth
+from core.upstox_capture.raw_writer import RawWriter
 from core.upstox_capture.normalized_writer import NormalizedWriter
 from core.upstox_capture.protobuf_decoder import decode_feed_response
 from core.upstox_capture.lifecycle_ledger import LifecycleLedger
+
+class ReplayQualityStreamer(MarketDataStreamerV3):
+    def __init__(self, raw_callback, lifecycle_ledger, log_subscription_callback, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.raw_callback = raw_callback
+        self.ledger = lifecycle_ledger
+        self.log_subscription_event = log_subscription_callback
+        self.reconnect_generation = 0
+
+    def subscribe(self, keys, mode):
+        for k in keys:
+            self.log_subscription_event("SUBSCRIBE_REQUEST", k, mode)
+        super().subscribe(keys, mode)
+
+    def handle_message(self, ws, message):
+        if self.raw_callback:
+            try:
+                self.raw_callback(message)
+            except Exception as e:
+                logger.error(f"Failed to record raw frame: {e}")
+        try:
+            decoded_data = self.decode_protobuf(message)
+            data_dict = json_format.MessageToDict(decoded_data)
+            self.emit(self.Event["MESSAGE"], data_dict)
+        except Exception as e:
+            logger.error(f"Failed to decode Protobuf: {e}")
+            self.emit(self.Event["ERROR"], f"Protobuf decode error: {e}")
+
+    def handle_open(self, ws):
+        self.ledger.log_connection_event("OPEN", "WebSocket connected", self.reconnect_generation)
+        self.log_subscription_event("CONNECT", "ws_conn", "OPEN")
+        super().handle_open(ws)
+
+    def handle_close(self, ws, code, msg):
+        self.ledger.log_connection_event("CLOSE", f"Code: {code}, Msg: {msg}", self.reconnect_generation)
+        self.log_subscription_event("DISCONNECT", "ws_conn", f"CLOSE_CODE_{code}")
+        self.reconnect_generation += 1
+        super().handle_close(ws, code, msg)
+
+    def handle_error(self, ws, error):
+        self.ledger.log_connection_event("ERROR", f"Err: {error}", self.reconnect_generation)
+        self.log_subscription_event("ERROR", "ws_conn", str(error))
+        super().handle_error(ws, error)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -84,13 +129,15 @@ def main():
     evidence_root = worktree_root / "runtime" / "market_data" / "upstox" / session_date / "full_day_replay_v1"
 
     # Preflight Auth Check
-    auth_mgr = UpstoxAuthManager()
-    preflight = auth_mgr.preflight_check()
-    if preflight["status"] != "PASS":
-        logger.error(f"Preflight authorization failed: {preflight.get('reason')}")
+    token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+    if not token:
+        logger.error("UPSTOX_ACCESS_TOKEN not found in env.")
         sys.exit(1)
 
-    if args.auth-only:
+    if not preflight_auth(token):
+        sys.exit(1)
+
+    if args.auth_only:
         logger.info("Preflight authorization succeeded (--auth-only mode).")
         sys.exit(0)
 
@@ -126,7 +173,7 @@ def main():
     ledger = LifecycleLedger(ledger_path)
     ledger.log_event("SESSION_START", {"run_id": run_id, "session_date": session_date})
 
-    raw_writer = ZstdRawWriter(raw_dir, run_id=run_id)
+    raw_writer = RawWriter(raw_dir, run_id=run_id)
     norm_writer = NormalizedWriter(evidence_root, run_id=run_id)
 
     full_keys = set(plan.get("full", []))
@@ -232,13 +279,14 @@ def main():
             logger.error(f"Error decoding raw frame: {e}")
 
     # Build Streamer
-    api_client = auth_mgr.get_authenticated_client()
+    api_client = upstox_client.ApiClient(upstox_client.Configuration())
+    api_client.configuration.access_token = token
     streamer = ReplayQualityStreamer(
         raw_callback=raw_callback,
         lifecycle_ledger=ledger,
         log_subscription_callback=log_sub_event,
         api_client=api_client,
-        instrumentKeys=plan.get("full", []),
+        instrumentKeys=list(plan.get("full", [])),
         mode="full"
     )
 
