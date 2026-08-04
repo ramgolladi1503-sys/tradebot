@@ -22,6 +22,20 @@ _STAGE_EVENT_TYPES = {
     "outcome_label": "OUTCOME_LABEL",
 }
 
+_RAW_STAGE_DEFAULT_EVENTS = {
+    "generated": "SIGNAL_GENERATED",
+    "strategy": "STRATEGY_EVALUATED",
+    "strategy_generation": "STRATEGY_EVALUATED",
+    "tradebuilder": "CANDIDATE_CREATED",
+    "trade_builder": "CANDIDATE_CREATED",
+    "phase2": "CANDIDATE_RANKED",
+    "phase_2": "CANDIDATE_RANKED",
+    "ranking": "CANDIDATE_RANKED",
+    "ranked": "CANDIDATE_RANKED",
+    "top_opportunity": "CANDIDATE_RANKED",
+    "top opportunity": "CANDIDATE_RANKED",
+}
+
 
 def _required_text(row: Mapping[str, Any], name: str) -> str:
     value = str(row.get(name) or "").strip()
@@ -33,15 +47,23 @@ def _required_text(row: Mapping[str, Any], name: str) -> str:
 def _timestamp(row: Mapping[str, Any], name: str) -> datetime:
     value = row.get(name)
     if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        raw = float(value)
+        if raw > 1_000_000_000_000:
+            raw /= 1000.0
+        return datetime.fromtimestamp(raw, tz=timezone.utc)
     if isinstance(value, datetime):
-        return value
+        if value.tzinfo is None:
+            raise EventValidationError(f"adapter_naive_{name}")
+        return value.astimezone(timezone.utc)
     if isinstance(value, str) and value.strip():
         text = value.strip().replace("Z", "+00:00")
         try:
-            return datetime.fromisoformat(text)
+            parsed = datetime.fromisoformat(text)
         except ValueError as exc:
             raise EventValidationError(f"adapter_invalid_{name}") from exc
+        if parsed.tzinfo is None:
+            raise EventValidationError(f"adapter_naive_{name}")
+        return parsed.astimezone(timezone.utc)
     raise EventValidationError(f"adapter_missing_{name}")
 
 
@@ -55,13 +77,30 @@ def _event_id(row: Mapping[str, Any], *, session_id: str, event_type: str) -> st
         "cycle_id": str(row.get("cycle_id") or ""),
         "candidate_id": str(row.get("candidate_id") or ""),
         "stage": str(row.get("stage") or ""),
+        "stage_status": str(row.get("stage_status") or ""),
         "timestamp": str(row.get("timestamp") or row.get("event_time") or ""),
         "source_component": str(row.get("source_file_or_component") or row.get("source_component") or ""),
     }
     if not identity["timestamp"]:
         raise EventValidationError("adapter_missing_event_identity_timestamp")
-    encoded = json.dumps(identity, sort_keys=True, separators=(",", ":"))
+    encoded = json.dumps(identity, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _resolve_candidate_event_type(row: Mapping[str, Any]) -> str:
+    stage = _required_text(row, "stage").lower()
+    event_type = _STAGE_EVENT_TYPES.get(stage)
+    if event_type is not None:
+        return event_type
+    event_type = _RAW_STAGE_DEFAULT_EVENTS.get(stage)
+    if event_type is None:
+        raise EventValidationError(f"adapter_unsupported_stage={stage}")
+    status = str(row.get("stage_status") or row.get("status") or "").strip().lower()
+    if status == "blocked":
+        return "CANDIDATE_BLOCKED"
+    if status == "selected" and stage in {"ranking", "ranked", "top_opportunity", "top opportunity"}:
+        return "CANDIDATE_RANKED"
+    return event_type
 
 
 def candidate_lineage_to_event(
@@ -73,10 +112,7 @@ def candidate_lineage_to_event(
     persist_time: datetime,
     producer_sequence: int,
 ) -> CanonicalEvent:
-    stage = _required_text(row, "stage").lower()
-    event_type = _STAGE_EVENT_TYPES.get(stage)
-    if event_type is None:
-        raise EventValidationError(f"adapter_unsupported_stage={stage}")
+    event_type = _resolve_candidate_event_type(row)
     event_time = _timestamp(row, "timestamp")
     available_value = row.get("available_time") or row.get("timestamp")
     source_value = row.get("source_time") or row.get("timestamp")
