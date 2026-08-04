@@ -37,6 +37,7 @@ jobs:
             scripts/run_aixion_trade_intelligence_offline.py \
             scripts/run_aixion_trade_intelligence_sidecar.py \
             scripts/build_aixion_campaign.py \
+            scripts/build_aixion_elite_cockpit.py \
             scripts/ingest_aixion_evidence.py \
             scripts/run_aixion_trade_intelligence_dashboard.py
 
