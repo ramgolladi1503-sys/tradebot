@@ -9,6 +9,9 @@ on:
       - "tests/test_pr782_remaining_evidence_contracts.py"
       - "tests/test_kite_read_only_observation_runtime.py"
       - "tests/test_ai_reliability_pr763_session.py"
+      - "docs/agent_reviews/pr782_remaining_evidence_contracts_v1.md"
+      - "docs/certification/pr782_remaining_evidence_contracts_v1.md"
+      - "research/pr782_remaining_evidence_contracts_v1/**"
       - ".github/workflows/pr782-remaining-evidence-contracts.yml"
   workflow_dispatch:
 
@@ -81,6 +84,10 @@ jobs:
               'core/kite_read_only_observation_runtime.py',
               'scripts/seal_pr763_read_only_evidence.py',
               'tests/test_pr782_remaining_evidence_contracts.py',
+              'docs/agent_reviews/pr782_remaining_evidence_contracts_v1.md',
+              'docs/certification/pr782_remaining_evidence_contracts_v1.md',
+              'research/pr782_remaining_evidence_contracts_v1/offline_closure.json',
+              'research/pr782_remaining_evidence_contracts_v1/offline_closure.md',
               '.github/workflows/pr782-remaining-evidence-contracts.yml',
           }
           unexpected = sorted(set(changed) - allowed)
