@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from .contracts import CanonicalEvent, EventValidationError
 from .publisher import FileEventPublisher
@@ -46,44 +46,18 @@ class RuntimeTailerConfig:
     def from_env(cls, *, repo_root: Path) -> "RuntimeTailerConfig":
         enabled = _truthy(os.getenv("AIXION_INTELLIGENCE_ENABLED"))
         if not enabled:
-            return cls(
-                enabled=False,
-                observation_mode="DISABLED",
-                output_root=repo_root / ".runtime" / "aixion_trade_intelligence",
-                poll_seconds=1.0,
-                start_at_end=True,
-                fsync=True,
-                session_id="disabled",
-                run_id="disabled",
-            )
+            return cls(False, "DISABLED", repo_root / ".runtime" / "aixion_trade_intelligence", 1.0, True, True, "disabled", "disabled")
         mode = str(os.getenv("AIXION_INTELLIGENCE_OBSERVATION_MODE") or "").strip().upper()
         if mode not in {"PAPER", "SHADOW"}:
             raise ValueError("AIXION_INTELLIGENCE_OBSERVATION_MODE_must_be_PAPER_or_SHADOW")
         output_raw = str(os.getenv("AIXION_INTELLIGENCE_OUTPUT_ROOT") or "").strip()
-        output_root = Path(output_raw).expanduser().resolve() if output_raw else (
-            repo_root / ".runtime" / "aixion_trade_intelligence"
-        )
-        poll_seconds = _parse_positive(
-            os.getenv("AIXION_INTELLIGENCE_POLL_SEC"),
-            name="AIXION_INTELLIGENCE_POLL_SEC",
-        )
+        output_root = Path(output_raw).expanduser().resolve() if output_raw else repo_root / ".runtime" / "aixion_trade_intelligence"
+        poll_seconds = _parse_positive(os.getenv("AIXION_INTELLIGENCE_POLL_SEC"), name="AIXION_INTELLIGENCE_POLL_SEC")
         run_id = str(os.getenv("AIXION_INTELLIGENCE_RUN_ID") or uuid.uuid4()).strip()
         session_id = str(os.getenv("AIXION_INTELLIGENCE_SESSION_ID") or "").strip()
         if not session_id:
-            session_id = (
-                f"{datetime.now(timezone.utc).strftime('%Y%m%d')}-"
-                f"{mode}-{run_id[:12]}"
-            )
-        return cls(
-            enabled=True,
-            observation_mode=mode,
-            output_root=output_root,
-            poll_seconds=poll_seconds,
-            start_at_end=_truthy(os.getenv("AIXION_INTELLIGENCE_START_AT_END", "1")),
-            fsync=_truthy(os.getenv("AIXION_INTELLIGENCE_FSYNC", "1")),
-            session_id=session_id,
-            run_id=run_id,
-        )
+            session_id = f"{datetime.now(timezone.utc).strftime('%Y%m%d')}-{mode}-{run_id[:12]}"
+        return cls(True, mode, output_root, poll_seconds, _truthy(os.getenv("AIXION_INTELLIGENCE_START_AT_END", "1")), _truthy(os.getenv("AIXION_INTELLIGENCE_FSYNC", "1")), session_id, run_id)
 
 
 class JsonlCursor:
@@ -125,9 +99,11 @@ class JsonlCursor:
 
 
 class JsonSnapshotCursor:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, start_at_current: bool) -> None:
         self.path = path
         self._last_hash = ""
+        if start_at_current and path.exists():
+            self._last_hash = hashlib.sha256(path.read_bytes()).hexdigest()
 
     def read_if_changed(self) -> dict[str, Any] | None:
         if not self.path.exists():
@@ -153,16 +129,16 @@ class RuntimeEvidenceTailer:
         runtime_events_path: Path,
         candidate_lineage_path: Path,
         market_snapshot_path: Path,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         if not config.enabled:
             raise ValueError("runtime_tailer_config_disabled")
         self.config = config
-        self.publisher = NonBlockingPublisher(
-            FileEventPublisher(config.output_root, fsync=config.fsync)
-        )
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.publisher = NonBlockingPublisher(FileEventPublisher(config.output_root, fsync=config.fsync))
         self.runtime_cursor = JsonlCursor(runtime_events_path, start_at_end=config.start_at_end)
         self.candidate_cursor = JsonlCursor(candidate_lineage_path, start_at_end=config.start_at_end)
-        self.market_cursor = JsonSnapshotCursor(market_snapshot_path)
+        self.market_cursor = JsonSnapshotCursor(market_snapshot_path, start_at_current=config.start_at_end)
         self.status_path = config.output_root / config.session_id / "runtime_tailer_status.json"
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -176,14 +152,9 @@ class RuntimeEvidenceTailer:
         return value
 
     def _publish_lifecycle(self, event_type: str) -> None:
-        now = datetime.now(timezone.utc)
+        now = self.clock()
         event = truth_snapshot_to_event(
-            {
-                "observation_mode": self.config.observation_mode,
-                "data_quality_state": "VALID",
-                "read_only": True,
-                "broker_authority": False,
-            },
+            {"observation_mode": self.config.observation_mode, "data_quality_state": "VALID", "read_only": True, "broker_authority": False},
             event_type=event_type,
             session_id=self.config.session_id,
             run_id=self.config.run_id,
@@ -206,19 +177,9 @@ class RuntimeEvidenceTailer:
         event_type = str(row.get("type") or payload.get("event") or "RUNTIME_EVENT").strip().upper()
         event_id = str(row.get("event_id") or payload.get("event_id") or "").strip()
         if not event_id:
-            encoded = json.dumps(
-                {
-                    "session_id": self.config.session_id,
-                    "event_type": event_type,
-                    "event_time": event_time.isoformat(),
-                    "payload": payload,
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-                allow_nan=False,
-            )
+            encoded = json.dumps({"session_id": self.config.session_id, "event_type": event_type, "event_time": event_time.isoformat(), "payload": payload}, sort_keys=True, separators=(",", ":"), allow_nan=False)
             event_id = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-        now = datetime.now(timezone.utc)
+        now = self.clock()
         return CanonicalEvent(
             event_id=event_id,
             event_type=event_type,
@@ -251,15 +212,8 @@ class RuntimeEvidenceTailer:
 
     def _publish_candidate_rows(self) -> None:
         for row in self.candidate_cursor.read_new():
-            now = datetime.now(timezone.utc)
-            event = candidate_lineage_to_event(
-                row,
-                session_id=self.config.session_id,
-                run_id=self.config.run_id,
-                receive_time=now,
-                persist_time=now,
-                producer_sequence=self._next_sequence("candidate_lineage"),
-            )
+            now = self.clock()
+            event = candidate_lineage_to_event(row, session_id=self.config.session_id, run_id=self.config.run_id, receive_time=now, persist_time=now, producer_sequence=self._next_sequence("candidate_lineage"))
             self.publisher.publish(event)
 
     def _publish_market_snapshot(self) -> None:
@@ -272,18 +226,10 @@ class RuntimeEvidenceTailer:
         event_time = datetime.fromisoformat(str(generated).replace("Z", "+00:00"))
         if event_time.tzinfo is None:
             raise EventValidationError("market_snapshot_generated_at_naive")
-        now = datetime.now(timezone.utc)
+        now = self.clock()
         encoded = json.dumps(snapshot, sort_keys=True, separators=(",", ":"), allow_nan=False)
         event = CanonicalEvent(
-            event_id=hashlib.sha256(
-                (
-                    self.config.session_id
-                    + "|MARKET_SNAPSHOT|"
-                    + event_time.isoformat()
-                    + "|"
-                    + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-                ).encode("utf-8")
-            ).hexdigest(),
+            event_id=hashlib.sha256((self.config.session_id + "|MARKET_SNAPSHOT|" + event_time.isoformat() + "|" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()).encode("utf-8")).hexdigest(),
             event_type="MARKET_SNAPSHOT",
             schema_version="1.0.0",
             session_id=self.config.session_id,
@@ -309,7 +255,7 @@ class RuntimeEvidenceTailer:
             "session_id": self.config.session_id,
             "run_id": self.config.run_id,
             "observation_mode": self.config.observation_mode,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": self.clock().isoformat(),
             "attempted": stats.attempted,
             "persisted": stats.persisted,
             "duplicates": stats.duplicates,
@@ -323,10 +269,7 @@ class RuntimeEvidenceTailer:
         }
         self.status_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.status_path.with_suffix(".tmp")
-        temporary.write_text(
-            json.dumps(payload, indent=2, sort_keys=True, allow_nan=False),
-            encoding="utf-8",
-        )
+        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8")
         os.replace(temporary, self.status_path)
 
     def poll_once(self) -> None:
@@ -348,11 +291,7 @@ class RuntimeEvidenceTailer:
             raise RuntimeError("runtime_tailer_already_started")
         self._publish_lifecycle("SESSION_STARTED")
         self._write_status()
-        self._thread = threading.Thread(
-            target=self._run,
-            name="aixion-trade-intelligence-tailer",
-            daemon=True,
-        )
+        self._thread = threading.Thread(target=self._run, name="aixion-trade-intelligence-tailer", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -381,12 +320,7 @@ def start_runtime_tailer_if_enabled(repo_root: Path) -> RuntimeEvidenceTailer | 
         from core.market_snapshot_store import DEFAULT_MARKET_SNAPSHOT_PATH
 
         candidate_path, _ = candidate_lineage_paths()
-        tailer = RuntimeEvidenceTailer(
-            config=config,
-            runtime_events_path=events_path(),
-            candidate_lineage_path=candidate_path,
-            market_snapshot_path=DEFAULT_MARKET_SNAPSHOT_PATH,
-        )
+        tailer = RuntimeEvidenceTailer(config=config, runtime_events_path=events_path(), candidate_lineage_path=candidate_path, market_snapshot_path=DEFAULT_MARKET_SNAPSHOT_PATH)
         tailer.start()
         atexit.register(tailer.stop)
         _RUNTIME_TAILER = tailer
