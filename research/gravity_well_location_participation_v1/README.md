@@ -2,116 +2,132 @@
 
 ## Objective
 
-Falsify whether a causal sequence of higher-timeframe location, movement away from a volume-weighted fair-value centre, centre acceleration, and NIFTY constituent participation contains incremental forecasting information for buy-only NIFTY options.
+Falsify whether higher-timeframe location, movement away from a gravity centre, centre acceleration and NIFTY constituent participation contain incremental forecasting information for buy-only NIFTY options.
 
-This is a semantic mechanism study. It is not an exact copy of the public Pine implementation and it does not treat an indicator description as evidence of profitability.
+This is a semantic mechanism study, not an exact Pine port and not an indicator-integration change.
 
-## Final verdict
+## Current verdict
 
 ```text
-DATA_BLOCKED_INSUFFICIENT_SESSIONS_AND_MISSING_UNDERLYING_VOLUME_AND_MISSING_CONSTITUENTS
+DATA_BLOCKED_MISSING_VOLUME_CONSTITUENTS_AND_REAL_OPTIONS
+NO_PRICE_ONLY_VALIDATION_SURVIVOR
+HOLDOUT_SEALED
+NO_STRATEGY_INTEGRATION
 ```
 
-The Drive data inspected contains real NIFTY index and option ticks, including bid/ask quotes. It does **not** contain the two inputs required to test the primary mechanism honestly:
+The complete mechanism remains untested because the available multi-session archive has zero underlying volume, no NIFTY constituent bars and no authoritative expired-option contract identity. A separately frozen price-only diagnostic was tested and produced no validation survivor.
 
-1. positive causal volume for the cash NIFTY index; and
-2. NIFTY constituent rows from which participation breadth can be built.
+## Source progression
 
-Only one evaluated session was complete, versus the frozen minimum of thirty independent sessions. No structural-edge claim was made and no holdout was opened.
+### Initial Drive audit
 
-## Frozen primary families
+The first run used two bounded 2026 Drive extracts and found only one complete session. Its historical evidence remains in:
+
+```text
+data_manifest.json
+evidence/report.json
+schema_inspection_manifest.json
+```
+
+Those files are retained as the **initial source audit**, not the current campaign verdict.
+
+### Multi-session replay update
+
+The uploaded `kite_candidate_replay(11).zip` was then fully audited:
+
+```text
+source ZIP SHA-256: f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d
+Parquet files:        1,509 / 1,509 parsed
+parse failures:       0
+underlying files:     1,479
+option files:         30, all explicitly OPT_MOCK
+NIFTY sessions:       493
+NIFTY 5m rows:        36,849
+session range:        2024-07-09 through 2026-07-08
+nonzero volume rows:  0
+constituent rows:     0
+real option identity: absent
+```
+
+The authoritative current evidence is:
+
+```text
+RESULTS.md
+data_manifest_multi_session_20260804.json
+frozen_price_only_diagnostic_spec_20260804.json
+evidence/multi_session_replay_20260804.json
+```
+
+## Frozen primary mechanism
 
 ### `GW_ESCAPE_ACCEPTANCE`
 
-Two completed five-minute closes remain outside the ATR-normalized gravity band, the volume-weighted centre is moving and accelerating in the same direction, and at least forty constituents show aligned participation.
+Price escapes an ATR-normalized volume-weighted centre, centre slope and acceleration agree, constituent participation expands, and the first causal pullback holds.
 
 ### `GW_FAILED_ESCAPE`
 
-A completed bar escapes the gravity band, the next completed state returns inside it, centre movement stops supporting the escape, and constituent participation confirms the reversal direction.
+Price reaches extreme displacement, centre movement or participation fails to support continuation, and price returns inside the band.
 
 ### `GW_CLUSTER_BREAK_ACCEPTANCE`
 
-A completed bar breaks a prior completed 15-minute location level, a second completed bar holds beyond the same level, the gravity centre confirms direction, and constituent participation expands.
+Price accepts a prior-completed higher-timeframe level, room remains to the next opposing cluster, and the centre plus constituent participation confirm.
 
-The implementation returns zero primary events when volume or constituent participation is unavailable. It does not substitute tick count, option volume, option OI, or synthetic breadth.
+The primary implementation returns zero certifiable events when volume, constituents or authoritative option identity are unavailable. Tick count, option activity and synthetic breadth are not substitutes.
 
-## Causal controls
+## Frozen price-only diagnostic
 
-- five-minute completed event bars;
-- prior completed 15-minute levels only;
-- current HTF extremes cannot rewrite the level used at the same timestamp;
-- trailing-only ATR and gravity-centre calculations;
-- option entry strictly after the completed underlying signal;
-- real ask for entry and real bid for exit;
-- exact-ATM and nearest-strike proxy identities remain explicit;
-- missing or zero bid/ask produces no option trade;
-- no cross-session or fallback quote construction.
-
-## Data inspected
-
-The evaluated analysis extracts were derived from two immutable local Drive parquet files:
-
-- July 1, 2026 partial session: raw SHA-256 `53341f21db27ab3f20e7a4ed8f183ab2b4aca03fae446779af04fe4987579243`;
-- July 9, 2026 complete session: raw SHA-256 `62410f680b0621c836e3b18e8a509126e3dfbcf40c61e3cc23d5c2bc30b95139`.
-
-Two additional Drive files were schema/symbol inspected:
-
-- July 15 ten-minute partition: `NSE_INDEX` and `NSE_FO` only;
-- July 16 file: NIFTY index and derivatives, no constituent rows.
-
-The durable source details and hashes are in:
-
-```text
-schema_inspection_manifest.json
-data_manifest.json
-```
-
-## Evaluated support
-
-```text
-analysis input rows:        1,910,118
-NIFTY index rows:             128,876
-NIFTY option rows:          1,781,242
-NIFTY constituent rows:             0
-positive index-volume rows:         0
-independent sessions:               2
-complete sessions:                  1
-five-minute index bars:            92
-primary event rows:                 0
-```
-
-The input row count above refers to bounded analysis extracts, not the complete raw parquet row total.
-
-## Diagnostic controls
-
-Price-only and location-only controls were allowed solely to verify the causal plumbing. They cannot certify the Gravity-Well mechanism.
-
-Observed diagnostic events:
-
-- price-only escape: 10;
-- price-only failed escape: 4;
-- location-only cluster break: 3.
-
-Only one diagnostic event reconciled to an exact-ATM option trade using valid post-signal ask/bid quotes. Its net return after the primary friction was `-5.3005%`. One trade has no statistical meaning and was not used as evidence for or against structural edge.
-
-## Relationship to existing Market Event Graph work
-
-The existing Market Event Graph reversal is based on causal constituent breadth sequences and has a frozen, reproduced underlying discovery. This study was designed to test incremental information from gravity-centre state and higher-timeframe location—not to rename that breadth mechanism.
-
-Because the available Drive corpus lacks constituent rows, a legitimate incremental comparison against the existing frozen Market Event Graph mechanism cannot be run from this corpus.
-
-## Required next evidence
-
-The next valid input is an immutable, multi-session NIFTY corpus containing:
+Because the primary data gate failed before outcomes, one bounded fallback diagnostic was frozen before evaluation:
 
 - completed NIFTY five-minute bars;
-- at least forty timestamp-aligned constituent bars;
-- actual constituent volume or an explicitly governed participation measure;
-- real expired-option bid/ask or audited option OHLC reconstruction;
-- at least thirty independent complete sessions.
+- EMA-centre length 20 with neighbours 14 and 30;
+- Wilder ATR 14, 1.5 ATR outer band and 2.0 ATR extreme band;
+- prior-completed 15-minute and 30-minute levels plus previous-session high/low;
+- next-bar entry and no cross-session outcomes;
+- primary 30-minute horizon;
+- 2 bps primary and 5 bps severe cost stress;
+- chronological 295 development / 99 validation / 99 sealed-holdout sessions;
+- session bootstrap, winner removal, session-concentration and matched-random controls.
 
-Until that exists, further threshold changes would be theatre, not research.
+## Validation results at 2 bps
+
+| Family | Validation trades / sessions | Expectancy | PF | 95% session CI | Decision |
+|---|---:|---:|---:|---:|---|
+| Escape acceptance | 134 / 79 | -3.49 bps | 0.39 | [-5.23, -1.90] | reject |
+| Failed escape | 7 / 7 | +0.77 bps | 1.38 | [-3.29, 4.60] | reject: sparse and concentrated |
+| Cluster-break acceptance | 20 / 20 | -3.96 bps | 0.46 | [-10.74, 2.24] | reject |
+
+The failed-escape slice is not a survivor. It becomes negative under 5 bps costs, top-winner removal, top-session removal and both predeclared centre-length neighbours.
+
+All simple validation baselines were also negative:
+
+```text
+EMA cross:              -2.07 bps
+ATR displacement:       -1.81 bps
+direct outer-band fade: -2.19 bps
+HTF cluster break:      -2.23 bps
+```
+
+## Integrity
+
+- 10/10 focused integrity checks passed;
+- future HTF mutation cannot alter past levels;
+- entries occur strictly after completed signals;
+- `OPT_MOCK` files are excluded from option P&L;
+- holdout outcomes were never calculated;
+- deterministic event-ledger SHA-256: `37a21a64f74f632f1c31ecc3bf14cefd4e2d2eeeb8c732c23e3e2c4c26d8ae4d`;
+- deterministic certification SHA-256: `5c830f4cc18b1a3c57593f89b65938cf91a822063e082caa065f4adffc961846`.
+
+## Decision
+
+Do not integrate or tune the price-only variants. Further threshold changes against this validation set would be post-selection.
+
+The complete mechanism may be reopened only with:
+
+- trustworthy nonzero centre input or a separately justified frozen centre definition;
+- timestamp-aligned NIFTY constituent bars;
+- real expired-option OHLC or bid/ask with expiry, strike, CE/PE and immutable contract identity;
+- the preserved Market Event Graph corpus for incremental comparison.
 
 ## Safety boundary
 
-Research only. No strategy registration, TradeBuilder, ranking, dashboard, risk, approval, broker, order, execution, or live-launcher code is changed.
+Research only. No strategy registration, TradeBuilder, ranking, dashboard, feed runtime, risk, approval, broker, order, execution or live-launcher code is changed. Keep draft and unmerged.
