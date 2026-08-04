@@ -26,7 +26,7 @@ Allowed supporting paths:
 
 The previously sealed 2026-08-04 evidence root is immutable and is not modified or retroactively certified.
 
-## Grill Me
+## Grill Me Review
 
 Questions that must remain answerable from code and tests:
 
@@ -38,7 +38,7 @@ Questions that must remain answerable from code and tests:
 - Does tampering or a missing required artifact fail closed?
 - Is the strict broker/execution import boundary unchanged?
 
-## Hermes
+## Hermes Review
 
 Evidence chain:
 
@@ -55,7 +55,7 @@ real/synthetic completed interval
 
 Every ledger row includes a deterministic semantic hash and stable session/interval identity. Latest-cycle summaries are convenience views only; cumulative certification truth comes from append-only ledgers.
 
-## GSD
+## GSD Review
 
 Goal: remove the three exact failed gates without architecture drift.
 
@@ -75,7 +75,7 @@ Offline tests passing ≠ live certification.
 
 A fresh governed Kite market session remains mandatory.
 
-## QA/Safety
+## QA / Safety Review
 
 Required safety properties:
 
