@@ -11,6 +11,10 @@ BASE = datetime(2026, 8, 5, 3, 45, tzinfo=timezone.utc)
 
 def _event(event_id: str, event_type: str, second: int, sequence: int, quality: str = "VALID") -> CanonicalEvent:
     event_time = BASE + timedelta(seconds=second)
+    observation = event_type == "MARKET_SNAPSHOT"
+    available_time = event_time if observation else event_time - timedelta(milliseconds=3)
+    receive_time = event_time if observation else event_time - timedelta(milliseconds=2)
+    parse_time = event_time if observation else event_time - timedelta(milliseconds=1)
     return CanonicalEvent(
         event_id=event_id,
         event_type=event_type,
@@ -19,9 +23,9 @@ def _event(event_id: str, event_type: str, second: int, sequence: int, quality: 
         run_id="run-1",
         event_time=event_time,
         source_time=event_time - timedelta(milliseconds=3),
-        receive_time=event_time - timedelta(milliseconds=2),
-        available_time=event_time - timedelta(milliseconds=3),
-        parse_time=event_time - timedelta(milliseconds=1),
+        receive_time=receive_time,
+        available_time=available_time,
+        parse_time=parse_time,
         persist_time=event_time,
         source_provider="TEST",
         source_component="fixture",
