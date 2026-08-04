@@ -12,6 +12,26 @@ from .safe_publish import NonBlockingPublisher
 from .tradebot_adapter import candidate_lineage_to_event, truth_snapshot_to_event
 
 
+def _parse_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, (int, float)):
+        raw = float(value)
+        if raw > 1_000_000_000_000:
+            raw /= 1000.0
+        parsed = datetime.fromtimestamp(raw, tz=timezone.utc)
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise EventValidationError("invalid_sidecar_event_time") from exc
+    else:
+        raise EventValidationError("missing_sidecar_event_time")
+    if parsed.tzinfo is None:
+        raise EventValidationError("naive_sidecar_event_time")
+    return parsed.astimezone(timezone.utc)
+
+
 @dataclass(frozen=True)
 class JsonlSource:
     path: Path
@@ -33,6 +53,9 @@ class SidecarConfig:
     mode: str
     sources: tuple[JsonlSource, ...]
     poll_interval_seconds: float
+    start_at_end: bool = False
+    session_start_time: datetime | None = None
+    session_end_time: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.session_id or not self.run_id:
@@ -43,10 +66,21 @@ class SidecarConfig:
             raise ValueError("poll_interval_must_be_positive")
         if not self.sources:
             raise ValueError("at_least_one_source_required")
+        if (self.session_start_time is None) != (self.session_end_time is None):
+            raise ValueError("session_boundaries_must_be_paired")
+        if self.session_start_time is not None and self.session_end_time is not None:
+            start = _parse_datetime(self.session_start_time)
+            end = _parse_datetime(self.session_end_time)
+            if end < start:
+                raise ValueError("session_boundaries_invalid")
+            object.__setattr__(self, "session_start_time", start)
+            object.__setattr__(self, "session_end_time", end)
 
     @classmethod
     def from_json(cls, path: str | Path) -> "SidecarConfig":
         record = json.loads(Path(path).read_text(encoding="utf-8"))
+        if "start_at_end" not in record:
+            raise ValueError("sidecar_config_requires_start_at_end")
         sources = tuple(
             JsonlSource(
                 path=Path(item["path"]).expanduser(),
@@ -56,12 +90,17 @@ class SidecarConfig:
             )
             for item in record.get("sources", [])
         )
+        start_raw = record.get("session_start_time")
+        end_raw = record.get("session_end_time")
         return cls(
             session_id=str(record.get("session_id") or ""),
             run_id=str(record.get("run_id") or ""),
             mode=str(record.get("mode") or ""),
             sources=sources,
             poll_interval_seconds=float(record.get("poll_interval_seconds")),
+            start_at_end=bool(record.get("start_at_end")),
+            session_start_time=_parse_datetime(start_raw) if start_raw is not None else None,
+            session_end_time=_parse_datetime(end_raw) if end_raw is not None else None,
         )
 
 
@@ -70,7 +109,15 @@ class JsonlTailer:
         self._offsets: dict[Path, int] = {}
         self._remainders: dict[Path, str] = {}
 
+    def initialize(self, path: Path, *, start_at_end: bool) -> None:
+        if path in self._offsets:
+            return
+        self._offsets[path] = path.stat().st_size if start_at_end and path.exists() else 0
+        self._remainders[path] = ""
+
     def read_new(self, path: Path) -> list[dict[str, Any]]:
+        if path not in self._offsets:
+            self.initialize(path, start_at_end=False)
         if not path.exists():
             return []
         offset = self._offsets.get(path, 0)
@@ -118,15 +165,25 @@ class LiveSidecar:
         self._sequence += 1
         return self._sequence
 
+    def _boundary_time(self, event_type: str) -> datetime:
+        if event_type == "SESSION_STARTED" and self.config.session_start_time is not None:
+            return self.config.session_start_time
+        if event_type == "SESSION_ENDED" and self.config.session_end_time is not None:
+            return self.config.session_end_time
+        return self.clock()
+
     def _publish_lifecycle(self, event_type: str) -> None:
+        occurred = self._boundary_time(event_type)
         now = self.clock()
+        if now < occurred:
+            now = occurred
         event = truth_snapshot_to_event(
-            {"mode": self.config.mode, "data_quality_state": "VALID"},
+            {"mode": self.config.mode, "data_quality_state": "VALID", "start_at_end": self.config.start_at_end},
             event_type=event_type,
             session_id=self.config.session_id,
             run_id=self.config.run_id,
             source_component="aixion_trade_intelligence.live_sidecar",
-            event_time=now,
+            event_time=occurred,
             receive_time=now,
             persist_time=now,
             producer_sequence=self._next_sequence(),
@@ -136,6 +193,8 @@ class LiveSidecar:
     def start(self) -> None:
         if self._started:
             return
+        for source in self.config.sources:
+            self.tailer.initialize(source.path, start_at_end=self.config.start_at_end)
         self._publish_lifecycle("SESSION_STARTED")
         self._started = True
 
@@ -155,18 +214,13 @@ class LiveSidecar:
                 now = self.clock()
                 try:
                     event = self._convert(source, row, now)
-                    if self.publisher.publish(event):
-                        persisted += 1
+                    if publisher_result := self.publisher.publish(event):
+                        persisted += int(publisher_result)
                 except (EventValidationError, ValueError, TypeError):
                     failed += 1
         return {"attempted": attempted, "persisted": persisted, "failed": failed}
 
-    def _convert(
-        self,
-        source: JsonlSource,
-        row: Mapping[str, Any],
-        now: datetime,
-    ) -> CanonicalEvent:
+    def _convert(self, source: JsonlSource, row: Mapping[str, Any], now: datetime) -> CanonicalEvent:
         sequence = self._next_sequence()
         if source.source_type == "candidate_lineage":
             return candidate_lineage_to_event(
@@ -201,23 +255,3 @@ class LiveSidecar:
                 time.sleep(self.config.poll_interval_seconds)
         finally:
             self.stop()
-
-
-def _parse_datetime(value: Any) -> datetime:
-    if isinstance(value, datetime):
-        parsed = value
-    elif isinstance(value, (int, float)):
-        raw = float(value)
-        if raw > 1_000_000_000_000:
-            raw /= 1000.0
-        parsed = datetime.fromtimestamp(raw, tz=timezone.utc)
-    elif isinstance(value, str) and value.strip():
-        try:
-            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-        except ValueError as exc:
-            raise EventValidationError("invalid_sidecar_event_time") from exc
-    else:
-        raise EventValidationError("missing_sidecar_event_time")
-    if parsed.tzinfo is None:
-        raise EventValidationError("naive_sidecar_event_time")
-    return parsed.astimezone(timezone.utc)
