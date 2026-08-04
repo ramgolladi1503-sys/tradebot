@@ -54,17 +54,18 @@ jobs:
 
       - name: Run focused evidence contracts
         run: |
-          pytest -q -o addopts='' \
-            tests/test_pr782_remaining_evidence_contracts.py \
-            tests/test_kite_read_only_observation_runtime.py \
-            tests/test_ai_reliability_pr763_session.py
+          # The observer import-boundary suite intentionally requires a clean
+          # Python process. Run every suite separately so unrelated tests cannot
+          # preload broker mocks and create a false boundary failure.
+          pytest -q -o addopts='' tests/test_kite_read_only_observation_runtime.py
+          pytest -q -o addopts='' tests/test_pr782_remaining_evidence_contracts.py
+          pytest -q -o addopts='' tests/test_ai_reliability_pr763_session.py
 
-      - name: Run alternate order
+      - name: Run alternate isolated order
         run: |
-          pytest -q -o addopts='' \
-            tests/test_ai_reliability_pr763_session.py \
-            tests/test_pr782_remaining_evidence_contracts.py \
-            tests/test_kite_read_only_observation_runtime.py
+          pytest -q -o addopts='' tests/test_ai_reliability_pr763_session.py
+          pytest -q -o addopts='' tests/test_pr782_remaining_evidence_contracts.py
+          pytest -q -o addopts='' tests/test_kite_read_only_observation_runtime.py
 
       - name: Verify protected runtime scope
         run: |
