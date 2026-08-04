@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -17,14 +18,7 @@ def detect_repo_root() -> Path:
 
 
 def validate_repo_root(repo_root: Path | str | None = None) -> Path:
-    """
-    Fail closed on malformed project structure without hardcoding a machine path.
-
-    This guard is intentionally structure-based:
-    - portable across clone locations
-    - safe to import from any cwd
-    - still catches running against a broken/incomplete checkout
-    """
+    """Fail closed on malformed project structure without hardcoding a machine path."""
     root = Path(repo_root).resolve() if repo_root is not None else detect_repo_root()
     missing = [marker for marker in _REQUIRED_REPO_MARKERS if not (root / marker).exists()]
     if missing:
@@ -42,35 +36,31 @@ def ensure_runtime_repo_guard() -> Path:
 
 
 def _record_boot_boundary(root: Path) -> None:
-    """Best-effort evidence that main.py import-side startup reached repo guard."""
-
     try:
         from core.runtime_startup_lifecycle import record_runtime_startup_event
-
         record_runtime_startup_event(
             "MAIN_BOOT_STARTED",
             source="core.runtime_guard.ensure_runtime_repo_guard",
             details={"repo_root": str(root), "is_order_action": False},
         )
     except Exception:
-        # Runtime guard must remain a guard, not a startup dependency.
         pass
 
 
+def _truthy_env(name: str) -> bool:
+    return os.getenv(name, "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _start_aixion_intelligence_boundary(root: Path) -> None:
-    """Start the opt-in read-only evidence tailer without affecting startup."""
-
+    """Start exactly one opt-in read-only evidence transport."""
+    if _truthy_env("AIXION_INTELLIGENCE_DIRECT_BRIDGE_ENABLED"):
+        return
     try:
-        from aixion_trade_intelligence.runtime_tailer import (
-            start_runtime_tailer_if_enabled,
-        )
-
+        from aixion_trade_intelligence.runtime_tailer import start_runtime_tailer_if_enabled
         start_runtime_tailer_if_enabled(root)
     except Exception as exc:
-        # The analytics sidecar is never allowed to abort or alter TradeBot.
         try:
             from core.runtime_startup_lifecycle import record_runtime_startup_event
-
             record_runtime_startup_event(
                 "AIXION_INTELLIGENCE_START_FAILED",
                 source="core.runtime_guard",
