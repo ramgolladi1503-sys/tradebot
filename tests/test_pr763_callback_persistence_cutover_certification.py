@@ -378,8 +378,11 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
     callback_active = False
     original_diag = depth_ws.campaign_raw_diagnostics
 
+    # A prior test may have deliberately terminated the process-wide worker.
+    # Use the supported test reset so acceptance, queue, stop event, and worker
+    # lifecycle are restored together instead of clearing one private latch.
+    tick_store.reset_runtime_state_for_tests()
     tick_store._ACCEPTING_WRITES = True
-    tick_store._FLUSH_THREAD_STOP.clear()
     if not depth_ws.depth_store._persist_thread.is_alive():
         depth_ws.depth_store = depth_store_module.DepthStore()
 
@@ -547,10 +550,11 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
     depth_ws._UNDERLYING_TOKENS.add(256265)
     ticker = type("RegisteredTicker", (), {})()
     callback = depth_ws._register_on_ticks_callback(ticker, lambda name: True, depth_ws.on_ticks)
+    tick_epoch = time.time()
     ticks = [
-        {"instrument_token": 256265, "last_price": 25000.0, "exchange_timestamp": 100.0,
+        {"instrument_token": 256265, "last_price": 25000.0, "exchange_timestamp": tick_epoch,
          "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0}},
-        {"instrument_token": 738561, "last_price": 1420.0, "exchange_timestamp": 100.0,
+        {"instrument_token": 738561, "last_price": 1420.0, "exchange_timestamp": tick_epoch + 0.001,
          "depth": {"buy": [{"price": 1419.5, "quantity": 10}], "sell": [{"price": 1420.5, "quantity": 8}]},
          "ohlc": {"open": 1410.0, "high": 1430.0, "low": 1400.0, "close": 1415.0}},
     ]

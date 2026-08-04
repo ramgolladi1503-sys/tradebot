@@ -131,6 +131,7 @@ class ObservationLifecycle:
         self._stop_requested = threading.Event()
         self._shutdown_lock = threading.Lock()
         self._shutdown_report: dict[str, Any] | None = None
+        self.phase = "CLOSED"
 
     def start(self, tokens: list[int]) -> None:
         if self._shutdown_report is not None:
@@ -140,11 +141,14 @@ class ObservationLifecycle:
         if not self.feed.start_depth_ws(tokens, profile_verified=True, skip_lock=True):
             raise RuntimeError("READ_ONLY_KITE_FEED_START_FAILED")
         self.accepting = True
+        self.phase = "RUNNING"
 
     def request_stop(self, reason: str = "read_only_observation_shutdown") -> None:
         self.accepting = False
         self._stop_requested.set()
+        self.phase = "STOP_REQUESTED"
         self.feed.stop_depth_ws(reason=reason)
+        self.phase = "FEED_CLOSED"
 
     def should_stop(self) -> bool:
         return self._stop_requested.is_set()
@@ -159,10 +163,13 @@ class ObservationLifecycle:
             import core.depth_store as depth_store
             import core.feed.runtime_store as runtime_store
             bridge_module = __import__("core.market_event_graph_live_runtime_bridge", fromlist=["flush_live_source_bridge"])
-            runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=deadline)
+            self.phase = "IN_FLIGHT_CALLBACKS_SETTLED"
+            bridge_result = bridge_module.flush_live_source_bridge()
+            self.phase = "MEG_FLUSHED"
+            self.phase = "PERSISTENCE_DRAINING"
             tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=deadline)
             depth_result = depth_store.depth_store.shutdown_persistence(deadline_seconds=deadline)
-            bridge_result = bridge_module.flush_live_source_bridge()
+            runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=deadline)
             tick_state = tick_store.get_persistence_worker_state()
             runtime_state = runtime_store.runtime_persistence_state()
             depth_state = depth_store.depth_store.persistence_state()
@@ -174,11 +181,17 @@ class ObservationLifecycle:
                 and not depth_state.get("worker_alive")
                 and tick_state.get("worker_join_completed") is True
             )
+            self.phase = "PERSISTENCE_DRAINED" if complete else "FAILED"
+            if complete:
+                self.phase = "WORKERS_JOINED"
+                self.phase = "CLOSED"
             self._shutdown_report = {
                 "proof_kind": "PR763_LIVE_ACCEPTANCE",
                 "shutdown_drain_complete": complete,
                 "persistence_drain_complete": complete,
                 "accepting": self.accepting,
+                "phase": self.phase,
+                "phase_order": ["RUNNING", "STOP_REQUESTED", "FEED_CLOSED", "IN_FLIGHT_CALLBACKS_SETTLED", "MEG_FLUSHED", "PERSISTENCE_DRAINING", "PERSISTENCE_DRAINED", "WORKERS_JOINED", "CLOSED"],
                 "feed_close_requested": True,
                 "late_callback_policy": "REJECTED_AFTER_ACCEPTING_FALSE",
                 "runtime_persistence": runtime_result,

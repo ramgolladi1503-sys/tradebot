@@ -1,4 +1,5 @@
 import importlib
+import time
 from datetime import date
 
 from config import config as cfg
@@ -62,7 +63,7 @@ def test_on_ticks_routes_observation_tokens_into_shadow_buffer(monkeypatch):
     tick = {
         "instrument_token": 256265,
         "last_price": 25000.0,
-        "exchange_timestamp": 100.0,
+        "exchange_timestamp": time.time(),
         "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
         "change": 0.1,
     }
@@ -82,7 +83,7 @@ def test_on_ticks_ignores_non_observation_tokens(monkeypatch):
     shadow.reset_live_source_shadow_buffer()
     ws._TOKEN_TO_SYMBOL[999999] = "IGNORED"
 
-    ws.on_ticks(None, [{"instrument_token": 999999, "last_price": 1.0, "exchange_timestamp": 100.0}])
+    ws.on_ticks(None, [{"instrument_token": 999999, "last_price": 1.0, "exchange_timestamp": time.time()}])
 
     assert shadow.shadow_ohlc_buffer.get_bars("IGNORED") == []
 
@@ -121,23 +122,23 @@ def test_raw_callback_routes_actual_constituents_without_production_symbol_maps(
         {
             "instrument_token": registry.index_token,
             "last_price": 25000.0,
-            "exchange_timestamp": 100.0,
+            "exchange_timestamp": time.time(),
             "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
             "change": 0.1,
         },
         {
             "instrument_token": registry.token_by_symbol["RELIANCE"],
             "last_price": 1420.0,
-            "exchange_timestamp": 100.0,
+            "exchange_timestamp": time.time(),
             "depth": {"buy": [{"price": 1419.5}], "sell": [{"price": 1420.5}]},
         },
         {
             "instrument_token": registry.token_by_symbol["HDFCBANK"],
             "last_price": 980.0,
-            "exchange_timestamp": 100.0,
+            "exchange_timestamp": time.time(),
             "depth": {"buy": [{"price": 979.5}], "sell": [{"price": 980.5}]},
         },
-        {"instrument_token": 999999, "last_price": 1.0, "exchange_timestamp": 100.0},
+        {"instrument_token": 999999, "last_price": 1.0, "exchange_timestamp": time.time()},
     ])
 
     assert shadow.shadow_ohlc_buffer.get_bars("NIFTY")[-1]["bar_provenance"]["instrument_token"] == 256265
@@ -172,7 +173,7 @@ def test_budget_blocked_observation_overlap_does_not_write_shadow_bar(monkeypatc
     ws.on_ticks(None, [{
         "instrument_token": registry.index_token,
         "last_price": 25000.0,
-        "exchange_timestamp": 100.0,
+        "exchange_timestamp": time.time(),
         "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0},
         "change": 0.1,
     }])
