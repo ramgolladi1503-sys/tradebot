@@ -2,18 +2,24 @@
 
 This module collects movement strategy candidates into one report and attaches
 option-confirmation and no-trade assessment evidence. It is intentionally a
-shell: it does not rank, execute, submit orders, call brokers, touch depth
-subscriptions, mutate candidates, tune strategy thresholds, or change dashboard
-behavior.
+shell: it does not rank, execute, submit orders, call brokers, mutate candidates,
+tune strategy thresholds, or change dashboard behavior. The market-event graph
+source may request read-only market-data subscriptions when explicitly enabled.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Iterable
 
+from core.market_event_graph_constituent_source import (
+    attach_market_event_graph_constituent_source,
+    persist_market_event_graph_constituent_state,
+)
+from core.market_event_graph_runtime_observer import observe_market_event_graph_runtime
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult, classify_movement_regime
 from core.no_trade_engine import NoTradeAssessment, assess_no_trade
@@ -25,7 +31,6 @@ from core.option_confirmation import (
 )
 
 CandidateGenerator = Callable[[StrategyContext, MovementRegimeResult], Iterable[StrategyCandidate]]
-
 REPORT_SCHEMA_VERSION = 1
 
 
@@ -35,9 +40,9 @@ class CandidatePoolReport:
 
     schema_version: int
     symbol: str
-    read_only: bool = True  # read_only=True
-    is_order_action: bool = False  # is_order_action=False
-    append: bool = False  # append=False
+    read_only: bool = True
+    is_order_action = False
+    append: bool = False
     regime: MovementRegimeResult
     option_pressure: OptionPressureAssessment
     no_trade_assessment: NoTradeAssessment
@@ -59,6 +64,7 @@ class CandidatePoolReport:
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
+        data["is_order_action"] = False
         data["regime"] = self.regime.to_dict()
         data["option_pressure"] = self.option_pressure.to_dict()
         data["no_trade_assessment"] = self.no_trade_assessment.to_dict()
@@ -80,21 +86,31 @@ def build_candidate_pool_report(
     option_pressure: OptionPressureAssessment | None = None,
     include_no_trade_candidate: bool = True,
 ) -> CandidatePoolReport:
-    """Build a read-only report from strategy candidates.
-
-    The function is missing-data safe and generator-failure tolerant. A broken
-    strategy contributes a warning, not a broker action and not a crash. The
-    report can show executable eligibility, but it cannot make anything
-    executable. If no-trade suppression is active, report-level executable count
-    is forced to zero even when a raw candidate individually looks eligible.
-    """
+    """Build a read-only report from strategy candidates."""
 
     if isinstance(ctx, dict):
         from core.movement_contract import context_from_dict
+
         ctx = context_from_dict(ctx)
     if not isinstance(ctx, StrategyContext):
         raise TypeError("candidate_pool_context_invalid")
 
+    source_index_token = None
+    if ctx.symbol == "NIFTY" and _live_constituent_source_requested(ctx.metadata):
+        source_index_token = _canonical_nifty_index_token()
+    source_metadata = attach_market_event_graph_constituent_source(
+        ctx.metadata,
+        symbol=ctx.symbol,
+        as_of_epoch=ctx.ts_epoch,
+        index_token=source_index_token,
+    )
+    ctx.metadata.clear()
+    ctx.metadata.update(source_metadata)
+
+    runtime_observation = observe_market_event_graph_runtime(
+        ctx.metadata,
+        context_ts=ctx.ts_epoch,
+    )
     regime_result = regime or classify_movement_regime(ctx)
     option_assessment = option_pressure or assess_option_pressure(ctx)
     generators = tuple(candidate_generators) if candidate_generators is not None else get_default_candidate_generators()
@@ -117,13 +133,14 @@ def build_candidate_pool_report(
             else:
                 warnings.append(f"strategy_generator_returned_non_candidate:{generator_name}")
 
+    source_state_persisted = persist_market_event_graph_constituent_state(ctx.metadata)
+
     no_trade_assessment = assess_no_trade(
         ctx,
         regime_result,
         movement_candidates,
         option_pressure=option_assessment,
     )
-
     no_trade_candidates: tuple[StrategyCandidate, ...] = ()
     if include_no_trade_candidate and no_trade_assessment.no_trade:
         no_trade_candidates = _build_no_trade_candidates(ctx, regime_result, movement_candidates)
@@ -134,7 +151,6 @@ def build_candidate_pool_report(
         for candidate in movement_candidates
         if candidate.direction in {"BUY_CALL", "BUY_PUT"}
     )
-
     blockers = tuple(
         sorted(
             set(
@@ -165,7 +181,6 @@ def build_candidate_pool_report(
         schema_version=REPORT_SCHEMA_VERSION,
         symbol=ctx.symbol,
         read_only=True,
-        is_order_action=False,
         append=False,
         regime=regime_result,
         option_pressure=option_assessment,
@@ -190,44 +205,35 @@ def build_candidate_pool_report(
             "dominant_option_direction": option_assessment.dominant_direction,
             "no_trade": no_trade_assessment.no_trade,
             "no_trade_primary_reason": no_trade_assessment.primary_reason,
+            "default_strategy_mode": "MARKET_EVENT_GRAPH_SHADOW_ONLY",
+            "market_event_graph_constituent_source_status": ctx.metadata.get(
+                "market_event_graph_constituent_source_status"
+            ),
+            "market_event_graph_constituent_source_reason": ctx.metadata.get(
+                "market_event_graph_constituent_source_reason"
+            ),
+            "market_event_graph_constituent_source_evidence": ctx.metadata.get(
+                "market_event_graph_constituent_source_evidence", {}
+            ),
+            "market_event_graph_constituent_state_persisted": bool(source_state_persisted),
+            "market_event_graph_runtime_status": runtime_observation["status"],
+            "market_event_graph_runtime_reason": runtime_observation["reason"],
+            "market_event_graph_runtime_observation": runtime_observation,
         },
     )
 
 
 def get_default_candidate_generators() -> tuple[CandidateGenerator, ...]:
-    """Return the read-only movement strategy generators.
+    """Return only the frozen market-event graph for default shadow observation.
 
-    Imports stay lazy so importing this module cannot accidentally load strategy
-    modules in unrelated legacy paths.
+    Previously implemented strategies remain importable and available for explicit
+    research/replay calls, but they are intentionally excluded from the default
+    live candidate pool because they have not met the current structural-edge bar.
     """
 
-    from strategies.movement import (  # noqa: PLC0415
-        generate_compression_breakout_candidates,
-        generate_event_volatility_expansion_candidates,
-        generate_exhaustion_reversal_candidates,
-        generate_failed_breakout_trap_candidates,
-        generate_late_day_momentum_candidates,
-        generate_mean_reversion_extension_candidates,
-        generate_opening_drive_candidates,
-        generate_opening_range_retest_candidates,
-        generate_option_pressure_candidates,
-        generate_trend_pullback_candidates,
-        generate_vwap_reclaim_rejection_candidates,
-    )
+    from strategies.movement import generate_market_event_graph_reversal_candidates  # noqa: PLC0415
 
-    return (
-        generate_opening_drive_candidates,
-        generate_opening_range_retest_candidates,
-        generate_compression_breakout_candidates,
-        generate_trend_pullback_candidates,
-        generate_vwap_reclaim_rejection_candidates,
-        generate_failed_breakout_trap_candidates,
-        generate_exhaustion_reversal_candidates,
-        generate_mean_reversion_extension_candidates,
-        generate_event_volatility_expansion_candidates,
-        generate_option_pressure_candidates,
-        generate_late_day_momentum_candidates,
-    )
+    return (generate_market_event_graph_reversal_candidates,)
 
 
 def _build_no_trade_candidates(
@@ -238,6 +244,27 @@ def _build_no_trade_candidates(
     from strategies.movement.no_trade_chop import generate_no_trade_candidates  # noqa: PLC0415
 
     return tuple(generate_no_trade_candidates(ctx, regime, movement_candidates) or ())
+
+
+def _live_constituent_source_requested(metadata: dict[str, Any]) -> bool:
+    if isinstance(metadata.get("completed_constituent_bars"), (list, tuple)):
+        return False
+    raw = metadata.get("market_event_graph_live_source_enable")
+    if raw is None:
+        raw = os.getenv("MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", "false")
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _canonical_nifty_index_token() -> int | None:
+    try:
+        from core.market_data import get_token_for_symbol
+
+        token = int(get_token_for_symbol("NIFTY"))
+    except Exception:
+        return None
+    return token if token > 0 else None
 
 
 def _generator_name(generator: CandidateGenerator) -> str:
