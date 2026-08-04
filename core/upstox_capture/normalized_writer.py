@@ -22,7 +22,7 @@ class NormalizedWriter:
         self.last_flush_time = time.time()
 
     def _get_partition_info(self, record: dict) -> tuple[str, str, str, str, str]:
-        # Extract trade_date, provider, segment, instrument_family, hour
+        # Extract trade_date, provider, asset_class, instrument_family, hour
         ts_str = record.get('receive_wall_ts_utc') or datetime.now(timezone.utc).isoformat()
         try:
             dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
@@ -31,12 +31,29 @@ class NormalizedWriter:
 
         trade_date = dt.strftime("%Y-%m-%d")
         provider = record.get('provider') or 'upstox'
-        segment = record.get('segment') or 'NSE_FO'
+        
+        # Derive asset_class
+        inst_type = record.get('instrument_type') or ''
+        segment = record.get('segment') or ''
+        key = record.get('instrument_key') or ''
+        
+        if inst_type == "INDEX" or "NSE_INDEX" in key or "BSE_INDEX" in key or "INDEX" in segment:
+            asset_class = "index"
+        elif inst_type == "EQ" or "NSE_EQ" in key or "BSE_EQ" in key or "EQ" in segment:
+            asset_class = "equity"
+        elif inst_type == "FUT" or "FUT" in segment:
+            asset_class = "future"
+        elif inst_type in ["CE", "PE"] or "OPT" in segment:
+            asset_class = "option"
+        else:
+            if "INDEX" in key or "Nifty" in key or "SENSEX" in key or "VIX" in key:
+                asset_class = "index"
+            else:
+                asset_class = "equity"
         
         # Derive instrument_family
         underlying = record.get('underlying_symbol') or ''
         symbol = record.get('tradingsymbol') or ''
-        key = record.get('instrument_key') or ''
 
         if "NIFTY BANK" in symbol or "BANKNIFTY" in symbol or "BANKNIFTY" in underlying or "Nifty Bank" in key:
             family = "BANKNIFTY"
@@ -50,14 +67,14 @@ class NormalizedWriter:
             family = "OTHER"
 
         hour = dt.strftime("%H")
-        return trade_date, provider, segment, family, hour
+        return trade_date, provider, asset_class, family, hour
 
     def write_record(self, record: dict):
         partition_info = self._get_partition_info(record)
         partition_key = "/".join([
+            f"asset_class={partition_info[2]}",
             f"trade_date={partition_info[0]}",
             f"provider={partition_info[1]}",
-            f"segment={partition_info[2]}",
             f"instrument_family={partition_info[3]}",
             f"hour={partition_info[4]}"
         ])

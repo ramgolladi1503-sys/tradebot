@@ -10,7 +10,7 @@ from core.upstox_capture.replay_adapter import ReplayAdapter
 @pytest.fixture
 def mock_normalized_dataset(tmp_path):
     run_dir = tmp_path / "run_123"
-    pq_dir = run_dir / "normalized" / "trade_date=2026-08-03" / "provider=upstox" / "segment=NSE_FO" / "instrument_family=NIFTY" / "hour=09"
+    pq_dir = run_dir / "normalized" / "asset_class=option" / "trade_date=2026-08-03" / "provider=upstox" / "instrument_family=NIFTY" / "hour=09"
     pq_dir.mkdir(parents=True, exist_ok=True)
 
     records = [

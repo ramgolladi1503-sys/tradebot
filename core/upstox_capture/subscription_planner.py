@@ -76,6 +76,69 @@ def resolve_option_surface(instruments: list[dict], underlying_name: str, spot_p
     df_strikes = df_exp[df_exp['strike_price'].isin(strikes)]
     return df_strikes['instrument_key'].tolist()
 
+def resolve_option_surface_weekly_monthly(instruments: list[dict], underlying_name: str, spot_price: float) -> list[str]:
+    """Finds CE/PE options ATM +- 10 for nearest weekly, and ATM +- 5 for nearest monthly expiries."""
+    import datetime
+    today = datetime.date.today()
+    
+    opts = [
+        i for i in instruments
+        if i.get("name") == underlying_name
+        and i.get("instrument_type") in ["CE", "PE"]
+        and i.get("expiry")
+    ]
+    if not opts:
+        return []
+        
+    valid_opts = []
+    for opt in opts:
+        try:
+            exp_date = datetime.datetime.strptime(opt["expiry"], "%Y-%m-%d").date()
+            if exp_date >= today:
+                opt["_exp_date"] = exp_date
+                valid_opts.append(opt)
+        except Exception:
+            pass
+            
+    if not valid_opts:
+        return []
+        
+    # Get sorted unique expiries
+    unique_expiries = sorted(list(set(o["_exp_date"] for o in valid_opts)))
+    if not unique_expiries:
+        return []
+        
+    nearest_expiry = unique_expiries[0]
+    
+    # Find nearest monthly expiry
+    nearest_monthly = None
+    for exp in unique_expiries:
+        # If adding 7 days changes the month, it's a monthly expiry
+        next_week = exp + datetime.timedelta(days=7)
+        if exp.month != next_week.month:
+            nearest_monthly = exp
+            break
+            
+    # Fallback to nearest if no monthly expiry found
+    if nearest_monthly is None:
+        nearest_monthly = nearest_expiry
+        
+    keys = []
+    
+    # 1. Weekly option surface: ATM +- 10 (step 50)
+    atm_weekly = round(spot_price / 50.0) * 50.0
+    weekly_strikes = [atm_weekly + (i * 50.0) for i in range(-10, 11)]
+    weekly_opts = [o["instrument_key"] for o in valid_opts if o["_exp_date"] == nearest_expiry and float(o.get("strike_price", 0.0)) in weekly_strikes]
+    keys.extend(weekly_opts)
+    
+    # 2. Monthly option surface: ATM +- 5 (step 50)
+    atm_monthly = round(spot_price / 50.0) * 50.0
+    monthly_strikes = [atm_monthly + (i * 50.0) for i in range(-5, 6)]
+    monthly_opts = [o["instrument_key"] for o in valid_opts if o["_exp_date"] == nearest_monthly and float(o.get("strike_price", 0.0)) in monthly_strikes]
+    keys.extend(monthly_opts)
+    
+    return sorted(list(set(keys)))
+
 def resolve_futures(instruments: list[dict], name: str, count: int = 2) -> list[str]:
     today = datetime.now().date()
     futs = [
@@ -114,7 +177,14 @@ def build_subscription_plan(instruments_path: Path, output_dir: Path, underlying
         "NIFTY 50": "NSE_INDEX|Nifty 50",
         "NIFTY BANK": "NSE_INDEX|Nifty Bank",
         "SENSEX": "BSE_INDEX|SENSEX",
-        "INDIA VIX": "NSE_INDEX|India VIX"
+        "INDIA VIX": "NSE_INDEX|India VIX",
+        "NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Fin Service",
+        "NIFTY IT": "NSE_INDEX|Nifty IT",
+        "NIFTY AUTO": "NSE_INDEX|Nifty Auto",
+        "NIFTY FMCG": "NSE_INDEX|Nifty FMCG",
+        "NIFTY PHARMA": "NSE_INDEX|Nifty Pharma",
+        "NIFTY METAL": "NSE_INDEX|Nifty Metal",
+        "NIFTY ENERGY": "NSE_INDEX|Nifty Energy",
     }
     for name, key in indices_mapping.items():
         found = any(i.get("instrument_key") == key for i in instruments)
@@ -124,8 +194,8 @@ def build_subscription_plan(instruments_path: Path, output_dir: Path, underlying
             exclusions.append((name, "INDEX", "Spot Index missing in master"))
 
     # 2. Options Surface (Tier A3)
-    # NIFTY ATM +- 10 (step 50)
-    nifty_options = resolve_option_surface(instruments, "NIFTY", underlying_prices.get("NIFTY", 24500.0), strikes_count=10, step_size=50.0)
+    # NIFTY Weekly ATM +- 10, Monthly ATM +- 5 (step 50)
+    nifty_options = resolve_option_surface_weekly_monthly(instruments, "NIFTY", underlying_prices.get("NIFTY", 24500.0))
     full_keys.update(nifty_options)
     
     # BANKNIFTY ATM +- 10 (step 100)

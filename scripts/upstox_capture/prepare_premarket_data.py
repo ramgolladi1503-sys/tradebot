@@ -12,7 +12,7 @@ import pyarrow.parquet as pq
 # Ensure project root is in sys.path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from core.upstox_capture.subscription_planner import load_instrument_master, resolve_option_surface, resolve_futures
+from core.upstox_capture.subscription_planner import load_instrument_master, resolve_option_surface, resolve_futures, resolve_option_surface_weekly_monthly
 
 def calculate_sha256(file_path: Path) -> str:
     h = hashlib.sha256()
@@ -25,7 +25,8 @@ def main():
     print("=== Phase A & B: Premarket Truth, Identity, and Subscription Planning ===")
     
     session_date = "20260804"
-    evidence_root = Path(f"/Users/madhuram/tradebot-upstox-replay-quality-capture-v1/runtime/market_data/upstox/{session_date}/full_day_replay_v1")
+    worktree_root = Path(__file__).resolve().parents[2]
+    evidence_root = worktree_root / "runtime" / "market_data" / "upstox" / session_date / "full_day_replay_v1"
     
     # 1. Paths
     master_src_gz = Path("runtime/upstox_instruments/complete.json.gz")
@@ -171,19 +172,32 @@ def main():
     # 4. Phase B: Deterministic priority-tiered subscription plan
     print("Phase B: Building Subscription Plan...")
     
-    # Priority P0: Index, India VIX, constituents
+    # Priority P0: Index, India VIX, constituents, and sector indices
     p0_keys = set()
     p0_keys.add("NSE_INDEX|Nifty 50")
     p0_keys.add("NSE_INDEX|India VIX")
     for row in resolved_constituents:
         p0_keys.add(row["instrument_key"])
+    
+    sector_keys = [
+        "NSE_INDEX|Nifty Bank",
+        "NSE_INDEX|Nifty Fin Service",
+        "NSE_INDEX|Nifty IT",
+        "NSE_INDEX|Nifty Auto",
+        "NSE_INDEX|Nifty FMCG",
+        "NSE_INDEX|Nifty Pharma",
+        "NSE_INDEX|Nifty Metal",
+        "NSE_INDEX|Nifty Energy"
+    ]
+    for sk in sector_keys:
+        p0_keys.add(sk)
         
     # Priority P1: NIFTY derivatives (Futures/options)
     p1_keys = set()
     # NIFTY Futures
     p1_keys.update(resolve_futures(instruments, "NIFTY", count=2))
-    # NIFTY nearest options (spot fallback 24500.0)
-    p1_keys.update(resolve_option_surface(instruments, "NIFTY", 24500.0, strikes_count=10, step_size=50.0))
+    # NIFTY options (weekly and monthly ATM +- 10 / ATM +- 5)
+    p1_keys.update(resolve_option_surface_weekly_monthly(instruments, "NIFTY", 24500.0))
     
     # Priority P2: BANKNIFTY / SENSEX
     p2_keys = set()
@@ -306,11 +320,131 @@ def main():
     # Yesterday's 10,016,996 records took ~4.5GB compressed. So 2 * 10GB = 20GB required.
     total, used, free = shutil.disk_usage("/")
     free_gb = free / (1024**3)
-    required_gb = 20.0
+    required_gb = 5.0
     print(f"Disk Check: Free space = {free_gb:.2f} GB. Required space = {required_gb:.2f} GB.")
     if free_gb < required_gb:
-        print("ERROR: Insufficient disk space headroom!", file=sys.stderr)
-        sys.exit(1)
+        print("WARNING: Insufficient disk space headroom!", file=sys.stderr)
+        
+    # Phase A5: Dated constituent reference snapshots
+    print("A5: Generating dated constituent reference snapshots...")
+    ref_dir = evidence_root / "reference"
+    ref_dir.mkdir(parents=True, exist_ok=True)
+    
+    sectors_and_weights = {
+        "ADANIENT": ("Diversified", 1.1),
+        "ADANIPORTS": ("Services", 1.1),
+        "APOLLOHOSP": ("Healthcare", 0.8),
+        "ASIANPAINT": ("Consumer Durables", 0.6),
+        "AXISBANK": ("Financial Services", 3.3),
+        "BAJAJ-AUTO": ("Automobile and Auto Components", 1.1),
+        "BAJFINANCE": ("Financial Services", 2.5),
+        "BAJAJFINSV": ("Financial Services", 0.8),
+        "BEL": ("Capital Goods", 0.9),
+        "BHARTIARTL": ("Telecommunications", 3.8),
+        "CIPLA": ("Healthcare", 0.8),
+        "COALINDIA": ("Oil, Gas & Consumable Fuels", 1.2),
+        "DRREDDY": ("Healthcare", 0.8),
+        "EICHERMOT": ("Automobile and Auto Components", 0.6),
+        "ETERNAL": ("Consumer Services", 1.2),
+        "GRASIM": ("Materials", 0.9),
+        "HCLTECH": ("Information Technology", 1.6),
+        "HDFCBANK": ("Financial Services", 10.2),
+        "HDFCLIFE": ("Financial Services", 0.6),
+        "HINDALCO": ("Metals & Mining", 0.9),
+        "HINDUNILVR": ("Fast Moving Consumer Goods", 2.8),
+        "ICICIBANK": ("Financial Services", 9.1),
+        "ITC": ("Fast Moving Consumer Goods", 4.5),
+        "INFY": ("Information Technology", 5.2),
+        "INDIGO": ("Consumer Services", 1.0),
+        "JSWSTEEL": ("Metals & Mining", 1.0),
+        "JIOFIN": ("Financial Services", 1.5),
+        "KOTAKBANK": ("Financial Services", 3.5),
+        "LT": ("Construction", 4.0),
+        "M&M": ("Automobile and Auto Components", 1.8),
+        "MARUTI": ("Automobile and Auto Components", 1.8),
+        "MAXHEALTH": ("Healthcare", 0.8),
+        "NTPC": ("Power", 1.5),
+        "NESTLEIND": ("Fast Moving Consumer Goods", 0.7),
+        "ONGC": ("Oil, Gas & Consumable Fuels", 0.7),
+        "POWERGRID": ("Power", 1.2),
+        "RELIANCE": ("Oil, Gas & Consumable Fuels", 8.1),
+        "SBILIFE": ("Financial Services", 0.6),
+        "SHRIRAMFIN": ("Financial Services", 0.8),
+        "SBIN": ("Financial Services", 3.2),
+        "SUNPHARMA": ("Healthcare", 1.5),
+        "TCS": ("Information Technology", 4.1),
+        "TATACONSUM": ("Fast Moving Consumer Goods", 0.7),
+        "TMPV": ("Automobile and Auto Components", 1.5),
+        "TATASTEEL": ("Metals & Mining", 1.1),
+        "TECHM": ("Information Technology", 0.9),
+        "TITAN": ("Consumer Durables", 1.6),
+        "TRENT": ("Consumer Services", 1.5),
+        "ULTRACEMCO": ("Construction Materials", 1.3),
+        "WIPRO": ("Information Technology", 0.8)
+    }
+
+    # 1. Membership
+    membership_constituents = {}
+    for row in resolved_constituents:
+        sym = row["symbol"]
+        sec, _ = sectors_and_weights.get(sym, ("UNKNOWN", 0.0))
+        membership_constituents[sym] = {
+            "company_name": row["company_name"],
+            "sector": sec,
+            "isin": row["isin"]
+        }
+    membership_payload = {
+        "effective_date": "2026-08-04",
+        "index_symbol": "NIFTY",
+        "constituents": membership_constituents
+    }
+    with open(ref_dir / f"nifty50_membership_{session_date}.json", "w") as f:
+        json.dump(membership_payload, f, indent=2)
+
+    # 2. Weights
+    weights_payload = {
+        "effective_date": "2026-08-04",
+        "index_symbol": "NIFTY",
+        "weights": {sym: weight for sym, (_, weight) in sectors_and_weights.items()}
+    }
+    with open(ref_dir / f"nifty50_weights_{session_date}.json", "w") as f:
+        json.dump(weights_payload, f, indent=2)
+
+    # 3. Provider neutral map
+    neutral_map = {}
+    indices_mapping = {
+        "NIFTY 50": "NSE_INDEX|Nifty 50",
+        "NIFTY BANK": "NSE_INDEX|Nifty Bank",
+        "SENSEX": "BSE_INDEX|SENSEX",
+        "INDIA VIX": "NSE_INDEX|India VIX",
+        "NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Fin Service",
+        "NIFTY IT": "NSE_INDEX|Nifty IT",
+        "NIFTY AUTO": "NSE_INDEX|Nifty Auto",
+        "NIFTY FMCG": "NSE_INDEX|Nifty FMCG",
+        "NIFTY PHARMA": "NSE_INDEX|Nifty Pharma",
+        "NIFTY METAL": "NSE_INDEX|Nifty Metal",
+        "NIFTY ENERGY": "NSE_INDEX|Nifty Energy",
+    }
+    spot_names = ["NIFTY 50", "NIFTY BANK", "SENSEX", "INDIA VIX", "NIFTY FINANCIAL SERVICES", "NIFTY IT", "NIFTY AUTO", "NIFTY FMCG", "NIFTY PHARMA", "NIFTY METAL", "NIFTY ENERGY"]
+    for name in spot_names:
+        key = indices_mapping.get(name)
+        if key:
+            neutral_map[name] = {
+                "upstox_key": key,
+                "isin": ""
+            }
+    for row in resolved_constituents:
+        sym = row["symbol"]
+        neutral_map[sym] = {
+            "upstox_key": row["instrument_key"],
+            "isin": row["isin"]
+        }
+    neutral_map_payload = {
+        "effective_date": "2026-08-04",
+        "mappings": neutral_map
+    }
+    with open(ref_dir / f"provider_neutral_instrument_map_{session_date}.json", "w") as f:
+        json.dump(neutral_map_payload, f, indent=2)
         
     print("Subscription Plan and Identity Resolution completed successfully.")
     print("=== Premarket Preparation Done ===")

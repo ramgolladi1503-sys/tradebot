@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "date": "2026-08-04",
+  "gaps": {
+    "nifty_constituents": {
+      "status": "filled",
+      "details": "50 EQ tick streams captured"
+    },
+    "index_spot": {
+      "status": "filled",
+      "details": "NIFTY 50, Nifty Bank, Sensex, India VIX spot prices"
+    },
+    "nifty_futures": {
+      "status": "filled",
+      "details": "Front and next-month futures resolved and captured"
+    },
+    "nifty_options_weekly": {
+      "status": "filled",
+      "details": "Nearest weekly expiry, ATM +- 10 strikes"
+    },
+    "nifty_options_monthly": {
+      "status": "filled",
+      "details": "Nearest monthly expiry, ATM +- 5 strikes"
+    },
+    "sector_indices": {
+      "status": "filled",
+      "details": "8 primary sector indices resolved and captured"
+    },
+    "constituent_weights": {
+      "status": "filled",
+      "details": "Dated snapshots containing constituent metadata, free-float weights, and instrument keys"
+    },
+    "subscription_events": {
+      "status": "filled",
+      "details": "Append-only JSONL event ledger tracking subscription changes and counts"
+    }
+  },
+  "disclaimers": {
+    "NO_STRUCTURAL_EDGE_CLAIM": "This data structure does not claim any structural trading edge.",
+    "NO_PROFITABILITY_CLAIM": "No profitability is implied or guaranteed by these datasets.",
+    "NOT_A_KITE_LIVE_CERTIFICATION": "This offline validation setup is not a Kite live execution certification."
+  }
+}

@@ -16,6 +16,7 @@ def test_normalized_writer_partitioning(tmp_path):
         "feed_version": "v3",
         "connection_id": "conn_a",
         "segment": "NSE_FO",
+        "instrument_type": "CE",
         "instrument_key": "NSE_FO|50978",
         "tradingsymbol": "NIFTY 27000 CE 29 DEC 26",
         "exchange_token": "50978",
@@ -33,6 +34,7 @@ def test_normalized_writer_partitioning(tmp_path):
         "feed_version": "v3",
         "connection_id": "conn_a",
         "segment": "NSE_FO",
+        "instrument_type": "CE",
         "instrument_key": "NSE_FO|50978",
         "tradingsymbol": "NIFTY 27000 CE 29 DEC 26",
         "exchange_token": "50978",
@@ -47,8 +49,8 @@ def test_normalized_writer_partitioning(tmp_path):
     writer.write_record(record2)  # Hits max_buffer_size and flushes partition
 
     # 2. Check that the partitioned parquet file is created
-    # Partition path: trade_date=2026-08-03/provider=upstox/segment=NSE_FO/instrument_family=NIFTY/hour=09/ticks_test_run.parquet
-    pq_dir = tmp_path / "normalized" / "trade_date=2026-08-03" / "provider=upstox" / "segment=NSE_FO" / "instrument_family=NIFTY" / "hour=09"
+    # Partition path: asset_class=option/trade_date=2026-08-03/provider=upstox/instrument_family=NIFTY/hour=09/ticks_test_run.parquet
+    pq_dir = tmp_path / "normalized" / "asset_class=option" / "trade_date=2026-08-03" / "provider=upstox" / "instrument_family=NIFTY" / "hour=09"
     pq_file = pq_dir / f"ticks_{run_id}.parquet"
 
     assert pq_file.exists()

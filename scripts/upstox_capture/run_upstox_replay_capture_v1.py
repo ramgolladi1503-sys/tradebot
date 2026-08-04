@@ -29,11 +29,17 @@ logging.basicConfig(
 logger = logging.getLogger("run_upstox_capture")
 
 class ReplayQualityStreamer(MarketDataStreamerV3):
-    def __init__(self, raw_callback, lifecycle_ledger, *args, **kwargs):
+    def __init__(self, raw_callback, lifecycle_ledger, log_subscription_callback, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.raw_callback = raw_callback
         self.ledger = lifecycle_ledger
+        self.log_subscription_event = log_subscription_callback
         self.reconnect_generation = 0
+
+    def subscribe(self, keys, mode):
+        for k in keys:
+            self.log_subscription_event("SUBSCRIBE_REQUEST", k, mode)
+        super().subscribe(keys, mode)
 
     def handle_message(self, ws, message):
         # 1. Capture raw message bytes
@@ -54,15 +60,18 @@ class ReplayQualityStreamer(MarketDataStreamerV3):
 
     def handle_open(self, ws):
         self.ledger.log_connection_event("OPEN", "WebSocket connected", self.reconnect_generation)
+        self.log_subscription_event("CONNECT", "ws_conn", "OPEN")
         super().handle_open(ws)
 
     def handle_close(self, ws, code, msg):
         self.ledger.log_connection_event("CLOSE", f"Code: {code}, Msg: {msg}", self.reconnect_generation)
+        self.log_subscription_event("DISCONNECT", "ws_conn", f"CLOSE_CODE_{code}")
         self.reconnect_generation += 1
         super().handle_close(ws, code, msg)
 
     def handle_error(self, ws, error):
         self.ledger.log_connection_event("ERROR", f"Err: {error}", self.reconnect_generation)
+        self.log_subscription_event("ERROR", "ws_conn", str(error))
         super().handle_error(ws, error)
 
 def main():
@@ -86,14 +95,15 @@ def main():
         logger.error(f"Failed to refresh BOD instrument master: {e}")
 
     # 1. Resolve Universe & Planner
-    inst_master_path = Path("runtime/upstox_instruments/complete.json")
+    project_root = Path(__file__).resolve().parents[2]
+    inst_master_path = project_root / "runtime/upstox_instruments/complete.json"
     date_str_dashed = datetime.now().strftime("%Y-%m-%d")
     run_id = datetime.now().strftime("%H%M%S")
-    output_dir = Path("/Users/madhuram/tradebot/.runtime/market_data/upstox_replay_capture_v1") / date_str_dashed / run_id
+    output_dir = project_root / ".runtime" / "market_data" / "upstox_replay_capture_v1" / date_str_dashed / run_id
     
     # Simple LTP fallback prices to build universe
     fallback_prices = {"NIFTY": 24500.0, "BANKNIFTY": 52200.0, "SENSEX": 80000.0}
-    preplanned = Path(f"runtime/market_data/upstox/{datetime.now().strftime('%Y%m%d')}/full_day_replay_v1/subscription/subscription_plan_{datetime.now().strftime('%Y%m%d')}.json")
+    preplanned = project_root / f"runtime/market_data/upstox/{datetime.now().strftime('%Y%m%d')}/full_day_replay_v1/subscription/subscription_plan_{datetime.now().strftime('%Y%m%d')}.json"
     if preplanned.exists():
         logger.info(f"Loading pre-planned subscription plan from {preplanned}")
         with open(preplanned, "r") as f:
@@ -110,6 +120,31 @@ def main():
         logger.info("Preflight complete in auth-only mode. Exiting.")
         sys.exit(0)
 
+    # Build metadata lookup index from Complete Instrument Master
+    metadata_lookup = {}
+    if inst_master_path.exists():
+        try:
+            logger.info("Building metadata lookup index from complete instrument master...")
+            instruments_list = load_instrument_master(inst_master_path)
+            for inst in instruments_list:
+                key = inst.get("instrument_key")
+                if key:
+                    metadata_lookup[key] = {
+                        "exchange": inst.get("exchange"),
+                        "segment": inst.get("segment"),
+                        "tradingsymbol": inst.get("trading_symbol"),
+                        "exchange_token": inst.get("exchange_token"),
+                        "instrument_type": inst.get("instrument_type"),
+                        "underlying_symbol": inst.get("name"),
+                        "expiry": inst.get("expiry"),
+                        "strike": float(inst["strike_price"]) if inst.get("strike_price") is not None else None,
+                        "lot_size": int(inst["lot_size"]) if inst.get("lot_size") is not None else None,
+                        "tick_size": float(inst["tick_size"]) if inst.get("tick_size") is not None else None,
+                    }
+            logger.info(f"Metadata lookup index built: {len(metadata_lookup)} keys indexed.")
+        except Exception as e:
+            logger.error(f"Failed to build metadata lookup index: {e}")
+
     # Wait for connect time (09:00 IST)
     now = datetime.now()
     connect_time = now.replace(hour=9, minute=0, second=0, microsecond=0)
@@ -119,6 +154,7 @@ def main():
         time.sleep(wait_sec)
 
     # Initialize ledgers and writers
+    output_dir.mkdir(parents=True, exist_ok=True)
     ledger = LifecycleLedger(output_dir)
     raw_writer_a = RawWriter(output_dir, connection_id="conn_a")
     normalized_writer = NormalizedWriter(output_dir, run_id)
@@ -128,12 +164,27 @@ def main():
     byte_count = 0
     decode_latencies = []
     local_sequence = 1
+    observed_message_counts = {}
+
+    def log_subscription_event(action: str, target_key: str, status: str, observed_count: int = 0):
+        try:
+            event_path = output_dir / "subscription_events.jsonl"
+            event_record = {
+                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "action": action,
+                "target_key": target_key,
+                "status": status,
+                "observed_count": observed_count
+            }
+            with open(event_path, "a") as f:
+                f.write(json.dumps(event_record) + "\n")
+        except Exception as e:
+            logger.error(f"Failed to log subscription event: {e}")
 
     def raw_callback(message_bytes: bytes):
         nonlocal byte_count
         byte_count += len(message_bytes)
         try:
-            # Quick validation check (can we decode?)
             decode_feed_response(message_bytes)
             raw_writer_a.write_frame(message_bytes, message_class="FeedResponse", decode_success=True)
         except Exception:
@@ -149,6 +200,8 @@ def main():
             for key, data in feeds.items():
                 if not isinstance(data, dict):
                     continue
+
+                observed_message_counts[key] = observed_message_counts.get(key, 0) + 1
 
                 ff = data.get("fullFeed", {})
                 market_ff = ff.get("marketFF", ff.get("indexFF", {}))
@@ -172,6 +225,7 @@ def main():
 
                 # Option Greeks
                 option_greeks = market_ff.get("optionGreeks", {})
+                meta = metadata_lookup.get(key, {})
                 
                 # Assemble provider-neutral normalized record
                 record = {
@@ -183,8 +237,16 @@ def main():
                     "subscription_lane": "broad" if key in plan["ltpc"] else "critical",
                     "subscription_mode": "ltpc" if key in plan["ltpc"] else "full",
                     "instrument_key": key,
-                    "tradingsymbol": data.get("trading_symbol") or key,
-                    "exchange_token": market_ff.get("exchange_token") or key.split("|")[-1],
+                    "tradingsymbol": meta.get("tradingsymbol") or data.get("trading_symbol") or key,
+                    "exchange_token": meta.get("exchange_token") or market_ff.get("exchange_token") or key.split("|")[-1],
+                    "exchange": meta.get("exchange"),
+                    "segment": meta.get("segment"),
+                    "instrument_type": meta.get("instrument_type"),
+                    "underlying_symbol": meta.get("underlying_symbol"),
+                    "expiry": meta.get("expiry"),
+                    "strike": meta.get("strike"),
+                    "lot_size": meta.get("lot_size"),
+                    "tick_size": meta.get("tick_size"),
                     "ltp": float(ltp) if ltp is not None else None,
                     "volume": int(market_ff.get("volume", 0)) if market_ff.get("volume") else None,
                     "open_interest": int(market_ff.get("oi", 0)) if market_ff.get("oi") else None,
@@ -224,6 +286,7 @@ def main():
     streamer = ReplayQualityStreamer(
         raw_callback=raw_callback,
         lifecycle_ledger=ledger,
+        log_subscription_callback=log_subscription_event,
         api_client=api_client,
         instrumentKeys=plan["full"],  # Start subscribing to critical full lane
         mode="full"
@@ -242,6 +305,10 @@ def main():
         streamer.disconnect()
         raw_writer_a.close()
         normalized_writer.flush_all()
+        # Log final observed counts
+        logger.info("Logging final observed message counts to ledger...")
+        for k, count in observed_message_counts.items():
+            log_subscription_event("OBSERVED_COUNT", k, "ACTIVE", count)
         logger.info("Shutdown finalized.")
         sys.exit(0)
 
