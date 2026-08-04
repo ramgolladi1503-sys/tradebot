@@ -1,0 +1,173 @@
+name: Candidate ML V2
+
+on:
+  pull_request:
+    paths:
+      - "core/analytics/candidate_ml_v2/**"
+      - "scripts/run_candidate_ml_v2.py"
+      - "scripts/run_candidate_ml_market_corpus.py"
+      - "scripts/run_candidate_ml_replay_ledger.py"
+      - "scripts/run_candidate_ml_historical_options.py"
+      - "tests/test_candidate_ml_v2*.py"
+      - "docs/architecture/candidate_ml_v2.md"
+      - "docs/architecture/candidate_ml_v2_historical_options.md"
+      - "docs/agent_reviews/candidate_ml_v2.md"
+      - "docs/agent_reviews/candidate_ml_v2_historical_options.md"
+      - ".github/workflows/candidate-ml-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate_ml_v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest numpy pandas scikit-learn joblib pyarrow
+      - name: Compile
+        run: |
+          python -m py_compile \
+            core/analytics/candidate_ml_v2/*.py \
+            scripts/run_candidate_ml_v2.py \
+            scripts/run_candidate_ml_market_corpus.py \
+            scripts/run_candidate_ml_replay_ledger.py \
+            scripts/run_candidate_ml_historical_options.py \
+            tests/test_candidate_ml_v2*.py
+      - name: Focused behavioral tests
+        env:
+          PYTHONPATH: .
+        run: pytest -q tests/test_candidate_ml_v2*.py
+
+  replay_ledger_proxy_training:
+    needs: candidate_ml_v2
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas scikit-learn joblib pyarrow
+      - name: Train historical replay ledger selector
+        run: |
+          python scripts/run_candidate_ml_replay_ledger.py \
+            --ledger runtime/strategy_validation/MEAN_REVERSION_EXTENSION/phase_4_trade_ledger.jsonl \
+            --output-root .runtime/candidate_ml_replay_ledger
+      - name: Show replay-ledger verdict
+        run: cat .runtime/candidate_ml_replay_ledger/replay_ledger_training_report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-ml-replay-ledger-proxy-selector
+          if-no-files-found: error
+          path: .runtime/candidate_ml_replay_ledger/
+
+  real_market_corpus_pilot:
+    needs: candidate_ml_v2
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GIT_LFS_SKIP_SMUDGE: "1"
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Materialize selected historical corpus
+        run: |
+          git lfs install --local
+          include_paths=$(cat <<'EOF' | paste -sd, -
+          runtime/strategy_validation/resolved_option_ticks_20260702.parquet
+          runtime/market_data/upstox/20260713/ticks_1783918406.parquet
+          runtime/market_data/upstox/20260713/ticks_1783928007.parquet
+          runtime/market_data/upstox/20260713/ticks_1783937009.parquet
+          runtime/market_data/upstox/20260714/ticks_1784007003.parquet
+          runtime/market_data/upstox/20260714/ticks_1784009407.parquet
+          runtime/market_data/upstox/20260714/ticks_1784011825.parquet
+          runtime/market_data/upstox/20260714/ticks_1784014228.parquet
+          runtime/market_data/upstox/20260714/ticks_1784016632.parquet
+          runtime/market_data/upstox/20260714/ticks_1784019036.parquet
+          runtime/market_data/upstox/20260714/ticks_1784021439.parquet
+          runtime/market_data/upstox/20260714/ticks_1784023243.parquet
+          runtime/market_data/upstox/20260715/ticks_1784090271.parquet
+          runtime/market_data/upstox/20260715/ticks_1784092682.parquet
+          runtime/market_data/upstox/20260715/ticks_1784095093.parquet
+          runtime/market_data/upstox/20260715/ticks_1784097496.parquet
+          runtime/market_data/upstox/20260715/ticks_1784099905.parquet
+          runtime/market_data/upstox/20260715/ticks_1784102324.parquet
+          runtime/market_data/upstox/20260715/ticks_1784104740.parquet
+          runtime/market_data/upstox/20260715/ticks_1784107146.parquet
+          runtime/market_data/upstox/20260715/ticks_1784109550.parquet
+          runtime/market_data/upstox/20260716/ticks_1784174050.parquet
+          runtime/market_data/upstox/20260716/ticks_1784176466.parquet
+          runtime/market_data/upstox/20260716/ticks_1784178906.parquet
+          runtime/market_data/upstox/20260716/ticks_1784181338.parquet
+          runtime/market_data/upstox/20260716/ticks_1784187570.parquet
+          runtime/market_data/upstox/20260716/ticks_1784189980.parquet
+          runtime/market_data/upstox/20260716/ticks_1784192404.parquet
+          runtime/market_data/upstox/20260716/ticks_1784194853.parquet
+          runtime/market_data/upstox/20260717/ticks_1784264*.parquet
+          runtime/market_data/upstox/20260717/ticks_1784271*.parquet
+          runtime/market_data/upstox/20260717/ticks_1784282*.parquet
+          EOF
+          )
+          git lfs pull --include="$include_paths" --exclude=""
+          python - <<'PY'
+          from pathlib import Path
+          roots = [Path("runtime/strategy_validation"), Path("runtime/market_data/upstox")]
+          materialized = []
+          for root in roots:
+              if not root.exists():
+                  continue
+              for path in root.rglob("*.parquet"):
+                  try:
+                      with path.open("rb") as handle:
+                          if handle.read(4) == b"PAR1":
+                              materialized.append(str(path))
+                  except OSError:
+                      continue
+          Path(".runtime/candidate_ml_market_corpus").mkdir(parents=True, exist_ok=True)
+          Path(".runtime/candidate_ml_market_corpus/materialized_files.txt").write_text(
+              "\n".join(sorted(materialized)) + "\n",
+              encoding="utf-8",
+          )
+          print(f"materialized_files={len(materialized)}")
+          PY
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas scikit-learn joblib pyarrow
+      - name: Audit and train real corpus lane
+        run: |
+          mapfile -t corpus_files < .runtime/candidate_ml_market_corpus/materialized_files.txt
+          python scripts/run_candidate_ml_market_corpus.py \
+            --inputs "${corpus_files[@]}" \
+            --output-root .runtime/candidate_ml_market_corpus/output \
+            --horizon-bars 5 \
+            --min-move-bps 5 \
+            --min-option-instruments 10
+      - name: Show corpus verdict
+        run: cat .runtime/candidate_ml_market_corpus/output/market_corpus_training_report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-ml-real-market-corpus-pilot
+          if-no-files-found: error
+          path: .runtime/candidate_ml_market_corpus/
