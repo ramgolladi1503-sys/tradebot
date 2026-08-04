@@ -69,6 +69,7 @@ def test_active_session_is_monitoring_healthy_but_not_finally_complete():
     assert snapshot.monitoring_valid is True
     assert snapshot.monitoring_verdict == "LIVE_MONITORING_HEALTHY"
     assert snapshot.final_session_complete is False
+    assert snapshot.final_session_valid is False
     assert snapshot.monitoring_only is True
     assert snapshot.blockers == ()
 
@@ -86,7 +87,27 @@ def test_completed_valid_session_is_final_complete():
     assert snapshot.monitoring_valid is True
     assert snapshot.monitoring_verdict == "FINAL_SESSION_COMPLETE"
     assert snapshot.final_session_complete is True
+    assert snapshot.final_session_valid is True
     assert snapshot.monitoring_only is False
+
+
+def test_completed_invalid_session_is_blocked_and_not_monitoring_only():
+    events = [
+        _event("start", "SESSION_STARTED", second=0, component="runtime", sequence=1),
+        _event("feed", "FEED_TRUTH_UPDATED", second=1, component="feed", sequence=1, quality="DEGRADED"),
+        _event("end", "SESSION_ENDED", second=2, component="runtime", sequence=2),
+    ]
+    analysis = SessionAnalyzer().analyze(events)
+    verification = {**_verification(), "event_count": 3}
+    snapshot = build_live_session_snapshot(analysis, verification=verification)
+    assert analysis.manifest["verdict"] == "PARTIAL_DATA_QUALITY"
+    assert snapshot.monitoring_valid is False
+    assert snapshot.monitoring_verdict == "LIVE_MONITORING_BLOCKED"
+    assert snapshot.final_session_complete is True
+    assert snapshot.final_session_valid is False
+    assert snapshot.monitoring_only is False
+    assert "PARTIAL_DATA_QUALITY" in snapshot.blockers
+    assert "FINAL_SESSION_EVIDENCE_INVALID" in snapshot.blockers
 
 
 def test_active_session_blocks_partial_quality_and_sequence_loss():
@@ -139,4 +160,5 @@ def test_live_snapshot_cli_writes_monitoring_artifact_for_active_session(tmp_pat
     assert record["monitoring_verdict"] == "LIVE_MONITORING_HEALTHY"
     assert record["monitoring_valid"] is True
     assert record["final_session_complete"] is False
+    assert record["final_session_valid"] is False
     assert record["session_analysis"]["manifest"]["verdict"] == "INCOMPLETE_SESSION"
