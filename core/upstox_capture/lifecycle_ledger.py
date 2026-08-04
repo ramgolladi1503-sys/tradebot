@@ -35,3 +35,6 @@ class LifecycleLedger:
             "guid": guid,
             "reason": reason
         })
+
+    def log_event(self, event_type: str, payload: dict):
+        self._write_event(event_type, payload)

@@ -119,6 +119,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Upstox V3 Market Capture Execution")
     parser.add_argument("--session-date", help="Session date in YYYYMMDD format")
     parser.add_argument("--auth-only", action="store_true", help="Perform auth preflight only")
+    parser.add_argument("--campaign-id", help="Target campaign identity")
+    parser.add_argument("--output-root", help="Root directory for capture output")
+    parser.add_argument("--preconnect-only", action="store_true", help="Perform setup up to streamer construction but do not connect")
     return parser.parse_args()
 
 def main():
@@ -126,7 +129,10 @@ def main():
     session_date = args.session_date or datetime.now(timezone.utc).strftime("%Y%m%d")
 
     worktree_root = Path(__file__).resolve().parents[2]
-    evidence_root = worktree_root / "runtime" / "market_data" / "upstox" / session_date / "full_day_replay_v1"
+    if args.output_root and args.campaign_id:
+        evidence_root = Path(args.output_root) / args.campaign_id
+    else:
+        evidence_root = worktree_root / "runtime" / "market_data" / "upstox" / session_date / "full_day_replay_v1"
 
     # Preflight Auth Check
     token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
@@ -164,16 +170,17 @@ def main():
     run_id = f"upstox_{session_date}_{int(time.time())}"
 
     # Output directories
-    raw_dir = evidence_root / "raw"
+    raw_dir = evidence_root
     normalized_dir = evidence_root / "normalized"
     sub_dir = evidence_root / "subscription"
-    ledger_path = evidence_root / "lifecycle_ledger.jsonl"
+    
+    lifecycle_dir = evidence_root / "lifecycle"
+    ledger = LifecycleLedger(lifecycle_dir)
+    ledger.log_event("SESSION_START", {"run_id": run_id, "session_date": session_date})
+    
     events_log_path = sub_dir / "subscription_events.jsonl"
 
-    ledger = LifecycleLedger(ledger_path)
-    ledger.log_event("SESSION_START", {"run_id": run_id, "session_date": session_date})
-
-    raw_writer = RawWriter(raw_dir, run_id=run_id)
+    raw_writer = RawWriter(evidence_root, connection_id="conn_active")
     norm_writer = NormalizedWriter(evidence_root, run_id=run_id)
 
     full_keys = set(plan.get("full", []))
@@ -198,12 +205,10 @@ def main():
         nonlocal local_sequence
         local_sequence += 1
 
-        # 1. Write raw zstd compressed payload
-        raw_writer.write_frame(binary_data)
-
-        # 2. Decode protobuf and normalize
+        decode_success = False
         try:
             feed_dict = decode_feed_response(binary_data)
+            decode_success = True
             feeds = feed_dict.get("feeds", {})
 
             for key, data in feeds.items():
@@ -277,6 +282,13 @@ def main():
                 norm_writer.write_record(record)
         except Exception as e:
             logger.error(f"Error decoding raw frame: {e}")
+            decode_success = False
+        finally:
+            raw_writer.write_frame(
+                binary_data,
+                message_class="FeedResponse",
+                decode_success=decode_success,
+            )
 
     # Build Streamer
     api_client = upstox_client.ApiClient(upstox_client.Configuration())
@@ -320,6 +332,11 @@ def main():
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
+
+    if args.preconnect_only:
+        logger.info("Preconnect setup complete (--preconnect-only mode). Shutting down.")
+        shutdown()
+        return
 
     log_sub_event("CONNECT", "ALL", "INITIATED")
     streamer.connect()
