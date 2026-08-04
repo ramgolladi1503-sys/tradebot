@@ -60,7 +60,7 @@ jobs:
         run: |
           mkdir -p .runtime/aixion-sidecar/source
           cat > .runtime/aixion-sidecar/source/candidates.jsonl <<'JSONL'
-          {"timestamp":"2026-08-05T03:45:01+00:00","available_time":"2026-08-05T03:45:00.999000+00:00","candidate_id":"sidecar-candidate-1","stage":"candidate_created","instrument_id":"NSE_FO|1","strategy_name":"fixture","strategy_version":"1"}
+          {"timestamp":"2020-01-02T03:45:01+00:00","available_time":"2020-01-02T03:45:00.999000+00:00","candidate_id":"sidecar-candidate-1","stage":"candidate_created","instrument_id":"NSE_FO|1","strategy_name":"fixture","strategy_version":"1"}
           JSONL
           cat > .runtime/aixion-sidecar/config.json <<'JSON'
           {"session_id":"SIDECAR-CERT-001","run_id":"SIDECAR-RUN-001","mode":"SHADOW","poll_interval_seconds":0.1,"sources":[{"path":".runtime/aixion-sidecar/source/candidates.jsonl","source_type":"candidate_lineage","source_component":"fixture"}]}
