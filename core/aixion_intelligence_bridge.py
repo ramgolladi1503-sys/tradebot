@@ -23,13 +23,15 @@ _PUBLISHERS: dict[tuple[str, str], Any] = {}
 _SEQUENCE: dict[tuple[str, str], int] = {}
 
 
+def _truthy(name: str) -> bool:
+    return os.getenv(name, "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _enabled() -> bool:
-    return os.getenv("AIXION_INTELLIGENCE_ENABLED", "0").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    """Direct publishing is explicit and mutually exclusive with file tailing."""
+    return _truthy("AIXION_INTELLIGENCE_ENABLED") and _truthy(
+        "AIXION_INTELLIGENCE_DIRECT_BRIDGE_ENABLED"
+    )
 
 
 def _mode() -> str:
@@ -72,9 +74,7 @@ def _next_sequence(key: tuple[str, str]) -> int:
         return value
 
 
-def publish_candidate_lineage_rows(
-    rows: Iterable[Mapping[str, Any]],
-) -> BridgeStatus:
+def publish_candidate_lineage_rows(rows: Iterable[Mapping[str, Any]]) -> BridgeStatus:
     materialized = [dict(row) for row in rows if isinstance(row, Mapping)]
     if not _enabled():
         return BridgeStatus(False, 0, 0, 0, 0, "DISABLED")
