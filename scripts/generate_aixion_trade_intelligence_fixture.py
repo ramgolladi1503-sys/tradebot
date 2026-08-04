@@ -14,6 +14,9 @@ from aixion_trade_intelligence.contracts import CanonicalEvent
 from aixion_trade_intelligence.publisher import FileEventPublisher
 
 
+FIXTURE_BASE = datetime(2020, 1, 2, 3, 45, tzinfo=timezone.utc)
+
+
 def _event(
     event_id: str,
     event_type: str,
@@ -59,18 +62,17 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-root", type=Path, required=True)
     args = parser.parse_args()
-    base = datetime(2026, 8, 5, 3, 45, tzinfo=timezone.utc)
     events = [
-        _event("cert-1", "SESSION_STARTED", base=base, second=0, sequence=1),
-        _event("cert-2", "FEED_TRUTH_UPDATED", base=base, second=1, sequence=2, payload={"state": "FRESH"}),
-        _event("cert-3", "STRATEGY_EVALUATED", base=base, second=2, sequence=3, candidate_id="candidate-cert-1"),
-        _event("cert-4", "SIGNAL_GENERATED", base=base, second=3, sequence=4, candidate_id="candidate-cert-1"),
-        _event("cert-5", "CANDIDATE_CREATED", base=base, second=4, sequence=5, candidate_id="candidate-cert-1"),
-        _event("cert-6", "CANDIDATE_RANKED", base=base, second=5, sequence=6, candidate_id="candidate-cert-1"),
-        _event("cert-7", "APPROVAL_REQUESTED", base=base, second=6, sequence=7, candidate_id="candidate-cert-1"),
-        _event("cert-8", "APPROVAL_DECIDED", base=base, second=7, sequence=8, candidate_id="candidate-cert-1", payload={"decision": "REJECT"}),
-        _event("cert-9", "OUTCOME_LABEL", base=base, second=30, sequence=9, candidate_id="candidate-cert-1", payload={"status": "RESOLVED", "horizon_seconds": 30}),
-        _event("cert-10", "SESSION_ENDED", base=base, second=31, sequence=10),
+        _event("cert-1", "SESSION_STARTED", base=FIXTURE_BASE, second=0, sequence=1),
+        _event("cert-2", "FEED_TRUTH_UPDATED", base=FIXTURE_BASE, second=1, sequence=2, payload={"state": "FRESH"}),
+        _event("cert-3", "STRATEGY_EVALUATED", base=FIXTURE_BASE, second=2, sequence=3, candidate_id="candidate-cert-1"),
+        _event("cert-4", "SIGNAL_GENERATED", base=FIXTURE_BASE, second=3, sequence=4, candidate_id="candidate-cert-1"),
+        _event("cert-5", "CANDIDATE_CREATED", base=FIXTURE_BASE, second=4, sequence=5, candidate_id="candidate-cert-1"),
+        _event("cert-6", "CANDIDATE_RANKED", base=FIXTURE_BASE, second=5, sequence=6, candidate_id="candidate-cert-1"),
+        _event("cert-7", "APPROVAL_REQUESTED", base=FIXTURE_BASE, second=6, sequence=7, candidate_id="candidate-cert-1"),
+        _event("cert-8", "APPROVAL_DECIDED", base=FIXTURE_BASE, second=7, sequence=8, candidate_id="candidate-cert-1", payload={"decision": "REJECT"}),
+        _event("cert-9", "OUTCOME_LABEL", base=FIXTURE_BASE, second=30, sequence=9, candidate_id="candidate-cert-1", payload={"status": "RESOLVED", "horizon_seconds": 30}),
+        _event("cert-10", "SESSION_ENDED", base=FIXTURE_BASE, second=31, sequence=10),
     ]
     publisher = FileEventPublisher(args.output_root, fsync=True)
     persisted = sum(1 for event in events if publisher.publish(event))
