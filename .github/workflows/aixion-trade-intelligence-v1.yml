@@ -1,0 +1,48 @@
+name: Aixion Trade Intelligence V1
+
+on:
+  pull_request:
+    paths:
+      - "aixion_trade_intelligence/**"
+      - "scripts/run_aixion_trade_intelligence_offline.py"
+      - "tests/test_aixion_trade_intelligence_v1.py"
+      - "docs/aixion_trade_intelligence/**"
+      - ".github/workflows/aixion-trade-intelligence-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-evidence-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip pytest
+      - name: Compile evidence kernel
+        run: |
+          python -m py_compile \
+            aixion_trade_intelligence/contracts.py \
+            aixion_trade_intelligence/publisher.py \
+            aixion_trade_intelligence/storage.py \
+            aixion_trade_intelligence/session.py \
+            aixion_trade_intelligence/report.py \
+            scripts/run_aixion_trade_intelligence_offline.py
+      - name: Run focused certification tests
+        run: pytest -q tests/test_aixion_trade_intelligence_v1.py
+      - name: Reject broker or execution authority
+        run: |
+          if grep -RInE "place_order|modify_order|cancel_order|exit_order|kite\.place|broker.*order" aixion_trade_intelligence scripts/run_aixion_trade_intelligence_offline.py; then
+            echo "Forbidden broker/order authority found"
+            exit 1
+          fi
+      - name: Reject hardcoded profitability claims
+        run: |
+          if grep -RInE "guaranteed_profit|profitability_certified|live_edge_certified" aixion_trade_intelligence; then
+            echo "Forbidden profitability claim found"
+            exit 1
+          fi
