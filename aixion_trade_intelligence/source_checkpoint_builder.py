@@ -26,6 +26,27 @@ def _parse_time(value: object, *, name: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+def _normalize_filters(value: object) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    if value in (None, {}):
+        return ()
+    if not isinstance(value, Mapping):
+        raise ValueError("source_file_spec_filters_must_be_object")
+    normalized: list[tuple[str, tuple[str, ...]]] = []
+    for raw_field, raw_allowed in sorted(value.items(), key=lambda item: str(item[0])):
+        field = str(raw_field).strip()
+        if not field:
+            raise ValueError("source_file_spec_filter_field_missing")
+        if isinstance(raw_allowed, list):
+            values = tuple(str(item).strip() for item in raw_allowed if str(item).strip())
+        else:
+            single = str(raw_allowed).strip()
+            values = (single,) if single else ()
+        if not values:
+            raise ValueError(f"source_file_spec_filter_values_missing={field}")
+        normalized.append((field, tuple(sorted(set(values)))))
+    return tuple(normalized)
+
+
 @dataclass(frozen=True)
 class SourceFileSpec:
     source_name: str
@@ -37,6 +58,7 @@ class SourceFileSpec:
     persist_time_field: str
     sequence_field: str | None = None
     required_event_types: tuple[str, ...] = ()
+    filters: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.source_name.strip():
@@ -49,6 +71,7 @@ class SourceFileSpec:
         object.__setattr__(self, "path", Path(self.path).expanduser())
         object.__setattr__(self, "identity_fields", tuple(str(value).strip() for value in self.identity_fields))
         object.__setattr__(self, "required_event_types", tuple(str(value).strip().upper() for value in self.required_event_types if str(value).strip()))
+        object.__setattr__(self, "filters", _normalize_filters(dict(self.filters)))
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "SourceFileSpec":
@@ -59,6 +82,7 @@ class SourceFileSpec:
         if not isinstance(required, list):
             raise ValueError("source_file_spec_required_event_types_must_be_list")
         sequence_raw = str(row.get("sequence_field") or "").strip()
+        filters = _normalize_filters(row.get("filters"))
         return cls(
             source_name=str(row.get("source_name") or ""),
             path=Path(str(row.get("path") or "")),
@@ -69,7 +93,14 @@ class SourceFileSpec:
             persist_time_field=str(row.get("persist_time_field") or "persist_time"),
             sequence_field=sequence_raw or None,
             required_event_types=tuple(str(value) for value in required),
+            filters=filters,
         )
+
+    def matches(self, payload: Mapping[str, object]) -> bool:
+        for field, allowed_values in self.filters:
+            if str(payload.get(field) or "").strip() not in allowed_values:
+                return False
+        return True
 
 
 @dataclass(frozen=True)
@@ -81,7 +112,9 @@ class SourceScanResult:
     valid_row_count: int
     malformed_row_count: int
     duplicate_identity_count: int
+    filtered_out_row_count: int
     partial_final_line_ignored: bool
+    filters: tuple[tuple[str, tuple[str, ...]], ...]
 
     def to_record(self) -> dict[str, object]:
         record = self.checkpoint.__dict__.copy()
@@ -98,7 +131,9 @@ class SourceScanResult:
                 "valid_row_count": self.valid_row_count,
                 "malformed_row_count": self.malformed_row_count,
                 "duplicate_identity_count": self.duplicate_identity_count,
+                "filtered_out_row_count": self.filtered_out_row_count,
                 "partial_final_line_ignored": self.partial_final_line_ignored,
+                "filters": {field: list(values) for field, values in self.filters},
             }
         )
         return record
@@ -118,6 +153,7 @@ def scan_source_file(spec: SourceFileSpec) -> SourceScanResult:
     observed_event_types: set[str] = set()
     malformed = 0
     duplicates = 0
+    filtered_out = 0
     valid_rows = 0
     latest_tuple: tuple[datetime, datetime, datetime] | None = None
     for line_number, raw_line in enumerate(raw_lines, start=1):
@@ -131,6 +167,9 @@ def scan_source_file(spec: SourceFileSpec) -> SourceScanResult:
             continue
         if not isinstance(payload, Mapping):
             malformed += 1
+            continue
+        if not spec.matches(payload):
+            filtered_out += 1
             continue
         try:
             identity = tuple(str(payload.get(field) or "").strip() for field in spec.identity_fields)
@@ -191,7 +230,9 @@ def scan_source_file(spec: SourceFileSpec) -> SourceScanResult:
         valid_row_count=valid_rows,
         malformed_row_count=malformed,
         duplicate_identity_count=duplicates,
+        filtered_out_row_count=filtered_out,
         partial_final_line_ignored=partial,
+        filters=spec.filters,
     )
 
 
