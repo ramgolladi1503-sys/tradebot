@@ -2,8 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from aixion_trade_intelligence.contracts import CanonicalEvent
 from aixion_trade_intelligence.publisher import FileEventPublisher
