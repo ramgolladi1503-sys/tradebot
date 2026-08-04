@@ -1,0 +1,93 @@
+{
+  "study_id": "gravity_well_location_participation_v1",
+  "source_archive": {
+    "name": "kite_candidate_replay(11).zip",
+    "sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d",
+    "parquet_files": 1509,
+    "parsed_files": 1509,
+    "parse_failures": 0,
+    "underlying_files": 1479,
+    "option_files": 30,
+    "total_rows": 120282,
+    "underlying_rows": 110547,
+    "option_rows": 9735
+  },
+  "data_authority": {
+    "nifty_sessions": 493,
+    "nifty_five_minute_rows": 36849,
+    "start": "2024-07-09T09:15:00+05:30",
+    "end": "2026-07-08T15:25:00+05:30",
+    "underlying_nonzero_volume_rows": 0,
+    "underlying_synthetic_rows": 0,
+    "underlying_fallback_rows": 0,
+    "underlying_mock_rows": 0,
+    "constituents_present": false,
+    "option_paths_all_explicitly_mock_named": true,
+    "option_contract_identity_present": false
+  },
+  "chronology": {
+    "development_sessions": 295,
+    "validation_sessions": 99,
+    "sealed_holdout_sessions": 99,
+    "holdout_opened": false
+  },
+  "verdicts": {
+    "primary": "DATA_BLOCKED_MISSING_VOLUME_CONSTITUENTS_AND_REAL_OPTIONS",
+    "diagnostic": "NO_PRICE_ONLY_VALIDATION_SURVIVOR",
+    "strategy_integration": false,
+    "option_edge_claim": false
+  },
+  "validation_net_2bps": {
+    "GW_ESCAPE_ACCEPTANCE_PRICE_ONLY": {
+      "development_trades": 308,
+      "validation_trades": 134,
+      "validation_sessions": 79,
+      "expectancy_bps": -3.49,
+      "profit_factor": 0.39,
+      "bootstrap_95pct": [-5.23, -1.90],
+      "after_remove_top5_bps": -4.29,
+      "after_remove_top2_sessions_bps": -3.93,
+      "matched_random_percentile": 0.073
+    },
+    "GW_FAILED_ESCAPE_PRICE_ONLY": {
+      "development_trades": 39,
+      "validation_trades": 7,
+      "validation_sessions": 7,
+      "expectancy_bps": 0.77,
+      "expectancy_at_5bps_cost": -2.23,
+      "profit_factor": 1.38,
+      "bootstrap_95pct": [-3.29, 4.60],
+      "after_remove_top5_bps": -6.48,
+      "after_remove_top2_sessions_bps": -1.75,
+      "survived": false
+    },
+    "GW_CLUSTER_BREAK_PRICE_ONLY": {
+      "development_trades": 106,
+      "validation_trades": 20,
+      "validation_sessions": 20,
+      "expectancy_bps": -3.96,
+      "profit_factor": 0.46,
+      "bootstrap_95pct": [-10.74, 2.24],
+      "after_remove_top5_bps": -8.98,
+      "after_remove_top2_sessions_bps": -6.30
+    }
+  },
+  "validation_baselines_net_2bps": {
+    "EMA_CROSS_ONLY": {"trades": 322, "expectancy_bps": -2.07, "profit_factor": 0.66},
+    "ATR_DISPLACEMENT_ONLY": {"trades": 216, "expectancy_bps": -1.81, "profit_factor": 0.67},
+    "DIRECT_OUTER_BAND_FADE": {"trades": 216, "expectancy_bps": -2.19, "profit_factor": 0.62},
+    "HTF_CLUSTER_BREAK_ONLY": {"trades": 84, "expectancy_bps": -2.23, "profit_factor": 0.62}
+  },
+  "neighbour_validation_expectancy_net_2bps": {
+    "14": {"escape": -2.10, "failed_escape": -4.15, "cluster_break": -3.70},
+    "20": {"escape": -3.49, "failed_escape": 0.77, "cluster_break": -3.96},
+    "30": {"escape": -3.00, "failed_escape": -4.14, "cluster_break": -8.08}
+  },
+  "integrity": {
+    "checks_passed": 10,
+    "checks_total": 10,
+    "event_ledger_sha256": "37a21a64f74f632f1c31ecc3bf14cefd4e2d2eeeb8c732c23e3e2c4c26d8ae4d",
+    "certification_sha256": "5c830f4cc18b1a3c57593f89b65938cf91a822063e082caa065f4adffc961846",
+    "deterministic_rerun_byte_identical": true
+  }
+}
