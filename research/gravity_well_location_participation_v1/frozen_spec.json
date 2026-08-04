@@ -1,0 +1,19 @@
+{
+  "study_id": "gravity_well_location_participation_v1",
+  "event_bar_minutes": 5,
+  "higher_timeframes_minutes": [15, 30],
+  "canonical_center_length": 20,
+  "center_length_neighbours": [15, 30],
+  "atr_length": 14,
+  "canonical_displacement_atr": 1.5,
+  "displacement_neighbour_atr": 2.0,
+  "escape_persistence_bars": 2,
+  "cluster_lookback_bars": 20,
+  "cluster_tolerance_atr": 0.25,
+  "minimum_constituents": 40,
+  "participation_threshold": 0.60,
+  "option_hold_minutes": 10,
+  "friction_pct": [1.0, 1.5],
+  "families": ["GW_ESCAPE_ACCEPTANCE", "GW_FAILED_ESCAPE", "GW_CLUSTER_BREAK_ACCEPTANCE"],
+  "claim_boundary": "semantic proxy; not an exact Pine port; freeze before outcome evaluation"
+}
