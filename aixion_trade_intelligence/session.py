@@ -61,13 +61,7 @@ def _milliseconds(later: datetime, earlier: datetime) -> float:
 
 
 class SessionAnalyzer:
-    """Deterministic first-pass session evidence analyzer.
-
-    No market-performance or profitability thresholds are embedded here. The
-    analyzer derives observed counts, coverage, timing distributions, lineage,
-    and readiness from the event log. Strategy certification belongs to a
-    separate research layer after causal outcomes exist.
-    """
+    """Deterministic, fail-closed session evidence analyzer."""
 
     _CANDIDATE_STAGE = {
         "STRATEGY_EVALUATED": "strategy_evaluated",
@@ -82,6 +76,8 @@ class SessionAnalyzer:
         "POSITION_EVENT": "position_event",
         "OUTCOME_LABEL": "outcome_label",
     }
+    _HARD_INVALID_QUALITY_STATES = {"UNKNOWN", "UNTRUSTED", "STALE"}
+    _PARTIAL_QUALITY_STATES = {"PARTIAL", "DEGRADED", "FALLBACK", "RECOVERED_FALLBACK"}
 
     def analyze(self, events: Iterable[CanonicalEvent]) -> SessionAnalysis:
         ordered = sorted(events, key=lambda event: (event.event_time, event.event_id))
@@ -96,29 +92,11 @@ class SessionAnalyzer:
         quality_counts = Counter(event.data_quality_state for event in ordered)
         source_counts = Counter(event.source_provider for event in ordered)
         instrument_keys = {event.instrument_key for event in ordered if event.instrument_key}
-        strategy_versions = sorted(
-            {
-                f"{event.strategy_id}:{event.strategy_version}"
-                for event in ordered
-                if event.strategy_id
-            }
-        )
+        strategy_versions = sorted({f"{event.strategy_id}:{event.strategy_version}" for event in ordered if event.strategy_id})
 
-        source_receive_latency = [
-            _milliseconds(event.receive_time, event.source_time)
-            for event in ordered
-            if event.source_time is not None and event.receive_time >= event.source_time
-        ]
-        receive_persist_latency = [
-            _milliseconds(event.persist_time, event.receive_time)
-            for event in ordered
-            if event.persist_time >= event.receive_time
-        ]
-        event_gaps_ms = [
-            _milliseconds(current.event_time, previous.event_time)
-            for previous, current in zip(ordered, ordered[1:])
-            if current.event_time >= previous.event_time
-        ]
+        source_receive_latency = [_milliseconds(event.receive_time, event.source_time) for event in ordered if event.source_time is not None and event.receive_time >= event.source_time]
+        receive_persist_latency = [_milliseconds(event.persist_time, event.receive_time) for event in ordered if event.persist_time >= event.receive_time]
+        event_gaps_ms = [_milliseconds(current.event_time, previous.event_time) for previous, current in zip(ordered, ordered[1:]) if current.event_time >= previous.event_time]
 
         producer_sequences: dict[str, list[int]] = defaultdict(list)
         for event in ordered:
@@ -126,11 +104,7 @@ class SessionAnalyzer:
                 producer_sequences[event.source_component].append(event.producer_sequence)
         sequence_gaps: dict[str, int] = {}
         for component, sequences in producer_sequences.items():
-            expected = sum(
-                max(current - previous - 1, 0)
-                for previous, current in zip(sequences, sequences[1:])
-            )
-            sequence_gaps[component] = expected
+            sequence_gaps[component] = sum(max(current - previous - 1, 0) for previous, current in zip(sequences, sequences[1:]))
 
         required_lifecycle = {
             "SESSION_STARTED": event_counts["SESSION_STARTED"] > 0,
@@ -140,19 +114,31 @@ class SessionAnalyzer:
             count
             for state, count in quality_counts.items()
             if state.upper().startswith("INVALID")
-            or state.upper() in {"UNKNOWN", "UNTRUSTED", "STALE"}
+            or state.upper() in self._HARD_INVALID_QUALITY_STATES
+        )
+        partial_quality_events = sum(
+            count
+            for state, count in quality_counts.items()
+            if state.upper() in self._PARTIAL_QUALITY_STATES
         )
         lifecycle_complete = all(required_lifecycle.values())
         sequence_gap_total = sum(sequence_gaps.values())
-        manifest_valid = lifecycle_complete and invalid_quality_events == 0 and sequence_gap_total == 0
+        manifest_valid = (
+            lifecycle_complete
+            and invalid_quality_events == 0
+            and partial_quality_events == 0
+            and sequence_gap_total == 0
+        )
         if manifest_valid:
             verdict = "VALID_OFFLINE_SESSION_EVIDENCE"
         elif not lifecycle_complete:
             verdict = "INCOMPLETE_SESSION"
         elif sequence_gap_total:
             verdict = "INVALID_SEQUENCE_COVERAGE"
-        else:
+        elif invalid_quality_events:
             verdict = "INVALID_DATA_QUALITY"
+        else:
+            verdict = "PARTIAL_DATA_QUALITY"
 
         manifest = {
             "session_id": ordered[0].session_id,
@@ -170,6 +156,7 @@ class SessionAnalyzer:
             "producer_sequence_gaps": dict(sorted(sequence_gaps.items())),
             "producer_sequence_gap_total": sequence_gap_total,
             "invalid_quality_event_count": invalid_quality_events,
+            "partial_quality_event_count": partial_quality_events,
             "source_to_receive_latency_ms": {
                 "count": len(source_receive_latency),
                 "p50": _percentile(source_receive_latency, 0.50),
@@ -208,20 +195,13 @@ class SessionAnalyzer:
                 reason = str(event.payload.get("reason") or event.payload.get("block_reason") or "UNSPECIFIED")
                 blockers[reason] += 1
 
-        complete_candidates = sum(
-            1
-            for stages in candidate_stages.values()
-            if "candidate_created" in stages and "outcome_label" in stages
-        )
+        complete_candidates = sum(1 for stages in candidate_stages.values() if "candidate_created" in stages and "outcome_label" in stages)
         candidate_funnel = {
             "stage_counts": dict(sorted(stage_counts.items())),
             "candidate_count": len(candidate_stages),
             "complete_candidate_to_outcome_count": complete_candidates,
             "blocker_counts": dict(sorted(blockers.items())),
-            "candidate_stages": {
-                candidate_id: sorted(stages)
-                for candidate_id, stages in sorted(candidate_stages.items())
-            },
+            "candidate_stages": {candidate_id: sorted(stages) for candidate_id, stages in sorted(candidate_stages.items())},
         }
 
         runtime_timeline = [
@@ -248,21 +228,10 @@ class SessionAnalyzer:
         outcome_readiness = {
             "candidate_created_count": candidate_created,
             "outcome_label_count": outcome_labels,
-            "candidate_to_outcome_coverage": (
-                outcome_labels / candidate_created if candidate_created else None
-            ),
-            "ready_for_strategy_diagnosis": bool(
-                manifest_valid and candidate_created > 0 and complete_candidates == candidate_created
-            ),
+            "candidate_to_outcome_coverage": outcome_labels / candidate_created if candidate_created else None,
+            "ready_for_strategy_diagnosis": bool(manifest_valid and candidate_created > 0 and complete_candidates == candidate_created),
             "ready_for_profitability_claim": False,
-            "reason": (
-                "OFFLINE_EVIDENCE_ONLY_REQUIRES_CAUSAL_OPTION_FILL_AND_HOLDOUT_CERTIFICATION"
-            ),
+            "reason": "OFFLINE_EVIDENCE_ONLY_REQUIRES_CAUSAL_OPTION_FILL_AND_HOLDOUT_CERTIFICATION",
         }
 
-        return SessionAnalysis(
-            manifest=manifest,
-            candidate_funnel=candidate_funnel,
-            runtime_timeline=runtime_timeline,
-            outcome_readiness=outcome_readiness,
-        )
+        return SessionAnalysis(manifest, candidate_funnel, runtime_timeline, outcome_readiness)
