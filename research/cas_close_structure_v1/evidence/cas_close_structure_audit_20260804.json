@@ -1,0 +1,102 @@
+{
+  "claim_boundary": {
+    "auction_order_imbalance_observed": false,
+    "execution_authority": false,
+    "final_cash_auction_repricing_observed": true,
+    "nifty_futures_path_observed": false,
+    "official_indicative_close_series_observed": false,
+    "real_option_contract_path_observed": false,
+    "strategy_edge_claimed": false
+  },
+  "first_material_jumps": {
+    "BANKNIFTY": {
+      "from": 57492.75,
+      "points": 414.4499999999971,
+      "timestamp_epoch": 1785837501.761993,
+      "timestamp_iso": "2026-08-04T09:58:21.761993Z",
+      "to": 57907.2
+    },
+    "INDIA_VIX": null,
+    "NIFTY": {
+      "from": 24463.45,
+      "points": 151.45000000000073,
+      "timestamp_epoch": 1785837501.610766,
+      "timestamp_iso": "2026-08-04T09:58:21.610766Z",
+      "to": 24614.9
+    },
+    "SENSEX": {
+      "from": 78324.56,
+      "points": 104.38999999999942,
+      "timestamp_epoch": 1785837575.455303,
+      "timestamp_iso": "2026-08-04T09:59:35.455303Z",
+      "to": 78428.95
+    }
+  },
+  "index_snapshots": {
+    "BANKNIFTY": {
+      "at_1515": {"last_price": 57492.75, "timestamp_epoch": 1785836699.861642, "timestamp_iso": "2026-08-04T09:44:59.861642Z"},
+      "at_1525": {"last_price": 57492.75, "timestamp_epoch": 1785837299.875516, "timestamp_iso": "2026-08-04T09:54:59.875516Z"},
+      "at_1535": {"last_price": 57907.2, "timestamp_epoch": 1785837899.989158, "timestamp_iso": "2026-08-04T10:04:59.989158Z"}
+    },
+    "INDIA_VIX": {
+      "at_1515": {"last_price": 12.19, "timestamp_epoch": 1785836699.861726, "timestamp_iso": "2026-08-04T09:44:59.861726Z"},
+      "at_1525": {"last_price": 12.19, "timestamp_epoch": 1785837299.878013, "timestamp_iso": "2026-08-04T09:54:59.878013Z"},
+      "at_1535": {"last_price": 12.16, "timestamp_epoch": 1785837899.837949, "timestamp_iso": "2026-08-04T10:04:59.837949Z"}
+    },
+    "NIFTY": {
+      "at_1515": {"last_price": 24463.4, "timestamp_epoch": 1785836699.714767, "timestamp_iso": "2026-08-04T09:44:59.714767Z"},
+      "at_1525": {"last_price": 24463.45, "timestamp_epoch": 1785837299.878125, "timestamp_iso": "2026-08-04T09:54:59.878125Z"},
+      "at_1535": {"last_price": 24614.9, "timestamp_epoch": 1785837899.989848, "timestamp_iso": "2026-08-04T10:04:59.989848Z"}
+    },
+    "SENSEX": {
+      "at_1515": {"last_price": 78324.56, "timestamp_epoch": 1785836699.714598, "timestamp_iso": "2026-08-04T09:44:59.714598Z"},
+      "at_1525": {"last_price": 78324.56, "timestamp_epoch": 1785837299.258061, "timestamp_iso": "2026-08-04T09:54:59.258061Z"},
+      "at_1535": {"last_price": 78428.95, "timestamp_epoch": 1785837899.686765, "timestamp_iso": "2026-08-04T10:04:59.686765Z"}
+    }
+  },
+  "observation": {
+    "auction_imbalance_available": false,
+    "authority": "SHADOW_ADVISORY_ONLY",
+    "breadth_positive_ratio": 0.96,
+    "constituent_count": 50,
+    "diagnostic_direction": "UP",
+    "equal_weight_mean_return_pct": 0.6675081632827822,
+    "evidence_class": "BROAD_AUCTION_REPRICING",
+    "execution_eligible": false,
+    "futures_available": false,
+    "index_jump_bps": 61.90868417986862,
+    "index_jump_points": 151.45000000000073,
+    "indicative_revision_series_available": false,
+    "matched_index": 24614.9,
+    "median_return_pct": 0.6772324850183975,
+    "negative_constituents": 2,
+    "positive_constituents": 48,
+    "pre_match_index": 24463.45,
+    "real_option_contracts_available": false,
+    "session_date": "2026-08-04",
+    "top_three_absolute_move_share": 0.1520570564333603,
+    "unchanged_constituents": 0
+  },
+  "research_readiness": {
+    "authority": "SHADOW_ADVISORY_ONLY",
+    "execution_eligible": false,
+    "final_auction_structure_observable": true,
+    "missing_authoritative_inputs": ["INDICATIVE_CLOSE_REVISION_SERIES", "AUCTION_ORDER_IMBALANCE", "NIFTY_FUTURES_PATH", "REAL_NIFTY_OPTION_CONTRACT_PATH"],
+    "predictive_cas_hypothesis_testable": false,
+    "verdict": "FINAL_AUCTION_STRUCTURE_OBSERVED_PREDICTIVE_EDGE_BLOCKED"
+  },
+  "session_date": "2026-08-04",
+  "source": {
+    "constituent_json": "TradeBot_Data/market_data/20260804/full_day_replay_v1/meg/nifty50_constituents_20260804.json",
+    "instrument_count": 54,
+    "positive_oi_rows": 0,
+    "positive_volume_rows": 0,
+    "sqlite_path": "TradeBot_Data/market_data/20260804/full_day_replay_v1/replay_verification.db",
+    "table_counts": {"broker_fills": 0, "daily_stats": 0, "depth_snapshots": 10352, "execution_stats": 0, "outcomes": 0, "ticks": 1041807, "trade_legs": 0, "trades": 0, "trail_events": 0},
+    "tick_end_epoch": 1785837900.88747,
+    "tick_rows": 1041807,
+    "tick_start_epoch": 1785816006.339035
+  },
+  "study_id": "cas_close_structure_v1",
+  "verdict": ["OLD_1515_1530_BREAKOUT_CANDLE_STRUCTURALLY_INVALID", "BROAD_AUCTION_REPRICING_OBSERVED_20260804", "PREDICTIVE_CAS_EDGE_NOT_YET_TESTABLE", "SHADOW_ADVISORY_ONLY"]
+}
