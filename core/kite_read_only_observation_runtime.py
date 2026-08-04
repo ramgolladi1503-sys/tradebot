@@ -99,9 +99,31 @@ def assert_import_boundary() -> None:
         raise RuntimeError(f"UNSAFE_OBSERVATION_IMPORTS:{','.join(unsafe)}")
 
 
-def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str) -> int:
+def write_authority_snapshot(candidate: Mapping[str, Any], path: Path) -> dict[str, Any]:
+    """Serialize canonical PR #771 authority output without execution wiring."""
+    from core.runtime_authority_cutover import apply_runtime_authority
+
+    row = dict(candidate)
+    stamped = apply_runtime_authority(row, mode="SIM")
+    payload = dict(stamped) if isinstance(stamped, Mapping) else dict(row)
+    payload.update({
+        "candidate_id": payload.get("candidate_id") or payload.get("trade_id") or payload.get("symbol"),
+        "read_only": True,
+        "is_order_action": False,
+        "broker_write_authority": False,
+        "allowed_for_live_execution": False,
+        "allowed_for_paper_execution": False,
+    })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, sort_keys=True, default=str) + "\n")
+    return payload
+
+
+def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None = None) -> int:
     env = safe_environment()
     contract = safety_contract(env, child_command=[sys.executable, "-B", "core.kite_read_only_observation_runtime.py"])
+    output_root.mkdir(parents=True, exist_ok=True)
     (output_root / "startup_safety_contract.json").write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.environ.update(env)
     assert_import_boundary()
@@ -123,9 +145,12 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     if not started:
         raise RuntimeError("READ_ONLY_KITE_FEED_START_FAILED")
     stop = threading.Event()
+    deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
     try:
-        while not stop.wait(1.0):
+        while not stop.wait(0.05 if deadline is not None else 1.0):
             produce_and_store_runtime_snapshots(market_snapshot=None, producer="kite_read_only_observation")
+            if deadline is not None and time.monotonic() >= deadline:
+                break
     finally:
         kite_depth_ws.stop_depth_ws(reason="read_only_observation_shutdown")
     return 0
