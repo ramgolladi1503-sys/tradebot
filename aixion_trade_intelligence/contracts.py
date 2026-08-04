@@ -11,6 +11,24 @@ class EventValidationError(ValueError):
     """Raised when a canonical intelligence event is unsafe or incomplete."""
 
 
+_DECISION_EVENT_TYPES = {
+    "STRATEGY_EVALUATED",
+    "SIGNAL_GENERATED",
+    "CANDIDATE_CREATED",
+    "CANDIDATE_BLOCKED",
+    "CANDIDATE_RANKED",
+    "APPROVAL_REQUESTED",
+    "APPROVAL_DECIDED",
+}
+
+_SOURCE_OBSERVATION_EVENT_TYPES = {
+    "MARKET_TICK",
+    "MARKET_SNAPSHOT",
+    "ORDER_BOOK_SNAPSHOT",
+    "OPTION_CHAIN_SNAPSHOT",
+}
+
+
 def _parse_utc(value: str | datetime, *, field_name: str) -> datetime:
     if isinstance(value, datetime):
         parsed = value
@@ -82,20 +100,26 @@ class CanonicalEvent:
         for parent in self.parent_event_ids:
             if not str(parent).strip():
                 raise EventValidationError("empty_parent_event_id")
+        event_type = str(self.event_type).strip().upper()
         event_time = _parse_utc(self.event_time, field_name="event_time")
         receive_time = _parse_utc(self.receive_time, field_name="receive_time")
         available_time = _parse_utc(self.available_time, field_name="available_time")
         parse_time = _parse_utc(self.parse_time, field_name="parse_time")
         persist_time = _parse_utc(self.persist_time, field_name="persist_time")
-        source_time = (
-            _parse_utc(self.source_time, field_name="source_time")
-            if self.source_time is not None
-            else None
-        )
-        if available_time > event_time:
-            raise EventValidationError("available_after_decision_time")
+        source_time = _parse_utc(self.source_time, field_name="source_time") if self.source_time is not None else None
+
         if receive_time > parse_time or parse_time > persist_time:
             raise EventValidationError("invalid_processing_time_order")
+        if event_time > persist_time:
+            raise EventValidationError("event_after_persist_time")
+        if available_time > persist_time:
+            raise EventValidationError("available_after_persist_time")
+        if event_type in _DECISION_EVENT_TYPES and available_time > event_time:
+            raise EventValidationError("available_after_decision_time")
+        if event_type in _SOURCE_OBSERVATION_EVENT_TYPES and available_time < event_time:
+            raise EventValidationError("observation_available_before_event_time")
+
+        object.__setattr__(self, "event_type", event_type)
         object.__setattr__(self, "event_time", event_time)
         object.__setattr__(self, "receive_time", receive_time)
         object.__setattr__(self, "available_time", available_time)
@@ -112,14 +136,7 @@ class CanonicalEvent:
 
     def to_record(self) -> dict[str, Any]:
         record = asdict(self)
-        for name in (
-            "event_time",
-            "receive_time",
-            "available_time",
-            "parse_time",
-            "persist_time",
-            "source_time",
-        ):
+        for name in ("event_time", "receive_time", "available_time", "parse_time", "persist_time", "source_time"):
             value = record[name]
             record[name] = value.isoformat() if value is not None else None
         record["parent_event_ids"] = list(self.parent_event_ids)
@@ -153,11 +170,7 @@ class CanonicalEvent:
             strategy_id=str(record.get("strategy_id") or ""),
             strategy_version=str(record.get("strategy_version") or ""),
             candidate_id=str(record.get("candidate_id") or ""),
-            producer_sequence=(
-                int(record["producer_sequence"])
-                if record.get("producer_sequence") is not None
-                else None
-            ),
+            producer_sequence=int(record["producer_sequence"]) if record.get("producer_sequence") is not None else None,
         )
         if expected_hash and expected_hash != event.payload_hash:
             raise EventValidationError("payload_hash_mismatch")
