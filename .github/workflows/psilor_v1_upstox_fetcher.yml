@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -57,21 +57,20 @@ jobs:
   authenticated-bounded-smoke:
     needs: test
     if: >-
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/data/psilor-v1-upstox-fetch-v2'
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 795 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'data/psilor-v1-upstox-fetch-v2'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
       PSILOR_SMOKE_ROOT: ${{ runner.temp }}/psilor-smoke
-      PSILOR_SMOKE_RUN_ID: push-${{ github.run_id }}-${{ github.run_attempt }}
-      RESULT_PATH: research/psilor_v1/authenticated_smoke_ci_result.json
+      PSILOR_SMOKE_RUN_ID: pr-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: data/psilor-v1-upstox-fetch-v2
           lfs: false
-          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -82,116 +81,41 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas pytz python-dateutil pyarrow requests
 
-      - name: Run smoke and prepare sanitized verdict
-        id: smoke
-        continue-on-error: true
+      - name: Require repository Upstox secret
         shell: bash
         run: |
-          set +e
-          mkdir -p "$(dirname "${RESULT_PATH}")"
+          set -euo pipefail
           if [ -z "${UPSTOX_ACCESS_TOKEN:-}" ]; then
-            python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-          Path(os.environ['RESULT_PATH']).write_text(json.dumps({
-              'schema_version': 1,
-              'source_head_sha': os.environ['GITHUB_SHA'],
-              'workflow_run_id': os.environ['GITHUB_RUN_ID'],
-              'workflow_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
-              'smoke_verdict': 'BLOCKED_AUTHENTICATION',
-              'formal_extraction_approved': False,
-              'credentials_persisted': False,
-          }, indent=2) + '\n', encoding='utf-8')
-          PY
+            echo 'SMOKE_VERDICT=BLOCKED_AUTHENTICATION'
+            echo 'UPSTOX_ACCESS_TOKEN repository secret is unavailable to this same-repository PR run.'
             exit 1
           fi
+          echo 'AUTH_SECRET_AVAILABLE=YES'
 
-          PYTHONPATH=. python scripts/smoke_test_psilor_v1.py
-          smoke_rc=$?
+      - name: Run exact five-file authenticated smoke
+        run: PYTHONPATH=. python scripts/smoke_test_psilor_v1.py
+
+      - name: Verify exact admission verdict
+        shell: bash
+        run: |
+          set -euo pipefail
           report="${PSILOR_SMOKE_ROOT}/${PSILOR_SMOKE_RUN_ID}/validation_report.json"
-          if [ -f "${report}" ]; then
-            python - "${report}" <<'PY'
+          python - "$report" <<'PY'
           import json
-          import os
           import sys
           from pathlib import Path
 
-          source = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
-          allowed = {
-              'schema_version': 1,
-              'source_head_sha': os.environ['GITHUB_SHA'],
-              'workflow_run_id': os.environ['GITHUB_RUN_ID'],
-              'workflow_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
-              'smoke_verdict': source.get('smoke_verdict'),
-              'real_future_contracts': source.get('real_future_contracts'),
-              'real_ce_contracts': source.get('real_ce_contracts'),
-              'real_pe_contracts': source.get('real_pe_contracts'),
-              'real_candle_files': source.get('real_candle_files'),
-              'exact_common_sessions': source.get('exact_common_sessions'),
-              'smoke_hash_reconciliation': source.get('smoke_hash_reconciliation'),
-              'no_unexpected_files': source.get('no_unexpected_files'),
-              'created_by_current_run': source.get('created_by_current_run'),
-              'formal_extraction_approved': source.get('formal_extraction_approved', False),
-              'credentials_persisted': False,
-          }
-          Path(os.environ['RESULT_PATH']).write_text(
-              json.dumps(allowed, indent=2, sort_keys=True) + '\n', encoding='utf-8'
-          )
-          PY
-          else
-            python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-          Path(os.environ['RESULT_PATH']).write_text(json.dumps({
-              'schema_version': 1,
-              'source_head_sha': os.environ['GITHUB_SHA'],
-              'workflow_run_id': os.environ['GITHUB_RUN_ID'],
-              'workflow_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
-              'smoke_verdict': 'FAILED_NO_VALIDATION_REPORT',
-              'formal_extraction_approved': False,
-              'credentials_persisted': False,
-          }, indent=2) + '\n', encoding='utf-8')
-          PY
-          fi
-          exit "${smoke_rc}"
-
-      - name: Commit sanitized smoke verdict
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "${RESULT_PATH}"
-          if git diff --cached --quiet; then
-            echo 'SMOKE_RESULT_UNCHANGED=YES'
-          else
-            git commit -m 'research: record authenticated PSILOR smoke verdict'
-            git push origin HEAD:data/psilor-v1-upstox-fetch-v2
-          fi
-
-      - name: Enforce exact smoke verdict
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-          result = json.loads(Path(os.environ['RESULT_PATH']).read_text(encoding='utf-8'))
-          assert result['smoke_verdict'] == 'PASS_BOUNDED_AUTHENTICATED_FETCH_SMOKE'
-          assert result['real_future_contracts'] == 1
-          assert result['real_ce_contracts'] == 2
-          assert result['real_pe_contracts'] == 2
-          assert result['real_candle_files'] == 5
-          assert len(result['exact_common_sessions']) == 2
-          assert result['smoke_hash_reconciliation'] == 'PASS'
-          assert result['no_unexpected_files'] is True
-          assert result['created_by_current_run'] is True
-          assert result['formal_extraction_approved'] is True
-          assert result['credentials_persisted'] is False
+          report = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+          assert report['smoke_verdict'] == 'PASS_BOUNDED_AUTHENTICATED_FETCH_SMOKE'
+          assert report['real_future_contracts'] == 1
+          assert report['real_ce_contracts'] == 2
+          assert report['real_pe_contracts'] == 2
+          assert report['real_candle_files'] == 5
+          assert len(report['exact_common_sessions']) == 2
+          assert report['smoke_hash_reconciliation'] == 'PASS'
+          assert report['no_unexpected_files'] is True
+          assert report['created_by_current_run'] is True
+          assert report['formal_extraction_approved'] is True
           print('SMOKE_VERDICT=PASS_BOUNDED_AUTHENTICATED_FETCH_SMOKE')
           PY
 
@@ -200,8 +124,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: psilor-authenticated-smoke-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/psilor-smoke
-            research/psilor_v1/authenticated_smoke_ci_result.json
+          path: ${{ runner.temp }}/psilor-smoke
           if-no-files-found: ignore
           retention-days: 14
