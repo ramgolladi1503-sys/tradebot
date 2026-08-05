@@ -1,6 +1,32 @@
 {
-  "REUSE_DIRECTLY": [],
-  "WRAP_WITH_ADAPTER": [],
+  "schema_version": 1,
+  "authority_boundary": "PR #719 data is reusable only after local LFS materialization, SHA-256 verification, Parquet schema validation, and session/contract reconciliation.",
+  "REUSE_DIRECTLY": [
+    {
+      "path": "research/upstox_expired_options/dynamic_atm_selection.py",
+      "purpose": "Dynamic session-ATM union semantics",
+      "condition": "Path exists and focused compatibility tests pass"
+    },
+    {
+      "path": "tests/test_upstox_expired_options_dynamic_atm.py",
+      "purpose": "Regression contract for the existing selection policy",
+      "condition": "Test remains runnable on the stacked base"
+    }
+  ],
+  "WRAP_WITH_ADAPTER": [
+    {
+      "path": "scripts/plan_upstox_dynamic_atm_contracts.py",
+      "purpose": "Reuse contract planning without creating a second ATM policy",
+      "condition": "Adapter preserves original provenance and output hashes"
+    },
+    {
+      "path": "PR #719 retained LFS corpus",
+      "purpose": "Avoid redundant provider downloads",
+      "condition": "Pointer alone is not data; every binary must be materialized and validated"
+    }
+  ],
   "SUPERSEDE_WITH_REASON": [],
-  "NOT_APPLICABLE": []
+  "NOT_APPLICABLE": [],
+  "current_pr_reuse_verdict": "NOT_YET_MATERIALIZED_OR_RECONCILED",
+  "files_reused_by_current_pr": 0
 }
