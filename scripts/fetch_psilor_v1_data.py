@@ -29,7 +29,7 @@ def is_proxy_entry_eligible(candle_row) -> bool:
     return candle_row.get("volume", 0) > 0
 
 class UpstoxFetcher:
-    def __init__(self, start_date, end_date):
+    def __init__(self, start_date, end_date, base_dir=Path("data/psilor_v1/upstox")):
         # Timezone-aware canonical dates (treated as Asia/Kolkata session dates)
         self.start_date = start_date
         self.end_date = end_date
@@ -37,7 +37,7 @@ class UpstoxFetcher:
         # Avoid logging/storing secrets
         self.token = os.environ.get("UPSTOX_ACCESS_TOKEN", "")
         
-        self.base_dir = Path("data/psilor_v1/upstox")
+        self.base_dir = base_dir
         self.ref_dir = Path("data/psilor_v1/reference")
         
         self.base_dir.mkdir(parents=True, exist_ok=True)
@@ -127,7 +127,8 @@ class UpstoxFetcher:
         req = urllib.request.Request(url, method=method, headers={
             "Accept": "application/json",
             "Api-Version": api_version,
-            "Authorization": f"Bearer {self.token}" if self.token else ""
+            "Authorization": f"Bearer {self.token}" if self.token else "",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
         })
         
         req_id = str(uuid.uuid4())
