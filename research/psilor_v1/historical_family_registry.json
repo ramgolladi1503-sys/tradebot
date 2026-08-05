@@ -1,0 +1,140 @@
+{
+  "schema_version": "1.0",
+  "generated_on": "2026-08-05",
+  "claim_boundary": "NO_STRUCTURAL_EDGE_OR_OPTION_PROFITABILITY_PROVEN",
+  "families": [
+    {
+      "family": "opening_range_breakout_and_retest",
+      "frequency": "frequent",
+      "decision": "DEPRIORITIZE",
+      "recertification_status": "PROXY_NEGATIVE_NOT_EXECUTABLE_FINAL",
+      "reason": "Strict option replay was data-blocked; earlier candle lanes contained session and evidence-authority defects. Do not run another ordinary threshold sweep."
+    },
+    {
+      "family": "vwap_reclaim",
+      "frequency": "frequent",
+      "decision": "CLOSE_AS_STANDALONE",
+      "recertification_status": "PRICE_SHAPE_FAMILY_NOT_SUPPORTED",
+      "reason": "Causal implementation repairs did not establish discriminative option economics. VWAP may remain contextual evidence only."
+    },
+    {
+      "family": "compression_breakout",
+      "frequency": "moderate",
+      "decision": "CLOSE_AS_STANDALONE",
+      "recertification_status": "SCREEN_NEGATIVE",
+      "reason": "Repeated price-shape and perturbation screens did not produce stable out-of-sample economics."
+    },
+    {
+      "family": "conventional_momentum_and_trend_pullback",
+      "frequency": "frequent",
+      "decision": "DEPRIORITIZE",
+      "recertification_status": "SCOPED_MECHANISM_NEGATIVE",
+      "reason": "Named price-action families repeatedly failed controls and cost robustness."
+    },
+    {
+      "family": "mean_reversion_exhaustion_and_failed_breakout",
+      "frequency": "frequent",
+      "decision": "DEPRIORITIZE",
+      "recertification_status": "SCOPED_MECHANISM_NEGATIVE",
+      "reason": "Broad state and matched-control screens produced no stable survivor. Reopen only with a participant or liquidity mechanism."
+    },
+    {
+      "family": "high_occurrence_surface_breadth_rebound",
+      "frequency": "307 trades across 140 sessions",
+      "decision": "CLOSE",
+      "recertification_status": "FRAGILE_NEGATIVE",
+      "reason": "Profit factor near 1.09 collapsed below one after winner removal and cost stress."
+    },
+    {
+      "family": "volume_absorption_after_confirmation",
+      "frequency": "217 trades",
+      "decision": "CLOSE",
+      "recertification_status": "FRAGILE_NEGATIVE",
+      "reason": "Profit factor near 1.19 failed winner-removal and realistic stress gates."
+    },
+    {
+      "family": "low_dispersion_directional_lift",
+      "frequency": "275 trades across 140 sessions",
+      "decision": "CLOSE",
+      "recertification_status": "FRAGILE_NEGATIVE",
+      "reason": "Top-three removal and cost stress destroyed the result despite positive-fold breadth."
+    },
+    {
+      "family": "synchronised_surface_discount_rebound",
+      "frequency": "moderate",
+      "decision": "CLOSE",
+      "recertification_status": "MECHANISM_NEGATIVE",
+      "reason": "Executed out-of-fold lanes were negative."
+    },
+    {
+      "family": "three_dimensional_option_events",
+      "frequency": "sparse",
+      "decision": "CLOSE_FOR_FREQUENT_EDGE_OBJECTIVE",
+      "recertification_status": "LOW_FREQUENCY_FRAGILE",
+      "reason": "The best isolated candidate had 23 trades across 15 sessions and broke under top-five removal."
+    },
+    {
+      "family": "common_factor_option_underreaction",
+      "frequency": "1036 trade rows across 160 sessions",
+      "decision": "CLOSE",
+      "recertification_status": "CONCENTRATION_FAILURE",
+      "reason": "Approximately 90 percent of profit came from one winner or session; winner removal made variants negative."
+    },
+    {
+      "family": "common_factor_delayed_confirmation",
+      "frequency": "24 to 95 trades per evaluated partition",
+      "decision": "CLOSE",
+      "recertification_status": "MECHANISM_REJECTED",
+      "reason": "Continuation validation profit factor was approximately 0.29 to 0.41; failed-confirmation reversal was approximately 0.09 to 0.14."
+    },
+    {
+      "family": "information_migration_sequence",
+      "frequency": "660 signals across 161 sessions",
+      "decision": "CLOSE",
+      "recertification_status": "VALIDATION_FAILURE",
+      "reason": "Frozen subgroup validation had 83 trades, negative mean, 35.5 percent wins and profit factor near 0.90."
+    },
+    {
+      "family": "late_day_bearish_pe_momentum",
+      "frequency": "sparse",
+      "decision": "WATCHLIST_NOT_PRIMARY",
+      "recertification_status": "FRAGILE_AND_CONTAMINATED",
+      "reason": "Only 13 viewed validation trades; removing two largest winners broke both partitions; the exit overlay was newly introduced."
+    },
+    {
+      "family": "closing_auction_convergence",
+      "frequency": "one late-session event per eligible day",
+      "decision": "WATCHLIST",
+      "recertification_status": "MECHANISM_REAL_SAMPLE_INSUFFICIENT",
+      "reason": "Auction finalisation is real, but directional executable option edge is not validated."
+    },
+    {
+      "family": "directional_option_repricing_lag_v3",
+      "frequency": "unknown",
+      "decision": "REOPEN",
+      "recertification_status": "GENUINELY_UNTESTED",
+      "reason": "No qualifying development candidate was evaluated because synchronised futures and option bid, ask, quantity, flow and instrument-master authority were missing."
+    },
+    {
+      "family": "market_event_graph_ce_reversal",
+      "frequency": "168 training occurrences, 115 validation trades, 25 holdout trades",
+      "decision": "REOPEN_EVENT_LOCATION_ONLY",
+      "recertification_status": "INVALID_OUTCOME_ACCOUNTING",
+      "reason": "The retained runner mixes one-minute and five-minute bar horizons, uses a precomputed future_return_15 field instead of recorded entry-to-exit PnL, selected from 11258 graph-direction pairs and had zero option rows."
+    },
+    {
+      "family": "market_event_graph_pe_participation_shock",
+      "frequency": "1040 training occurrences, 182 validation trades",
+      "decision": "REOPEN_EVENT_LOCATION_ONLY",
+      "recertification_status": "INVALID_OUTCOME_ACCOUNTING",
+      "reason": "The event mechanism is frequent, but the same mixed-horizon, precomputed-outcome, multiple-testing and no-option-evidence defects invalidate the performance claim."
+    },
+    {
+      "family": "psilor_v1",
+      "frequency": "target 0.5 to 2 executable events per session; not measured",
+      "decision": "PRIMARY_PREREGISTERED_CANDIDATE",
+      "recertification_status": "NOT_EVALUATED_DATA_BLOCKED",
+      "reason": "This combines the only frequent causal event-location family worth reopening with a genuinely untested executable option repricing mechanism. It is not a threshold variation and no edge is claimed."
+    }
+  ]
+}
