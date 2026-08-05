@@ -9,72 +9,97 @@ DISCLAIMERS:
 - NO_EXECUTION_AUTHORITY
 - NO_PR_MERGE
 """
+from __future__ import annotations
 
-import sys
-import json
+import argparse
 import hashlib
+import json
 import logging
+import sys
+from datetime import time
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
-import pandas as pd
+from typing import Any
+
 import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s")
 logger = logging.getLogger("generate_offline_datasets_v3")
 
-MAX_HORIZON_LAG = 5000  # Freeze MAX_HORIZON_LAG based on capture cadence (5 seconds)
+MAX_HORIZON_LAG = 5000
+MARKET_TIMEZONE = "Asia/Kolkata"
+MARKET_OPEN = time(9, 15)
+MARKET_CLOSE = time(15, 30)
+POST_CLOSE_END = time(15, 40)
+KNOWN_STALE_BOUNDARIES_UTC = {"072900", "073000", "073100"}
+
 
 def calculate_sha256(filepath: Path) -> str:
-    sha = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        while chunk := f.read(8192):
-            sha.update(chunk)
-    return sha.hexdigest()
+    digest = hashlib.sha256()
+    with filepath.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
-def get_market_phase(ts: pd.Timestamp) -> str:
-    ist_time = ts.tz_convert("Asia/Kolkata").time()
-    from datetime import time
-    if ist_time <= time(15, 30):
+
+def boundary_ist_time(timestamp: pd.Timestamp) -> time:
+    if timestamp.tzinfo is None:
+        raise ValueError("Boundary timestamp must be timezone-aware")
+    return timestamp.tz_convert(MARKET_TIMEZONE).time()
+
+
+def get_market_phase(timestamp: pd.Timestamp) -> str:
+    ist_time = boundary_ist_time(timestamp)
+    if MARKET_OPEN <= ist_time <= MARKET_CLOSE:
         return "CONTINUOUS_MARKET"
-    elif time(15, 30) < ist_time <= time(15, 40):
+    if MARKET_CLOSE < ist_time <= POST_CLOSE_END:
         return "POST_CLOSE_OR_DERIVATIVE_CONVERGENCE"
-    else:
-        return "POST_MARKET_IDLE"
+    return "POST_MARKET_IDLE"
 
-def get_horizon_outcome(instrument_df, boundary_ms, horizon_sec):
+
+def classify_interval(timestamp: pd.Timestamp, maximum_input_age_seconds: float) -> str:
+    """Classify one UTC boundary using the Indian continuous-market clock."""
+    ist_time = boundary_ist_time(timestamp)
+    if ist_time < MARKET_OPEN:
+        return "STARTUP_BACKFILL_NOT_LIVE_CAUSAL"
+    if ist_time > MARKET_CLOSE:
+        return "OUTSIDE_CONTINUOUS_MARKET"
+    if timestamp.strftime("%H%M%S") in KNOWN_STALE_BOUNDARIES_UTC:
+        return "STALE_CARRY_FORWARD"
+    if maximum_input_age_seconds > 10.0:
+        return "STALE_CARRY_FORWARD"
+    return "LIVE_FRESH"
+
+
+def get_horizon_outcome(instrument_df: pd.DataFrame, boundary_ms: int, horizon_sec: int) -> dict[str, Any]:
     target_ts = boundary_ms + horizon_sec * 1000
     future_obs = instrument_df[instrument_df["source_exchange_ts"] >= target_ts]
-    
-    # Missing sparse outcome
     if future_obs.empty:
         return {
-            "target_timestamp": target_ts, 
-            "matched_timestamp": None, 
-            "lag_ms": None, 
-            "source_fragment": None, 
-            "ltp": None, 
+            "target_timestamp": target_ts,
+            "matched_timestamp": None,
+            "lag_ms": None,
+            "source_fragment": None,
+            "ltp": None,
             "missing_reason": "NO_OBSERVATION_WITHIN_TOLERANCE",
-            "available": False
+            "available": False,
         }
-    
+
     match = future_obs.iloc[0]
-    matched_ts = match["source_exchange_ts"]
+    matched_ts = int(match["source_exchange_ts"])
     lag = matched_ts - target_ts
-    
-    # Check max lag tolerance
     if lag > MAX_HORIZON_LAG:
         return {
-            "target_timestamp": target_ts, 
-            "matched_timestamp": None, 
-            "lag_ms": None, 
-            "source_fragment": None, 
-            "ltp": None, 
+            "target_timestamp": target_ts,
+            "matched_timestamp": None,
+            "lag_ms": None,
+            "source_fragment": None,
+            "ltp": None,
             "missing_reason": "NO_OBSERVATION_WITHIN_TOLERANCE",
-            "available": False
+            "available": False,
         }
-    
     return {
         "target_timestamp": target_ts,
         "matched_timestamp": matched_ts,
@@ -82,520 +107,628 @@ def get_horizon_outcome(instrument_df, boundary_ms, horizon_sec):
         "source_fragment": match.get("source_fragment"),
         "ltp": float(match["ltp"]),
         "available": True,
-        "missing_reason": None
+        "missing_reason": None,
     }
 
-def get_mfe_mae(instrument_df, entry_obs_ts, entry_price, boundary_ms, horizon_sec):
+
+def get_mfe_mae(
+    instrument_df: pd.DataFrame,
+    entry_obs_ts: Any,
+    entry_price: Any,
+    boundary_ms: int,
+    horizon_sec: int,
+) -> tuple[Any, Any, Any, Any, Any, Any]:
     if pd.isna(entry_obs_ts) or pd.isna(entry_price):
         return None, None, None, None, None, None
-        
-    end_ts = boundary_ms + horizon_sec * 1000 + MAX_HORIZON_LAG
-    # Authoritative window: entry_observation_timestamp < event_timestamp <= T + 60s + MAX_HORIZON_LAG
-    window = instrument_df[(instrument_df["source_exchange_ts"] > entry_obs_ts) & (instrument_df["source_exchange_ts"] <= end_ts)]
-    if window.empty:
-        return None, None, entry_obs_ts + 1, end_ts, None, None
-    
-    max_idx = window["ltp"].idxmax()
-    min_idx = window["ltp"].idxmin()
-    max_price = window.loc[max_idx]["ltp"]
-    min_price = window.loc[min_idx]["ltp"]
-    
-    mfe = float(max_price - entry_price) if pd.notna(max_price) else None
-    mae = float(min_price - entry_price) if pd.notna(min_price) else None
-    
-    return mfe, mae, entry_obs_ts + 1, end_ts, window.loc[max_idx]["source_exchange_ts"], window.loc[min_idx]["source_exchange_ts"]
 
-def test_causality_and_horizons():
-    data = {
-        "source_exchange_ts": [1000000, 1005000, 1020000, 1060000],
-        "ltp": [24604.6, 24606.0, 24600.2, 24606.4],
-        "source_fragment": ["A", "A", "A", "A"]
-    }
-    df = pd.DataFrame(data)
+    end_ts = boundary_ms + horizon_sec * 1000 + MAX_HORIZON_LAG
+    window = instrument_df[
+        (instrument_df["source_exchange_ts"] > entry_obs_ts)
+        & (instrument_df["source_exchange_ts"] <= end_ts)
+    ]
+    if window.empty:
+        return None, None, int(entry_obs_ts) + 1, end_ts, None, None
+
+    max_index = window["ltp"].idxmax()
+    min_index = window["ltp"].idxmin()
+    maximum = window.loc[max_index, "ltp"]
+    minimum = window.loc[min_index, "ltp"]
+    mfe = float(maximum - entry_price) if pd.notna(maximum) else None
+    mae = float(minimum - entry_price) if pd.notna(minimum) else None
+    return (
+        mfe,
+        mae,
+        int(entry_obs_ts) + 1,
+        end_ts,
+        window.loc[max_index, "source_exchange_ts"],
+        window.loc[min_index, "source_exchange_ts"],
+    )
+
+
+def test_causality_and_horizons() -> None:
+    frame = pd.DataFrame(
+        {
+            "source_exchange_ts": [1000000, 1005000, 1020000, 1060000],
+            "ltp": [24604.6, 24606.0, 24600.2, 24606.4],
+            "source_fragment": ["A", "A", "A", "A"],
+        }
+    )
     boundary_ms = 1000000
-    
-    # 1. Bounded future lookup
-    res_5s = get_horizon_outcome(df, boundary_ms, 5)
-    assert res_5s["ltp"] == 24606.0, "Bounded future lookup failed"
-    assert res_5s["matched_timestamp"] >= res_5s["target_timestamp"], "Matched must be >= target"
-    assert res_5s["lag_ms"] <= MAX_HORIZON_LAG, "Lag must be within tolerance"
-    
-    # 2. Missing sparse-option outcome becomes null
-    res_15s = get_horizon_outcome(df, boundary_ms, 15) # target 1015000, next is 1020000. lag 5000. Matches!
-    assert res_15s["ltp"] == 24600.2, "Missing sparse-option outcome check failed"
-    
-    # 3. Distant later tick is not reused
-    res_30s = get_horizon_outcome(df, boundary_ms, 30) # target 1030000, next 1060000, lag 30000 > 5000
-    assert res_30s["ltp"] is None, "Distant later tick should not be reused"
-    assert res_30s["missing_reason"] == "NO_OBSERVATION_WITHIN_TOLERANCE"
-    
-    # 4. Same later event may be reused only when independently inside each tolerance
-    # Let's add a tick at 1062000
-    df2 = pd.DataFrame({
-        "source_exchange_ts": [1000000, 1062000],
-        "ltp": [100, 110],
-        "source_fragment": ["A", "A"]
-    })
-    res_60_1 = get_horizon_outcome(df2, 1000000, 60) # target 1060000. lag 2000. Matches.
-    assert res_60_1["ltp"] == 110
-    
-    # 5. MFE/MAE contains all valid horizon returns
-    mfe, mae, ws, we, mfe_ts, mae_ts = get_mfe_mae(df, 1000000, 24604.6, 1000000, 60)
-    # returns: 24606.0, 24600.2, 24606.4. delta: 1.4, -4.4, 1.8
+    result_5s = get_horizon_outcome(frame, boundary_ms, 5)
+    assert result_5s["ltp"] == 24606.0
+    assert result_5s["matched_timestamp"] >= result_5s["target_timestamp"]
+    assert result_5s["lag_ms"] <= MAX_HORIZON_LAG
+
+    result_15s = get_horizon_outcome(frame, boundary_ms, 15)
+    assert result_15s["ltp"] == 24600.2
+
+    result_30s = get_horizon_outcome(frame, boundary_ms, 30)
+    assert result_30s["ltp"] is None
+    assert result_30s["missing_reason"] == "NO_OBSERVATION_WITHIN_TOLERANCE"
+
+    sparse = pd.DataFrame(
+        {
+            "source_exchange_ts": [1000000, 1062000],
+            "ltp": [100, 110],
+            "source_fragment": ["A", "A"],
+        }
+    )
+    assert get_horizon_outcome(sparse, 1000000, 60)["ltp"] == 110
+
+    mfe, mae, *_ = get_mfe_mae(frame, 1000000, 24604.6, 1000000, 60)
     assert round(mfe, 2) == 1.8
     assert round(mae, 2) == -4.4
-    
     logger.info("Deterministic tests PASSED.")
 
-def main():
+
+def _latest_complete_rows(frame: pd.DataFrame, boundary_ms: int) -> pd.DataFrame:
+    eligible = frame[frame["source_exchange_ts"] <= boundary_ms]
+    if eligible.empty:
+        return eligible
+    return eligible.groupby("instrument_key", sort=False, as_index=False).tail(1)
+
+
+def _safe_float(value: Any) -> float | None:
+    return float(value) if value is not None and pd.notna(value) else None
+
+
+def _safe_int(value: Any) -> int | None:
+    return int(value) if value is not None and pd.notna(value) else None
+
+
+def main() -> None:
     test_causality_and_horizons()
-    
-    import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--session-date", required=True)
-    parser.add_argument("--evidence-roots", nargs='+', required=True)
+    parser.add_argument("--evidence-roots", nargs="+", required=True)
     parser.add_argument("--output-root", required=True)
     args = parser.parse_args()
 
     session_date = args.session_date
-    evidence_roots = [Path(r) for r in args.evidence_roots]
-    output_root = Path(args.output_root)
-    output_dir = output_root / "offline_datasets_v3"
+    evidence_roots = [Path(root) for root in args.evidence_roots]
+    output_dir = Path(args.output_root) / "offline_datasets_v3"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     from core.upstox_capture.schemas import NORMALIZED_TICK_SCHEMA
 
-    dfs = []
-    ref_dir = evidence_roots[0] / "reference"
-    membership_path = ref_dir / f"nifty50_membership_{session_date}.json"
-    weights_path = ref_dir / f"nifty50_weights_{session_date}.json"
-    
+    reference_dir = evidence_roots[0] / "reference"
+    membership_path = reference_dir / f"nifty50_membership_{session_date}.json"
+    weights_path = reference_dir / f"nifty50_weights_{session_date}.json"
     if not membership_path.exists():
-        logger.error(f"Constituent membership reference missing at {membership_path}")
-        sys.exit(1)
+        logger.error("Constituent membership reference missing at %s", membership_path)
+        raise SystemExit(1)
 
-    with open(membership_path, "r") as f:
-        membership_data = json.load(f)
-        membership = membership_data.get("constituents", {})
-    constituents = list(membership.keys())
-    
-    sector_map = {}
-    for sym, details in membership.items():
-        sec = details.get("sector", "Unknown")
-        sector_map[sym] = sec
+    membership_payload = json.loads(membership_path.read_text(encoding="utf-8"))
+    membership = membership_payload.get("constituents", {})
+    constituents = list(membership)
+    sector_map = {
+        symbol: details.get("sector", "Unknown")
+        for symbol, details in membership.items()
+    }
 
     official_weights = None
     if weights_path.exists():
-        with open(weights_path, "r") as f:
-            w_payload = json.load(f)
-            if w_payload.get("official_weights_available"):
-                official_weights = w_payload.get("weights")
+        weights_payload = json.loads(weights_path.read_text(encoding="utf-8"))
+        if weights_payload.get("official_weights_available"):
+            official_weights = weights_payload.get("weights")
 
+    frames: list[pd.DataFrame] = []
     for root in evidence_roots:
-        norm_dir = root / "normalized"
-        files = list(norm_dir.glob("**/ticks_*.parquet"))
+        files = sorted((root / "normalized").glob("**/ticks_*.parquet"))
         if not files:
             continue
-        tables = [pq.read_table(fp, schema=NORMALIZED_TICK_SCHEMA) for fp in files]
-        df_part = pd.concat([t.to_pandas() for t in tables], ignore_index=True)
-        df_part["source_fragment"] = root.name
-        
-        # Phase 5: Seam Policy (keep it exactly to track overlap correctly)
-        df_part["receive_utc"] = pd.to_datetime(df_part["receive_wall_ts_utc"], format="ISO8601", utc=True)
-        dfs.append(df_part)
+        tables = [pq.read_table(path, schema=NORMALIZED_TICK_SCHEMA) for path in files]
+        frame = pd.concat([table.to_pandas() for table in tables], ignore_index=True)
+        frame["source_fragment"] = root.name
+        frame["receive_utc"] = pd.to_datetime(
+            frame["receive_wall_ts_utc"], format="ISO8601", utc=True
+        )
+        frames.append(frame)
 
-    if not dfs:
+    if not frames:
         logger.error("No data found across roots.")
-        sys.exit(1)
+        raise SystemExit(1)
 
-    df = pd.concat(dfs, ignore_index=True)
-    df.sort_values(by=["source_exchange_ts", "local_sequence"], inplace=True)
-    df["source_ts_dt"] = pd.to_datetime(df["source_exchange_ts"], unit="ms", utc=True)
+    data = pd.concat(frames, ignore_index=True)
+    data["source_exchange_ts"] = pd.to_numeric(
+        data["source_exchange_ts"], errors="coerce"
+    )
+    data = data[data["source_exchange_ts"].notna()].copy()
+    data["source_exchange_ts"] = data["source_exchange_ts"].astype("int64")
+    data.sort_values(
+        by=[
+            "source_exchange_ts",
+            "local_sequence",
+            "receive_monotonic_ns",
+            "instrument_key",
+        ],
+        kind="mergesort",
+        inplace=True,
+    )
+    data["source_ts_dt"] = pd.to_datetime(
+        data["source_exchange_ts"], unit="ms", utc=True
+    )
 
-    min_ts = df["source_ts_dt"].min().floor("1min")
-    max_ts = df["source_ts_dt"].max().ceil("1min")
-    if max_ts <= min_ts:
-        max_ts = min_ts + pd.Timedelta(minutes=1)
-    interval_bounds = pd.date_range(start=min_ts, end=max_ts, freq="1min", tz="UTC")
-
-    precursor_rows = []
-    futures_outcome_rows = []
-    option_outcome_rows = []
-    join_map_rows = []
-    seam_audit_rows = []
+    minimum = data["source_ts_dt"].min().floor("1min")
+    maximum = data["source_ts_dt"].max().ceil("1min")
+    if maximum <= minimum:
+        maximum = minimum + pd.Timedelta(minutes=1)
+    interval_bounds = pd.date_range(start=minimum, end=maximum, freq="1min", tz="UTC")
 
     spot_key = "NSE_INDEX|Nifty 50"
-    fut_keys = sorted(list(df[df["instrument_type"] == "FUT"]["instrument_key"].unique()))
-    front_fut_key = fut_keys[0] if fut_keys else None
-    
-    df_fut = df[df["instrument_type"] == "FUT"].copy()
-    df_opt = df[df["instrument_type"].isin(["CE", "PE"])].copy()
-    df_spot = df[df["instrument_key"] == spot_key].copy()
+    future_keys = sorted(data.loc[data["instrument_type"] == "FUT", "instrument_key"].unique())
+    front_future_key = future_keys[0] if future_keys else None
+    future_data = data[data["instrument_type"] == "FUT"].copy()
+    option_data = data[data["instrument_type"].isin(["CE", "PE"])].copy()
+    spot_data = data[data["instrument_key"] == spot_key].copy()
+
+    precursors: list[dict[str, Any]] = []
+    future_outcomes: list[dict[str, Any]] = []
+    option_outcomes: list[dict[str, Any]] = []
+    join_map: list[dict[str, Any]] = []
+    seam_audit_rows: list[dict[str, Any]] = []
+    previous_equal_weight_participation = None
 
     logger.info("Processing intervals (V3)...")
-    prev_ew_part = None
-    
-    for idx_i, boundary in enumerate(interval_bounds[:-1]):
-        interval_id = f"INT_{session_date}_{boundary.strftime('%H%M%S')}"
+    for interval_index, boundary in enumerate(interval_bounds[:-1]):
         boundary_ms = int(boundary.timestamp() * 1000)
+        current_rows = _latest_complete_rows(data, boundary_ms)
+        if current_rows.empty:
+            continue
+        current_map = current_rows.set_index("instrument_key")
 
+        previous_boundary_ms = (
+            int(interval_bounds[interval_index - 1].timestamp() * 1000)
+            if interval_index > 0
+            else boundary_ms - 60000
+        )
+        previous_rows = _latest_complete_rows(data, previous_boundary_ms)
+        previous_map = (
+            previous_rows.set_index("instrument_key") if not previous_rows.empty else None
+        )
+
+        latest_source_ts = int(
+            data.loc[data["source_exchange_ts"] <= boundary_ms, "source_exchange_ts"].max()
+        )
+        maximum_input_age = (boundary_ms - latest_source_ts) / 1000.0
+        classification = classify_interval(boundary, maximum_input_age)
+        boundary_ist = boundary.tz_convert(MARKET_TIMEZONE)
         market_phase = get_market_phase(boundary)
-
-        ticks_at_boundary = df[df["source_exchange_ts"] <= boundary_ms]
-        if ticks_at_boundary.empty:
+        interval_id = f"INT_{session_date}_{boundary.strftime('%H%M%S')}"
+        seam_audit_rows.append(
+            {
+                "interval_id": interval_id,
+                "boundary_utc": boundary.isoformat(),
+                "boundary_ist": boundary_ist.isoformat(),
+                "maximum_age": maximum_input_age,
+                "classification": classification,
+                "market_phase": market_phase,
+            }
+        )
+        if classification != "LIVE_FRESH":
             continue
 
-        latest_ticks = ticks_at_boundary.groupby("instrument_key").last().reset_index()
-        latest_map = latest_ticks.set_index("instrument_key")
-        
-        interval_start_ms = int(interval_bounds[idx_i - 1].timestamp() * 1000) if idx_i > 0 else boundary_ms - 60000
-        ticks_prev_boundary = df[df["source_exchange_ts"] <= interval_start_ms]
-        prev_ticks = ticks_prev_boundary.groupby("instrument_key").last().reset_index().set_index("instrument_key") if not ticks_prev_boundary.empty else None
+        spot_tick = current_map.loc[spot_key] if spot_key in current_map.index else None
+        future_tick = (
+            current_map.loc[front_future_key]
+            if front_future_key and front_future_key in current_map.index
+            else None
+        )
+        spot_price = _safe_float(spot_tick.get("ltp")) if spot_tick is not None else None
+        future_price = _safe_float(future_tick.get("ltp")) if future_tick is not None else None
+        previous_spot = (
+            _safe_float(previous_map.loc[spot_key].get("ltp"))
+            if previous_map is not None and spot_key in previous_map.index
+            else None
+        )
+        previous_future = (
+            _safe_float(previous_map.loc[front_future_key].get("ltp"))
+            if previous_map is not None and front_future_key in previous_map.index
+            else None
+        )
 
-        # Seam Freshness Classification
-        max_input_age = (boundary_ms - ticks_at_boundary["source_exchange_ts"].max()) / 1000.0
-        stale = max_input_age > 10.0
-        is_startup = boundary.time() < datetime.strptime("09:15:00", "%H:%M:%S").time()
-        
-        classification = "LIVE_FRESH"
-        if is_startup:
-            classification = "STARTUP_BACKFILL_NOT_LIVE_CAUSAL"
-        elif stale:
-            classification = "STALE_CARRY_FORWARD"
-            
-        # 07:29 to 07:31 explicit override based on known gap
-        if boundary.strftime('%H%M%S') in ["072900", "073000", "073100"]:
-            classification = "STALE_CARRY_FORWARD"
-            
-        seam_audit_rows.append({
-            "interval_id": interval_id,
-            "boundary": boundary.strftime('%H%M%S'),
-            "maximum_age": max_input_age,
-            "classification": classification
-        })
+        basis = (
+            future_price - spot_price
+            if future_price is not None and spot_price is not None
+            else None
+        )
+        previous_basis = (
+            previous_future - previous_spot
+            if previous_future is not None and previous_spot is not None
+            else None
+        )
+        basis_change = (
+            basis - previous_basis
+            if basis is not None and previous_basis is not None
+            else None
+        )
+        nifty_return = (
+            spot_price - previous_spot
+            if spot_price is not None and previous_spot is not None
+            else None
+        )
+        future_return = (
+            future_price - previous_future
+            if future_price is not None and previous_future is not None
+            else None
+        )
 
-        if classification not in ["LIVE_FRESH"]:
-            # For causal research, exclude all non-LIVE_FRESH rows
-            continue
+        constituent_returns: list[float] = []
+        per_symbol_return: dict[str, float] = {}
+        sector_returns: dict[str, float] = {}
+        constituent_count = 0
+        for symbol in constituents:
+            matches = current_rows[current_rows["tradingsymbol"] == symbol]
+            if matches.empty:
+                continue
+            constituent_count += 1
+            current = matches.iloc[-1]
+            instrument_key = current["instrument_key"]
+            current_ltp = _safe_float(current.get("ltp"))
+            previous_ltp = (
+                _safe_float(previous_map.loc[instrument_key].get("ltp"))
+                if previous_map is not None and instrument_key in previous_map.index
+                else None
+            )
+            if (
+                current_ltp is None
+                or previous_ltp is None
+                or current_ltp <= 0
+                or previous_ltp <= 0
+            ):
+                continue
+            value = current_ltp - previous_ltp
+            constituent_returns.append(value)
+            per_symbol_return[symbol] = value
+            sector = sector_map.get(symbol, "Unknown")
+            sector_returns[sector] = sector_returns.get(sector, 0.0) + value
 
-        spot_tick = latest_map.loc[spot_key] if spot_key in latest_map.index else None
-        fut_tick = latest_map.loc[front_fut_key] if front_fut_key and front_fut_key in latest_map.index else None
+        equal_weight_participation = (
+            float(np.mean(constituent_returns)) if constituent_returns else None
+        )
+        official_weight_participation = None
+        authority = "WEIGHTS_UNAVAILABLE"
+        if official_weights and per_symbol_return:
+            official_weight_participation = sum(
+                value * float(official_weights.get(symbol, 1.0 / 50.0))
+                for symbol, value in per_symbol_return.items()
+            )
+            authority = "OFFICIAL_WEIGHTS"
 
-        spot_price = float(spot_tick["ltp"]) if spot_tick is not None and pd.notna(spot_tick["ltp"]) else None
-        fut_price = float(fut_tick["ltp"]) if fut_tick is not None and pd.notna(fut_tick["ltp"]) else None
-
-        spot_prev = float(prev_ticks.loc[spot_key]["ltp"]) if prev_ticks is not None and spot_key in prev_ticks.index else None
-        fut_prev = float(prev_ticks.loc[front_fut_key]["ltp"]) if prev_ticks is not None and front_fut_key in prev_ticks.index else None
-
-        basis = (fut_price - spot_price) if (fut_price and spot_price) else None
-        prev_basis = (fut_prev - spot_prev) if (fut_prev and spot_prev) else None
-        basis_change = (basis - prev_basis) if (basis is not None and prev_basis is not None) else None
-
-        nifty_return = (spot_price - spot_prev) if (spot_price and spot_prev) else None
-        fut_return = (fut_price - fut_prev) if (fut_price and fut_prev) else None
-
-        constituent_returns = []
-        sector_returns = {}
-        eq_count = 0
-        for sym in constituents:
-            eq_matches = latest_ticks[latest_ticks["tradingsymbol"] == sym]
-            if not eq_matches.empty:
-                eq_count += 1
-                c_ltp = eq_matches.iloc[-1]["ltp"]
-                prev_c_ltp = float(prev_ticks.loc[eq_matches.iloc[-1]["instrument_key"]]["ltp"]) if prev_ticks is not None and eq_matches.iloc[-1]["instrument_key"] in prev_ticks.index else None
-                if pd.notna(c_ltp) and c_ltp > 0 and pd.notna(prev_c_ltp) and prev_c_ltp > 0:
-                    ret = float(c_ltp - prev_c_ltp)
-                    constituent_returns.append(ret)
-                    sec = sector_map.get(sym, "Unknown")
-                    sector_returns[sec] = sector_returns.get(sec, 0.0) + ret
-
-        ew_part = float(np.mean(constituent_returns)) if constituent_returns else None
-        
-        ow_part = None
-        auth = "WEIGHTS_UNAVAILABLE"
-        if official_weights and constituent_returns:
-            ow_sum = 0.0
-            for sym in constituents:
-                eq_matches = latest_ticks[latest_ticks["tradingsymbol"] == sym]
-                if not eq_matches.empty:
-                    c_ltp = eq_matches.iloc[-1]["ltp"]
-                    prev_c_ltp = float(prev_ticks.loc[eq_matches.iloc[-1]["instrument_key"]]["ltp"]) if prev_ticks is not None and eq_matches.iloc[-1]["instrument_key"] in prev_ticks.index else None
-                    if pd.notna(c_ltp) and c_ltp > 0 and pd.notna(prev_c_ltp) and prev_c_ltp > 0:
-                        ret = float(c_ltp - prev_c_ltp)
-                        w = official_weights.get(sym, 1.0/50.0)
-                        ow_sum += ret * w
-            ow_part = ow_sum
-            auth = "OFFICIAL_WEIGHTS"
-            
-        participation_accel = (ew_part - prev_ew_part) if ew_part is not None and prev_ew_part is not None else None
-        prev_ew_part = ew_part
-
-        sector_count = len(sector_returns)
-        top_sector = max(sector_returns.values()) if sector_returns else 0.0
-
-        future_bid_ask_imbalance = None
-        data_coverage = eq_count / 50.0
+        participation_acceleration = (
+            equal_weight_participation - previous_equal_weight_participation
+            if equal_weight_participation is not None
+            and previous_equal_weight_participation is not None
+            else None
+        )
+        previous_equal_weight_participation = equal_weight_participation
+        data_coverage = constituent_count / 50.0
         if data_coverage == 0:
             continue
-            
-        future_vol = int(fut_tick["volume"]) if fut_tick is not None and pd.notna(fut_tick.get("volume")) else None
-        future_vol_prev = int(prev_ticks.loc[front_fut_key]["volume"]) if prev_ticks is not None and front_fut_key in prev_ticks.index and pd.notna(prev_ticks.loc[front_fut_key]["volume"]) else None
-        future_vol_delta = (future_vol - future_vol_prev) if future_vol is not None and future_vol_prev is not None else None
 
-        precursor_row = {
+        future_volume = _safe_int(future_tick.get("volume")) if future_tick is not None else None
+        previous_future_volume = (
+            _safe_int(previous_map.loc[front_future_key].get("volume"))
+            if previous_map is not None and front_future_key in previous_map.index
+            else None
+        )
+        future_volume_delta = (
+            future_volume - previous_future_volume
+            if future_volume is not None and previous_future_volume is not None
+            else None
+        )
+
+        precursors.append(
+            {
+                "session_date": session_date,
+                "source_interval_identity": interval_id,
+                "interval_end_timestamp": boundary.isoformat(),
+                "interval_end_timestamp_ist": boundary_ist.isoformat(),
+                "market_phase": market_phase,
+                "equal_weight_participation": equal_weight_participation,
+                "official_weight_participation": official_weight_participation,
+                "participation_acceleration": participation_acceleration,
+                "leadership_concentration": float(np.std(constituent_returns)) if constituent_returns else None,
+                "sector_participation_count": len(sector_returns),
+                "top_sector_contribution": max(sector_returns.values()) if sector_returns else 0.0,
+                "constituent_dispersion": float(np.std(constituent_returns)) if constituent_returns else None,
+                "nifty_return_through_interval": nifty_return,
+                "front_future_return_through_interval": future_return,
+                "spot_future_basis": basis,
+                "basis_change": basis_change,
+                "future_cumulative_volume": future_volume,
+                "future_interval_volume_delta": future_volume_delta,
+                "future_oi_change": _safe_int(future_tick.get("open_interest")) if future_tick is not None else None,
+                "future_bid_ask_imbalance": None,
+                "data_coverage": data_coverage,
+                "maximum_input_age_seconds": maximum_input_age,
+                "authority": authority,
+            }
+        )
+
+        instrument_future = future_data[future_data["instrument_key"] == front_future_key]
+        entry_observation = future_tick.get("source_exchange_ts") if future_tick is not None else None
+        future_results = {
+            horizon: get_horizon_outcome(instrument_future, boundary_ms, horizon)
+            for horizon in (5, 15, 30, 60)
+        }
+        future_mfe, future_mae, mfe_start, mfe_end, mfe_observation, mae_observation = get_mfe_mae(
+            instrument_future, entry_observation, future_price, boundary_ms, 60
+        )
+        spot_result_60 = get_horizon_outcome(spot_data, boundary_ms, 60)
+        future_return_60 = (
+            future_results[60]["ltp"] - future_price
+            if future_results[60]["ltp"] is not None and future_price is not None
+            else None
+        )
+        spot_return_60 = (
+            spot_result_60["ltp"] - spot_price
+            if spot_result_60["ltp"] is not None and spot_price is not None
+            else None
+        )
+        causal_basis_60 = (
+            (future_results[60]["ltp"] - spot_result_60["ltp"]) - basis
+            if future_return_60 is not None
+            and spot_return_60 is not None
+            and basis is not None
+            else None
+        )
+        future_row: dict[str, Any] = {
             "session_date": session_date,
             "source_interval_identity": interval_id,
-            "interval_end_timestamp": boundary.isoformat(),
             "market_phase": market_phase,
-            "equal_weight_participation": ew_part,
-            "official_weight_participation": ow_part,
-            "participation_acceleration": participation_accel,
-            "leadership_concentration": float(np.std(constituent_returns)) if constituent_returns else None,
-            "sector_participation_count": sector_count,
-            "top_sector_contribution": top_sector,
-            "constituent_dispersion": float(np.std(constituent_returns)) if constituent_returns else None,
-            "nifty_return_through_interval": nifty_return,
-            "front_future_return_through_interval": fut_return,
-            "spot_future_basis": basis,
-            "basis_change": basis_change,
-            "future_cumulative_volume": future_vol,
-            "future_interval_volume_delta": future_vol_delta,
-            "future_oi_change": int(fut_tick["open_interest"]) if fut_tick is not None and pd.notna(fut_tick.get("open_interest")) else None,
-            "future_bid_ask_imbalance": future_bid_ask_imbalance,
-            "data_coverage": data_coverage,
-            "maximum_input_age_seconds": max_input_age,
-            "authority": auth
+            "entry_ltp": future_price,
+            "entry_observation_timestamp": entry_observation,
+            "entry_receive_timestamp": future_tick.get("receive_wall_ts_utc") if future_tick is not None else None,
+            "entry_connection_generation": future_tick.get("reconnect_generation") if future_tick is not None else None,
+            "source_fragment": future_tick.get("source_fragment") if future_tick is not None else None,
+            "basis_change_60s": causal_basis_60,
+            "mfe_window_start": mfe_start,
+            "mfe_window_end": mfe_end,
+            "mfe_observation_timestamp": mfe_observation,
+            "mae_observation_timestamp": mae_observation,
+            "mfe_60s": future_mfe,
+            "mae_60s": future_mae,
         }
-        precursor_rows.append(precursor_row)
+        for horizon, result in future_results.items():
+            future_row[f"outcome_{horizon}s_target_timestamp"] = result["target_timestamp"]
+            future_row[f"outcome_{horizon}s_matched_timestamp"] = result["matched_timestamp"]
+            future_row[f"outcome_{horizon}s_lag_ms"] = result["lag_ms"]
+            future_row[f"front_future_return_{horizon}s"] = (
+                result["ltp"] - future_price
+                if result["ltp"] is not None and future_price is not None
+                else None
+            )
+        future_outcomes.append(future_row)
 
-        inst_fut = df_fut[df_fut["instrument_key"] == front_fut_key]
-        entry_obs_ts = fut_tick["source_exchange_ts"] if fut_tick is not None else None
-        fut_res_5s = get_horizon_outcome(inst_fut, boundary_ms, 5)
-        fut_res_15s = get_horizon_outcome(inst_fut, boundary_ms, 15)
-        fut_res_30s = get_horizon_outcome(inst_fut, boundary_ms, 30)
-        fut_res_60s = get_horizon_outcome(inst_fut, boundary_ms, 60)
-        
-        fut_mfe, fut_mae, mfe_ws, mfe_we, mfe_obs, mae_obs = get_mfe_mae(inst_fut, entry_obs_ts, fut_price, boundary_ms, 60)
-
-        # Causal Basis
-        fut_ret_60 = (fut_res_60s["ltp"] - fut_price) if fut_res_60s["ltp"] is not None and fut_price is not None else None
-        
-        inst_spot = df_spot
-        spot_res_60s = get_horizon_outcome(inst_spot, boundary_ms, 60)
-        spot_ret_60 = (spot_res_60s["ltp"] - spot_price) if spot_res_60s["ltp"] is not None and spot_price is not None else None
-        
-        c_basis_60 = None
-        if fut_ret_60 is not None and spot_ret_60 is not None:
-            c_basis_60 = (fut_res_60s["ltp"] - spot_res_60s["ltp"]) - basis
-
-        fut_outcome_row = {
-            "session_date": session_date,
-            "source_interval_identity": interval_id,
-            "market_phase": market_phase,
-            
-            "entry_ltp": fut_price,
-            "entry_observation_timestamp": entry_obs_ts,
-            "entry_receive_timestamp": fut_tick.get("receive_wall_ts_utc") if fut_tick is not None else None,
-            "entry_connection_generation": fut_tick.get("reconnect_generation") if fut_tick is not None else None,
-            "source_fragment": fut_tick.get("source_fragment") if fut_tick is not None else None,
-            
-            "outcome_5s_target_timestamp": fut_res_5s["target_timestamp"],
-            "outcome_5s_matched_timestamp": fut_res_5s["matched_timestamp"],
-            "outcome_5s_lag_ms": fut_res_5s["lag_ms"],
-            "front_future_return_5s": (fut_res_5s["ltp"] - fut_price) if fut_res_5s["ltp"] is not None and fut_price is not None else None,
-            
-            "outcome_15s_target_timestamp": fut_res_15s["target_timestamp"],
-            "outcome_15s_matched_timestamp": fut_res_15s["matched_timestamp"],
-            "outcome_15s_lag_ms": fut_res_15s["lag_ms"],
-            "front_future_return_15s": (fut_res_15s["ltp"] - fut_price) if fut_res_15s["ltp"] is not None and fut_price is not None else None,
-            
-            "outcome_30s_target_timestamp": fut_res_30s["target_timestamp"],
-            "outcome_30s_matched_timestamp": fut_res_30s["matched_timestamp"],
-            "outcome_30s_lag_ms": fut_res_30s["lag_ms"],
-            "front_future_return_30s": (fut_res_30s["ltp"] - fut_price) if fut_res_30s["ltp"] is not None and fut_price is not None else None,
-            
-            "outcome_60s_target_timestamp": fut_res_60s["target_timestamp"],
-            "outcome_60s_matched_timestamp": fut_res_60s["matched_timestamp"],
-            "outcome_60s_lag_ms": fut_res_60s["lag_ms"],
-            "front_future_return_60s": fut_ret_60,
-            
-            "basis_change_60s": c_basis_60,
-            
-            "mfe_window_start": mfe_ws,
-            "mfe_window_end": mfe_we,
-            "mfe_observation_timestamp": mfe_obs,
-            "mae_observation_timestamp": mae_obs,
-            "mfe_60s": fut_mfe,
-            "mae_60s": fut_mae
-        }
-        futures_outcome_rows.append(fut_outcome_row)
-
-        opt_count = 0
-        for opt_key in df_opt["instrument_key"].unique()[:15]:
-            if opt_count > 10:
+        option_count = 0
+        for option_key in option_data["instrument_key"].drop_duplicates().tolist()[:15]:
+            if option_count > 10:
                 break
-            opt_matches = latest_ticks[latest_ticks["instrument_key"] == opt_key]
-            if not opt_matches.empty:
-                opt_info = opt_matches.iloc[-1]
-                opt_price = float(opt_info.get("ltp")) if pd.notna(opt_info.get("ltp")) else None
-                inst_opt = df_opt[df_opt["instrument_key"] == opt_key]
-                
-                entry_obs_ts = opt_info["source_exchange_ts"]
-                opt_res_5s = get_horizon_outcome(inst_opt, boundary_ms, 5)
-                opt_res_15s = get_horizon_outcome(inst_opt, boundary_ms, 15)
-                opt_res_30s = get_horizon_outcome(inst_opt, boundary_ms, 30)
-                opt_res_60s = get_horizon_outcome(inst_opt, boundary_ms, 60)
-                
-                opt_mfe, opt_mae, mfe_ws, mfe_we, mfe_obs, mae_obs = get_mfe_mae(inst_opt, entry_obs_ts, opt_price, boundary_ms, 60)
-                
-                option_outcome_rows.append({
-                    "session_date": session_date,
-                    "source_interval_identity": interval_id,
-                    "market_phase": market_phase,
-                    "instrument_key": opt_key,
-                    "expiry": str(opt_info.get("expiry")),
-                    "strike": float(opt_info.get("strike")) if pd.notna(opt_info.get("strike")) else 0.0,
-                    "option_type": str(opt_info.get("instrument_type")),
-                    "moneyness": (float(opt_info.get("strike")) - spot_price) if spot_price and pd.notna(opt_info.get("strike")) else None,
-                    
-                    "entry_ltp": opt_price,
-                    "entry_observation_timestamp": entry_obs_ts,
-                    "entry_receive_timestamp": opt_info.get("receive_wall_ts_utc"),
-                    "entry_connection_generation": opt_info.get("reconnect_generation"),
-                    "source_fragment": opt_info.get("source_fragment"),
-                    
-                    "entry_quote_authority": "LTP_ONLY",
-                    "executable": False,
-                    "entry_bid": None,
-                    "entry_ask": None,
-                    "entry_mid": None,
-                    "entry_spread": None,
-                    "entry_depth": None,
-                    
-                    "outcome_5s_target_timestamp": opt_res_5s["target_timestamp"],
-                    "outcome_5s_matched_timestamp": opt_res_5s["matched_timestamp"],
-                    "outcome_5s_lag_ms": opt_res_5s["lag_ms"],
-                    "premium_return_5s": (opt_res_5s["ltp"] - opt_price) if opt_res_5s["ltp"] is not None and opt_price is not None else None,
-                    
-                    "outcome_15s_target_timestamp": opt_res_15s["target_timestamp"],
-                    "outcome_15s_matched_timestamp": opt_res_15s["matched_timestamp"],
-                    "outcome_15s_lag_ms": opt_res_15s["lag_ms"],
-                    "premium_return_15s": (opt_res_15s["ltp"] - opt_price) if opt_res_15s["ltp"] is not None and opt_price is not None else None,
-                    
-                    "outcome_30s_target_timestamp": opt_res_30s["target_timestamp"],
-                    "outcome_30s_matched_timestamp": opt_res_30s["matched_timestamp"],
-                    "outcome_30s_lag_ms": opt_res_30s["lag_ms"],
-                    "premium_return_30s": (opt_res_30s["ltp"] - opt_price) if opt_res_30s["ltp"] is not None and opt_price is not None else None,
-                    
-                    "outcome_60s_target_timestamp": opt_res_60s["target_timestamp"],
-                    "outcome_60s_matched_timestamp": opt_res_60s["matched_timestamp"],
-                    "outcome_60s_lag_ms": opt_res_60s["lag_ms"],
-                    "premium_return_60s": (opt_res_60s["ltp"] - opt_price) if opt_res_60s["ltp"] is not None and opt_price is not None else None,
-                    
-                    "mfe_window_start": mfe_ws,
-                    "mfe_window_end": mfe_we,
-                    "mfe_observation_timestamp": mfe_obs,
-                    "mae_observation_timestamp": mae_obs,
-                    "mfe_60s": opt_mfe,
-                    "mae_60s": opt_mae,
-                    "volume_change": None,
-                    "oi_change": None
-                })
-                opt_count += 1
+            matches = current_rows[current_rows["instrument_key"] == option_key]
+            if matches.empty:
+                continue
+            option_info = matches.iloc[-1]
+            option_price = _safe_float(option_info.get("ltp"))
+            instrument_option = option_data[option_data["instrument_key"] == option_key]
+            option_results = {
+                horizon: get_horizon_outcome(instrument_option, boundary_ms, horizon)
+                for horizon in (5, 15, 30, 60)
+            }
+            option_mfe, option_mae, opt_mfe_start, opt_mfe_end, opt_mfe_observation, opt_mae_observation = get_mfe_mae(
+                instrument_option,
+                option_info.get("source_exchange_ts"),
+                option_price,
+                boundary_ms,
+                60,
+            )
+            option_row: dict[str, Any] = {
+                "session_date": session_date,
+                "source_interval_identity": interval_id,
+                "market_phase": market_phase,
+                "instrument_key": option_key,
+                "expiry": str(option_info.get("expiry")),
+                "strike": _safe_float(option_info.get("strike")) or 0.0,
+                "option_type": str(option_info.get("instrument_type")),
+                "moneyness": (
+                    _safe_float(option_info.get("strike")) - spot_price
+                    if _safe_float(option_info.get("strike")) is not None and spot_price is not None
+                    else None
+                ),
+                "entry_ltp": option_price,
+                "entry_observation_timestamp": option_info.get("source_exchange_ts"),
+                "entry_receive_timestamp": option_info.get("receive_wall_ts_utc"),
+                "entry_connection_generation": option_info.get("reconnect_generation"),
+                "source_fragment": option_info.get("source_fragment"),
+                "entry_quote_authority": "LTP_ONLY",
+                "executable": False,
+                "entry_bid": None,
+                "entry_ask": None,
+                "entry_mid": None,
+                "entry_spread": None,
+                "entry_depth": None,
+                "mfe_window_start": opt_mfe_start,
+                "mfe_window_end": opt_mfe_end,
+                "mfe_observation_timestamp": opt_mfe_observation,
+                "mae_observation_timestamp": opt_mae_observation,
+                "mfe_60s": option_mfe,
+                "mae_60s": option_mae,
+                "volume_change": None,
+                "oi_change": None,
+            }
+            for horizon, result in option_results.items():
+                option_row[f"outcome_{horizon}s_target_timestamp"] = result["target_timestamp"]
+                option_row[f"outcome_{horizon}s_matched_timestamp"] = result["matched_timestamp"]
+                option_row[f"outcome_{horizon}s_lag_ms"] = result["lag_ms"]
+                option_row[f"premium_return_{horizon}s"] = (
+                    result["ltp"] - option_price
+                    if result["ltp"] is not None and option_price is not None
+                    else None
+                )
+            option_outcomes.append(option_row)
+            option_count += 1
 
-        join_map_rows.append({
-            "session_date": session_date,
-            "source_interval_identity": interval_id,
-            "market_phase": market_phase,
-            "precursor_index": len(precursor_rows) - 1,
-            "futures_outcome_index": len(futures_outcome_rows) - 1
-        })
+        join_map.append(
+            {
+                "session_date": session_date,
+                "source_interval_identity": interval_id,
+                "market_phase": market_phase,
+                "precursor_index": len(precursors) - 1,
+                "futures_outcome_index": len(future_outcomes) - 1,
+            }
+        )
 
     logger.info("Saving parquets (V3)...")
-    df_precursors = pd.DataFrame(precursor_rows)
-    df_fut_outcomes = pd.DataFrame(futures_outcome_rows)
-    df_opt_outcomes = pd.DataFrame(option_outcome_rows)
-    df_join_map = pd.DataFrame(join_map_rows)
-    df_seam_audit = pd.DataFrame(seam_audit_rows)
+    precursor_frame = pd.DataFrame(precursors)
+    future_frame = pd.DataFrame(future_outcomes)
+    option_frame = pd.DataFrame(option_outcomes)
+    join_frame = pd.DataFrame(join_map)
+    seam_frame = pd.DataFrame(seam_audit_rows)
 
-    out_pre = output_dir / f"precursors_{session_date}_v3.parquet"
-    out_fut = output_dir / f"futures_outcomes_{session_date}_v3.parquet"
-    out_opt = output_dir / f"option_outcomes_{session_date}_v3.parquet"
-    out_join = output_dir / f"join_map_{session_date}_v3.parquet"
-
-    if len(df_precursors) > 0:
-        pq.write_table(pa.Table.from_pandas(df_precursors), out_pre)
-        pq.write_table(pa.Table.from_pandas(df_fut_outcomes), out_fut)
-        pq.write_table(pa.Table.from_pandas(df_opt_outcomes), out_opt)
-        pq.write_table(pa.Table.from_pandas(df_join_map), out_join)
+    precursor_path = output_dir / f"precursors_{session_date}_v3.parquet"
+    future_path = output_dir / f"futures_outcomes_{session_date}_v3.parquet"
+    option_path = output_dir / f"option_outcomes_{session_date}_v3.parquet"
+    join_path = output_dir / f"join_map_{session_date}_v3.parquet"
+    if not precursor_frame.empty:
+        pq.write_table(pa.Table.from_pandas(precursor_frame), precursor_path)
+        pq.write_table(pa.Table.from_pandas(future_frame), future_path)
+        pq.write_table(pa.Table.from_pandas(option_frame), option_path)
+        pq.write_table(pa.Table.from_pandas(join_frame), join_path)
 
     checksums = {
-        "precursors_sha256": calculate_sha256(out_pre) if out_pre.exists() else None,
-        "futures_outcomes_sha256": calculate_sha256(out_fut) if out_fut.exists() else None,
-        "option_outcomes_sha256": calculate_sha256(out_opt) if out_opt.exists() else None,
-        "join_map_sha256": calculate_sha256(out_join) if out_join.exists() else None,
-        "precursor_rows": len(df_precursors),
-        "futures_outcome_rows": len(df_fut_outcomes),
-        "option_outcome_rows": len(df_opt_outcomes)
+        "precursors_sha256": calculate_sha256(precursor_path) if precursor_path.exists() else None,
+        "futures_outcomes_sha256": calculate_sha256(future_path) if future_path.exists() else None,
+        "option_outcomes_sha256": calculate_sha256(option_path) if option_path.exists() else None,
+        "join_map_sha256": calculate_sha256(join_path) if join_path.exists() else None,
+        "precursor_rows": len(precursor_frame),
+        "futures_outcome_rows": len(future_frame),
+        "option_outcome_rows": len(option_frame),
     }
+    (output_dir / f"dataset_checksums_{session_date}_v3.json").write_text(
+        json.dumps(checksums, indent=2) + "\n", encoding="utf-8"
+    )
 
-    with open(output_dir / f"dataset_checksums_{session_date}_v3.json", "w") as f:
-        json.dump(checksums, f, indent=2)
-
-    # Calculate MFE/MAE Violations for Gate
-    fut_mfe_viols = 0
-    fut_mae_viols = 0
-    opt_mfe_viols = 0
-    opt_mae_viols = 0
-    
-    if len(df_fut_outcomes) > 0:
-        fut_mfe_viols = (df_fut_outcomes[['front_future_return_5s', 'front_future_return_15s', 'front_future_return_30s', 'front_future_return_60s']].gt(df_fut_outcomes['mfe_60s'], axis=0)).any(axis=1).sum()
-        fut_mae_viols = (df_fut_outcomes[['front_future_return_5s', 'front_future_return_15s', 'front_future_return_30s', 'front_future_return_60s']].lt(df_fut_outcomes['mae_60s'], axis=0)).any(axis=1).sum()
-    if len(df_opt_outcomes) > 0:
-        opt_mfe_viols = (df_opt_outcomes[['premium_return_5s', 'premium_return_15s', 'premium_return_30s', 'premium_return_60s']].gt(df_opt_outcomes['mfe_60s'], axis=0)).any(axis=1).sum()
-        opt_mae_viols = (df_opt_outcomes[['premium_return_5s', 'premium_return_15s', 'premium_return_30s', 'premium_return_60s']].lt(df_opt_outcomes['mae_60s'], axis=0)).any(axis=1).sum()
+    future_return_columns = [
+        "front_future_return_5s",
+        "front_future_return_15s",
+        "front_future_return_30s",
+        "front_future_return_60s",
+    ]
+    option_return_columns = [
+        "premium_return_5s",
+        "premium_return_15s",
+        "premium_return_30s",
+        "premium_return_60s",
+    ]
+    future_mfe_violations = future_mae_violations = 0
+    option_mfe_violations = option_mae_violations = 0
+    if not future_frame.empty:
+        future_mfe_violations = int(
+            future_frame[future_return_columns]
+            .gt(future_frame["mfe_60s"], axis=0)
+            .any(axis=1)
+            .sum()
+        )
+        future_mae_violations = int(
+            future_frame[future_return_columns]
+            .lt(future_frame["mae_60s"], axis=0)
+            .any(axis=1)
+            .sum()
+        )
+    if not option_frame.empty:
+        option_mfe_violations = int(
+            option_frame[option_return_columns]
+            .gt(option_frame["mfe_60s"], axis=0)
+            .any(axis=1)
+            .sum()
+        )
+        option_mae_violations = int(
+            option_frame[option_return_columns]
+            .lt(option_frame["mae_60s"], axis=0)
+            .any(axis=1)
+            .sum()
+        )
 
     causality_audit = {
         "status": "PASS",
-        "futures_mfe_violations": int(fut_mfe_viols),
-        "futures_mae_violations": int(fut_mae_viols),
-        "options_mfe_violations": int(opt_mfe_viols),
-        "options_mae_violations": int(opt_mae_viols),
-        "total_horizons_exceeding_tolerance": 0
+        "futures_mfe_violations": future_mfe_violations,
+        "futures_mae_violations": future_mae_violations,
+        "options_mfe_violations": option_mfe_violations,
+        "options_mae_violations": option_mae_violations,
+        "total_horizons_exceeding_tolerance": 0,
     }
-    with open(output_dir / f"causality_audit_{session_date}_v3.json", "w") as f:
-        json.dump(causality_audit, f, indent=2)
+    (output_dir / f"causality_audit_{session_date}_v3.json").write_text(
+        json.dumps(causality_audit, indent=2) + "\n", encoding="utf-8"
+    )
 
+    classification_counts = (
+        seam_frame["classification"].value_counts().to_dict()
+        if not seam_frame.empty
+        else {}
+    )
     seam_audit = {
         "status": "PASS",
-        "stale_intervals": len(df_seam_audit[df_seam_audit["classification"] == "STALE_CARRY_FORWARD"]),
-        "fresh_intervals": len(df_seam_audit[df_seam_audit["classification"] == "LIVE_FRESH"])
+        "timezone": MARKET_TIMEZONE,
+        "continuous_market_open": MARKET_OPEN.isoformat(),
+        "continuous_market_close": MARKET_CLOSE.isoformat(),
+        "classification_counts": classification_counts,
+        "stale_intervals": int(classification_counts.get("STALE_CARRY_FORWARD", 0)),
+        "fresh_intervals": int(classification_counts.get("LIVE_FRESH", 0)),
+        "startup_intervals": int(
+            classification_counts.get("STARTUP_BACKFILL_NOT_LIVE_CAUSAL", 0)
+        ),
+        "outside_continuous_market_intervals": int(
+            classification_counts.get("OUTSIDE_CONTINUOUS_MARKET", 0)
+        ),
     }
-    with open(output_dir / f"seam_audit_{session_date}_v3.json", "w") as f:
-        json.dump(seam_audit, f, indent=2)
-        
-    dataset_quality = {
-        "precursor_rows": len(df_precursors),
-        "futures_rows": len(df_fut_outcomes),
-        "options_rows": len(df_opt_outcomes),
-        "join_rows": len(df_join_map)
-    }
-    with open(output_dir / f"dataset_quality_report_{session_date}_v3.json", "w") as f:
-        json.dump(dataset_quality, f, indent=2)
+    (output_dir / f"seam_audit_{session_date}_v3.json").write_text(
+        json.dumps(seam_audit, indent=2) + "\n", encoding="utf-8"
+    )
 
-    if fut_mfe_viols > 0 or fut_mae_viols > 0:
+    quality = {
+        "precursor_rows": len(precursor_frame),
+        "futures_rows": len(future_frame),
+        "options_rows": len(option_frame),
+        "join_rows": len(join_frame),
+    }
+    (output_dir / f"dataset_quality_report_{session_date}_v3.json").write_text(
+        json.dumps(quality, indent=2) + "\n", encoding="utf-8"
+    )
+
+    if future_mfe_violations or future_mae_violations:
         logger.error("FAILED_GATE: FUTURES_MFE_MAE_VIOLATIONS")
-        sys.exit(1)
-        
-    if opt_mfe_viols > 0 or opt_mae_viols > 0:
+        raise SystemExit(1)
+    if option_mfe_violations or option_mae_violations:
         logger.error("FAILED_GATE: OPTIONS_MFE_MAE_VIOLATIONS")
-        sys.exit(1)
+        raise SystemExit(1)
 
     logger.info("PASS_UPSTOX_OFFLINE_DATASET_V3_CAUSAL_REPAIR")
     logger.info("PASS_OPTION_HORIZON_WINDOW_CONSISTENCY")
     logger.info("PASS_SEAM_FRESHNESS_CLASSIFICATION")
     logger.info("PASS_MEG_FEATURE_SEMANTICS")
     logger.info("READY_FOR_MEG_RESEARCH_WITH_LIMITATIONS")
+
 
 if __name__ == "__main__":
     main()
