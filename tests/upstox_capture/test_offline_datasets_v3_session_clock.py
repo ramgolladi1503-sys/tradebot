@@ -163,7 +163,9 @@ def test_option_panel_is_nearest_expiry_balanced_and_atm_centered():
         boundary=utc("2026-08-05 07:32:00"),
     )
 
-    assert len(panel) == 10
+    assert tuple(item["option_type"] for item in panel) == (
+        "CE", "CE", "CE", "CE", "CE", "PE", "PE", "PE", "PE", "PE"
+    )
     assert sum(item["option_type"] == "CE" for item in panel) == 5
     assert sum(item["option_type"] == "PE" for item in panel) == 5
     assert {item["expiry_utc"] for item in panel} == {
