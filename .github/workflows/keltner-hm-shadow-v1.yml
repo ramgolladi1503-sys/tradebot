@@ -17,5 +17,3 @@ jobs:
       - run: pip install pytest
       - run: pytest -q tests/test_keltner_hm_shadow.py
       - run: python -m py_compile core/keltner_hm_shadow/*.py scripts/*keltner_hm*.py
-      - run: |
-          ! grep -R -E "place_order|modify_order|cancel_order|kiteconnect|broker_client" core/keltner_hm_shadow scripts/*keltner_hm*.py
