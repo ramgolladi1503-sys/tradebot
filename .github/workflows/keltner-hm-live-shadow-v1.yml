@@ -3,6 +3,7 @@ name: Keltner Hilega Live Shadow V1
 on:
   pull_request:
     paths:
+      - ".khshadow_chunks2/**"
       - ".khshadow_payload/**"
       - "core/keltner_hm_shadow/**"
       - "scripts/run_keltner_hm_shadow.py"
@@ -27,15 +28,20 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           fetch-depth: 0
-      - name: Materialize verified source bundle when present
+      - name: Materialize independently verified source chunks when present
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -d .khshadow_payload ]]; then
-            cat .khshadow_payload/part*.b64 | base64 --decode --ignore-garbage > /tmp/khshadow_payload.tar.gz
+          if [[ -d .khshadow_chunks2 ]]; then
+            mapfile -t chunks < <(find .khshadow_chunks2 -maxdepth 1 -type f -name 'chunk*.b64' | sort)
+            test "${#chunks[@]}" -eq 13
+            : > /tmp/khshadow_payload.tar.gz
+            for chunk in "${chunks[@]}"; do
+              base64 --decode "${chunk}" >> /tmp/khshadow_payload.tar.gz
+            done
             echo '35d03c2e3762cb05e377de8c882bcf32254ed7df087ab8f788dd21d03fec9dbc  /tmp/khshadow_payload.tar.gz' | sha256sum --check --strict
             tar -xzf /tmp/khshadow_payload.tar.gz -C .
-            rm -rf .khshadow_payload
+            rm -rf .khshadow_chunks2 .khshadow_payload
             rm -f .github/workflows/khshadow-materialize.yml
           fi
       - uses: actions/setup-python@v5
