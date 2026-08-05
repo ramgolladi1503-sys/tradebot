@@ -1,7 +1,0 @@
-strategy,bucket,reason
-HTF_OPENING_DRIVE_CONT,A. Dead signal,0 signals generated.
-HTF_PDH_PDL_HOLD,E. Too rare to judge,Only 3 trades.
-HTF_15M_TREND_CONT,A. Dead signal,0 signals generated.
-HTF_15M_VWAP_PULLBACK,A. Dead signal,0 signals generated.
-HTF_FAILED_BREAKOUT_REVERSAL,E. Too rare to judge,Only 1 trades.
-ORB_BREAKOUT,F. Cost/slippage killed,Slippage drains gross edge.

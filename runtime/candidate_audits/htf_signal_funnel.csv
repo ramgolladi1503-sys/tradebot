@@ -1,7 +1,0 @@
-strategy,raw_setup_count,rejected_by_session,rejected_by_15m_regime,rejected_by_30m_regime,rejected_by_volatility,rejected_by_vwap_cond,rejected_by_pdh_pdl,rejected_by_structure,rejected_by_execution_availability,final_trades
-HTF_15M_TREND_CONT,11764,2962,1361,2830,0,0,0,3441,0,1170
-HTF_15M_VWAP_PULLBACK,11764,2962,1361,2830,0,4611,0,0,0,0
-HTF_OPENING_DRIVE_CONT,11764,2962,1361,2830,0,0,0,1932,0,2679
-HTF_PDH_PDL_HOLD,11764,2962,0,0,0,0,4405,0,0,4397
-HTF_FAILED_BREAKOUT_REVERSAL,11764,2962,4611,0,0,0,0,3416,0,775
-HTF_RANGE_EXPANSION,11764,2962,0,0,7758,0,0,317,0,727

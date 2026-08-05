@@ -21,6 +21,10 @@ venv/
 # App runtime
 logs/
 .runtime/
+/runtime/**
+!/runtime/
+!/runtime/README.md
+!/runtime/.gitkeep
 
 # Local caches / large files
 .codex/

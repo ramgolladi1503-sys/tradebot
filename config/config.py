@@ -19,6 +19,14 @@ from core.runtime_paths import (
     LOCKS_ROOT as _LOCKS_ROOT,
     DB_ROOT as _DB_ROOT,
 )
+from core.shared_data_paths import (
+    archived_live_evidence_root as _archived_live_evidence_root,
+    historical_data_root as _historical_data_root,
+    market_data_root as _market_data_root,
+    replay_data_root as _replay_data_root,
+    research_inputs_root as _research_inputs_root,
+    shared_data_root as _shared_data_root,
+)
 try:
     from dotenv import load_dotenv  # type: ignore
     load_dotenv()
@@ -44,6 +52,15 @@ LOGS_ROOT = os.getenv("LOGS_ROOT", str(_LOGS_ROOT))
 REPORTS_ROOT = os.getenv("REPORTS_ROOT", str(_REPORTS_ROOT))
 LOCKS_ROOT = os.getenv("LOCKS_ROOT", str(_LOCKS_ROOT))
 DB_ROOT = os.getenv("DB_ROOT", str(_DB_ROOT))
+TRADEBOT_DATA_ROOT = os.getenv("TRADEBOT_DATA_ROOT", str(_shared_data_root()))
+TRADEBOT_HISTORICAL_DATA_ROOT = os.getenv("TRADEBOT_HISTORICAL_DATA_ROOT", str(_historical_data_root()))
+TRADEBOT_REPLAY_DATA_ROOT = os.getenv("TRADEBOT_REPLAY_DATA_ROOT", str(_replay_data_root()))
+TRADEBOT_MARKET_DATA_ROOT = os.getenv("TRADEBOT_MARKET_DATA_ROOT", str(_market_data_root()))
+TRADEBOT_RESEARCH_INPUTS_ROOT = os.getenv("TRADEBOT_RESEARCH_INPUTS_ROOT", str(_research_inputs_root()))
+TRADEBOT_ARCHIVED_LIVE_EVIDENCE_ROOT = os.getenv(
+    "TRADEBOT_ARCHIVED_LIVE_EVIDENCE_ROOT",
+    str(_archived_live_evidence_root()),
+)
 TB_LOG_ROTATE_MAX_MB = int(os.getenv("TB_LOG_ROTATE_MAX_MB", "20"))
 TB_LOG_ROTATE_BACKUPS = int(os.getenv("TB_LOG_ROTATE_BACKUPS", "3"))
 TB_LOG_RETENTION_DAYS = int(os.getenv("TB_LOG_RETENTION_DAYS", "7"))

@@ -1,2 +1,0 @@
-timestamp,regime,volatility_metrics,nifty_spot,chosen_option,strike,expiry,bid,ask,spread,spread_pct,theoretical_entry,theoretical_stop,theoretical_target,is_long,status,mfe,mae,realized_R,fill_quality_estimate,risk
-2026-06-18T18:25:36.478296,VOL_EXPANSION,VALID,24168,NFO:NIFTY26JUN23100CE,23100,2026-06-26,150.0,151.0,1.0,0.006,151.0,24148,24208,True,TARGET,0.0,0.0,1.9,GOOD,20.0

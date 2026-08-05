@@ -1,5 +1,0 @@
-strategy,stopped_trades_count,stopped_later_reached_0.5r,stopped_later_reached_1r,stopped_later_reached_2r,avg_noise_wick_mae
-TrendContinuation_EMA_PULLBACK,3,1,0,0,1.5317235518918497
-TrendContinuation_OPENING_DRIVE,16,10,3,0,2.154060578901211
-ORB_BREAKOUT,5,3,0,0,1.1365429392759878
-MeanReversion_VWAP_PULLBACK,11,6,4,0,1.6388434556930995
