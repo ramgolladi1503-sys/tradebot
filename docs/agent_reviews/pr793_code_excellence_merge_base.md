@@ -21,23 +21,23 @@ Out of scope:
 - TradeBot runtime, feeds, strategies, ranking, risk, broker, orders, execution, credentials, tests, assertions, or gate thresholds;
 - bypassing or suppressing any required check.
 
-## Grill Me
+## Grill Me Review
 
 The old command fetched `main` with `--depth=1`, replacing the full-history remote-tracking ref with a shallow tip. A PR created from an older `main` could then fail `git diff origin/main...HEAD` because Git had no merge base. The repair removes the shallow depth restriction while retaining the same three-dot diff and all downstream gates.
 
-## Hermes
+## Hermes Review
 
 Scope result: PASS_PENDING_REQUIRED_CI.
 
 The patch changes one workflow command and adds this evidence file. It preserves the existing checkout depth, changed-path comparison, unified CE execution, report generation, and artifact upload.
 
-## GSD
+## GSD Review
 
 Delivery verdict: PASS_PENDING_REQUIRED_CI.
 
 The implementation is complete when a PR whose base advanced can collect changed paths successfully and the existing Code Excellence gate runs without weakening any assertion.
 
-## QA / Safety
+## QA / Safety Review
 
 Required checks:
 
