@@ -4,25 +4,28 @@
 
 mode: CI_ONLY
 candidate_id: PR795_AUTHENTICATED_SMOKE_GATE
-decision: RUN_EXACT_BRANCH_RESTRICTED_AUTHENTICATED_SMOKE
-reason: PR #795 requires an authenticated five-file Upstox smoke result before tooling closure, while repository secrets must remain on the protected default-branch workflow boundary.
-timestamp: 2026-08-06T04:50:00+05:30
+decision: RUN_MAIN_ONLY_TRUSTED_BOUNDED_SMOKE
+reason: PR #795 requires an authenticated five-file Upstox smoke before tooling closure, while repository secrets must never be exposed to pull-request code.
+timestamp: 2026-08-06T05:05:00+05:30
 is_order_action: false
 broker_api_called: false
 source: USER_APPROVED_PR_CLOSURE_ORDER_AND_PR795_GATE_CONTRACT
 
 ## Agent Work Contract
 
-Add one temporary GitHub Actions workflow on `main` that runs after the repository `tests` workflow succeeds for the exact internal branch `data/psilor-v1-upstox-fetch-v2`.
+Add a temporary trusted smoke mechanism to `main` that runs only after the repository `tests` workflow succeeds for the exact internal PR #795 branch.
 
-The workflow must:
+The secret-bearing job must:
 
-- use the repository `UPSTOX_ACCESS_TOKEN` secret without printing or persisting it;
-- checkout the exact tested PR #795 head SHA;
-- execute `scripts/smoke_test_psilor_v1.py`;
+- checkout `main` only;
+- execute only a standalone runner reviewed and merged through this PR;
+- treat PR #795's tested head SHA as metadata, never executable code;
+- use `UPSTOX_ACCESS_TOKEN` without printing or persisting it;
+- make a fixed read-only sequence of Upstox requests;
+- create exactly one future, two CE, and two PE Parquet files;
 - retain only sanitized verdict fields;
-- post the sanitized result to PR #795;
-- fail unless the exact five-file smoke contract passes;
+- update one sanitized result comment on PR #795;
+- fail unless the exact smoke contract passes;
 - be removed after PR #795 closes.
 
 ## Scope Guard
@@ -31,49 +34,89 @@ Allowed files:
 
 ```text
 .github/workflows/psilor_pr795_trusted_smoke.yml
+scripts/ci/psilor_pr795_trusted_smoke.py
+tests/ci/test_psilor_pr795_trusted_smoke.py
 docs/agent_reviews/pr795_trusted_smoke_gate.md
 ```
 
 Excluded:
 
+- checkout or execution of PR #795 code in a secret-bearing job;
 - strategy code or registration;
 - ranking, candidate-pool, TradeBuilder, or risk behavior;
 - broker, order, execution, or live-feed behavior;
 - market data mutation;
 - data-admission or edge claims;
-- persistence of credentials, authorization headers, or raw tokens.
+- persistence of credentials, authorization headers, raw tokens, or raw provider error bodies.
 
 ## Grill Me Review
 
-The prior smoke workflows were located only on PR #795's research lineage. GitHub did not schedule them as a secret-capable trusted workflow, so the absence of a result could not be interpreted as either authentication failure or smoke success.
+The first workflow design checked out `github.event.workflow_run.head_sha` and then executed PR code while the repository secret was available. GitHub Advanced Security correctly raised **CodeQL: checkout of untrusted code in a privileged workflow**. That design is rejected.
 
-A direct write to `main` was rejected by branch protection, correctly requiring this change to pass through a pull request. The temporary workflow is therefore the narrowest auditable method to obtain the missing verdict without weakening branch rules or asking the user to expose a token.
+The repaired design separates trust boundaries:
+
+1. PR #795 code is tested by ordinary unprivileged PR workflows.
+2. The privileged `workflow_run` job checks out `main` only.
+3. A self-contained trusted runner on `main` performs a fixed, bounded provider smoke.
+4. The triggering PR head SHA is recorded only as the source identity whose normal tests passed.
+
+The trusted runner rejects absolute/dynamic endpoints, hardcodes the Upstox host and endpoint families, bounds retries, validates provider schemas, validates candle values, requires two common sessions, rewrites exactly five files, and verifies read-back hashes.
 
 ## Hermes Review
 
-The workflow uses `workflow_run` for the existing `tests` workflow and applies all of these conditions:
+The workflow runs only when all conditions are true:
 
 ```text
+UPSTREAM_WORKFLOW=tests
 UPSTREAM_CONCLUSION=success
 UPSTREAM_EVENT=pull_request
 UPSTREAM_HEAD_BRANCH=data/psilor-v1-upstox-fetch-v2
+UPSTREAM_HEAD_REPOSITORY=current repository
+TRUSTED_CHECKOUT=main
 ```
 
-It checks out `github.event.workflow_run.head_sha`, not a mutable branch tip. The smoke result is reduced to an allow-list of counts, sessions, hashes, boolean verdicts, and workflow identity. The PR comment contains no credentials, headers, request payloads, or raw provider response bodies.
+The secret-bearing process executes only:
+
+```text
+scripts/ci/psilor_pr795_trusted_smoke.py
+```
+
+from `main`. It does not import or execute `scripts/fetch_psilor_v1_data.py`, `scripts/smoke_test_psilor_v1.py`, or any other PR-head file.
+
+The result comment is an allow-list containing only:
+
+- source head SHA;
+- smoke verdict;
+- selected expiry;
+- future/CE/PE counts;
+- Parquet file count;
+- exact common sessions;
+- SHA-256 reconciliation;
+- current-run and unexpected-file flags;
+- formal-extraction flag;
+- artifact labels, row counts, sessions, and hashes.
 
 ## GSD Review
 
 Execution sequence:
 
-1. Merge this temporary two-file CI PR after repository gates pass.
-2. Complete or retrigger the normal `tests` workflow on PR #795.
-3. Let the trusted `workflow_run` gate execute on the exact successful head.
-4. Read the sanitized comment on PR #795.
-5. Repair a confirmed smoke defect if the verdict identifies one.
-6. Merge and close PR #795 only after its merge boundary is satisfied.
-7. Remove the temporary workflow through a separate protected PR.
+1. Validate and merge this temporary four-file CI PR.
+2. Complete or retrigger PR #795's normal `tests` workflow.
+3. Let the trusted workflow run from `main` after that exact head passes.
+4. Read the sanitized PR #795 comment.
+5. Repair only a confirmed provider or bounded-runner defect if identified.
+6. Complete PR #795's final-head checks and merge it into its research base.
+7. Remove the temporary trusted workflow and runner through a protected cleanup PR.
 
 ## QA / Safety Review
+
+Focused tests prove:
+
+1. middle-contract selection is deterministic;
+2. conflicting duplicate candles fail closed;
+3. the trusted smoke produces exactly five Parquet files and two common sessions;
+4. an empty token returns `BLOCKED_AUTHENTICATION`;
+5. an absolute/external endpoint is rejected before any request.
 
 Safety assertions:
 
@@ -86,39 +129,32 @@ NO_RISK_CHANGES
 NO_LIVE_RUNTIME_CHANGES
 NO_CREDENTIAL_PERSISTENCE
 NO_TOKEN_IN_PR_COMMENT
-EXACT_HEAD_SHA_CHECKOUT
+NO_PR_CODE_CHECKOUT_IN_PRIVILEGED_JOB
+NO_PR_CODE_EXECUTION_IN_PRIVILEGED_JOB
+TRUSTED_CHECKOUT=main
 ```
-
-The result allow-list is restricted to:
-
-- smoke verdict;
-- future/CE/PE contract counts;
-- Parquet file count;
-- exact common sessions;
-- hash reconciliation;
-- unexpected-file and current-run provenance flags;
-- formal-extraction flag;
-- workflow run identity and tested SHA.
 
 ## Acceptance Proof
 
 Required before merge:
 
-- changed-file scope is exactly the workflow and this review document;
+- changed-file scope is exactly the four listed files;
+- five focused trusted-runner tests pass;
 - repository `ci` and `tests` pass;
-- agent-review, Code Excellence, Repo Forensics, CodeQL, registry, and portfolio gates pass;
+- agent-review, Code Excellence, Repo Forensics, CodeQL, registry, portfolio, and RAG gates pass;
+- the original CodeQL review thread is outdated or resolved after the trusted-main repair;
 - PR is mergeable against current `main`;
-- no unresolved review thread remains.
+- no unresolved actionable review thread remains.
 
 Required after merge:
 
 - a sanitized `PSILOR_AUTHENTICATED_SMOKE_RESULT` comment appears on PR #795;
-- the result references the exact tested PR #795 head SHA;
-- no credential material appears in the comment or artifacts.
+- the result references the exact successful PR #795 tests head SHA;
+- no credential material appears in comments or artifacts.
 
 ## Runtime Proof Required After Merge
 
-No TradeBot runtime is started. The only post-merge runtime proof is the isolated GitHub-hosted offline smoke:
+No TradeBot process is started. The only runtime proof is isolated, read-only, GitHub-hosted market-data retrieval:
 
 ```text
 1 expired future
@@ -135,26 +171,31 @@ created by current run
 
 This PR does not prove:
 
-- that the repository secret exists or is valid;
-- that Upstox historical endpoints are currently available;
+- that the repository secret exists or remains valid;
+- that Upstox Plus permission is available;
+- that provider historical endpoints are currently healthy;
 - that the smoke will pass;
+- that PR #795's implementation is executed with the token;
 - that the Drive corpus is admitted;
 - that 30 overlapping sessions exist;
-- that DORL or PSILOR has an edge;
+- that DORL or PSILOR has structural edge;
 - that any live or paper execution should be enabled.
 
 A blocked or failed smoke remains a valid fail-closed outcome and must be reported precisely.
 
 ## Human Approval
 
-The user explicitly instructed the assistant to complete and close PR #796 first, then work on PR #795 until closure in that order. PR #796 is already merged. This temporary workflow is necessary to satisfy PR #795's previously stated authenticated-smoke gate without requesting the user to paste credentials or bypassing branch protection.
+The user explicitly instructed the assistant to complete and close PR #796 first, then work on PR #795 until closure in that order. PR #796 is merged. This temporary protected mechanism is necessary to satisfy PR #795's authenticated-smoke gate without requesting the user to paste credentials or weakening branch protection.
 
 ## Final Review Verdict
 
 ```text
-TEMPORARY_WORKFLOW_REQUIRED=YES
-SCOPE_FILES=2
+TEMPORARY_TRUSTED_WORKFLOW_REQUIRED=YES
+SCOPE_FILES=4
+FOCUSED_TESTS=5
 SECRET_EXPOSURE_ALLOWED=NO
+PR_CODE_EXECUTED_WITH_SECRET=NO
+TRUSTED_CODE_SOURCE=main
 PR_COMMENT_SANITIZED=YES
 STRATEGY_OR_RUNTIME_CHANGE=NO
 DATA_ADMISSION_CHANGE=NO
