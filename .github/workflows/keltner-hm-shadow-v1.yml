@@ -1,0 +1,21 @@
+name: Keltner HM Shadow V1
+on:
+  pull_request:
+    paths:
+      - "core/keltner_hm_shadow/**"
+      - "scripts/*keltner_hm*"
+      - "tests/test_keltner_hm_shadow.py"
+      - ".github/workflows/keltner-hm-shadow-v1.yml"
+jobs:
+  offline-certification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - run: pytest -q tests/test_keltner_hm_shadow.py
+      - run: python -m py_compile core/keltner_hm_shadow/*.py scripts/*keltner_hm*.py
+      - run: |
+          ! grep -R -E "place_order|modify_order|cancel_order|kiteconnect|broker_client" core/keltner_hm_shadow scripts/*keltner_hm*.py
