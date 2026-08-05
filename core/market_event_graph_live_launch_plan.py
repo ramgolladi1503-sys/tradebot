@@ -13,10 +13,12 @@ from core.market_event_graph_live_observation_registry import (
 )
 
 SCHEMA_VERSION = 1
+SEMANTIC_SCHEMA_VERSION = 1
 PASS_STATIC_LIVE_SOURCE_PREFLIGHT = "PASS_STATIC_LIVE_SOURCE_PREFLIGHT"
 PASS_LIVE_SOURCE_PRESESSION_READINESS = "PASS_LIVE_SOURCE_PRESESSION_READINESS"
 BLOCKED_BY_PRODUCTION_SUBSCRIPTION_PLAN_UNPROVEN = "BLOCKED_BY_PRODUCTION_SUBSCRIPTION_PLAN_UNPROVEN"
 BLOCKED_BY_LAUNCH_PLAN_IDENTITY = "BLOCKED_BY_LAUNCH_PLAN_IDENTITY"
+BLOCKED_BY_FROZEN_LAUNCH_PLAN = "BLOCKED_BY_FROZEN_LAUNCH_PLAN"
 
 
 def _tokens(values: Sequence[int]) -> list[int]:
@@ -32,6 +34,72 @@ def _json_safe(value: Any) -> Any:
     return json.loads(json.dumps(value, sort_keys=True, default=str))
 
 
+def _stable_sha(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode("utf-8")
+    ).hexdigest()
+
+
+def _semantic_resolution(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Keep selection-driving resolver output, excluding volatile quote values."""
+    fields = (
+        "symbol", "exchange", "expiry", "index_token", "step", "strikes_around",
+        "option_strikes_selected", "tokens", "option_count", "resolved_count",
+        "resolved_option_count", "final_count", "final_option_count", "option_min_required",
+        "option_coverage_status", "option_coverage_reason", "index_token_source",
+    )
+    result = []
+    for row in rows:
+        result.append({key: _json_safe(row[key]) for key in fields if key in row})
+    return sorted(result, key=lambda row: (str(row.get("exchange", "")), str(row.get("symbol", ""))))
+
+
+def resolver_snapshot(plan: Mapping[str, Any]) -> dict[str, Any]:
+    """Capture the time-sensitive inputs used by production token resolution."""
+    return {
+        "schema_version": 1,
+        "master_sha256": str(plan.get("master_sha256") or ""),
+        "universe_sha256": str(plan.get("universe_sha256") or ""),
+        "production_resolution": _json_safe(plan.get("production_resolution") or []),
+        "production_tokens": _tokens(plan.get("production_tokens") or []),
+    }
+
+
+def canonicalize_launch_plan(plan: Mapping[str, Any], resolver_snapshot_hash: str = "") -> dict[str, Any]:
+    """Build the documented semantic projection used for launch approval."""
+    instruments = [{"instrument_token": int(token)} for token in _tokens(plan.get("final_union_tokens") or [])]
+    instruments.sort(key=lambda row: row["instrument_token"])
+    projection = {
+        "semantic_schema_version": SEMANTIC_SCHEMA_VERSION,
+        "session_date": str(plan.get("session_date") or ""),
+        "observation_tokens": _tokens(plan.get("observation_tokens") or []),
+        "final_union_tokens": _tokens(plan.get("final_union_tokens") or []),
+        "instruments": instruments,
+        "configured_budget": int(plan.get("configured_budget") or 0),
+        "production_resolution": _semantic_resolution(plan.get("production_resolution") or []),
+        "master_sha256": str(plan.get("master_sha256") or ""),
+        "universe_sha256": str(plan.get("universe_sha256") or ""),
+        "configuration_fingerprint": str(plan.get("configuration_fingerprint") or ""),
+        "read_only": bool(plan.get("read_only")),
+        "is_order_action": bool(plan.get("is_order_action")),
+        "allowed_for_live_execution": bool(plan.get("allowed_for_live_execution")),
+        "resolver_snapshot_sha256": str(resolver_snapshot_hash or ""),
+    }
+    for key in ("subscription_modes", "interval_seconds", "retry_bound", "campaign_id", "provider", "evidence_root"):
+        if key in plan:
+            projection[key] = _json_safe(plan[key])
+    return projection
+
+
+def semantic_sha256(plan: Mapping[str, Any], resolver_snapshot_hash: str = "") -> str:
+    projection = canonicalize_launch_plan(plan, resolver_snapshot_hash)
+    # The snapshot reference is provenance, not launch semantics. A quote-only
+    # snapshot change must be visible in resolver identity without changing the
+    # semantic plan when selected instruments and controls remain unchanged.
+    projection.pop("resolver_snapshot_sha256", None)
+    return _stable_sha(projection)
+
+
 def build_launch_plan(
     *,
     session_date: str,
@@ -44,6 +112,7 @@ def build_launch_plan(
     universe_sha256: str,
     configuration: Mapping[str, Any],
     broker_metadata_called: bool,
+    resolver_snapshot_sha256: str = "",
 ) -> dict[str, Any]:
     production = _tokens(production_tokens)
     observation = _tokens(observation_tokens)
@@ -77,6 +146,15 @@ def build_launch_plan(
         "broker_metadata_called": bool(broker_metadata_called),
     }
     plan_sha = _sha(basis)
+    snapshot = {
+        "schema_version": 1,
+        "master_sha256": str(master_sha256),
+        "universe_sha256": str(universe_sha256),
+        "production_resolution": resolution,
+        "production_tokens": production,
+    }
+    snapshot_sha = str(resolver_snapshot_sha256 or _stable_sha(snapshot))
+    semantic = canonicalize_launch_plan({**basis, "session_date": session_date, "read_only": True, "is_order_action": False, "allowed_for_live_execution": False}, snapshot_sha)
     ok = bool(merge["ok"] and len(observation) == 51 and len(basis["final_union_tokens"]) == len(set(production) | set(observation)))
     return {
         **basis,
@@ -91,6 +169,12 @@ def build_launch_plan(
         "observation_exclusive_count": len(basis["observation_exclusive_tokens"]),
         "final_union_count": len(basis["final_union_tokens"]),
         "launch_plan_sha256": plan_sha,
+        "resolver_snapshot_sha256": snapshot_sha,
+        "canonical_semantic_launch_plan": semantic,
+        "semantic_launch_plan_sha256": semantic_sha256(
+            {**basis, "session_date": session_date, "read_only": True, "is_order_action": False, "allowed_for_live_execution": False},
+            snapshot_sha,
+        ),
         "read_only": True,
         "is_order_action": False,
         "allowed_for_live_execution": False,
@@ -127,12 +211,54 @@ def load_launch_plan(path: Path) -> dict[str, Any]:
     return raw
 
 
+def verify_frozen_launch_plan(
+    path: Path,
+    *,
+    expected_semantic_sha256: str,
+    expected_resolver_snapshot_sha256: str,
+    session_date: str,
+    campaign_id: str | None = None,
+) -> dict[str, Any]:
+    """Fail closed before any feed object is constructed."""
+    frozen_root = path.resolve().parent
+    if not (frozen_root / "FROZEN").is_file():
+        raise ValueError(f"{BLOCKED_BY_FROZEN_LAUNCH_PLAN}:FROZEN_MARKER_MISSING")
+    plan = load_launch_plan(path)
+    if str(plan.get("session_date")) != str(session_date):
+        raise ValueError(f"{BLOCKED_BY_FROZEN_LAUNCH_PLAN}:SESSION_DATE_MISMATCH")
+    if campaign_id is not None and str(plan.get("campaign_id") or "") != str(campaign_id):
+        raise ValueError(f"{BLOCKED_BY_FROZEN_LAUNCH_PLAN}:CAMPAIGN_MISMATCH")
+    snapshot_path = frozen_root / "resolver_snapshot.json"
+    if not snapshot_path.is_file():
+        snapshot_path = frozen_root / "resolver_snapshot" / "resolver_inputs.json"
+    if not snapshot_path.is_file():
+        raise ValueError(f"{BLOCKED_BY_FROZEN_LAUNCH_PLAN}:RESOLVER_SNAPSHOT_MISSING")
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    snapshot_hash = _stable_sha(snapshot)
+    if snapshot_hash != str(expected_resolver_snapshot_sha256):
+        raise ValueError(f"{BLOCKED_BY_FROZEN_LAUNCH_PLAN}:RESOLVER_SNAPSHOT_MISMATCH")
+    actual_semantic = semantic_sha256(plan, snapshot_hash)
+    if actual_semantic != str(expected_semantic_sha256):
+        raise ValueError(f"{BLOCKED_BY_FROZEN_LAUNCH_PLAN}:SEMANTIC_HASH_MISMATCH")
+    tokens = _tokens(plan.get("final_union_tokens") or [])
+    if len(tokens) != 123 or len(tokens) != len(set(tokens)) or len(_tokens(plan.get("observation_tokens") or [])) != 51:
+        raise ValueError(f"{BLOCKED_BY_FROZEN_LAUNCH_PLAN}:TOKEN_CONTRACT_MISMATCH")
+    if int(plan.get("configured_budget") or 0) > 150 or plan.get("read_only") is not True or plan.get("allowed_for_live_execution") is not False:
+        raise ValueError(f"{BLOCKED_BY_FROZEN_LAUNCH_PLAN}:AUTHORITY_OR_BUDGET_MISMATCH")
+    return {"ok": True, "semantic_sha256": actual_semantic, "resolver_snapshot_sha256": snapshot_hash, "token_count": len(tokens)}
+
+
 __all__ = [
     "BLOCKED_BY_LAUNCH_PLAN_IDENTITY",
+    "BLOCKED_BY_FROZEN_LAUNCH_PLAN",
     "BLOCKED_BY_PRODUCTION_SUBSCRIPTION_PLAN_UNPROVEN",
     "PASS_STATIC_LIVE_SOURCE_PREFLIGHT",
     "PASS_LIVE_SOURCE_PRESESSION_READINESS",
     "build_launch_plan",
+    "canonicalize_launch_plan",
     "load_launch_plan",
+    "resolver_snapshot",
+    "semantic_sha256",
+    "verify_frozen_launch_plan",
     "write_launch_plan",
 ]

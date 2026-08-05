@@ -24,6 +24,8 @@ from core.market_event_graph_live_launch_plan import (
     PASS_STATIC_LIVE_SOURCE_PREFLIGHT,
     build_launch_plan,
     write_launch_plan,
+    load_launch_plan,
+    verify_frozen_launch_plan,
 )
 from core.market_event_graph_live_observation_registry import load_observation_registry
 from core.session_calendar import is_open
@@ -218,6 +220,10 @@ def main() -> int:
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--static-preflight-only", action="store_true")
     parser.add_argument("--launch-preflight-only", action="store_true")
+    parser.add_argument("--frozen-launch-plan", type=Path, default=None)
+    parser.add_argument("--expected-semantic-sha256", default=None)
+    parser.add_argument("--expected-resolver-snapshot-sha256", default=None)
+    parser.add_argument("--campaign-id", default=None)
     args = parser.parse_args()
 
     session_date = _validate_session_date(args.session_date)
@@ -245,12 +251,24 @@ def main() -> int:
         print(json.dumps(static_preflight, sort_keys=True))
         return 0 if bool(static_preflight.get("ok")) else 2
 
-    launch_plan = _build_production_launch_plan(
-        session_date=session_date,
-        registry=registry,
-        master_sha=master_sha,
-        broker_metadata_called=broker_metadata_called,
-    )
+    if args.frozen_launch_plan is not None:
+        if not args.expected_semantic_sha256 or not args.expected_resolver_snapshot_sha256:
+            raise SystemExit("BLOCKED_BY_FROZEN_LAUNCH_PLAN:EXPECTED_HASH_MISSING")
+        verify_frozen_launch_plan(
+            args.frozen_launch_plan,
+            expected_semantic_sha256=args.expected_semantic_sha256,
+            expected_resolver_snapshot_sha256=args.expected_resolver_snapshot_sha256,
+            session_date=session_date,
+            campaign_id=args.campaign_id,
+        )
+        launch_plan = load_launch_plan(args.frozen_launch_plan)
+    else:
+        launch_plan = _build_production_launch_plan(
+            session_date=session_date,
+            registry=registry,
+            master_sha=master_sha,
+            broker_metadata_called=broker_metadata_called,
+        )
     if args.launch_preflight_only:
         print(json.dumps(launch_plan, sort_keys=True))
         return 0 if bool(launch_plan.get("ok")) else 2
@@ -313,6 +331,7 @@ def main() -> int:
             "--kite-instruments-file", str(master_path),
             "--launch-plan", str(launch_plan_path),
             "--token-path", str(token_path),
+            *(["--frozen-launch-plan", str(args.frozen_launch_plan), "--expected-semantic-sha256", str(args.expected_semantic_sha256), "--expected-resolver-snapshot-sha256", str(args.expected_resolver_snapshot_sha256), "--campaign-id", str(args.campaign_id)] if args.frozen_launch_plan else []),
         ], cwd=REPO_ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT)
     return int(proc.returncode)
 

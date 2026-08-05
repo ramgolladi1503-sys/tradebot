@@ -1,0 +1,4 @@
+{
+  "required": ["semantic_schema_version", "session_date", "observation_tokens", "final_union_tokens", "instruments", "configured_budget", "production_resolution", "master_sha256", "universe_sha256", "configuration_fingerprint", "read_only", "is_order_action", "allowed_for_live_execution"],
+  "types": {"semantic_schema_version": "integer", "session_date": "string", "observation_tokens": "array", "final_union_tokens": "array", "instruments": "array", "configured_budget": "integer", "production_resolution": "array", "master_sha256": "string", "universe_sha256": "string", "configuration_fingerprint": "string", "read_only": "boolean", "is_order_action": "boolean", "allowed_for_live_execution": "boolean"}
+}

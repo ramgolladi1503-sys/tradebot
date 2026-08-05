@@ -22,7 +22,7 @@ for _module_name in tuple(sys.modules):
         sys.modules.pop(_module_name, None)
 
 from core.kite_read_only_observation_runtime import run_observation, safe_environment
-from core.market_event_graph_live_launch_plan import load_launch_plan
+from core.market_event_graph_live_launch_plan import load_launch_plan, verify_frozen_launch_plan
 
 EXPECTED_MASTER_SHA256 = "828c0c378e4939720c34ee7e727e5ae6f0265441e0e0a1888a386f85ab9c2a93"
 
@@ -33,6 +33,10 @@ def main() -> int:
     parser.add_argument("--output-root", required=True, type=Path)
     parser.add_argument("--kite-instruments-file", required=True, type=Path)
     parser.add_argument("--launch-plan", required=True, type=Path)
+    parser.add_argument("--frozen-launch-plan", type=Path, default=None)
+    parser.add_argument("--expected-semantic-sha256", default=None)
+    parser.add_argument("--expected-resolver-snapshot-sha256", default=None)
+    parser.add_argument("--campaign-id", default=None)
     parser.add_argument("--token-path", required=True, type=Path)
     parser.add_argument("--validate-only", action="store_true")
     args = parser.parse_args()
@@ -42,7 +46,18 @@ def main() -> int:
     if digest != EXPECTED_MASTER_SHA256:
         raise SystemExit("BLOCKED_BY_KITE_MASTER_HASH")
     os.environ["TRADING_BOT_TOKEN_PATH"] = str(args.token_path.resolve())
-    plan = load_launch_plan(args.launch_plan)
+    plan_path = args.frozen_launch_plan or args.launch_plan
+    if args.frozen_launch_plan is not None:
+        if not args.expected_semantic_sha256 or not args.expected_resolver_snapshot_sha256:
+            raise SystemExit("BLOCKED_BY_FROZEN_LAUNCH_PLAN:EXPECTED_HASH_MISSING")
+        verify_frozen_launch_plan(
+            plan_path,
+            expected_semantic_sha256=args.expected_semantic_sha256,
+            expected_resolver_snapshot_sha256=args.expected_resolver_snapshot_sha256,
+            session_date=args.session_date,
+            campaign_id=args.campaign_id,
+        )
+    plan = load_launch_plan(plan_path)
     env = safe_environment()
     os.environ.update(env)
     from core.kite_read_only_observation_runtime import assert_import_boundary, safety_contract

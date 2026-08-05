@@ -1,0 +1,1 @@
+{"encoding":"UTF-8","sort_keys":true,"separators":[",",":"],"ensure_ascii":true,"allow_nan":false,"instrument_sort":["instrument_token"],"list_rule":"token lists preserve semantic order; resolver rows sort by exchange then symbol","unknown_field_behavior":"reject unknown fields in canonical semantic document"}
