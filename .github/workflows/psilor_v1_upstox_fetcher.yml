@@ -43,7 +43,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git grep -n -E 'Bearer [A-Za-z0-9._-]{20,}|UPSTOX_ACCESS_TOKEN=.+' -- \
+          if git grep -n -E 'Bearer [A-Za-z0-9._-]{20,}|UPSTOX_ACCESS_TOKEN=.+' -- \
             scripts/fetch_psilor_v1_data.py scripts/smoke_test_psilor_v1.py \
-            tests/test_fetch_psilor_v1_data.py docs/agent_reviews/psilor_v1_upstox_fetcher.md \
-            && { echo 'Potential secret found'; exit 1; } || true
+            tests/test_fetch_psilor_v1_data.py docs/agent_reviews/psilor_v1_upstox_fetcher.md; then
+            echo 'Potential secret found in focused files'
+            exit 1
+          fi
