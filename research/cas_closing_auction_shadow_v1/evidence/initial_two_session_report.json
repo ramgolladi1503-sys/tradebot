@@ -1,0 +1,121 @@
+{
+  "study_id": "CAS_CLOSING_AUCTION_SHADOW_V1_INITIAL_TWO_SESSION",
+  "generated_at": "2026-08-04T22:25:00+05:30",
+  "source_authority": {
+    "aug3": "Google Drive upstox_market_data/20260803 raw 10-minute parquet chunks, exact NSE_INDEX|Nifty 50 and immutable NSE_FO option keys",
+    "aug4": "Google Drive evidence/upstox/20260804/full_day_replay_v1 normalized exact-index and NSE_EQ constituent partitions",
+    "official_indicative_close_available": false,
+    "aug4_option_path_available_in_inspected_partitions": false
+  },
+  "input_hashes": {
+    "aug4_nifty_hour09": "3f1aee8cb0dcc56a9315bdf3f9d711f84edb7034f921c5d779a6981e7359f880",
+    "aug4_nifty_hour10": "cce31f8ddefb63c3d6636a75b412a6e73e839443edefe514b4e36d2556984b54",
+    "instrument_master_complete_json_gz": "Drive complete.json.gz; artifact manifest SHA-256 c867c43e11dcfe0b28b683d6c903a812ce220fae69460484cb24168f49102733"
+  },
+  "aug3_non_expiry_dte1": {
+    "pre_1515_index": {
+      "ts": "2026-08-03T15:14:58.910522223+05:30",
+      "price": 24575.1
+    },
+    "final_observed_index": {
+      "ts": "2026-08-03T15:34:59.667600870+05:30",
+      "price": 24774.3
+    },
+    "post_1515_move_points": 199.2,
+    "post_1515_move_bps": 81.0577,
+    "largest_positive_one_minute": {
+      "minute": "2026-08-03T15:29:00+05:30",
+      "points": 200.95
+    },
+    "normal_late_session": {
+      "start_price": 24598.35,
+      "end_price": 24575.1,
+      "points": -23.25,
+      "bps": -9.4519
+    },
+    "cas_order_discovery": {
+      "start_price": 24573.35,
+      "end_price": 24774.3,
+      "points": 200.95,
+      "bps": 81.7756
+    },
+    "frozen_atm_24600": {
+      "authority": "LTP_PATH_ONLY_NOT_EXECUTABLE",
+      "ce": {
+        "instrument_key": "NSE_FO|65871",
+        "pre_1515_ltp": 44.75,
+        "1530_ltp": 43.45,
+        "1535_ltp": 53.95,
+        "move_points": 9.2,
+        "move_pct": 20.5587
+      },
+      "pe": {
+        "instrument_key": "NSE_FO|65872",
+        "pre_1515_ltp": 75.4,
+        "1530_ltp": 59.3,
+        "1535_ltp": 59.0,
+        "move_points": -16.4,
+        "move_pct": -21.7507
+      }
+    }
+  },
+  "aug4_weekly_expiry": {
+    "pre_1515_index": {
+      "ts": "2026-08-04T15:14:58.806010+05:30",
+      "price": 24465.05
+    },
+    "final_observed_index": {
+      "ts": "2026-08-04T15:34:59.989848+05:30",
+      "price": 24614.9
+    },
+    "post_1515_move_points": 149.85,
+    "post_1515_move_bps": 61.2506,
+    "largest_positive_one_minute": {
+      "minute": "2026-08-04T15:28:00+05:30",
+      "points": 151.45
+    },
+    "normal_late_session": {
+      "start_price": 24456.65,
+      "end_price": 24465.05,
+      "points": 8.4,
+      "bps": 3.4346
+    },
+    "cas_order_discovery": {
+      "start_price": 24463.45,
+      "end_price": 24614.9,
+      "points": 151.45,
+      "bps": 61.9087
+    },
+    "constituents": {
+      "count": 50,
+      "positive": 47,
+      "negative": 2,
+      "unchanged": 1,
+      "positive_fraction": 0.94,
+      "median_bps": 67.9084,
+      "equal_weight_mean_bps": 65.7648,
+      "top3_abs_share": 0.154832,
+      "broad_move": true
+    },
+    "option_response": {
+      "available": false,
+      "reason": "not present in inspected normalized partitions"
+    }
+  },
+  "cross_session_observation": {
+    "both_large_index_repricings_occurred_near_auction_finalization": true,
+    "aug3_jump_minute": "15:29 IST",
+    "aug4_jump_minute": "15:28 IST",
+    "aug4_move_was_broad_not_top3_concentrated": true,
+    "edge_validated": false,
+    "reason": "two sessions and no official indicative-close/imbalance stream"
+  },
+  "source_analysis_sha256": "82296589878eaa13a376642da8341c368938ad0a1f18867400dea9c6c47205ed",
+  "verdict": [
+    "CAS_MECHANISM_CONFIRMED_IN_TWO_SESSIONS",
+    "DIRECTIONAL_EDGE_NOT_VALIDATED",
+    "SHADOW_ONLY",
+    "NO_STRATEGY_INTEGRATION",
+    "NO_ORDER_ACTION"
+  ]
+}
