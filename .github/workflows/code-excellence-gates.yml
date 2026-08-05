@@ -38,7 +38,7 @@ jobs:
 
       - name: Collect changed paths
         run: |
-          git fetch origin main --depth=1
+          git fetch origin main --no-tags
           mkdir -p docs/code_excellence/reports
           git diff --name-only origin/main...HEAD > docs/code_excellence/reports/changed_paths.txt
           cat docs/code_excellence/reports/changed_paths.txt
