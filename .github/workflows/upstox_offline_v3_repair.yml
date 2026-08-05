@@ -1,0 +1,71 @@
+name: Upstox Offline V3 Repair
+
+on:
+  push:
+    branches:
+      - "fix/upstox-offline-datasets-v3-causality"
+    paths:
+      - "scripts/upstox_capture/generate_offline_datasets_v3.py"
+      - "scripts/upstox_capture/validate_upstox_capture_v1.py"
+      - "tests/upstox_capture/test_capture_validation_sequence.py"
+      - "tests/upstox_capture/test_offline_datasets_v3_session_clock.py"
+      - "docs/agent_reviews/upstox_offline_v3_time_sequence_repair.md"
+      - ".github/workflows/upstox_offline_v3_repair.yml"
+  pull_request:
+    paths:
+      - "scripts/upstox_capture/generate_offline_datasets_v3.py"
+      - "scripts/upstox_capture/validate_upstox_capture_v1.py"
+      - "tests/upstox_capture/test_capture_validation_sequence.py"
+      - "tests/upstox_capture/test_offline_datasets_v3_session_clock.py"
+      - "docs/agent_reviews/upstox_offline_v3_time_sequence_repair.md"
+      - ".github/workflows/upstox_offline_v3_repair.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pandas numpy pyarrow zstandard
+
+      - name: Compile repaired modules
+        run: |
+          python -m py_compile \
+            scripts/upstox_capture/generate_offline_datasets_v3.py \
+            scripts/upstox_capture/validate_upstox_capture_v1.py
+
+      - name: Run sequence identity tests
+        run: |
+          python -m pytest -q tests/upstox_capture/test_capture_validation_sequence.py
+
+      - name: Run IST and contract-authority tests
+        run: |
+          python -m pytest -q tests/upstox_capture/test_offline_datasets_v3_session_clock.py
+
+      - name: Safety boundary
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          test -n "${BASE_SHA}"
+          git diff --name-only "${BASE_SHA}"...HEAD > /tmp/changed.txt
+          if grep -E '^(core/(trade_builder|risk|broker|execution)|strategies/.*\.py$)' /tmp/changed.txt; then
+            echo "Protected runtime or strategy path changed."
+            exit 1
+          fi
+          grep -q 'NO_ORDER_ACTIONS' scripts/upstox_capture/generate_offline_datasets_v3.py
+          grep -q 'NO_EXECUTION_AUTHORITY' scripts/upstox_capture/generate_offline_datasets_v3.py

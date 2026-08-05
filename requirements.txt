@@ -19,3 +19,4 @@ statsmodels
 upstox-python-sdk
 protobuf
 websockets
+zstandard
