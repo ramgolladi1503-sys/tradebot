@@ -1,0 +1,74 @@
+name: PSILOR V1 Recertification
+
+on:
+  pull_request:
+    paths:
+      - "research/psilor_v1/**"
+      - "scripts/run_psilor_v1_recertification.py"
+      - "tests/test_psilor_v1_recertification.py"
+      - ".github/workflows/psilor_v1_recertification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recertification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install focused dependencies
+        run: python -m pip install --disable-pip-version-check pandas pytest
+
+      - name: Compile PSILOR research lane
+        run: >-
+          python -m py_compile
+          research/psilor_v1/*.py
+          scripts/run_psilor_v1_recertification.py
+          tests/test_psilor_v1_recertification.py
+
+      - name: Run focused integrity tests
+        run: pytest -q tests/test_psilor_v1_recertification.py
+
+      - name: Generate deterministic readiness evidence
+        run: >-
+          python scripts/run_psilor_v1_recertification.py
+          --output runtime/research/psilor_v1/readiness.json
+
+      - name: Enforce claim boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("runtime/research/psilor_v1/readiness.json")
+          evidence = json.loads(path.read_text())
+          assert evidence["candidate_count"] == 0
+          assert evidence["candidate"] is None
+          assert evidence["allowed_for_live_execution"] is False
+          assert evidence["is_order_action"] is False
+          assert evidence["broker_api_called"] is False
+          assert evidence["final_verdict"] == "NOT_EVALUATED_DATA_BLOCKED"
+          assert evidence["claim_boundary"] == (
+              "NO_STRUCTURAL_EDGE_OR_OPTION_PROFITABILITY_PROVEN"
+          )
+          assert evidence["calibration"][
+              "precomputed_outcome_mismatch_detected"
+          ] is True
+          assert evidence["calibration"]["mixed_bar_horizon_audit"][
+              "mixed_elapsed_horizon"
+          ] is True
+          PY
+
+      - name: Upload research evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: psilor-v1-recertification
+          path: runtime/research/psilor_v1/readiness.json
+          if-no-files-found: error
