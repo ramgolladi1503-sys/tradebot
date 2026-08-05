@@ -1,6 +1,0 @@
-timestamp_ist,previous_state,new_state,trigger,physical_transport_state,critical_freshness,core_fresh_ratio,subscription_consistency,recovery_result,stable_cycle_count
-2026-07-30T14:57:26.966687+05:30,,DEGRADED_LOCAL,sampled_runtime_snapshot,True,1.0,0.9857142857142858,False,,12
-2026-07-30T15:01:11.777664+05:30,DEGRADED_LOCAL,LIVE,sampled_runtime_snapshot,True,1.0,0.9705882352941176,False,IDLE,4
-2026-07-30T15:01:16.827599+05:30,LIVE,DEGRADED_LOCAL,sampled_runtime_snapshot,True,1.0,0.9705882352941176,False,IDLE,6
-2026-07-30T15:07:27.166116+05:30,DEGRADED_LOCAL,LIVE,sampled_runtime_snapshot,True,1.0,0.9692307692307692,False,IDLE,26
-2026-07-30T15:07:32.222180+05:30,LIVE,DEGRADED_LOCAL,sampled_runtime_snapshot,True,1.0,0.96875,False,IDLE,27

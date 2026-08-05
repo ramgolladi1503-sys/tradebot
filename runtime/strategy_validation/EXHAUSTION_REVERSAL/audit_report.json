@@ -1,8 +1,0 @@
-{
-    "strategy_id": "EXHAUSTION_REVERSAL",
-    "callable_exists": true,
-    "returns_list_or_tuple": true,
-    "contract_passed": true,
-    "errors": [],
-    "state": "CANDIDATE_GENERATOR_CONTRACT_PASSED"
-}
