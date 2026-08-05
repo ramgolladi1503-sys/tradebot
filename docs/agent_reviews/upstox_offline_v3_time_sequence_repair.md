@@ -1,5 +1,16 @@
 # Agent Review Evidence — Upstox Offline V3 Authority Repair
 
+## Traceability Record
+
+mode: OFFLINE_RESEARCH
+candidate_id: PSILOR_DRIVE_CORPUS_20260805
+ decision: BLOCK_DATA_ADMISSION_PENDING_REAL_CORPUS_REGENERATION
+reason: Code authority is repaired and tested, while the sealed archive still requires offline materialization and regeneration before DORL or PSILOR admission.
+timestamp: 2026-08-06T03:55:00+05:30
+is_order_action: false
+broker_api_called: false
+source: SEALED_DRIVE_MANIFEST_AND_PR796_FINAL_HEAD
+
 ## Agent Work Contract
 
 Repair only the offline Upstox data-authority path required to validate an already sealed market-data corpus:
