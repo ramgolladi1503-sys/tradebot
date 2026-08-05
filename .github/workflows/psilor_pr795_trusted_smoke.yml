@@ -1,0 +1,173 @@
+name: PSILOR PR795 Trusted Smoke
+
+on:
+  workflow_run:
+    workflows: ["tests"]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  authenticated-bounded-smoke:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_branch == 'data/psilor-v1-upstox-fetch-v2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
+      PSILOR_SMOKE_ROOT: ${{ runner.temp }}/psilor-smoke
+      PSILOR_SMOKE_RUN_ID: trusted-${{ github.run_id }}-${{ github.run_attempt }}
+      RESULT_PATH: ${{ runner.temp }}/psilor-smoke-result.json
+    steps:
+      - name: Checkout exact tested head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install smoke dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas pytz python-dateutil pyarrow requests
+
+      - name: Run smoke and write sanitized result
+        id: smoke
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          if [ -z "${UPSTOX_ACCESS_TOKEN:-}" ]; then
+            python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          Path(os.environ['RESULT_PATH']).write_text(json.dumps({
+              'schema_version': 1,
+              'source_head_sha': os.environ['GITHUB_SHA'],
+              'workflow_run_id': os.environ['GITHUB_RUN_ID'],
+              'workflow_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'smoke_verdict': 'BLOCKED_AUTHENTICATION',
+              'formal_extraction_approved': False,
+              'credentials_persisted': False,
+          }, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+            exit 1
+          fi
+
+          PYTHONPATH=. python scripts/smoke_test_psilor_v1.py
+          smoke_rc=$?
+          report="${PSILOR_SMOKE_ROOT}/${PSILOR_SMOKE_RUN_ID}/validation_report.json"
+          if [ -f "${report}" ]; then
+            python - "${report}" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          source = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+          safe = {
+              'schema_version': 1,
+              'source_head_sha': os.environ['GITHUB_SHA'],
+              'workflow_run_id': os.environ['GITHUB_RUN_ID'],
+              'workflow_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'smoke_verdict': source.get('smoke_verdict'),
+              'real_future_contracts': source.get('real_future_contracts'),
+              'real_ce_contracts': source.get('real_ce_contracts'),
+              'real_pe_contracts': source.get('real_pe_contracts'),
+              'real_candle_files': source.get('real_candle_files'),
+              'exact_common_sessions': source.get('exact_common_sessions'),
+              'smoke_hash_reconciliation': source.get('smoke_hash_reconciliation'),
+              'no_unexpected_files': source.get('no_unexpected_files'),
+              'created_by_current_run': source.get('created_by_current_run'),
+              'formal_extraction_approved': source.get('formal_extraction_approved', False),
+              'credentials_persisted': False,
+          }
+          Path(os.environ['RESULT_PATH']).write_text(
+              json.dumps(safe, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+          else
+            python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          Path(os.environ['RESULT_PATH']).write_text(json.dumps({
+              'schema_version': 1,
+              'source_head_sha': os.environ['GITHUB_SHA'],
+              'workflow_run_id': os.environ['GITHUB_RUN_ID'],
+              'workflow_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'smoke_verdict': 'FAILED_NO_VALIDATION_REPORT',
+              'formal_extraction_approved': False,
+              'credentials_persisted': False,
+          }, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+          fi
+          exit "${smoke_rc}"
+
+      - name: Post sanitized result to PR 795
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          RESULT_PATH: ${{ env.RESULT_PATH }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = process.env.RESULT_PATH;
+            let result;
+            if (fs.existsSync(path)) {
+              result = JSON.parse(fs.readFileSync(path, 'utf8'));
+            } else {
+              result = {
+                schema_version: 1,
+                source_head_sha: context.sha,
+                smoke_verdict: 'FAILED_NO_SANITIZED_RESULT',
+                formal_extraction_approved: false,
+                credentials_persisted: false
+              };
+            }
+            const body = [
+              '<!-- PSILOR_AUTHENTICATED_SMOKE_RESULT -->',
+              '## PSILOR authenticated smoke result',
+              '```json',
+              JSON.stringify(result, null, 2),
+              '```'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 795,
+              body
+            });
+
+      - name: Enforce exact smoke verdict
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          result = json.loads(Path(os.environ['RESULT_PATH']).read_text(encoding='utf-8'))
+          assert result['smoke_verdict'] == 'PASS_BOUNDED_AUTHENTICATED_FETCH_SMOKE'
+          assert result['real_future_contracts'] == 1
+          assert result['real_ce_contracts'] == 2
+          assert result['real_pe_contracts'] == 2
+          assert result['real_candle_files'] == 5
+          assert len(result['exact_common_sessions']) == 2
+          assert result['smoke_hash_reconciliation'] == 'PASS'
+          assert result['no_unexpected_files'] is True
+          assert result['created_by_current_run'] is True
+          assert result['formal_extraction_approved'] is True
+          assert result['credentials_persisted'] is False
+          print('SMOKE_VERDICT=PASS_BOUNDED_AUTHENTICATED_FETCH_SMOKE')
+          PY
