@@ -16,7 +16,7 @@ import hashlib
 import json
 import logging
 import sys
-from datetime import time
+from datetime import datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +34,9 @@ MARKET_OPEN = time(9, 15)
 MARKET_CLOSE = time(15, 30)
 POST_CLOSE_END = time(15, 40)
 KNOWN_STALE_BOUNDARIES_UTC = {"072900", "073000", "073100"}
+OPTION_PANEL_PER_SIDE = 5
+OPTION_SELECTION_POLICY = "NEAREST_NONEXPIRED_EXPIRY_ATM_BALANCED_5CE_5PE"
+FUTURE_SELECTION_POLICY = "NEAREST_NONEXPIRED_EXPIRY"
 
 
 def calculate_sha256(filepath: Path) -> str:
@@ -60,7 +63,7 @@ def get_market_phase(timestamp: pd.Timestamp) -> str:
 
 
 def classify_interval(timestamp: pd.Timestamp, maximum_input_age_seconds: float) -> str:
-    """Classify one UTC boundary using the Indian continuous-market clock."""
+    """Classify a UTC boundary using the Indian continuous-market clock."""
     ist_time = boundary_ist_time(timestamp)
     if ist_time < MARKET_OPEN:
         return "STARTUP_BACKFILL_NOT_LIVE_CAUSAL"
@@ -73,7 +76,106 @@ def classify_interval(timestamp: pd.Timestamp, maximum_input_age_seconds: float)
     return "LIVE_FRESH"
 
 
-def get_horizon_outcome(instrument_df: pd.DataFrame, boundary_ms: int, horizon_sec: int) -> dict[str, Any]:
+def parse_expiry_utc(value: Any) -> pd.Timestamp | None:
+    if value is None or pd.isna(value):
+        return None
+    try:
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            return pd.to_datetime(int(value), unit="ms", utc=True)
+        text = str(value).strip()
+        if not text:
+            return None
+        if text.replace(".", "", 1).isdigit():
+            return pd.to_datetime(int(float(text)), unit="ms", utc=True)
+        parsed = pd.to_datetime(text, utc=True, errors="coerce")
+        return None if pd.isna(parsed) else parsed
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _session_date_value(session_date: str) -> Any:
+    return datetime.strptime(session_date, "%Y%m%d").date()
+
+
+def select_front_future(
+    frame: pd.DataFrame, session_date: str
+) -> tuple[str | None, str | None]:
+    candidates = frame[frame["instrument_type"] == "FUT"][[
+        "instrument_key",
+        "expiry",
+    ]].drop_duplicates()
+    if candidates.empty:
+        return None, None
+    session_value = _session_date_value(session_date)
+    rows: list[tuple[pd.Timestamp, str]] = []
+    for candidate in candidates.itertuples(index=False):
+        expiry = parse_expiry_utc(candidate.expiry)
+        if expiry is None or expiry.tz_convert(MARKET_TIMEZONE).date() < session_value:
+            continue
+        rows.append((expiry, str(candidate.instrument_key)))
+    if not rows:
+        return None, None
+    expiry, instrument_key = min(rows, key=lambda item: (item[0], item[1]))
+    return instrument_key, expiry.isoformat()
+
+
+def select_option_panel(
+    latest_rows: pd.DataFrame,
+    spot_price: float | None,
+    boundary: pd.Timestamp,
+    per_side: int = OPTION_PANEL_PER_SIDE,
+) -> list[dict[str, Any]]:
+    if spot_price is None or latest_rows.empty:
+        return []
+    candidates = latest_rows[
+        latest_rows["instrument_type"].isin(["CE", "PE"])
+    ].copy()
+    if candidates.empty:
+        return []
+    candidates["strike_numeric"] = pd.to_numeric(candidates["strike"], errors="coerce")
+    candidates["expiry_utc"] = candidates["expiry"].map(parse_expiry_utc)
+    candidates = candidates[
+        candidates["strike_numeric"].notna() & candidates["expiry_utc"].notna()
+    ].copy()
+    if candidates.empty:
+        return []
+    boundary_date = boundary.tz_convert(MARKET_TIMEZONE).date()
+    candidates = candidates[
+        candidates["expiry_utc"].map(
+            lambda expiry: expiry.tz_convert(MARKET_TIMEZONE).date() >= boundary_date
+        )
+    ].copy()
+    if candidates.empty:
+        return []
+    nearest_expiry = min(candidates["expiry_utc"])
+    candidates = candidates[candidates["expiry_utc"] == nearest_expiry].copy()
+    candidates["absolute_moneyness"] = (
+        candidates["strike_numeric"] - spot_price
+    ).abs()
+
+    selected: list[dict[str, Any]] = []
+    for option_type in ("CE", "PE"):
+        side = candidates[candidates["instrument_type"] == option_type].sort_values(
+            by=["absolute_moneyness", "strike_numeric", "instrument_key"],
+            kind="mergesort",
+        )
+        for rank, row in enumerate(side.head(per_side).itertuples(index=False), start=1):
+            selected.append(
+                {
+                    "instrument_key": str(row.instrument_key),
+                    "option_type": option_type,
+                    "expiry_utc": row.expiry_utc.isoformat(),
+                    "strike": float(row.strike_numeric),
+                    "selection_rank_within_side": rank,
+                    "absolute_moneyness": float(row.absolute_moneyness),
+                }
+            )
+    return selected
+
+
+def get_horizon_outcome(
+    instrument_df: pd.DataFrame, boundary_ms: int, horizon_sec: int
+) -> dict[str, Any]:
     target_ts = boundary_ms + horizon_sec * 1000
     future_obs = instrument_df[instrument_df["source_exchange_ts"] >= target_ts]
     if future_obs.empty:
@@ -86,7 +188,6 @@ def get_horizon_outcome(instrument_df: pd.DataFrame, boundary_ms: int, horizon_s
             "missing_reason": "NO_OBSERVATION_WITHIN_TOLERANCE",
             "available": False,
         }
-
     match = future_obs.iloc[0]
     matched_ts = int(match["source_exchange_ts"])
     lag = matched_ts - target_ts
@@ -120,7 +221,6 @@ def get_mfe_mae(
 ) -> tuple[Any, Any, Any, Any, Any, Any]:
     if pd.isna(entry_obs_ts) or pd.isna(entry_price):
         return None, None, None, None, None, None
-
     end_ts = boundary_ms + horizon_sec * 1000 + MAX_HORIZON_LAG
     window = instrument_df[
         (instrument_df["source_exchange_ts"] > entry_obs_ts)
@@ -128,16 +228,13 @@ def get_mfe_mae(
     ]
     if window.empty:
         return None, None, int(entry_obs_ts) + 1, end_ts, None, None
-
     max_index = window["ltp"].idxmax()
     min_index = window["ltp"].idxmin()
     maximum = window.loc[max_index, "ltp"]
     minimum = window.loc[min_index, "ltp"]
-    mfe = float(maximum - entry_price) if pd.notna(maximum) else None
-    mae = float(minimum - entry_price) if pd.notna(minimum) else None
     return (
-        mfe,
-        mae,
+        float(maximum - entry_price) if pd.notna(maximum) else None,
+        float(minimum - entry_price) if pd.notna(minimum) else None,
         int(entry_obs_ts) + 1,
         end_ts,
         window.loc[max_index, "source_exchange_ts"],
@@ -153,19 +250,14 @@ def test_causality_and_horizons() -> None:
             "source_fragment": ["A", "A", "A", "A"],
         }
     )
-    boundary_ms = 1000000
-    result_5s = get_horizon_outcome(frame, boundary_ms, 5)
+    result_5s = get_horizon_outcome(frame, 1000000, 5)
     assert result_5s["ltp"] == 24606.0
     assert result_5s["matched_timestamp"] >= result_5s["target_timestamp"]
     assert result_5s["lag_ms"] <= MAX_HORIZON_LAG
-
-    result_15s = get_horizon_outcome(frame, boundary_ms, 15)
-    assert result_15s["ltp"] == 24600.2
-
-    result_30s = get_horizon_outcome(frame, boundary_ms, 30)
+    assert get_horizon_outcome(frame, 1000000, 15)["ltp"] == 24600.2
+    result_30s = get_horizon_outcome(frame, 1000000, 30)
     assert result_30s["ltp"] is None
     assert result_30s["missing_reason"] == "NO_OBSERVATION_WITHIN_TOLERANCE"
-
     sparse = pd.DataFrame(
         {
             "source_exchange_ts": [1000000, 1062000],
@@ -174,7 +266,6 @@ def test_causality_and_horizons() -> None:
         }
     )
     assert get_horizon_outcome(sparse, 1000000, 60)["ltp"] == 110
-
     mfe, mae, *_ = get_mfe_mae(frame, 1000000, 24604.6, 1000000, 60)
     assert round(mfe, 2) == 1.8
     assert round(mae, 2) == -4.4
@@ -198,7 +289,6 @@ def _safe_int(value: Any) -> int | None:
 
 def main() -> None:
     test_causality_and_horizons()
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--session-date", required=True)
     parser.add_argument("--evidence-roots", nargs="+", required=True)
@@ -226,7 +316,6 @@ def main() -> None:
         symbol: details.get("sector", "Unknown")
         for symbol, details in membership.items()
     }
-
     official_weights = None
     if weights_path.exists():
         weights_payload = json.loads(weights_path.read_text(encoding="utf-8"))
@@ -245,7 +334,6 @@ def main() -> None:
             frame["receive_wall_ts_utc"], format="ISO8601", utc=True
         )
         frames.append(frame)
-
     if not frames:
         logger.error("No data found across roots.")
         raise SystemExit(1)
@@ -277,8 +365,10 @@ def main() -> None:
     interval_bounds = pd.date_range(start=minimum, end=maximum, freq="1min", tz="UTC")
 
     spot_key = "NSE_INDEX|Nifty 50"
-    future_keys = sorted(data.loc[data["instrument_type"] == "FUT", "instrument_key"].unique())
-    front_future_key = future_keys[0] if future_keys else None
+    front_future_key, front_future_expiry = select_front_future(data, session_date)
+    if not front_future_key:
+        logger.error("FAILED_GATE: NO_NONEXPIRED_NIFTY_FUTURE")
+        raise SystemExit(1)
     future_data = data[data["instrument_type"] == "FUT"].copy()
     option_data = data[data["instrument_type"].isin(["CE", "PE"])].copy()
     spot_data = data[data["instrument_key"] == spot_key].copy()
@@ -297,7 +387,6 @@ def main() -> None:
         if current_rows.empty:
             continue
         current_map = current_rows.set_index("instrument_key")
-
         previous_boundary_ms = (
             int(interval_bounds[interval_index - 1].timestamp() * 1000)
             if interval_index > 0
@@ -332,7 +421,7 @@ def main() -> None:
         spot_tick = current_map.loc[spot_key] if spot_key in current_map.index else None
         future_tick = (
             current_map.loc[front_future_key]
-            if front_future_key and front_future_key in current_map.index
+            if front_future_key in current_map.index
             else None
         )
         spot_price = _safe_float(spot_tick.get("ltp")) if spot_tick is not None else None
@@ -415,7 +504,6 @@ def main() -> None:
                 for symbol, value in per_symbol_return.items()
             )
             authority = "OFFICIAL_WEIGHTS"
-
         participation_acceleration = (
             equal_weight_participation - previous_equal_weight_participation
             if equal_weight_participation is not None
@@ -438,6 +526,7 @@ def main() -> None:
             if future_volume is not None and previous_future_volume is not None
             else None
         )
+        option_panel = select_option_panel(current_rows, spot_price, boundary)
 
         precursors.append(
             {
@@ -457,6 +546,11 @@ def main() -> None:
                 "front_future_return_through_interval": future_return,
                 "spot_future_basis": basis,
                 "basis_change": basis_change,
+                "front_future_key": front_future_key,
+                "front_future_expiry": front_future_expiry,
+                "future_selection_policy": FUTURE_SELECTION_POLICY,
+                "option_selection_policy": OPTION_SELECTION_POLICY,
+                "selected_option_contract_count": len(option_panel),
                 "future_cumulative_volume": future_volume,
                 "future_interval_volume_delta": future_volume_delta,
                 "future_oi_change": _safe_int(future_tick.get("open_interest")) if future_tick is not None else None,
@@ -498,6 +592,9 @@ def main() -> None:
             "session_date": session_date,
             "source_interval_identity": interval_id,
             "market_phase": market_phase,
+            "front_future_key": front_future_key,
+            "front_future_expiry": front_future_expiry,
+            "future_selection_policy": FUTURE_SELECTION_POLICY,
             "entry_ltp": future_price,
             "entry_observation_timestamp": entry_observation,
             "entry_receive_timestamp": future_tick.get("receive_wall_ts_utc") if future_tick is not None else None,
@@ -522,10 +619,8 @@ def main() -> None:
             )
         future_outcomes.append(future_row)
 
-        option_count = 0
-        for option_key in option_data["instrument_key"].drop_duplicates().tolist()[:15]:
-            if option_count > 10:
-                break
+        for selected in option_panel:
+            option_key = selected["instrument_key"]
             matches = current_rows[current_rows["instrument_key"] == option_key]
             if matches.empty:
                 continue
@@ -548,14 +643,13 @@ def main() -> None:
                 "source_interval_identity": interval_id,
                 "market_phase": market_phase,
                 "instrument_key": option_key,
-                "expiry": str(option_info.get("expiry")),
-                "strike": _safe_float(option_info.get("strike")) or 0.0,
-                "option_type": str(option_info.get("instrument_type")),
-                "moneyness": (
-                    _safe_float(option_info.get("strike")) - spot_price
-                    if _safe_float(option_info.get("strike")) is not None and spot_price is not None
-                    else None
-                ),
+                "expiry": selected["expiry_utc"],
+                "strike": selected["strike"],
+                "option_type": selected["option_type"],
+                "moneyness": selected["strike"] - spot_price if spot_price is not None else None,
+                "absolute_moneyness": selected["absolute_moneyness"],
+                "selection_rank_within_side": selected["selection_rank_within_side"],
+                "option_selection_policy": OPTION_SELECTION_POLICY,
                 "entry_ltp": option_price,
                 "entry_observation_timestamp": option_info.get("source_exchange_ts"),
                 "entry_receive_timestamp": option_info.get("receive_wall_ts_utc"),
@@ -587,7 +681,6 @@ def main() -> None:
                     else None
                 )
             option_outcomes.append(option_row)
-            option_count += 1
 
         join_map.append(
             {
@@ -624,6 +717,10 @@ def main() -> None:
         "precursor_rows": len(precursor_frame),
         "futures_outcome_rows": len(future_frame),
         "option_outcome_rows": len(option_frame),
+        "front_future_key": front_future_key,
+        "front_future_expiry": front_future_expiry,
+        "future_selection_policy": FUTURE_SELECTION_POLICY,
+        "option_selection_policy": OPTION_SELECTION_POLICY,
     }
     (output_dir / f"dataset_checksums_{session_date}_v3.json").write_text(
         json.dumps(checksums, indent=2) + "\n", encoding="utf-8"
@@ -711,6 +808,9 @@ def main() -> None:
         "futures_rows": len(future_frame),
         "options_rows": len(option_frame),
         "join_rows": len(join_frame),
+        "option_rows_per_precursor": (
+            len(option_frame) / len(precursor_frame) if len(precursor_frame) else None
+        ),
     }
     (output_dir / f"dataset_quality_report_{session_date}_v3.json").write_text(
         json.dumps(quality, indent=2) + "\n", encoding="utf-8"
