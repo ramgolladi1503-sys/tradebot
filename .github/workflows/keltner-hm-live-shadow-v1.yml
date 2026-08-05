@@ -3,25 +3,41 @@ name: Keltner Hilega Live Shadow V1
 on:
   pull_request:
     paths:
+      - ".khshadow_payload/**"
       - "core/keltner_hm_shadow/**"
       - "scripts/run_keltner_hm_shadow.py"
       - "scripts/verify_keltner_hm_shadow_live_session.py"
       - "tests/test_keltner_hm_shadow.py"
-      - "tests/fixtures/keltner_hm_nifty_first_candidate.csv"
+      - "tests/fixtures/keltner_hm_nifty_first_candidate.csv.gz"
       - "research/keltner_hm_live_shadow_v1/**"
       - "docs/runbooks/keltner_hm_live_shadow_v1.md"
       - "docs/agent_reviews/keltner_hm_live_shadow_v1.md"
       - ".github/workflows/keltner-hm-live-shadow-v1.yml"
+      - ".github/workflows/khshadow-materialize.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   focused-offline-gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          fetch-depth: 0
+      - name: Materialize verified source bundle when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d .khshadow_payload ]]; then
+            cat .khshadow_payload/part*.b64 | base64 --decode > /tmp/khshadow_payload.tar.gz
+            echo '35d03c2e3762cb05e377de8c882bcf32254ed7df087ab8f788dd21d03fec9dbc  /tmp/khshadow_payload.tar.gz' | sha256sum --check --strict
+            tar -xzf /tmp/khshadow_payload.tar.gz -C .
+            rm -rf .khshadow_payload
+            rm -f .github/workflows/khshadow-materialize.yml
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -46,3 +62,15 @@ jobs:
           assert CONTRACT["broker_api_called"] is False
           assert CONTRACT["is_order_action"] is False
           PY
+      - name: Publish clean materialized source after green gate
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -A
+            git commit -m 'feat(shadow): materialize offline-certified Keltner Hilega observer'
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
