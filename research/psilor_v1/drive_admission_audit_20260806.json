@@ -1,0 +1,135 @@
+{
+  "audit_version": 2,
+  "audit_date": "2026-08-06",
+  "source_campaign": {
+    "run_id": "meg-dual-provider-20260805-05",
+    "date": "20260805",
+    "sealed_at_utc": "2026-08-05T11:16:25.678607Z",
+    "total_files": 11347,
+    "total_bytes": 667730913
+  },
+  "sealed_manifest_reconciliation": {
+    "verdict": "PASS",
+    "normalized_chunk_entries": 11250,
+    "normalized_rows": 1315840,
+    "normalized_bytes": 527413368,
+    "unique_paths": 11250,
+    "unique_hashes": 11250,
+    "missing_from_sealed_manifest": 0,
+    "hash_mismatches": 0,
+    "duplicate_paths": 0,
+    "duplicate_hashes": 0,
+    "nonpositive_row_files": 0,
+    "nonpositive_size_files": 0,
+    "chunk_sequence_groups": 24,
+    "chunk_sequence_anomaly_groups": 0
+  },
+  "asset_inventory": {
+    "equity_other": {
+      "files": 1703,
+      "rows": 342686,
+      "bytes": 88307066,
+      "first_source_timestamp_ms": 1785915116129,
+      "last_source_timestamp_ms": 1785925794274
+    },
+    "future_nifty": {
+      "files": 1779,
+      "rows": 16165,
+      "bytes": 72484097,
+      "first_source_timestamp_ms": 1785915116257,
+      "last_source_timestamp_ms": 1785924599600
+    },
+    "index_banknifty": {
+      "files": 1995,
+      "rows": 42431,
+      "bytes": 79984581,
+      "first_source_timestamp_ms": 1785915116000,
+      "last_source_timestamp_ms": 1785925800000
+    },
+    "index_india_vix": {
+      "files": 1995,
+      "rows": 21246,
+      "bytes": 79182689,
+      "first_source_timestamp_ms": 1785915116000,
+      "last_source_timestamp_ms": 1785925800000
+    },
+    "index_nifty": {
+      "files": 1995,
+      "rows": 212269,
+      "bytes": 85432400,
+      "first_source_timestamp_ms": 1785915116000,
+      "last_source_timestamp_ms": 1785925800000
+    },
+    "option_nifty": {
+      "files": 1783,
+      "rows": 681043,
+      "bytes": 122022535,
+      "first_source_timestamp_ms": 1785914742388,
+      "last_source_timestamp_ms": 1785924599932
+    }
+  },
+  "sequence_validation": {
+    "legacy_reported_issues": 6781,
+    "equality_cases": 6781,
+    "backward_regressions": 0,
+    "unparsed": 0,
+    "affected_files": 690,
+    "capture_contract": "local_sequence increments once per websocket frame and is copied to each instrument row in that frame",
+    "legacy_validator_defect": "strict <= comparison incorrectly rejected valid equal-sequence multi-instrument frame rows",
+    "repair_branch": "fix/upstox-offline-datasets-v3-causality",
+    "repair_pr": 796,
+    "repair_status": "CODE_AND_FOCUSED_TESTS_COMMITTED_CI_PENDING",
+    "old_validation_report_authority": "SUPERSEDED_REVALIDATION_REQUIRED"
+  },
+  "offline_v3": {
+    "archive_sha256": "15f6be1f5636df7ed839c7f5dbc5cdb43380497681223d14fff6b9bedc6487cf",
+    "inner_hash_reconciliation": "PASS",
+    "precursor_rows": 75,
+    "futures_rows": 75,
+    "option_rows": 825,
+    "join_rows": 75,
+    "causality_audit": "PASS_WITHIN_GENERATED_WINDOW",
+    "seam_audit": "PASS_WITHIN_GENERATED_WINDOW",
+    "entry_quote_authority": "LTP_ONLY",
+    "executable_bid_ask_depth": false,
+    "generated_interval_start_utc": "2026-08-05T09:15:00+00:00",
+    "generated_interval_end_utc": "2026-08-05T10:29:00+00:00",
+    "source_option_start_utc": "2026-08-05T07:25:42.388000+00:00",
+    "timezone_defect": "generator compared UTC boundary.time() with 09:15 IST market-open literal",
+    "excluded_available_window_approx": "2026-08-05T07:25:42Z through 2026-08-05T09:14:59Z",
+    "authority": "SUPERSEDED_REGENERATION_REQUIRED"
+  },
+  "sample_option_schema": {
+    "sha256": "88d17f7c5decdcbe4fde5d52797dd8de9c6a730a67d00d29920922e33d183e27",
+    "columns": [
+      "ts",
+      "instrument_key",
+      "ltp",
+      "bid_price",
+      "ask_price",
+      "delta",
+      "theta",
+      "gamma",
+      "vega",
+      "iv",
+      "volume",
+      "oi"
+    ],
+    "quote_authority": "BID_ASK_COLUMNS_PRESENT_VALUES_NOT_AUDITED",
+    "depth_authority": "NOT_PROVEN"
+  },
+  "principal_verdict": {
+    "drive_corpus_reusable": true,
+    "raw_authority": "PASS",
+    "manifest_integrity": "PASS",
+    "normalized_direct_reuse": false,
+    "normalized_revalidation_required": true,
+    "offline_v3_direct_reuse": false,
+    "offline_v3_regeneration_required": true,
+    "fresh_bounded_upstox_smoke_required": true,
+    "formal_extraction_approved": false,
+    "data_ready_for_dorl_only": false,
+    "data_ready_for_psilor_proxy_validation": false,
+    "edge_validation_allowed": false
+  }
+}
