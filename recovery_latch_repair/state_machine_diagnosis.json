@@ -1,0 +1,10 @@
+{
+  "principal_cause": "PARTIAL_RECOVERY_MISCLASSIFIED_AS_TERMINAL",
+  "old_transition": "partial_activity_detected -> partial_recovery marker -> downstream RECOVERY_BLOCKED/process_restart_required",
+  "new_transition": "partial_activity_detected -> provisional verification; stable configured recovery clears only partial_recovery",
+  "terminal_preserved": true,
+  "thresholds_changed": false,
+  "order_authority_changed": false,
+  "recovery_confirmation": "existing configured quorum and RECOVERY_STABLE_CYCLES",
+  "offline_tests": "tests/test_partial_recovery_latch_repair.py"
+}

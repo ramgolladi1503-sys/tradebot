@@ -2678,6 +2678,23 @@ def _clear_reconnect_blocked_reason() -> None:
     _LAST_INTERNAL_RETRY_SUPPRESSION_STATE = {}
 
 
+def _clear_nonterminal_partial_recovery_latch() -> bool:
+    """Clear only the provisional partial-recovery marker.
+
+    A partial token batch is degraded evidence, not proof that the reactor is
+    unrecoverable. Preserve any independently established reactor terminal
+    marker so confirmed process-restart failures still fail closed.
+    """
+    global _RECONNECT_BLOCKED_REASON, _RECONNECT_BLOCKED_SINCE_EPOCH
+    if str(_RECONNECT_BLOCKED_REASON or "").strip().lower() != "partial_recovery":
+        return False
+    if _REACTOR_NOT_RESTARTABLE_DETECTED:
+        return False
+    _RECONNECT_BLOCKED_REASON = ""
+    _RECONNECT_BLOCKED_SINCE_EPOCH = 0.0
+    return True
+
+
 def _reconnect_recovery_blocked_active() -> bool:
     blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower()
     if blocked_reason == "partial_recovery":
@@ -5793,7 +5810,14 @@ def _maybe_trigger_silent_reconnect(
         backoff_min_sec=float(backoff_min_sec),
         backoff_max_sec=float(backoff_max_sec),
     )
+    recovery_state_text = str(_RUNTIME_STATE or "").strip().upper()
+    recovery_state_active = recovery_state_text in {"DEGRADED_LOCAL", "VERIFYING_RECOVERY"} or (
+        recovery_state_text == "RECOVERY_BLOCKED"
+        and str(_RECONNECT_BLOCKED_REASON or "").strip().lower() == "partial_recovery"
+        and not _REACTOR_NOT_RESTARTABLE_DETECTED
+    )
     if action.get("reason") == "partial_activity_detected":
+        _clear_nonterminal_partial_recovery_latch()
         _transition_partial_activity_recovery(
             now_epoch=float(now_epoch),
             current_tokens=set(current_tokens or set()),
@@ -5802,9 +5826,15 @@ def _maybe_trigger_silent_reconnect(
             index_threshold_sec=float(index_threshold_sec),
             option_threshold_sec=float(option_threshold_sec),
         )
-    elif action.get("stale_tokens") == 0 and str(_RUNTIME_STATE or "").strip().upper() in {"DEGRADED_LOCAL", "VERIFYING_RECOVERY"}:
-        _clear_reconnect_blocked_reason()
-        globals()["_RUNTIME_STATE"] = "LIVE"
+    elif action.get("stale_tokens") == 0 and recovery_state_active:
+        _transition_partial_activity_recovery(
+            now_epoch=float(now_epoch),
+            current_tokens=set(current_tokens or set()),
+            underlying_tokens=set(underlying_tokens or set()),
+            last_msg_by_token=last_msg_by_token,
+            index_threshold_sec=float(index_threshold_sec),
+            option_threshold_sec=float(option_threshold_sec),
+        )
 
     if not bool(action.get("silent_detected")):
         state["confirm_hits"] = 0

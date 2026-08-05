@@ -1,0 +1,16 @@
+{
+  "positive": {
+    "input": ["CONNECTED", "SUBSCRIBED_73", "FEED_TICK", "STALE", "PARTIAL_BATCH", "STABLE_BATCH", "STABLE_BATCH"],
+    "result": "LIVE",
+    "process_restart_required": false,
+    "reconnect_suppressed": false
+  },
+  "negative_control": {
+    "input": ["CONNECTED", "SUBSCRIBED_73", "FEED_TICK", "STALE", "PARTIAL_BATCH"],
+    "reactor_terminal": true,
+    "result": "RECOVERY_BLOCKED",
+    "process_restart_required": true,
+    "reconnect_suppressed": true
+  },
+  "test": "tests/test_partial_recovery_latch_repair.py"
+}

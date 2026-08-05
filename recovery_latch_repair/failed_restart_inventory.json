@@ -1,0 +1,20 @@
+{
+  "source_watchdog_log": "/Users/madhuram/tradebot/.runtime/logs/depth_ws_watchdog.log",
+  "source_restart_guard": "/Users/madhuram/tradebot/.runtime/logs/feed_restart_guard.jsonl",
+  "restart_count": 12,
+  "per_attempt": {
+    "websocket_connected": true,
+    "subscribed_tokens": 73,
+    "option_verification_symbols": ["BANKNIFTY", "NIFTY", "SENSEX"],
+    "initial_feed_tick_observed": true,
+    "stale_window_observed": true,
+    "later_tick_resumption_observed": true,
+    "terminal_latch_observed": true
+  },
+  "safety": {
+    "read_only": true,
+    "order_actions": 0,
+    "broker_write_actions": 0,
+    "evidence_roots_modified": false
+  }
+}

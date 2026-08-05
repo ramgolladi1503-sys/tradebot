@@ -1,0 +1,15 @@
+{
+  "sequence": [
+    "CONNECTED",
+    "SUBSCRIBED_73",
+    "FEED_TICK",
+    "STALE",
+    "PARTIAL_ACTIVITY_DETECTED",
+    "PARTIAL_RECOVERY",
+    "RECOVERY_BLOCKED",
+    "RECONNECT_SUPPRESSED",
+    "FEED_TICK_RESUMED"
+  ],
+  "contradiction": "FEED_TICK_RESUMED coexisted with RECOVERY_BLOCKED and reconnect suppression",
+  "source": "/Users/madhuram/tradebot/.runtime/logs/depth_ws_watchdog.log"
+}
