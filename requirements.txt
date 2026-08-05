@@ -13,6 +13,7 @@ requests
 xgboost
 scikit-learn
 pyarrow
+pytz
 holidays
 plotly
 statsmodels
