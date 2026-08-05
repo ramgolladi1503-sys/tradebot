@@ -30,6 +30,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -59,11 +61,8 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          if [ -n "${BASE_SHA}" ] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
-            git diff --name-only "${BASE_SHA}"...HEAD > /tmp/changed.txt
-          else
-            git show --pretty='' --name-only HEAD > /tmp/changed.txt
-          fi
+          test -n "${BASE_SHA}"
+          git diff --name-only "${BASE_SHA}"...HEAD > /tmp/changed.txt
           if grep -E '^(core/(trade_builder|risk|broker|execution)|strategies/.*\.py$)' /tmp/changed.txt; then
             echo "Protected runtime or strategy path changed."
             exit 1
