@@ -1,6 +1,22 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "authority_boundary": "PR #719 data is reusable only after local LFS materialization, SHA-256 verification, Parquet schema validation, and session/contract reconciliation.",
+  "authenticated_smoke_gate": {
+    "workflow": ".github/workflows/psilor_v1_recertification.yml",
+    "job": "authenticated-bounded-smoke",
+    "trusted_head_branch": "data/psilor-v1-upstox-fetch-v2",
+    "required_secret": "UPSTOX_ACCESS_TOKEN",
+    "secret_persistence": "NEVER_COMMITTED_OR_EMITTED",
+    "required_verdict": "PASS_BOUNDED_AUTHENTICATED_FETCH_SMOKE",
+    "required_future_contracts": 1,
+    "required_ce_contracts": 2,
+    "required_pe_contracts": 2,
+    "required_candle_files": 5,
+    "required_common_completed_sessions": 2,
+    "hash_reconciliation_required": true,
+    "unexpected_files_allowed": false,
+    "formal_extraction_approved_before_pass": false
+  },
   "REUSE_DIRECTLY": [
     {
       "path": "research/upstox_expired_options/dynamic_atm_selection.py",
