@@ -7,10 +7,12 @@ import logging
 from pathlib import Path
 from datetime import datetime, timezone
 from config import config as cfg
-from core.trade_store import insert_depth_snapshot
+from core.trade_store import insert_depth_snapshot, insert_depth_snapshots
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.persistence_durability import record_degradation
+
+_DEFAULT_INSERT_DEPTH_SNAPSHOT = insert_depth_snapshot
 
 _ERROR_LOG_PATH = logs_dir() / "depth_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
@@ -22,6 +24,7 @@ class DepthStore:
         self._ts_window = deque(maxlen=10000)
         self._last_persist_epoch_by_token = defaultdict(float)
         self._persist_queue = queue.Queue(maxsize=2048)
+        self._persist_batch_size = 64
         self._persist_stop = threading.Event()
         self._persist_lock = threading.Lock()
         self._persist_enqueued = 0
@@ -39,18 +42,34 @@ class DepthStore:
                 item = self._persist_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
+            batch = [item]
+            while len(batch) < self._persist_batch_size:
+                try:
+                    batch.append(self._persist_queue.get_nowait())
+                except queue.Empty:
+                    break
             try:
-                insert_depth_snapshot(*item)
+                # Keep the single-row seam for existing diagnostics/tests; live
+                # bursts use the transactional batch path above one row.
+                if insert_depth_snapshot is not _DEFAULT_INSERT_DEPTH_SNAPSHOT:
+                    persisted = sum(bool(insert_depth_snapshot(*item)) for item in batch)
+                elif len(batch) == 1:
+                    persisted = 1 if insert_depth_snapshot(*batch[0]) else 0
+                else:
+                    persisted = insert_depth_snapshots(batch)
+                if persisted != len(batch):
+                    raise RuntimeError("depth persistence batch was not durable")
                 with self._persist_lock:
-                    self._persisted += 1
+                    self._persisted += persisted
             except Exception as exc:
                 with self._persist_lock:
-                    self._persist_failures += 1
+                    self._persist_failures += len(batch)
                     self._persist_degraded = True
                     record_degradation("depth", "DEPTH_PERSISTENCE_FAILURE")
                 logger.warning("depth_persistence_failed error=%s", type(exc).__name__)
             finally:
-                self._persist_queue.task_done()
+                for _ in batch:
+                    self._persist_queue.task_done()
 
     def _should_persist_snapshot(self, instrument_token, now_epoch: float) -> bool:
         min_interval_sec = max(

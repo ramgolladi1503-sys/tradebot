@@ -758,6 +758,56 @@ def insert_depth_snapshot(ts_iso, instrument_token, depth_json, ts_epoch=None):
     return False
 
 
+def insert_depth_snapshots(rows):
+    """Persist an ordered depth batch in one transaction.
+
+    The caller owns failure accounting.  Returning the number of durable rows
+    keeps the persistence worker from treating a lock-skip as a successful
+    write, which would otherwise hide data loss.
+    """
+    rows = list(rows)
+    if not rows:
+        return 0
+    init_db()
+    now_epoch = max(float(row[3] or time.time()) for row in rows)
+    should_prune = _should_prune_depth_snapshots(now_epoch)
+    retry_attempts = max(1, int(getattr(cfg, "DEPTH_SNAPSHOT_DB_WRITE_RETRY_ATTEMPTS", 3) or 3))
+    retry_backoff_sec = max(0.0, float(getattr(cfg, "DEPTH_SNAPSHOT_DB_WRITE_RETRY_BACKOFF_SEC", 0.05) or 0.05))
+    for attempt in range(1, retry_attempts + 1):
+        try:
+            with _conn() as conn:
+                conn.executemany(
+                    """
+                    INSERT INTO depth_snapshots
+                    (timestamp, instrument_token, depth_json, timestamp_iso, timestamp_epoch)
+                    VALUES (?,?,?,?,?)
+                    """,
+                    [(row[0], row[1], row[2], row[0], row[3]) for row in rows],
+                )
+                if should_prune:
+                    limit = int(getattr(cfg, "DEPTH_SNAPSHOT_LIMIT", 10000) or 10000)
+                    conn.execute(
+                        """
+                        DELETE FROM depth_snapshots
+                        WHERE rowid NOT IN (
+                            SELECT rowid FROM depth_snapshots ORDER BY timestamp_epoch DESC LIMIT ?
+                        )
+                        """,
+                        (limit,),
+                    )
+            return len(rows)
+        except Exception as exc:
+            if _is_database_locked_error(exc) and attempt < retry_attempts:
+                time.sleep(retry_backoff_sec * (2 ** (attempt - 1)))
+                continue
+            if _is_database_locked_error(exc) and bool(getattr(cfg, "DEPTH_SNAPSHOT_DB_LOCK_SKIP_ENABLE", True)):
+                _warn_depth_db_lock_once(exc)
+                return 0
+            trigger_db_write_fail({"table": "depth_snapshots", "error": str(exc)})
+            raise
+    return 0
+
+
 def insert_broker_fill(row):
     init_db()
     now_epoch = time.time()

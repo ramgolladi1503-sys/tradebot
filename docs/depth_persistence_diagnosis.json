@@ -1,0 +1,26 @@
+{
+  "campaign": "meg-dual-provider-20260805-04",
+  "run_id": "ada91c0ba82d-29a777589e3b",
+  "principal_cause": "WORKER_THROUGHPUT_INSUFFICIENT",
+  "evidence": {
+    "depth_enqueued": 4794,
+    "depth_persisted": 3393,
+    "depth_pending": 1400,
+    "depth_rejected": 1239,
+    "depth_failures": 0,
+    "worker_count": 1,
+    "queue_capacity_code": 2048,
+    "enqueue_policy": "put_nowait_fail_closed",
+    "write_shape": "one SQLite connection and transaction per row",
+    "shutdown_deadline_seconds": 2.0
+  },
+  "rate_calculation": {
+    "observed_capture_window_seconds": 66.870446,
+    "incoming_rows_per_second": 71.69,
+    "durable_rows_per_second": 50.74,
+    "backlog_growth_rows_per_second": 20.95,
+    "estimated_time_to_2048_queue_rows_seconds": 97.75,
+    "estimated_drain_time_for_1400_rows_seconds": 27.59
+  },
+  "conclusion": "The single-row writer could not sustain the observed input rate. Queue enlargement alone would postpone rejection and is not the repair."
+}

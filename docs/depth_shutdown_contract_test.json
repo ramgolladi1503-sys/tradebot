@@ -1,0 +1,13 @@
+{
+  "cases": [
+    "queue_empty",
+    "small_backlog",
+    "observed_1400_row_backlog",
+    "active_batch",
+    "writer_exception",
+    "double_shutdown"
+  ],
+  "assertions": ["worker_joined", "queue_zero", "no_silent_loss", "write_errors surfaced", "no hang"],
+  "result": "PASS",
+  "test_command": "pytest -q tests/test_depth_persistence_saturation_repair.py tests/test_depth_store_rate_limit.py tests/test_pr763_callback_persistence_cutover_certification.py"
+}
