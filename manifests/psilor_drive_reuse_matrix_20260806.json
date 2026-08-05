@@ -1,0 +1,104 @@
+{
+  "audit_date": "2026-08-06",
+  "scope": "PSILOR_V1 Google Drive market-data admission reconciliation",
+  "principal_verdict": {
+    "drive_market_corpus_found": true,
+    "drive_can_reduce_download": true,
+    "drive_can_replace_formal_historical_extraction": false,
+    "expired_option_candle_archive_proven": false,
+    "fresh_bounded_smoke_required": true,
+    "data_ready_for_dorl_only": false,
+    "data_ready_for_psilor_proxy_validation": false,
+    "formal_extraction_approved": false
+  },
+  "primary_campaign": {
+    "run_id": "meg-dual-provider-20260805-05",
+    "trade_date": "2026-08-05",
+    "total_files": 11347,
+    "total_bytes": 667730913,
+    "raw_valid": true,
+    "raw_frames": 70202,
+    "normalized_valid": false,
+    "normalized_rows": 1315840,
+    "normalized_files": 11250,
+    "normalized_bytes": 527413368,
+    "validation_issue_count": 6781,
+    "validation_issue_class": "NON_MONOTONIC_EQUAL_LOCAL_SEQUENCE",
+    "partition_validation": "PASS",
+    "asset_inventory": {
+      "option_nifty": {"files": 1783, "rows": 681043, "bytes_approx": 122016000},
+      "future_nifty": {"files": 1779, "rows": 16165, "bytes_approx": 72480000},
+      "equity_other": {"files": 1703, "rows": 342686, "bytes_approx": 88310000},
+      "index": {"files": 5985, "rows": 275946, "bytes_approx": 244600000}
+    }
+  },
+  "constituent_authority": {
+    "effective_date": "2026-08-05",
+    "constituent_count": 50,
+    "unresolved_symbols": 0,
+    "duplicates": 0,
+    "official_weights_available": false,
+    "fallback": "equal 2 percent per constituent",
+    "allowed_use": "equal-weight participation only"
+  },
+  "offline_v3": {
+    "decision": "REUSE_FOR_PIPELINE_SMOKE_ONLY",
+    "archive_sha256": "15f6be1f5636df7ed839c7f5dbc5cdb43380497681223d14fff6b9bedc6487cf",
+    "precursor_rows": 75,
+    "futures_rows": 75,
+    "option_rows": 825,
+    "join_rows": 75,
+    "inner_hash_reconciliation": "PASS",
+    "causality_audit": "PASS",
+    "seam_audit": "PASS",
+    "entry_quote_authority": "LTP_ONLY",
+    "executable_bid_ask_depth": false
+  },
+  "older_sessions": [
+    {
+      "date": "2026-08-03",
+      "decision": "REUSE_AS_RAW_LIVE_REPLAY_PENDING_SCHEMA_AND_HASH_AUDIT",
+      "total_messages": 156927,
+      "dropped_messages": 0,
+      "parse_failures": 0,
+      "reconnects": 3,
+      "coverage_keys": 722
+    },
+    {
+      "date": "2026-07-14",
+      "decision": "REUSE_AS_RAW_LIVE_REPLAY_PENDING_SCHEMA_AND_HASH_AUDIT",
+      "total_messages": 113465,
+      "dropped_messages": 0,
+      "parse_failures": 0,
+      "reconnects": 1,
+      "coverage_keys": 878,
+      "combined_parquet_bytes": 209540762
+    },
+    {
+      "dates": ["2026-07-13", "2026-07-15", "2026-07-20"],
+      "decision": "INVENTORY_PRESENT_NOT_YET_ADMITTED"
+    }
+  ],
+  "reuse_matrix": [
+    {"source": "2026-08-05 raw archive", "decision": "REUSE_DIRECTLY_AFTER_MATERIALIZATION"},
+    {"source": "2026-08-05 normalized chunks", "decision": "WRAP_OR_REBUILD_FROM_RAW"},
+    {"source": "session and checksum manifests", "decision": "REUSE_DIRECTLY"},
+    {"source": "NIFTY50 membership", "decision": "REUSE_DIRECTLY_FOR_2026-08-05"},
+    {"source": "fallback equal weights", "decision": "RESTRICTED"},
+    {"source": "offline dataset V3", "decision": "REUSE_FOR_PIPELINE_SMOKE_ONLY"},
+    {"source": "offline dataset V2", "decision": "SUPERSEDE_WITH_REASON"},
+    {"source": "older dated captures", "decision": "WRAP_WITH_ADAPTER_OR_HOLD"},
+    {"source": "tiny placeholder Parquets", "decision": "INVALID_OR_QUARANTINE"},
+    {"source": "PR719 code and reports", "decision": "REUSE_DIRECTLY"},
+    {"source": "PR719 large data corpus", "decision": "MATERIALIZATION_NOT_PROVEN"}
+  ],
+  "next_gates": [
+    "materialize existing Drive archives",
+    "verify all session-manifest hashes",
+    "rebuild normalized rows from raw authority",
+    "audit older dated session manifests",
+    "materialize and reconcile PR719 corpus",
+    "calculate exact missing contract/session delta",
+    "run fresh five-file authenticated Upstox smoke"
+  ]
+}
