@@ -1,0 +1,48 @@
+name: Keltner Hilega Live Shadow V1
+
+on:
+  pull_request:
+    paths:
+      - "core/keltner_hm_shadow/**"
+      - "scripts/run_keltner_hm_shadow.py"
+      - "scripts/verify_keltner_hm_shadow_live_session.py"
+      - "tests/test_keltner_hm_shadow.py"
+      - "tests/fixtures/keltner_hm_nifty_first_candidate.csv"
+      - "research/keltner_hm_live_shadow_v1/**"
+      - "docs/runbooks/keltner_hm_live_shadow_v1.md"
+      - "docs/agent_reviews/keltner_hm_live_shadow_v1.md"
+      - ".github/workflows/keltner-hm-live-shadow-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-offline-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused test dependency
+        run: python -m pip install --disable-pip-version-check pytest
+      - name: Compile changed implementation
+        run: |
+          python -m py_compile \
+            core/keltner_hm_shadow/*.py \
+            scripts/run_keltner_hm_shadow.py \
+            scripts/verify_keltner_hm_shadow_live_session.py
+      - name: Focused deterministic tests
+        run: pytest -q tests/test_keltner_hm_shadow.py
+      - name: Contract and safety scan
+        run: |
+          python - <<'PY'
+          from core.keltner_hm_shadow.contract import CONTRACT, RESEARCH_CONTRACT_SHA256
+          assert RESEARCH_CONTRACT_SHA256 == "a372c2083485236348f66594ac7ae7f195c5bcb17e0747fde13aa12190ea0e02"
+          assert CONTRACT["research_only"] is True
+          assert CONTRACT["execution_eligibility"] is False
+          assert CONTRACT["allowed_for_live_execution"] is False
+          assert CONTRACT["broker_api_called"] is False
+          assert CONTRACT["is_order_action"] is False
+          PY
