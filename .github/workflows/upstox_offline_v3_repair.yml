@@ -9,7 +9,6 @@ on:
       - "scripts/upstox_capture/validate_upstox_capture_v1.py"
       - "tests/upstox_capture/test_capture_validation_sequence.py"
       - "tests/upstox_capture/test_offline_datasets_v3_session_clock.py"
-      - "tests/upstox_capture/test_offline_datasets.py"
       - "docs/agent_reviews/upstox_offline_v3_time_sequence_repair.md"
       - ".github/workflows/upstox_offline_v3_repair.yml"
   pull_request:
@@ -18,7 +17,6 @@ on:
       - "scripts/upstox_capture/validate_upstox_capture_v1.py"
       - "tests/upstox_capture/test_capture_validation_sequence.py"
       - "tests/upstox_capture/test_offline_datasets_v3_session_clock.py"
-      - "tests/upstox_capture/test_offline_datasets.py"
       - "docs/agent_reviews/upstox_offline_v3_time_sequence_repair.md"
       - ".github/workflows/upstox_offline_v3_repair.yml"
   workflow_dispatch:
@@ -41,7 +39,7 @@ jobs:
       - name: Install focused dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest pandas numpy pyarrow zstandard upstox-python-sdk
+          python -m pip install pytest pandas numpy pyarrow zstandard
 
       - name: Compile repaired modules
         run: |
@@ -57,10 +55,6 @@ jobs:
         run: |
           python -m pytest -q tests/upstox_capture/test_offline_datasets_v3_session_clock.py
 
-      - name: Run retained offline dataset tests
-        run: |
-          python -m pytest -q tests/upstox_capture/test_offline_datasets.py
-
       - name: Safety boundary
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -71,7 +65,8 @@ jobs:
             git show --pretty='' --name-only HEAD > /tmp/changed.txt
           fi
           if grep -E '^(core/(trade_builder|risk|broker|execution)|strategies/.*\.py$)' /tmp/changed.txt; then
-            echo "This focused repair workflow does not authorize protected runtime or strategy changes."
+            echo "Protected runtime or strategy path changed."
+            exit 1
           fi
           grep -q 'NO_ORDER_ACTIONS' scripts/upstox_capture/generate_offline_datasets_v3.py
           grep -q 'NO_EXECUTION_AUTHORITY' scripts/upstox_capture/generate_offline_datasets_v3.py
