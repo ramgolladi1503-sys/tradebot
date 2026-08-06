@@ -9,6 +9,13 @@ on:
       - "scripts/run_observation_first_pattern_atlas_*_v1.py"
       - "research/observation_first_pattern_atlas_v1/**"
       - ".github/workflows/observation-first-pattern-atlas-execution-v1.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "scripts/run_observation_first_pattern_atlas_*_v1.py"
+      - "research/observation_first_pattern_atlas_v1/**"
+      - ".github/workflows/observation-first-pattern-atlas-execution-v1.yml"
 
 permissions:
   contents: read
