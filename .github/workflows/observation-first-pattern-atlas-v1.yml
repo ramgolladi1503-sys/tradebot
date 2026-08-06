@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - "scripts/run_observation_first_pattern_atlas_*_v1.py"
-      - "tests/test_observation_first_pattern_atlas_*_v1.py"
+      - "scripts/run_observation_first_pattern_atlas_*.py"
+      - "tests/test_observation_first_pattern_atlas_*.py"
       - "research/observation_first_pattern_atlas_v1/**"
       - ".github/workflows/observation-first-pattern-atlas-v1.yml"
 
@@ -32,4 +32,5 @@ jobs:
             tests/test_observation_first_pattern_atlas_inventory_v1.py \
             tests/test_observation_first_pattern_atlas_deduplicate_inventory_v1.py \
             tests/test_observation_first_pattern_atlas_trajectory_v1.py \
+            tests/test_observation_first_pattern_atlas_index_trajectory_v2.py \
             tests/test_observation_first_pattern_atlas_archetypes_v1.py
