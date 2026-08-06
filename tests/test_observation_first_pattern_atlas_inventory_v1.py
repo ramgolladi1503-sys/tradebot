@@ -3,12 +3,14 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 import importlib.util
+import sys
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_observation_first_pattern_atlas_inventory_v1.py"
 SPEC = importlib.util.spec_from_file_location("atlas_inventory", MODULE_PATH)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
 
