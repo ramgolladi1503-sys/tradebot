@@ -51,6 +51,58 @@ The inventory stage is schema- and metadata-focused. It does not calculate retur
 - `cas_regime_inventory.json`
 - `DATA_READINESS.md`
 
+## Stage 1: normalized trajectory warehouse
+
+Run only after Stage 0 has produced `corpus_inventory.json`:
+
+```bash
+python scripts/run_observation_first_pattern_atlas_trajectory_v1.py \
+  --repo-root . \
+  --inventory-json runtime/research/observation_first_pattern_atlas_v1/inventory/corpus_inventory.json \
+  --family underlying \
+  --output-root runtime/research/observation_first_pattern_atlas_v1/trajectory
+```
+
+This stage produces two separately governed artifacts:
+
+1. `causal_minute_trajectory.parquet`
+   - every feature at timestamp `t` uses information available no later than `t`;
+   - no backward filling is allowed;
+   - suitable for later prefix and nearest-historical-analogue research.
+2. `completed_session_vectors.json`
+   - fixed-grid descriptions of completed historical sessions;
+   - suitable only for post-close whole-day archetype discovery;
+   - explicitly prohibited from being treated as intraday-available evidence.
+
+The causal feature set contains:
+
+- return from session open;
+- one-minute log return;
+- rolling 15-minute realized volatility;
+- rolling 15-minute directional efficiency;
+- expanding range and range position;
+- causal VWAP distance;
+- distance in prior-session ATR units;
+- session progress.
+
+Default session quality gates are:
+
+- at least 90% observed-minute coverage;
+- no more than five minutes without a real observation;
+- coverage beginning within the first 2% of the session;
+- coverage extending through at least 98% of the session.
+
+PRE_CAS sessions use a 09:15–15:30 grid. POST_CAS sessions use a 09:15–15:40 grid. They remain explicitly labeled and must not be silently pooled.
+
+Stage 1 emits:
+
+- `trajectory_contract.json`
+- `trajectory_summary.json`
+- `causal_minute_trajectory.parquet`
+- `completed_session_vectors.json`
+- `rejected_sessions.json`
+- `file_diagnostics.json`
+
 ## Safety boundaries
 
 Forbidden during observation and pattern-freeze stages:
@@ -74,6 +126,6 @@ Post-CAS sessions must not be pooled with historical closing behavior unless the
 
 ## Current verdict
 
-`IMPLEMENTATION_STARTED`
+`TRAJECTORY_STAGE_IMPLEMENTED_NOT_PHYSICALLY_EXECUTED`
 
-The branch currently establishes the evidence inventory and governance layer. No pattern or edge has been claimed.
+The inventory and normalized-trajectory stages are implemented. Pure synthetic governance and causality tests pass. Physical corpus execution remains required before any day-shape cluster or motif can be claimed.
