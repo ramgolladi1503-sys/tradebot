@@ -1,0 +1,80 @@
+name: observation-first-pattern-atlas-execution-v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/observation-first-pattern-atlas-v1
+    paths:
+      - "scripts/run_observation_first_pattern_atlas_*_v1.py"
+      - "research/observation_first_pattern_atlas_v1/**"
+      - ".github/workflows/observation-first-pattern-atlas-execution-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  execute-atlas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout without broad LFS hydration
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - name: Pull only observation evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git lfs install --local
+          git lfs pull \
+            --include="research/local_evidence_consolidation_v1/**/event_universe_5m.parquet,research/local_evidence_consolidation_v1/**/repaired_joint_underlying_option_warehouse.parquet,research/local_evidence_consolidation_v1/**/constituent_index_5m.parquet" \
+            --exclude=""
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pyarrow scikit-learn pytest
+
+      - name: Run focused governance tests
+        run: |
+          python -m pytest -q \
+            tests/test_observation_first_pattern_atlas_inventory_v1.py \
+            tests/test_observation_first_pattern_atlas_trajectory_v1.py \
+            tests/test_observation_first_pattern_atlas_archetypes_v1.py
+
+      - name: Inventory physical corpus
+        run: |
+          python scripts/run_observation_first_pattern_atlas_inventory_v1.py \
+            --repo-root . \
+            --search-root research/local_evidence_consolidation_v1 \
+            --output-root runtime/research/observation_first_pattern_atlas_v1/inventory
+
+      - name: Build underlying trajectory warehouse
+        run: |
+          python scripts/run_observation_first_pattern_atlas_trajectory_v1.py \
+            --repo-root . \
+            --inventory-json runtime/research/observation_first_pattern_atlas_v1/inventory/corpus_inventory.json \
+            --family underlying \
+            --output-root runtime/research/observation_first_pattern_atlas_v1/trajectory
+
+      - name: Freeze outcome-blind day archetypes
+        run: |
+          python scripts/run_observation_first_pattern_atlas_archetypes_v1.py \
+            --trajectory-vectors runtime/research/observation_first_pattern_atlas_v1/trajectory/completed_session_vectors.json \
+            --output-root runtime/research/observation_first_pattern_atlas_v1/archetypes
+
+      - name: Upload execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: observation-first-pattern-atlas-execution-v1
+          path: runtime/research/observation_first_pattern_atlas_v1/
+          if-no-files-found: warn
