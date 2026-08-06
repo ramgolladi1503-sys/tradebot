@@ -59,7 +59,8 @@ jobs:
             tests/test_observation_first_pattern_atlas_deduplicate_inventory_v1.py \
             tests/test_observation_first_pattern_atlas_trajectory_v1.py \
             tests/test_observation_first_pattern_atlas_index_trajectory_v2.py \
-            tests/test_observation_first_pattern_atlas_archetypes_v1.py
+            tests/test_observation_first_pattern_atlas_archetypes_v1.py \
+            tests/test_observation_first_pattern_atlas_motifs_v1.py
 
       - name: Inventory physical corpus
         run: |
@@ -89,10 +90,17 @@ jobs:
             --trajectory-vectors runtime/research/observation_first_pattern_atlas_v1/index_trajectory_v2/completed_session_vectors.json \
             --output-root runtime/research/observation_first_pattern_atlas_v1/index_archetypes_v2
 
+      - name: Freeze native-cadence NIFTY motifs
+        run: |
+          python scripts/run_observation_first_pattern_atlas_motifs_v1.py \
+            --causal-trajectory runtime/research/observation_first_pattern_atlas_v1/index_trajectory_v2/causal_minute_trajectory.parquet \
+            --instrument NIFTY \
+            --output-root runtime/research/observation_first_pattern_atlas_v1/native_motifs_v1
+
       - name: Upload execution evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: observation-first-pattern-atlas-execution-v2
+          name: observation-first-pattern-atlas-execution-v3
           path: runtime/research/observation_first_pattern_atlas_v1/
           if-no-files-found: warn
