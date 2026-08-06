@@ -103,6 +103,28 @@ Stage 1 emits:
 - `rejected_sessions.json`
 - `file_diagnostics.json`
 
+## Stage 2: outcome-blind day archetypes
+
+Run after Stage 1 produces accepted completed-session vectors:
+
+```bash
+python scripts/run_observation_first_pattern_atlas_archetypes_v1.py \
+  --trajectory-vectors runtime/research/observation_first_pattern_atlas_v1/trajectory/completed_session_vectors.json \
+  --output-root runtime/research/observation_first_pattern_atlas_v1/archetypes
+```
+
+Each instrument and CAS regime is modelled separately. Chronological blocks are fixed as earliest 60% observation, next 25% replication and latest 15% unopened. Scaling is fitted only on observation sessions.
+
+Candidate models are selected without outcomes using:
+
+- observation silhouette;
+- observation and replication occupancy;
+- occupancy Jensen-Shannon divergence;
+- replication centroid drift;
+- minimum cross-session support.
+
+The stage emits `day_archetype_catalog.json` with frozen centroids, stable archetype IDs, representative real sessions and full model-selection diagnostics. See `STAGE_2_DAY_ARCHETYPES.md` for the exact contract.
+
 ## Safety boundaries
 
 Forbidden during observation and pattern-freeze stages:
@@ -126,6 +148,6 @@ Post-CAS sessions must not be pooled with historical closing behavior unless the
 
 ## Current verdict
 
-`TRAJECTORY_STAGE_IMPLEMENTED_NOT_PHYSICALLY_EXECUTED`
+`ARCHETYPE_STAGE_IMPLEMENTED_NOT_PHYSICALLY_EXECUTED`
 
-The inventory and normalized-trajectory stages are implemented. Pure synthetic governance and causality tests pass. Physical corpus execution remains required before any day-shape cluster or motif can be claimed.
+The inventory, normalized-trajectory and outcome-blind day-archetype stages are implemented. Focused synthetic governance and causality tests pass. Physical corpus execution remains required before any day-shape cluster, motif or edge can be claimed.
