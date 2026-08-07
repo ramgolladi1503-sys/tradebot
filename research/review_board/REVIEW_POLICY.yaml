@@ -1,10 +1,11 @@
-schema_version: mros-review-policy-v1
+schema_version: mros-review-policy-v2
 status: IMPLEMENTED_NOT_CALIBRATED
 authority: Research / R
 runtime_authority: NONE
 bootstrap:
   s002_may_be_certified_by_board: false
-  normal_board_authority_begins_no_earlier_than: S003
+  board_may_self_certify: false
+  normal_board_authority_begins_no_earlier_than: S003_AFTER_BOOTSTRAP_CALIBRATION_AND_INDEPENDENT_REVIEW
   reason: prevent circular certification
 candidate:
   immutable_head_required: true
@@ -17,22 +18,39 @@ native_validation:
     exit_code: 0
     head_must_equal_candidate_head: true
 review:
-  reviewer_count: 10
-  minimum_valid_independent_reviews: 8
+  reviewer_count_minimum: 10
+  minimum_valid_independent_reviews: 10
   max_review_rounds_per_sprint: 5
   exact_head_match_required: true
   independent_from_implementation_required: true
+  independent_from_review_aggregation_required: true
 aggregation:
   simple_majority_forbidden: true
   critical_blocks: true
   major_blocks: true
   mandatory_unknown_blocks: true
-  minimum_nonblocking_reviews: 8
+  minimum_nonblocking_reviews: 10
   preserve_dissent: true
+  material_disagreement_requires_adjudication: true
+audit:
+  required_after_nonblocking_review_aggregate: true
+  auditor_count_minimum: 10
+  minimum_valid_independent_audits: 10
+  exact_head_match_required: true
+  audited_review_round_match_required: true
+  independent_from_implementation_required: true
+  independent_from_review_aggregation_required: true
+  critical_blocks: true
+  major_blocks: true
+  mandatory_unknown_blocks: true
+  acceptance_trace_complete_required: true
+  state_consistent_required: true
 advancement:
   require_native_validation_pass: true
   require_review_board_acceptance: true
+  require_audit_board_acceptance: true
   require_no_blocking_finding: true
   require_sprint_acceptance_criteria: true
+  require_state_ledger_consistency: true
   m9_blocked: true
   runtime_authority_must_remain: NONE
