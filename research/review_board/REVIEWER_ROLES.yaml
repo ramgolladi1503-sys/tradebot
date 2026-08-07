@@ -1,4 +1,5 @@
-schema_version: mros-reviewer-roles-v1
+schema_version: mros-reviewer-roles-v2
+minimum_required_roles: 10
 roles:
   R01: {name: contract_compliance, objective: "Attack frozen requirements, interfaces, schemas, invariants, vocabulary, and acceptance criteria."}
   R02: {name: negative_control, objective: "Attack malformed, missing, ambiguous, invalid-enum, illegal-transition, and unsupported inputs."}
@@ -10,6 +11,11 @@ roles:
   R08: {name: qa_verification, objective: "Attack tautological tests, weak assertions, missing equivalence classes/boundaries, and string-existence-only verification."}
   R09: {name: architecture_no_drift, objective: "Attack dependency/scope drift, premature later-sprint work, unnecessary architecture, and S003/M2/M9 contamination."}
   R10: {name: adversarial_red_team, objective: "Assume other reviewers missed the strongest falsifier and attempt to destroy acceptance."}
+  R11: {name: reproducibility, objective: "Attempt clean reproduction from declared artifacts, commands, inputs, hashes, and exact candidate head."}
+  R12: {name: security_secrets, objective: "Attack unsafe permissions, secret exposure, write boundaries, and unrelated production-data access."}
+  R13: {name: data_contract, objective: "Attack schema, missingness, point-in-time semantics, provenance, and causal data authority."}
+  R14: {name: statistical_semantics, objective: "Attack null definitions, estimands, effect definitions, multiplicity, and statistical interpretation."}
+  R15: {name: adversarial_api, objective: "Fuzz malformed types, illegal states, unexpected nulls, exceptions, and fail-open API behavior."}
 reviewer_constraints:
   fresh_isolated_context_where_supported: true
   candidate_write_access: forbidden
@@ -17,4 +23,6 @@ reviewer_constraints:
   negotiate_acceptance_criteria: forbidden
   inherit_implementation_hidden_reasoning: forbidden
   reviewed_head_change: forbidden
+  independent_from_implementation_required: true
+  independent_from_review_aggregation_required: true
   non_independent_result: INVALID_REVIEW
