@@ -1,0 +1,40 @@
+name: PR806 Certifier Calibration V1
+
+on:
+  pull_request:
+    paths:
+      - 'research/pr806_certifier_calibration_v1/**'
+      - 'scripts/audit_pr806_certifier_calibration_v1.py'
+      - 'tests/test_pr806_certifier_calibration_v1.py'
+      - 'docs/research/pr806_certifier_calibration_v1/**'
+      - 'docs/agent_reviews/pr806_certifier_calibration_v1.md'
+      - '.github/workflows/pr806-certifier-calibration-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy pandas scikit-learn pyarrow pytest
+      - name: Compile calibration lane
+        run: |
+          python -m py_compile \
+            research/pr806_certifier_calibration_v1/calibration.py \
+            scripts/audit_pr806_certifier_calibration_v1.py \
+            tests/test_pr806_certifier_calibration_v1.py
+      - name: Run focused tests
+        run: pytest -q tests/test_pr806_certifier_calibration_v1.py
+      - name: Verify sealed-tail firewall
+        run: |
+          ! grep -R "unopened_test(" -n research/pr806_certifier_calibration_v1 scripts/audit_pr806_certifier_calibration_v1.py
+          ! grep -R "broker\|place_order\|modify_order\|cancel_order" -n research/pr806_certifier_calibration_v1 scripts/audit_pr806_certifier_calibration_v1.py
