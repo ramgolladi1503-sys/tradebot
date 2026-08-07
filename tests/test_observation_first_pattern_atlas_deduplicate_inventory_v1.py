@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -57,7 +58,7 @@ def test_cli_deduplicates_physical_sha_and_writes_evidence(tmp_path: Path) -> No
     assert output["source_file_count_before_deduplication"] == 3
     assert output["source_file_count_after_deduplication"] == 2
     assert output["duplicate_source_count"] == 1
-    assert len(output["semantic_sha256"]) == 64
+    assert re.fullmatch(r"[0-9a-f]{64}", output["semantic_sha256"])
     assert duplicates["duplicates"] == [
         {
             "path": "z.parquet",
@@ -65,7 +66,7 @@ def test_cli_deduplicates_physical_sha_and_writes_evidence(tmp_path: Path) -> No
             "identity": "same",
         }
     ]
-    assert len(duplicates["semantic_sha256"]) == 64
+    assert re.fullmatch(r"[0-9a-f]{64}", duplicates["semantic_sha256"])
 
 
 def test_cli_keeps_distinct_path_identities_when_sha_is_absent(tmp_path: Path) -> None:
