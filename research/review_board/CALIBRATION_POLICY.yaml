@@ -1,18 +1,47 @@
-schema_version: mros-review-board-calibration-v1
+schema_version: mros-review-audit-calibration-v2
 status: SPECIFIED_NOT_EXECUTED
 authority: Research / R
-cases:
+runtime_authority: NONE
+known_bad_cases:
   - {id: RB-CAL-001, defect: future_data_leakage, expected: REPAIR_REQUIRED}
-  - {id: RB-CAL-002, defect: authority_stage_skip, expected: REPAIR_REQUIRED}
-  - {id: RB-CAL-003, defect: evidence_free_promotion, expected: REPAIR_REQUIRED}
+  - {id: RB-CAL-002, defect: evidence_free_promotion, expected: REPAIR_REQUIRED}
+  - {id: RB-CAL-003, defect: authority_stage_skip, expected: REPAIR_REQUIRED}
   - {id: RB-CAL-004, defect: denominator_laundering, expected: REPAIR_REQUIRED}
   - {id: RB-CAL-005, defect: runtime_authority_creation, expected: REPAIR_REQUIRED}
-  - {id: RB-CAL-006, defect: none_clean_contract_compliant, expected: PASS}
+  - {id: RB-CAL-006, defect: stale_head_review_evidence, expected: INVALID_REVIEW}
+  - {id: RB-CAL-007, defect: fake_independent_reviewer, expected: INVALID_REVIEW}
+  - {id: RB-CAL-008, defect: major_hidden_behind_majority_pass, expected: REPAIR_REQUIRED}
+  - {id: RB-CAL-009, defect: mandatory_unknown, expected: UNKNOWN}
+  - {id: RB-CAL-010, defect: malformed_artifact_schema, expected: INVALID_REVIEW}
+known_good_cases:
+  - {id: RB-CAL-G001, control: clean_contract_compliant_a, expected: PASS}
+  - {id: RB-CAL-G002, control: clean_contract_compliant_b, expected: PASS}
+  - {id: RB-CAL-G003, control: clean_contract_compliant_with_nonblocking_minor, expected: PASS_WITH_MINOR_FINDINGS}
 metrics:
   - known_bad_detection_rate
-  - false_acceptance
-  - known_good_acceptance
-  - false_rejection
+  - false_acceptance_rate
+  - known_good_acceptance_rate
+  - false_rejection_rate
   - reviewer_disagreement
-  - aggregator_correctness
-claim_rule: "Do not claim calibrated or authoritative until executed evidence demonstrates applicable operating characteristics and independent bootstrap review accepts the board."
+  - audit_disagreement
+  - review_aggregation_correctness
+  - audit_aggregation_correctness
+  - adjudication_correctness
+  - sha_mismatch_rejection
+  - non_independent_review_rejection
+  - non_independent_audit_rejection
+  - major_blocking_correctness
+  - critical_non_outvoting_correctness
+  - mandatory_unknown_blocking_correctness
+  - maximum_round_escalation_correctness
+  - repair_head_invalidation_correctness
+  - m9_hard_stop_correctness
+  - runtime_authority_boundary_correctness
+calibration_acceptance:
+  known_bad_detection_rate_required: 1.0
+  false_acceptance_rate_required: 0.0
+  known_good_acceptance_rate_required: 1.0
+  false_rejection_rate_required: 0.0
+  all_structural_gate_checks_required: true
+bootstrap_independent_review_required: true
+claim_rule: "Do not claim calibrated, authorized, production-ready, or authoritative until executed calibration evidence satisfies all predeclared criteria and a genuinely independent bootstrap review accepts the board. The board may not certify itself or retroactively certify S002."
