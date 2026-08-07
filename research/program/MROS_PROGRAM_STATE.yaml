@@ -9,9 +9,9 @@ active_milestone: M1
 active_work_package: WP001
 active_sprint: S002
 last_completed_sprint: S001
-last_verified_commit: "9afbd8208acf667059cf8ac191f58b534cbf68d7"
+last_verified_commit: "0f7df9061b048295905783044e0063c7583f9015"
 program_status: ACTIVE
-active_sprint_status: ACTIVE
+active_sprint_status: IMPLEMENTED_NOT_VALIDATED
 
 milestone_status:
   M1: ACTIVE
@@ -53,7 +53,8 @@ work_package_status:
 next_action:
   sprint: S002
   work_package: WP001
-  objective: "Implement deterministic constitutional statement-classification and rule-validation fixtures under the frozen S001 interface/schema/status/error contract; preserve fail-closed semantics and do not weaken RC-001 through RC-010."
+  objective: "Obtain native exact-checkout execution provenance for scripts/mros/validate_s002_fixtures.py, preserve exact HEAD/Python/command/output/exit code, independently consume that evidence, and issue the S002 sprint decision only if acceptance criteria are genuinely satisfied. Do not start S003 before this gate closes."
+  blocker_artifact: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_BLOCKER.md"
 
 execution_policy:
   sprint_prs: false
