@@ -1,5 +1,14 @@
 # MROS Governance Sprint-001 — Agent Review Evidence
 
+mode: RESEARCH_GOVERNANCE
+candidate_id: MROS-SPRINT-001-PR811
+decision: HOLD_FOR_HUMAN_REVIEW
+reason: Governance foundation implemented and CI evidence is being verified; merge remains explicitly unauthorized.
+timestamp: 2026-08-08T02:31:00+05:30
+is_order_action: false
+broker_api_called: false
+source: repository-pr-811
+
 ## Agent Work Contract
 
 Work is restricted to establishing MROS research-governance artifacts and satisfying repository-required review evidence for PR #811. No strategy, runtime, broker, execution, risk, MEG, UI, TrueData, or ML behavior is changed. Repository artifacts and CI evidence are authoritative.
@@ -43,11 +52,11 @@ Verdict: Sprint-001 repository changes match the stated governance objective.
 
 ## QA / Safety Review
 
-CI evidence before this review file: Portfolio CI, Repo Forensics PR Gate, TradeBot RAG CI, Verify Strategy Registry, Code Excellence Gates, CodeQL Advanced, tests, and ci passed on head `e225e3d9129b12480e94f16309ffd3bba2422f55`. Agent Review Evidence Gate failed only because this mandatory file was absent. The failing workflow log named no substantive research-document defect.
+CI evidence before the mandatory review-evidence repair showed Portfolio CI, Repo Forensics PR Gate, TradeBot RAG CI, Verify Strategy Registry, Code Excellence Gates, CodeQL Advanced, tests, and ci passing on the prior governance head. The first Agent Review Evidence Gate failure identified the absence of this required review artifact. After adding it, that gate passed; Code Excellence then exposed the repository's separate eight-field evidence traceability contract, which this revision now supplies explicitly.
 
 Safety boundary: no order placement, broker behavior, execution logic, risk logic, strategy logic, or runtime behavior is changed by this PR.
 
-Verdict: no runtime safety surface is modified; CI must be re-evaluated after this evidence commit.
+Verdict: no runtime safety surface is modified; all CI checks must be green on the final head before Sprint-001 is treated as review-ready.
 
 ## Acceptance Proof
 
