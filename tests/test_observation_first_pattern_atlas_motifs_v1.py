@@ -84,11 +84,16 @@ def test_chronological_split_preserves_unopened_tail() -> None:
     sessions = [f'2024-01-{day:02d}' for day in range(1, 31)]
     split = MODULE.chronological_split(sessions, minimum_unopened=5)
     assert split.observation[0] == '2024-01-01'
-    assert split.unopened[-1] == '2024-01-30'
+    assert split.unopened == (
+        '2024-01-26',
+        '2024-01-27',
+        '2024-01-28',
+        '2024-01-29',
+        '2024-01-30',
+    )
     assert set(split.observation).isdisjoint(split.replication)
     assert set(split.observation).isdisjoint(split.unopened)
     assert set(split.replication).isdisjoint(split.unopened)
-    assert len(split.unopened) >= 5
 
 
 def test_insufficient_post_cas_lane_fails_without_model() -> None:
@@ -114,8 +119,11 @@ def test_repeating_synthetic_shapes_freeze_replication_stable_motifs() -> None:
         maximum_clusters=4,
         max_windows_per_session=20,
     )
+    expected_split = MODULE.chronological_split(
+        sorted(str(value) for value in native['session_date'].unique())
+    )
     assert result['unopened_sessions_scored'] is False
-    assert len(result['unopened_sessions']) >= 10
+    assert result['unopened_sessions'] == list(expected_split.unopened)
     assert result['verdict'] == 'OUTCOME_BLIND_NATIVE_CADENCE_MOTIFS_FROZEN'
     assert result['frozen_motif_count'] > 0
     assert {item['window_minutes'] for item in result['windows']} == {15}
