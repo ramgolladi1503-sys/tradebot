@@ -1,0 +1,125 @@
+S001 TARGETED VALIDATION OUTPUT
+
+Reviewed implementation HEAD: 9ad27265968bdb44bfa6ef5381a30e58012b2c73
+Branch at pin verification: research/mros-program-v1
+Branch comparison at execution start: identical to reviewed implementation HEAD (ahead=0, behind=0)
+Python version: Python 3.13.5
+Exact command: python scripts/mros/validate_s001_contract.py
+Exit status: 0
+Execution note: The review sandbox could not perform a network git clone because github.com DNS resolution is blocked. The validator was executed from an ephemeral repository-shaped materialization of the S001 contract inputs retrieved from the exact pinned commit through the authenticated GitHub connector. This limitation is preserved for independent assessment and is not represented as a native git-checkout execution.
+
+--- STDOUT (exact) ---
+PASS | constitution contains RC-001 exactly once
+PASS | constitution contains RC-002 exactly once
+PASS | constitution contains RC-003 exactly once
+PASS | constitution contains RC-004 exactly once
+PASS | constitution contains RC-005 exactly once
+PASS | constitution contains RC-006 exactly once
+PASS | constitution contains RC-007 exactly once
+PASS | constitution contains RC-008 exactly once
+PASS | constitution contains RC-009 exactly once
+PASS | constitution contains RC-010 exactly once
+PASS | RC-009 denominator protection: The denominator is part of the experiment contract, not a reporting convenience.
+PASS | RC-009 denominator protection: eligible observations
+PASS | RC-009 denominator protection: eligible trades/events
+PASS | RC-009 denominator protection: reported metric denominators
+PASS | RC-009 denominator protection: cannot be changed after observing outcomes
+PASS | RC-009 denominator protection: preregistered before outcomes are inspected
+PASS | RC-009 denominator protection: preserve the original denominator/result
+PASS | RC-009 denominator protection: new exploratory analysis or new search family
+PASS | RC-009 denominator protection: Silent removal of inconvenient trades
+PASS | controlled knowledge class OBSERVED_FACT
+PASS | controlled knowledge class INFERENCE
+PASS | controlled knowledge class HYPOTHESIS
+PASS | controlled knowledge class SPECULATION
+PASS | controlled verdict SUPPORTED
+PASS | controlled verdict REJECTED
+PASS | controlled verdict UNKNOWN
+PASS | controlled verdict INSUFFICIENT_EVIDENCE
+PASS | authority grade Research / R
+PASS | authority grade Grade C
+PASS | authority grade Grade B
+PASS | authority grade Grade A
+PASS | authority grade Grade A+
+PASS | authority grade Rejected
+PASS | authority grade Unknown
+PASS | controlled status PASS
+PASS | controlled status FAIL
+PASS | controlled status UNKNOWN
+PASS | controlled status INVALID_INPUT
+PASS | controlled status BLOCKED
+PASS | controlled status REVIEW_REQUIRED
+PASS | error code family E001
+PASS | error code family E002
+PASS | error code family E003
+PASS | error code family E004
+PASS | error code family E005
+PASS | error code family E006
+PASS | error code family E007
+PASS | error code family E008
+PASS | error code family E009
+PASS | error code family E010
+PASS | error code family E011
+PASS | error code family E012
+PASS | error code family E013
+PASS | error code family E014
+PASS | error code family E015
+PASS | error code family E016
+PASS | error code family E017
+PASS | interface invariant I-001
+PASS | interface invariant I-002
+PASS | interface invariant I-003
+PASS | interface invariant I-004
+PASS | interface invariant I-005
+PASS | interface invariant I-006
+PASS | interface invariant I-007
+PASS | interface invariant I-008
+PASS | interface invariant I-009
+PASS | interface invariant I-010
+PASS | acceptance trace contains S001-AC-001
+PASS | acceptance trace contains S001-AC-002
+PASS | acceptance trace contains S001-AC-003
+PASS | acceptance trace contains S001-AC-004
+PASS | acceptance trace contains S001-AC-005
+PASS | acceptance trace contains S001-AC-006
+PASS | acceptance trace contains S001-AC-007
+PASS | acceptance trace contains S001-AC-008
+PASS | acceptance trace contains S001-AC-009
+PASS | acceptance trace contains S001-AC-010
+PASS | acceptance trace contains S001-AC-011
+PASS | acceptance trace contains S001-AC-012
+PASS | acceptance trace contains S001-AC-013
+PASS | acceptance trace contains S001-AC-014
+PASS | acceptance trace contains S001-AC-015
+PASS | acceptance trace contains S001-AC-016
+PASS | acceptance trace contains S001-AC-017
+PASS | acceptance trace contains S001-AC-018
+PASS | acceptance trace contains S001-AC-019
+PASS | acceptance trace contains S001-AC-020
+PASS | acceptance trace contains S001-AC-021
+PASS | acceptance trace contains S001-AC-022
+PASS | acceptance trace contains S001-AC-023
+PASS | acceptance trace contains S001-AC-024
+PASS | acceptance trace contains S001-AC-025
+PASS | acceptance trace contains S001-AC-026
+PASS | acceptance trace contains S001-AC-027
+PASS | acceptance trace contains S001-AC-028
+PASS | acceptance trace contains S001-AC-029
+PASS | program state remains pre-S002: active_milestone: M1
+PASS | program state remains pre-S002: active_work_package: WP001
+PASS | program state remains pre-S002: active_sprint: S001
+PASS | program state remains pre-S002: active_sprint_status: REVIEW_REQUIRED
+PASS | program state remains pre-S002: M2: NOT_STARTED
+PASS | program state remains pre-S002: M9: NOT_STARTED
+PASS | program state remains pre-S002: runtime_authority: NONE
+PASS | original independent review is preserved
+PASS | interface explicitly does not implement S002
+PASS | interface explicitly blocks runtime authority
+PASS | trace keeps independent re-review as blocker
+SUMMARY | checks=107 pass=107 fail=0
+S001_TARGETED_VALIDATION_PASS
+--- END STDOUT ---
+
+--- STDERR (exact) ---
+<empty>
+--- END STDERR ---
