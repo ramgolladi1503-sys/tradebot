@@ -1,0 +1,211 @@
+{
+  "authority_version": 1,
+  "campaign": "autonomous_structural_edge_exhaustion_v1",
+  "principal_verdict": "HISTORICAL_DISCOVERY_EXHAUSTED_WITHIN_AVAILABLE_GOVERNED_DATA_NO_STRUCTURAL_EDGE_CERTIFIED",
+  "reopen_verdict": "MATERIALLY_NEW_DATA_OR_ECONOMIC_EXPOSURE_REQUIRED_TO_REOPEN",
+  "physical_autonomous_campaign": {
+    "pr": 806,
+    "execution_head": "da23bd2b45c572c19f6a4749e52eb6e87b559dcf",
+    "workflow_run": 31206465810,
+    "artifact_id": 9005119965,
+    "artifact_name": "autonomous-structural-edge-exhaustion-v3",
+    "artifact_sha256": "b00f8aeebc005112c6632a580a3123303c4aa1be64cc6158bfe244a55bb65b4a",
+    "source_sha256": "ae9645a83cb555899145e04ebe5a961fd130df25cba88a8fc8fd43b986bbfad0",
+    "accepted_pre_cas_sessions": 411,
+    "chronological_split": {
+      "observation": 205,
+      "replication": 82,
+      "validation": 61,
+      "unopened": 63
+    },
+    "observation_selected_constituent_count": 81,
+    "point_in_time_membership_available": false,
+    "membership_risk": "UNRESOLVED_POINT_IN_TIME_MEMBERSHIP",
+    "batches": 3,
+    "families": 18,
+    "frozen_motifs": 216,
+    "frozen_hypotheses": 648,
+    "campaign_global_bh_q_threshold": 0.025,
+    "structural_screen_survivors": 0,
+    "validation_wfa_survivors": 0,
+    "robustness_survivors": 0,
+    "final_unopened_survivors": 0,
+    "unopened_sessions_scored": false,
+    "final_semantic_sha256": "a73c19a5bb45ee381140fe073448e9b661b926e2c3573a1d5e398e0b94537b82",
+    "discovery_semantic_sha256": "9d493df79cfe32d17f9581f832a6858b11ef505a121bfe99c4704967f8204d41",
+    "screen_semantic_sha256": "2bdf60d6d7d463146f4ac11b4c9078ed04f2cee965d9629858660b1af34e6ae3",
+    "unopened_semantic_sha256": "119c5d8baf54523eb98750fd40675a7c0a4e653160d4a6714c439fa3519989e4",
+    "exhaustion_semantic_sha256": "c838dd26b5c352cccbcbcf40b9f4295a2794110a69df51d2c0c5c8fbb607f88d"
+  },
+  "autonomous_family_batches": {
+    "A": [
+      "PARTICIPATION_LEADERSHIP",
+      "DISPERSION_COHESION",
+      "INDEX_CONSTITUENT_DISAGREEMENT",
+      "DIFFUSION_DYNAMICS",
+      "CROSS_SCALE_ALIGNMENT",
+      "NORMALIZED_VOLUME_SHOCK"
+    ],
+    "B": [
+      "TAIL_SHAPE_ASYMMETRY",
+      "ORDER_STATISTIC_GEOMETRY",
+      "STATE_DURATION_HAZARD",
+      "CLOCK_TIME_RESIDUAL",
+      "CROSS_METRIC_PHASE",
+      "PATH_TOPOLOGY"
+    ],
+    "C": [
+      "CORRELATION_SPECTRUM",
+      "RANK_MOBILITY",
+      "CROSS_SECTIONAL_SERIAL_DEPENDENCE",
+      "BETA_STRUCTURE",
+      "STANDARDIZED_EXTREME_COINCIDENCE",
+      "COMMON_FACTOR_RESIDUAL_STRUCTURE"
+    ]
+  },
+  "autonomous_screen_attrition": {
+    "total_hypotheses": 648,
+    "observation_n_ge_20": 648,
+    "observation_abs_mean_ge_2bps": 147,
+    "replication_n_ge_10": 648,
+    "replication_mean_ge_2bps": 187,
+    "replication_hit_rate_ge_55pct": 181,
+    "replication_ci90_lower_positive": 62,
+    "campaign_global_bh_q_le_2_5pct": 0
+  },
+  "near_miss_policy": {
+    "promoted": false,
+    "threshold_tuning_authorized": false,
+    "failed_family_reopening_authorized": false,
+    "reason": "Several hypotheses passed local effect gates, but none survived campaign-wide multiplicity. Promoting or retuning them after observing outcomes would be overfitting."
+  },
+  "independent_negative_or_noncertified_campaigns": [
+    {
+      "reference": "PR #801",
+      "domain": "observation-first NIFTY price geometry and causal-prefix motifs",
+      "verdict": "NO_PRE_CAS_UNDERLYING_STRUCTURAL_EDGE_SURVIVED_FULL_CERTIFICATION",
+      "hypotheses": 22,
+      "survivors": 0,
+      "unopened_tail_accessed": false
+    },
+    {
+      "reference": "PR #807",
+      "domain": "predeclared Z-score regime displacement",
+      "verdict": "NO_ZSCORE_HYPOTHESIS_SURVIVED_DEVELOPMENT_CERTIFICATION",
+      "hypotheses": 4,
+      "survivors": 0,
+      "unopened_tail_accessed": false
+    },
+    {
+      "reference": "PR #709",
+      "domain": "weighted and unweighted constituent lead-lag proxy",
+      "verdict": "NO_QUALIFYING_SIGNALS_UNDER_VALID_PROXY_CONTRACT",
+      "weighted_signals": 0,
+      "unweighted_signals": 1
+    },
+    {
+      "reference": "PR #708",
+      "domain": "candle-based cross-index residual liquidity-exhaustion mean reversion",
+      "verdict": "NO_STABLE_RESIDUAL_MEAN_REVERSION_SEGMENT_FOUND",
+      "events": 491,
+      "predeclared_segments": 78,
+      "survivors": 0
+    },
+    {
+      "reference": "buy_side_structural_discovery_closeout_v1",
+      "domain": "BUY-only NIFTY options within certified joint warehouse, OHLC-derived option fields, one-minute and governed five-minute granularity",
+      "verdict": "BUY_SIDE_DISCOVERY_CAMPAIGN_CLOSED",
+      "new_strategy_discovered": false,
+      "thresholds_tuned": false
+    },
+    {
+      "reference": "PR #805",
+      "domain": "Market Event Graph",
+      "verdict": "MEG_REMAINS_A_FORWARD_VALIDATION_HYPOTHESIS",
+      "structural_edge_certified": false,
+      "reason": "corrected historical train/validation evidence was not robust and the old strong holdout had already been consumed"
+    },
+    {
+      "reference": "PR #799",
+      "domain": "Keltner/Hilega initiation-confirmation",
+      "verdict": "RETROSPECTIVE_PROSPECTIVE_SHADOW_ONLY",
+      "structural_edge_certified": false,
+      "reason": "retrospective candidate requires fresh reviewed live-shadow evidence and is explicitly not a certified structural edge"
+    }
+  ],
+  "historical_domains_exhausted_within_current_authority": [
+    "current governed NIFTY underlying/index OHLC state and recurring price geometry",
+    "current governed NIFTY constituent proxy cross-sectional state families represented by three autonomous batches",
+    "current weighted/unweighted constituent lead-lag proxy contract",
+    "candle-based cross-index residual mean-reversion formulation",
+    "BUY-only NIFTY option search within the certified joint warehouse, current OHLC-derived fields, causal execution contract, costs and tested mechanism families",
+    "predeclared Z-score regime displacement family"
+  ],
+  "untested_or_unexhausted_but_data_blocked_domains": [
+    {
+      "domain": "historical executable option microstructure",
+      "status": "DATA_BLOCKED",
+      "missing": [
+        "synchronized point-in-time bid/ask history",
+        "quote staleness authority",
+        "historical trustworthy depth where required",
+        "point-in-time IV/Greeks provenance where used"
+      ]
+    },
+    {
+      "domain": "NIFTY futures-options basis / term-structure mechanisms",
+      "status": "INSUFFICIENT_HISTORY",
+      "available_synchronized_sessions": 47,
+      "available_synchronized_expiries": 1,
+      "front_month_continuity": "PARTIAL",
+      "minimum_target_met": false
+    },
+    {
+      "domain": "SENSEX historical option / late-session convexity",
+      "status": "INVALID_DATA_ACQUISITION",
+      "missing": [
+        "complete historical SENSEX constituent membership/weights",
+        "verified historical SENSEX option tokens",
+        "complete certified one-minute acquisition",
+        "historical bid/ask"
+      ]
+    },
+    {
+      "domain": "point-in-time constituent membership and weights",
+      "status": "DATA_BLOCKED",
+      "reason": "the 2024-2025 constituent proxy corpus does not provide point-in-time membership authority"
+    },
+    {
+      "domain": "POST_CAS prospective independent evidence",
+      "status": "ACCUMULATING_INSUFFICIENT",
+      "reason": "only a few sessions exist after CAS began on 2026-08-03"
+    }
+  ],
+  "reopen_conditions": [
+    "materially richer synchronized market microstructure",
+    "longer genuinely independent history unused by prior selection",
+    "materially different instrument universe with independently certified data",
+    "materially different quote-supported execution horizon",
+    "explicitly authorized different economic exposure"
+  ],
+  "never_sufficient_to_reopen": [
+    "new indicator combinations on the same exhausted corpus",
+    "threshold grids after seeing outcomes",
+    "stop/target tuning to rescue failed candidates",
+    "one favorable month or subgroup",
+    "renaming or lightly modifying rejected mechanisms",
+    "promoting a local near miss that failed campaign-wide multiplicity"
+  ],
+  "claim_boundary": {
+    "all_possible_strategies_exhausted": false,
+    "all_future_edges_impossible": false,
+    "available_governed_historical_search_space_exhausted": true,
+    "structural_edge_certified": false,
+    "options_edge_certified": false,
+    "shadow_authorized": false,
+    "paper_authorized": false,
+    "live_authorized": false,
+    "order_authorized": false,
+    "merge_authorized": false
+  }
+}
