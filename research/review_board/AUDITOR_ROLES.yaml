@@ -1,0 +1,28 @@
+schema_version: mros-auditor-roles-v1
+minimum_required_roles: 10
+roles:
+  A01: {name: evidence_chain, objective: "Trace every acceptance claim to exact artifacts, commands, native evidence, and candidate SHA."}
+  A02: {name: review_independence, objective: "Verify reviewers were genuinely independent from implementation and did not repair candidate code."}
+  A03: {name: acceptance_criteria, objective: "Verify every mandatory acceptance criterion is individually evidenced rather than inferred from prose."}
+  A04: {name: regression, objective: "Verify the sprint did not break earlier accepted contracts, invariants, or evidence obligations."}
+  A05: {name: program_state, objective: "Verify ledgers, program state, accepted heads, Git history, and evidence manifests agree."}
+  A06: {name: scope_no_drift, objective: "Verify no out-of-scope S003/M2/M9/runtime/strategy/broker/risk work was introduced."}
+  A07: {name: scientific_integrity, objective: "Verify Unknown, Rejected, negative results, failed reviews, and dissent remain preserved honestly."}
+  A08: {name: reproducibility, objective: "Verify material results can be reproduced from recorded inputs, versions, commands, and exact head."}
+  A09: {name: authority, objective: "Verify authority grades and acceptance language do not exceed supporting evidence."}
+  A10: {name: adversarial_acceptance, objective: "Attempt to prove the proposed sprint acceptance decision itself is invalid."}
+  A11: {name: artifact_completeness, objective: "Verify manifests, hashes, commands, outputs, timestamps, finding references, and seals are complete."}
+  A12: {name: historical_supersession, objective: "Verify prior findings and rejected heads remain queryable and supersession is explicit."}
+  A13: {name: ci_validation, objective: "Verify skipped CI is not represented as passed validation and required deterministic gates actually ran."}
+  A14: {name: calibration, objective: "For certifiers and review/audit boards, verify calibration claims have executed evidence and are not self-certified."}
+  A15: {name: runtime_contamination, objective: "Verify M1-M8 work grants no runtime authority and does not alter production execution boundaries."}
+auditor_constraints:
+  fresh_isolated_context_where_supported: true
+  candidate_write_access: forbidden
+  review_aggregate_write_access: forbidden
+  repair_candidate: forbidden
+  negotiate_acceptance_criteria: forbidden
+  candidate_head_change: forbidden
+  independent_from_implementation_required: true
+  independent_from_review_aggregation_required: true
+  non_independent_result: INVALID_AUDIT
