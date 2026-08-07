@@ -1,65 +1,150 @@
-# Research Constitution
+# MROS Research Constitution
 
-## 1. Purpose
+Version: 1.0
+Status: FROZEN CONTRACT FOR WP001 VERIFICATION
+Manual authority: MROS Enterprise Engineering Manual & Research Handbook v1.0
+Program decision authority: `DEC-2026-0001`, `DEC-2026-0002`
+Operational authority: NONE
 
-MROS exists to produce quantitative market knowledge that is reproducible, calibrated, attackable, traceable, and economically meaningful.
+## 1. Mission
 
-## 2. Scientific Authority
+MROS exists to maximize the probability that accepted market claims are objectively defensible within explicitly stated assumptions. TradeBot is one downstream consumer. The research organization is the primary system.
 
-The repository is the authority. A claim is only as strong as its registered datasets, experiments, evidence, calibration, decisions, and independent attacks.
+The Constitution governs what MROS may claim. It does not guarantee that markets contain a profitable edge, that a strategy will be discovered, or that trading will be profitable.
 
-No agent, operator, model, dashboard, or runtime component may promote a claim by assertion.
+## 2. Knowledge Classes
 
-## 3. Claim Discipline
+Every material research statement must be classifiable as exactly one primary knowledge class at the point it is recorded.
 
-Every research claim must have a Claim ID and lifecycle state. Every supporting experiment, dataset, and evidence artifact must have its own registered ID.
+### Observed Fact
 
-Anonymous evidence is inadmissible for promotion.
+Directly supported by reproducible evidence without interpretive extension.
+
+Example: `The frozen Stage-6 artifact contains 648 hypothesis result rows.`
+
+### Inference
+
+Best current explanation of observed evidence; alternatives remain possible.
+
+Example: `The tested certifier appears underpowered for modest sparse effects under the tested representation.`
+
+### Hypothesis
+
+A falsifiable mechanism or prediction that has not earned sufficient evidence.
+
+Example: `Constituent breadth expansion precedes index continuation over a declared horizon.`
+
+### Speculation
+
+An idea worth exploring but not yet supported enough to influence decisions.
+
+Example: `Dealer hedging may explain an observed expiry-day pattern before any mechanism evidence exists.`
+
+`Unknown` is a legal verdict when evidence is insufficient to support or reject a claim. `Rejected` is a legal verdict when evidence contradicts the claim or required gates fail.
+
+## 3. Constitutional Rules
+
+### RC-001 — No Drift
+
+One active sprint objective. Adjacent ideas are parked, not implemented. A material scope change requires a recorded decision and impact review before work continues.
+
+### RC-002 — Evidence Promotion
+
+Authority can increase only when new registered evidence satisfies predeclared gates. Reformatting, rerunning the same evidence without a scientific reason, model confidence, human confidence, green CI alone, or persuasive prose are not new evidence.
+
+### RC-003 — Unknown Is Legal
+
+MROS may conclude `UNKNOWN` or `INSUFFICIENT EVIDENCE` without penalty. Unknown must not be converted to rejection merely to create closure, and it must not be converted to support merely because a result is promising.
+
+### RC-004 — Independent Attack
+
+Discovering agents do not grant final authority to their own claims. Applicable promotion requires independent review/attack under the authority model. Independence must be substantive, not the same reasoning paraphrased.
+
+### RC-005 — Calibration Before Trust
+
+Research instruments, certifiers, gates, and measurement procedures used for strong verdicts must demonstrate applicable operating characteristics before those verdicts are trusted. A negative certifier result is bounded by demonstrated detection power and representation coverage.
+
+### RC-006 — No Silent Supersession
+
+Changed beliefs are recorded through versioning and explicit supersession. Prior claims, evidence, decisions, and rejection history remain queryable. History is not rewritten to make later conclusions appear inevitable.
+
+### RC-007 — Falsifiability
+
+Every material claim lists destroyers and re-evaluation/review triggers appropriate to its lifecycle state. Claims that cannot state what evidence would weaken or destroy them cannot be promoted as scientific claims.
+
+### RC-008 — Causal Time
+
+Predictors and experimental inputs may use only information genuinely available at the declared decision timestamp. Look-ahead, future-derived membership, future labels in predictors, and outcome-contaminated feature selection invalidate affected evidence until repaired and rerun.
+
+### RC-009 — No Denominator Laundering
+
+Failed hypotheses remain counted. Search budgets, multiplicity denominators, or campaign identities cannot be reset merely because a campaign failed. A new denominator requires new information authority and a recorded decision explaining why the new search family is scientifically distinct.
+
+### RC-010 — Runtime Separation
+
+Runtime may consume versioned certified knowledge through the governed integration boundary but may not invent, reinterpret, promote, or weaken research authority. Runtime output cannot retroactively establish research truth.
 
 ## 4. Burden of Proof
 
-The burden lies with the claim. Absence of disproof is not evidence of truth. Statistical significance alone is insufficient. Economic plausibility alone is insufficient. Backtest profitability alone is insufficient.
+The claimant carries the burden of proof. Absence of disproof is not evidence of truth. Statistical significance alone, economic plausibility alone, a profitable backtest alone, high win rate alone, agent confidence alone, or runtime output alone cannot satisfy the burden for certification.
 
-## 5. Reproducibility
+Promotion must follow the governed lifecycle and authority model. No level may be skipped.
 
-A result intended to support promotion must identify inputs, code or procedure, parameters, time boundaries, transformations, outputs, and environment assumptions sufficiently for independent reproduction.
+## 5. Repository Authority
 
-## 6. Separation of Observation and Interpretation
+Repository-backed, identified, versioned evidence is authoritative. Conversation memory, chat summaries, agent scratchpads, dashboards, and uncommitted outputs may assist navigation but cannot override repository state.
 
-Research artifacts must distinguish observed facts from inference, hypothesis, assumption, and unknowns. Derived conclusions must not be presented as raw observations.
+Every material research object must receive its required canonical identity when the applicable registry work package is accepted. Anonymous evidence is inadmissible for promotion.
 
-## 7. Calibration Before Certification
+## 6. Reproducibility
 
-A certifier may not be treated as trustworthy merely because it rejects weak hypotheses. Its own false-positive, false-negative, power, multiplicity, representation, and null-world behavior must be measured under M2.
+Evidence intended to change authority must identify inputs, code/procedure, parameters, time boundaries, transformations, seeds where applicable, outputs, environment assumptions, and relevant hashes/commit IDs sufficiently for an independent session to reproduce the principal result.
 
-## 8. Independent Attack
+Failure to reproduce is evidence and must be recorded.
 
-Claims seeking certification must be exposed to a documented attack intended to destroy them. The attacker must be able to challenge data, representation, leakage, multiplicity, regime dependence, mechanism, statistics, costs, and implementation assumptions.
+## 7. Separation of Observation and Interpretation
 
-## 9. Promotion
+Research reports must distinguish at minimum:
 
-Allowed lifecycle:
+- Observed Facts
+- Inferences
+- Hypotheses
+- Assumptions
+- Destroyers
+- Unknowns
+- Next Experiment / Review Trigger
+- Authority Grade
 
-`Speculation -> Hypothesis -> Supported Hypothesis -> Certified Claim -> Operational Knowledge`
+An inference may not be rewritten as an observed fact. A pattern may not silently become a mechanism claim.
 
-Promotion requires new registered evidence and a recorded decision. Skipping levels is prohibited.
+## 8. Promotion and Authority
 
-## 10. Supersession
+Scientific grades are governed by the manual-defined scale in `research/governance/AUTHORITY_GRADES.md`:
 
-New evidence does not silently overwrite old knowledge. Materially changed conclusions require explicit supersession links preserving the prior claim and explaining why authority changed.
+`Research / R`, `Grade C`, `Grade B`, `Grade A`, `Grade A+`, `Rejected`, `Unknown`.
 
-## 11. Scope and Drift
+Promotion requires new evidence, applicable gate evidence, and a recorded decision. No discovering agent can self-certify.
 
-Each sprint has one objective and one exit criterion. Out-of-scope work is parked. Architecture changes require a stop, evidence, reasoning, roadmap update, and explicit continuation.
+## 9. Negative Results
 
-## 12. Negative Results
+Null results, rejected claims, invalidated experiments, failed reproductions, destroyed hypotheses, and inadequate-data outcomes are first-class institutional knowledge. They remain traceable and must not be deleted merely because they are inconvenient.
 
-Failed hypotheses, null results, invalidated experiments, and destroyed claims are first-class research outputs. They must not be hidden merely because they are inconvenient.
+## 10. Completion Language
 
-## 13. Operational Boundary
+No artifact may claim completion, calibration, certification, implementation, discovery, milestone pass, work-package pass, or sprint acceptance unless repository evidence demonstrates that exact statement under the applicable Definition of Done.
 
-TradeBot may consume only knowledge whose lifecycle and authority satisfy the applicable certification and operational gates. Runtime behavior cannot retroactively establish research truth.
+`Implemented` without evidence is not `Done`.
 
-## 14. Completion Language
+## 11. Change Control
 
-No artifact may claim completion, calibration, certification, implementation, or discovery unless repository evidence demonstrates the claim at the stated authority level.
+Changes to constitutional rules, milestone intent, work-package intent, authority grades, or gate semantics require:
+
+1. stop the affected progression;
+2. present evidence and reason for change;
+3. record a decision and impact review;
+4. update controlled program artifacts;
+5. continue only from the resulting repository state.
+
+## 12. WP001 Verification Boundary
+
+This document is the frozen WP001 contract. Its existence does not complete WP001. WP001 requires all five controlled sprints, acceptance against the manual criteria, independent review/reproduction, a sealed evidence manifest, and no unresolved Critical/High research-integrity defect.
