@@ -61,8 +61,8 @@ def test_extracts_one_post_cas_session_without_outcome_fields(tmp_path: Path) ->
 
     assert result["market_event_graph_thresholds"] == FROZEN_THRESHOLDS
     assert [bar["source_bar_end_epoch"] for bar in result["completed_constituent_bars"]] == [
+        1_786_090_060.0,
         1_786_090_120.0,
-        1_786_090_180.0,
     ]
     bridge = result["governed_source_bridge"]
     assert bridge["source_regime"] == "POST_CAS"
