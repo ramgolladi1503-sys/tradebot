@@ -1,19 +1,38 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "mros-review-schema-v1",
+  "$id": "mros-review-schema-v2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["review_id","sprint","review_round","reviewed_head","reviewer_role","independent_from_implementation","verdict","findings","critical","major","minor","unknown"],
+  "required": ["artifact_id","sprint","round","candidate_head","role","independent_from_implementation","independent_from_review_aggregation","verdict","findings","critical","major","minor","unknown","evidence_refs"],
   "properties": {
-    "review_id": {"type":"string","minLength":1},
+    "artifact_id": {"type":"string","minLength":1},
     "sprint": {"type":"string","pattern":"^S[0-9]{3}$"},
-    "review_round": {"type":"string","pattern":"^R[0-9]{3}$"},
-    "reviewed_head": {"type":"string","pattern":"^[0-9a-f]{40}$"},
-    "reviewer_role": {"enum":["contract_compliance","negative_control","evidence_provenance","authority_promotion","causal_time","denominator_search_integrity","runtime_boundary","qa_verification","architecture_no_drift","adversarial_red_team","critical_adjudicator"]},
+    "round": {"type":"string","pattern":"^R[0-9]{3}$"},
+    "candidate_head": {"type":"string","pattern":"^[0-9a-f]{40}$"},
+    "role": {"enum":["contract_compliance","negative_control","evidence_provenance","authority_promotion","causal_time","denominator_search_integrity","runtime_boundary","qa_verification","architecture_no_drift","adversarial_red_team","reproducibility","security_secrets","data_contract","statistical_semantics","adversarial_api","critical_adjudicator"]},
     "independent_from_implementation": {"type":"boolean"},
+    "independent_from_review_aggregation": {"type":"boolean"},
     "verdict": {"enum":["PASS","PASS_WITH_MINOR_FINDINGS","REPAIR_REQUIRED","FAIL","UNKNOWN","INVALID_REVIEW"]},
     "findings": {"type":"array","items":{"$ref":"#/$defs/finding"}},
-    "critical":{"type":"integer","minimum":0},"major":{"type":"integer","minimum":0},"minor":{"type":"integer","minimum":0},"unknown":{"type":"integer","minimum":0}
+    "critical":{"type":"integer","minimum":0},
+    "major":{"type":"integer","minimum":0},
+    "minor":{"type":"integer","minimum":0},
+    "unknown":{"type":"integer","minimum":0},
+    "evidence_refs":{"type":"array","items":{"type":"string","minLength":1}}
   },
-  "$defs": {"finding":{"type":"object","additionalProperties":false,"required":["finding_id","severity","requirement","evidence","falsifier","recommended_repair_scope"],"properties":{"finding_id":{"type":"string","minLength":1},"severity":{"enum":["CRITICAL","MAJOR","MINOR","UNKNOWN"]},"requirement":{"type":"string","minLength":1},"evidence":{"type":"string","minLength":1},"falsifier":{"type":"string","minLength":1},"recommended_repair_scope":{"type":"string","minLength":1}}}}
+  "$defs": {
+    "finding": {
+      "type":"object",
+      "additionalProperties":false,
+      "required":["finding_id","severity","requirement","evidence","falsifier","recommended_repair_scope"],
+      "properties": {
+        "finding_id":{"type":"string","minLength":1},
+        "severity":{"enum":["CRITICAL","MAJOR","MINOR","UNKNOWN"]},
+        "requirement":{"type":"string","minLength":1},
+        "evidence":{"type":"string","minLength":1},
+        "falsifier":{"type":"string","minLength":1},
+        "recommended_repair_scope":{"type":"string","minLength":1}
+      }
+    }
+  }
 }
