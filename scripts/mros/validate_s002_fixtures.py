@@ -116,7 +116,7 @@ def classify(inp):
 
 
 def canonical_evidence_refs(value):
-    if not isinstance(value, list):
+    if not isinstance(value, list) or not value:
         return None
     if any(not nonempty_str(x) or not EVIDENCE_REF.fullmatch(x.strip()) for x in value):
         return None
