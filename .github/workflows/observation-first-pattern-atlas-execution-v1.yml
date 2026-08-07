@@ -22,9 +22,16 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONHASHSEED: "0"
+  OMP_NUM_THREADS: "1"
+  OPENBLAS_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
+  NUMEXPR_NUM_THREADS: "1"
+
 jobs:
   execute-atlas:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - name: Checkout without broad LFS hydration
@@ -44,13 +51,47 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.12.13"
           cache: pip
 
-      - name: Install focused dependencies
+      - name: Install pinned certification dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install numpy pandas scipy pyarrow scikit-learn pytest
+          python -m pip install --upgrade "pip==26.2.1"
+          python -m pip install \
+            "numpy==2.5.1" \
+            "pandas==3.0.5" \
+            "scipy==1.18.0" \
+            "pyarrow==25.0.0" \
+            "scikit-learn==1.9.0" \
+            "pytest==9.1.1"
+
+      - name: Record canonical execution environment
+        run: |
+          mkdir -p runtime/research/observation_first_pattern_atlas_v1
+          python - <<'PY'
+          import json, platform, sys
+          import numpy, pandas, scipy, pyarrow, sklearn, pytest
+          payload = {
+              "python": sys.version,
+              "platform": platform.platform(),
+              "numpy": numpy.__version__,
+              "pandas": pandas.__version__,
+              "scipy": scipy.__version__,
+              "pyarrow": pyarrow.__version__,
+              "scikit_learn": sklearn.__version__,
+              "pytest": pytest.__version__,
+              "PYTHONHASHSEED": "0",
+              "OMP_NUM_THREADS": "1",
+              "OPENBLAS_NUM_THREADS": "1",
+              "MKL_NUM_THREADS": "1",
+              "NUMEXPR_NUM_THREADS": "1",
+              "authority": "CANONICAL_PATTERN_ATLAS_CERTIFICATION_ENVIRONMENT_V1",
+          }
+          with open("runtime/research/observation_first_pattern_atlas_v1/certification_environment.json", "w") as f:
+              json.dump(payload, f, indent=2, sort_keys=True)
+              f.write("\n")
+          print(json.dumps(payload, indent=2, sort_keys=True))
+          PY
 
       - name: Run focused governance tests
         run: |
@@ -133,6 +174,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: observation-first-pattern-atlas-full-certification-v4
+          name: observation-first-pattern-atlas-full-certification-v5-canonical
           path: runtime/research/observation_first_pattern_atlas_v1/
           if-no-files-found: warn
