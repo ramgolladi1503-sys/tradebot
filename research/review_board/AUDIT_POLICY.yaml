@@ -1,0 +1,35 @@
+schema_version: mros-audit-policy-v1
+status: IMPLEMENTED_NOT_CALIBRATED
+authority: Research / R
+runtime_authority: NONE
+bootstrap:
+  s002_may_be_certified_by_audit_board: false
+  audit_board_may_self_certify: false
+  normal_authority_begins_no_earlier_than: S003_AFTER_BOOTSTRAP_CALIBRATION_AND_INDEPENDENT_REVIEW
+preconditions:
+  exact_candidate_head_required: true
+  native_validation_pass_required: true
+  nonblocking_review_aggregate_required: true
+  audited_review_round_required: true
+auditors:
+  minimum_valid_independent_audits: 10
+  exact_head_match_required: true
+  independent_from_implementation_required: true
+  independent_from_review_aggregation_required: true
+aggregation:
+  simple_majority_forbidden: true
+  critical_blocks: true
+  major_blocks: true
+  mandatory_unknown_blocks: true
+  acceptance_trace_complete_required: true
+  state_consistent_required: true
+  preserve_dissent: true
+  material_disagreement_requires_adjudication: true
+acceptance:
+  review_aggregate_must_be_nonblocking: true
+  valid_audits_minimum: 10
+  critical_must_equal: 0
+  major_must_equal: 0
+  mandatory_unknown_must_equal: 0
+  m9_must_remain: NOT_STARTED
+  runtime_authority_must_remain: NONE
