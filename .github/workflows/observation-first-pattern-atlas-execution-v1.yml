@@ -86,6 +86,7 @@ jobs:
               "MKL_NUM_THREADS": "1",
               "NUMEXPR_NUM_THREADS": "1",
               "authority": "CANONICAL_PATTERN_ATLAS_CERTIFICATION_ENVIRONMENT_V1",
+              "trigger_authority": "CAUSAL_PREFIX_FIRST_QUALIFYING_SIGNAL_V2",
           }
           with open("runtime/research/observation_first_pattern_atlas_v1/certification_environment.json", "w") as f:
               json.dump(payload, f, indent=2, sort_keys=True)
@@ -105,7 +106,9 @@ jobs:
             tests/test_observation_first_pattern_atlas_motifs_v1.py \
             tests/test_observation_first_pattern_atlas_analogues_v1.py \
             tests/test_observation_first_pattern_atlas_motif_recertification_v2.py \
-            tests/test_observation_first_pattern_atlas_full_certification_v1.py
+            tests/test_observation_first_pattern_atlas_full_certification_v1.py \
+            tests/test_observation_first_pattern_atlas_analogues_v3.py \
+            tests/test_observation_first_pattern_atlas_full_certification_v2.py
 
       - name: Inventory physical corpus
         run: |
@@ -149,21 +152,21 @@ jobs:
             --previous-motif-catalog runtime/research/observation_first_pattern_atlas_v1/native_motifs_v1/native_motif_catalog.json \
             --output-root runtime/research/observation_first_pattern_atlas_v1/native_motifs_v2
 
-      - name: Freeze PRE-CAS matched geometric analogues from recertified motifs
+      - name: Freeze causal-prefix PRE-CAS matched analogues
         run: |
-          python scripts/run_observation_first_pattern_atlas_analogues_v2.py \
+          python scripts/run_observation_first_pattern_atlas_analogues_v3.py \
             --source-file research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet \
             --motif-catalog runtime/research/observation_first_pattern_atlas_v1/native_motifs_v2/native_motif_catalog_v2.json \
-            --output-root runtime/research/observation_first_pattern_atlas_v1/matched_analogues_v2
+            --output-root runtime/research/observation_first_pattern_atlas_v1/matched_analogues_v3
 
-      - name: Execute Pattern Atlas stages 5 through 14
+      - name: Execute live-causal Pattern Atlas stages 5 through 14
         run: |
-          python scripts/run_observation_first_pattern_atlas_full_certification_v1.py \
+          python scripts/run_observation_first_pattern_atlas_full_certification_v2.py \
             --source-file research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet \
             --motif-catalog runtime/research/observation_first_pattern_atlas_v1/native_motifs_v2/native_motif_catalog_v2.json \
-            --analogue-catalog runtime/research/observation_first_pattern_atlas_v1/matched_analogues_v2/matched_geometric_analogue_catalog.json \
+            --analogue-catalog runtime/research/observation_first_pattern_atlas_v1/matched_analogues_v3/matched_geometric_analogue_catalog_v3.json \
             --option-data-root runtime/strategy_validation \
-            --output-root runtime/research/observation_first_pattern_atlas_v1/full_certification_v1
+            --output-root runtime/research/observation_first_pattern_atlas_v1/full_certification_v2
 
       - name: Remove large causal intermediate after downstream certification
         if: always()
@@ -174,6 +177,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: observation-first-pattern-atlas-full-certification-v5-canonical
+          name: observation-first-pattern-atlas-full-certification-v6-causal
           path: runtime/research/observation_first_pattern_atlas_v1/
           if-no-files-found: warn
