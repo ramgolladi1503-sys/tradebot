@@ -9,9 +9,9 @@ active_milestone: M1
 active_work_package: WP001
 active_sprint: S002
 last_completed_sprint: S001
-last_verified_commit: "ac3429b88709f313037c0f124fc1545e51d2b36c"
+last_verified_commit: "834843ae2bc3222de52e0621455fbe0c763d9519"
 program_status: ACTIVE
-active_sprint_status: REPAIR_IMPLEMENTED_PENDING_NATIVE_VALIDATION
+active_sprint_status: NATIVE_VALIDATION_PASS_INDEPENDENT_RE_REVIEW_REQUIRED
 
 s002_review:
   reviewed_head: "ac3429b88709f313037c0f124fc1545e51d2b36c"
@@ -25,11 +25,14 @@ s002_review:
     UNKNOWN: 0
 
 s002_repair:
-  semantic_repair_head: "31180e65fd85119aab29f2186cfcc0e1a8429919"
+  final_repaired_head: "834843ae2bc3222de52e0621455fbe0c763d9519"
   fixture_schema_version: "mros-s002-fixtures-v3"
   required_case_count: 39
-  native_validation: PENDING_FOR_FINAL_REPAIRED_HEAD
-  independent_re_review: PENDING_AFTER_NATIVE_VALIDATION
+  native_validation: PASS
+  native_validation_evidence: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_OUTPUT.txt"
+  native_validation_result: "39/39_PASS_EXIT_0_PYTHON_3.12.2"
+  native_validation_source: "operator-supplied genuine local Git worktree terminal capture"
+  independent_re_review: REQUIRED_FOR_EXACT_HEAD_834843ae2bc3222de52e0621455fbe0c763d9519
 
 milestone_status:
   M1: ACTIVE
@@ -71,10 +74,8 @@ work_package_status:
 next_action:
   sprint: S002
   work_package: WP001
-  objective: "Pin the final repaired S002 branch HEAD, run native exact-checkout validation of the 39-case fixture suite, preserve exact HEAD/Python/command/stdout/stderr/exit code, then obtain a genuinely independent re-review from a session that did not implement or direct this repair. Do not start S003 before both gates close."
-  required_native_validator: "scripts/mros/validate_s002_fixtures.py"
-  required_expected_case_count: 39
-  required_external_role: "independent reviewer/session distinct from S002 implementing/repair agent"
+  objective: "Obtain a genuinely independent re-review of exact native-validated HEAD 834843ae2bc3222de52e0621455fbe0c763d9519. If PASS or PASS_WITH_MINOR_FINDINGS with no blocking findings, seal S002 acceptance and activate S003. Do not allow the bootstrap Review Board to certify S002 or itself."
+  required_external_role: "independent reviewer/session distinct from S002 implementation/repair and Review Board bootstrap implementation"
 
 execution_policy:
   sprint_prs: false
