@@ -57,11 +57,11 @@ def promotion(inp):
 
 def validate_enums(inp):
     if "knowledge_class" in inp and inp["knowledge_class"] not in KNOWLEDGE_CLASSES:
-        return result("INVALID_INPUT",errors=["MROS-S001-E002-AMBIGUOUS_KNOWLEDGE_CLASS"])
+        return result("INVALID_INPUT",errors=["MROS-S002-E018-INVALID_KNOWLEDGE_CLASS_ENUM"])
     if "verdict" in inp and inp["verdict"] not in VERDICTS:
-        return result("INVALID_INPUT",errors=["MROS-S001-E001-MISSING_REQUIRED_FIELD"])
+        return result("INVALID_INPUT",errors=["MROS-S002-E019-INVALID_VERDICT_ENUM"])
     if "status" in inp and inp["status"] not in STATUSES:
-        return result("INVALID_INPUT",errors=["MROS-S001-E001-MISSING_REQUIRED_FIELD"])
+        return result("INVALID_INPUT",errors=["MROS-S002-E020-INVALID_STATUS_ENUM"])
     return result("PASS")
 
 def constitutional(inp):
