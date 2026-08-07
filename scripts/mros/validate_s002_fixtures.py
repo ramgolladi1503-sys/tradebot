@@ -7,7 +7,10 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURES = ROOT / "research/evidence/sprints/S002/S002_FIXTURES.json"
+FIXTURE_FILES = (
+    ROOT / "research/evidence/sprints/S002/S002_FIXTURES.json",
+    ROOT / "research/evidence/sprints/S002/S002_FIXTURES_V5_ADDENDUM.json",
+)
 
 AUTH = ["Research / R", "Grade C", "Grade B", "Grade A", "Grade A+", "Rejected", "Unknown"]
 LEGAL_PROMOTIONS = {
@@ -28,29 +31,23 @@ KNOWLEDGE_CLASSES = {"OBSERVED_FACT", "INFERENCE", "HYPOTHESIS", "SPECULATION"}
 VERDICTS = {"SUPPORTED", "REJECTED", "UNKNOWN", "INSUFFICIENT_EVIDENCE"}
 STATUSES = {"PASS", "FAIL", "UNKNOWN", "INVALID_INPUT", "BLOCKED", "REVIEW_REQUIRED"}
 OBSOLETE = re.compile(r"^A[0-5]$")
+EVIDENCE_REF = re.compile(r"^EVID-[A-Z0-9][A-Z0-9-]*$")
 DENOMINATOR_CONTRACT_FIELDS = {
-    "denominator_definition",
-    "exclusion_rule_refs",
-    "population_identity",
-    "horizon",
-    "regimes",
-    "symbols",
-    "dates_ref",
-    "search_family_id",
+    "denominator_definition", "exclusion_rule_refs", "population_identity", "horizon",
+    "regimes", "symbols", "dates_ref", "search_family_id",
 }
 DENOMINATOR_TRIGGER_KEYS = {
-    "confirmatory",
-    "experiment_contract_ref",
-    "frozen_denominator_contract",
-    "current_denominator_contract",
-    "outcomes_inspected",
-    "analysis_mode",
+    "confirmatory", "experiment_contract_ref", "frozen_denominator_contract",
+    "current_denominator_contract", "outcomes_inspected", "analysis_mode",
+    "original_result_preserved", "new_analysis_identity", "post_hoc_rationale",
+    "multiplicity_accounted", "reduced_authority",
 }
 CONSTITUTIONAL_KEYS = {
     "decision_timestamp", "input_availability_timestamps", "confirmatory", "experiment_contract_ref",
     "frozen_denominator_contract", "current_denominator_contract", "outcomes_inspected", "analysis_mode",
-    "runtime_context", "runtime_attempts_authority_promotion", "material_claim", "destroyers",
-    "completion_claim", "completion_evidence_refs", "supersedes", "supersession_decision_ref",
+    "original_result_preserved", "new_analysis_identity", "post_hoc_rationale", "multiplicity_accounted",
+    "reduced_authority", "runtime_context", "runtime_attempts_authority_promotion", "material_claim",
+    "destroyers", "completion_claim", "completion_evidence_refs", "supersedes", "supersession_decision_ref",
     "declared_scope", "attempted_scope",
 }
 
@@ -106,18 +103,27 @@ def classify(inp):
         "FALSIFIABLE_UNVERIFIED": "HYPOTHESIS",
         "UNSUPPORTED_CONJECTURE": "SPECULATION",
     }
-    sig = set(inp["classification_signals"])
-    classes = {mapping[x] for x in sig if x in mapping}
+    classes = {mapping[x] for x in set(inp["classification_signals"]) if x in mapping}
     if len(classes) != 1:
         return result("REVIEW_REQUIRED", knowledge_class=None,
                       errors=["MROS-S001-E002-AMBIGUOUS_KNOWLEDGE_CLASS"])
 
     knowledge_class = next(iter(classes))
-    if knowledge_class in {"OBSERVED_FACT", "INFERENCE"}:
-        if not nonempty_str_list(inp.get("evidence_refs")):
-            return result("INVALID_INPUT", knowledge_class=None,
-                          errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
+    if knowledge_class in {"OBSERVED_FACT", "INFERENCE"} and not nonempty_str_list(inp.get("evidence_refs")):
+        return result("INVALID_INPUT", knowledge_class=None,
+                      errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
     return result("PASS", knowledge_class=knowledge_class)
+
+
+def canonical_evidence_refs(value):
+    if not isinstance(value, list):
+        return None
+    if any(not nonempty_str(x) or not EVIDENCE_REF.fullmatch(x.strip()) for x in value):
+        return None
+    canonical = [x.strip().upper() for x in value]
+    if len(canonical) != len(set(canonical)):
+        return None
+    return canonical
 
 
 def promotion(inp):
@@ -136,21 +142,19 @@ def promotion(inp):
         return result("INVALID_INPUT", can_promote=False,
                       errors=["MROS-S001-E003-INVALID_AUTHORITY_GRADE"])
 
-    new_refs = inp.get("new_evidence_refs")
-    if not nonempty_str_list(new_refs):
+    for flag in ("requires_independent_attack", "requires_calibration", "evidence_provenance_complete"):
+        if flag in inp and not is_bool(inp[flag]):
+            return invalid_schema(can_promote=False)
+
+    if "new_evidence_refs" not in inp:
         return result("FAIL", can_promote=False,
                       errors=["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], rules=["RC-002"])
-    old_refs = inp.get("evidence_refs", [])
-    if old_refs is not None and not isinstance(old_refs, list):
+    new_refs = canonical_evidence_refs(inp["new_evidence_refs"])
+    if new_refs is None:
+        if inp["new_evidence_refs"] == []:
+            return result("FAIL", can_promote=False,
+                          errors=["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], rules=["RC-002"])
         return invalid_schema(can_promote=False)
-    if isinstance(old_refs, list) and any(not nonempty_str(x) for x in old_refs):
-        return invalid_schema(can_promote=False)
-    if set(old_refs or []).intersection(new_refs):
-        return result("FAIL", can_promote=False,
-                      errors=["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], rules=["RC-002"])
-    if inp.get("evidence_provenance_complete") is not True:
-        return result("INVALID_INPUT", can_promote=False,
-                      errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
 
     if req not in LEGAL_PROMOTIONS.get(cur, set()):
         return result("FAIL", can_promote=False,
@@ -170,15 +174,36 @@ def promotion(inp):
     if "calibration_ref" in required_for_grade and not nonempty_str(inp.get("calibration_ref")):
         return result("BLOCKED", can_promote=False,
                       errors=["MROS-S001-E010-CALIBRATION_REQUIRED"], rules=["RC-005"])
-    other_required = tuple(field for field in required_for_grade if field not in {"independent_attack_ref", "calibration_ref"})
+    other_required = tuple(f for f in required_for_grade if f not in {"independent_attack_ref", "calibration_ref"})
     if other_required and any(not nonempty_str(inp.get(field)) for field in other_required):
         return invalid_missing(can_promote=False)
+
+    # An authority-bearing PASS must establish the complete prior evidence set and provenance.
+    # `evidence_refs` is therefore mandatory even when the complete prior set is empty.
+    if "evidence_refs" not in inp:
+        return result("INVALID_INPUT", can_promote=False,
+                      errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
+    old_refs = canonical_evidence_refs(inp["evidence_refs"])
+    if old_refs is None:
+        if inp["evidence_refs"] != []:
+            return invalid_schema(can_promote=False)
+        old_refs = []
+    if inp.get("evidence_provenance_complete") is not True:
+        return result("INVALID_INPUT", can_promote=False,
+                      errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
+    if set(old_refs).intersection(new_refs):
+        return result("FAIL", can_promote=False,
+                      errors=["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], rules=["RC-002"])
+
     return result("PASS", can_promote=True)
 
 
 def validate_enums(inp):
     if not isinstance(inp, dict):
         return invalid_schema()
+    controlled = {"knowledge_class", "verdict", "status"}
+    if not set(inp).intersection(controlled):
+        return invalid_missing()
     if "knowledge_class" in inp and inp["knowledge_class"] not in KNOWLEDGE_CLASSES:
         return result("INVALID_INPUT", errors=["MROS-S002-E018-INVALID_KNOWLEDGE_CLASS_ENUM"])
     if "verdict" in inp and inp["verdict"] not in VERDICTS:
@@ -201,8 +226,7 @@ def denominator_contract_valid(contract):
 
 
 def validate_denominator_semantics(inp):
-    present = bool(set(inp).intersection(DENOMINATOR_TRIGGER_KEYS))
-    if not present:
+    if not set(inp).intersection(DENOMINATOR_TRIGGER_KEYS):
         return None
 
     confirmatory = inp.get("confirmatory", _UNSET)
@@ -211,7 +235,6 @@ def validate_denominator_semantics(inp):
         return invalid_schema()
     if mode is not _UNSET and mode != "EXPLORATORY_POST_HOC":
         return invalid_schema()
-
     if confirmatory is True and mode is not _UNSET:
         return invalid_schema()
     if confirmatory is not True and mode != "EXPLORATORY_POST_HOC":
@@ -234,9 +257,16 @@ def validate_denominator_semantics(inp):
             return result("FAIL", errors=["MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION", "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED"], rules=["RC-009"])
         return None
 
-    if mode == "EXPLORATORY_POST_HOC" and changed and outcomes_inspected:
+    # EXPLORATORY_POST_HOC semantically asserts that outcomes have been inspected.
+    # `false` is contradictory and must never be accepted as a way around post-hoc controls.
+    if mode == "EXPLORATORY_POST_HOC" and outcomes_inspected is not True:
+        return invalid_schema()
+    if mode == "EXPLORATORY_POST_HOC" and changed:
         if any(not nonempty_str(inp.get(f)) for f in ("new_analysis_identity", "post_hoc_rationale")):
             return result("FAIL", errors=["MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION", "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED"], rules=["RC-009"])
+        for flag in ("original_result_preserved", "multiplicity_accounted", "reduced_authority"):
+            if flag in inp and not is_bool(inp[flag]):
+                return invalid_schema()
         if not all(inp.get(flag) is True for flag in ("original_result_preserved", "multiplicity_accounted", "reduced_authority")):
             return result("FAIL", errors=["MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION", "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED"], rules=["RC-009"])
     return None
@@ -255,17 +285,27 @@ def constitutional(inp):
     if not isinstance(inp, dict) or not set(inp).intersection(CONSTITUTIONAL_KEYS):
         return invalid_missing()
 
+    # Dependent-only partial requests are indeterminate and must fail closed.
+    dependencies = (
+        ("destroyers", "material_claim"),
+        ("completion_evidence_refs", "completion_claim"),
+        ("supersession_decision_ref", "supersedes"),
+    )
+    for dependent, primary in dependencies:
+        if dependent in inp and primary not in inp:
+            return invalid_missing()
+
     if ("decision_timestamp" in inp) != ("input_availability_timestamps" in inp):
         return invalid_missing()
     if "decision_timestamp" in inp:
         if not nonempty_str(inp["decision_timestamp"]) or not nonempty_str_list(inp["input_availability_timestamps"]):
             return invalid_missing()
         try:
-            d = parse_timestamp(inp["decision_timestamp"])
+            decision = parse_timestamp(inp["decision_timestamp"])
             inputs = [parse_timestamp(x) for x in inp["input_availability_timestamps"]]
         except (TypeError, ValueError, OverflowError):
             return invalid_schema()
-        if any(x > d for x in inputs):
+        if any(x > decision for x in inputs):
             return result("FAIL", errors=["MROS-S001-E007-CAUSAL_TIME_VIOLATION"], rules=["RC-008"])
 
     denominator_result = validate_denominator_semantics(inp)
@@ -329,21 +369,33 @@ def evaluate(case):
     return invalid_missing()
 
 
+def load_cases():
+    cases = []
+    for fixture_path in FIXTURE_FILES:
+        try:
+            payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"FIXTURE_LOAD_FAIL | {fixture_path.name} | {exc}")
+            raise SystemExit(2)
+        if not isinstance(payload, dict) or not isinstance(payload.get("cases"), list):
+            print(f"FIXTURE_SCHEMA_FAIL | {fixture_path.name}")
+            raise SystemExit(2)
+        cases.extend(payload["cases"])
+    ids = [case.get("case_id") for case in cases if isinstance(case, dict)]
+    if len(ids) != len(set(ids)):
+        print("FIXTURE_DUPLICATE_CASE_ID")
+        raise SystemExit(2)
+    return cases
+
+
 def main():
-    try:
-        payload = json.loads(FIXTURES.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"FIXTURE_LOAD_FAIL | {exc}")
-        raise SystemExit(2)
-    if not isinstance(payload, dict) or not isinstance(payload.get("cases"), list):
-        print("FIXTURE_SCHEMA_FAIL")
-        raise SystemExit(2)
+    cases = load_cases()
     total = passed = 0
-    for case in payload["cases"]:
+    for case in cases:
         total += 1
         try:
             actual = evaluate(case)
-        except Exception as exc:  # defensive: no malformed fixture may masquerade as a controlled PASS
+        except Exception as exc:
             actual = result("INVALID_INPUT", errors=["MROS-S002-E021-INVALID_SCHEMA_TYPE"])
             print(f"CONTROLLED_EXCEPTION | {case.get('case_id','UNKNOWN')} | {type(exc).__name__}: {exc}")
         expected = case.get("expected")
