@@ -119,23 +119,23 @@ def test_validation_accepts_causal_prefix_v3_authority() -> None:
         recertified_motif_catalog(), causal_analogue_catalog(), "NIFTY"
     )
     assert lane["regime"] == "PRE_CAS"
+    assert lane["unopened_sessions"] == ["2024-01-03"]
 
 
 def test_first_qualifying_prefix_wins_even_when_later_match_is_closer() -> None:
     session = session_frame()
     calibration, first_distance, second_distance = calibration_that_qualifies_first_and_second(session)
     assert second_distance < first_distance
-    result = MODULE.first_qualifying_prefix_index(
+    start, distance = MODULE.first_qualifying_prefix_index(
         session,
         calibration,
         full_window_points=4,
         cadence_minutes=5.0,
         future_points=2,
     )
-    assert result is not None
-    start, distance = result
     assert start == 0
     assert distance == pytest.approx(first_distance)
+    assert distance > second_distance
 
 
 def test_future_suffix_mutation_does_not_change_first_trigger() -> None:
@@ -149,7 +149,6 @@ def test_future_suffix_mutation_does_not_change_first_trigger() -> None:
     changed = MODULE.first_qualifying_prefix_index(
         mutated, calibration, 4, 5.0, 2
     )
-    assert original is not None and changed is not None
     assert original[0] == changed[0] == 0
     assert original[1] == pytest.approx(changed[1])
 
