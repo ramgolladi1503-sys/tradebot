@@ -11,28 +11,38 @@ active_sprint: S002
 last_completed_sprint: S001
 last_verified_commit: "834843ae2bc3222de52e0621455fbe0c763d9519"
 program_status: ACTIVE
-active_sprint_status: NATIVE_VALIDATION_PASS_INDEPENDENT_RE_REVIEW_REQUIRED
+active_sprint_status: REPAIR_ROUND_2_IMPLEMENTED_PENDING_NATIVE_VALIDATION
 
 s002_review:
-  reviewed_head: "ac3429b88709f313037c0f124fc1545e51d2b36c"
-  review_commit: "2852e9c06c9c2d5e2c9c43052b0935825842c614"
-  review_artifact: "research/evidence/sprints/S002/S002_INDEPENDENT_REVIEW.md"
-  review_verdict: S002_INDEPENDENT_REVIEW_REPAIR_REQUIRED
-  finding_counts:
+  first_review_commit: "2852e9c06c9c2d5e2c9c43052b0935825842c614"
+  first_review_verdict: S002_INDEPENDENT_REVIEW_REPAIR_REQUIRED
+  second_review_commit: "027a913e7f3908147c4db6a529665b0597724f45"
+  second_review_artifact: "research/evidence/sprints/S002/S002_INDEPENDENT_RE_REVIEW.md"
+  second_review_verdict: S002_INDEPENDENT_RE_REVIEW_REPAIR_REQUIRED
+  second_review_findings:
     MINOR: 0
     MAJOR: 5
     CRITICAL: 0
     UNKNOWN: 0
 
 s002_repair:
-  final_repaired_head: "834843ae2bc3222de52e0621455fbe0c763d9519"
-  fixture_schema_version: "mros-s002-fixtures-v3"
-  required_case_count: 39
-  native_validation: PASS
-  native_validation_evidence: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_OUTPUT.txt"
-  native_validation_result: "39/39_PASS_EXIT_0_PYTHON_3.12.2"
-  native_validation_source: "operator-supplied genuine local Git worktree terminal capture"
-  independent_re_review: REQUIRED_FOR_EXACT_HEAD_834843ae2bc3222de52e0621455fbe0c763d9519
+  prior_native_validated_head: "834843ae2bc3222de52e0621455fbe0c763d9519"
+  prior_native_validation_result: "39/39_PASS_EXIT_0_PYTHON_3.12.2"
+  prior_native_validation_authority: HISTORICAL_FOR_PRE_REPAIR_HEAD_ONLY
+  round_2_validator_repair_commit: "c9307ae28d3697f8f2100bcc0eb9f30dcf2cfaee"
+  round_2_fixture_commit: "76c5f42234163d3dd079a0e89601e4298202f318"
+  round_2_evidence_commit: "e816bec5f4c3694e90e0c69f1068f70a09b79ef4"
+  fixture_schema_version: "mros-s002-fixtures-v4"
+  required_case_count: 53
+  native_validation: PENDING_FOR_ROUND_2_FINAL_HEAD
+  independent_re_review: PENDING_AFTER_NATIVE_VALIDATION
+
+review_board:
+  status: IMPLEMENTED_NOT_CALIBRATED
+  authority: Research / R
+  may_certify_s002: false
+  may_certify_itself: false
+  normal_authority_begins_no_earlier_than: S003_AFTER_BOOTSTRAP_CALIBRATION_AND_INDEPENDENT_REVIEW
 
 milestone_status:
   M1: ACTIVE
@@ -74,7 +84,9 @@ work_package_status:
 next_action:
   sprint: S002
   work_package: WP001
-  objective: "Obtain a genuinely independent re-review of exact native-validated HEAD 834843ae2bc3222de52e0621455fbe0c763d9519. If PASS or PASS_WITH_MINOR_FINDINGS with no blocking findings, seal S002 acceptance and activate S003. Do not allow the bootstrap Review Board to certify S002 or itself."
+  objective: "Run native exact-checkout validation of the canonical 53-case S002 v4 fixture suite on the latest round-2 repair head, preserve exact HEAD/Python/command/output/exit code, then obtain a fresh independent re-review from a session that did not implement or direct this repair. Do not start S003 before both gates close."
+  required_native_validator: "scripts/mros/validate_s002_fixtures.py"
+  required_expected_case_count: 53
   required_external_role: "independent reviewer/session distinct from S002 implementation/repair and Review Board bootstrap implementation"
 
 execution_policy:
