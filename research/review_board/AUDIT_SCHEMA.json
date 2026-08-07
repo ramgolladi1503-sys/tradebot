@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mros-audit-schema-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_id","sprint","round","candidate_head","role","independent_from_implementation","independent_from_review_aggregation","verdict","findings","critical","major","minor","unknown","evidence_refs","audited_review_round","audited_native_validation","audited_acceptance_criteria","audit_scope"],
+  "properties": {
+    "artifact_id": {"type":"string","minLength":1},
+    "sprint": {"type":"string","pattern":"^S[0-9]{3}$"},
+    "round": {"type":"string","pattern":"^A[0-9]{3}$"},
+    "candidate_head": {"type":"string","pattern":"^[0-9a-f]{40}$"},
+    "role": {"enum":["evidence_chain","review_independence","acceptance_criteria","regression","program_state","scope_no_drift","scientific_integrity","reproducibility","authority","adversarial_acceptance","artifact_completeness","historical_supersession","ci_validation","calibration","runtime_contamination","critical_adjudicator"]},
+    "independent_from_implementation": {"type":"boolean"},
+    "independent_from_review_aggregation": {"type":"boolean"},
+    "verdict": {"enum":["PASS","PASS_WITH_MINOR_FINDINGS","REPAIR_REQUIRED","FAIL","UNKNOWN","INVALID_AUDIT"]},
+    "findings": {"type":"array","items":{"$ref":"#/$defs/finding"}},
+    "critical":{"type":"integer","minimum":0},
+    "major":{"type":"integer","minimum":0},
+    "minor":{"type":"integer","minimum":0},
+    "unknown":{"type":"integer","minimum":0},
+    "evidence_refs":{"type":"array","items":{"type":"string","minLength":1}},
+    "audited_review_round":{"type":"string","pattern":"^R[0-9]{3}$"},
+    "audited_native_validation":{"type":"string","minLength":1},
+    "audited_acceptance_criteria":{"type":"array","items":{"type":"string","minLength":1}},
+    "audit_scope":{"type":"array","minItems":1,"items":{"type":"string","minLength":1}}
+  },
+  "$defs": {
+    "finding": {
+      "type":"object",
+      "additionalProperties":false,
+      "required":["finding_id","severity","requirement","evidence","falsifier","recommended_repair_scope"],
+      "properties": {
+        "finding_id":{"type":"string","minLength":1},
+        "severity":{"enum":["CRITICAL","MAJOR","MINOR","UNKNOWN"]},
+        "requirement":{"type":"string","minLength":1},
+        "evidence":{"type":"string","minLength":1},
+        "falsifier":{"type":"string","minLength":1},
+        "recommended_repair_scope":{"type":"string","minLength":1}
+      }
+    }
+  }
+}
