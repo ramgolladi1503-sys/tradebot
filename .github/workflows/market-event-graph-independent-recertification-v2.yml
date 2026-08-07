@@ -8,9 +8,11 @@ on:
       - 'scripts/run_market_event_graph_independent_recertification_v2.py'
       - 'scripts/run_market_event_graph_independent_recertification_v2_regime_safe.py'
       - 'scripts/run_market_event_graph_prospective_lockbox_v1.py'
+      - 'scripts/extract_market_event_graph_governed_session_v1.py'
       - 'tests/test_market_event_graph_independent_recertification_v2.py'
       - 'tests/test_market_event_graph_independent_regime_guard_v2.py'
       - 'tests/test_market_event_graph_prospective_lockbox_v1.py'
+      - 'tests/test_market_event_graph_governed_session_extractor_v1.py'
       - 'research/market_event_graph_independent_recertification_v2/**'
       - '.github/workflows/market-event-graph-independent-recertification-v2.yml'
   pull_request:
@@ -18,9 +20,11 @@ on:
       - 'scripts/run_market_event_graph_independent_recertification_v2.py'
       - 'scripts/run_market_event_graph_independent_recertification_v2_regime_safe.py'
       - 'scripts/run_market_event_graph_prospective_lockbox_v1.py'
+      - 'scripts/extract_market_event_graph_governed_session_v1.py'
       - 'tests/test_market_event_graph_independent_recertification_v2.py'
       - 'tests/test_market_event_graph_independent_regime_guard_v2.py'
       - 'tests/test_market_event_graph_prospective_lockbox_v1.py'
+      - 'tests/test_market_event_graph_governed_session_extractor_v1.py'
       - 'research/market_event_graph_independent_recertification_v2/**'
       - '.github/workflows/market-event-graph-independent-recertification-v2.yml'
   workflow_dispatch:
@@ -58,6 +62,7 @@ jobs:
             tests/test_market_event_graph_independent_recertification_v2.py \
             tests/test_market_event_graph_independent_regime_guard_v2.py \
             tests/test_market_event_graph_prospective_lockbox_v1.py \
+            tests/test_market_event_graph_governed_session_extractor_v1.py \
             tests/test_observation_first_pattern_atlas_full_certification_v1.py \
             tests/test_observation_first_pattern_atlas_full_certification_v2.py
 
