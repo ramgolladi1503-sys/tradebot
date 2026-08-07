@@ -112,7 +112,9 @@ def test_complete_five_minute_session_passes_native_coverage() -> None:
         minimum_native_coverage=0.90,
         maximum_staleness_multiple=1.25,
     )
-    assert len(accepted) == 1
+    assert [item["session_date"] for item in accepted] == ["2025-01-02"]
+    assert accepted[0]["quality"]["native_bar_coverage"] >= 0.90
+    assert accepted[0]["quality"]["staleness_multiple"] <= 1.25
     assert rejected == []
 
 
@@ -130,4 +132,5 @@ def test_missing_native_bars_fail_quality_gate() -> None:
         maximum_staleness_multiple=1.25,
     )
     assert accepted == []
+    assert rejected[0]["session_date"] == "2025-01-02"
     assert "native_gap_exceeds_threshold" in rejected[0]["reasons"]
