@@ -172,6 +172,8 @@ _NIFTY_MODE_LIFECYCLE_SEQUENCE = 0
 _NIFTY_MODE_LIFECYCLE_LOCK = threading.Lock()
 _FIRST_LIVE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_SUBSCRIPTION_REQUEST_ID_BY_TOKEN: dict[int, str] = {}
+_FIRST_POST_REQUEST_TICK_ID_BY_TOKEN: dict[int, str] = {}
 _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
@@ -391,6 +393,10 @@ def _record_subscription_request_succeeded(tokens: Sequence[int]) -> None:
             _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
             _FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN.pop(token, None)
             _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN[token] = int(_NIFTY_MODE_LIFECYCLE_SEQUENCE)
+            identity = get_current_feed_session_identity()
+            request_sequence = _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN[token]
+            _SUBSCRIPTION_REQUEST_ID_BY_TOKEN[token] = f"{identity['feed_session_id']}:{identity['reconnect_generation']}:{request_sequence}:{token}"
+            _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.pop(token, None)
             if token in _MODE_COMMAND_FINAL_FULL_TOKENS:
                 _MODE_COMMAND_FINAL_FULL_TOKENS.discard(token)
         _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = epoch
@@ -527,6 +533,8 @@ def _reset_market_event_graph_generation_evidence() -> None:
     _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.clear()
     _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.clear()
     _FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN.clear()
+    _SUBSCRIPTION_REQUEST_ID_BY_TOKEN.clear()
+    _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.clear()
     _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.clear()
     _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
     _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
@@ -601,6 +609,10 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             # Compatibility aliases. These are receipt-time fields, not broker-source timestamps.
             "first_live_tick_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
             "first_post_request_tick_epoch": _FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "request_id": _SUBSCRIPTION_REQUEST_ID_BY_TOKEN.get(token_int),
+            "request_generation": _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN.get(token_int),
+            "first_post_request_tick_id": _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.get(token_int),
+            "selected_post_request_tick_id": _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.get(token_int),
             "latest_live_tick_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
             "first_full_payload_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
             "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
@@ -1610,6 +1622,8 @@ _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
 _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_LIVE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_SUBSCRIPTION_REQUEST_ID_BY_TOKEN: dict[int, str] = {}
+_FIRST_POST_REQUEST_TICK_ID_BY_TOKEN: dict[int, str] = {}
 _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
@@ -1748,6 +1762,10 @@ def _record_subscription_request_succeeded(tokens: Sequence[int]) -> None:
             _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN[token] = epoch
             _FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN.pop(token, None)
             _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN[token] = int(_NIFTY_MODE_LIFECYCLE_SEQUENCE)
+            identity = get_current_feed_session_identity()
+            request_sequence = _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN[token]
+            _SUBSCRIPTION_REQUEST_ID_BY_TOKEN[token] = f"{identity['feed_session_id']}:{identity['reconnect_generation']}:{request_sequence}:{token}"
+            _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.pop(token, None)
             if token in _MODE_COMMAND_FINAL_FULL_TOKENS:
                 _MODE_COMMAND_FINAL_FULL_TOKENS.discard(token)
         _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = epoch
@@ -1809,6 +1827,8 @@ def _reset_market_event_graph_generation_evidence() -> None:
     _LATEST_MODE_COMMAND_BY_TOKEN.clear()
     _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.clear()
     _FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN.clear()
+    _SUBSCRIPTION_REQUEST_ID_BY_TOKEN.clear()
+    _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.clear()
     _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.clear()
     _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
     _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.clear()
@@ -1889,6 +1909,10 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             # Compatibility aliases. These are receipt-time fields, not broker-source timestamps.
             "first_live_tick_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
             "first_post_request_tick_epoch": _FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "request_id": _SUBSCRIPTION_REQUEST_ID_BY_TOKEN.get(token_int),
+            "request_generation": _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN.get(token_int),
+            "first_post_request_tick_id": _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.get(token_int),
+            "selected_post_request_tick_id": _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.get(token_int),
             "latest_live_tick_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
             "first_full_payload_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
             "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
@@ -6418,6 +6442,11 @@ def on_ticks(ws, ticks):
             request_success_epoch = _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(int(token_int))
             if request_success_epoch is not None and float(now_epoch) >= float(request_success_epoch):
                 _FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN.setdefault(int(token_int), float(now_epoch))
+                request_id = _SUBSCRIPTION_REQUEST_ID_BY_TOKEN.get(int(token_int))
+                if request_id is not None:
+                    identity = get_current_feed_session_identity()
+                    tick_id = f"{identity['feed_session_id']}:{identity['reconnect_generation']}:{_FEED_ON_TICKS_ROW_SEQ}:{token_int}"
+                    _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.setdefault(int(token_int), tick_id)
             if payload_tick_epoch is not None:
                 _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.setdefault(int(token_int), float(payload_tick_epoch))
         observation_identity = (
