@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 import numpy as np
+import pytest
 
 MODULE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -20,7 +21,7 @@ SPEC.loader.exec_module(MODULE)
 
 def test_bh_qvalues_preserve_original_order_and_bounds() -> None:
     q = MODULE.bh_qvalues([0.01, 0.20, 0.03])
-    assert len(q) == 3
+    assert q == pytest.approx([0.03, 0.20, 0.045])
     assert all(0.0 <= value <= 1.0 for value in q)
     assert q[0] <= q[2] <= q[1]
 
@@ -76,6 +77,7 @@ def test_structural_screen_can_pass_strong_fixed_evidence() -> None:
     }
     result = MODULE.structural_screen({"records": [record]})
     assert result["survivor_count"] == 1
+    assert result["survivor_hypothesis_ids"] == ["H1"]
 
 
 def test_structural_screen_rejects_small_replication() -> None:
@@ -102,6 +104,7 @@ def test_structural_screen_rejects_small_replication() -> None:
     }
     result = MODULE.structural_screen({"records": [record]})
     assert result["survivor_count"] == 0
+    assert result["survivor_hypothesis_ids"] == []
 
 
 def test_strategy_construction_excludes_sub_10_minute_horizon() -> None:
