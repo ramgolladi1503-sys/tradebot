@@ -1,0 +1,44 @@
+MROS S002 NATIVE VALIDATION OUTPUT
+
+Evidence source: operator-supplied terminal capture from a genuine local Git worktree.
+This ChatGPT session did NOT execute the native validator and does NOT claim independent execution provenance beyond the captured terminal evidence.
+
+Repository: /Users/madhuram/.mros-review/s002-native
+Branch source: origin/research/mros-program-v1
+Execution mode: detached exact-head checkout
+HEAD: 834843ae2bc3222de52e0621455fbe0c763d9519
+Python: 3.12.2
+Command: python3 scripts/mros/validate_s002_fixtures.py
+
+Observed terminal summary:
+SUMMARY | checks=39 pass=39 fail=0
+S002_TARGETED_VALIDATION_PASS
+EXIT_CODE=0
+
+The captured run also showed all cases S002-C001 through S002-C039 as PASS, including the repaired coverage for:
+- missing required fields;
+- invalid authority grade;
+- independent-attack requirement;
+- calibration requirement;
+- evidence-provenance requirement;
+- invalid knowledge-class/verdict/status enums;
+- causal-time violation;
+- denominator laundering and post-hoc exclusions;
+- runtime authority violation;
+- non-falsifiable claims;
+- unsupported completion claims;
+- silent supersession;
+- scope drift;
+- grade-derived promotion requirements;
+- Rejected/Unknown promotion-stage handling;
+- provenance requirements for OBSERVED_FACT / INFERENCE;
+- legitimate preregistered denominator exclusions;
+- separated exploratory post-hoc analysis semantics.
+
+Evidence interpretation:
+- Native implementation-side validation for exact HEAD 834843ae2bc3222de52e0621455fbe0c763d9519: PASS.
+- This artifact does NOT satisfy the mandatory independent-review gate.
+- This artifact does NOT accept S002.
+- S003 remains NOT_STARTED until independent re-review of this exact validated HEAD passes.
+- Runtime authority remains NONE.
+- M9 remains NOT_STARTED.
