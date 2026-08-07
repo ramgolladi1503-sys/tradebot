@@ -1,0 +1,43 @@
+name: MROS Review Board Gate
+on:
+  workflow_dispatch:
+    inputs:
+      sprint:
+        description: Sprint ID
+        required: true
+        type: string
+      candidate_sha:
+        description: Immutable candidate commit SHA
+        required: true
+        type: string
+      review_round:
+        description: Review round, e.g. R001
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  pinned-review-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          persist-credentials: false
+      - name: Verify exact HEAD
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ inputs.candidate_sha }}"
+      - name: Verify M9 and runtime bootstrap boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'M9: NOT_STARTED' research/program/MROS_PROGRAM_STATE.yaml
+          grep -q 'runtime_authority: NONE' research/program/MROS_PROGRAM_STATE.yaml
+      - name: Review-board bootstrap notice
+        run: |
+          echo "This lightweight workflow pins and verifies the candidate only."
+          echo "It does not manufacture AI reviewer independence and does not certify S002."
+          echo "Reviewer artifacts and exact-head native evidence must be supplied and validated separately."
