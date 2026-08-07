@@ -110,9 +110,13 @@ def test_matched_pairs_use_prefix_geometry_and_different_sessions() -> None:
         completion_rows=np.asarray([0, 2]),
         divergence_rows=np.asarray([1]),
     )
-    assert len(pairs) == 1
-    assert pairs[0]["divergence_session_date"] == "2024-01-02"
-    assert pairs[0]["completion_session_date"] == "2024-01-01"
+    assert [
+        (item["divergence_session_date"], item["completion_session_date"])
+        for item in pairs
+    ] == [("2024-01-02", "2024-01-01")]
+    assert pairs[0]["divergence_start_timestamp"] == "2024-01-02T10:01:00+05:30"
+    assert pairs[0]["completion_start_timestamp"] == "2024-01-01T10:00:00+05:30"
+    assert pairs[0]["prefix_match_distance"] < 0.1
 
 
 def test_distance_is_dimension_normalized() -> None:
