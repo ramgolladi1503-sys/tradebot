@@ -1,0 +1,18 @@
+schema_version: mros-review-board-calibration-v1
+status: SPECIFIED_NOT_EXECUTED
+authority: Research / R
+cases:
+  - {id: RB-CAL-001, defect: future_data_leakage, expected: REPAIR_REQUIRED}
+  - {id: RB-CAL-002, defect: authority_stage_skip, expected: REPAIR_REQUIRED}
+  - {id: RB-CAL-003, defect: evidence_free_promotion, expected: REPAIR_REQUIRED}
+  - {id: RB-CAL-004, defect: denominator_laundering, expected: REPAIR_REQUIRED}
+  - {id: RB-CAL-005, defect: runtime_authority_creation, expected: REPAIR_REQUIRED}
+  - {id: RB-CAL-006, defect: none_clean_contract_compliant, expected: PASS}
+metrics:
+  - known_bad_detection_rate
+  - false_acceptance
+  - known_good_acceptance
+  - false_rejection
+  - reviewer_disagreement
+  - aggregator_correctness
+claim_rule: "Do not claim calibrated or authoritative until executed evidence demonstrates applicable operating characteristics and independent bootstrap review accepts the board."
