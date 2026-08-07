@@ -21,18 +21,8 @@ LEGAL_PROMOTIONS = {
 }
 STRONG_GRADE_REQUIREMENTS = {
     "Grade B": ("independent_attack_ref", "calibration_ref"),
-    "Grade A": (
-        "independent_attack_ref",
-        "calibration_ref",
-        "scientific_certification_ref",
-        "economic_certification_ref",
-    ),
-    "Grade A+": (
-        "independent_attack_ref",
-        "calibration_ref",
-        "live_forward_evidence_ref",
-        "monitoring_ref",
-    ),
+    "Grade A": ("independent_attack_ref", "calibration_ref", "scientific_certification_ref", "economic_certification_ref"),
+    "Grade A+": ("independent_attack_ref", "calibration_ref", "live_forward_evidence_ref", "monitoring_ref"),
 }
 KNOWLEDGE_CLASSES = {"OBSERVED_FACT", "INFERENCE", "HYPOTHESIS", "SPECULATION"}
 VERDICTS = {"SUPPORTED", "REJECTED", "UNKNOWN", "INSUFFICIENT_EVIDENCE"}
@@ -48,25 +38,20 @@ DENOMINATOR_CONTRACT_FIELDS = {
     "dates_ref",
     "search_family_id",
 }
-CONSTITUTIONAL_KEYS = {
-    "decision_timestamp",
-    "input_availability_timestamps",
+DENOMINATOR_TRIGGER_KEYS = {
     "confirmatory",
     "experiment_contract_ref",
     "frozen_denominator_contract",
     "current_denominator_contract",
     "outcomes_inspected",
     "analysis_mode",
-    "runtime_context",
-    "runtime_attempts_authority_promotion",
-    "material_claim",
-    "destroyers",
-    "completion_claim",
-    "completion_evidence_refs",
-    "supersedes",
-    "supersession_decision_ref",
-    "declared_scope",
-    "attempted_scope",
+}
+CONSTITUTIONAL_KEYS = {
+    "decision_timestamp", "input_availability_timestamps", "confirmatory", "experiment_contract_ref",
+    "frozen_denominator_contract", "current_denominator_contract", "outcomes_inspected", "analysis_mode",
+    "runtime_context", "runtime_attempts_authority_promotion", "material_claim", "destroyers",
+    "completion_claim", "completion_evidence_refs", "supersedes", "supersession_decision_ref",
+    "declared_scope", "attempted_scope",
 }
 
 _UNSET = object()
@@ -81,223 +66,189 @@ def result(status, *, knowledge_class=_UNSET, can_promote=None, errors=None, rul
     return out
 
 
+def nonempty_str(value):
+    return isinstance(value, str) and bool(value.strip())
+
+
+def nonempty_str_list(value):
+    return isinstance(value, list) and bool(value) and all(nonempty_str(x) for x in value)
+
+
+def is_bool(value):
+    return type(value) is bool
+
+
 def missing_required(inp, *fields):
-    return [
-        field
-        for field in fields
-        if field not in inp or inp[field] is None or inp[field] == "" or inp[field] == []
-    ]
+    return [field for field in fields if field not in inp or inp[field] is None or inp[field] == "" or inp[field] == []]
 
 
 def invalid_missing(*, knowledge_class=_UNSET, can_promote=None):
-    return result(
-        "INVALID_INPUT",
-        knowledge_class=knowledge_class,
-        can_promote=can_promote,
-        errors=["MROS-S001-E001-MISSING_REQUIRED_FIELD"],
-    )
+    return result("INVALID_INPUT", knowledge_class=knowledge_class, can_promote=can_promote,
+                  errors=["MROS-S001-E001-MISSING_REQUIRED_FIELD"])
+
+
+def invalid_schema(*, knowledge_class=_UNSET, can_promote=None):
+    return result("INVALID_INPUT", knowledge_class=knowledge_class, can_promote=can_promote,
+                  errors=["MROS-S002-E021-INVALID_SCHEMA_TYPE"])
 
 
 def classify(inp):
+    if not isinstance(inp, dict):
+        return invalid_schema(knowledge_class=None)
     if missing_required(inp, "statement_text", "classification_signals"):
         return invalid_missing(knowledge_class=None)
+    if not nonempty_str(inp["statement_text"]) or not nonempty_str_list(inp["classification_signals"]):
+        return invalid_schema(knowledge_class=None)
 
-    sig = set(inp.get("classification_signals", []))
     mapping = {
         "DIRECT_MEASUREMENT": "OBSERVED_FACT",
         "DERIVED_REASONING": "INFERENCE",
         "FALSIFIABLE_UNVERIFIED": "HYPOTHESIS",
         "UNSUPPORTED_CONJECTURE": "SPECULATION",
     }
+    sig = set(inp["classification_signals"])
     classes = {mapping[x] for x in sig if x in mapping}
-
     if len(classes) != 1:
-        return result(
-            "REVIEW_REQUIRED",
-            knowledge_class=None,
-            errors=["MROS-S001-E002-AMBIGUOUS_KNOWLEDGE_CLASS"],
-        )
+        return result("REVIEW_REQUIRED", knowledge_class=None,
+                      errors=["MROS-S001-E002-AMBIGUOUS_KNOWLEDGE_CLASS"])
 
     knowledge_class = next(iter(classes))
-    if knowledge_class in {"OBSERVED_FACT", "INFERENCE"} and not inp.get("evidence_refs"):
-        return result(
-            "INVALID_INPUT",
-            knowledge_class=None,
-            errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"],
-        )
-
+    if knowledge_class in {"OBSERVED_FACT", "INFERENCE"}:
+        if not nonempty_str_list(inp.get("evidence_refs")):
+            return result("INVALID_INPUT", knowledge_class=None,
+                          errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
     return result("PASS", knowledge_class=knowledge_class)
 
 
 def promotion(inp):
+    if not isinstance(inp, dict):
+        return invalid_schema(can_promote=False)
     if missing_required(inp, "authority_current", "authority_requested"):
         return invalid_missing(can_promote=False)
 
-    cur, req = inp.get("authority_current"), inp.get("authority_requested")
-
-    if (cur and OBSOLETE.match(cur)) or (req and OBSOLETE.match(req)):
-        return result(
-            "INVALID_INPUT",
-            can_promote=False,
-            errors=["MROS-S001-E017-OBSOLETE_AUTHORITY_SCALE"],
-        )
-
+    cur, req = inp["authority_current"], inp["authority_requested"]
+    if not isinstance(cur, str) or not isinstance(req, str):
+        return invalid_schema(can_promote=False)
+    if OBSOLETE.match(cur) or OBSOLETE.match(req):
+        return result("INVALID_INPUT", can_promote=False,
+                      errors=["MROS-S001-E017-OBSOLETE_AUTHORITY_SCALE"])
     if cur not in AUTH or req not in AUTH:
-        return result(
-            "INVALID_INPUT",
-            can_promote=False,
-            errors=["MROS-S001-E003-INVALID_AUTHORITY_GRADE"],
-        )
+        return result("INVALID_INPUT", can_promote=False,
+                      errors=["MROS-S001-E003-INVALID_AUTHORITY_GRADE"])
 
-    if not inp.get("new_evidence_refs"):
-        return result(
-            "FAIL",
-            can_promote=False,
-            errors=["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"],
-            rules=["RC-002"],
-        )
-
-    if inp.get("evidence_provenance_complete") is False:
-        return result(
-            "INVALID_INPUT",
-            can_promote=False,
-            errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"],
-        )
+    new_refs = inp.get("new_evidence_refs")
+    if not nonempty_str_list(new_refs):
+        return result("FAIL", can_promote=False,
+                      errors=["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], rules=["RC-002"])
+    old_refs = inp.get("evidence_refs", [])
+    if old_refs is not None and not isinstance(old_refs, list):
+        return invalid_schema(can_promote=False)
+    if isinstance(old_refs, list) and any(not nonempty_str(x) for x in old_refs):
+        return invalid_schema(can_promote=False)
+    if set(old_refs or []).intersection(new_refs):
+        return result("FAIL", can_promote=False,
+                      errors=["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], rules=["RC-002"])
+    if inp.get("evidence_provenance_complete") is not True:
+        return result("INVALID_INPUT", can_promote=False,
+                      errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
 
     if req not in LEGAL_PROMOTIONS.get(cur, set()):
-        return result(
-            "FAIL",
-            can_promote=False,
-            errors=["MROS-S001-E004-AUTHORITY_STAGE_SKIP"],
-            rules=["RC-002"],
-        )
+        return result("FAIL", can_promote=False,
+                      errors=["MROS-S001-E004-AUTHORITY_STAGE_SKIP"], rules=["RC-002"])
 
-    if inp.get("requires_independent_attack") and not inp.get("independent_attack_ref"):
-        return result(
-            "REVIEW_REQUIRED",
-            can_promote=False,
-            errors=["MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED"],
-            rules=["RC-004"],
-        )
-
-    if inp.get("requires_calibration") and not inp.get("calibration_ref"):
-        return result(
-            "BLOCKED",
-            can_promote=False,
-            errors=["MROS-S001-E010-CALIBRATION_REQUIRED"],
-            rules=["RC-005"],
-        )
+    if inp.get("requires_independent_attack") is True and not nonempty_str(inp.get("independent_attack_ref")):
+        return result("REVIEW_REQUIRED", can_promote=False,
+                      errors=["MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED"], rules=["RC-004"])
+    if inp.get("requires_calibration") is True and not nonempty_str(inp.get("calibration_ref")):
+        return result("BLOCKED", can_promote=False,
+                      errors=["MROS-S001-E010-CALIBRATION_REQUIRED"], rules=["RC-005"])
 
     required_for_grade = STRONG_GRADE_REQUIREMENTS.get(req, ())
-    if "independent_attack_ref" in required_for_grade and not inp.get("independent_attack_ref"):
-        return result(
-            "REVIEW_REQUIRED",
-            can_promote=False,
-            errors=["MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED"],
-            rules=["RC-004"],
-        )
-    if "calibration_ref" in required_for_grade and not inp.get("calibration_ref"):
-        return result(
-            "BLOCKED",
-            can_promote=False,
-            errors=["MROS-S001-E010-CALIBRATION_REQUIRED"],
-            rules=["RC-005"],
-        )
-
-    other_required = tuple(
-        field for field in required_for_grade if field not in {"independent_attack_ref", "calibration_ref"}
-    )
-    if other_required and missing_required(inp, *other_required):
+    if "independent_attack_ref" in required_for_grade and not nonempty_str(inp.get("independent_attack_ref")):
+        return result("REVIEW_REQUIRED", can_promote=False,
+                      errors=["MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED"], rules=["RC-004"])
+    if "calibration_ref" in required_for_grade and not nonempty_str(inp.get("calibration_ref")):
+        return result("BLOCKED", can_promote=False,
+                      errors=["MROS-S001-E010-CALIBRATION_REQUIRED"], rules=["RC-005"])
+    other_required = tuple(field for field in required_for_grade if field not in {"independent_attack_ref", "calibration_ref"})
+    if other_required and any(not nonempty_str(inp.get(field)) for field in other_required):
         return invalid_missing(can_promote=False)
-
     return result("PASS", can_promote=True)
 
 
 def validate_enums(inp):
+    if not isinstance(inp, dict):
+        return invalid_schema()
     if "knowledge_class" in inp and inp["knowledge_class"] not in KNOWLEDGE_CLASSES:
-        return result(
-            "INVALID_INPUT",
-            errors=["MROS-S002-E018-INVALID_KNOWLEDGE_CLASS_ENUM"],
-        )
+        return result("INVALID_INPUT", errors=["MROS-S002-E018-INVALID_KNOWLEDGE_CLASS_ENUM"])
     if "verdict" in inp and inp["verdict"] not in VERDICTS:
-        return result(
-            "INVALID_INPUT",
-            errors=["MROS-S002-E019-INVALID_VERDICT_ENUM"],
-        )
+        return result("INVALID_INPUT", errors=["MROS-S002-E019-INVALID_VERDICT_ENUM"])
     if "status" in inp and inp["status"] not in STATUSES:
-        return result(
-            "INVALID_INPUT",
-            errors=["MROS-S002-E020-INVALID_STATUS_ENUM"],
-        )
+        return result("INVALID_INPUT", errors=["MROS-S002-E020-INVALID_STATUS_ENUM"])
     return result("PASS")
 
 
 def denominator_contract_valid(contract):
-    return isinstance(contract, dict) and DENOMINATOR_CONTRACT_FIELDS.issubset(contract.keys())
+    if not isinstance(contract, dict) or not DENOMINATOR_CONTRACT_FIELDS.issubset(contract):
+        return False
+    if not all(nonempty_str(contract[k]) for k in ("denominator_definition", "population_identity", "horizon", "dates_ref", "search_family_id")):
+        return False
+    if not isinstance(contract["exclusion_rule_refs"], list) or any(not nonempty_str(x) for x in contract["exclusion_rule_refs"]):
+        return False
+    if not nonempty_str_list(contract["regimes"]) or not nonempty_str_list(contract["symbols"]):
+        return False
+    return True
 
 
 def validate_denominator_semantics(inp):
-    relevant = inp.get("confirmatory") is True or inp.get("analysis_mode") == "EXPLORATORY_POST_HOC"
-    if not relevant:
+    present = bool(set(inp).intersection(DENOMINATOR_TRIGGER_KEYS))
+    if not present:
         return None
 
-    required = (
-        "experiment_contract_ref",
-        "frozen_denominator_contract",
-        "current_denominator_contract",
-        "outcomes_inspected",
-    )
+    confirmatory = inp.get("confirmatory", _UNSET)
+    mode = inp.get("analysis_mode", _UNSET)
+    if confirmatory is not _UNSET and not is_bool(confirmatory):
+        return invalid_schema()
+    if mode is not _UNSET and mode != "EXPLORATORY_POST_HOC":
+        return invalid_schema()
+
+    if confirmatory is True and mode is not _UNSET:
+        return invalid_schema()
+    if confirmatory is not True and mode != "EXPLORATORY_POST_HOC":
+        return invalid_missing()
+
+    required = ("experiment_contract_ref", "frozen_denominator_contract", "current_denominator_contract", "outcomes_inspected")
     if missing_required(inp, *required):
         return invalid_missing()
+    if not nonempty_str(inp["experiment_contract_ref"]) or not is_bool(inp["outcomes_inspected"]):
+        return invalid_schema()
 
-    frozen = inp.get("frozen_denominator_contract")
-    current = inp.get("current_denominator_contract")
+    frozen, current = inp["frozen_denominator_contract"], inp["current_denominator_contract"]
     if not denominator_contract_valid(frozen) or not denominator_contract_valid(current):
-        return invalid_missing()
+        return invalid_schema()
 
     changed = frozen != current
-    outcomes_inspected = inp.get("outcomes_inspected") is True
-
-    if inp.get("confirmatory") is True:
+    outcomes_inspected = inp["outcomes_inspected"]
+    if confirmatory is True:
         if changed and outcomes_inspected:
-            return result(
-                "FAIL",
-                errors=[
-                    "MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION",
-                    "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED",
-                ],
-                rules=["RC-009"],
-            )
+            return result("FAIL", errors=["MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION", "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED"], rules=["RC-009"])
         return None
 
-    if inp.get("analysis_mode") == "EXPLORATORY_POST_HOC" and changed and outcomes_inspected:
-        exploratory_required = (
-            "new_analysis_identity",
-            "post_hoc_rationale",
-        )
-        if missing_required(inp, *exploratory_required):
-            return result(
-                "FAIL",
-                errors=[
-                    "MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION",
-                    "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED",
-                ],
-                rules=["RC-009"],
-            )
-        if not all(
-            inp.get(flag) is True
-            for flag in ("original_result_preserved", "multiplicity_accounted", "reduced_authority")
-        ):
-            return result(
-                "FAIL",
-                errors=[
-                    "MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION",
-                    "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED",
-                ],
-                rules=["RC-009"],
-            )
-
+    if mode == "EXPLORATORY_POST_HOC" and changed and outcomes_inspected:
+        if any(not nonempty_str(inp.get(f)) for f in ("new_analysis_identity", "post_hoc_rationale")):
+            return result("FAIL", errors=["MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION", "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED"], rules=["RC-009"])
+        if not all(inp.get(flag) is True for flag in ("original_result_preserved", "multiplicity_accounted", "reduced_authority")):
+            return result("FAIL", errors=["MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION", "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED"], rules=["RC-009"])
     return None
+
+
+def parse_timestamp(value):
+    if not nonempty_str(value):
+        raise ValueError("timestamp must be a non-empty string")
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("timestamp must be timezone-aware")
+    return parsed
 
 
 def constitutional(inp):
@@ -306,17 +257,16 @@ def constitutional(inp):
 
     if ("decision_timestamp" in inp) != ("input_availability_timestamps" in inp):
         return invalid_missing()
-    if inp.get("decision_timestamp") and inp.get("input_availability_timestamps"):
-        d = datetime.fromisoformat(inp["decision_timestamp"].replace("Z", "+00:00"))
-        if any(
-            datetime.fromisoformat(x.replace("Z", "+00:00")) > d
-            for x in inp["input_availability_timestamps"]
-        ):
-            return result(
-                "FAIL",
-                errors=["MROS-S001-E007-CAUSAL_TIME_VIOLATION"],
-                rules=["RC-008"],
-            )
+    if "decision_timestamp" in inp:
+        if not nonempty_str(inp["decision_timestamp"]) or not nonempty_str_list(inp["input_availability_timestamps"]):
+            return invalid_missing()
+        try:
+            d = parse_timestamp(inp["decision_timestamp"])
+            inputs = [parse_timestamp(x) for x in inp["input_availability_timestamps"]]
+        except (TypeError, ValueError, OverflowError):
+            return invalid_schema()
+        if any(x > d for x in inputs):
+            return result("FAIL", errors=["MROS-S001-E007-CAUSAL_TIME_VIOLATION"], rules=["RC-008"])
 
     denominator_result = validate_denominator_semantics(inp)
     if denominator_result is not None:
@@ -324,53 +274,49 @@ def constitutional(inp):
 
     if ("runtime_context" in inp) != ("runtime_attempts_authority_promotion" in inp):
         return invalid_missing()
-    if inp.get("runtime_context") and inp.get("runtime_attempts_authority_promotion"):
-        return result(
-            "FAIL",
-            errors=["MROS-S001-E011-RUNTIME_AUTHORITY_VIOLATION"],
-            rules=["RC-010"],
-        )
+    if "runtime_context" in inp:
+        if not is_bool(inp["runtime_context"]) or not is_bool(inp["runtime_attempts_authority_promotion"]):
+            return invalid_schema()
+        if inp["runtime_attempts_authority_promotion"] is True:
+            if inp["runtime_context"] is True:
+                return result("FAIL", errors=["MROS-S001-E011-RUNTIME_AUTHORITY_VIOLATION"], rules=["RC-010"])
+            return invalid_schema()
 
-    if inp.get("material_claim") and not inp.get("destroyers"):
-        return result(
-            "FAIL",
-            errors=["MROS-S001-E013-NON_FALSIFIABLE_CLAIM"],
-            rules=["RC-007"],
-        )
+    if "material_claim" in inp:
+        if not is_bool(inp["material_claim"]):
+            return invalid_schema()
+        if inp["material_claim"] is True and not nonempty_str_list(inp.get("destroyers")):
+            return result("FAIL", errors=["MROS-S001-E013-NON_FALSIFIABLE_CLAIM"], rules=["RC-007"])
 
-    if inp.get("completion_claim") and not inp.get("completion_evidence_refs"):
-        return result(
-            "FAIL",
-            errors=["MROS-S001-E016-UNSUPPORTED_COMPLETION_CLAIM"],
-        )
+    if "completion_claim" in inp:
+        if not is_bool(inp["completion_claim"]):
+            return invalid_schema()
+        if inp["completion_claim"] is True and not nonempty_str_list(inp.get("completion_evidence_refs")):
+            return result("FAIL", errors=["MROS-S001-E016-UNSUPPORTED_COMPLETION_CLAIM"])
 
-    if inp.get("supersedes") and not inp.get("supersession_decision_ref"):
-        return result(
-            "FAIL",
-            errors=["MROS-S001-E012-UNRECORDED_SUPERSESSION"],
-            rules=["RC-006"],
-        )
+    if "supersedes" in inp:
+        if not nonempty_str(inp["supersedes"]):
+            return invalid_missing()
+        if not nonempty_str(inp.get("supersession_decision_ref")):
+            return result("FAIL", errors=["MROS-S001-E012-UNRECORDED_SUPERSESSION"], rules=["RC-006"])
 
     if ("declared_scope" in inp) != ("attempted_scope" in inp):
         return invalid_missing()
-    if (
-        inp.get("declared_scope")
-        and inp.get("attempted_scope")
-        and inp["attempted_scope"] != inp["declared_scope"]
-    ):
-        return result(
-            "FAIL",
-            errors=["MROS-S001-E014-SCOPE_DRIFT"],
-            rules=["RC-001"],
-        )
+    if "declared_scope" in inp:
+        if not nonempty_str(inp["declared_scope"]) or not nonempty_str(inp["attempted_scope"]):
+            return invalid_missing()
+        if inp["attempted_scope"] != inp["declared_scope"]:
+            return result("FAIL", errors=["MROS-S001-E014-SCOPE_DRIFT"], rules=["RC-001"])
 
     return result("PASS")
 
 
 def evaluate(case):
+    if not isinstance(case, dict):
+        return invalid_schema()
     op = case.get("operation")
     inp = case.get("input", {})
-    if not op:
+    if not nonempty_str(op):
         return invalid_missing()
     if op == "CLASSIFY_STATEMENT":
         return classify(inp)
@@ -384,19 +330,26 @@ def evaluate(case):
 
 
 def main():
-    payload = json.loads(FIXTURES.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(FIXTURES.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"FIXTURE_LOAD_FAIL | {exc}")
+        raise SystemExit(2)
+    if not isinstance(payload, dict) or not isinstance(payload.get("cases"), list):
+        print("FIXTURE_SCHEMA_FAIL")
+        raise SystemExit(2)
     total = passed = 0
     for case in payload["cases"]:
         total += 1
-        actual = evaluate(case)
-        expected = case["expected"]
+        try:
+            actual = evaluate(case)
+        except Exception as exc:  # defensive: no malformed fixture may masquerade as a controlled PASS
+            actual = result("INVALID_INPUT", errors=["MROS-S002-E021-INVALID_SCHEMA_TYPE"])
+            print(f"CONTROLLED_EXCEPTION | {case.get('case_id','UNKNOWN')} | {type(exc).__name__}: {exc}")
+        expected = case.get("expected")
         ok = actual == expected
         passed += int(ok)
-        print(
-            f"{'PASS' if ok else 'FAIL'} | {case['case_id']} | "
-            f"expected={json.dumps(expected, sort_keys=True)} | "
-            f"actual={json.dumps(actual, sort_keys=True)}"
-        )
+        print(f"{'PASS' if ok else 'FAIL'} | {case.get('case_id','UNKNOWN')} | expected={json.dumps(expected, sort_keys=True)} | actual={json.dumps(actual, sort_keys=True)}")
     print(f"SUMMARY | checks={total} pass={passed} fail={total-passed}")
     if passed != total:
         raise SystemExit(1)
