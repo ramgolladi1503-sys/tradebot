@@ -1,5 +1,9 @@
 name: tradingview-public-library-benchmark-v1
 
+concurrency:
+  group: tradingview-public-library-benchmark-v1-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   push:
@@ -60,6 +64,7 @@ jobs:
             research/tradingview_public_library_benchmark_v1/guarded_runtime.py \
             research/tradingview_public_library_benchmark_v1/parameter_guard.py \
             research/tradingview_public_library_benchmark_v1/normalized_benchmark.py \
+            research/tradingview_public_library_benchmark_v1/performance_guard.py \
             scripts/run_tradingview_public_library_benchmark_v1.py
           PYTHONPATH=. python -m pytest -q \
             tests/test_tradingview_public_library_benchmark_v1.py \
