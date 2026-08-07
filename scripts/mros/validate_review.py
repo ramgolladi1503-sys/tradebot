@@ -2,19 +2,24 @@
 from __future__ import annotations
 import argparse,json,re
 from pathlib import Path
-ROLES={'contract_compliance','negative_control','evidence_provenance','authority_promotion','causal_time','denominator_search_integrity','runtime_boundary','qa_verification','architecture_no_drift','adversarial_red_team','critical_adjudicator'}
+ROLES={'contract_compliance','negative_control','evidence_provenance','authority_promotion','causal_time','denominator_search_integrity','runtime_boundary','qa_verification','architecture_no_drift','adversarial_red_team','reproducibility','security_secrets','data_contract','statistical_semantics','adversarial_api','critical_adjudicator'}
 VERDICTS={'PASS','PASS_WITH_MINOR_FINDINGS','REPAIR_REQUIRED','FAIL','UNKNOWN','INVALID_REVIEW'}
 SEV={'CRITICAL','MAJOR','MINOR','UNKNOWN'}
 SHA=re.compile(r'^[0-9a-f]{40}$')
+REQ=['artifact_id','sprint','round','candidate_head','role','independent_from_implementation','independent_from_review_aggregation','verdict','findings','critical','major','minor','unknown','evidence_refs']
 def validate(d,head):
  e=[]
- for k in ['review_id','sprint','review_round','reviewed_head','reviewer_role','independent_from_implementation','verdict','findings','critical','major','minor','unknown']:
+ for k in REQ:
   if k not in d:e.append('MISSING:'+k)
- if d.get('reviewed_head')!=head:e.append('HEAD_MISMATCH')
- if not SHA.match(str(d.get('reviewed_head',''))):e.append('INVALID_HEAD')
- if d.get('independent_from_implementation') is not True:e.append('REVIEWER_INVALID_NOT_INDEPENDENT')
- if d.get('reviewer_role') not in ROLES:e.append('INVALID_ROLE')
+ if d.get('candidate_head')!=head:e.append('HEAD_MISMATCH')
+ if not SHA.match(str(d.get('candidate_head',''))):e.append('INVALID_HEAD')
+ if d.get('independent_from_implementation') is not True:e.append('REVIEWER_INVALID_NOT_INDEPENDENT_FROM_IMPLEMENTATION')
+ if d.get('independent_from_review_aggregation') is not True:e.append('REVIEWER_INVALID_NOT_INDEPENDENT_FROM_AGGREGATION')
+ if d.get('role') not in ROLES:e.append('INVALID_ROLE')
  if d.get('verdict') not in VERDICTS:e.append('INVALID_VERDICT')
+ if not re.match(r'^S[0-9]{3}$',str(d.get('sprint',''))):e.append('INVALID_SPRINT')
+ if not re.match(r'^R[0-9]{3}$',str(d.get('round',''))):e.append('INVALID_ROUND')
+ if not isinstance(d.get('evidence_refs'),list):e.append('INVALID_EVIDENCE_REFS')
  fs=d.get('findings',[])
  if not isinstance(fs,list):e.append('INVALID_FINDINGS');fs=[]
  counts={x:0 for x in SEV}
@@ -26,6 +31,9 @@ def validate(d,head):
   else:counts[f['severity']]+=1
  for sev,key in [('CRITICAL','critical'),('MAJOR','major'),('MINOR','minor'),('UNKNOWN','unknown')]:
   if d.get(key)!=counts[sev]:e.append('COUNT_MISMATCH:'+key)
+ if d.get('critical',0)>0 and d.get('verdict') in {'PASS','PASS_WITH_MINOR_FINDINGS'}:e.append('CRITICAL_CANNOT_PASS')
+ if d.get('major',0)>0 and d.get('verdict') in {'PASS','PASS_WITH_MINOR_FINDINGS'}:e.append('MAJOR_CANNOT_PASS')
+ if d.get('unknown',0)>0 and d.get('verdict')=='PASS':e.append('UNKNOWN_CANNOT_PLAIN_PASS')
  return e
 def main():
  p=argparse.ArgumentParser();p.add_argument('review');p.add_argument('--candidate-head',required=True);a=p.parse_args()
