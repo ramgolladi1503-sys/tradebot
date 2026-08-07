@@ -6,6 +6,7 @@ from pathlib import Path
 
 from research.autonomous_structural_edge_exhaustion_v1.common import stable_write
 from research.tradingview_public_library_benchmark_v1.normalized_benchmark import run_from_normalized
+from research.tradingview_public_library_benchmark_v1.parameter_guard import install as install_parameter_guard
 
 
 def main() -> int:
@@ -14,6 +15,9 @@ def main() -> int:
     p.add_argument("--normalized-aeron", required=True)
     p.add_argument("--output-root", required=True)
     args = p.parse_args()
+
+    # Freeze parameter interpretation before the market outcome engine is invoked.
+    install_parameter_guard()
 
     inventory = json.loads(Path(args.inventory).read_text())
     root = Path(args.output_root)
