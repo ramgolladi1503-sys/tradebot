@@ -50,7 +50,7 @@ jobs:
       - name: Install focused dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy pandas pyarrow scikit-learn pytest
+          python -m pip install numpy pandas scipy pyarrow scikit-learn pytest
 
       - name: Run focused governance tests
         run: |
@@ -59,8 +59,12 @@ jobs:
             tests/test_observation_first_pattern_atlas_deduplicate_inventory_v1.py \
             tests/test_observation_first_pattern_atlas_trajectory_v1.py \
             tests/test_observation_first_pattern_atlas_index_trajectory_v2.py \
+            tests/test_observation_first_pattern_atlas_external_index_trajectory_v3.py \
             tests/test_observation_first_pattern_atlas_archetypes_v1.py \
-            tests/test_observation_first_pattern_atlas_motifs_v1.py
+            tests/test_observation_first_pattern_atlas_motifs_v1.py \
+            tests/test_observation_first_pattern_atlas_analogues_v1.py \
+            tests/test_observation_first_pattern_atlas_motif_recertification_v2.py \
+            tests/test_observation_first_pattern_atlas_full_certification_v1.py
 
       - name: Inventory physical corpus
         run: |
@@ -90,17 +94,45 @@ jobs:
             --trajectory-vectors runtime/research/observation_first_pattern_atlas_v1/index_trajectory_v2/completed_session_vectors.json \
             --output-root runtime/research/observation_first_pattern_atlas_v1/index_archetypes_v2
 
-      - name: Freeze native-cadence NIFTY motifs
+      - name: Freeze legacy native-cadence motifs for superseded comparison
         run: |
           python scripts/run_observation_first_pattern_atlas_motifs_v1.py \
             --causal-trajectory runtime/research/observation_first_pattern_atlas_v1/index_trajectory_v2/causal_minute_trajectory.parquet \
             --instrument NIFTY \
             --output-root runtime/research/observation_first_pattern_atlas_v1/native_motifs_v1
 
+      - name: Recertify motifs on trajectory-accepted sessions only
+        run: |
+          python scripts/run_observation_first_pattern_atlas_motif_recertification_v2.py \
+            --source-file research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet \
+            --previous-motif-catalog runtime/research/observation_first_pattern_atlas_v1/native_motifs_v1/native_motif_catalog.json \
+            --output-root runtime/research/observation_first_pattern_atlas_v1/native_motifs_v2
+
+      - name: Freeze PRE-CAS matched geometric analogues from recertified motifs
+        run: |
+          python scripts/run_observation_first_pattern_atlas_analogues_v2.py \
+            --source-file research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet \
+            --motif-catalog runtime/research/observation_first_pattern_atlas_v1/native_motifs_v2/native_motif_catalog_v2.json \
+            --output-root runtime/research/observation_first_pattern_atlas_v1/matched_analogues_v2
+
+      - name: Execute Pattern Atlas stages 5 through 14
+        run: |
+          python scripts/run_observation_first_pattern_atlas_full_certification_v1.py \
+            --source-file research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet \
+            --motif-catalog runtime/research/observation_first_pattern_atlas_v1/native_motifs_v2/native_motif_catalog_v2.json \
+            --analogue-catalog runtime/research/observation_first_pattern_atlas_v1/matched_analogues_v2/matched_geometric_analogue_catalog.json \
+            --option-data-root runtime/strategy_validation \
+            --output-root runtime/research/observation_first_pattern_atlas_v1/full_certification_v1
+
+      - name: Remove large causal intermediate after downstream certification
+        if: always()
+        run: |
+          rm -f runtime/research/observation_first_pattern_atlas_v1/index_trajectory_v2/causal_minute_trajectory.parquet
+
       - name: Upload execution evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: observation-first-pattern-atlas-execution-v3
+          name: observation-first-pattern-atlas-full-certification-v4
           path: runtime/research/observation_first_pattern_atlas_v1/
           if-no-files-found: warn
