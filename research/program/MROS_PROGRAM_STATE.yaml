@@ -9,8 +9,9 @@ active_milestone: M1
 active_work_package: WP001
 active_sprint: S001
 last_completed_sprint: null
-last_verified_commit: "480475610ebf91c34f111c77fed6e6b7368e633b"
+last_verified_commit: "b74710c4791f2b293f8bdc5d43eb67a47d5d4c58"
 program_status: ACTIVE
+active_sprint_status: REVIEW_REQUIRED
 
 milestone_status:
   M1: ACTIVE
@@ -52,7 +53,8 @@ work_package_status:
 next_action:
   sprint: S001
   work_package: WP001
-  objective: "Freeze and verify the Research Constitution contract against the Enterprise Engineering Manual before implementation expansion."
+  objective: "Obtain an independent review/classification run against the frozen S001 Constitution contract; record the results and only then issue the S001 acceptance decision."
+  required_external_role: "independent reviewer/session distinct from the implementing agent"
 
 execution_policy:
   sprint_prs: false
@@ -65,6 +67,7 @@ execution_policy:
 
 stop_conditions:
   - HUMAN_AUTHORITY_DECISION_REQUIRED
+  - INDEPENDENT_REVIEW_REQUIRED
   - SEALED_DATA_BOUNDARY_REQUIRES_APPROVAL
   - CREDENTIAL_OR_PRIVATE_DATA_UNAVAILABLE
   - ARCHITECTURE_CHANGE_REQUIRES_DECISION
