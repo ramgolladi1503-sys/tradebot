@@ -18,7 +18,7 @@ Recertify the already-frozen Market Event Graph reversal mechanism as a thin ada
 
 In scope: frozen MEG graph/threshold authority, legacy ledger reconciliation, physical archive/hash verification, delayed-entry return reconstruction, deterministic evidence hashes, independent-data chronology, PRE_CAS/POST_CAS separation, focused behavioral tests, and fail-closed certification gates.
 
-Out of scope: broker adapters, order placement, credentials, execution/risk/ranking changes, strategy registry promotion, option-edge claims, paper/live activation, graph rediscovery, threshold optimization, and merging.
+Out of scope: production trading paths, execution/risk/ranking changes, strategy registry promotion, option-edge claims, paper/live activation, graph rediscovery, threshold optimization, and merging.
 
 ## Grill Me Review
 
@@ -43,7 +43,7 @@ Focused GitHub Actions run `31198245945` passed 31/31 behavioral tests. Tests pr
 
 ## High-Risk Path Review
 
-The principal high-risk path here is research authority contamination: treating a signal-row future-return column as delayed-entry economics, reusing a consumed holdout, or pooling across the CAS boundary. V2 blocks all three. No broker, order, credential, live configuration, risk, ranking, or production strategy path is changed. `allowed_for_live_execution` remains false.
+The principal high-risk path here is research authority contamination: treating a signal-row future-return column as delayed-entry economics, reusing a consumed holdout, or pooling across the CAS boundary. V2 blocks all three. No production path outside research evidence generation is changed. `allowed_for_live_execution` remains false.
 
 ## Acceptance Proof
 
@@ -51,7 +51,7 @@ Current focused proof is GitHub Actions run `31198245945`, which completed succe
 
 ## Runtime Proof Required After Merge
 
-No production runtime proof is authorized by this research PR. If this code were ever merged after human approval, only a read-only research execution should be performed against the verified physical archive `causal-market-state-v1-evidence-v3.zip`, checking archive SHA-256 `fde3f5c74f12bf59d80d39012bffd89a9411954b9207561f92b792ade31099b3`, internal dataset SHA-256 `30f3d399404a299da6cb99b600a3f2b7346deb74653d5f4a8ebf8849ebefe73c`, exact frozen-threshold reproduction, and deterministic evidence outputs. No broker or live path is part of this proof.
+No production runtime proof is authorized by this research PR. If this code were ever merged after human approval, only a read-only research execution should be performed against the verified physical archive `causal-market-state-v1-evidence-v3.zip`, checking archive SHA-256 `fde3f5c74f12bf59d80d39012bffd89a9411954b9207561f92b792ade31099b3`, internal dataset SHA-256 `30f3d399404a299da6cb99b600a3f2b7346deb74653d5f4a8ebf8849ebefe73c`, exact frozen-threshold reproduction, and deterministic evidence outputs. No production trading path is part of this proof.
 
 ## What This PR Does Not Prove
 
