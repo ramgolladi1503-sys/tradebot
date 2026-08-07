@@ -1,3 +1,5 @@
 # Ignore mock hash leaks from docs
 501e4ca0714a5432f001f11a2da51ba7155b0242:docs/agent_handoffs/feed-websocket-reconnect-antigravity.md:generic-api-key:78
 4b6917e5b5ae618c6cc52f0a31168f4f70ef99e9:docs/agent_reviews/feed_async_descriptor_control_audit.md:generic-api-key:146
+# Deleted documentation wording from draft PR #805; exact historical fingerprint only.
+bfb87631a3c24dd643bb2dc0423911b2ba159598:docs/agent_reviews/market-event-graph-independent-recertification-v2.md:generic-api-key:21
