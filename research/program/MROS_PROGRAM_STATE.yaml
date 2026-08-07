@@ -1,0 +1,77 @@
+program: MROS
+program_version: "1.0"
+manual_version: "1.0"
+manual_sha256: "53350c3f60f2046180726077b0c18fb52222d6826d4d6e10fc746a46ab80cb39"
+integration_branch: research/mros-program-v1
+repository_authority: true
+
+active_milestone: M1
+active_work_package: WP001
+active_sprint: S001
+last_completed_sprint: null
+last_verified_commit: "480475610ebf91c34f111c77fed6e6b7368e633b"
+program_status: ACTIVE
+
+milestone_status:
+  M1: ACTIVE
+  M2: NOT_STARTED
+  M3: NOT_STARTED
+  M4: NOT_STARTED
+  M5: NOT_STARTED
+  M6: NOT_STARTED
+  M7: NOT_STARTED
+  M8: NOT_STARTED
+  M9: NOT_STARTED
+
+work_package_status:
+  WP001: ACTIVE
+  WP002: NOT_STARTED
+  WP003: NOT_STARTED
+  WP004: NOT_STARTED
+  WP005: NOT_STARTED
+  WP006: NOT_STARTED
+  WP007: NOT_STARTED
+  WP008: NOT_STARTED
+  WP009: NOT_STARTED
+  WP010: NOT_STARTED
+  WP011: NOT_STARTED
+  WP012: NOT_STARTED
+  WP013: NOT_STARTED
+  WP014: NOT_STARTED
+  WP015: NOT_STARTED
+  WP016: NOT_STARTED
+  WP017: NOT_STARTED
+  WP018: NOT_STARTED
+  WP019: NOT_STARTED
+  WP020: NOT_STARTED
+  WP021: NOT_STARTED
+  WP022: NOT_STARTED
+  WP023: NOT_STARTED
+  WP024: NOT_STARTED
+
+next_action:
+  sprint: S001
+  work_package: WP001
+  objective: "Freeze and verify the Research Constitution contract against the Enterprise Engineering Manual before implementation expansion."
+
+execution_policy:
+  sprint_prs: false
+  work_package_prs: false
+  persistent_program_branch: true
+  intermediate_commit_ci: SKIP_WHEN_TARGETED_QA_EVIDENCE_EXISTS
+  milestone_ci: REQUIRED
+  promotion_pr_m1_m8: REQUIRED_AT_PROMOTION
+  promotion_pr_m9: SEPARATE_REQUIRED_AT_PROMOTION
+
+stop_conditions:
+  - HUMAN_AUTHORITY_DECISION_REQUIRED
+  - SEALED_DATA_BOUNDARY_REQUIRES_APPROVAL
+  - CREDENTIAL_OR_PRIVATE_DATA_UNAVAILABLE
+  - ARCHITECTURE_CHANGE_REQUIRES_DECISION
+  - MERGE_OR_OPERATIONAL_PROMOTION_REQUIRED
+  - REQUIRED_EVIDENCE_CANNOT_BE_OBTAINED
+
+authority:
+  source: repository
+  current_program_grade: "Research / R"
+  runtime_authority: NONE
