@@ -8,13 +8,17 @@ on:
     paths:
       - 'research/autonomous_structural_edge_exhaustion_v1/**'
       - 'scripts/run_autonomous_structural_edge_exhaustion_v1.py'
+      - 'scripts/run_autonomous_structural_edge_exhaustion_v2.py'
       - 'tests/test_autonomous_structural_edge_exhaustion_v1.py'
+      - 'tests/test_autonomous_structural_edge_exhaustion_v2.py'
       - '.github/workflows/autonomous-structural-edge-exhaustion-v1.yml'
   pull_request:
     paths:
       - 'research/autonomous_structural_edge_exhaustion_v1/**'
       - 'scripts/run_autonomous_structural_edge_exhaustion_v1.py'
+      - 'scripts/run_autonomous_structural_edge_exhaustion_v2.py'
       - 'tests/test_autonomous_structural_edge_exhaustion_v1.py'
+      - 'tests/test_autonomous_structural_edge_exhaustion_v2.py'
       - '.github/workflows/autonomous-structural-edge-exhaustion-v1.yml'
 
 permissions:
@@ -68,28 +72,30 @@ jobs:
         run: |
           PYTHONPATH=. python -m pytest -q \
             tests/test_autonomous_structural_edge_exhaustion_v1.py \
+            tests/test_autonomous_structural_edge_exhaustion_v2.py \
             tests/test_observation_first_pattern_atlas_full_certification_v1.py \
             tests/test_observation_first_pattern_atlas_full_certification_v2.py
 
-      - name: Execute autonomous multi-family discovery and certification
+      - name: Execute two-batch autonomous discovery and certification
         run: |
-          rm -rf runtime/research/autonomous_structural_edge_exhaustion_v1
-          PYTHONPATH=. python scripts/run_autonomous_structural_edge_exhaustion_v1.py \
+          rm -rf runtime/research/autonomous_structural_edge_exhaustion_v2
+          PYTHONPATH=. python scripts/run_autonomous_structural_edge_exhaustion_v2.py \
             --source-file research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet \
-            --output-root runtime/research/autonomous_structural_edge_exhaustion_v1
+            --output-root runtime/research/autonomous_structural_edge_exhaustion_v2
 
-      - name: Verify exhaustion and authority boundaries
+      - name: Verify two-batch exhaustion and authority boundaries
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
 
-          root = Path('runtime/research/autonomous_structural_edge_exhaustion_v1')
+          root = Path('runtime/research/autonomous_structural_edge_exhaustion_v2')
           final = json.loads((root / 'final_authority.json').read_text())
           discovery = json.loads((root / 'stage3_discovery.json').read_text())
           final_test = json.loads((root / 'stage9_final_unopened.json').read_text())
           exhaustion = json.loads((root / 'stage11_exhaustion_ledger.json').read_text())
           robustness = json.loads((root / 'stage8_robustness.json').read_text())
+          screen = json.loads((root / 'stage6_structural_screen.json').read_text())
 
           assert final['options_edge_certified'] is False
           assert final['shadow_authorized'] is False
@@ -98,22 +104,28 @@ jobs:
           assert final['order_authorized'] is False
           assert final['pre_post_cas_pooled'] is False
           assert final['failed_family_reopening_authorized'] is False
+          assert final['campaign_batch_count'] == 2
+          assert final['campaign_family_count'] == 12
+          assert final['campaign_global_q_threshold'] == 0.05
           assert discovery['policy']['outcomes_seen_when_frozen'] is False
           assert discovery['policy']['unopened_sessions_scored'] is False
+          assert discovery['family_count'] == 12
           assert exhaustion['all_predeclared_families_attempted'] is True
           assert exhaustion['failed_families_reopened'] is False
-          assert exhaustion['family_count'] == 6
+          assert exhaustion['family_count'] == 12
+          assert exhaustion['batch_count'] == 2
+          assert screen['campaign_global_q_threshold'] == 0.05
           if not robustness.get('survivor_hypothesis_ids'):
               assert final_test['unopened_sessions_scored'] is False
           print(json.dumps(final, indent=2, sort_keys=True))
           print(json.dumps(exhaustion, indent=2, sort_keys=True))
           PY
 
-      - name: Upload complete discovery evidence
+      - name: Upload complete two-batch discovery evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: autonomous-structural-edge-exhaustion-v1
-          path: runtime/research/autonomous_structural_edge_exhaustion_v1/
+          name: autonomous-structural-edge-exhaustion-v2
+          path: runtime/research/autonomous_structural_edge_exhaustion_v2/
           if-no-files-found: error
           retention-days: 30
