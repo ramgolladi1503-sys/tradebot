@@ -19,16 +19,36 @@ def test_subscription_lifecycle_requires_post_request_tick_and_full_payload(monk
     lifecycle = evidence["token_lifecycle"]["101"]
     assert lifecycle["subscribe_call_succeeded_epoch"] == 11.0
     assert lifecycle["first_live_tick_epoch"] is None
+    assert lifecycle["first_post_request_tick_epoch"] is None
     assert lifecycle["first_full_payload_epoch"] is None
     assert evidence["subscription_generation_id"] == evidence["subscription_evidence_id"]
 
     ws._FIRST_LIVE_TICK_EPOCH_BY_TOKEN[101] = 13.0
+    ws._FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN[101] = 13.0
     ws._record_full_payload_observed(101)
     updated = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": 101})
 
     assert updated["subscription_generation_id"] == evidence["subscription_generation_id"]
     assert updated["evidence_snapshot_sha256"] != evidence["evidence_snapshot_sha256"]
     assert updated["token_lifecycle"]["101"]["first_full_payload_epoch"] == 13.0
+    assert updated["token_lifecycle"]["101"]["first_post_request_tick_epoch"] == 13.0
+
+
+def test_second_request_clears_request_scoped_tick_but_preserves_session_first(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    ws._FEED_SESSION_ID = "session-test"
+    ws._FEED_RECONNECT_GENERATION = 1
+    ws._reset_market_event_graph_generation_evidence()
+    epochs = iter([10.0, 11.0, 12.0, 20.0])
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: next(epochs))
+    ws._record_subscription_requested([101])
+    ws._record_subscription_request_succeeded([101])
+    ws._FIRST_LIVE_TICK_EPOCH_BY_TOKEN[101] = 12.0
+    ws._FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN[101] = 12.0
+    ws._record_subscription_requested([101])
+    ws._record_subscription_request_succeeded([101])
+    assert ws._FIRST_LIVE_TICK_EPOCH_BY_TOKEN[101] == 12.0
+    assert 101 not in ws._FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN
 
 
 def test_already_running_start_does_not_rotate_generation_or_clear_evidence(monkeypatch):

@@ -328,7 +328,7 @@ class LiveSourceRuntimeBridge:
             if row_generation != evidence_generation:
                 return False, RECONNECT_GENERATION_MISMATCH, (symbol,)
             subscribe_success = _coerce_float(row.get("subscribe_call_succeeded_epoch"))
-            live_tick_first = _coerce_float(row.get("first_live_tick_epoch"))
+            live_tick_first = _coerce_float(row.get("first_post_request_tick_epoch"))
             mode_success = _coerce_float(row.get("mode_request_succeeded_epoch"))
             full_first = _coerce_float(row.get("first_full_payload_epoch"))
             latest_packet = row.get("latest_observation_packet") if isinstance(row.get("latest_observation_packet"), Mapping) else {}
