@@ -1,9 +1,10 @@
 # MROS Research Constitution
 
-Version: 1.0
-Status: FROZEN CONTRACT FOR WP001 VERIFICATION
+Version: 1.0.1
+Status: FROZEN CONTRACT FOR S001 RE-REVIEW
 Manual authority: MROS Enterprise Engineering Manual & Research Handbook v1.0
 Program decision authority: `DEC-2026-0001`, `DEC-2026-0002`
+Repair authority: `research/evidence/sprints/S001/S001_INDEPENDENT_REVIEW.md` (`F-001`)
 Operational authority: NONE
 
 ## 1. Mission
@@ -78,7 +79,15 @@ Predictors and experimental inputs may use only information genuinely available 
 
 ### RC-009 — No Denominator Laundering
 
-Failed hypotheses remain counted. Search budgets, multiplicity denominators, or campaign identities cannot be reset merely because a campaign failed. A new denominator requires new information authority and a recorded decision explaining why the new search family is scientifically distinct.
+The denominator is part of the experiment contract, not a reporting convenience.
+
+Failed hypotheses remain counted. Search budgets, multiplicity denominators, campaign identities, eligible observations, eligible trades/events, reported metric denominators, exclusion rules, horizons, regimes, symbols, dates, and any population used to compute a claim cannot be changed after observing outcomes merely to improve the reported result.
+
+Any exclusion or denominator rule used for confirmatory evidence must be preregistered before outcomes are inspected and must be applied consistently to favorable and unfavorable observations. Data-quality exclusions are permitted only when their rule is outcome-blind, recorded, reproducible, and applied under the frozen contract.
+
+A post-hoc denominator change is not allowed to overwrite the original result. If scientifically justified, it must be recorded as a new exploratory analysis or new search family, preserve the original denominator/result, state the new rationale, receive a new identity where applicable, account for the additional search/multiplicity burden, and remain at reduced authority until independently confirmed under a preregistered contract.
+
+A new confirmatory denominator requires new information authority and a recorded decision explaining why the new population/search family is scientifically distinct. Silent removal of inconvenient trades, observations, dates, regimes, hypotheses, or failed outcomes is a constitutional violation.
 
 ### RC-010 — Runtime Separation
 
@@ -144,6 +153,8 @@ Changes to constitutional rules, milestone intent, work-package intent, authorit
 3. record a decision and impact review;
 4. update controlled program artifacts;
 5. continue only from the resulting repository state.
+
+Before WP001/S001 acceptance, repairs required by independent review are permitted as contract-freeze corrections when the review artifact, changed text, verification evidence, and re-review are all preserved. Such repairs do not grant acceptance by themselves.
 
 ## 12. WP001 Verification Boundary
 
