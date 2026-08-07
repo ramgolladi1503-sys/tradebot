@@ -1,4 +1,4 @@
-name: MROS Review Board Gate
+name: MROS Review + Audit Board Gate
 on:
   workflow_dispatch:
     inputs:
@@ -14,10 +14,14 @@ on:
         description: Review round, e.g. R001
         required: true
         type: string
+      audit_round:
+        description: Audit round, e.g. A001
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
-  pinned-review-gate:
+  pinned-review-audit-gate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact candidate
@@ -30,14 +34,27 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${{ inputs.candidate_sha }}"
+      - name: Verify controlled round identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${{ inputs.sprint }}" =~ ^S[0-9]{3}$ ]]
+          [[ "${{ inputs.review_round }}" =~ ^R[0-9]{3}$ ]]
+          [[ "${{ inputs.audit_round }}" =~ ^A[0-9]{3}$ ]]
       - name: Verify M9 and runtime bootstrap boundary
         shell: bash
         run: |
           set -euo pipefail
           grep -q 'M9: NOT_STARTED' research/program/MROS_PROGRAM_STATE.yaml
           grep -q 'runtime_authority: NONE' research/program/MROS_PROGRAM_STATE.yaml
-      - name: Review-board bootstrap notice
+      - name: Verify bootstrap authority remains fail-closed
+        shell: bash
         run: |
-          echo "This lightweight workflow pins and verifies the candidate only."
-          echo "It does not manufacture AI reviewer independence and does not certify S002."
-          echo "Reviewer artifacts and exact-head native evidence must be supplied and validated separately."
+          set -euo pipefail
+          grep -q 'status: IMPLEMENTED_NOT_CALIBRATED' research/review_board/REVIEW_POLICY.yaml
+          grep -q 'status: IMPLEMENTED_NOT_CALIBRATED' research/review_board/AUDIT_POLICY.yaml
+      - name: Review-audit bootstrap notice
+        run: |
+          echo "This workflow pins and verifies the candidate and governance boundary only."
+          echo "It does not manufacture reviewer/auditor independence and does not certify S002 or the board itself."
+          echo "Native evidence plus validated independent review and audit artifacts are required for ordinary authority."
