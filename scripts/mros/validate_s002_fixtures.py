@@ -11,9 +11,11 @@ AUTH = ["Research / R", "Grade C", "Grade B", "Grade A", "Grade A+", "Rejected",
 STAGES = {"Research / R":0,"Grade C":1,"Grade B":2,"Grade A":3,"Grade A+":4}
 OBSOLETE = re.compile(r"^A[0-5]$")
 
-def result(status, *, knowledge_class=None, can_promote=None, errors=None, rules=None):
+_UNSET = object()
+
+def result(status, *, knowledge_class=_UNSET, can_promote=None, errors=None, rules=None):
     out={"status":status,"error_codes":errors or [],"violated_rules":rules or []}
-    if knowledge_class is not None: out["knowledge_class"]=knowledge_class
+    if knowledge_class is not _UNSET: out["knowledge_class"]=knowledge_class
     if can_promote is not None: out["can_promote"]=can_promote
     return out
 
@@ -22,7 +24,7 @@ def classify(inp):
     mapping={"DIRECT_MEASUREMENT":"OBSERVED_FACT","DERIVED_REASONING":"INFERENCE","FALSIFIABLE_UNVERIFIED":"HYPOTHESIS","UNSUPPORTED_CONJECTURE":"SPECULATION"}
     classes={mapping[x] for x in sig if x in mapping}
     if len(classes)!=1:
-        return result("REVIEW_REQUIRED",errors=["MROS-S001-E002-AMBIGUOUS_KNOWLEDGE_CLASS"])
+        return result("REVIEW_REQUIRED",knowledge_class=None,errors=["MROS-S001-E002-AMBIGUOUS_KNOWLEDGE_CLASS"])
     return result("PASS",knowledge_class=next(iter(classes)))
 
 def promotion(inp):
