@@ -1,0 +1,29 @@
+schema_version: mros-aggregation-policy-v1
+valid_review:
+  exact_head_required: true
+  independent_required: true
+  schema_valid_required: true
+acceptance:
+  minimum_valid_reviews: 8
+  minimum_pass_or_minor: 8
+  critical: 0
+  major: 0
+  mandatory_unknown: 0
+blocking:
+  deterministic_validation_failure: REVIEW_BLOCKED_NATIVE_VALIDATION_REQUIRED
+  critical: REVIEW_DISAGREEMENT_REQUIRES_ADJUDICATION
+  unresolved_major: REPAIR_REQUIRED
+  mandatory_unknown: UNKNOWN
+disagreement:
+  critical_with_any_noncritical_votes: REVIEW_DISAGREEMENT_REQUIRES_ADJUDICATION
+  split_material_verdicts: REVIEW_DISAGREEMENT_REQUIRES_ADJUDICATION
+minor:
+  preserve: true
+  acceptance_verdict: PASS_WITH_MINOR_FINDINGS
+critical_adjudication:
+  inputs: [finding, requirement, evidence, implementation_artifact, counterevidence, reviewed_head]
+  allowed_results: [CRITICAL_CONFIRMED, CRITICAL_DOWNGRADED, CRITICAL_UNSUPPORTED, UNKNOWN]
+  confirmed_blocks: true
+history:
+  repaired_head_invalidates_prior_authority: true
+  prior_reviews_preserved_as_historical_evidence: true
