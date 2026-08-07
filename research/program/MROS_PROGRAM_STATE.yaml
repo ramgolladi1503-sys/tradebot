@@ -9,9 +9,9 @@ active_milestone: M1
 active_work_package: WP001
 active_sprint: S002
 last_completed_sprint: S001
-last_verified_commit: "0f7df9061b048295905783044e0063c7583f9015"
+last_verified_commit: "77009a85c90f7fff034eb95f65c5d233110d187c"
 program_status: ACTIVE
-active_sprint_status: IMPLEMENTED_NOT_VALIDATED
+active_sprint_status: REPAIR_IMPLEMENTED_PENDING_NATIVE_VALIDATION
 
 milestone_status:
   M1: ACTIVE
@@ -53,8 +53,10 @@ work_package_status:
 next_action:
   sprint: S002
   work_package: WP001
-  objective: "Obtain native exact-checkout execution provenance for scripts/mros/validate_s002_fixtures.py, preserve exact HEAD/Python/command/output/exit code, independently consume that evidence, and issue the S002 sprint decision only if acceptance criteria are genuinely satisfied. Do not start S003 before this gate closes."
-  blocker_artifact: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_BLOCKER.md"
+  objective: "Run native exact-checkout validation of the repaired 23-case S002 fixture suite, preserving exact HEAD/Python/command/output/exit code. Then obtain a genuinely independent review of that exact validated HEAD before issuing the S002 sprint decision. Do not start S003 before both gates close."
+  required_native_validator: "scripts/mros/validate_s002_fixtures.py"
+  required_expected_case_count: 23
+  required_external_role: "independent reviewer/session distinct from S002 implementing/repair agent"
 
 execution_policy:
   sprint_prs: false
