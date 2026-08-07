@@ -8,13 +8,13 @@ on:
     paths:
       - 'research/tradingview_public_library_benchmark_v1/**'
       - 'scripts/run_tradingview_public_library_benchmark_v1.py'
-      - 'tests/test_tradingview_public_library_benchmark_v*.py'
+      - 'tests/test_tradingview_public_library_*_v1.py'
       - '.github/workflows/tradingview-public-library-benchmark-v1.yml'
   pull_request:
     paths:
       - 'research/tradingview_public_library_benchmark_v1/**'
       - 'scripts/run_tradingview_public_library_benchmark_v1.py'
-      - 'tests/test_tradingview_public_library_benchmark_v*.py'
+      - 'tests/test_tradingview_public_library_*_v1.py'
       - '.github/workflows/tradingview-public-library-benchmark-v1.yml'
 
 permissions:
@@ -58,11 +58,13 @@ jobs:
           PYTHONPATH=. python -m py_compile \
             research/tradingview_public_library_benchmark_v1/benchmark.py \
             research/tradingview_public_library_benchmark_v1/guarded_runtime.py \
+            research/tradingview_public_library_benchmark_v1/parameter_guard.py \
             research/tradingview_public_library_benchmark_v1/normalized_benchmark.py \
             scripts/run_tradingview_public_library_benchmark_v1.py
           PYTHONPATH=. python -m pytest -q \
             tests/test_tradingview_public_library_benchmark_v1.py \
-            tests/test_tradingview_public_library_benchmark_guarded_v1.py
+            tests/test_tradingview_public_library_benchmark_guarded_v1.py \
+            tests/test_tradingview_public_library_parameter_guard_v1.py
 
       - name: Restore frozen 42-page TradingView inventory
         uses: actions/download-artifact@v4
