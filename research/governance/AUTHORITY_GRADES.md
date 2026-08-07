@@ -1,35 +1,83 @@
-# Authority Grades
+# Authority Grades — MROS v1.0
 
-Authority grades describe how strongly repository evidence supports a statement. Grades apply to a specific claim and dimension; they are not global labels for an entire project.
+Authority: MROS Enterprise Engineering Manual & Research Handbook v1.0, adopted by `DEC-2026-0001`.
 
-## A0 — Unregistered
+Authority grades apply to a specific claim and scope. They do not describe the prestige of an agent, branch, report, or project.
 
-Conversation, note, intuition, or output without a registered claim/evidence chain. No research authority.
+## Research / R
 
-## A1 — Registered
+Exploratory or incomplete. Cannot influence runtime or capital.
 
-The statement is registered and falsifiable, but empirical support is absent or not yet validated.
+Typical examples:
 
-## A2 — Observed
+- a registered hypothesis with incomplete testing;
+- a reproducible calibration observation that has not completed the applicable MROS work package.
 
-A reproducible observation exists from registered data and procedure. This grade does not establish generalization, mechanism, or economic value.
+## Grade C
 
-## A3 — Supported
+Reproducible observation with material unresolved assumptions.
 
-The hypothesis has reproducible evidence beyond a single observation and has survived declared basic robustness checks. Major calibration or independent-attack requirements may remain open.
+Minimum interpretation:
 
-## A4 — Certified
+- provenance and procedure are reproducible;
+- the observation is real within the stated dataset/procedure;
+- material assumptions, representation limits, replication gaps, calibration gaps, or mechanism uncertainty remain.
 
-The specific claim has passed applicable calibrated statistical, representation, multiplicity, mechanism, robustness, and independent-attack gates. Certification scope must be explicit.
+Grade C must not be described as a certified market edge.
 
-## A5 — Operational
+## Grade B
 
-A certified claim has additionally passed economic and implementation-equivalence gates and is approved for bounded operational consumption.
+Replicated supported claim with calibrated statistical authority; not necessarily economically executable.
 
-## Rules
+Minimum interpretation:
 
-- Grade the weakest required authority dimension, not the strongest headline metric.
-- A claim may have mixed dimensional grades; the confidence passport records them separately.
-- Failed reproduction or newly contradictory evidence may downgrade authority.
-- `A4` and `A5` require recorded decisions; they cannot be inferred from test output alone.
-- An authority grade never implies permanence. Every certified or operational claim requires review triggers.
+- independent or meaningfully distinct replication supports the claim;
+- applicable statistical/certifier procedures are calibrated within the claim's tested domain;
+- multiplicity, leakage, representation, and uncertainty requirements applicable to the claim have been addressed;
+- unresolved defects do not contradict the Grade B statement.
+
+Grade B grants no runtime or capital authority by itself.
+
+## Grade A
+
+Scientific and economic certification passed, independent attack survived, and limitations are explicit.
+
+Minimum interpretation:
+
+- applicable scientific-certification gates passed;
+- economic certification passed under the stated execution/cost/capacity assumptions;
+- independent attack was completed and no unresolved Critical/High blocker remains;
+- limitations, destroyers, review triggers, and expiry conditions are explicit.
+
+Operational integration still requires the M9 governed integration boundary.
+
+## Grade A+
+
+Grade A plus live/forward evidence across required regimes and continuing monitoring; still subject to expiry and review triggers.
+
+Grade A+ is not permanent authority. Material drift, data changes, implementation changes, failed monitoring, or contradictory evidence can downgrade it.
+
+## Rejected
+
+Evidence contradicts the claim or required gates fail.
+
+Rejected claims remain queryable and keep their evidence/decision lineage. Rejection is a valid research outcome, not missing work.
+
+## Unknown
+
+Evidence is insufficient to support or reject the claim.
+
+Unknown must be used when data, calibration, representation, sample size, implementation, or other authority is inadequate for a defensible verdict. It must not be converted to Rejected merely to create closure.
+
+## Mandatory Rules
+
+- Scientific grade is one of: `Research / R`, `Grade C`, `Grade B`, `Grade A`, `Grade A+`, `Rejected`, `Unknown`.
+- No discovering agent may assign final authority to its own discovery without the required independent review and decision path.
+- Promotion requires explicit gate evidence and a recorded decision.
+- Exceptions cannot grant higher authority than the underlying evidence supports.
+- The weakest applicable unresolved authority dimension bounds the final grade.
+- Runtime and capital cannot consume `Research / R`, `Grade C`, `Grade B`, `Rejected`, or `Unknown` as operational authority.
+- Grade A/A+ still require M9 compatibility, version, expiry, and runtime integration controls before TradeBot consumption.
+- Failed reproduction, contradictory evidence, calibration failure, representation failure, economic failure, or implementation mismatch may immediately reduce authority.
+
+The former bootstrap `A0–A5` scale is superseded by this manual-defined scale and must not be used for new MROS records.
