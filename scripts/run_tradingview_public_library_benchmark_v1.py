@@ -2,29 +2,23 @@ from __future__ import annotations
 
 import argparse
 import json
-import tempfile
 from pathlib import Path
 
 from research.autonomous_structural_edge_exhaustion_v1.common import stable_write
-from research.tradingview_public_library_benchmark_v1 import benchmark as benchmark_module
-from research.tradingview_public_library_benchmark_v1.guarded_runtime import install
+from research.tradingview_public_library_benchmark_v1.normalized_benchmark import run_from_normalized
 
 
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--inventory", required=True)
+    p.add_argument("--normalized-aeron", required=True)
     p.add_argument("--output-root", required=True)
     args = p.parse_args()
-
-    # Freeze the ex-ante inventory gate and full-history indicator semantics before any
-    # independent market outcomes are read by the benchmark engine.
-    install()
 
     inventory = json.loads(Path(args.inventory).read_text())
     root = Path(args.output_root)
     root.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="tv_benchmark_") as tmp:
-        result = benchmark_module.run_benchmark(inventory, Path(tmp))
+    result = run_from_normalized(inventory, Path(args.normalized_aeron))
 
     stable_write(root / "mapping.json", result["mapping"])
     stable_write(root / "source_authority.json", result["source_authority"])
