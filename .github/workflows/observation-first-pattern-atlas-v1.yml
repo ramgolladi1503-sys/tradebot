@@ -38,4 +38,6 @@ jobs:
             tests/test_observation_first_pattern_atlas_motifs_v1.py \
             tests/test_observation_first_pattern_atlas_analogues_v1.py \
             tests/test_observation_first_pattern_atlas_motif_recertification_v2.py \
-            tests/test_observation_first_pattern_atlas_full_certification_v1.py
+            tests/test_observation_first_pattern_atlas_full_certification_v1.py \
+            tests/test_observation_first_pattern_atlas_analogues_v3.py \
+            tests/test_observation_first_pattern_atlas_full_certification_v2.py
