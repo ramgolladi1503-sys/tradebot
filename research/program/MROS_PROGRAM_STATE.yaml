@@ -40,9 +40,31 @@ s002_repair:
 review_board:
   status: IMPLEMENTED_NOT_CALIBRATED
   authority: Research / R
+  policy_version: mros-review-policy-v2
+  minimum_valid_independent_reviews: 10
   may_certify_s002: false
   may_certify_itself: false
   normal_authority_begins_no_earlier_than: S003_AFTER_BOOTSTRAP_CALIBRATION_AND_INDEPENDENT_REVIEW
+
+audit_board:
+  status: IMPLEMENTED_NOT_CALIBRATED
+  authority: Research / R
+  policy_version: mros-audit-policy-v1
+  minimum_valid_independent_audits: 10
+  may_certify_s002: false
+  may_certify_itself: false
+  normal_authority_begins_no_earlier_than: S003_AFTER_BOOTSTRAP_CALIBRATION_AND_INDEPENDENT_REVIEW
+
+review_audit_governance:
+  decision: DEC-2026-0003
+  exact_head_binding_required: true
+  native_validation_precondition: true
+  review_and_audit_are_distinct: true
+  simple_majority_forbidden: true
+  max_full_repair_rounds_per_sprint: 5
+  bootstrap_calibration_status: NOT_EXECUTED
+  bootstrap_independent_review_status: NOT_EXECUTED
+  autonomous_authority: NOT_AUTHORIZED
 
 milestone_status:
   M1: ACTIVE
@@ -87,7 +109,7 @@ next_action:
   objective: "Run native exact-checkout validation of the canonical 53-case S002 v4 fixture suite on the latest round-2 repair head, preserve exact HEAD/Python/command/output/exit code, then obtain a fresh independent re-review from a session that did not implement or direct this repair. Do not start S003 before both gates close."
   required_native_validator: "scripts/mros/validate_s002_fixtures.py"
   required_expected_case_count: 53
-  required_external_role: "independent reviewer/session distinct from S002 implementation/repair and Review Board bootstrap implementation"
+  required_external_role: "independent reviewer/session distinct from S002 implementation/repair and Review/Audit Board bootstrap implementation"
 
 execution_policy:
   sprint_prs: false
