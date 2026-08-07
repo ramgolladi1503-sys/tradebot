@@ -33,5 +33,7 @@ jobs:
             tests/test_observation_first_pattern_atlas_deduplicate_inventory_v1.py \
             tests/test_observation_first_pattern_atlas_trajectory_v1.py \
             tests/test_observation_first_pattern_atlas_index_trajectory_v2.py \
+            tests/test_observation_first_pattern_atlas_external_index_trajectory_v3.py \
             tests/test_observation_first_pattern_atlas_archetypes_v1.py \
-            tests/test_observation_first_pattern_atlas_motifs_v1.py
+            tests/test_observation_first_pattern_atlas_motifs_v1.py \
+            tests/test_observation_first_pattern_atlas_analogues_v1.py
