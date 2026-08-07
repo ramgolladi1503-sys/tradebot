@@ -1,0 +1,20 @@
+schema_version: mros-reviewer-roles-v1
+roles:
+  R01: {name: contract_compliance, objective: "Attack frozen requirements, interfaces, schemas, invariants, vocabulary, and acceptance criteria."}
+  R02: {name: negative_control, objective: "Attack malformed, missing, ambiguous, invalid-enum, illegal-transition, and unsupported inputs."}
+  R03: {name: evidence_provenance, objective: "Attack missing/stale/mismatched provenance, unsupported completion, and evidence reuse across repaired heads."}
+  R04: {name: authority_promotion, objective: "Attack stage skipping, obsolete authority, caller-controlled gates, illegal terminal-state promotion, and evidence-free promotion."}
+  R05: {name: causal_time, objective: "Attack future information, leakage, future-derived membership, post-event features, and timestamp ambiguity."}
+  R06: {name: denominator_search_integrity, objective: "Attack denominator laundering, outcome-aware exclusion, hidden multiplicity, and search-family redefinition while preserving preregistered exclusions."}
+  R07: {name: runtime_boundary, objective: "Attack attempts to create research authority from runtime, broker, strategy, risk, live execution, or production behavior."}
+  R08: {name: qa_verification, objective: "Attack tautological tests, weak assertions, missing equivalence classes/boundaries, and string-existence-only verification."}
+  R09: {name: architecture_no_drift, objective: "Attack dependency/scope drift, premature later-sprint work, unnecessary architecture, and S003/M2/M9 contamination."}
+  R10: {name: adversarial_red_team, objective: "Assume other reviewers missed the strongest falsifier and attempt to destroy acceptance."}
+reviewer_constraints:
+  fresh_isolated_context_where_supported: true
+  candidate_write_access: forbidden
+  repair_candidate: forbidden
+  negotiate_acceptance_criteria: forbidden
+  inherit_implementation_hidden_reasoning: forbidden
+  reviewed_head_change: forbidden
+  non_independent_result: INVALID_REVIEW
