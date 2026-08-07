@@ -9,6 +9,9 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "research/evidence/sprints/S002/S002_FIXTURES.json"
 AUTH = ["Research / R", "Grade C", "Grade B", "Grade A", "Grade A+", "Rejected", "Unknown"]
 STAGES = {"Research / R":0,"Grade C":1,"Grade B":2,"Grade A":3,"Grade A+":4}
+KNOWLEDGE_CLASSES = {"OBSERVED_FACT", "INFERENCE", "HYPOTHESIS", "SPECULATION"}
+VERDICTS = {"SUPPORTED", "REJECTED", "UNKNOWN", "INSUFFICIENT_EVIDENCE"}
+STATUSES = {"PASS", "FAIL", "UNKNOWN", "INVALID_INPUT", "BLOCKED", "REVIEW_REQUIRED"}
 OBSOLETE = re.compile(r"^A[0-5]$")
 
 _UNSET = object()
@@ -19,7 +22,12 @@ def result(status, *, knowledge_class=_UNSET, can_promote=None, errors=None, rul
     if can_promote is not None: out["can_promote"]=can_promote
     return out
 
+def missing_required(inp, *fields):
+    return [field for field in fields if field not in inp or inp[field] is None or inp[field] == ""]
+
 def classify(inp):
+    if missing_required(inp, "statement_text", "classification_signals"):
+        return result("INVALID_INPUT",knowledge_class=None,errors=["MROS-S001-E001-MISSING_REQUIRED_FIELD"])
     sig=set(inp.get("classification_signals",[]))
     mapping={"DIRECT_MEASUREMENT":"OBSERVED_FACT","DERIVED_REASONING":"INFERENCE","FALSIFIABLE_UNVERIFIED":"HYPOTHESIS","UNSUPPORTED_CONJECTURE":"SPECULATION"}
     classes={mapping[x] for x in sig if x in mapping}
@@ -28,6 +36,8 @@ def classify(inp):
     return result("PASS",knowledge_class=next(iter(classes)))
 
 def promotion(inp):
+    if missing_required(inp, "authority_current", "authority_requested"):
+        return result("INVALID_INPUT",can_promote=False,errors=["MROS-S001-E001-MISSING_REQUIRED_FIELD"])
     cur, req=inp.get("authority_current"), inp.get("authority_requested")
     if (cur and OBSOLETE.match(cur)) or (req and OBSOLETE.match(req)):
         return result("INVALID_INPUT",can_promote=False,errors=["MROS-S001-E017-OBSOLETE_AUTHORITY_SCALE"])
@@ -35,9 +45,24 @@ def promotion(inp):
         return result("INVALID_INPUT",can_promote=False,errors=["MROS-S001-E003-INVALID_AUTHORITY_GRADE"])
     if not inp.get("new_evidence_refs"):
         return result("FAIL",can_promote=False,errors=["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"],rules=["RC-002"])
+    if inp.get("evidence_provenance_complete") is False:
+        return result("INVALID_INPUT",can_promote=False,errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
+    if inp.get("requires_independent_attack") and not inp.get("independent_attack_ref"):
+        return result("REVIEW_REQUIRED",can_promote=False,errors=["MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED"],rules=["RC-004"])
+    if inp.get("requires_calibration") and not inp.get("calibration_ref"):
+        return result("BLOCKED",can_promote=False,errors=["MROS-S001-E010-CALIBRATION_REQUIRED"],rules=["RC-005"])
     if cur in STAGES and req in STAGES and STAGES[req] > STAGES[cur]+1:
         return result("FAIL",can_promote=False,errors=["MROS-S001-E004-AUTHORITY_STAGE_SKIP"],rules=["RC-002"])
     return result("PASS",can_promote=True)
+
+def validate_enums(inp):
+    if "knowledge_class" in inp and inp["knowledge_class"] not in KNOWLEDGE_CLASSES:
+        return result("INVALID_INPUT",errors=["MROS-S001-E002-AMBIGUOUS_KNOWLEDGE_CLASS"])
+    if "verdict" in inp and inp["verdict"] not in VERDICTS:
+        return result("INVALID_INPUT",errors=["MROS-S001-E001-MISSING_REQUIRED_FIELD"])
+    if "status" in inp and inp["status"] not in STATUSES:
+        return result("INVALID_INPUT",errors=["MROS-S001-E001-MISSING_REQUIRED_FIELD"])
+    return result("PASS")
 
 def constitutional(inp):
     if inp.get("decision_timestamp") and inp.get("input_availability_timestamps"):
@@ -60,8 +85,11 @@ def constitutional(inp):
 
 def evaluate(case):
     op=case.get("operation"); inp=case.get("input",{})
+    if not op:
+        return result("INVALID_INPUT",errors=["MROS-S001-E001-MISSING_REQUIRED_FIELD"])
     if op=="CLASSIFY_STATEMENT": return classify(inp)
     if op=="VALIDATE_PROMOTION": return promotion(inp)
+    if op=="VALIDATE_CONTRACT_ENUMS": return validate_enums(inp)
     if op=="VALIDATE_CONSTITUTIONAL_ACTION": return constitutional(inp)
     return result("INVALID_INPUT",errors=["MROS-S001-E001-MISSING_REQUIRED_FIELD"])
 
