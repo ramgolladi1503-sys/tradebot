@@ -7,13 +7,11 @@ repository_authority: true
 
 active_milestone: M1
 active_work_package: WP001
-active_sprint: S001
-last_completed_sprint: null
-last_verified_commit: "b74710c4791f2b293f8bdc5d43eb67a47d5d4c58"
+active_sprint: S002
+last_completed_sprint: S001
+last_verified_commit: "9afbd8208acf667059cf8ac191f58b534cbf68d7"
 program_status: ACTIVE
-active_sprint_status: REVIEW_REQUIRED
-repair_candidate_status: READY_FOR_INDEPENDENT_RE_REVIEW
-original_independent_review_commit: "88d099bcc7a63470acb1c99a06a606746e14ea27"
+active_sprint_status: ACTIVE
 
 milestone_status:
   M1: ACTIVE
@@ -53,10 +51,9 @@ work_package_status:
   WP024: NOT_STARTED
 
 next_action:
-  sprint: S001
+  sprint: S002
   work_package: WP001
-  objective: "Run a genuinely independent re-review against the repaired S001 HEAD, including RC-009 adversarial denominator cases, interface/status/error contract review, acceptance-trace review, and rerun of scripts/mros/validate_s001_contract.py. Only after a passing re-review may the primary agent seal the sprint decision and advance to S002."
-  required_external_role: "independent reviewer/session distinct from the implementing agent"
+  objective: "Implement deterministic constitutional statement-classification and rule-validation fixtures under the frozen S001 interface/schema/status/error contract; preserve fail-closed semantics and do not weaken RC-001 through RC-010."
 
 execution_policy:
   sprint_prs: false
