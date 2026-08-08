@@ -10,7 +10,7 @@ active_work_package: WP001
 active_sprint: S003
 last_completed_sprint: S002
 program_status: ACTIVE
-active_sprint_status: BOARD_BOOTSTRAP_R002_REPAIR_NATIVE_CALIBRATION_PENDING
+active_sprint_status: BOARD_BOOTSTRAP_R003_REVIEW_PREPARATION
 
 s002_acceptance:
   decision: ACCEPTED
@@ -71,12 +71,13 @@ review_audit_governance:
     mandatory_unknown: 1
     repair_contract: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_R002_REPAIR_CONTRACT.json"
   bootstrap_repaired_candidate: "d6b502d55f6d0a2b66719607b816873d9bf78d62"
-  bootstrap_calibration_status: PENDING_EXACT_HEAD_NATIVE_EXECUTION
+  bootstrap_calibration_status: PASS_39_OF_39_EXIT_0_PYTHON_3.12.2
   bootstrap_calibration_harness: "scripts/mros/calibrate_review_audit_board_v2.py"
   bootstrap_calibration_case_registry: "research/review_board/CALIBRATION_CASES.json"
   bootstrap_calibration_case_count: 39
+  bootstrap_calibration_result: "research/evidence/sprints/S003/agent_queue/results/S003_CALIBRATION_R93.md"
   bootstrap_acceptance_contract: "research/evidence/sprints/S003/S003_ACCEPTANCE_CONTRACT.json"
-  bootstrap_independent_review_status: BLOCKED_UNTIL_REPAIRED_NATIVE_PASS
+  bootstrap_independent_review_status: READY_TO_FREEZE_AND_LAUNCH_R003
   bootstrap_independent_audit_status: BLOCKED_UNTIL_REPAIRED_REVIEW_PASS
   autonomous_authority: NOT_AUTHORIZED
 
@@ -134,7 +135,7 @@ work_package_status:
 next_action:
   sprint: S003
   work_package: WP001
-  objective: "Run exact-head 39-case native calibration on repaired candidate d6b502d55f6d0a2b66719607b816873d9bf78d62. If PASS, freeze fresh R003 review population with adaptive initial quorum 3. Any blocking finding repairs immediately and invalidates prior evidence. After nonblocking review, run adaptive audit quorum and authorize Boards only if the full acceptance contract is satisfied."
+  objective: "Freeze and execute fresh R003 review population with adaptive initial quorum 3 against exact candidate d6b502d55f6d0a2b66719607b816873d9bf78d62. Any blocking finding repairs immediately. After nonblocking review, run adaptive audit quorum and authorize Boards only if the full acceptance contract is satisfied."
   expected_candidate: "d6b502d55f6d0a2b66719607b816873d9bf78d62"
   queue_branch: automation/mros-agent-queue-v1
 
