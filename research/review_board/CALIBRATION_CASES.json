@@ -43,7 +43,9 @@
     {"id":"CAL-036","class":"BAD","attack":"native declared receipt/source refs do not match supplied artifacts","expected":"REJECT"},
     {"id":"CAL-037","class":"BAD","attack":"bridge receipt wrong job type","expected":"REJECT"},
     {"id":"CAL-038","class":"BAD","attack":"bridge receipt missing or malformed timestamps","expected":"REJECT"},
-    {"id":"CAL-039","class":"BAD","attack":"advancement with fabricated empty PASS aggregates","expected":"REJECT"}
+    {"id":"CAL-039","class":"BAD","attack":"advancement with fabricated empty PASS aggregates","expected":"REJECT"},
+    {"id":"CAL-040","class":"BAD","attack":"fabricated PASS aggregate hides a blocking child review","expected":"REJECT"},
+    {"id":"CAL-041","class":"BAD","attack":"positive but artificially reduced review quorum and denominator","expected":"REJECT"}
   ],
   "acceptance_metrics": {
     "known_bad_detection_rate": 1.0,
