@@ -1,0 +1,12 @@
+{
+  "backend": "codex",
+  "candidate_sha": "bfae7a6cdea9f4af9a39bcbf548b4c944fdeeda5",
+  "created_at": "2026-08-08",
+  "created_by": "mros-recovery-controller",
+  "job_type": "reviewer",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_CALIBRATION_R114_BFAE7A6C.md",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_CALIBRATION_R114_BFAE7A6C.md",
+  "request_id": "S003_CALIBRATION_R114_BFAE7A6C",
+  "role_id": "R114",
+  "schema_version": 1
+}
