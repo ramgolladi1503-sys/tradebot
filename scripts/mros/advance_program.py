@@ -6,7 +6,7 @@ from native_evidence import validate_native_evidence
 from program_context import load_and_validate_context
 from aggregate_reviews import aggregate_payloads as aggregate_reviews
 from aggregate_audits import aggregate_payloads as aggregate_audits
-from population_git_trust import validate_trusted_population,load_exact_receipts
+from population_git_trust import validate_trusted_population,load_exact_receipts,canonical_manifest_path
 
 ACCEPT={'PASS','PASS_WITH_MINOR_FINDINGS'}
 ROOT=Path(__file__).resolve().parents[2]
@@ -41,7 +41,9 @@ def _validate_aggregate(data:object,*,candidate_head:str,kind:str,manifest:dict,
  if data.get('runtime_authority')!='NONE':e.append(f'{prefix}_RUNTIME_AUTHORITY_INVALID')
  if data.get('authority')!='Research / R':e.append(f'{prefix}_AUTHORITY_INVALID')
  if data.get('transport')!='mac_git_mailbox':e.append(f'{prefix}_TRANSPORT_INVALID')
+ expected_manifest=canonical_manifest_path(expected_sprint,expected_round,'reviewer' if kind=='review' else 'auditor')
  if data.get('population_manifest') is None:e.append(f'{prefix}_POPULATION_MANIFEST_REF_MISSING')
+ elif Path(str(data.get('population_manifest'))).as_posix()!=expected_manifest:e.append(f'{prefix}_POPULATION_MANIFEST_REF_MISMATCH')
  plural='reviews' if kind=='review' else 'audits';valid_key='valid_reviews' if kind=='review' else 'valid_audits';invalid_key='invalid_reviews' if kind=='review' else 'invalid_audits';expected_key='expected_reviews' if kind=='review' else 'expected_audits';submitted_key='submitted_reviews' if kind=='review' else 'submitted_audits';omitted_key='omitted_reviews' if kind=='review' else 'omitted_audits';extra_key='extra_reviews' if kind=='review' else 'extra_audits';minimum_key='minimum_valid_reviews' if kind=='review' else 'minimum_valid_audits'
  items=data.get(plural)
  if not isinstance(items,list):e.append(f'{prefix}_ITEMS_INVALID');items=[]
