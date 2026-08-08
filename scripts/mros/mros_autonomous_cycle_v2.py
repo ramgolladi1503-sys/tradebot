@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Safe S003 launcher with deterministic controller-owned review transport identity."""
 from __future__ import annotations
-import json,subprocess,time
+import json,subprocess,sys,time
 from pathlib import Path
 import mros_autonomous_cycle as cycle
 from mros_review_transport import canonicalize_artifact, invalid_roles, member_for_output
@@ -143,6 +143,33 @@ def _latest_repair_candidate(auth:Path)->str:
    except ValueError:pass
  return cycle.git(auth,'rev-parse',f'origin/{cycle.AUTH}').stdout.strip()
 
+def _cli_path(flag:str)->Path|None:
+ try:
+  i=sys.argv.index(flag);return Path(sys.argv[i+1]).resolve()
+ except (ValueError,IndexError):return None
+
+def _resume_latest_calibrated_candidate()->int|None:
+ auth=_cli_path('--authority-repo');q=_cli_path('--queue-repo')
+ if auth is None or q is None:return None
+ cycle.sync(auth,q)
+ rows=[];request_dir=q/cycle.ROOT/'requests'
+ for rp in sorted(request_dir.glob('*CALIBRATION*.json')) if request_dir.is_dir() else []:
+  try:req=cycle.read_json(rp);candidate=str(req.get('candidate_sha') or '');rec=q/cycle.ROOT/'receipts'/rp.name;out=q/str(req.get('output_path') or '')
+  except Exception:continue
+  if len(candidate)!=40 or not rec.is_file() or not out.is_file():continue
+  try:receipt=cycle.read_json(rec);job=receipt.get('job',{})
+  except Exception:continue
+  if not isinstance(job,dict) or job.get('state')!='SUCCEEDED' or job.get('exit_code')!=0:continue
+  text=out.read_text(encoding='utf-8',errors='replace')
+  if 'S003_BOARD_DETERMINISTIC_CALIBRATION_PASS' not in text or 'CALIBRATION_EXECUTION_RESULT=PASS' not in text:continue
+  rows.append((float(job.get('finished_at') or 0),candidate,str(out.relative_to(q))))
+ if not rows:return None
+ _,candidate,nref=sorted(rows,key=lambda x:x[0])[-1]
+ reviews=cycle.manifests(q,'reviewer')
+ if any(m.get('candidate_head')==candidate for _,_,m in reviews):return None
+ if cycle.git(auth,'merge-base','--is-ancestor',candidate,f'origin/{cycle.AUTH}',check=False).returncode!=0:raise cycle.CycleError(f'CALIBRATED_CANDIDATE_NOT_IN_AUTHORITY_ANCESTRY:{candidate}')
+ rr=cycle.queue_review(q,candidate,full=False);print(json.dumps({'action':'FAST_REVIEW_QUEUED_FROM_CALIBRATION','candidate':candidate,'round':rr,'native_ref':nref},sort_keys=True));return 0
+
 def process_review_v2(auth:Path,q:Path,state_root:Path,row):
  n,mp,manifest=row;round_id=f'R{n:03d}';candidate=manifest.get('candidate_head');tier=str(manifest.get('assurance_tier') or 'FAST')
  if not isinstance(candidate,str):raise cycle.CycleError('LATEST_REVIEW_CANDIDATE_INVALID')
@@ -190,5 +217,7 @@ def process_audit_v2(auth:Path,q:Path,state_root:Path,row):
 
 def main()->int:
  cycle.run=safe_run;cycle.exact_population=exact_population_v2;cycle.blocking_findings=blocking_findings_v2;cycle.record_aggregate=record_aggregate_v2;cycle.process_review=process_review_v2;cycle.process_audit=process_audit_v2;cycle.current_head=_latest_repair_candidate;cycle.native_ref=native_ref_v2;cycle.queue_audit=queue_audit_v2;cycle.calibration_status=calibration_status_v2;cycle.queue_calibration=queue_calibration_v2
+ resumed=_resume_latest_calibrated_candidate()
+ if resumed is not None:return resumed
  result=cycle.main();return 0 if result is None else int(result)
 if __name__=='__main__':raise SystemExit(main())
