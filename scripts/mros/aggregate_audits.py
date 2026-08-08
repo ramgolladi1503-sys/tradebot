@@ -6,13 +6,16 @@ from validate_audit import validate
 from native_evidence import validate_native_evidence
 from bridge_receipt import validate_bridge_receipt
 from population_manifest import validate_population_manifest,reconcile_population
-PASS={'PASS','PASS_WITH_MINOR_FINDINGS'};MIN_VALID=10
+PASS={'PASS','PASS_WITH_MINOR_FINDINGS'}
 
 def aggregate_payloads(payloads,*,candidate_head,review_round,receipts,manifest,review_job_ids=None,required_acceptance_ids=None,expected_native_ref=None):
  manifest_errors=validate_population_manifest(manifest,candidate_head=candidate_head,job_type='auditor');artifacts=[d for _,d in payloads if isinstance(d,dict)];recon=reconcile_population(manifest,artifacts) if not manifest_errors else {'expected':0,'submitted':len(artifacts),'omitted':[],'extra':[],'expected_members':{}}
+ required=manifest.get('expected_count') if isinstance(manifest,dict) else None
+ if isinstance(required,bool) or not isinstance(required,int):required=0
+ expected_sprint=manifest.get('sprint') if isinstance(manifest,dict) else None;expected_round=manifest.get('round') if isinstance(manifest,dict) else None
  audits=[];invalid=[];seen_roles=set();seen_artifacts=set();seen_jobs=set();review_job_ids=set(review_job_ids or []);coverage=set()
  for name,d in payloads:
-  errs=validate(d,candidate_head,review_round);member=recon['expected_members'].get(d.get('output_path')) if isinstance(d,dict) else None
+  errs=validate(d,candidate_head,review_round,expected_sprint,expected_round);member=recon['expected_members'].get(d.get('output_path')) if isinstance(d,dict) else None
   if not errs and member is None:errs.append('AUDIT_NOT_IN_FROZEN_POPULATION')
   if not errs:
    if d.get('execution_role_id')!=member.get('execution_role_id'):errs.append('POPULATION_EXECUTION_ROLE_MISMATCH')
@@ -30,19 +33,21 @@ def aggregate_payloads(payloads,*,candidate_head,review_round,receipts,manifest,
   else:
    audits.append(d);seen_roles.add(role);seen_artifacts.add(artifact);seen_jobs.add(job_id);coverage.update(d.get('audited_acceptance_criteria',[]))
  critical=sum(x['critical'] for x in audits);major=sum(x['major'] for x in audits);unknown=sum(x['unknown'] for x in audits);minor=sum(x['minor'] for x in audits);verdicts=[x['verdict'] for x in audits];good=sum(v in PASS for v in verdicts);nonpass=[v for v in verdicts if v not in PASS]
- missing_criteria=sorted(set(required_acceptance_ids or [])-coverage);population_block=bool(manifest_errors or recon['omitted'] or recon['extra'])
+ required_ids=set(required_acceptance_ids or []);unknown_criteria=sorted(coverage-required_ids) if required_ids else []
+ missing_criteria=sorted(required_ids-coverage);population_block=bool(manifest_errors or recon['omitted'] or recon['extra'])
  if manifest_errors:decision='INVALID_AUDIT_POPULATION_MANIFEST'
  elif population_block:decision='INCOMPLETE_OR_UNDECLARED_AUDIT_POPULATION'
+ elif unknown_criteria:decision='INVALID_AUDIT_ACCEPTANCE_COVERAGE'
  elif missing_criteria:decision='INCOMPLETE_AUDIT_ACCEPTANCE_COVERAGE'
  elif critical:decision='AUDIT_DISAGREEMENT_REQUIRES_ADJUDICATION'
  elif major:decision='REPAIR_REQUIRED'
  elif unknown or 'UNKNOWN' in verdicts:decision='UNKNOWN'
- elif len(audits)<MIN_VALID:decision='INSUFFICIENT_VALID_INDEPENDENT_AUDITS'
+ elif len(audits)<required:decision='INSUFFICIENT_VALID_INDEPENDENT_AUDITS'
  elif nonpass:decision='REPAIR_REQUIRED' if set(nonpass)=={'REPAIR_REQUIRED'} else 'AUDIT_DISAGREEMENT_REQUIRES_ADJUDICATION'
  elif invalid:decision='INSUFFICIENT_VALID_INDEPENDENT_AUDITS'
  elif minor:decision='PASS_WITH_MINOR_FINDINGS'
  else:decision='PASS'
- return {'candidate_head':candidate_head,'review_round':review_round,'minimum_valid_audits':MIN_VALID,'valid_audits':len(audits),'invalid_audits':len(invalid),'expected_audits':recon['expected'],'submitted_audits':recon['submitted'],'omitted_audits':recon['omitted'],'extra_audits':recon['extra'],'excluded_audits':0,'manifest_errors':manifest_errors,'required_acceptance_ids':sorted(set(required_acceptance_ids or [])),'covered_acceptance_ids':sorted(coverage),'missing_acceptance_ids':missing_criteria,'pass_or_minor':good,'critical':critical,'major':major,'minor':minor,'unknown':unknown,'decision':decision,'audits':audits,'invalid':invalid,'transport':'mac_git_mailbox','runtime_authority':'NONE','authority':'Research / R'}
+ return {'candidate_head':candidate_head,'review_round':review_round,'minimum_valid_audits':required,'valid_audits':len(audits),'invalid_audits':len(invalid),'expected_audits':recon['expected'],'submitted_audits':recon['submitted'],'omitted_audits':recon['omitted'],'extra_audits':recon['extra'],'excluded_audits':0,'manifest_errors':manifest_errors,'required_acceptance_ids':sorted(required_ids),'covered_acceptance_ids':sorted(coverage),'unknown_acceptance_ids':unknown_criteria,'missing_acceptance_ids':missing_criteria,'pass_or_minor':good,'critical':critical,'major':major,'minor':minor,'unknown':unknown,'decision':decision,'audits':audits,'invalid':invalid,'transport':'mac_git_mailbox','runtime_authority':'NONE','authority':'Research / R'}
 
 def load_receipts(directory:Path):
  out={}
@@ -57,8 +62,12 @@ def main():
  if errs:print(json.dumps({'decision':'AUDIT_BLOCKED_NATIVE_VALIDATION_REQUIRED','native_errors':errs},sort_keys=True));raise SystemExit(2)
  review=json.loads(Path(a.review_aggregate).read_text())
  if review.get('candidate_head')!=a.candidate_head or review.get('decision') not in PASS or review.get('critical',0) or review.get('major',0) or review.get('unknown',0):print(json.dumps({'decision':'AUDIT_BLOCKED_NONBLOCKING_REVIEW_REQUIRED'}));raise SystemExit(2)
- contract=json.loads(Path(a.acceptance_contract).read_text());required=[c.get('id') for c in contract.get('criteria',[]) if isinstance(c,dict) and c.get('id')];review_jobs=[r.get('execution_job_id') for r in review.get('reviews',[]) if isinstance(r,dict)]
- payloads=[(str(f),json.loads(f.read_text())) for f in sorted(Path(a.audit_dir).glob('auditor-*.json'))];manifest=json.loads(Path(a.population_manifest).read_text())
+ contract=json.loads(Path(a.acceptance_contract).read_text());required=[c.get('id') for c in contract.get('criteria',[]) if isinstance(c,dict) and isinstance(c.get('id'),str) and c.get('id')];review_jobs=[r.get('execution_job_id') for r in review.get('reviews',[]) if isinstance(r,dict)]
+ payloads=[]
+ for f in sorted(Path(a.audit_dir).glob('*.json')):
+  try:payloads.append((str(f),json.loads(f.read_text())))
+  except Exception:payloads.append((str(f),None))
+ manifest=json.loads(Path(a.population_manifest).read_text())
  out=aggregate_payloads(payloads,candidate_head=a.candidate_head,review_round=a.review_round,receipts=load_receipts(Path(a.receipt_dir)),manifest=manifest,review_job_ids=review_jobs,required_acceptance_ids=required,expected_native_ref=str(Path(a.native_evidence)))
  print(json.dumps(out,indent=2,sort_keys=True));raise SystemExit(0 if out.get('decision') in PASS else 1)
 if __name__=='__main__':main()
