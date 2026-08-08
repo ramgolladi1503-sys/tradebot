@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse,json
+import argparse,json,re
 from pathlib import Path
 from native_evidence import validate_native_evidence
 from program_context import load_and_validate_context
-ACCEPT={'PASS','PASS_WITH_MINOR_FINDINGS'}
-ROOT=Path(__file__).resolve().parents[2]
+ACCEPT={'PASS','PASS_WITH_MINOR_FINDINGS'};ROOT=Path(__file__).resolve().parents[2];SPRINT=re.compile(r'^S([0-9]{3})$')
 
 def authorize(*,sprint,next_sprint,candidate_head,review,audit,native,context_errors):
  errors=list(context_errors)
@@ -18,8 +17,12 @@ def authorize(*,sprint,next_sprint,candidate_head,review,audit,native,context_er
  if audit.get('critical',0) or audit.get('major',0) or audit.get('unknown',0):errors.append('AUDIT_BLOCKING_FINDINGS_PRESENT')
  if review.get('runtime_authority')!='NONE' or audit.get('runtime_authority')!='NONE':errors.append('BOARD_RUNTIME_AUTHORITY_INVALID')
  if review.get('authority')!='Research / R' or audit.get('authority')!='Research / R':errors.append('BOARD_AUTHORITY_INVALID')
- if not isinstance(next_sprint,str) or not next_sprint.startswith('S') or not next_sprint[1:].isdigit():errors.append('NEXT_SPRINT_INVALID')
- elif int(next_sprint[1:])>=111:errors.append('M9_HARD_STOP')
+ sm=SPRINT.fullmatch(str(sprint));nm=SPRINT.fullmatch(str(next_sprint))
+ if not sm:errors.append('SPRINT_INVALID')
+ if not nm:errors.append('NEXT_SPRINT_INVALID')
+ if sm and int(sm.group(1))>=111:errors.append('M9_HARD_STOP')
+ if nm and int(nm.group(1))>=111:errors.append('M9_HARD_STOP')
+ if sm and nm and int(nm.group(1))!=int(sm.group(1))+1:errors.append('NON_SEQUENTIAL_SPRINT_TRANSITION')
  if errors:return {'advance':False,'errors':sorted(set(errors)),'runtime_authority':'NONE','authority':'Research / R'}
  return {'advance':True,'accepted_sprint':sprint,'accepted_head':candidate_head,'next_sprint':next_sprint,'runtime_authority':'NONE','authority':'Research / R'}
 
@@ -28,7 +31,7 @@ def main():
  review=json.loads(Path(a.review_aggregate).read_text());audit=json.loads(Path(a.audit_aggregate).read_text());native=json.loads(Path(a.native_evidence).read_text())
  context_errors=load_and_validate_context(state_path=Path(a.program_state),ledger_path=Path(a.sprint_ledger),acceptance_path=Path(a.acceptance_trace),sprint=a.sprint,next_sprint=a.next_sprint,candidate_head=a.candidate_head)
  out=authorize(sprint=a.sprint,next_sprint=a.next_sprint,candidate_head=a.candidate_head,review=review,audit=audit,native=native,context_errors=context_errors)
- print(json.dumps(out,sort_keys=True))
+ print(json.dumps(out,sort_keys=True));
  if not out['advance']:raise SystemExit(1)
  print('ADVANCEMENT_AUTHORIZATION_ONLY: ledger/state mutation must be performed as a separate evidenced commit.')
 if __name__=='__main__':main()
