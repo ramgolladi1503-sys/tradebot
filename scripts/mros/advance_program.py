@@ -4,12 +4,34 @@ import argparse,json,re
 from pathlib import Path
 from native_evidence import validate_native_evidence
 from program_context import load_and_validate_context
-ACCEPT={'PASS','PASS_WITH_MINOR_FINDINGS'};ROOT=Path(__file__).resolve().parents[2];SPRINT=re.compile(r'^S([0-9]{3})$')
+from aggregate_reviews import aggregate_payloads as aggregate_reviews
+from aggregate_audits import aggregate_payloads as aggregate_audits
+
+ACCEPT={'PASS','PASS_WITH_MINOR_FINDINGS'}
+ROOT=Path(__file__).resolve().parents[2]
+SPRINT=re.compile(r'^S([0-9]{3})$')
 
 def _nonneg_int(value):return isinstance(value,int) and not isinstance(value,bool) and value>=0
 def _positive_int(value):return isinstance(value,int) and not isinstance(value,bool) and value>0
 
-def _validate_aggregate(data:object,*,candidate_head:str,kind:str)->list[str]:
+def _load_receipts(directory:Path)->dict:
+ out={}
+ for f in sorted(directory.glob('*.json')):
+  try:d=json.loads(f.read_text())
+  except Exception:continue
+  job=d.get('job') if isinstance(d,dict) else None
+  if isinstance(job,dict) and isinstance(job.get('job_id'),str) and job.get('job_id'):out[job['job_id']]=d
+ return out
+
+def _compare_recomputed(data:dict,recomputed:dict,*,kind:str)->list[str]:
+ e=[];prefix=kind.upper();plural='reviews' if kind=='review' else 'audits'
+ keys=(('minimum_valid_reviews','valid_reviews','invalid_reviews','expected_reviews','submitted_reviews','omitted_reviews','extra_reviews') if kind=='review' else ('minimum_valid_audits','valid_audits','invalid_audits','expected_audits','submitted_audits','omitted_audits','extra_audits'))
+ keys=keys+('manifest_errors','critical','major','minor','unknown','decision',plural)
+ for key in keys:
+  if data.get(key)!=recomputed.get(key):e.append(f'{prefix}_RECOMPUTED_{key.upper()}_MISMATCH')
+ return e
+
+def _validate_aggregate(data:object,*,candidate_head:str,kind:str,manifest:object=None,receipts:object=None)->list[str]:
  e=[];prefix=kind.upper()
  if not isinstance(data,dict):return [f'{prefix}_AGGREGATE_OBJECT_REQUIRED']
  if data.get('candidate_head')!=candidate_head:e.append(f'{prefix}_AGGREGATE_HEAD_MISMATCH')
@@ -22,8 +44,6 @@ def _validate_aggregate(data:object,*,candidate_head:str,kind:str)->list[str]:
  if not isinstance(items,list):e.append(f'{prefix}_ITEMS_INVALID');items=[]
  for key in (valid_key,invalid_key,expected_key,submitted_key,minimum_key,'critical','major','minor','unknown'):
   if not _nonneg_int(data.get(key)):e.append(f'{prefix}_{key.upper()}_INVALID')
- # A PASS aggregate must represent a real frozen population; zero-quorum/zero-denominator
- # aggregates are never sufficient evidence for advancement.
  for key in (valid_key,expected_key,submitted_key,minimum_key):
   if not _positive_int(data.get(key)):e.append(f'{prefix}_{key.upper()}_NONPOSITIVE')
  if not items:e.append(f'{prefix}_EMPTY_POPULATION')
@@ -36,26 +56,35 @@ def _validate_aggregate(data:object,*,candidate_head:str,kind:str)->list[str]:
   if data[valid_key]<data[minimum_key]:e.append(f'{prefix}_QUORUM_NOT_MET')
   if data[expected_key]!=data[submitted_key] or data[expected_key]!=data[valid_key]:e.append(f'{prefix}_DENOMINATOR_MISMATCH')
  if any(data.get(k,0) for k in ('critical','major','unknown')):e.append(f'{prefix}_BLOCKING_FINDINGS_PRESENT')
- seen_jobs=set();seen_roles=set()
- for i,item in enumerate(items):
-  if not isinstance(item,dict):e.append(f'{prefix}_ITEM_{i}_INVALID');continue
-  if item.get('candidate_head')!=candidate_head:e.append(f'{prefix}_ITEM_{i}_HEAD_MISMATCH')
-  jid=item.get('execution_job_id');role=item.get('execution_role_id')
-  if not isinstance(jid,str) or not jid:e.append(f'{prefix}_ITEM_{i}_JOB_ID_INVALID')
-  elif jid in seen_jobs:e.append(f'{prefix}_DUPLICATE_JOB_ID')
-  else:seen_jobs.add(jid)
-  if not isinstance(role,str) or not role:e.append(f'{prefix}_ITEM_{i}_ROLE_INVALID')
-  elif role in seen_roles:e.append(f'{prefix}_DUPLICATE_ROLE')
-  else:seen_roles.add(role)
  if kind=='audit':
   if not isinstance(data.get('missing_acceptance_ids'),list) or data.get('missing_acceptance_ids'):e.append('AUDIT_ACCEPTANCE_COVERAGE_INCOMPLETE')
   if data.get('unknown_acceptance_ids') not in (None,[]):e.append('AUDIT_ACCEPTANCE_COVERAGE_UNKNOWN_IDS')
+ if not isinstance(manifest,dict):
+  e.append(f'{prefix}_POPULATION_MANIFEST_REQUIRED');return e
+ if not isinstance(receipts,dict):
+  e.append(f'{prefix}_RECEIPTS_REQUIRED');return e
+ payloads=[]
+ for i,item in enumerate(items):
+  name=item.get('output_path') if isinstance(item,dict) else f'<invalid-{i}>'
+  payloads.append((str(name),item))
+ try:
+  if kind=='review':
+   recomputed=aggregate_reviews(payloads,candidate_head=candidate_head,receipts=receipts,manifest=manifest)
+  else:
+   review_round=data.get('review_round')
+   if not isinstance(review_round,str) or not review_round:
+    e.append('AUDIT_REVIEW_ROUND_INVALID');return e
+   recomputed=aggregate_audits(payloads,candidate_head=candidate_head,review_round=review_round,receipts=receipts,manifest=manifest)
+ except Exception:
+  e.append(f'{prefix}_RECOMPUTATION_FAILED');return e
+ e.extend(_compare_recomputed(data,recomputed,kind=kind))
+ if recomputed.get('decision') not in ACCEPT:e.append(f'{prefix}_RECOMPUTED_BOARD_NOT_ACCEPTED')
  return e
 
-def authorize(*,sprint,next_sprint,candidate_head,review,audit,native,context_errors):
+def authorize(*,sprint,next_sprint,candidate_head,review,audit,native,context_errors,review_manifest=None,audit_manifest=None,review_receipts=None,audit_receipts=None):
  errors=list(context_errors)
- errors.extend(_validate_aggregate(review,candidate_head=candidate_head,kind='review'))
- errors.extend(_validate_aggregate(audit,candidate_head=candidate_head,kind='audit'))
+ errors.extend(_validate_aggregate(review,candidate_head=candidate_head,kind='review',manifest=review_manifest,receipts=review_receipts))
+ errors.extend(_validate_aggregate(audit,candidate_head=candidate_head,kind='audit',manifest=audit_manifest,receipts=audit_receipts))
  if validate_native_evidence(native,candidate_head):errors.append('NATIVE_VALIDATION_NOT_PASS_FOR_HEAD')
  sm=SPRINT.fullmatch(str(sprint));nm=SPRINT.fullmatch(str(next_sprint))
  if not sm:errors.append('SPRINT_INVALID')
@@ -67,10 +96,10 @@ def authorize(*,sprint,next_sprint,candidate_head,review,audit,native,context_er
  return {'advance':True,'accepted_sprint':sprint,'accepted_head':candidate_head,'next_sprint':next_sprint,'runtime_authority':'NONE','authority':'Research / R'}
 
 def main():
- p=argparse.ArgumentParser();p.add_argument('--sprint',required=True);p.add_argument('--next-sprint',required=True);p.add_argument('--candidate-head',required=True);p.add_argument('--review-aggregate',required=True);p.add_argument('--audit-aggregate',required=True);p.add_argument('--native-evidence',required=True);p.add_argument('--acceptance-trace',required=True);p.add_argument('--program-state',default=str(ROOT/'research/program/MROS_PROGRAM_STATE.yaml'));p.add_argument('--sprint-ledger',default=str(ROOT/'research/program/SPRINT_LEDGER.jsonl'));a=p.parse_args()
- review=json.loads(Path(a.review_aggregate).read_text());audit=json.loads(Path(a.audit_aggregate).read_text());native=json.loads(Path(a.native_evidence).read_text())
+ p=argparse.ArgumentParser();p.add_argument('--sprint',required=True);p.add_argument('--next-sprint',required=True);p.add_argument('--candidate-head',required=True);p.add_argument('--review-aggregate',required=True);p.add_argument('--audit-aggregate',required=True);p.add_argument('--native-evidence',required=True);p.add_argument('--acceptance-trace',required=True);p.add_argument('--review-population-manifest',required=True);p.add_argument('--audit-population-manifest',required=True);p.add_argument('--review-receipt-dir',required=True);p.add_argument('--audit-receipt-dir',required=True);p.add_argument('--program-state',default=str(ROOT/'research/program/MROS_PROGRAM_STATE.yaml'));p.add_argument('--sprint-ledger',default=str(ROOT/'research/program/SPRINT_LEDGER.jsonl'));a=p.parse_args()
+ review=json.loads(Path(a.review_aggregate).read_text());audit=json.loads(Path(a.audit_aggregate).read_text());native=json.loads(Path(a.native_evidence).read_text());review_manifest=json.loads(Path(a.review_population_manifest).read_text());audit_manifest=json.loads(Path(a.audit_population_manifest).read_text())
  context_errors=load_and_validate_context(state_path=Path(a.program_state),ledger_path=Path(a.sprint_ledger),acceptance_path=Path(a.acceptance_trace),sprint=a.sprint,next_sprint=a.next_sprint,candidate_head=a.candidate_head)
- out=authorize(sprint=a.sprint,next_sprint=a.next_sprint,candidate_head=a.candidate_head,review=review,audit=audit,native=native,context_errors=context_errors)
+ out=authorize(sprint=a.sprint,next_sprint=a.next_sprint,candidate_head=a.candidate_head,review=review,audit=audit,native=native,context_errors=context_errors,review_manifest=review_manifest,audit_manifest=audit_manifest,review_receipts=_load_receipts(Path(a.review_receipt_dir)),audit_receipts=_load_receipts(Path(a.audit_receipt_dir)))
  print(json.dumps(out,sort_keys=True))
  if not out['advance']:raise SystemExit(1)
  print('ADVANCEMENT_AUTHORIZATION_ONLY: ledger/state mutation must be performed as a separate evidenced commit.')
