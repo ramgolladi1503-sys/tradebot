@@ -68,14 +68,22 @@ def worker_operational_health(state_root:Path)->tuple[bool,str,str|None]:
  launchd=worker_alive_from_launchd();return bool(d.get('operational')) and status=='RUNNING' and launchd,status,err
 def write_health(path:Path,h:Health)->None:
  h.updated_at=time.time();path.parent.mkdir(parents=True,exist_ok=True);tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(asdict(h),sort_keys=True,indent=2)+'\n',encoding='utf-8');os.replace(tmp,path)
-def run_script(repo:Path,name:str,args:list[str],timeout:int=7200)->tuple[int,str]:
+def invoke(repo:Path,name:str,args:list[str],timeout:int=7200)->tuple[int,str]:
  script=BRIDGE_ROOT/'scripts/mros'/name
  if not script.is_file():raise SupervisorError(f'SCRIPT_MISSING:{script}')
- p=subprocess.run([sys.executable,str(script),*args],cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=False);detail=((p.stdout or p.stderr or '').strip().splitlines() or [''])[-1]
- if p.returncode not in (0,3):raise SupervisorError(f'{name}_FAILED:{p.returncode}:{detail}')
- return p.returncode,detail
-def run_cycle(repo:Path,state_root:Path)->tuple[int,str]:return run_script(repo,'mros_autonomous_cycle.py',['--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT),'--state-root',str(state_root)])
-def run_finalizer(repo:Path)->tuple[int,str]:return run_script(repo,'mros_s003_autonomous_finalizer.py',['--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT)])
+ p=subprocess.run([sys.executable,str(script),*args],cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=False);detail=((p.stdout or p.stderr or '').strip().splitlines() or [''])[-1];return p.returncode,detail
+def run_cycle(repo:Path,state_root:Path)->tuple[int,str]:
+ rc,detail=invoke(repo,'mros_autonomous_cycle.py',['--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT),'--state-root',str(state_root)])
+ if rc==2 and 'CALIBRATION_VALIDATION_FAILED' in detail:
+  rc2,d2=invoke(repo,'mros_calibration_failure_repair.py',['--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT),'--state-root',str(state_root)],timeout=7200)
+  if rc2!=0:raise SupervisorError(f'CALIBRATION_REPAIR_FAILED:{rc2}:{d2}')
+  return 0,d2
+ if rc not in (0,3):raise SupervisorError(f'AUTONOMOUS_CYCLE_FAILED:{rc}:{detail}')
+ return rc,detail
+def run_finalizer(repo:Path)->tuple[int,str]:
+ rc,detail=invoke(repo,'mros_s003_autonomous_finalizer.py',['--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT)])
+ if rc not in (0,3):raise SupervisorError(f'FINALIZER_FAILED:{rc}:{detail}')
+ return rc,detail
 def single_instance(lock_path:Path):
  lock_path.parent.mkdir(parents=True,exist_ok=True);h=lock_path.open('a+')
  try:fcntl.flock(h.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
