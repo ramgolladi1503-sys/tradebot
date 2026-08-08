@@ -147,11 +147,14 @@ def _enqueue_retry_for_role(repo:Path,remote_branch:str,job_type:str,role_id:str
     original_path,original=attempts[0];original_packet=repo/str(original.get("packet_path",""))
     if not original_packet.is_file():raise WorkerError(f"RETRY_PACKET_MISSING:{role_id}")
     retry_no=len(attempts);stem=Path(str(original.get("output_path"))).stem;suffix=f"{stem}_RETRY{retry_no}"
-    packet_rel=(QUEUE_ROOT/"packets"/f"{suffix}.md").as_posix();output_rel=(QUEUE_ROOT/"results"/f"{suffix}.json").as_posix();request_rel=(REQUEST_DIR/f"{suffix}.json").as_posix()
+    packet_rel=(QUEUE_ROOT/"packets"/f"{suffix}.md").as_posix();output_rel=(QUEUE_ROOT/"results"/f"{suffix}.json").as_posix();request_rel=(REQUEST_DIR/f"{suffix}.json").as_posix();receipt_rel=(RECEIPT_DIR/f"{suffix}.json").as_posix()
     packet=repo/packet_rel;request_path=repo/request_rel
     if packet.exists() or request_path.exists():return False
     packet.parent.mkdir(parents=True,exist_ok=True);packet.write_text(original_packet.read_text(encoding="utf-8")+f"\n\n## Infrastructure retry {retry_no}\nSame frozen role and candidate. Fresh isolated execution. Failed prior attempts are preserved and must not be treated as peer conclusions.\n",encoding="utf-8")
     retry=dict(original);retry["request_id"]=f"{original.get('request_id','mros')}-retry{retry_no}";retry["created_by"]="mros-agent-worker-retry";retry["packet_path"]=packet_rel;retry["output_path"]=output_rel
+    ctl=retry.get("controller_transport")
+    if isinstance(ctl,dict):
+        ctl=dict(ctl);ctl["packet_path"]=packet_rel;ctl["output_path"]=output_rel;ctl["receipt_path"]=receipt_rel;retry["controller_transport"]=ctl
     request_path.parent.mkdir(parents=True,exist_ok=True);request_path.write_text(json.dumps(retry,sort_keys=True,indent=2)+"\n",encoding="utf-8")
     files=[packet_rel,request_rel];run_git(repo,"add","--",*files);staged=set(run_git(repo,"diff","--cached","--name-only").stdout.splitlines())
     if staged!=set(files):run_git(repo,"reset");raise WorkerError("RETRY_COMMIT_SCOPE_VIOLATION")
