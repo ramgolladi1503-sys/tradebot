@@ -10,7 +10,7 @@ active_work_package: WP001
 active_sprint: S003
 last_completed_sprint: S002
 program_status: ACTIVE
-active_sprint_status: BOARD_BOOTSTRAP_R002_REVIEW_REPAIR_REQUIRED
+active_sprint_status: BOARD_BOOTSTRAP_R002_REPAIR_NATIVE_CALIBRATION_PENDING
 
 s002_acceptance:
   decision: ACCEPTED
@@ -22,9 +22,11 @@ s002_acceptance:
 review_board:
   status: IMPLEMENTED_NOT_CALIBRATED
   authority: Research / R
-  policy_version: mros-review-policy-v3
+  policy_version: mros-review-policy-v4
   review_schema: mros-review-schema-v3
-  minimum_valid_independent_reviews: 10
+  quorum_model: ADAPTIVE_ESCALATION
+  normal_initial_valid_independent_reviews: 3
+  maximum_elastic_reviewers: 16
   bridge_receipt_required: true
   frozen_population_required: true
   may_certify_s002: false
@@ -35,7 +37,9 @@ audit_board:
   authority: Research / R
   policy_version: mros-audit-policy-v2
   audit_schema: mros-audit-schema-v2
-  minimum_valid_independent_audits: 10
+  quorum_model: ADAPTIVE_ESCALATION
+  normal_initial_valid_independent_audits: 1
+  maximum_elastic_auditors: 16
   bridge_receipt_required: true
   frozen_population_required: true
   may_certify_s002: false
@@ -48,6 +52,7 @@ review_audit_governance:
   native_evidence_schema: mros-native-evidence-v2
   review_and_audit_are_distinct: true
   simple_majority_forbidden: true
+  blocking_finding_cannot_be_outvoted: true
   max_full_repair_rounds_per_sprint: 5
   bootstrap_round_R001:
     candidate: "5c7c0d6a75e6b8b56362011fb89b66efa29a64b3"
@@ -58,15 +63,20 @@ review_audit_governance:
     mandatory_unknown: 0
     decision: REPAIR_REQUIRED
     repair_contract: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_R001_REPAIR_CONTRACT.md"
-  bootstrap_repaired_candidate: "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7"
-  bootstrap_calibration_status: PASS
-  bootstrap_calibration_harness: "scripts/mros/calibrate_review_audit_board.py"
+  bootstrap_round_R002:
+    candidate: "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7"
+    decision: REVIEW_DISAGREEMENT_REQUIRES_ADJUDICATION
+    critical: 1
+    major: 5
+    mandatory_unknown: 1
+    repair_contract: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_R002_REPAIR_CONTRACT.json"
+  bootstrap_repaired_candidate: "fdb053a5094154e9e282b5fe076b9b6dc0c12821"
+  bootstrap_calibration_status: PENDING_EXACT_HEAD_NATIVE_EXECUTION
+  bootstrap_calibration_harness: "scripts/mros/calibrate_review_audit_board_v2.py"
   bootstrap_calibration_case_registry: "research/review_board/CALIBRATION_CASES.json"
-  bootstrap_calibration_case_count: 32
+  bootstrap_calibration_case_count: 39
   bootstrap_acceptance_contract: "research/evidence/sprints/S003/S003_ACCEPTANCE_CONTRACT.json"
-  bootstrap_calibration_request: "research/evidence/sprints/S003/agent_queue/requests/S003_CALIBRATION_R95.json"
-  bootstrap_calibration_queue_commit: "2ba73a0147aa704f9a86f8d983f562b73b0f2233"
-  bootstrap_independent_review_status: REVIEW_DISAGREEMENT_REQUIRES_ADJUDICATION
+  bootstrap_independent_review_status: BLOCKED_UNTIL_REPAIRED_NATIVE_PASS
   bootstrap_independent_audit_status: BLOCKED_UNTIL_REPAIRED_REVIEW_PASS
   autonomous_authority: NOT_AUTHORIZED
 
@@ -78,7 +88,6 @@ execution_environment:
   queue_branch: automation/mros-agent-queue-v1
   codex_cli_on_mac: "0.146.0"
   python_on_mac: "3.12.2"
-  bridge_tests: "6/6_PASS"
   mac_worker_current_status: RUNNING_AND_PROCESSING_QUEUE
   isolated_reviewer_backend: PROVEN
   isolated_auditor_backend: AVAILABLE_PENDING_BOOTSTRAP_USE
@@ -125,8 +134,8 @@ work_package_status:
 next_action:
   sprint: S003
   work_package: WP001
-  objective: "Consume R95 exact-head 32-case native calibration. If PASS, freeze R002 population manifest and launch 10 fresh bridge-bound reviewers. Repair and repeat on any blocker. After nonblocking review, launch 10 fresh auditors and authorize Boards only if the full acceptance contract is satisfied."
-  expected_candidate: "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7"
+  objective: "Run exact-head 39-case native calibration on repaired candidate fdb053a5094154e9e282b5fe076b9b6dc0c12821. If PASS, freeze a fresh R003 review population with adaptive initial quorum 3. Any blocking finding repairs immediately and invalidates prior evidence. After nonblocking review, run adaptive audit quorum and authorize Boards only if the full acceptance contract is satisfied."
+  expected_candidate: "fdb053a5094154e9e282b5fe076b9b6dc0c12821"
   queue_branch: automation/mros-agent-queue-v1
 
 execution_policy:
