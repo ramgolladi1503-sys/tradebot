@@ -4,9 +4,9 @@
   "controller_transport": {
     "candidate_head": "0c5d6268ef224450cd881da588efcce04c630414",
     "execution_role_id": "R02",
-    "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R02.json",
-    "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R004_R02.md",
-    "receipt_path": "research/evidence/sprints/S003/agent_queue/receipts/S003_R004_R02.json",
+    "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R02_RETRY1.json",
+    "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R004_R02_RETRY1.md",
+    "receipt_path": "research/evidence/sprints/S003/agent_queue/receipts/S003_R004_R02_RETRY1.json",
     "round": "R004",
     "sprint": "S003"
   },
