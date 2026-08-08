@@ -1,0 +1,20 @@
+MROS S002 v10 exact-head native validation evidence
+
+Source: user-provided native terminal transcript captured 2026-08-08.
+
+Exact candidate HEAD: fd16f526842b9f4f27d7fd06859b059812e10796
+Working directory: /Users/madhuram/.mros-review/s002-native
+Git state: ## HEAD (no branch)
+Python: Python 3.12.2
+Command: python3 scripts/mros/validate_s002_fixtures.py
+
+Terminal summary:
+SUMMARY | checks=90 pass=90 fail=0
+S002_TARGETED_VALIDATION_PASS
+EXIT_CODE=0
+
+The supplied transcript shows PASS for every active case including the v10 explicit-null regressions:
+S002-C097 -> INVALID_INPUT / MROS-S002-E021-INVALID_SCHEMA_TYPE
+S002-C098 -> INVALID_INPUT / MROS-S002-E021-INVALID_SCHEMA_TYPE
+
+Evidence authority: exact-head native validation only. This artifact does not constitute independent review, S002 acceptance, Board calibration, S003 activation, runtime authority, or promotion.
