@@ -10,7 +10,7 @@ active_work_package: WP001
 active_sprint: S003
 last_completed_sprint: S002
 program_status: ACTIVE
-active_sprint_status: BOARD_BOOTSTRAP_R003_REVIEW_PREPARATION
+active_sprint_status: BOARD_AUTONOMOUS_R004_REVIEW_REPAIR_REQUIRED
 
 s002_acceptance:
   decision: ACCEPTED
