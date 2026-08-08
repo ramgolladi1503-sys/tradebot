@@ -70,6 +70,27 @@ def worker_operational_health(root:Path):
  return bool(d.get('operational')) and status=='RUNNING' and worker_alive_from_launchd(),status,err
 def write_health(path:Path,h:Health):
  h.updated_at=time.time();path.parent.mkdir(parents=True,exist_ok=True);tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(asdict(h),sort_keys=True,indent=2)+'\n',encoding='utf-8');os.replace(tmp,path)
+def recover_authority_checkout(repo:Path,root:Path):
+ """Preserve unexpected local authority edits, then restore the canonical fast-forward path.
+
+    Nothing is discarded: dirty tracked/untracked state is stored in a local git stash and
+    recorded outside the repository. Recovery is permitted only when local HEAD is already
+    an ancestor of the remote authority HEAD; divergent local commits remain a hard stop.
+    """
+ status=git(repo,'status','--porcelain').stdout.strip()
+ if not status:return None
+ local=ref(repo,'HEAD');remote=ref(repo,f'origin/{AUTHORITY_BRANCH}')
+ if git(repo,'merge-base','--is-ancestor',local,remote,check=False).returncode!=0:
+  raise SupervisorError(f'AUTHORITY_DIRTY_AND_DIVERGED:local={local}:remote={remote}')
+ label=f'MROS_AUTONOMOUS_RECOVERY_{int(time.time())}_{local[:8]}'
+ p=git(repo,'stash','push','--include-untracked','-m',label,timeout=300,check=False)
+ if p.returncode!=0:raise SupervisorError(f'AUTHORITY_RECOVERY_STASH_FAILED:{p.stderr or p.stdout}')
+ if git(repo,'status','--porcelain').stdout.strip():raise SupervisorError('AUTHORITY_RECOVERY_DID_NOT_CLEAN_WORKTREE')
+ stash=git(repo,'stash','list','-1','--format=%gd:%H:%s',check=False).stdout.strip()
+ log=root/'authority_recovery.log';log.parent.mkdir(parents=True,exist_ok=True)
+ with log.open('a',encoding='utf-8') as fh:fh.write(f'{time.time()} local={local} remote={remote} stash={stash} status={status!r}\n')
+ git(repo,'merge','--ff-only',f'origin/{AUTHORITY_BRANCH}',timeout=300)
+ return stash
 def invoke(repo:Path,name:str,args:list[str],timeout=7200):
  script=BRIDGE_ROOT/'scripts/mros'/name
  if not script.is_file():raise SupervisorError(f'SCRIPT_MISSING:{script}')
@@ -99,7 +120,7 @@ def main():
  try:
   while True:
    try:
-    fetch(repo);h.authority_head=ref(repo,f'origin/{AUTHORITY_BRANCH}');h.queue_head=ref(repo,f'origin/{QUEUE_BRANCH}');st=parse_program_state(read_at_ref(repo,f'origin/{AUTHORITY_BRANCH}',str(STATE)));h.milestone=st.get('active_milestone','');h.work_package=st.get('active_work_package','');h.sprint=st.get('active_sprint','');h.runtime_authority=st.get('runtime_authority') or 'NONE';h.m9_started=h.milestone=='M9';req,rec=queue_inventory(repo);names={Path(x).name for x in req};h.pending_requests=len(names-set(rec));h.completed_receipts,h.failed_receipts=receipt_stats(rec);h.worker_alive,h.worker_status,h.worker_last_error=worker_operational_health(root);h.phase,h.next_action=derive_phase(st,req,rec)
+    fetch(repo);recover_authority_checkout(repo,root);h.authority_head=ref(repo,f'origin/{AUTHORITY_BRANCH}');h.queue_head=ref(repo,f'origin/{QUEUE_BRANCH}');st=parse_program_state(read_at_ref(repo,f'origin/{AUTHORITY_BRANCH}',str(STATE)));h.milestone=st.get('active_milestone','');h.work_package=st.get('active_work_package','');h.sprint=st.get('active_sprint','');h.runtime_authority=st.get('runtime_authority') or 'NONE';h.m9_started=h.milestone=='M9';req,rec=queue_inventory(repo);names={Path(x).name for x in req};h.pending_requests=len(names-set(rec));h.completed_receipts,h.failed_receipts=receipt_stats(rec);h.worker_alive,h.worker_status,h.worker_last_error=worker_operational_health(root);h.phase,h.next_action=derive_phase(st,req,rec)
     if h.runtime_authority!='NONE':raise SupervisorError(f'RUNTIME_AUTHORITY_FORBIDDEN:{h.runtime_authority}')
     if h.m9_started:raise SupervisorError('M9_START_FORBIDDEN')
     if h.phase=='HARD_STOP' and st.get('program_status')=='M8_COMPLETE_M9_HARD_STOP':h.supervisor_status='RUNNING';h.next_action='M8_COMPLETE_WAIT';write_health(hp,h)
