@@ -1,0 +1,36 @@
+{
+  "broker_actions_allowed": false,
+  "job": {
+    "backend": "codex",
+    "candidate_sha": "8b8a209d4b9e06a8e6ab9c6f0d8cf5ff005d2fd3",
+    "command_hash": "58252422d9bb73dcf06ed7c396e1b38607d851e35d81bf26b97dab4e231f4375",
+    "created_at": 1786215356.5414212,
+    "error_code": null,
+    "error_detail": null,
+    "exit_code": 0,
+    "finished_at": 1786215634.791498,
+    "job_id": "75c662092b994e2caed2a867aaabb361",
+    "job_type": "reviewer",
+    "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R007_R03.json",
+    "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R007_R03.md",
+    "role_id": "R03",
+    "started_at": 1786215356.57583,
+    "state": "SUCCEEDED",
+    "worktree_path": "/Users/madhuram/.mros-agent-bridge/jobs/mros-reviewer-R03-75c66209"
+  },
+  "request": {
+    "backend": "codex",
+    "candidate_sha": "8b8a209d4b9e06a8e6ab9c6f0d8cf5ff005d2fd3",
+    "created_at": "2026-08-09",
+    "created_by": "mros-autonomous-cycle",
+    "job_type": "reviewer",
+    "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R007_R03.json",
+    "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R007_R03.md",
+    "request_id": "S003-R007-R03-8b8a209d",
+    "role_id": "R03",
+    "schema_version": 1
+  },
+  "runtime_authority": "NONE",
+  "schema_version": 1,
+  "worker_id": "mros-mac-worker"
+}
