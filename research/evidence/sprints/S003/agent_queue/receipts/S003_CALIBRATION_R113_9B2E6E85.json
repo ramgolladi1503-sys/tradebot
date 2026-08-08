@@ -1,0 +1,36 @@
+{
+  "broker_actions_allowed": false,
+  "job": {
+    "backend": "codex",
+    "candidate_sha": "9b2e6e853444dae0c75a9a57fce910b3389cc6f1",
+    "command_hash": "1d7df09c5fc83a61347fe5a6027de6ff4759698835dd6f0b862eeba5b4fd7ebf",
+    "created_at": 1786211194.612677,
+    "error_code": null,
+    "error_detail": null,
+    "exit_code": 0,
+    "finished_at": 1786211548.219409,
+    "job_id": "fb61daed90464e988838c46b68c3ce8e",
+    "job_type": "reviewer",
+    "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_CALIBRATION_R113_9B2E6E85.md",
+    "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_CALIBRATION_R113_9B2E6E85.md",
+    "role_id": "R113",
+    "started_at": 1786211194.61498,
+    "state": "SUCCEEDED",
+    "worktree_path": "/Users/madhuram/.mros-agent-bridge/jobs/mros-reviewer-R113-fb61daed"
+  },
+  "request": {
+    "backend": "codex",
+    "candidate_sha": "9b2e6e853444dae0c75a9a57fce910b3389cc6f1",
+    "created_at": "2026-08-08",
+    "created_by": "mros-recovery-controller",
+    "job_type": "reviewer",
+    "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_CALIBRATION_R113_9B2E6E85.md",
+    "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_CALIBRATION_R113_9B2E6E85.md",
+    "request_id": "S003_CALIBRATION_R113_9B2E6E85",
+    "role_id": "R113",
+    "schema_version": 1
+  },
+  "runtime_authority": "NONE",
+  "schema_version": 1,
+  "worker_id": "mros-mac-worker"
+}
