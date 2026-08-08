@@ -1,0 +1,61 @@
+{
+  "schema_version": "mros-review-transport-archive-v1",
+  "sprint": "S003",
+  "round": "R007",
+  "candidate_head": "8b8a209d4b9e06a8e6ab9c6f0d8cf5ff005d2fd3",
+  "disposition": "TRANSPORT_INVALID_FRESH_POPULATION_REQUIRED",
+  "candidate_change_required": false,
+  "native_validation": {
+    "request": "research/evidence/sprints/S003/agent_queue/requests/S003_CALIBRATION_R115_8B8A209D.json",
+    "result": "research/evidence/sprints/S003/agent_queue/results/S003_CALIBRATION_R115_8B8A209D.md",
+    "verdict": "PASS",
+    "cases": 41,
+    "failures": 0
+  },
+  "transport_failures": [
+    {
+      "role": "R02",
+      "attempt": "original",
+      "receipt": "research/evidence/sprints/S003/agent_queue/receipts/S003_R007_R02.json",
+      "reason": "WORKTREE_CREATE_FAILED",
+      "classification": "INFRASTRUCTURE"
+    },
+    {
+      "role": "R02",
+      "attempt": "retry1",
+      "result": "research/evidence/sprints/S003/agent_queue/results/S003_R007_R02_RETRY1.json",
+      "reason": "reviewer treated queue-side post-candidate packet absence from historical candidate tree as UNKNOWN",
+      "classification": "TRANSPORT_SCOPE_MISINTERPRETATION"
+    },
+    {
+      "role": "R03",
+      "attempt": "original",
+      "result": "research/evidence/sprints/S003/agent_queue/results/S003_R007_R03.json",
+      "reason": "reviewer treated queue-side post-candidate packet absence from historical candidate tree as UNKNOWN",
+      "classification": "TRANSPORT_SCOPE_MISINTERPRETATION"
+    },
+    {
+      "role": "R03",
+      "attempt": "retry1",
+      "result": "research/evidence/sprints/S003/agent_queue/results/S003_R007_R03_RETRY1.json",
+      "reason": "finding contradicted current normative receipt-causality policy by requiring a descendant post-freeze receipt origin to be rejected while the policy requires receipt creation strictly after freeze",
+      "classification": "REVIEW_CONTRACT_MISINTERPRETATION"
+    }
+  ],
+  "nonblocking_observations": [
+    {
+      "role": "R01",
+      "result": "research/evidence/sprints/S003/agent_queue/results/S003_R007_R01.json",
+      "verdict": "PASS_WITH_MINOR_FINDINGS"
+    },
+    {
+      "role": "R02",
+      "result": "research/evidence/sprints/S003/agent_queue/results/S003_R007_R02_RETRY2.json",
+      "verdict": "PASS"
+    }
+  ],
+  "governance_rule": "Do not aggregate or repair candidate code from R007. Preserve all attempts as historical transport evidence and freeze a fresh independent population on the same exact calibrated candidate.",
+  "next_action": "FREEZE_FRESH_FULL_REVIEW_POPULATION",
+  "runtime_authority": "NONE",
+  "m9_status": "NOT_STARTED"
+}
