@@ -1,0 +1,22 @@
+{
+  "repo_root": "/Users/madhuram/.mros-agent-bridge/program",
+  "allowed_repo_realpath": "/Users/madhuram/.mros-agent-bridge/program",
+  "worktree_root": "/Users/madhuram/.mros-agent-bridge/jobs",
+  "state_root": "/Users/madhuram/.mros-agent-bridge/state",
+  "max_parallel_jobs": 4,
+  "backends": {
+    "codex": {
+      "argv": [
+        "python3",
+        "/Users/madhuram/.mros-agent-bridge/bridge/scripts/mros/mros_codex_backend.py",
+        "--worktree",
+        "{worktree}",
+        "--packet",
+        "{packet}",
+        "--output",
+        "{output}"
+      ],
+      "timeout_seconds": 3600
+    }
+  }
+}
