@@ -1,19 +1,11 @@
 #!/usr/bin/env python3
 """Local, allowlisted execution bridge for MROS reviewer/auditor jobs.
 
-This module is intentionally narrow:
-- no arbitrary shell command API;
-- no broker/runtime actions;
-- only preconfigured model backends may execute;
-- every job is bound to an exact Git candidate SHA;
-- every job receives a fresh detached worktree and process environment;
-- reviewer/auditor outputs are isolated by role/job id;
-- immutable JSONL job events are recorded locally.
-
-It is an execution substrate only. It does NOT declare reviewer independence,
-aggregate findings, accept sprints, grant authority, or advance MROS state.
+The bridge is execution substrate only. It never aggregates findings, grants
+runtime authority, changes broker/runtime/strategy state, accepts a sprint, or
+advances MROS. Every job is bound to an exact commit and receives a fresh
+isolated checkout plus fresh process environment.
 """
-
 from __future__ import annotations
 
 import hashlib
@@ -46,11 +38,7 @@ class BackendSpec:
     timeout_seconds: int = 3600
 
     def render(self, *, worktree: Path, packet: Path, output: Path) -> list[str]:
-        values = {
-            "worktree": str(worktree),
-            "packet": str(packet),
-            "output": str(output),
-        }
+        values = {"worktree": str(worktree), "packet": str(packet), "output": str(output)}
         rendered = [part.format(**values) for part in self.argv_template]
         if not rendered or not rendered[0].strip():
             raise BridgeError("BACKEND_COMMAND_EMPTY")
@@ -116,12 +104,7 @@ class JobStore:
         return JobRecord(**json.loads(path.read_text(encoding="utf-8")))
 
     def event(self, job_id: str, event: str, details: Mapping[str, Any] | None = None) -> None:
-        row = {
-            "ts": time.time(),
-            "job_id": job_id,
-            "event": event,
-            "details": dict(details or {}),
-        }
+        row = {"ts": time.time(), "job_id": job_id, "event": event, "details": dict(details or {})}
         with self._lock:
             with self.events_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(row, sort_keys=True) + "\n")
@@ -144,8 +127,7 @@ class MrosAgentBridge:
         allowed = self.config.allowed_repo_realpath.resolve()
         if actual != allowed:
             raise BridgeError("REPOSITORY_ROOT_NOT_ALLOWLISTED")
-        git_marker = actual / ".git"
-        if not git_marker.exists():
+        if not (actual / ".git").exists():
             raise BridgeError("REPOSITORY_GIT_MARKER_MISSING")
 
     def health(self) -> dict[str, Any]:
@@ -172,7 +154,6 @@ class MrosAgentBridge:
         packet_path = str(payload.get("packet_path") or "").strip()
         output_path = str(payload.get("output_path") or "").strip()
         backend = str(payload.get("backend") or "").strip()
-
         if job_type not in JOB_TYPES:
             raise BridgeError("JOB_TYPE_INVALID")
         if not ROLE_RE.fullmatch(role_id):
@@ -185,25 +166,17 @@ class MrosAgentBridge:
             raise BridgeError("CANDIDATE_SHA_INVALID")
         if backend not in self.config.backends:
             raise BridgeError("BACKEND_NOT_ALLOWLISTED")
-
         packet = self._resolve_repo_file(packet_path, must_exist=True)
         output = self._resolve_repo_file(output_path, must_exist=False)
         if packet == output:
             raise BridgeError("PACKET_OUTPUT_PATH_COLLISION")
         if output.exists():
             raise BridgeError("OUTPUT_PATH_ALREADY_EXISTS")
-
         self._assert_git_object(candidate_sha)
         job_id = uuid.uuid4().hex
-        record = JobRecord(
-            job_id=job_id,
-            job_type=job_type,
-            role_id=role_id,
-            candidate_sha=candidate_sha,
-            packet_path=packet_path,
-            output_path=output_path,
-            backend=backend,
-        )
+        record = JobRecord(job_id=job_id, job_type=job_type, role_id=role_id,
+                           candidate_sha=candidate_sha, packet_path=packet_path,
+                           output_path=output_path, backend=backend)
         self.store.save(record)
         self.store.event(job_id, "JOB_QUEUED", {"candidate_sha": candidate_sha, "role_id": role_id})
         thread = threading.Thread(target=self._run_job, args=(job_id,), daemon=True)
@@ -233,14 +206,9 @@ class MrosAgentBridge:
         return candidate
 
     def _assert_git_object(self, sha: str) -> None:
-        result = subprocess.run(
-            ["git", "cat-file", "-e", f"{sha}^{{commit}}"],
-            cwd=self.config.repo_root,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=20,
-            check=False,
-        )
+        result = subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"],
+                                cwd=self.config.repo_root, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=20, check=False)
         if result.returncode != 0:
             raise BridgeError("CANDIDATE_SHA_NOT_PRESENT_LOCALLY")
 
@@ -261,20 +229,11 @@ class MrosAgentBridge:
                 argv = spec.render(worktree=worktree, packet=packet, output=output)
                 record.command_hash = hashlib.sha256("\0".join(argv).encode("utf-8")).hexdigest()
                 self.store.save(record)
-                env = self._fresh_job_env(record, worktree, output)
-                completed = subprocess.run(
-                    argv,
-                    cwd=worktree,
-                    env=env,
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    timeout=spec.timeout_seconds,
-                    check=False,
-                )
-                log_path = self.config.state_root / "jobs" / f"{job_id}.log"
-                log_path.write_text(completed.stdout or "", encoding="utf-8")
+                completed = subprocess.run(argv, cwd=worktree,
+                    env=self._fresh_job_env(record, worktree, output), stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                    timeout=spec.timeout_seconds, check=False)
+                (self.config.state_root / "jobs" / f"{job_id}.log").write_text(completed.stdout or "", encoding="utf-8")
                 record.exit_code = completed.returncode
                 if completed.returncode != 0:
                     raise BridgeError("BACKEND_EXIT_NONZERO")
@@ -283,115 +242,95 @@ class MrosAgentBridge:
                 record.state = "SUCCEEDED"
                 self.store.event(job_id, "JOB_SUCCEEDED", {"output_path": record.output_path})
             except subprocess.TimeoutExpired as exc:
-                record.state = "FAILED"
-                record.error_code = "BACKEND_TIMEOUT"
-                record.error_detail = str(exc)
+                record.state = "FAILED"; record.error_code = "BACKEND_TIMEOUT"; record.error_detail = str(exc)
                 self.store.event(job_id, "JOB_FAILED", {"error_code": record.error_code})
             except BridgeError as exc:
-                record.state = "BLOCKED" if str(exc) in {
-                    "CANDIDATE_SHA_NOT_PRESENT_LOCALLY",
-                    "BACKEND_NOT_ALLOWLISTED",
-                } else "FAILED"
-                record.error_code = str(exc)
+                record.state = "BLOCKED" if str(exc) in {"CANDIDATE_SHA_NOT_PRESENT_LOCALLY", "BACKEND_NOT_ALLOWLISTED"} else "FAILED"
+                record.error_code = str(exc).split(":", 1)[0]
                 record.error_detail = str(exc)
-                self.store.event(job_id, "JOB_FAILED", {"error_code": record.error_code})
+                self.store.event(job_id, "JOB_FAILED", {"error_code": record.error_code, "detail": record.error_detail[-1000:]})
             except Exception as exc:
-                record.state = "FAILED"
-                record.error_code = "UNEXPECTED_BRIDGE_ERROR"
-                record.error_detail = f"{type(exc).__name__}: {exc}"
+                record.state = "FAILED"; record.error_code = "UNEXPECTED_BRIDGE_ERROR"; record.error_detail = f"{type(exc).__name__}: {exc}"
                 self.store.event(job_id, "JOB_FAILED", {"error_code": record.error_code})
             finally:
                 if worktree is not None:
                     self._remove_worktree(worktree)
-                # Publish terminal state only after isolation cleanup completes.
                 record.finished_at = time.time()
                 self.store.save(record)
                 with self._thread_lock:
                     self._threads.pop(job_id, None)
 
     def _create_worktree(self, record: JobRecord) -> Path:
+        """Create an exact-candidate isolation checkout.
+
+        Primary path uses git worktree. If shared worktree registry/lock state is
+        unhealthy after bounded retries, fall back to a local --shared clone and
+        detached checkout of the exact same candidate. The fallback is still
+        local, read-only from the reviewer's perspective, exact-head bound, and
+        never changes authority or queue refs.
+        """
         self.config.worktree_root.mkdir(parents=True, exist_ok=True)
-        worktree = self.config.worktree_root / f"mros-{record.job_type}-{record.role_id}-{record.job_id[:8]}"
+        path = self.config.worktree_root / f"mros-{record.job_type}-{record.role_id}-{record.job_id[:8]}"
         with self._worktree_lock:
             last_output = ""
             for attempt in range(3):
-                subprocess.run(
-                    ["git", "worktree", "prune"],
-                    cwd=self.config.repo_root,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=120,
-                    check=False,
-                )
-                if worktree.exists():
-                    shutil.rmtree(worktree, ignore_errors=True)
-                result = subprocess.run(
-                    ["git", "worktree", "add", "--detach", str(worktree), record.candidate_sha],
-                    cwd=self.config.repo_root,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    timeout=180,
-                    check=False,
-                )
+                subprocess.run(["git", "worktree", "prune"], cwd=self.config.repo_root,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=120, check=False)
+                if path.exists():
+                    shutil.rmtree(path, ignore_errors=True)
+                result = subprocess.run(["git", "worktree", "add", "--detach", str(path), record.candidate_sha],
+                                        cwd=self.config.repo_root, stdout=subprocess.PIPE,
+                                        stderr=subprocess.STDOUT, text=True, timeout=180, check=False)
                 if result.returncode == 0:
-                    return worktree
+                    return path
                 last_output = (result.stdout or "").strip()
                 time.sleep(0.25 * (attempt + 1))
-            self.store.event(
-                record.job_id,
-                "WORKTREE_CREATE_RETRY_EXHAUSTED",
-                {"attempts": 3, "detail": last_output[-1000:]},
-            )
-            raise BridgeError("WORKTREE_CREATE_FAILED")
+
+            # Registry-independent fallback. This specifically addresses repeated
+            # WORKTREE_CREATE_FAILED without weakening exact-head provenance.
+            if path.exists():
+                shutil.rmtree(path, ignore_errors=True)
+            clone = subprocess.run(["git", "clone", "--shared", "--no-checkout", "--quiet",
+                                    str(self.config.repo_root), str(path)],
+                                   cwd=self.config.repo_root, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, text=True, timeout=300, check=False)
+            clone_output = (clone.stdout or "").strip()
+            if clone.returncode == 0:
+                checkout = subprocess.run(["git", "checkout", "--detach", record.candidate_sha],
+                                          cwd=path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                          text=True, timeout=180, check=False)
+                if checkout.returncode == 0:
+                    actual = subprocess.run(["git", "rev-parse", "HEAD"], cwd=path,
+                                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                            text=True, timeout=30, check=False).stdout.strip()
+                    if actual == record.candidate_sha:
+                        self.store.event(record.job_id, "ISOLATION_FALLBACK_CLONE_SUCCEEDED",
+                                         {"candidate_sha": actual, "worktree_add_detail": last_output[-1000:]})
+                        return path
+                clone_output = ((checkout.stdout or "").strip() if 'checkout' in locals() else clone_output)
+            shutil.rmtree(path, ignore_errors=True)
+            detail = f"worktree={last_output[-700:]} clone={clone_output[-700:]}"
+            self.store.event(record.job_id, "ISOLATION_CREATE_RETRY_EXHAUSTED", {"detail": detail})
+            raise BridgeError("WORKTREE_CREATE_FAILED:" + detail)
 
     def _remove_worktree(self, worktree: Path) -> None:
         with self._worktree_lock:
-            subprocess.run(
-                ["git", "worktree", "remove", "--force", str(worktree)],
-                cwd=self.config.repo_root,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=120,
-                check=False,
-            )
+            subprocess.run(["git", "worktree", "remove", "--force", str(worktree)],
+                           cwd=self.config.repo_root, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=120, check=False)
             shutil.rmtree(worktree, ignore_errors=True)
-            subprocess.run(
-                ["git", "worktree", "prune"],
-                cwd=self.config.repo_root,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=120,
-                check=False,
-            )
+            subprocess.run(["git", "worktree", "prune"], cwd=self.config.repo_root,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=120, check=False)
 
     def _fresh_job_env(self, record: JobRecord, worktree: Path, output: Path) -> dict[str, str]:
-        keep = {
-            "HOME",
-            "PATH",
-            "LANG",
-            "LC_ALL",
-            "TMPDIR",
-            "USER",
-            "LOGNAME",
-            "SHELL",
-            "TERM",
-            "SSL_CERT_FILE",
-            "SSL_CERT_DIR",
-        }
+        keep = {"HOME", "PATH", "LANG", "LC_ALL", "TMPDIR", "USER", "LOGNAME", "SHELL", "TERM", "SSL_CERT_FILE", "SSL_CERT_DIR"}
         env = {key: value for key, value in os.environ.items() if key in keep}
-        env.update(
-            {
-                "MROS_JOB_ID": record.job_id,
-                "MROS_JOB_TYPE": record.job_type,
-                "MROS_ROLE_ID": record.role_id,
-                "MROS_CANDIDATE_SHA": record.candidate_sha,
-                "MROS_OUTPUT_PATH": str(output),
-                "MROS_WORKTREE": str(worktree),
-                "MROS_RUNTIME_AUTHORITY": "NONE",
-                "MROS_BROKER_ACTIONS_ALLOWED": "0",
-            }
-        )
+        env.update({"MROS_JOB_ID": record.job_id, "MROS_JOB_TYPE": record.job_type,
+                    "MROS_ROLE_ID": record.role_id, "MROS_CANDIDATE_SHA": record.candidate_sha,
+                    "MROS_OUTPUT_PATH": str(output), "MROS_WORKTREE": str(worktree),
+                    "MROS_RUNTIME_AUTHORITY": "NONE", "MROS_BROKER_ACTIONS_ALLOWED": "0"})
         return env
 
 
@@ -417,23 +356,12 @@ def load_config(path: Path) -> BridgeConfig:
     raw = json.loads(path.read_text(encoding="utf-8"))
     repo_root = Path(raw["repo_root"]).expanduser().resolve()
     allowed = Path(raw.get("allowed_repo_realpath") or repo_root).expanduser().resolve()
-    return BridgeConfig(
-        repo_root=repo_root,
+    return BridgeConfig(repo_root=repo_root,
         worktree_root=Path(raw["worktree_root"]).expanduser().resolve(),
         state_root=Path(raw["state_root"]).expanduser().resolve(),
-        allowed_repo_realpath=allowed,
-        backends=load_backend_specs(raw.get("backends") or {}),
-        max_parallel_jobs=max(1, min(int(raw.get("max_parallel_jobs") or 4), 20)),
-    )
+        allowed_repo_realpath=allowed, backends=load_backend_specs(raw.get("backends") or {}),
+        max_parallel_jobs=max(1, min(int(raw.get("max_parallel_jobs") or 4), 20)))
 
 
-__all__ = [
-    "BackendSpec",
-    "BridgeConfig",
-    "BridgeError",
-    "JobRecord",
-    "JobStore",
-    "MrosAgentBridge",
-    "load_backend_specs",
-    "load_config",
-]
+__all__ = ["BackendSpec", "BridgeConfig", "BridgeError", "JobRecord", "JobStore",
+           "MrosAgentBridge", "load_backend_specs", "load_config"]
