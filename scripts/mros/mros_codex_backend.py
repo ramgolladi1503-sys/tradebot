@@ -161,6 +161,20 @@ conversation. Do not read peer reviewer/auditor outputs unless the supplied
 packet explicitly requires them for an auditor role. Do not repair or modify the
 candidate. Your final response must be the complete review/audit artifact content
 required by the packet; do not wrap it in chat commentary.
+
+TRANSPORT FACTS (authoritative and fail-closed):
+- The complete frozen review/audit packet is the prompt text immediately above
+  this boundary. It is transported from the queue branch by the bridge and is
+  intentionally NOT committed into the detached exact-candidate worktree.
+- Therefore, absence of packet_path inside the candidate worktree is expected
+  transport isolation and MUST NOT by itself produce UNKNOWN, MAJOR, or CRITICAL.
+  Packet population/freeze/provenance is validated independently by the
+  controller/aggregator against queue-branch receipts and manifests.
+- The sandbox is intentionally read-only. A test that requires a writable temp
+  directory may be unavailable here. Do not convert that sandbox property into
+  UNKNOWN when deterministic exact-head native evidence is supplied and can be
+  inspected. Static/adversarial inspection remains mandatory and blocking code
+  defects must still be reported.
 ---
 """
     final_prompt = prompt + boundary
