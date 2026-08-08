@@ -45,3 +45,31 @@ def test_corpus_runner_writes_manifest_and_research_only_outputs(tmp_path):
     assert passports
     assert all(p["certification"] == "NOT_CERTIFIED" for p in passports)
     assert all(p["integration"]["allowed_tradebot_mode"] == "RESEARCH_ONLY" for p in passports)
+
+
+def test_tick_rows_are_aggregated_to_minute_ohlc(tmp_path):
+    corpus = tmp_path / "ticks.csv"
+    corpus.write_text(
+        "exchange_timestamp,instrument_key,ltp,ltq,best_bid,best_ask,is_fallback\n"
+        + "\n".join(
+            f"2026-01-{day:02d}T09:{15+bar:02d}:10,NSE_INDEX|NIFTY,{100+day+bar},10,{99.99+day+bar},{100.01+day+bar},false"
+            for day in range(1, 25)
+            for bar in range(8)
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    args = runner.build_parser().parse_args([
+        "--no-known-roots",
+        "--no-gdrive-discovery",
+        "--corpus-root", str(corpus),
+        "--output-dir", str(tmp_path / "tick-runs"),
+        "--run-id", "TICK-RUN",
+        "--instrument", "NIFTY",
+        "--min-trades", "1",
+        "--cost-bps", "0",
+    ])
+    manifest = runner.run(args)
+    assert manifest["loaded_rows"] > 0
+    assert manifest["inventory_summary"]["tick_ohlc_rows"] > 0
+    assert manifest["inventory_summary"]["ready_ohlc_rows"] == 0
