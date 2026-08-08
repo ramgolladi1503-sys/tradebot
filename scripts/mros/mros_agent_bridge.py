@@ -136,6 +136,7 @@ class MrosAgentBridge:
         self._semaphore = threading.BoundedSemaphore(config.max_parallel_jobs)
         self._threads: dict[str, threading.Thread] = {}
         self._thread_lock = threading.Lock()
+        self._worktree_lock = threading.Lock()
         self._validate_repo_root()
 
     def _validate_repo_root(self) -> None:
@@ -311,37 +312,58 @@ class MrosAgentBridge:
     def _create_worktree(self, record: JobRecord) -> Path:
         self.config.worktree_root.mkdir(parents=True, exist_ok=True)
         worktree = self.config.worktree_root / f"mros-{record.job_type}-{record.role_id}-{record.job_id[:8]}"
-        result = subprocess.run(
-            ["git", "worktree", "add", "--detach", str(worktree), record.candidate_sha],
-            cwd=self.config.repo_root,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=180,
-            check=False,
-        )
-        if result.returncode != 0:
+        with self._worktree_lock:
+            last_output = ""
+            for attempt in range(3):
+                subprocess.run(
+                    ["git", "worktree", "prune"],
+                    cwd=self.config.repo_root,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=120,
+                    check=False,
+                )
+                if worktree.exists():
+                    shutil.rmtree(worktree, ignore_errors=True)
+                result = subprocess.run(
+                    ["git", "worktree", "add", "--detach", str(worktree), record.candidate_sha],
+                    cwd=self.config.repo_root,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=180,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    return worktree
+                last_output = (result.stdout or "").strip()
+                time.sleep(0.25 * (attempt + 1))
+            self.store.event(
+                record.job_id,
+                "WORKTREE_CREATE_RETRY_EXHAUSTED",
+                {"attempts": 3, "detail": last_output[-1000:]},
+            )
             raise BridgeError("WORKTREE_CREATE_FAILED")
-        return worktree
 
     def _remove_worktree(self, worktree: Path) -> None:
-        subprocess.run(
-            ["git", "worktree", "remove", "--force", str(worktree)],
-            cwd=self.config.repo_root,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=120,
-            check=False,
-        )
-        shutil.rmtree(worktree, ignore_errors=True)
-        subprocess.run(
-            ["git", "worktree", "prune"],
-            cwd=self.config.repo_root,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=120,
-            check=False,
-        )
+        with self._worktree_lock:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", str(worktree)],
+                cwd=self.config.repo_root,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=120,
+                check=False,
+            )
+            shutil.rmtree(worktree, ignore_errors=True)
+            subprocess.run(
+                ["git", "worktree", "prune"],
+                cwd=self.config.repo_root,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=120,
+                check=False,
+            )
 
     def _fresh_job_env(self, record: JobRecord, worktree: Path, output: Path) -> dict[str, str]:
         keep = {
