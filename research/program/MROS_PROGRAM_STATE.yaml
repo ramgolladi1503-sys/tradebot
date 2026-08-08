@@ -70,7 +70,7 @@ review_audit_governance:
     major: 5
     mandatory_unknown: 1
     repair_contract: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_R002_REPAIR_CONTRACT.json"
-  bootstrap_repaired_candidate: "fdb053a5094154e9e282b5fe076b9b6dc0c12821"
+  bootstrap_repaired_candidate: "d6b502d55f6d0a2b66719607b816873d9bf78d62"
   bootstrap_calibration_status: PENDING_EXACT_HEAD_NATIVE_EXECUTION
   bootstrap_calibration_harness: "scripts/mros/calibrate_review_audit_board_v2.py"
   bootstrap_calibration_case_registry: "research/review_board/CALIBRATION_CASES.json"
@@ -134,8 +134,8 @@ work_package_status:
 next_action:
   sprint: S003
   work_package: WP001
-  objective: "Run exact-head 39-case native calibration on repaired candidate fdb053a5094154e9e282b5fe076b9b6dc0c12821. If PASS, freeze a fresh R003 review population with adaptive initial quorum 3. Any blocking finding repairs immediately and invalidates prior evidence. After nonblocking review, run adaptive audit quorum and authorize Boards only if the full acceptance contract is satisfied."
-  expected_candidate: "fdb053a5094154e9e282b5fe076b9b6dc0c12821"
+  objective: "Run exact-head 39-case native calibration on repaired candidate d6b502d55f6d0a2b66719607b816873d9bf78d62. If PASS, freeze fresh R003 review population with adaptive initial quorum 3. Any blocking finding repairs immediately and invalidates prior evidence. After nonblocking review, run adaptive audit quorum and authorize Boards only if the full acceptance contract is satisfied."
+  expected_candidate: "d6b502d55f6d0a2b66719607b816873d9bf78d62"
   queue_branch: automation/mros-agent-queue-v1
 
 execution_policy:
