@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Persistent MROS supervisor."""
+"""Persistent MROS supervisor that executes repository steps autonomously."""
 from __future__ import annotations
 import argparse,fcntl,json,os,re,subprocess,sys,time
 from dataclasses import dataclass,asdict
@@ -11,6 +11,7 @@ class SupervisorError(RuntimeError):pass
 @dataclass
 class Health:
  supervisor_status:str='STARTING';phase:str='UNKNOWN';authority_head:str='';queue_head:str='';milestone:str='';work_package:str='';sprint:str='';pending_requests:int=0;completed_receipts:int=0;failed_receipts:int=0;worker_alive:bool=False;worker_status:str='UNKNOWN';worker_last_error:str|None=None;next_action:str='DISCOVER';last_error:str|None=None;runtime_authority:str='NONE';m9_started:bool=False;updated_at:float=0.0
+
 def git(repo:Path,*args:str,timeout:int=180,check:bool=True)->subprocess.CompletedProcess[str]:
  p=subprocess.run(['git',*args],cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=False)
  if check and p.returncode!=0:raise SupervisorError(f"GIT_FAILED:{' '.join(args)}:{(p.stderr or p.stdout).strip()}")
@@ -33,27 +34,18 @@ def queue_inventory(repo:Path)->tuple[list[str],dict[str,dict[str,Any]]]:
    except Exception:receipts[Path(p).name]={'_invalid':True}
  return requests,receipts
 def _is_review_request(name:str)->bool:
- upper=name.upper()
- if 'CALIBRATION' in upper:return False
- if re.search(r'(?:^|[_-])A\d{2,3}(?:[_\.-]|$)',upper):return False
- return bool(re.search(r'(?:^|[_-])R\d{2,3}(?:[_\.-]|$)',upper))
-def _is_audit_request(name:str)->bool:
- return bool(re.search(r'(?:^|[_-])A\d{2,3}(?:[_\.-]|$)',name.upper()))
+ u=name.upper()
+ if 'CALIBRATION' in u:return False
+ if re.search(r'(?:^|[_-])A\d{2,3}(?:[_\.-]|$)',u):return False
+ return bool(re.search(r'(?:^|[_-])R\d{2,3}(?:[_\.-]|$)',u))
+def _is_audit_request(name:str)->bool:return bool(re.search(r'(?:^|[_-])A\d{2,3}(?:[_\.-]|$)',name.upper()))
 def derive_phase(state:dict[str,str],requests:list[str],receipts:dict[str,dict[str,Any]])->tuple[str,str]:
  if state.get('active_milestone')=='M9':return 'HARD_STOP','M9_BOUNDARY_VIOLATION'
- if state.get('active_sprint')!='S003':return 'SPRINT_AUTOMATION','RUN_REPOSITORY_STEP'
- status=state.get('active_sprint_status','');names={Path(x).name for x in requests};done=set(receipts);pending=names-done
- if 'R95_PENDING' in status:return 'BOOTSTRAP_CALIBRATION_COMPLETE_CHECK','RUN_REPOSITORY_STEP'
- if 'R002_REVIEW_PREPARATION' in status:
-  return ('BOOTSTRAP_REVIEW_RUNNING','WAIT_FOR_REVIEW_QUORUM') if any(_is_review_request(x) for x in pending) else ('BOOTSTRAP_R002_AGGREGATION','RUN_REPOSITORY_STEP')
- if 'R002_REVIEW_PASS_A001_AUDIT_PREPARATION' in status:
-  return ('BOOTSTRAP_AUDIT_RUNNING','WAIT_FOR_AUDIT_QUORUM') if any(_is_audit_request(x) for x in pending) else ('BOOTSTRAP_A001_AGGREGATION','RUN_REPOSITORY_STEP')
- if 'AUTHORIZATION_PENDING' in status:return 'BOARD_AUTHORIZATION_PENDING','RUN_REPOSITORY_STEP'
- if 'REPAIR_REQUIRED' in status:return 'BOOTSTRAP_REPAIR_REQUIRED','RUN_REPOSITORY_STEP'
- if any('CALIBRATION' in x.upper() for x in pending):return 'BOOTSTRAP_CALIBRATION_RUNNING','WAIT_FOR_CALIBRATION_RECEIPT'
- if any(_is_audit_request(x) for x in pending):return 'BOOTSTRAP_AUDIT_RUNNING','WAIT_FOR_AUDIT_QUORUM'
- if any(_is_review_request(x) for x in pending):return 'BOOTSTRAP_REVIEW_RUNNING','WAIT_FOR_REVIEW_QUORUM'
- return 'BOOTSTRAP_TRANSITION_PENDING','RUN_REPOSITORY_STEP'
+ names={Path(x).name for x in requests};pending=names-set(receipts)
+ if any('CALIBRATION' in x.upper() for x in pending):return 'NATIVE_CALIBRATION_RUNNING','WAIT_AUTOMATICALLY'
+ if any(_is_audit_request(x) for x in pending):return 'AUDIT_RUNNING','WAIT_AUTOMATICALLY'
+ if any(_is_review_request(x) for x in pending):return 'REVIEW_RUNNING','WAIT_AUTOMATICALLY'
+ return ('AUTONOMOUS_S003_CYCLE','RUN_AUTONOMOUS_CYCLE') if state.get('active_sprint')=='S003' else ('SPRINT_AUTOMATION','RUN_AUTONOMOUS_CYCLE')
 def receipt_stats(receipts):
  ok=bad=0
  for d in receipts.values():
@@ -72,22 +64,16 @@ def worker_operational_health(state_root:Path)->tuple[bool,str,str|None]:
  except Exception:return False,'INVALID_HEALTH','WORKER_HEALTH_UNREADABLE'
  age=time.time()-float(d.get('updated_at') or 0);status=str(d.get('status') or 'UNKNOWN');err=d.get('last_error')
  if age>120:return False,'STALE',f'WORKER_HEALTH_STALE:{int(age)}s'
- launchd=worker_alive_from_launchd();operational=bool(d.get('operational')) and status=='RUNNING' and launchd
- return operational,status,err
+ launchd=worker_alive_from_launchd();return bool(d.get('operational')) and status=='RUNNING' and launchd,status,err
 def write_health(path:Path,h:Health)->None:
  h.updated_at=time.time();path.parent.mkdir(parents=True,exist_ok=True);tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(asdict(h),sort_keys=True,indent=2)+'\n',encoding='utf-8');os.replace(tmp,path)
-def run_bridge_script(name:str,repo:Path,*extra:str)->int:
- script=BRIDGE_ROOT/'scripts/mros'/name
+def run_cycle(repo:Path,state_root:Path)->tuple[int,str]:
+ script=BRIDGE_ROOT/'scripts/mros/mros_autonomous_cycle.py'
  if not script.is_file():raise SupervisorError(f'SCRIPT_MISSING:{script}')
- cmd=[sys.executable,str(script),'--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT),*extra]
- p=subprocess.run(cmd,cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=1200,check=False)
- if p.returncode not in (0,3):raise SupervisorError(f'{name}_FAILED:{p.returncode}:{(p.stderr or p.stdout).strip()}')
- return p.returncode
-def run_step(repo:Path,health:Path)->int:
- script=BRIDGE_ROOT/'scripts/mros/mros_supervisor_step.py'
- p=subprocess.run([sys.executable,str(script),'--repo',str(repo),'--health',str(health),'--once'],cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=900,check=False)
- if p.returncode not in (0,3):raise SupervisorError(f'SUPERVISOR_STEP_FAILED:{p.returncode}:{(p.stderr or p.stdout).strip()}')
- return p.returncode
+ p=subprocess.run([sys.executable,str(script),'--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT),'--state-root',str(state_root)],cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=7200,check=False)
+ detail=(p.stdout or p.stderr or '').strip().splitlines()[-1:] or ['']
+ if p.returncode not in (0,3):raise SupervisorError(f'AUTONOMOUS_CYCLE_FAILED:{p.returncode}:{detail[0]}')
+ return p.returncode,detail[0]
 def single_instance(lock_path:Path):
  lock_path.parent.mkdir(parents=True,exist_ok=True);h=lock_path.open('a+')
  try:fcntl.flock(h.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -104,19 +90,15 @@ def main()->int:
     state=parse_program_state(read_at_ref(repo,f'origin/{AUTHORITY_BRANCH}','research/program/MROS_PROGRAM_STATE.yaml'));h.milestone=state.get('active_milestone','');h.work_package=state.get('active_work_package','');h.sprint=state.get('active_sprint','');h.runtime_authority=state.get('runtime_authority') or 'NONE';h.m9_started=h.milestone=='M9'
     req,rec=queue_inventory(repo);names={Path(x).name for x in req};h.pending_requests=len(names-set(rec));h.completed_receipts,h.failed_receipts=receipt_stats(rec);h.worker_alive,h.worker_status,h.worker_last_error=worker_operational_health(root);h.phase,h.next_action=derive_phase(state,req,rec)
     if h.m9_started:raise SupervisorError('M9_START_FORBIDDEN')
+    if h.runtime_authority!='NONE':raise SupervisorError(f'RUNTIME_AUTHORITY_FORBIDDEN:{h.runtime_authority}')
     if not h.worker_alive and h.pending_requests>0:
      h.supervisor_status='HARD_STOP';h.phase='WORKER_BLOCKED';h.next_action='OPERATOR_ATTENTION';h.last_error=h.worker_last_error or f'WORKER_NOT_OPERATIONAL:{h.worker_status}';write_health(health_path,h)
     else:
      h.supervisor_status='RUNNING';h.last_error=None;write_health(health_path,h)
-     if h.next_action=='RUN_REPOSITORY_STEP':
-      status=state.get('active_sprint_status','')
-      if 'R95_PENDING' in status:run_step(repo,health_path)
-      fetch(repo);state=parse_program_state(read_at_ref(repo,f'origin/{AUTHORITY_BRANCH}','research/program/MROS_PROGRAM_STATE.yaml'));status=state.get('active_sprint_status','')
-      if 'R002_REVIEW_PREPARATION' in status:
-       run_bridge_script('mros_bootstrap_review_launcher.py',repo);run_bridge_script('mros_bootstrap_review_consumer.py',repo)
-      fetch(repo);state=parse_program_state(read_at_ref(repo,f'origin/{AUTHORITY_BRANCH}','research/program/MROS_PROGRAM_STATE.yaml'));status=state.get('active_sprint_status','')
-      if 'R002_REVIEW_PASS_A001_AUDIT_PREPARATION' in status:
-       run_bridge_script('mros_bootstrap_audit_launcher.py',repo);run_bridge_script('mros_bootstrap_audit_consumer.py',repo)
+     # The controller owns repository progression. Pending jobs cause a benign
+     # no-op/wait; completed populations are consumed without operator prompts.
+     rc,detail=run_cycle(repo,root)
+     h.next_action='WAIT_AUTOMATICALLY' if rc==3 else 'AUTONOMOUS_CYCLE_CONTINUE';h.last_error=None;write_health(health_path,h)
    except Exception as exc:
     h.supervisor_status='HARD_STOP';h.last_error=f'{type(exc).__name__}:{exc}';h.next_action='OPERATOR_ATTENTION';write_health(health_path,h)
     if a.once:return 2
