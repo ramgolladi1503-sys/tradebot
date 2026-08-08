@@ -1,0 +1,19 @@
+{
+  "repository": "ramgolladi1503-sys/tradebot",
+  "branch": "research/mros-program-v1",
+  "head": "5c7c0d6a75e6b8b56362011fb89b66efa29a64b3",
+  "validator": "scripts/mros/calibrate_review_audit_board.py",
+  "python_version": "3.12.2",
+  "command": "python3 scripts/mros/calibrate_review_audit_board.py",
+  "checks": 24,
+  "passed": 24,
+  "failed": 0,
+  "exit_code": 0,
+  "terminal_marker": "S003_BOARD_DETERMINISTIC_CALIBRATION_PASS",
+  "bridge_role": "R96",
+  "bridge_receipt": "research/evidence/sprints/S003/agent_queue/receipts/S003_CALIBRATION_R96.json",
+  "bridge_result": "research/evidence/sprints/S003/agent_queue/results/S003_CALIBRATION_R96.md",
+  "runtime_authority": "NONE",
+  "broker_actions": "NONE",
+  "status": "DETERMINISTIC_CALIBRATION_PASS_BOOTSTRAP_REVIEW_REQUIRED"
+}
