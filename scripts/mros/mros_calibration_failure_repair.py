@@ -38,6 +38,17 @@ def generation(auth:Path):
   m=re.search(r'_G(\d+)_',p.name)
   if m:nums.append(int(m.group(1)))
  return max(nums,default=0)+1
+
+def _queue_recalibration(q:Path,new_candidate:str)->str:
+ if not re.fullmatch(r'[0-9a-f]{40}',new_candidate):raise CalibrationRepairError('REPAIRED_CANDIDATE_INVALID')
+ bridge=Path('/Users/madhuram/.mros-agent-bridge/bridge/scripts/mros').resolve()
+ if str(bridge) not in sys.path:sys.path.insert(0,str(bridge))
+ from mros_autonomous_cycle_v2 import queue_calibration_v2
+ git(q,'fetch','origin',QUEUE,AUTH,timeout=300);git(q,'rebase',f'origin/{QUEUE}',timeout=300)
+ role=queue_calibration_v2(q,new_candidate)
+ if role in (None,'EXISTS'):raise CalibrationRepairError('REPAIRED_HEAD_CALIBRATION_NOT_QUEUED')
+ return str(role)
+
 def main():
  p=argparse.ArgumentParser();p.add_argument('--authority-repo',required=True,type=Path);p.add_argument('--queue-repo',required=True,type=Path);p.add_argument('--state-root',required=True,type=Path);a=p.parse_args();auth=a.authority_repo.resolve();q=a.queue_repo.resolve()
  try:
@@ -53,6 +64,8 @@ def main():
   try:result=json.loads((r.stdout or '').splitlines()[-1])
   except Exception:raise CalibrationRepairError('REPAIR_EXECUTOR_INVALID_OUTPUT')
   if r.returncode!=0 or result.get('status')!='REPAIR_PUBLISHED':raise CalibrationRepairError('REPAIR_EXECUTOR_BLOCKED:'+str(result.get('error')))
-  print(json.dumps({'status':'CALIBRATION_FAILURE_REPAIRED','generation':gen,'old_candidate':candidate,'new_candidate':result.get('candidate_head'),'repair_contract':cp.as_posix(),'runtime_authority':'NONE'},sort_keys=True));return 0
+  new_candidate=str(result.get('candidate_head') or '')
+  recalibration_role=_queue_recalibration(q,new_candidate)
+  print(json.dumps({'status':'CALIBRATION_FAILURE_REPAIRED','generation':gen,'old_candidate':candidate,'new_candidate':new_candidate,'repair_contract':cp.as_posix(),'recalibration_role':recalibration_role,'runtime_authority':'NONE'},sort_keys=True));return 0
  except Exception as exc:print(json.dumps({'status':'CALIBRATION_REPAIR_BLOCKED','error':f'{type(exc).__name__}:{exc}','runtime_authority':'NONE'},sort_keys=True));return 2
 if __name__=='__main__':raise SystemExit(main())
