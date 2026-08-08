@@ -9,8 +9,8 @@ active_milestone: M1
 active_work_package: WP001
 active_sprint: S003
 last_completed_sprint: S002
-program_status: BLOCKED
-active_sprint_status: BOARD_BOOTSTRAP_BLOCKED_EXTERNAL_EXECUTION_BRIDGE_AND_ISOLATED_AGENT_BACKEND
+program_status: ACTIVE
+active_sprint_status: BOARD_BOOTSTRAP_CALIBRATION_IN_PROGRESS
 
 s002_acceptance:
   decision: ACCEPTED
@@ -60,27 +60,29 @@ review_audit_governance:
   review_and_audit_are_distinct: true
   simple_majority_forbidden: true
   max_full_repair_rounds_per_sprint: 5
-  bootstrap_calibration_status: BLOCKED_NO_CALLABLE_NATIVE_EXECUTION_BRIDGE
-  bootstrap_independent_review_status: BLOCKED_NO_ISOLATED_AGENT_BACKEND
+  bootstrap_calibration_status: READY_TO_EXECUTE
+  bootstrap_independent_review_status: PENDING_CALIBRATION_AND_FROZEN_BOARD_CANDIDATE
   autonomous_authority: NOT_AUTHORIZED
-  prior_blocker_artifact: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_EXECUTION_BLOCKER.md"
-  prior_blocker_status: SUPERSEDED_IN_PART_MAC_DNS_EXTERNALLY_RESOLVED
-  current_blocker_artifact: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_BACKEND_REINVESTIGATION_20260808.md"
-  current_blocker_commit: "02afd942c1779dd7a6af07c2cbf110c9ab661158"
+  prior_blocker_artifact: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_BACKEND_REINVESTIGATION_20260808.md"
+  prior_blocker_status: SUPERSEDED_BY_AGENT_BRIDGE_SMOKE_PASS
+  bridge_smoke_artifact: "research/evidence/sprints/S003/S003_AGENT_BRIDGE_SMOKE_PASS.md"
+  bridge_smoke_artifact_commit: "5a53d59e79a1f4f19db09bb75ccc97f209f0f47f"
+  bridge_queue_result_commit: "715f2398abe468ac392024e2234aa13120a3c5dc"
 
 execution_environment_reinvestigation:
-  operator_mac_github_connectivity: EXTERNALLY_REPORTED_WORKING
+  operator_mac_github_connectivity: WORKING
   current_session_github_connector: WORKING
   current_session_native_git_network: DNS_FAILURE
-  current_session_mac_execution_bridge: UNAVAILABLE
-  codex_cli: UNAVAILABLE
-  antigravity_cli: UNAVAILABLE
-  claude_cli: UNAVAILABLE
-  gemini_cli: UNAVAILABLE
-  github_cli: UNAVAILABLE
-  repository_agent_orchestrator_external_agent_calls: false
-  callable_isolated_reviewer_backend: NOT_FOUND
-  callable_isolated_auditor_backend: NOT_FOUND
+  mac_execution_bridge: AVAILABLE_VIA_GIT_MAILBOX
+  bridge_branch: research/mros-agent-bridge-v1
+  queue_branch: automation/mros-agent-queue-v1
+  codex_cli_on_mac: "0.146.0"
+  python_on_mac: "3.12.2"
+  bridge_tests: "6/6_PASS"
+  isolated_reviewer_backend: PROVEN_BY_NON_CERTIFYING_R99_SMOKE
+  isolated_auditor_backend: AVAILABLE_SAME_SUBSTRATE_NOT_YET_BOOTSTRAP_PROVEN
+  runtime_authority: NONE
+  broker_actions_allowed: false
 
 milestone_status:
   M1: ACTIVE
@@ -122,10 +124,10 @@ work_package_status:
 next_action:
   sprint: S003
   work_package: WP001
-  objective: "Provide/call a legitimate execution bridge to a Git-capable native environment and an isolated-agent backend capable of 10+ fresh reviewer jobs and 10+ fresh auditor jobs. Then perform fresh sparse checkout provenance, deterministic Board calibration, bootstrap-independent Board review/audit, authorize only if gates pass, and resume S003."
-  required_native_condition: "Callable exact-head Git checkout/execution path from the active automation session"
-  required_independence_condition: "10+ genuinely isolated reviewer jobs and 10+ genuinely isolated auditor jobs or repository-authorized equivalent"
-  blocker_artifact: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_BACKEND_REINVESTIGATION_20260808.md"
+  objective: "Execute deterministic Review/Audit Board calibration, freeze the exact Board candidate, launch the required isolated bootstrap reviewer and auditor populations through the proven Git-mailbox Mac bridge, validate and aggregate their outputs, repair/recalibrate if required, and authorize normal autonomous Board use only if all bootstrap gates pass."
+  required_native_condition: "SATISFIED_BY_MAC_GIT_MAILBOX_BRIDGE"
+  required_independence_condition: "PENDING_EXECUTION_OF_10_PLUS_REVIEWERS_AND_10_PLUS_AUDITORS"
+  blocker_artifact: null
 
 execution_policy:
   sprint_prs: false
