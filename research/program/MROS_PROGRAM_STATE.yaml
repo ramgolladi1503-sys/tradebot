@@ -9,8 +9,8 @@ active_milestone: M1
 active_work_package: WP001
 active_sprint: S003
 last_completed_sprint: S002
-program_status: ACTIVE
-active_sprint_status: BOARD_BOOTSTRAP_CALIBRATION_REQUIRED
+program_status: BLOCKED
+active_sprint_status: BOARD_BOOTSTRAP_EXTERNAL_EXECUTION_BLOCKED
 
 s002_acceptance:
   decision: ACCEPTED
@@ -60,9 +60,11 @@ review_audit_governance:
   review_and_audit_are_distinct: true
   simple_majority_forbidden: true
   max_full_repair_rounds_per_sprint: 5
-  bootstrap_calibration_status: REQUIRED
-  bootstrap_independent_review_status: NOT_EXECUTED
+  bootstrap_calibration_status: BLOCKED_NATIVE_GIT_DNS
+  bootstrap_independent_review_status: BLOCKED_NO_ISOLATED_AGENT_ORCHESTRATION
   autonomous_authority: NOT_AUTHORIZED
+  blocker_artifact: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_EXECUTION_BLOCKER.md"
+  blocker_commit: "71c730f600e20338cf64dc37899e177980236259"
 
 milestone_status:
   M1: ACTIVE
@@ -104,10 +106,10 @@ work_package_status:
 next_action:
   sprint: S003
   work_package: WP001
-  objective: "Before normal autonomous S003 certification begins, execute deterministic calibration of the implemented Review Board and Audit Board, preserve exact-head evidence, obtain separate bootstrap-independent certification of the boards, and authorize normal use only if all calibration/review/audit gates pass. Then continue S003 under the manual-defined scope."
-  review_board_minimum_valid_independent_reviews: 10
-  audit_board_minimum_valid_independent_audits: 10
-  board_authority_before_bootstrap_completion: "Research / R"
+  objective: "Resume Review/Audit Board bootstrap when native exact-checkout execution and genuine isolated reviewer/auditor orchestration are available. Run deterministic calibration, preserve exact-head evidence, obtain independent Board bootstrap review/audit, authorize only if all gates pass, then continue normal S003 scope."
+  required_native_condition: "Git checkout/execution environment with working repository access"
+  required_independence_condition: "10+ genuinely isolated reviewer jobs and 10+ genuinely isolated auditor jobs or repository-authorized equivalent"
+  blocker_artifact: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_EXECUTION_BLOCKER.md"
 
 execution_policy:
   sprint_prs: false
