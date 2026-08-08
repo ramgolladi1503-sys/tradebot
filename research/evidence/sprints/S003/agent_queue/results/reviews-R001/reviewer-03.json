@@ -1,0 +1,46 @@
+{
+  "artifact_id": "S003-R03",
+  "sprint": "S003",
+  "round": "R001",
+  "candidate_head": "5c7c0d6a75e6b8b56362011fb89b66efa29a64b3",
+  "role": "evidence_provenance",
+  "independent_from_implementation": true,
+  "independent_from_review_aggregation": true,
+  "verdict": "REPAIR_REQUIRED",
+  "findings": [
+    {
+      "finding_id": "S003-R03-MAJOR-001",
+      "severity": "MAJOR",
+      "requirement": "Native validation evidence must represent the exact checks actually executed and bind them to the candidate head.",
+      "evidence": "scripts/mros/calibrate_review_audit_board.py constructs native evidence in memory with checks=1, passed=1, failed=0, and a fixed timestamp, while main() executes 24 calibration checks. No native evidence artifact is generated or hash-bound to the executed results.",
+      "falsifier": "A sealed native-evidence artifact records the exact executed check count, pass/fail results, command, candidate SHA, and content hash, and aggregation rejects any mismatch.",
+      "recommended_repair_scope": "Replace synthetic native metadata with sealed, content-addressed validation output whose counts and result are derived from the actual calibration run."
+    },
+    {
+      "finding_id": "S003-R03-MAJOR-002",
+      "severity": "MAJOR",
+      "requirement": "Calibration must exercise the production transport and serialization boundaries used by reviewers and auditors.",
+      "evidence": "The candidate replaces subprocess CLI validation and temporary JSON artifact round-trips with direct calls to validate_review, validate_audit, aggregate_payloads, aggregate_audits, and authorize. It therefore does not prove that serialized review/audit/native artifacts, file discovery, CLI parsing, or transport artifacts preserve provenance and candidate binding.",
+      "falsifier": "Calibration writes artifacts to a temporary directory, invokes the actual validator and aggregation CLIs, reloads their JSON outputs, and verifies rejection of stale, malformed, mismatched, and transport-substituted evidence.",
+      "recommended_repair_scope": "Restore end-to-end temporary-artifact and CLI calibration coverage while retaining direct unit checks only as supplemental tests."
+    },
+    {
+      "finding_id": "S003-R03-MAJOR-003",
+      "severity": "MAJOR",
+      "requirement": "Evidence references must identify the concrete evidence and its native generator.",
+      "evidence": "Generated reviews and audits use the generic evidence_refs value CALIBRATION-CONTROL, and native() identifies the calibration script itself without a sealed output reference, execution digest, or provenance chain. This permits stale evidence reuse after repair and cannot distinguish transport metadata from validated native evidence.",
+      "falsifier": "Every reference resolves to an immutable artifact containing the exact candidate SHA, generator command, execution result, content hash, and validation status; stale or substituted references are rejected.",
+      "recommended_repair_scope": "Add immutable evidence references and explicit generator/output bindings to calibration artifacts and enforce their resolution during aggregation."
+    }
+  ],
+  "critical": 0,
+  "major": 3,
+  "minor": 0,
+  "unknown": 0,
+  "evidence_refs": [
+    "git:5c7c0d6a75e6b8b56362011fb89b66efa29a64b3:scripts/mros/calibrate_review_audit_board.py",
+    "scripts/mros/aggregate_reviews.py:aggregate_payloads",
+    "scripts/mros/aggregate_audits.py:aggregate_payloads",
+    "scripts/mros/validate_review.py:validate"
+  ]
+}
