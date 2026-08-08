@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 ROOT=Path(__file__).resolve().parents[2];SCRIPTS=ROOT/"scripts"/"mros"
 if str(SCRIPTS) not in sys.path:sys.path.insert(0,str(SCRIPTS))
-from mros_autonomous_supervisor import parse_program_state,derive_phase,receipt_stats,single_instance,SupervisorError
+from mros_autonomous_supervisor import parse_program_state,derive_phase,receipt_stats,single_instance,SupervisorError,AUTHORITY_WT
 from mros_autonomous_repair_executor import validate_scope,RepairError,MAX_REPAIR_GENERATIONS
 from mros_autonomous_cycle import blocking_findings
 from mros_program_catalog import sprint_spec,next_sprint,sprint_acceptance
@@ -16,6 +16,8 @@ import mros_program_sprint_executor as sprint_executor
 import mros_program_repair_executor as program_repair
 import mros_program_native_validator as program_native
 
+def test_supervisor_default_authority_checkout_is_dedicated_worktree():
+    assert AUTHORITY_WT == Path('/Users/madhuram/.mros-agent-bridge/authority')
 def test_parse_program_state_and_runtime_boundary():
     s='''active_milestone: M1\nactive_work_package: WP001\nactive_sprint: S003\nprogram_status: ACTIVE\nactive_sprint_status: ANY\nauthority:\n  runtime_authority: NONE\n''';d=parse_program_state(s);assert d['active_milestone']=='M1';assert d['active_sprint']=='S003';assert d['runtime_authority']=='NONE'
 def test_pending_calibration_waits_automatically():
