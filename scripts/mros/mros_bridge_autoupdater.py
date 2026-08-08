@@ -44,6 +44,7 @@ def main()->int:
     str(test_root/'scripts/mros/mros_autonomous_cycle_v2.py'),
     str(test_root/'scripts/mros/mros_review_transport.py'),
     str(test_root/'scripts/mros/mros_agent_git_worker.py'),
+    str(test_root/'scripts/mros/mros_codex_backend.py'),
    ]
    c=run(test_root,'python3','-m','py_compile',*compile_targets,timeout=120,check=False)
    if c.returncode!=0:raise UpdateError('TARGET_COMPILE_FAILED:'+((c.stdout or '')+(c.stderr or ''))[-4000:])
