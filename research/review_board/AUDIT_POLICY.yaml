@@ -1,23 +1,39 @@
-schema_version: mros-audit-policy-v1
+schema_version: mros-audit-policy-v2
 status: IMPLEMENTED_NOT_CALIBRATED
 authority: Research / R
 runtime_authority: NONE
 bootstrap:
   s002_may_be_certified_by_audit_board: false
   audit_board_may_self_certify: false
-  normal_authority_begins_no_earlier_than: S003_AFTER_BOOTSTRAP_CALIBRATION_AND_INDEPENDENT_REVIEW
+  deterministic_calibration_is_not_certification: true
+  normal_authority_begins_no_earlier_than: S003_AFTER_BOOTSTRAP_CALIBRATION_AND_INDEPENDENT_REVIEW_AUDIT
 preconditions:
   exact_candidate_head_required: true
   native_validation_pass_required: true
+  native_evidence_schema: mros-native-evidence-v2
   nonblocking_review_aggregate_required: true
   audited_review_round_required: true
+  repaired_head_invalidates_predecessor_authority: true
 auditors:
+  schema: mros-audit-schema-v2
   minimum_valid_independent_audits: 10
   exact_head_match_required: true
+  bridge_execution_receipt_required: true
+  mac_git_mailbox_transport_required: true
+  unique_execution_job_required: true
+  unique_semantic_role_required: true
   independent_from_implementation_required: true
   independent_from_review_aggregation_required: true
+population:
+  frozen_before_execution_required: true
+  schema: mros-agent-population-v1
+  expected_denominator_required: true
+  omitted_artifacts_block: true
+  undeclared_extra_artifacts_block: true
+  post_hoc_exclusion_forbidden: true
 aggregation:
   simple_majority_forbidden: true
+  any_nonpass_verdict_blocks_or_requires_adjudication: true
   critical_blocks: true
   major_blocks: true
   mandatory_unknown_blocks: true
@@ -31,5 +47,7 @@ acceptance:
   critical_must_equal: 0
   major_must_equal: 0
   mandatory_unknown_must_equal: 0
+  candidate_bound_acceptance_trace_required: true
+  repository_state_ledger_consistency_required: true
   m9_must_remain: NOT_STARTED
   runtime_authority_must_remain: NONE
