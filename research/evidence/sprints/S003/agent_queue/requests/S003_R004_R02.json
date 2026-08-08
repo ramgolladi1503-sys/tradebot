@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "request_id": "S003-R004-R02-0c5d6268",
+  "request_id": "S003-R004-R02-0c5d6268-transport-retry1",
   "created_by": "mros-primary-controller",
   "created_at": "2026-08-08",
   "job_type": "reviewer",
@@ -8,5 +8,15 @@
   "candidate_sha": "0c5d6268ef224450cd881da588efcce04c630414",
   "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R004_R02.md",
   "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R02.json",
-  "backend": "codex"
+  "backend": "codex",
+  "transport_retry": 1,
+  "controller_transport": {
+    "candidate_head": "0c5d6268ef224450cd881da588efcce04c630414",
+    "sprint": "S003",
+    "round": "R004",
+    "execution_role_id": "R02",
+    "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R004_R02.md",
+    "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R02.json",
+    "receipt_path": "research/evidence/sprints/S003/agent_queue/receipts/S003_R004_R02.json"
+  }
 }
