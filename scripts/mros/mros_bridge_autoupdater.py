@@ -9,7 +9,7 @@ Benign no-op cases exit 0 so launchd does not report them as failures.
 from __future__ import annotations
 import argparse,fcntl,os,shutil,subprocess,time
 from pathlib import Path
-BRANCH='research/mros-agent-bridge-v1';SERVICES=('com.aixion.mros-agent-worker','com.aixion.mros-autonomous-supervisor');DEPLOY_EPOCH='native-calibration-v1-20260808'
+BRANCH='research/mros-agent-bridge-v1';SERVICES=('com.aixion.mros-agent-worker','com.aixion.mros-autonomous-supervisor');DEPLOY_EPOCH='calibration-requeue-v2-20260808'
 class UpdateError(RuntimeError):pass
 def run(cwd:Path,*args:str,timeout:int=600,check=True):
  p=subprocess.run(list(args),cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=False)
@@ -45,6 +45,7 @@ def main()->int:
     str(test_root/'scripts/mros/mros_review_transport.py'),
     str(test_root/'scripts/mros/mros_agent_git_worker.py'),
     str(test_root/'scripts/mros/mros_codex_backend.py'),
+    str(test_root/'scripts/mros/mros_calibration_failure_repair.py'),
    ]
    c=run(test_root,'python3','-m','py_compile',*compile_targets,timeout=120,check=False)
    if c.returncode!=0:raise UpdateError('TARGET_COMPILE_FAILED:'+((c.stdout or '')+(c.stderr or ''))[-4000:])
