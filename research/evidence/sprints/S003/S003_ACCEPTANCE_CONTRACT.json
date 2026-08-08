@@ -1,0 +1,23 @@
+{
+  "schema_version": "mros-s003-bootstrap-acceptance-v1",
+  "sprint": "S003",
+  "status": "FROZEN",
+  "authority": "Research / R",
+  "runtime_authority": "NONE",
+  "m9_status": "NOT_STARTED",
+  "objective": "Calibrate and bootstrap-authorize the autonomous Review and Audit Boards without circular certification.",
+  "criteria": [
+    {"id":"S003-AC-001","requirement":"Deterministic calibration executes the frozen labeled case registry and satisfies all predeclared metrics.","verification":"CALIBRATION_CASE_REGISTRY_AND_NATIVE_OUTPUT"},
+    {"id":"S003-AC-002","requirement":"Calibration and all evidence are bound to one exact frozen candidate HEAD.","verification":"EXACT_HEAD_BINDING"},
+    {"id":"S003-AC-003","requirement":"Native validation evidence is strict-schema, content-addressed, receipt-bound, and exact-head bound.","verification":"NATIVE_EVIDENCE_V2"},
+    {"id":"S003-AC-004","requirement":"At least 10 distinct predeclared reviewer jobs complete through the Mac Git-mailbox bridge with valid receipts.","verification":"REVIEW_POPULATION_MANIFEST_AND_RECEIPTS"},
+    {"id":"S003-AC-005","requirement":"Review aggregation is severity-aware, preserves dissent, cannot majority-mask non-PASS verdicts, and is non-blocking.","verification":"REVIEW_AGGREGATE"},
+    {"id":"S003-AC-006","requirement":"At least 10 distinct predeclared auditor jobs complete through the Mac Git-mailbox bridge with valid receipts after review closes.","verification":"AUDIT_POPULATION_MANIFEST_AND_RECEIPTS"},
+    {"id":"S003-AC-007","requirement":"Audit aggregation independently verifies provenance, review legality, state, scope and authority and is non-blocking.","verification":"AUDIT_AGGREGATE"},
+    {"id":"S003-AC-008","requirement":"No unresolved CRITICAL, MAJOR or mandatory UNKNOWN remains at authorization.","verification":"REVIEW_AND_AUDIT_COUNTS"},
+    {"id":"S003-AC-009","requirement":"Acceptance trace is complete and repository state and Sprint Ledger are mutually consistent before advancement.","verification":"PROGRAM_CONTEXT_VALIDATOR"},
+    {"id":"S003-AC-010","requirement":"Repair HEAD changes invalidate all predecessor native/review/audit/aggregate authority.","verification":"REPAIR_HEAD_INVALIDATION_CASES"},
+    {"id":"S003-AC-011","requirement":"The Boards cannot certify S002, cannot self-certify bootstrap, and gain normal authority no earlier than accepted S003 bootstrap.","verification":"BOOTSTRAP_BOUNDARY_AND_AUTHORIZATION_DECISION"},
+    {"id":"S003-AC-012","requirement":"M9 remains NOT_STARTED and runtime authority remains NONE throughout bootstrap and advancement.","verification":"PROGRAM_STATE_AND_ADVANCEMENT_HARD_STOP"}
+  ]
+}
