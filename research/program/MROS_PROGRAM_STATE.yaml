@@ -10,7 +10,7 @@ active_work_package: WP001
 active_sprint: S002
 last_completed_sprint: S001
 program_status: ACTIVE
-active_sprint_status: V8_INHERITED_GATE_PROVENANCE_REPAIR_PENDING_NATIVE_VALIDATION
+active_sprint_status: NATIVE_VALIDATION_PASS_INDEPENDENT_RE_REVIEW_REQUIRED
 
 s002_review:
   latest_review_artifact: "research/evidence/sprints/S002/S002_INDEPENDENT_RE_REVIEW_8E872_BOOTSTRAP_V2.md"
@@ -32,16 +32,20 @@ s002_v8_repair:
   validator_repair_commit: "4d71405abc593daabef1bbd72afacc8e84a4598f"
   contract_sync_commit: "0f88c5bfdbc43a008a558da341e5d08223d30988"
   repair_evidence_commit: "99823c35221cba83b18befdd9cdc6129face1b32"
-  implementation_candidate_head: "0f88c5bfdbc43a008a558da341e5d08223d30988"
+  c073_contract_sync_commit: "0468f68480aa42b7af60a93cf3c7dc69b9ad99c9"
+  active_corpus_cleanup_commit: "7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79"
+  implementation_candidate_head: "7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79"
   base_fixture_schema: "mros-s002-fixtures-v4"
   v5_fixture_schema: "mros-s002-fixtures-v5-addendum"
   v6_fixture_schema: "mros-s002-fixtures-v6-gate-binding"
   v7_fixture_schema: "mros-s002-fixtures-v7-gate-semantic-binding"
   v8_fixture_schema: "mros-s002-fixtures-v8-inherited-gate-provenance"
   required_active_case_count: 82
-  native_validation: REQUIRED_EXACT_HEAD_0f88c5bfdbc43a008a558da341e5d08223d30988
-  native_validation_result: PENDING
-  independent_re_review: BLOCKED_UNTIL_NATIVE_PASS
+  native_validation: PASS_EXACT_HEAD_7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79
+  native_validation_result: "82/82_PASS_EXIT_0_PYTHON_3.12.2"
+  native_validation_evidence: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_OUTPUT_82_CASES.txt"
+  native_validation_evidence_commit: "6122212c04c6aeab8f5ffb64b9789e4e9ed521ce"
+  independent_re_review: REQUIRED_FOR_EXACT_HEAD_7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79
 
 review_board:
   status: IMPLEMENTED_NOT_CALIBRATED
@@ -112,10 +116,10 @@ work_package_status:
 next_action:
   sprint: S002
   work_package: WP001
-  objective: "Run canonical native validation of exact v8 repaired candidate 0f88c5bfdbc43a008a558da341e5d08223d30988. Expect 82 active cases. Preserve exact HEAD/Python/command/output/exit provenance. Only after PASS obtain a fresh bootstrap-independent review focused on 8E872-V2-F-001 closure."
+  objective: "Obtain one fresh bootstrap-independent adversarial re-review of exact validated candidate 7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79, consuming committed 82/82 native evidence and re-attacking closure of 8E872-V2-F-001. Do not start S003 unless that review returns PASS or PASS_WITH_MINOR_FINDINGS with no blocking MAJOR/CRITICAL/mandatory UNKNOWN."
   required_native_validator: "scripts/mros/validate_s002_fixtures.py"
   required_expected_case_count: 82
-  required_external_role_after_native_pass: "bootstrap-independent reviewer/session distinct from S002 implementation/repair and Review/Audit Board bootstrap implementation"
+  required_external_role: "bootstrap-independent reviewer/session distinct from S002 implementation/repair and Review/Audit Board bootstrap implementation"
 
 execution_policy:
   sprint_prs: false
