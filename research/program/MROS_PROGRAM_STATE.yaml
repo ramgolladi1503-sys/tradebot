@@ -10,41 +10,38 @@ active_work_package: WP001
 active_sprint: S002
 last_completed_sprint: S001
 program_status: ACTIVE
-active_sprint_status: NATIVE_VALIDATION_PASS_INDEPENDENT_RE_REVIEW_REQUIRED
+active_sprint_status: V8_INHERITED_GATE_PROVENANCE_REPAIR_PENDING_NATIVE_VALIDATION
 
 s002_review:
-  latest_review_commit: "f97be96131bf1aba9121c237efd0481d4e2c9636"
-  latest_review_artifact: "research/evidence/sprints/S002/S002_INDEPENDENT_RE_REVIEW_89D3_FINAL.md"
-  latest_reviewed_head: "89d3abd3b2b2c20951c123063b534c56af7ebf60"
+  latest_review_artifact: "research/evidence/sprints/S002/S002_INDEPENDENT_RE_REVIEW_8E872_BOOTSTRAP_V2.md"
+  latest_reviewed_head: "8e87223efdb33bc73b58436cf590b7f3c7c10717"
   latest_review_verdict: S002_INDEPENDENT_RE_REVIEW_REPAIR_REQUIRED
   latest_findings:
-    MINOR: 1
+    MINOR: 0
     MAJOR: 1
     CRITICAL: 0
     UNKNOWN: 0
-  blocking_finding: "89D3-F-001_RC002_GATE_BINDING_DID_NOT_PROVE_AUTHORITATIVE_GATE_EVIDENCE_WAS_THE_GENUINELY_NEW_EVIDENCE"
-  documentation_minor: "CLOSED_BY_S002_CONTRACT_IMPLEMENTATION_SYNC"
+  blocking_finding: "8E872-V2-F-001_INHERITED_GATE_PROVENANCE_AND_EXTRA_KNOWN_BINDING_FAIL_OPEN"
+  reviewer_independence: SATISFIED
 
-s002_v7_repair:
-  prior_native_validated_head: "89d3abd3b2b2c20951c123063b534c56af7ebf60"
-  prior_native_validation_result: "70/70_PASS_EXIT_0_PYTHON_3.12.2"
-  prior_native_validation_authority: HISTORICAL_PRE_V7_REPAIR_ONLY
-  v7_fixture_commit: "e1ce175fb480efb286cd960b69d8168d7b179c32"
-  validator_repair_commit: "622733f4dbbc29ea3152f366ae32820023605dc6"
-  contract_sync_commit: "8e87223efdb33bc73b58436cf590b7f3c7c10717"
-  implementation_candidate_head: "8e87223efdb33bc73b58436cf590b7f3c7c10717"
+s002_v8_repair:
+  prior_native_validated_head: "8e87223efdb33bc73b58436cf590b7f3c7c10717"
+  prior_native_validation_result: "78/78_PASS_EXIT_0_PYTHON_3.12.2"
+  prior_native_validation_authority: HISTORICAL_PRE_V8_REPAIR_ONLY
+  v8_fixture_commit: "e7a4f0ddd5d71deff3fc2cd3e54f46c0b4c34deb"
+  validator_repair_commit: "4d71405abc593daabef1bbd72afacc8e84a4598f"
+  contract_sync_commit: "0f88c5bfdbc43a008a558da341e5d08223d30988"
+  repair_evidence_commit: "99823c35221cba83b18befdd9cdc6129face1b32"
+  implementation_candidate_head: "0f88c5bfdbc43a008a558da341e5d08223d30988"
   base_fixture_schema: "mros-s002-fixtures-v4"
   v5_fixture_schema: "mros-s002-fixtures-v5-addendum"
   v6_fixture_schema: "mros-s002-fixtures-v6-gate-binding"
   v7_fixture_schema: "mros-s002-fixtures-v7-gate-semantic-binding"
-  superseded_historical_pass_cases: ["S002-C033", "S002-C035", "S002-C037", "S002-C065", "S002-C067", "S002-C070", "S002-C071", "S002-C072"]
-  v7_positive_replacements: ["S002-C075", "S002-C078", "S002-C082", "S002-C084"]
-  required_active_case_count: 78
-  native_validation: PASS_EXACT_HEAD_8e87223efdb33bc73b58436cf590b7f3c7c10717
-  native_validation_result: "78/78_PASS_EXIT_0_PYTHON_3.12.2"
-  native_validation_evidence: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_OUTPUT_78_CASES.txt"
-  native_validation_evidence_commit: "3ecc2865464d28bdf667ec7d35d46b915b074643"
-  independent_re_review: REQUIRED_FOR_EXACT_HEAD_8e87223efdb33bc73b58436cf590b7f3c7c10717
+  v8_fixture_schema: "mros-s002-fixtures-v8-inherited-gate-provenance"
+  required_active_case_count: 82
+  native_validation: REQUIRED_EXACT_HEAD_0f88c5bfdbc43a008a558da341e5d08223d30988
+  native_validation_result: PENDING
+  independent_re_review: BLOCKED_UNTIL_NATIVE_PASS
 
 review_board:
   status: IMPLEMENTED_NOT_CALIBRATED
@@ -115,10 +112,10 @@ work_package_status:
 next_action:
   sprint: S002
   work_package: WP001
-  objective: "Obtain a fresh bootstrap-independent adversarial re-review of exact validated candidate HEAD 8e87223efdb33bc73b58436cf590b7f3c7c10717, consuming the committed 78/78 native evidence and specifically re-attacking 89D3-F-001 semantic gate binding. Do not start S003 unless that review returns PASS or PASS_WITH_MINOR_FINDINGS with no blocking MAJOR/CRITICAL/mandatory UNKNOWN."
+  objective: "Run canonical native validation of exact v8 repaired candidate 0f88c5bfdbc43a008a558da341e5d08223d30988. Expect 82 active cases. Preserve exact HEAD/Python/command/output/exit provenance. Only after PASS obtain a fresh bootstrap-independent review focused on 8E872-V2-F-001 closure."
   required_native_validator: "scripts/mros/validate_s002_fixtures.py"
-  required_expected_case_count: 78
-  required_external_role: "bootstrap-independent reviewer/session distinct from S002 implementation/repair and Review/Audit Board bootstrap implementation"
+  required_expected_case_count: 82
+  required_external_role_after_native_pass: "bootstrap-independent reviewer/session distinct from S002 implementation/repair and Review/Audit Board bootstrap implementation"
 
 execution_policy:
   sprint_prs: false
