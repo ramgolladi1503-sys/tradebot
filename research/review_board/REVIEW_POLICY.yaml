@@ -65,6 +65,17 @@ population:
   omitted_artifacts_block: true
   undeclared_extra_artifacts_block: true
   post_hoc_exclusion_forbidden: true
+  receipt_path_and_expected_identity_frozen_before_execution: true
+  receipt_content_created_only_after_execution: true
+  receipt_origin_must_be_strictly_after_population_freeze: true
+  receipt_history_must_be_single_origin_immutable: true
+repair_contract:
+  requirement_field_is_normative: true
+  evidence_field_is_observation: true
+  falsifier_is_adversarial_test_proposal_not_new_requirement: true
+  recommended_repair_scope_is_nonbinding_guidance: true
+  reviewer_must_not_promote_a_causally_impossible_falsifier_into_a_requirement: true
+  contradictory_findings_require_adjudication_or_fresh_review_not_gate_weakening: true
 aggregation:
   simple_majority_forbidden: true
   any_nonpass_verdict_blocks_or_requires_adjudication: true
