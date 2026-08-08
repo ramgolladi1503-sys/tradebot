@@ -96,7 +96,7 @@ def invoke(repo:Path,name:str,args:list[str],timeout=7200):
  if not script.is_file():raise SupervisorError(f'SCRIPT_MISSING:{script}')
  p=subprocess.run([sys.executable,str(script),*args],cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=False);detail=((p.stdout or p.stderr or '').strip().splitlines() or [''])[-1];return p.returncode,detail
 def run_s003(repo:Path,root:Path):
- rc,d=invoke(repo,'mros_autonomous_cycle.py',['--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT),'--state-root',str(root)])
+ rc,d=invoke(repo,'mros_autonomous_cycle_v2.py',['--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT),'--state-root',str(root)])
  if rc==2 and 'CALIBRATION_VALIDATION_FAILED' in d:rc,d=invoke(repo,'mros_calibration_failure_repair.py',['--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT),'--state-root',str(root)])
  if rc not in (0,3):raise SupervisorError(f'S003_CYCLE_FAILED:{rc}:{d}')
  return rc,d
