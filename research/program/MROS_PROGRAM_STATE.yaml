@@ -10,7 +10,7 @@ active_work_package: WP001
 active_sprint: S002
 last_completed_sprint: S001
 program_status: ACTIVE
-active_sprint_status: RC002_SEMANTIC_GATE_BINDING_REPAIR_PENDING_NATIVE_VALIDATION
+active_sprint_status: NATIVE_VALIDATION_PASS_INDEPENDENT_RE_REVIEW_REQUIRED
 
 s002_review:
   latest_review_commit: "f97be96131bf1aba9121c237efd0481d4e2c9636"
@@ -40,9 +40,11 @@ s002_v7_repair:
   superseded_historical_pass_cases: ["S002-C033", "S002-C035", "S002-C037", "S002-C065", "S002-C067", "S002-C070", "S002-C071", "S002-C072"]
   v7_positive_replacements: ["S002-C075", "S002-C078", "S002-C082", "S002-C084"]
   required_active_case_count: 78
-  native_validation: REQUIRED_EXACT_HEAD_8e87223efdb33bc73b58436cf590b7f3c7c10717
-  native_validation_result: PENDING
-  independent_re_review: BLOCKED_UNTIL_NATIVE_PASS
+  native_validation: PASS_EXACT_HEAD_8e87223efdb33bc73b58436cf590b7f3c7c10717
+  native_validation_result: "78/78_PASS_EXIT_0_PYTHON_3.12.2"
+  native_validation_evidence: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_OUTPUT_78_CASES.txt"
+  native_validation_evidence_commit: "3ecc2865464d28bdf667ec7d35d46b915b074643"
+  independent_re_review: REQUIRED_FOR_EXACT_HEAD_8e87223efdb33bc73b58436cf590b7f3c7c10717
 
 review_board:
   status: IMPLEMENTED_NOT_CALIBRATED
@@ -113,10 +115,10 @@ work_package_status:
 next_action:
   sprint: S002
   work_package: WP001
-  objective: "Run canonical S002 native validation against exact repaired candidate 8e87223efdb33bc73b58436cf590b7f3c7c10717. Expect 78 active cases. Preserve exact HEAD/Python/command/output/exit provenance. Only after PASS obtain a fresh bootstrap-independent review focused on 89D3-F-001."
+  objective: "Obtain a fresh bootstrap-independent adversarial re-review of exact validated candidate HEAD 8e87223efdb33bc73b58436cf590b7f3c7c10717, consuming the committed 78/78 native evidence and specifically re-attacking 89D3-F-001 semantic gate binding. Do not start S003 unless that review returns PASS or PASS_WITH_MINOR_FINDINGS with no blocking MAJOR/CRITICAL/mandatory UNKNOWN."
   required_native_validator: "scripts/mros/validate_s002_fixtures.py"
   required_expected_case_count: 78
-  required_external_role_after_native_pass: "bootstrap-independent reviewer/session distinct from S002 implementation/repair and Review/Audit Board bootstrap implementation"
+  required_external_role: "bootstrap-independent reviewer/session distinct from S002 implementation/repair and Review/Audit Board bootstrap implementation"
 
 execution_policy:
   sprint_prs: false
