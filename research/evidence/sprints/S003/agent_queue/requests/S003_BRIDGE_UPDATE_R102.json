@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "request_id": "S003-BRIDGE-UPDATE-R102-dcac192c",
+  "created_by": "mros-primary-controller",
+  "created_at": "2026-08-08",
+  "job_type": "reviewer",
+  "role_id": "R102",
+  "candidate_sha": "0c5d6268ef224450cd881da588efcce04c630414",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_BRIDGE_UPDATE_R102.md",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_BRIDGE_UPDATE_R102.md",
+  "backend": "codex"
+}
