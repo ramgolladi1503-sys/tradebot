@@ -10,42 +10,43 @@ active_work_package: WP001
 active_sprint: S002
 last_completed_sprint: S001
 program_status: ACTIVE
-active_sprint_status: NATIVE_VALIDATION_PASS_INDEPENDENT_RE_REVIEW_REQUIRED
+active_sprint_status: V9_CLASSIFICATION_SCHEMA_REPAIR_PENDING_NATIVE_VALIDATION
 
 s002_review:
-  latest_review_artifact: "research/evidence/sprints/S002/S002_INDEPENDENT_RE_REVIEW_8E872_BOOTSTRAP_V2.md"
-  latest_reviewed_head: "8e87223efdb33bc73b58436cf590b7f3c7c10717"
+  latest_review_commit: "5115c574410ec2bda02f9b8ab6813218cc4cf9ce"
+  latest_review_artifact: "research/evidence/sprints/S002/S002_INDEPENDENT_RE_REVIEW_7E7A_FINAL.md"
+  latest_reviewed_head: "7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79"
   latest_review_verdict: S002_INDEPENDENT_RE_REVIEW_REPAIR_REQUIRED
   latest_findings:
     MINOR: 0
-    MAJOR: 1
+    MAJOR: 2
     CRITICAL: 0
     UNKNOWN: 0
-  blocking_finding: "8E872-V2-F-001_INHERITED_GATE_PROVENANCE_AND_EXTRA_KNOWN_BINDING_FAIL_OPEN"
+  blocking_findings:
+    - "7E7A-F-001_NON_STRING_INHERITED_MANDATORY_REFS_WRONG_STATUS_PRECEDENCE"
+    - "7E7A-F-002_UNKNOWN_CLASSIFICATION_SIGNALS_SILENTLY_IGNORED"
   reviewer_independence: SATISFIED
 
-s002_v8_repair:
-  prior_native_validated_head: "8e87223efdb33bc73b58436cf590b7f3c7c10717"
-  prior_native_validation_result: "78/78_PASS_EXIT_0_PYTHON_3.12.2"
-  prior_native_validation_authority: HISTORICAL_PRE_V8_REPAIR_ONLY
-  v8_fixture_commit: "e7a4f0ddd5d71deff3fc2cd3e54f46c0b4c34deb"
-  validator_repair_commit: "4d71405abc593daabef1bbd72afacc8e84a4598f"
-  contract_sync_commit: "0f88c5bfdbc43a008a558da341e5d08223d30988"
-  repair_evidence_commit: "99823c35221cba83b18befdd9cdc6129face1b32"
-  c073_contract_sync_commit: "0468f68480aa42b7af60a93cf3c7dc69b9ad99c9"
-  active_corpus_cleanup_commit: "7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79"
-  implementation_candidate_head: "7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79"
+s002_v9_repair:
+  prior_native_validated_head: "7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79"
+  prior_native_validation_result: "82/82_PASS_EXIT_0_PYTHON_3.12.2"
+  prior_native_validation_authority: HISTORICAL_PRE_V9_REPAIR_ONLY
+  v9_fixture_create_commit: "a131eaf4c8726155dde43618957241bf7a522c7d"
+  v9_fixture_hardening_commit: "f3ef260088b2c0a2c4a7de23d8baadda61e6478c"
+  validator_ref_type_and_signal_repair_commit: "d77ff7467c152168548a5425631d9b60e4e5167d"
+  validator_classification_provenance_commit: "3a3de7de20a28906ebfa64316030550754aeb86f"
+  contract_sync_commit: "2a10c33c34e4d8d7c95b90dee2d88d59b906b6e4"
+  implementation_candidate_head: "2a10c33c34e4d8d7c95b90dee2d88d59b906b6e4"
   base_fixture_schema: "mros-s002-fixtures-v4"
   v5_fixture_schema: "mros-s002-fixtures-v5-addendum"
   v6_fixture_schema: "mros-s002-fixtures-v6-gate-binding"
   v7_fixture_schema: "mros-s002-fixtures-v7-gate-semantic-binding"
   v8_fixture_schema: "mros-s002-fixtures-v8-inherited-gate-provenance"
-  required_active_case_count: 82
-  native_validation: PASS_EXACT_HEAD_7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79
-  native_validation_result: "82/82_PASS_EXIT_0_PYTHON_3.12.2"
-  native_validation_evidence: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_OUTPUT_82_CASES.txt"
-  native_validation_evidence_commit: "6122212c04c6aeab8f5ffb64b9789e4e9ed521ce"
-  independent_re_review: REQUIRED_FOR_EXACT_HEAD_7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79
+  v9_fixture_schema: "mros-s002-fixtures-v9-classification-schema"
+  required_active_case_count: 88
+  native_validation: REQUIRED_EXACT_HEAD_2a10c33c34e4d8d7c95b90dee2d88d59b906b6e4
+  native_validation_result: PENDING
+  independent_re_review: BLOCKED_UNTIL_NATIVE_PASS
 
 review_board:
   status: IMPLEMENTED_NOT_CALIBRATED
@@ -116,10 +117,10 @@ work_package_status:
 next_action:
   sprint: S002
   work_package: WP001
-  objective: "Obtain one fresh bootstrap-independent adversarial re-review of exact validated candidate 7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79, consuming committed 82/82 native evidence and re-attacking closure of 8E872-V2-F-001. Do not start S003 unless that review returns PASS or PASS_WITH_MINOR_FINDINGS with no blocking MAJOR/CRITICAL/mandatory UNKNOWN."
+  objective: "Run canonical native validation of exact v9 candidate 2a10c33c34e4d8d7c95b90dee2d88d59b906b6e4. Expect 88 active cases. Preserve exact HEAD/Python/command/output/exit provenance. Only after PASS obtain a fresh bootstrap-independent re-review focused on closure of 7E7A-F-001 and 7E7A-F-002 plus classification provenance hardening."
   required_native_validator: "scripts/mros/validate_s002_fixtures.py"
-  required_expected_case_count: 82
-  required_external_role: "bootstrap-independent reviewer/session distinct from S002 implementation/repair and Review/Audit Board bootstrap implementation"
+  required_expected_case_count: 88
+  required_external_role_after_native_pass: "bootstrap-independent reviewer/session distinct from S002 implementation/repair and Review/Audit Board bootstrap implementation"
 
 execution_policy:
   sprint_prs: false
