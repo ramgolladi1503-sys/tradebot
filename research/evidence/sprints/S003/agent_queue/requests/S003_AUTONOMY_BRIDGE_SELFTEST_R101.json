@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "request_id": "S003-AUTONOMY-BRIDGE-SELFTEST-R101-8A8A0269",
+  "created_by": "mros-primary-controller",
+  "created_at": "2026-08-08",
+  "job_type": "reviewer",
+  "role_id": "R101",
+  "candidate_sha": "8a8a0269fee19a45a43144c9bc57093c1a3c4528",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_AUTONOMY_BRIDGE_SELFTEST_R101.md",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_AUTONOMY_BRIDGE_SELFTEST_R101.md",
+  "backend": "codex"
+}
