@@ -6,11 +6,6 @@ Transport is deliberately separated from repository authority:
 - exact candidate SHAs may point anywhere in the same repository;
 - the worker never updates MROS_PROGRAM_STATE or accepts a sprint;
 - the authoritative program branch consumes validated output later.
-
-The worker creates one local commit per completed job, rebases that narrow commit
-onto the latest remote queue branch, and pushes HEAD:<queue-branch>. This lets the
-controller enqueue additional jobs while a model process is running without
-turning queue traffic into MROS program-state commits.
 """
 
 from __future__ import annotations
@@ -39,30 +34,47 @@ class WorkerError(RuntimeError):
 
 
 def run_git(repo: Path, *args: str, timeout: int = 120, check: bool = True) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=repo,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
+    result = subprocess.run(["git", *args], cwd=repo, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout, check=False)
     if check and result.returncode != 0:
         raise WorkerError(f"GIT_COMMAND_FAILED:{' '.join(args)}:{result.stdout.strip()}")
     return result
 
 
+def _declared_untracked_paths(repo: Path) -> set[str]:
+    allowed: set[str] = set()
+    request_dir = repo / REQUEST_DIR
+    if not request_dir.exists():
+        return allowed
+    for request_file in request_dir.glob("*.json"):
+        try:
+            payload = json.loads(request_file.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        output = payload.get("output_path")
+        if isinstance(output, str) and output.strip():
+            allowed.add(output.strip())
+        allowed.add(str((RECEIPT_DIR / request_file.name).as_posix()))
+    return allowed
+
+
 def ensure_clean(repo: Path) -> None:
-    status = run_git(repo, "status", "--porcelain").stdout.strip()
-    if status:
-        raise WorkerError("QUEUE_WORKTREE_NOT_CLEAN")
+    lines = [line for line in run_git(repo, "status", "--porcelain").stdout.splitlines() if line.strip()]
+    if not lines:
+        return
+    allowed_untracked = _declared_untracked_paths(repo)
+    blockers: list[str] = []
+    for line in lines:
+        status = line[:2]
+        path = line[3:] if len(line) > 3 else ""
+        if status == "??" and path in allowed_untracked:
+            continue
+        blockers.append(line)
+    if blockers:
+        raise WorkerError("QUEUE_WORKTREE_NOT_CLEAN:" + "|".join(blockers))
 
 
 def sync_queue(repo: Path, remote_branch: str) -> None:
     ensure_clean(repo)
-    # Fetch both transport and authority refs. Future sprint candidate SHAs live
-    # on the program branch, not necessarily in queue-branch ancestry.
     run_git(repo, "fetch", "origin", remote_branch, AUTHORITY_BRANCH, timeout=180)
     run_git(repo, "rebase", f"origin/{remote_branch}", timeout=180)
 
@@ -96,14 +108,7 @@ def validate_request_payload(payload: Any) -> dict[str, Any]:
 
 def write_receipt(path: Path, *, request: dict[str, Any], record: dict[str, Any], worker_id: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "schema_version": 1,
-        "worker_id": worker_id,
-        "request": request,
-        "job": record,
-        "runtime_authority": "NONE",
-        "broker_actions_allowed": False,
-    }
+    payload = {"schema_version": 1, "worker_id": worker_id, "request": request, "job": record, "runtime_authority": "NONE", "broker_actions_allowed": False}
     path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 
@@ -135,28 +140,12 @@ def process_one(repo: Path, remote_branch: str, bridge: MrosAgentBridge, request
     final = current.public_dict()
     write_receipt(receipt, request=request, record=final, worker_id=worker_id)
     if current.state != "SUCCEEDED":
-        commit_sha = commit_and_push(
-            repo,
-            remote_branch,
-            [receipt],
-            f"mros(S003): record failed isolated {request['role_id']} job [skip ci]",
-        )
-        return {
-            "request": request_file.name,
-            "status": current.state,
-            "job_id": current.job_id,
-            "commit_sha": commit_sha,
-        }
-
+        commit_sha = commit_and_push(repo, remote_branch, [receipt], f"mros(S003): record failed isolated {request['role_id']} job [skip ci]")
+        return {"request": request_file.name, "status": current.state, "job_id": current.job_id, "commit_sha": commit_sha}
     output = repo / request["output_path"]
     if not output.is_file() or output.stat().st_size == 0:
         raise WorkerError("OUTPUT_ARTIFACT_MISSING_BEFORE_COMMIT")
-    commit_sha = commit_and_push(
-        repo,
-        remote_branch,
-        [output, receipt],
-        f"mros(S003): record isolated {request['role_id']} job output [skip ci]",
-    )
+    commit_sha = commit_and_push(repo, remote_branch, [output, receipt], f"mros(S003): record isolated {request['role_id']} job output [skip ci]")
     return {"request": request_file.name, "status": "SUCCEEDED", "job_id": current.job_id, "commit_sha": commit_sha}
 
 
@@ -175,18 +164,7 @@ def main() -> int:
     config = load_config(args.config)
     repo = config.repo_root
     bridge = MrosAgentBridge(config)
-    print(
-        json.dumps(
-            {
-                "status": "WORKER_STARTING",
-                "queue_branch": args.queue_branch,
-                "authority_branch": AUTHORITY_BRANCH,
-                "worker_id": args.worker_id,
-                "health": bridge.health(),
-            }
-        ),
-        flush=True,
-    )
+    print(json.dumps({"status":"WORKER_STARTING","queue_branch":args.queue_branch,"authority_branch":AUTHORITY_BRANCH,"worker_id":args.worker_id,"health":bridge.health()}), flush=True)
     while True:
         try:
             sync_queue(repo, args.queue_branch)
@@ -195,13 +173,9 @@ def main() -> int:
                 if receipt_path(repo, request).exists():
                     continue
                 processed.append(process_one(repo, args.queue_branch, bridge, request, args.worker_id))
-            print(json.dumps({"status": "POLL_COMPLETE", "processed": processed}, sort_keys=True), flush=True)
+            print(json.dumps({"status":"POLL_COMPLETE","processed":processed}, sort_keys=True), flush=True)
         except (BridgeError, WorkerError, subprocess.TimeoutExpired, OSError, ValueError, json.JSONDecodeError) as exc:
-            print(
-                json.dumps({"status": "WORKER_BLOCKED", "error": f"{type(exc).__name__}:{exc}"}),
-                file=sys.stderr,
-                flush=True,
-            )
+            print(json.dumps({"status":"WORKER_BLOCKED","error":f"{type(exc).__name__}:{exc}"}), file=sys.stderr, flush=True)
             if args.once:
                 return 2
         if args.once:
