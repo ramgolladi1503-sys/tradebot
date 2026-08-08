@@ -1,47 +1,52 @@
-schema_version: mros-review-audit-calibration-v2
-status: SPECIFIED_NOT_EXECUTED
+schema_version: mros-review-audit-calibration-v3
+status: SPECIFIED_NOT_EXECUTED_FOR_CURRENT_REPAIRED_HEAD
 authority: Research / R
 runtime_authority: NONE
-known_bad_cases:
-  - {id: RB-CAL-001, defect: future_data_leakage, expected: REPAIR_REQUIRED}
-  - {id: RB-CAL-002, defect: evidence_free_promotion, expected: REPAIR_REQUIRED}
-  - {id: RB-CAL-003, defect: authority_stage_skip, expected: REPAIR_REQUIRED}
-  - {id: RB-CAL-004, defect: denominator_laundering, expected: REPAIR_REQUIRED}
-  - {id: RB-CAL-005, defect: runtime_authority_creation, expected: REPAIR_REQUIRED}
-  - {id: RB-CAL-006, defect: stale_head_review_evidence, expected: INVALID_REVIEW}
-  - {id: RB-CAL-007, defect: fake_independent_reviewer, expected: INVALID_REVIEW}
-  - {id: RB-CAL-008, defect: major_hidden_behind_majority_pass, expected: REPAIR_REQUIRED}
-  - {id: RB-CAL-009, defect: mandatory_unknown, expected: UNKNOWN}
-  - {id: RB-CAL-010, defect: malformed_artifact_schema, expected: INVALID_REVIEW}
-known_good_cases:
-  - {id: RB-CAL-G001, control: clean_contract_compliant_a, expected: PASS}
-  - {id: RB-CAL-G002, control: clean_contract_compliant_b, expected: PASS}
-  - {id: RB-CAL-G003, control: clean_contract_compliant_with_nonblocking_minor, expected: PASS_WITH_MINOR_FINDINGS}
+case_registry: research/review_board/CALIBRATION_CASES.json
+case_registry_schema: mros-review-audit-calibration-cases-v1
+frozen_case_count: 32
+denominator_policy:
+  all_declared_cases_mandatory: true
+  silent_omission_forbidden: true
+  post_outcome_exclusion_forbidden: true
+  denominator_conservation_required: true
+required_attack_classes:
+  - stale_or_wrong_head
+  - non_independent_reviewer_or_auditor
+  - malformed_schema_and_invalid_enum
+  - bridge_receipt_mismatch
+  - duplicate_role_artifact_or_job
+  - omitted_or_undeclared_population_member
+  - majority_masked_fail
+  - mandatory_unknown
+  - major_blocking
+  - critical_non_outvoting
+  - malformed_native_evidence
+  - native_source_hash_or_receipt_mismatch
+  - repair_head_invalidation
+  - failed_acceptance_criterion
+  - state_ledger_mismatch
+  - m9_transition
+  - runtime_authority_creation
+  - legal_clean_advancement
 metrics:
   - known_bad_detection_rate
   - false_acceptance_rate
   - known_good_acceptance_rate
   - false_rejection_rate
-  - reviewer_disagreement
-  - audit_disagreement
-  - review_aggregation_correctness
-  - audit_aggregation_correctness
-  - adjudication_correctness
-  - sha_mismatch_rejection
-  - non_independent_review_rejection
-  - non_independent_audit_rejection
-  - major_blocking_correctness
-  - critical_non_outvoting_correctness
-  - mandatory_unknown_blocking_correctness
-  - maximum_round_escalation_correctness
-  - repair_head_invalidation_correctness
-  - m9_hard_stop_correctness
-  - runtime_authority_boundary_correctness
+  - declared_case_denominator
+  - executed_case_denominator
+  - missing_cases
+  - extra_cases
 calibration_acceptance:
   known_bad_detection_rate_required: 1.0
   false_acceptance_rate_required: 0.0
   known_good_acceptance_rate_required: 1.0
   false_rejection_rate_required: 0.0
+  declared_equals_executed_required: true
+  missing_cases_required: 0
+  extra_cases_required: 0
   all_structural_gate_checks_required: true
 bootstrap_independent_review_required: true
-claim_rule: "Do not claim calibrated, authorized, production-ready, or authoritative until executed calibration evidence satisfies all predeclared criteria and a genuinely independent bootstrap review accepts the board. The board may not certify itself or retroactively certify S002."
+bootstrap_independent_audit_required: true
+claim_rule: "Deterministic calibration is not certification. Do not claim calibrated, authorized, production-ready, or authoritative until exact-head native calibration evidence satisfies the frozen registry and genuinely independent bootstrap review and audit populations both accept the same candidate. The Boards may not certify themselves or retroactively certify S002."
