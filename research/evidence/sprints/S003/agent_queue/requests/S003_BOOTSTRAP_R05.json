@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "request_id": "S003-BOOTSTRAP-R05-5C7C0D6A",
+  "created_by": "mros-primary-controller",
+  "created_at": "2026-08-08",
+  "job_type": "reviewer",
+  "role_id": "R05",
+  "candidate_sha": "5c7c0d6a75e6b8b56362011fb89b66efa29a64b3",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_BOOTSTRAP_R05.md",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/reviews-R001/reviewer-05.json",
+  "backend": "codex"
+}
