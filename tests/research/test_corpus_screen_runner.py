@@ -72,4 +72,4 @@ def test_tick_rows_are_aggregated_to_minute_ohlc(tmp_path):
     manifest = runner.run(args)
     assert manifest["loaded_rows"] > 0
     assert manifest["inventory_summary"]["tick_ohlc_rows"] > 0
-    assert manifest["inventory_summary"]["ready_ohlc_rows"] == 0
+    assert manifest["inventory_summary"]["normalized_ohlc_rows"] == 0
