@@ -22,7 +22,6 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
 import threading
 import time
 import uuid
@@ -88,8 +87,7 @@ class JobRecord:
     worktree_path: str | None = None
 
     def public_dict(self) -> dict[str, Any]:
-        payload = asdict(self)
-        return payload
+        return asdict(self)
 
 
 class JobStore:
@@ -115,8 +113,7 @@ class JobStore:
         path = self._job_path(job_id)
         if not path.exists():
             raise BridgeError("JOB_NOT_FOUND")
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        return JobRecord(**raw)
+        return JobRecord(**json.loads(path.read_text(encoding="utf-8")))
 
     def event(self, job_id: str, event: str, details: Mapping[str, Any] | None = None) -> None:
         row = {
@@ -146,11 +143,9 @@ class MrosAgentBridge:
         allowed = self.config.allowed_repo_realpath.resolve()
         if actual != allowed:
             raise BridgeError("REPOSITORY_ROOT_NOT_ALLOWLISTED")
-        if not (actual / ".git").exists():
-            # Worktree .git may be a file; main checkout is normally a directory.
-            git_marker = actual / ".git"
-            if not git_marker.exists():
-                raise BridgeError("REPOSITORY_GIT_MARKER_MISSING")
+        git_marker = actual / ".git"
+        if not git_marker.exists():
+            raise BridgeError("REPOSITORY_GIT_MARKER_MISSING")
 
     def health(self) -> dict[str, Any]:
         git_ok = shutil.which("git") is not None
@@ -299,16 +294,17 @@ class MrosAgentBridge:
                 record.error_code = str(exc)
                 record.error_detail = str(exc)
                 self.store.event(job_id, "JOB_FAILED", {"error_code": record.error_code})
-            except Exception as exc:  # fail closed and preserve evidence
+            except Exception as exc:
                 record.state = "FAILED"
                 record.error_code = "UNEXPECTED_BRIDGE_ERROR"
                 record.error_detail = f"{type(exc).__name__}: {exc}"
                 self.store.event(job_id, "JOB_FAILED", {"error_code": record.error_code})
             finally:
-                record.finished_at = time.time()
-                self.store.save(record)
                 if worktree is not None:
                     self._remove_worktree(worktree)
+                # Publish terminal state only after isolation cleanup completes.
+                record.finished_at = time.time()
+                self.store.save(record)
                 with self._thread_lock:
                     self._threads.pop(job_id, None)
 
@@ -338,9 +334,16 @@ class MrosAgentBridge:
             check=False,
         )
         shutil.rmtree(worktree, ignore_errors=True)
+        subprocess.run(
+            ["git", "worktree", "prune"],
+            cwd=self.config.repo_root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=120,
+            check=False,
+        )
 
     def _fresh_job_env(self, record: JobRecord, worktree: Path, output: Path) -> dict[str, str]:
-        # Fresh process environment, intentionally retaining only basic user/runtime variables.
         keep = {
             "HOME",
             "PATH",
@@ -407,6 +410,7 @@ __all__ = [
     "BridgeConfig",
     "BridgeError",
     "JobRecord",
+    "JobStore",
     "MrosAgentBridge",
     "load_backend_specs",
     "load_config",
