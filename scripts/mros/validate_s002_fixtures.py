@@ -214,7 +214,9 @@ def promotion(inp):
                       errors=["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], rules=["RC-002"])
 
     required_gates = PROMOTION_GATE_REQUIREMENTS.get(req, ())
-    bindings = inp.get("new_evidence_gate_bindings")
+    if "new_evidence_gate_bindings" not in inp:
+        return invalid_missing(can_promote=False)
+    bindings = inp["new_evidence_gate_bindings"]
     if not isinstance(bindings, dict):
         return invalid_schema(can_promote=False)
     if any(gate not in bindings for gate in required_gates):
