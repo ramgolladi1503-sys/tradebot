@@ -95,6 +95,33 @@ def native_ref_v2(q:Path,candidate:str):
 def queue_audit_v2(q:Path,auth:Path,candidate:str,review_round:str,review_aggregate:dict,full:bool=True):
  _ensure_native_evidence(auth,q,candidate);return _ORIG_QUEUE_AUDIT(q,auth,candidate,review_round,review_aggregate,full=full)
 
+def _tempdir_infrastructure_failure(text:str)->bool:
+ t=text.lower()
+ return 'no usable temporary directory found' in t or ('fileNotFoundError'.lower() in t and 'tempfile.py' in t)
+
+def calibration_status_v2(q:Path,candidate:str):
+ reqs=cycle.calibration_requests(q,candidate)
+ if not reqs:return 'MISSING',None
+ rp,r=reqs[-1]
+ rec=q/cycle.ROOT/'receipts'/rp.name;out=q/str(r.get('output_path',''))
+ if not rec.is_file():return 'PENDING',None
+ try:job=cycle.read_json(rec).get('job',{})
+ except Exception:return 'INFRA_FAILED',None
+ if job.get('state')!='SUCCEEDED' or job.get('exit_code')!=0:return 'INFRA_FAILED',None
+ if not out.is_file():return 'INFRA_FAILED',None
+ text=out.read_text(encoding='utf-8',errors='replace')
+ if 'S003_BOARD_DETERMINISTIC_CALIBRATION_PASS' in text and 'CALIBRATION_EXECUTION_RESULT=PASS' in text:return 'PASS',str(out.relative_to(q))
+ if _tempdir_infrastructure_failure(text):return 'INFRA_FAILED',str(out.relative_to(q))
+ if 'CALIBRATION_EXECUTION_RESULT=FAIL' in text:return 'VALIDATION_FAILED',str(out.relative_to(q))
+ return 'VALIDATION_FAILED',str(out.relative_to(q))
+
+def queue_calibration_v2(q:Path,candidate:str,force_retry=False):
+ if cycle.calibration_requests(q,candidate) and not force_retry:return 'EXISTS'
+ rid=cycle.next_calibration_role(q);tag=f'S003_CALIBRATION_{rid}_{candidate[:8].upper()}';packet=cycle.ROOT/'packets'/f'{tag}.md';output=cycle.ROOT/'results'/f'{tag}.md';request=cycle.ROOT/'requests'/f'{tag}.json';(q/packet).parent.mkdir(parents=True,exist_ok=True)
+ command=f'mkdir -p .mros_tmp && TMPDIR="$PWD/.mros_tmp" python3 scripts/mros/calibrate_review_audit_board_v2.py --candidate-head {candidate}'
+ (q/packet).write_text(f'''# S003 autonomous exact-head Board calibration {rid}\n\nExact candidate: `{candidate}`\n\nNon-certifying native execution. Do not repair or review.\n\nRun:\n1. `git rev-parse HEAD`\n2. `python3 --version`\n3. `{command}`\n\nReturn Markdown containing CANDIDATE_HEAD, PYTHON_VERSION, COMMAND, COMPLETE STDOUT, EXIT_CODE, RUNTIME_AUTHORITY=NONE, BROKER_ACTIONS=NONE, CALIBRATION_EXECUTION_RESULT=PASS|FAIL. PASS requires exact HEAD, every declared calibration case executed, zero failures, denominator conservation, all declared metrics satisfied, terminal `S003_BOARD_DETERMINISTIC_CALIBRATION_PASS`, and exit 0.\n''',encoding='utf-8')
+ req={'schema_version':1,'request_id':f'{tag}-{int(time.time())}','created_by':'mros-autonomous-cycle-v2','created_at':cycle.datetime.date.today().isoformat(),'job_type':'reviewer','role_id':rid,'candidate_sha':candidate,'packet_path':packet.as_posix(),'output_path':output.as_posix(),'backend':'codex'};(q/request).write_text(json.dumps(req,sort_keys=True,indent=2)+'\n',encoding='utf-8');cycle.queue_commit(q,[packet,request],f'mros(S003): queue tempdir-safe exact-head calibration {rid} {candidate[:8]} [skip ci]');return rid
+
 def process_review_v2(auth:Path,q:Path,state_root:Path,row):
  n,mp,manifest=row;round_id=f'R{n:03d}';candidate=manifest.get('candidate_head');tier=str(manifest.get('assurance_tier') or 'FAST')
  if not isinstance(candidate,str):raise cycle.CycleError('LATEST_REVIEW_CANDIDATE_INVALID')
@@ -109,15 +136,15 @@ def process_review_v2(auth:Path,q:Path,state_root:Path,row):
  if decision not in cycle.PASS:
   prior=cycle.repair_evidence_for_failed(auth,candidate)
   if prior:
-   new=cycle.git(auth,'rev-parse',f'origin/{cycle.AUTH}').stdout.strip();cs,_=cycle.calibration_status(q,new)
-   if cs=='MISSING':cycle.queue_calibration(q,new)
+   new=cycle.git(auth,'rev-parse',f'origin/{cycle.AUTH}').stdout.strip();cs,_=calibration_status_v2(q,new)
+   if cs=='MISSING':queue_calibration_v2(q,new)
    return {'action':'REPAIR_ALREADY_PUBLISHED','round':round_id,'new_candidate':new,'calibration':cs}
   if cp is None:raise cycle.CycleError('REPAIR_CONTRACT_MISSING')
-  repair=cycle.run_repair(auth,state_root,cp);cycle.sync(auth,q);cycle.queue_calibration(q,repair['candidate_head']);return {'action':'REPAIR_AND_CALIBRATE','round':round_id,'decision':decision,'new_candidate':repair['candidate_head'],'generation':repair['generation']}
+  repair=cycle.run_repair(auth,state_root,cp);cycle.sync(auth,q);queue_calibration_v2(q,repair['candidate_head']);return {'action':'REPAIR_AND_CALIBRATE','round':round_id,'decision':decision,'new_candidate':repair['candidate_head'],'generation':repair['generation']}
  if tier!='FULL':fr=cycle.queue_review(q,candidate,full=True);return {'action':'FINAL_FULL_REVIEW_QUEUED','from_round':round_id,'round':fr,'candidate':candidate}
  cycle.queue_audit(q,auth,candidate,round_id,aggregate,full=True);return {'action':'FINAL_FULL_AUDIT_QUEUED','round':round_id,'candidate':candidate,'decision':decision}
 
 def main()->int:
- cycle.run=safe_run;cycle.exact_population=exact_population_v2;cycle.blocking_findings=blocking_findings_v2;cycle.record_aggregate=record_aggregate_v2;cycle.process_review=process_review_v2;cycle.native_ref=native_ref_v2;cycle.queue_audit=queue_audit_v2
+ cycle.run=safe_run;cycle.exact_population=exact_population_v2;cycle.blocking_findings=blocking_findings_v2;cycle.record_aggregate=record_aggregate_v2;cycle.process_review=process_review_v2;cycle.native_ref=native_ref_v2;cycle.queue_audit=queue_audit_v2;cycle.calibration_status=calibration_status_v2;cycle.queue_calibration=queue_calibration_v2
  result=cycle.main();return 0 if result is None else int(result)
 if __name__=='__main__':raise SystemExit(main())
