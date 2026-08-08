@@ -14,6 +14,24 @@ PYTHON="$(command -v python3)"
 [[ -f "$CONFIG" ]] || { echo "CONFIG_MISSING:$CONFIG" >&2; exit 3; }
 [[ -f "$BRIDGE_WT/scripts/mros/mros_agent_git_worker.py" ]] || { echo BRIDGE_WORKER_MISSING >&2; exit 4; }
 [[ -f "$BRIDGE_WT/scripts/mros/mros_autonomous_supervisor.py" ]] || { echo SUPERVISOR_MISSING >&2; exit 5; }
+
+# launchd does not inherit the interactive shell PATH. Preserve the current
+# bootstrap PATH explicitly so Git hooks can resolve git-lfs and other tools
+# exactly as they do from the user's terminal. Do not bypass hooks.
+SERVICE_PATH="${PATH:-/opt/anaconda3/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
+if command -v git-lfs >/dev/null 2>&1; then
+  GIT_LFS_BIN="$(command -v git-lfs)"
+  GIT_LFS_DIR="$(dirname "$GIT_LFS_BIN")"
+  case ":$SERVICE_PATH:" in
+    *":$GIT_LFS_DIR:"*) ;;
+    *) SERVICE_PATH="$GIT_LFS_DIR:$SERVICE_PATH" ;;
+  esac
+else
+  echo "GIT_LFS_NOT_FOUND_IN_BOOTSTRAP_PATH" >&2
+  echo "Install/restore git-lfs before autonomous pushes; hooks will not be bypassed." >&2
+  exit 7
+fi
+
 cd "$SOURCE_REPO"
 git fetch origin research/mros-program-v1 research/mros-agent-bridge-v1 automation/mros-agent-queue-v1
 if [[ ! -e "$AUTHORITY_WT/.git" ]]; then
@@ -32,6 +50,7 @@ cat > "$LAUNCH/com.aixion.mros-agent-worker.plist" <<PLIST
 <plist version="1.0"><dict>
 <key>Label</key><string>com.aixion.mros-agent-worker</string>
 <key>ProgramArguments</key><array><string>$PYTHON</string><string>$BRIDGE_WT/scripts/mros/mros_agent_git_worker.py</string><string>--config</string><string>$CONFIG</string><string>--queue-branch</string><string>automation/mros-agent-queue-v1</string></array>
+<key>EnvironmentVariables</key><dict><key>PATH</key><string>$SERVICE_PATH</string></dict>
 <key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>10</integer>
 <key>StandardOutPath</key><string>$LOGS/worker.out.log</string><key>StandardErrorPath</key><string>$LOGS/worker.err.log</string>
 </dict></plist>
@@ -42,6 +61,7 @@ cat > "$LAUNCH/com.aixion.mros-autonomous-supervisor.plist" <<PLIST
 <plist version="1.0"><dict>
 <key>Label</key><string>com.aixion.mros-autonomous-supervisor</string>
 <key>ProgramArguments</key><array><string>$PYTHON</string><string>$BRIDGE_WT/scripts/mros/mros_autonomous_supervisor.py</string><string>--repo</string><string>$AUTHORITY_WT</string><string>--state-root</string><string>$STATE</string><string>--poll-seconds</string><string>15</string></array>
+<key>EnvironmentVariables</key><dict><key>PATH</key><string>$SERVICE_PATH</string></dict>
 <key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>10</integer>
 <key>StandardOutPath</key><string>$LOGS/supervisor.out.log</string><key>StandardErrorPath</key><string>$LOGS/supervisor.err.log</string>
 </dict></plist>
@@ -52,9 +72,11 @@ for label in com.aixion.mros-agent-worker com.aixion.mros-autonomous-supervisor;
   launchctl enable "gui/$(id -u)/$label"
 done
 sleep 2
-launchctl print "gui/$(id -u)/com.aixion.mros-agent-worker" | head -40
-launchctl print "gui/$(id -u)/com.aixion.mros-autonomous-supervisor" | head -40
+launchctl print "gui/$(id -u)/com.aixion.mros-agent-worker" | head -50
+launchctl print "gui/$(id -u)/com.aixion.mros-autonomous-supervisor" | head -50
 printf '%s\n' MROS_AUTONOMOUS_SERVICES_INSTALLED
 printf 'Authority worktree: %s\n' "$AUTHORITY_WT"
 printf 'Health: %s\n' "$STATE/supervisor_health.json"
+printf 'git-lfs: %s\n' "$GIT_LFS_BIN"
+printf 'service PATH: %s\n' "$SERVICE_PATH"
 printf '%s\n' "Stop: launchctl bootout gui/$(id -u)/com.aixion.mros-autonomous-supervisor ; launchctl bootout gui/$(id -u)/com.aixion.mros-agent-worker"
