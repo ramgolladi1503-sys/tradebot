@@ -9,7 +9,7 @@ Benign no-op cases exit 0 so launchd does not report them as failures.
 from __future__ import annotations
 import argparse,fcntl,os,shutil,subprocess,time
 from pathlib import Path
-BRANCH='research/mros-agent-bridge-v1';SERVICES=('com.aixion.mros-agent-worker','com.aixion.mros-autonomous-supervisor');DEPLOY_EPOCH='r113-worker-recovery-v1-20260808'
+BRANCH='research/mros-agent-bridge-v1';SERVICES=('com.aixion.mros-agent-worker','com.aixion.mros-autonomous-supervisor');DEPLOY_EPOCH='calibrated-candidate-review-recovery-v1-20260808'
 class UpdateError(RuntimeError):pass
 def run(cwd:Path,*args:str,timeout:int=600,check=True):
  p=subprocess.run(list(args),cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=False)
