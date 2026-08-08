@@ -41,6 +41,7 @@ def _is_review_request(name:str)->bool:
 def _is_audit_request(name:str)->bool:return bool(re.search(r'(?:^|[_-])A\d{2,3}(?:[_\.-]|$)',name.upper()))
 def derive_phase(state:dict[str,str],requests:list[str],receipts:dict[str,dict[str,Any]])->tuple[str,str]:
  if state.get('active_milestone')=='M9':return 'HARD_STOP','M9_BOUNDARY_VIOLATION'
+ if state.get('active_sprint_status')=='BOARD_BOOTSTRAP_AUTHORIZATION_PENDING':return 'S003_AUTHORIZATION','FINALIZE_AUTOMATICALLY'
  names={Path(x).name for x in requests};pending=names-set(receipts)
  if any('CALIBRATION' in x.upper() for x in pending):return 'NATIVE_CALIBRATION_RUNNING','WAIT_AUTOMATICALLY'
  if any(_is_audit_request(x) for x in pending):return 'AUDIT_RUNNING','WAIT_AUTOMATICALLY'
@@ -67,13 +68,14 @@ def worker_operational_health(state_root:Path)->tuple[bool,str,str|None]:
  launchd=worker_alive_from_launchd();return bool(d.get('operational')) and status=='RUNNING' and launchd,status,err
 def write_health(path:Path,h:Health)->None:
  h.updated_at=time.time();path.parent.mkdir(parents=True,exist_ok=True);tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(asdict(h),sort_keys=True,indent=2)+'\n',encoding='utf-8');os.replace(tmp,path)
-def run_cycle(repo:Path,state_root:Path)->tuple[int,str]:
- script=BRIDGE_ROOT/'scripts/mros/mros_autonomous_cycle.py'
+def run_script(repo:Path,name:str,args:list[str],timeout:int=7200)->tuple[int,str]:
+ script=BRIDGE_ROOT/'scripts/mros'/name
  if not script.is_file():raise SupervisorError(f'SCRIPT_MISSING:{script}')
- p=subprocess.run([sys.executable,str(script),'--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT),'--state-root',str(state_root)],cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=7200,check=False)
- detail=(p.stdout or p.stderr or '').strip().splitlines()[-1:] or ['']
- if p.returncode not in (0,3):raise SupervisorError(f'AUTONOMOUS_CYCLE_FAILED:{p.returncode}:{detail[0]}')
- return p.returncode,detail[0]
+ p=subprocess.run([sys.executable,str(script),*args],cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=False);detail=((p.stdout or p.stderr or '').strip().splitlines() or [''])[-1]
+ if p.returncode not in (0,3):raise SupervisorError(f'{name}_FAILED:{p.returncode}:{detail}')
+ return p.returncode,detail
+def run_cycle(repo:Path,state_root:Path)->tuple[int,str]:return run_script(repo,'mros_autonomous_cycle.py',['--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT),'--state-root',str(state_root)])
+def run_finalizer(repo:Path)->tuple[int,str]:return run_script(repo,'mros_s003_autonomous_finalizer.py',['--authority-repo',str(repo),'--queue-repo',str(QUEUE_WT)])
 def single_instance(lock_path:Path):
  lock_path.parent.mkdir(parents=True,exist_ok=True);h=lock_path.open('a+')
  try:fcntl.flock(h.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -95,9 +97,8 @@ def main()->int:
      h.supervisor_status='HARD_STOP';h.phase='WORKER_BLOCKED';h.next_action='OPERATOR_ATTENTION';h.last_error=h.worker_last_error or f'WORKER_NOT_OPERATIONAL:{h.worker_status}';write_health(health_path,h)
     else:
      h.supervisor_status='RUNNING';h.last_error=None;write_health(health_path,h)
-     # The controller owns repository progression. Pending jobs cause a benign
-     # no-op/wait; completed populations are consumed without operator prompts.
-     rc,detail=run_cycle(repo,root)
+     if state.get('active_sprint_status')=='BOARD_BOOTSTRAP_AUTHORIZATION_PENDING':rc,detail=run_finalizer(repo)
+     else:rc,detail=run_cycle(repo,root)
      h.next_action='WAIT_AUTOMATICALLY' if rc==3 else 'AUTONOMOUS_CYCLE_CONTINUE';h.last_error=None;write_health(health_path,h)
    except Exception as exc:
     h.supervisor_status='HARD_STOP';h.last_error=f'{type(exc).__name__}:{exc}';h.next_action='OPERATOR_ATTENTION';write_health(health_path,h)
