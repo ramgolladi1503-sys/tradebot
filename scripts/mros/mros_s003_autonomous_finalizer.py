@@ -14,6 +14,7 @@ def run(cwd:Path,*args:str,timeout=1200,check=True):
  return p
 def git(cwd:Path,*args:str,**kw):return run(cwd,'git',*args,**kw)
 def read_json(p:Path):return json.loads(p.read_text(encoding='utf-8'))
+def sha256_file(p:Path)->str:return hashlib.sha256(p.read_bytes()).hexdigest()
 def load_mod(auth:Path,name:str):
  d=(auth/'scripts/mros').resolve()
  if str(d) not in sys.path:sys.path.insert(0,str(d))
@@ -89,22 +90,26 @@ def receipt_map(q:Path,manifest:dict):
   if not isinstance(job.get('job_id'),str):raise FinalizeError('MANIFEST_RECEIPT_JOB_INVALID')
   out[job['job_id']]=r
  return out
-def build_trace(auth:Path,candidate:str,rr:str,ar:str,rap:Path,aap:Path,native:Path,rmp:Path,amp:Path):
+def build_trace(auth:Path,q:Path,candidate:str,rr:str,ar:str,rap:Path,aap:Path,native:Path,rmp:Path,amp:Path):
  contract=read_json(auth/CONTRACT);ids=[c.get('id') for c in contract.get('criteria',[]) if isinstance(c,dict) and isinstance(c.get('id'),str)]
- refs=[native.as_posix(),rap.as_posix(),aap.as_posix(),str(rmp),str(amp),CONTRACT.as_posix()];trace={'schema_version':'mros-sprint-acceptance-trace-v1','sprint':'S003','candidate_head':candidate,'authority':'Research / R','runtime_authority':'NONE','m9_status':'NOT_STARTED','review_round':rr,'audit_round':ar,'criteria':[{'id':cid,'status':'PASS','evidence_refs':refs} for cid in ids]};path=Path('research/evidence/sprints/S003/S003_AUTONOMOUS_ACCEPTANCE_TRACE.json');(auth/path).write_text(json.dumps(trace,sort_keys=True,indent=2)+'\n',encoding='utf-8');return path,trace
+ refs=[native.as_posix(),rap.as_posix(),aap.as_posix(),rmp.as_posix(),amp.as_posix(),CONTRACT.as_posix()]
+ bindings=[]
+ for ref in refs:
+  source='queue' if '/agent_queue/' in ref else 'authority';root=q if source=='queue' else auth;path=root/ref
+  if not path.is_file():raise FinalizeError(f'ACCEPTANCE_EVIDENCE_FILE_MISSING:{ref}')
+  bindings.append({'path':ref,'source':source,'sha256':sha256_file(path)})
+ trace={'schema_version':'mros-sprint-acceptance-trace-v1','sprint':'S003','candidate_head':candidate,'authority':'Research / R','runtime_authority':'NONE','m9_status':'NOT_STARTED','review_round':rr,'audit_round':ar,'evidence_bindings':bindings,'criteria':[{'id':cid,'status':'PASS','evidence_refs':refs} for cid in ids]};path=Path('research/evidence/sprints/S003/S003_AUTONOMOUS_ACCEPTANCE_TRACE.json');(auth/path).write_text(json.dumps(trace,sort_keys=True,indent=2)+'\n',encoding='utf-8');return path,trace
 def finalize(auth:Path,q:Path):
  sync(auth,q);state=(auth/STATE).read_text(encoding='utf-8')
  if re.search(r'(?m)^active_sprint:\s*S004\s*$',state):return {'status':'ALREADY_FINALIZED'}
  if not re.search(r'(?m)^active_sprint:\s*S003\s*$',state):raise FinalizeError('ACTIVE_SPRINT_NOT_S003')
- candidate,rr,ar,rmp,rm,review,amp,am,audit,rap,aap=latest_full_pair(auth,q);native_path,native,source_ref,receipt_ref,native_receipt,source_text=build_native(auth,q,candidate);trace_path,trace=build_trace(auth,candidate,rr,ar,rap,aap,native_path,Path(str(rmp.relative_to(q))),Path(str(amp.relative_to(q))))
+ candidate,rr,ar,rmp,rm,review,amp,am,audit,rap,aap=latest_full_pair(auth,q);native_path,native,source_ref,receipt_ref,native_receipt,source_text=build_native(auth,q,candidate);review_manifest_rel=Path(str(rmp.relative_to(q)));audit_manifest_rel=Path(str(amp.relative_to(q)));trace_path,trace=build_trace(auth,q,candidate,rr,ar,rap,aap,native_path,review_manifest_rel,audit_manifest_rel)
  native_mod=load_mod(auth,'native_evidence');ne=native_mod.verify_native_sources(native,source_output_text=source_text,receipt=native_receipt,candidate_head=candidate,source_output_ref=source_ref,execution_receipt_ref=receipt_ref)
  if ne:raise FinalizeError('NATIVE_SOURCE_VERIFICATION_FAILED:'+','.join(ne))
- context=load_mod(auth,'program_context');context_errors=context.validate_state_ledger(state,(auth/LEDGER).read_text(encoding='utf-8'),sprint='S003',next_sprint='S004')+context.validate_acceptance_trace(trace,sprint='S003',candidate_head=candidate)
- advance=load_mod(auth,'advance_program');result=advance.authorize(sprint='S003',next_sprint='S004',candidate_head=candidate,review=review,audit=audit,native=native,context_errors=context_errors,review_manifest=rm,audit_manifest=am,review_receipts=receipt_map(q,rm),audit_receipts=receipt_map(q,am))
+ context=load_mod(auth,'program_context');contract=read_json(auth/CONTRACT);context_errors=context.validate_state_ledger(state,(auth/LEDGER).read_text(encoding='utf-8'),sprint='S003',next_sprint='S004')+context.validate_acceptance_trace(trace,sprint='S003',candidate_head=candidate,contract=contract,authority_root=auth,queue_root=q,strict_contract=True,verify_evidence=True)
+ advance=load_mod(auth,'advance_program');result=advance.authorize(sprint='S003',next_sprint='S004',candidate_head=candidate,review=review,audit=audit,native=native,context_errors=context_errors,review_manifest=rm,audit_manifest=am,review_receipts=receipt_map(q,rm),audit_receipts=receipt_map(q,am),queue_repo=q,review_manifest_path=rmp,audit_manifest_path=amp,review_round=rr,audit_round=ar,expected_native_ref=native_path.as_posix())
  if not result.get('advance'):raise FinalizeError('ADVANCEMENT_REJECTED:'+','.join(result.get('errors',[])))
- # Evidence first, then one guarded authority transition including state+ledger.
- state=set_top(state,'active_sprint','S004');state=set_top(state,'last_completed_sprint','S003');state=set_top(state,'active_sprint_status','NOT_STARTED');state=set_indented(state,'status','AUTHORIZED') if False else state
- state=set_indented(state,'autonomous_authority','AUTHORIZED_RESEARCH_R');state=set_indented(state,'runtime_authority','NONE')
+ state=set_top(state,'active_sprint','S004');state=set_top(state,'last_completed_sprint','S003');state=set_top(state,'active_sprint_status','NOT_STARTED');state=set_indented(state,'autonomous_authority','AUTHORIZED_RESEARCH_R');state=set_indented(state,'runtime_authority','NONE')
  (auth/STATE).write_text(state,encoding='utf-8')
  ledger=(auth/LEDGER).read_text(encoding='utf-8');accept_row={'sprint_id':'S003','milestone':'M1','work_package':'WP001','status':'ACCEPTED','branch':AUTH,'authority_grade':'Research / R','decision':'ACCEPTED','candidate_head':candidate,'native_evidence':native_path.as_posix(),'review_round':rr,'review_aggregate':rap.as_posix(),'audit_round':ar,'audit_aggregate':aap.as_posix(),'acceptance_trace':trace_path.as_posix(),'review_board_authority':'AUTHORIZED_RESEARCH_R','audit_board_authority':'AUTHORIZED_RESEARCH_R','s004':'ACTIVATED','m9':'NOT_STARTED','runtime_authority':'NONE'};active_row={'sprint_id':'S004','milestone':'M1','work_package':'WP001','status':'ACTIVE','branch':AUTH,'authority_grade':'Research / R','decision':'ACTIVE','m9':'NOT_STARTED','runtime_authority':'NONE'}
  (auth/LEDGER).write_text(ledger.rstrip()+'\n'+json.dumps(accept_row,sort_keys=True)+'\n'+json.dumps(active_row,sort_keys=True)+'\n',encoding='utf-8');decision_path=Path('research/evidence/sprints/S003/S003_AUTONOMOUS_ACCEPTANCE_DECISION.json');(auth/decision_path).write_text(json.dumps({'schema_version':'mros-sprint-acceptance-decision-v1','sprint':'S003','candidate_head':candidate,'decision':'ACCEPTED','next_sprint':'S004','authorization_result':result,'runtime_authority':'NONE','m9_status':'NOT_STARTED'},sort_keys=True,indent=2)+'\n',encoding='utf-8')
