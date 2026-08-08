@@ -1,0 +1,35 @@
+{
+  "schema_version": "mros-agent-population-v1",
+  "job_type": "reviewer",
+  "candidate_head": "0c5d6268ef224450cd881da588efcce04c630414",
+  "sprint": "S003",
+  "round": "R004",
+  "frozen_before_execution": true,
+  "expected_count": 3,
+  "assurance_tier": "FAST",
+  "created_by": "mros-primary-controller",
+  "runtime_authority": "NONE",
+  "members": [
+    {
+      "execution_role_id": "R01",
+      "semantic_role": "contract_compliance",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R004_R01.md",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R01.json",
+      "receipt_path": "research/evidence/sprints/S003/agent_queue/receipts/S003_R004_R01.json"
+    },
+    {
+      "execution_role_id": "R02",
+      "semantic_role": "negative_control",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R004_R02.md",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R02.json",
+      "receipt_path": "research/evidence/sprints/S003/agent_queue/receipts/S003_R004_R02.json"
+    },
+    {
+      "execution_role_id": "R03",
+      "semantic_role": "adversarial_red_team",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R004_R03.md",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R03.json",
+      "receipt_path": "research/evidence/sprints/S003/agent_queue/receipts/S003_R004_R03.json"
+    }
+  ]
+}
