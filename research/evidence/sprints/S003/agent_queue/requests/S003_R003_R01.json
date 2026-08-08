@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "request_id": "S003-R003-R01-d6b502d5",
+  "created_by": "mros-primary-controller",
+  "created_at": "2026-08-08",
+  "job_type": "reviewer",
+  "role_id": "R01",
+  "candidate_sha": "d6b502d55f6d0a2b66719607b816873d9bf78d62",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R003_R01.md",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R003_R01.json",
+  "backend": "codex"
+}
