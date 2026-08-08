@@ -1,0 +1,15 @@
+SOURCE: operator-supplied native terminal execution
+WORKTREE: /Users/madhuram/.mros-review/s002-native
+BRANCH/REF: detached exact candidate checkout from research/mros-program-v1
+HEAD: 89d3abd3b2b2c20951c123063b534c56af7ebf60
+PYTHON: 3.12.2
+COMMAND: python3 scripts/mros/validate_s002_fixtures.py
+RESULT: checks=70 pass=70 fail=0
+MARKER: S002_TARGETED_VALIDATION_PASS
+EXIT_CODE: 0
+
+PROVENANCE NOTE:
+This file records native execution performed by the repository operator on a genuine local Git checkout. It is implementation-side validation evidence only. It does not constitute an independent review or S002 acceptance decision.
+
+SOURCE TRANSCRIPT:
+User-supplied terminal transcript captured in the MROS primary session on 2026-08-08. The transcript shows exact HEAD 89d3abd3b2b2c20951c123063b534c56af7ebf60, Python 3.12.2, all active S002 cases C001-C074 (with historical superseded IDs omitted by the validator), SUMMARY checks=70 pass=70 fail=0, S002_TARGETED_VALIDATION_PASS, and EXIT_CODE=0.
