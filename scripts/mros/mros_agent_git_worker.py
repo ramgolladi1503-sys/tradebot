@@ -31,6 +31,7 @@ REQUEST_DIR = QUEUE_ROOT / "requests"
 RECEIPT_DIR = QUEUE_ROOT / "receipts"
 ALLOWED_JOB_TYPES = {"reviewer", "auditor"}
 DEFAULT_QUEUE_BRANCH = "automation/mros-agent-queue-v1"
+AUTHORITY_BRANCH = "research/mros-program-v1"
 
 
 class WorkerError(RuntimeError):
@@ -60,7 +61,9 @@ def ensure_clean(repo: Path) -> None:
 
 def sync_queue(repo: Path, remote_branch: str) -> None:
     ensure_clean(repo)
-    run_git(repo, "fetch", "origin", remote_branch, timeout=180)
+    # Fetch both transport and authority refs. Future sprint candidate SHAs live
+    # on the program branch, not necessarily in queue-branch ancestry.
+    run_git(repo, "fetch", "origin", remote_branch, AUTHORITY_BRANCH, timeout=180)
     run_git(repo, "rebase", f"origin/{remote_branch}", timeout=180)
 
 
@@ -112,8 +115,6 @@ def commit_and_push(repo: Path, remote_branch: str, paths: list[Path], message: 
         run_git(repo, "reset")
         raise WorkerError("COMMIT_SCOPE_VIOLATION")
     run_git(repo, "commit", "-m", message)
-    # Rebase the narrow evidence commit over any queue requests added while the
-    # model was running. Requests/results use distinct immutable paths.
     run_git(repo, "fetch", "origin", remote_branch, timeout=180)
     run_git(repo, "rebase", f"origin/{remote_branch}", timeout=180)
     run_git(repo, "push", "origin", f"HEAD:{remote_branch}", timeout=180)
@@ -179,6 +180,7 @@ def main() -> int:
             {
                 "status": "WORKER_STARTING",
                 "queue_branch": args.queue_branch,
+                "authority_branch": AUTHORITY_BRANCH,
                 "worker_id": args.worker_id,
                 "health": bridge.health(),
             }
