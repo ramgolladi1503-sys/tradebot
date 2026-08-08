@@ -7,58 +7,33 @@ repository_authority: true
 
 active_milestone: M1
 active_work_package: WP001
-active_sprint: S002
-last_completed_sprint: S001
+active_sprint: S003
+last_completed_sprint: S002
 program_status: ACTIVE
-active_sprint_status: V10_NATIVE_VALIDATION_PASS_PENDING_INDEPENDENT_RE_REVIEW
+active_sprint_status: BOARD_BOOTSTRAP_CALIBRATION_REQUIRED
 
-s002_review:
-  latest_review_commit: "1da6fcf909eb070c1c4cf31fd424521a86e35f5c"
-  latest_review_artifact: "research/evidence/sprints/S002/S002_INDEPENDENT_RE_REVIEW_2A10C_FINAL.md"
-  latest_reviewed_head: "2a10c33c34e4d8d7c95b90dee2d88d59b906b6e4"
-  latest_review_verdict: S002_INDEPENDENT_RE_REVIEW_UNKNOWN
-  latest_findings:
-    MINOR: 0
-    MAJOR: 1
-    CRITICAL: 0
-    UNKNOWN: 1
-  blocking_findings:
-    - "2A10C-F-001_EXPLICIT_NULL_MANDATORY_REFS_WRONG_SCHEMA_PRECEDENCE"
-    - "NATIVE_88_CASE_EVIDENCE_NOT_COMMITTED_AT_REVIEW_TIME"
-  reviewer_independence: SATISFIED
-
-s002_v9_history:
-  implementation_candidate_head: "2a10c33c34e4d8d7c95b90dee2d88d59b906b6e4"
-  native_validation_result: "88/88_PASS_EXIT_0_PYTHON_3.12.2"
-  native_validation_evidence: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_OUTPUT_88_CASES.txt"
-  native_validation_evidence_commit: "b0b9d39e5857ada7d2dd02a76027e69c490e3e13"
-  native_validation_authority: HISTORICAL_PRE_V10_REPAIR_ONLY
-  review_commit: "1da6fcf909eb070c1c4cf31fd424521a86e35f5c"
-  review_verdict: S002_INDEPENDENT_RE_REVIEW_UNKNOWN
-  review_major: 1
-  review_mandatory_unknown: 1
-
-s002_v10_repair:
-  prior_native_validated_head: "2a10c33c34e4d8d7c95b90dee2d88d59b906b6e4"
-  prior_native_validation_result: "88/88_PASS_EXIT_0_PYTHON_3.12.2"
-  prior_native_validation_authority: HISTORICAL_PRE_V10_REPAIR_ONLY
-  v10_fixture_commit: "79a58c6bf5e72f83a9ab3b2ea5ebd5f81a964b0a"
-  validator_repair_commit: "c6e79c4bba4eed9004be9f0a2e68611afc704cfe"
-  contract_sync_commit: "fd16f526842b9f4f27d7fd06859b059812e10796"
+s002_acceptance:
+  decision: ACCEPTED
+  acceptance_artifact: "research/evidence/sprints/S002/S002_ACCEPTANCE_DECISION.md"
+  acceptance_decision_commit: "95e7283bbb01aea98c118b4cf7775e89db57b888"
   implementation_candidate_head: "fd16f526842b9f4f27d7fd06859b059812e10796"
-  base_fixture_schema: "mros-s002-fixtures-v4"
-  v5_fixture_schema: "mros-s002-fixtures-v5-addendum"
-  v6_fixture_schema: "mros-s002-fixtures-v6-gate-binding"
-  v7_fixture_schema: "mros-s002-fixtures-v7-gate-semantic-binding"
-  v8_fixture_schema: "mros-s002-fixtures-v8-inherited-gate-provenance"
-  v9_fixture_schema: "mros-s002-fixtures-v9-classification-schema"
-  v10_fixture_schema: "mros-s002-fixtures-v10-null-mandatory-ref-schema"
-  required_active_case_count: 90
-  native_validation: EXACT_HEAD_fd16f526842b9f4f27d7fd06859b059812e10796
   native_validation_result: "90/90_PASS_EXIT_0_PYTHON_3.12.2"
   native_validation_evidence: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_OUTPUT_90_CASES.txt"
   native_validation_evidence_commit: "becacebd0e854d7fc2c2828b7bd14b9043f774e6"
-  independent_re_review: REQUIRED_FRESH_BOOTSTRAP_INDEPENDENT_REVIEW
+  independent_review_artifact: "research/evidence/sprints/S002/S002_INDEPENDENT_RE_REVIEW_FD16_FINAL.md"
+  independent_review_commit: "e99bfd42629756c2e7f434667f670d90d2a9cfbf"
+  independent_review_verdict: S002_INDEPENDENT_RE_REVIEW_PASS
+  findings:
+    MINOR: 0
+    MAJOR: 0
+    CRITICAL: 0
+    UNKNOWN: 0
+  reviewer_independence: SATISFIED
+
+s002_history_policy:
+  preserve_all_prior_failed_unknown_reviews: true
+  prior_reviews_are_historical_only: true
+  accepted_candidate_is_exact_head_bound: true
 
 review_board:
   status: IMPLEMENTED_NOT_CALIBRATED
@@ -85,7 +60,7 @@ review_audit_governance:
   review_and_audit_are_distinct: true
   simple_majority_forbidden: true
   max_full_repair_rounds_per_sprint: 5
-  bootstrap_calibration_status: NOT_EXECUTED
+  bootstrap_calibration_status: REQUIRED
   bootstrap_independent_review_status: NOT_EXECUTED
   autonomous_authority: NOT_AUTHORIZED
 
@@ -127,12 +102,12 @@ work_package_status:
   WP024: NOT_STARTED
 
 next_action:
-  sprint: S002
+  sprint: S003
   work_package: WP001
-  objective: "Obtain a fresh bootstrap-independent re-review of exact implementation candidate fd16f526842b9f4f27d7fd06859b059812e10796 using committed 90/90 native evidence becacebd0e854d7fc2c2828b7bd14b9043f774e6. Re-attack explicit-null versus absent mandatory-ref semantics and all prior blocking surfaces. Do not accept S002 or start S003 before the independent verdict."
-  required_native_validator: "scripts/mros/validate_s002_fixtures.py"
-  required_expected_case_count: 90
-  required_external_role_after_native_pass: "bootstrap-independent reviewer/session distinct from S002 implementation/repair and Review/Audit Board bootstrap implementation"
+  objective: "Before normal autonomous S003 certification begins, execute deterministic calibration of the implemented Review Board and Audit Board, preserve exact-head evidence, obtain separate bootstrap-independent certification of the boards, and authorize normal use only if all calibration/review/audit gates pass. Then continue S003 under the manual-defined scope."
+  review_board_minimum_valid_independent_reviews: 10
+  audit_board_minimum_valid_independent_audits: 10
+  board_authority_before_bootstrap_completion: "Research / R"
 
 execution_policy:
   sprint_prs: false
