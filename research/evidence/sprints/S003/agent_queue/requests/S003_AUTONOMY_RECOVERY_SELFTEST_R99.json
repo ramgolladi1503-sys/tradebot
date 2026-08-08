@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "request_id": "S003-AUTONOMY-RECOVERY-SELFTEST-R99-894A1D8F",
+  "created_by": "mros-primary-controller",
+  "created_at": "2026-08-08",
+  "job_type": "reviewer",
+  "role_id": "R99",
+  "candidate_sha": "894a1d8ff88997fc1ece29277f7b3dc38eccbe15",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_AUTONOMY_RECOVERY_SELFTEST_R99.md",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_AUTONOMY_RECOVERY_SELFTEST_R99.md",
+  "backend": "codex"
+}
