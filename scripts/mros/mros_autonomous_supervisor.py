@@ -5,7 +5,7 @@ import argparse,fcntl,json,os,re,subprocess,sys,time
 from dataclasses import dataclass,asdict
 from pathlib import Path
 from typing import Any
-AUTHORITY_BRANCH='research/mros-program-v1';QUEUE_BRANCH='automation/mros-agent-queue-v1';QUEUE_ROOT=Path('research/evidence/sprints/S003/agent_queue');STATE=Path('research/program/MROS_PROGRAM_STATE.yaml');BRIDGE_ROOT=Path('/Users/madhuram/.mros-agent-bridge/bridge');QUEUE_WT=Path('/Users/madhuram/.mros-agent-bridge/queue')
+AUTHORITY_BRANCH='research/mros-program-v1';QUEUE_BRANCH='automation/mros-agent-queue-v1';QUEUE_ROOT=Path('research/evidence/sprints/S003/agent_queue');STATE=Path('research/program/MROS_PROGRAM_STATE.yaml');BRIDGE_ROOT=Path('/Users/madhuram/.mros-agent-bridge/bridge');QUEUE_WT=Path('/Users/madhuram/.mros-agent-bridge/queue');CHECKPOINT_SECONDS=900
 class SupervisorError(RuntimeError):pass
 @dataclass
 class Health:
@@ -70,27 +70,32 @@ def worker_operational_health(root:Path):
  return bool(d.get('operational')) and status=='RUNNING' and worker_alive_from_launchd(),status,err
 def write_health(path:Path,h:Health):
  h.updated_at=time.time();path.parent.mkdir(parents=True,exist_ok=True);tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(asdict(h),sort_keys=True,indent=2)+'\n',encoding='utf-8');os.replace(tmp,path)
-def recover_authority_checkout(repo:Path,root:Path):
- """Preserve unexpected local authority edits, then restore the canonical fast-forward path.
+def write_checkpoint(root:Path,h:Health,force:bool=False):
+ """Append a durable, read-only operational snapshot at most once per 15-minute bucket.
 
-    Nothing is discarded: dirty tracked/untracked state is stored in a local git stash and
-    recorded outside the repository. Recovery is permitted only when local HEAD is already
-    an ancestor of the remote authority HEAD; divergent local commits remain a hard stop.
+    Checkpoints live outside the authority/queue repositories so observation can never mutate
+    program authority. Repeated supervisor polls in the same bucket are deduplicated.
     """
+ now=time.time();bucket=int(now//CHECKPOINT_SECONDS);marker=root/'checkpoint_bucket';log=root/'supervisor_checkpoints.jsonl'
+ try:last=int(marker.read_text(encoding='utf-8').strip()) if marker.is_file() else -1
+ except Exception:last=-1
+ if not force and last==bucket:return
+ record=asdict(h);record['checkpointed_at']=now;record['checkpoint_bucket']=bucket
+ root.mkdir(parents=True,exist_ok=True)
+ with log.open('a',encoding='utf-8') as fh:fh.write(json.dumps(record,sort_keys=True,separators=(',',':'))+'\n')
+ tmp=marker.with_suffix('.tmp');tmp.write_text(str(bucket)+'\n',encoding='utf-8');os.replace(tmp,marker)
+def recover_authority_checkout(repo:Path,root:Path):
  status=git(repo,'status','--porcelain').stdout.strip()
  if not status:return None
  local=ref(repo,'HEAD');remote=ref(repo,f'origin/{AUTHORITY_BRANCH}')
- if git(repo,'merge-base','--is-ancestor',local,remote,check=False).returncode!=0:
-  raise SupervisorError(f'AUTHORITY_DIRTY_AND_DIVERGED:local={local}:remote={remote}')
+ if git(repo,'merge-base','--is-ancestor',local,remote,check=False).returncode!=0:raise SupervisorError(f'AUTHORITY_DIRTY_AND_DIVERGED:local={local}:remote={remote}')
  label=f'MROS_AUTONOMOUS_RECOVERY_{int(time.time())}_{local[:8]}'
  p=git(repo,'stash','push','--include-untracked','-m',label,timeout=300,check=False)
  if p.returncode!=0:raise SupervisorError(f'AUTHORITY_RECOVERY_STASH_FAILED:{p.stderr or p.stdout}')
  if git(repo,'status','--porcelain').stdout.strip():raise SupervisorError('AUTHORITY_RECOVERY_DID_NOT_CLEAN_WORKTREE')
- stash=git(repo,'stash','list','-1','--format=%gd:%H:%s',check=False).stdout.strip()
- log=root/'authority_recovery.log';log.parent.mkdir(parents=True,exist_ok=True)
+ stash=git(repo,'stash','list','-1','--format=%gd:%H:%s',check=False).stdout.strip();log=root/'authority_recovery.log';log.parent.mkdir(parents=True,exist_ok=True)
  with log.open('a',encoding='utf-8') as fh:fh.write(f'{time.time()} local={local} remote={remote} stash={stash} status={status!r}\n')
- git(repo,'merge','--ff-only',f'origin/{AUTHORITY_BRANCH}',timeout=300)
- return stash
+ git(repo,'merge','--ff-only',f'origin/{AUTHORITY_BRANCH}',timeout=300);return stash
 def invoke(repo:Path,name:str,args:list[str],timeout=7200):
  script=BRIDGE_ROOT/'scripts/mros'/name
  if not script.is_file():raise SupervisorError(f'SCRIPT_MISSING:{script}')
@@ -123,17 +128,17 @@ def main():
     fetch(repo);recover_authority_checkout(repo,root);h.authority_head=ref(repo,f'origin/{AUTHORITY_BRANCH}');h.queue_head=ref(repo,f'origin/{QUEUE_BRANCH}');st=parse_program_state(read_at_ref(repo,f'origin/{AUTHORITY_BRANCH}',str(STATE)));h.milestone=st.get('active_milestone','');h.work_package=st.get('active_work_package','');h.sprint=st.get('active_sprint','');h.runtime_authority=st.get('runtime_authority') or 'NONE';h.m9_started=h.milestone=='M9';req,rec=queue_inventory(repo);names={Path(x).name for x in req};h.pending_requests=len(names-set(rec));h.completed_receipts,h.failed_receipts=receipt_stats(rec);h.worker_alive,h.worker_status,h.worker_last_error=worker_operational_health(root);h.phase,h.next_action=derive_phase(st,req,rec)
     if h.runtime_authority!='NONE':raise SupervisorError(f'RUNTIME_AUTHORITY_FORBIDDEN:{h.runtime_authority}')
     if h.m9_started:raise SupervisorError('M9_START_FORBIDDEN')
-    if h.phase=='HARD_STOP' and st.get('program_status')=='M8_COMPLETE_M9_HARD_STOP':h.supervisor_status='RUNNING';h.next_action='M8_COMPLETE_WAIT';write_health(hp,h)
-    elif not h.worker_alive and h.pending_requests>0:h.supervisor_status='HARD_STOP';h.phase='WORKER_BLOCKED';h.next_action='OPERATOR_ATTENTION';h.last_error=h.worker_last_error or f'WORKER_NOT_OPERATIONAL:{h.worker_status}';write_health(hp,h)
+    if h.phase=='HARD_STOP' and st.get('program_status')=='M8_COMPLETE_M9_HARD_STOP':h.supervisor_status='RUNNING';h.next_action='M8_COMPLETE_WAIT';h.last_error=None;write_health(hp,h);write_checkpoint(root,h)
+    elif not h.worker_alive and h.pending_requests>0:h.supervisor_status='HARD_STOP';h.phase='WORKER_BLOCKED';h.next_action='OPERATOR_ATTENTION';h.last_error=h.worker_last_error or f'WORKER_NOT_OPERATIONAL:{h.worker_status}';write_health(hp,h);write_checkpoint(root,h,force=True)
     else:
-     h.supervisor_status='RUNNING';h.last_error=None;write_health(hp,h)
+     h.supervisor_status='RUNNING';h.last_error=None;write_health(hp,h);write_checkpoint(root,h)
      if st.get('active_sprint_status')=='BOARD_BOOTSTRAP_AUTHORIZATION_PENDING':rc,d=run_finalizer(repo)
      elif st.get('active_sprint')=='S003':rc,d=run_s003(repo,root)
      elif re.fullmatch(r'S\d{3}',st.get('active_sprint','')) and 4<=int(st['active_sprint'][1:])<=110:rc,d=run_program(repo,root)
      else:rc,d=3,'NO_AUTONOMOUS_ACTION'
      h.next_action='WAIT_AUTOMATICALLY' if rc==3 else 'AUTONOMOUS_CYCLE_CONTINUE';write_health(hp,h)
    except Exception as exc:
-    h.supervisor_status='HARD_STOP';h.last_error=f'{type(exc).__name__}:{exc}';h.next_action='OPERATOR_ATTENTION';write_health(hp,h)
+    h.supervisor_status='HARD_STOP';h.last_error=f'{type(exc).__name__}:{exc}';h.next_action='OPERATOR_ATTENTION';write_health(hp,h);write_checkpoint(root,h,force=True)
     if a.once:return 2
     time.sleep(max(30,a.poll_seconds));continue
    if a.once:return 0
