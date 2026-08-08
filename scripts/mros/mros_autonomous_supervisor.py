@@ -5,7 +5,7 @@ import argparse,fcntl,json,os,re,subprocess,sys,time
 from dataclasses import dataclass,asdict
 from pathlib import Path
 from typing import Any
-AUTHORITY_BRANCH='research/mros-program-v1';QUEUE_BRANCH='automation/mros-agent-queue-v1';QUEUE_ROOT=Path('research/evidence/sprints/S003/agent_queue');BRIDGE_ROOT=Path('/Users/madhuram/.mros-agent-bridge/bridge');QUEUE_WT=Path('/Users/madhuram/.mros-agent-bridge/queue')
+AUTHORITY_BRANCH='research/mros-program-v1';QUEUE_BRANCH='automation/mros-agent-queue-v1';QUEUE_ROOT=Path('research/evidence/sprints/S003/agent_queue');STATE=Path('research/program/MROS_PROGRAM_STATE.yaml');BRIDGE_ROOT=Path('/Users/madhuram/.mros-agent-bridge/bridge');QUEUE_WT=Path('/Users/madhuram/.mros-agent-bridge/queue')
 class SupervisorError(RuntimeError):pass
 @dataclass
 class Health:
