@@ -1,14 +1,56 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import json,re
+import hashlib,json,re
 from pathlib import Path
 
 SPRINT_RE=re.compile(r'^S[0-9]{3}$')
+ROUND_RE=re.compile(r'^[RA][0-9]{3}$')
+SHA256_RE=re.compile(r'^[0-9a-f]{64}$')
+ROOT=Path(__file__).resolve().parents[2]
 
 def _top(text:str,key:str):
  m=re.search(rf'(?m)^{re.escape(key)}:\s*([^\n#]+?)\s*$',text);return m.group(1).strip().strip('"\'') if m else None
 
-def validate_acceptance_trace(data:object,*,sprint:str,candidate_head:str)->list[str]:
+def _contract_ids(contract:object,*,sprint:str)->tuple[list[str],list[str]]:
+ e=[]
+ if not isinstance(contract,dict):return [],['ACCEPTANCE_CONTRACT_OBJECT_REQUIRED']
+ if contract.get('sprint')!=sprint:e.append('ACCEPTANCE_CONTRACT_SPRINT_MISMATCH')
+ if contract.get('status')!='FROZEN':e.append('ACCEPTANCE_CONTRACT_NOT_FROZEN')
+ rows=contract.get('criteria');ids=[]
+ if not isinstance(rows,list) or not rows:return [],e+['ACCEPTANCE_CONTRACT_CRITERIA_INVALID']
+ for i,row in enumerate(rows):
+  cid=row.get('id') if isinstance(row,dict) else None
+  if not isinstance(cid,str) or not cid.strip():e.append(f'ACCEPTANCE_CONTRACT_CRITERION_{i}_ID_INVALID')
+  else:ids.append(cid)
+ if len(ids)!=len(set(ids)):e.append('ACCEPTANCE_CONTRACT_DUPLICATE_IDS')
+ return ids,e
+
+def _expected_s003_refs(data:dict,*,sprint:str)->tuple[list[str],list[str]]:
+ e=[];rr=data.get('review_round');ar=data.get('audit_round')
+ if not isinstance(rr,str) or not re.fullmatch(r'R[0-9]{3}',rr):e.append('ACCEPTANCE_TRACE_REVIEW_ROUND_INVALID')
+ if not isinstance(ar,str) or not re.fullmatch(r'A[0-9]{3}',ar):e.append('ACCEPTANCE_TRACE_AUDIT_ROUND_INVALID')
+ if e:return [],e
+ base=f'research/evidence/sprints/{sprint}'
+ return [
+  f'{base}/{sprint}_AUTONOMOUS_NATIVE_EVIDENCE.json',
+  f'{base}/{sprint}_{rr}_REVIEW_AGGREGATE.json',
+  f'{base}/{sprint}_{ar}_AUDIT_AGGREGATE.json',
+  f'{base}/agent_queue/manifests/{sprint}_{rr}_REVIEW_POPULATION.json',
+  f'{base}/agent_queue/manifests/{sprint}_{ar}_AUDIT_POPULATION.json',
+  f'{base}/{sprint}_ACCEPTANCE_CONTRACT.json',
+ ],[]
+
+def _safe_ref(ref:str)->bool:
+ p=Path(ref)
+ return bool(ref) and not p.is_absolute() and '..' not in p.parts and p.as_posix()==ref
+
+def _sha256(path:Path)->str:
+ h=hashlib.sha256()
+ with path.open('rb') as fh:
+  for chunk in iter(lambda:fh.read(1024*1024),b''):h.update(chunk)
+ return h.hexdigest()
+
+def validate_acceptance_trace(data:object,*,sprint:str,candidate_head:str,contract:object|None=None,authority_root:Path|None=None,queue_root:Path|None=None,strict_contract:bool=False,verify_evidence:bool=False)->list[str]:
  e=[]
  if not isinstance(data,dict):return ['ACCEPTANCE_TRACE_OBJECT_REQUIRED']
  if data.get('schema_version')!='mros-sprint-acceptance-trace-v1':e.append('ACCEPTANCE_TRACE_SCHEMA_INVALID')
@@ -17,7 +59,7 @@ def validate_acceptance_trace(data:object,*,sprint:str,candidate_head:str)->list
  if data.get('authority')!='Research / R':e.append('ACCEPTANCE_TRACE_AUTHORITY_INVALID')
  if data.get('runtime_authority')!='NONE':e.append('ACCEPTANCE_TRACE_RUNTIME_AUTHORITY_INVALID')
  if data.get('m9_status')!='NOT_STARTED':e.append('ACCEPTANCE_TRACE_M9_INVALID')
- criteria=data.get('criteria')
+ criteria=data.get('criteria');trace_ids=[]
  if not isinstance(criteria,list) or not criteria:e.append('ACCEPTANCE_TRACE_CRITERIA_INVALID')
  else:
   ids=set()
@@ -26,11 +68,45 @@ def validate_acceptance_trace(data:object,*,sprint:str,candidate_head:str)->list
    cid=c.get('id')
    if not isinstance(cid,str) or not cid.strip():e.append(f'ACCEPTANCE_CRITERION_{i}_ID_INVALID')
    elif cid in ids:e.append(f'ACCEPTANCE_CRITERION_{i}_DUPLICATE_ID')
-   ids.add(cid)
+   else:ids.add(cid);trace_ids.append(cid)
    if c.get('status')!='PASS':e.append(f'ACCEPTANCE_CRITERION_{i}_NOT_PASS')
    refs=c.get('evidence_refs')
-   if not isinstance(refs,list) or not refs or any(not isinstance(x,str) or not x.strip() for x in refs):e.append(f'ACCEPTANCE_CRITERION_{i}_EVIDENCE_INVALID')
- return e
+   if not isinstance(refs,list) or not refs or any(not isinstance(x,str) or not _safe_ref(x) for x in refs):e.append(f'ACCEPTANCE_CRITERION_{i}_EVIDENCE_INVALID')
+ if strict_contract:
+  contract_ids,ce=_contract_ids(contract,sprint=sprint);e.extend(ce)
+  if contract_ids and (len(trace_ids)!=len(contract_ids) or set(trace_ids)!=set(contract_ids)):e.append('ACCEPTANCE_TRACE_CONTRACT_IDS_MISMATCH')
+  expected_refs,ref_errors=_expected_s003_refs(data,sprint=sprint);e.extend(ref_errors)
+  if expected_refs and isinstance(criteria,list):
+   expected_set=set(expected_refs)
+   for i,c in enumerate(criteria):
+    refs=c.get('evidence_refs') if isinstance(c,dict) else None
+    if isinstance(refs,list) and (len(refs)!=len(expected_refs) or set(refs)!=expected_set):e.append(f'ACCEPTANCE_CRITERION_{i}_EVIDENCE_REFS_MISMATCH')
+  if verify_evidence and expected_refs:
+   bindings=data.get('evidence_bindings')
+   if not isinstance(bindings,list):e.append('ACCEPTANCE_TRACE_EVIDENCE_BINDINGS_REQUIRED');bindings=[]
+   by_path={}
+   for i,b in enumerate(bindings):
+    if not isinstance(b,dict):e.append(f'ACCEPTANCE_EVIDENCE_BINDING_{i}_INVALID');continue
+    path=b.get('path');source=b.get('source');digest=b.get('sha256')
+    if not isinstance(path,str) or not _safe_ref(path):e.append(f'ACCEPTANCE_EVIDENCE_BINDING_{i}_PATH_INVALID');continue
+    if path in by_path:e.append(f'ACCEPTANCE_EVIDENCE_BINDING_{i}_DUPLICATE_PATH');continue
+    if source not in {'authority','queue'}:e.append(f'ACCEPTANCE_EVIDENCE_BINDING_{i}_SOURCE_INVALID')
+    if not isinstance(digest,str) or not SHA256_RE.fullmatch(digest):e.append(f'ACCEPTANCE_EVIDENCE_BINDING_{i}_SHA256_INVALID')
+    by_path[path]=b
+   if set(by_path)!=set(expected_refs):e.append('ACCEPTANCE_TRACE_EVIDENCE_BINDING_SET_MISMATCH')
+   for ref in expected_refs:
+    b=by_path.get(ref)
+    if not isinstance(b,dict):continue
+    expected_source='queue' if '/agent_queue/' in ref else 'authority'
+    if b.get('source')!=expected_source:e.append(f'ACCEPTANCE_EVIDENCE_SOURCE_MISMATCH:{ref}')
+    root=queue_root if expected_source=='queue' else authority_root
+    if root is None:e.append(f'ACCEPTANCE_EVIDENCE_ROOT_MISSING:{expected_source}');continue
+    path=Path(root).resolve()/ref
+    try:path.resolve().relative_to(Path(root).resolve())
+    except ValueError:e.append(f'ACCEPTANCE_EVIDENCE_PATH_ESCAPE:{ref}');continue
+    if not path.is_file():e.append(f'ACCEPTANCE_EVIDENCE_FILE_MISSING:{ref}');continue
+    if isinstance(b.get('sha256'),str) and SHA256_RE.fullmatch(b['sha256']) and _sha256(path)!=b['sha256']:e.append(f'ACCEPTANCE_EVIDENCE_SHA256_MISMATCH:{ref}')
+ return sorted(set(e))
 
 def validate_state_ledger(state_text:str,ledger_text:str,*,sprint:str,next_sprint:str)->list[str]:
  e=[]
@@ -56,7 +132,7 @@ def validate_state_ledger(state_text:str,ledger_text:str,*,sprint:str,next_sprin
    e.append('SPRINT_LEDGER_FUTURE_ADVANCEMENT_PRESENT');break
  return e
 
-def load_and_validate_context(*,state_path:Path,ledger_path:Path,acceptance_path:Path,sprint:str,next_sprint:str,candidate_head:str)->list[str]:
+def load_and_validate_context(*,state_path:Path,ledger_path:Path,acceptance_path:Path,sprint:str,next_sprint:str,candidate_head:str,contract_path:Path|None=None,authority_root:Path|None=None,queue_root:Path|None=None,strict_contract:bool=False,verify_evidence:bool=False)->list[str]:
  e=[]
  try:state=state_path.read_text(encoding='utf-8')
  except OSError:return ['PROGRAM_STATE_UNREADABLE']
@@ -64,6 +140,11 @@ def load_and_validate_context(*,state_path:Path,ledger_path:Path,acceptance_path
  except OSError:return ['SPRINT_LEDGER_UNREADABLE']
  try:acceptance=json.loads(acceptance_path.read_text(encoding='utf-8'))
  except (OSError,json.JSONDecodeError):return ['ACCEPTANCE_TRACE_UNREADABLE']
+ contract=None
+ if strict_contract:
+  cp=contract_path or (ROOT/f'research/evidence/sprints/{sprint}/{sprint}_ACCEPTANCE_CONTRACT.json')
+  try:contract=json.loads(Path(cp).read_text(encoding='utf-8'))
+  except (OSError,json.JSONDecodeError):e.append('ACCEPTANCE_CONTRACT_UNREADABLE')
  e.extend(validate_state_ledger(state,ledger,sprint=sprint,next_sprint=next_sprint))
- e.extend(validate_acceptance_trace(acceptance,sprint=sprint,candidate_head=candidate_head))
- return e
+ e.extend(validate_acceptance_trace(acceptance,sprint=sprint,candidate_head=candidate_head,contract=contract,authority_root=authority_root,queue_root=queue_root,strict_contract=strict_contract,verify_evidence=verify_evidence))
+ return sorted(set(e))
