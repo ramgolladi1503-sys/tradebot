@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Mac-side Git mailbox worker for MROS isolated reviewer/auditor jobs."""
 from __future__ import annotations
-import argparse,fcntl,json,os,shutil,subprocess,sys,time
+import argparse,fcntl,json,os,shutil,subprocess,sys,threading,time
+from concurrent.futures import ThreadPoolExecutor,as_completed
 from pathlib import Path
 from typing import Any
 from mros_agent_bridge import BridgeError,MrosAgentBridge,load_config
@@ -9,6 +10,7 @@ QUEUE_ROOT=Path("research/evidence/sprints/S003/agent_queue"); REQUEST_DIR=QUEUE
 MANIFEST_DIR=QUEUE_ROOT/"manifests"; MAX_INFRA_ATTEMPTS=3
 ALLOWED_JOB_TYPES={"reviewer","auditor"}; DEFAULT_QUEUE_BRANCH="automation/mros-agent-queue-v1"; AUTHORITY_BRANCH="research/mros-program-v1"
 CONTROLLER_RETRY_FIELDS={"transport_retry","controller_transport"}
+_COMMIT_LOCK=threading.Lock()
 class WorkerError(RuntimeError): pass
 
 def run_git(repo:Path,*args:str,timeout:int=120,check:bool=True)->subprocess.CompletedProcess[str]:
@@ -179,9 +181,10 @@ def write_receipt(path:Path,*,request:dict[str,Any],record:dict[str,Any],worker_
     path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps({"schema_version":1,"worker_id":worker_id,"request":request,"job":record,"runtime_authority":"NONE","broker_actions_allowed":False},sort_keys=True,indent=2)+"\n",encoding="utf-8")
 
 def commit_and_push(repo:Path,remote_branch:str,paths:list[Path],message:str)->str:
-    relative=[str(p.relative_to(repo)) for p in paths];run_git(repo,"add","--",*relative);staged=run_git(repo,"diff","--cached","--name-only").stdout.splitlines()
-    if set(staged)!=set(relative):run_git(repo,"reset");raise WorkerError("COMMIT_SCOPE_VIOLATION")
-    run_git(repo,"commit","-m",message);run_git(repo,"fetch","origin",remote_branch,timeout=180);run_git(repo,"rebase",f"origin/{remote_branch}",timeout=180);run_git(repo,"push","origin",f"HEAD:{remote_branch}",timeout=180);return run_git(repo,"rev-parse","HEAD").stdout.strip()
+    with _COMMIT_LOCK:
+        relative=[str(p.relative_to(repo)) for p in paths];run_git(repo,"add","--",*relative);staged=run_git(repo,"diff","--cached","--name-only").stdout.splitlines()
+        if set(staged)!=set(relative):run_git(repo,"reset");raise WorkerError("COMMIT_SCOPE_VIOLATION")
+        run_git(repo,"commit","-m",message);run_git(repo,"fetch","origin",remote_branch,timeout=180);run_git(repo,"rebase",f"origin/{remote_branch}",timeout=180);run_git(repo,"push","origin",f"HEAD:{remote_branch}",timeout=180);return run_git(repo,"rev-parse","HEAD").stdout.strip()
 
 def process_one(repo:Path,remote_branch:str,bridge:MrosAgentBridge,request_file:Path,worker_id:str)->dict[str,Any]:
     receipt=receipt_path(repo,request_file)
@@ -198,6 +201,20 @@ def process_one(repo:Path,remote_branch:str,bridge:MrosAgentBridge,request_file:
     if not output.is_file() or output.stat().st_size==0:raise WorkerError("OUTPUT_ARTIFACT_MISSING_BEFORE_COMMIT")
     sha=commit_and_push(repo,remote_branch,[output,receipt],f"mros(S003): record isolated {request['role_id']} job output [skip ci]");return {"request":request_file.name,"status":"SUCCEEDED","job_id":current.job_id,"commit_sha":sha}
 
+def _process_pending_parallel(repo:Path,remote_branch:str,bridge:MrosAgentBridge,pending:list[Path],worker_id:str,max_parallel:int)->list[dict[str,Any]]:
+    if not pending:return []
+    workers=max(1,min(int(max_parallel or 1),len(pending)))
+    processed=[]
+    with ThreadPoolExecutor(max_workers=workers,thread_name_prefix="mros-mailbox") as pool:
+        futures={pool.submit(process_one,repo,remote_branch,bridge,r,worker_id):r for r in pending}
+        for future in as_completed(futures):
+            r=futures[future]
+            try:processed.append(future.result())
+            except (BridgeError,WorkerError,subprocess.TimeoutExpired,OSError,ValueError,json.JSONDecodeError) as exc:
+                row={"request":r.name,"status":"REQUEST_REJECTED","error":f"{type(exc).__name__}:{exc}"};processed.append(row)
+                print(json.dumps(row,sort_keys=True),file=sys.stderr,flush=True)
+    return processed
+
 def parse_args()->argparse.Namespace:
     p=argparse.ArgumentParser();p.add_argument("--config",required=True,type=Path);p.add_argument("--queue-branch",default=DEFAULT_QUEUE_BRANCH);p.add_argument("--poll-seconds",type=int,default=15);p.add_argument("--once",action="store_true");p.add_argument("--worker-id",default=os.environ.get("HOSTNAME") or "mros-mac-worker");return p.parse_args()
 
@@ -207,22 +224,15 @@ def main()->int:
     except WorkerError as exc:
         _write_worker_health(c.state_root,status="BLOCKED",error=str(exc));print(json.dumps({"status":"WORKER_BLOCKED","error":f"WorkerError:{exc}"}),file=sys.stderr,flush=True);return 4
     bridge=MrosAgentBridge(c);_write_worker_health(c.state_root,status="RUNNING")
-    print(json.dumps({"status":"WORKER_STARTING","queue_branch":a.queue_branch,"authority_branch":AUTHORITY_BRANCH,"worker_id":a.worker_id,"health":bridge.health()}),flush=True)
+    print(json.dumps({"status":"WORKER_STARTING","queue_branch":a.queue_branch,"authority_branch":AUTHORITY_BRANCH,"worker_id":a.worker_id,"health":bridge.health(),"parallel_jobs":c.max_parallel_jobs}),flush=True)
     try:
         while True:
             try:
                 sync_queue(repo,c.state_root,a.queue_branch);retry_count,retry_exhausted=enqueue_needed_retries(repo,a.queue_branch)
                 if retry_count:sync_queue(repo,c.state_root,a.queue_branch)
-                processed=[]
-                for r in list_requests(repo):
-                    if receipt_path(repo,r).exists():
-                        continue
-                    try:
-                        processed.append(process_one(repo,a.queue_branch,bridge,r,a.worker_id))
-                    except (BridgeError,WorkerError,subprocess.TimeoutExpired,OSError,ValueError,json.JSONDecodeError) as exc:
-                        processed.append({"request":r.name,"status":"REQUEST_REJECTED","error":f"{type(exc).__name__}:{exc}"})
-                        print(json.dumps({"status":"REQUEST_REJECTED","request":r.name,"error":f"{type(exc).__name__}:{exc}"},sort_keys=True),file=sys.stderr,flush=True)
-                _write_worker_health(c.state_root,status="RUNNING",processed=len(processed));print(json.dumps({"status":"POLL_COMPLETE","processed":processed,"retries_enqueued":retry_count,"retry_exhausted":retry_exhausted},sort_keys=True),flush=True)
+                pending=[r for r in list_requests(repo) if not receipt_path(repo,r).exists()]
+                processed=_process_pending_parallel(repo,a.queue_branch,bridge,pending,a.worker_id,c.max_parallel_jobs)
+                _write_worker_health(c.state_root,status="RUNNING",processed=len(processed));print(json.dumps({"status":"POLL_COMPLETE","processed":processed,"retries_enqueued":retry_count,"retry_exhausted":retry_exhausted,"parallel_jobs":c.max_parallel_jobs},sort_keys=True),flush=True)
             except (BridgeError,WorkerError,subprocess.TimeoutExpired,OSError,ValueError,json.JSONDecodeError) as exc:
                 _write_worker_health(c.state_root,status="BLOCKED",error=f"{type(exc).__name__}:{exc}");print(json.dumps({"status":"WORKER_BLOCKED","error":f"{type(exc).__name__}:{exc}"}),file=sys.stderr,flush=True)
                 if a.once:return 2
