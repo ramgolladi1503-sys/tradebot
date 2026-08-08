@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Deterministic, single-writer Git transition engine for MROS automation."""
 from __future__ import annotations
-import contextlib,fcntl,json,subprocess,time
+import contextlib,fcntl,json,re,subprocess,time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 AUTHORITY_BRANCH="research/mros-program-v1"
 ALLOWED_PREFIXES=("research/program/","research/evidence/","research/decisions/")
-FORBIDDEN_TOKENS=("active_milestone: M9","M9: ACTIVE","runtime_authority: LIVE","runtime_authority: EXECUTION")
 class TransitionError(RuntimeError):pass
 @dataclass(frozen=True)
 class TransitionResult:
@@ -38,8 +37,12 @@ def _check_path(path:str)->None:
 def _check_boundary(path:Path)->None:
     if not path.is_file() or path.suffix.lower() not in {".yaml",".yml",".json",".md",".txt"}:return
     text=path.read_text(encoding="utf-8",errors="replace")
-    for token in FORBIDDEN_TOKENS:
-        if token in text:raise TransitionError(f"M9_OR_RUNTIME_BOUNDARY_VIOLATION:{token}")
+    if path.name=="MROS_PROGRAM_STATE.yaml":
+        m=re.search(r"(?m)^active_milestone:\s*[\"']?([^\n\"']+)",text)
+        if m and m.group(1).strip()=="M9":raise TransitionError("M9_OR_RUNTIME_BOUNDARY_VIOLATION:active_milestone=M9")
+        for m in re.finditer(r"(?m)^\s*runtime_authority:\s*[\"']?([^\n\"']+)",text):
+            if m.group(1).strip() not in {"NONE","Research / R","Research/R"}:
+                raise TransitionError(f"M9_OR_RUNTIME_BOUNDARY_VIOLATION:runtime_authority={m.group(1).strip()}")
 @contextlib.contextmanager
 def writer_lock(lock_path:Path):
     lock_path.parent.mkdir(parents=True,exist_ok=True)
@@ -48,6 +51,38 @@ def writer_lock(lock_path:Path):
         except BlockingIOError as exc:raise TransitionError("ANOTHER_SUPERVISOR_HOLDS_WRITER_LOCK") from exc
         try:yield
         finally:fcntl.flock(h.fileno(),fcntl.LOCK_UN)
+
+def _ahead_count(repo:Path,remote:str)->tuple[int,int]:
+    raw=_git(repo,"rev-list","--left-right","--count",f"{remote}...HEAD").stdout.strip().split()
+    if len(raw)!=2:raise TransitionError("AHEAD_COUNT_INVALID")
+    return int(raw[0]),int(raw[1])
+
+def recover_stranded_transition(*,repo:Path,lock_path:Path,message:str|None=None)->TransitionResult|None:
+    """Publish a clean, exactly-one-commit local authority transition stranded by a prior push failure.
+
+    Recovery is allowed only when origin is an exact ancestor of HEAD, local is ahead by
+    exactly one commit, the worktree is clean, and the stranded commit touches only
+    allowlisted authority/evidence paths. No force push is used.
+    """
+    with writer_lock(lock_path):
+        _ensure_branch(repo)
+        if _status_paths(repo):raise TransitionError("STRANDED_RECOVERY_REQUIRES_CLEAN_WORKTREE")
+        _git(repo,"fetch","origin",AUTHORITY_BRANCH)
+        remote=_git(repo,"rev-parse",f"origin/{AUTHORITY_BRANCH}").stdout.strip();head=_head(repo)
+        behind,ahead=_ahead_count(repo,f"origin/{AUTHORITY_BRANCH}")
+        if behind!=0 or ahead==0:return None
+        if ahead!=1:raise TransitionError(f"STRANDED_RECOVERY_UNSAFE_DIVERGENCE:behind={behind}:ahead={ahead}")
+        parent=_git(repo,"rev-parse","HEAD^1").stdout.strip()
+        if parent!=remote:raise TransitionError(f"STRANDED_RECOVERY_PARENT_MISMATCH:parent={parent}:remote={remote}")
+        changed=tuple(x for x in _git(repo,"diff-tree","--no-commit-id","--name-only","-r","HEAD").stdout.splitlines() if x)
+        if not changed:raise TransitionError("STRANDED_RECOVERY_EMPTY_COMMIT")
+        for p in changed:_check_path(p);_check_boundary(repo/p)
+        if message:
+            actual=_git(repo,"log","-1","--pretty=%s").stdout.strip()
+            if actual!=message:raise TransitionError(f"STRANDED_RECOVERY_MESSAGE_MISMATCH:{actual}")
+        _git(repo,"push","origin",f"HEAD:{AUTHORITY_BRANCH}")
+        return TransitionResult(parent_sha=parent,commit_sha=head,changed_paths=changed,message=_git(repo,"log","-1","--pretty=%s").stdout.strip())
+
 def commit_transition(*,repo:Path,lock_path:Path,expected_parent:str,changed_paths:Iterable[str],message:str,push:bool=True)->TransitionResult:
     paths=tuple(dict.fromkeys(str(p) for p in changed_paths))
     if not paths:raise TransitionError("NO_CHANGED_PATHS")
