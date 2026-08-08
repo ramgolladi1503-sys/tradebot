@@ -49,12 +49,14 @@ def record_aggregate_v2(auth:Path,aggregate:dict,kind:str,round_id:str,candidate
   if _transport_invalid_old(old,kind) and not aggregate.get('invalid'):
    archive=ap.with_name(ap.stem+'_TRANSPORT_INVALID_ARCHIVE.json');changed=[];archive_file=auth/archive
    if not archive_file.is_file():archive_file.write_text(json.dumps(old,sort_keys=True,indent=2)+'\n',encoding='utf-8');changed.append(archive)
-   current.write_text(json.dumps(aggregate,sort_keys=True,indent=2)+'\n',encoding='utf-8');changed.append(ap);decision=str(aggregate.get('decision'));state=(auth/cycle.STATE).read_text(encoding='utf-8')
+   current.write_text(json.dumps(aggregate,sort_keys=True,indent=2)+'\n',encoding='utf-8');changed.append(ap);decision=str(aggregate.get('decision'));state_path=auth/cycle.STATE;original_state=state_path.read_text(encoding='utf-8');state=original_state
    if decision not in cycle.PASS:
     contract={'schema_version':'mros-repair-contract-v2','sprint':'S003','failed_head':candidate,'source_kind':kind,'source_round':round_id,'aggregate_decision':decision,'blocking_findings':blocking_findings_v2(aggregate,kind),'invalid_artifacts':[],'superseded_transport_invalid_artifacts':old.get('invalid',[]),'root_cause_instruction':'Repair only findings from valid independent artifacts. Transport-invalid artifacts are historical evidence and cannot contribute implementation findings.','repair_scope':{'allowed':['scripts/mros/','tests/mros/','research/review_board/','research/audit_board/'],'forbidden':['research/program/','runtime/strategy/risk/execution/broker code','weaken fixtures or acceptance criteria','begin M9','create runtime authority']},'runtime_authority':'NONE','m9_status':'NOT_STARTED'}
     (auth/cp).write_text(json.dumps(contract,sort_keys=True,indent=2)+'\n',encoding='utf-8');changed.append(cp);state=cycle.set_top(state,'active_sprint_status',f'BOARD_AUTONOMOUS_{round_id}_{kind.upper()}_REPAIR_REQUIRED')
    else:state=cycle.set_top(state,'active_sprint_status',f'BOARD_AUTONOMOUS_{round_id}_{kind.upper()}_PASS')
-   (auth/cycle.STATE).write_text(state,encoding='utf-8');changed.append(cycle.STATE);cycle.commit_authority(auth,changed,f'mros(S003): supersede {round_id} transport-invalid {kind} aggregate with controller-normalized evidence [skip ci]');return decision,(cp if decision not in cycle.PASS else None)
+   if state!=original_state:
+    state_path.write_text(state,encoding='utf-8');changed.append(cycle.STATE)
+   cycle.commit_authority(auth,changed,f'mros(S003): supersede {round_id} transport-invalid {kind} aggregate with controller-normalized evidence [skip ci]');return decision,(cp if decision not in cycle.PASS else None)
  return _ORIG_RECORD_AGGREGATE(auth,aggregate,kind,round_id,candidate)
 
 def _retry_invalid_roles(q:Path,manifest:dict,roles:list[str],round_id:str,candidate:str):
@@ -97,7 +99,7 @@ def queue_audit_v2(q:Path,auth:Path,candidate:str,review_round:str,review_aggreg
 
 def _tempdir_infrastructure_failure(text:str)->bool:
  t=text.lower()
- return 'no usable temporary directory found' in t or ('fileNotFoundError'.lower() in t and 'tempfile.py' in t)
+ return 'no usable temporary directory found' in t or ('filenotfounderror' in t and 'tempfile.py' in t)
 
 def calibration_status_v2(q:Path,candidate:str):
  reqs=cycle.calibration_requests(q,candidate)
