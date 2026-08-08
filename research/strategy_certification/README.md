@@ -44,6 +44,54 @@ python3 scripts/research/hypothesis_factory/hypothesis_factory.py passports \
   --top 5
 ```
 
+## Corpus runner
+
+Use the corpus runner when the data is already checked out locally or synchronized from Google Drive.
+
+It auto-searches these known local roots when present:
+
+```text
+/Users/madhuram/tradebot/runtime/upstox_candidate_replay
+/Users/madhuram/tradebot/runtime
+/Users/madhuram/tradebot/.runtime/market_data
+/Users/madhuram/tradebot-ml-evidence
+/Users/madhuram/tradebot-research-corpus
+Google Drive CloudStorage folders matching tradebot_market_data/upstox_market_data/market_data/kite_candidate_replay
+```
+
+Run:
+
+```bash
+python3 scripts/research/hypothesis_factory/run_corpus_screen.py \
+  --output-dir research/hypotheses/corpus_runs \
+  --instrument NIFTY \
+  --instrument BANKNIFTY \
+  --max-files 200 \
+  --max-rows-total 250000
+```
+
+Or force one corpus root:
+
+```bash
+python3 scripts/research/hypothesis_factory/run_corpus_screen.py \
+  --no-known-roots \
+  --no-gdrive-discovery \
+  --corpus-root /Users/madhuram/tradebot/runtime/upstox_candidate_replay \
+  --output-dir research/hypotheses/corpus_runs
+```
+
+The runner writes a timestamped run folder containing:
+
+```text
+generated_hypotheses.json
+screen_results.json
+leaderboard.csv
+strategy_passports.json
+run_manifest.json
+```
+
+Parquet files require local `pandas`/`pyarrow`. CSV files use the Python standard library.
+
 ## Status meanings
 
 - `GENERATED`: template hypothesis only.
