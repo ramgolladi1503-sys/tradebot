@@ -128,6 +128,21 @@ def queue_calibration_v2(q:Path,candidate:str,force_retry=False):
  (q/packet).write_text(f'''# S003 autonomous exact-head Board calibration {rid}\n\nExact candidate: `{candidate}`\n\nNon-certifying deterministic native execution. Do not repair or review. This packet is executed by the bridge's fixed allowlisted native calibration path, not by the read-only model sandbox.\n\nRequired command semantics:\n1. `git rev-parse HEAD`\n2. `python3 --version`\n3. `{command}`\n\nReturn Markdown containing CANDIDATE_HEAD, PYTHON_VERSION, COMMAND, COMPLETE STDOUT, EXIT_CODE, RUNTIME_AUTHORITY=NONE, BROKER_ACTIONS=NONE, CALIBRATION_EXECUTION_RESULT=PASS|FAIL. PASS requires exact HEAD, every declared calibration case executed, zero failures, denominator conservation, all declared metrics satisfied, terminal `S003_BOARD_DETERMINISTIC_CALIBRATION_PASS`, and exit 0.\n''',encoding='utf-8')
  req={'schema_version':1,'request_id':f'{tag}-{int(time.time())}','created_by':'mros-autonomous-cycle-v2','created_at':cycle.datetime.date.today().isoformat(),'job_type':'reviewer','role_id':rid,'candidate_sha':candidate,'packet_path':packet.as_posix(),'output_path':output.as_posix(),'backend':'codex'};(q/request).write_text(json.dumps(req,sort_keys=True,indent=2)+'\n',encoding='utf-8');cycle.queue_commit(q,[packet,request],f'mros(S003): queue native exact-head calibration {rid} {candidate[:8]} [skip ci]');return rid
 
+def _latest_repair_candidate(auth:Path)->str:
+ evidence=[];root=auth/'research/evidence/sprints/S003'
+ if root.is_dir():
+  for p in root.glob('AUTONOMOUS_REPAIR_G*_*.json'):
+   try:d=cycle.read_json(p);generation=int(d.get('generation') or 0)
+   except Exception:continue
+   evidence.append((generation,p))
+ if evidence:
+  _,path=sorted(evidence,key=lambda x:x[0])[-1]
+  rel=path.relative_to(auth).as_posix();r=cycle.git(auth,'log','-1','--format=%H','--',rel,check=False);candidate=(r.stdout or '').strip()
+  if len(candidate)==40:
+   try:int(candidate,16);return candidate
+   except ValueError:pass
+ return cycle.git(auth,'rev-parse',f'origin/{cycle.AUTH}').stdout.strip()
+
 def process_review_v2(auth:Path,q:Path,state_root:Path,row):
  n,mp,manifest=row;round_id=f'R{n:03d}';candidate=manifest.get('candidate_head');tier=str(manifest.get('assurance_tier') or 'FAST')
  if not isinstance(candidate,str):raise cycle.CycleError('LATEST_REVIEW_CANDIDATE_INVALID')
@@ -142,15 +157,38 @@ def process_review_v2(auth:Path,q:Path,state_root:Path,row):
  if decision not in cycle.PASS:
   prior=cycle.repair_evidence_for_failed(auth,candidate)
   if prior:
-   new=cycle.git(auth,'rev-parse',f'origin/{cycle.AUTH}').stdout.strip();cs,_=calibration_status_v2(q,new)
+   new=_latest_repair_candidate(auth);cs,_=calibration_status_v2(q,new)
    if cs=='MISSING':queue_calibration_v2(q,new)
+   elif cs=='INFRA_FAILED':queue_calibration_v2(q,new,force_retry=True)
    return {'action':'REPAIR_ALREADY_PUBLISHED','round':round_id,'new_candidate':new,'calibration':cs}
   if cp is None:raise cycle.CycleError('REPAIR_CONTRACT_MISSING')
   repair=cycle.run_repair(auth,state_root,cp);cycle.sync(auth,q);queue_calibration_v2(q,repair['candidate_head']);return {'action':'REPAIR_AND_CALIBRATE','round':round_id,'decision':decision,'new_candidate':repair['candidate_head'],'generation':repair['generation']}
  if tier!='FULL':fr=cycle.queue_review(q,candidate,full=True);return {'action':'FINAL_FULL_REVIEW_QUEUED','from_round':round_id,'round':fr,'candidate':candidate}
  cycle.queue_audit(q,auth,candidate,round_id,aggregate,full=True);return {'action':'FINAL_FULL_AUDIT_QUEUED','round':round_id,'candidate':candidate,'decision':decision}
 
+def process_audit_v2(auth:Path,q:Path,state_root:Path,row):
+ n,mp,m=row;audit_round=f'A{n:03d}';review_round=str(m.get('review_round') or '');candidate=m.get('candidate_head');tier=str(m.get('assurance_tier') or 'FAST')
+ if not isinstance(candidate,str):raise cycle.CycleError('LATEST_AUDIT_CANDIDATE_INVALID')
+ complete,payloads,receipts=exact_population_v2(q,m)
+ if not complete:return {'action':'WAIT_AUDIT','round':audit_round,'candidate':candidate,'tier':tier}
+ rap=cycle.aggregate_path('review',review_round)
+ if not (auth/rap).is_file():raise cycle.CycleError('AUDIT_REVIEW_AGGREGATE_MISSING')
+ review=cycle.read_json(auth/rap);contract=cycle.read_json(auth/cycle.ACCEPTANCE);required=[c.get('id') for c in contract.get('criteria',[]) if isinstance(c,dict) and isinstance(c.get('id'),str)];review_jobs=[r.get('execution_job_id') for r in review.get('reviews',[]) if isinstance(r,dict)];nref=native_ref_v2(q,candidate);aggregate=cycle.load_mod(auth,'aggregate_audits').aggregate_payloads(payloads,candidate_head=candidate,review_round=review_round,receipts=receipts,manifest=m,review_job_ids=review_jobs,required_acceptance_ids=required,expected_native_ref=nref);aggregate.update({'audit_round':audit_round,'population_manifest':str(mp.relative_to(q)),'review_aggregate':rap.as_posix(),'assurance_tier':tier,'runtime_authority':'NONE'});decision,cp=record_aggregate_v2(auth,aggregate,'audit',audit_round,candidate);cycle.sync(auth,q)
+ if decision not in cycle.PASS:
+  prior=cycle.repair_evidence_for_failed(auth,candidate)
+  if prior:
+   new=_latest_repair_candidate(auth);cs,_=calibration_status_v2(q,new)
+   if cs=='MISSING':queue_calibration_v2(q,new)
+   elif cs=='INFRA_FAILED':queue_calibration_v2(q,new,force_retry=True)
+   return {'action':'AUDIT_REPAIR_ALREADY_PUBLISHED','round':audit_round,'new_candidate':new,'calibration':cs}
+  if cp is None:raise cycle.CycleError('AUDIT_REPAIR_CONTRACT_MISSING')
+  repair=cycle.run_repair(auth,state_root,cp);cycle.sync(auth,q);queue_calibration_v2(q,repair['candidate_head']);return {'action':'AUDIT_REPAIR_AND_CALIBRATE','round':audit_round,'new_candidate':repair['candidate_head'],'generation':repair['generation']}
+ if tier!='FULL' or int(m.get('expected_count') or 0)<10:raise cycle.CycleError('FINAL_AUTHORIZATION_REQUIRES_FULL_AUDIT_POPULATION')
+ state=(auth/cycle.STATE).read_text(encoding='utf-8')
+ if 'active_sprint_status: BOARD_BOOTSTRAP_AUTHORIZATION_PENDING' in state:return {'action':'AUTHORIZATION_READY','round':audit_round,'candidate':candidate,'decision':decision}
+ state=cycle.set_top(state,'active_sprint_status','BOARD_BOOTSTRAP_AUTHORIZATION_PENDING');state=cycle.set_indented(state,'bootstrap_independent_audit_status',decision);(auth/cycle.STATE).write_text(state,encoding='utf-8');sha=cycle.commit_authority(auth,[cycle.STATE],f'mros(S003): autonomous full-board audit ready for authorization {candidate[:8]} [skip ci]');return {'action':'AUTHORIZATION_READY','round':audit_round,'candidate':candidate,'decision':decision,'commit':sha}
+
 def main()->int:
- cycle.run=safe_run;cycle.exact_population=exact_population_v2;cycle.blocking_findings=blocking_findings_v2;cycle.record_aggregate=record_aggregate_v2;cycle.process_review=process_review_v2;cycle.native_ref=native_ref_v2;cycle.queue_audit=queue_audit_v2;cycle.calibration_status=calibration_status_v2;cycle.queue_calibration=queue_calibration_v2
+ cycle.run=safe_run;cycle.exact_population=exact_population_v2;cycle.blocking_findings=blocking_findings_v2;cycle.record_aggregate=record_aggregate_v2;cycle.process_review=process_review_v2;cycle.process_audit=process_audit_v2;cycle.current_head=_latest_repair_candidate;cycle.native_ref=native_ref_v2;cycle.queue_audit=queue_audit_v2;cycle.calibration_status=calibration_status_v2;cycle.queue_calibration=queue_calibration_v2
  result=cycle.main();return 0 if result is None else int(result)
 if __name__=='__main__':raise SystemExit(main())
