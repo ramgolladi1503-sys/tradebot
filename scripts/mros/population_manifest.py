@@ -7,19 +7,22 @@ ROUND={'reviewer':re.compile(r'^R[0-9]{3}$'),'auditor':re.compile(r'^A[0-9]{3}$'
 MIN_COUNT={'reviewer':2,'auditor':1}
 MAX_COUNT=32
 
-def validate_population_manifest(data:object,*,candidate_head:str,job_type:str)->list[str]:
+def validate_population_manifest(data:object,*,candidate_head:str,job_type:str,expected_sprint:str|None=None,expected_round:str|None=None,minimum_required:int|None=None)->list[str]:
  e=[]
  if not isinstance(data,dict):return ['POPULATION_MANIFEST_OBJECT_REQUIRED']
  if data.get('schema_version')!='mros-agent-population-v1':e.append('POPULATION_SCHEMA_INVALID')
  if data.get('job_type')!=job_type:e.append('POPULATION_JOB_TYPE_MISMATCH')
  if data.get('candidate_head')!=candidate_head or not SHA.fullmatch(str(data.get('candidate_head',''))):e.append('POPULATION_HEAD_MISMATCH')
  if not re.fullmatch(r'S[0-9]{3}',str(data.get('sprint',''))):e.append('POPULATION_SPRINT_INVALID')
+ if expected_sprint is not None and data.get('sprint')!=expected_sprint:e.append('POPULATION_SPRINT_MISMATCH')
  if not ROUND[job_type].fullmatch(str(data.get('round',''))):e.append('POPULATION_ROUND_INVALID')
+ if expected_round is not None and data.get('round')!=expected_round:e.append('POPULATION_ROUND_MISMATCH')
  if data.get('frozen_before_execution') is not True:e.append('POPULATION_NOT_FROZEN')
  members=data.get('members')
  if not isinstance(members,list):return e+['POPULATION_MEMBERS_INVALID']
  expected=data.get('expected_count')
  minimum=MIN_COUNT[job_type]
+ if isinstance(minimum_required,int) and not isinstance(minimum_required,bool):minimum=max(minimum,minimum_required)
  if isinstance(expected,bool) or not isinstance(expected,int) or expected<minimum or expected>MAX_COUNT:e.append('POPULATION_EXPECTED_COUNT_INVALID')
  elif expected!=len(members):e.append('POPULATION_COUNT_MISMATCH')
  tier=data.get('assurance_tier')
