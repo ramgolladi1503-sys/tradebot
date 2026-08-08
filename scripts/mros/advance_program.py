@@ -7,6 +7,7 @@ from program_context import load_and_validate_context
 ACCEPT={'PASS','PASS_WITH_MINOR_FINDINGS'};ROOT=Path(__file__).resolve().parents[2];SPRINT=re.compile(r'^S([0-9]{3})$')
 
 def _nonneg_int(value):return isinstance(value,int) and not isinstance(value,bool) and value>=0
+def _positive_int(value):return isinstance(value,int) and not isinstance(value,bool) and value>0
 
 def _validate_aggregate(data:object,*,candidate_head:str,kind:str)->list[str]:
  e=[];prefix=kind.upper()
@@ -21,12 +22,17 @@ def _validate_aggregate(data:object,*,candidate_head:str,kind:str)->list[str]:
  if not isinstance(items,list):e.append(f'{prefix}_ITEMS_INVALID');items=[]
  for key in (valid_key,invalid_key,expected_key,submitted_key,minimum_key,'critical','major','minor','unknown'):
   if not _nonneg_int(data.get(key)):e.append(f'{prefix}_{key.upper()}_INVALID')
+ # A PASS aggregate must represent a real frozen population; zero-quorum/zero-denominator
+ # aggregates are never sufficient evidence for advancement.
+ for key in (valid_key,expected_key,submitted_key,minimum_key):
+  if not _positive_int(data.get(key)):e.append(f'{prefix}_{key.upper()}_NONPOSITIVE')
+ if not items:e.append(f'{prefix}_EMPTY_POPULATION')
  if _nonneg_int(data.get(valid_key)) and data.get(valid_key)!=len(items):e.append(f'{prefix}_VALID_COUNT_MISMATCH')
  if _nonneg_int(data.get(invalid_key)) and data.get(invalid_key)!=0:e.append(f'{prefix}_INVALID_ARTIFACTS_PRESENT')
  if not isinstance(data.get(omitted_key),list) or data.get(omitted_key):e.append(f'{prefix}_OMITTED_ARTIFACTS_PRESENT')
  if not isinstance(data.get(extra_key),list) or data.get(extra_key):e.append(f'{prefix}_EXTRA_ARTIFACTS_PRESENT')
  if not isinstance(data.get('manifest_errors'),list) or data.get('manifest_errors'):e.append(f'{prefix}_MANIFEST_ERRORS_PRESENT')
- if all(_nonneg_int(data.get(k)) for k in (valid_key,expected_key,submitted_key,minimum_key)):
+ if all(_positive_int(data.get(k)) for k in (valid_key,expected_key,submitted_key,minimum_key)):
   if data[valid_key]<data[minimum_key]:e.append(f'{prefix}_QUORUM_NOT_MET')
   if data[expected_key]!=data[submitted_key] or data[expected_key]!=data[valid_key]:e.append(f'{prefix}_DENOMINATOR_MISMATCH')
  if any(data.get(k,0) for k in ('critical','major','unknown')):e.append(f'{prefix}_BLOCKING_FINDINGS_PRESENT')
