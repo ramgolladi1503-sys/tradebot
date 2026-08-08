@@ -32,18 +32,27 @@ def queue_inventory(repo:Path)->tuple[list[str],dict[str,dict[str,Any]]]:
    try:receipts[Path(p).name]=json.loads(read_at_ref(repo,f'origin/{QUEUE_BRANCH}',p))
    except Exception:receipts[Path(p).name]={'_invalid':True}
  return requests,receipts
+def _is_review_request(name:str)->bool:
+ upper=name.upper()
+ if 'CALIBRATION' in upper:return False
+ if re.search(r'(?:^|[_-])A\d{2,3}(?:[_\.-]|$)',upper):return False
+ return bool(re.search(r'(?:^|[_-])R\d{2,3}(?:[_\.-]|$)',upper))
+def _is_audit_request(name:str)->bool:
+ return bool(re.search(r'(?:^|[_-])A\d{2,3}(?:[_\.-]|$)',name.upper()))
 def derive_phase(state:dict[str,str],requests:list[str],receipts:dict[str,dict[str,Any]])->tuple[str,str]:
  if state.get('active_milestone')=='M9':return 'HARD_STOP','M9_BOUNDARY_VIOLATION'
  if state.get('active_sprint')!='S003':return 'SPRINT_AUTOMATION','RUN_REPOSITORY_STEP'
  status=state.get('active_sprint_status','');names={Path(x).name for x in requests};done=set(receipts);pending=names-done
  if 'R95_PENDING' in status:return 'BOOTSTRAP_CALIBRATION_COMPLETE_CHECK','RUN_REPOSITORY_STEP'
  if 'R002_REVIEW_PREPARATION' in status:
-  return ('BOOTSTRAP_REVIEW_RUNNING','WAIT_FOR_REVIEW_QUORUM') if any('S003_R002_' in x for x in pending) else ('BOOTSTRAP_R002_AGGREGATION','RUN_REPOSITORY_STEP')
+  return ('BOOTSTRAP_REVIEW_RUNNING','WAIT_FOR_REVIEW_QUORUM') if any(_is_review_request(x) for x in pending) else ('BOOTSTRAP_R002_AGGREGATION','RUN_REPOSITORY_STEP')
  if 'R002_REVIEW_PASS_A001_AUDIT_PREPARATION' in status:
-  return ('BOOTSTRAP_AUDIT_RUNNING','WAIT_FOR_AUDIT_QUORUM') if any('S003_A001_' in x for x in pending) else ('BOOTSTRAP_A001_AGGREGATION','RUN_REPOSITORY_STEP')
+  return ('BOOTSTRAP_AUDIT_RUNNING','WAIT_FOR_AUDIT_QUORUM') if any(_is_audit_request(x) for x in pending) else ('BOOTSTRAP_A001_AGGREGATION','RUN_REPOSITORY_STEP')
  if 'AUTHORIZATION_PENDING' in status:return 'BOARD_AUTHORIZATION_PENDING','RUN_REPOSITORY_STEP'
  if 'REPAIR_REQUIRED' in status:return 'BOOTSTRAP_REPAIR_REQUIRED','RUN_REPOSITORY_STEP'
- if any('CALIBRATION' in x for x in pending):return 'BOOTSTRAP_CALIBRATION_RUNNING','WAIT_FOR_CALIBRATION_RECEIPT'
+ if any('CALIBRATION' in x.upper() for x in pending):return 'BOOTSTRAP_CALIBRATION_RUNNING','WAIT_FOR_CALIBRATION_RECEIPT'
+ if any(_is_audit_request(x) for x in pending):return 'BOOTSTRAP_AUDIT_RUNNING','WAIT_FOR_AUDIT_QUORUM'
+ if any(_is_review_request(x) for x in pending):return 'BOOTSTRAP_REVIEW_RUNNING','WAIT_FOR_REVIEW_QUORUM'
  return 'BOOTSTRAP_TRANSITION_PENDING','RUN_REPOSITORY_STEP'
 def receipt_stats(receipts):
  ok=bad=0
