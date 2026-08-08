@@ -1,0 +1,23 @@
+MROS S002 native validation evidence — operator-supplied terminal execution
+
+Candidate HEAD: 8e87223efdb33bc73b58436cf590b7f3c7c10717
+Repository: ramgolladi1503-sys/tradebot
+Branch lineage: research/mros-program-v1
+Worktree: /Users/madhuram/.mros-review/s002-native
+Python: 3.12.2
+Validator: scripts/mros/validate_s002_fixtures.py
+Command: python3 scripts/mros/validate_s002_fixtures.py
+Active fixture count: 78
+Result: 78/78 PASS
+Terminal marker: S002_TARGETED_VALIDATION_PASS
+Exit code: 0
+
+The operator supplied the complete terminal transcript showing every active case PASS, including V7 semantic gate-binding controls C075–C086, and the final lines:
+
+SUMMARY | checks=78 pass=78 fail=0
+S002_TARGETED_VALIDATION_PASS
+EXIT_CODE=0
+
+Evidence classification: implementation-side native execution provenance. This artifact does NOT constitute independent S002 certification.
+
+Exact-head rule: this evidence applies only to candidate HEAD 8e87223efdb33bc73b58436cf590b7f3c7c10717. Any implementation change requires a new native validation run.
