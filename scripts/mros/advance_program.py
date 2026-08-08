@@ -26,7 +26,8 @@ def _load_receipts(directory:Path)->dict:
 def _compare_recomputed(data:dict,recomputed:dict,*,kind:str)->list[str]:
  e=[];prefix=kind.upper();plural='reviews' if kind=='review' else 'audits'
  keys=(('minimum_valid_reviews','valid_reviews','invalid_reviews','expected_reviews','submitted_reviews','omitted_reviews','extra_reviews') if kind=='review' else ('minimum_valid_audits','valid_audits','invalid_audits','expected_audits','submitted_audits','omitted_audits','extra_audits'))
- keys=keys+('manifest_errors','critical','major','minor','unknown','decision',plural)
+ detail_keys=('excluded_reviews','invalid','pass_or_minor') if kind=='review' else ('excluded_audits','invalid','pass_or_minor','missing_acceptance_ids','unknown_acceptance_ids')
+ keys=keys+('manifest_errors','critical','major','minor','unknown','decision',plural)+detail_keys
  for key in keys:
   if data.get(key)!=recomputed.get(key):e.append(f'{prefix}_RECOMPUTED_{key.upper()}_MISMATCH')
  return e
