@@ -9,8 +9,8 @@ active_milestone: M1
 active_work_package: WP001
 active_sprint: S003
 last_completed_sprint: S002
-program_status: ACTIVE
-active_sprint_status: BOARD_BOOTSTRAP_CALIBRATION_IN_PROGRESS
+program_status: BLOCKED
+active_sprint_status: BOARD_BOOTSTRAP_MAC_WORKER_QUEUE_BLOCKED
 
 s002_acceptance:
   decision: ACCEPTED
@@ -60,7 +60,11 @@ review_audit_governance:
   review_and_audit_are_distinct: true
   simple_majority_forbidden: true
   max_full_repair_rounds_per_sprint: 5
-  bootstrap_calibration_status: READY_TO_EXECUTE
+  bootstrap_calibration_status: QUEUED_NATIVE_EXECUTION_WORKER_UNRESPONSIVE
+  bootstrap_calibration_candidate: "c1a4ab07daf19db636c6ea8b0d951c642808d32e"
+  bootstrap_calibration_harness: "scripts/mros/calibrate_review_audit_board.py"
+  bootstrap_calibration_request: "research/evidence/sprints/S003/agent_queue/requests/S003_CALIBRATION_R98.json"
+  bootstrap_calibration_queue_commit: "e0d2c6c8adf0282c8f51d819432ce6b779610f92"
   bootstrap_independent_review_status: PENDING_CALIBRATION_AND_FROZEN_BOARD_CANDIDATE
   autonomous_authority: NOT_AUTHORIZED
   prior_blocker_artifact: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_BACKEND_REINVESTIGATION_20260808.md"
@@ -68,6 +72,8 @@ review_audit_governance:
   bridge_smoke_artifact: "research/evidence/sprints/S003/S003_AGENT_BRIDGE_SMOKE_PASS.md"
   bridge_smoke_artifact_commit: "5a53d59e79a1f4f19db09bb75ccc97f209f0f47f"
   bridge_queue_result_commit: "715f2398abe468ac392024e2234aa13120a3c5dc"
+  active_blocker_artifact: "research/evidence/sprints/S003/S003_MAC_WORKER_QUEUE_BLOCKER_20260808.md"
+  active_blocker_commit: "ab1370ad2afbaeb5d18978a6fda8282dd3e6cefa"
 
 execution_environment_reinvestigation:
   operator_mac_github_connectivity: WORKING
@@ -81,6 +87,8 @@ execution_environment_reinvestigation:
   bridge_tests: "6/6_PASS"
   isolated_reviewer_backend: PROVEN_BY_NON_CERTIFYING_R99_SMOKE
   isolated_auditor_backend: AVAILABLE_SAME_SUBSTRATE_NOT_YET_BOOTSTRAP_PROVEN
+  mac_worker_current_status: UNRESPONSIVE_TO_QUEUED_R98_REQUEST
+  remote_worker_restart_control: UNAVAILABLE_FROM_PRIMARY_SESSION
   runtime_authority: NONE
   broker_actions_allowed: false
 
@@ -124,10 +132,10 @@ work_package_status:
 next_action:
   sprint: S003
   work_package: WP001
-  objective: "Execute deterministic Review/Audit Board calibration, freeze the exact Board candidate, launch the required isolated bootstrap reviewer and auditor populations through the proven Git-mailbox Mac bridge, validate and aggregate their outputs, repair/recalibrate if required, and authorize normal autonomous Board use only if all bootstrap gates pass."
-  required_native_condition: "SATISFIED_BY_MAC_GIT_MAILBOX_BRIDGE"
-  required_independence_condition: "PENDING_EXECUTION_OF_10_PLUS_REVIEWERS_AND_10_PLUS_AUDITORS"
-  blocker_artifact: null
+  objective: "Ensure the canonical Mac Git-mailbox worker is running. Consume the already queued R98 calibration request without replacement, record exact-head native calibration evidence, then freeze the Board candidate and launch 10+ isolated reviewers followed by 10+ isolated auditors. Authorize normal Board use only if all bootstrap gates pass, then continue autonomous S003 execution."
+  required_operator_condition: "Canonical Mac worker process running continuously"
+  canonical_worker_command: "python3 /Users/madhuram/.mros-agent-bridge/bridge/scripts/mros/mros_agent_git_worker.py --config /Users/madhuram/.mros-agent-bridge/config.json --queue-branch automation/mros-agent-queue-v1"
+  blocker_artifact: "research/evidence/sprints/S003/S003_MAC_WORKER_QUEUE_BLOCKER_20260808.md"
 
 execution_policy:
   sprint_prs: false
