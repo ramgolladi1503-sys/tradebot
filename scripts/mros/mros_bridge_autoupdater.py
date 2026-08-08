@@ -9,7 +9,7 @@ Benign no-op cases exit 0 so launchd does not report them as failures.
 from __future__ import annotations
 import argparse,fcntl,os,shutil,subprocess,time
 from pathlib import Path
-BRANCH='research/mros-agent-bridge-v1';SERVICES=('com.aixion.mros-agent-worker','com.aixion.mros-autonomous-supervisor')
+BRANCH='research/mros-agent-bridge-v1';SERVICES=('com.aixion.mros-agent-worker','com.aixion.mros-autonomous-supervisor');DEPLOY_EPOCH='native-calibration-v1-20260808'
 class UpdateError(RuntimeError):pass
 def run(cwd:Path,*args:str,timeout:int=600,check=True):
  p=subprocess.run(list(args),cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=False)
@@ -53,8 +53,8 @@ def main()->int:
   git(bridge,'checkout','--detach',target,timeout=300)
   uid=os.getuid()
   for svc in SERVICES:run(source,'launchctl','kickstart','-k',f'gui/{uid}/{svc}',timeout=60,check=False)
-  log=state/'bridge_updates.log';log.write_text((log.read_text(encoding='utf-8') if log.exists() else '')+f'{time.time()} {current} -> {target}\n',encoding='utf-8')
-  print(f'MROS_BRIDGE_UPDATED {current} -> {target}');return 0
+  log=state/'bridge_updates.log';log.write_text((log.read_text(encoding='utf-8') if log.exists() else '')+f'{time.time()} {DEPLOY_EPOCH} {current} -> {target}\n',encoding='utf-8')
+  print(f'MROS_BRIDGE_UPDATED {DEPLOY_EPOCH} {current} -> {target}');return 0
  finally:
   fcntl.flock(lock.fileno(),fcntl.LOCK_UN);lock.close()
 if __name__=='__main__':raise SystemExit(main())
