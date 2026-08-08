@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "request_id": "S003-AUTONOMY-STDERR-SAFE-R100-499F9EF3",
+  "created_by": "mros-primary-controller",
+  "created_at": "2026-08-08",
+  "job_type": "reviewer",
+  "role_id": "R100",
+  "candidate_sha": "499f9ef3f45661f8c59ec03c8b7f09e03a90d9ff",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_AUTONOMY_STDERR_SAFE_R100.md",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_AUTONOMY_STDERR_SAFE_R100.md",
+  "backend": "codex"
+}
