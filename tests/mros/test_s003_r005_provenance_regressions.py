@@ -99,7 +99,7 @@ def _valid_receipt(manifest: dict) -> dict:
     }
 
 
-def test_post_freeze_receipt_creation_is_rejected(tmp_path: Path, monkeypatch) -> None:
+def test_post_freeze_receipt_creation_is_required(tmp_path: Path, monkeypatch) -> None:
     repo, manifest, receipt_rel = _init_receipt_repo(tmp_path, round_id="R006")
     receipt_path = repo / receipt_rel
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,9 +108,48 @@ def test_post_freeze_receipt_creation_is_rejected(tmp_path: Path, monkeypatch) -
     _git(repo, "commit", "-m", "post-freeze receipt")
 
     monkeypatch.setattr(population_git_trust, "QUEUE_REF", "HEAD")
+    receipts, errors = population_git_trust.load_exact_receipts(queue_repo=repo, manifest=manifest)
+    assert errors == []
+    assert len(receipts) == 1
+
+
+def test_receipt_origin_at_population_freeze_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "queue"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.email", "mros-test@example.invalid")
+    _git(repo, "config", "user.name", "MROS Test")
+    candidate = "b" * 40
+    round_id = "R006"
+    manifest_rel = population_git_trust.canonical_manifest_path("S003", round_id, "reviewer")
+    output_rel = f"research/evidence/sprints/S003/agent_queue/results/S003_{round_id}_R01.json"
+    packet_rel = f"research/evidence/sprints/S003/agent_queue/packets/S003_{round_id}_R01.md"
+    receipt_rel = f"research/evidence/sprints/S003/agent_queue/receipts/S003_{round_id}_R01.json"
+    manifest = {
+        "candidate_head": candidate,
+        "sprint": "S003",
+        "round": round_id,
+        "job_type": "reviewer",
+        "frozen_before_execution": True,
+        "members": [{
+            "execution_role_id": "R01",
+            "packet_path": packet_rel,
+            "output_path": output_rel,
+            "receipt_path": receipt_rel,
+        }],
+    }
+    manifest_path = repo / manifest_rel
+    receipt_path = repo / receipt_rel
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    receipt_path.write_text(json.dumps(_valid_receipt(manifest)), encoding="utf-8")
+    _git(repo, "add", manifest_rel, receipt_rel)
+    _git(repo, "commit", "-m", "invalid simultaneous freeze and receipt")
+
+    monkeypatch.setattr(population_git_trust, "QUEUE_REF", "HEAD")
     _, errors = population_git_trust.load_exact_receipts(queue_repo=repo, manifest=manifest)
-    assert "RECEIPT_MEMBER_0_POST_FREEZE_ORIGIN" in errors
-    assert "RECEIPT_MEMBER_0_NOT_PRESENT_AT_FREEZE" in errors
+    assert "RECEIPT_MEMBER_0_ORIGIN_NOT_STRICTLY_AFTER_FREEZE" in errors
 
 
 def test_modified_receipt_history_is_rejected(tmp_path: Path, monkeypatch) -> None:
