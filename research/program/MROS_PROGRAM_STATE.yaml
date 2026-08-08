@@ -9,86 +9,79 @@ active_milestone: M1
 active_work_package: WP001
 active_sprint: S003
 last_completed_sprint: S002
-program_status: BLOCKED
-active_sprint_status: BOARD_BOOTSTRAP_MAC_WORKER_QUEUE_BLOCKED
+program_status: ACTIVE
+active_sprint_status: BOARD_BOOTSTRAP_R001_REPAIRED_NATIVE_CALIBRATION_R95_PENDING
 
 s002_acceptance:
   decision: ACCEPTED
-  acceptance_artifact: "research/evidence/sprints/S002/S002_ACCEPTANCE_DECISION.md"
-  acceptance_decision_commit: "95e7283bbb01aea98c118b4cf7775e89db57b888"
   implementation_candidate_head: "fd16f526842b9f4f27d7fd06859b059812e10796"
   native_validation_result: "90/90_PASS_EXIT_0_PYTHON_3.12.2"
-  native_validation_evidence: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_OUTPUT_90_CASES.txt"
-  native_validation_evidence_commit: "becacebd0e854d7fc2c2828b7bd14b9043f774e6"
-  independent_review_artifact: "research/evidence/sprints/S002/S002_INDEPENDENT_RE_REVIEW_FD16_FINAL.md"
-  independent_review_commit: "e99bfd42629756c2e7f434667f670d90d2a9cfbf"
   independent_review_verdict: S002_INDEPENDENT_RE_REVIEW_PASS
-  findings:
-    MINOR: 0
-    MAJOR: 0
-    CRITICAL: 0
-    UNKNOWN: 0
   reviewer_independence: SATISFIED
-
-s002_history_policy:
-  preserve_all_prior_failed_unknown_reviews: true
-  prior_reviews_are_historical_only: true
-  accepted_candidate_is_exact_head_bound: true
 
 review_board:
   status: IMPLEMENTED_NOT_CALIBRATED
   authority: Research / R
-  policy_version: mros-review-policy-v2
+  policy_version: mros-review-policy-v3
+  review_schema: mros-review-schema-v3
   minimum_valid_independent_reviews: 10
+  bridge_receipt_required: true
+  frozen_population_required: true
   may_certify_s002: false
   may_certify_itself: false
-  normal_authority_begins_no_earlier_than: S003_AFTER_BOOTSTRAP_CALIBRATION_AND_INDEPENDENT_REVIEW
 
 audit_board:
   status: IMPLEMENTED_NOT_CALIBRATED
   authority: Research / R
-  policy_version: mros-audit-policy-v1
+  policy_version: mros-audit-policy-v2
+  audit_schema: mros-audit-schema-v2
   minimum_valid_independent_audits: 10
+  bridge_receipt_required: true
+  frozen_population_required: true
   may_certify_s002: false
   may_certify_itself: false
-  normal_authority_begins_no_earlier_than: S003_AFTER_BOOTSTRAP_CALIBRATION_AND_INDEPENDENT_REVIEW
 
 review_audit_governance:
   decision: DEC-2026-0003
   exact_head_binding_required: true
   native_validation_precondition: true
+  native_evidence_schema: mros-native-evidence-v2
   review_and_audit_are_distinct: true
   simple_majority_forbidden: true
   max_full_repair_rounds_per_sprint: 5
-  bootstrap_calibration_status: QUEUED_NATIVE_EXECUTION_WORKER_UNRESPONSIVE
-  bootstrap_calibration_candidate: "c1a4ab07daf19db636c6ea8b0d951c642808d32e"
+  bootstrap_round_R001:
+    candidate: "5c7c0d6a75e6b8b56362011fb89b66efa29a64b3"
+    reviewers_completed: 10
+    critical: 10
+    major: 17
+    minor: 0
+    mandatory_unknown: 0
+    decision: REPAIR_REQUIRED
+    repair_contract: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_R001_REPAIR_CONTRACT.md"
+  bootstrap_repaired_candidate: "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7"
+  bootstrap_calibration_status: R95_QUEUED_PENDING_RESULT
   bootstrap_calibration_harness: "scripts/mros/calibrate_review_audit_board.py"
-  bootstrap_calibration_request: "research/evidence/sprints/S003/agent_queue/requests/S003_CALIBRATION_R98.json"
-  bootstrap_calibration_queue_commit: "e0d2c6c8adf0282c8f51d819432ce6b779610f92"
-  bootstrap_independent_review_status: PENDING_CALIBRATION_AND_FROZEN_BOARD_CANDIDATE
+  bootstrap_calibration_case_registry: "research/review_board/CALIBRATION_CASES.json"
+  bootstrap_calibration_case_count: 32
+  bootstrap_acceptance_contract: "research/evidence/sprints/S003/S003_ACCEPTANCE_CONTRACT.json"
+  bootstrap_calibration_request: "research/evidence/sprints/S003/agent_queue/requests/S003_CALIBRATION_R95.json"
+  bootstrap_calibration_queue_commit: "2ba73a0147aa704f9a86f8d983f562b73b0f2233"
+  bootstrap_independent_review_status: R002_BLOCKED_UNTIL_REPAIRED_NATIVE_PASS
+  bootstrap_independent_audit_status: BLOCKED_UNTIL_NONBLOCKING_R002
   autonomous_authority: NOT_AUTHORIZED
-  prior_blocker_artifact: "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_BACKEND_REINVESTIGATION_20260808.md"
-  prior_blocker_status: SUPERSEDED_BY_AGENT_BRIDGE_SMOKE_PASS
-  bridge_smoke_artifact: "research/evidence/sprints/S003/S003_AGENT_BRIDGE_SMOKE_PASS.md"
-  bridge_smoke_artifact_commit: "5a53d59e79a1f4f19db09bb75ccc97f209f0f47f"
-  bridge_queue_result_commit: "715f2398abe468ac392024e2234aa13120a3c5dc"
-  active_blocker_artifact: "research/evidence/sprints/S003/S003_MAC_WORKER_QUEUE_BLOCKER_20260808.md"
-  active_blocker_commit: "ab1370ad2afbaeb5d18978a6fda8282dd3e6cefa"
 
-execution_environment_reinvestigation:
+execution_environment:
   operator_mac_github_connectivity: WORKING
   current_session_github_connector: WORKING
-  current_session_native_git_network: DNS_FAILURE
   mac_execution_bridge: AVAILABLE_VIA_GIT_MAILBOX
   bridge_branch: research/mros-agent-bridge-v1
   queue_branch: automation/mros-agent-queue-v1
   codex_cli_on_mac: "0.146.0"
   python_on_mac: "3.12.2"
   bridge_tests: "6/6_PASS"
-  isolated_reviewer_backend: PROVEN_BY_NON_CERTIFYING_R99_SMOKE
-  isolated_auditor_backend: AVAILABLE_SAME_SUBSTRATE_NOT_YET_BOOTSTRAP_PROVEN
-  mac_worker_current_status: UNRESPONSIVE_TO_QUEUED_R98_REQUEST
-  remote_worker_restart_control: UNAVAILABLE_FROM_PRIMARY_SESSION
+  mac_worker_current_status: RUNNING_AND_PROCESSING_QUEUE
+  isolated_reviewer_backend: PROVEN
+  isolated_auditor_backend: AVAILABLE_PENDING_BOOTSTRAP_USE
   runtime_authority: NONE
   broker_actions_allowed: false
 
@@ -132,10 +125,9 @@ work_package_status:
 next_action:
   sprint: S003
   work_package: WP001
-  objective: "Ensure the canonical Mac Git-mailbox worker is running. Consume the already queued R98 calibration request without replacement, record exact-head native calibration evidence, then freeze the Board candidate and launch 10+ isolated reviewers followed by 10+ isolated auditors. Authorize normal Board use only if all bootstrap gates pass, then continue autonomous S003 execution."
-  required_operator_condition: "Canonical Mac worker process running continuously"
-  canonical_worker_command: "python3 /Users/madhuram/.mros-agent-bridge/bridge/scripts/mros/mros_agent_git_worker.py --config /Users/madhuram/.mros-agent-bridge/config.json --queue-branch automation/mros-agent-queue-v1"
-  blocker_artifact: "research/evidence/sprints/S003/S003_MAC_WORKER_QUEUE_BLOCKER_20260808.md"
+  objective: "Consume R95 exact-head 32-case native calibration. If PASS, freeze R002 population manifest and launch 10 fresh bridge-bound reviewers. Repair and repeat on any blocker. After nonblocking review, launch 10 fresh auditors and authorize Boards only if the full acceptance contract is satisfied."
+  expected_candidate: "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7"
+  queue_branch: automation/mros-agent-queue-v1
 
 execution_policy:
   sprint_prs: false
@@ -145,15 +137,6 @@ execution_policy:
   milestone_ci: REQUIRED
   promotion_pr_m1_m8: REQUIRED_AT_PROMOTION
   promotion_pr_m9: SEPARATE_REQUIRED_AT_PROMOTION
-
-stop_conditions:
-  - HUMAN_AUTHORITY_DECISION_REQUIRED
-  - INDEPENDENT_REVIEW_REQUIRED
-  - SEALED_DATA_BOUNDARY_REQUIRES_APPROVAL
-  - CREDENTIAL_OR_PRIVATE_DATA_UNAVAILABLE
-  - ARCHITECTURE_CHANGE_REQUIRES_DECISION
-  - MERGE_OR_OPERATIONAL_PROMOTION_REQUIRED
-  - REQUIRED_EVIDENCE_CANNOT_BE_OBTAINED
 
 authority:
   source: repository
