@@ -4,6 +4,8 @@ import re
 SHA=re.compile(r'^[0-9a-f]{40}$')
 RID={'reviewer':re.compile(r'^R[0-9]{2,3}$'),'auditor':re.compile(r'^A[0-9]{2,3}$')}
 ROUND={'reviewer':re.compile(r'^R[0-9]{3}$'),'auditor':re.compile(r'^A[0-9]{3}$')}
+MIN_COUNT={'reviewer':2,'auditor':1}
+MAX_COUNT=32
 
 def validate_population_manifest(data:object,*,candidate_head:str,job_type:str)->list[str]:
  e=[]
@@ -17,8 +19,11 @@ def validate_population_manifest(data:object,*,candidate_head:str,job_type:str)-
  members=data.get('members')
  if not isinstance(members,list):return e+['POPULATION_MEMBERS_INVALID']
  expected=data.get('expected_count')
- if isinstance(expected,bool) or not isinstance(expected,int) or expected<10:e.append('POPULATION_EXPECTED_COUNT_INVALID')
+ minimum=MIN_COUNT[job_type]
+ if isinstance(expected,bool) or not isinstance(expected,int) or expected<minimum or expected>MAX_COUNT:e.append('POPULATION_EXPECTED_COUNT_INVALID')
  elif expected!=len(members):e.append('POPULATION_COUNT_MISMATCH')
+ tier=data.get('assurance_tier')
+ if tier is not None and tier not in {'FAST','ELEVATED','FULL'}:e.append('POPULATION_ASSURANCE_TIER_INVALID')
  seen={k:set() for k in ('execution_role_id','semantic_role','packet_path','output_path','receipt_path')}
  for i,m in enumerate(members):
   if not isinstance(m,dict):e.append(f'POPULATION_MEMBER_{i}_INVALID');continue
