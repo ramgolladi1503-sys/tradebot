@@ -1,0 +1,36 @@
+{
+  "broker_actions_allowed": false,
+  "job": {
+    "backend": "codex",
+    "candidate_sha": "8b8a209d4b9e06a8e6ab9c6f0d8cf5ff005d2fd3",
+    "command_hash": null,
+    "created_at": 1786217636.213778,
+    "error_code": "WORKTREE_CREATE_FAILED",
+    "error_detail": "WORKTREE_CREATE_FAILED",
+    "exit_code": null,
+    "finished_at": 1786217962.632263,
+    "job_id": "05dde6737238401dac5e40b086bc2c69",
+    "job_type": "reviewer",
+    "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R008_R05.json",
+    "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R008_R05.md",
+    "role_id": "R05",
+    "started_at": 1786217636.214912,
+    "state": "FAILED",
+    "worktree_path": null
+  },
+  "request": {
+    "backend": "codex",
+    "candidate_sha": "8b8a209d4b9e06a8e6ab9c6f0d8cf5ff005d2fd3",
+    "created_at": "2026-08-09",
+    "created_by": "mros-recovery-controller-full-r008",
+    "job_type": "reviewer",
+    "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R008_R05.json",
+    "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R008_R05.md",
+    "request_id": "S003-R008-R05-8b8a209d",
+    "role_id": "R05",
+    "schema_version": 1
+  },
+  "runtime_authority": "NONE",
+  "schema_version": 1,
+  "worker_id": "mros-mac-worker"
+}
