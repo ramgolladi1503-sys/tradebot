@@ -1,0 +1,12 @@
+{
+  "backend": "codex",
+  "candidate_sha": "8b8a209d4b9e06a8e6ab9c6f0d8cf5ff005d2fd3",
+  "created_at": "2026-08-09",
+  "created_by": "mros-autonomous-cycle",
+  "job_type": "reviewer",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R007_R03.json",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R007_R03.md",
+  "request_id": "S003-R007-R03-8b8a209d",
+  "role_id": "R03",
+  "schema_version": 1
+}
