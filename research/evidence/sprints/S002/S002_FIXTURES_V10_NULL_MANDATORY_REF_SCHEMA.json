@@ -1,0 +1,56 @@
+{
+  "schema_version": "mros-s002-fixtures-v10-null-mandatory-ref-schema",
+  "purpose": "Close 2A10C-F-001 by distinguishing explicit null mandatory inherited refs from semantic absence: explicit null is malformed non-string input and must return INVALID_INPUT/E021.",
+  "cases": [
+    {
+      "case_id": "S002-C097",
+      "operation": "VALIDATE_PROMOTION",
+      "input": {
+        "authority_current": "Grade B",
+        "authority_requested": "Grade A",
+        "evidence_refs": ["EVID-PRIOR-GRADEB", "EVID-ATTACK-PRIOR", "EVID-CAL-PRIOR"],
+        "new_evidence_refs": ["EVID-SCI-NEW", "EVID-ECON-NEW"],
+        "evidence_provenance_complete": true,
+        "independent_attack_ref": null,
+        "calibration_ref": "EVID-CAL-PRIOR",
+        "scientific_certification_ref": "EVID-SCI-NEW",
+        "economic_certification_ref": "EVID-ECON-NEW",
+        "new_evidence_gate_bindings": {
+          "SCIENTIFIC_CERTIFICATION": "EVID-SCI-NEW",
+          "ECONOMIC_CERTIFICATION": "EVID-ECON-NEW"
+        }
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "can_promote": false,
+        "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
+        "violated_rules": []
+      }
+    },
+    {
+      "case_id": "S002-C098",
+      "operation": "VALIDATE_PROMOTION",
+      "input": {
+        "authority_current": "Grade B",
+        "authority_requested": "Grade A",
+        "evidence_refs": ["EVID-PRIOR-GRADEB", "EVID-ATTACK-PRIOR", "EVID-CAL-PRIOR"],
+        "new_evidence_refs": ["EVID-SCI-NEW", "EVID-ECON-NEW"],
+        "evidence_provenance_complete": true,
+        "independent_attack_ref": "EVID-ATTACK-PRIOR",
+        "calibration_ref": null,
+        "scientific_certification_ref": "EVID-SCI-NEW",
+        "economic_certification_ref": "EVID-ECON-NEW",
+        "new_evidence_gate_bindings": {
+          "SCIENTIFIC_CERTIFICATION": "EVID-SCI-NEW",
+          "ECONOMIC_CERTIFICATION": "EVID-ECON-NEW"
+        }
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "can_promote": false,
+        "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
+        "violated_rules": []
+      }
+    }
+  ]
+}
