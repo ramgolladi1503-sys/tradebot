@@ -13,6 +13,7 @@ FIXTURE_FILES = (
     ROOT / "research/evidence/sprints/S002/S002_FIXTURES_V6_GATE_BINDING.json",
     ROOT / "research/evidence/sprints/S002/S002_FIXTURES_V7_GATE_SEMANTIC_BINDING.json",
     ROOT / "research/evidence/sprints/S002/S002_FIXTURES_V8_INHERITED_GATE_PROVENANCE.json",
+    ROOT / "research/evidence/sprints/S002/S002_FIXTURES_V9_CLASSIFICATION_SCHEMA.json",
 )
 SUPERSEDED_CASE_IDS = {
     "S002-C033", "S002-C035", "S002-C037", "S002-C065",
@@ -20,6 +21,7 @@ SUPERSEDED_CASE_IDS = {
 }
 REQUIRED_V7_REPLACEMENTS = {"S002-C075", "S002-C078", "S002-C082", "S002-C084"}
 REQUIRED_V8_CASES = {"S002-C087", "S002-C088", "S002-C089", "S002-C090"}
+REQUIRED_V9_CASES = {"S002-C091", "S002-C092", "S002-C093", "S002-C094"}
 
 AUTH = ["Research / R", "Grade C", "Grade B", "Grade A", "Grade A+", "Rejected", "Unknown"]
 LEGAL_PROMOTIONS = {
@@ -164,8 +166,11 @@ def classify(inp):
         "FALSIFIABLE_UNVERIFIED": "HYPOTHESIS",
         "UNSUPPORTED_CONJECTURE": "SPECULATION",
     }
+    signals = inp["classification_signals"]
+    if any(signal not in mapping for signal in signals):
+        return invalid_schema(knowledge_class=None)
     try:
-        classes = {mapping[x] for x in set(inp["classification_signals"]) if x in mapping}
+        classes = {mapping[x] for x in set(signals)}
     except TypeError:
         return invalid_schema(knowledge_class=None)
     if len(classes) != 1:
@@ -176,6 +181,16 @@ def classify(inp):
         return result("INVALID_INPUT", knowledge_class=None,
                       errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
     return result("PASS", knowledge_class=knowledge_class)
+
+
+def _semantic_ref_requirement(inp, field, *, missing_status, missing_error, missing_rule):
+    if field not in inp or inp[field] is None or inp[field] == "":
+        return result(missing_status, can_promote=False, errors=[missing_error], rules=[missing_rule])
+    if not isinstance(inp[field], str):
+        return invalid_schema(can_promote=False)
+    if not inp[field].strip():
+        return result(missing_status, can_promote=False, errors=[missing_error], rules=[missing_rule])
+    return None
 
 
 def promotion(inp):
@@ -210,23 +225,53 @@ def promotion(inp):
         return result("FAIL", can_promote=False,
                       errors=["MROS-S001-E004-AUTHORITY_STAGE_SKIP"], rules=["RC-002"])
 
-    if inp.get("requires_independent_attack") is True and not nonempty_str(inp.get("independent_attack_ref")):
-        return result("REVIEW_REQUIRED", can_promote=False,
-                      errors=["MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED"], rules=["RC-004"])
-    if inp.get("requires_calibration") is True and not nonempty_str(inp.get("calibration_ref")):
-        return result("BLOCKED", can_promote=False,
-                      errors=["MROS-S001-E010-CALIBRATION_REQUIRED"], rules=["RC-005"])
+    if inp.get("requires_independent_attack") is True:
+        issue = _semantic_ref_requirement(
+            inp, "independent_attack_ref",
+            missing_status="REVIEW_REQUIRED",
+            missing_error="MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED",
+            missing_rule="RC-004",
+        )
+        if issue is not None:
+            return issue
+    if inp.get("requires_calibration") is True:
+        issue = _semantic_ref_requirement(
+            inp, "calibration_ref",
+            missing_status="BLOCKED",
+            missing_error="MROS-S001-E010-CALIBRATION_REQUIRED",
+            missing_rule="RC-005",
+        )
+        if issue is not None:
+            return issue
 
     required_for_grade = STRONG_GRADE_REQUIREMENTS.get(req, ())
-    if "independent_attack_ref" in required_for_grade and not nonempty_str(inp.get("independent_attack_ref")):
-        return result("REVIEW_REQUIRED", can_promote=False,
-                      errors=["MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED"], rules=["RC-004"])
-    if "calibration_ref" in required_for_grade and not nonempty_str(inp.get("calibration_ref")):
-        return result("BLOCKED", can_promote=False,
-                      errors=["MROS-S001-E010-CALIBRATION_REQUIRED"], rules=["RC-005"])
+    if "independent_attack_ref" in required_for_grade:
+        issue = _semantic_ref_requirement(
+            inp, "independent_attack_ref",
+            missing_status="REVIEW_REQUIRED",
+            missing_error="MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED",
+            missing_rule="RC-004",
+        )
+        if issue is not None:
+            return issue
+    if "calibration_ref" in required_for_grade:
+        issue = _semantic_ref_requirement(
+            inp, "calibration_ref",
+            missing_status="BLOCKED",
+            missing_error="MROS-S001-E010-CALIBRATION_REQUIRED",
+            missing_rule="RC-005",
+        )
+        if issue is not None:
+            return issue
     other_required = tuple(f for f in required_for_grade if f not in {"independent_attack_ref", "calibration_ref"})
-    if other_required and any(not nonempty_str(inp.get(field)) for field in other_required):
-        return invalid_missing(can_promote=False)
+    if other_required:
+        for field in other_required:
+            if field not in inp or inp[field] is None or inp[field] == "":
+                return invalid_missing(can_promote=False)
+            if not isinstance(inp[field], str):
+                return invalid_schema(can_promote=False)
+            if not inp[field].strip():
+                return invalid_missing(can_promote=False)
 
     if "evidence_refs" not in inp:
         return provenance_missing()
@@ -251,15 +296,11 @@ def promotion(inp):
     if not isinstance(bindings, dict):
         return invalid_schema(can_promote=False)
 
-    # Fail closed on extra or missing gate keys. The binding object must describe
-    # exactly the predeclared gates for the requested authority transition.
     if set(bindings) != set(required_gates):
         return invalid_schema(can_promote=False)
 
     requested_fields = {PROMOTION_GATE_REF_FIELDS[g] for g in required_gates}
 
-    # Inherited mandatory gate evidence must be registered/canonical and already
-    # present in the declared complete prior provenance set.
     for field in required_for_grade:
         authoritative_ref = canonical_evidence_ref(inp.get(field))
         if authoritative_ref is None:
@@ -267,8 +308,6 @@ def promotion(inp):
         if field not in requested_fields and authoritative_ref not in old_refs:
             return provenance_missing()
 
-    # Newly requested gates must point to exactly the same authoritative evidence
-    # identity, and that identity must be genuinely new.
     for gate in required_gates:
         field = PROMOTION_GATE_REF_FIELDS[gate]
         if field not in inp:
@@ -456,6 +495,9 @@ def load_cases():
         raise SystemExit(2)
     if not REQUIRED_V8_CASES.issubset(set(ids)):
         print("FIXTURE_V8_CASE_MISSING")
+        raise SystemExit(2)
+    if not REQUIRED_V9_CASES.issubset(set(ids)):
+        print("FIXTURE_V9_CASE_MISSING")
         raise SystemExit(2)
     return cases
 
