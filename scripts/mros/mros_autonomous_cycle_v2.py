@@ -99,7 +99,11 @@ def queue_audit_v2(q:Path,auth:Path,candidate:str,review_round:str,review_aggreg
 
 def _tempdir_infrastructure_failure(text:str)->bool:
  t=text.lower()
- return 'no usable temporary directory found' in t or ('filenotfounderror' in t and 'tempfile.py' in t)
+ return (
+  'no usable temporary directory found' in t
+  or ('filenotfounderror' in t and 'tempfile.py' in t)
+  or ('operation not permitted' in t and ('.mros_tmp' in t or 'mkdir' in t))
+ )
 
 def calibration_status_v2(q:Path,candidate:str):
  reqs=cycle.calibration_requests(q,candidate)
@@ -120,9 +124,9 @@ def calibration_status_v2(q:Path,candidate:str):
 def queue_calibration_v2(q:Path,candidate:str,force_retry=False):
  if cycle.calibration_requests(q,candidate) and not force_retry:return 'EXISTS'
  rid=cycle.next_calibration_role(q);tag=f'S003_CALIBRATION_{rid}_{candidate[:8].upper()}';packet=cycle.ROOT/'packets'/f'{tag}.md';output=cycle.ROOT/'results'/f'{tag}.md';request=cycle.ROOT/'requests'/f'{tag}.json';(q/packet).parent.mkdir(parents=True,exist_ok=True)
- command=f'mkdir -p .mros_tmp && TMPDIR="$PWD/.mros_tmp" python3 scripts/mros/calibrate_review_audit_board_v2.py --candidate-head {candidate}'
- (q/packet).write_text(f'''# S003 autonomous exact-head Board calibration {rid}\n\nExact candidate: `{candidate}`\n\nNon-certifying native execution. Do not repair or review.\n\nRun:\n1. `git rev-parse HEAD`\n2. `python3 --version`\n3. `{command}`\n\nReturn Markdown containing CANDIDATE_HEAD, PYTHON_VERSION, COMMAND, COMPLETE STDOUT, EXIT_CODE, RUNTIME_AUTHORITY=NONE, BROKER_ACTIONS=NONE, CALIBRATION_EXECUTION_RESULT=PASS|FAIL. PASS requires exact HEAD, every declared calibration case executed, zero failures, denominator conservation, all declared metrics satisfied, terminal `S003_BOARD_DETERMINISTIC_CALIBRATION_PASS`, and exit 0.\n''',encoding='utf-8')
- req={'schema_version':1,'request_id':f'{tag}-{int(time.time())}','created_by':'mros-autonomous-cycle-v2','created_at':cycle.datetime.date.today().isoformat(),'job_type':'reviewer','role_id':rid,'candidate_sha':candidate,'packet_path':packet.as_posix(),'output_path':output.as_posix(),'backend':'codex'};(q/request).write_text(json.dumps(req,sort_keys=True,indent=2)+'\n',encoding='utf-8');cycle.queue_commit(q,[packet,request],f'mros(S003): queue tempdir-safe exact-head calibration {rid} {candidate[:8]} [skip ci]');return rid
+ command=f'python3 scripts/mros/calibrate_review_audit_board_v2.py --candidate-head {candidate}'
+ (q/packet).write_text(f'''# S003 autonomous exact-head Board calibration {rid}\n\nExact candidate: `{candidate}`\n\nNon-certifying deterministic native execution. Do not repair or review. This packet is executed by the bridge's fixed allowlisted native calibration path, not by the read-only model sandbox.\n\nRequired command semantics:\n1. `git rev-parse HEAD`\n2. `python3 --version`\n3. `{command}`\n\nReturn Markdown containing CANDIDATE_HEAD, PYTHON_VERSION, COMMAND, COMPLETE STDOUT, EXIT_CODE, RUNTIME_AUTHORITY=NONE, BROKER_ACTIONS=NONE, CALIBRATION_EXECUTION_RESULT=PASS|FAIL. PASS requires exact HEAD, every declared calibration case executed, zero failures, denominator conservation, all declared metrics satisfied, terminal `S003_BOARD_DETERMINISTIC_CALIBRATION_PASS`, and exit 0.\n''',encoding='utf-8')
+ req={'schema_version':1,'request_id':f'{tag}-{int(time.time())}','created_by':'mros-autonomous-cycle-v2','created_at':cycle.datetime.date.today().isoformat(),'job_type':'reviewer','role_id':rid,'candidate_sha':candidate,'packet_path':packet.as_posix(),'output_path':output.as_posix(),'backend':'codex'};(q/request).write_text(json.dumps(req,sort_keys=True,indent=2)+'\n',encoding='utf-8');cycle.queue_commit(q,[packet,request],f'mros(S003): queue native exact-head calibration {rid} {candidate[:8]} [skip ci]');return rid
 
 def process_review_v2(auth:Path,q:Path,state_root:Path,row):
  n,mp,manifest=row;round_id=f'R{n:03d}';candidate=manifest.get('candidate_head');tier=str(manifest.get('assurance_tier') or 'FAST')
