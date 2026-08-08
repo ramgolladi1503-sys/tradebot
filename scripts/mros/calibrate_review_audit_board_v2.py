@@ -11,7 +11,7 @@ from native_evidence import validate_native_evidence,verify_native_sources
 from bridge_receipt import validate_bridge_receipt
 from program_context import validate_acceptance_trace,validate_state_ledger
 from advance_program import authorize
-from board_calibration_fixtures import review,audit,receipt,bundle,finding,native,accept_trace,state_text,ledger_text,REVIEW_ROLES,AUDIT_ROLES
+from board_calibration_fixtures import review,audit,receipt,bundle,finding,native,accept_trace,state_text,ledger_text
 PASS={'PASS','PASS_WITH_MINOR_FINDINGS'}
 
 def accepted(decision):return decision in PASS
@@ -44,13 +44,20 @@ def main():
  for cid,verdict,fs in [('CAL-021','REPAIR_REQUIRED',[finding('M','MAJOR')]),('CAL-022','FAIL',[finding('C','CRITICAL')]),('CAL-023','UNKNOWN',[]),('CAL-024','FAIL',[])]:
   arr=list(audits);arr[0]=audit(1,head,verdict,fs);pl,rc,m=bundle(arr,head,'auditor','A001');seto(cid,accepted(aa(pl,candidate_head=head,review_round='R001',receipts=rc,manifest=m)['decision']))
  n,src,nr=native(head);bad=dict(n);bad['head']='0'*40;seto('CAL-025',not bool(validate_native_evidence(bad,head)))
- bad=dict(n);bad['source_output_sha256']='0'*64;seto('CAL-026',not bool(verify_native_sources(bad,source_output_text=src,receipt=nr,candidate_head=head)))
+ bad=dict(n);bad['source_output_sha256']='0'*64;seto('CAL-026',not bool(verify_native_sources(bad,source_output_text=src,receipt=nr,candidate_head=head,source_output_ref=n['source_output_ref'],execution_receipt_ref=n['execution_receipt_ref'])))
  old='0'*40;oldr=dict(rg);oldr['candidate_head']=old;olda=dict(ag);olda['candidate_head']=old;oldn=dict(n);oldn['head']=old;seto('CAL-027',authorize(sprint='S003',next_sprint='S004',candidate_head=head,review=oldr,audit=olda,native=oldn,context_errors=[])['advance'])
  seto('CAL-028',not bool(validate_acceptance_trace(accept_trace(head,False),sprint='S003',candidate_head=head)))
  seto('CAL-029',not bool(validate_state_ledger(state_text(active='S004'),ledger_text(),sprint='S003',next_sprint='S004')))
  seto('CAL-030',not bool(validate_state_ledger(state_text(),ledger_text(),sprint='S003',next_sprint='S111')))
  br=receipt(r1,head,'reviewer');br['runtime_authority']='LIVE';seto('CAL-031',not bool(validate_bridge_receipt(br,r1,candidate_head=head,job_type='reviewer')))
  ctx=validate_acceptance_trace(accept_trace(head,True),sprint='S003',candidate_head=head)+validate_state_ledger(state_text(),ledger_text(),sprint='S003',next_sprint='S004');seto('CAL-032',authorize(sprint='S003',next_sprint='S004',candidate_head=head,review=rg,audit=ag,native=n,context_errors=ctx)['advance'])
+ x=dict(r1);x['unexpected_field']='forbidden';seto('CAL-033',not bool(vr(x,head,'S003','R001')))
+ x=dict(r1);x['critical']=True;seto('CAL-034',not bool(vr(x,head,'S003','R001')))
+ x=dict(r1);x['sprint']='S999';seto('CAL-035',not bool(vr(x,head,'S003','R001')))
+ seto('CAL-036',not bool(verify_native_sources(n,source_output_text=src,receipt=nr,candidate_head=head,source_output_ref='results/WRONG.txt',execution_receipt_ref=n['execution_receipt_ref'])))
+ br=receipt(r1,head,'reviewer');br['request']['job_type']='auditor';seto('CAL-037',not bool(validate_bridge_receipt(br,r1,candidate_head=head,job_type='reviewer')))
+ br=receipt(r1,head,'reviewer');br['job'].pop('finished_at',None);seto('CAL-038',not bool(validate_bridge_receipt(br,r1,candidate_head=head,job_type='reviewer')))
+ fake_review={'candidate_head':head,'decision':'PASS','critical':0,'major':0,'minor':0,'unknown':0,'runtime_authority':'NONE','authority':'Research / R','transport':'mac_git_mailbox','valid_reviews':0,'invalid_reviews':0,'expected_reviews':0,'submitted_reviews':0,'minimum_valid_reviews':0,'omitted_reviews':[],'extra_reviews':[],'manifest_errors':[],'reviews':[]};fake_audit={'candidate_head':head,'decision':'PASS','critical':0,'major':0,'minor':0,'unknown':0,'runtime_authority':'NONE','authority':'Research / R','transport':'mac_git_mailbox','valid_audits':0,'invalid_audits':0,'expected_audits':0,'submitted_audits':0,'minimum_valid_audits':0,'omitted_audits':[],'extra_audits':[],'manifest_errors':[],'audits':[],'missing_acceptance_ids':[],'unknown_acceptance_ids':[]};seto('CAL-039',authorize(sprint='S003',next_sprint='S004',candidate_head=head,review=fake_review,audit=fake_audit,native=n,context_errors=[])['advance'])
  declared={c['id']:c for c in cases};missing=sorted(set(declared)-set(out));extra_ids=sorted(set(out)-set(declared));fail=[]
  for cid,c in declared.items():
   expected=c['expected']=='ACCEPT';actual=out.get(cid);ok=(actual is expected);print(f"{'PASS' if ok else 'FAIL'} | {cid} | expected={c['expected']} observed={'ACCEPT' if actual else 'REJECT'}")
