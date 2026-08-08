@@ -40,7 +40,12 @@ def main()->int:
    ]
    p=run(test_root,'python3','-m','pytest','-q',*tests,timeout=900,check=False)
    if p.returncode!=0:raise UpdateError('TARGET_TESTS_FAILED:'+((p.stdout or '')+(p.stderr or ''))[-4000:])
-   c=run(test_root,'python3','-m','py_compile',str(test_root/'scripts/mros/mros_autonomous_cycle_v2.py'),str(test_root/'scripts/mros/mros_review_transport.py'),timeout=120,check=False)
+   compile_targets=[
+    str(test_root/'scripts/mros/mros_autonomous_cycle_v2.py'),
+    str(test_root/'scripts/mros/mros_review_transport.py'),
+    str(test_root/'scripts/mros/mros_agent_git_worker.py'),
+   ]
+   c=run(test_root,'python3','-m','py_compile',*compile_targets,timeout=120,check=False)
    if c.returncode!=0:raise UpdateError('TARGET_COMPILE_FAILED:'+((c.stdout or '')+(c.stderr or ''))[-4000:])
   finally:
    git(source,'worktree','remove','--force',str(test_root),check=False);shutil.rmtree(test_root,ignore_errors=True);git(source,'worktree','prune',check=False)
