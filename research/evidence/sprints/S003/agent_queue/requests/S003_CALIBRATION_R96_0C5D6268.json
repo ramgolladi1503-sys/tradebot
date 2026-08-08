@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "request_id": "S003-CALIBRATION-R96-0C5D6268",
+  "created_by": "mros-primary-controller",
+  "created_at": "2026-08-08",
+  "job_type": "reviewer",
+  "role_id": "R96",
+  "candidate_sha": "0c5d6268ef224450cd881da588efcce04c630414",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_CALIBRATION_R96_0C5D6268.md",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_CALIBRATION_R96_0C5D6268.md",
+  "backend": "codex"
+}
