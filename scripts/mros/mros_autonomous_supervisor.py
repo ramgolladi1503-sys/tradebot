@@ -5,7 +5,7 @@ import argparse,fcntl,json,os,re,subprocess,sys,time
 from dataclasses import dataclass,asdict
 from pathlib import Path
 from typing import Any
-AUTHORITY_BRANCH='research/mros-program-v1';QUEUE_BRANCH='automation/mros-agent-queue-v1';QUEUE_ROOT=Path('research/evidence/sprints/S003/agent_queue');STATE=Path('research/program/MROS_PROGRAM_STATE.yaml');BRIDGE_ROOT=Path('/Users/madhuram/.mros-agent-bridge/bridge');QUEUE_WT=Path('/Users/madhuram/.mros-agent-bridge/queue');CHECKPOINT_SECONDS=900
+AUTHORITY_BRANCH='research/mros-program-v1';QUEUE_BRANCH='automation/mros-agent-queue-v1';QUEUE_ROOT=Path('research/evidence/sprints/S003/agent_queue');STATE=Path('research/program/MROS_PROGRAM_STATE.yaml');BRIDGE_ROOT=Path('/Users/madhuram/.mros-agent-bridge/bridge');AUTHORITY_WT=Path('/Users/madhuram/.mros-agent-bridge/authority');QUEUE_WT=Path('/Users/madhuram/.mros-agent-bridge/queue');CHECKPOINT_SECONDS=900
 class SupervisorError(RuntimeError):pass
 @dataclass
 class Health:
@@ -71,11 +71,6 @@ def worker_operational_health(root:Path):
 def write_health(path:Path,h:Health):
  h.updated_at=time.time();path.parent.mkdir(parents=True,exist_ok=True);tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(asdict(h),sort_keys=True,indent=2)+'\n',encoding='utf-8');os.replace(tmp,path)
 def write_checkpoint(root:Path,h:Health,force:bool=False):
- """Append a durable, read-only operational snapshot at most once per 15-minute bucket.
-
-    Checkpoints live outside the authority/queue repositories so observation can never mutate
-    program authority. Repeated supervisor polls in the same bucket are deduplicated.
-    """
  now=time.time();bucket=int(now//CHECKPOINT_SECONDS);marker=root/'checkpoint_bucket';log=root/'supervisor_checkpoints.jsonl'
  try:last=int(marker.read_text(encoding='utf-8').strip()) if marker.is_file() else -1
  except Exception:last=-1
@@ -119,7 +114,7 @@ def single_instance(lock_path:Path):
  except BlockingIOError as exc:h.close();raise SupervisorError('SUPERVISOR_ALREADY_RUNNING') from exc
  return h
 def parse_args():
- p=argparse.ArgumentParser();p.add_argument('--repo',type=Path,default=Path('/Users/madhuram/tradebot'));p.add_argument('--state-root',type=Path,default=Path('/Users/madhuram/.mros-agent-bridge/state'));p.add_argument('--poll-seconds',type=int,default=15);p.add_argument('--once',action='store_true');return p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('--repo',type=Path,default=AUTHORITY_WT);p.add_argument('--state-root',type=Path,default=Path('/Users/madhuram/.mros-agent-bridge/state'));p.add_argument('--poll-seconds',type=int,default=15);p.add_argument('--once',action='store_true');return p.parse_args()
 def main():
  a=parse_args();repo=a.repo.resolve();root=a.state_root.resolve();hp=root/'supervisor_health.json';lock=single_instance(root/'supervisor.lock');h=Health()
  try:
