@@ -1,31 +1,47 @@
-schema_version: mros-review-policy-v2
+schema_version: mros-review-policy-v3
 status: IMPLEMENTED_NOT_CALIBRATED
 authority: Research / R
 runtime_authority: NONE
 bootstrap:
   s002_may_be_certified_by_board: false
   board_may_self_certify: false
-  normal_board_authority_begins_no_earlier_than: S003_AFTER_BOOTSTRAP_CALIBRATION_AND_INDEPENDENT_REVIEW
-  reason: prevent circular certification
+  deterministic_calibration_is_not_certification: true
+  normal_board_authority_begins_no_earlier_than: S003_AFTER_BOOTSTRAP_CALIBRATION_AND_INDEPENDENT_REVIEW_AUDIT
 candidate:
   immutable_head_required: true
   branch_required: true
+  repair_head_invalidates_prior_native_reviews_audits_aggregates: true
 native_validation:
   required: true
-  required_fields: [repository, branch, head, validator, python_version, command, checks, passed, failed, exit_code, timestamp]
-  pass_conditions:
-    failed: 0
-    exit_code: 0
-    head_must_equal_candidate_head: true
+  schema: mros-native-evidence-v2
+  exact_head_required: true
+  content_addressed_source_output_required: true
+  execution_receipt_required: true
+  validator_command_binding_required: true
+  typed_counts_required: true
+  runtime_authority_must_remain: NONE
 review:
+  schema: mros-review-schema-v3
   reviewer_count_minimum: 10
   minimum_valid_independent_reviews: 10
   max_review_rounds_per_sprint: 5
   exact_head_match_required: true
+  bridge_execution_receipt_required: true
+  mac_git_mailbox_transport_required: true
+  unique_execution_job_required: true
+  unique_semantic_role_required: true
   independent_from_implementation_required: true
   independent_from_review_aggregation_required: true
+population:
+  frozen_before_execution_required: true
+  schema: mros-agent-population-v1
+  expected_denominator_required: true
+  omitted_artifacts_block: true
+  undeclared_extra_artifacts_block: true
+  post_hoc_exclusion_forbidden: true
 aggregation:
   simple_majority_forbidden: true
+  any_nonpass_verdict_blocks_or_requires_adjudication: true
   critical_blocks: true
   major_blocks: true
   mandatory_unknown_blocks: true
@@ -38,11 +54,8 @@ audit:
   minimum_valid_independent_audits: 10
   exact_head_match_required: true
   audited_review_round_match_required: true
-  independent_from_implementation_required: true
-  independent_from_review_aggregation_required: true
-  critical_blocks: true
-  major_blocks: true
-  mandatory_unknown_blocks: true
+  bridge_execution_receipt_required: true
+  frozen_population_required: true
   acceptance_trace_complete_required: true
   state_consistent_required: true
 advancement:
@@ -50,7 +63,8 @@ advancement:
   require_review_board_acceptance: true
   require_audit_board_acceptance: true
   require_no_blocking_finding: true
-  require_sprint_acceptance_criteria: true
-  require_state_ledger_consistency: true
+  require_candidate_bound_acceptance_trace: true
+  require_repository_state_ledger_consistency: true
+  caller_boolean_acceptance_forbidden: true
   m9_blocked: true
   runtime_authority_must_remain: NONE
