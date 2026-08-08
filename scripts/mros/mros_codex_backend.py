@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Fresh-context Codex backend adapter for the MROS local agent bridge.
 
-The adapter passes the complete role packet as a positional prompt (not stdin),
-uses an ephemeral Codex session, constrains the agent to a read-only repository
-sandbox, and asks Codex itself to write only the last agent message to the output
-artifact via --output-last-message.
+Reviewer/auditor jobs run through an ephemeral read-only Codex sandbox. The one
+special case is the deterministic S003 Board calibration packet: that packet is
+not a review job semantically and requires writable temporary Git state, so the
+adapter executes one fixed allowlisted calibration command natively in the exact
+candidate worktree and writes a machine-readable Markdown result. No arbitrary
+packet command is executed.
 """
 
 from __future__ import annotations
@@ -14,7 +16,11 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+
+CALIBRATION_MARKER = "# S003 autonomous exact-head Board calibration"
+CALIBRATION_SCRIPT = "scripts/mros/calibrate_review_audit_board_v2.py"
 
 
 def parse_args() -> argparse.Namespace:
@@ -26,15 +32,91 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _run_native_calibration(*, worktree: Path, output: Path, candidate: str) -> int:
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=worktree,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    actual_head = (head.stdout or "").strip()
+    if head.returncode != 0 or actual_head != candidate:
+        print("MROS_NATIVE_CALIBRATION_BLOCKED: exact candidate mismatch", file=sys.stderr)
+        return 26
+
+    py = subprocess.run(
+        [sys.executable, "--version"],
+        cwd=worktree,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    pyver = (py.stdout or "").strip()
+    command = [sys.executable, CALIBRATION_SCRIPT, "--candidate-head", candidate]
+    env = os.environ.copy()
+    with tempfile.TemporaryDirectory(prefix="mros-native-cal-") as td:
+        env["TMPDIR"] = td
+        completed = subprocess.run(
+            command,
+            cwd=worktree,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=int(os.environ.get("MROS_NATIVE_CALIBRATION_TIMEOUT_SECONDS", "1200")),
+            check=False,
+        )
+    stdout = completed.stdout or ""
+    passed = completed.returncode == 0 and "S003_BOARD_DETERMINISTIC_CALIBRATION_PASS" in stdout
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        "\n".join(
+            [
+                f"CANDIDATE_HEAD: `{actual_head}`",
+                "",
+                f"PYTHON_VERSION: `{pyver}`",
+                "",
+                "COMMAND:",
+                "",
+                "```bash",
+                f"{sys.executable} {CALIBRATION_SCRIPT} --candidate-head {candidate}",
+                "```",
+                "",
+                "COMPLETE STDOUT:",
+                "",
+                "```text",
+                stdout.rstrip(),
+                "```",
+                "",
+                f"EXIT_CODE: `{completed.returncode}`",
+                "",
+                "RUNTIME_AUTHORITY=NONE",
+                "",
+                "BROKER_ACTIONS=NONE",
+                "",
+                f"CALIBRATION_EXECUTION_RESULT={'PASS' if passed else 'FAIL'}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    # The isolated job itself succeeded even when deterministic validation says FAIL.
+    # The controller consumes CALIBRATION_EXECUTION_RESULT and decides repair vs pass.
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     worktree = args.worktree.resolve()
     packet = args.packet.resolve()
     output = args.output.resolve()
 
-    if shutil.which("codex") is None:
-        print("MROS_CODEX_BACKEND_BLOCKED: codex CLI not found", file=sys.stderr)
-        return 20
     if not worktree.is_dir() or not (worktree / ".git").exists():
         print("MROS_CODEX_BACKEND_BLOCKED: detached worktree invalid", file=sys.stderr)
         return 21
@@ -54,6 +136,14 @@ def main() -> int:
     role_id = os.environ.get("MROS_ROLE_ID", "")
     job_type = os.environ.get("MROS_JOB_TYPE", "")
     job_id = os.environ.get("MROS_JOB_ID", "")
+
+    if prompt.startswith(CALIBRATION_MARKER):
+        return _run_native_calibration(worktree=worktree, output=output, candidate=candidate)
+
+    if shutil.which("codex") is None:
+        print("MROS_CODEX_BACKEND_BLOCKED: codex CLI not found", file=sys.stderr)
+        return 20
+
     boundary = f"""
 
 ---
