@@ -4,9 +4,10 @@
 The updater is separate from the supervisor. It never updates authority state.
 It promotes a new bridge commit only after running the bridge/supervisor safety
 tests in an isolated temporary worktree, then kickstarts the persistent services.
+Benign no-op cases exit 0 so launchd does not report them as failures.
 """
 from __future__ import annotations
-import argparse,fcntl,os,shutil,subprocess,tempfile,time
+import argparse,fcntl,os,shutil,subprocess,time
 from pathlib import Path
 BRANCH='research/mros-agent-bridge-v1';SERVICES=('com.aixion.mros-agent-worker','com.aixion.mros-autonomous-supervisor')
 class UpdateError(RuntimeError):pass
@@ -20,9 +21,11 @@ def main()->int:
  lock=(state/'bridge-updater.lock').open('a+')
  try:
   try:fcntl.flock(lock.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
-  except BlockingIOError:return 3
+  except BlockingIOError:
+   print('MROS_BRIDGE_UPDATE_NOOP_LOCK_HELD');return 0
   git(source,'fetch','origin',BRANCH);target=git(source,'rev-parse',f'origin/{BRANCH}').stdout.strip();current=git(bridge,'rev-parse','HEAD').stdout.strip()
-  if target==current:return 3
+  if target==current:
+   print(f'MROS_BRIDGE_UPDATE_NOOP_CURRENT {current}');return 0
   if git(bridge,'status','--porcelain').stdout.strip():raise UpdateError('BRIDGE_WORKTREE_NOT_CLEAN')
   test_root=state/'update-test-worktree'
   if test_root.exists():
