@@ -94,18 +94,21 @@ def load_exact_receipts(*,queue_repo:Path,manifest:dict)->tuple[dict,list[str]]:
   rel=_path(rel)
   try:r=_show_json(queue_repo,QUEUE_REF,rel)
   except Exception:e.append(f'RECEIPT_MEMBER_{i}_CANONICAL_FILE_MISSING');continue
+  if not isinstance(r,dict):e.append(f'RECEIPT_MEMBER_{i}_OBJECT_REQUIRED');continue
   origin,hist_errors=_single_origin(queue_repo,rel)
   for err in hist_errors:e.append(f'RECEIPT_MEMBER_{i}_{err}')
   if freeze and origin:
-   anc=_run(queue_repo,'merge-base','--is-ancestor',freeze,origin)
-   if anc.returncode!=0:e.append(f'RECEIPT_MEMBER_{i}_PREDATES_FREEZE')
-  req=r.get('request') if isinstance(r,dict) else None
+   if origin==freeze:e.append(f'RECEIPT_MEMBER_{i}_NOT_POST_FREEZE')
+   else:
+    anc=_run(queue_repo,'merge-base','--is-ancestor',freeze,origin)
+    if anc.returncode!=0:e.append(f'RECEIPT_MEMBER_{i}_PREDATES_FREEZE')
+  req=r.get('request')
   if not isinstance(req,dict):e.append(f'RECEIPT_MEMBER_{i}_REQUEST_INVALID')
   else:
    expected={'candidate_sha':candidate,'role_id':m.get('execution_role_id'),'packet_path':m.get('packet_path'),'output_path':m.get('output_path')}
    for k,v in expected.items():
     if req.get(k)!=v:e.append(f'RECEIPT_MEMBER_{i}_{k.upper()}_MISMATCH')
-  job=r.get('job') if isinstance(r,dict) else None;job_id=job.get('job_id') if isinstance(job,dict) else None
+  job=r.get('job');job_id=job.get('job_id') if isinstance(job,dict) else None
   if not isinstance(job_id,str) or not job_id:e.append(f'RECEIPT_MEMBER_{i}_JOB_ID_INVALID');continue
   if job_id in out:e.append('RECEIPT_JOB_ID_DUPLICATE');continue
   r=dict(r);r['_frozen_receipt_path']=rel;out[job_id]=r
