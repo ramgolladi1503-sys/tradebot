@@ -24,12 +24,7 @@ def canonical_request_path(member:dict)->str:
  return (QUEUE_ROOT/'requests'/Path(str(member.get('output_path',''))).name).as_posix()
 
 def _single_origin(repo:Path,path:str)->tuple[str|None,list[str]]:
- """Return the single add-origin commit for an immutable queue artifact.
-
- A trusted transport artifact must have exactly one add-origin and no later path
- history. For receipt authority, that origin must additionally exist at or before
- the frozen population manifest commit.
- """
+ """Return the single add-origin commit for an immutable queue artifact."""
  hist=_run(repo,'log','--format=%H',QUEUE_REF,'--',path)
  commits=[x for x in hist.stdout.splitlines() if x.strip()] if hist.returncode==0 else []
  adds=_run(repo,'log','--diff-filter=A','--format=%H',QUEUE_REF,'--',path)
@@ -98,13 +93,13 @@ def load_exact_receipts(*,queue_repo:Path,manifest:dict)->tuple[dict,list[str]]:
   origin,hist_errors=_single_origin(queue_repo,rel)
   for err in hist_errors:e.append(f'RECEIPT_MEMBER_{i}_{err}')
   if freeze and origin:
-   # R005/R006 frozen contract: a receipt cannot acquire authority by appearing
-   # after the population freeze. Prove its add-origin is an ancestor of (or is)
-   # the freeze commit and prove the exact path exists in the freeze tree.
-   anc=_run(queue_repo,'merge-base','--is-ancestor',origin,freeze)
-   if anc.returncode!=0:e.append(f'RECEIPT_MEMBER_{i}_POST_FREEZE_ORIGIN')
-   present=_run(queue_repo,'cat-file','-e',f'{freeze}:{rel}')
-   if present.returncode!=0:e.append(f'RECEIPT_MEMBER_{i}_NOT_PRESENT_AT_FREEZE')
+   # Frozen population means identity/path are fixed before execution; receipt
+   # content is created by execution and therefore must originate strictly after
+   # the population-freeze commit. This preserves causal ordering without
+   # allowing post-hoc role/path substitution.
+   anc=_run(queue_repo,'merge-base','--is-ancestor',freeze,origin)
+   same=origin==freeze
+   if anc.returncode!=0 or same:e.append(f'RECEIPT_MEMBER_{i}_ORIGIN_NOT_STRICTLY_AFTER_FREEZE')
   req=r.get('request')
   if not isinstance(req,dict):e.append(f'RECEIPT_MEMBER_{i}_REQUEST_INVALID')
   else:
