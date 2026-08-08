@@ -75,11 +75,20 @@ def calibration_source(q:Path,candidate:str):
   if job.get('state')=='SUCCEEDED' and job.get('exit_code')==0 and 'CALIBRATION_EXECUTION_RESULT=PASS' in text and 'S003_BOARD_DETERMINISTIC_CALIBRATION_PASS' in text:choices.append((float(job.get('finished_at') or 0),rp,req,rec,r,text,job))
  if not choices:raise FinalizeError('CANDIDATE_CALIBRATION_PASS_MISSING')
  return sorted(choices,key=lambda x:x[0])[-1]
+def _parse_python_version(text:str)->str:
+ m=re.search(r'(?m)^PYTHON_VERSION\s*[:=]\s*`?(?:Python\s+)?([0-9]+\.[0-9]+\.[0-9]+)',text)
+ if not m:raise FinalizeError('CALIBRATION_PYTHON_VERSION_PARSE_FAILED')
+ return m.group(1)
+def _parse_command(text:str)->str:
+ m=re.search(r'(?ms)^COMMAND\s*:\s*\n+```(?:bash)?\s*\n([^\n]+)',text)
+ if not m:m=re.search(r'(?m)^COMMAND\s*=\s*`?([^`\n]+)',text)
+ if not m:raise FinalizeError('CALIBRATION_COMMAND_PARSE_FAILED')
+ return m.group(1).strip()
 def build_native(auth:Path,q:Path,candidate:str):
- _,rp,req,rec,r,text,job=calibration_source(q,candidate);m=re.search(r'SUMMARY\s*\|\s*cases=(\d+)\s+pass=(\d+)\s+fail=(\d+)',text);pm=re.search(r'PYTHON_VERSION\s*=\s*(?:Python\s+)?([0-9]+\.[0-9]+\.[0-9]+)',text);cm=re.search(r'COMMAND\s*=\s*([^\n]+)',text)
- if not m or not pm or not cm:raise FinalizeError('CALIBRATION_OUTPUT_PARSE_FAILED')
- checks,passed,failed=map(int,m.groups());source_ref=str(Path(str(req['output_path'])));receipt_ref=str((ROOT/'receipts'/rp.name).as_posix());native_path=Path('research/evidence/sprints/S003/S003_AUTONOMOUS_NATIVE_EVIDENCE.json')
- data={'schema_version':'mros-native-evidence-v2','evidence_kind':'native_validation','repository':'ramgolladi1503-sys/tradebot','branch':AUTH,'head':candidate,'validator':'scripts/mros/calibrate_review_audit_board_v2.py','python_version':pm.group(1),'command':cm.group(1).strip().strip('`'),'checks':checks,'passed':passed,'failed':failed,'exit_code':0,'timestamp':datetime.datetime.fromtimestamp(float(job.get('finished_at') or 0),tz=datetime.timezone.utc).isoformat(),'transport':'mac_git_mailbox','execution_job_id':job.get('job_id'),'execution_receipt_ref':receipt_ref,'source_output_ref':source_ref,'source_output_sha256':hashlib.sha256(text.encode('utf-8')).hexdigest(),'runtime_authority':'NONE','broker_actions':'NONE'}
+ _,rp,req,rec,r,text,job=calibration_source(q,candidate);m=re.search(r'SUMMARY\s*\|\s*cases=(\d+)\s+pass=(\d+)\s+fail=(\d+)',text)
+ if not m:raise FinalizeError('CALIBRATION_SUMMARY_PARSE_FAILED')
+ checks,passed,failed=map(int,m.groups());python_version=_parse_python_version(text);command=_parse_command(text);source_ref=str(Path(str(req['output_path'])));receipt_ref=str((ROOT/'receipts'/rp.name).as_posix());native_path=Path('research/evidence/sprints/S003/S003_AUTONOMOUS_NATIVE_EVIDENCE.json')
+ data={'schema_version':'mros-native-evidence-v2','evidence_kind':'native_validation','repository':'ramgolladi1503-sys/tradebot','branch':AUTH,'head':candidate,'validator':'scripts/mros/calibrate_review_audit_board_v2.py','python_version':python_version,'command':command,'checks':checks,'passed':passed,'failed':failed,'exit_code':0,'timestamp':datetime.datetime.fromtimestamp(float(job.get('finished_at') or 0),tz=datetime.timezone.utc).isoformat(),'transport':'mac_git_mailbox','execution_job_id':job.get('job_id'),'execution_receipt_ref':receipt_ref,'source_output_ref':source_ref,'source_output_sha256':hashlib.sha256(text.encode('utf-8')).hexdigest(),'runtime_authority':'NONE','broker_actions':'NONE'}
  (auth/native_path).write_text(json.dumps(data,sort_keys=True,indent=2)+'\n',encoding='utf-8');return native_path,data,source_ref,receipt_ref,r,text
 def receipt_map(q:Path,manifest:dict):
  out={}
