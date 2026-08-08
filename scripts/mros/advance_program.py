@@ -98,10 +98,10 @@ def authorize(*,sprint,next_sprint,candidate_head,review,audit,native,context_er
  rr={};ar={}
  if queue_repo is not None and isinstance(review_manifest,dict) and isinstance(review_round,str):
   errors.extend(validate_trusted_population(queue_repo=Path(queue_repo),manifest_path=review_manifest_path or '',manifest=review_manifest,candidate_head=candidate_head,sprint=sprint,round_id=review_round,job_type='reviewer'))
-  rr,re=load_exact_receipts(queue_repo=Path(queue_repo),manifest=review_manifest);errors.extend('REVIEW_'+x for x in re)
+  rr,receipt_errors=load_exact_receipts(queue_repo=Path(queue_repo),manifest=review_manifest);errors.extend('REVIEW_'+x for x in receipt_errors)
  if queue_repo is not None and isinstance(audit_manifest,dict) and isinstance(audit_round,str):
   errors.extend(validate_trusted_population(queue_repo=Path(queue_repo),manifest_path=audit_manifest_path or '',manifest=audit_manifest,candidate_head=candidate_head,sprint=sprint,round_id=audit_round,job_type='auditor'))
-  ar,re=load_exact_receipts(queue_repo=Path(queue_repo),manifest=audit_manifest);errors.extend('AUDIT_'+x for x in re)
+  ar,receipt_errors=load_exact_receipts(queue_repo=Path(queue_repo),manifest=audit_manifest);errors.extend('AUDIT_'+x for x in receipt_errors)
  review_jobs=[r.get('execution_job_id') for r in (review.get('reviews',[]) if isinstance(review,dict) else []) if isinstance(r,dict) and isinstance(r.get('execution_job_id'),str)]
  if isinstance(review_manifest,dict) and isinstance(review_round,str):errors.extend(_validate_aggregate(review,candidate_head=candidate_head,kind='review',manifest=review_manifest,receipts=rr,expected_sprint=sprint,expected_round=review_round,minimum_required=minimum))
  if isinstance(audit_manifest,dict) and isinstance(audit_round,str):errors.extend(_validate_aggregate(audit,candidate_head=candidate_head,kind='audit',manifest=audit_manifest,receipts=ar,expected_sprint=sprint,expected_round=audit_round,minimum_required=minimum,required_acceptance_ids=ids,expected_native_ref=expected_native_ref,review_job_ids=review_jobs))
