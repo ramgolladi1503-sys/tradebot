@@ -18,9 +18,9 @@ python3 -m pytest -q \
   "$BRIDGE_WT/tests/mros/test_mros_agent_bridge.py" \
   "$BRIDGE_WT/tests/mros/test_mros_autonomous_supervisor.py" \
   "$BRIDGE_WT/tests/mros/test_mros_state_transition_engine.py"
-printf '%s\n' '=== SUPERVISOR ONE-SHOT DRY/REAL DISCOVERY ==='
-# One-shot may legally perform the stale-calibration -> review-preparation transition.
-python3 "$BRIDGE_WT/scripts/mros/install_mros_autonomous_services_mac.sh" "$SOURCE_REPO"
+printf '%s\n' '=== INSTALL AUTONOMOUS SERVICES ==='
+# Installer is a shell script; execute it with bash, never through Python.
+bash "$BRIDGE_WT/scripts/mros/install_mros_autonomous_services_mac.sh" "$SOURCE_REPO"
 sleep 5
 printf '%s\n' '=== SERVICE STATUS ==='
 launchctl print "gui/$(id -u)/com.aixion.mros-agent-worker" | grep -E 'state =|pid =|last exit code' | head -20 || true
