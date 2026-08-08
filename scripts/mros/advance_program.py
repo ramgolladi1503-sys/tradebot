@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse,json
 from pathlib import Path
+from native_evidence import validate_native_evidence
 ACCEPT={'PASS','PASS_WITH_MINOR_FINDINGS'}
 
 
@@ -9,15 +10,16 @@ def authorize(*, sprint, next_sprint, candidate_head, review, audit, native, acc
  errors=[]
  if review.get('candidate_head')!=candidate_head:errors.append('REVIEW_AGGREGATE_HEAD_MISMATCH')
  if audit.get('candidate_head')!=candidate_head:errors.append('AUDIT_AGGREGATE_HEAD_MISMATCH')
- if native.get('head')!=candidate_head or native.get('failed')!=0 or native.get('exit_code')!=0 or native.get('passed')!=native.get('checks'):errors.append('NATIVE_VALIDATION_NOT_PASS_FOR_HEAD')
+ if validate_native_evidence(native,candidate_head):errors.append('NATIVE_VALIDATION_NOT_PASS_FOR_HEAD')
  if review.get('decision') not in ACCEPT:errors.append('REVIEW_BOARD_NOT_ACCEPTED')
  if audit.get('decision') not in ACCEPT:errors.append('AUDIT_BOARD_NOT_ACCEPTED')
  if review.get('critical',0) or review.get('major',0) or review.get('unknown',0):errors.append('REVIEW_BLOCKING_FINDINGS_PRESENT')
  if audit.get('critical',0) or audit.get('major',0) or audit.get('unknown',0):errors.append('AUDIT_BLOCKING_FINDINGS_PRESENT')
  if not acceptance_criteria_satisfied:errors.append('SPRINT_ACCEPTANCE_CRITERIA_NOT_SATISFIED')
  if not state_consistent:errors.append('PROGRAM_STATE_LEDGER_CONSISTENCY_NOT_PROVEN')
- if next_sprint.startswith('S') and int(next_sprint[1:])>=111:errors.append('M9_HARD_STOP')
- if errors:return {'advance':False,'errors':errors}
+ if not isinstance(next_sprint,str) or not next_sprint.startswith('S') or not next_sprint[1:].isdigit():errors.append('NEXT_SPRINT_INVALID')
+ elif int(next_sprint[1:])>=111:errors.append('M9_HARD_STOP')
+ if errors:return {'advance':False,'errors':errors,'runtime_authority':'NONE'}
  return {'advance':True,'accepted_sprint':sprint,'accepted_head':candidate_head,'next_sprint':next_sprint,'runtime_authority':'NONE'}
 
 
