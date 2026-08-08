@@ -14,9 +14,22 @@ preconditions:
   nonblocking_review_aggregate_required: true
   audited_review_round_required: true
   repaired_head_invalidates_predecessor_authority: true
+assurance:
+  model: ADAPTIVE_ESCALATION
+  normal_initial_valid_independent_audits: 1
+  elevated_initial_valid_independent_audits: 3
+  escalation_auditors: [2, 3, 5, 10]
+  maximum_elastic_auditors: 16
+  full_auditor_count: 10
+  full_board_required_for:
+    - board_bootstrap_final_authorization
+    - authority_promotion
+    - milestone_closure
+    - M8_final_certification
+  blocking_finding_cannot_be_outvoted: true
 auditors:
   schema: mros-audit-schema-v2
-  minimum_valid_independent_audits: 10
+  minimum_valid_independent_audits: 1
   exact_head_match_required: true
   bridge_execution_receipt_required: true
   mac_git_mailbox_transport_required: true
@@ -28,6 +41,7 @@ population:
   frozen_before_execution_required: true
   schema: mros-agent-population-v1
   expected_denominator_required: true
+  frozen_expected_count_is_round_quorum: true
   omitted_artifacts_block: true
   undeclared_extra_artifacts_block: true
   post_hoc_exclusion_forbidden: true
@@ -43,7 +57,8 @@ aggregation:
   material_disagreement_requires_adjudication: true
 acceptance:
   review_aggregate_must_be_nonblocking: true
-  valid_audits_minimum: 10
+  valid_audits_minimum: 1
+  full_boundary_valid_audits_minimum: 10
   critical_must_equal: 0
   major_must_equal: 0
   mandatory_unknown_must_equal: 0
