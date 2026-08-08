@@ -8,6 +8,7 @@ from mros_agent_bridge import BridgeError,MrosAgentBridge,load_config
 QUEUE_ROOT=Path("research/evidence/sprints/S003/agent_queue"); REQUEST_DIR=QUEUE_ROOT/"requests"; RECEIPT_DIR=QUEUE_ROOT/"receipts"
 MANIFEST_DIR=QUEUE_ROOT/"manifests"; MAX_INFRA_ATTEMPTS=3
 ALLOWED_JOB_TYPES={"reviewer","auditor"}; DEFAULT_QUEUE_BRANCH="automation/mros-agent-queue-v1"; AUTHORITY_BRANCH="research/mros-program-v1"
+CONTROLLER_RETRY_FIELDS={"transport_retry","controller_transport"}
 class WorkerError(RuntimeError): pass
 
 def run_git(repo:Path,*args:str,timeout:int=120,check:bool=True)->subprocess.CompletedProcess[str]:
@@ -91,8 +92,21 @@ def validate_request_payload(payload:Any)->dict[str,Any]:
     required={"job_type","role_id","candidate_sha","packet_path","output_path","backend"};missing=sorted(required-set(payload))
     if missing:raise WorkerError("REQUEST_FIELDS_MISSING:"+",".join(missing))
     if payload.get("job_type") not in ALLOWED_JOB_TYPES:raise WorkerError("REQUEST_JOB_TYPE_INVALID")
-    extras=sorted(set(payload)-(required|{"schema_version","request_id","created_by","created_at"}))
+    allowed_meta={"schema_version","request_id","created_by","created_at"}|CONTROLLER_RETRY_FIELDS
+    extras=sorted(set(payload)-(required|allowed_meta))
     if extras:raise WorkerError("REQUEST_FIELDS_UNKNOWN:"+",".join(extras))
+    if "transport_retry" in payload:
+        retry=payload.get("transport_retry")
+        if not isinstance(retry,int) or isinstance(retry,bool) or retry<1 or retry>3:raise WorkerError("REQUEST_TRANSPORT_RETRY_INVALID")
+    if "controller_transport" in payload:
+        ctl=payload.get("controller_transport")
+        if not isinstance(ctl,dict):raise WorkerError("REQUEST_CONTROLLER_TRANSPORT_INVALID")
+        expected={"candidate_head","sprint","round","execution_role_id","packet_path","output_path","receipt_path"}
+        if set(ctl)!=expected:raise WorkerError("REQUEST_CONTROLLER_TRANSPORT_FIELDS_INVALID")
+        if ctl.get("candidate_head")!=payload.get("candidate_sha"):raise WorkerError("REQUEST_CONTROLLER_CANDIDATE_MISMATCH")
+        if ctl.get("execution_role_id")!=payload.get("role_id"):raise WorkerError("REQUEST_CONTROLLER_ROLE_MISMATCH")
+        if ctl.get("packet_path")!=payload.get("packet_path"):raise WorkerError("REQUEST_CONTROLLER_PACKET_MISMATCH")
+        if ctl.get("output_path")!=payload.get("output_path"):raise WorkerError("REQUEST_CONTROLLER_OUTPUT_MISMATCH")
     return payload
 
 def _read_json(path:Path)->dict[str,Any]|None:
@@ -128,7 +142,6 @@ def _enqueue_retry_for_role(repo:Path,remote_branch:str,job_type:str,role_id:str
     attempts=_attempts(repo,job_type,role_id,candidate)
     if not attempts:return False
     if any(_attempt_succeeded(repo,path,p) for path,p in attempts):return False
-    # A request without a receipt is still live/pending.
     if any(not receipt_path(repo,path).is_file() for path,_ in attempts):return False
     if len(attempts)>=MAX_INFRA_ATTEMPTS:raise WorkerError(f"INFRA_RETRY_EXHAUSTED:{job_type}:{role_id}:{candidate[:8]}")
     original_path,original=attempts[0];original_packet=repo/str(original.get("packet_path",""))
