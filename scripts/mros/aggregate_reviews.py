@@ -8,13 +8,13 @@ from bridge_receipt import validate_bridge_receipt
 from population_manifest import validate_population_manifest,reconcile_population
 PASS={'PASS','PASS_WITH_MINOR_FINDINGS'}
 
-def aggregate_payloads(payloads,*,candidate_head,receipts,manifest):
- manifest_errors=validate_population_manifest(manifest,candidate_head=candidate_head,job_type='reviewer')
+def aggregate_payloads(payloads,*,candidate_head,receipts,manifest,expected_sprint=None,expected_round=None,minimum_required=None,require_receipt_path=False):
+ manifest_errors=validate_population_manifest(manifest,candidate_head=candidate_head,job_type='reviewer',expected_sprint=expected_sprint,expected_round=expected_round,minimum_required=minimum_required)
  artifacts=[d for _,d in payloads if isinstance(d,dict)]
  recon=reconcile_population(manifest,artifacts) if not manifest_errors else {'expected':0,'submitted':len(artifacts),'omitted':[],'extra':[],'expected_members':{}}
  required=manifest.get('expected_count') if isinstance(manifest,dict) else None
  if isinstance(required,bool) or not isinstance(required,int):required=0
- expected_sprint=manifest.get('sprint') if isinstance(manifest,dict) else None;expected_round=manifest.get('round') if isinstance(manifest,dict) else None
+ expected_sprint=expected_sprint or (manifest.get('sprint') if isinstance(manifest,dict) else None);expected_round=expected_round or (manifest.get('round') if isinstance(manifest,dict) else None)
  reviews=[];invalid=[];seen_roles=set();seen_artifacts=set();seen_jobs=set()
  for name,d in payloads:
   errs=validate(d,candidate_head,expected_sprint,expected_round);member=recon['expected_members'].get(d.get('output_path')) if isinstance(d,dict) else None
@@ -24,6 +24,9 @@ def aggregate_payloads(payloads,*,candidate_head,receipts,manifest):
    if d.get('role')!=member.get('semantic_role'):errs.append('POPULATION_SEMANTIC_ROLE_MISMATCH')
    if d.get('packet_path')!=member.get('packet_path'):errs.append('POPULATION_PACKET_PATH_MISMATCH')
   job_id=d.get('execution_job_id') if isinstance(d,dict) else None;receipt=receipts.get(job_id) if isinstance(receipts,dict) else None
+  if not errs and require_receipt_path:
+   frozen=receipt.get('_frozen_receipt_path') if isinstance(receipt,dict) else None
+   if frozen!=member.get('receipt_path'):errs.append('POPULATION_RECEIPT_PATH_MISMATCH')
   if not errs:errs.extend(validate_bridge_receipt(receipt,d,candidate_head=candidate_head,job_type='reviewer'))
   role=d.get('role') if isinstance(d,dict) else None;artifact=d.get('artifact_id') if isinstance(d,dict) else None
   if not errs and role in seen_roles:errs.append('DUPLICATE_REVIEW_ROLE')
@@ -50,7 +53,7 @@ def load_receipts(directory:Path):
  out={}
  for f in sorted(directory.glob('*.json')):
   d=json.loads(f.read_text());job=d.get('job') if isinstance(d,dict) else None
-  if isinstance(job,dict) and isinstance(job.get('job_id'),str):out[job['job_id']]=d
+  if isinstance(job,dict) and isinstance(job.get('job_id'),str):d=dict(d);d['_frozen_receipt_path']=f.as_posix();out[job['job_id']]=d
  return out
 
 def main():
