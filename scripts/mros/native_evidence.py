@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import hashlib,re
+import hashlib,posixpath,re
 from datetime import datetime
 SHA_RE=re.compile(r'^[0-9a-f]{40}$');SHA64_RE=re.compile(r'^[0-9a-f]{64}$');JOB_RE=re.compile(r'^[0-9a-f]{32}$');PY_RE=re.compile(r'^\d+\.\d+\.\d+$')
 REPOSITORY='ramgolladi1503-sys/tradebot';BRANCH='research/mros-program-v1'
 REQUIRED=('schema_version','evidence_kind','repository','branch','head','validator','python_version','command','checks','passed','failed','exit_code','timestamp','transport','execution_job_id','execution_receipt_ref','source_output_ref','source_output_sha256','runtime_authority','broker_actions')
+
+def _canonical_repo_ref(value:object)->str|None:
+ if not isinstance(value,str) or not value.strip():return None
+ v=value.strip().replace('\\','/')
+ if v.startswith('/') or re.match(r'^[A-Za-z]:/',v):return None
+ norm=posixpath.normpath(v)
+ if norm in {'.','..'} or norm.startswith('../') or '/..' in '/'+norm:return None
+ return norm
 
 def validate_native_evidence(data:object,candidate_head:str)->list[str]:
  e=[]
@@ -40,15 +48,21 @@ def validate_native_evidence(data:object,candidate_head:str)->list[str]:
  if data.get('transport')!='mac_git_mailbox':e.append('NATIVE_TRANSPORT_INVALID')
  if not JOB_RE.fullmatch(str(data.get('execution_job_id',''))):e.append('NATIVE_EXECUTION_JOB_INVALID')
  for k in ('execution_receipt_ref','source_output_ref'):
-  if not isinstance(data.get(k),str) or not data[k].strip():e.append(f'NATIVE_{k.upper()}_INVALID')
+  if _canonical_repo_ref(data.get(k)) is None:e.append(f'NATIVE_{k.upper()}_INVALID')
  if not SHA64_RE.fullmatch(str(data.get('source_output_sha256',''))):e.append('NATIVE_SOURCE_OUTPUT_SHA256_INVALID')
  if data.get('runtime_authority')!='NONE':e.append('NATIVE_RUNTIME_AUTHORITY_INVALID')
  if data.get('broker_actions')!='NONE':e.append('NATIVE_BROKER_BOUNDARY_INVALID')
  return e
 
-def verify_native_sources(data:dict,*,source_output_text:str,receipt:dict,candidate_head:str)->list[str]:
+def verify_native_sources(data:dict,*,source_output_text:str,receipt:dict,candidate_head:str,source_output_ref:str|None=None,execution_receipt_ref:str|None=None)->list[str]:
  e=validate_native_evidence(data,candidate_head)
  if e:return e
+ declared_source=_canonical_repo_ref(data.get('source_output_ref'));declared_receipt=_canonical_repo_ref(data.get('execution_receipt_ref'))
+ actual_source=_canonical_repo_ref(source_output_ref);actual_receipt=_canonical_repo_ref(execution_receipt_ref)
+ if actual_source is None:e.append('NATIVE_SOURCE_OUTPUT_ACTUAL_REF_REQUIRED')
+ elif declared_source!=actual_source:e.append('NATIVE_SOURCE_OUTPUT_REF_MISMATCH')
+ if actual_receipt is None:e.append('NATIVE_EXECUTION_RECEIPT_ACTUAL_REF_REQUIRED')
+ elif declared_receipt!=actual_receipt:e.append('NATIVE_EXECUTION_RECEIPT_REF_MISMATCH')
  actual=hashlib.sha256(source_output_text.encode('utf-8')).hexdigest()
  if actual!=data['source_output_sha256']:e.append('NATIVE_SOURCE_OUTPUT_HASH_MISMATCH')
  job=receipt.get('job') if isinstance(receipt,dict) else None;req=receipt.get('request') if isinstance(receipt,dict) else None
