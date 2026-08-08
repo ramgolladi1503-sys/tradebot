@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "request_id": "S003-BRIDGE-RECOVERY-R103-9378d3f6",
+  "created_by": "mros-autopilot",
+  "created_at": "2026-08-08",
+  "job_type": "reviewer",
+  "role_id": "R103",
+  "candidate_sha": "9378d3f6ff9d27b603c406b695367ae8232b5451",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_BRIDGE_RECOVERY_R103.md",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_BRIDGE_RECOVERY_R103.md",
+  "backend": "codex"
+}
