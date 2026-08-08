@@ -10,7 +10,10 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_FILES = (
     ROOT / "research/evidence/sprints/S002/S002_FIXTURES.json",
     ROOT / "research/evidence/sprints/S002/S002_FIXTURES_V5_ADDENDUM.json",
+    ROOT / "research/evidence/sprints/S002/S002_FIXTURES_V6_GATE_BINDING.json",
 )
+SUPERSEDED_CASE_IDS = {"S002-C033", "S002-C035", "S002-C037", "S002-C065"}
+REQUIRED_V6_REPLACEMENTS = {"S002-C067", "S002-C070", "S002-C071", "S002-C072"}
 
 AUTH = ["Research / R", "Grade C", "Grade B", "Grade A", "Grade A+", "Rejected", "Unknown"]
 LEGAL_PROMOTIONS = {
@@ -26,6 +29,12 @@ STRONG_GRADE_REQUIREMENTS = {
     "Grade B": ("independent_attack_ref", "calibration_ref"),
     "Grade A": ("independent_attack_ref", "calibration_ref", "scientific_certification_ref", "economic_certification_ref"),
     "Grade A+": ("independent_attack_ref", "calibration_ref", "live_forward_evidence_ref", "monitoring_ref"),
+}
+PROMOTION_GATE_REQUIREMENTS = {
+    "Grade C": ("REPRODUCIBILITY",),
+    "Grade B": ("INDEPENDENT_ATTACK", "CALIBRATION"),
+    "Grade A": ("SCIENTIFIC_CERTIFICATION", "ECONOMIC_CERTIFICATION"),
+    "Grade A+": ("LIVE_FORWARD_EVIDENCE", "MONITORING"),
 }
 KNOWLEDGE_CLASSES = {"OBSERVED_FACT", "INFERENCE", "HYPOTHESIS", "SPECULATION"}
 VERDICTS = {"SUPPORTED", "REJECTED", "UNKNOWN", "INSUFFICIENT_EVIDENCE"}
@@ -126,6 +135,13 @@ def canonical_evidence_refs(value):
     return canonical
 
 
+def canonical_evidence_ref(value):
+    if not nonempty_str(value):
+        return None
+    normalized = value.strip().upper()
+    return normalized if EVIDENCE_REF.fullmatch(normalized) else None
+
+
 def promotion(inp):
     if not isinstance(inp, dict):
         return invalid_schema(can_promote=False)
@@ -178,22 +194,39 @@ def promotion(inp):
     if other_required and any(not nonempty_str(inp.get(field)) for field in other_required):
         return invalid_missing(can_promote=False)
 
-    # An authority-bearing PASS must establish the complete prior evidence set and provenance.
-    # `evidence_refs` is therefore mandatory even when the complete prior set is empty.
     if "evidence_refs" not in inp:
         return result("INVALID_INPUT", can_promote=False,
                       errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
-    old_refs = canonical_evidence_refs(inp["evidence_refs"])
-    if old_refs is None:
-        if inp["evidence_refs"] != []:
-            return invalid_schema(can_promote=False)
+    if inp["evidence_refs"] == []:
+        if cur != "Research / R":
+            return result("INVALID_INPUT", can_promote=False,
+                          errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
         old_refs = []
+    else:
+        old_refs = canonical_evidence_refs(inp["evidence_refs"])
+        if old_refs is None:
+            return invalid_schema(can_promote=False)
     if inp.get("evidence_provenance_complete") is not True:
         return result("INVALID_INPUT", can_promote=False,
                       errors=["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"])
     if set(old_refs).intersection(new_refs):
         return result("FAIL", can_promote=False,
                       errors=["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], rules=["RC-002"])
+
+    required_gates = PROMOTION_GATE_REQUIREMENTS.get(req, ())
+    bindings = inp.get("new_evidence_gate_bindings")
+    if not isinstance(bindings, dict) or any(gate not in bindings for gate in required_gates):
+        return invalid_missing(can_promote=False)
+    allowed_gates = {g for gates in PROMOTION_GATE_REQUIREMENTS.values() for g in gates}
+    if any(gate not in allowed_gates for gate in bindings):
+        return invalid_schema(can_promote=False)
+    for gate in required_gates:
+        bound_ref = canonical_evidence_ref(bindings.get(gate))
+        if bound_ref is None:
+            return invalid_schema(can_promote=False)
+        if bound_ref not in new_refs:
+            return result("FAIL", can_promote=False,
+                          errors=["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], rules=["RC-002"])
 
     return result("PASS", can_promote=True)
 
@@ -257,8 +290,6 @@ def validate_denominator_semantics(inp):
             return result("FAIL", errors=["MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION", "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED"], rules=["RC-009"])
         return None
 
-    # EXPLORATORY_POST_HOC semantically asserts that outcomes have been inspected.
-    # `false` is contradictory and must never be accepted as a way around post-hoc controls.
     if mode == "EXPLORATORY_POST_HOC" and outcomes_inspected is not True:
         return invalid_schema()
     if mode == "EXPLORATORY_POST_HOC" and changed:
@@ -285,7 +316,6 @@ def constitutional(inp):
     if not isinstance(inp, dict) or not set(inp).intersection(CONSTITUTIONAL_KEYS):
         return invalid_missing()
 
-    # Dependent-only partial requests are indeterminate and must fail closed.
     dependencies = (
         ("destroyers", "material_claim"),
         ("completion_evidence_refs", "completion_claim"),
@@ -380,10 +410,13 @@ def load_cases():
         if not isinstance(payload, dict) or not isinstance(payload.get("cases"), list):
             print(f"FIXTURE_SCHEMA_FAIL | {fixture_path.name}")
             raise SystemExit(2)
-        cases.extend(payload["cases"])
+        cases.extend(case for case in payload["cases"] if case.get("case_id") not in SUPERSEDED_CASE_IDS)
     ids = [case.get("case_id") for case in cases if isinstance(case, dict)]
     if len(ids) != len(set(ids)):
         print("FIXTURE_DUPLICATE_CASE_ID")
+        raise SystemExit(2)
+    if not REQUIRED_V6_REPLACEMENTS.issubset(set(ids)):
+        print("FIXTURE_V6_REPLACEMENT_MISSING")
         raise SystemExit(2)
     return cases
 
