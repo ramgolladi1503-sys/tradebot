@@ -1,0 +1,127 @@
+{
+  "assurance_tier": "FAST",
+  "authority": "Research / R",
+  "candidate_head": "9b2e6e853444dae0c75a9a57fce910b3389cc6f1",
+  "critical": 0,
+  "decision": "REPAIR_REQUIRED",
+  "excluded_reviews": 0,
+  "expected_reviews": 3,
+  "extra_reviews": [],
+  "invalid": [],
+  "invalid_reviews": 0,
+  "major": 2,
+  "manifest_errors": [],
+  "minimum_valid_reviews": 3,
+  "minor": 0,
+  "omitted_reviews": [],
+  "pass_or_minor": 1,
+  "population_manifest": "research/evidence/sprints/S003/agent_queue/manifests/S003_R005_REVIEW_POPULATION.json",
+  "review_round": "R005",
+  "reviews": [
+    {
+      "artifact_id": "S003_R005_R01_contract_compliance",
+      "broker_actions": "NONE",
+      "candidate_head": "9b2e6e853444dae0c75a9a57fce910b3389cc6f1",
+      "critical": 0,
+      "evidence_refs": [
+        "scripts/mros/advance_program.py:95-105",
+        "git show 9b2e6e853444dae0c75a9a57fce910b3389cc6f1 -- scripts/mros/advance_program.py"
+      ],
+      "execution_job_id": "2ad279e8d5424ecb8f567b803d8a552c",
+      "execution_role_id": "R01",
+      "findings": [],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 0,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R005_R01.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R005_R01.md",
+      "role": "contract_compliance",
+      "round": "R005",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "PASS"
+    },
+    {
+      "artifact_id": "S003-R005-R02",
+      "broker_actions": "NONE",
+      "candidate_head": "9b2e6e853444dae0c75a9a57fce910b3389cc6f1",
+      "critical": 0,
+      "evidence_refs": [
+        "scripts/mros/advance_program.py",
+        "scripts/mros/population_git_trust.py",
+        "scripts/mros/aggregate_reviews.py",
+        "scripts/mros/aggregate_audits.py"
+      ],
+      "execution_job_id": "ef26c40ca29741a88ed5b760b83f47d9",
+      "execution_role_id": "R02",
+      "findings": [
+        {
+          "evidence": "scripts/mros/advance_program.py::_validate_aggregate checks only that population_manifest is non-null. _compare_recomputed does not compare population_manifest, so an aggregate can carry a stale or alternate manifest reference while validation uses a different trusted manifest path.",
+          "falsifier": "A test that changes review or audit population_manifest to a stale or non-canonical path while leaving the recomputed payload unchanged must cause authorization to fail.",
+          "finding_id": "R02-MAJOR-001",
+          "recommended_repair_scope": "Require exact equality between each aggregate's population_manifest and the canonical manifest path validated by validate_trusted_population; add malformed/stale-reference regression tests for both review and audit aggregates.",
+          "requirement": "Aggregated review and audit payloads must bind their declared population-manifest reference to the canonical, independently validated manifest used for recomputation.",
+          "severity": "MAJOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 1,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R005_R02.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R005_R02.md",
+      "role": "negative_control",
+      "round": "R005",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "REPAIR_REQUIRED"
+    },
+    {
+      "artifact_id": "S003_R005_R03_adversarial_red_team",
+      "broker_actions": "NONE",
+      "candidate_head": "9b2e6e853444dae0c75a9a57fce910b3389cc6f1",
+      "critical": 0,
+      "evidence_refs": [
+        "scripts/mros/population_git_trust.py:26-58",
+        "scripts/mros/population_git_trust.py:60-76",
+        "scripts/mros/advance_program.py:99-107",
+        "scripts/mros/bridge_receipt.py:7-75"
+      ],
+      "execution_job_id": "352bdddf53584727a84f7eb64c0026ef",
+      "execution_role_id": "R03",
+      "findings": [
+        {
+          "evidence": "scripts/mros/population_git_trust.py validates one immutable Git-history entry for the population manifest and verifies request provenance, but load_exact_receipts() reads receipt_path objects from the mutable current QUEUE_REF without checking that each receipt existed at the manifest freeze commit, has exactly one immutable origin, or is otherwise bound to the frozen population. A post-freeze or replaced receipt can therefore satisfy validate_bridge_receipt() and be used by _validate_aggregate() for advancement authorization.",
+          "falsifier": "Demonstrate an independent trusted-queue test in which every receipt_path is verified to exist at the manifest freeze commit, is content-addressed or otherwise immutable, and post-freeze receipt creation/replacement causes authorization to fail closed.",
+          "finding_id": "R03-MAJOR-001",
+          "recommended_repair_scope": "Harden validate_trusted_population/load_exact_receipts to bind each receipt to the frozen manifest commit and immutable Git provenance, reject post-freeze or ambiguous receipt history, and add regression tests proving forged or post-freeze receipts cannot authorize advancement.",
+          "requirement": "Frozen population evidence, including execution receipts, must be immutable and bound to the frozen population before execution.",
+          "severity": "MAJOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 1,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R005_R03.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R005_R03.md",
+      "role": "adversarial_red_team",
+      "round": "R005",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "REPAIR_REQUIRED"
+    }
+  ],
+  "runtime_authority": "NONE",
+  "submitted_reviews": 3,
+  "transport": "mac_git_mailbox",
+  "unknown": 0,
+  "valid_reviews": 3
+}
