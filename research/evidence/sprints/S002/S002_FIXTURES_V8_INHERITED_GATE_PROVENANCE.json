@@ -1,7 +1,6 @@
 {
   "schema_version": "mros-s002-fixtures-v8-inherited-gate-provenance",
-  "purpose": "Close 8E872-V2-F-001 by enforcing canonical inherited mandatory gate references, prior-provenance membership, exact requested-gate binding schema, and a clean replacement for historical C073 under v8 fail-closed precedence.",
-  "supersedes_case_ids": ["S002-C073"],
+  "purpose": "Close 8E872-V2-F-001 by enforcing canonical inherited mandatory gate references, prior-provenance membership, and exact requested-gate binding schema.",
   "cases": [
     {
       "case_id": "S002-C087",
@@ -95,29 +94,6 @@
         "can_promote": false,
         "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
         "violated_rules": []
-      }
-    },
-    {
-      "case_id": "S002-C091",
-      "operation": "VALIDATE_PROMOTION",
-      "input": {
-        "authority_current": "Grade C",
-        "authority_requested": "Grade B",
-        "evidence_refs": ["EVID-PRIOR-GRADEC", "EVID-ATTACK-OLD", "EVID-CAL-OLD"],
-        "new_evidence_refs": ["EVID-CAL-NEW", "EVID-UNRELATED-NEW"],
-        "evidence_provenance_complete": true,
-        "independent_attack_ref": "EVID-ATTACK-OLD",
-        "calibration_ref": "EVID-CAL-NEW",
-        "new_evidence_gate_bindings": {
-          "INDEPENDENT_ATTACK": "EVID-ATTACK-OLD",
-          "CALIBRATION": "EVID-CAL-NEW"
-        }
-      },
-      "expected": {
-        "status": "FAIL",
-        "can_promote": false,
-        "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"],
-        "violated_rules": ["RC-002"]
       }
     }
   ]
