@@ -17,6 +17,7 @@ from mros_agent_bridge import (  # noqa: E402
     BackendSpec,
     BridgeConfig,
     BridgeError,
+    JobRecord,
     MrosAgentBridge,
 )
 from mros_agent_git_worker import validate_request_payload  # noqa: E402
@@ -109,6 +110,38 @@ def test_isolated_reviewer_job_creates_artifact_and_removes_worktree(tmp_path: P
     health = bridge.health()
     assert health["runtime_authority"] == "NONE"
     assert health["broker_actions_allowed"] is False
+
+
+def test_worktree_creation_retries_transient_git_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge, sha, _ = _bridge(tmp_path)
+    real_run = subprocess.run
+    attempts = 0
+
+    def flaky_run(*args, **kwargs):
+        nonlocal attempts
+        cmd = list(args[0]) if args else []
+        if len(cmd) >= 3 and cmd[:3] == ["git", "worktree", "add"]:
+            attempts += 1
+            if attempts == 1:
+                return subprocess.CompletedProcess(cmd, 128, stdout="fatal: transient git metadata lock\n")
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", flaky_run)
+    record = JobRecord(
+        job_id="1" * 32,
+        job_type="reviewer",
+        role_id="R01",
+        candidate_sha=sha,
+        packet_path="research/packets/R01.md",
+        output_path="research/results/retry.md",
+        backend="fake",
+    )
+    worktree = bridge._create_worktree(record)
+    try:
+        assert attempts == 2
+        assert worktree.is_dir()
+    finally:
+        bridge._remove_worktree(worktree)
 
 
 def test_rejects_reviewer_auditor_role_mismatch(tmp_path: Path) -> None:
