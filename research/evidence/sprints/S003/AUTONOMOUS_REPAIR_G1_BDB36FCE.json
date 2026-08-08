@@ -1,0 +1,32 @@
+{
+  "schema_version": "mros-controller-repair-execution-v1",
+  "sprint": "S003",
+  "generation": 1,
+  "source_round": "R005",
+  "source_kind": "review",
+  "repair_contract": "research/evidence/sprints/S003/S003_R005_REVIEW_REPAIR_CONTRACT.json",
+  "failed_head": "9b2e6e853444dae0c75a9a57fce910b3389cc6f1",
+  "repair_base": "9b2e6e853444dae0c75a9a57fce910b3389cc6f1",
+  "code_commits": [
+    "d1d1334c869be652e146bb9b5d088613c3a0f04b",
+    "accf7f0b4f93a8c84714d8b378b8a2affc4185d7",
+    "bdb36fcec095f57b7f64597c122cd228f43f0149"
+  ],
+  "changed_paths": [
+    "scripts/mros/population_git_trust.py",
+    "scripts/mros/advance_program.py",
+    "tests/mros/test_s003_r005_provenance_regressions.py"
+  ],
+  "root_causes_repaired": [
+    "aggregate population_manifest reference was not bound to the canonical frozen manifest path used for validation",
+    "receipt provenance did not require a single immutable Git origin descending from the frozen population and matching frozen member identity"
+  ],
+  "regression_tests_added": [
+    "stale review population_manifest reference is rejected",
+    "receipt modified after its original Git commit is rejected as non-immutable"
+  ],
+  "repair_mode": "controller_direct_bounded_repair",
+  "runtime_authority": "NONE",
+  "broker_actions": "NONE",
+  "m9_status": "NOT_STARTED"
+}
