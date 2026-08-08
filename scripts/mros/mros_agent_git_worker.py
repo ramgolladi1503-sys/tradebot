@@ -162,11 +162,18 @@ def _enqueue_retry_for_role(repo:Path,remote_branch:str,job_type:str,role_id:str
     run_git(repo,"fetch","origin",remote_branch,timeout=180);run_git(repo,"rebase",f"origin/{remote_branch}",timeout=180);run_git(repo,"push","origin",f"HEAD:{remote_branch}",timeout=180)
     return True
 
-def enqueue_needed_retries(repo:Path,remote_branch:str)->int:
-    count=0
+def enqueue_needed_retries(repo:Path,remote_branch:str)->tuple[int,list[str]]:
+    count=0; exhausted=[]
     for job_type,role_id,candidate in _frozen_roles(repo):
-        if _enqueue_retry_for_role(repo,remote_branch,job_type,role_id,candidate):count+=1
-    return count
+        try:
+            if _enqueue_retry_for_role(repo,remote_branch,job_type,role_id,candidate):count+=1
+        except WorkerError as exc:
+            detail=str(exc)
+            if detail.startswith("INFRA_RETRY_EXHAUSTED:"):
+                exhausted.append(detail)
+                continue
+            raise
+    return count,exhausted
 
 def write_receipt(path:Path,*,request:dict[str,Any],record:dict[str,Any],worker_id:str)->None:
     path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps({"schema_version":1,"worker_id":worker_id,"request":request,"job":record,"runtime_authority":"NONE","broker_actions_allowed":False},sort_keys=True,indent=2)+"\n",encoding="utf-8")
@@ -204,7 +211,7 @@ def main()->int:
     try:
         while True:
             try:
-                sync_queue(repo,c.state_root,a.queue_branch);retry_count=enqueue_needed_retries(repo,a.queue_branch)
+                sync_queue(repo,c.state_root,a.queue_branch);retry_count,retry_exhausted=enqueue_needed_retries(repo,a.queue_branch)
                 if retry_count:sync_queue(repo,c.state_root,a.queue_branch)
                 processed=[]
                 for r in list_requests(repo):
@@ -215,7 +222,7 @@ def main()->int:
                     except (BridgeError,WorkerError,subprocess.TimeoutExpired,OSError,ValueError,json.JSONDecodeError) as exc:
                         processed.append({"request":r.name,"status":"REQUEST_REJECTED","error":f"{type(exc).__name__}:{exc}"})
                         print(json.dumps({"status":"REQUEST_REJECTED","request":r.name,"error":f"{type(exc).__name__}:{exc}"},sort_keys=True),file=sys.stderr,flush=True)
-                _write_worker_health(c.state_root,status="RUNNING",processed=len(processed));print(json.dumps({"status":"POLL_COMPLETE","processed":processed,"retries_enqueued":retry_count},sort_keys=True),flush=True)
+                _write_worker_health(c.state_root,status="RUNNING",processed=len(processed));print(json.dumps({"status":"POLL_COMPLETE","processed":processed,"retries_enqueued":retry_count,"retry_exhausted":retry_exhausted},sort_keys=True),flush=True)
             except (BridgeError,WorkerError,subprocess.TimeoutExpired,OSError,ValueError,json.JSONDecodeError) as exc:
                 _write_worker_health(c.state_root,status="BLOCKED",error=f"{type(exc).__name__}:{exc}");print(json.dumps({"status":"WORKER_BLOCKED","error":f"{type(exc).__name__}:{exc}"}),file=sys.stderr,flush=True)
                 if a.once:return 2
