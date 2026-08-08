@@ -1,6 +1,6 @@
 {
   "schema_version": "mros-s002-fixtures-v9-classification-schema",
-  "purpose": "Close 7E7A-F-001 and 7E7A-F-002 by enforcing malformed inherited mandatory-ref type precedence and fail-closed classification signals.",
+  "purpose": "Close 7E7A-F-001 and 7E7A-F-002 by enforcing malformed inherited mandatory-ref type precedence, fail-closed classification signals, and canonical classification provenance refs.",
   "cases": [
     {
       "case_id": "S002-C091",
@@ -73,6 +73,36 @@
       "input": {
         "statement_text": "Falsifiable hypothesis with garbage metadata.",
         "classification_signals": ["FALSIFIABLE_UNVERIFIED", "GARBAGE"]
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "knowledge_class": null,
+        "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
+        "violated_rules": []
+      }
+    },
+    {
+      "case_id": "S002-C095",
+      "operation": "CLASSIFY_STATEMENT",
+      "input": {
+        "statement_text": "Observed fact with malformed provenance identity.",
+        "classification_signals": ["DIRECT_MEASUREMENT"],
+        "evidence_refs": ["not-an-evid"]
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "knowledge_class": null,
+        "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
+        "violated_rules": []
+      }
+    },
+    {
+      "case_id": "S002-C096",
+      "operation": "CLASSIFY_STATEMENT",
+      "input": {
+        "statement_text": "Inference with malformed provenance identity.",
+        "classification_signals": ["DERIVED_REASONING"],
+        "evidence_refs": ["bad-ref"]
       },
       "expected": {
         "status": "INVALID_INPUT",
