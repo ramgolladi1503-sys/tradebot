@@ -1,0 +1,45 @@
+{
+  "aggregate_decision": "REPAIR_REQUIRED",
+  "blocking_findings": [
+    {
+      "evidence": "scripts/mros/population_git_trust.py:100-101 accepts a receipt when `git merge-base --is-ancestor freeze origin` succeeds. This accepts an origin commit descending from the freeze commit, including receipts created after the population was frozen. The R005 repair contract explicitly requires post-freeze receipt creation to fail closed.",
+      "falsifier": "Create the manifest in commit F, create a valid receipt in descendant commit R, and run load_exact_receipts with QUEUE_REF at R. The current implementation accepts the receipt instead of emitting a provenance error.",
+      "finding_id": "R01-MAJOR-001",
+      "recommended_repair_scope": "Require the receipt origin commit to be an ancestor of the manifest freeze commit, or verify the receipt path exists in the freeze commit tree; add a regression test for a newly created post-freeze receipt and an independently modified post-freeze receipt.",
+      "requirement": "Every receipt must be proven to exist at or before the frozen population manifest commit; post-freeze receipt creation must fail closed.",
+      "severity": "MAJOR"
+    },
+    {
+      "evidence": "scripts/mros/program_context.py::validate_acceptance_trace validates only schema_version, sprint, candidate_head, authority/runtime/M9 labels, criterion status, and non-empty string evidence_refs. scripts/mros/advance_program.py::load_and_validate_context does not compare trace criterion IDs or evidence_refs with S003_ACCEPTANCE_CONTRACT.json or load/hash the referenced evidence. authorize() separately loads only acceptance IDs from the frozen contract for audit coverage, so an attacker-controlled all-PASS acceptance trace with arbitrary criterion IDs/evidence_refs can pass context validation and remain part of the advancement input.",
+      "falsifier": "Provide a structurally valid acceptance trace for S003 with all criteria marked PASS but substitute criterion IDs and nonexistent or unrelated evidence_refs; authorization must reject it specifically for contract-ID and evidence-resolution/provenance mismatches.",
+      "finding_id": "S003-R006-R03-F001",
+      "recommended_repair_scope": "Bind acceptance-trace criteria exactly to the frozen S003 acceptance contract, reject missing/extra/duplicate IDs, resolve each evidence_ref from an approved repository root, verify existence and immutable content identity, and fail closed on stale, nonexistent, or unrelated evidence.",
+      "requirement": "Advancement must validate the supplied acceptance trace against the frozen S003 acceptance contract and resolve or cryptographically verify every referenced evidence artifact.",
+      "severity": "MAJOR"
+    }
+  ],
+  "failed_head": "bfae7a6cdea9f4af9a39bcbf548b4c944fdeeda5",
+  "invalid_artifacts": [],
+  "m9_status": "NOT_STARTED",
+  "repair_scope": {
+    "allowed": [
+      "scripts/mros/",
+      "tests/mros/",
+      "research/review_board/",
+      "research/audit_board/"
+    ],
+    "forbidden": [
+      "research/program/",
+      "runtime/strategy/risk/execution/broker code",
+      "weaken fixtures or acceptance criteria",
+      "begin M9",
+      "create runtime authority"
+    ]
+  },
+  "root_cause_instruction": "Cluster related findings and repair common causes once; preserve adaptive routine assurance and explicit full-board authority boundaries.",
+  "runtime_authority": "NONE",
+  "schema_version": "mros-repair-contract-v2",
+  "source_kind": "review",
+  "source_round": "R006",
+  "sprint": "S003"
+}

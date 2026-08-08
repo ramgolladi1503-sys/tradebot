@@ -1,0 +1,136 @@
+{
+  "assurance_tier": "FAST",
+  "authority": "Research / R",
+  "candidate_head": "bfae7a6cdea9f4af9a39bcbf548b4c944fdeeda5",
+  "critical": 0,
+  "decision": "REPAIR_REQUIRED",
+  "excluded_reviews": 0,
+  "expected_reviews": 3,
+  "extra_reviews": [],
+  "invalid": [],
+  "invalid_reviews": 0,
+  "major": 2,
+  "manifest_errors": [],
+  "minimum_valid_reviews": 3,
+  "minor": 1,
+  "omitted_reviews": [],
+  "pass_or_minor": 1,
+  "population_manifest": "research/evidence/sprints/S003/agent_queue/manifests/S003_R006_REVIEW_POPULATION.json",
+  "review_round": "R006",
+  "reviews": [
+    {
+      "artifact_id": "S003_R006_R01_contract_compliance",
+      "broker_actions": "NONE",
+      "candidate_head": "bfae7a6cdea9f4af9a39bcbf548b4c944fdeeda5",
+      "critical": 0,
+      "evidence_refs": [
+        "scripts/mros/population_git_trust.py:86-111",
+        "research/evidence/sprints/S003/S003_R005_REVIEW_REPAIR_CONTRACT.json:13-15",
+        "research/evidence/sprints/S003/AUTONOMOUS_REPAIR_G1_BDB36FCE.json"
+      ],
+      "execution_job_id": "b0397389f704413f808070579fcb1557",
+      "execution_role_id": "R01",
+      "findings": [
+        {
+          "evidence": "scripts/mros/population_git_trust.py:100-101 accepts a receipt when `git merge-base --is-ancestor freeze origin` succeeds. This accepts an origin commit descending from the freeze commit, including receipts created after the population was frozen. The R005 repair contract explicitly requires post-freeze receipt creation to fail closed.",
+          "falsifier": "Create the manifest in commit F, create a valid receipt in descendant commit R, and run load_exact_receipts with QUEUE_REF at R. The current implementation accepts the receipt instead of emitting a provenance error.",
+          "finding_id": "R01-MAJOR-001",
+          "recommended_repair_scope": "Require the receipt origin commit to be an ancestor of the manifest freeze commit, or verify the receipt path exists in the freeze commit tree; add a regression test for a newly created post-freeze receipt and an independently modified post-freeze receipt.",
+          "requirement": "Every receipt must be proven to exist at or before the frozen population manifest commit; post-freeze receipt creation must fail closed.",
+          "severity": "MAJOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 1,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R006_R01.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R006_R01.md",
+      "role": "contract_compliance",
+      "round": "R006",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "REPAIR_REQUIRED"
+    },
+    {
+      "artifact_id": "S003_R006_R02_REVIEW",
+      "broker_actions": "NONE",
+      "candidate_head": "bfae7a6cdea9f4af9a39bcbf548b4c944fdeeda5",
+      "critical": 0,
+      "evidence_refs": [
+        "scripts/mros/population_git_trust.py",
+        "scripts/mros/advance_program.py",
+        "tests/mros/test_s003_r005_provenance_regressions.py",
+        "research/review_board/REVIEW_SCHEMA.json"
+      ],
+      "execution_job_id": "9dce8fa0edf24a12875b5d6f37e0bc71",
+      "execution_role_id": "R02",
+      "findings": [
+        {
+          "evidence": "scripts/mros/population_git_trust.py load_exact_receipts() accepts any JSON value from _show_json(); when the value is not a dictionary, it records REQUEST_INVALID but then unconditionally evaluates r.get('job'), causing AttributeError for arrays, strings, null, or scalars.",
+          "falsifier": "Add a test invoking load_exact_receipts() with a canonical receipt whose JSON root is [] or null; if it returns a structured error list rather than raising AttributeError, this finding is falsified.",
+          "finding_id": "R02-MINOR-001",
+          "recommended_repair_scope": "Add an explicit root-object guard before all receipt field access, emit a typed RECEIPT_MEMBER_<i>_OBJECT_REQUIRED error, and add malformed-root regression tests. Do not alter acceptance, quorum, or runtime authority semantics.",
+          "requirement": "Malformed receipt JSON must be rejected through an explicit validation error without an uncaught exception.",
+          "severity": "MINOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 0,
+      "minor": 1,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R006_R02.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R006_R02.md",
+      "role": "negative_control",
+      "round": "R006",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "PASS_WITH_MINOR_FINDINGS"
+    },
+    {
+      "artifact_id": "S003-R006-R03-adversarial-red-team-review",
+      "broker_actions": "NONE",
+      "candidate_head": "bfae7a6cdea9f4af9a39bcbf548b4c944fdeeda5",
+      "critical": 0,
+      "evidence_refs": [
+        "scripts/mros/program_context.py",
+        "scripts/mros/advance_program.py",
+        "research/evidence/sprints/S003/S003_ACCEPTANCE_CONTRACT.json"
+      ],
+      "execution_job_id": "62e4cdbf3c8d47e98e52c28ef3bc39ce",
+      "execution_role_id": "R03",
+      "findings": [
+        {
+          "evidence": "scripts/mros/program_context.py::validate_acceptance_trace validates only schema_version, sprint, candidate_head, authority/runtime/M9 labels, criterion status, and non-empty string evidence_refs. scripts/mros/advance_program.py::load_and_validate_context does not compare trace criterion IDs or evidence_refs with S003_ACCEPTANCE_CONTRACT.json or load/hash the referenced evidence. authorize() separately loads only acceptance IDs from the frozen contract for audit coverage, so an attacker-controlled all-PASS acceptance trace with arbitrary criterion IDs/evidence_refs can pass context validation and remain part of the advancement input.",
+          "falsifier": "Provide a structurally valid acceptance trace for S003 with all criteria marked PASS but substitute criterion IDs and nonexistent or unrelated evidence_refs; authorization must reject it specifically for contract-ID and evidence-resolution/provenance mismatches.",
+          "finding_id": "S003-R006-R03-F001",
+          "recommended_repair_scope": "Bind acceptance-trace criteria exactly to the frozen S003 acceptance contract, reject missing/extra/duplicate IDs, resolve each evidence_ref from an approved repository root, verify existence and immutable content identity, and fail closed on stale, nonexistent, or unrelated evidence.",
+          "requirement": "Advancement must validate the supplied acceptance trace against the frozen S003 acceptance contract and resolve or cryptographically verify every referenced evidence artifact.",
+          "severity": "MAJOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 1,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R006_R03.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R006_R03.md",
+      "role": "adversarial_red_team",
+      "round": "R006",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "REPAIR_REQUIRED"
+    }
+  ],
+  "runtime_authority": "NONE",
+  "submitted_reviews": 3,
+  "transport": "mac_git_mailbox",
+  "unknown": 0,
+  "valid_reviews": 3
+}
