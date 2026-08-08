@@ -1,0 +1,80 @@
+{
+  "aggregate_decision": "REVIEW_DISAGREEMENT_REQUIRES_ADJUDICATION",
+  "blocking_findings": [
+    {
+      "evidence": "The candidate HEAD is e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7, but the required packet path research/evidence/sprints/S003/agent_queue/packets/S003_R002_R01.md is absent from the repository. The candidate diff only adds S003_BOARD_BOOTSTRAP_R001_REPAIR_CONTRACT.md; no R002 population manifest, native exact-head calibration evidence, or R002 execution receipt is present at this HEAD.",
+      "falsifier": "Provide the frozen R002 packet, exact-head native calibration artifact, frozen R002 population manifest, and matching Mac Git-mailbox receipt artifacts in the repository, then rerun this contract review.",
+      "finding_id": "S003-R002-R01-U001",
+      "recommended_repair_scope": "Do not authorize or aggregate this review round until the missing packet and exact-head, receipt-bound R002 evidence are committed and mechanically validated.",
+      "requirement": "The exact candidate must be independently reviewable against the frozen R002 packet and all required candidate-bound evidence.",
+      "severity": "UNKNOWN"
+    },
+    {
+      "evidence": "scripts/mros/validate_review.py:28-29 accepts any syntactically valid S###/R### values rather than requiring S003/R002; lines 44-45 compare counts without rejecting booleans, and Python bool values can satisfy integer count equality. validate_audit.py has the same sprint and count-type gaps at lines 28-29 and 47-48.",
+      "falsifier": "A validator test that supplies sprint S999 or round R999, or supplies critical=true for one CRITICAL finding, must return validation errors. The current implementation does not establish those failures.",
+      "finding_id": "R02-F001",
+      "recommended_repair_scope": "Bind validators to the supplied frozen sprint/round and explicitly require type(value) is int for all severity counters; add malformed, wrong-enum, wrong-transition, and boolean-count tests.",
+      "requirement": "Review and audit validators must reject malformed typed counts and enforce the frozen sprint/round contract.",
+      "severity": "MAJOR"
+    },
+    {
+      "evidence": "scripts/mros/native_evidence.py:42-44 only checks that execution_receipt_ref and source_output_ref are non-empty strings. verify_native_sources checks the source text hash and selected receipt fields, but does not resolve or compare either declared reference to the supplied receipt/output path.",
+      "falsifier": "Provide valid native metadata with execution_receipt_ref and source_output_ref naming unrelated artifacts while supplying a receipt and source text that otherwise pass; verification should reject the mismatch but the current code has no reference-binding check.",
+      "finding_id": "R02-F002",
+      "recommended_repair_scope": "Require canonical, repository-relative receipt/output references and compare them to the actual supplied artifact paths before accepting native evidence; add wrong-reference and path-traversal tests.",
+      "requirement": "Native evidence verification must bind the declared execution receipt and source-output references to the actual receipt/output artifacts.",
+      "severity": "MAJOR"
+    },
+    {
+      "evidence": "scripts/mros/aggregate_reviews.py and aggregate_audits.py enumerate only files matching reviewer-*.json or auditor-*.json. Files placed in the review or audit directory under any other filename are never loaded, never included in submitted/extra denominators, and cannot trigger the required undeclared-extra population block. The reconciliation therefore depends on a filename glob that is not itself part of the frozen population contract.",
+      "falsifier": "Place an additional valid-looking artifact with a non-matching filename in the relevant directory while retaining the ten declared artifacts. A correct implementation must detect it as an undeclared extra and return INCOMPLETE_OR_UNDECLARED_*_POPULATION; the current loader ignores it and can return PASS.",
+      "finding_id": "R06-MAJOR-001",
+      "recommended_repair_scope": "Make artifact discovery manifest-driven or enumerate all JSON artifacts and reconcile every discovered artifact against the frozen manifest before validation. Preserve explicit discovered, submitted, omitted, extra, invalid, and duplicate counts for both reviewer and auditor aggregation; add calibration cases covering non-matching filenames and duplicate physical artifacts.",
+      "requirement": "All declared population members and undeclared artifacts must be conserved and reconciled; post-hoc omission or hidden multiplicity must block aggregation.",
+      "severity": "MAJOR"
+    },
+    {
+      "evidence": "research/review_board/REVIEW_SCHEMA.json sets additionalProperties=false, but scripts/mros/validate_review.py and scripts/mros/validate_audit.py manually validate only required fields and never reject extra keys. An artifact containing arbitrary undeclared fields is therefore accepted by the runtime validators and aggregators.",
+      "falsifier": "Add an unknown top-level property to an otherwise valid review and audit artifact and run the corresponding validators; both must reject it before aggregation.",
+      "finding_id": "R08-QA-001",
+      "recommended_repair_scope": "Implement strict schema validation or equivalent explicit unknown-field rejection in both runtime validators, with negative tests for extra top-level and nested finding fields.",
+      "requirement": "Runtime validation must enforce the frozen strict schema, including rejection of undeclared properties.",
+      "severity": "MAJOR"
+    },
+    {
+      "evidence": "scripts/mros/calibrate_review_audit_board_v2.py constructs all calibration artifacts through board_calibration_fixtures.py and invokes the same production validators/aggregators directly. The 32 cases do not test several required boundary classes: wrong receipt path/reference, wrong receipt job type, missing receipt schema/version, missing receipt timestamps, malformed non-object JSON, undeclared extra fields, or invalid acceptance-criterion identifiers. The reported 32/32 result consequently proves only the listed mutations, not the frozen attack classes in CALIBRATION_POLICY.yaml.",
+      "falsifier": "Supply independently authored fixtures for each omitted boundary and verify that wrong receipt references/types, malformed JSON/object shapes, undeclared fields, and invalid acceptance IDs are rejected while valid controls remain accepted.",
+      "finding_id": "R08-QA-002",
+      "recommended_repair_scope": "Create externally authored, content-addressed calibration fixtures per attack class; add explicit denominator accounting and tests covering receipt/reference, malformed-input, strict-schema, and acceptance-identifier equivalence classes.",
+      "requirement": "Calibration must exercise independent boundary-equivalence classes rather than only single-field mutations of fixtures produced by the same helper layer.",
+      "severity": "MAJOR"
+    },
+    {
+      "evidence": "scripts/mros/advance_program.py::authorize accepts caller-supplied review and audit dictionaries and checks only candidate_head, decision, critical/major/unknown counts, runtime_authority, and authority. It does not validate aggregate schemas, minimum valid population, manifest_errors, omitted/extra artifacts, invalid_reviews/invalid_audits, or receipt-bound evidence. A fabricated aggregate with the correct candidate_head, decision=PASS, zero blocking counts, runtime_authority=NONE, and authority=Research / R is accepted without any reviewer or auditor evidence.",
+      "falsifier": "Invoke authorize with fabricated PASS review/audit aggregates containing no reviews or audits, while supplying otherwise valid native and context inputs. The function returns advance=true, demonstrating that Board advancement can be authorized without satisfying S003-AC-004 through S003-AC-008.",
+      "finding_id": "R10-CRITICAL-001",
+      "recommended_repair_scope": "Make advance_program validate the complete review and audit aggregate contracts or recompute aggregation from frozen manifests, artifacts, receipts, and native evidence. Require minimum valid counts, zero invalid/omitted/extra artifacts, empty manifest errors, complete acceptance coverage, and receipt/provenance validation before allowing advancement.",
+      "requirement": "Advancement must independently validate review and audit aggregate integrity, quorum, manifests, invalid-artifact counts, and evidence provenance before authorization.",
+      "severity": "CRITICAL"
+    }
+  ],
+  "failed_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+  "repair_scope": {
+    "allowed": [
+      "minimum changes required to resolve listed blocking findings"
+    ],
+    "forbidden": [
+      "weaken_fixture",
+      "change_acceptance_criteria",
+      "reuse_prior_head_reviews",
+      "begin_next_sprint",
+      "begin_M2",
+      "begin_M9",
+      "create_runtime_authority"
+    ]
+  },
+  "review_round": "R002",
+  "runtime_authority": "NONE",
+  "schema_version": "mros-repair-contract-v1",
+  "sprint": "S003"
+}

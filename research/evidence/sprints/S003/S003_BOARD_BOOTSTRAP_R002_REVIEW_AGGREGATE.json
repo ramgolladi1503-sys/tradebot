@@ -1,0 +1,513 @@
+{
+  "attempt_selection": {
+    "R01": {
+      "job_id": "0cc8958973cf45cd82d2aa362080e7bf",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R01.json",
+      "successful_attempts_seen": 1
+    },
+    "R02": {
+      "job_id": "936354d7f4534d5c9b35b70921969897",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R02.json",
+      "successful_attempts_seen": 1
+    },
+    "R03": {
+      "job_id": "d3330c69ad4b43ad892fbd2b0bd8b9bf",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R03_RETRY1.json",
+      "successful_attempts_seen": 1
+    },
+    "R04": {
+      "job_id": "7465c4d6fb2f4fe09d8202aae0f63c52",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R04_RETRY1.json",
+      "successful_attempts_seen": 1
+    },
+    "R05": {
+      "job_id": "e2adf08b13704d338225ed21b2e9a61a",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R05_RETRY1.json",
+      "successful_attempts_seen": 1
+    },
+    "R06": {
+      "job_id": "a7cbdc9ff66c475da9dd464889ac25e1",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R06.json",
+      "successful_attempts_seen": 1
+    },
+    "R07": {
+      "job_id": "a2c15a86aed343cca3dbd8f112876467",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R07_RETRY1.json",
+      "successful_attempts_seen": 1
+    },
+    "R08": {
+      "job_id": "5ffa12aad3884f0584ceb4c1dca5929e",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R08.json",
+      "successful_attempts_seen": 1
+    },
+    "R09": {
+      "job_id": "0c38a0280a924ddaba5feb697022f49f",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R09.json",
+      "successful_attempts_seen": 1
+    },
+    "R10": {
+      "job_id": "0fc2b53fae524d6c9e99c188fd115f6e",
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R10.json",
+      "successful_attempts_seen": 1
+    }
+  },
+  "authority": "Research / R",
+  "candidate_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+  "critical": 1,
+  "decision": "REVIEW_DISAGREEMENT_REQUIRES_ADJUDICATION",
+  "excluded_reviews": 0,
+  "expected_reviews": 10,
+  "extra_reviews": [],
+  "invalid": [
+    {
+      "errors": [
+        "RECEIPT_OUTPUT_PATH_MISMATCH",
+        "RECEIPT_PACKET_PATH_MISMATCH"
+      ],
+      "file": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R03_RETRY1.json",
+      "review": {
+        "artifact_id": "S003-R002-R03-evidence-provenance",
+        "broker_actions": "NONE",
+        "candidate_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+        "critical": 0,
+        "evidence_refs": [
+          "scripts/mros/native_evidence.py",
+          "scripts/mros/aggregate_reviews.py",
+          "scripts/mros/advance_program.py",
+          "scripts/mros/program_context.py",
+          "research/evidence/sprints/S003/S003_ACCEPTANCE_CONTRACT.json"
+        ],
+        "execution_job_id": "d3330c69ad4b43ad892fbd2b0bd8b9bf",
+        "execution_role_id": "R03",
+        "findings": [
+          {
+            "evidence": "scripts/mros/native_evidence.py:validate_native_evidence checks that execution_receipt_ref and source_output_ref are non-empty and that source_output_sha256 has the correct format, but it does not resolve either reference. scripts/mros/aggregate_reviews.py:53-57 and scripts/mros/advance_program.py:13 call validate_native_evidence only; neither invokes verify_native_sources or otherwise checks that the source output hash and receipt contents match the declared evidence. Therefore arbitrary or stale referenced artifacts can accompany structurally valid native evidence and still reach aggregation/advancement.",
+            "falsifier": "Run the actual native/review/advancement path with a native evidence object whose source_output_ref and execution_receipt_ref point to nonexistent or unrelated files while source_output_sha256 is a valid 64-character digest; demonstrate that the path rejects it before acceptance.",
+            "finding_id": "R03-EP-001",
+            "recommended_repair_scope": "Make native evidence validation/authority resolution require explicit loaded source-output and receipt artifacts, verify the declared SHA-256 against the exact bytes, verify receipt job/head/state/boundary and reference identity, and fail closed when references are missing, stale, or mismatched.",
+            "requirement": "Native validation authority must verify the referenced receipt and source output, not merely validate metadata and a candidate-head string.",
+            "severity": "MAJOR"
+          },
+          {
+            "evidence": "scripts/mros/program_context.py:validate_acceptance_trace checks only that each criterion has a non-empty evidence_refs list; it does not validate criterion IDs against S003_ACCEPTANCE_CONTRACT.json, require all frozen criteria, or resolve references to candidate-bound artifacts. scripts/mros/advance_program.py:32-33 uses this validator as the acceptance gate. A trace can therefore mark an arbitrary subset of invented criterion IDs PASS with opaque references and remain context-valid if state/ledger checks pass.",
+            "falsifier": "Supply a candidate-bound acceptance trace containing one invented criterion ID or a subset of the 12 frozen S003 criteria, with non-empty nonexistent evidence_refs, and run advance_program.py against otherwise valid-looking aggregates; the validator must reject it.",
+            "finding_id": "R03-EP-002",
+            "recommended_repair_scope": "Load and bind the frozen acceptance contract, require exact criterion-set conservation and PASS status for every criterion, resolve each evidence reference, and verify each referenced artifact is present, candidate-head-bound, non-superseded, and independently validated before authorization.",
+            "requirement": "Candidate-bound acceptance evidence must prove the declared criteria and referenced artifacts rather than accepting non-empty opaque evidence references.",
+            "severity": "MAJOR"
+          }
+        ],
+        "independent_from_implementation": true,
+        "independent_from_review_aggregation": true,
+        "major": 2,
+        "minor": 0,
+        "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R03.json",
+        "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R002_R03.md",
+        "role": "evidence_provenance",
+        "round": "R002",
+        "runtime_authority": "NONE",
+        "sprint": "S003",
+        "transport": "mac_git_mailbox",
+        "unknown": 0,
+        "verdict": "REPAIR_REQUIRED"
+      }
+    },
+    {
+      "errors": [
+        "RECEIPT_OUTPUT_PATH_MISMATCH",
+        "RECEIPT_PACKET_PATH_MISMATCH"
+      ],
+      "file": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R04_RETRY1.json",
+      "review": {
+        "artifact_id": "S003-R002-R04-authority-promotion-review",
+        "broker_actions": "NONE",
+        "candidate_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+        "critical": 0,
+        "evidence_refs": [
+          "scripts/mros/advance_program.py",
+          "scripts/mros/program_context.py",
+          "research/evidence/sprints/S003/S003_ACCEPTANCE_CONTRACT.json",
+          "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_R001_REPAIR_CONTRACT.md"
+        ],
+        "execution_job_id": "7465c4d6fb2f4fe09d8202aae0f63c52",
+        "execution_role_id": "R04",
+        "findings": [
+          {
+            "evidence": "scripts/mros/advance_program.py:9-27 checks only aggregate candidate_head, decision membership, three severity counters, authority, and runtime_authority. It does not invoke validate_review, validate_audit, aggregate reconciliation, receipt validation, or minimum-count checks. A caller-provided review aggregate and audit aggregate can therefore contain decision=PASS, zero findings, and fabricated authority fields and satisfy the promotion path.",
+            "falsifier": "A promotion test or implementation trace showing advance_program.authorize rejects fabricated PASS aggregates lacking the required valid reviewer/auditor populations, receipts, manifest reconciliation, and schema/provenance validation would falsify this finding.",
+            "finding_id": "R04-F-001",
+            "recommended_repair_scope": "Make authorization consume independently validated aggregate artifacts or revalidate their complete evidence contracts, including exact head, manifest denominators, receipts, distinct jobs/roles, valid-count thresholds, dissent preservation, audit coverage, and aggregate integrity hashes.",
+            "requirement": "Promotion must independently validate review and audit aggregate provenance, population completeness, minimum valid counts, candidate binding, and blocking-state semantics before authorization.",
+            "severity": "MAJOR"
+          },
+          {
+            "evidence": "scripts/mros/advance_program.py:30-33 accepts a caller-supplied --acceptance-trace path. scripts/mros/program_context.py:11-32 validates only a generic trace shape, matching sprint/head, authority/runtime/M9 labels, criterion status=PASS, and non-empty string evidence_refs; it does not load or compare against research/evidence/sprints/S003/S003_ACCEPTANCE_CONTRACT.json, verify the twelve frozen criterion IDs, or resolve/hash referenced evidence. Thus an evidence-free trace with arbitrary strings can pass context validation and contribute to advancement.",
+            "falsifier": "A deterministic test demonstrating that a trace with all required frozen S003 criterion IDs but nonexistent or unrelated evidence references is rejected, and that criteria missing from the frozen contract cannot be substituted, would falsify this finding.",
+            "finding_id": "R04-F-002",
+            "recommended_repair_scope": "Bind the acceptance trace to the frozen sprint contract and canonical candidate-bound evidence manifest; require exact criterion coverage, resolvable content-addressed references, and independent validation of every criterion before authorization.",
+            "requirement": "Acceptance/state promotion must be bound to the frozen S003 acceptance contract and canonical evidence, not merely caller-selected paths and self-declared criterion status.",
+            "severity": "MAJOR"
+          }
+        ],
+        "independent_from_implementation": true,
+        "independent_from_review_aggregation": true,
+        "major": 2,
+        "minor": 0,
+        "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R04.json",
+        "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R002_R04.md",
+        "role": "authority_promotion",
+        "round": "R002",
+        "runtime_authority": "NONE",
+        "sprint": "S003",
+        "transport": "mac_git_mailbox",
+        "unknown": 0,
+        "verdict": "REPAIR_REQUIRED"
+      }
+    },
+    {
+      "errors": [
+        "RECEIPT_OUTPUT_PATH_MISMATCH",
+        "RECEIPT_PACKET_PATH_MISMATCH"
+      ],
+      "file": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R05_RETRY1.json",
+      "review": {
+        "artifact_id": "S003-R002-R05-causal-time",
+        "broker_actions": "NONE",
+        "candidate_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+        "critical": 0,
+        "evidence_refs": [
+          "scripts/mros/native_evidence.py:35-39",
+          "scripts/mros/bridge_receipt.py:61-65",
+          "scripts/mros/population_manifest.py:16-18",
+          "scripts/mros/population_manifest.py:27-38",
+          "research/review_board/CALIBRATION_POLICY.yaml:9-14",
+          "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_R001_REPAIR_CONTRACT.md:60-63"
+        ],
+        "execution_job_id": "e2adf08b13704d338225ed21b2e9a61a",
+        "execution_role_id": "R05",
+        "findings": [
+          {
+            "evidence": "scripts/mros/native_evidence.py validates timestamp only with datetime.fromisoformat and accepts naive timestamps; scripts/mros/bridge_receipt.py checks only created_at <= started_at <= finished_at. No cross-artifact comparison binds native_evidence.timestamp to receipt times or proves the evidence was produced before review/aggregation/advancement.",
+            "falsifier": "A strict test using a naive native timestamp, or a native timestamp after receipt.finished_at/review execution, is rejected; implement cross-artifact UTC ordering checks and rerun the frozen calibration cases.",
+            "finding_id": "R05-CT-001",
+            "recommended_repair_scope": "Require timezone-aware UTC timestamps and explicit cross-artifact temporal ordering for native evidence, receipts, review outputs, aggregates, acceptance traces, and advancement.",
+            "requirement": "All evidence timestamps must be unambiguous, timezone-aware, and causally bound across native execution, receipt creation, review, aggregation, and advancement.",
+            "severity": "MAJOR"
+          },
+          {
+            "evidence": "scripts/mros/population_manifest.py accepts frozen_before_execution=True as a self-asserted field and validates no freeze timestamp, manifest hash, repository commit, mailbox receipt, or causal relation to execution. reconcile_population keys membership only by output_path and does not verify when the manifest was frozen. This permits future-derived membership or post-outcome population construction while passing the structural validator.",
+            "falsifier": "Provide a manifest created after one or more result files and show the validator rejects it; alternatively add signed/content-addressed freeze metadata and a test proving post-outcome manifests fail closed.",
+            "finding_id": "R05-CT-002",
+            "recommended_repair_scope": "Bind manifests to immutable content hashes, freeze time, candidate commit, and bridge request evidence; reject manifests lacking independently verifiable pre-execution ordering and detect post-outcome membership.",
+            "requirement": "The reviewer/auditor population and membership denominator must be frozen before outcomes are available, with independently verifiable freeze evidence rather than a caller-supplied boolean.",
+            "severity": "MAJOR"
+          }
+        ],
+        "independent_from_implementation": true,
+        "independent_from_review_aggregation": true,
+        "major": 2,
+        "minor": 0,
+        "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R05.json",
+        "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R002_R05.md",
+        "role": "causal_time",
+        "round": "R002",
+        "runtime_authority": "NONE",
+        "sprint": "S003",
+        "transport": "mac_git_mailbox",
+        "unknown": 0,
+        "verdict": "REPAIR_REQUIRED"
+      }
+    },
+    {
+      "errors": [
+        "RECEIPT_OUTPUT_PATH_MISMATCH",
+        "RECEIPT_PACKET_PATH_MISMATCH"
+      ],
+      "file": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R07_RETRY1.json",
+      "review": {
+        "artifact_id": "S003_R002_R07_runtime_boundary_review",
+        "broker_actions": "NONE",
+        "candidate_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+        "critical": 0,
+        "evidence_refs": [
+          "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_R001_REPAIR_CONTRACT.md",
+          "research/review_board/REVIEW_SCHEMA.json"
+        ],
+        "execution_job_id": "a2c15a86aed343cca3dbd8f112876467",
+        "execution_role_id": "R07",
+        "findings": [],
+        "independent_from_implementation": true,
+        "independent_from_review_aggregation": true,
+        "major": 0,
+        "minor": 0,
+        "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R07.json",
+        "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R002_R07.md",
+        "role": "runtime_boundary",
+        "round": "R002",
+        "runtime_authority": "NONE",
+        "sprint": "S003",
+        "transport": "mac_git_mailbox",
+        "unknown": 0,
+        "verdict": "PASS"
+      }
+    }
+  ],
+  "invalid_reviews": 4,
+  "m9_started": false,
+  "major": 5,
+  "manifest_errors": [],
+  "minimum_valid_reviews": 10,
+  "minor": 1,
+  "omitted_reviews": [],
+  "pass_or_minor": 1,
+  "population_manifest": "research/evidence/sprints/S003/agent_queue/manifests/S003_R002_REVIEW_POPULATION.json",
+  "review_round": "R002",
+  "reviews": [
+    {
+      "artifact_id": "S003_R002_R01_contract_compliance",
+      "broker_actions": "NONE",
+      "candidate_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+      "critical": 0,
+      "evidence_refs": [
+        "research/review_board/REVIEW_SCHEMA.json",
+        "research/evidence/sprints/S003/S003_ACCEPTANCE_CONTRACT.json",
+        "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_R001_REPAIR_CONTRACT.md",
+        "scripts/mros/native_evidence.py",
+        "scripts/mros/bridge_receipt.py",
+        "scripts/mros/population_manifest.py"
+      ],
+      "execution_job_id": "0cc8958973cf45cd82d2aa362080e7bf",
+      "execution_role_id": "R01",
+      "findings": [
+        {
+          "evidence": "The candidate HEAD is e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7, but the required packet path research/evidence/sprints/S003/agent_queue/packets/S003_R002_R01.md is absent from the repository. The candidate diff only adds S003_BOARD_BOOTSTRAP_R001_REPAIR_CONTRACT.md; no R002 population manifest, native exact-head calibration evidence, or R002 execution receipt is present at this HEAD.",
+          "falsifier": "Provide the frozen R002 packet, exact-head native calibration artifact, frozen R002 population manifest, and matching Mac Git-mailbox receipt artifacts in the repository, then rerun this contract review.",
+          "finding_id": "S003-R002-R01-U001",
+          "recommended_repair_scope": "Do not authorize or aggregate this review round until the missing packet and exact-head, receipt-bound R002 evidence are committed and mechanically validated.",
+          "requirement": "The exact candidate must be independently reviewable against the frozen R002 packet and all required candidate-bound evidence.",
+          "severity": "UNKNOWN"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 0,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R01.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R002_R01.md",
+      "role": "contract_compliance",
+      "round": "R002",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 1,
+      "verdict": "UNKNOWN"
+    },
+    {
+      "artifact_id": "S003-R002-R02",
+      "broker_actions": "NONE",
+      "candidate_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+      "critical": 0,
+      "evidence_refs": [
+        "scripts/mros/validate_review.py",
+        "scripts/mros/validate_audit.py",
+        "scripts/mros/native_evidence.py",
+        "research/review_board/REVIEW_SCHEMA.json"
+      ],
+      "execution_job_id": "936354d7f4534d5c9b35b70921969897",
+      "execution_role_id": "R02",
+      "findings": [
+        {
+          "evidence": "scripts/mros/validate_review.py:28-29 accepts any syntactically valid S###/R### values rather than requiring S003/R002; lines 44-45 compare counts without rejecting booleans, and Python bool values can satisfy integer count equality. validate_audit.py has the same sprint and count-type gaps at lines 28-29 and 47-48.",
+          "falsifier": "A validator test that supplies sprint S999 or round R999, or supplies critical=true for one CRITICAL finding, must return validation errors. The current implementation does not establish those failures.",
+          "finding_id": "R02-F001",
+          "recommended_repair_scope": "Bind validators to the supplied frozen sprint/round and explicitly require type(value) is int for all severity counters; add malformed, wrong-enum, wrong-transition, and boolean-count tests.",
+          "requirement": "Review and audit validators must reject malformed typed counts and enforce the frozen sprint/round contract.",
+          "severity": "MAJOR"
+        },
+        {
+          "evidence": "scripts/mros/native_evidence.py:42-44 only checks that execution_receipt_ref and source_output_ref are non-empty strings. verify_native_sources checks the source text hash and selected receipt fields, but does not resolve or compare either declared reference to the supplied receipt/output path.",
+          "falsifier": "Provide valid native metadata with execution_receipt_ref and source_output_ref naming unrelated artifacts while supplying a receipt and source text that otherwise pass; verification should reject the mismatch but the current code has no reference-binding check.",
+          "finding_id": "R02-F002",
+          "recommended_repair_scope": "Require canonical, repository-relative receipt/output references and compare them to the actual supplied artifact paths before accepting native evidence; add wrong-reference and path-traversal tests.",
+          "requirement": "Native evidence verification must bind the declared execution receipt and source-output references to the actual receipt/output artifacts.",
+          "severity": "MAJOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 2,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R02.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R002_R02.md",
+      "role": "negative_control",
+      "round": "R002",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "REPAIR_REQUIRED"
+    },
+    {
+      "artifact_id": "S003-R002-R06-denominator-search-integrity",
+      "broker_actions": "NONE",
+      "candidate_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+      "critical": 0,
+      "evidence_refs": [
+        "scripts/mros/aggregate_reviews.py:45-58",
+        "scripts/mros/aggregate_audits.py:55-63",
+        "scripts/mros/population_manifest.py:34-42",
+        "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_R001_REPAIR_CONTRACT.md:55-58"
+      ],
+      "execution_job_id": "a7cbdc9ff66c475da9dd464889ac25e1",
+      "execution_role_id": "R06",
+      "findings": [
+        {
+          "evidence": "scripts/mros/aggregate_reviews.py and aggregate_audits.py enumerate only files matching reviewer-*.json or auditor-*.json. Files placed in the review or audit directory under any other filename are never loaded, never included in submitted/extra denominators, and cannot trigger the required undeclared-extra population block. The reconciliation therefore depends on a filename glob that is not itself part of the frozen population contract.",
+          "falsifier": "Place an additional valid-looking artifact with a non-matching filename in the relevant directory while retaining the ten declared artifacts. A correct implementation must detect it as an undeclared extra and return INCOMPLETE_OR_UNDECLARED_*_POPULATION; the current loader ignores it and can return PASS.",
+          "finding_id": "R06-MAJOR-001",
+          "recommended_repair_scope": "Make artifact discovery manifest-driven or enumerate all JSON artifacts and reconcile every discovered artifact against the frozen manifest before validation. Preserve explicit discovered, submitted, omitted, extra, invalid, and duplicate counts for both reviewer and auditor aggregation; add calibration cases covering non-matching filenames and duplicate physical artifacts.",
+          "requirement": "All declared population members and undeclared artifacts must be conserved and reconciled; post-hoc omission or hidden multiplicity must block aggregation.",
+          "severity": "MAJOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 1,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R06.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R002_R06.md",
+      "role": "denominator_search_integrity",
+      "round": "R002",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "REPAIR_REQUIRED"
+    },
+    {
+      "artifact_id": "S003-R002-R08",
+      "broker_actions": "NONE",
+      "candidate_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+      "critical": 0,
+      "evidence_refs": [
+        "research/review_board/REVIEW_SCHEMA.json",
+        "scripts/mros/validate_review.py",
+        "scripts/mros/validate_audit.py",
+        "scripts/mros/calibrate_review_audit_board_v2.py",
+        "scripts/mros/board_calibration_fixtures.py",
+        "research/review_board/CALIBRATION_POLICY.yaml"
+      ],
+      "execution_job_id": "5ffa12aad3884f0584ceb4c1dca5929e",
+      "execution_role_id": "R08",
+      "findings": [
+        {
+          "evidence": "research/review_board/REVIEW_SCHEMA.json sets additionalProperties=false, but scripts/mros/validate_review.py and scripts/mros/validate_audit.py manually validate only required fields and never reject extra keys. An artifact containing arbitrary undeclared fields is therefore accepted by the runtime validators and aggregators.",
+          "falsifier": "Add an unknown top-level property to an otherwise valid review and audit artifact and run the corresponding validators; both must reject it before aggregation.",
+          "finding_id": "R08-QA-001",
+          "recommended_repair_scope": "Implement strict schema validation or equivalent explicit unknown-field rejection in both runtime validators, with negative tests for extra top-level and nested finding fields.",
+          "requirement": "Runtime validation must enforce the frozen strict schema, including rejection of undeclared properties.",
+          "severity": "MAJOR"
+        },
+        {
+          "evidence": "scripts/mros/calibrate_review_audit_board_v2.py constructs all calibration artifacts through board_calibration_fixtures.py and invokes the same production validators/aggregators directly. The 32 cases do not test several required boundary classes: wrong receipt path/reference, wrong receipt job type, missing receipt schema/version, missing receipt timestamps, malformed non-object JSON, undeclared extra fields, or invalid acceptance-criterion identifiers. The reported 32/32 result consequently proves only the listed mutations, not the frozen attack classes in CALIBRATION_POLICY.yaml.",
+          "falsifier": "Supply independently authored fixtures for each omitted boundary and verify that wrong receipt references/types, malformed JSON/object shapes, undeclared fields, and invalid acceptance IDs are rejected while valid controls remain accepted.",
+          "finding_id": "R08-QA-002",
+          "recommended_repair_scope": "Create externally authored, content-addressed calibration fixtures per attack class; add explicit denominator accounting and tests covering receipt/reference, malformed-input, strict-schema, and acceptance-identifier equivalence classes.",
+          "requirement": "Calibration must exercise independent boundary-equivalence classes rather than only single-field mutations of fixtures produced by the same helper layer.",
+          "severity": "MAJOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 2,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R08.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R002_R08.md",
+      "role": "qa_verification",
+      "round": "R002",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "REPAIR_REQUIRED"
+    },
+    {
+      "artifact_id": "S003_R002_R09_architecture_no_drift",
+      "broker_actions": "NONE",
+      "candidate_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+      "critical": 0,
+      "evidence_refs": [
+        "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_R001_REPAIR_CONTRACT.md",
+        "research/evidence/sprints/S003/S003_ACCEPTANCE_CONTRACT.json",
+        "research/evidence/sprints/S003/S003_BOARD_BOOTSTRAP_EXECUTION_BLOCKER.md"
+      ],
+      "execution_job_id": "0c38a0280a924ddaba5feb697022f49f",
+      "execution_role_id": "R09",
+      "findings": [
+        {
+          "evidence": "The sole candidate change is the S003 repair contract. It correctly states that M2 and M9 remain NOT_STARTED, runtime authority is NONE, and no strategy/broker/risk/execution/runtime implementation is authorized. However, section 8 introduces an otherwise unneeded global-looking rule that 'S111+ is hard-blocked', extending the bootstrap contract beyond the stated S003/M1 boundary.",
+          "falsifier": "A repository-governed S003 acceptance or program-state contract explicitly requires the S111+ hard block as part of this exact bootstrap artifact, rather than deriving it from a later-sprint policy.",
+          "finding_id": "R09-MINOR-001",
+          "recommended_repair_scope": "Remove the S111+ reference or move it to the canonical program-state policy. Keep this S003 repair contract limited to explicitly required S003, M2, M9, runtime-authority, and sequential-transition boundaries.",
+          "requirement": "S003 bootstrap documentation must remain limited to S003/M1 governance scope and avoid unnecessary later-sprint architecture or contamination.",
+          "severity": "MINOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 0,
+      "minor": 1,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R09.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R002_R09.md",
+      "role": "architecture_no_drift",
+      "round": "R002",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "PASS_WITH_MINOR_FINDINGS"
+    },
+    {
+      "artifact_id": "S003_R002_R10_adversarial_red_team",
+      "broker_actions": "NONE",
+      "candidate_head": "e89dc2edbedb0544b431aa36f5cfd0e03c2d57e7",
+      "critical": 1,
+      "evidence_refs": [
+        "scripts/mros/advance_program.py",
+        "research/evidence/sprints/S003/S003_ACCEPTANCE_CONTRACT.json",
+        "research/review_board/REVIEW_SCHEMA.json",
+        "research/review_board/AUDIT_SCHEMA.json"
+      ],
+      "execution_job_id": "0fc2b53fae524d6c9e99c188fd115f6e",
+      "execution_role_id": "R10",
+      "findings": [
+        {
+          "evidence": "scripts/mros/advance_program.py::authorize accepts caller-supplied review and audit dictionaries and checks only candidate_head, decision, critical/major/unknown counts, runtime_authority, and authority. It does not validate aggregate schemas, minimum valid population, manifest_errors, omitted/extra artifacts, invalid_reviews/invalid_audits, or receipt-bound evidence. A fabricated aggregate with the correct candidate_head, decision=PASS, zero blocking counts, runtime_authority=NONE, and authority=Research / R is accepted without any reviewer or auditor evidence.",
+          "falsifier": "Invoke authorize with fabricated PASS review/audit aggregates containing no reviews or audits, while supplying otherwise valid native and context inputs. The function returns advance=true, demonstrating that Board advancement can be authorized without satisfying S003-AC-004 through S003-AC-008.",
+          "finding_id": "R10-CRITICAL-001",
+          "recommended_repair_scope": "Make advance_program validate the complete review and audit aggregate contracts or recompute aggregation from frozen manifests, artifacts, receipts, and native evidence. Require minimum valid counts, zero invalid/omitted/extra artifacts, empty manifest errors, complete acceptance coverage, and receipt/provenance validation before allowing advancement.",
+          "requirement": "Advancement must independently validate review and audit aggregate integrity, quorum, manifests, invalid-artifact counts, and evidence provenance before authorization.",
+          "severity": "CRITICAL"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 0,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R002_R10.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R002_R10.md",
+      "role": "adversarial_red_team",
+      "round": "R002",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "FAIL"
+    }
+  ],
+  "runtime_authority": "NONE",
+  "submitted_reviews": 10,
+  "transport": "mac_git_mailbox",
+  "unknown": 1,
+  "valid_reviews": 6
+}

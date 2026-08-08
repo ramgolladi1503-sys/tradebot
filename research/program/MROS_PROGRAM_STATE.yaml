@@ -10,7 +10,7 @@ active_work_package: WP001
 active_sprint: S003
 last_completed_sprint: S002
 program_status: ACTIVE
-active_sprint_status: BOARD_BOOTSTRAP_R002_REVIEW_PREPARATION
+active_sprint_status: BOARD_BOOTSTRAP_R002_REVIEW_REPAIR_REQUIRED
 
 s002_acceptance:
   decision: ACCEPTED
@@ -66,8 +66,8 @@ review_audit_governance:
   bootstrap_acceptance_contract: "research/evidence/sprints/S003/S003_ACCEPTANCE_CONTRACT.json"
   bootstrap_calibration_request: "research/evidence/sprints/S003/agent_queue/requests/S003_CALIBRATION_R95.json"
   bootstrap_calibration_queue_commit: "2ba73a0147aa704f9a86f8d983f562b73b0f2233"
-  bootstrap_independent_review_status: READY_TO_FREEZE_AND_LAUNCH_R002
-  bootstrap_independent_audit_status: BLOCKED_UNTIL_NONBLOCKING_R002
+  bootstrap_independent_review_status: REVIEW_DISAGREEMENT_REQUIRES_ADJUDICATION
+  bootstrap_independent_audit_status: BLOCKED_UNTIL_REPAIRED_REVIEW_PASS
   autonomous_authority: NOT_AUTHORIZED
 
 execution_environment:
