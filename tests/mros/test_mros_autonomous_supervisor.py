@@ -7,6 +7,8 @@ if str(SCRIPTS) not in sys.path:sys.path.insert(0,str(SCRIPTS))
 from mros_autonomous_supervisor import parse_program_state,derive_phase,receipt_stats,single_instance,SupervisorError
 from mros_autonomous_repair_executor import validate_scope,RepairError,MAX_REPAIR_GENERATIONS
 from mros_autonomous_cycle import blocking_findings
+import mros_s003_autonomous_finalizer as finalizer
+import mros_calibration_failure_repair as calibration_repair
 
 def test_parse_program_state_and_runtime_boundary():
     s='''active_milestone: M1\nactive_work_package: WP001\nactive_sprint: S003\nprogram_status: ACTIVE\nactive_sprint_status: ANY\nauthority:\n  runtime_authority: NONE\n'''
@@ -24,6 +26,10 @@ def test_review_phase_waits_automatically():
 
 def test_audit_phase_waits_automatically():
     state={'active_milestone':'M1','active_sprint':'S003'};req=['x/requests/S003_A005_A01.json'];assert derive_phase(state,req,{})==('AUDIT_RUNNING','WAIT_AUTOMATICALLY')
+
+def test_authorization_routes_to_finalizer():
+    state={'active_milestone':'M1','active_sprint':'S003','active_sprint_status':'BOARD_BOOTSTRAP_AUTHORIZATION_PENDING'}
+    assert derive_phase(state,[],{})==('S003_AUTHORIZATION','FINALIZE_AUTOMATICALLY')
 
 def test_no_pending_work_routes_to_cycle_not_human():
     state={'active_milestone':'M1','active_sprint':'S003'}
@@ -56,3 +62,7 @@ def test_blocking_findings_include_invalid_artifact_findings():
     f={'severity':'MAJOR','requirement':'bind receipt path','evidence':'x'}
     aggregate={'reviews':[],'invalid':[{'review':{'findings':[f]}}]}
     assert blocking_findings(aggregate,'review')==[f]
+
+def test_auxiliary_controller_modules_are_importable():
+    assert callable(finalizer.finalize)
+    assert callable(calibration_repair.main)
