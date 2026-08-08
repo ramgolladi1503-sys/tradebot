@@ -1,0 +1,123 @@
+Last login: Sat Aug  8 12:33:05 on ttys000
+You have new mail.
+(base) madhuram@RAMs-MacBook-Pro tradebot % cd /Users/madhuram/.mros-review/s002-native
+
+git fetch origin
+git checkout 7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79
+
+echo "=== NATIVE PROVENANCE ==="
+pwd
+git status --short --branch
+git rev-parse HEAD
+python3 --version
+
+echo "=== S002 V8 FINAL VALIDATION ==="
+python3 scripts/mros/validate_s002_fixtures.py
+RC=$?
+
+echo "EXIT_CODE=$RC"
+exit $RC
+warning: Empty last update token.
+remote: Enumerating objects: 45, done.
+remote: Counting objects: 100% (44/44), done.
+remote: Compressing objects: 100% (17/17), done.
+remote: Total 20 (delta 11), reused 0 (delta 0), pack-reused 0 (from 0)
+Unpacking objects: 100% (20/20), 2.01 KiB | 89.00 KiB/s, done.
+From https://github.com/ramgolladi1503-sys/tradebot
+   2cc061779..7e7a0d8fc  research/mros-program-v1 -> origin/research/mros-program-v1
+warning: Empty last update token.
+warning: Empty last update token.
+Previous HEAD position was 0f88c5bfd mros(S002): document v8 inherited provenance enforcement [skip ci]
+HEAD is now at 7e7a0d8fc mros(S002): keep v8 active corpus at four targeted attacks [skip ci]
+=== NATIVE PROVENANCE ===
+/Users/madhuram/.mros-review/s002-native
+warning: Empty last update token.
+## HEAD (no branch)
+7e7a0d8fc747b6376c5b1016c2bdb606a64b9c79
+Python 3.12.2
+=== S002 V8 FINAL VALIDATION ===
+PASS | S002-C001 | expected={"error_codes": [], "knowledge_class": "OBSERVED_FACT", "status": "PASS", "violated_rules": []} | actual={"error_codes": [], "knowledge_class": "OBSERVED_FACT", "status": "PASS", "violated_rules": []}
+PASS | S002-C002 | expected={"error_codes": [], "knowledge_class": "INFERENCE", "status": "PASS", "violated_rules": []} | actual={"error_codes": [], "knowledge_class": "INFERENCE", "status": "PASS", "violated_rules": []}
+PASS | S002-C003 | expected={"error_codes": [], "knowledge_class": "HYPOTHESIS", "status": "PASS", "violated_rules": []} | actual={"error_codes": [], "knowledge_class": "HYPOTHESIS", "status": "PASS", "violated_rules": []}
+PASS | S002-C004 | expected={"error_codes": [], "knowledge_class": "SPECULATION", "status": "PASS", "violated_rules": []} | actual={"error_codes": [], "knowledge_class": "SPECULATION", "status": "PASS", "violated_rules": []}
+PASS | S002-C005 | expected={"error_codes": ["MROS-S001-E002-AMBIGUOUS_KNOWLEDGE_CLASS"], "knowledge_class": null, "status": "REVIEW_REQUIRED", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E002-AMBIGUOUS_KNOWLEDGE_CLASS"], "knowledge_class": null, "status": "REVIEW_REQUIRED", "violated_rules": []}
+PASS | S002-C006 | expected={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C007 | expected={"can_promote": false, "error_codes": ["MROS-S001-E004-AUTHORITY_STAGE_SKIP"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E004-AUTHORITY_STAGE_SKIP"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C008 | expected={"can_promote": false, "error_codes": ["MROS-S001-E017-OBSOLETE_AUTHORITY_SCALE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S001-E017-OBSOLETE_AUTHORITY_SCALE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C009 | expected={"error_codes": ["MROS-S001-E007-CAUSAL_TIME_VIOLATION"], "status": "FAIL", "violated_rules": ["RC-008"]} | actual={"error_codes": ["MROS-S001-E007-CAUSAL_TIME_VIOLATION"], "status": "FAIL", "violated_rules": ["RC-008"]}
+PASS | S002-C010 | expected={"error_codes": ["MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION", "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED"], "status": "FAIL", "violated_rules": ["RC-009"]} | actual={"error_codes": ["MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION", "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED"], "status": "FAIL", "violated_rules": ["RC-009"]}
+PASS | S002-C011 | expected={"error_codes": ["MROS-S001-E011-RUNTIME_AUTHORITY_VIOLATION"], "status": "FAIL", "violated_rules": ["RC-010"]} | actual={"error_codes": ["MROS-S001-E011-RUNTIME_AUTHORITY_VIOLATION"], "status": "FAIL", "violated_rules": ["RC-010"]}
+PASS | S002-C012 | expected={"error_codes": ["MROS-S001-E013-NON_FALSIFIABLE_CLAIM"], "status": "FAIL", "violated_rules": ["RC-007"]} | actual={"error_codes": ["MROS-S001-E013-NON_FALSIFIABLE_CLAIM"], "status": "FAIL", "violated_rules": ["RC-007"]}
+PASS | S002-C013 | expected={"error_codes": ["MROS-S001-E016-UNSUPPORTED_COMPLETION_CLAIM"], "status": "FAIL", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E016-UNSUPPORTED_COMPLETION_CLAIM"], "status": "FAIL", "violated_rules": []}
+PASS | S002-C014 | expected={"error_codes": ["MROS-S001-E012-UNRECORDED_SUPERSESSION"], "status": "FAIL", "violated_rules": ["RC-006"]} | actual={"error_codes": ["MROS-S001-E012-UNRECORDED_SUPERSESSION"], "status": "FAIL", "violated_rules": ["RC-006"]}
+PASS | S002-C015 | expected={"error_codes": ["MROS-S001-E014-SCOPE_DRIFT"], "status": "FAIL", "violated_rules": ["RC-001"]} | actual={"error_codes": ["MROS-S001-E014-SCOPE_DRIFT"], "status": "FAIL", "violated_rules": ["RC-001"]}
+PASS | S002-C016 | expected={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C017 | expected={"can_promote": false, "error_codes": ["MROS-S001-E003-INVALID_AUTHORITY_GRADE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S001-E003-INVALID_AUTHORITY_GRADE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C018 | expected={"can_promote": false, "error_codes": ["MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED"], "status": "REVIEW_REQUIRED", "violated_rules": ["RC-004"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED"], "status": "REVIEW_REQUIRED", "violated_rules": ["RC-004"]}
+PASS | S002-C019 | expected={"can_promote": false, "error_codes": ["MROS-S001-E010-CALIBRATION_REQUIRED"], "status": "BLOCKED", "violated_rules": ["RC-005"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E010-CALIBRATION_REQUIRED"], "status": "BLOCKED", "violated_rules": ["RC-005"]}
+PASS | S002-C020 | expected={"can_promote": false, "error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C021 | expected={"error_codes": ["MROS-S002-E018-INVALID_KNOWLEDGE_CLASS_ENUM"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E018-INVALID_KNOWLEDGE_CLASS_ENUM"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C022 | expected={"error_codes": ["MROS-S002-E019-INVALID_VERDICT_ENUM"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E019-INVALID_VERDICT_ENUM"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C023 | expected={"error_codes": ["MROS-S002-E020-INVALID_STATUS_ENUM"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E020-INVALID_STATUS_ENUM"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C024 | expected={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C025 | expected={"can_promote": false, "error_codes": ["MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED"], "status": "REVIEW_REQUIRED", "violated_rules": ["RC-004"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E006-INDEPENDENT_ATTACK_REQUIRED"], "status": "REVIEW_REQUIRED", "violated_rules": ["RC-004"]}
+PASS | S002-C026 | expected={"can_promote": false, "error_codes": ["MROS-S001-E010-CALIBRATION_REQUIRED"], "status": "BLOCKED", "violated_rules": ["RC-005"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E010-CALIBRATION_REQUIRED"], "status": "BLOCKED", "violated_rules": ["RC-005"]}
+PASS | S002-C027 | expected={"can_promote": false, "error_codes": ["MROS-S001-E004-AUTHORITY_STAGE_SKIP"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E004-AUTHORITY_STAGE_SKIP"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C028 | expected={"can_promote": false, "error_codes": ["MROS-S001-E004-AUTHORITY_STAGE_SKIP"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E004-AUTHORITY_STAGE_SKIP"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C029 | expected={"error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C030 | expected={"error_codes": [], "status": "PASS", "violated_rules": []} | actual={"error_codes": [], "status": "PASS", "violated_rules": []}
+PASS | S002-C031 | expected={"error_codes": [], "status": "PASS", "violated_rules": []} | actual={"error_codes": [], "status": "PASS", "violated_rules": []}
+PASS | S002-C032 | expected={"error_codes": ["MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION", "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED"], "status": "FAIL", "violated_rules": ["RC-009"]} | actual={"error_codes": ["MROS-S001-E008-DENOMINATOR_CONTRACT_VIOLATION", "MROS-S001-E009-POST_HOC_EXCLUSION_DETECTED"], "status": "FAIL", "violated_rules": ["RC-009"]}
+PASS | S002-C034 | expected={"can_promote": false, "error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C036 | expected={"can_promote": false, "error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C038 | expected={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C039 | expected={"error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C040 | expected={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C041 | expected={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C042 | expected={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C043 | expected={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C044 | expected={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C045 | expected={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C046 | expected={"can_promote": false, "error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C047 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C048 | expected={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C049 | expected={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C050 | expected={"error_codes": [], "status": "PASS", "violated_rules": []} | actual={"error_codes": [], "status": "PASS", "violated_rules": []}
+PASS | S002-C051 | expected={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C052 | expected={"error_codes": ["MROS-S002-E018-INVALID_KNOWLEDGE_CLASS_ENUM"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E018-INVALID_KNOWLEDGE_CLASS_ENUM"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C053 | expected={"error_codes": [], "status": "PASS", "violated_rules": []} | actual={"error_codes": [], "status": "PASS", "violated_rules": []}
+PASS | S002-C054 | expected={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C055 | expected={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C056 | expected={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C057 | expected={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C058 | expected={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C059 | expected={"can_promote": false, "error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C060 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C061 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C062 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C063 | expected={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C064 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C066 | expected={"error_codes": [], "status": "PASS", "violated_rules": []} | actual={"error_codes": [], "status": "PASS", "violated_rules": []}
+PASS | S002-C068 | expected={"can_promote": false, "error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C069 | expected={"can_promote": false, "error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C073 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C074 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C075 | expected={"can_promote": true, "error_codes": [], "status": "PASS", "violated_rules": []} | actual={"can_promote": true, "error_codes": [], "status": "PASS", "violated_rules": []}
+PASS | S002-C076 | expected={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C077 | expected={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C078 | expected={"can_promote": true, "error_codes": [], "status": "PASS", "violated_rules": []} | actual={"can_promote": true, "error_codes": [], "status": "PASS", "violated_rules": []}
+PASS | S002-C079 | expected={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C080 | expected={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C081 | expected={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C082 | expected={"can_promote": true, "error_codes": [], "status": "PASS", "violated_rules": []} | actual={"can_promote": true, "error_codes": [], "status": "PASS", "violated_rules": []}
+PASS | S002-C083 | expected={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]} | actual={"can_promote": false, "error_codes": ["MROS-S001-E005-NO_NEW_EVIDENCE_FOR_PROMOTION"], "status": "FAIL", "violated_rules": ["RC-002"]}
+PASS | S002-C084 | expected={"can_promote": true, "error_codes": [], "status": "PASS", "violated_rules": []} | actual={"can_promote": true, "error_codes": [], "status": "PASS", "violated_rules": []}
+PASS | S002-C085 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C086 | expected={"can_promote": false, "error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S001-E001-MISSING_REQUIRED_FIELD"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C087 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C088 | expected={"can_promote": false, "error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C089 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C090 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+SUMMARY | checks=82 pass=82 fail=0
+S002_TARGETED_VALIDATION_PASS
+EXIT_CODE=0
