@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import hashlib,json,re
+import hashlib,json,re,subprocess
 from pathlib import Path
 
 SPRINT_RE=re.compile(r'^S[0-9]{3}$')
-ROUND_RE=re.compile(r'^[RA][0-9]{3}$')
 SHA256_RE=re.compile(r'^[0-9a-f]{64}$')
 ROOT=Path(__file__).resolve().parents[2]
+QUEUE_REF='origin/automation/mros-agent-queue-v1'
 
 def _top(text:str,key:str):
  m=re.search(rf'(?m)^{re.escape(key)}:\s*([^\n#]+?)\s*$',text);return m.group(1).strip().strip('"\'') if m else None
@@ -44,11 +44,11 @@ def _safe_ref(ref:str)->bool:
  p=Path(ref)
  return bool(ref) and not p.is_absolute() and '..' not in p.parts and p.as_posix()==ref
 
-def _sha256(path:Path)->str:
- h=hashlib.sha256()
- with path.open('rb') as fh:
-  for chunk in iter(lambda:fh.read(1024*1024),b''):h.update(chunk)
- return h.hexdigest()
+def _sha256_bytes(data:bytes)->str:return hashlib.sha256(data).hexdigest()
+def _sha256(path:Path)->str:return _sha256_bytes(path.read_bytes())
+def _queue_blob(authority_root:Path,ref:str)->bytes|None:
+ p=subprocess.run(['git','show',f'{QUEUE_REF}:{ref}'],cwd=authority_root,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,check=False)
+ return p.stdout if p.returncode==0 else None
 
 def validate_acceptance_trace(data:object,*,sprint:str,candidate_head:str,contract:object|None=None,authority_root:Path|None=None,queue_root:Path|None=None,strict_contract:bool=False,verify_evidence:bool=False)->list[str]:
  e=[]
@@ -94,18 +94,28 @@ def validate_acceptance_trace(data:object,*,sprint:str,candidate_head:str,contra
     if not isinstance(digest,str) or not SHA256_RE.fullmatch(digest):e.append(f'ACCEPTANCE_EVIDENCE_BINDING_{i}_SHA256_INVALID')
     by_path[path]=b
    if set(by_path)!=set(expected_refs):e.append('ACCEPTANCE_TRACE_EVIDENCE_BINDING_SET_MISMATCH')
+   auth_root=Path(authority_root or ROOT).resolve()
    for ref in expected_refs:
     b=by_path.get(ref)
     if not isinstance(b,dict):continue
     expected_source='queue' if '/agent_queue/' in ref else 'authority'
     if b.get('source')!=expected_source:e.append(f'ACCEPTANCE_EVIDENCE_SOURCE_MISMATCH:{ref}')
-    root=queue_root if expected_source=='queue' else authority_root
-    if root is None:e.append(f'ACCEPTANCE_EVIDENCE_ROOT_MISSING:{expected_source}');continue
-    path=Path(root).resolve()/ref
-    try:path.resolve().relative_to(Path(root).resolve())
-    except ValueError:e.append(f'ACCEPTANCE_EVIDENCE_PATH_ESCAPE:{ref}');continue
-    if not path.is_file():e.append(f'ACCEPTANCE_EVIDENCE_FILE_MISSING:{ref}');continue
-    if isinstance(b.get('sha256'),str) and SHA256_RE.fullmatch(b['sha256']) and _sha256(path)!=b['sha256']:e.append(f'ACCEPTANCE_EVIDENCE_SHA256_MISMATCH:{ref}')
+    actual_digest=None
+    if expected_source=='queue':
+     if queue_root is not None:
+      root=Path(queue_root).resolve();path=(root/ref).resolve()
+      try:path.relative_to(root)
+      except ValueError:e.append(f'ACCEPTANCE_EVIDENCE_PATH_ESCAPE:{ref}');continue
+      if path.is_file():actual_digest=_sha256(path)
+     else:
+      blob=_queue_blob(auth_root,ref);actual_digest=_sha256_bytes(blob) if blob is not None else None
+    else:
+     path=(auth_root/ref).resolve()
+     try:path.relative_to(auth_root)
+     except ValueError:e.append(f'ACCEPTANCE_EVIDENCE_PATH_ESCAPE:{ref}');continue
+     if path.is_file():actual_digest=_sha256(path)
+    if actual_digest is None:e.append(f'ACCEPTANCE_EVIDENCE_FILE_MISSING:{ref}')
+    elif isinstance(b.get('sha256'),str) and SHA256_RE.fullmatch(b['sha256']) and actual_digest!=b['sha256']:e.append(f'ACCEPTANCE_EVIDENCE_SHA256_MISMATCH:{ref}')
  return sorted(set(e))
 
 def validate_state_ledger(state_text:str,ledger_text:str,*,sprint:str,next_sprint:str)->list[str]:
@@ -132,7 +142,7 @@ def validate_state_ledger(state_text:str,ledger_text:str,*,sprint:str,next_sprin
    e.append('SPRINT_LEDGER_FUTURE_ADVANCEMENT_PRESENT');break
  return e
 
-def load_and_validate_context(*,state_path:Path,ledger_path:Path,acceptance_path:Path,sprint:str,next_sprint:str,candidate_head:str,contract_path:Path|None=None,authority_root:Path|None=None,queue_root:Path|None=None,strict_contract:bool=False,verify_evidence:bool=False)->list[str]:
+def load_and_validate_context(*,state_path:Path,ledger_path:Path,acceptance_path:Path,sprint:str,next_sprint:str,candidate_head:str,contract_path:Path|None=None,authority_root:Path|None=None,queue_root:Path|None=None,strict_contract:bool=True,verify_evidence:bool=True)->list[str]:
  e=[]
  try:state=state_path.read_text(encoding='utf-8')
  except OSError:return ['PROGRAM_STATE_UNREADABLE']
@@ -146,5 +156,5 @@ def load_and_validate_context(*,state_path:Path,ledger_path:Path,acceptance_path
   try:contract=json.loads(Path(cp).read_text(encoding='utf-8'))
   except (OSError,json.JSONDecodeError):e.append('ACCEPTANCE_CONTRACT_UNREADABLE')
  e.extend(validate_state_ledger(state,ledger,sprint=sprint,next_sprint=next_sprint))
- e.extend(validate_acceptance_trace(acceptance,sprint=sprint,candidate_head=candidate_head,contract=contract,authority_root=authority_root,queue_root=queue_root,strict_contract=strict_contract,verify_evidence=verify_evidence))
+ e.extend(validate_acceptance_trace(acceptance,sprint=sprint,candidate_head=candidate_head,contract=contract,authority_root=authority_root or ROOT,queue_root=queue_root,strict_contract=strict_contract,verify_evidence=verify_evidence))
  return sorted(set(e))
