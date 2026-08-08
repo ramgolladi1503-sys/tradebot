@@ -1,0 +1,12 @@
+{
+  "backend": "codex",
+  "candidate_sha": "8b8a209d4b9e06a8e6ab9c6f0d8cf5ff005d2fd3",
+  "created_at": "2026-08-09",
+  "created_by": "mros-agent-worker-retry",
+  "job_type": "reviewer",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R008_R07_RETRY2.json",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R008_R07_RETRY2.md",
+  "request_id": "S003-R008-R07-8b8a209d-retry2",
+  "role_id": "R07",
+  "schema_version": 1
+}
