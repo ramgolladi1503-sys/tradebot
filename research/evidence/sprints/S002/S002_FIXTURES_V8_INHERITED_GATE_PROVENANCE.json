@@ -1,0 +1,100 @@
+{
+  "schema_version": "mros-s002-fixtures-v8-inherited-gate-provenance",
+  "purpose": "Close 8E872-V2-F-001 by enforcing canonical inherited mandatory gate references, prior-provenance membership, and exact requested-gate binding schema.",
+  "cases": [
+    {
+      "case_id": "S002-C087",
+      "operation": "VALIDATE_PROMOTION",
+      "input": {
+        "authority_current": "Grade B",
+        "authority_requested": "Grade A",
+        "evidence_refs": ["EVID-PRIOR-GRADEB"],
+        "new_evidence_refs": ["EVID-SCI-NEW", "EVID-ECON-NEW"],
+        "evidence_provenance_complete": true,
+        "independent_attack_ref": "NOT-A-REGISTERED-EVID",
+        "calibration_ref": "ALSO-NOT-EVID",
+        "scientific_certification_ref": "EVID-SCI-NEW",
+        "economic_certification_ref": "EVID-ECON-NEW",
+        "new_evidence_gate_bindings": {
+          "SCIENTIFIC_CERTIFICATION": "EVID-SCI-NEW",
+          "ECONOMIC_CERTIFICATION": "EVID-ECON-NEW"
+        }
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "can_promote": false,
+        "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
+        "violated_rules": []
+      }
+    },
+    {
+      "case_id": "S002-C088",
+      "operation": "VALIDATE_PROMOTION",
+      "input": {
+        "authority_current": "Grade B",
+        "authority_requested": "Grade A",
+        "evidence_refs": ["EVID-PRIOR-GRADEB"],
+        "new_evidence_refs": ["EVID-SCI-NEW", "EVID-ECON-NEW"],
+        "evidence_provenance_complete": true,
+        "independent_attack_ref": "EVID-ATTACK-PRIOR",
+        "calibration_ref": "EVID-CAL-PRIOR",
+        "scientific_certification_ref": "EVID-SCI-NEW",
+        "economic_certification_ref": "EVID-ECON-NEW",
+        "new_evidence_gate_bindings": {
+          "SCIENTIFIC_CERTIFICATION": "EVID-SCI-NEW",
+          "ECONOMIC_CERTIFICATION": "EVID-ECON-NEW"
+        }
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "can_promote": false,
+        "error_codes": ["MROS-S001-E015-EVIDENCE_PROVENANCE_MISSING"],
+        "violated_rules": []
+      }
+    },
+    {
+      "case_id": "S002-C089",
+      "operation": "VALIDATE_PROMOTION",
+      "input": {
+        "authority_current": "Research / R",
+        "authority_requested": "Grade C",
+        "evidence_refs": [],
+        "new_evidence_refs": ["EVID-REPRO-NEW"],
+        "evidence_provenance_complete": true,
+        "reproducibility_ref": "EVID-REPRO-NEW",
+        "new_evidence_gate_bindings": {
+          "REPRODUCIBILITY": "EVID-REPRO-NEW",
+          "INDEPENDENT_ATTACK": ["malformed"]
+        }
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "can_promote": false,
+        "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
+        "violated_rules": []
+      }
+    },
+    {
+      "case_id": "S002-C090",
+      "operation": "VALIDATE_PROMOTION",
+      "input": {
+        "authority_current": "Research / R",
+        "authority_requested": "Grade C",
+        "evidence_refs": [],
+        "new_evidence_refs": ["EVID-REPRO-NEW", "EVID-EXTRA-NEW"],
+        "evidence_provenance_complete": true,
+        "reproducibility_ref": "EVID-REPRO-NEW",
+        "new_evidence_gate_bindings": {
+          "REPRODUCIBILITY": "EVID-REPRO-NEW",
+          "INDEPENDENT_ATTACK": "EVID-EXTRA-NEW"
+        }
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "can_promote": false,
+        "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
+        "violated_rules": []
+      }
+    }
+  ]
+}
