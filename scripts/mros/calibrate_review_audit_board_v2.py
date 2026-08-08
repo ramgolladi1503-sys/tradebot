@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse,json,subprocess,sys
+import argparse,json,subprocess,sys,tempfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2];SCRIPTS=ROOT/'scripts'/'mros';sys.path.insert(0,str(SCRIPTS))
 from validate_review import validate as vr
@@ -11,16 +11,26 @@ from native_evidence import validate_native_evidence,verify_native_sources
 from bridge_receipt import validate_bridge_receipt
 from program_context import validate_acceptance_trace,validate_state_ledger
 from advance_program import authorize
-from board_calibration_fixtures import review,audit,receipt,bundle,finding,native,accept_trace,state_text,ledger_text
+from population_git_trust import load_exact_receipts
+from board_calibration_fixtures import review,audit,receipt,bundle,finding,native,accept_trace,state_text,ledger_text,S003_ACCEPTANCE_IDS,CALIBRATION_NATIVE_REF
 PASS={'PASS','PASS_WITH_MINOR_FINDINGS'}
+QUEUE_ROOT=Path('research/evidence/sprints/S003/agent_queue')
 
 def accepted(decision):return decision in PASS
+
+def _git(cwd:Path,*args:str):subprocess.check_call(['git',*args],cwd=cwd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+def _write_json(p:Path,d):p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(d,sort_keys=True,indent=2)+'\n',encoding='utf-8')
+def _trusted_queue(head,rm,am,reviews,audits):
+ td=tempfile.TemporaryDirectory(prefix='mros-cal-q-');q=Path(td.name);_git(q,'init');_git(q,'config','user.email','calibration@mros.local');_git(q,'config','user.name','MROS Calibration')
+ rmp=QUEUE_ROOT/'manifests'/'S003_R001_REVIEW_POPULATION.json';amp=QUEUE_ROOT/'manifests'/'S003_A001_AUDIT_POPULATION.json';_write_json(q/rmp,rm);_write_json(q/amp,am);_git(q,'add','.');_git(q,'commit','-m','freeze calibration populations')
+ for item,m in [(x,m) for x,m in zip(reviews,rm['members'])]+[(x,m) for x,m in zip(audits,am['members'])]:
+  req=QUEUE_ROOT/'requests'/Path(m['output_path']).name;_write_json(q/req,{'candidate_sha':head,'role_id':m['execution_role_id'],'packet_path':m['packet_path'],'output_path':m['output_path']});_write_json(q/Path(m['receipt_path']),receipt(item,head,'reviewer' if item['execution_role_id'].startswith('R') else 'auditor'))
+ _git(q,'add','.');_git(q,'commit','-m','execute calibration populations');_git(q,'update-ref','refs/remotes/origin/automation/mros-agent-queue-v1','HEAD');return td,q,rmp,amp
 
 def main():
  p=argparse.ArgumentParser();p.add_argument('--candidate-head',required=True);a=p.parse_args();head=a.candidate_head
  observed=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
- if observed!=head:
-  print(f'FAIL | EXACT_HEAD | expected={head} observed={observed}');return 1
+ if observed!=head:print(f'FAIL | EXACT_HEAD | expected={head} observed={observed}');return 1
  registry=json.loads((ROOT/'research/review_board/CALIBRATION_CASES.json').read_text());cases=registry['cases'];out={}
  def seto(cid,value):out[cid]=bool(value)
  r1=review(1,head);seto('CAL-001',not vr(r1,head) and not validate_bridge_receipt(receipt(r1,head,'reviewer'),r1,candidate_head=head,job_type='reviewer'))
@@ -45,21 +55,29 @@ def main():
   arr=list(audits);arr[0]=audit(1,head,verdict,fs);pl,rc,m=bundle(arr,head,'auditor','A001');seto(cid,accepted(aa(pl,candidate_head=head,review_round='R001',receipts=rc,manifest=m)['decision']))
  n,src,nr=native(head);bad=dict(n);bad['head']='0'*40;seto('CAL-025',not bool(validate_native_evidence(bad,head)))
  bad=dict(n);bad['source_output_sha256']='0'*64;seto('CAL-026',not bool(verify_native_sources(bad,source_output_text=src,receipt=nr,candidate_head=head,source_output_ref=n['source_output_ref'],execution_receipt_ref=n['execution_receipt_ref'])))
- old='0'*40;oldr=dict(rg);oldr['candidate_head']=old;olda=dict(ag);olda['candidate_head']=old;oldn=dict(n);oldn['head']=old;seto('CAL-027',authorize(sprint='S003',next_sprint='S004',candidate_head=head,review=oldr,audit=olda,native=oldn,context_errors=[],review_manifest=rm,audit_manifest=am,review_receipts=rrc,audit_receipts=arc)['advance'])
- seto('CAL-028',not bool(validate_acceptance_trace(accept_trace(head,False),sprint='S003',candidate_head=head)))
- seto('CAL-029',not bool(validate_state_ledger(state_text(active='S004'),ledger_text(),sprint='S003',next_sprint='S004')))
- seto('CAL-030',not bool(validate_state_ledger(state_text(),ledger_text(),sprint='S003',next_sprint='S111')))
- br=receipt(r1,head,'reviewer');br['runtime_authority']='LIVE';seto('CAL-031',not bool(validate_bridge_receipt(br,r1,candidate_head=head,job_type='reviewer')))
- ctx=validate_acceptance_trace(accept_trace(head,True),sprint='S003',candidate_head=head)+validate_state_ledger(state_text(),ledger_text(),sprint='S003',next_sprint='S004');seto('CAL-032',authorize(sprint='S003',next_sprint='S004',candidate_head=head,review=rg,audit=ag,native=n,context_errors=ctx,review_manifest=rm,audit_manifest=am,review_receipts=rrc,audit_receipts=arc)['advance'])
- x=dict(r1);x['unexpected_field']='forbidden';seto('CAL-033',not bool(vr(x,head,'S003','R001')))
- x=dict(r1);x['critical']=True;seto('CAL-034',not bool(vr(x,head,'S003','R001')))
- x=dict(r1);x['sprint']='S999';seto('CAL-035',not bool(vr(x,head,'S003','R001')))
- seto('CAL-036',not bool(verify_native_sources(n,source_output_text=src,receipt=nr,candidate_head=head,source_output_ref='results/WRONG.txt',execution_receipt_ref=n['execution_receipt_ref'])))
- br=receipt(r1,head,'reviewer');br['request']['job_type']='auditor';seto('CAL-037',not bool(validate_bridge_receipt(br,r1,candidate_head=head,job_type='reviewer')))
- br=receipt(r1,head,'reviewer');br['job'].pop('finished_at',None);seto('CAL-038',not bool(validate_bridge_receipt(br,r1,candidate_head=head,job_type='reviewer')))
- fake_review={'candidate_head':head,'decision':'PASS','critical':0,'major':0,'minor':0,'unknown':0,'runtime_authority':'NONE','authority':'Research / R','transport':'mac_git_mailbox','valid_reviews':0,'invalid_reviews':0,'expected_reviews':0,'submitted_reviews':0,'minimum_valid_reviews':0,'omitted_reviews':[],'extra_reviews':[],'manifest_errors':[],'reviews':[]};fake_audit={'candidate_head':head,'decision':'PASS','critical':0,'major':0,'minor':0,'unknown':0,'runtime_authority':'NONE','authority':'Research / R','transport':'mac_git_mailbox','valid_audits':0,'invalid_audits':0,'expected_audits':0,'submitted_audits':0,'minimum_valid_audits':0,'omitted_audits':[],'extra_audits':[],'manifest_errors':[],'audits':[],'review_round':'R001','missing_acceptance_ids':[],'unknown_acceptance_ids':[]};seto('CAL-039',authorize(sprint='S003',next_sprint='S004',candidate_head=head,review=fake_review,audit=fake_audit,native=n,context_errors=[],review_manifest=rm,audit_manifest=am,review_receipts=rrc,audit_receipts=arc)['advance'])
- blocking=list(reviews);blocking[0]=review(1,head,'REPAIR_REQUIRED',[finding('AUTH-MAJOR','MAJOR')]);forged=dict(rg);forged['reviews']=blocking;forged['critical']=0;forged['major']=0;forged['minor']=0;forged['unknown']=0;forged['decision']='PASS';seto('CAL-040',authorize(sprint='S003',next_sprint='S004',candidate_head=head,review=forged,audit=ag,native=n,context_errors=[],review_manifest=rm,audit_manifest=am,review_receipts=rrc,audit_receipts=arc)['advance'])
- small=dict(rg);small.update({'valid_reviews':1,'expected_reviews':1,'submitted_reviews':1,'minimum_valid_reviews':1,'omitted_reviews':[],'extra_reviews':[],'manifest_errors':[],'reviews':[reviews[0]],'critical':0,'major':0,'minor':0,'unknown':0,'decision':'PASS'});seto('CAL-041',authorize(sprint='S003',next_sprint='S004',candidate_head=head,review=small,audit=ag,native=n,context_errors=[],review_manifest=rm,audit_manifest=am,review_receipts=rrc,audit_receipts=arc)['advance'])
+ td,q,rmp,amp=_trusted_queue(head,rm,am,reviews,audits)
+ try:
+  qrr,re=load_exact_receipts(queue_repo=q,manifest=rm);qar,ae=load_exact_receipts(queue_repo=q,manifest=am)
+  assert not re and not ae
+  rg_auth=ar(rpl,candidate_head=head,receipts=qrr,manifest=rm,expected_sprint='S003',expected_round='R001',minimum_required=10,require_receipt_path=True);rg_auth.update({'review_round':'R001','population_manifest':rmp.as_posix()})
+  ag_auth=aa(apl,candidate_head=head,review_round='R001',receipts=qar,manifest=am,review_job_ids=[r['execution_job_id'] for r in reviews],required_acceptance_ids=S003_ACCEPTANCE_IDS,expected_native_ref=CALIBRATION_NATIVE_REF,expected_sprint='S003',expected_round='A001',minimum_required=10,require_receipt_path=True);ag_auth.update({'audit_round':'A001','population_manifest':amp.as_posix()})
+  def authz(rv,av,nv,ctx):return authorize(sprint='S003',next_sprint='S004',candidate_head=head,review=rv,audit=av,native=nv,context_errors=ctx,review_manifest=rm,audit_manifest=am,queue_repo=q,review_manifest_path=rmp,audit_manifest_path=amp,review_round='R001',audit_round='A001',expected_native_ref=CALIBRATION_NATIVE_REF)
+  old='0'*40;oldr=dict(rg_auth);oldr['candidate_head']=old;olda=dict(ag_auth);olda['candidate_head']=old;oldn=dict(n);oldn['head']=old;seto('CAL-027',authz(oldr,olda,oldn,[])['advance'])
+  seto('CAL-028',not bool(validate_acceptance_trace(accept_trace(head,False),sprint='S003',candidate_head=head)))
+  seto('CAL-029',not bool(validate_state_ledger(state_text(active='S004'),ledger_text(),sprint='S003',next_sprint='S004')))
+  seto('CAL-030',not bool(validate_state_ledger(state_text(),ledger_text(),sprint='S003',next_sprint='S111')))
+  br=receipt(r1,head,'reviewer');br['runtime_authority']='LIVE';seto('CAL-031',not bool(validate_bridge_receipt(br,r1,candidate_head=head,job_type='reviewer')))
+  ctx=validate_acceptance_trace(accept_trace(head,True),sprint='S003',candidate_head=head)+validate_state_ledger(state_text(),ledger_text(),sprint='S003',next_sprint='S004');seto('CAL-032',authz(rg_auth,ag_auth,n,ctx)['advance'])
+  x=dict(r1);x['unexpected_field']='forbidden';seto('CAL-033',not bool(vr(x,head,'S003','R001')))
+  x=dict(r1);x['critical']=True;seto('CAL-034',not bool(vr(x,head,'S003','R001')))
+  x=dict(r1);x['sprint']='S999';seto('CAL-035',not bool(vr(x,head,'S003','R001')))
+  seto('CAL-036',not bool(verify_native_sources(n,source_output_text=src,receipt=nr,candidate_head=head,source_output_ref='results/WRONG.txt',execution_receipt_ref=n['execution_receipt_ref'])))
+  br=receipt(r1,head,'reviewer');br['request']['job_type']='auditor';seto('CAL-037',not bool(validate_bridge_receipt(br,r1,candidate_head=head,job_type='reviewer')))
+  br=receipt(r1,head,'reviewer');br['job'].pop('finished_at',None);seto('CAL-038',not bool(validate_bridge_receipt(br,r1,candidate_head=head,job_type='reviewer')))
+  fake_review={'candidate_head':head,'decision':'PASS','critical':0,'major':0,'minor':0,'unknown':0,'runtime_authority':'NONE','authority':'Research / R','transport':'mac_git_mailbox','valid_reviews':0,'invalid_reviews':0,'expected_reviews':0,'submitted_reviews':0,'minimum_valid_reviews':0,'omitted_reviews':[],'extra_reviews':[],'manifest_errors':[],'reviews':[],'review_round':'R001','population_manifest':rmp.as_posix()};fake_audit={'candidate_head':head,'decision':'PASS','critical':0,'major':0,'minor':0,'unknown':0,'runtime_authority':'NONE','authority':'Research / R','transport':'mac_git_mailbox','valid_audits':0,'invalid_audits':0,'expected_audits':0,'submitted_audits':0,'minimum_valid_audits':0,'omitted_audits':[],'extra_audits':[],'manifest_errors':[],'audits':[],'review_round':'R001','audit_round':'A001','population_manifest':amp.as_posix(),'required_acceptance_ids':S003_ACCEPTANCE_IDS,'covered_acceptance_ids':[],'missing_acceptance_ids':[],'unknown_acceptance_ids':[]};seto('CAL-039',authz(fake_review,fake_audit,n,[])['advance'])
+  blocking=list(reviews);blocking[0]=review(1,head,'REPAIR_REQUIRED',[finding('AUTH-MAJOR','MAJOR')]);forged=dict(rg_auth);forged['reviews']=blocking;forged['critical']=0;forged['major']=0;forged['minor']=0;forged['unknown']=0;forged['decision']='PASS';seto('CAL-040',authz(forged,ag_auth,n,[])['advance'])
+  small=dict(rg_auth);small.update({'valid_reviews':1,'expected_reviews':1,'submitted_reviews':1,'minimum_valid_reviews':1,'omitted_reviews':[],'extra_reviews':[],'manifest_errors':[],'reviews':[reviews[0]],'critical':0,'major':0,'minor':0,'unknown':0,'decision':'PASS'});seto('CAL-041',authz(small,ag_auth,n,[])['advance'])
+ finally:td.cleanup()
  declared={c['id']:c for c in cases};missing=sorted(set(declared)-set(out));extra_ids=sorted(set(out)-set(declared));fail=[]
  for cid,c in declared.items():
   expected=c['expected']=='ACCEPT';actual=out.get(cid);ok=(actual is expected);print(f"{'PASS' if ok else 'FAIL'} | {cid} | expected={c['expected']} observed={'ACCEPT' if actual else 'REJECT'}")
