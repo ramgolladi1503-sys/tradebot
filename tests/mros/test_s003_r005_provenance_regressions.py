@@ -53,7 +53,7 @@ def test_review_aggregate_rejects_stale_population_manifest_reference() -> None:
     assert "REVIEW_POPULATION_MANIFEST_REF_MISMATCH" in errors
 
 
-def test_modified_receipt_history_is_rejected(tmp_path: Path, monkeypatch) -> None:
+def _init_receipt_repo(tmp_path: Path, *, round_id: str = "R005") -> tuple[Path, dict, str]:
     repo = tmp_path / "queue"
     repo.mkdir()
     _git(repo, "init")
@@ -61,14 +61,14 @@ def test_modified_receipt_history_is_rejected(tmp_path: Path, monkeypatch) -> No
     _git(repo, "config", "user.name", "MROS Test")
 
     candidate = "b" * 40
-    manifest_rel = population_git_trust.canonical_manifest_path("S003", "R005", "reviewer")
-    output_rel = "research/evidence/sprints/S003/agent_queue/results/S003_R005_R01.json"
-    packet_rel = "research/evidence/sprints/S003/agent_queue/packets/S003_R005_R01.md"
-    receipt_rel = "research/evidence/sprints/S003/agent_queue/receipts/S003_R005_R01.json"
+    manifest_rel = population_git_trust.canonical_manifest_path("S003", round_id, "reviewer")
+    output_rel = f"research/evidence/sprints/S003/agent_queue/results/S003_{round_id}_R01.json"
+    packet_rel = f"research/evidence/sprints/S003/agent_queue/packets/S003_{round_id}_R01.md"
+    receipt_rel = f"research/evidence/sprints/S003/agent_queue/receipts/S003_{round_id}_R01.json"
     manifest = {
         "candidate_head": candidate,
         "sprint": "S003",
-        "round": "R005",
+        "round": round_id,
         "job_type": "reviewer",
         "frozen_before_execution": True,
         "members": [{
@@ -83,16 +83,39 @@ def test_modified_receipt_history_is_rejected(tmp_path: Path, monkeypatch) -> No
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     _git(repo, "add", manifest_rel)
     _git(repo, "commit", "-m", "freeze population")
+    return repo, manifest, receipt_rel
 
-    receipt = {
+
+def _valid_receipt(manifest: dict) -> dict:
+    member = manifest["members"][0]
+    return {
         "request": {
-            "candidate_sha": candidate,
+            "candidate_sha": manifest["candidate_head"],
             "role_id": "R01",
-            "packet_path": packet_rel,
-            "output_path": output_rel,
+            "packet_path": member["packet_path"],
+            "output_path": member["output_path"],
         },
         "job": {"job_id": "1" * 32},
     }
+
+
+def test_post_freeze_receipt_creation_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    repo, manifest, receipt_rel = _init_receipt_repo(tmp_path, round_id="R006")
+    receipt_path = repo / receipt_rel
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(json.dumps(_valid_receipt(manifest)), encoding="utf-8")
+    _git(repo, "add", receipt_rel)
+    _git(repo, "commit", "-m", "post-freeze receipt")
+
+    monkeypatch.setattr(population_git_trust, "QUEUE_REF", "HEAD")
+    _, errors = population_git_trust.load_exact_receipts(queue_repo=repo, manifest=manifest)
+    assert "RECEIPT_MEMBER_0_POST_FREEZE_ORIGIN" in errors
+    assert "RECEIPT_MEMBER_0_NOT_PRESENT_AT_FREEZE" in errors
+
+
+def test_modified_receipt_history_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    repo, manifest, receipt_rel = _init_receipt_repo(tmp_path)
+    receipt = _valid_receipt(manifest)
     receipt_path = repo / receipt_rel
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
@@ -107,3 +130,17 @@ def test_modified_receipt_history_is_rejected(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setattr(population_git_trust, "QUEUE_REF", "HEAD")
     _, errors = population_git_trust.load_exact_receipts(queue_repo=repo, manifest=manifest)
     assert "RECEIPT_MEMBER_0_HISTORY_NOT_IMMUTABLE" in errors
+
+
+def test_malformed_receipt_root_returns_controlled_error(tmp_path: Path, monkeypatch) -> None:
+    repo, manifest, receipt_rel = _init_receipt_repo(tmp_path, round_id="R006")
+    receipt_path = repo / receipt_rel
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text("[]", encoding="utf-8")
+    _git(repo, "add", receipt_rel)
+    _git(repo, "commit", "-m", "malformed receipt root")
+
+    monkeypatch.setattr(population_git_trust, "QUEUE_REF", "HEAD")
+    receipts, errors = population_git_trust.load_exact_receipts(queue_repo=repo, manifest=manifest)
+    assert receipts == {}
+    assert "RECEIPT_MEMBER_0_OBJECT_REQUIRED" in errors
