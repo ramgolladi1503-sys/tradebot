@@ -1,0 +1,58 @@
+S002 V9 NATIVE VALIDATION EVIDENCE
+
+Candidate HEAD: 2a10c33c34e4d8d7c95b90dee2d88d59b906b6e4
+Repository: ramgolladi1503-sys/tradebot
+Branch used for fetch: research/mros-program-v1
+Execution worktree: /Users/madhuram/.mros-review/s002-native
+Python: 3.12.2
+Validator: scripts/mros/validate_s002_fixtures.py
+Result: 88/88 PASS
+Fail: 0
+Terminal marker: S002_TARGETED_VALIDATION_PASS
+Exit code: 0
+
+Native command executed by operator:
+
+cd /Users/madhuram/.mros-review/s002-native
+
+git fetch origin
+git checkout 2a10c33c34e4d8d7c95b90dee2d88d59b906b6e4
+
+echo "=== NATIVE PROVENANCE ==="
+pwd
+git status --short --branch
+git rev-parse HEAD
+python3 --version
+
+echo "=== S002 V9 VALIDATION ==="
+python3 scripts/mros/validate_s002_fixtures.py
+RC=$?
+
+echo "EXIT_CODE=$RC"
+exit $RC
+
+Observed provenance excerpt:
+
+=== NATIVE PROVENANCE ===
+/Users/madhuram/.mros-review/s002-native
+## HEAD (no branch)
+2a10c33c34e4d8d7c95b90dee2d88d59b906b6e4
+Python 3.12.2
+=== S002 V9 VALIDATION ===
+...
+PASS | S002-C091 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C092 | expected={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []} | actual={"can_promote": false, "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C093 | expected={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C094 | expected={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C095 | expected={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []}
+PASS | S002-C096 | expected={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []} | actual={"error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"], "knowledge_class": null, "status": "INVALID_INPUT", "violated_rules": []}
+SUMMARY | checks=88 pass=88 fail=0
+S002_TARGETED_VALIDATION_PASS
+EXIT_CODE=0
+
+Source terminal transcript supplied by operator in the MROS implementation session.
+SHA-256 of the complete supplied transcript file:
+a636893dfaa0bd872a70b744b06aa04015a438ec9d60e135cadb128db9a334b3
+
+Authority note:
+This is implementation-side native validation evidence only. It does not constitute independent S002 certification. It is bound exclusively to candidate HEAD 2a10c33c34e4d8d7c95b90dee2d88d59b906b6e4 and becomes historical if implementation changes.
