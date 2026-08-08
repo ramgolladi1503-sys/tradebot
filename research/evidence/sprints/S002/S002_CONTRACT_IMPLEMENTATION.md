@@ -4,7 +4,7 @@ Program: MROS
 Milestone: M1 — Research Governance  
 Work Package: WP001 — Research Constitution  
 Sprint: S002  
-Status: FINAL_BOOTSTRAP_REPAIR_IMPLEMENTED_PENDING_NATIVE_VALIDATION  
+Status: RC002_SEMANTIC_GATE_BINDING_REPAIR_PENDING_NATIVE_VALIDATION  
 Authority: `Research / R`  
 Runtime authority: `NONE`
 
@@ -18,12 +18,14 @@ The canonical executable validator is:
 
 `scripts/mros/validate_s002_fixtures.py`
 
-It loads two immutable evidence corpora:
+It loads four preserved evidence corpora:
 
-1. `S002_FIXTURES.json` — v4 baseline, 53 historical/regression cases;
-2. `S002_FIXTURES_V5_ADDENDUM.json` — final bootstrap-review closure cases.
+1. `S002_FIXTURES.json` — v4 baseline/regression corpus;
+2. `S002_FIXTURES_V5_ADDENDUM.json` — final bootstrap-review closure cases;
+3. `S002_FIXTURES_V6_GATE_BINDING.json` — syntactic new-evidence gate binding and lineage controls;
+4. `S002_FIXTURES_V7_GATE_SEMANTIC_BINDING.json` — semantic gate-to-authoritative-evidence binding attacks and positive controls.
 
-Case IDs must be unique across both files. Any fixture-load/schema/duplicate-ID failure exits non-zero.
+Historical PASS cases superseded by stronger promotion controls remain preserved but are excluded from the active suite. Case IDs must be unique across active corpora. Fixture load/schema/duplicate-ID failures exit non-zero.
 
 ## Deterministic Classification
 
@@ -49,83 +51,47 @@ Promotion must:
 - provide the complete prior evidence-ref set explicitly via `evidence_refs` before PASS;
 - provide `evidence_provenance_complete=true` before PASS;
 - prevent canonical old/new ref overlap and duplicate new refs;
-- derive mandatory Grade B/A/A+ gate requirements from the requested grade;
-- reject malformed optional boolean gate flags instead of silently ignoring them.
+- derive mandatory Grade B/A/A+ requirements from the requested grade;
+- bind every requested promotion gate to a canonical new `EVID-*` identity;
+- bind that same identity to the authoritative gate metadata field (`reproducibility_ref`, `independent_attack_ref`, `calibration_ref`, `scientific_certification_ref`, `economic_certification_ref`, `live_forward_evidence_ref`, or `monitoring_ref` as applicable);
+- reject stale gate metadata paired with unrelated newly labelled evidence;
+- reject malformed optional boolean/gate/schema values instead of silently ignoring them.
 
-The literal reference identity is treated as the stable MROS evidence-registry identity at S002. Stronger content-hash/registry enforcement may be introduced only through controlled later registry work; S002 does not invent a separate evidence registry.
+The literal `EVID-*` identity is the stable MROS evidence-registry identity at S002. S002 does not claim to inspect future registry content semantics; it does deterministically prevent a caller from presenting one evidence identity as the authoritative gate evidence while binding a different unrelated identity as the supposedly new evidence satisfying that gate.
 
 ## Constitutional Fail-Closed Semantics
 
-A request cannot receive PASS merely because one dependent field is recognizable.
-
-Dependent-only requests such as:
-
-- `destroyers` without `material_claim`;
-- `completion_evidence_refs` without `completion_claim`;
-- `supersession_decision_ref` without `supersedes`;
-
-return controlled `INVALID_INPUT` / E001.
-
-Causal-time, runtime, and scope pairs remain fail-closed. Malformed types/timestamps return controlled `INVALID_INPUT`, not uncaught exceptions.
+A request cannot receive PASS merely because one dependent field is recognizable. Partial/dependent requests fail closed. Causal-time, runtime, denominator, scope, enum, and malformed-schema paths remain controlled.
 
 ## RC-009
 
-Denominator-relevant inputs require deterministic confirmatory or `EXPLORATORY_POST_HOC` authority context.
-
-Contracts must contain non-empty/type-valid denominator identity fields. Confirmatory post-outcome changes fail E008/E009. Legitimate preregistered unchanged contracts remain valid.
-
-`EXPLORATORY_POST_HOC` semantically requires `outcomes_inspected=true`; declaring post-hoc analysis while asserting outcomes were not inspected is contradictory and now returns `INVALID_INPUT`.
-
-A valid changed post-hoc analysis must preserve the original result, use a new analysis identity/rationale, account for multiplicity, and reduce authority.
-
-## Enum Validation
-
-`VALIDATE_CONTRACT_ENUMS` requires at least one controlled enum field (`knowledge_class`, `verdict`, or `status`). An empty or irrelevant enum-validation request cannot return PASS.
+Denominator-relevant inputs require deterministic confirmatory or `EXPLORATORY_POST_HOC` authority context. Confirmatory post-outcome changes fail E008/E009. Legitimate preregistered unchanged contracts remain valid. A changed post-hoc analysis must preserve the original result, use a new analysis identity/rationale, account for multiplicity, and reduce authority.
 
 ## Review History
 
-The final bootstrap-independent review of candidate `c8864050e5df1a0d2303cadf88908c5eef6410c3` returned:
+The independent review of exact candidate `89d3abd3b2b2c20951c123063b534c56af7ebf60` returned `S002_INDEPENDENT_RE_REVIEW_REPAIR_REQUIRED` with 1 MAJOR and 1 MINOR.
 
-`S002_INDEPENDENT_RE_REVIEW_REPAIR_REQUIRED`
+The MAJOR (`89D3-F-001`) proved that v6 only enforced syntactic membership/non-overlap: stale authoritative gate metadata could coexist with unrelated new evidence caller-labelled as the requested gate and still PASS. The v7 repair closes that contradiction by requiring equality between each requested gate binding and its authoritative gate evidence reference.
 
-with 5 MAJOR, 1 MINOR, 0 CRITICAL, 1 UNKNOWN.
-
-The five MAJOR classes were:
-
-1. partial/dependent constitutional requests silently passing;
-2. empty enum-validation requests passing;
-3. contradictory post-hoc RC-009 state passing;
-4. incomplete genuine-new-evidence identity/lineage enforcement;
-5. malformed promotion-schema types being ignored or substantively misclassified.
-
-The current v5 repair addresses those classes in implementation and adds dedicated adversarial fixtures. The prior UNKNOWN concerning repository-sealed native evidence is not declared closed by implementation; a new exact-head native run is required.
+The MINOR was documentation drift about fixture-corpus count; this document now lists all four active/preserved corpora accurately.
 
 ## Non-Goals
 
-S002 does not:
-
-- accept itself;
-- accept WP001;
-- start S003;
-- start M2;
-- authorize Review/Audit Boards;
-- start M9;
-- modify strategy/broker/risk/execution/runtime behavior.
+S002 does not accept itself, accept WP001, start S003/M2/M9, authorize Review/Audit Boards, or modify strategy/broker/risk/execution/runtime behavior.
 
 ## Observed Facts
 
-- S001 remains accepted with one non-blocking minor finding.
-- Multiple independent S002 rounds have found real fail-open defects.
-- Failed reviews and prior native results remain preserved as historical evidence.
-- The current implementation includes the 53-case v4 corpus plus the v5 adversarial addendum.
+- Exact candidate `89d3abd3...` had native 70/70 PASS but failed independent review on one real RC-002 semantic binding defect.
+- The failed review is preserved at `S002_INDEPENDENT_RE_REVIEW_89D3_FINAL.md`.
+- v7 adds deterministic attacks for unrelated/stale gate evidence and legitimate promotion controls.
 
 ## Inferences
 
-Repeated independent attack is strengthening the governance validator; no previous green fixture result is treated as authority for a changed HEAD.
+The repair is stricter than v6: it no longer accepts arbitrary new evidence merely because a caller assigns a gate label to it while the authoritative gate metadata points elsewhere.
 
 ## Hypotheses
 
-The v5 repair may close the currently known S002 fail-open classes, but this remains unproven until native validation and a fresh bootstrap-independent re-review of the exact repaired HEAD.
+The v7 repair closes `89D3-F-001`; this remains unproven until native validation and a fresh independent review of the exact repaired HEAD.
 
 ## Assumptions
 
@@ -133,16 +99,16 @@ The frozen S001 contract and current MROS authority model remain authoritative.
 
 ## Destroyers / Falsifiers
 
-S002 remains unacceptable if a valid adversarial input can silently PASS through missing/contradictory decision semantics, evidence-only promotion, RC-009, runtime separation, malformed schema handling, or controlled enum validation.
+S002 remains unacceptable if stale/unrelated gate evidence can still produce authority promotion, or if the v7 repair regresses any previously accepted fail-closed behavior.
 
 ## Unknowns
 
-- exact-head native validation for the current v5 repair;
-- fresh bootstrap-independent review of that exact native-validated HEAD.
+- exact-head native validation for the v7 repair;
+- fresh bootstrap-independent review of that exact validated HEAD.
 
 ## Next Experiment
 
-Run the canonical combined fixture validator natively from the exact current S002 repair HEAD, preserve complete provenance, then obtain a fresh independent re-review. Do not start S003 beforehand.
+Run the canonical combined fixture validator natively from the exact repaired HEAD, preserve exact provenance, then obtain a fresh independent re-review. Do not start S003 beforehand.
 
 ## Authority Grade
 
