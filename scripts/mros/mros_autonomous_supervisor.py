@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 AUTHORITY_BRANCH="research/mros-program-v1"; QUEUE_BRANCH="automation/mros-agent-queue-v1"
 QUEUE_ROOT=Path("research/evidence/sprints/S003/agent_queue"); REQUEST_DIR=QUEUE_ROOT/"requests"; RECEIPT_DIR=QUEUE_ROOT/"receipts"
+BRIDGE_ROOT=Path('/Users/madhuram/.mros-agent-bridge/bridge')
 class SupervisorError(RuntimeError):pass
 @dataclass
 class Health:
@@ -57,13 +58,18 @@ def worker_alive_from_launchd()->bool:
  except Exception:return False
 def write_health(path:Path,h:Health)->None:
  h.updated_at=time.time();path.parent.mkdir(parents=True,exist_ok=True);tmp=path.with_suffix(".tmp");tmp.write_text(json.dumps(asdict(h),sort_keys=True,indent=2)+"\n",encoding="utf-8");os.replace(tmp,path)
-def run_step(repo:Path,step_script:Path,health_path:Path)->int:
- if not step_script.is_file():return 0
- p=subprocess.run([sys.executable,str(step_script),"--repo",str(repo),"--health",str(health_path),"--once"],cwd=repo,timeout=900,check=False);return p.returncode
+def run_step(repo:Path,health_path:Path)->int:
+ step_script=BRIDGE_ROOT/"scripts/mros/mros_supervisor_step.py"
+ if not step_script.is_file():raise SupervisorError(f"SUPERVISOR_STEP_SCRIPT_MISSING:{step_script}")
+ p=subprocess.run([sys.executable,str(step_script),"--repo",str(repo),"--health",str(health_path),"--once"],cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=900,check=False)
+ if p.returncode not in (0,3):raise SupervisorError(f"SUPERVISOR_STEP_FAILED:{p.returncode}:{(p.stderr or p.stdout).strip()}")
+ return p.returncode
 def run_launcher(repo:Path)->int:
- script=Path('/Users/madhuram/.mros-agent-bridge/bridge/scripts/mros/mros_bootstrap_review_launcher.py');queue=Path('/Users/madhuram/.mros-agent-bridge/queue')
- if not script.is_file():return 0
- p=subprocess.run([sys.executable,str(script),"--authority-repo",str(repo),"--queue-repo",str(queue)],cwd=repo,timeout=900,check=False);return p.returncode
+ script=BRIDGE_ROOT/"scripts/mros/mros_bootstrap_review_launcher.py";queue=Path('/Users/madhuram/.mros-agent-bridge/queue')
+ if not script.is_file():raise SupervisorError(f"R002_LAUNCHER_MISSING:{script}")
+ p=subprocess.run([sys.executable,str(script),"--authority-repo",str(repo),"--queue-repo",str(queue)],cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=900,check=False)
+ if p.returncode not in (0,3):raise SupervisorError(f"R002_LAUNCH_FAILED:{p.returncode}:{(p.stderr or p.stdout).strip()}")
+ return p.returncode
 def single_instance(lock_path:Path):
  lock_path.parent.mkdir(parents=True,exist_ok=True);h=lock_path.open("a+")
  try:fcntl.flock(h.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -82,12 +88,9 @@ def main()->int:
     if h.m9_started:raise SupervisorError("M9_START_FORBIDDEN")
     h.supervisor_status="RUNNING";h.last_error=None;write_health(health_path,h)
     if h.next_action=="RUN_REPOSITORY_STEP":
-     rc=run_step(repo,repo/"scripts/mros/mros_supervisor_step.py",health_path)
-     if rc not in (0,3):raise SupervisorError(f"SUPERVISOR_STEP_FAILED:{rc}")
+     run_step(repo,health_path)
      fetch(repo);state=parse_program_state(read_at_ref(repo,f"origin/{AUTHORITY_BRANCH}","research/program/MROS_PROGRAM_STATE.yaml"))
-     if "R002_REVIEW_PREPARATION" in state.get("active_sprint_status",""):
-      lrc=run_launcher(repo)
-      if lrc not in (0,3):raise SupervisorError(f"R002_LAUNCH_FAILED:{lrc}")
+     if "R002_REVIEW_PREPARATION" in state.get("active_sprint_status",""):run_launcher(repo)
    except Exception as exc:
     h.supervisor_status="HARD_STOP";h.last_error=f"{type(exc).__name__}:{exc}";h.next_action="OPERATOR_ATTENTION";write_health(health_path,h)
     if a.once:return 2
