@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="${MROS_AGENT_BRIDGE_ROOT:-/Users/madhuram/.mros-agent-bridge}"
+SOURCE_REPO="${1:-/Users/madhuram/tradebot}"
 BRIDGE_WT="$ROOT/bridge"
+AUTHORITY_WT="$ROOT/authority"
 CONFIG="$ROOT/config.json"
 STATE="$ROOT/state"
 LOGS="$ROOT/logs"
@@ -12,6 +14,18 @@ PYTHON="$(command -v python3)"
 [[ -f "$CONFIG" ]] || { echo "CONFIG_MISSING:$CONFIG" >&2; exit 3; }
 [[ -f "$BRIDGE_WT/scripts/mros/mros_agent_git_worker.py" ]] || { echo BRIDGE_WORKER_MISSING >&2; exit 4; }
 [[ -f "$BRIDGE_WT/scripts/mros/mros_autonomous_supervisor.py" ]] || { echo SUPERVISOR_MISSING >&2; exit 5; }
+cd "$SOURCE_REPO"
+git fetch origin research/mros-program-v1 research/mros-agent-bridge-v1 automation/mros-agent-queue-v1
+if [[ ! -e "$AUTHORITY_WT/.git" ]]; then
+  git worktree add "$AUTHORITY_WT" research/mros-program-v1
+else
+  if [[ -n "$(git -C "$AUTHORITY_WT" status --porcelain)" ]]; then
+    echo "AUTHORITY_WORKTREE_NOT_CLEAN:$AUTHORITY_WT" >&2; exit 6
+  fi
+  git -C "$AUTHORITY_WT" fetch origin research/mros-program-v1
+  git -C "$AUTHORITY_WT" switch research/mros-program-v1
+  git -C "$AUTHORITY_WT" merge --ff-only origin/research/mros-program-v1
+fi
 cat > "$LAUNCH/com.aixion.mros-agent-worker.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -27,7 +41,7 @@ cat > "$LAUNCH/com.aixion.mros-autonomous-supervisor.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>com.aixion.mros-autonomous-supervisor</string>
-<key>ProgramArguments</key><array><string>$PYTHON</string><string>$BRIDGE_WT/scripts/mros/mros_autonomous_supervisor.py</string><string>--repo</string><string>/Users/madhuram/tradebot</string><string>--state-root</string><string>$STATE</string><string>--poll-seconds</string><string>15</string></array>
+<key>ProgramArguments</key><array><string>$PYTHON</string><string>$BRIDGE_WT/scripts/mros/mros_autonomous_supervisor.py</string><string>--repo</string><string>$AUTHORITY_WT</string><string>--state-root</string><string>$STATE</string><string>--poll-seconds</string><string>15</string></array>
 <key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>10</integer>
 <key>StandardOutPath</key><string>$LOGS/supervisor.out.log</string><key>StandardErrorPath</key><string>$LOGS/supervisor.err.log</string>
 </dict></plist>
@@ -41,5 +55,6 @@ sleep 2
 launchctl print "gui/$(id -u)/com.aixion.mros-agent-worker" | head -40
 launchctl print "gui/$(id -u)/com.aixion.mros-autonomous-supervisor" | head -40
 printf '%s\n' MROS_AUTONOMOUS_SERVICES_INSTALLED
+printf 'Authority worktree: %s\n' "$AUTHORITY_WT"
 printf 'Health: %s\n' "$STATE/supervisor_health.json"
 printf '%s\n' "Stop: launchctl bootout gui/$(id -u)/com.aixion.mros-autonomous-supervisor ; launchctl bootout gui/$(id -u)/com.aixion.mros-agent-worker"
