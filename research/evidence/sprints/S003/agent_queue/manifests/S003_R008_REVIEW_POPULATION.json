@@ -1,0 +1,24 @@
+{
+  "schema_version": "mros-agent-population-v1",
+  "job_type": "reviewer",
+  "candidate_head": "8b8a209d4b9e06a8e6ab9c6f0d8cf5ff005d2fd3",
+  "sprint": "S003",
+  "round": "R008",
+  "frozen_before_execution": true,
+  "expected_count": 10,
+  "assurance_tier": "FULL",
+  "created_by": "mros-recovery-controller-full-r008",
+  "runtime_authority": "NONE",
+  "members": [
+    {"execution_role_id":"R01","semantic_role":"contract_compliance","packet_path":"research/evidence/sprints/S003/agent_queue/packets/S003_R008_R01.md","output_path":"research/evidence/sprints/S003/agent_queue/results/S003_R008_R01.json","receipt_path":"research/evidence/sprints/S003/agent_queue/receipts/S003_R008_R01.json"},
+    {"execution_role_id":"R02","semantic_role":"negative_control","packet_path":"research/evidence/sprints/S003/agent_queue/packets/S003_R008_R02.md","output_path":"research/evidence/sprints/S003/agent_queue/results/S003_R008_R02.json","receipt_path":"research/evidence/sprints/S003/agent_queue/receipts/S003_R008_R02.json"},
+    {"execution_role_id":"R03","semantic_role":"evidence_provenance","packet_path":"research/evidence/sprints/S003/agent_queue/packets/S003_R008_R03.md","output_path":"research/evidence/sprints/S003/agent_queue/results/S003_R008_R03.json","receipt_path":"research/evidence/sprints/S003/agent_queue/receipts/S003_R008_R03.json"},
+    {"execution_role_id":"R04","semantic_role":"authority_promotion","packet_path":"research/evidence/sprints/S003/agent_queue/packets/S003_R008_R04.md","output_path":"research/evidence/sprints/S003/agent_queue/results/S003_R008_R04.json","receipt_path":"research/evidence/sprints/S003/agent_queue/receipts/S003_R008_R04.json"},
+    {"execution_role_id":"R05","semantic_role":"causal_time","packet_path":"research/evidence/sprints/S003/agent_queue/packets/S003_R008_R05.md","output_path":"research/evidence/sprints/S003/agent_queue/results/S003_R008_R05.json","receipt_path":"research/evidence/sprints/S003/agent_queue/receipts/S003_R008_R05.json"},
+    {"execution_role_id":"R06","semantic_role":"denominator_search_integrity","packet_path":"research/evidence/sprints/S003/agent_queue/packets/S003_R008_R06.md","output_path":"research/evidence/sprints/S003/agent_queue/results/S003_R008_R06.json","receipt_path":"research/evidence/sprints/S003/agent_queue/receipts/S003_R008_R06.json"},
+    {"execution_role_id":"R07","semantic_role":"runtime_boundary","packet_path":"research/evidence/sprints/S003/agent_queue/packets/S003_R008_R07.md","output_path":"research/evidence/sprints/S003/agent_queue/results/S003_R008_R07.json","receipt_path":"research/evidence/sprints/S003/agent_queue/receipts/S003_R008_R07.json"},
+    {"execution_role_id":"R08","semantic_role":"qa_verification","packet_path":"research/evidence/sprints/S003/agent_queue/packets/S003_R008_R08.md","output_path":"research/evidence/sprints/S003/agent_queue/results/S003_R008_R08.json","receipt_path":"research/evidence/sprints/S003/agent_queue/receipts/S003_R008_R08.json"},
+    {"execution_role_id":"R09","semantic_role":"architecture_no_drift","packet_path":"research/evidence/sprints/S003/agent_queue/packets/S003_R008_R09.md","output_path":"research/evidence/sprints/S003/agent_queue/results/S003_R008_R09.json","receipt_path":"research/evidence/sprints/S003/agent_queue/receipts/S003_R008_R09.json"},
+    {"execution_role_id":"R10","semantic_role":"adversarial_red_team","packet_path":"research/evidence/sprints/S003/agent_queue/packets/S003_R008_R10.md","output_path":"research/evidence/sprints/S003/agent_queue/results/S003_R008_R10.json","receipt_path":"research/evidence/sprints/S003/agent_queue/receipts/S003_R008_R10.json"}
+  ]
+}
