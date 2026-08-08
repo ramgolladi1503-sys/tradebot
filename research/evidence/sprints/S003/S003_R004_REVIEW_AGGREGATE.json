@@ -2,187 +2,163 @@
   "assurance_tier": "FAST",
   "authority": "Research / R",
   "candidate_head": "0c5d6268ef224450cd881da588efcce04c630414",
-  "critical": 0,
-  "decision": "INCOMPLETE_OR_UNDECLARED_REVIEW_POPULATION",
+  "critical": 1,
+  "decision": "REVIEW_DISAGREEMENT_REQUIRES_ADJUDICATION",
   "excluded_reviews": 0,
   "expected_reviews": 3,
-  "extra_reviews": [
-    "/Users/madhuram/.mros-agent-bridge/queue/research/evidence/sprints/S003/agent_queue/results/S003_R004_R02.json",
-    "reviews/S003/R004/R01.json"
-  ],
-  "invalid": [
-    {
-      "errors": [
-        "REVIEW_NOT_IN_FROZEN_POPULATION"
-      ],
-      "file": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R01.json",
-      "review": {
-        "artifact_id": "MROS-S003-R004-R01",
-        "broker_actions": "NONE",
-        "candidate_head": "0c5d6268ef224450cd881da588efcce04c630414",
-        "critical": 0,
-        "evidence_refs": [
-          "scripts/mros/advance_program.py:35-83",
-          "scripts/mros/advance_program.py:85-98",
-          "scripts/mros/aggregate_audits.py:11-47",
-          "scripts/mros/population_manifest.py:10-45",
-          "scripts/mros/bridge_receipt.py:10-76"
-        ],
-        "execution_job_id": "5a569b59c369401bb1ab810d7ef75532",
-        "execution_role_id": "R01",
-        "findings": [
-          {
-            "evidence": "scripts/mros/advance_program.py calls aggregate_audits without required_acceptance_ids or expected_native_ref. Its recomputation therefore uses an empty acceptance denominator and does not revalidate each audit's audited_native_validation reference. _compare_recomputed also omits required_acceptance_ids and covered_acceptance_ids, allowing a forged aggregate with missing coverage to remain internally consistent.",
-            "falsifier": "A test showing authorize rejects an audit aggregate whose required acceptance criteria are missing or whose audited_native_validation points to a different native artifact, using only recomputed inputs.",
-            "finding_id": "R004-COMP-001",
-            "recommended_repair_scope": "Pass the acceptance-contract IDs and canonical native-evidence reference into audit recomputation, compare required and covered criteria, and add adversarial tests for missing, extra, and mismatched native references.",
-            "requirement": "Advancement must recompute and enforce the frozen audit acceptance population and native-evidence binding.",
-            "severity": "MAJOR"
-          },
-          {
-            "evidence": "_validate_aggregate validates the supplied manifest and recomputes against it, but authorize never supplies sprint/round expectations to validate_population_manifest. population_manifest.py accepts any valid S### and reviewer/auditor round matching its own pattern. A manifest from another sprint or round can therefore define the denominator and quorum while context validation checks only the acceptance trace's requested sprint.",
-            "falsifier": "A test using a valid frozen manifest with the correct candidate head but S004 or a different round, plus matching artifacts, that authorize must reject for manifest sprint/round mismatch.",
-            "finding_id": "R004-COMP-002",
-            "recommended_repair_scope": "Bind manifest sprint and round to authorize inputs and require exact board-round identity before deriving expected_count, submitted_count, or quorum.",
-            "requirement": "Frozen population and quorum derivation must be bound to the requested sprint and round, not merely to candidate_head and artifact-local metadata.",
-            "severity": "MAJOR"
-          },
-          {
-            "evidence": "population_manifest.py records receipt_path but aggregate_reviews.py, aggregate_audits.py, and advance_program._load_receipts ignore it. Receipts are indexed solely by embedded job_id from every JSON file in the directory. A valid receipt can be placed under a different path, or an unrelated file can provide the matching job_id, while the artifact still passes receipt validation.",
-            "falsifier": "A test renaming or relocating a receipt while leaving its embedded job_id valid, with the manifest receipt_path unchanged, that aggregation must reject.",
-            "finding_id": "R004-COMP-003",
-            "recommended_repair_scope": "Load receipts by the manifest-declared path and verify path identity, uniqueness, and canonical job/output/packet/request bindings before accepting an artifact.",
-            "requirement": "Receipt provenance must bind the manifest receipt_path and actual receipt file to the artifact/job/output/packet chain.",
-            "severity": "MAJOR"
-          }
-        ],
-        "independent_from_implementation": true,
-        "independent_from_review_aggregation": true,
-        "major": 3,
-        "minor": 0,
-        "output_path": "reviews/S003/R004/R01.json",
-        "packet_path": "packets/S003/R004/R01_contract_compliance.md",
-        "role": "contract_compliance",
-        "round": "R004",
-        "runtime_authority": "NONE",
-        "sprint": "S003",
-        "transport": "mac_git_mailbox",
-        "unknown": 0,
-        "verdict": "REPAIR_REQUIRED"
-      }
-    },
-    {
-      "errors": [
-        "REVIEW_NOT_IN_FROZEN_POPULATION"
-      ],
-      "file": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R02.json",
-      "review": {
-        "artifact_id": "S003_R004_R02",
-        "broker_actions": "NONE",
-        "candidate_head": "0c5d6268ef224450cd881da588efcce04c630414",
-        "critical": 0,
-        "evidence_refs": [
-          "scripts/mros/advance_program.py",
-          "scripts/mros/population_manifest.py",
-          "research/review_board/AUDIT_POLICY.yaml",
-          "research/review_board/CALIBRATION_CASES.json#CAL-041"
-        ],
-        "execution_job_id": "ab8ac011d68d459aa960ae730de0f1cc",
-        "execution_role_id": "R02",
-        "findings": [
-          {
-            "evidence": "The candidate's scripts/mros/population_manifest.py accepts expected_count=1 for auditors via MIN_COUNT={'reviewer':2,'auditor':1}, while research/review_board/AUDIT_POLICY.yaml requires minimum_valid_independent_audits: 10 and valid_audits_minimum: 10. scripts/mros/advance_program.py validates only the manifest-derived minimum and recomputes against that same reduced manifest, so a syntactically valid 1/1 PASS audit aggregate can satisfy advancement if the fabricated manifest is supplied.",
-            "falsifier": "A deterministic test or validator must construct a frozen auditor manifest with expected_count=1, one valid PASS audit, matching receipt/provenance, and a syntactically valid PASS aggregate, then prove authorize() rejects it because the policy quorum is 10 and the frozen population cannot be reduced.",
-            "finding_id": "R02-MAJOR-001",
-            "recommended_repair_scope": "Bind advancement and population validation to the normative audit/review quorum policy, reject manifests below the policy minimum, and add a regression test for positive-but-artificially-reduced 1/1 denominators. Preserve exact-head, frozen-membership, receipt, provenance, and derived-count checks.",
-            "requirement": "Advancement must reject a positive aggregate with an artificially reduced denominator or quorum, including a 1/1 audit population.",
-            "severity": "MAJOR"
-          }
-        ],
-        "independent_from_implementation": true,
-        "independent_from_review_aggregation": true,
-        "major": 1,
-        "minor": 0,
-        "output_path": "/Users/madhuram/.mros-agent-bridge/queue/research/evidence/sprints/S003/agent_queue/results/S003_R004_R02.json",
-        "packet_path": "/Users/madhuram/.mros-agent-bridge/queue/research/evidence/sprints/S003/agent_queue/packets/S003_R004_R02.md",
-        "role": "negative_control",
-        "round": "R004",
-        "runtime_authority": "NONE",
-        "sprint": "S003",
-        "transport": "mac_git_mailbox",
-        "unknown": 0,
-        "verdict": "REPAIR_REQUIRED"
-      }
-    },
-    {
-      "errors": [
-        "INVALID_EXECUTION_JOB_ID"
-      ],
-      "file": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R03.json",
-      "review": {
-        "artifact_id": "S003_R004_R03_adversarial_red_team",
-        "broker_actions": "NONE",
-        "candidate_head": "0c5d6268ef224450cd881da588efcce04c630414",
-        "critical": 1,
-        "evidence_refs": [
-          "scripts/mros/advance_program.py:86-89",
-          "scripts/mros/population_manifest.py:8-31",
-          "scripts/mros/aggregate_reviews.py:11-57",
-          "scripts/mros/aggregate_audits.py:11-53",
-          "scripts/mros/bridge_receipt.py:8-70"
-        ],
-        "execution_job_id": "29823326ebe144248e3b9ced52430a2",
-        "execution_role_id": "R03",
-        "findings": [
-          {
-            "evidence": "scripts/mros/advance_program.py:86-89 accepts --review-population-manifest and --audit-population-manifest paths supplied by the caller and passes their parsed contents directly into _validate_aggregate. population_manifest.py only validates self-asserted structure, candidate head, sprint/round syntax, and frozen_before_execution=True; it does not bind the manifest to a canonical S003/R004 manifest, immutable hash, repository commit, or trusted board source. An attacker can provide a fabricated manifest with a positive expected_count and matching substituted roles, paths, jobs, receipts, and PASS artifacts; aggregate recomputation then validates against that attacker-controlled population.",
-            "falsifier": "Run authorize with otherwise structurally valid fabricated manifests containing substituted members and matching artifacts/receipts while the canonical frozen R004 population differs; authorization must reject the inputs without relying on caller-provided manifest contents.",
-            "finding_id": "R03-AR-001",
-            "recommended_repair_scope": "Resolve frozen manifests from a trusted canonical path or content-addressed board input, bind them to S003/R004/candidate head and an immutable manifest hash, and reject caller-selected or self-attested population definitions.",
-            "requirement": "Advancement must reconstruct reviewer and auditor membership from an independently frozen population rather than trusting caller-supplied aggregate inputs or manifests.",
-            "severity": "CRITICAL"
-          },
-          {
-            "evidence": "population_manifest.py validates and stores each member's receipt_path, but aggregate_reviews.py and aggregate_audits.py never compare receipt_path with the manifest member. advance_program._load_receipts loads every JSON receipt in a caller-supplied directory and indexes only by embedded job_id; validate_bridge_receipt checks internal consistency but not the manifest-declared receipt path. A receipt copied or substituted under another path can therefore satisfy the authority boundary if its embedded fields match the artifact.",
-            "falsifier": "Place a valid receipt for a manifest member at a path different from that member's frozen receipt_path, supply the receipt directory to advance_program, and verify that authorization rejects the result.",
-            "finding_id": "R03-AR-002",
-            "recommended_repair_scope": "Load receipts by the exact frozen receipt_path, bind receipt path and content hash to the manifest member, reject unlisted receipt files, and preserve explicit provenance mismatch errors.",
-            "requirement": "Receipt and provenance validation must enforce the receipt member declared by the frozen population and reject substituted receipt files.",
-            "severity": "MAJOR"
-          }
-        ],
-        "independent_from_implementation": true,
-        "independent_from_review_aggregation": true,
-        "major": 1,
-        "minor": 0,
-        "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R03.json",
-        "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R004_R03.md",
-        "role": "adversarial_red_team",
-        "round": "R004",
-        "runtime_authority": "NONE",
-        "sprint": "S003",
-        "transport": "mac_git_mailbox",
-        "unknown": 0,
-        "verdict": "FAIL"
-      }
-    }
-  ],
-  "invalid_reviews": 3,
-  "major": 0,
+  "extra_reviews": [],
+  "invalid": [],
+  "invalid_reviews": 0,
+  "major": 5,
   "manifest_errors": [],
   "minimum_valid_reviews": 3,
   "minor": 0,
-  "omitted_reviews": [
-    "research/evidence/sprints/S003/agent_queue/results/S003_R004_R01.json",
-    "research/evidence/sprints/S003/agent_queue/results/S003_R004_R02.json"
-  ],
+  "omitted_reviews": [],
   "pass_or_minor": 0,
   "population_manifest": "research/evidence/sprints/S003/agent_queue/manifests/S003_R004_REVIEW_POPULATION.json",
   "review_round": "R004",
-  "reviews": [],
+  "reviews": [
+    {
+      "artifact_id": "MROS-S003-R004-R01",
+      "broker_actions": "NONE",
+      "candidate_head": "0c5d6268ef224450cd881da588efcce04c630414",
+      "critical": 0,
+      "evidence_refs": [
+        "scripts/mros/advance_program.py:35-83",
+        "scripts/mros/advance_program.py:85-98",
+        "scripts/mros/aggregate_audits.py:11-47",
+        "scripts/mros/population_manifest.py:10-45",
+        "scripts/mros/bridge_receipt.py:10-76"
+      ],
+      "execution_job_id": "5a569b59c369401bb1ab810d7ef75532",
+      "execution_role_id": "R01",
+      "findings": [
+        {
+          "evidence": "scripts/mros/advance_program.py calls aggregate_audits without required_acceptance_ids or expected_native_ref. Its recomputation therefore uses an empty acceptance denominator and does not revalidate each audit's audited_native_validation reference. _compare_recomputed also omits required_acceptance_ids and covered_acceptance_ids, allowing a forged aggregate with missing coverage to remain internally consistent.",
+          "falsifier": "A test showing authorize rejects an audit aggregate whose required acceptance criteria are missing or whose audited_native_validation points to a different native artifact, using only recomputed inputs.",
+          "finding_id": "R004-COMP-001",
+          "recommended_repair_scope": "Pass the acceptance-contract IDs and canonical native-evidence reference into audit recomputation, compare required and covered criteria, and add adversarial tests for missing, extra, and mismatched native references.",
+          "requirement": "Advancement must recompute and enforce the frozen audit acceptance population and native-evidence binding.",
+          "severity": "MAJOR"
+        },
+        {
+          "evidence": "_validate_aggregate validates the supplied manifest and recomputes against it, but authorize never supplies sprint/round expectations to validate_population_manifest. population_manifest.py accepts any valid S### and reviewer/auditor round matching its own pattern. A manifest from another sprint or round can therefore define the denominator and quorum while context validation checks only the acceptance trace's requested sprint.",
+          "falsifier": "A test using a valid frozen manifest with the correct candidate head but S004 or a different round, plus matching artifacts, that authorize must reject for manifest sprint/round mismatch.",
+          "finding_id": "R004-COMP-002",
+          "recommended_repair_scope": "Bind manifest sprint and round to authorize inputs and require exact board-round identity before deriving expected_count, submitted_count, or quorum.",
+          "requirement": "Frozen population and quorum derivation must be bound to the requested sprint and round, not merely to candidate_head and artifact-local metadata.",
+          "severity": "MAJOR"
+        },
+        {
+          "evidence": "population_manifest.py records receipt_path but aggregate_reviews.py, aggregate_audits.py, and advance_program._load_receipts ignore it. Receipts are indexed solely by embedded job_id from every JSON file in the directory. A valid receipt can be placed under a different path, or an unrelated file can provide the matching job_id, while the artifact still passes receipt validation.",
+          "falsifier": "A test renaming or relocating a receipt while leaving its embedded job_id valid, with the manifest receipt_path unchanged, that aggregation must reject.",
+          "finding_id": "R004-COMP-003",
+          "recommended_repair_scope": "Load receipts by the manifest-declared path and verify path identity, uniqueness, and canonical job/output/packet/request bindings before accepting an artifact.",
+          "requirement": "Receipt provenance must bind the manifest receipt_path and actual receipt file to the artifact/job/output/packet chain.",
+          "severity": "MAJOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 3,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R01.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R004_R01.md",
+      "role": "contract_compliance",
+      "round": "R004",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "REPAIR_REQUIRED"
+    },
+    {
+      "artifact_id": "S003_R004_R02",
+      "broker_actions": "NONE",
+      "candidate_head": "0c5d6268ef224450cd881da588efcce04c630414",
+      "critical": 0,
+      "evidence_refs": [
+        "scripts/mros/advance_program.py",
+        "scripts/mros/population_manifest.py",
+        "research/review_board/AUDIT_POLICY.yaml",
+        "research/review_board/CALIBRATION_CASES.json#CAL-041"
+      ],
+      "execution_job_id": "ab8ac011d68d459aa960ae730de0f1cc",
+      "execution_role_id": "R02",
+      "findings": [
+        {
+          "evidence": "The candidate's scripts/mros/population_manifest.py accepts expected_count=1 for auditors via MIN_COUNT={'reviewer':2,'auditor':1}, while research/review_board/AUDIT_POLICY.yaml requires minimum_valid_independent_audits: 10 and valid_audits_minimum: 10. scripts/mros/advance_program.py validates only the manifest-derived minimum and recomputes against that same reduced manifest, so a syntactically valid 1/1 PASS audit aggregate can satisfy advancement if the fabricated manifest is supplied.",
+          "falsifier": "A deterministic test or validator must construct a frozen auditor manifest with expected_count=1, one valid PASS audit, matching receipt/provenance, and a syntactically valid PASS aggregate, then prove authorize() rejects it because the policy quorum is 10 and the frozen population cannot be reduced.",
+          "finding_id": "R02-MAJOR-001",
+          "recommended_repair_scope": "Bind advancement and population validation to the normative audit/review quorum policy, reject manifests below the policy minimum, and add a regression test for positive-but-artificially-reduced 1/1 denominators. Preserve exact-head, frozen-membership, receipt, provenance, and derived-count checks.",
+          "requirement": "Advancement must reject a positive aggregate with an artificially reduced denominator or quorum, including a 1/1 audit population.",
+          "severity": "MAJOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 1,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R02.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R004_R02.md",
+      "role": "negative_control",
+      "round": "R004",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "REPAIR_REQUIRED"
+    },
+    {
+      "artifact_id": "S003_R004_R03_adversarial_red_team",
+      "broker_actions": "NONE",
+      "candidate_head": "0c5d6268ef224450cd881da588efcce04c630414",
+      "critical": 1,
+      "evidence_refs": [
+        "scripts/mros/advance_program.py:86-89",
+        "scripts/mros/population_manifest.py:8-31",
+        "scripts/mros/aggregate_reviews.py:11-57",
+        "scripts/mros/aggregate_audits.py:11-53",
+        "scripts/mros/bridge_receipt.py:8-70"
+      ],
+      "execution_job_id": "29823326ebe144248ee3b9ced52430a2",
+      "execution_role_id": "R03",
+      "findings": [
+        {
+          "evidence": "scripts/mros/advance_program.py:86-89 accepts --review-population-manifest and --audit-population-manifest paths supplied by the caller and passes their parsed contents directly into _validate_aggregate. population_manifest.py only validates self-asserted structure, candidate head, sprint/round syntax, and frozen_before_execution=True; it does not bind the manifest to a canonical S003/R004 manifest, immutable hash, repository commit, or trusted board source. An attacker can provide a fabricated manifest with a positive expected_count and matching substituted roles, paths, jobs, receipts, and PASS artifacts; aggregate recomputation then validates against that attacker-controlled population.",
+          "falsifier": "Run authorize with otherwise structurally valid fabricated manifests containing substituted members and matching artifacts/receipts while the canonical frozen R004 population differs; authorization must reject the inputs without relying on caller-provided manifest contents.",
+          "finding_id": "R03-AR-001",
+          "recommended_repair_scope": "Resolve frozen manifests from a trusted canonical path or content-addressed board input, bind them to S003/R004/candidate head and an immutable manifest hash, and reject caller-selected or self-attested population definitions.",
+          "requirement": "Advancement must reconstruct reviewer and auditor membership from an independently frozen population rather than trusting caller-supplied aggregate inputs or manifests.",
+          "severity": "CRITICAL"
+        },
+        {
+          "evidence": "population_manifest.py validates and stores each member's receipt_path, but aggregate_reviews.py and aggregate_audits.py never compare receipt_path with the manifest member. advance_program._load_receipts loads every JSON receipt in a caller-supplied directory and indexes only by embedded job_id; validate_bridge_receipt checks internal consistency but not the manifest-declared receipt path. A receipt copied or substituted under another path can therefore satisfy the authority boundary if its embedded fields match the artifact.",
+          "falsifier": "Place a valid receipt for a manifest member at a path different from that member's frozen receipt_path, supply the receipt directory to advance_program, and verify that authorization rejects the result.",
+          "finding_id": "R03-AR-002",
+          "recommended_repair_scope": "Load receipts by the exact frozen receipt_path, bind receipt path and content hash to the manifest member, reject unlisted receipt files, and preserve explicit provenance mismatch errors.",
+          "requirement": "Receipt and provenance validation must enforce the receipt member declared by the frozen population and reject substituted receipt files.",
+          "severity": "MAJOR"
+        }
+      ],
+      "independent_from_implementation": true,
+      "independent_from_review_aggregation": true,
+      "major": 1,
+      "minor": 0,
+      "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_R004_R03.json",
+      "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_R004_R03.md",
+      "role": "adversarial_red_team",
+      "round": "R004",
+      "runtime_authority": "NONE",
+      "sprint": "S003",
+      "transport": "mac_git_mailbox",
+      "unknown": 0,
+      "verdict": "FAIL"
+    }
+  ],
   "runtime_authority": "NONE",
   "submitted_reviews": 3,
   "transport": "mac_git_mailbox",
   "unknown": 0,
-  "valid_reviews": 0
+  "valid_reviews": 3
 }
