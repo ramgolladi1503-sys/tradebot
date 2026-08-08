@@ -1,0 +1,85 @@
+{
+  "schema_version": "mros-s002-fixtures-v9-classification-schema",
+  "purpose": "Close 7E7A-F-001 and 7E7A-F-002 by enforcing malformed inherited mandatory-ref type precedence and fail-closed classification signals.",
+  "cases": [
+    {
+      "case_id": "S002-C091",
+      "operation": "VALIDATE_PROMOTION",
+      "input": {
+        "authority_current": "Grade B",
+        "authority_requested": "Grade A",
+        "evidence_refs": ["EVID-PRIOR-GRADEB", "EVID-ATTACK-PRIOR", "EVID-CAL-PRIOR"],
+        "new_evidence_refs": ["EVID-SCI-NEW", "EVID-ECON-NEW"],
+        "evidence_provenance_complete": true,
+        "independent_attack_ref": 123,
+        "calibration_ref": "EVID-CAL-PRIOR",
+        "scientific_certification_ref": "EVID-SCI-NEW",
+        "economic_certification_ref": "EVID-ECON-NEW",
+        "new_evidence_gate_bindings": {
+          "SCIENTIFIC_CERTIFICATION": "EVID-SCI-NEW",
+          "ECONOMIC_CERTIFICATION": "EVID-ECON-NEW"
+        }
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "can_promote": false,
+        "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
+        "violated_rules": []
+      }
+    },
+    {
+      "case_id": "S002-C092",
+      "operation": "VALIDATE_PROMOTION",
+      "input": {
+        "authority_current": "Grade B",
+        "authority_requested": "Grade A",
+        "evidence_refs": ["EVID-PRIOR-GRADEB", "EVID-ATTACK-PRIOR", "EVID-CAL-PRIOR"],
+        "new_evidence_refs": ["EVID-SCI-NEW", "EVID-ECON-NEW"],
+        "evidence_provenance_complete": true,
+        "independent_attack_ref": "EVID-ATTACK-PRIOR",
+        "calibration_ref": 123,
+        "scientific_certification_ref": "EVID-SCI-NEW",
+        "economic_certification_ref": "EVID-ECON-NEW",
+        "new_evidence_gate_bindings": {
+          "SCIENTIFIC_CERTIFICATION": "EVID-SCI-NEW",
+          "ECONOMIC_CERTIFICATION": "EVID-ECON-NEW"
+        }
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "can_promote": false,
+        "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
+        "violated_rules": []
+      }
+    },
+    {
+      "case_id": "S002-C093",
+      "operation": "CLASSIFY_STATEMENT",
+      "input": {
+        "statement_text": "Measured observation with an unsupported classification token.",
+        "classification_signals": ["DIRECT_MEASUREMENT", "UNKNOWN_SIGNAL"],
+        "evidence_refs": ["EVID-OBS-1"]
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "knowledge_class": null,
+        "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
+        "violated_rules": []
+      }
+    },
+    {
+      "case_id": "S002-C094",
+      "operation": "CLASSIFY_STATEMENT",
+      "input": {
+        "statement_text": "Falsifiable hypothesis with garbage metadata.",
+        "classification_signals": ["FALSIFIABLE_UNVERIFIED", "GARBAGE"]
+      },
+      "expected": {
+        "status": "INVALID_INPUT",
+        "knowledge_class": null,
+        "error_codes": ["MROS-S002-E021-INVALID_SCHEMA_TYPE"],
+        "violated_rules": []
+      }
+    }
+  ]
+}
