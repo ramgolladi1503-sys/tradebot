@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
-"""One deterministic MROS supervisor transition step.
-
-Consumes only a successful calibration bound to the candidate currently expected
-by repository authority. Queue transport success alone is insufficient: the
-result itself must declare deterministic calibration PASS and the matching
-receipt must prove exact-head isolated execution.
-"""
+"""One deterministic MROS supervisor transition step."""
 from __future__ import annotations
 import argparse,json,re,subprocess
 from pathlib import Path
-from mros_state_transition_engine import commit_transition
+from mros_state_transition_engine import commit_transition,recover_stranded_transition
 AUTH="research/mros-program-v1";QUEUE="automation/mros-agent-queue-v1"
 RESULT_ROOT="research/evidence/sprints/S003/agent_queue/results";RECEIPT_ROOT="research/evidence/sprints/S003/agent_queue/receipts"
 STATE_PATH="research/program/MROS_PROGRAM_STATE.yaml";EVID_PATH="research/evidence/sprints/S003/S003_BOARD_CALIBRATION_NATIVE_EVIDENCE_SUPERVISOR.md"
+TRANSITION_MESSAGE="mros(S003): supervisor consume repaired Board calibration pass [skip ci]"
 class StepError(RuntimeError):pass
 def git(repo:Path,*args:str,check:bool=True)->str:
  p=subprocess.run(["git",*args],cwd=repo,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
@@ -72,12 +67,16 @@ def apply_calibration(repo:Path,cal:dict)->int:
  evidence=repo/EVID_PATH;evidence.parent.mkdir(parents=True,exist_ok=True);met=cal["metrics"]
  evidence.write_text(f'''# S003 Board Calibration — Supervisor-Consumed Native Evidence\n\nCandidate: `{cal["candidate"]}`\n\nQueue result: `{cal["result_path"]}`\n\nQueue receipt: `{cal["receipt_path"]}`\n\nExecution role: `{cal["role"]}`\n\nJob ID: `{cal["job_id"]}`\n\nPython: `{met.get("python","UNKNOWN")}`\n\nCommand: `{met.get("command","UNKNOWN")}`\n\nSummary: `{met.get("summary","UNKNOWN")}`\n\nThe queue result explicitly contains `S003_BOARD_DETERMINISTIC_CALIBRATION_PASS` and `CALIBRATION_EXECUTION_RESULT=PASS`. The matching receipt records successful exact-head isolated Mac execution with exit code 0.\n\nThis artifact is calibration evidence only. It does not authorize the Review Board or Audit Board. Runtime authority remains `NONE`. M9 remains `NOT_STARTED`.\n''',encoding="utf-8")
  parent=git(repo,"rev-parse","HEAD")
- result=commit_transition(repo=repo,lock_path=Path.home()/".mros-agent-bridge/state/authority-writer.lock",expected_parent=parent,changed_paths=[STATE_PATH,EVID_PATH],message="mros(S003): supervisor consume repaired Board calibration pass [skip ci]")
+ result=commit_transition(repo=repo,lock_path=Path.home()/".mros-agent-bridge/state/authority-writer.lock",expected_parent=parent,changed_paths=[STATE_PATH,EVID_PATH],message=TRANSITION_MESSAGE)
  print(json.dumps({"transition":"CALIBRATION_PASS_CONSUMED","candidate":cal["candidate"],"summary":met.get("summary"),"commit":result.commit_sha},sort_keys=True));return 0
 def parse_args():
  p=argparse.ArgumentParser();p.add_argument("--repo",required=True,type=Path);p.add_argument("--health",type=Path);p.add_argument("--once",action="store_true");return p.parse_args()
 def main()->int:
- a=parse_args();repo=a.repo.resolve();git(repo,"fetch","origin",AUTH,QUEUE);git(repo,"merge","--ff-only",f"origin/{AUTH}")
+ a=parse_args();repo=a.repo.resolve();git(repo,"fetch","origin",AUTH,QUEUE)
+ recovered=recover_stranded_transition(repo=repo,lock_path=Path.home()/".mros-agent-bridge/state/authority-writer.lock",message=TRANSITION_MESSAGE)
+ if recovered:
+  print(json.dumps({"transition":"STRANDED_CALIBRATION_TRANSITION_PUBLISHED","commit":recovered.commit_sha},sort_keys=True));return 0
+ git(repo,"merge","--ff-only",f"origin/{AUTH}")
  state=(repo/STATE_PATH).read_text(encoding="utf-8")
  if not re.search(r"(?m)^active_sprint:\s*S003\s*$",state):return 3
  expected=expected_candidate(state);cals=successful_calibrations(repo,expected)
