@@ -37,12 +37,16 @@ def _check_path(path:str)->None:
 def _check_boundary(path:Path)->None:
     if not path.is_file() or path.suffix.lower() not in {".yaml",".yml",".json",".md",".txt"}:return
     text=path.read_text(encoding="utf-8",errors="replace")
-    if path.name=="MROS_PROGRAM_STATE.yaml":
-        m=re.search(r"(?m)^active_milestone:\s*[\"']?([^\n\"']+)",text)
-        if m and m.group(1).strip()=="M9":raise TransitionError("M9_OR_RUNTIME_BOUNDARY_VIOLATION:active_milestone=M9")
-        for m in re.finditer(r"(?m)^\s*runtime_authority:\s*[\"']?([^\n\"']+)",text):
-            if m.group(1).strip() not in {"NONE","Research / R","Research/R"}:
-                raise TransitionError(f"M9_OR_RUNTIME_BOUNDARY_VIOLATION:runtime_authority={m.group(1).strip()}")
+    # Boundary enforcement is content-based, not filename-based. This lets tests
+    # and future state artifacts prove the invariant while still allowing benign
+    # references such as `M9: NOT_STARTED`.
+    m=re.search(r"(?m)^\s*active_milestone:\s*[\"']?([^\n\"']+)",text)
+    if m and m.group(1).strip()=="M9":
+        raise TransitionError("M9_OR_RUNTIME_BOUNDARY_VIOLATION:active_milestone=M9")
+    for rm in re.finditer(r"(?m)^\s*runtime_authority:\s*[\"']?([^\n\"']+)",text):
+        value=rm.group(1).strip()
+        if value not in {"NONE","Research / R","Research/R"}:
+            raise TransitionError(f"M9_OR_RUNTIME_BOUNDARY_VIOLATION:runtime_authority={value}")
 @contextlib.contextmanager
 def writer_lock(lock_path:Path):
     lock_path.parent.mkdir(parents=True,exist_ok=True)
