@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tradebot-hypothesis-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "hypothesis_id",
+    "family",
+    "instrument",
+    "direction",
+    "window_minutes",
+    "filters",
+    "entry_rule",
+    "exit_rule",
+    "max_hold_minutes",
+    "status",
+    "runtime_authority",
+    "broker_actions_allowed",
+    "certification"
+  ],
+  "properties": {
+    "schema_version": {"const": "tradebot-hypothesis-v1"},
+    "hypothesis_id": {"type": "string", "pattern": "^HYP-[A-Z0-9]{12}$"},
+    "family": {
+      "enum": [
+        "opening_range_breakout",
+        "opening_range_failure",
+        "vwap_reclaim_reject",
+        "gap_continuation_fade",
+        "pre_close_momentum"
+      ]
+    },
+    "instrument": {"type": "string", "minLength": 1},
+    "direction": {"enum": ["BUY_CE", "BUY_PE"]},
+    "window_minutes": {"type": "integer", "minimum": 1, "maximum": 120},
+    "filters": {"type": "array", "items": {"type": "string"}},
+    "entry_rule": {"type": "string", "minLength": 1},
+    "exit_rule": {"type": "string", "minLength": 1},
+    "max_hold_minutes": {"type": "integer", "minimum": 1, "maximum": 390},
+    "status": {"enum": ["GENERATED", "REJECTED", "PROMISING_NOT_CERTIFIED"]},
+    "runtime_authority": {"const": "NONE"},
+    "broker_actions_allowed": {"const": false},
+    "certification": {"const": "NOT_CERTIFIED"}
+  }
+}
