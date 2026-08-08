@@ -208,7 +208,13 @@ def main()->int:
                 if retry_count:sync_queue(repo,c.state_root,a.queue_branch)
                 processed=[]
                 for r in list_requests(repo):
-                    if not receipt_path(repo,r).exists():processed.append(process_one(repo,a.queue_branch,bridge,r,a.worker_id))
+                    if receipt_path(repo,r).exists():
+                        continue
+                    try:
+                        processed.append(process_one(repo,a.queue_branch,bridge,r,a.worker_id))
+                    except (BridgeError,WorkerError,subprocess.TimeoutExpired,OSError,ValueError,json.JSONDecodeError) as exc:
+                        processed.append({"request":r.name,"status":"REQUEST_REJECTED","error":f"{type(exc).__name__}:{exc}"})
+                        print(json.dumps({"status":"REQUEST_REJECTED","request":r.name,"error":f"{type(exc).__name__}:{exc}"},sort_keys=True),file=sys.stderr,flush=True)
                 _write_worker_health(c.state_root,status="RUNNING",processed=len(processed));print(json.dumps({"status":"POLL_COMPLETE","processed":processed,"retries_enqueued":retry_count},sort_keys=True),flush=True)
             except (BridgeError,WorkerError,subprocess.TimeoutExpired,OSError,ValueError,json.JSONDecodeError) as exc:
                 _write_worker_health(c.state_root,status="BLOCKED",error=f"{type(exc).__name__}:{exc}");print(json.dumps({"status":"WORKER_BLOCKED","error":f"{type(exc).__name__}:{exc}"}),file=sys.stderr,flush=True)
