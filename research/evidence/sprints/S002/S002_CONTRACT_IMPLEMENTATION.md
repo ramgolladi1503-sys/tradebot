@@ -4,7 +4,7 @@ Program: MROS
 Milestone: M1 — Research Governance  
 Work Package: WP001 — Research Constitution  
 Sprint: S002  
-Status: RC002_SEMANTIC_GATE_BINDING_REPAIR_PENDING_NATIVE_VALIDATION  
+Status: V8_INHERITED_GATE_PROVENANCE_REPAIR_PENDING_NATIVE_VALIDATION  
 Authority: `Research / R`  
 Runtime authority: `NONE`
 
@@ -18,12 +18,13 @@ The canonical executable validator is:
 
 `scripts/mros/validate_s002_fixtures.py`
 
-It loads four preserved evidence corpora:
+It loads five preserved evidence corpora:
 
 1. `S002_FIXTURES.json` — v4 baseline/regression corpus;
 2. `S002_FIXTURES_V5_ADDENDUM.json` — final bootstrap-review closure cases;
 3. `S002_FIXTURES_V6_GATE_BINDING.json` — syntactic new-evidence gate binding and lineage controls;
-4. `S002_FIXTURES_V7_GATE_SEMANTIC_BINDING.json` — semantic gate-to-authoritative-evidence binding attacks and positive controls.
+4. `S002_FIXTURES_V7_GATE_SEMANTIC_BINDING.json` — semantic requested-gate binding attacks and positive controls;
+5. `S002_FIXTURES_V8_INHERITED_GATE_PROVENANCE.json` — inherited mandatory gate provenance and exact binding-schema controls.
 
 Historical PASS cases superseded by stronger promotion controls remain preserved but are excluded from the active suite. Case IDs must be unique across active corpora. Fixture load/schema/duplicate-ID failures exit non-zero.
 
@@ -52,12 +53,14 @@ Promotion must:
 - provide `evidence_provenance_complete=true` before PASS;
 - prevent canonical old/new ref overlap and duplicate new refs;
 - derive mandatory Grade B/A/A+ requirements from the requested grade;
-- bind every requested promotion gate to a canonical new `EVID-*` identity;
-- bind that same identity to the authoritative gate metadata field (`reproducibility_ref`, `independent_attack_ref`, `calibration_ref`, `scientific_certification_ref`, `economic_certification_ref`, `live_forward_evidence_ref`, or `monitoring_ref` as applicable);
+- bind every newly requested promotion gate to a canonical new `EVID-*` identity;
+- bind that same identity to the authoritative gate metadata field;
+- require inherited mandatory gate evidence to be canonical registered `EVID-*` identities already present in the declared prior evidence provenance;
+- require `new_evidence_gate_bindings` to contain exactly the requested transition gates, rejecting both missing and extra known/unknown gate entries;
 - reject stale gate metadata paired with unrelated newly labelled evidence;
 - reject malformed optional boolean/gate/schema values instead of silently ignoring them.
 
-The literal `EVID-*` identity is the stable MROS evidence-registry identity at S002. S002 does not claim to inspect future registry content semantics; it does deterministically prevent a caller from presenting one evidence identity as the authoritative gate evidence while binding a different unrelated identity as the supposedly new evidence satisfying that gate.
+The literal `EVID-*` identity is the stable MROS evidence-registry identity at S002. S002 does not claim to inspect future registry content semantics; it deterministically enforces identity/provenance consistency within the declared governance input.
 
 ## Constitutional Fail-Closed Semantics
 
@@ -69,11 +72,14 @@ Denominator-relevant inputs require deterministic confirmatory or `EXPLORATORY_P
 
 ## Review History
 
-The independent review of exact candidate `89d3abd3b2b2c20951c123063b534c56af7ebf60` returned `S002_INDEPENDENT_RE_REVIEW_REPAIR_REQUIRED` with 1 MAJOR and 1 MINOR.
+The bootstrap-independent review of exact candidate `8e87223efdb33bc73b58436cf590b7f3c7c10717` returned `S002_INDEPENDENT_RE_REVIEW_REPAIR_REQUIRED` with 1 MAJOR, 0 MINOR, 0 CRITICAL, and 0 mandatory UNKNOWN.
 
-The MAJOR (`89D3-F-001`) proved that v6 only enforced syntactic membership/non-overlap: stale authoritative gate metadata could coexist with unrelated new evidence caller-labelled as the requested gate and still PASS. The v7 repair closes that contradiction by requiring equality between each requested gate binding and its authoritative gate evidence reference.
+The prior blocker `89D3-F-001` was closed as written. The new MAJOR (`8E872-V2-F-001`) found two remaining fail-open schema/provenance paths:
 
-The MINOR was documentation drift about fixture-corpus count; this document now lists all four active/preserved corpora accurately.
+1. inherited mandatory Grade-B evidence such as `independent_attack_ref` and `calibration_ref` could be malformed or absent from the declared complete prior `evidence_refs` set while a B→A promotion still PASSed;
+2. extra known entries inside `new_evidence_gate_bindings` were ignored when they were not required for the requested transition, allowing malformed extra gate metadata to coexist with PASS.
+
+The v8 repair closes those paths by canonicalizing inherited mandatory evidence, requiring its membership in prior provenance, and requiring exact requested-gate key equality for the binding object.
 
 ## Non-Goals
 
@@ -81,17 +87,17 @@ S002 does not accept itself, accept WP001, start S003/M2/M9, authorize Review/Au
 
 ## Observed Facts
 
-- Exact candidate `89d3abd3...` had native 70/70 PASS but failed independent review on one real RC-002 semantic binding defect.
-- The failed review is preserved at `S002_INDEPENDENT_RE_REVIEW_89D3_FINAL.md`.
-- v7 adds deterministic attacks for unrelated/stale gate evidence and legitimate promotion controls.
+- Exact candidate `8e87223e...` had native 78/78 PASS but failed a genuinely independent review on one real fail-open provenance/schema defect class.
+- That review is preserved at `S002_INDEPENDENT_RE_REVIEW_8E872_BOOTSTRAP_V2.md`.
+- v8 adds four direct regression attacks covering malformed inherited refs, missing inherited provenance, malformed extra known bindings, and valid-looking extra known bindings.
 
 ## Inferences
 
-The repair is stricter than v6: it no longer accepts arbitrary new evidence merely because a caller assigns a gate label to it while the authoritative gate metadata points elsewhere.
+The v8 repair is stricter than v7: PASS now requires both newly requested gate evidence and inherited mandatory gate evidence to be internally consistent with declared evidence provenance.
 
 ## Hypotheses
 
-The v7 repair closes `89D3-F-001`; this remains unproven until native validation and a fresh independent review of the exact repaired HEAD.
+The v8 repair closes `8E872-V2-F-001`; this remains unproven until native validation and a fresh bootstrap-independent re-review of the exact repaired HEAD.
 
 ## Assumptions
 
@@ -99,16 +105,16 @@ The frozen S001 contract and current MROS authority model remain authoritative.
 
 ## Destroyers / Falsifiers
 
-S002 remains unacceptable if stale/unrelated gate evidence can still produce authority promotion, or if the v7 repair regresses any previously accepted fail-closed behavior.
+S002 remains unacceptable if malformed/unproven inherited gate evidence or ignored extra gate metadata can still produce authority promotion, or if the v8 rewrite regresses any previously accepted fail-closed behavior.
 
 ## Unknowns
 
-- exact-head native validation for the v7 repair;
+- exact-head native validation for the v8 repair;
 - fresh bootstrap-independent review of that exact validated HEAD.
 
 ## Next Experiment
 
-Run the canonical combined fixture validator natively from the exact repaired HEAD, preserve exact provenance, then obtain a fresh independent re-review. Do not start S003 beforehand.
+Run the canonical combined fixture validator natively from the exact repaired HEAD. The active suite should contain 82 cases. Preserve exact HEAD/Python/command/output/exit provenance, then obtain a fresh independent re-review. Do not start S003 beforehand.
 
 ## Authority Grade
 
