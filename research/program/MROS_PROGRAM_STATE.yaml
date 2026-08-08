@@ -10,7 +10,7 @@ active_work_package: WP001
 active_sprint: S002
 last_completed_sprint: S001
 program_status: ACTIVE
-active_sprint_status: V10_NULL_MANDATORY_REF_SCHEMA_REPAIR_PENDING_NATIVE_VALIDATION
+active_sprint_status: V10_NATIVE_VALIDATION_PASS_PENDING_INDEPENDENT_RE_REVIEW
 
 s002_review:
   latest_review_commit: "1da6fcf909eb070c1c4cf31fd424521a86e35f5c"
@@ -54,9 +54,11 @@ s002_v10_repair:
   v9_fixture_schema: "mros-s002-fixtures-v9-classification-schema"
   v10_fixture_schema: "mros-s002-fixtures-v10-null-mandatory-ref-schema"
   required_active_case_count: 90
-  native_validation: REQUIRED_EXACT_HEAD_fd16f526842b9f4f27d7fd06859b059812e10796
-  native_validation_result: PENDING
-  independent_re_review: BLOCKED_UNTIL_NATIVE_PASS_AND_COMMITTED_EVIDENCE
+  native_validation: EXACT_HEAD_fd16f526842b9f4f27d7fd06859b059812e10796
+  native_validation_result: "90/90_PASS_EXIT_0_PYTHON_3.12.2"
+  native_validation_evidence: "research/evidence/sprints/S002/S002_NATIVE_VALIDATION_OUTPUT_90_CASES.txt"
+  native_validation_evidence_commit: "becacebd0e854d7fc2c2828b7bd14b9043f774e6"
+  independent_re_review: REQUIRED_FRESH_BOOTSTRAP_INDEPENDENT_REVIEW
 
 review_board:
   status: IMPLEMENTED_NOT_CALIBRATED
@@ -127,7 +129,7 @@ work_package_status:
 next_action:
   sprint: S002
   work_package: WP001
-  objective: "Run canonical native validation of exact v10 candidate fd16f526842b9f4f27d7fd06859b059812e10796. Expect 90 active cases. Preserve and commit exact HEAD/Python/command/output/exit provenance before any fresh independent re-review. Re-attack explicit-null versus absent mandatory-ref semantics after native PASS."
+  objective: "Obtain a fresh bootstrap-independent re-review of exact implementation candidate fd16f526842b9f4f27d7fd06859b059812e10796 using committed 90/90 native evidence becacebd0e854d7fc2c2828b7bd14b9043f774e6. Re-attack explicit-null versus absent mandatory-ref semantics and all prior blocking surfaces. Do not accept S002 or start S003 before the independent verdict."
   required_native_validator: "scripts/mros/validate_s002_fixtures.py"
   required_expected_case_count: 90
   required_external_role_after_native_pass: "bootstrap-independent reviewer/session distinct from S002 implementation/repair and Review/Audit Board bootstrap implementation"
