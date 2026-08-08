@@ -14,6 +14,7 @@ FIXTURE_FILES = (
     ROOT / "research/evidence/sprints/S002/S002_FIXTURES_V7_GATE_SEMANTIC_BINDING.json",
     ROOT / "research/evidence/sprints/S002/S002_FIXTURES_V8_INHERITED_GATE_PROVENANCE.json",
     ROOT / "research/evidence/sprints/S002/S002_FIXTURES_V9_CLASSIFICATION_SCHEMA.json",
+    ROOT / "research/evidence/sprints/S002/S002_FIXTURES_V10_NULL_MANDATORY_REF_SCHEMA.json",
 )
 SUPERSEDED_CASE_IDS = {
     "S002-C033", "S002-C035", "S002-C037", "S002-C065",
@@ -22,6 +23,7 @@ SUPERSEDED_CASE_IDS = {
 REQUIRED_V7_REPLACEMENTS = {"S002-C075", "S002-C078", "S002-C082", "S002-C084"}
 REQUIRED_V8_CASES = {"S002-C087", "S002-C088", "S002-C089", "S002-C090"}
 REQUIRED_V9_CASES = {"S002-C091", "S002-C092", "S002-C093", "S002-C094", "S002-C095", "S002-C096"}
+REQUIRED_V10_CASES = {"S002-C097", "S002-C098"}
 
 AUTH = ["Research / R", "Grade C", "Grade B", "Grade A", "Grade A+", "Rejected", "Unknown"]
 LEGAL_PROMOTIONS = {
@@ -108,9 +110,14 @@ def classify(inp):
 
 
 def _semantic_ref_requirement(inp, field, *, missing_status, missing_error, missing_rule):
-    if field not in inp or inp[field] is None or inp[field] == "": return result(missing_status, can_promote=False, errors=[missing_error], rules=[missing_rule])
-    if not isinstance(inp[field], str): return invalid_schema(can_promote=False)
-    if not inp[field].strip(): return result(missing_status, can_promote=False, errors=[missing_error], rules=[missing_rule])
+    if field not in inp:
+        return result(missing_status, can_promote=False, errors=[missing_error], rules=[missing_rule])
+    if inp[field] is None:
+        return invalid_schema(can_promote=False)
+    if not isinstance(inp[field], str):
+        return invalid_schema(can_promote=False)
+    if not inp[field].strip():
+        return result(missing_status, can_promote=False, errors=[missing_error], rules=[missing_rule])
     return None
 
 
@@ -287,6 +294,7 @@ def load_cases():
     if not REQUIRED_V7_REPLACEMENTS.issubset(set(ids)): print("FIXTURE_V7_REPLACEMENT_MISSING"); raise SystemExit(2)
     if not REQUIRED_V8_CASES.issubset(set(ids)): print("FIXTURE_V8_CASE_MISSING"); raise SystemExit(2)
     if not REQUIRED_V9_CASES.issubset(set(ids)): print("FIXTURE_V9_CASE_MISSING"); raise SystemExit(2)
+    if not REQUIRED_V10_CASES.issubset(set(ids)): print("FIXTURE_V10_CASE_MISSING"); raise SystemExit(2)
     return cases
 
 
