@@ -92,14 +92,16 @@ def infer_direction(ret6: float | None, ret12: float | None, up20: float, down20
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--candidates-input", default="research/evidence/behavior_discovery_engine_v2/NIFTY_tod_session_position_candidates_v1.jsonl")
+    parser.add_argument("--development-output", default="research/evidence/behavior_discovery_engine_v2/NIFTY_tod_session_position_development_v1.json")
     args = parser.parse_args()
     
     root = Path(__file__).resolve().parent.parent.parent.parent
     
     dataset_path = root / "research" / "hypotheses" / "historical_corpus" / "kite_nifty_cache_v2" / "canonical" / "NIFTY.csv"
     episodes_path = root / "research" / "evidence" / "behavior_discovery_engine_v2" / "NIFTY_behavior_episodes_v1.jsonl"
-    candidates_path = root / "research" / "evidence" / "behavior_discovery_engine_v2" / "NIFTY_tod_session_position_candidates_v1.jsonl"
-    output_path = root / "research" / "evidence" / "behavior_discovery_engine_v2" / "NIFTY_tod_session_position_development_v1.json"
+    candidates_path = root / args.candidates_input
+    output_path = root / args.development_output
     
     if not dataset_path.exists():
         print(f"BLOCKED: Missing {dataset_path}")
@@ -140,12 +142,15 @@ def main():
             candidate_matches[cand.get("candidate_id")].append(row)
             
     supported = []
+    candidate_summaries = []
     
     for cand in candidates:
         cid = cand.get("candidate_id")
         rows = candidate_matches.get(cid, [])
+        ret3 = [float(r["ret3_bps"]) for r in rows if r.get("ret3_bps") is not None]
         ret6 = [float(r["ret6_bps"]) for r in rows if r.get("ret6_bps") is not None]
         ret12 = [float(r["ret12_bps"]) for r in rows if r.get("ret12_bps") is not None]
+        ret18 = [float(r["ret18_bps"]) for r in rows if r.get("ret18_bps") is not None]
         up12 = [float(r["max_up_12_bps"]) for r in rows if r.get("max_up_12_bps") is not None]
         down12 = [float(r["max_down_12_bps"]) for r in rows if r.get("max_down_12_bps") is not None]
         
@@ -174,15 +179,36 @@ def main():
         else:
             reasons.append("NO_DIRECTION_INFERRED")
             
+        verdict = "DEVELOPMENT_STRUCTURE_SUPPORTED" if not reasons else "DEVELOPMENT_STRUCTURE_REJECTED"
         if not reasons:
             supported.append(cid)
+            
+        summary = {
+            "candidate_id": cid,
+            "tod_bucket": cand["tod_bucket"],
+            "required_state": cand["required_state"],
+            "matches": len(rows),
+            "distinct_sessions": distinct_sessions,
+            "ret3_bps": summarize(ret3),
+            "ret6_bps": summarize(ret6),
+            "ret12_bps": summarize(ret12),
+            "ret18_bps": summarize(ret18),
+            "up_excursion_rate_20bps": up20,
+            "down_excursion_rate_20bps": down20,
+            "up_excursion_rate_30bps": up30,
+            "down_excursion_rate_30bps": down30,
+            "inferred_direction": direction,
+            "verdict": verdict,
+            "reasons": reasons
+        }
+        candidate_summaries.append(summary)
             
     if len(supported) > 2:
         status = "DEVELOPMENT_SUPPORTED_TOO_MANY_REQUIRES_PRE_OUTCOME_NARROWING"
     elif supported:
         status = "DEVELOPMENT_STRUCTURE_SUPPORTED"
     else:
-        status = "NO_STRUCTURAL_EDGE_FOUND"
+        status = "NO_DEVELOPMENT_SUPPORTED_TOD_SESSION_POSITION_CANDIDATE"
         
     out = {
         "schema_version": 1,
@@ -194,7 +220,8 @@ def main():
         "locked_outcomes_accessed": False,
         "edge_claimed": False,
         "status": status,
-        "supported_candidates": supported
+        "supported_candidates": supported,
+        "candidate_summaries": candidate_summaries
     }
     
     with output_path.open("w") as f:

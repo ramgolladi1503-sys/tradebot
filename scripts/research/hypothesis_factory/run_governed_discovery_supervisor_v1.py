@@ -75,6 +75,25 @@ def main():
         
     print(f"Outcome status: {status}")
     
+    if status == "DEVELOPMENT_SUPPORTED_TOO_MANY_REQUIRES_PRE_OUTCOME_NARROWING":
+        print("Too many candidates supported. Initiating pre-outcome structural narrowing...")
+        subprocess.check_call([sys.executable, str(script_dir / "narrow_tod_session_position_candidates_v1.py")], cwd=root)
+        
+        print("Re-running development outcome stage on narrowed candidates...")
+        try:
+            out_narrowed = subprocess.check_output([
+                sys.executable, 
+                str(script_dir / "run_tod_session_position_development_v1.py"),
+                "--candidates-input", "research/evidence/behavior_discovery_engine_v2/NIFTY_tod_session_position_candidates_v1_narrowed.jsonl",
+                "--development-output", "research/evidence/behavior_discovery_engine_v2/NIFTY_tod_session_position_narrowed_development_v1.json"
+            ], cwd=root).decode("utf-8").strip()
+            status = out_narrowed.split("\n")[-1]
+        except subprocess.CalledProcessError as e:
+            print(f"BLOCKED: Narrowed outcome stage failed {e}")
+            sys.exit(1)
+            
+        print(f"Narrowed Outcome status: {status}")
+    
     with (out_dir / "run_manifest.json").open("w") as f:
         json.dump({"status": status, "locked_outcomes_accessed": False, "edge_claimed": False}, f, indent=2)
         
