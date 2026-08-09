@@ -15,6 +15,7 @@ import argparse
 import ast
 import hashlib
 import json
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,7 +34,7 @@ SEMANTIC_MARKERS: dict[str, tuple[str, ...]] = {
     "anchor_state": ("anchor", "support", "resistance", "vwap"),
     "retracement_state": ("pullback", "retrace", "retracement"),
     "mean_reversion_anchor": ("vwap", "mean", "anchor", "support", "resistance"),
-    "oscillator_confirmation": ("oscillator", "rsi", "zscore", "z_score", "stoch"),
+    "oscillator_confirmation": ("oscillator", "rsi", "zscore", "z_score", "stoch", "stochastic"),
     "cross_asset_health": ("cross_asset", "pair", "spread"),
     "spread_truth": ("spread",),
     "beta_truth": ("beta",),
@@ -218,17 +219,26 @@ def ast_facts(source: str) -> dict[str, Any]:
     }
 
 
+def _lexical_parts(value: str) -> tuple[str, ...]:
+    return tuple(part for part in re.split(r"[^a-z0-9]+", value.lower()) if part)
+
+
+def _contains_lexical_marker(value: str, marker: str) -> bool:
+    value_parts = _lexical_parts(value)
+    marker_parts = _lexical_parts(marker)
+    if not marker_parts or len(marker_parts) > len(value_parts):
+        return False
+    width = len(marker_parts)
+    return any(value_parts[i:i + width] == marker_parts for i in range(len(value_parts) - width + 1))
+
+
 def semantic_evidence_consumed(facts: dict[str, Any], markers: tuple[str, ...]) -> bool:
     tokens: set[str] = set()
-    tokens.update(str(x).lower() for x in facts.get("names", ()))
-    tokens.update(str(x).lower() for x in facts.get("attributes", ()))
-    tokens.update(str(x).lower() for x in facts.get("calls", ()))
-    tokens.update(str(x).lower() for x in facts.get("string_literals", ()))
-    for marker in markers:
-        m = marker.lower()
-        if any(m in token for token in tokens):
-            return True
-    return False
+    tokens.update(str(x) for x in facts.get("names", ()))
+    tokens.update(str(x) for x in facts.get("attributes", ()))
+    tokens.update(str(x) for x in facts.get("calls", ()))
+    tokens.update(str(x) for x in facts.get("string_literals", ()))
+    return any(_contains_lexical_marker(token, marker) for token in tokens for marker in markers)
 
 
 def audit_spec(root: Path, spec: RegistrySpec) -> dict[str, Any]:
@@ -259,9 +269,13 @@ def audit_spec(root: Path, spec: RegistrySpec) -> dict[str, Any]:
 
     temporal_policy = TEMPORAL_POLICIES.get(spec.strategy_id)
     if temporal_policy:
-        lower_semantics = set(str(x).lower() for x in facts["names"] + facts["attributes"] + facts["calls"] + facts["string_literals"])
+        semantic_tokens = tuple(
+            str(x)
+            for field in ("names", "attributes", "calls", "string_literals")
+            for x in facts.get(field, ())
+        )
         for marker in temporal_policy:
-            if not any(marker.lower() in token for token in lower_semantics):
+            if not any(_contains_lexical_marker(token, marker) for token in semantic_tokens):
                 findings.append({"severity":"MAJOR","code":"TEMPORAL_CONTRACT_MARKER_MISSING","detail":marker})
 
     if spec.family in META_FAMILIES:
@@ -302,7 +316,7 @@ def run(repo_root: Path) -> dict[str, Any]:
         counts[r["verdict"]] = counts.get(r["verdict"],0)+1
     head = subprocess.run(["git", "-C", str(repo_root), "rev-parse", "HEAD"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False).stdout.strip()
     return {
-        "schema_version":"tradebot-strategy-structural-audit-v5",
+        "schema_version":"tradebot-strategy-structural-audit-v6",
         "status":"STRUCTURAL_AUDIT_COMPLETE_STATIC_PHASE",
         "registry_source":"HEAD:core/strategy_spec.py",
         "source_commit":head,
