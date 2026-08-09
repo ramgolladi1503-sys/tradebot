@@ -76,8 +76,6 @@ def git_show(root: Path, repo_path: str) -> str | None:
 
 
 def read_repo_text(root: Path, repo_path: str) -> str | None:
-    # Always bind audit inputs to the exact checked-out commit. Do not prefer a
-    # materialized file because sparse worktrees may leave stale skip-worktree paths.
     return git_show(root, repo_path)
 
 
@@ -167,34 +165,70 @@ def load_registry_specs(root: Path) -> tuple[RegistrySpec, ...]:
     return tuple(specs)
 
 
+def _attribute_path(node: ast.AST) -> str | None:
+    parts: list[str] = []
+    cur = node
+    while isinstance(cur, ast.Attribute):
+        parts.append(cur.attr)
+        cur = cur.value
+    if isinstance(cur, ast.Name):
+        parts.append(cur.id)
+        return ".".join(reversed(parts))
+    return None
+
+
 def ast_facts(source: str) -> dict[str, Any]:
     tree = ast.parse(source)
     funcs = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
     classes = {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
     calls: set[str] = set()
     imports: set[str] = set()
+    names: set[str] = set()
+    attributes: set[str] = set()
+    string_literals: set[str] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            path = _attribute_path(node)
+            if path:
+                attributes.add(path)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            string_literals.add(node.value)
+        elif isinstance(node, ast.Call):
             fn = node.func
             if isinstance(fn, ast.Name):
                 calls.add(fn.id)
             elif isinstance(fn, ast.Attribute):
-                parts=[]; cur: Any = fn
-                while isinstance(cur, ast.Attribute):
-                    parts.append(cur.attr); cur=cur.value
-                if isinstance(cur, ast.Name):
-                    parts.append(cur.id)
-                calls.add(".".join(reversed(parts)))
+                path = _attribute_path(fn)
+                if path:
+                    calls.add(path)
         elif isinstance(node, ast.Import):
             imports.update(a.name for a in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             imports.add(node.module)
-    return {"functions": sorted(funcs), "classes": sorted(classes), "calls": sorted(calls), "imports": sorted(imports)}
+    return {
+        "functions": sorted(funcs),
+        "classes": sorted(classes),
+        "calls": sorted(calls),
+        "imports": sorted(imports),
+        "names": sorted(names),
+        "attributes": sorted(attributes),
+        "string_literals": sorted(string_literals),
+    }
 
 
-def marker_present(text: str, markers: tuple[str, ...]) -> bool:
-    low = text.lower()
-    return any(m.lower() in low for m in markers)
+def semantic_evidence_consumed(facts: dict[str, Any], markers: tuple[str, ...]) -> bool:
+    tokens: set[str] = set()
+    tokens.update(str(x).lower() for x in facts.get("names", ()))
+    tokens.update(str(x).lower() for x in facts.get("attributes", ()))
+    tokens.update(str(x).lower() for x in facts.get("calls", ()))
+    tokens.update(str(x).lower() for x in facts.get("string_literals", ()))
+    for marker in markers:
+        m = marker.lower()
+        if any(m in token for token in tokens):
+            return True
+    return False
 
 
 def audit_spec(root: Path, spec: RegistrySpec) -> dict[str, Any]:
@@ -220,13 +254,14 @@ def audit_spec(root: Path, spec: RegistrySpec) -> dict[str, Any]:
 
     for key in spec.required_evidence_keys:
         markers = SEMANTIC_MARKERS.get(key)
-        if markers and not marker_present(source, markers):
+        if markers and not semantic_evidence_consumed(facts, markers):
             findings.append({"severity":"MAJOR","code":"REQUIRED_EVIDENCE_NOT_CONSUMED","detail":key})
 
     temporal_policy = TEMPORAL_POLICIES.get(spec.strategy_id)
     if temporal_policy:
+        lower_semantics = set(str(x).lower() for x in facts["names"] + facts["attributes"] + facts["calls"] + facts["string_literals"])
         for marker in temporal_policy:
-            if marker.lower() not in source.lower():
+            if not any(marker.lower() in token for token in lower_semantics):
                 findings.append({"severity":"MAJOR","code":"TEMPORAL_CONTRACT_MARKER_MISSING","detail":marker})
 
     if spec.family in META_FAMILIES:
@@ -267,7 +302,7 @@ def run(repo_root: Path) -> dict[str, Any]:
         counts[r["verdict"]] = counts.get(r["verdict"],0)+1
     head = subprocess.run(["git", "-C", str(repo_root), "rev-parse", "HEAD"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False).stdout.strip()
     return {
-        "schema_version":"tradebot-strategy-structural-audit-v4",
+        "schema_version":"tradebot-strategy-structural-audit-v5",
         "status":"STRUCTURAL_AUDIT_COMPLETE_STATIC_PHASE",
         "registry_source":"HEAD:core/strategy_spec.py",
         "source_commit":head,
