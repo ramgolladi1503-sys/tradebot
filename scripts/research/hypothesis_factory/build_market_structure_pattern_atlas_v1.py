@@ -53,17 +53,24 @@ def confirm_pivots(rows,threshold_bps:float):
                 direction=-1;extreme_i=i;extreme_price=lo
             continue
         if direction==1:
-            if hi>=extreme_price:extreme_i=i;extreme_price=hi
-            reversal=bps(extreme_price,lo)
+            # Causality invariant: test reversal against the extreme that was
+            # already established before this bar. Only if this bar does not
+            # confirm a reversal may its high extend the candidate extreme.
+            prior_extreme_i=extreme_i;prior_extreme_price=extreme_price
+            reversal=bps(prior_extreme_price,lo)
             if reversal<=-threshold_bps:
-                piv.append({'type':'HIGH','pivot_index':extreme_i,'pivot_timestamp':rows[extreme_i]['timestamp'],'confirmation_index':i,'confirmation_timestamp':r['timestamp'],'price':extreme_price,'threshold_bps':threshold_bps})
+                piv.append({'type':'HIGH','pivot_index':prior_extreme_i,'pivot_timestamp':rows[prior_extreme_i]['timestamp'],'confirmation_index':i,'confirmation_timestamp':r['timestamp'],'price':prior_extreme_price,'threshold_bps':threshold_bps})
                 direction=-1;extreme_i=i;extreme_price=lo
+            elif hi>=extreme_price:
+                extreme_i=i;extreme_price=hi
         else:
-            if lo<=extreme_price:extreme_i=i;extreme_price=lo
-            reversal=bps(extreme_price,hi)
+            prior_extreme_i=extreme_i;prior_extreme_price=extreme_price
+            reversal=bps(prior_extreme_price,hi)
             if reversal>=threshold_bps:
-                piv.append({'type':'LOW','pivot_index':extreme_i,'pivot_timestamp':rows[extreme_i]['timestamp'],'confirmation_index':i,'confirmation_timestamp':r['timestamp'],'price':extreme_price,'threshold_bps':threshold_bps})
+                piv.append({'type':'LOW','pivot_index':prior_extreme_i,'pivot_timestamp':rows[prior_extreme_i]['timestamp'],'confirmation_index':i,'confirmation_timestamp':r['timestamp'],'price':prior_extreme_price,'threshold_bps':threshold_bps})
                 direction=1;extreme_i=i;extreme_price=hi
+            elif lo<=extreme_price:
+                extreme_i=i;extreme_price=lo
     return piv
 
 def bar_descriptors(rows,i,lookback):
