@@ -1,5 +1,5 @@
 {
-  "status": "NO_STRUCTURAL_EDGE_FOUND",
+  "status": "DEVELOPMENT_SUPPORTED_TOO_MANY_REQUIRES_PRE_OUTCOME_NARROWING",
   "locked_outcomes_accessed": false,
   "edge_claimed": false
 }
