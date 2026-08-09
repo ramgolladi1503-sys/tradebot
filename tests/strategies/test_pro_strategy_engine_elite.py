@@ -1,83 +1,75 @@
-from __future__ import annotations
-
-from unittest.mock import Mock
-
-import strategies.pro_layer.pro_strategy_engine as pro_engine_mod
-from strategies.pro_layer.pro_strategy_engine import ProStrategyEngine, StrategyBase
+from strategies.pro_layer.pro_strategy_engine import ProStrategyEngine
 
 
-class _BrokenStrategy(StrategyBase):
-    family = "broken_family"
-    regimes = {"TREND", "NEUTRAL"}
+def _child(name, family, direction="BUY_CALL", score=0.8, confidence=0.8, **evidence_overrides):
+    evidence = {
+        "structural_status": "STRUCTURALLY_VALID",
+        "contract_valid": True,
+        "freshness_valid": True,
+        "source_sha256": f"sha-{name}",
+    }
+    evidence.update(evidence_overrides)
+    return {
+        "name": name,
+        "family": family,
+        "direction": direction,
+        "score": score,
+        "confidence": confidence,
+        "reason": "child",
+        "regime_tags": ["TREND"],
+        "evidence": evidence,
+    }
 
-    def generate(self, market_data):
-        raise RuntimeError("boom")
 
-
-def test_strategy_exceptions_are_logged_and_reported(monkeypatch):
+def test_invalid_child_fails_complete_meta_decision_closed():
     engine = ProStrategyEngine()
-    monkeypatch.setattr(engine, "strategies", [_BrokenStrategy()])
-    exception_spy = Mock()
-    monkeypatch.setattr(pro_engine_mod.logger, "exception", exception_spy)
-
     errors: list[str] = []
-    signals = engine.run({"regime": "TREND"}, error_sink=errors)
-
+    signals = engine.run(
+        {"pro_child_signals": [_child("a", "trend"), _child("b", "flow", freshness_valid=False)]},
+        error_sink=errors,
+    )
     assert signals == []
-    assert len(errors) == 1
-    assert errors[0].startswith("strategy_failed:broken_family:RuntimeError:boom")
-    assert exception_spy.call_count == 1
+    assert errors == ["invalid_pro_child_signal:1"]
 
 
-def test_time_window_never_emits_without_primary_confirmation():
+def test_missing_child_input_never_synthesizes_alpha():
     engine = ProStrategyEngine()
-    market_data = {
-        "regime": "TREND",
-        "hour": 9,
-        "minute": 35,
-        "ltp_change_window": 0.9,
-        "ltp": 100.0,
-        "vwap": 100.0,
-        "atr": 0.0,
-        "vol_z": 0.0,
-        "quote_age_sec": 1.0,
-        "spread_pct": 0.008,
-    }
-    assert engine.run(market_data) == []
+    assert engine.run({"regime": "TREND", "ltp": 102, "vwap": 100, "atr": 2.0}) == []
 
 
-def test_precision_rules_fail_closed_on_stale_or_weak_context():
+def test_single_family_cannot_create_meta_signal():
     engine = ProStrategyEngine()
-    market_data = {
-        "regime": "TREND",
-        "atr": 2.0,
-        "ltp_change_window": 1.6,
-        "vol_z": 2.2,
-        "bid_qty": 900,
-        "ask_qty": 100,
-        "quote_age_sec": 12.0,
-        "spread_pct": 0.038,
-    }
-    assert engine.run(market_data) == []
+    assert engine.run({"pro_child_signals": [_child("a", "trend"), _child("b", "trend")]}) == []
 
 
-def test_aggregator_keeps_only_top_non_tied_signal():
+def test_conflicting_family_consensus_fails_closed():
     engine = ProStrategyEngine()
-    market_data = {
-        "regime": "TREND",
-        "atr": 2.4,
-        "ltp_change_window": 1.8,
-        "vol_z": 2.5,
-        "bid_qty": 1400,
-        "ask_qty": 100,
-        "call_oi_delta": 120,
-        "put_oi_delta": 10,
-        "iv_change": 0.09,
-        "quote_age_sec": 1.0,
-        "spread_pct": 0.007,
-        "ltp": 102.0,
-        "vwap": 100.0,
-        "rsi": 0.08,
-    }
-    signals = engine.run(market_data)
-    assert len(signals) <= 1
+    signals = engine.run(
+        {
+            "pro_child_signals": [
+                _child("a", "trend", "BUY_CALL", 0.8, 0.8),
+                _child("b", "flow", "BUY_PUT", 0.78, 0.8),
+            ]
+        }
+    )
+    assert signals == []
+
+
+def test_two_structurally_valid_families_can_form_one_consensus():
+    engine = ProStrategyEngine()
+    signals = engine.run(
+        {
+            "pro_child_signals": [
+                _child("a", "trend", "BUY_CALL", 0.82, 0.80),
+                _child("b", "flow", "BUY_CALL", 0.76, 0.75),
+            ]
+        }
+    )
+    assert len(signals) == 1
+    signal = signals[0]
+    assert signal.name == "pro_strategy_consensus"
+    assert signal.direction == "BUY_CALL"
+    assert signal.evidence["structural_status"] == "STRUCTURALLY_VALID"
+    assert signal.evidence["contract_valid"] is True
+    assert signal.evidence["freshness_valid"] is True
+    assert signal.evidence["family_truth"] == ("flow", "trend")
