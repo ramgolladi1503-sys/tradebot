@@ -81,7 +81,9 @@ def write_checkpoint(root:Path,h:Health,force:bool=False):
  tmp=marker.with_suffix('.tmp');tmp.write_text(str(bucket)+'\n',encoding='utf-8');os.replace(tmp,marker)
 def recover_authority_checkout(repo:Path,root:Path):
  status=git(repo,'status','--porcelain').stdout.strip()
- if not status:return None
+ if not status:
+  git(repo,'merge','--ff-only',f'origin/{AUTHORITY_BRANCH}',timeout=300)
+  return None
  local=ref(repo,'HEAD');remote=ref(repo,f'origin/{AUTHORITY_BRANCH}')
  if git(repo,'merge-base','--is-ancestor',local,remote,check=False).returncode!=0:raise SupervisorError(f'AUTHORITY_DIRTY_AND_DIVERGED:local={local}:remote={remote}')
  label=f'MROS_AUTONOMOUS_RECOVERY_{int(time.time())}_{local[:8]}'
