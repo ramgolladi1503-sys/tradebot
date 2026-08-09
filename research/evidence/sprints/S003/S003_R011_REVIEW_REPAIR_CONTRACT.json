@@ -1,0 +1,37 @@
+{
+  "aggregate_decision": "REPAIR_REQUIRED",
+  "blocking_findings": [
+    {
+      "evidence": "scripts/mros/advance_program.py:110 calls only validate_native_evidence(native,candidate_head). scripts/mros/native_evidence.py:17-55 validates field shape, hashes, references, and pass counts but does not read or verify the referenced source output or receipt. The stronger verify_native_sources function exists at lines 57-78 but is not invoked by authorization.",
+      "falsifier": "A promotion authorization test that supplies fabricated native evidence with passed/check counts, source_output_sha256, source_output_ref, execution_receipt_ref, and execution_job_id pointing to nonexistent or mismatched artifacts must reject authorization.",
+      "finding_id": "R03-NATIVE-EVIDENCE-001",
+      "recommended_repair_scope": "Make authorization resolve and verify the declared native source output and canonical execution receipt, including source hash, receipt identity, candidate head, job success, runtime authority, broker boundary, and reference paths; fail closed when verification inputs are unavailable.",
+      "requirement": "Promotion authorization must verify native evidence provenance against the declared source output and execution receipt, not merely validate self-attested metadata.",
+      "severity": "MAJOR"
+    }
+  ],
+  "failed_head": "b426d9785abb51e7d12d7457cbe94a28d4160e3e",
+  "invalid_artifacts": [],
+  "m9_status": "NOT_STARTED",
+  "repair_scope": {
+    "allowed": [
+      "scripts/mros/",
+      "tests/mros/",
+      "research/review_board/",
+      "research/audit_board/"
+    ],
+    "forbidden": [
+      "research/program/",
+      "runtime/strategy/risk/execution/broker code",
+      "weaken fixtures or acceptance criteria",
+      "begin M9",
+      "create runtime authority"
+    ]
+  },
+  "root_cause_instruction": "Cluster related findings and repair common causes once; preserve adaptive routine assurance and explicit full-board authority boundaries.",
+  "runtime_authority": "NONE",
+  "schema_version": "mros-repair-contract-v2",
+  "source_kind": "review",
+  "source_round": "R011",
+  "sprint": "S003"
+}
