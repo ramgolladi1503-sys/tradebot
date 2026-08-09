@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "audit_id": "REGISTERED_STRATEGY_PRE_CERTIFICATION_CONTRACT_AUDIT_V1",
+  "status": "TERMINAL_PRE_CERTIFICATION_AUDIT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "implementation_source_commit": "561041b2e11f03283ebca3fd5eb70e6ef6fc1d6d",
+  "freeze_manifest_commit": "f68439cb60fa19896aab867f20ac7b9e05835c28",
+  "capability_audit_commit": "76a24105be8a37947ef9dbd37bcbc50a88a8d50b",
+  "supersedes_for_execution_readiness": "REGISTERED_STRATEGY_DATA_CAPABILITY_MATRIX_V1 READY_FOR_EDGE_CERTIFICATION labels",
+  "reason_for_correction": "The automated capability audit used source-token absence as a sufficiency proxy. Exact contract inspection showed additional externally supplied strategy inputs that are not present in the frozen OHLC/VWAP corpus, and Zero-Hero constructs synthetic option premium values from underlying LTP rather than consuming historical option prices.",
+  "corrected_readiness_counts": {
+    "READY_FOR_EDGE_CERTIFICATION": 0,
+    "INSUFFICIENT_EVIDENCE": 15,
+    "BLOCKED_PENDING_SYNC_DATASET_VERIFICATION": 2,
+    "DEFER_CHILD_CERTIFICATION": 2,
+    "SUPPORT_COMPONENT_EXCLUDED": 2
+  },
+  "downgraded_from_ready": [
+    {
+      "strategy_id": "nifty_intraday",
+      "previous_readiness": "READY_FOR_EDGE_CERTIFICATION",
+      "corrected_readiness": "INSUFFICIENT_EVIDENCE",
+      "contract_inputs": ["ltp", "vwap", "bias", "regime"],
+      "finding": "The frozen OHLC/VWAP corpus provides price and VWAP but does not contain the historical external regime state consumed by the frozen implementation. resolve_strategy_regime(None, ...) resolves to UNKNOWN; this strategy rejects UNKNOWN. Deriving a new regime series from OHLC would create a different evidence/feature contract and is prohibited under the frozen identity."
+    },
+    {
+      "strategy_id": "banknifty_intraday",
+      "previous_readiness": "READY_FOR_EDGE_CERTIFICATION",
+      "corrected_readiness": "INSUFFICIENT_EVIDENCE",
+      "contract_inputs": ["ltp", "vwap", "bias", "regime"],
+      "finding": "The frozen OHLC/VWAP corpus provides price and VWAP but does not contain the historical external regime state consumed by the frozen implementation. resolve_strategy_regime(None, ...) resolves to UNKNOWN; this strategy rejects UNKNOWN. Deriving a new regime series from OHLC would create a different evidence/feature contract and is prohibited under the frozen identity."
+    },
+    {
+      "strategy_id": "sensex_intraday",
+      "previous_readiness": "READY_FOR_EDGE_CERTIFICATION",
+      "corrected_readiness": "INSUFFICIENT_EVIDENCE",
+      "contract_inputs": ["ltp", "vwap", "bias", "regime"],
+      "finding": "The frozen OHLC/VWAP corpus provides price and VWAP but does not contain the historical external regime state consumed by the frozen implementation. resolve_strategy_regime(None, ...) resolves to UNKNOWN; this strategy rejects UNKNOWN. Deriving a new regime series from OHLC would create a different evidence/feature contract and is prohibited under the frozen identity."
+    },
+    {
+      "strategy_id": "zero_hero_expiry",
+      "previous_readiness": "READY_FOR_EDGE_CERTIFICATION",
+      "corrected_readiness": "INSUFFICIENT_EVIDENCE",
+      "contract_inputs": ["symbol", "underlying_ltp", "premarket_bias", "current_date", "expiry_calendar", "regime"],
+      "finding": "The frozen implementation selects CE/PE and strike from the underlying, then computes entry_price as max(underlying_ltp * entry_price_mult, premium_floor), with stop and target derived from that synthetic value. It does not consume historical option premium, bid/ask, or executable option price data. Therefore the current underlying-only corpus cannot support a valid option-PnL or structural-edge certification for this frozen strategy identity."
+    }
+  ],
+  "remaining_classification": {
+    "INSUFFICIENT_EVIDENCE": [
+      "vwap_orb",
+      "nifty_intraday",
+      "banknifty_intraday",
+      "sensex_intraday",
+      "zero_hero_expiry",
+      "opening_range_retest",
+      "trend_pullback",
+      "mean_reversion_extension",
+      "opening_drive",
+      "compression_breakout",
+      "failed_breakout_trap",
+      "exhaustion_reversal",
+      "late_day_momentum",
+      "vwap_reclaim_rejection",
+      "event_volatility_expansion"
+    ],
+    "BLOCKED_PENDING_SYNC_DATASET_VERIFICATION": [
+      "pairs_arbitrage",
+      "volatility_trend"
+    ],
+    "DEFER_CHILD_CERTIFICATION": [
+      "ensemble",
+      "pro_strategy"
+    ],
+    "SUPPORT_COMPONENT_EXCLUDED": [
+      "option_pressure_confirmation",
+      "no_trade_chop"
+    ]
+  },
+  "authorized_next_step": "Verify the physical synchronized BANKNIFTY/NIFTY/SENSEX dataset against its frozen hash and exact feature-timing contract. Only pairs_arbitrage and volatility_trend may become candidates for edge certification from the currently declared data after that verification. Do not backtest the fifteen INSUFFICIENT_EVIDENCE strategies under their frozen identities until their required historical inputs are supplied and frozen.",
+  "prohibited_interpretation": [
+    "Do not treat implementation-integrity PASS as market-edge evidence.",
+    "Do not treat the earlier 4 READY labels as authorization to backtest.",
+    "Do not synthesize historical regime, option premium, bid/ask, volume, event state, OI, depth, IV, or order-flow inputs to make a frozen strategy testable.",
+    "Do not claim any strategy is certified or profitable from this audit."
+  ]
+}
