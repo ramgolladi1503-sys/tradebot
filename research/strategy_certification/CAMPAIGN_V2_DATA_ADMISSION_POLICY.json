@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "policy_id": "CAMPAIGN_V2_DATA_ADMISSION_POLICY_V1",
+  "status": "FROZEN_BEFORE_NEW_DATA_ACCESS",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "campaign_v1_status_required": "CAMPAIGN_V1_SEALED_NO_EDGE",
+  "campaign_v1_seal_path": "research/evidence/strategy_certification/SEALED_RESEARCH_CAMPAIGN_V1_SEAL.json",
+  "sealed_kernel_commit": "46dd4f7df9b63486eb633a12baf25412cd4f761d",
+  "admission_rule": "CAMPAIGN V2 MAY OPEN ONLY WHEN A DATASET INTRODUCES A MATERIALLY NEW INFORMATION CLASS RELATIVE TO CAMPAIGN V1 AND ITS TIMING/PROVENANCE CAN BE VERIFIED WITHOUT SYNTHETIC SUBSTITUTION.",
+  "accepted_information_classes": {
+    "OPTIONS_CHAIN": {
+      "required_any_identifier_fields": ["instrument", "symbol", "tradingsymbol"],
+      "required_fields": ["timestamp", "expiry", "strike", "option_type"],
+      "required_market_fields": ["bid", "ask"],
+      "required_information_fields_any": ["iv", "implied_volatility", "oi", "open_interest", "change_in_oi", "delta", "gamma", "theta", "vega"],
+      "minimum_information_fields_present": 2
+    },
+    "ORDER_BOOK_OR_TRADE_FLOW": {
+      "required_any_identifier_fields": ["instrument", "symbol", "tradingsymbol"],
+      "required_fields": ["timestamp"],
+      "required_information_fields_any": ["bid_qty", "ask_qty", "bid_quantity", "ask_quantity", "depth", "trade_qty", "last_quantity", "aggressor_side", "buy_qty", "sell_qty"],
+      "minimum_information_fields_present": 2
+    },
+    "INDEPENDENT_EVENT_OR_STATE": {
+      "required_any_identifier_fields": ["instrument", "symbol", "event_id", "state_id"],
+      "required_fields": ["timestamp"],
+      "required_information_fields_any": ["event_type", "state", "regime", "announcement_type", "scheduled_time", "release_time"],
+      "minimum_information_fields_present": 1
+    }
+  },
+  "provenance_requirements": {
+    "dataset_sha256_required": true,
+    "source_name_required": true,
+    "source_path_or_vendor_reference_required": true,
+    "timezone_required": true,
+    "timestamp_semantics_required": true,
+    "field_semantics_required": true,
+    "date_range_required": true,
+    "row_count_required": true
+  },
+  "causality_requirements": {
+    "future_derived_fields_forbidden": true,
+    "unknown_timestamp_semantics_fail_closed": true,
+    "unknown_field_semantics_fail_closed": true,
+    "bid_ask_must_be_same_or_prior_timestamp_to_decision": true,
+    "oi_iv_greeks_must_be_observed_or_reconstructable_without_future_quotes": true
+  },
+  "data_quality_requirements": {
+    "duplicate_timestamp_key_report_required": true,
+    "missingness_report_required": true,
+    "bid_ask_crossed_or_inverted_report_required_when_applicable": true,
+    "zero_or_negative_price_report_required_when_applicable": true,
+    "expiry_strike_option_type_domain_report_required_when_applicable": true
+  },
+  "terminal_verdicts": [
+    "CAMPAIGN_V2_DATA_ADMITTED",
+    "CAMPAIGN_V2_DATA_REJECTED",
+    "CAMPAIGN_V2_DATA_INSUFFICIENT_EVIDENCE"
+  ],
+  "prohibited_actions": [
+    "DO_NOT_OPEN_CAMPAIGN_V2_ON_OHLC_ONLY_DATA",
+    "DO_NOT_SYNTHESIZE_MISSING_IV_OI_BID_ASK_DEPTH_OR_EVENT_FIELDS",
+    "DO_NOT_USE_CAMPAIGN_V1_HOLDOUT_OUTCOMES_FOR_DESIGN",
+    "DO_NOT_DEFINE_HYPOTHESES_BEFORE_DATA_ADMISSION_IS SEALED"
+  ]
+}
