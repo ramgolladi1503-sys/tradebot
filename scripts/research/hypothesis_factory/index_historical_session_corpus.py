@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Inventory a local/synced historical market-data corpus by trading session.
 
-The expected corpus shape is permissive, but optimized for date folders such as
-YYYYMMDD/underlying/*.parquet. The indexer never assumes that the presence of a
-date folder means an instrument is available. It classifies every file from its
-path/name and records exact per-session coverage.
+The expected corpus shape is permissive, and supports date folders such as
+YYYYMMDD/underlying/*.parquet and YYYY-MM-DD/underlying/*.parquet. The indexer
+never assumes that the presence of a date folder means an instrument is
+available. It classifies every file from its path/name and records exact
+per-session coverage.
 
 Research-only. It does not screen hypotheses, certify edge, or grant runtime or
 broker authority.
@@ -21,7 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DATE_RE = re.compile(r"(?<!\d)(20\d{6})(?!\d)")
+COMPACT_DATE_RE = re.compile(r"(?<!\d)(20\d{6})(?!\d)")
+HYPHEN_DATE_RE = re.compile(r"(?<!\d)(20\d{2})-(\d{2})-(\d{2})(?!\d)")
 SUPPORTED_EXTENSIONS = {".parquet", ".csv"}
 
 
@@ -38,9 +40,12 @@ def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
 
 def infer_date(path: Path) -> str:
     for part in reversed(path.parts):
-        m = DATE_RE.search(part)
-        if m:
-            raw = m.group(1)
+        hyphen = HYPHEN_DATE_RE.search(part)
+        if hyphen:
+            return f"{hyphen.group(1)}-{hyphen.group(2)}-{hyphen.group(3)}"
+        compact = COMPACT_DATE_RE.search(part)
+        if compact:
+            raw = compact.group(1)
             return f"{raw[:4]}-{raw[4:6]}-{raw[6:8]}"
     return "UNKNOWN"
 
@@ -171,7 +176,7 @@ def inventory(roots: list[Path], hash_files: bool = False) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--historical-root", action="append", default=[], help="Explicit local/synced tradebot_historical_data root; repeatable")
+    p.add_argument("--historical-root", action="append", default=[], help="Explicit local/synced historical corpus root; repeatable")
     p.add_argument("--output", default="research/hypotheses/historical_corpus/historical_session_index.json")
     p.add_argument("--hash-files", action="store_true")
     args = p.parse_args(argv)
