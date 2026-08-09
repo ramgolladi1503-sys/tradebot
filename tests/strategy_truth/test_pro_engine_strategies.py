@@ -1,178 +1,97 @@
-from strategies.pro_layer.pro_strategy_engine import (
-    VolatilityExpansionStrategy,
-    LiquidityImbalanceStrategy,
-    VWAPMeanReversionStrategy,
-    OptionsFlowStrategy,
-    TimeWindowStrategy,
-)
+from strategies.pro_layer.pro_strategy_engine import ProStrategyEngine, ProSignal, ProSignalAggregator
 
-def _mock_snapshot(overrides):
-    base = {
-        "symbol": "TEST",
-        "ltp": 100.0,
-        "vwap": 100.0,
-        "atr": 5.0,
-        "ltp_change_window": 1.0,
-        "vol_z": 1.0,
-        "bid_qty": 1000,
-        "ask_qty": 500,
-        "spread_pct": 0.001,
-        "quote_age_sec": 1.0,
-        "rsi_mom": 40.0,
-        "call_oi_delta": 1000,
-        "put_oi_delta": 500,
-        "iv_change": 0.05,
-        "ltp_change": 0.5,
+
+def _child(name, family, direction="BUY_CALL", score=0.8, confidence=0.8, **evidence_overrides):
+    evidence = {
+        "structural_status": "STRUCTURALLY_VALID",
+        "contract_valid": True,
+        "freshness_valid": True,
+        "source_sha256": f"sha-{name}",
     }
-    base.update(overrides)
-    return base
+    evidence.update(evidence_overrides)
+    return ProSignal(
+        name=name,
+        direction=direction,
+        score=score,
+        confidence=confidence,
+        reason="child",
+        family=family,
+        regime_tags=["TREND"],
+        evidence=evidence,
+    )
 
-# VolatilityExpansionStrategy
-def test_volatility_expansion_positive_trigger():
-    s = VolatilityExpansionStrategy()
-    res = s.generate(_mock_snapshot({"ltp_change_window": 5.0, "atr": 5.0, "vol_z": 1.5}))
-    assert res is not None
-    assert res.name == "vol_expansion"
-    assert res.direction == "BUY_CALL"
 
-def test_volatility_expansion_negative_no_trigger():
-    s = VolatilityExpansionStrategy()
-    res = s.generate(_mock_snapshot({"ltp_change_window": 1.0, "atr": 5.0, "vol_z": 0.5}))
-    assert res is None
+def test_pro_engine_does_not_generate_hidden_alpha_without_children():
+    engine = ProStrategyEngine()
+    assert engine.run({
+        "regime": "TREND",
+        "ltp": 102.0,
+        "vwap": 100.0,
+        "atr": 2.0,
+        "bid_qty": 2000,
+        "ask_qty": 500,
+        "call_oi_delta": 500,
+        "put_oi_delta": 2000,
+    }) == []
 
-def test_volatility_expansion_bullish_bearish_maps_correctly():
-    s = VolatilityExpansionStrategy()
-    res_up = s.generate(_mock_snapshot({"ltp_change_window": 5.0, "atr": 5.0, "vol_z": 1.5}))
-    assert res_up.direction == "BUY_CALL"
-    res_down = s.generate(_mock_snapshot({"ltp_change_window": -5.0, "atr": 5.0, "vol_z": 1.5}))
-    assert res_down.direction == "BUY_PUT"
 
-def test_volatility_expansion_nan_fails_closed():
-    s = VolatilityExpansionStrategy()
-    res = s.generate(_mock_snapshot({"atr": float("nan"), "ltp_change_window": 5.0}))
-    assert res is None
+def test_pro_engine_rejects_missing_structural_provenance():
+    engine = ProStrategyEngine()
+    bad = _child("a", "trend", structural_status="UNKNOWN")
+    errors: list[str] = []
+    assert engine.run({"pro_child_signals": [bad]}, error_sink=errors) == []
+    assert errors == ["invalid_pro_child_signal:0"]
 
-def test_volatility_expansion_missing_fails_closed():
-    s = VolatilityExpansionStrategy()
-    res = s.generate({"symbol": "TEST", "ltp": 100.0, "quote_age_sec": 1.0, "spread_pct": 0.001})
-    assert res is None
 
-# LiquidityImbalanceStrategy
-def test_liquidity_imbalance_positive_trigger():
-    s = LiquidityImbalanceStrategy()
-    res = s.generate(_mock_snapshot({"bid_qty": 2000, "ask_qty": 500, "spread_pct": 0.001}))
-    assert res is not None
-    assert res.name == "liquidity_imbalance"
-    assert res.direction == "BUY_CALL"
+def test_pro_engine_rejects_missing_source_hash():
+    engine = ProStrategyEngine()
+    bad = _child("a", "trend", source_sha256="")
+    assert engine.run({"pro_child_signals": [bad]}) == []
 
-def test_liquidity_imbalance_negative_no_trigger():
-    s = LiquidityImbalanceStrategy()
-    res = s.generate(_mock_snapshot({"bid_qty": 1000, "ask_qty": 1000}))
-    assert res is None
 
-def test_liquidity_imbalance_bullish_bearish_maps_correctly():
-    s = LiquidityImbalanceStrategy()
-    res_up = s.generate(_mock_snapshot({"bid_qty": 2000, "ask_qty": 500}))
-    assert res_up.direction == "BUY_CALL"
-    res_down = s.generate(_mock_snapshot({"bid_qty": 500, "ask_qty": 2000}))
-    assert res_down.direction == "BUY_PUT"
+def test_pro_engine_rejects_stale_child():
+    engine = ProStrategyEngine()
+    bad = _child("a", "trend", freshness_valid=False)
+    assert engine.run({"pro_child_signals": [bad]}) == []
 
-def test_liquidity_imbalance_nan_fails_closed():
-    s = LiquidityImbalanceStrategy()
-    res = s.generate(_mock_snapshot({"bid_qty": float("nan")}))
-    assert res is None
 
-def test_liquidity_imbalance_missing_fails_closed():
-    s = LiquidityImbalanceStrategy()
-    res = s.generate({"symbol": "TEST", "quote_age_sec": 1.0, "spread_pct": 0.001})
-    assert res is None
+def test_pro_engine_requires_orthogonal_family_diversity():
+    engine = ProStrategyEngine()
+    assert engine.run({"pro_child_signals": [_child("a", "trend"), _child("b", "trend")]}) == []
 
-# VWAPMeanReversionStrategy
-def test_vwap_mean_reversion_positive_trigger():
-    s = VWAPMeanReversionStrategy()
-    res = s.generate(_mock_snapshot({"ltp": 99.0, "vwap": 100.0, "rsi_mom": -0.40}))
-    assert res is not None
-    assert res.name == "vwap_mean_reversion"
-    assert res.direction == "BUY_CALL"
 
-def test_vwap_mean_reversion_negative_no_trigger():
-    s = VWAPMeanReversionStrategy()
-    res = s.generate(_mock_snapshot({"ltp": 100.0, "vwap": 100.0}))
-    assert res is None
+def test_pro_engine_rejects_material_direction_conflict():
+    engine = ProStrategyEngine()
+    result = engine.run({
+        "pro_child_signals": [
+            _child("a", "trend", "BUY_CALL", 0.8, 0.8),
+            _child("b", "flow", "BUY_PUT", 0.8, 0.8),
+        ]
+    })
+    assert result == []
 
-def test_vwap_mean_reversion_bullish_bearish_maps_correctly():
-    s = VWAPMeanReversionStrategy()
-    res_up = s.generate(_mock_snapshot({"ltp": 99.0, "vwap": 100.0, "rsi_mom": -0.40}))
-    assert res_up.direction == "BUY_CALL"
-    res_down = s.generate(_mock_snapshot({"ltp": 101.0, "vwap": 100.0, "rsi_mom": 0.40}))
-    assert res_down.direction == "BUY_PUT"
 
-def test_vwap_mean_reversion_nan_fails_closed():
-    s = VWAPMeanReversionStrategy()
-    res = s.generate(_mock_snapshot({"vwap": float("nan")}))
-    assert res is None
+def test_pro_engine_emits_consensus_only_from_two_valid_families():
+    engine = ProStrategyEngine()
+    result = engine.run({
+        "pro_child_signals": [
+            _child("a", "trend", "BUY_CALL", 0.82, 0.80),
+            _child("b", "flow", "BUY_CALL", 0.76, 0.75),
+        ]
+    })
+    assert len(result) == 1
+    signal = result[0]
+    assert signal.name == "pro_strategy_consensus"
+    assert signal.direction == "BUY_CALL"
+    assert signal.family == "pro_meta"
+    assert signal.evidence["family_truth"] == ("flow", "trend")
+    assert signal.evidence["source_sha256"] == "sha-a|sha-b"
 
-def test_vwap_mean_reversion_missing_fails_closed():
-    s = VWAPMeanReversionStrategy()
-    res = s.generate({"symbol": "TEST", "quote_age_sec": 1.0, "spread_pct": 0.001})
-    assert res is None
 
-# OptionsFlowStrategy
-def test_options_flow_positive_trigger():
-    s = OptionsFlowStrategy()
-    res = s.generate(_mock_snapshot({"call_oi_delta": 500, "put_oi_delta": 2000, "ltp_change": 1.0}))
-    assert res is not None
-    assert res.name == "options_flow_alignment"
-    assert res.direction == "BUY_CALL"
-
-def test_options_flow_negative_no_trigger():
-    s = OptionsFlowStrategy()
-    res = s.generate(_mock_snapshot({"call_oi_delta": 1000, "put_oi_delta": 1000}))
-    assert res is None
-
-def test_options_flow_bullish_bearish_maps_correctly():
-    s = OptionsFlowStrategy()
-    res_up = s.generate(_mock_snapshot({"call_oi_delta": 500, "put_oi_delta": 2000, "ltp_change_window": 1.0}))
-    assert res_up.direction == "BUY_CALL"
-    res_down = s.generate(_mock_snapshot({"call_oi_delta": 2000, "put_oi_delta": 500, "ltp_change_window": -1.0}))
-    assert res_down.direction == "BUY_PUT"
-
-def test_options_flow_nan_fails_closed():
-    s = OptionsFlowStrategy()
-    res = s.generate(_mock_snapshot({"call_oi_delta": float("nan"), "put_oi_delta": float("nan"), "iv_change": 0.0}))
-    assert res is None
-
-def test_options_flow_missing_fails_closed():
-    s = OptionsFlowStrategy()
-    res = s.generate({"symbol": "TEST", "quote_age_sec": 1.0, "spread_pct": 0.001})
-    assert res is None
-
-# TimeWindowStrategy
-def test_time_window_positive_trigger():
-    s = TimeWindowStrategy()
-    res = s.generate(_mock_snapshot({"hour": 9, "minute": 25, "ltp_change": 1.0}))
-    assert res is not None
-    assert res.name == "time_window_momentum"
-    assert res.direction == "BUY_CALL"
-
-def test_time_window_negative_no_trigger():
-    s = TimeWindowStrategy()
-    res = s.generate(_mock_snapshot({"hour": 11, "minute": 0, "ltp_change": 1.0}))
-    assert res is None
-
-def test_time_window_bullish_bearish_maps_correctly():
-    s = TimeWindowStrategy()
-    res_up = s.generate(_mock_snapshot({"hour": 9, "minute": 25, "ltp_change_window": 1.0}))
-    assert res_up.direction == "BUY_CALL"
-    res_down = s.generate(_mock_snapshot({"hour": 9, "minute": 25, "ltp_change_window": -1.0}))
-    assert res_down.direction == "BUY_PUT"
-
-def test_time_window_nan_fails_closed():
-    s = TimeWindowStrategy()
-    res = s.generate(_mock_snapshot({"ltp_change": float("nan")}))
-    assert res is None
-
-def test_time_window_missing_fails_closed():
-    s = TimeWindowStrategy()
-    res = s.generate({"symbol": "TEST"})
-    assert res is None
+def test_aggregator_rejects_weak_top_signal():
+    agg = ProSignalAggregator()
+    result = agg.aggregate([
+        _child("a", "trend", score=0.60, confidence=0.59),
+        _child("b", "flow", score=0.60, confidence=0.59),
+    ])
+    assert result == []
