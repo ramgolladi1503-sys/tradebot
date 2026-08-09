@@ -53,8 +53,6 @@ SEMANTIC_MARKERS: dict[str, tuple[str, ...]] = {
     "family_truth": ("family_truth", "family"),
 }
 
-# Every registry entry must have a policy. Each inner tuple is an OR group; all
-# groups must be satisfied. Markers are lexical, not raw substrings.
 STRATEGY_POLICIES: dict[str, tuple[tuple[str, ...], ...]] = {
     "ensemble": (("child_signals",), ("source_sha256",), ("structural_status",), ("contract_valid",), ("freshness_valid",)),
     "vwap_orb": (("trend_confirmation",), ("cumulative_volume_delta",), ("vpin_toxicity",), ("dealer_gamma_exposure",)),
@@ -62,7 +60,7 @@ STRATEGY_POLICIES: dict[str, tuple[tuple[str, ...], ...]] = {
     "banknifty_intraday": (("_allowed_regimes",), ("regime_not_declared_by_strategy_spec",), ("vwap",)),
     "sensex_intraday": (("_allowed_regimes",), ("regime_not_declared_by_strategy_spec",), ("vwap",)),
     "zero_hero_expiry": (("generate_signal",), ("zero_hero_strategy",), ("next_expiry",)),
-    "pairs_arbitrage": (("leg_a_age_sec",), ("leg_b_age_sec",), ("adfuller",), ("cointegration_truth_unavailable",), ("hedge_ratio",), ("spread_truth",)),
+    "pairs_arbitrage": (("cross_asset_health",), ("leg_a_age_sec",), ("leg_b_age_sec",), ("adfuller",), ("cointegration_truth_unavailable",), ("hedge_ratio",), ("spread_truth",)),
     "opening_range_retest": (("completed_bar_history",), ("breakout",), ("retest",), ("continuation",)),
     "trend_pullback": (("completed_bar_history",), ("pullback",), ("trigger", "resumption")),
     "mean_reversion_extension": (("oscillator_confirmation",), ("rsi", "zscore", "z_score"), ("vwap",)),
@@ -74,7 +72,7 @@ STRATEGY_POLICIES: dict[str, tuple[tuple[str, ...], ...]] = {
     "vwap_reclaim_rejection": (("completed_bar_history",), ("establishment",), ("reclaim",), ("hold",)),
     "option_pressure_confirmation": (("does not emit standalone", "downstream_owned", "downstream-owned"), ("return",)),
     "event_volatility_expansion": (("event_state",), ("volatility_state",), ("atr_short",), ("atr_long",), ("volume_z",)),
-    "no_trade_chop": (("assess_no_trade",), ("no_trade",), ("direction",)),
+    "no_trade_chop": (("assess_no_trade",), ("no_trade",), ("no_trade_environment_detected", "NO_TRADE")),
     "volatility_trend": (("cross_assets",), ("cross_asset_health",), ("confirming_assets",), ("atr",)),
     "pro_strategy": (("pro_child_signals",), ("source_sha256",), ("structural_status",), ("contract_valid",), ("freshness_valid",), ("family_truth",)),
 }
@@ -241,7 +239,6 @@ def audit_spec(root: Path, spec: RegistrySpec) -> dict[str, Any]:
     if bad_calls:
         findings.append({"severity":"CRITICAL","code":"BROKER_OR_ORDER_CALL_PRESENT","detail":",".join(bad_calls)})
 
-    # Support components intentionally do not consume alpha evidence themselves.
     if spec.strategy_id not in SUPPORT_COMPONENT_IDS:
         for key in spec.required_evidence_keys:
             markers = SEMANTIC_MARKERS.get(key)
