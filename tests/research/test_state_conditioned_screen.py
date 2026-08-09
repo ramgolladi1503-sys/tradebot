@@ -33,3 +33,20 @@ def test_generation_has_state_conditioning_and_large_grid():
     assert len(hs) >= 600
     assert {'prior_up','prior_down','prior_high_vol','prior_low_vol'} == {h['regime'] for h in hs}
     assert {'gap_follow','gap_fade','opening_momentum','intraday_breakout','intraday_reversion'} == {h['family'] for h in hs}
+
+
+def test_missing_prior_state_fails_closed_without_exception():
+    first=[
+        row('2026-01-01T09:15:00',100,101,99,100),
+        row('2026-01-01T09:20:00',100,102,99,101),
+        row('2026-01-01T09:25:00',101,103,100,102),
+        row('2026-01-01T09:30:00',102,104,101,103),
+        row('2026-01-01T09:35:00',103,105,102,104),
+    ]
+    h={'id':'FIRST','family':'opening_momentum','regime':'prior_up','direction':1,'threshold_bps':10,'hold_bars':2,'lookback':3}
+    result=m.evaluate(h,[('2026-01-01',first)],{},cost=8,min_trades=1)
+    assert result['trades']==0
+    assert result['sessions_traded']==0
+    assert result['sessions_skipped_missing_prior_state']==1
+    assert result['status']=='REJECTED'
+    assert m.signal(h, first, 3, {}) is False
