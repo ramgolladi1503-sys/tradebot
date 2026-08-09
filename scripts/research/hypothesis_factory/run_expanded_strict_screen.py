@@ -175,6 +175,17 @@ def evaluate(h: dict[str, Any], sessions: dict[str,list[dict[str,Any]]], cost: f
       "pnl_semantics":"UNDERLYING_DIRECTION_PROXY_BPS","option_pnl_claimed":False}
 
 
+def write_results_csv(path: Path, results: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not results:
+        path.write_text("", encoding="utf-8")
+        return
+    fieldnames = sorted({key for row in results for key in row.keys()})
+    with path.open("w", newline="", encoding="utf-8") as h:
+        w=csv.DictWriter(h,fieldnames=fieldnames,extrasaction="ignore")
+        w.writeheader(); w.writerows(results)
+
+
 def main(argv=None)->int:
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--input",required=True); p.add_argument("--instrument",required=True)
@@ -186,8 +197,7 @@ def main(argv=None)->int:
     results.sort(key=lambda x:(x["status"]=="PROMISING_NOT_CERTIFIED",x["net_expectancy_bps"],x["trades"]),reverse=True)
     run_id=datetime.now(timezone.utc).strftime("EXPANDED-STRICT-%Y%m%dT%H%M%SZ"); out=Path(a.output_dir)/run_id; out.mkdir(parents=True,exist_ok=True)
     (out/"results.json").write_text(json.dumps(results,indent=2,sort_keys=True)+"\n")
-    with (out/"leaderboard.csv").open("w",newline="",encoding="utf-8") as h:
-        w=csv.DictWriter(h,fieldnames=list(results[0].keys())); w.writeheader(); w.writerows(results)
+    write_results_csv(out/"leaderboard.csv", results)
     manifest={"schema_version":"tradebot-expanded-strict-screen-v1","run_id":run_id,"instrument":a.instrument.upper(),"input":str(Path(a.input).resolve()),
       "input_sha256":hashlib.sha256(Path(a.input).read_bytes()).hexdigest(),"loaded_rows":len(rows),"sessions":len(sessions),"hypotheses":len(hs),
       "promising_not_certified":sum(r["status"]=="PROMISING_NOT_CERTIFIED" for r in results),"min_trades":a.min_trades,"cost_bps":a.cost_bps,
