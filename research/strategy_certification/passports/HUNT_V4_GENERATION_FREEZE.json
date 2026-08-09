@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "generation_id": "HUNT_V4_GENERATION_FREEZE",
+  "status": "FROZEN_PRE_DEVELOPMENT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "sealed_kernel_commit": "46dd4f7df9b63486eb633a12baf25412cd4f761d",
+  "sealed_kernel_runner_sha256": "b27ac20068aa399ca1bc2ba9b56d9192089b9cc02f52903fa758b2ef00bf9c91",
+  "dataset_id": "BANKNIFTY_NIFTY_SENSEX_SYNC_5M_V1",
+  "dataset_sha256": "66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32",
+  "multiple_testing_family": "HUNT_V4_TEMPORAL_STRUCTURE_FAMILY",
+  "prior_generation_policy": "V1_V2_V3_HOLDOUT_OUTCOMES_FORBIDDEN; V3_FAILED_RANGE_ESCAPE_NEAR_MISS_MUST_NOT_BE_REUSED_OR_REPARAMETERIZED",
+  "split_contract": {"development_fraction":0.6,"validation_fraction":0.2,"holdout_fraction":0.2,"ordering":"CHRONOLOGICAL_BY_SESSION","validation_access":"FORBIDDEN_UNTIL_DEVELOPMENT_NOMINATION","holdout_access":"FORBIDDEN_UNTIL_VALIDATION_PASS_AND_ROBUSTNESS_CONTROLS"},
+  "execution_contract": {"decision":"COMPLETED_BAR_T_USING_ONLY_T_AND_PRIOR_BARS","entry":"NEXT_SYNCHRONIZED_BAR_CLOSE_T_PLUS_1","exit":"FIXED_HORIZON_SYNCHRONIZED_CLOSE","max_concurrent_positions_per_configuration":1,"base_round_trip_cost_bps":2.0,"development_horizons_bars":[1,3,6]},
+  "development_gate": {"minimum_trades":50,"require_positive_mean_net_bps":true,"selection":"BEST_MEAN_WITHIN_PASSPORT_DEVELOPMENT_ONLY"},
+  "negative_controls_required_later":["NO_SAME_BAR_FILL","FUTURE_BAR_SHIFT_MUST_NOT_AUTHORIZE_EDGE","RANDOMIZED_DIRECTION_NULL","SESSION_PERMUTATION_NULL"],
+  "freeze_rule":"ANY CHANGE TO SIGNAL, GRID, HORIZON, COST, SPLIT, DATASET HASH, OR SELECTION RULE CREATES A NEW GENERATION IDENTITY.",
+  "passports":[
+    {"passport_id":"HUNT_V4_THREE_BAR_DIRECTIONAL_PERSISTENCE","signal_rule":"LAST_N completed BANKNIFTY close-to-close returns share sign and each abs return >= min_bar_bps","direction_rule":"SHARED_PRIOR_RETURN_DIRECTION","grid":{"lookback_bars":[2,3],"min_bar_bps":[3,6,10]}},
+    {"passport_id":"HUNT_V4_THREE_BAR_DIRECTIONAL_EXHAUSTION","signal_rule":"LAST_N completed BANKNIFTY close-to-close returns share sign and cumulative abs return >= cumulative_bps","direction_rule":"OPPOSITE_SHARED_PRIOR_RETURN_DIRECTION","grid":{"lookback_bars":[2,3],"cumulative_bps":[15,25,40]}},
+    {"passport_id":"HUNT_V4_ALTERNATING_SEQUENCE_RESOLUTION","signal_rule":"LAST_THREE completed BANKNIFTY return signs alternate and current absolute return >= trigger_bps","direction_rule":"CURRENT_RETURN_DIRECTION","grid":{"trigger_bps":[5,10,15]}},
+    {"passport_id":"HUNT_V4_LEADER_STREAK_CONFIRMATION","signal_rule":"NIFTY and SENSEX last N completed return signs agree on every bar and BANKNIFTY current return sign agrees; minimum leader absolute return >= leader_bps","direction_rule":"CONSENSUS_DIRECTION","grid":{"lookback_bars":[2,3],"leader_bps":[3,6,10]}},
+    {"passport_id":"HUNT_V4_LATE_SESSION_DIRECTIONAL_PERSISTENCE","signal_rule":"AFTER bar_index_min within session, last N completed BANKNIFTY close-to-close returns share sign and cumulative abs return >= cumulative_bps","direction_rule":"SHARED_PRIOR_RETURN_DIRECTION","grid":{"bar_index_min":[45,55,65],"lookback_bars":[2,3],"cumulative_bps":[12,20,30]}}
+  ]
+}
