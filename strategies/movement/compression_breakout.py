@@ -24,7 +24,8 @@ STRATEGY_ID = "compression_breakout_v1"
 MOVEMENT_TYPE = "COMPRESSION_BREAKOUT"
 EMBEDDED_PROFILE_DEFAULTS = {
     "MAX_ATR_RATIO": 0.75,
-    "MAX_RANGE_WIDTH_PCT": 0.35,
+    # Fractional width, not percentage points. 0.0035 == 0.35%.
+    "MAX_RANGE_WIDTH_PCT": 0.0035,
     "MIN_BREAKOUT_DISTANCE_PCT": 0.0008,
     "MIN_COMPRESSION_SCORE": 0.5,
     "MIN_VWAP_ALIGNMENT_PCT": 0.0004,
@@ -58,6 +59,9 @@ def generate_compression_breakout_candidates(ctx: StrategyContext, regime: Movem
     if temporal is None:
         return ()
     upper_level, lower_level, completed_range_width_pct = temporal
+    max_range_width_pct = _fractional_width_threshold(params.get("MAX_RANGE_WIDTH_PCT"))
+    if max_range_width_pct is None or completed_range_width_pct > max_range_width_pct:
+        return ()
     compression_score = _compression_evidence_score(completed_range_width_pct, ctx, regime, params)
     if compression_score < min_compression_score:
         return ()
@@ -89,6 +93,7 @@ def _build_candidate(ctx, regime, profile: RuntimeProfileResolution, direction, 
         "completed_bar_history": True,
         "compression_lookback_bars": COMPRESSION_LOOKBACK_BARS,
         "completed_range_width_pct": completed_range_width_pct,
+        "max_completed_range_width_pct": _fractional_width_threshold(params.get("MAX_RANGE_WIDTH_PCT")),
         "atr_short": ctx.atr_short,
         "atr_long": ctx.atr_long,
         "atr_short_long_ratio": _atr_ratio(ctx),
@@ -113,11 +118,20 @@ def _build_candidate(ctx, regime, profile: RuntimeProfileResolution, direction, 
     )
 
 
+def _fractional_width_threshold(raw: object) -> float | None:
+    value = safe_float(raw)
+    if value is None or value <= 0:
+        return None
+    # Historical profiles used percentage points (0.35 == 0.35%). Normalize
+    # those values to the fractional representation used by completed bars.
+    return value / 100.0 if value >= 0.05 else value
+
+
 def _compression_evidence_score(completed_range_width_pct: float, ctx: StrategyContext, regime: MovementRegimeResult, params: dict[str, object]) -> float:
-    max_range_width_pct = float(params["MAX_RANGE_WIDTH_PCT"])
+    max_range_width_pct = _fractional_width_threshold(params.get("MAX_RANGE_WIDTH_PCT"))
     max_atr_ratio = float(params["MAX_ATR_RATIO"])
     atr_ratio = _atr_ratio(ctx)
-    if atr_ratio is None or completed_range_width_pct < 0:
+    if max_range_width_pct is None or atr_ratio is None or completed_range_width_pct < 0 or completed_range_width_pct > max_range_width_pct:
         return 0.0
     parts = [
         clamp_score((max_range_width_pct - completed_range_width_pct) / max_range_width_pct),
