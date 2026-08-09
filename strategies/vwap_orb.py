@@ -1,46 +1,75 @@
 # strategies/vwap_orb.py
 
+
+def _trend_confirmation(market_data, option_type):
+    """Require explicit directional trend evidence; never infer it from VWAP alone."""
+    raw = market_data.get("trend_confirmation")
+    score = market_data.get("trend_score")
+    direction = market_data.get("trend_direction")
+
+    if isinstance(raw, dict):
+        direction = raw.get("direction", direction)
+        score = raw.get("score", score)
+    elif isinstance(raw, str):
+        direction = raw
+    elif isinstance(raw, bool):
+        if not raw:
+            return False
+        direction = "UP" if option_type == "CE" else "DOWN"
+
+    try:
+        score = float(score)
+    except Exception:
+        return False
+    if score < 0.5:
+        return False
+
+    normalized = str(direction or "").strip().upper()
+    if option_type == "CE":
+        return normalized in {"UP", "BULL", "BULLISH", "BUY_CALL", "CE"}
+    return normalized in {"DOWN", "BEAR", "BEARISH", "BUY_PUT", "PE"}
+
+
 def vwap_orb_strategy(symbol, ltp, vwap, vwap_buffer=0.0015, market_data=None):
-    """
-    VWAP + ORB confirmation strategy with Elite GEX and CVD Filtering
-    """
+    """VWAP/ORB-style signal requiring independent trend and flow confirmation."""
     trades = []
     market_data = market_data or {}
 
     if not ltp or not vwap or vwap <= 0:
         return trades
 
-    # Elite 10/10 GEX Filter: Hard-lock if Positive Gamma
-    dealer_gamma = market_data.get("dealer_gamma_exposure", 0)
+    dealer_gamma = market_data.get("dealer_gamma_exposure")
+    if dealer_gamma is None:
+        return trades
     if dealer_gamma > 0:
-        # Veto the trade: Positive gamma suppresses volatility and destroys ORBs
         return trades
 
-    # Elite 10/10 CVD Filter: Volume must support the breakout
-    cvd = market_data.get("cumulative_volume_delta", 0)
+    cvd = market_data.get("cumulative_volume_delta")
+    if cvd is None:
+        return trades
 
-    # Elite 10/10 VPIN Toxicity Filter
-    # Breakouts require high order flow toxicity to sustain momentum
-    vpin_toxicity = market_data.get("vpin_toxicity", 1.0) # default 1.0 to not break tests if absent
-    min_vpin_threshold = market_data.get("min_vpin_threshold", 0.6) # 60% toxicity required
-    
+    vpin_toxicity = market_data.get("vpin_toxicity")
+    if vpin_toxicity is None:
+        return trades
+    min_vpin_threshold = market_data.get("min_vpin_threshold", 0.6)
     if vpin_toxicity < min_vpin_threshold:
-        return trades # Veto: Breakout lacks informed order flow toxicity
+        return trades
 
-    # VWAP buffer to reduce noise
     if ltp > vwap * (1 + vwap_buffer):
         if cvd < 0:
-            return trades  # Veto: Fake breakout without volume backing
+            return trades
         option_type = "CE"
     elif ltp < vwap * (1 - vwap_buffer):
         if cvd > 0:
-            return trades  # Veto: Fake breakdown without volume backing
+            return trades
         option_type = "PE"
     else:
-        return trades  # no signal
+        return trades
+
+    if not _trend_confirmation(market_data, option_type):
+        return trades
 
     strike = round(ltp / 100) * 100
-    # Clamp entry to a realistic premium band if available
     try:
         from config.config import MIN_PREMIUM, MAX_PREMIUM
         min_prem = MIN_PREMIUM
@@ -49,12 +78,9 @@ def vwap_orb_strategy(symbol, ltp, vwap, vwap_buffer=0.0015, market_data=None):
         min_prem = 40
         max_prem = 150
 
-    entry_price = ltp * 0.004
-    entry_price = max(entry_price, min_prem)
-    entry_price = min(entry_price, max_prem)
+    entry_price = max(min(ltp * 0.004, max_prem), min_prem)
     stop_loss = round(entry_price * 0.8, 2)
     target = round(entry_price * 1.3, 2)
-    lot_size = 1
 
     trades.append({
         "symbol": symbol,
@@ -63,8 +89,8 @@ def vwap_orb_strategy(symbol, ltp, vwap, vwap_buffer=0.0015, market_data=None):
         "entry_price": round(entry_price, 2),
         "stop_loss": stop_loss,
         "target": target,
-        "lot_size": lot_size,
-        "confidence": 60
+        "lot_size": 1,
+        "confidence": 60,
+        "trend_confirmation": True,
     })
-
     return trades
