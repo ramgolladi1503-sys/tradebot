@@ -46,7 +46,9 @@
       "generation_id": "HUNT_V4_GENERATION_FREEZE",
       "freeze_path": "research/strategy_certification/passports/HUNT_V4_GENERATION_FREEZE.json",
       "development_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_hunt_v4_development_screen.py", "--repo-root", "."],
-      "development_output": "research/evidence/strategy_certification/HUNT_V4_DEVELOPMENT_SCREEN.json"
+      "development_output": "research/evidence/strategy_certification/HUNT_V4_DEVELOPMENT_SCREEN.json",
+      "validation_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_exact_nomination_validation.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V4_GENERATION_FREEZE.json", "--development-output", "research/evidence/strategy_certification/HUNT_V4_DEVELOPMENT_SCREEN.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v4_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V4_VALIDATION_RESULT.json"],
+      "validation_output": "research/evidence/strategy_certification/HUNT_V4_VALIDATION_RESULT.json"
     }
   ],
   "extension_rule": "NEW GENERATIONS MAY BE APPENDED ONLY BEFORE THEIR DEVELOPMENT OUTCOMES ARE ACCESSED. APPENDING A GENERATION DOES NOT CHANGE ANY EXISTING GENERATION OR GLOBAL GATE.",
