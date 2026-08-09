@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse,json,re
 from pathlib import Path
-from native_evidence import validate_native_evidence
+from native_evidence import validate_native_evidence,verify_native_sources
 from program_context import load_and_validate_context
 from aggregate_reviews import aggregate_payloads as aggregate_reviews
 from aggregate_audits import aggregate_payloads as aggregate_audits
@@ -82,6 +82,25 @@ def _validate_aggregate(data:object,*,candidate_head:str,kind:str,manifest:dict,
  if recomputed.get('decision') not in ACCEPT:e.append(f'{prefix}_RECOMPUTED_BOARD_NOT_ACCEPTED')
  return e
 
+def _verify_native_authority(native:object,*,candidate_head:str,queue_repo:Path|None)->list[str]:
+ e=validate_native_evidence(native,candidate_head)
+ if e:return e
+ if queue_repo is None:return ['NATIVE_QUEUE_REPO_REQUIRED']
+ assert isinstance(native,dict)
+ source_ref=str(native['source_output_ref']).replace('\\','/')
+ receipt_ref=str(native['execution_receipt_ref']).replace('\\','/')
+ source_path=Path(queue_repo)/source_ref
+ receipt_path=Path(queue_repo)/receipt_ref
+ if not source_path.is_file():e.append('NATIVE_SOURCE_OUTPUT_MISSING')
+ if not receipt_path.is_file():e.append('NATIVE_EXECUTION_RECEIPT_MISSING')
+ if e:return e
+ try:source_text=source_path.read_text(encoding='utf-8')
+ except Exception:return ['NATIVE_SOURCE_OUTPUT_UNREADABLE']
+ try:receipt=json.loads(receipt_path.read_text(encoding='utf-8'))
+ except Exception:return ['NATIVE_EXECUTION_RECEIPT_INVALID_JSON']
+ if not isinstance(receipt,dict):return ['NATIVE_EXECUTION_RECEIPT_OBJECT_REQUIRED']
+ return verify_native_sources(native,source_output_text=source_text,receipt=receipt,candidate_head=candidate_head,source_output_ref=source_ref,execution_receipt_ref=receipt_ref)
+
 def authorize(*,sprint,next_sprint,candidate_head,review,audit,native,context_errors,review_manifest=None,audit_manifest=None,review_receipts=None,audit_receipts=None,queue_repo=None,review_manifest_path=None,audit_manifest_path=None,review_round=None,audit_round=None,expected_native_ref=None):
  errors=list(context_errors);ids,ae=_acceptance_ids(str(sprint));errors.extend(ae)
  sm=SPRINT.fullmatch(str(sprint));nm=SPRINT.fullmatch(str(next_sprint))
@@ -107,7 +126,10 @@ def authorize(*,sprint,next_sprint,candidate_head,review,audit,native,context_er
  review_jobs=[r.get('execution_job_id') for r in (review.get('reviews',[]) if isinstance(review,dict) else []) if isinstance(r,dict) and isinstance(r.get('execution_job_id'),str)]
  if isinstance(review_manifest,dict) and isinstance(review_round,str):errors.extend(_validate_aggregate(review,candidate_head=candidate_head,kind='review',manifest=review_manifest,receipts=rr,expected_sprint=sprint,expected_round=review_round,minimum_required=minimum))
  if isinstance(audit_manifest,dict) and isinstance(audit_round,str):errors.extend(_validate_aggregate(audit,candidate_head=candidate_head,kind='audit',manifest=audit_manifest,receipts=ar,expected_sprint=sprint,expected_round=audit_round,minimum_required=minimum,required_acceptance_ids=ids,expected_native_ref=expected_native_ref,review_job_ids=review_jobs))
- if validate_native_evidence(native,candidate_head):errors.append('NATIVE_VALIDATION_NOT_PASS_FOR_HEAD')
+ native_errors=_verify_native_authority(native,candidate_head=candidate_head,queue_repo=Path(queue_repo) if queue_repo is not None else None)
+ if native_errors:
+  errors.append('NATIVE_VALIDATION_NOT_PASS_FOR_HEAD')
+  errors.extend(native_errors)
  if errors:return {'advance':False,'errors':sorted(set(errors)),'runtime_authority':'NONE','authority':'Research / R'}
  return {'advance':True,'accepted_sprint':sprint,'accepted_head':candidate_head,'next_sprint':next_sprint,'runtime_authority':'NONE','authority':'Research / R'}
 
