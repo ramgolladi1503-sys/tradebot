@@ -8,6 +8,7 @@ from mros_autonomous_supervisor import parse_program_state,derive_phase,receipt_
 from mros_autonomous_repair_executor import validate_scope,RepairError,MAX_REPAIR_GENERATIONS
 from mros_autonomous_cycle import blocking_findings
 from mros_program_catalog import sprint_spec,next_sprint,sprint_acceptance
+import mros_autonomous_supervisor as supervisor
 import mros_s003_autonomous_finalizer as finalizer
 import mros_calibration_failure_repair as calibration_repair
 import mros_post_bootstrap_cycle as post_cycle
@@ -18,6 +19,17 @@ import mros_program_native_validator as program_native
 
 def test_supervisor_default_authority_checkout_is_dedicated_worktree():
     assert AUTHORITY_WT == Path('/Users/madhuram/.mros-agent-bridge/authority')
+def test_clean_authority_checkout_fast_forwards_before_cycle(monkeypatch,tmp_path:Path):
+    from types import SimpleNamespace
+    calls=[]
+    def fake_git(repo,*args,timeout=180,check=True):
+        calls.append(args)
+        if args==('status','--porcelain'):return SimpleNamespace(stdout='',stderr='',returncode=0)
+        if args==('merge','--ff-only',f'origin/{supervisor.AUTHORITY_BRANCH}'):return SimpleNamespace(stdout='Already up to date.\n',stderr='',returncode=0)
+        raise AssertionError(f'unexpected git call: {args}')
+    monkeypatch.setattr(supervisor,'git',fake_git)
+    assert supervisor.recover_authority_checkout(tmp_path,tmp_path) is None
+    assert ('merge','--ff-only',f'origin/{supervisor.AUTHORITY_BRANCH}') in calls
 def test_parse_program_state_and_runtime_boundary():
     s='''active_milestone: M1\nactive_work_package: WP001\nactive_sprint: S003\nprogram_status: ACTIVE\nactive_sprint_status: ANY\nauthority:\n  runtime_authority: NONE\n''';d=parse_program_state(s);assert d['active_milestone']=='M1';assert d['active_sprint']=='S003';assert d['runtime_authority']=='NONE'
 def test_pending_calibration_waits_automatically():
