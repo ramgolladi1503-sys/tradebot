@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "manifest_id": "REPLACE_WITH_DATASET_MANIFEST_ID",
+  "status": "UNVERIFIED",
+  "information_class": "OPTIONS_CHAIN",
+  "source_name": "REPLACE",
+  "source_path_or_vendor_reference": "REPLACE",
+  "dataset_path": "REPLACE_WITH_LOCAL_RELATIVE_OR_ABSOLUTE_PATH",
+  "dataset_sha256": "REPLACE_AFTER_LOCAL_HASH",
+  "timezone": "Asia/Kolkata",
+  "timestamp_semantics": "REPLACE_EG_EXCHANGE_EVENT_TIME_OR_VENDOR_RECEIVE_TIME",
+  "field_semantics": {
+    "timestamp": "REPLACE",
+    "instrument": "REPLACE",
+    "expiry": "REPLACE",
+    "strike": "REPLACE",
+    "option_type": "REPLACE",
+    "bid": "REPLACE",
+    "ask": "REPLACE",
+    "iv": "REPLACE_IF_PRESENT",
+    "oi": "REPLACE_IF_PRESENT"
+  },
+  "date_start": "YYYY-MM-DD",
+  "date_end": "YYYY-MM-DD",
+  "row_count": 0,
+  "key_fields": ["timestamp", "instrument", "expiry", "strike", "option_type"],
+  "declared_columns": [],
+  "notes": "Do not mark verified until the admission validator passes."
+}
