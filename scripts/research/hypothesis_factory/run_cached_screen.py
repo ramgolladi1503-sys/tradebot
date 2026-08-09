@@ -2,7 +2,8 @@
 """Screen hypotheses from a previously built canonical corpus cache.
 
 This avoids rescanning raw corpus files. It is research-only and never certifies
-edge or grants runtime/broker authority.
+edge or grants runtime/broker authority. Cached screening uses strict semantics:
+no overlapping trades and unsupported exit rules fail closed.
 """
 
 from __future__ import annotations
@@ -19,21 +20,15 @@ HERE = Path(__file__).resolve().parent
 
 def load_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
-    assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
-    # Python 3.12 dataclasses inspect sys.modules during class processing.
-    # Register the module before execution so dynamically imported dataclasses
-    # resolve their module namespace correctly.
+    assert spec and spec.loader
     sys.modules[name] = mod
-    try:
-        spec.loader.exec_module(mod)
-    except Exception:
-        sys.modules.pop(name, None)
-        raise
+    spec.loader.exec_module(mod)
     return mod
 
 
 hf = load_module("hypothesis_factory", HERE / "hypothesis_factory.py")
+strict = load_module("strict_screen_engine", HERE / "strict_screen_engine.py")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -63,9 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     hypotheses = hf.generate_hypotheses(instruments=[instrument])
     rows = hf.load_rows(data_path)
     cfg = hf.ScreenConfig(min_trades=args.min_trades, cost_bps=args.cost_bps, spread_max_pct=args.spread_max_pct)
-    results = hf.screen_hypotheses(hypotheses, rows, cfg)
+    results = strict.screen_hypotheses_strict(hypotheses, rows, cfg)
 
-    run_id = args.run_id or datetime.now(timezone.utc).strftime("CACHED-%Y%m%dT%H%M%SZ")
+    run_id = args.run_id or datetime.now(timezone.utc).strftime("CACHED-STRICT-%Y%m%dT%H%M%SZ")
     out = Path(args.output_dir) / run_id
     out.mkdir(parents=True, exist_ok=True)
     hf.write_json(out / "generated_hypotheses.json", hypotheses)
@@ -73,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     hf.write_csv(out / "leaderboard.csv", results)
 
     manifest = {
-        "schema_version": "tradebot-cached-screen-run-v1",
+        "schema_version": "tradebot-cached-strict-screen-run-v1",
         "run_id": run_id,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "instrument": instrument,
@@ -83,9 +78,16 @@ def main(argv: list[str] | None = None) -> int:
         "loaded_rows": len(rows),
         "hypotheses": len(hypotheses),
         "promising_not_certified": sum(r.get("status") == "PROMISING_NOT_CERTIFIED" for r in results),
+        "unsupported_exit_rule_count": sum(r.get("screen_rejection_reason") == "UNSUPPORTED_EXIT_RULE" for r in results),
         "min_trades": args.min_trades,
         "cost_bps": args.cost_bps,
         "spread_max_pct": args.spread_max_pct,
+        "screen_semantics": {
+            "overlapping_trades_allowed": False,
+            "supported_exit_rules": sorted(strict.SUPPORTED_EXIT_RULES),
+            "pnl_semantics": "UNDERLYING_DIRECTION_PROXY_BPS",
+            "option_pnl_claimed": False,
+        },
         "certification": "NOT_CERTIFIED",
         "runtime_authority": "NONE",
         "broker_actions_allowed": False,
