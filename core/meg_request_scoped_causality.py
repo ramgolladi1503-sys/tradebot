@@ -50,7 +50,56 @@ def append_primitives(root: Path, *, session_id: str, producer_commit_sha: str,
             continue
         payload = {**common, **dict(row), "evidence_kind": kind}
         _required(payload, fields)
-        append_jsonl_record(root / FILES[kind], payload, hash_field="row_sha256")
+        path = root / FILES[kind]
+        identity_field = {"request": "request_event_id", "tick": "selected_tick_event_id",
+                          "accepted": "cycle_id", "persisted": "persistence_identity"}[kind]
+        existing = set()
+        if path.is_file():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                try:
+                    prior = json.loads(line)
+                    if prior.get("session_id") == session_id:
+                        existing.add(prior.get(identity_field))
+                except (TypeError, json.JSONDecodeError):
+                    raise ValueError("malformed_existing_primitive")
+        if payload[identity_field] not in existing:
+            append_jsonl_record(path, payload, hash_field="row_sha256")
+
+
+def append_meg_cycle_primitives(root: Path, *, session_id: str, producer_commit_sha: str,
+                                cycle_id: str, accepted: bool,
+                                subscription_evidence: Mapping[str, Any]) -> None:
+    """Project authoritative request/tick/cycle facts into append-only ledgers."""
+    lifecycle = subscription_evidence.get("token_lifecycle") or {}
+    for item in lifecycle.values():
+        request_id = item.get("request_id")
+        if not request_id or item.get("subscribe_call_succeeded_epoch") is None:
+            continue
+        common = dict(request_event_id=request_id, request_id=request_id,
+                      request_generation=item.get("request_generation"),
+                      request_success_timestamp=item.get("subscribe_call_succeeded_epoch"),
+                      feed_session_id=item.get("feed_session_id"),
+                      reconnect_generation=item.get("reconnect_generation"),
+                      expected_instrument_token=item.get("instrument_token"),
+                      expected_symbol=item.get("symbol"))
+        append_primitives(root, session_id=session_id, producer_commit_sha=producer_commit_sha,
+                          request=common)
+        tick_id = item.get("selected_post_request_tick_id")
+        if accepted and tick_id and item.get("first_post_request_tick_epoch") is not None:
+            append_primitives(root, session_id=session_id, producer_commit_sha=producer_commit_sha,
+                              tick=dict(selected_tick_event_id=f"{cycle_id}:{item['instrument_token']}",
+                                        cycle_id=cycle_id, request_id=request_id,
+                                        request_generation=item.get("request_generation"),
+                                        selected_tick_id=tick_id,
+                                        selected_tick_receipt_timestamp=item.get("first_post_request_tick_epoch"),
+                                        selected_tick_feed_session_id=item.get("feed_session_id"),
+                                        selected_tick_reconnect_generation=item.get("reconnect_generation"),
+                                        selected_tick_instrument_token=item.get("instrument_token"),
+                                        selected_tick_symbol=item.get("symbol")))
+    if accepted:
+        append_primitives(root, session_id=session_id, producer_commit_sha=producer_commit_sha,
+                          accepted=dict(cycle_id=cycle_id, accepted=True),
+                          persisted=dict(cycle_id=cycle_id, persistence_identity=f"{session_id}:{cycle_id}"))
 
 
 def _rows(root: Path, kind: str) -> list[dict[str, Any]]:

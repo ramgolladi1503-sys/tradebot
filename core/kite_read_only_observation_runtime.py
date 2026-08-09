@@ -209,6 +209,15 @@ def write_meg_wiring_evidence(
         interval_end_epoch=interval_end_epoch,
         producer_commit=producer_commit,
     )
+    from core.meg_request_scoped_causality import append_meg_cycle_primitives
+    append_meg_cycle_primitives(
+        output_path.parent,
+        session_id=resolved_run_id,
+        producer_commit_sha=producer_commit,
+        cycle_id=str(payload.get("source_interval_identity") or f"{resolved_session}:{cycle_count}"),
+        accepted=bool(getattr(result, "exported", False)),
+        subscription_evidence=dict(payload.get("subscription_evidence") or {}),
+    )
     payload.update(_measured_meg_facts(bridge=bridge, result=result))
     payload["market_event_graph_traversal_count"] = int(payload.get("cumulative_session_export_count") or 0)
     payload["market_event_graph_traversal"] = payload["market_event_graph_traversal_count"] > 0
