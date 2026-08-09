@@ -26,6 +26,18 @@ def test_registry_parser_preserves_mean_reversion_required_evidence():
     assert 'oscillator_confirmation' in row.required_evidence_keys
 
 
+def test_semantic_matcher_does_not_treat_version_as_rsi():
+    facts={
+        'names':['strategy_version','price_structure_score'],
+        'attributes':[],
+        'calls':[],
+        'string_literals':['v1','strategy_version'],
+    }
+    assert m.semantic_evidence_consumed(facts, ('rsi',)) is False
+    facts['names'].append('rsi_value')
+    assert m.semantic_evidence_consumed(facts, ('rsi',)) is True
+
+
 def test_opening_range_retest_has_temporal_contract_markers():
     result=m.run(ROOT)
     row=next(x for x in result['strategies'] if x['strategy_id']=='opening_range_retest')
