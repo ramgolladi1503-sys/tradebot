@@ -121,6 +121,13 @@ def derive_instrument(value: Any, source_path: Path) -> str:
     return raw if raw else "UNKNOWN"
 
 
+def raw_instrument_id(value: Any, source_path: Path) -> str:
+    raw = str(value or "").strip()
+    if raw:
+        return raw
+    return f"SOURCE::{source_path.name}"
+
+
 def minute_stamp(value: Any) -> str:
     if value is None or value == "":
         return ""
@@ -153,19 +160,20 @@ def normalize_ohlc_row(raw: dict[str, Any], source_path: Path) -> dict[str, Any]
     if not has_explicit_ohlc(row):
         return None
     timestamp = pick(row, TIMESTAMP_ALIASES)
-    instrument = pick(row, INSTRUMENT_ALIASES)
+    instrument_value = pick(row, INSTRUMENT_ALIASES)
     open_ = as_float(pick(row, OPEN_ALIASES))
     high = as_float(pick(row, HIGH_ALIASES))
     low = as_float(pick(row, LOW_ALIASES))
     close = as_float(pick(row, CLOSE_ALIASES))
     stamp = minute_stamp(timestamp)
-    instrument_name = derive_instrument(instrument, source_path)
+    instrument_name = derive_instrument(instrument_value, source_path)
     if not stamp or instrument_name == "UNKNOWN" or None in (open_, high, low, close):
         return None
     out = dict(row)
     out.update({
         "timestamp": stamp,
         "instrument": instrument_name,
+        "raw_instrument": raw_instrument_id(instrument_value, source_path),
         "open": open_,
         "high": high,
         "low": low,
@@ -186,12 +194,14 @@ def normalize_tick_row(raw: dict[str, Any], source_path: Path) -> dict[str, Any]
     stamp = minute_stamp(pick(row, TIMESTAMP_ALIASES))
     if price is None or price <= 0 or not stamp:
         return None
-    instrument = derive_instrument(pick(row, INSTRUMENT_ALIASES), source_path)
+    instrument_value = pick(row, INSTRUMENT_ALIASES)
+    instrument = derive_instrument(instrument_value, source_path)
     if instrument == "UNKNOWN":
         return None
     return {
         "timestamp": stamp,
         "instrument": instrument,
+        "raw_instrument": raw_instrument_id(instrument_value, source_path),
         "price": price,
         "volume": as_float(pick(row, VOLUME_ALIASES), 0.0) or 0.0,
         "vwap": as_float(pick(row, VWAP_ALIASES), price) or price,
@@ -203,24 +213,24 @@ def normalize_tick_row(raw: dict[str, Any], source_path: Path) -> dict[str, Any]
 
 
 def aggregate_ticks_to_minute_ohlc(ticks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    buckets: dict[tuple[str, str], dict[str, Any]] = {}
+    buckets: dict[tuple[str, str, str], dict[str, Any]] = {}
     for tick in ticks:
         if tick.get("is_fallback"):
             continue
-        key = (str(tick["instrument"]), str(tick["timestamp"]))
+        key = (str(tick["instrument"]), str(tick.get("raw_instrument", "")), str(tick["timestamp"]))
         price = float(tick["price"])
         bucket = buckets.get(key)
         if bucket is None:
             buckets[key] = {
                 "timestamp": tick["timestamp"],
                 "instrument": tick["instrument"],
+                "raw_instrument": tick.get("raw_instrument", ""),
                 "open": price,
                 "high": price,
                 "low": price,
                 "close": price,
                 "volume": float(tick.get("volume") or 0.0),
-                "vwap_sum": float(tick.get("vwap") or price),
-                "vwap_count": 1,
+                "vwap": float(tick.get("vwap") or price),
                 "bid": float(tick.get("bid") or 0.0),
                 "ask": float(tick.get("ask") or 0.0),
                 "is_fallback": False,
@@ -231,25 +241,16 @@ def aggregate_ticks_to_minute_ohlc(ticks: list[dict[str, Any]]) -> list[dict[str
             bucket["low"] = min(float(bucket["low"]), price)
             bucket["close"] = price
             bucket["volume"] = float(bucket.get("volume") or 0.0) + float(tick.get("volume") or 0.0)
-            bucket["vwap_sum"] = float(bucket.get("vwap_sum") or 0.0) + float(tick.get("vwap") or price)
-            bucket["vwap_count"] = int(bucket.get("vwap_count") or 0) + 1
-            if tick.get("bid"):
-                bucket["bid"] = float(tick["bid"])
-            if tick.get("ask"):
-                bucket["ask"] = float(tick["ask"])
-    rows: list[dict[str, Any]] = []
-    for row in sorted(buckets.values(), key=lambda r: (r["instrument"], r["timestamp"])):
-        count = int(row.pop("vwap_count") or 1)
-        total = float(row.pop("vwap_sum") or row["close"])
-        row["vwap"] = total / count
-        rows.append(row)
-    return rows
+            bucket["vwap"] = float(tick.get("vwap") or bucket.get("vwap") or price)
+            bucket["bid"] = float(tick.get("bid") or bucket.get("bid") or 0.0)
+            bucket["ask"] = float(tick.get("ask") or bucket.get("ask") or 0.0)
+    return sorted(buckets.values(), key=lambda r: (str(r["instrument"]), str(r.get("raw_instrument", "")), str(r["timestamp"])))
 
 
-def normalize_records(records: list[dict[str, Any]], source_path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def normalize_loaded_rows(raw_rows: list[dict[str, Any]], source_path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     ohlc_rows: list[dict[str, Any]] = []
     tick_rows: list[dict[str, Any]] = []
-    for raw in records:
+    for raw in raw_rows:
         ohlc = normalize_ohlc_row(raw, source_path)
         if ohlc is not None:
             ohlc_rows.append(ohlc)
@@ -257,219 +258,153 @@ def normalize_records(records: list[dict[str, Any]], source_path: Path) -> tuple
         tick = normalize_tick_row(raw, source_path)
         if tick is not None:
             tick_rows.append(tick)
-    tick_ohlc_rows = aggregate_ticks_to_minute_ohlc(tick_rows)
-    columns = sorted({str(k).strip().lower() for record in records[:25] for k in record.keys()})
-    return ohlc_rows + tick_ohlc_rows, {
-        "raw_rows": len(records),
-        "columns": columns,
+    tick_ohlc = aggregate_ticks_to_minute_ohlc(tick_rows)
+    rows = ohlc_rows + tick_ohlc
+    rows.sort(key=lambda r: (str(r.get("instrument", "")), str(r.get("raw_instrument", "")), str(r.get("timestamp", ""))))
+    return rows, {
+        "raw_rows": len(raw_rows),
         "normalized_ohlc_rows": len(ohlc_rows),
         "normalized_tick_rows": len(tick_rows),
-        "tick_ohlc_rows": len(tick_ohlc_rows),
+        "tick_ohlc_rows": len(tick_ohlc),
     }
 
 
-def find_google_drive_roots() -> list[Path]:
-    roots: list[Path] = []
-    cloud = Path.home() / "Library" / "CloudStorage"
-    if not cloud.exists():
-        return roots
-    for candidate in cloud.glob("GoogleDrive-*"):
-        for hint in GDRIVE_NAME_HINTS:
-            roots.extend(p for p in candidate.rglob(hint) if p.is_dir())
-    return sorted(set(roots))
-
-
-def discover_roots(extra_roots: Iterable[str], include_known: bool, include_gdrive: bool) -> list[Path]:
-    roots: list[Path] = []
-    if include_known:
-        roots.extend(Path(p).expanduser() for p in KNOWN_CORPUS_ROOTS)
-    if include_gdrive:
-        roots.extend(find_google_drive_roots())
-    roots.extend(Path(p).expanduser() for p in extra_roots)
-    return [p for p in sorted(set(roots)) if p.exists()]
-
-
-def discover_files(roots: Iterable[Path], patterns: Iterable[str], max_files: int | None) -> list[Path]:
-    found: list[Path] = []
-    for root in roots:
-        if root.is_file():
-            found.append(root)
-            continue
-        for pattern in patterns:
-            found.extend(p for p in root.rglob(pattern) if p.is_file())
-    out = sorted(set(found))
-    if max_files is not None:
-        return out[:max_files]
-    return out
-
-
-def load_csv(path: Path, max_rows: int | None) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
-    records: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        for raw in reader:
-            records.append(dict(raw))
-            if max_rows is not None and len(records) >= max_rows:
-                break
-    rows, meta = normalize_records(records, path)
-    return rows, meta, None
-
-
-def load_parquet(path: Path, max_rows: int | None) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
+def load_csv(path: Path, max_rows: int | None = None) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
     try:
-        import pandas as pd  # type: ignore
-    except Exception as exc:  # pragma: no cover
-        return [], {}, f"pandas/pyarrow unavailable for parquet: {exc}"
+        raw_rows: list[dict[str, Any]] = []
+        with path.open("r", encoding="utf-8", newline="", errors="replace") as fh:
+            reader = csv.DictReader(fh)
+            for idx, row in enumerate(reader):
+                if max_rows is not None and idx >= max_rows:
+                    break
+                raw_rows.append(row)
+        normalized, meta = normalize_loaded_rows(raw_rows, path)
+        meta["columns"] = list(raw_rows[0].keys()) if raw_rows else []
+        return normalized, meta, None
+    except Exception as exc:
+        return [], {}, f"{type(exc).__name__}: {exc}"
+
+
+def load_parquet(path: Path, max_rows: int | None = None) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
     try:
-        frame = pd.read_parquet(path)
+        import pandas as pd
+        df = pd.read_parquet(path)
         if max_rows is not None:
-            frame = frame.head(max_rows)
-        records = frame.to_dict(orient="records")
-        rows, meta = normalize_records(records, path)
-        meta["parquet_rows"] = int(len(frame))
-        return rows, meta, None
-    except Exception as exc:  # pragma: no cover
-        return [], {}, f"parquet load failed: {exc}"
+            df = df.head(max_rows)
+        raw_rows = df.to_dict(orient="records")
+        normalized, meta = normalize_loaded_rows(raw_rows, path)
+        meta["columns"] = [str(c) for c in df.columns]
+        return normalized, meta, None
+    except Exception as exc:
+        return [], {}, f"{type(exc).__name__}: {exc}"
 
 
-def load_corpus(files: Iterable[Path], max_rows_total: int | None, max_rows_per_file: int | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    all_rows: list[dict[str, Any]] = []
-    inventory: list[dict[str, Any]] = []
-    for path in files:
-        if max_rows_total is not None and len(all_rows) >= max_rows_total:
-            break
-        remaining = None if max_rows_total is None else max_rows_total - len(all_rows)
-        per_file = max_rows_per_file if remaining is None else min(max_rows_per_file or remaining, remaining)
-        if path.suffix.lower() == ".csv":
-            rows, meta, error = load_csv(path, per_file)
-        elif path.suffix.lower() == ".parquet":
-            rows, meta, error = load_parquet(path, per_file)
-        else:
-            rows, meta, error = [], {}, "unsupported extension"
-        if remaining is not None:
-            rows = rows[:remaining]
-        inventory.append({
-            "path": str(path),
-            "suffix": path.suffix.lower(),
-            "sha256": sha256_file(path),
-            "loaded_rows": len(rows),
-            "error": error,
-            **meta,
-        })
-        all_rows.extend(rows)
-    return all_rows, inventory
+def discover_roots(user_roots: list[str], include_known: bool = True, include_gdrive: bool = True) -> list[Path]:
+    candidates: list[Path] = [Path(p).expanduser() for p in user_roots]
+    if include_known:
+        candidates.extend(Path(p) for p in KNOWN_CORPUS_ROOTS)
+    if include_gdrive:
+        for parent in (Path.home() / "Library/CloudStorage", Path.home() / "Google Drive", Path.home()):
+            if not parent.exists():
+                continue
+            try:
+                for path in parent.rglob("*"):
+                    if path.is_dir() and path.name.lower() in GDRIVE_NAME_HINTS:
+                        candidates.append(path)
+            except (OSError, PermissionError):
+                continue
+    seen: set[str] = set()
+    roots: list[Path] = []
+    for path in candidates:
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        key = str(resolved)
+        if key not in seen and resolved.exists() and resolved.is_dir():
+            seen.add(key)
+            roots.append(resolved)
+    return roots
 
 
-def write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not rows:
-        path.write_text("\n", encoding="utf-8")
-        return
-    keys = sorted({k for row in rows for k in row.keys()})
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=keys)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def inventory_summary(inventory: list[dict[str, Any]]) -> dict[str, Any]:
-    return {
-        "files": len(inventory),
-        "files_with_errors": sum(1 for item in inventory if item.get("error")),
-        "files_with_loaded_rows": sum(1 for item in inventory if int(item.get("loaded_rows") or 0) > 0),
-        "raw_rows": sum(int(item.get("raw_rows") or 0) for item in inventory),
-        "normalized_ohlc_rows": sum(int(item.get("normalized_ohlc_rows") or 0) for item in inventory),
-        "normalized_tick_rows": sum(int(item.get("normalized_tick_rows") or 0) for item in inventory),
-        "tick_ohlc_rows": sum(int(item.get("tick_ohlc_rows") or 0) for item in inventory),
-    }
-
-
-def run(args: argparse.Namespace) -> dict[str, Any]:
-    roots = discover_roots(args.corpus_root, not args.no_known_roots, not args.no_gdrive_discovery)
-    files = discover_files(roots, args.pattern or DEFAULT_GLOBS, args.max_files)
-    rows, inventory = load_corpus(files, args.max_rows_total, args.max_rows_per_file)
-
-    run_id = args.run_id or datetime.now(timezone.utc).strftime("RUN-%Y%m%dT%H%M%SZ")
-    out_dir = Path(args.output_dir) / run_id
-    instruments = sorted({i.strip().upper() for i in args.instrument if i.strip()})
-    hypotheses = hf.generate_hypotheses(instruments=instruments)
-    config = hf.ScreenConfig(
-        max_hold_bars=args.max_hold_bars,
-        min_trades=args.min_trades,
-        spread_max_pct=args.spread_max_pct,
-        cost_bps=args.cost_bps,
-        min_net_expectancy_bps=args.min_net_expectancy_bps,
-    )
-    results = hf.screen_hypotheses(hypotheses, rows, config)
-    ranked = sorted(results, key=lambda r: r.get("score", -1), reverse=True)
-    passports = []
-    by_id = {h["hypothesis_id"]: h for h in hypotheses}
-    for row in ranked[: args.top_passports]:
-        passports.append(hf.make_passport(by_id[row["hypothesis_id"]], row))
-
-    write_json(out_dir / "generated_hypotheses.json", hypotheses)
-    write_json(out_dir / "screen_results.json", ranked)
-    write_csv(out_dir / "leaderboard.csv", ranked)
-    write_json(out_dir / "strategy_passports.json", passports)
-    manifest = {
-        "schema_version": "tradebot-hypothesis-corpus-run-v1",
-        "run_id": run_id,
-        "created_at_utc": datetime.now(timezone.utc).isoformat(),
-        "runtime_authority": "NONE",
-        "broker_actions_allowed": False,
-        "certification": "NOT_CERTIFIED",
-        "corpus_roots": [str(p) for p in roots],
-        "discovered_files": len(files),
-        "loaded_rows": len(rows),
-        "hypotheses": len(hypotheses),
-        "screen_results": len(ranked),
-        "promising_not_certified": sum(1 for r in ranked if r.get("status") == "PROMISING_NOT_CERTIFIED"),
-        "top_passports": len(passports),
-        "config": vars(args),
-        "outputs": {
-            "generated_hypotheses": str(out_dir / "generated_hypotheses.json"),
-            "screen_results": str(out_dir / "screen_results.json"),
-            "leaderboard": str(out_dir / "leaderboard.csv"),
-            "strategy_passports": str(out_dir / "strategy_passports.json"),
-        },
-        "inventory_summary": inventory_summary(inventory),
-        "inventory": inventory,
-    }
-    write_json(out_dir / "run_manifest.json", manifest)
-    return manifest
+def discover_files(roots: list[Path], patterns: Iterable[str], max_files: int) -> list[Path]:
+    seen: set[str] = set()
+    files: list[Path] = []
+    for root in roots:
+        for pattern in patterns:
+            try:
+                for path in sorted(root.rglob(pattern)):
+                    if not path.is_file():
+                        continue
+                    key = str(path.resolve())
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    files.append(path)
+                    if len(files) >= max_files:
+                        return files
+            except (OSError, PermissionError):
+                continue
+    return files
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--corpus-root", action="append", default=[], help="Corpus root/file; repeatable")
-    parser.add_argument("--pattern", action="append", default=[], help="Glob pattern; default *.csv and *.parquet")
-    parser.add_argument("--instrument", action="append", default=["NIFTY", "BANKNIFTY"], help="Instrument universe; repeatable")
-    parser.add_argument("--output-dir", default="research/hypotheses/corpus_runs")
-    parser.add_argument("--run-id", default="")
-    parser.add_argument("--max-files", type=int, default=200)
-    parser.add_argument("--max-rows-total", type=int, default=250000)
-    parser.add_argument("--max-rows-per-file", type=int, default=10000)
-    parser.add_argument("--top-passports", type=int, default=10)
-    parser.add_argument("--max-hold-bars", type=int, default=6)
-    parser.add_argument("--min-trades", type=int, default=20)
-    parser.add_argument("--spread-max-pct", type=float, default=0.02)
-    parser.add_argument("--cost-bps", type=float, default=8.0)
-    parser.add_argument("--min-net-expectancy-bps", type=float, default=0.0)
-    parser.add_argument("--no-known-roots", action="store_true")
-    parser.add_argument("--no-gdrive-discovery", action="store_true")
-    return parser
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--corpus-root", action="append", default=[])
+    p.add_argument("--pattern", action="append", default=[])
+    p.add_argument("--output-dir", default="research/hypotheses/corpus_runs")
+    p.add_argument("--instrument", action="append", default=[])
+    p.add_argument("--max-files", type=int, default=1000)
+    p.add_argument("--max-rows-total", type=int, default=1_000_000)
+    p.add_argument("--max-rows-per-file", type=int, default=100_000)
+    p.add_argument("--min-trades", type=int, default=20)
+    p.add_argument("--cost-bps", type=float, default=8.0)
+    p.add_argument("--spread-max-pct", type=float, default=0.02)
+    p.add_argument("--no-known-roots", action="store_true")
+    p.add_argument("--no-gdrive-discovery", action="store_true")
+    return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    manifest = run(args)
-    print(json.dumps({k: manifest[k] for k in ("run_id", "loaded_rows", "hypotheses", "screen_results", "promising_not_certified")}, indent=2))
-    return 0 if manifest["loaded_rows"] > 0 else 2
+    roots = discover_roots(args.corpus_root, not args.no_known_roots, not args.no_gdrive_discovery)
+    files = discover_files(roots, args.pattern or DEFAULT_GLOBS, args.max_files)
+    rows: list[dict[str, Any]] = []
+    inventory: list[dict[str, Any]] = []
+    for path in files:
+        remaining = max(0, args.max_rows_total - len(rows))
+        if remaining <= 0:
+            break
+        max_rows = min(args.max_rows_per_file, remaining)
+        loaded, meta, error = load_csv(path, max_rows) if path.suffix.lower() == ".csv" else load_parquet(path, max_rows)
+        inventory.append({"path": str(path), "loaded_rows": len(loaded), "error": error, **meta})
+        rows.extend(loaded[:remaining])
+
+    instruments = [x.strip().upper() for x in args.instrument if x.strip()] or ["NIFTY", "BANKNIFTY"]
+    hypotheses = hf.generate_hypotheses(instruments=instruments)
+    cfg = hf.ScreenConfig(min_trades=args.min_trades, cost_bps=args.cost_bps, spread_max_pct=args.spread_max_pct)
+    results = hf.screen_hypotheses(hypotheses, rows, cfg)
+    run_id = datetime.now(timezone.utc).strftime("RUN-%Y%m%dT%H%M%SZ")
+    out = Path(args.output_dir) / run_id
+    out.mkdir(parents=True, exist_ok=True)
+    hf.write_json(out / "generated_hypotheses.json", hypotheses)
+    hf.write_json(out / "screen_results.json", results)
+    hf.write_csv(out / "leaderboard.csv", results)
+    hf.write_json(out / "corpus_inventory.json", {"files": inventory})
+    manifest = {
+        "run_id": run_id,
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "loaded_rows": len(rows),
+        "hypotheses": len(hypotheses),
+        "screen_results": len(results),
+        "promising_not_certified": sum(r.get("status") == "PROMISING_NOT_CERTIFIED" for r in results),
+        "runtime_authority": "NONE",
+        "broker_actions_allowed": False,
+        "certification": "NOT_CERTIFIED",
+    }
+    hf.write_json(out / "run_manifest.json", manifest)
+    print(json.dumps(manifest, indent=2))
+    return 0
 
 
 if __name__ == "__main__":
