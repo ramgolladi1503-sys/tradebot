@@ -2,7 +2,8 @@
 
 A trap is valid only when completed bars prove a break first and a strictly later
 re-entry second. Metadata flags are retained only as diagnostics and never as
-sufficient proof of the setup.
+sufficient proof of the setup. Missing option-pressure evidence never counts as
+stall confirmation.
 """
 from __future__ import annotations
 
@@ -34,9 +35,11 @@ def generate_failed_breakout_trap_candidates(ctx: StrategyContext, regime: Movem
         if proof is not None:
             distance = (high - spot) / abs(high)
             if distance <= max_reentry:
-                score = _trap_score(ctx, regime, distance, max_reentry, "UP")
-                if score >= min_score:
-                    candidates.append(_build_candidate(ctx, regime, "BUY_PUT", score, "failed_upside_breakout_reentry", high, proof))
+                option_stall = _option_stall_for_failed_upside(ctx)
+                if option_stall is not None:
+                    score = _trap_score(ctx, regime, distance, max_reentry, option_stall)
+                    if score >= min_score:
+                        candidates.append(_build_candidate(ctx, regime, "BUY_PUT", score, "failed_upside_breakout_reentry", high, proof))
 
     low = _failed_low_level(ctx)
     if low is not None and spot > low:
@@ -44,14 +47,15 @@ def generate_failed_breakout_trap_candidates(ctx: StrategyContext, regime: Movem
         if proof is not None:
             distance = (spot - low) / abs(low)
             if distance <= max_reentry:
-                score = _trap_score(ctx, regime, distance, max_reentry, "DOWN")
-                if score >= min_score:
-                    candidates.append(_build_candidate(ctx, regime, "BUY_CALL", score, "failed_downside_breakdown_reentry", low, proof))
+                option_stall = _option_stall_for_failed_downside(ctx)
+                if option_stall is not None:
+                    score = _trap_score(ctx, regime, distance, max_reentry, option_stall)
+                    if score >= min_score:
+                        candidates.append(_build_candidate(ctx, regime, "BUY_CALL", score, "failed_downside_breakdown_reentry", low, proof))
     return tuple(candidates)
 
 
-def _trap_score(ctx: StrategyContext, regime: MovementRegimeResult, reentry_distance: float, max_reentry: float, side: str) -> float:
-    option_stall = _option_stall_for_failed_upside(ctx) if side == "UP" else _option_stall_for_failed_downside(ctx)
+def _trap_score(ctx: StrategyContext, regime: MovementRegimeResult, reentry_distance: float, max_reentry: float, option_stall: float) -> float:
     return clamp_score(
         0.40 * ratio_score(reentry_distance, start=0.0, full=max_reentry)
         + 0.30 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))
@@ -122,18 +126,22 @@ def _failed_low_level(ctx: StrategyContext) -> float | None:
     return None
 
 
-def _option_stall_for_failed_upside(ctx: StrategyContext) -> float:
+def _option_stall_for_failed_upside(ctx: StrategyContext) -> float | None:
     ce_change = safe_float(ctx.ce_premium_change)
     pe_change = safe_float(ctx.pe_premium_change)
-    ce_stall = 1.0 if ce_change is None or ce_change <= 0 else 0.0
+    if ce_change is None or pe_change is None:
+        return None
+    ce_stall = 1.0 if ce_change <= 0 else clamp_score(1.0 - ratio_score(ce_change, start=0.0, full=12.0))
     pe_confirm = ratio_score(pe_change, start=0.0, full=15.0)
     return clamp_score(0.55 * ce_stall + 0.45 * pe_confirm)
 
 
-def _option_stall_for_failed_downside(ctx: StrategyContext) -> float:
+def _option_stall_for_failed_downside(ctx: StrategyContext) -> float | None:
     pe_change = safe_float(ctx.pe_premium_change)
     ce_change = safe_float(ctx.ce_premium_change)
-    pe_stall = 1.0 if pe_change is None or pe_change <= 0 else 0.0
+    if pe_change is None or ce_change is None:
+        return None
+    pe_stall = 1.0 if pe_change <= 0 else clamp_score(1.0 - ratio_score(pe_change, start=0.0, full=12.0))
     ce_confirm = ratio_score(ce_change, start=0.0, full=15.0)
     return clamp_score(0.55 * pe_stall + 0.45 * ce_confirm)
 
