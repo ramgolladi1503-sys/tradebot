@@ -51,7 +51,11 @@ def base_candidate(**updates):
         "direction": "BUY_PE",
         "window_minutes": "5",
         "filters": "['spread_ok', 'volume_spike']",
+        "exit_rule": "time_stop",
         "trades": "120",
+        "sessions_traded": "24",
+        "top_session_trade_share": "0.10",
+        "top_session_abs_pnl_share": "0.20",
         "win_rate": "0.55",
         "net_expectancy_bps": "4.0",
         "profit_factor": "1.4",
@@ -88,6 +92,28 @@ def test_candidate_filter_report_collapses_duplicate_shapes(tmp_path):
     assert "duplicate_shape" in duplicate["rejection_reasons"]
     assert report["runtime_authority"] == "NONE"
     assert report["broker_actions_allowed"] is False
+
+
+def test_missing_session_breadth_metrics_fail_closed(tmp_path):
+    run_dir = tmp_path / "screen"
+    candidate = base_candidate(
+        hypothesis_id="HYP-NO-BREADTH",
+        sessions_traded="",
+        top_session_trade_share="",
+        top_session_abs_pnl_share="",
+    )
+    write_screen_run(run_dir, [candidate])
+
+    report = candidate_report.build_report(
+        candidate_report.build_parser().parse_args([
+            "--screen-run-dir", str(run_dir),
+            "--min-trades", "20",
+        ])
+    )
+
+    assert report["summary"]["eligible_for_robustness"] == 0
+    reasons = report["candidates"][0]["rejection_reasons"]
+    assert "sessions_traded_below_threshold" in reasons
 
 
 def test_low_trade_candidate_cannot_certify_even_with_missing_robustness(tmp_path):
@@ -152,6 +178,7 @@ def test_synthetic_passed_robustness_can_validate_research_only(tmp_path):
         ])
     )
     shape_key = candidate_filter["candidates"][0]["candidate_shape_key"]
+    assert candidate_filter["candidates"][0]["eligible_for_robustness"] is True
 
     trade_path = run_dir / "candidate_trades.csv"
     with trade_path.open("w", encoding="utf-8", newline="") as handle:
