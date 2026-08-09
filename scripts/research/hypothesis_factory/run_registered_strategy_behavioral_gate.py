@@ -37,7 +37,7 @@ def run(root: Path, output: Path) -> dict:
     source_missing = [p for p in REQUIRED_SOURCE_PATHS if not (root / p).exists()]
     head = git_head(root)
     result = {
-        "schema_version": "tradebot-registered-strategy-behavioral-gate-v1",
+        "schema_version": "tradebot-registered-strategy-behavioral-gate-v2",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "source_commit": head,
         "test_files": list(TEST_FILES),
@@ -75,7 +75,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     root = Path(args.repo_root).resolve()
     result = run(root, root / args.output)
-    print(json.dumps({
+    summary = {
         "status": result["status"],
         "source_commit": result["source_commit"],
         "pytest_exit_code": result.get("pytest_exit_code"),
@@ -83,7 +83,11 @@ def main(argv=None) -> int:
         "missing_source_paths": result.get("missing_source_paths", []),
         "output": str(root / args.output),
         "runtime_authority": "NONE",
-    }, indent=2, sort_keys=True))
+    }
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    if result["status"] == "BEHAVIORAL_GATE_FAIL":
+        print("\n=== PYTEST FAILURE OUTPUT ===")
+        print(result.get("pytest_output", "").rstrip())
     return 0 if result["status"] == "BEHAVIORAL_GATE_PASS" else 2
 
 
