@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "candidate_family_id": "RAPID_DOWNTREND_CONTINUATION_V1",
+  "status": "FROZEN_BEFORE_LOCKED_OUTCOME_ACCESS",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "source_motif": "DOWNTREND_CONTINUATION_SWING",
+  "directional_reference": "DOWN",
+  "development_source": "FIRST_80_PERCENT_ALREADY_EXPOSED_CHARACTERIZATION_POOL_ONLY",
+  "locked_source": "FINAL_20_PERCENT_99_SESSIONS_UNTOUCHED",
+  "locked_outcomes_must_remain_unaccessed_during_development": true,
+  "hypothesis": "Temporal compactness may preserve structural momentum: causally confirmed downtrend-continuation swings that form and confirm rapidly may have greater immediate downside continuation propensity than slower formations.",
+  "allowed_features": [
+    "formation_bars",
+    "middle_to_second_bars",
+    "confirmation_delay_bars"
+  ],
+  "forbidden_filters": [
+    "price_amplitude_thresholds",
+    "leader_state",
+    "volatility_state",
+    "session_bucket",
+    "preformation_return_thresholds",
+    "support_resistance_filters",
+    "indicator_filters",
+    "post_confirmation_information"
+  ],
+  "definitions": [
+    {
+      "candidate_id": "RAPID",
+      "formation_bars_max": 16,
+      "middle_to_second_bars_max": 10,
+      "confirmation_delay_bars_max": 4
+    },
+    {
+      "candidate_id": "STRICT_RAPID",
+      "formation_bars_max": 12,
+      "middle_to_second_bars_max": 8,
+      "confirmation_delay_bars_max": 2
+    }
+  ],
+  "development_gate": {
+    "minimum_candidate_episodes": 20,
+    "primary_outcome": "down_30bps_within_12_bars",
+    "secondary_outcome": "down_20bps_within_12_bars",
+    "minimum_absolute_primary_rate_improvement_vs_parent": 0.08,
+    "minimum_secondary_rate_improvement_vs_parent": 0.03,
+    "nomination_rule": "Among definitions passing all gates, nominate the one with the larger primary rate improvement; tie-break by larger episode count. Nominate at most one.",
+    "no_cutpoint_search": true,
+    "no_retuning_after_result": true
+  },
+  "locked_test_policy": {
+    "allowed_only_after_single_nomination": true,
+    "one_time_access": true,
+    "no_parameter_changes_after_access": true,
+    "minimum_locked_episodes": 12,
+    "required_primary_rate_not_below_parent_characterization_rate": true,
+    "edge_certification": "NOT_PART_OF_THIS_FREEZE"
+  }
+}
