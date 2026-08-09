@@ -56,6 +56,8 @@ def main(argv=None):
    except:continue
    ts=r['timestamp'];rows.append({'timestamp':ts,'session':r.get('session') or ts[:10],'open':o,'high':hi,'low':lo,'close':c})
   rows.sort(key=lambda r:r['timestamp']);idx={r['timestamp']:i for i,r in enumerate(rows)};session_counts=Counter(r['session'] for r in rows)
+  session_pos={};seen=Counter()
+  for i,r in enumerate(rows):session_pos[i]=seen[r['session']];seen[r['session']]+=1
   motifs={(m.get('motif'),m.get('confirmation_timestamp')):m for m in load_jsonl(motifs_p) if m.get('motif')==MOTIF}
   contexts={(m.get('motif'),m.get('confirmation_timestamp')):m for m in load_jsonl(context_p) if m.get('motif')==MOTIF}
   dev_eps=[e for e in load_jsonl(dev_ep_p) if e.get('motif')==MOTIF]
@@ -71,7 +73,7 @@ def main(argv=None):
    sess=o['session']
    if not all(rows[i]['session']==sess for i in (i0,i1,i2,ic)):continue
    p0,p1,p2=(float(p['price']) for p in piv[:3]);pre=ctx.get('preformation_context') or {}
-   desc={'formation_bars':i2-i0,'first_to_middle_bars':i1-i0,'middle_to_second_bars':i2-i1,'leg_duration_ratio':((i2-i1)/(i1-i0) if i1>i0 else None),'first_to_middle_bps':bps(p0,p1),'middle_to_second_bps':bps(p1,p2),'first_to_second_bps':bps(p0,p2),'confirmation_delay_bars':ic-i2,'preformation_nifty_ret_3_bps':pre.get('nifty_ret_3_bps'),'preformation_nifty_ret_6_bps':pre.get('nifty_ret_6_bps'),'preformation_leader_state':pre.get('leader_state'),'preformation_volatility_state':pre.get('volatility_state'),'formation_session_bucket':bucket(i2-i0+0,session_counts[sess])}
+   desc={'formation_bars':i2-i0,'first_to_middle_bars':i1-i0,'middle_to_second_bars':i2-i1,'leg_duration_ratio':((i2-i1)/(i1-i0) if i1>i0 else None),'first_to_middle_bps':bps(p0,p1),'middle_to_second_bps':bps(p1,p2),'first_to_second_bps':bps(p0,p2),'confirmation_delay_bars':ic-i2,'preformation_nifty_ret_3_bps':pre.get('nifty_ret_3_bps'),'preformation_nifty_ret_6_bps':pre.get('nifty_ret_6_bps'),'preformation_leader_state':pre.get('leader_state'),'preformation_volatility_state':pre.get('volatility_state'),'formation_session_bucket':bucket(session_pos[i2],session_counts[sess])}
    episodes.append({'motif':MOTIF,'session':sess,'confirmation_timestamp':o['confirmation_timestamp'],'descriptors':desc,'outcome':{'up_excursion_bps':o.get('up_excursion_bps'),'down_excursion_bps':o.get('down_excursion_bps'),'ret6_bps':(o.get('returns_bps') or {}).get('6'),'ret12_bps':(o.get('returns_bps') or {}).get('12')}})
   thresholds=[float(x) for x in freeze['favorable_excursion_cohorts_bps']];numeric=[x for x in freeze['descriptors'] if x not in ('preformation_leader_state','preformation_volatility_state','formation_session_bucket')];categorical=['preformation_leader_state','preformation_volatility_state','formation_session_bucket'];cohorts={}
   for t in thresholds:
