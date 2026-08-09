@@ -1,0 +1,136 @@
+{
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "final_verdict": "NO_CORRECTED_NIFTY_DEVELOPMENT_SURVIVOR",
+  "input": {
+    "first_timestamp": "2024-07-09T03:45:00",
+    "known_canonical_nifty_sha256_from_frozen_contract": "6a145d4d17f124f9dc8ee272c5a19ca98988873a14b294765f44a27284d8b7e8",
+    "last_timestamp": "2026-07-08T09:55:00",
+    "nifty_ohlc_semantic_sha256": "cd34d678aabdebeb49b1d4409f8ad4c516503e9a9a06312ba9c6740dd4302eb6",
+    "rows": 36849,
+    "semantic_note": "Independent recomputation used timestamp/open/high/low/close decoded directly from the uploaded 493-session Kite candidate-replay parquet corpus. The canonical CSV byte hash is metadata/path-sensitive; structural calculations use only these OHLC fields.",
+    "sessions": 493,
+    "uploaded_candidate_replay_zip_sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d"
+  },
+  "locked_outcomes_accessed": false,
+  "next_action": "DO_NOT_ACCESS_LOCKED_99_FOR_THESE_FAMILIES",
+  "reversal_family_v1_gates_replayed_unchanged": {
+    "minimum_episodes_per_motif": 30,
+    "motifs": {
+      "DOUBLE_BOTTOM_STRUCTURE": {
+        "adverse_excursion_rates": {"20": 0.4166666666666667, "30": 0.2222222222222222},
+        "direction": "UP",
+        "directional_returns_bps": {
+          "1": {"mean": 3.476721464797229, "median": 0.14642096067774002, "n": 36},
+          "3": {"mean": 4.975818348390682, "median": 3.526232616040126, "n": 36},
+          "6": {"mean": 4.213570646858985, "median": -1.515091432874871, "n": 34},
+          "12": {"mean": 10.243971530357054, "median": 11.389200216092021, "n": 27}
+        },
+        "episodes": 39,
+        "favorable_excursion_rates": {"20": 0.5833333333333334, "30": 0.4166666666666667},
+        "reasons": ["NONPOSITIVE_DIRECTIONAL_MEDIAN_RET6"],
+        "verdict": "DEVELOPMENT_STRUCTURE_SCREEN_FAIL"
+      },
+      "DOUBLE_TOP_STRUCTURE": {
+        "adverse_excursion_rates": {"20": 0.3, "30": 0.26666666666666666},
+        "direction": "DOWN",
+        "directional_returns_bps": {
+          "1": {"mean": -1.0146639521433354, "median": -1.7687733303040076, "n": 30},
+          "3": {"mean": -1.442701928080645, "median": -2.1356392425886384, "n": 29},
+          "6": {"mean": 0.6365973298828819, "median": -0.8490320024434617, "n": 25},
+          "12": {"mean": -1.163017987724176, "median": 2.2663926656052436, "n": 23}
+        },
+        "episodes": 31,
+        "favorable_excursion_rates": {"20": 0.4666666666666667, "30": 0.26666666666666666},
+        "reasons": ["NONPOSITIVE_DIRECTIONAL_MEDIAN_RET6"],
+        "verdict": "DEVELOPMENT_STRUCTURE_SCREEN_FAIL"
+      }
+    }
+  },
+  "runtime_authority": "NONE",
+  "schema_version": 1,
+  "source_repairs": {
+    "audit_commit": "c51e6f11538713ab4b43cfbc94e42b12ff28f4ec",
+    "cross_session_motif_rejection_commit": "7445b87d670263bea5271bc9a80bc9faf322e8e4",
+    "session_local_swing_label_commit": "fcbb1f97d1ec058c22553146c3f3bf3ffc227a42",
+    "synthetic_verifier_commit": "9a67e68cc5eae547b818158449ede4ee4d1106d6"
+  },
+  "split": {
+    "development_sessions": 394,
+    "first_locked_session": "2026-02-10",
+    "locked_outcomes_accessed": false,
+    "locked_sessions": 99
+  },
+  "status": "NIFTY_SESSION_LOCAL_REGENERATION_COMPLETE_NO_SURVIVORS",
+  "structure": {
+    "confirmed_pivots": 765,
+    "corrected_swing_motif_counts": {
+      "DOUBLE_BOTTOM_STRUCTURE": 54,
+      "DOUBLE_TOP_STRUCTURE": 45,
+      "DOWNTREND_CONTINUATION_SWING": 21,
+      "DOWNTREND_FAILURE_TO_LOWER_HIGH": 27,
+      "UPTREND_CONTINUATION_SWING": 39,
+      "UPTREND_FAILURE_TO_HIGHER_LOW": 37
+    },
+    "pivot_threshold_bps": 35.0,
+    "session_scope": "SESSION_LOCAL",
+    "swing_label_tolerance_bps": 15.0
+  },
+  "swing_transition_family_v1_gates_replayed_unchanged": {
+    "favorable_minus_adverse_rate_min_at_20bps": 0.15,
+    "favorable_minus_adverse_rate_min_at_30bps": 0.1,
+    "median_ret12_abs_min_bps": 3.0,
+    "median_ret6_abs_min_bps": 3.0,
+    "minimum_episodes": 30,
+    "motifs": {
+      "DOWNTREND_CONTINUATION_SWING": {
+        "down_excursion_rate_20bps": 0.4117647058823529,
+        "down_excursion_rate_30bps": 0.17647058823529413,
+        "episodes": 17,
+        "inferred_direction": null,
+        "reasons": ["INSUFFICIENT_EPISODES", "RET6_MEDIAN_MAGNITUDE_GATE_FAIL", "RET6_RET12_SIGN_CONSISTENCY_FAIL"],
+        "ret12_bps": {"mean": 20.655909013984417, "median": 13.926835326258935, "n": 11},
+        "ret6_bps": {"mean": 9.990792983583134, "median": -1.0659287374381599, "n": 13},
+        "up_excursion_rate_20bps": 0.5882352941176471,
+        "up_excursion_rate_30bps": 0.5882352941176471,
+        "verdict": "DEVELOPMENT_ASYMMETRY_FAIL"
+      },
+      "DOWNTREND_FAILURE_TO_LOWER_HIGH": {
+        "down_excursion_rate_20bps": 0.36363636363636365,
+        "down_excursion_rate_30bps": 0.2727272727272727,
+        "episodes": 22,
+        "inferred_direction": "UP",
+        "reasons": ["INSUFFICIENT_EPISODES", "30BPS_EXCURSION_ASYMMETRY_FAIL"],
+        "ret12_bps": {"mean": 10.846964497116529, "median": 11.944063934613558, "n": 14},
+        "ret6_bps": {"mean": 6.433835800768532, "median": 6.832941672629822, "n": 17},
+        "up_excursion_rate_20bps": 0.5454545454545454,
+        "up_excursion_rate_30bps": 0.3181818181818182,
+        "verdict": "DEVELOPMENT_ASYMMETRY_FAIL"
+      },
+      "UPTREND_CONTINUATION_SWING": {
+        "down_excursion_rate_20bps": 0.4166666666666667,
+        "down_excursion_rate_30bps": 0.3333333333333333,
+        "episodes": 24,
+        "inferred_direction": "UP",
+        "reasons": ["INSUFFICIENT_EPISODES", "20BPS_EXCURSION_ASYMMETRY_FAIL", "30BPS_EXCURSION_ASYMMETRY_FAIL"],
+        "ret12_bps": {"mean": -5.702161618477538, "median": 3.408058249232404, "n": 14},
+        "ret6_bps": {"mean": 8.107822756751947, "median": 6.4445055316919575, "n": 22},
+        "up_excursion_rate_20bps": 0.5,
+        "up_excursion_rate_30bps": 0.4166666666666667,
+        "verdict": "DEVELOPMENT_ASYMMETRY_FAIL"
+      },
+      "UPTREND_FAILURE_TO_HIGHER_LOW": {
+        "down_excursion_rate_20bps": 0.4782608695652174,
+        "down_excursion_rate_30bps": 0.2608695652173913,
+        "episodes": 23,
+        "inferred_direction": "DOWN",
+        "reasons": ["INSUFFICIENT_EPISODES", "20BPS_EXCURSION_ASYMMETRY_FAIL"],
+        "ret12_bps": {"mean": -8.340933120005326, "median": -4.623070739586677, "n": 14},
+        "ret6_bps": {"mean": -7.932215429526257, "median": -7.829546805898646, "n": 18},
+        "up_excursion_rate_20bps": 0.391304347826087,
+        "up_excursion_rate_30bps": 0.13043478260869565,
+        "verdict": "DEVELOPMENT_ASYMMETRY_FAIL"
+      }
+    }
+  }
+}
