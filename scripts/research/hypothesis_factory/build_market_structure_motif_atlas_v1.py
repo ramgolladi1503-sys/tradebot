@@ -63,24 +63,37 @@ def zone_motifs(rows,zones,tol,lookahead_bars=12):
     out.append({'motif':'BREAK_RETEST_HOLD' if held else 'BREAK_RETEST_UNRESOLVED','zone_id':z['zone_id'],'former_side':z['side'],'zone_center':z['center'],'break_timestamp':rows[broken]['timestamp'],'confirmation_timestamp':rows[j]['timestamp'],'session':rows[j]['session']});break
  return out
 
+def _flush_interaction(out,z,episode):
+ if episode is None:return
+ if episode['saw_compression']:
+  out.append({'motif':'COMPRESSION_AT_'+z['side'],'confirmation_timestamp':episode['first_compression_timestamp'],'episode_start_timestamp':episode['start_timestamp'],'episode_end_timestamp':episode['end_timestamp'],'session':episode['session'],'zone_id':z['zone_id'],'zone_center':z['center']})
+ if episode['saw_wick']:
+  out.append({'motif':'WICK_REJECTION_AT_'+z['side'],'confirmation_timestamp':episode['first_wick_timestamp'],'episode_start_timestamp':episode['start_timestamp'],'episode_end_timestamp':episode['end_timestamp'],'session':episode['session'],'zone_id':z['zone_id'],'zone_center':z['center']})
+
 def context_motifs(rows,bar_fn,zones,tol,lookback):
- # Collapse adjacent qualifying bars into one zone-interaction episode.
+ # One context motif per full zone-interaction episode. An episode starts when
+ # price enters the zone and ends only after it leaves the tolerance band or
+ # the session changes. Repeated qualifying bars inside that interaction do
+ # not create additional pattern occurrences.
  out=[]
  for z in zones:
-  active={'COMPRESSION':False,'WICK':False}
+  episode=None
   for i,r in enumerate(rows):
    if r['timestamp']<z['first_confirmation_timestamp']:continue
    near=abs(bps(z['center'],r['close']))<=tol
-   if not near:
-    active={'COMPRESSION':False,'WICK':False};continue
+   if episode is not None and (r['session']!=episode['session'] or not near):
+    _flush_interaction(out,z,episode);episode=None
+   if not near:continue
+   if episode is None:
+    episode={'start_timestamp':r['timestamp'],'end_timestamp':r['timestamp'],'session':r['session'],'saw_compression':False,'saw_wick':False,'first_compression_timestamp':None,'first_wick_timestamp':None}
+   episode['end_timestamp']=r['timestamp']
    ps=set(bar_fn(rows,i,lookback)['primitives'])
-   comp='RANGE_COMPRESSION' in ps
+   if 'RANGE_COMPRESSION' in ps and not episode['saw_compression']:
+    episode['saw_compression']=True;episode['first_compression_timestamp']=r['timestamp']
    wick=(z['side']=='RESISTANCE' and 'UPPER_WICK_REJECTION' in ps) or (z['side']=='SUPPORT' and 'LOWER_WICK_REJECTION' in ps)
-   if comp and not active['COMPRESSION']:
-    out.append({'motif':'COMPRESSION_AT_'+z['side'],'confirmation_timestamp':r['timestamp'],'session':r['session'],'zone_id':z['zone_id'],'zone_center':z['center']})
-   if wick and not active['WICK']:
-    out.append({'motif':'WICK_REJECTION_AT_'+z['side'],'confirmation_timestamp':r['timestamp'],'session':r['session'],'zone_id':z['zone_id'],'zone_center':z['center']})
-   active['COMPRESSION']=comp;active['WICK']=wick
+   if wick and not episode['saw_wick']:
+    episode['saw_wick']=True;episode['first_wick_timestamp']=r['timestamp']
+  _flush_interaction(out,z,episode)
  return out
 
 def main(argv=None):
@@ -94,7 +107,7 @@ def main(argv=None):
   motifs=[];motifs+=swing_motifs(piv,a.zone_tolerance_bps);motifs+=triangle_motifs(piv,a.zone_tolerance_bps);motifs+=zone_motifs(rows,zones,a.zone_tolerance_bps);motifs+=context_motifs(rows,builder.bar_descriptors,zones,a.zone_tolerance_bps,a.rolling_context_bars)
   motifs.sort(key=lambda x:(x['confirmation_timestamp'],x['motif'],x.get('zone_id','')))
   counts=Counter(x['motif'] for x in motifs);od.mkdir(parents=True,exist_ok=True);mp=od/f'{a.instrument}_motifs.jsonl';sp=od/f'{a.instrument}_motif_summary.json';mp.write_text(''.join(json.dumps(x,sort_keys=True)+'\n' for x in motifs))
-  res.update({'status':'MOTIF_ATLAS_BUILD_COMPLETE','instrument':a.instrument,'input_sha256':sha256(ip),'threshold_bps':a.threshold_bps,'confirmed_pivots':len(piv),'zones':len(zones),'motifs':len(motifs),'motif_counts':dict(sorted(counts.items())),'motifs_path':str(mp),'motifs_sha256':sha256(mp),'context_episode_collapsing':True,'interpretation':'Higher-level causal structural motifs only. Adjacent zone-context bars are collapsed into one episode. No outcome, expectancy, or profitability labels are computed.'})
+  res.update({'status':'MOTIF_ATLAS_BUILD_COMPLETE','instrument':a.instrument,'input_sha256':sha256(ip),'threshold_bps':a.threshold_bps,'confirmed_pivots':len(piv),'zones':len(zones),'motifs':len(motifs),'motif_counts':dict(sorted(counts.items())),'motifs_path':str(mp),'motifs_sha256':sha256(mp),'context_episode_collapsing':True,'context_episode_definition':'one event per zone entry-to-exit interaction per motif type','interpretation':'Higher-level causal structural motifs only. Zone-context bars are collapsed into full interaction episodes. No outcome, expectancy, or profitability labels are computed.'})
  except Exception as e:res['error']=f'{type(e).__name__}:{e}'
  od.mkdir(parents=True,exist_ok=True);sp=od/f'{a.instrument}_motif_summary.json';sp.write_text(json.dumps(res,indent=2,sort_keys=True)+'\n');print(json.dumps(res,indent=2));return 0 if res['status']=='MOTIF_ATLAS_BUILD_COMPLETE' else 2
 if __name__=='__main__':raise SystemExit(main())
