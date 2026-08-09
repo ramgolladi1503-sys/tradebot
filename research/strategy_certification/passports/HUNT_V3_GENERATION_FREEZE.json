@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "generation_id": "HUNT_V3_GENERATION_FREEZE",
+  "status": "FROZEN_PRE_DEVELOPMENT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "sealed_kernel_commit": "46dd4f7df9b63486eb633a12baf25412cd4f761d",
+  "sealed_kernel_runner_sha256": "b27ac20068aa399ca1bc2ba9b56d9192089b9cc02f52903fa758b2ef00bf9c91",
+  "dataset_id": "BANKNIFTY_NIFTY_SENSEX_SYNC_5M_V1",
+  "dataset_sha256": "66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32",
+  "multiple_testing_family": "HUNT_V3_INTRABAR_GEOMETRY_FAMILY",
+  "prior_generation_holdout_policy": "HUNT_V1_AND_HUNT_V2_HOLDOUT_OUTCOMES_FORBIDDEN_FOR_V3_DESIGN_OR_SELECTION",
+  "split_contract": {
+    "development_fraction": 0.6,
+    "validation_fraction": 0.2,
+    "holdout_fraction": 0.2,
+    "ordering": "CHRONOLOGICAL_BY_SESSION",
+    "validation_access": "FORBIDDEN_UNTIL_DEVELOPMENT_NOMINATION",
+    "holdout_access": "FORBIDDEN_UNTIL_VALIDATION_PASS_AND_ROBUSTNESS_CONTROLS"
+  },
+  "execution_contract": {
+    "decision": "COMPLETED_BAR_T_USING_ONLY_T_AND_PRIOR_BARS",
+    "entry": "NEXT_SYNCHRONIZED_BAR_CLOSE_T_PLUS_1",
+    "exit": "FIXED_HORIZON_SYNCHRONIZED_CLOSE",
+    "max_concurrent_positions_per_configuration": 1,
+    "base_round_trip_cost_bps": 2.0,
+    "development_horizons_bars": [1,3,6]
+  },
+  "development_gate": {
+    "minimum_trades": 50,
+    "require_positive_mean_net_bps": true,
+    "selection": "BEST_MEAN_WITHIN_PASSPORT_DEVELOPMENT_ONLY"
+  },
+  "negative_controls_required_later": [
+    "NO_SAME_BAR_FILL",
+    "FUTURE_BAR_SHIFT_MUST_NOT_AUTHORIZE_EDGE",
+    "RANDOMIZED_DIRECTION_NULL",
+    "SESSION_PERMUTATION_NULL"
+  ],
+  "freeze_rule": "ANY CHANGE TO SIGNAL, GRID, HORIZON, COST, SPLIT, DATASET HASH, OR SELECTION RULE CREATES A NEW GENERATION IDENTITY.",
+  "passports": [
+    {
+      "passport_id": "HUNT_V3_RANGE_EXPANSION_STRONG_CLOSE_CONTINUATION",
+      "signal_rule": "BANKNIFTY_BAR_RANGE_BPS>=range_bps; BODY_DIRECTION_NONZERO; BODY_FRACTION_OF_RANGE>=body_fraction; CLOSE_WITHIN_EXTREME_FRACTION_OF_BODY_DIRECTION>=close_extreme_fraction",
+      "direction_rule": "BANKNIFTY_BODY_DIRECTION",
+      "grid": {"range_bps":[20,30,40],"body_fraction":[0.5,0.7],"close_extreme_fraction":[0.2,0.35]}
+    },
+    {
+      "passport_id": "HUNT_V3_WICK_REJECTION_REVERSAL",
+      "signal_rule": "BANKNIFTY_BAR_RANGE_BPS>=range_bps; DOMINANT_WICK_FRACTION>=wick_fraction; CLOSE_DIRECTION_OPPOSITE_DOMINANT_WICK",
+      "direction_rule": "AWAY_FROM_DOMINANT_WICK",
+      "grid": {"range_bps":[15,25,35],"wick_fraction":[0.45,0.6]}
+    },
+    {
+      "passport_id": "HUNT_V3_TWO_BAR_COMPRESSION_BREAKOUT",
+      "signal_rule": "PRIOR_TWO_COMPLETED_BANKNIFTY_RANGES_EACH<=compression_bps; CURRENT_CLOSE_BREAKS_PRIOR_TWO_BAR_HIGH_OR_LOW_BY>=breakout_bps",
+      "direction_rule": "BREAKOUT_DIRECTION",
+      "grid": {"compression_bps":[15,25,35],"breakout_bps":[2,5,8]}
+    },
+    {
+      "passport_id": "HUNT_V3_FAILED_RANGE_ESCAPE_REVERSAL",
+      "signal_rule": "PRIOR_BAR_RANGE_BPS>=prior_range_bps; CURRENT_HIGH_EXCEEDS_PRIOR_HIGH_OR_LOW_BREAKS_PRIOR_LOW_BY>=escape_bps; CURRENT_CLOSE_RETURNS_INSIDE_PRIOR_RANGE",
+      "direction_rule": "OPPOSITE_FAILED_ESCAPE_DIRECTION",
+      "grid": {"prior_range_bps":[20,30,40],"escape_bps":[2,5,8]}
+    },
+    {
+      "passport_id": "HUNT_V3_LEADER_CONFIRMED_STRONG_CLOSE",
+      "signal_rule": "BANKNIFTY_BODY_DIRECTION_MATCHES_NIFTY_AND_SENSEX_CURRENT_RETURN_SIGN; BANKNIFTY_BAR_RANGE_BPS>=range_bps; BODY_FRACTION>=body_fraction; MIN_ABS_LEADER_RETURN>=leader_bps",
+      "direction_rule": "SHARED_DIRECTION",
+      "grid": {"range_bps":[15,25,35],"body_fraction":[0.5,0.7],"leader_bps":[5,10,15]}
+    }
+  ]
+}
