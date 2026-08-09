@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "policy_id": "HUNT_V2_VALIDATION_POLICY",
+  "status": "FROZEN_PRE_VALIDATION",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "generation_id": "HUNT_V2_GENERATION_FREEZE",
+  "generation_sha256": "adc66a83fd04f6186cb25bbe924e230c7fb55548c2a2beb0c3ad49db9cee26dd",
+  "dataset_sha256": "66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32",
+  "sealed_kernel_commit": "46dd4f7df9b63486eb633a12baf25412cd4f761d",
+  "development_evidence_contract": {
+    "required_status": "DEVELOPMENT_SCREEN_COMPLETE",
+    "required_nominated_count": 3,
+    "validation_accessed_must_be": false,
+    "holdout_accessed_must_be": false
+  },
+  "nominations": [
+    {
+      "passport_id": "HUNT_V2_BANKNIFTY_OPENING_SHOCK_DECAY",
+      "config": {"counter_bar_bps": 15, "shock_bps": 50, "horizon_bars": 6},
+      "development_metrics": {"trades": 104, "mean_net_bps": 1.5903705660447234, "win_rate": 0.5288461538461539, "total_net_bps": 165.39853886865123}
+    },
+    {
+      "passport_id": "HUNT_V2_CROSS_MARKET_DISPERSION_COMPRESSION",
+      "config": {"dispersion_bps": 15, "horizon_bars": 6},
+      "development_metrics": {"trades": 123, "mean_net_bps": 2.0725436800154706, "win_rate": 0.5121951219512195, "total_net_bps": 254.92287264190293}
+    },
+    {
+      "passport_id": "HUNT_V2_RELATIVE_ACCELERATION_CONTINUATION",
+      "config": {"bar_bps": 20, "margin_bps": 30, "horizon_bars": 1},
+      "development_metrics": {"trades": 121, "mean_net_bps": 0.3989090855935901, "win_rate": 0.4793388429752066, "total_net_bps": 48.267999356824404}
+    }
+  ],
+  "validation_block": {
+    "session_fraction": 0.2,
+    "position": "IMMEDIATELY_AFTER_DEVELOPMENT_BLOCK",
+    "expected_sessions": 98,
+    "holdout_access": "FORBIDDEN"
+  },
+  "validation_gate": {
+    "minimum_trades": 20,
+    "require_positive_mean_net_bps": true,
+    "require_positive_total_net_bps": true,
+    "cost_bps": 2.0,
+    "selection": "NO_RESELECTION_NO_NEIGHBOR_CONFIGS_NO_CROSS_CANDIDATE_RANKING",
+    "advance_rule": "EACH_EXACT_NOMINATION_PASSES_OR_FAILS_INDEPENDENTLY"
+  },
+  "interpretation": "VALIDATION_PASS IS NOT EDGE CERTIFICATION. PASS ONLY AUTHORIZES PRE-HOLDOUT ROBUSTNESS AND NEGATIVE-CONTROL WORK. HOLDOUT MUST REMAIN UNOPENED.",
+  "freeze_rule": "ANY CHANGE TO NOMINATION, VALIDATION BLOCK, MINIMUM TRADES, COST, OR PASS RULE CREATES A NEW POLICY IDENTITY BEFORE VALIDATION OUTCOMES MAY BE READ."
+}
