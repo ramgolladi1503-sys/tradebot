@@ -16,6 +16,10 @@ def _same_session(points):
  sessions=[x.get('session') for x in points]
  return bool(sessions) and all(s is not None for s in sessions) and len(set(sessions))==1
 
+def _zone_broken(z,close,tol):
+ d=bps(z['center'],close)
+ return (z['side']=='RESISTANCE' and d>tol) or (z['side']=='SUPPORT' and d<-tol)
+
 def swing_motifs(pivots,tol):
  out=[]
  for i in range(2,len(pivots)):
@@ -56,8 +60,7 @@ def zone_motifs(rows,zones,tol,lookahead_bars=12):
   if first_i is None:continue
   broken=None
   for i in range(first_i,len(rows)):
-   r=rows[i];d=bps(z['center'],r['close'])
-   if (z['side']=='RESISTANCE' and d>tol) or (z['side']=='SUPPORT' and d<-tol):broken=i;break
+   if _zone_broken(z,rows[i]['close'],tol):broken=i;break
   if broken is None:continue
   for j in range(broken+1,min(len(rows),broken+1+lookahead_bars)):
    if rows[j]['session']!=rows[broken]['session']:break
@@ -77,11 +80,17 @@ def _flush_interaction(out,z,episode):
   out.append({'motif':'WICK_REJECTION_AT_'+z['side'],'confirmation_timestamp':episode['first_wick_timestamp'],'episode_start_timestamp':episode['start_timestamp'],'episode_end_timestamp':episode['end_timestamp'],'session':episode['session'],'zone_id':z['zone_id'],'zone_center':z['center']})
 
 def context_motifs(rows,bar_fn,zones,tol,lookback):
+ # Original support/resistance-side context exists only while the zone is active.
+ # Once price closes beyond the structural break threshold, flush any in-flight
+ # interaction and stop. Post-break behavior belongs to BREAK_RETEST_* rather
+ # than being mislabeled as compression/wick rejection at the old side.
  out=[]
  for z in zones:
   episode=None
   for i,r in enumerate(rows):
    if r['timestamp']<z['first_confirmation_timestamp']:continue
+   if _zone_broken(z,r['close'],tol):
+    _flush_interaction(out,z,episode);episode=None;break
    near=abs(bps(z['center'],r['close']))<=tol
    if episode is not None and (r['session']!=episode['session'] or not near):
     _flush_interaction(out,z,episode);episode=None
@@ -103,13 +112,11 @@ def main(argv=None):
  root=Path(a.repo_root).resolve();ip=Path(a.input);ip=ip if ip.is_absolute() else root/ip;od=root/a.output_dir;builder=load_module(root/'scripts/research/hypothesis_factory/build_market_structure_pattern_atlas_v1.py')
  res={'status':'FAIL_CLOSED','runtime_authority':'NONE','broker_actions_permitted':False,'edge_claimed':False,'forward_profitability_labels_computed':False}
  try:
-  rows=builder.load_rows(ip,a.instrument);piv=builder.classify_swings(builder.confirm_pivots(rows,a.threshold_bps),a.zone_tolerance_bps)
-  for p in piv:p['session']=rows[p['confirmation_index']]['session']
-  zones=builder.build_zones(piv,a.zone_tolerance_bps,a.zone_min_touches)
+  rows=builder.load_rows(ip,a.instrument);piv=builder.classify_swings(builder.confirm_pivots(rows,a.threshold_bps),a.zone_tolerance_bps);zones=builder.build_zones(piv,a.zone_tolerance_bps,a.zone_min_touches)
   motifs=[];motifs+=swing_motifs(piv,a.zone_tolerance_bps);motifs+=triangle_motifs(piv,a.zone_tolerance_bps);motifs+=zone_motifs(rows,zones,a.zone_tolerance_bps);motifs+=context_motifs(rows,builder.bar_descriptors,zones,a.zone_tolerance_bps,a.rolling_context_bars)
   motifs.sort(key=lambda x:(x['confirmation_timestamp'],x['motif'],x.get('zone_id','')))
   counts=Counter(x['motif'] for x in motifs);od.mkdir(parents=True,exist_ok=True);mp=od/f'{a.instrument}_motifs.jsonl';sp=od/f'{a.instrument}_motif_summary.json';mp.write_text(''.join(json.dumps(x,sort_keys=True)+'\n' for x in motifs))
-  res.update({'status':'MOTIF_ATLAS_BUILD_COMPLETE','instrument':a.instrument,'input_sha256':sha256(ip),'threshold_bps':a.threshold_bps,'confirmed_pivots':len(piv),'zones':len(zones),'motifs':len(motifs),'motif_counts':dict(sorted(counts.items())),'motifs_path':str(mp),'motifs_sha256':sha256(mp),'context_episode_collapsing':True,'context_episode_definition':'one event per zone entry-to-exit interaction per motif type','session_scope_rule':'all swing and triangle pivots must belong to one trading session','interpretation':'Higher-level causal structural motifs only. Cross-session swing/triangle motifs are forbidden. Zone-context bars are collapsed into full interaction episodes. No outcome, expectancy, or profitability labels are computed.'})
+  res.update({'status':'MOTIF_ATLAS_BUILD_COMPLETE','instrument':a.instrument,'input_sha256':sha256(ip),'threshold_bps':a.threshold_bps,'confirmed_pivots':len(piv),'zones':len(zones),'motifs':len(motifs),'motif_counts':dict(sorted(counts.items())),'motifs_path':str(mp),'motifs_sha256':sha256(mp),'context_episode_collapsing':True,'context_episode_definition':'one event per active-zone entry-to-exit interaction per motif type','session_scope_rule':'all swing and triangle pivots must belong to one trading session','zone_lifecycle_rule':'ACTIVE_FROM_MIN_TOUCH_ACTIVATION_UNTIL_FIRST_STRUCTURAL_BREAK','interpretation':'Higher-level causal structural motifs only. Swing/triangle motifs are session-local. Active-side zone context ends at the first structural break; post-break behavior is represented only by break/retest motifs. No outcome, expectancy, or profitability labels are computed.'})
  except Exception as e:res['error']=f'{type(e).__name__}:{e}'
  od.mkdir(parents=True,exist_ok=True);sp=od/f'{a.instrument}_motif_summary.json';sp.write_text(json.dumps(res,indent=2,sort_keys=True)+'\n');print(json.dumps(res,indent=2));return 0 if res['status']=='MOTIF_ATLAS_BUILD_COMPLETE' else 2
 if __name__=='__main__':raise SystemExit(main())
