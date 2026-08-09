@@ -4,19 +4,20 @@
 This audit answers a different question from profitability: does the implementation
 faithfully and safely represent the strategy contract it claims to implement?
 It is read-only and never grants runtime or broker authority.
+
+The audit is sparse-checkout safe. Strategy registry/source files are read from the
+current Git commit with `git show HEAD:<path>` when they are not materialized locally.
 """
 from __future__ import annotations
 
 import argparse
 import ast
 import hashlib
-import importlib.util
 import json
-from dataclasses import asdict
+import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-from core.strategy_spec import build_default_strategy_specs
 
 FORBIDDEN_CALL_TOKENS = {
     "place_order", "submit_order", "cancel_order", "modify_order", "exit_order",
@@ -51,12 +52,92 @@ TEMPORAL_POLICIES: dict[str, tuple[str, ...]] = {
 META_FAMILIES = {"ENSEMBLE", "PRO_STRATEGY"}
 
 
-def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+@dataclass(frozen=True)
+class RegistrySpec:
+    strategy_id: str
+    name: str
+    family: str
+    module_path: str
+    callable_name: str
+    required_evidence_keys: tuple[str, ...]
 
 
-def module_path(root: Path, dotted: str) -> Path:
-    return root.joinpath(*dotted.split(".")).with_suffix(".py")
+def git_show(root: Path, repo_path: str) -> str | None:
+    """Read a text path from current HEAD, preserving sparse checkout."""
+    proc = subprocess.run(
+        ["git", "-C", str(root), "show", f"HEAD:{repo_path}"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def read_repo_text(root: Path, repo_path: str) -> str | None:
+    local = root / repo_path
+    if local.exists():
+        return local.read_text(encoding="utf-8")
+    return git_show(root, repo_path)
+
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def dotted_repo_path(dotted: str) -> str:
+    return "/".join(dotted.split(".")) + ".py"
+
+
+def _literal(node: ast.AST, default: Any = None) -> Any:
+    try:
+        return ast.literal_eval(node)
+    except Exception:
+        return default
+
+
+def load_registry_specs(root: Path) -> tuple[RegistrySpec, ...]:
+    source = read_repo_text(root, "core/strategy_spec.py")
+    if source is None:
+        raise ValueError("strategy_registry_source_missing:core/strategy_spec.py")
+    tree = ast.parse(source)
+    build: ast.FunctionDef | ast.AsyncFunctionDef | None = None
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "build_default_strategy_specs":
+            build = node
+            break
+    if build is None:
+        raise ValueError("strategy_registry_builder_missing")
+
+    calls: list[ast.Call] = []
+    for node in ast.walk(build):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if isinstance(fn, ast.Name) and fn.id == "StrategySpec":
+            calls.append(node)
+
+    specs: list[RegistrySpec] = []
+    for call in calls:
+        if len(call.args) < 5:
+            continue
+        strategy_id = _literal(call.args[0])
+        name = _literal(call.args[1])
+        family_node = call.args[2]
+        family = family_node.id.removeprefix("FAMILY_") if isinstance(family_node, ast.Name) else str(_literal(family_node, ""))
+        module_path = _literal(call.args[3])
+        callable_name = _literal(call.args[4])
+        required: tuple[str, ...] = ("market_state", "regime_state", "feed_health_truth", "quote_truth")
+        for kw in call.keywords:
+            if kw.arg == "required_evidence_keys":
+                raw = _literal(kw.value, ())
+                if isinstance(raw, (list, tuple)):
+                    required = tuple(str(x) for x in raw)
+        if all(isinstance(x, str) and x for x in (strategy_id, name, family, module_path, callable_name)):
+            specs.append(RegistrySpec(strategy_id, name, family, module_path, callable_name, required))
+    if not specs:
+        raise ValueError("strategy_registry_empty_or_unparseable")
+    return tuple(specs)
 
 
 def ast_facts(source: str) -> dict[str, Any]:
@@ -67,11 +148,14 @@ def ast_facts(source: str) -> dict[str, Any]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             fn = node.func
-            if isinstance(fn, ast.Name): calls.add(fn.id)
+            if isinstance(fn, ast.Name):
+                calls.add(fn.id)
             elif isinstance(fn, ast.Attribute):
                 parts=[]; cur: Any = fn
-                while isinstance(cur, ast.Attribute): parts.append(cur.attr); cur=cur.value
-                if isinstance(cur, ast.Name): parts.append(cur.id)
+                while isinstance(cur, ast.Attribute):
+                    parts.append(cur.attr); cur=cur.value
+                if isinstance(cur, ast.Name):
+                    parts.append(cur.id)
                 calls.add(".".join(reversed(parts)))
         elif isinstance(node, ast.Import):
             imports.update(a.name for a in node.names)
@@ -85,18 +169,19 @@ def marker_present(text: str, markers: tuple[str, ...]) -> bool:
     return any(m.lower() in low for m in markers)
 
 
-def audit_spec(root: Path, spec: Any) -> dict[str, Any]:
-    path = module_path(root, spec.module_path)
+def audit_spec(root: Path, spec: RegistrySpec) -> dict[str, Any]:
+    repo_path = dotted_repo_path(spec.module_path)
     findings: list[dict[str, str]] = []
-    if not path.exists():
+    source = read_repo_text(root, repo_path)
+    if source is None:
         return {
             "strategy_id": spec.strategy_id, "name": spec.name, "family": spec.family,
             "module_path": spec.module_path, "callable_name": spec.callable_name,
+            "source_path": repo_path,
             "verdict": "NOT_IMPLEMENTING_CLAIMED_STRATEGY",
-            "findings": [{"severity":"CRITICAL","code":"MODULE_MISSING","detail":str(path)}],
+            "findings": [{"severity":"CRITICAL","code":"MODULE_MISSING","detail":repo_path}],
             "runtime_authority":"NONE", "broker_actions_allowed":False,
         }
-    source = path.read_text(encoding="utf-8")
     facts = ast_facts(source)
     if spec.callable_name not in facts["functions"]:
         findings.append({"severity":"CRITICAL","code":"CALLABLE_MISSING","detail":spec.callable_name})
@@ -138,8 +223,8 @@ def audit_spec(root: Path, spec: Any) -> dict[str, Any]:
         "family": spec.family,
         "module_path": spec.module_path,
         "callable_name": spec.callable_name,
-        "source_path": str(path),
-        "source_sha256": sha256(path),
+        "source_path": repo_path,
+        "source_sha256": sha256_text(source),
         "required_evidence_keys": list(spec.required_evidence_keys),
         "verdict": verdict,
         "findings": findings,
@@ -150,13 +235,16 @@ def audit_spec(root: Path, spec: Any) -> dict[str, Any]:
 
 
 def run(repo_root: Path) -> dict[str, Any]:
-    specs = build_default_strategy_specs()
+    specs = load_registry_specs(repo_root)
     rows = [audit_spec(repo_root, s) for s in specs]
     counts: dict[str,int] = {}
-    for r in rows: counts[r["verdict"]] = counts.get(r["verdict"],0)+1
+    for r in rows:
+        counts[r["verdict"]] = counts.get(r["verdict"],0)+1
     return {
-        "schema_version":"tradebot-strategy-structural-audit-v1",
+        "schema_version":"tradebot-strategy-structural-audit-v2",
         "status":"STRUCTURAL_AUDIT_COMPLETE_STATIC_PHASE",
+        "registry_source":"HEAD:core/strategy_spec.py",
+        "sparse_checkout_safe":True,
         "registered_strategy_count":len(specs),
         "verdict_counts":counts,
         "strategies":rows,
