@@ -5,8 +5,9 @@ This audit answers a different question from profitability: does the implementat
 faithfully and safely represent the strategy contract it claims to implement?
 It is read-only and never grants runtime or broker authority.
 
-The audit is sparse-checkout safe. Strategy registry/source files are read from the
-current Git commit with `git show HEAD:<path>` when they are not materialized locally.
+The audit is sparse-checkout safe. Registry and strategy sources are always read from
+HEAD with `git show HEAD:<path>` so omitted sparse paths and stale materialized files
+cannot change the audit input.
 """
 from __future__ import annotations
 
@@ -75,9 +76,8 @@ def git_show(root: Path, repo_path: str) -> str | None:
 
 
 def read_repo_text(root: Path, repo_path: str) -> str | None:
-    local = root / repo_path
-    if local.exists():
-        return local.read_text(encoding="utf-8")
+    # Always bind audit inputs to the exact checked-out commit. Do not prefer a
+    # materialized file because sparse worktrees may leave stale skip-worktree paths.
     return git_show(root, repo_path)
 
 
@@ -157,8 +157,9 @@ def load_registry_specs(root: Path) -> tuple[RegistrySpec, ...]:
         for kw in call.keywords:
             if kw.arg == "required_evidence_keys":
                 resolved = _resolve_string_tuple(kw.value, tree)
-                if resolved is not None:
-                    required = resolved
+                if resolved is None:
+                    raise ValueError(f"required_evidence_unparseable:{strategy_id}")
+                required = resolved
         if all(isinstance(x, str) and x for x in (strategy_id, name, family, module_path, callable_name)):
             specs.append(RegistrySpec(strategy_id, name, family, module_path, callable_name, required))
     if not specs:
@@ -169,6 +170,7 @@ def load_registry_specs(root: Path) -> tuple[RegistrySpec, ...]:
 def ast_facts(source: str) -> dict[str, Any]:
     tree = ast.parse(source)
     funcs = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    classes = {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
     calls: set[str] = set()
     imports: set[str] = set()
     for node in ast.walk(tree):
@@ -187,7 +189,7 @@ def ast_facts(source: str) -> dict[str, Any]:
             imports.update(a.name for a in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             imports.add(node.module)
-    return {"functions": sorted(funcs), "calls": sorted(calls), "imports": sorted(imports)}
+    return {"functions": sorted(funcs), "classes": sorted(classes), "calls": sorted(calls), "imports": sorted(imports)}
 
 
 def marker_present(text: str, markers: tuple[str, ...]) -> bool:
@@ -209,7 +211,7 @@ def audit_spec(root: Path, spec: RegistrySpec) -> dict[str, Any]:
             "runtime_authority":"NONE", "broker_actions_allowed":False,
         }
     facts = ast_facts(source)
-    if spec.callable_name not in facts["functions"]:
+    if spec.callable_name not in facts["functions"] and spec.callable_name not in facts["classes"]:
         findings.append({"severity":"CRITICAL","code":"CALLABLE_MISSING","detail":spec.callable_name})
 
     bad_calls = sorted(c for c in facts["calls"] if any(tok in c.lower() for tok in FORBIDDEN_CALL_TOKENS))
@@ -263,10 +265,12 @@ def run(repo_root: Path) -> dict[str, Any]:
     counts: dict[str,int] = {}
     for r in rows:
         counts[r["verdict"]] = counts.get(r["verdict"],0)+1
+    head = subprocess.run(["git", "-C", str(repo_root), "rev-parse", "HEAD"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False).stdout.strip()
     return {
-        "schema_version":"tradebot-strategy-structural-audit-v3",
+        "schema_version":"tradebot-strategy-structural-audit-v4",
         "status":"STRUCTURAL_AUDIT_COMPLETE_STATIC_PHASE",
         "registry_source":"HEAD:core/strategy_spec.py",
+        "source_commit":head,
         "sparse_checkout_safe":True,
         "registered_strategy_count":len(specs),
         "verdict_counts":counts,
@@ -288,6 +292,7 @@ def main(argv=None)->int:
     out.write_text(json.dumps(result,indent=2,sort_keys=True)+"\n",encoding="utf-8")
     print(json.dumps({
         "status":result["status"],
+        "source_commit":result["source_commit"],
         "registered_strategy_count":result["registered_strategy_count"],
         "verdict_counts":result["verdict_counts"],
         "output":str(out),
