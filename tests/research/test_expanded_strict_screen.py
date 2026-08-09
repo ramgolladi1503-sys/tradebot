@@ -1,4 +1,4 @@
-import importlib.util, sys
+import csv, importlib.util, sys
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -34,7 +34,6 @@ def test_evaluation_never_overlaps_positions():
     h={'id':'X','family':'momentum_continuation','direction':1,'lookback':2,'threshold_bps':1,'hold_bars':3}
     r=m.evaluate(h,{'2026-01-01':s},cost=0,min_trades=1)
     assert r['overlapping_trades_allowed'] is False
-    # With 20 bars and 3-bar holds, a non-overlap engine cannot create anywhere near one trade per bar.
     assert r['trades'] <= 5
 
 
@@ -43,3 +42,19 @@ def test_generation_is_materially_larger_than_baseline_supported_set():
     assert len(hs) >= 500
     assert {'opening_drive','opening_pullback','compression_breakout','momentum_continuation','range_failure'} == {h['family'] for h in hs}
     assert all(h['hold_bars'] in {2,3,6,12} for h in hs)
+
+
+def test_csv_export_handles_family_specific_fields(tmp_path):
+    results=[
+        {'family':'opening_drive','open_bars':3,'threshold_bps':25,'trades':100},
+        {'family':'opening_pullback','open_bars':6,'retrace':0.5,'threshold_bps':40,'trades':120},
+        {'family':'compression_breakout','lookback':6,'threshold_bps':35,'trades':150},
+    ]
+    path=tmp_path/'leaderboard.csv'
+    m.write_results_csv(path,results)
+    with path.open(newline='',encoding='utf-8') as h:
+        rows=list(csv.DictReader(h))
+    assert len(rows)==3
+    assert 'retrace' in rows[0]
+    assert 'open_bars' in rows[0]
+    assert 'lookback' in rows[0]
