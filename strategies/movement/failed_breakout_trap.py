@@ -56,8 +56,14 @@ def generate_failed_breakout_trap_candidates(ctx: StrategyContext, regime: Movem
 
 
 def _trap_score(ctx: StrategyContext, regime: MovementRegimeResult, reentry_distance: float, max_reentry: float, option_stall: float) -> float:
+    # A failed-breakout trap is stronger when the current observation sits close
+    # to the failed level after the completed-bar re-entry. The old formulation
+    # rewarded larger distance from the level, which inverted the thesis.
+    if max_reentry <= 0 or reentry_distance < 0:
+        return 0.0
+    reentry_proximity = clamp_score(1.0 - (reentry_distance / max_reentry))
     return clamp_score(
-        0.40 * ratio_score(reentry_distance, start=0.0, full=max_reentry)
+        0.40 * reentry_proximity
         + 0.30 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))
         + 0.20 * option_stall
         + 0.10 * ratio_score(abs(safe_float(ctx.volume_z) or 0.0), start=0.4, full=2.0)
