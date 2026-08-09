@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "generation_id": "HUNT_V6_GENERATION_FREEZE",
+  "status": "FROZEN_PRE_DEVELOPMENT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "sealed_kernel_commit": "46dd4f7df9b63486eb633a12baf25412cd4f761d",
+  "dataset_id": "BANKNIFTY_NIFTY_SENSEX_SYNC_5M_V1",
+  "dataset_sha256": "66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32",
+  "multiple_testing_family": "HUNT_V6_LEADER_DIVERGENCE_FAMILY",
+  "prior_generation_policy": "V1_V2_V3_HOLDOUT_OUTCOMES_FORBIDDEN; V4_V5 OUTCOMES MAY NOT ALTER V6 RULES",
+  "split_contract": {"development_fraction":0.6,"validation_fraction":0.2,"holdout_fraction":0.2,"ordering":"CHRONOLOGICAL_BY_SESSION","validation_access":"FORBIDDEN_UNTIL_DEVELOPMENT_NOMINATION","holdout_access":"FORBIDDEN_UNTIL_VALIDATION_PASS_AND_ROBUSTNESS_CONTROLS"},
+  "execution_contract": {"decision":"COMPLETED_BAR_T_USING_ONLY_T_AND_PRIOR_BARS","entry":"NEXT_SYNCHRONIZED_BAR_CLOSE_T_PLUS_1","exit":"FIXED_HORIZON_SYNCHRONIZED_CLOSE","max_concurrent_positions_per_configuration":1,"base_round_trip_cost_bps":2.0,"development_horizons_bars":[1,3,6]},
+  "development_gate": {"minimum_trades":50,"require_positive_mean_net_bps":true,"selection":"BEST_MEAN_WITHIN_PASSPORT_DEVELOPMENT_ONLY"},
+  "negative_controls_required_later":["NO_SAME_BAR_FILL","FUTURE_BAR_SHIFT_MUST_NOT_AUTHORIZE_EDGE","RANDOMIZED_DIRECTION_NULL","SESSION_PERMUTATION_NULL"],
+  "freeze_rule":"ANY CHANGE TO SIGNAL, GRID, HORIZON, COST, SPLIT, DATASET HASH, OR SELECTION RULE CREATES A NEW GENERATION IDENTITY.",
+  "passports":[
+    {"passport_id":"HUNT_V6_DUAL_LEADER_DIVERGENCE_FADE","signal_rule":"BANKNIFTY minus NIFTY and BANKNIFTY minus SENSEX current-return divergences share sign and min abs divergence >= divergence_bps","direction_rule":"OPPOSITE_DIVERGENCE_SIGN","grid":{"divergence_bps":[8,15,25]}},
+    {"passport_id":"HUNT_V6_DUAL_LEADER_DIVERGENCE_CONTINUATION","signal_rule":"BANKNIFTY minus NIFTY and BANKNIFTY minus SENSEX current-return divergences share sign and min abs divergence >= divergence_bps","direction_rule":"DIVERGENCE_SIGN","grid":{"divergence_bps":[8,15,25]}},
+    {"passport_id":"HUNT_V6_LEADER_DISAGREEMENT_BANKNIFTY_RESOLUTION","signal_rule":"NIFTY and SENSEX current return signs disagree and BANKNIFTY absolute current return >= bn_bar_bps","direction_rule":"BANKNIFTY_CURRENT_RETURN_DIRECTION","grid":{"bn_bar_bps":[8,15,25]}},
+    {"passport_id":"HUNT_V6_LEADER_AGREEMENT_BANKNIFTY_LAG","signal_rule":"NIFTY and SENSEX current return signs agree, min abs leader return >= leader_bps, BANKNIFTY same-sign return magnitude trails leader average by >= lag_bps","direction_rule":"LEADER_DIRECTION","grid":{"leader_bps":[5,10],"lag_bps":[5,10]}}
+  ]
+}
