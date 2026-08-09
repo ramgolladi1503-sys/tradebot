@@ -41,10 +41,7 @@ def _normalize_bias(bias):
     return None
 
 def zero_hero_strategy(symbol, ltp, premarket_bias, current_date=None, expiry_window_days=None, debug_stats=None, regime=None):
-    """
-    Zero-Hero logic for weekly expiry.
-    Only generates manual approval trades
-    """
+    """Zero-Hero weekly-expiry advisory logic."""
     _update_debug(debug_stats, considered=1)
     trades = []
     if ltp is None or float(ltp or 0) <= 0:
@@ -62,11 +59,7 @@ def zero_hero_strategy(symbol, ltp, premarket_bias, current_date=None, expiry_wi
         _update_debug(debug_stats, rejected=1, reason="expiry_unavailable")
         return trades
 
-    window_days = int(
-        expiry_window_days
-        if expiry_window_days is not None
-        else getattr(cfg, "ZERO_HERO_EXPIRY_WINDOW_DAYS", 1)
-    )
+    window_days = int(expiry_window_days if expiry_window_days is not None else getattr(cfg, "ZERO_HERO_EXPIRY_WINDOW_DAYS", 1))
     days_to_expiry = (expiry - today).days
     expiry_context = 0 <= days_to_expiry <= max(0, window_days)
     if not expiry_context and not bool(getattr(cfg, "ZERO_HERO_ALLOW_NON_EXPIRY_CONTEXT", True)):
@@ -99,29 +92,23 @@ def zero_hero_strategy(symbol, ltp, premarket_bias, current_date=None, expiry_wi
 
     strike = round(float(ltp) / 100) * 100
     option_type = "CE" if bias_norm == "bullish" else "PE"
-    entry_price = max(
-        float(ltp) * float(profile.get("entry_price_mult", 0.005)),
-        float(profile.get("premium_floor", 25.0)),
-    )
+    entry_price = max(float(ltp) * float(profile.get("entry_price_mult", 0.005)), float(profile.get("premium_floor", 25.0)))
     stop_loss = round(entry_price * float(profile.get("stop_loss_mult", 0.8)), 2)
     target = round(entry_price * float(profile.get("target_mult", 2.0)), 2)
-    lot_size = 1
 
-    trades.append(
-        {
-            "symbol": symbol,
-            "strike": strike,
-            "option_type": option_type,
-            "entry_price": round(entry_price, 2),
-            "stop_loss": stop_loss,
-            "target": target,
-            "lot_size": lot_size,
-            "confidence": int(profile.get("confidence", 60)),
-            "confidence_reason": str(profile.get("confidence_reason", "expiry_window_manual_advisory")),
-            "regime_path": regime_name,
-            "variant": str(profile.get("variant") or "manual_expiry_window"),
-        }
-    )
+    trades.append({
+        "symbol": symbol,
+        "strike": strike,
+        "option_type": option_type,
+        "entry_price": round(entry_price, 2),
+        "stop_loss": stop_loss,
+        "target": target,
+        "lot_size": 1,
+        "confidence": int(profile.get("confidence", 60)),
+        "confidence_reason": str(profile.get("confidence_reason", "expiry_window_manual_advisory")),
+        "regime_path": regime_name,
+        "variant": str(profile.get("variant") or "manual_expiry_window"),
+    })
     if isinstance(debug_stats, dict):
         debug_stats["zero_hero_selected_premium_band"] = {
             "strategy": "ZERO_HERO",
@@ -132,5 +119,20 @@ def zero_hero_strategy(symbol, ltp, premarket_bias, current_date=None, expiry_wi
         }
         debug_stats["zero_hero_rejected_reason"] = None
     _update_debug(debug_stats, scored=1)
-
     return trades
+
+
+def generate_signal(symbol, ltp, premarket_bias, current_date=None, expiry_window_days=None, debug_stats=None, regime=None):
+    """Canonical registry entrypoint; delegates without changing Zero-Hero semantics."""
+    return zero_hero_strategy(
+        symbol,
+        ltp,
+        premarket_bias,
+        current_date=current_date,
+        expiry_window_days=expiry_window_days,
+        debug_stats=debug_stats,
+        regime=regime,
+    )
+
+
+__all__ = ["zero_hero_strategy", "generate_signal"]
