@@ -12,10 +12,15 @@ def load_module(path:Path):
 
 def bps(a,b):return (b/a-1)*10000 if a and a>0 else float('nan')
 
+def _same_session(points):
+ sessions=[x.get('session') for x in points]
+ return bool(sessions) and all(s is not None for s in sessions) and len(set(sessions))==1
+
 def swing_motifs(pivots,tol):
  out=[]
  for i in range(2,len(pivots)):
   a,b,c=pivots[i-2:i+1]
+  if not _same_session((a,b,c)):continue
   if not (a['type']!=b['type'] and b['type']!=c['type'] and a['type']==c['type']):continue
   labs=set(c.get('swing_labels',[]));motif=None
   if a['type']=='HIGH':
@@ -34,6 +39,7 @@ def triangle_motifs(pivots,tol):
  out=[]
  for i in range(4,len(pivots)):
   w=pivots[i-4:i+1]
+  if not _same_session(w):continue
   if any(w[j]['type']==w[j+1]['type'] for j in range(4)):continue
   highs=[x for x in w if x['type']=='HIGH'];lows=[x for x in w if x['type']=='LOW']
   if len(highs)<2 or len(lows)<2:continue
@@ -71,10 +77,6 @@ def _flush_interaction(out,z,episode):
   out.append({'motif':'WICK_REJECTION_AT_'+z['side'],'confirmation_timestamp':episode['first_wick_timestamp'],'episode_start_timestamp':episode['start_timestamp'],'episode_end_timestamp':episode['end_timestamp'],'session':episode['session'],'zone_id':z['zone_id'],'zone_center':z['center']})
 
 def context_motifs(rows,bar_fn,zones,tol,lookback):
- # One context motif per full zone-interaction episode. An episode starts when
- # price enters the zone and ends only after it leaves the tolerance band or
- # the session changes. Repeated qualifying bars inside that interaction do
- # not create additional pattern occurrences.
  out=[]
  for z in zones:
   episode=None
@@ -107,7 +109,7 @@ def main(argv=None):
   motifs=[];motifs+=swing_motifs(piv,a.zone_tolerance_bps);motifs+=triangle_motifs(piv,a.zone_tolerance_bps);motifs+=zone_motifs(rows,zones,a.zone_tolerance_bps);motifs+=context_motifs(rows,builder.bar_descriptors,zones,a.zone_tolerance_bps,a.rolling_context_bars)
   motifs.sort(key=lambda x:(x['confirmation_timestamp'],x['motif'],x.get('zone_id','')))
   counts=Counter(x['motif'] for x in motifs);od.mkdir(parents=True,exist_ok=True);mp=od/f'{a.instrument}_motifs.jsonl';sp=od/f'{a.instrument}_motif_summary.json';mp.write_text(''.join(json.dumps(x,sort_keys=True)+'\n' for x in motifs))
-  res.update({'status':'MOTIF_ATLAS_BUILD_COMPLETE','instrument':a.instrument,'input_sha256':sha256(ip),'threshold_bps':a.threshold_bps,'confirmed_pivots':len(piv),'zones':len(zones),'motifs':len(motifs),'motif_counts':dict(sorted(counts.items())),'motifs_path':str(mp),'motifs_sha256':sha256(mp),'context_episode_collapsing':True,'context_episode_definition':'one event per zone entry-to-exit interaction per motif type','interpretation':'Higher-level causal structural motifs only. Zone-context bars are collapsed into full interaction episodes. No outcome, expectancy, or profitability labels are computed.'})
+  res.update({'status':'MOTIF_ATLAS_BUILD_COMPLETE','instrument':a.instrument,'input_sha256':sha256(ip),'threshold_bps':a.threshold_bps,'confirmed_pivots':len(piv),'zones':len(zones),'motifs':len(motifs),'motif_counts':dict(sorted(counts.items())),'motifs_path':str(mp),'motifs_sha256':sha256(mp),'context_episode_collapsing':True,'context_episode_definition':'one event per zone entry-to-exit interaction per motif type','session_scope_rule':'all swing and triangle pivots must belong to one trading session','interpretation':'Higher-level causal structural motifs only. Cross-session swing/triangle motifs are forbidden. Zone-context bars are collapsed into full interaction episodes. No outcome, expectancy, or profitability labels are computed.'})
  except Exception as e:res['error']=f'{type(e).__name__}:{e}'
  od.mkdir(parents=True,exist_ok=True);sp=od/f'{a.instrument}_motif_summary.json';sp.write_text(json.dumps(res,indent=2,sort_keys=True)+'\n');print(json.dumps(res,indent=2));return 0 if res['status']=='MOTIF_ATLAS_BUILD_COMPLETE' else 2
 if __name__=='__main__':raise SystemExit(main())
