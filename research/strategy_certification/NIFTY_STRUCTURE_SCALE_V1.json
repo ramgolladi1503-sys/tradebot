@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "scale_id": "NIFTY_STRUCTURE_SCALE_V1",
+  "status": "FROZEN_FOR_DESCRIPTIVE_ATLAS",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "instrument": "NIFTY",
+  "dataset_path": "research/hypotheses/historical_corpus/kite_nifty_cache_v2/canonical/NIFTY.csv",
+  "dataset_sha256": "6a145d4d17f124f9dc8ee272c5a19ca98988873a14b294765f44a27284d8b7e8",
+  "pivot_threshold_bps": 35.0,
+  "zone_tolerance_bps": 15.0,
+  "zone_min_confirmed_touches": 2,
+  "rolling_context_bars": 12,
+  "selection_basis": "Chosen before forward outcomes from descriptive threshold characterization across 20/35/50 bps. 35 bps balances structural density and sample size for NIFTY motif work.",
+  "forward_outcomes_permitted": false
+}
