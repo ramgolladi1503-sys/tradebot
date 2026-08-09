@@ -113,7 +113,7 @@ def test_missing_session_breadth_metrics_fail_closed(tmp_path):
 
     assert report["summary"]["eligible_for_robustness"] == 0
     reasons = report["candidates"][0]["rejection_reasons"]
-    assert "sessions_traded_below_threshold" in reasons
+    assert "sessions_below_threshold" in reasons
 
 
 def test_low_trade_candidate_cannot_certify_even_with_missing_robustness(tmp_path):
