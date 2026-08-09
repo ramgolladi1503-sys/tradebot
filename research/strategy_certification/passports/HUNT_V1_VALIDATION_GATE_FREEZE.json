@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "gate_id": "HUNT_V1_VALIDATION_GATE_FREEZE",
+  "status": "FROZEN_PRE_VALIDATION",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "parent_generation_id": "HUNT_V1_GENERATION_FREEZE",
+  "parent_generation_sha256": "3c74dc940645f4d34edf211c436183cb9f3742457c9b8386ff6e8b1f2db0cb1e",
+  "dataset_sha256": "66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32",
+  "sealed_kernel_commit": "46dd4f7df9b63486eb633a12baf25412cd4f761d",
+  "nominated_passport_id": "HUNT_V1_LEADER_REVERSAL_TRANSMISSION",
+  "nominated_configuration": {
+    "from_open_min_bps": 40,
+    "reversal_bar_min_bps": 15,
+    "horizon_bars": 3
+  },
+  "development_evidence_contract": {
+    "required_nominated_count": 1,
+    "required_development_status": "NOMINATED_FOR_VALIDATION",
+    "required_development_trades": 65,
+    "required_development_mean_net_bps": 0.23406261792223698,
+    "validation_accessed_must_be": false,
+    "holdout_accessed_must_be": false
+  },
+  "validation_partition": {
+    "ordering": "CHRONOLOGICAL_BY_SESSION",
+    "development_sessions": 295,
+    "validation_sessions": 98,
+    "holdout_sessions": 100,
+    "validation_session_slice": "[295:393)",
+    "holdout_outcomes_forbidden": true
+  },
+  "validation_gate": {
+    "minimum_trades": 20,
+    "require_mean_net_bps_gt": 0.0,
+    "require_total_net_bps_gt": 0.0,
+    "cost_bps": 2.0,
+    "configuration_selection": "EXACT_DEVELOPMENT_NOMINATION_ONLY",
+    "neighbor_or_alternative_config_testing": false
+  },
+  "on_pass": "ELIGIBLE_FOR_HOLDOUT_GATE_FREEZE; HOLDOUT STILL MUST NOT BE READ UNTIL THAT GATE IS FROZEN",
+  "on_fail": "REJECT_GENERATION_CANDIDATE; DO_NOT RETUNE THIS PASSPORT",
+  "freeze_rule": "ANY CHANGE TO NOMINATED CONFIGURATION, VALIDATION PARTITION, COST, OR PASS THRESHOLD CREATES A NEW GATE IDENTITY."
+}
