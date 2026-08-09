@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Reconcile canonical corpus rows across multiple source files.
 
-The v1 cache intentionally preserved source_path in its dedupe key. That is good
-for provenance but can leave duplicate market observations when multiple source
-files contain the same instrument/timestamp/OHLC. This reconciliation layer:
+The canonical cache preserves broad family labels (NIFTY/BANKNIFTY) plus
+`raw_instrument` contract identity. Reconciliation therefore operates on
+instrument family + raw instrument + timestamp:
 
-- groups by instrument + timestamp;
-- collapses identical OHLC observations across sources to one row;
-- excludes timestamps with conflicting OHLC observations (fail closed);
+- collapses identical OHLC observations across sources for the same contract;
+- excludes same-contract/timestamp OHLC conflicts (fail closed);
+- never treats different option contracts at the same minute as conflicts;
 - excludes fallback rows;
-- preserves contributing source paths in an audit manifest;
+- preserves contributing source paths in the output provenance field;
 - writes a separate reconciled dataset; the original cache is untouched.
 
 Research-only. Never certifies edge or grants runtime/broker authority.
@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-FIELDS = ["timestamp", "instrument", "open", "high", "low", "close", "volume", "vwap", "bid", "ask", "is_fallback", "source_path"]
+FIELDS = ["timestamp", "instrument", "raw_instrument", "open", "high", "low", "close", "volume", "vwap", "bid", "ask", "is_fallback", "source_path"]
 
 
 def truthy(value: Any) -> bool:
@@ -67,14 +67,27 @@ def market_signature(row: dict[str, Any]) -> tuple[str, str, str, str]:
     return tuple(str(row.get(k, "")) for k in ("open", "high", "low", "close"))
 
 
+def contract_identity(row: dict[str, Any]) -> str:
+    raw = str(row.get("raw_instrument", "")).strip()
+    return raw if raw else "MISSING_RAW_INSTRUMENT"
+
+
 def reconcile_rows(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    groups: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    groups: dict[tuple[str, str, str], list[dict[str, str]]] = defaultdict(list)
     fallback_rows = 0
+    missing_raw_identity_rows = 0
     for row in rows:
         if truthy(row.get("is_fallback")):
             fallback_rows += 1
             continue
-        key = (str(row.get("instrument", "")).upper(), str(row.get("timestamp", "")))
+        raw_id = contract_identity(row)
+        if raw_id == "MISSING_RAW_INSTRUMENT":
+            missing_raw_identity_rows += 1
+        key = (
+            str(row.get("instrument", "")).upper(),
+            raw_id,
+            str(row.get("timestamp", "")),
+        )
         groups[key].append(row)
 
     reconciled: list[dict[str, Any]] = []
@@ -86,7 +99,7 @@ def reconcile_rows(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], di
     max_sources_for_observation = 0
     conflicts: list[dict[str, Any]] = []
 
-    for (instrument, timestamp), group in sorted(groups.items()):
+    for (instrument, raw_instrument, timestamp), group in sorted(groups.items()):
         signatures: dict[tuple[str, str, str, str], list[dict[str, str]]] = defaultdict(list)
         for row in group:
             signatures[market_signature(row)].append(row)
@@ -101,6 +114,7 @@ def reconcile_rows(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], di
             if len(conflicts) < 100:
                 conflicts.append({
                     "instrument": instrument,
+                    "raw_instrument": raw_instrument,
                     "timestamp": timestamp,
                     "rows": len(group),
                     "sources": sources,
@@ -109,19 +123,20 @@ def reconcile_rows(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], di
             continue
 
         representative = dict(group[0])
+        representative["raw_instrument"] = raw_instrument
         if len(group) > 1:
             duplicate_groups += 1
             duplicate_rows_removed += len(group) - 1
-        # Provenance remains audit-visible without allowing source path to duplicate observations.
         representative["source_path"] = " || ".join(sources)
         representative["is_fallback"] = "false"
         reconciled.append(representative)
 
-    reconciled.sort(key=lambda r: (str(r.get("instrument", "")), str(r.get("timestamp", ""))))
+    reconciled.sort(key=lambda r: (str(r.get("instrument", "")), str(r.get("raw_instrument", "")), str(r.get("timestamp", ""))))
     summary = {
         "input_rows": len(rows),
         "fallback_rows_excluded": fallback_rows,
-        "unique_instrument_timestamps": len(groups),
+        "missing_raw_identity_rows": missing_raw_identity_rows,
+        "unique_contract_timestamps": len(groups),
         "reconciled_rows": len(reconciled),
         "duplicate_groups_collapsed": duplicate_groups,
         "duplicate_rows_removed": duplicate_rows_removed,
@@ -146,8 +161,10 @@ def main(argv: list[str] | None = None) -> int:
     if not manifest_path.exists():
         raise SystemExit(f"cache manifest missing: {manifest_path}")
     source_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if source_manifest.get("schema_version") != "tradebot-canonical-corpus-cache-v2":
+        raise SystemExit("canonical cache schema v2 required; rebuild cache before reconciliation")
     instruments = [x.strip().upper() for x in args.instrument if x.strip()] or sorted(source_manifest.get("canonical_outputs", {}).keys())
-    out_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else cache_dir / "reconciled"
+    out_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else cache_dir / "reconciled_v2"
 
     outputs: dict[str, Any] = {}
     total_conflicts = 0
@@ -173,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
         }
 
     result = {
-        "schema_version": "tradebot-reconciled-canonical-cache-v1",
+        "schema_version": "tradebot-reconciled-canonical-cache-v2",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "source_cache_manifest": str(manifest_path),
         "source_cache_manifest_sha256": sha256_file(manifest_path),
