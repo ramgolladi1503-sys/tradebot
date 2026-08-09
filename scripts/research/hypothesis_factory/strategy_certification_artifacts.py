@@ -109,7 +109,7 @@ def shape_key(row: dict[str, Any]) -> str:
         str(row.get("direction", "")).upper(),
         str(row.get("window_minutes", "")),
         filters,
-        str(row.get("exit_profile", row.get("exit", ""))).lower(),
+        str(row.get("exit_rule", row.get("exit_profile", row.get("exit", "")))).lower(),
     ]
     return "|".join(fields)
 
@@ -121,6 +121,9 @@ def candidate_rejection_reasons(
     min_net_expectancy_bps: float,
     min_profit_factor: float,
     max_drawdown_bps_abs: float,
+    min_sessions_traded: int,
+    max_top_session_trade_share: float,
+    max_top_session_abs_pnl_share: float,
     duplicate_shape: bool,
 ) -> list[str]:
     reasons: list[str] = []
@@ -128,12 +131,18 @@ def candidate_rejection_reasons(
     net = to_float(row.get("net_expectancy_bps"))
     pf = to_float(row.get("profit_factor"))
     drawdown = abs(to_float(row.get("max_drawdown_bps")))
+    sessions_traded = to_int(row.get("sessions_traded"))
+    top_session_trade_share = to_float(row.get("top_session_trade_share"))
+    top_session_abs_pnl_share = to_float(row.get("top_session_abs_pnl_share"))
     fallback_used = to_bool(row.get("fallback_execution_data_used"))
     broker_allowed = to_bool(row.get("broker_actions_allowed"))
     runtime = str(row.get("runtime_authority", "")).upper()
+    unsupported_exit = str(row.get("screen_rejection_reason", "")).upper() == "UNSUPPORTED_EXIT_RULE"
 
     if duplicate_shape:
         reasons.append("duplicate_shape")
+    if unsupported_exit:
+        reasons.append("unsupported_exit_rule")
     if trades < min_trades:
         reasons.append("trades_below_threshold")
     if net < min_net_expectancy_bps:
@@ -142,6 +151,12 @@ def candidate_rejection_reasons(
         reasons.append("profit_factor_below_threshold")
     if drawdown > max_drawdown_bps_abs:
         reasons.append("drawdown_too_high")
+    if sessions_traded < min_sessions_traded:
+        reasons.append("sessions_below_threshold")
+    if top_session_trade_share > max_top_session_trade_share:
+        reasons.append("trade_concentration_too_high")
+    if top_session_abs_pnl_share > max_top_session_abs_pnl_share:
+        reasons.append("pnl_concentration_too_high")
     if fallback_used:
         reasons.append("fallback_data_used")
     if broker_allowed:
@@ -159,6 +174,9 @@ def annotate_candidates(
     min_net_expectancy_bps: float,
     min_profit_factor: float,
     max_drawdown_bps_abs: float,
+    min_sessions_traded: int = 10,
+    max_top_session_trade_share: float = 0.25,
+    max_top_session_abs_pnl_share: float = 0.35,
 ) -> list[dict[str, Any]]:
     indexed: list[dict[str, Any]] = []
     best_by_shape: dict[str, tuple[int, float]] = {}
@@ -182,6 +200,9 @@ def annotate_candidates(
             min_net_expectancy_bps=min_net_expectancy_bps,
             min_profit_factor=min_profit_factor,
             max_drawdown_bps_abs=max_drawdown_bps_abs,
+            min_sessions_traded=min_sessions_traded,
+            max_top_session_trade_share=max_top_session_trade_share,
+            max_top_session_abs_pnl_share=max_top_session_abs_pnl_share,
             duplicate_shape=duplicate,
         )
         out = dict(row)
