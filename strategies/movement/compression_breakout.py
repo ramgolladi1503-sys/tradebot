@@ -1,15 +1,15 @@
 """Compression Breakout movement strategy.
 
-Captures expansion after a tight range/ATR compression. This module emits
-read-only StrategyCandidate objects only. It does not call brokers, submit
-orders, alter execution gates, touch depth subscriptions, or tune live trading.
+A candidate is emitted only when a completed, strictly pre-decision bar window
+proves compression and the current observation subsequently breaks that frozen
+range. Snapshot-only compression assertions are not accepted.
 """
-
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
 from core.strategy_parameter_profiles import RuntimeProfileResolution, resolve_required_profile_parameters
+from strategies.movement._temporal_evidence import compression_window
 from strategies.movement._utils import (
     block_on_required_fields,
     clamp_score,
@@ -29,21 +29,12 @@ EMBEDDED_PROFILE_DEFAULTS = {
     "MIN_COMPRESSION_SCORE": 0.5,
     "MIN_VWAP_ALIGNMENT_PCT": 0.0004,
 }
-REQUIRED_PROFILE_KEYS = (
-    "MAX_ATR_RATIO",
-    "MAX_RANGE_WIDTH_PCT",
-    "MIN_BREAKOUT_DISTANCE_PCT",
-    "MIN_COMPRESSION_SCORE",
-    "MIN_VWAP_ALIGNMENT_PCT",
-)
+REQUIRED_PROFILE_KEYS = tuple(EMBEDDED_PROFILE_DEFAULTS)
+COMPRESSION_LOOKBACK_BARS = 6
 
 
-def generate_compression_breakout_candidates(
-    ctx: StrategyContext,
-    regime: MovementRegimeResult,
-) -> tuple[StrategyCandidate, ...]:
-    """Generate CALL/PUT candidates only after compression break evidence."""
-
+def generate_compression_breakout_candidates(ctx: StrategyContext, regime: MovementRegimeResult) -> tuple[StrategyCandidate, ...]:
+    """Require completed-bar compression first, then a later current-price breakout."""
     profile = resolve_required_profile_parameters(STRATEGY_ID, REQUIRED_PROFILE_KEYS)
     if not profile.is_valid:
         return ()
@@ -52,109 +43,58 @@ def generate_compression_breakout_candidates(
     min_breakout_distance_pct = float(params["MIN_BREAKOUT_DISTANCE_PCT"])
     min_vwap_alignment_pct = float(params["MIN_VWAP_ALIGNMENT_PCT"])
 
-    spot = safe_float(ctx.spot_ltp)
-    vwap = safe_float(ctx.vwap)
     if block_on_required_fields(
         STRATEGY_ID,
         reason="missing_required_thesis_evidence",
-        field_specs=(
-            ("spot_ltp", ctx.spot_ltp, "positive"),
-            ("vwap", ctx.vwap, "positive"),
-        ),
+        field_specs=(("spot_ltp", ctx.spot_ltp, "positive"), ("vwap", ctx.vwap, "positive"), ("atr_short", ctx.atr_short, "positive"), ("atr_long", ctx.atr_long, "positive")),
     ):
         return ()
-
-    compression_missing = block_on_required_fields(
-        STRATEGY_ID,
-        reason="missing_required_thesis_evidence",
-        field_specs=(
-            ("range_width_pct", ctx.range_width_pct, "finite"),
-            ("atr_short", ctx.atr_short, "positive"),
-            ("atr_long", ctx.atr_long, "positive"),
-        ),
-    )
-    compression_score = _compression_evidence_score(ctx, regime, params)
-    if compression_score < min_compression_score:
-        if compression_missing:
-            return ()
+    spot = safe_float(ctx.spot_ltp)
+    vwap = safe_float(ctx.vwap)
+    if spot is None or vwap is None:
         return ()
 
-    candidates: list[StrategyCandidate] = []
-    upper_level = _upper_breakout_level(ctx)
-    lower_level = _lower_breakout_level(ctx)
+    temporal = compression_window(ctx, lookback=COMPRESSION_LOOKBACK_BARS)
+    if temporal is None:
+        return ()
+    upper_level, lower_level, completed_range_width_pct = temporal
+    compression_score = _compression_evidence_score(completed_range_width_pct, ctx, regime, params)
+    if compression_score < min_compression_score:
+        return ()
+
     vwap_move = signed_pct_distance(spot, vwap)
-
-    if upper_level is not None and vwap_move is not None:
-        breakout_distance = (spot - upper_level) / abs(upper_level)
-        if (
-            breakout_distance >= min_breakout_distance_pct
-            and vwap_move >= min_vwap_alignment_pct
-        ):
-            candidates.append(
-                _build_candidate(
-                    ctx,
-                    regime,
-                    profile,
-                    "BUY_CALL",
-                    compression_score,
-                    breakout_distance,
-                    abs(vwap_move),
-                    upper_level,
-                )
-            )
-
-    if lower_level is not None and vwap_move is not None:
-        breakout_distance = (lower_level - spot) / abs(lower_level)
-        if (
-            breakout_distance >= min_breakout_distance_pct
-            and vwap_move <= -min_vwap_alignment_pct
-        ):
-            candidates.append(
-                _build_candidate(
-                    ctx,
-                    regime,
-                    profile,
-                    "BUY_PUT",
-                    compression_score,
-                    breakout_distance,
-                    abs(vwap_move),
-                    lower_level,
-                )
-            )
-
+    if vwap_move is None:
+        return ()
+    candidates: list[StrategyCandidate] = []
+    upside = (spot - upper_level) / abs(upper_level)
+    if upside >= min_breakout_distance_pct and vwap_move >= min_vwap_alignment_pct:
+        candidates.append(_build_candidate(ctx, regime, profile, "BUY_CALL", compression_score, upside, abs(vwap_move), upper_level, lower_level, completed_range_width_pct))
+    downside = (lower_level - spot) / abs(lower_level)
+    if downside >= min_breakout_distance_pct and vwap_move <= -min_vwap_alignment_pct:
+        candidates.append(_build_candidate(ctx, regime, profile, "BUY_PUT", compression_score, downside, abs(vwap_move), lower_level, upper_level, completed_range_width_pct))
     return tuple(candidates)
 
 
-def _build_candidate(
-    ctx: StrategyContext,
-    regime: MovementRegimeResult,
-    profile: RuntimeProfileResolution,
-    direction: str,
-    compression_score: float,
-    breakout_distance: float,
-    vwap_alignment: float,
-    breakout_level: float,
-) -> StrategyCandidate:
-
+def _build_candidate(ctx, regime, profile: RuntimeProfileResolution, direction, compression_score, breakout_distance, vwap_alignment, breakout_level, opposite_level, completed_range_width_pct):
     params = dict(profile.parameters)
-    min_breakout_distance_pct = float(params["MIN_BREAKOUT_DISTANCE_PCT"])
-    min_vwap_alignment_pct = float(params["MIN_VWAP_ALIGNMENT_PCT"])
     side = side_evidence(ctx, direction)
     price_structure_score = clamp_score(
         0.45 * compression_score
-        + 0.35
-        * ratio_score(breakout_distance, start=min_breakout_distance_pct, full=0.006)
-        + 0.20 * ratio_score(vwap_alignment, start=min_vwap_alignment_pct, full=0.004)
+        + 0.35 * ratio_score(breakout_distance, start=float(params["MIN_BREAKOUT_DISTANCE_PCT"]), full=0.006)
+        + 0.20 * ratio_score(vwap_alignment, start=float(params["MIN_VWAP_ALIGNMENT_PCT"]), full=0.004)
     )
     evidence = {
         "spot_ltp": ctx.spot_ltp,
         "vwap": ctx.vwap,
-        "range_width_pct": ctx.range_width_pct,
+        "completed_bar_history": True,
+        "compression_lookback_bars": COMPRESSION_LOOKBACK_BARS,
+        "completed_range_width_pct": completed_range_width_pct,
         "atr_short": ctx.atr_short,
         "atr_long": ctx.atr_long,
         "atr_short_long_ratio": _atr_ratio(ctx),
         "compression_score": compression_score,
         "breakout_level": breakout_level,
+        "opposite_range_level": opposite_level,
         "breakout_distance_pct": breakout_distance,
         "vwap_alignment_abs_pct": vwap_alignment,
         "option_ltp": side.option_ltp,
@@ -163,40 +103,26 @@ def _build_candidate(
         "depth": side.depth,
     }
     return make_candidate(
-        ctx=ctx,
-        regime=regime,
-        strategy_id=STRATEGY_ID,
-        movement_type=MOVEMENT_TYPE,
-        direction=direction,
-        price_structure_score=price_structure_score,
-        side=side,
-        entry_trigger="compression_range_breakout_release",
-        invalid_if="price_returns_inside_compression_range",
-        rank_reason="range and ATR compression released into a directional breakout",
-        evidence=evidence,
-        warnings=(),
-        confluence_tags=("compression", "range_breakout"),
-        strategy_version="v1",
-        params_used=params,
-        params_hash=profile.parameter_hash,
-        promotion_state="ADVISORY_ONLY",
+        ctx=ctx, regime=regime, strategy_id=STRATEGY_ID, movement_type=MOVEMENT_TYPE,
+        direction=direction, price_structure_score=price_structure_score, side=side,
+        entry_trigger="completed_compression_window_then_later_range_breakout",
+        invalid_if="price_returns_inside_frozen_compression_range",
+        rank_reason="strictly prior completed bars compressed before a later directional release",
+        evidence=evidence, warnings=(), confluence_tags=("compression", "range_breakout", "completed_bar_history"),
+        strategy_version="v1", params_used=params, params_hash=profile.parameter_hash, promotion_state="ADVISORY_ONLY",
     )
 
 
-def _compression_evidence_score(
-    ctx: StrategyContext,
-    regime: MovementRegimeResult,
-    params: dict[str, object],
-) -> float:
+def _compression_evidence_score(completed_range_width_pct: float, ctx: StrategyContext, regime: MovementRegimeResult, params: dict[str, object]) -> float:
     max_range_width_pct = float(params["MAX_RANGE_WIDTH_PCT"])
     max_atr_ratio = float(params["MAX_ATR_RATIO"])
-    range_width = safe_float(ctx.range_width_pct)
     atr_ratio = _atr_ratio(ctx)
-    if range_width is None or atr_ratio is None:
+    if atr_ratio is None or completed_range_width_pct < 0:
         return 0.0
-    parts: list[float] = []
-    parts.append(clamp_score((max_range_width_pct - range_width) / max_range_width_pct))
-    parts.append(clamp_score((max_atr_ratio - atr_ratio) / max_atr_ratio))
+    parts = [
+        clamp_score((max_range_width_pct - completed_range_width_pct) / max_range_width_pct),
+        clamp_score((max_atr_ratio - atr_ratio) / max_atr_ratio),
+    ]
     regime_score = safe_float(regime.scores.get("COMPRESSION"))
     if regime_score is not None:
         parts.append(regime_score)
@@ -209,22 +135,6 @@ def _atr_ratio(ctx: StrategyContext) -> float | None:
     if atr_short is None or atr_long is None or atr_long <= 0:
         return None
     return atr_short / atr_long
-
-
-def _upper_breakout_level(ctx: StrategyContext) -> float | None:
-    for value in (ctx.nearest_resistance, ctx.orb_high, ctx.day_high):
-        level = safe_float(value)
-        if level is not None and level > 0:
-            return level
-    return None
-
-
-def _lower_breakout_level(ctx: StrategyContext) -> float | None:
-    for value in (ctx.nearest_support, ctx.orb_low, ctx.day_low):
-        level = safe_float(value)
-        if level is not None and level > 0:
-            return level
-    return None
 
 
 __all__ = ["STRATEGY_ID", "MOVEMENT_TYPE", "generate_compression_breakout_candidates"]
