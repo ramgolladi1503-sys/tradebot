@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,10 +19,19 @@ HERE = Path(__file__).resolve().parent
 
 def load_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
-    spec.loader.exec_module(mod)
+    mod = importlib.util.module_from_spec(spec)
+    # Python 3.12 dataclasses inspect sys.modules during class processing.
+    # Register the module before execution so dynamically imported dataclasses
+    # resolve their module namespace correctly.
+    sys.modules[name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        sys.modules.pop(name, None)
+        raise
     return mod
+
 
 hf = load_module("hypothesis_factory", HERE / "hypothesis_factory.py")
 
