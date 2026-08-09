@@ -74,8 +74,11 @@ def validate_trusted_population(*,queue_repo:Path,manifest_path:Path|str,manifes
   rh=_run(queue_repo,'log','--diff-filter=A','--format=%H',QUEUE_REF,'--',req_rel)
   rcommits=[x for x in rh.stdout.splitlines() if x.strip()] if rh.returncode==0 else []
   if len(rcommits)!=1:e.append(f'POPULATION_TRUST_REQUEST_{i}_ORIGIN_AMBIGUOUS');continue
-  anc=_run(queue_repo,'merge-base','--is-ancestor',freeze,rcommits[0])
-  if anc.returncode!=0:e.append(f'POPULATION_REQUEST_{i}_PREDATES_FREEZE')
+  # Population identity and request payload must already exist when the
+  # population manifest is frozen. Therefore the request origin must be an
+  # ancestor of (or the same commit as) the manifest freeze, never a descendant.
+  anc=_run(queue_repo,'merge-base','--is-ancestor',rcommits[0],freeze)
+  if anc.returncode!=0:e.append(f'POPULATION_REQUEST_{i}_POSTDATES_FREEZE')
  return sorted(set(e))
 
 def load_exact_receipts(*,queue_repo:Path,manifest:dict)->tuple[dict,list[str]]:
