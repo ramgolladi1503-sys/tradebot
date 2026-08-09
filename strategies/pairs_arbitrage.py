@@ -1,7 +1,8 @@
 """Pairs Trading Arbitrage Strategy implementation.
 
-The implementation is fail-closed on stale legs, missing aligned history, and
-unavailable stationarity evidence. It never substitutes a mock ADF pass.
+The implementation is fail-closed on stale legs, missing aligned history,
+unavailable stationarity evidence, and missing cross-asset health truth. It never
+substitutes a mock ADF pass.
 """
 
 from core.regime_router import resolve_strategy_regime
@@ -30,6 +31,19 @@ def _fresh_leg(age, max_age):
     return np.isfinite(age) and np.isfinite(max_age) and 0.0 <= age <= max_age
 
 
+def _cross_asset_health_ok(value):
+    """Accept only explicit healthy truth; missing/ambiguous values fail closed."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, dict):
+        for key in ("healthy", "ok", "passed", "valid"):
+            if key in value:
+                return bool(value.get(key))
+        return False
+    text = str(value or "").strip().upper()
+    return text in {"HEALTHY", "OK", "PASS", "PASSED", "VALID", "TRUE", "1"}
+
+
 def generate_signal(
     price_a,
     price_b,
@@ -42,13 +56,17 @@ def generate_signal(
     leg_a_age_sec=None,
     leg_b_age_sec=None,
     max_leg_age_sec=5.0,
+    cross_asset_health=None,
     **kwargs,
 ):
-    """Pairs signal with explicit spread, hedge-ratio, stationarity and freshness truth."""
+    """Pairs signal with explicit spread, beta, stationarity, freshness and health truth."""
     _update_debug(debug_stats, considered=1)
 
     if price_a is None or price_b is None:
         _update_debug(debug_stats, rejected=1, reason="missing_prices")
+        return None
+    if not _cross_asset_health_ok(cross_asset_health):
+        _update_debug(debug_stats, rejected=1, reason="cross_asset_health_unavailable_or_unhealthy")
         return None
     if not _fresh_leg(leg_a_age_sec, max_leg_age_sec) or not _fresh_leg(leg_b_age_sec, max_leg_age_sec):
         _update_debug(debug_stats, rejected=1, reason="stale_or_missing_leg_freshness")
@@ -122,6 +140,7 @@ def generate_signal(
         "setup_type": "STATISTICAL_ARBITRAGE",
         "regime_path": regime_name,
         "hedge_ratio": round(float(hedge_ratio), 4),
+        "cross_asset_health": {"passed": True},
         "beta_truth": round(float(hedge_ratio), 6),
         "cointegration_truth": {"adf_pvalue": adf_pvalue, "passed": True},
         "spread_truth": {"zscore": spread_z, "current_spread": float(current_spread)},
