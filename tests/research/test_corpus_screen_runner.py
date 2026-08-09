@@ -11,6 +11,21 @@ sys.modules[spec.name] = runner
 spec.loader.exec_module(runner)
 
 
+def test_plain_underlying_ohlc_preserves_raw_instrument_identity(tmp_path):
+    source = tmp_path / "underlying.csv"
+    normalized = runner.normalize_ohlc_row({
+        "timestamp": "2026-01-01T09:15:00",
+        "instrument": "BANKNIFTY",
+        "open": "100",
+        "high": "102",
+        "low": "99",
+        "close": "101",
+    }, source)
+    assert normalized is not None
+    assert normalized["instrument"] == "BANKNIFTY"
+    assert normalized["raw_instrument"] == "BANKNIFTY"
+
+
 def test_corpus_runner_writes_manifest_and_research_only_outputs(tmp_path):
     corpus = tmp_path / "corpus.csv"
     corpus.write_text(
