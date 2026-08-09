@@ -161,7 +161,6 @@ def main(argv=None) -> int:
                 append_jsonl(ledger_path, {"event":"GENERATION_CLOSED","generation_id":gid,"reason":"NO_DEVELOPMENT_SURVIVORS","holdout_accessed":False})
                 continue
 
-            # Validation is allowed only if explicitly registered before this controller run.
             val_cmd, val_out_rel = stage_descriptor(gen, "validation")
             if not val_cmd or not val_out_rel:
                 state.update(status="BLOCKED_MISSING_STAGE_IMPLEMENTATION", reason=f"{gid}:validation_stage_missing", generations_processed=processed, total_frozen_configurations_tested=total_configs, current_stage="validation")
@@ -186,7 +185,6 @@ def main(argv=None) -> int:
                 append_jsonl(ledger_path, {"event":"GENERATION_CLOSED","generation_id":gid,"reason":"NO_VALIDATION_SURVIVORS","holdout_accessed":False})
                 continue
 
-            # Robustness and holdout are never inferred. They must be registered in policy before execution.
             for stage in ("robustness", "holdout", "certification"):
                 cmd, out_rel = stage_descriptor(gen, stage)
                 if not cmd or not out_rel:
@@ -212,12 +210,10 @@ def main(argv=None) -> int:
                     processed += 1
                     append_jsonl(ledger_path, {"event":"GENERATION_CLOSED","generation_id":gid,"reason":"HOLDOUT_FAIL"})
                     break
-                if stage == "certification":
-                    if payload.get("verdict") in ("CERTIFIED", "STRUCTURAL_EDGE_CANDIDATE_FOUND"):
-                        state.update(status="STRUCTURAL_EDGE_CANDIDATE_FOUND", reason="CERTIFICATION_STAGE_PASS", generations_processed=processed+1, total_frozen_configurations_tested=total_configs, current_stage="complete")
-                        write_state(state_path, state)
-                        return 0
-                    processed += 1
+                if stage == "certification" and payload.get("verdict") in ("CERTIFIED", "STRUCTURAL_EDGE_CANDIDATE_FOUND"):
+                    state.update(status="STRUCTURAL_EDGE_CANDIDATE_FOUND", reason="CERTIFICATION_STAGE_PASS", generations_processed=processed+1, total_frozen_configurations_tested=total_configs, current_stage="complete")
+                    write_state(state_path, state)
+                    return 0
             else:
                 processed += 1
 
