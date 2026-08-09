@@ -50,6 +50,7 @@ TEMPORAL_POLICIES: dict[str, tuple[str, ...]] = {
 }
 
 META_FAMILIES = {"ENSEMBLE", "PRO_STRATEGY"}
+DEFAULT_REQUIRED_EVIDENCE = ("market_state", "regime_state", "feed_health_truth", "quote_truth")
 
 
 @dataclass(frozen=True)
@@ -63,7 +64,6 @@ class RegistrySpec:
 
 
 def git_show(root: Path, repo_path: str) -> str | None:
-    """Read a text path from current HEAD, preserving sparse checkout."""
     proc = subprocess.run(
         ["git", "-C", str(root), "show", f"HEAD:{repo_path}"],
         text=True,
@@ -96,6 +96,35 @@ def _literal(node: ast.AST, default: Any = None) -> Any:
         return default
 
 
+def _const_tuple_from_module(tree: ast.Module, name: str) -> tuple[str, ...] | None:
+    for node in tree.body:
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets: list[ast.AST] = []
+            value: ast.AST | None = None
+            if isinstance(node, ast.Assign):
+                targets = list(node.targets)
+                value = node.value
+            else:
+                targets = [node.target]
+                value = node.value
+            if any(isinstance(t, ast.Name) and t.id == name for t in targets) and value is not None:
+                raw = _literal(value, None)
+                if isinstance(raw, (list, tuple)) and all(isinstance(x, str) for x in raw):
+                    return tuple(raw)
+    return None
+
+
+def _resolve_string_tuple(node: ast.AST, tree: ast.Module) -> tuple[str, ...] | None:
+    raw = _literal(node, None)
+    if isinstance(raw, (list, tuple)) and all(isinstance(x, str) for x in raw):
+        return tuple(raw)
+    if isinstance(node, ast.Name):
+        if node.id == "_DEFAULT_REQUIRED_EVIDENCE_KEYS":
+            return _const_tuple_from_module(tree, node.id) or DEFAULT_REQUIRED_EVIDENCE
+        return _const_tuple_from_module(tree, node.id)
+    return None
+
+
 def load_registry_specs(root: Path) -> tuple[RegistrySpec, ...]:
     source = read_repo_text(root, "core/strategy_spec.py")
     if source is None:
@@ -111,10 +140,7 @@ def load_registry_specs(root: Path) -> tuple[RegistrySpec, ...]:
 
     calls: list[ast.Call] = []
     for node in ast.walk(build):
-        if not isinstance(node, ast.Call):
-            continue
-        fn = node.func
-        if isinstance(fn, ast.Name) and fn.id == "StrategySpec":
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "StrategySpec":
             calls.append(node)
 
     specs: list[RegistrySpec] = []
@@ -127,12 +153,12 @@ def load_registry_specs(root: Path) -> tuple[RegistrySpec, ...]:
         family = family_node.id.removeprefix("FAMILY_") if isinstance(family_node, ast.Name) else str(_literal(family_node, ""))
         module_path = _literal(call.args[3])
         callable_name = _literal(call.args[4])
-        required: tuple[str, ...] = ("market_state", "regime_state", "feed_health_truth", "quote_truth")
+        required: tuple[str, ...] = _const_tuple_from_module(tree, "_DEFAULT_REQUIRED_EVIDENCE_KEYS") or DEFAULT_REQUIRED_EVIDENCE
         for kw in call.keywords:
             if kw.arg == "required_evidence_keys":
-                raw = _literal(kw.value, ())
-                if isinstance(raw, (list, tuple)):
-                    required = tuple(str(x) for x in raw)
+                resolved = _resolve_string_tuple(kw.value, tree)
+                if resolved is not None:
+                    required = resolved
         if all(isinstance(x, str) and x for x in (strategy_id, name, family, module_path, callable_name)):
             specs.append(RegistrySpec(strategy_id, name, family, module_path, callable_name, required))
     if not specs:
@@ -190,13 +216,10 @@ def audit_spec(root: Path, spec: RegistrySpec) -> dict[str, Any]:
     if bad_calls:
         findings.append({"severity":"CRITICAL","code":"BROKER_OR_ORDER_CALL_PRESENT","detail":",".join(bad_calls)})
 
-    semantic_missing=[]
     for key in spec.required_evidence_keys:
         markers = SEMANTIC_MARKERS.get(key)
         if markers and not marker_present(source, markers):
-            semantic_missing.append(key)
-    for key in semantic_missing:
-        findings.append({"severity":"MAJOR","code":"REQUIRED_EVIDENCE_NOT_CONSUMED","detail":key})
+            findings.append({"severity":"MAJOR","code":"REQUIRED_EVIDENCE_NOT_CONSUMED","detail":key})
 
     temporal_policy = TEMPORAL_POLICIES.get(spec.strategy_id)
     if temporal_policy:
@@ -241,7 +264,7 @@ def run(repo_root: Path) -> dict[str, Any]:
     for r in rows:
         counts[r["verdict"]] = counts.get(r["verdict"],0)+1
     return {
-        "schema_version":"tradebot-strategy-structural-audit-v2",
+        "schema_version":"tradebot-strategy-structural-audit-v3",
         "status":"STRUCTURAL_AUDIT_COMPLETE_STATIC_PHASE",
         "registry_source":"HEAD:core/strategy_spec.py",
         "sparse_checkout_safe":True,
