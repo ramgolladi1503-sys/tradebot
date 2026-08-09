@@ -9,6 +9,7 @@ from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_can
 from tests.vwap_reclaim_test_support import EVALUATION_CUTOFF, bearish_history, bullish_history
 
 IST = ZoneInfo("Asia/Kolkata")
+TRAP_DECISION_EPOCH = datetime(2026, 7, 14, 9, 19, tzinfo=IST).timestamp()
 
 
 def _regime(primary="TREND_UP", **scores):
@@ -132,7 +133,7 @@ def test_vwap_reclaim_blocks_bad_quote_quality_but_keeps_candidate_visible():
 
 
 def test_failed_breakout_trap_generates_put_only_after_completed_bull_trap_reentry():
-    ctx = _base_context(spot_ltp=22645.0, orb_high=22660.0, ce_premium_change=0.0, pe_premium_change=12.0, completed_bar_history=_bull_trap_history())
+    ctx = _base_context(ts_epoch=TRAP_DECISION_EPOCH, spot_ltp=22645.0, orb_high=22660.0, ce_premium_change=0.0, pe_premium_change=12.0, completed_bar_history=_bull_trap_history())
     candidates = generate_failed_breakout_trap_candidates(ctx, _regime(primary="TRAP_RISK", TRAP_RISK=0.75))
     assert len(candidates) == 1
     candidate = candidates[0]
@@ -143,7 +144,7 @@ def test_failed_breakout_trap_generates_put_only_after_completed_bull_trap_reent
 
 
 def test_failed_breakout_trap_generates_call_only_after_completed_bear_trap_reentry():
-    ctx = _base_context(spot_ltp=22505.0, orb_low=22490.0, nearest_support=22480.0, ce_premium_change=12.0, pe_premium_change=0.0, completed_bar_history=_bear_trap_history())
+    ctx = _base_context(ts_epoch=TRAP_DECISION_EPOCH, spot_ltp=22505.0, orb_low=22490.0, nearest_support=22480.0, ce_premium_change=12.0, pe_premium_change=0.0, completed_bar_history=_bear_trap_history())
     candidates = generate_failed_breakout_trap_candidates(ctx, _regime(primary="TRAP_RISK", TRAP_RISK=0.75))
     assert len(candidates) == 1
     candidate = candidates[0]
@@ -153,21 +154,26 @@ def test_failed_breakout_trap_generates_call_only_after_completed_bear_trap_reen
     assert candidate.evidence["reentry_index"] > candidate.evidence["break_index"]
 
 
+def test_failed_breakout_same_timestamp_bar_is_not_causal_evidence():
+    ctx = _base_context(ts_epoch=EVALUATION_CUTOFF, spot_ltp=22645.0, orb_high=22660.0, ce_premium_change=0.0, pe_premium_change=12.0, completed_bar_history=_bull_trap_history())
+    assert generate_failed_breakout_trap_candidates(ctx, _regime(primary="TRAP_RISK", TRAP_RISK=0.8)) == ()
+
+
 def test_failed_breakout_metadata_alone_and_missing_option_evidence_cannot_trigger():
-    metadata_only = _base_context(spot_ltp=22645.0, orb_high=22660.0, completed_bar_history=bullish_history(), metadata={"previous_break_high": 22685.0, "price_reentered_range": True}, ce_premium_change=0.0, pe_premium_change=12.0)
+    metadata_only = _base_context(ts_epoch=TRAP_DECISION_EPOCH, spot_ltp=22645.0, orb_high=22660.0, completed_bar_history=bullish_history(), metadata={"previous_break_high": 22685.0, "price_reentered_range": True}, ce_premium_change=0.0, pe_premium_change=12.0)
     assert generate_failed_breakout_trap_candidates(metadata_only, _regime(primary="TRAP_RISK", TRAP_RISK=0.8)) == ()
-    missing_option = _base_context(spot_ltp=22645.0, orb_high=22660.0, completed_bar_history=_bull_trap_history(), ce_premium_change=None, pe_premium_change=12.0)
+    missing_option = _base_context(ts_epoch=TRAP_DECISION_EPOCH, spot_ltp=22645.0, orb_high=22660.0, completed_bar_history=_bull_trap_history(), ce_premium_change=None, pe_premium_change=12.0)
     assert generate_failed_breakout_trap_candidates(missing_option, _regime(primary="TRAP_RISK", TRAP_RISK=0.8)) == ()
 
 
 def test_failed_breakout_trap_rejects_too_far_or_missing_core():
-    too_far = _base_context(spot_ltp=22450.0, orb_high=22660.0, completed_bar_history=_bull_trap_history(), ce_premium_change=0.0, pe_premium_change=12.0)
+    too_far = _base_context(ts_epoch=TRAP_DECISION_EPOCH, spot_ltp=22450.0, orb_high=22660.0, completed_bar_history=_bull_trap_history(), ce_premium_change=0.0, pe_premium_change=12.0)
     assert generate_failed_breakout_trap_candidates(too_far, _regime(TRAP_RISK=0.8)) == ()
-    assert generate_failed_breakout_trap_candidates(_base_context(spot_ltp=None, completed_bar_history=_bull_trap_history()), _regime(TRAP_RISK=0.8)) == ()
+    assert generate_failed_breakout_trap_candidates(_base_context(ts_epoch=TRAP_DECISION_EPOCH, spot_ltp=None, completed_bar_history=_bull_trap_history()), _regime(TRAP_RISK=0.8)) == ()
 
 
 def test_failed_breakout_trap_bad_quote_remains_non_executable_raw_candidate():
-    ctx = _base_context(spot_ltp=22645.0, orb_high=22660.0, ce_premium_change=0.0, pe_premium_change=12.0, pe_spread_pct=8.0, option_ltp_age_sec=8.0, fallback_used=True, quote_source="recovered_fallback", completed_bar_history=_bull_trap_history())
+    ctx = _base_context(ts_epoch=TRAP_DECISION_EPOCH, spot_ltp=22645.0, orb_high=22660.0, ce_premium_change=0.0, pe_premium_change=12.0, pe_spread_pct=8.0, option_ltp_age_sec=8.0, fallback_used=True, quote_source="recovered_fallback", completed_bar_history=_bull_trap_history())
     candidates = generate_failed_breakout_trap_candidates(ctx, _regime(primary="TRAP_RISK", TRAP_RISK=0.8))
     summary = build_candidate_pool(candidates).summary()
     assert summary.total_count == 1 and summary.executable_eligible_count == 0
