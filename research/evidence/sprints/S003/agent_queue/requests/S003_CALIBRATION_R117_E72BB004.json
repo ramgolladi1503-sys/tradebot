@@ -1,0 +1,12 @@
+{
+  "backend": "codex",
+  "candidate_sha": "e72bb00401dd05d2935ac634a82419b7c44d2426",
+  "created_at": "2026-08-09",
+  "created_by": "mros-m8-autopilot",
+  "job_type": "reviewer",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_CALIBRATION_R117_E72BB004.md",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_CALIBRATION_R117_E72BB004.md",
+  "request_id": "S003_CALIBRATION_R117_E72BB004",
+  "role_id": "R117",
+  "schema_version": 1
+}
