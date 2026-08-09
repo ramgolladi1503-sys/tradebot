@@ -22,9 +22,16 @@ def _git(cwd:Path,*args:str):subprocess.check_call(['git',*args],cwd=cwd,stdout=
 def _write_json(p:Path,d):p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(d,sort_keys=True,indent=2)+'\n',encoding='utf-8')
 def _trusted_queue(head,rm,am,reviews,audits):
  td=tempfile.TemporaryDirectory(prefix='mros-cal-q-');q=Path(td.name);_git(q,'init');_git(q,'config','user.email','calibration@mros.local');_git(q,'config','user.name','MROS Calibration')
- rmp=QUEUE_ROOT/'manifests'/'S003_R001_REVIEW_POPULATION.json';amp=QUEUE_ROOT/'manifests'/'S003_A001_AUDIT_POPULATION.json';_write_json(q/rmp,rm);_write_json(q/amp,am);_git(q,'add','.');_git(q,'commit','-m','freeze calibration populations')
+ rmp=QUEUE_ROOT/'manifests'/'S003_R001_REVIEW_POPULATION.json';amp=QUEUE_ROOT/'manifests'/'S003_A001_AUDIT_POPULATION.json'
+ # Frozen population provenance requires request identity/path artifacts to
+ # exist at or before the manifest freeze commit. Stage requests first, then
+ # freeze manifests, then create execution receipts strictly after the freeze.
  for item,m in [(x,m) for x,m in zip(reviews,rm['members'])]+[(x,m) for x,m in zip(audits,am['members'])]:
-  req=QUEUE_ROOT/'requests'/Path(m['output_path']).name;_write_json(q/req,{'candidate_sha':head,'role_id':m['execution_role_id'],'packet_path':m['packet_path'],'output_path':m['output_path']});_write_json(q/Path(m['receipt_path']),receipt(item,head,'reviewer' if item['execution_role_id'].startswith('R') else 'auditor'))
+  req=QUEUE_ROOT/'requests'/Path(m['output_path']).name;_write_json(q/req,{'candidate_sha':head,'role_id':m['execution_role_id'],'packet_path':m['packet_path'],'output_path':m['output_path']})
+ _git(q,'add','.');_git(q,'commit','-m','stage calibration requests')
+ _write_json(q/rmp,rm);_write_json(q/amp,am);_git(q,'add','.');_git(q,'commit','-m','freeze calibration populations')
+ for item,m in [(x,m) for x,m in zip(reviews,rm['members'])]+[(x,m) for x,m in zip(audits,am['members'])]:
+  _write_json(q/Path(m['receipt_path']),receipt(item,head,'reviewer' if item['execution_role_id'].startswith('R') else 'auditor'))
  _git(q,'add','.');_git(q,'commit','-m','execute calibration populations');_git(q,'update-ref','refs/remotes/origin/automation/mros-agent-queue-v1','HEAD');return td,q,rmp,amp
 
 def main():
