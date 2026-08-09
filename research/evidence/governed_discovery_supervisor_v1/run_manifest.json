@@ -1,5 +1,5 @@
 {
-  "status": "DEVELOPMENT_SUPPORTED_TOO_MANY_REQUIRES_PRE_OUTCOME_NARROWING",
+  "status": "DEVELOPMENT_STRUCTURE_SUPPORTED",
   "locked_outcomes_accessed": false,
   "edge_claimed": false
 }

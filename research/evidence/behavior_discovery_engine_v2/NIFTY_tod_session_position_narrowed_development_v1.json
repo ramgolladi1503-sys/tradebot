@@ -1,0 +1,540 @@
+{
+  "schema_version": 1,
+  "runner_id": "TOD_SESSION_POSITION_DEVELOPMENT_OUTCOME_V1",
+  "search_family_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1",
+  "development_only": true,
+  "forward_outcomes_computed": true,
+  "forward_outcomes_scope": "development_sessions_only",
+  "locked_outcomes_accessed": false,
+  "edge_claimed": false,
+  "status": "DEVELOPMENT_STRUCTURE_SUPPORTED",
+  "supported_candidates": [
+    "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_UPSIDE_ESCAPE",
+    "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_FAILED_UPSIDE_ESCAPE"
+  ],
+  "candidate_summaries": [
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_MID_SESSION_EXPANSION",
+      "tod_bucket": "MID_SESSION",
+      "required_state": "EXPANSION",
+      "matches": 188,
+      "distinct_sessions": 159,
+      "ret3_bps": {
+        "n": 188,
+        "mean": -0.7218690608916715,
+        "median": -0.6475862873606131
+      },
+      "ret6_bps": {
+        "n": 188,
+        "mean": -0.7477783686390783,
+        "median": -1.5343204042178593
+      },
+      "ret12_bps": {
+        "n": 188,
+        "mean": -1.080561695309094,
+        "median": -0.29428724450775157
+      },
+      "ret18_bps": {
+        "n": 188,
+        "mean": -0.020052629742351488,
+        "median": -0.5815305421752459
+      },
+      "up_excursion_rate_20bps": 0.21808510638297873,
+      "down_excursion_rate_20bps": 0.2712765957446808,
+      "up_excursion_rate_30bps": 0.09042553191489362,
+      "down_excursion_rate_30bps": 0.12234042553191489,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_EXPANSION",
+      "tod_bucket": "PRE_CLOSE_30",
+      "required_state": "EXPANSION",
+      "matches": 364,
+      "distinct_sessions": 363,
+      "ret3_bps": {
+        "n": 364,
+        "mean": 1.4481612424546768,
+        "median": 3.193438362109058
+      },
+      "ret6_bps": {
+        "n": 364,
+        "mean": 1.1056345245235768,
+        "median": 1.1156532044531708
+      },
+      "ret12_bps": {
+        "n": 364,
+        "mean": -0.6358248274841942,
+        "median": 3.244601517218282
+      },
+      "ret18_bps": {
+        "n": 364,
+        "mean": -1.1192057746442559,
+        "median": 0.5791967104062934
+      },
+      "up_excursion_rate_20bps": 0.5851648351648352,
+      "down_excursion_rate_20bps": 0.510989010989011,
+      "up_excursion_rate_30bps": 0.4478021978021978,
+      "down_excursion_rate_30bps": 0.4010989010989011,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_MID_SESSION_DOWNSIDE_ESCAPE",
+      "tod_bucket": "MID_SESSION",
+      "required_state": "DOWNSIDE_ESCAPE",
+      "matches": 69,
+      "distinct_sessions": 66,
+      "ret3_bps": {
+        "n": 69,
+        "mean": -0.3771289708041049,
+        "median": -1.362259361207263
+      },
+      "ret6_bps": {
+        "n": 69,
+        "mean": 1.8941593822369878,
+        "median": 0.7862459377316888
+      },
+      "ret12_bps": {
+        "n": 69,
+        "mean": -0.10230371413497333,
+        "median": 0.6261424575071395
+      },
+      "ret18_bps": {
+        "n": 69,
+        "mean": 5.171947634284808,
+        "median": 2.145668406361434
+      },
+      "up_excursion_rate_20bps": 0.391304347826087,
+      "down_excursion_rate_20bps": 0.3333333333333333,
+      "up_excursion_rate_30bps": 0.18840579710144928,
+      "down_excursion_rate_30bps": 0.18840579710144928,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_MID_SESSION_FAILED_DOWNSIDE_ESCAPE",
+      "tod_bucket": "MID_SESSION",
+      "required_state": "FAILED_DOWNSIDE_ESCAPE",
+      "matches": 104,
+      "distinct_sessions": 98,
+      "ret3_bps": {
+        "n": 104,
+        "mean": -1.7001462905122282,
+        "median": -1.8023088308105617
+      },
+      "ret6_bps": {
+        "n": 104,
+        "mean": -1.5675818471859448,
+        "median": -1.8783307326347698
+      },
+      "ret12_bps": {
+        "n": 104,
+        "mean": -2.867453347914719,
+        "median": -1.4818340763045335
+      },
+      "ret18_bps": {
+        "n": 104,
+        "mean": 0.3881877295925673,
+        "median": -1.1462634981296294
+      },
+      "up_excursion_rate_20bps": 0.23076923076923078,
+      "down_excursion_rate_20bps": 0.3076923076923077,
+      "up_excursion_rate_30bps": 0.07692307692307693,
+      "down_excursion_rate_30bps": 0.125,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_MID_SESSION_UPSIDE_ESCAPE",
+      "tod_bucket": "MID_SESSION",
+      "required_state": "UPSIDE_ESCAPE",
+      "matches": 60,
+      "distinct_sessions": 58,
+      "ret3_bps": {
+        "n": 60,
+        "mean": -2.063321419912334,
+        "median": -1.4148184894696714
+      },
+      "ret6_bps": {
+        "n": 60,
+        "mean": -2.169706204452078,
+        "median": -1.33734666819596
+      },
+      "ret12_bps": {
+        "n": 60,
+        "mean": -4.8968747527016925,
+        "median": -2.441719589110214
+      },
+      "ret18_bps": {
+        "n": 60,
+        "mean": -1.529186037166711,
+        "median": -0.7971605152190531
+      },
+      "up_excursion_rate_20bps": 0.2833333333333333,
+      "down_excursion_rate_20bps": 0.4,
+      "up_excursion_rate_30bps": 0.11666666666666667,
+      "down_excursion_rate_30bps": 0.21666666666666667,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_FAILED_DOWNSIDE_ESCAPE",
+      "tod_bucket": "PRE_CLOSE_30",
+      "required_state": "FAILED_DOWNSIDE_ESCAPE",
+      "matches": 194,
+      "distinct_sessions": 194,
+      "ret3_bps": {
+        "n": 194,
+        "mean": 3.6357145736075536,
+        "median": 4.229887617528405
+      },
+      "ret6_bps": {
+        "n": 194,
+        "mean": 3.360828781586825,
+        "median": 1.2012280137774223
+      },
+      "ret12_bps": {
+        "n": 194,
+        "mean": 2.8918588977058075,
+        "median": 4.883233253933916
+      },
+      "ret18_bps": {
+        "n": 194,
+        "mean": 2.437314986138142,
+        "median": 4.240951541337745
+      },
+      "up_excursion_rate_20bps": 0.6185567010309279,
+      "down_excursion_rate_20bps": 0.5154639175257731,
+      "up_excursion_rate_30bps": 0.4845360824742268,
+      "down_excursion_rate_30bps": 0.4072164948453608,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_UPSIDE_ESCAPE",
+      "tod_bucket": "PRE_CLOSE_30",
+      "required_state": "UPSIDE_ESCAPE",
+      "matches": 127,
+      "distinct_sessions": 127,
+      "ret3_bps": {
+        "n": 127,
+        "mean": 7.152407062858983,
+        "median": 3.7532666396500325
+      },
+      "ret6_bps": {
+        "n": 127,
+        "mean": 6.673514934776444,
+        "median": 6.376596589172667
+      },
+      "ret12_bps": {
+        "n": 127,
+        "mean": 5.382850856430051,
+        "median": 5.931474522198332
+      },
+      "ret18_bps": {
+        "n": 127,
+        "mean": 6.848461844146888,
+        "median": 8.882763188218235
+      },
+      "up_excursion_rate_20bps": 0.6456692913385826,
+      "down_excursion_rate_20bps": 0.47244094488188976,
+      "up_excursion_rate_30bps": 0.5275590551181102,
+      "down_excursion_rate_30bps": 0.3858267716535433,
+      "inferred_direction": "UP",
+      "verdict": "DEVELOPMENT_STRUCTURE_SUPPORTED",
+      "reasons": []
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_DOWNSIDE_ESCAPE",
+      "tod_bucket": "PRE_CLOSE_30",
+      "required_state": "DOWNSIDE_ESCAPE",
+      "matches": 140,
+      "distinct_sessions": 140,
+      "ret3_bps": {
+        "n": 140,
+        "mean": 1.2045187819580019,
+        "median": 3.704525525243252
+      },
+      "ret6_bps": {
+        "n": 140,
+        "mean": 0.40660714746864385,
+        "median": 1.7680664551844583
+      },
+      "ret12_bps": {
+        "n": 140,
+        "mean": -0.6762427188732638,
+        "median": 4.435907085383883
+      },
+      "ret18_bps": {
+        "n": 140,
+        "mean": 0.135502897957924,
+        "median": 4.321507720126405
+      },
+      "up_excursion_rate_20bps": 0.6571428571428571,
+      "down_excursion_rate_20bps": 0.5214285714285715,
+      "up_excursion_rate_30bps": 0.5,
+      "down_excursion_rate_30bps": 0.4,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_FAILED_UPSIDE_ESCAPE",
+      "tod_bucket": "PRE_CLOSE_30",
+      "required_state": "FAILED_UPSIDE_ESCAPE",
+      "matches": 170,
+      "distinct_sessions": 170,
+      "ret3_bps": {
+        "n": 170,
+        "mean": 7.459596923148701,
+        "median": 5.665784940840357
+      },
+      "ret6_bps": {
+        "n": 170,
+        "mean": 6.747712505418266,
+        "median": 4.739692551999353
+      },
+      "ret12_bps": {
+        "n": 170,
+        "mean": 6.56687885021348,
+        "median": 8.651277461860785
+      },
+      "ret18_bps": {
+        "n": 170,
+        "mean": 7.087883861460518,
+        "median": 10.079149884435479
+      },
+      "up_excursion_rate_20bps": 0.6823529411764706,
+      "down_excursion_rate_20bps": 0.45294117647058824,
+      "up_excursion_rate_30bps": 0.5294117647058824,
+      "down_excursion_rate_30bps": 0.37058823529411766,
+      "inferred_direction": "UP",
+      "verdict": "DEVELOPMENT_STRUCTURE_SUPPORTED",
+      "reasons": []
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_60_EXPANSION",
+      "tod_bucket": "PRE_CLOSE_60",
+      "required_state": "EXPANSION",
+      "matches": 24,
+      "distinct_sessions": 24,
+      "ret3_bps": {
+        "n": 24,
+        "mean": -0.6453392375193694,
+        "median": 1.0791100045537405
+      },
+      "ret6_bps": {
+        "n": 24,
+        "mean": -0.9534922323275093,
+        "median": 0.33368309212744585
+      },
+      "ret12_bps": {
+        "n": 24,
+        "mean": 3.7651532123558766,
+        "median": 1.5645464638047724
+      },
+      "ret18_bps": {
+        "n": 24,
+        "mean": 6.207877366460011,
+        "median": -4.120719943740969
+      },
+      "up_excursion_rate_20bps": 0.4583333333333333,
+      "down_excursion_rate_20bps": 0.5416666666666666,
+      "up_excursion_rate_30bps": 0.3333333333333333,
+      "down_excursion_rate_30bps": 0.4166666666666667,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_60_FAILED_DOWNSIDE_ESCAPE",
+      "tod_bucket": "PRE_CLOSE_60",
+      "required_state": "FAILED_DOWNSIDE_ESCAPE",
+      "matches": 12,
+      "distinct_sessions": 12,
+      "ret3_bps": {
+        "n": 12,
+        "mean": -2.869892272503727,
+        "median": -1.046640317400871
+      },
+      "ret6_bps": {
+        "n": 12,
+        "mean": -2.073262138195068,
+        "median": -2.441353295352111
+      },
+      "ret12_bps": {
+        "n": 12,
+        "mean": 17.538877822149136,
+        "median": 27.665215835958044
+      },
+      "ret18_bps": {
+        "n": 12,
+        "mean": 13.99821509302096,
+        "median": 5.264389171807937
+      },
+      "up_excursion_rate_20bps": 0.6666666666666666,
+      "down_excursion_rate_20bps": 0.5,
+      "up_excursion_rate_30bps": 0.5833333333333334,
+      "down_excursion_rate_30bps": 0.3333333333333333,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL",
+        "MIN_DISTINCT_DEVELOPMENT_SESSIONS_FAIL",
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET6_RET12_SIGN_CONSISTENCY_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_MID_SESSION_FAILED_UPSIDE_ESCAPE",
+      "tod_bucket": "MID_SESSION",
+      "required_state": "FAILED_UPSIDE_ESCAPE",
+      "matches": 91,
+      "distinct_sessions": 85,
+      "ret3_bps": {
+        "n": 91,
+        "mean": -0.7702698623037593,
+        "median": -0.32494963280726985
+      },
+      "ret6_bps": {
+        "n": 91,
+        "mean": 0.14631865284264878,
+        "median": 1.339696568436466
+      },
+      "ret12_bps": {
+        "n": 91,
+        "mean": -1.8544398189460474,
+        "median": 0.46751234455078006
+      },
+      "ret18_bps": {
+        "n": 91,
+        "mean": -1.3121027841950665,
+        "median": 0.7396434918383044
+      },
+      "up_excursion_rate_20bps": 0.24175824175824176,
+      "down_excursion_rate_20bps": 0.3076923076923077,
+      "up_excursion_rate_30bps": 0.10989010989010989,
+      "down_excursion_rate_30bps": 0.14285714285714285,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_60_FAILED_UPSIDE_ESCAPE",
+      "tod_bucket": "PRE_CLOSE_60",
+      "required_state": "FAILED_UPSIDE_ESCAPE",
+      "matches": 13,
+      "distinct_sessions": 13,
+      "ret3_bps": {
+        "n": 13,
+        "mean": -2.6649643999756045,
+        "median": -2.5249236010216336
+      },
+      "ret6_bps": {
+        "n": 13,
+        "mean": 0.6124805913454435,
+        "median": 1.5492778208137103
+      },
+      "ret12_bps": {
+        "n": 13,
+        "mean": 6.998322582767106,
+        "median": 6.700015218323863
+      },
+      "ret18_bps": {
+        "n": 13,
+        "mean": 9.14390603669311,
+        "median": -4.150451905156061
+      },
+      "up_excursion_rate_20bps": 0.46153846153846156,
+      "down_excursion_rate_20bps": 0.5384615384615384,
+      "up_excursion_rate_30bps": 0.46153846153846156,
+      "down_excursion_rate_30bps": 0.46153846153846156,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL",
+        "MIN_DISTINCT_DEVELOPMENT_SESSIONS_FAIL",
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_60_UPSIDE_ESCAPE",
+      "tod_bucket": "PRE_CLOSE_60",
+      "required_state": "UPSIDE_ESCAPE",
+      "matches": 8,
+      "distinct_sessions": 8,
+      "ret3_bps": {
+        "n": 8,
+        "mean": 0.9611180864842195,
+        "median": 1.534983166426307
+      },
+      "ret6_bps": {
+        "n": 8,
+        "mean": 4.262133775071176,
+        "median": 4.889328319411801
+      },
+      "ret12_bps": {
+        "n": 8,
+        "mean": 22.76100717188173,
+        "median": 30.921450474759027
+      },
+      "ret18_bps": {
+        "n": 8,
+        "mean": 18.50937920405915,
+        "median": 11.770218876462346
+      },
+      "up_excursion_rate_20bps": 0.625,
+      "down_excursion_rate_20bps": 0.5,
+      "up_excursion_rate_30bps": 0.625,
+      "down_excursion_rate_30bps": 0.375,
+      "inferred_direction": "UP",
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL",
+        "MIN_DISTINCT_DEVELOPMENT_SESSIONS_FAIL"
+      ]
+    }
+  ]
+}
