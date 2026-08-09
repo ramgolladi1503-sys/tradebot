@@ -46,6 +46,18 @@ python3 scripts/run_market_event_graph_live_session_v1.py \
   --kite-instruments-file runtime/reference/market_event_graph/kite_instruments/kite_nse_instruments_828c0c378e493972.json
 ```
 
+Status and controlled drain use the explicit session root:
+
+```bash
+python3 scripts/status_meg_live_observation_v1.py --evidence-root <EVIDENCE_ROOT>/<SESSION_DATE>/<RUN_ID>
+python3 scripts/stop_meg_live_observation_v1.py --evidence-root <EVIDENCE_ROOT>/<SESSION_DATE>/<RUN_ID> --run-id <RUN_ID> --producer-sha <PRODUCER_SHA>
+python3 scripts/status_meg_live_observation_v1.py --evidence-root <EVIDENCE_ROOT>/<SESSION_DATE>/<RUN_ID>
+```
+
+The stop command requests `STOP_REQUESTED`; the runtime then performs its
+existing lifecycle shutdown and persistence drain. A stop request is not drain
+success. Confirm `shutdown_drain.json` reports completion before sealing.
+
 The preflight-only form adds `--preflight-only`; status is obtained from the
 session evidence/status files under the explicit output root. Controlled
 shutdown is the runtime's governed stop path, followed by the seal command

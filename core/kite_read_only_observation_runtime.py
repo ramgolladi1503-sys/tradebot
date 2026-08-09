@@ -352,9 +352,17 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         or os.environ.get("TRADEBOT_COMMIT_SHA")
         or ""
     )
+    write_json_atomic(output_root / "process_identity.json", {
+        "run_id": run_id, "pid": os.getpid(), "producer_sha": producer_commit,
+        "session_root": str(output_root.resolve()), "state": "RUNNING",
+        "read_only": True, "order_authority": False, "broker_write_authority": False,
+    })
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
     try:
         while not lifecycle.should_stop():
+            if (output_root / "STOP_REQUESTED").is_file():
+                lifecycle.request_stop("operator_control_file")
+                break
             latest_runtime_outputs = produce_and_store_runtime_snapshots(
                 market_snapshot=None,
                 producer="kite_read_only_observation",
@@ -419,4 +427,10 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         )
         if not report["shutdown_drain_complete"]:
             raise RuntimeError("READ_ONLY_SHUTDOWN_DRAIN_INCOMPLETE")
+        write_json_atomic(output_root / "process_identity.json", {
+            "run_id": run_id, "pid": os.getpid(), "producer_sha": producer_commit,
+            "session_root": str(output_root.resolve()), "state": "STOPPED",
+            "shutdown_drain_complete": bool(report.get("shutdown_drain_complete")),
+            "read_only": True, "order_authority": False, "broker_write_authority": False,
+        })
     return 0
