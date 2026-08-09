@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "generation_id": "HUNT_V1_GENERATION_FREEZE",
+  "status": "FROZEN_PRE_DEVELOPMENT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "sealed_kernel_commit": "46dd4f7df9b63486eb633a12baf25412cd4f761d",
+  "sealed_kernel_runner_sha256": "b27ac20068aa399ca1bc2ba9b56d9192089b9cc02f52903fa758b2ef00bf9c91",
+  "dataset_id": "BANKNIFTY_NIFTY_SENSEX_SYNC_5M_V1",
+  "dataset_sha256": "66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32",
+  "multiple_testing_family": "HUNT_V1_FIVE_CANDIDATE_FAMILY",
+  "split_contract": {"development_fraction":0.6,"validation_fraction":0.2,"holdout_fraction":0.2,"ordering":"CHRONOLOGICAL_BY_SESSION","development_stage_access":"DEVELOPMENT_ONLY","validation_access":"FORBIDDEN_UNTIL_DEVELOPMENT_NOMINATION","holdout_access":"FORBIDDEN_UNTIL_VALIDATION_PASS"},
+  "execution_contract": {"decision":"COMPLETED_BAR_T","entry":"NEXT_SYNCHRONIZED_BAR_CLOSE_T_PLUS_1","exit":"FIXED_HORIZON_SYNCHRONIZED_CLOSE","max_concurrent_positions_per_configuration":1,"base_round_trip_cost_bps":2.0,"development_horizons_bars":[1,3,6]},
+  "development_gate": {"minimum_trades":50,"require_positive_mean_net_bps":true,"selection":"WITHIN_PASSPORT_DEVELOPMENT_ONLY","no_cross_candidate_holdout_selection":true},
+  "negative_controls_required_later":["NO_SAME_BAR_FILL","FUTURE_LEADER_SHIFT_MUST_NOT_AUTHORIZE_EDGE","RANDOMIZED_DIRECTION_NULL","SESSION_PERMUTATION_NULL"],
+  "freeze_rule":"ANY CHANGE TO SIGNAL DEFINITION, GRID, HORIZON, COST, SPLIT, DATASET HASH, OR SELECTION RULE CREATES A NEW GENERATION IDENTITY.",
+  "passports":[
+    {"passport_id":"HUNT_V1_LEADER_CONSENSUS_LAG_CATCHUP","direction_rule":"SIGN_OF_MEAN_LEADER_RETURN","signal_rule":"NIFTY_AND_SENSEX_RETURNS_HAVE_SAME_NONZERO_SIGN; ABS(MEAN_LEADER_RETURN)>=leader_min_bps; SIGN* (MEAN_LEADER_RETURN-BANKNIFTY_RETURN)>=lag_gap_bps","grid":{"leader_min_bps":[5,10,15],"lag_gap_bps":[5,10,15]}},
+    {"passport_id":"HUNT_V1_FROM_OPEN_RELATIVE_STRENGTH_PERSISTENCE","direction_rule":"SHARED_FROM_OPEN_SIGN","signal_rule":"NIFTY_AND_SENSEX_FROM_OPEN_HAVE_SAME_NONZERO_SIGN; MIN_ABS_LEADER_FROM_OPEN>=leader_from_open_min_bps; BANKNIFTY_FROM_OPEN_HAS_SAME_SIGN; SIGN*(BANKNIFTY_FROM_OPEN-MEAN_LEADER_FROM_OPEN)>=relative_strength_margin_bps","grid":{"leader_from_open_min_bps":[15,30,45],"relative_strength_margin_bps":[0,10,20]}},
+    {"passport_id":"HUNT_V1_TRANSIENT_DIVERGENCE_MEAN_REVERSION","direction_rule":"OPPOSITE_BANKNIFTY_DIVERGENCE_SIGN","signal_rule":"BN_MINUS_NIFTY_AND_BN_MINUS_SENSEX_HAVE_SAME_NONZERO_SIGN; MIN_ABS_DIVERGENCE>=divergence_min_bps; SIGN*BANKNIFTY_FROM_OPEN <= SIGN*MEAN_LEADER_FROM_OPEN + confirmation_margin_bps","grid":{"divergence_min_bps":[10,20,30],"confirmation_margin_bps":[0,10]}},
+    {"passport_id":"HUNT_V1_LEADER_REVERSAL_TRANSMISSION","direction_rule":"CURRENT_SHARED_LEADER_RETURN_SIGN","signal_rule":"NIFTY_AND_SENSEX_CURRENT_RETURNS_HAVE_SAME_NONZERO_SIGN; THEIR_FROM_OPEN_SIGNS_AGREE_AND_ARE_OPPOSITE_CURRENT_RETURN_SIGN; MIN_ABS_LEADER_FROM_OPEN>=from_open_min_bps; MIN_ABS_CURRENT_LEADER_RETURN>=reversal_bar_min_bps; BANKNIFTY_FROM_OPEN_STILL_HAS_PRIOR_FROM_OPEN_SIGN","grid":{"from_open_min_bps":[20,40,60],"reversal_bar_min_bps":[5,10,15]}},
+    {"passport_id":"HUNT_V1_DISAGREEMENT_RESOLUTION","direction_rule":"SHARED_LEADER_FROM_OPEN_SIGN","signal_rule":"LEADERS_CONSENSUS_EQUALS_ZERO; NIFTY_AND_SENSEX_FROM_OPEN_HAVE_SAME_NONZERO_SIGN; MIN_ABS_LEADER_FROM_OPEN>=from_open_min_bps","grid":{"from_open_min_bps":[20,40,60]}}
+  ]
+}
