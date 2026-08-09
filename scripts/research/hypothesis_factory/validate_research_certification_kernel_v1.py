@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ def load_runner(root: Path):
     if spec is None or spec.loader is None:
         raise RuntimeError("runner_import_spec_failed")
     mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
     return mod
 
@@ -47,8 +49,6 @@ def synthetic_rows(n: int = 20) -> list[dict[str, Any]]:
 
 
 def stub_signal(price_a, price_b, historical_a=None, historical_b=None, min_zscore=2.0, **kwargs):
-    # Entry calls use min_zscore > 0 and receive a positive z; exit-state calls
-    # use min_zscore == 0 and receive opposite-sign z to force a quick exit.
     z = 2.5 if float(min_zscore) > 0 else -0.1
     return {
         "direction": "SELL_SPREAD",
@@ -92,7 +92,6 @@ def main(argv=None) -> int:
     passport = json.loads(passport_path.read_text(encoding="utf-8"))
     results: list[dict[str, Any]] = []
 
-    # 1. Chronological split must be disjoint and ordered.
     rows = [{"session": f"2026-01-{i:02d}"} for i in range(1, 11)]
     dev, val, hold = mod.split_sessions(rows, 0.6, 0.2)
     ordered_ok = (
@@ -103,7 +102,6 @@ def main(argv=None) -> int:
     )
     results.append(check("CHRONOLOGICAL_SPLIT_ISOLATION", ordered_ok, {"dev": sorted(dev), "validation": sorted(val), "holdout": sorted(hold)}))
 
-    # 2. Same-bar entry must be impossible.
     srows = synthetic_rows()
     trades = mod.run_pair(
         srows, set(range(len(srows))), "banknifty_close", "nifty_close",
@@ -112,7 +110,6 @@ def main(argv=None) -> int:
     same_bar_ok = bool(trades) and trades[0].entry_i == 10 and trades[0].entry_i > 9
     results.append(check("NO_SAME_BAR_ENTRY_FILL", same_bar_ok, {"first_entry_i": trades[0].entry_i if trades else None, "decision_i": 9}))
 
-    # 3. Cost stress must monotonically worsen identical trades.
     base_trades = [mod.Trade(1, 2, "SELL_SPREAD", 1.0, 0.002, 0.0018, "X", "S") for _ in range(5)]
     m2 = mod.metrics_at_cost(base_trades, 2.0, 2.0)
     m8 = mod.metrics_at_cost(base_trades, 8.0, 2.0)
@@ -120,31 +117,29 @@ def main(argv=None) -> int:
     cost_ok = m2["mean_net_bps"] > m8["mean_net_bps"] > m12["mean_net_bps"]
     results.append(check("COST_STRESS_MONOTONICITY", cost_ok, {"2": m2, "8": m8, "12": m12}))
 
-    # 4. Dataset byte corruption must hard fail before research execution.
     with tempfile.TemporaryDirectory() as td:
         bad_ds = Path(td) / "bad.csv"
         data = dataset_path.read_bytes()
         bad_ds.write_bytes(data + b"\nCORRUPTION")
         results.append(run_fail_closed_case(mod, root, passport, bad_ds, "DATASET_HASH_CORRUPTION_FAILS_CLOSED"))
 
-    # 5. Passport identity tamper must hard fail.
-    bad = dict(passport); bad["passport_id"] = "TAMPERED"
+    bad = dict(passport)
+    bad["passport_id"] = "TAMPERED"
     results.append(run_fail_closed_case(mod, root, bad, dataset_path, "PASSPORT_ID_TAMPER_FAILS_CLOSED"))
 
-    # 6. Parent implementation identity tamper must hard fail.
-    bad = dict(passport); bad["parent_implementation_commit"] = "0" * 40
+    bad = dict(passport)
+    bad["parent_implementation_commit"] = "0" * 40
     results.append(run_fail_closed_case(mod, root, bad, dataset_path, "PARENT_COMMIT_TAMPER_FAILS_CLOSED"))
 
-    # 7. Holdout may be measured, but parameter-selection neighborhood must be validation-only.
     source = (root / RUNNER_REL).read_text(encoding="utf-8")
+    neighborhood_slice = source[source.find('if ok:'):source.find('verdict =')]
     holdout_selection_ok = (
-        'idx_sets["validation"]' in source
+        'idx_sets["validation"]' in neighborhood_slice
+        and 'idx_sets["holdout"]' not in neighborhood_slice
         and 'parameter_neighborhood_validation_only' in source
-        and 'idx_sets["holdout"]' not in source[source.find('if ok:'):source.find('verdict =')]
     )
     results.append(check("HOLDOUT_NOT_USED_FOR_PARAMETER_SELECTION", holdout_selection_ok))
 
-    # 8. Research authority invariants must be literal and fail closed.
     authority_ok = '"runtime_authority": "NONE"' in source and '"broker_actions_permitted": False' in source
     results.append(check("RESEARCH_AUTHORITY_REMAINS_NONE", authority_ok))
 
