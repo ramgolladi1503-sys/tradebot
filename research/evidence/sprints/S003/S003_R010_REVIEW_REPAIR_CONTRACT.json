@@ -1,0 +1,37 @@
+{
+  "aggregate_decision": "REPAIR_REQUIRED",
+  "blocking_findings": [
+    {
+      "evidence": "scripts/mros/population_git_trust.py:74-78 checks whether the manifest freeze commit is an ancestor of each request origin and emits POPULATION_REQUEST_<i>_PREDATES_FREEZE only when that relation is false. This accepts request origins strictly after the freeze commit, so a request can be created or substituted after population freeze while still passing trusted-population validation.",
+      "falsifier": "Construct a queue history with a canonical manifest committed at freeze F and its canonical request created in descendant commit R, then run validate_trusted_population with the manifest and exact queue ref; the validator must reject the request specifically as post-freeze rather than accepting it.",
+      "finding_id": "R03-EVP-001",
+      "recommended_repair_scope": "Invert the request provenance relation to require request origin at or before the manifest freeze commit, explicitly reject origins descending from freeze, and add a deterministic regression test. Preserve the existing strict post-freeze receipt-origin rule and do not change runtime or broker authority.",
+      "requirement": "Frozen population request artifacts must exist at or before the population freeze commit; post-freeze request creation must fail closed.",
+      "severity": "MAJOR"
+    }
+  ],
+  "failed_head": "e72bb00401dd05d2935ac634a82419b7c44d2426",
+  "invalid_artifacts": [],
+  "m9_status": "NOT_STARTED",
+  "repair_scope": {
+    "allowed": [
+      "scripts/mros/",
+      "tests/mros/",
+      "research/review_board/",
+      "research/audit_board/"
+    ],
+    "forbidden": [
+      "research/program/",
+      "runtime/strategy/risk/execution/broker code",
+      "weaken fixtures or acceptance criteria",
+      "begin M9",
+      "create runtime authority"
+    ]
+  },
+  "root_cause_instruction": "Cluster related findings and repair common causes once; preserve adaptive routine assurance and explicit full-board authority boundaries.",
+  "runtime_authority": "NONE",
+  "schema_version": "mros-repair-contract-v2",
+  "source_kind": "review",
+  "source_round": "R010",
+  "sprint": "S003"
+}
