@@ -62,6 +62,48 @@
       "holdout_output": "research/evidence/strategy_certification/HUNT_V4_HOLDOUT_RESULT.json",
       "certification_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_campaign_multiple_testing_certification.py", "--repo-root", ".", "--holdout-output", "research/evidence/strategy_certification/HUNT_V4_HOLDOUT_RESULT.json", "--output", "research/evidence/strategy_certification/HUNT_V4_CAMPAIGN_CERTIFICATION.json"],
       "certification_output": "research/evidence/strategy_certification/HUNT_V4_CAMPAIGN_CERTIFICATION.json"
+    },
+    {
+      "generation_id": "HUNT_V5_GENERATION_FREEZE",
+      "freeze_path": "research/strategy_certification/passports/HUNT_V5_GENERATION_FREEZE.json",
+      "development_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_hunt_v5_development_screen.py", "--repo-root", "."],
+      "development_output": "research/evidence/strategy_certification/HUNT_V5_DEVELOPMENT_SCREEN.json",
+      "validation_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_exact_nomination_validation.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V5_GENERATION_FREEZE.json", "--development-output", "research/evidence/strategy_certification/HUNT_V5_DEVELOPMENT_SCREEN.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v5_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V5_VALIDATION_RESULT.json"],
+      "validation_output": "research/evidence/strategy_certification/HUNT_V5_VALIDATION_RESULT.json",
+      "robustness_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_preholdout_robustness.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V5_GENERATION_FREEZE.json", "--validation-output", "research/evidence/strategy_certification/HUNT_V5_VALIDATION_RESULT.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v5_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V5_ROBUSTNESS_RESULT.json"],
+      "robustness_output": "research/evidence/strategy_certification/HUNT_V5_ROBUSTNESS_RESULT.json",
+      "holdout_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_one_time_holdout.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V5_GENERATION_FREEZE.json", "--robustness-output", "research/evidence/strategy_certification/HUNT_V5_ROBUSTNESS_RESULT.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v5_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V5_HOLDOUT_RESULT.json"],
+      "holdout_output": "research/evidence/strategy_certification/HUNT_V5_HOLDOUT_RESULT.json",
+      "certification_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_campaign_multiple_testing_certification.py", "--repo-root", ".", "--holdout-output", "research/evidence/strategy_certification/HUNT_V5_HOLDOUT_RESULT.json", "--output", "research/evidence/strategy_certification/HUNT_V5_CAMPAIGN_CERTIFICATION.json"],
+      "certification_output": "research/evidence/strategy_certification/HUNT_V5_CAMPAIGN_CERTIFICATION.json"
+    },
+    {
+      "generation_id": "HUNT_V6_GENERATION_FREEZE",
+      "freeze_path": "research/strategy_certification/passports/HUNT_V6_GENERATION_FREEZE.json",
+      "development_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_hunt_v6_development_screen.py", "--repo-root", "."],
+      "development_output": "research/evidence/strategy_certification/HUNT_V6_DEVELOPMENT_SCREEN.json",
+      "validation_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_exact_nomination_validation.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V6_GENERATION_FREEZE.json", "--development-output", "research/evidence/strategy_certification/HUNT_V6_DEVELOPMENT_SCREEN.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v6_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V6_VALIDATION_RESULT.json"],
+      "validation_output": "research/evidence/strategy_certification/HUNT_V6_VALIDATION_RESULT.json",
+      "robustness_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_preholdout_robustness.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V6_GENERATION_FREEZE.json", "--validation-output", "research/evidence/strategy_certification/HUNT_V6_VALIDATION_RESULT.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v6_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V6_ROBUSTNESS_RESULT.json"],
+      "robustness_output": "research/evidence/strategy_certification/HUNT_V6_ROBUSTNESS_RESULT.json",
+      "holdout_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_one_time_holdout.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V6_GENERATION_FREEZE.json", "--robustness-output", "research/evidence/strategy_certification/HUNT_V6_ROBUSTNESS_RESULT.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v6_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V6_HOLDOUT_RESULT.json"],
+      "holdout_output": "research/evidence/strategy_certification/HUNT_V6_HOLDOUT_RESULT.json",
+      "certification_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_campaign_multiple_testing_certification.py", "--repo-root", ".", "--holdout-output", "research/evidence/strategy_certification/HUNT_V6_HOLDOUT_RESULT.json", "--output", "research/evidence/strategy_certification/HUNT_V6_CAMPAIGN_CERTIFICATION.json"],
+      "certification_output": "research/evidence/strategy_certification/HUNT_V6_CAMPAIGN_CERTIFICATION.json"
+    },
+    {
+      "generation_id": "HUNT_V7_GENERATION_FREEZE",
+      "freeze_path": "research/strategy_certification/passports/HUNT_V7_GENERATION_FREEZE.json",
+      "development_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_hunt_v7_development_screen.py", "--repo-root", "."],
+      "development_output": "research/evidence/strategy_certification/HUNT_V7_DEVELOPMENT_SCREEN.json",
+      "validation_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_exact_nomination_validation.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V7_GENERATION_FREEZE.json", "--development-output", "research/evidence/strategy_certification/HUNT_V7_DEVELOPMENT_SCREEN.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v7_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V7_VALIDATION_RESULT.json"],
+      "validation_output": "research/evidence/strategy_certification/HUNT_V7_VALIDATION_RESULT.json",
+      "robustness_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_preholdout_robustness.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V7_GENERATION_FREEZE.json", "--validation-output", "research/evidence/strategy_certification/HUNT_V7_VALIDATION_RESULT.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v7_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V7_ROBUSTNESS_RESULT.json"],
+      "robustness_output": "research/evidence/strategy_certification/HUNT_V7_ROBUSTNESS_RESULT.json",
+      "holdout_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_one_time_holdout.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V7_GENERATION_FREEZE.json", "--robustness-output", "research/evidence/strategy_certification/HUNT_V7_ROBUSTNESS_RESULT.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v7_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V7_HOLDOUT_RESULT.json"],
+      "holdout_output": "research/evidence/strategy_certification/HUNT_V7_HOLDOUT_RESULT.json",
+      "certification_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_campaign_multiple_testing_certification.py", "--repo-root", ".", "--holdout-output", "research/evidence/strategy_certification/HUNT_V7_HOLDOUT_RESULT.json", "--output", "research/evidence/strategy_certification/HUNT_V7_CAMPAIGN_CERTIFICATION.json"],
+      "certification_output": "research/evidence/strategy_certification/HUNT_V7_CAMPAIGN_CERTIFICATION.json"
     }
   ],
   "extension_rule": "NEW GENERATIONS MAY BE APPENDED ONLY BEFORE THEIR DEVELOPMENT OUTCOMES ARE ACCESSED. APPENDING A GENERATION DOES NOT CHANGE ANY EXISTING GENERATION OR GLOBAL GATE.",
