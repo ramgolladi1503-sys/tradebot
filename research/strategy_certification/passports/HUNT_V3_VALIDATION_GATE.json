@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "policy_id": "HUNT_V3_VALIDATION_GATE",
+  "status": "FROZEN_PRE_VALIDATION",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "generation_id": "HUNT_V3_GENERATION_FREEZE",
+  "generation_sha256": "904bf1d086b1d3b81942faae1ae63d31c9f1fcd92cc82a7090737605e703f819",
+  "dataset_sha256": "66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32",
+  "development_evidence_contract": {
+    "status": "DEVELOPMENT_SCREEN_COMPLETE",
+    "validation_accessed": false,
+    "holdout_accessed": false,
+    "nominated_count": 2
+  },
+  "nominations": [
+    {
+      "passport_id": "HUNT_V3_WICK_REJECTION_REVERSAL",
+      "configuration": {"range_bps":35,"wick_fraction":0.45,"horizon_bars":6},
+      "development_metrics": {"trades":83,"mean_net_bps":1.8324007409203202,"win_rate":0.5783132530120482,"total_net_bps":152.08926149638657}
+    },
+    {
+      "passport_id": "HUNT_V3_FAILED_RANGE_ESCAPE_REVERSAL",
+      "configuration": {"escape_bps":2,"prior_range_bps":30,"horizon_bars":6},
+      "development_metrics": {"trades":122,"mean_net_bps":1.4435254261184982,"win_rate":0.5245901639344263,"total_net_bps":176.11010198645678}
+    }
+  ],
+  "validation_gate": {
+    "minimum_trades": 20,
+    "require_positive_mean_net_bps": true,
+    "require_positive_total_net_bps": true,
+    "base_round_trip_cost_bps": 2.0,
+    "selection": "EXACT_DEVELOPMENT_NOMINATION_ONLY",
+    "neighboring_configurations_forbidden": true,
+    "cross_candidate_ranking_forbidden": true
+  },
+  "holdout_rule": "HOLDOUT OUTCOMES REMAIN FORBIDDEN UNTIL A CANDIDATE PASSES THIS VALIDATION GATE AND SUBSEQUENT PRE-HOLDOUT ROBUSTNESS/NEGATIVE CONTROLS.",
+  "freeze_rule": "ANY CHANGE TO NOMINATIONS, VALIDATION THRESHOLDS, COST, SPLIT, OR DATASET/GENERATION IDENTITY CREATES A NEW POLICY IDENTITY."
+}
