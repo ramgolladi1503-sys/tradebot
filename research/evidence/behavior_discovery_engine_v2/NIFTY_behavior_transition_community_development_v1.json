@@ -1,0 +1,192 @@
+{
+  "broker_actions_permitted": false,
+  "candidate_count": 4,
+  "candidate_summaries": [
+    {
+      "candidate_id": "BDE2_TRANS_CAND_6cacb2a0b7bccce1",
+      "center_state": "UPSIDE_ESCAPE",
+      "community_id": "BDE2_TRANS_COMM_7fe5a779182853ba",
+      "distinct_sessions": 161,
+      "down_excursion_rate_20bps": 0.4482758620689655,
+      "down_excursion_rate_30bps": 0.3448275862068966,
+      "inferred_direction": null,
+      "matches": 174,
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ],
+      "ret12_bps": {
+        "mean": 0.5910687099852526,
+        "median": 2.6480155978558795,
+        "n": 174
+      },
+      "ret18_bps": {
+        "mean": 2.226347622279142,
+        "median": 2.5154193157028715,
+        "n": 174
+      },
+      "ret3_bps": {
+        "mean": 2.8740401021809716,
+        "median": 1.4364432137070615,
+        "n": 174
+      },
+      "ret6_bps": {
+        "mean": 2.759278670762278,
+        "median": 1.2804638315089267,
+        "n": 174
+      },
+      "up_excursion_rate_20bps": 0.5172413793103449,
+      "up_excursion_rate_30bps": 0.39080459770114945,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED"
+    },
+    {
+      "candidate_id": "BDE2_TRANS_CAND_a33b34bda475865d",
+      "center_state": "DOWNSIDE_ESCAPE",
+      "community_id": "BDE2_TRANS_COMM_b057ffa22cbe9e58",
+      "distinct_sessions": 186,
+      "down_excursion_rate_20bps": 0.44711538461538464,
+      "down_excursion_rate_30bps": 0.32211538461538464,
+      "inferred_direction": null,
+      "matches": 208,
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ],
+      "ret12_bps": {
+        "mean": 0.9142714248614119,
+        "median": 2.78862253967338,
+        "n": 208
+      },
+      "ret18_bps": {
+        "mean": 2.952996606860891,
+        "median": 1.3645510395854377,
+        "n": 208
+      },
+      "ret3_bps": {
+        "mean": 1.9538857666971292,
+        "median": 1.70129377365269,
+        "n": 208
+      },
+      "ret6_bps": {
+        "mean": 1.5828881074433707,
+        "median": 1.4605508804976797,
+        "n": 208
+      },
+      "up_excursion_rate_20bps": 0.5673076923076923,
+      "up_excursion_rate_30bps": 0.41346153846153844,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED"
+    },
+    {
+      "candidate_id": "BDE2_TRANS_CAND_04fe17db04273d21",
+      "center_state": "FAILED_UPSIDE_ESCAPE",
+      "community_id": "BDE2_TRANS_COMM_2b641614108e0207",
+      "distinct_sessions": 234,
+      "down_excursion_rate_20bps": 0.421455938697318,
+      "down_excursion_rate_30bps": 0.3065134099616858,
+      "inferred_direction": null,
+      "matches": 261,
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ],
+      "ret12_bps": {
+        "mean": 3.5384474389449556,
+        "median": 4.478494613366912,
+        "n": 261
+      },
+      "ret18_bps": {
+        "mean": 3.373381605824004,
+        "median": 6.162714809847536,
+        "n": 261
+      },
+      "ret3_bps": {
+        "mean": 3.619856728022443,
+        "median": 1.4533350056633587,
+        "n": 261
+      },
+      "ret6_bps": {
+        "mean": 3.6823496778894484,
+        "median": 1.5897158275546275,
+        "n": 261
+      },
+      "up_excursion_rate_20bps": 0.5210727969348659,
+      "up_excursion_rate_30bps": 0.3793103448275862,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED"
+    },
+    {
+      "candidate_id": "BDE2_TRANS_CAND_d39b19a886b259f2",
+      "center_state": "FAILED_DOWNSIDE_ESCAPE",
+      "community_id": "BDE2_TRANS_COMM_666d70f672c3861b",
+      "distinct_sessions": 247,
+      "down_excursion_rate_20bps": 0.4425087108013937,
+      "down_excursion_rate_30bps": 0.30313588850174217,
+      "inferred_direction": null,
+      "matches": 287,
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET6_RET12_SIGN_CONSISTENCY_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ],
+      "ret12_bps": {
+        "mean": 0.4396961339347508,
+        "median": 2.1727777629543255,
+        "n": 287
+      },
+      "ret18_bps": {
+        "mean": 1.181470792684653,
+        "median": -0.38576173730708874,
+        "n": 287
+      },
+      "ret3_bps": {
+        "mean": 0.07196759513215265,
+        "median": 0.3752723193217733,
+        "n": 287
+      },
+      "ret6_bps": {
+        "mean": 0.5312682836084636,
+        "median": -0.6573636021889318,
+        "n": 287
+      },
+      "up_excursion_rate_20bps": 0.49825783972125437,
+      "up_excursion_rate_30bps": 0.3588850174216028,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED"
+    }
+  ],
+  "candidates_sha256": "ab62236a13cd041aff7bde8dc264428f8648b8e93a5c833734b21f1ab3db5879",
+  "dataset_sha256": "6a145d4d17f124f9dc8ee272c5a19ca98988873a14b294765f44a27284d8b7e8",
+  "development_only": true,
+  "development_sessions": 394,
+  "edge_claimed": false,
+  "episodes_sha256": "3e84238a1530aa3896dcfd45c96b76ab0ab1e647968e21c514361e2e280cd8f5",
+  "first_locked_session": "2026-02-10",
+  "forward_outcomes_computed": true,
+  "forward_outcomes_scope": "development_sessions_only",
+  "gate": {
+    "maximum_supported_candidates_without_narrowing": 2,
+    "minimum_abs_median_ret12_bps": 3.0,
+    "minimum_abs_median_ret6_bps": 3.0,
+    "minimum_development_matches": 20,
+    "minimum_distinct_development_sessions": 15,
+    "minimum_favorable_minus_adverse_20bps": 0.08,
+    "minimum_favorable_minus_adverse_30bps": 0.03
+  },
+  "interpretation": "Development-only outcome screen for selected BDE2 transition community candidates. Episode end is used as conservative confirmation. Locked sessions are skipped without computing outcomes. This is not OOS/WFA, not execution viability, and not structural edge certification.",
+  "locked_candidate_matches_skipped_without_outcome_computation": 266,
+  "locked_outcomes_accessed": false,
+  "locked_sessions": 99,
+  "matches_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_transition_community_development_matches_v1.jsonl",
+  "matches_sha256": "0b176110424d9aa975ca3a55561cb6d1ebbdd91577e49950e358924c1bfeef75",
+  "next_action": "NO_DEVELOPMENT_SUPPORTED_TRANSITION_COMMUNITY_CANDIDATE",
+  "runner_id": "BEHAVIOR_TRANSITION_COMMUNITY_DEVELOPMENT_OUTCOME_V1",
+  "runtime_authority": "NONE",
+  "schema_version": 1,
+  "search_family_id": "BDE2_TRANSITION_COMMUNITY_FAMILY_V1",
+  "sessions_total": 493,
+  "status": "DEVELOPMENT_OUTCOME_SCREEN_COMPLETE_NO_SURVIVOR",
+  "summary_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_transition_community_development_v1.json",
+  "supported_candidate_count": 0,
+  "supported_candidates": []
+}

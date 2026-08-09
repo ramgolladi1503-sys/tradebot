@@ -1,0 +1,38 @@
+{
+  "broker_actions_permitted": false,
+  "communities_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_transition_communities_v1.jsonl",
+  "communities_sha256": "a6a4b77bd1979502eed591a7de605e6a6e47ddede82a3123eed7d5de198b1f56",
+  "component_id": "BEHAVIOR_TRANSITION_COMMUNITY_BUILDER_V1",
+  "edge_claimed": false,
+  "episodes_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_episodes_v1.jsonl",
+  "episodes_read": 912,
+  "episodes_sha256": "3e84238a1530aa3896dcfd45c96b76ab0ab1e647968e21c514361e2e280cd8f5",
+  "forward_outcomes_used": false,
+  "graph_stats": {
+    "eligible_communities_before_cap": 13,
+    "raw_edges": 143,
+    "raw_nodes": 13,
+    "supported_edges": 111
+  },
+  "interpretation": "Outcome-free transition community mining from BDE2 episode state graphs. Communities describe recurrent graph neighborhoods only; no return, excursion, profitability, or edge label is computed.",
+  "locked_outcomes_accessed": false,
+  "max_communities": 25,
+  "min_community_episode_support": 40,
+  "min_community_session_support": 30,
+  "min_edge_episode_support": 25,
+  "min_edge_session_support": 20,
+  "min_supported_edges": 2,
+  "next_action": "GOVERNED_DEVELOPMENT_OUTCOME_TEST",
+  "runtime_authority": "NONE",
+  "schema_version": 1,
+  "search_pressure": {
+    "eligible_communities_before_cap": 13,
+    "episodes_scanned": 912,
+    "raw_edges": 143,
+    "raw_nodes": 13,
+    "selected_communities": 13,
+    "supported_edges": 111
+  },
+  "selected_communities": 13,
+  "status": "TRANSITION_COMMUNITY_CANDIDATES_BUILT"
+}

@@ -1,0 +1,55 @@
+{
+  "accepted_before_cap": 4,
+  "broker_actions_permitted": false,
+  "candidate_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_transition_community_candidates_v1.jsonl",
+  "candidate_sha256": "ab62236a13cd041aff7bde8dc264428f8648b8e93a5c833734b21f1ab3db5879",
+  "communities_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_transition_communities_v1.jsonl",
+  "communities_read": 13,
+  "communities_sha256": "a6a4b77bd1979502eed591a7de605e6a6e47ddede82a3123eed7d5de198b1f56",
+  "edge_claimed": false,
+  "forward_outcomes_used": false,
+  "interpretation": "Pre-outcome selector for high-information transition communities. Ubiquitous/generic state neighborhoods are rejected before any outcome test. No return, excursion, profitability, or edge label is computed.",
+  "locked_outcomes_accessed": false,
+  "next_action": "COMPILE_OR_DEVELOPMENT_TEST_ONLY_AFTER_GOVERNED_REVIEW",
+  "rejected_candidates": 9,
+  "rejections_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_transition_community_candidates_v1_rejections.jsonl",
+  "rejections_sha256": "b0ea8d7461381a523ec1798826b3656085b3eb91cd8a4893bf9e527e58a413e4",
+  "runtime_authority": "NONE",
+  "schema_version": 1,
+  "search_family_id": "BDE2_TRANSITION_COMMUNITY_FAMILY_V1",
+  "search_pressure": {
+    "accepted_before_cap": 4,
+    "communities_read": 13,
+    "rejected_candidates": 9,
+    "selected_candidates": 4
+  },
+  "selected_candidates": 4,
+  "selection_policy": {
+    "generic_center_states_rejected": [
+      "COMPRESSION",
+      "DIRECTIONAL_ACCELERATION",
+      "DIRECTIONAL_DECELERATION",
+      "DIRECTIONAL_DOWN",
+      "DIRECTIONAL_UP",
+      "LOWER_REJECTION",
+      "RANGE_BALANCE",
+      "UPPER_REJECTION"
+    ],
+    "high_information_states": [
+      "DOWNSIDE_ESCAPE",
+      "EXPANSION",
+      "FAILED_DOWNSIDE_ESCAPE",
+      "FAILED_UPSIDE_ESCAPE",
+      "UPSIDE_ESCAPE"
+    ],
+    "max_candidates": 5,
+    "max_episode_presence": 650,
+    "max_session_fraction": 0.9,
+    "max_supported_edges": 16,
+    "min_episode_support": 60,
+    "min_session_support": 40,
+    "min_supported_edges": 3
+  },
+  "selector_id": "BEHAVIOR_TRANSITION_COMMUNITY_SELECTOR_V1",
+  "status": "TRANSITION_COMMUNITY_CANDIDATES_SELECTED"
+}
