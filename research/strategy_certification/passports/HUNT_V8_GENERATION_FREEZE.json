@@ -1,0 +1,23 @@
+{
+  "schema_version":1,
+  "generation_id":"HUNT_V8_GENERATION_FREEZE",
+  "status":"FROZEN_PRE_DEVELOPMENT",
+  "research_only":true,
+  "runtime_authority":"NONE",
+  "broker_actions_permitted":false,
+  "edge_claimed":false,
+  "sealed_kernel_commit":"46dd4f7df9b63486eb633a12baf25412cd4f761d",
+  "dataset_sha256":"66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32",
+  "multiple_testing_family":"HUNT_V8_VOLATILITY_STATE_TRANSITION_FAMILY",
+  "prior_generation_policy":"V4_V5_V6_V7_OUTCOMES_MAY_NOT_CHANGE_THIS_FREEZE; ALL PRIOR HOLDOUTS_FORBIDDEN",
+  "split_contract":{"development_fraction":0.6,"validation_fraction":0.2,"holdout_fraction":0.2,"ordering":"CHRONOLOGICAL_BY_SESSION","validation_access":"FORBIDDEN_UNTIL_DEVELOPMENT_NOMINATION","holdout_access":"FORBIDDEN_UNTIL_VALIDATION_AND_ROBUSTNESS_PASS"},
+  "execution_contract":{"decision":"COMPLETED_BAR_T_ONLY","entry":"NEXT_SYNCHRONIZED_BAR_CLOSE_T_PLUS_1","exit":"FIXED_HORIZON_SYNCHRONIZED_CLOSE","max_concurrent_positions_per_configuration":1,"base_round_trip_cost_bps":2.0,"development_horizons_bars":[1,3,6]},
+  "development_gate":{"minimum_trades":50,"require_positive_mean_net_bps":true,"selection":"BEST_MEAN_WITHIN_PASSPORT_DEVELOPMENT_ONLY"},
+  "passports":[
+    {"passport_id":"HUNT_V8_RANGE_SHOCK_CONTINUATION","grid":{"lookback_bars":[6,12],"range_ratio":[1.5,2.0]}},
+    {"passport_id":"HUNT_V8_RANGE_SHOCK_REVERSAL","grid":{"lookback_bars":[6,12],"range_ratio":[1.5,2.0]}},
+    {"passport_id":"HUNT_V8_COMPRESSION_RELEASE_CONTINUATION","grid":{"lookback_bars":[6,12],"compression_ratio":[0.65,0.8]}},
+    {"passport_id":"HUNT_V8_TWO_BAR_VOLATILITY_CLIMAX_FADE","grid":{"range_ratio":[1.35,1.75]}}
+  ],
+  "freeze_rule":"ANY CHANGE CREATES A NEW GENERATION IDENTITY."
+}
