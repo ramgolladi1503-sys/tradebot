@@ -19,6 +19,13 @@ def test_audit_uses_canonical_strategy_registry():
     assert result['broker_actions_allowed'] is False
 
 
+def test_registry_parser_preserves_mean_reversion_required_evidence():
+    specs=m.load_registry_specs(ROOT)
+    row=next(x for x in specs if x.strategy_id=='mean_reversion_extension')
+    assert 'mean_reversion_anchor' in row.required_evidence_keys
+    assert 'oscillator_confirmation' in row.required_evidence_keys
+
+
 def test_opening_range_retest_has_temporal_contract_markers():
     result=m.run(ROOT)
     row=next(x for x in result['strategies'] if x['strategy_id']=='opening_range_retest')
