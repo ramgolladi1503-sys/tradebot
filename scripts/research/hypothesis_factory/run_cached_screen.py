@@ -4,6 +4,9 @@
 This avoids rescanning raw corpus files. It is research-only and never certifies
 edge or grants runtime/broker authority. Cached screening uses strict semantics:
 no overlapping trades and unsupported exit rules fail closed.
+
+A reconciled manifest may be supplied explicitly. The runner never silently
+switches datasets because dataset identity is part of the evidence chain.
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ strict = load_module("strict_screen_engine", HERE / "strict_screen_engine.py")
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--cache-dir", default="research/hypotheses/corpus_cache")
+    p.add_argument("--reconciled-manifest", default="", help="Explicit reconciled_manifest.json; if omitted use v1 canonical cache")
     p.add_argument("--instrument", required=True)
     p.add_argument("--output-dir", default="research/hypotheses/cached_screen_runs")
     p.add_argument("--min-trades", type=int, default=20)
@@ -44,13 +48,24 @@ def main(argv: list[str] | None = None) -> int:
 
     instrument = args.instrument.strip().upper()
     cache_dir = Path(args.cache_dir)
-    cache_manifest_path = cache_dir / "cache_manifest.json"
-    if not cache_manifest_path.exists():
-        raise SystemExit(f"cache manifest missing: {cache_manifest_path}")
-    cache_manifest = json.loads(cache_manifest_path.read_text(encoding="utf-8"))
-    canonical = cache_manifest.get("canonical_outputs", {}).get(instrument)
+
+    if args.reconciled_manifest:
+        source_manifest_path = Path(args.reconciled_manifest)
+        if not source_manifest_path.exists():
+            raise SystemExit(f"reconciled manifest missing: {source_manifest_path}")
+        source_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
+        canonical = source_manifest.get("outputs", {}).get(instrument)
+        dataset_kind = "RECONCILED_CANONICAL"
+    else:
+        source_manifest_path = cache_dir / "cache_manifest.json"
+        if not source_manifest_path.exists():
+            raise SystemExit(f"cache manifest missing: {source_manifest_path}")
+        source_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
+        canonical = source_manifest.get("canonical_outputs", {}).get(instrument)
+        dataset_kind = "CANONICAL_V1"
+
     if not canonical:
-        raise SystemExit(f"no canonical cache for instrument={instrument}")
+        raise SystemExit(f"no cache data for instrument={instrument}")
     data_path = Path(canonical["path"])
     if not data_path.exists():
         raise SystemExit(f"canonical data missing: {data_path}")
@@ -72,7 +87,8 @@ def main(argv: list[str] | None = None) -> int:
         "run_id": run_id,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "instrument": instrument,
-        "cache_manifest": str(cache_manifest_path),
+        "dataset_kind": dataset_kind,
+        "source_manifest": str(source_manifest_path),
         "cache_data": str(data_path),
         "cache_data_sha256": canonical.get("sha256"),
         "loaded_rows": len(rows),
