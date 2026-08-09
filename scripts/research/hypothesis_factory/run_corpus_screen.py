@@ -121,10 +121,12 @@ def derive_instrument(value: Any, source_path: Path) -> str:
     return raw if raw else "UNKNOWN"
 
 
-def raw_instrument_id(value: Any, source_path: Path) -> str:
+def raw_instrument_id(value: Any, source_path: Path, normalized_instrument: str | None = None) -> str:
     raw = str(value or "").strip()
     if raw:
         return raw
+    if normalized_instrument and normalized_instrument != "UNKNOWN":
+        return normalized_instrument
     return f"SOURCE::{source_path.name}"
 
 
@@ -173,7 +175,7 @@ def normalize_ohlc_row(raw: dict[str, Any], source_path: Path) -> dict[str, Any]
     out.update({
         "timestamp": stamp,
         "instrument": instrument_name,
-        "raw_instrument": raw_instrument_id(instrument_value, source_path),
+        "raw_instrument": raw_instrument_id(instrument_value, source_path, instrument_name),
         "open": open_,
         "high": high,
         "low": low,
@@ -201,7 +203,7 @@ def normalize_tick_row(raw: dict[str, Any], source_path: Path) -> dict[str, Any]
     return {
         "timestamp": stamp,
         "instrument": instrument,
-        "raw_instrument": raw_instrument_id(instrument_value, source_path),
+        "raw_instrument": raw_instrument_id(instrument_value, source_path, instrument),
         "price": price,
         "volume": as_float(pick(row, VOLUME_ALIASES), 0.0) or 0.0,
         "vwap": as_float(pick(row, VWAP_ALIASES), price) or price,
@@ -321,90 +323,153 @@ def discover_roots(user_roots: list[str], include_known: bool = True, include_gd
         except OSError:
             continue
         key = str(resolved)
-        if key not in seen and resolved.exists() and resolved.is_dir():
+        if key not in seen and resolved.exists():
             seen.add(key)
             roots.append(resolved)
     return roots
 
 
-def discover_files(roots: list[Path], patterns: Iterable[str], max_files: int) -> list[Path]:
-    seen: set[str] = set()
-    files: list[Path] = []
+def discover_files(roots: Iterable[Path], patterns: Iterable[str], max_files: int | None) -> list[Path]:
+    found: list[Path] = []
     for root in roots:
+        if root.is_file():
+            if root.suffix.lower() in {".csv", ".parquet"}:
+                found.append(root)
+            continue
         for pattern in patterns:
             try:
-                for path in sorted(root.rglob(pattern)):
-                    if not path.is_file():
-                        continue
-                    key = str(path.resolve())
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    files.append(path)
-                    if len(files) >= max_files:
-                        return files
+                found.extend(p for p in root.rglob(pattern) if p.is_file())
             except (OSError, PermissionError):
                 continue
-    return files
+    out = sorted(set(found))
+    if max_files is not None:
+        return out[:max_files]
+    return out
+
+
+def load_corpus(files: Iterable[Path], max_rows_total: int | None, max_rows_per_file: int | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    all_rows: list[dict[str, Any]] = []
+    inventory: list[dict[str, Any]] = []
+    for path in files:
+        if max_rows_total is not None and len(all_rows) >= max_rows_total:
+            break
+        remaining = None if max_rows_total is None else max_rows_total - len(all_rows)
+        per_file = max_rows_per_file if remaining is None else min(max_rows_per_file or remaining, remaining)
+        if path.suffix.lower() == ".csv":
+            rows, meta, error = load_csv(path, per_file)
+        elif path.suffix.lower() == ".parquet":
+            rows, meta, error = load_parquet(path, per_file)
+        else:
+            rows, meta, error = [], {}, "unsupported extension"
+        if remaining is not None:
+            rows = rows[:remaining]
+        inventory.append({
+            "path": str(path),
+            "suffix": path.suffix.lower(),
+            "sha256": sha256_file(path),
+            "loaded_rows": len(rows),
+            "error": error,
+            **meta,
+        })
+        all_rows.extend(rows)
+    return all_rows, inventory
+
+
+def inventory_summary(inventory: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "files": len(inventory),
+        "files_with_errors": sum(1 for item in inventory if item.get("error")),
+        "files_with_loaded_rows": sum(1 for item in inventory if int(item.get("loaded_rows") or 0) > 0),
+        "raw_rows": sum(int(item.get("raw_rows") or 0) for item in inventory),
+        "normalized_ohlc_rows": sum(int(item.get("normalized_ohlc_rows") or 0) for item in inventory),
+        "normalized_tick_rows": sum(int(item.get("normalized_tick_rows") or 0) for item in inventory),
+        "tick_ohlc_rows": sum(int(item.get("tick_ohlc_rows") or 0) for item in inventory),
+    }
+
+
+def run(args: argparse.Namespace) -> dict[str, Any]:
+    roots = discover_roots(args.corpus_root, not args.no_known_roots, not args.no_gdrive_discovery)
+    files = discover_files(roots, args.pattern or DEFAULT_GLOBS, args.max_files)
+    rows, inventory = load_corpus(files, args.max_rows_total, args.max_rows_per_file)
+
+    run_id = args.run_id or datetime.now(timezone.utc).strftime("RUN-%Y%m%dT%H%M%SZ")
+    out_dir = Path(args.output_dir) / run_id
+    instruments = sorted({i.strip().upper() for i in args.instrument if i.strip()}) or ["NIFTY", "BANKNIFTY"]
+    hypotheses = hf.generate_hypotheses(instruments=instruments)
+    config = hf.ScreenConfig(
+        max_hold_bars=args.max_hold_bars,
+        min_trades=args.min_trades,
+        spread_max_pct=args.spread_max_pct,
+        cost_bps=args.cost_bps,
+        min_net_expectancy_bps=args.min_net_expectancy_bps,
+    )
+    results = hf.screen_hypotheses(hypotheses, rows, config)
+    ranked = sorted(results, key=lambda r: r.get("score", -1), reverse=True)
+    passports = []
+    by_id = {h["hypothesis_id"]: h for h in hypotheses}
+    for row in ranked[: args.top_passports]:
+        passports.append(hf.make_passport(by_id[row["hypothesis_id"]], row))
+
+    hf.write_json(out_dir / "generated_hypotheses.json", hypotheses)
+    hf.write_json(out_dir / "screen_results.json", ranked)
+    hf.write_csv(out_dir / "leaderboard.csv", ranked)
+    hf.write_json(out_dir / "strategy_passports.json", passports)
+    hf.write_json(out_dir / "corpus_inventory.json", {"files": inventory})
+    manifest = {
+        "schema_version": "tradebot-hypothesis-corpus-run-v1",
+        "run_id": run_id,
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "runtime_authority": "NONE",
+        "broker_actions_allowed": False,
+        "certification": "NOT_CERTIFIED",
+        "corpus_roots": [str(p) for p in roots],
+        "discovered_files": len(files),
+        "loaded_rows": len(rows),
+        "hypotheses": len(hypotheses),
+        "screen_results": len(ranked),
+        "promising_not_certified": sum(1 for r in ranked if r.get("status") == "PROMISING_NOT_CERTIFIED"),
+        "top_passports": len(passports),
+        "config": vars(args),
+        "outputs": {
+            "generated_hypotheses": str(out_dir / "generated_hypotheses.json"),
+            "screen_results": str(out_dir / "screen_results.json"),
+            "leaderboard": str(out_dir / "leaderboard.csv"),
+            "strategy_passports": str(out_dir / "strategy_passports.json"),
+            "corpus_inventory": str(out_dir / "corpus_inventory.json"),
+        },
+        "inventory_summary": inventory_summary(inventory),
+        "inventory": inventory,
+    }
+    hf.write_json(out_dir / "run_manifest.json", manifest)
+    return manifest
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--corpus-root", action="append", default=[])
-    p.add_argument("--pattern", action="append", default=[])
-    p.add_argument("--output-dir", default="research/hypotheses/corpus_runs")
-    p.add_argument("--instrument", action="append", default=[])
-    p.add_argument("--max-files", type=int, default=1000)
-    p.add_argument("--max-rows-total", type=int, default=1_000_000)
-    p.add_argument("--max-rows-per-file", type=int, default=100_000)
-    p.add_argument("--min-trades", type=int, default=20)
-    p.add_argument("--cost-bps", type=float, default=8.0)
-    p.add_argument("--spread-max-pct", type=float, default=0.02)
-    p.add_argument("--no-known-roots", action="store_true")
-    p.add_argument("--no-gdrive-discovery", action="store_true")
-    return p
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--corpus-root", action="append", default=[], help="Corpus root/file; repeatable")
+    parser.add_argument("--pattern", action="append", default=[], help="Glob pattern; default *.csv and *.parquet")
+    parser.add_argument("--instrument", action="append", default=[], help="Instrument universe; repeatable")
+    parser.add_argument("--output-dir", default="research/hypotheses/corpus_runs")
+    parser.add_argument("--run-id", default="")
+    parser.add_argument("--max-files", type=int, default=200)
+    parser.add_argument("--max-rows-total", type=int, default=250000)
+    parser.add_argument("--max-rows-per-file", type=int, default=10000)
+    parser.add_argument("--top-passports", type=int, default=10)
+    parser.add_argument("--max-hold-bars", type=int, default=6)
+    parser.add_argument("--min-trades", type=int, default=20)
+    parser.add_argument("--spread-max-pct", type=float, default=0.02)
+    parser.add_argument("--cost-bps", type=float, default=8.0)
+    parser.add_argument("--min-net-expectancy-bps", type=float, default=0.0)
+    parser.add_argument("--no-known-roots", action="store_true")
+    parser.add_argument("--no-gdrive-discovery", action="store_true")
+    return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    roots = discover_roots(args.corpus_root, not args.no_known_roots, not args.no_gdrive_discovery)
-    files = discover_files(roots, args.pattern or DEFAULT_GLOBS, args.max_files)
-    rows: list[dict[str, Any]] = []
-    inventory: list[dict[str, Any]] = []
-    for path in files:
-        remaining = max(0, args.max_rows_total - len(rows))
-        if remaining <= 0:
-            break
-        max_rows = min(args.max_rows_per_file, remaining)
-        loaded, meta, error = load_csv(path, max_rows) if path.suffix.lower() == ".csv" else load_parquet(path, max_rows)
-        inventory.append({"path": str(path), "loaded_rows": len(loaded), "error": error, **meta})
-        rows.extend(loaded[:remaining])
-
-    instruments = [x.strip().upper() for x in args.instrument if x.strip()] or ["NIFTY", "BANKNIFTY"]
-    hypotheses = hf.generate_hypotheses(instruments=instruments)
-    cfg = hf.ScreenConfig(min_trades=args.min_trades, cost_bps=args.cost_bps, spread_max_pct=args.spread_max_pct)
-    results = hf.screen_hypotheses(hypotheses, rows, cfg)
-    run_id = datetime.now(timezone.utc).strftime("RUN-%Y%m%dT%H%M%SZ")
-    out = Path(args.output_dir) / run_id
-    out.mkdir(parents=True, exist_ok=True)
-    hf.write_json(out / "generated_hypotheses.json", hypotheses)
-    hf.write_json(out / "screen_results.json", results)
-    hf.write_csv(out / "leaderboard.csv", results)
-    hf.write_json(out / "corpus_inventory.json", {"files": inventory})
-    manifest = {
-        "run_id": run_id,
-        "created_at_utc": datetime.now(timezone.utc).isoformat(),
-        "loaded_rows": len(rows),
-        "hypotheses": len(hypotheses),
-        "screen_results": len(results),
-        "promising_not_certified": sum(r.get("status") == "PROMISING_NOT_CERTIFIED" for r in results),
-        "runtime_authority": "NONE",
-        "broker_actions_allowed": False,
-        "certification": "NOT_CERTIFIED",
-    }
-    hf.write_json(out / "run_manifest.json", manifest)
-    print(json.dumps(manifest, indent=2))
-    return 0
+    manifest = run(args)
+    print(json.dumps({k: manifest[k] for k in ("run_id", "loaded_rows", "hypotheses", "screen_results", "promising_not_certified")}, indent=2))
+    return 0 if manifest["loaded_rows"] > 0 else 2
 
 
 if __name__ == "__main__":
