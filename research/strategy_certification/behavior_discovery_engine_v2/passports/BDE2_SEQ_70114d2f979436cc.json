@@ -1,0 +1,38 @@
+{
+  "broker_actions_permitted": false,
+  "candidate_id": "BDE2_SEQ_70114d2f979436cc",
+  "causal_observability_contract": "candidate matches only after the final state in the frozen sequence is observable from same-session prefix data",
+  "compiler_id": "BEHAVIOR_HYPOTHESIS_COMPILER_V1",
+  "direction": "UNKNOWN",
+  "edge_claimed": false,
+  "entry_concept": "NONE",
+  "exit_concept": "NONE",
+  "feature_schema_hash": "28a63fbaeb61cc5b67aa8e8d257a39523aede069f97972ab68e03f4fb48ec21a",
+  "forward_outcomes_used": false,
+  "interpretation": "Frozen structural behavior hypothesis, not a strategy and not an edge claim.",
+  "locked_outcomes_accessed": false,
+  "matching_rule": "ordered contiguous state_sequence subsequence inside a causally built behavior episode",
+  "minimum_support_rule": "support and distinct-session counts are measured before any outcome access; no forward labels used for selection",
+  "next_action": "DEVELOPMENT_OUTCOME_TEST_ONLY_AFTER_GOVERNED_APPROVAL_AND_PARTITION_CHECK",
+  "passport_sha256": "62cbd5e12e70c2a0247a54c41c0982c0cba28f8d309ff80283837ad515911373",
+  "runtime_authority": "NONE",
+  "schema_version": 1,
+  "search_family_id": "BDE2_SEQUENCE_FAMILY_V1",
+  "search_pressure": {
+    "candidate_count_compiled_in_batch": 25,
+    "candidate_rank_by_recurrence": 5,
+    "source_sequence_records": 25
+  },
+  "sequence_definition": {
+    "minimum_distinct_session_support_observed": 341,
+    "minimum_episode_support_observed": 381,
+    "sequence_length": 3,
+    "state_sequence": [
+      "DIRECTIONAL_DECELERATION",
+      "UPPER_REJECTION",
+      "COMPRESSION"
+    ]
+  },
+  "source_dataset_sha256": "6a145d4d17f124f9dc8ee272c5a19ca98988873a14b294765f44a27284d8b7e8",
+  "source_engine": "BEHAVIOR_DISCOVERY_ENGINE_V2"
+}

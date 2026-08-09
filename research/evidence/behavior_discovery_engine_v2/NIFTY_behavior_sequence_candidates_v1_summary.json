@@ -1,0 +1,40 @@
+{
+  "broker_actions_permitted": false,
+  "candidate_sequences_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_sequence_candidates_v1.jsonl",
+  "candidate_sequences_sha256": "c0a975da58125e902141af775e4b7511071f107cb5414e3e274fc23a23814cac",
+  "edge_claimed": false,
+  "episodes_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_episodes_v1.jsonl",
+  "episodes_read": 912,
+  "episodes_sha256": "3e84238a1530aa3896dcfd45c96b76ab0ab1e647968e21c514361e2e280cd8f5",
+  "forward_outcomes_used": false,
+  "interpretation": "Pre-outcome selector for materially distinct recurrent behavior sequences. This reduces false-discovery pressure before any development outcome test and still does not claim edge.",
+  "locked_outcomes_accessed": false,
+  "next_action": "COMPILE_SELECTED_BEHAVIOR_HYPOTHESIS_PASSPORTS",
+  "raw_recurrent_sequences_after_structural_gates": 1709,
+  "rejected_as_redundant_or_concentrated": 107,
+  "rejections_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_sequence_candidates_v1_rejections.jsonl",
+  "rejections_sha256": "8a0b1830c6c36117336f22243f72229c6f764fce8d98c0b75d40a1a098f43197",
+  "runtime_authority": "NONE",
+  "schema_version": 1,
+  "search_pressure": {
+    "episodes_scanned": 912,
+    "raw_recurrent_sequences_after_structural_gates": 1709,
+    "selected_candidates": 25,
+    "sequence_lengths_tried": 3
+  },
+  "selected_candidates": 25,
+  "selection_policy": {
+    "anchor_signature_concentration_limit": 3,
+    "first_state_concentration_limit": 4,
+    "generic_directional_only_sequences_rejected": true,
+    "max_candidates": 25,
+    "max_len": 5,
+    "max_overlap_jaccard": 0.8,
+    "min_distinct_session_support": 10,
+    "min_episode_support": 12,
+    "min_len": 3,
+    "minimum_anchor_state_count": 2
+  },
+  "selector_id": "BEHAVIOR_SEQUENCE_CANDIDATE_SELECTOR_V1",
+  "status": "BEHAVIOR_SEQUENCE_CANDIDATES_SELECTED"
+}

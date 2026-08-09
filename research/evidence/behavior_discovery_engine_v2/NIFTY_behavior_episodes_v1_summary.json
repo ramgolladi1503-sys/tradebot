@@ -1,0 +1,16 @@
+{
+  "broker_actions_permitted": false,
+  "component_id": "BEHAVIOR_EPISODE_GRAPH_V1",
+  "edge_claimed": false,
+  "episodes": 912,
+  "forward_outcomes_computed": false,
+  "input_rows": 36849,
+  "input_sha256": "8adf57b0be0e18d2bcdac5f870eab636ddc94d4d1d7a208190e4fc915e2c5f4a",
+  "interpretation": "Outcome-free causal episode graph. Adjacent state observations are collapsed into coherent session-local episodes.",
+  "locked_outcomes_accessed": false,
+  "output_sha256": "3e84238a1530aa3896dcfd45c96b76ab0ab1e647968e21c514361e2e280cd8f5",
+  "runtime_authority": "NONE",
+  "sessions": 493,
+  "status": "DISCOVERY_EPISODE_GRAPH_BUILT",
+  "unique_state_sequences": 909
+}

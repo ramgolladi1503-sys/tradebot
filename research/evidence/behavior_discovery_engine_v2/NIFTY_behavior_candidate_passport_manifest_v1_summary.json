@@ -1,0 +1,173 @@
+{
+  "broker_actions_permitted": false,
+  "compiler_id": "BEHAVIOR_HYPOTHESIS_COMPILER_V1",
+  "edge_claimed": false,
+  "feature_schema_hash": "28a63fbaeb61cc5b67aa8e8d257a39523aede069f97972ab68e03f4fb48ec21a",
+  "forward_outcomes_used": false,
+  "interpretation": "Candidate passports freeze recurrent causal structures only. Direction, entry, exit, and edge remain unknown.",
+  "locked_outcomes_accessed": false,
+  "manifest": [
+    {
+      "candidate_id": "BDE2_SEQ_b2135218a3848a6e",
+      "passport_file_sha256": "6783c5b40aa3d6f0ba0825f8c42875bac093537f5b93ef4a1cc126d1e4ee1241",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_b2135218a3848a6e.json",
+      "passport_sha256": "0b8f9f1bf36c4a823932f57156b720edf0d521b787b5dbb4f7b6138226dcda2c"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_148ca2975f3db371",
+      "passport_file_sha256": "5b4e0ee6a737ae5598337f8c1c7d3c8c40324e3aedfcd8edb10f2944ad142242",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_148ca2975f3db371.json",
+      "passport_sha256": "2e6f4468a17edb50ac80cbed8bf290923870f73debb5838ee4f535c14eb795fe"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_c7bc0498232a167b",
+      "passport_file_sha256": "78722214e4d0f7339f4450c91a374145d6ad0ccad5c3d5c76739958044015834",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_c7bc0498232a167b.json",
+      "passport_sha256": "1608cbb146311561cbab23ac3671e619b97d6fd70f3e4f2cdb2572c9e74a0bf2"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_9ab0426cc4d16437",
+      "passport_file_sha256": "db86ce309b84c3103fcecd68c3f3be1100aa61944ded2c3e20e947c2971c7ff9",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_9ab0426cc4d16437.json",
+      "passport_sha256": "0ee10b288a9d04f0424108888c6d288ae73b50f19f7b5f749f760342b0f7880d"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_70114d2f979436cc",
+      "passport_file_sha256": "f22b9442e39cade429008d4e709af91be521ee02ad5e6a5d53706d95e6117f41",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_70114d2f979436cc.json",
+      "passport_sha256": "62cbd5e12e70c2a0247a54c41c0982c0cba28f8d309ff80283837ad515911373"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_2e41dfdb88e4e497",
+      "passport_file_sha256": "acab9615600a6d764a585e2996093267f3113ce8bd800ac2888f4bee39a12f58",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_2e41dfdb88e4e497.json",
+      "passport_sha256": "b529172dc85460d813b468e74fd188764ebb681682791eef1d528cbd5b738a4e"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_ac15c094025b049d",
+      "passport_file_sha256": "9d87470d28bad0ea638f7d931acd981d4a9677e87e5ae1e506068dbd31524f47",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_ac15c094025b049d.json",
+      "passport_sha256": "da4baacbb4bc684a4d9ec89aa24553bc6ef80961d33a444e928014f069e08be8"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_9b5980b98a125ccc",
+      "passport_file_sha256": "395b18402456cee61dbd2c07f589092300f91a5954e01922191899ce86fd62c3",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_9b5980b98a125ccc.json",
+      "passport_sha256": "1b31e87672337e7b5750ffd723f386f27df22e6ad9f3a25845e86883d0183c77"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_7d36fde2404b32c6",
+      "passport_file_sha256": "cc29d09139cf1ecf63476c72607c6bd834143c21aae63911626a83f2758c1f91",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_7d36fde2404b32c6.json",
+      "passport_sha256": "f463028a396b3160215550708ec76e0c64c773306c84a1700674e3c2fbcd9092"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_80ed86824b0272ab",
+      "passport_file_sha256": "fa0bbca600d3280b67ec381b6231eee7fc13a54670375819a4ec1e309c325017",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_80ed86824b0272ab.json",
+      "passport_sha256": "6922063f667d071232c3b044643db965283d5f26da32c630e7e85a3f9df2d678"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_ce9a4bd44ce3beb3",
+      "passport_file_sha256": "9324860101eec4a188d275a04ae6c0f5249969f6511e49869b3c061a2bf33c65",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_ce9a4bd44ce3beb3.json",
+      "passport_sha256": "88be3d5247317b07600c207bfa3c1644ccceb18db7b75e7822ac61fb749f033c"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_f604c86326916df7",
+      "passport_file_sha256": "ff1687412b81b66bb04dab212b03676e7b454497836d60add593430ecd7216cb",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_f604c86326916df7.json",
+      "passport_sha256": "0355e89718510e4435e8e30a97deb084d4e35224213b7de3540a3dcab19a13d2"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_d910dd7b32937347",
+      "passport_file_sha256": "000de005e90c5de053b6afee2494a931521315dd83de5ce045c9c00b0a2a994a",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_d910dd7b32937347.json",
+      "passport_sha256": "a4fd3084c6b7782033400282d05695e1c6e750e3ec39dfa0789a3f89cadce5cb"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_4a1b791e176a8a1d",
+      "passport_file_sha256": "86a5cd8b0d3a19f96540d586b76d4711e80d0befa0b4826223b7050087390adc",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_4a1b791e176a8a1d.json",
+      "passport_sha256": "6df85c3cbb385af9af66f019e7ba1ba254b7e821cf7317e4e38dd45082b00115"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_6d420e4b29ba2bbd",
+      "passport_file_sha256": "d85e38deec314142b4f4f16c82900de7b0154461473bb3156077206125118009",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_6d420e4b29ba2bbd.json",
+      "passport_sha256": "f53eec76011b35783fb0c327d6bfb338d86deb11e7cac12e4c3cd7513e89d284"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_f1c40ff8dd302082",
+      "passport_file_sha256": "354c81bf6e85d8404a76a198ee9227a7c631653f16a46a0f024968cbc4a3e6ea",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_f1c40ff8dd302082.json",
+      "passport_sha256": "cd7cbcd176bfe189cffcfa39500cb11389efc20c23e3d1ba19fb67be7e28392d"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_91249e48b8be79fc",
+      "passport_file_sha256": "9ce4b8c7408e6f29cdefadf9f44778f9574f6ba9d7a3619ee93019c1b62bda91",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_91249e48b8be79fc.json",
+      "passport_sha256": "5a0255a317ff1d5c99e3d0586430c49043722c55d0ececa36d688bd210f0f268"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_59f0c42062f16af7",
+      "passport_file_sha256": "fc446c3d20c662386badbb40df2a5e6b22d47f6ae2866b090410295658064164",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_59f0c42062f16af7.json",
+      "passport_sha256": "99d8bb333f40227ed3671a2efab881873b3d3f3d85b471e5a02e4dcaec1bcaca"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_94be63165f5fcc2a",
+      "passport_file_sha256": "e53465660bf38e0e322e5fa020e63fe2dff7d8a65bb962bf7add74822dcbee3c",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_94be63165f5fcc2a.json",
+      "passport_sha256": "8e46234ce65e7cb71db517cd5167fef4010973a032f15461cd0a561db7813eac"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_32b8e1047a01cee9",
+      "passport_file_sha256": "a3941f70b0b384823028b311fd809563ed317d147616b9efccd8700459371fec",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_32b8e1047a01cee9.json",
+      "passport_sha256": "f592f7e9b21d071ba1cfbda746f5a50de9fea12c0d712765042edfb1f1889d6f"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_1fee81e3941ef50a",
+      "passport_file_sha256": "e4e821b653a7656b7615cd06ab62abd3ebff1435ceae3dbafeb436a99721ac75",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_1fee81e3941ef50a.json",
+      "passport_sha256": "4204f3d5f8b691e849392af8bcb61a1da1d805ed9022e44552cec197b4563062"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_f9db3c8a806d610f",
+      "passport_file_sha256": "66a511df5fdc285da8e3b76a7818ff7c6d7920569e23687ad32fe3fb9fc7d4da",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_f9db3c8a806d610f.json",
+      "passport_sha256": "f582658bcf56773585ff3b5b69237fc0e6abd632a6a84e1e4c43c7cc0f97ea08"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_9033bcfab2d62bba",
+      "passport_file_sha256": "3f049e6ef8db99b26a407746af81761ec810dabffea406269de40aadc5df5749",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_9033bcfab2d62bba.json",
+      "passport_sha256": "ae2a8d57f9517bde410fb3a4e855c8de4775ba510677c4c50ff5a6667390f0f3"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_5ed123827cbe6d86",
+      "passport_file_sha256": "f534e491514c2f3de10301e6b0ef2f93cc605d877035df3329b97039c41b9ee4",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_5ed123827cbe6d86.json",
+      "passport_sha256": "1c0487877cad7514e13659e745eef6cf8d297fe433eb14408a9e9768737db654"
+    },
+    {
+      "candidate_id": "BDE2_SEQ_5f394ccb941aa5d0",
+      "passport_file_sha256": "5a3f11e9d6da6cdf732917c303bc451f1a3c6073722c4fe7f24e150389e5aca6",
+      "passport_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/strategy_certification/behavior_discovery_engine_v2/passports/BDE2_SEQ_5f394ccb941aa5d0.json",
+      "passport_sha256": "d5f4d62986b0ec2d6f6b726676e367ebfd34ceeff44953c85c57b2d543fe9fcf"
+    }
+  ],
+  "manifest_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_candidate_passport_manifest_v1.json",
+  "manifest_sha256": "80daecaa7238012286c2f0d0876a7bd56c74ae9a25a94def05a35bfbe3170f94",
+  "next_action": "GOVERNED_DEVELOPMENT_OUTCOME_TEST",
+  "passports_frozen": 25,
+  "runtime_authority": "NONE",
+  "schema_version": 1,
+  "search_family_id": "BDE2_SEQUENCE_FAMILY_V1",
+  "sequence_records_read": 25,
+  "sequences_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/evidence/behavior_discovery_engine_v2/NIFTY_behavior_sequence_candidates_v1.jsonl",
+  "sequences_sha256": "c0a975da58125e902141af775e4b7511071f107cb5414e3e274fc23a23814cac",
+  "source_dataset_sha256": "6a145d4d17f124f9dc8ee272c5a19ca98988873a14b294765f44a27284d8b7e8",
+  "status": "STRUCTURAL_CANDIDATE_PASSPORTS_FROZEN"
+}
