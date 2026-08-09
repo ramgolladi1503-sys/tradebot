@@ -1,10 +1,13 @@
 """Mean Reversion Extension movement strategy.
 
 Detects range/chop extension back toward VWAP/range mean. This strategy refuses
-to fade strong continuation and emits read-only StrategyCandidate objects only.
+to fade strong continuation and requires explicit oscillator confirmation before
+emitting read-only StrategyCandidate objects.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.strategy_parameter_profiles import get_default_profile
@@ -26,7 +29,7 @@ def generate_mean_reversion_extension_candidates(
     ctx: StrategyContext,
     regime: MovementRegimeResult,
 ) -> tuple[StrategyCandidate, ...]:
-    """Generate mean-reversion candidates only in range/chop extension contexts."""
+    """Generate mean-reversion candidates only with anchor and oscillator evidence."""
 
     profile = get_default_profile(STRATEGY_ID, "v1")
     params = profile.params if profile else {}
@@ -63,6 +66,7 @@ def generate_mean_reversion_extension_candidates(
         distance > 0
         and _trend_continuation_score(ctx, regime, "BUY_CALL")
         <= max_trend_continuation_score
+        and _oscillator_confirms_reversion(ctx, "BUY_PUT")
     ):
         candidates.append(
             _build_candidate(
@@ -78,6 +82,7 @@ def generate_mean_reversion_extension_candidates(
         distance < 0
         and _trend_continuation_score(ctx, regime, "BUY_PUT")
         <= max_trend_continuation_score
+        and _oscillator_confirms_reversion(ctx, "BUY_CALL")
     ):
         candidates.append(
             _build_candidate(
@@ -90,6 +95,48 @@ def generate_mean_reversion_extension_candidates(
             )
         )
     return tuple(candidates)
+
+
+def _oscillator_snapshot(ctx: StrategyContext) -> dict[str, Any]:
+    """Return only explicitly supplied causal oscillator evidence.
+
+    The strategy never invents a default oscillator state. Callers may provide a
+    boolean/directional `oscillator_confirmation`, RSI, or z-score in metadata.
+    Missing evidence fails closed.
+    """
+
+    metadata = ctx.metadata or {}
+    confirmation = metadata.get("oscillator_confirmation")
+    rsi = safe_float(metadata.get("rsi"))
+    zscore = safe_float(metadata.get("zscore", metadata.get("z_score")))
+    return {
+        "oscillator_confirmation": confirmation,
+        "rsi": rsi,
+        "zscore": zscore,
+    }
+
+
+def _oscillator_confirms_reversion(ctx: StrategyContext, direction: str) -> bool:
+    snapshot = _oscillator_snapshot(ctx)
+    explicit = snapshot["oscillator_confirmation"]
+    if isinstance(explicit, dict):
+        explicit = explicit.get(direction) or explicit.get(direction.lower())
+    if isinstance(explicit, bool):
+        return explicit
+    if isinstance(explicit, str):
+        normalized = explicit.strip().upper()
+        if normalized in {direction, "CONFIRMED", "TRUE", "YES"}:
+            return True
+        if normalized in {"FALSE", "NO", "REJECTED"}:
+            return False
+
+    rsi = snapshot["rsi"]
+    zscore = snapshot["zscore"]
+    if direction == "BUY_PUT":
+        return bool((rsi is not None and rsi >= 65.0) or (zscore is not None and zscore >= 1.0))
+    if direction == "BUY_CALL":
+        return bool((rsi is not None and rsi <= 35.0) or (zscore is not None and zscore <= -1.0))
+    return False
 
 
 def _build_candidate(
@@ -120,12 +167,17 @@ def _build_candidate(
         )
         + 0.20 * _range_boundary_score(ctx, direction)
     )
+    oscillator = _oscillator_snapshot(ctx)
     evidence = {
         "spot_ltp": ctx.spot_ltp,
         "vwap": ctx.vwap,
         "vwap_extension_abs_pct": extension_abs,
         "reversion_type": reversion_type,
         "range_chop_score": range_chop_score,
+        "mean_reversion_anchor": "VWAP",
+        "oscillator_confirmation": True,
+        "oscillator_rsi": oscillator["rsi"],
+        "oscillator_zscore": oscillator["zscore"],
         "day_high": ctx.day_high,
         "day_low": ctx.day_low,
         "nearest_support": ctx.nearest_support,
@@ -143,12 +195,12 @@ def _build_candidate(
         direction=direction,
         price_structure_score=price_structure_score,
         side=side,
-        entry_trigger="range_extension_with_opposite_option_confirmation",
-        invalid_if="extension_expands_into_trend_continuation_or_option_quote_degrades",
-        rank_reason="range/chop extension stretched away from VWAP with opposite option confirmation",
+        entry_trigger="range_extension_with_oscillator_and_opposite_option_confirmation",
+        invalid_if="oscillator_confirmation_lost_or_extension_expands_into_trend_continuation_or_option_quote_degrades",
+        rank_reason="range/chop extension stretched from VWAP with explicit oscillator reversal confirmation",
         evidence=evidence,
         warnings=(),
-        confluence_tags=("mean_reversion", "range_extension", "option_confirmation"),
+        confluence_tags=("mean_reversion", "range_extension", "oscillator_confirmation", "option_confirmation"),
         suppression_tags=("avoid_fading_strong_trend",),
         strategy_version="v1",
         params_used=params,
