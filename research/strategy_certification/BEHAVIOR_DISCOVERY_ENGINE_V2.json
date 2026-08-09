@@ -1,0 +1,22 @@
+{
+  "engine_id": "BEHAVIOR_DISCOVERY_ENGINE_V2",
+  "component_id": "BEHAVIOR_STATE_ENGINE_V1",
+  "schema_version": 1,
+  "instrument": "NIFTY",
+  "dataset_sha256": "6a145d4d17f124f9dc8ee272c5a19ca98988873a14b294765f44a27284d8b7e8",
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "forward_outcomes_permitted": false,
+  "locked_outcomes_permitted": false,
+  "rolling_range_lookback": 12,
+  "rolling_return_lookback": 6,
+  "recent_extreme_lookback": 12,
+  "compression_ratio_max": 0.70,
+  "expansion_ratio_min": 1.60,
+  "strong_body_fraction_min": 0.65,
+  "rejection_wick_fraction_min": 0.45,
+  "escape_threshold_bps": 8.0,
+  "recovery_threshold_bps": 6.0,
+  "acceleration_ratio_min": 1.50,
+  "deceleration_ratio_max": 0.60
+}
