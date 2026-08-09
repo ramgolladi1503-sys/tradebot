@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 SELECTOR_ID = "BEHAVIOR_TRANSITION_COMMUNITY_SELECTOR_V1"
 SEARCH_FAMILY_ID = "BDE2_TRANSITION_COMMUNITY_FAMILY_V1"
@@ -26,6 +27,31 @@ GENERIC_CENTER_STATES = {
     "RANGE_BALANCE",
 }
 
+ALLOWED_FALSE_GOVERNANCE_FLAGS = {
+    "edge_claimed",
+    "forward_outcomes_used",
+    "locked_outcomes_accessed",
+}
+FORBIDDEN_EXACT_KEYS = {
+    "forward_return",
+    "future_return",
+    "pnl",
+    "profit",
+    "profitability",
+    "outcome",
+    "target",
+    "label",
+}
+FORBIDDEN_KEY_TERMS = (
+    "forward_return",
+    "future_return",
+    "future_",
+    "pnl",
+    "profit",
+    "target",
+    "label",
+)
+
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -45,12 +71,28 @@ def load_jsonl(path: Path) -> list[dict[str, object]]:
     return rows
 
 
+def _audit_no_outcome_payload(value: Any, path: str = "") -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key).lower()
+            child_path = f"{path}.{key_text}" if path else key_text
+            if key_text in ALLOWED_FALSE_GOVERNANCE_FLAGS:
+                if child is not False:
+                    raise ValueError(f"governance_flag_not_false:{child_path}")
+                continue
+            if key_text in FORBIDDEN_EXACT_KEYS or any(term in key_text for term in FORBIDDEN_KEY_TERMS):
+                raise ValueError(f"outcome_like_key_rejected:{child_path}")
+            _audit_no_outcome_payload(child, child_path)
+        return
+    if isinstance(value, list):
+        for i, item in enumerate(value):
+            _audit_no_outcome_payload(item, f"{path}[{i}]")
+        return
+
+
 def reject_outcome_like(rows: list[dict[str, object]]) -> None:
-    terms = ("forward_return", "future_return", "pnl", "profit", "outcome", "target", "label")
     for row in rows:
-        payload = json.dumps(row, sort_keys=True).lower()
-        if any(term in payload for term in terms):
-            raise ValueError("outcome_like_input_rejected")
+        _audit_no_outcome_payload(row)
 
 
 def reject_reason(
