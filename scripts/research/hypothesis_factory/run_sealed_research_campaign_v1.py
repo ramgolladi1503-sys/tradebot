@@ -29,9 +29,15 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    """Append a canonical event once; controller resume must not duplicate evidence."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(payload, sort_keys=True)
+    if path.exists():
+        existing = {x for x in path.read_text(encoding="utf-8").splitlines() if x.strip()}
+        if line in existing:
+            return
     with path.open("a", encoding="utf-8") as h:
-        h.write(json.dumps(payload, sort_keys=True) + "\n")
+        h.write(line + "\n")
 
 
 def write_state(path: Path, payload: dict[str, Any]) -> None:
