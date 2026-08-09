@@ -1,14 +1,11 @@
 from core.regime_router import resolve_strategy_regime, record_strategy_regime_path
-from strategies.soft_signal import soft_signal
 
 
 def _update_debug(debug_stats, *, considered=0, rejected=0, scored=0, reason=None):
     if not isinstance(debug_stats, dict):
         return
     debug_stats["candidates_considered"] = int(debug_stats.get("candidates_considered", 0)) + int(considered)
-    debug_stats["candidates_rejected_pre_score"] = int(
-        debug_stats.get("candidates_rejected_pre_score", 0)
-    ) + int(rejected)
+    debug_stats["candidates_rejected_pre_score"] = int(debug_stats.get("candidates_rejected_pre_score", 0)) + int(rejected)
     debug_stats["candidates_scored"] = int(debug_stats.get("candidates_scored", 0)) + int(scored)
     counts = debug_stats.setdefault("rejection_reason_counts", {})
     if reason:
@@ -16,12 +13,12 @@ def _update_debug(debug_stats, *, considered=0, rejected=0, scored=0, reason=Non
 
 
 _PROFILES = {
-    "TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bias': 0.05, 'range_reversion': False, 'trend_conflict_mult': 1.4},
-    "TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bias': 0.05, 'range_reversion': False, 'trend_conflict_mult': 1.4},
-    "RANGE": {'setup_family': 'MEAN_REVERSION', 'vwap_buffer_mult': 1.15, 'min_move_mult': 0.8, 'score_bias': -0.02, 'range_reversion': True, 'range_extension_mult': 1.2},
-    "VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score_bias': -0.04, 'range_reversion': False, 'strict_move_mult': 1.15},
-    "EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'score_bias': 0.0, 'range_reversion': False},
+    "TRENDING_UP": {"setup_family": "BREAKOUT", "vwap_buffer_mult": 0.9, "min_move_mult": 0.9, "score_bias": 0.05, "trend_conflict_mult": 1.4},
+    "TRENDING_DOWN": {"setup_family": "BREAKOUT", "vwap_buffer_mult": 0.9, "min_move_mult": 0.9, "score_bias": 0.05, "trend_conflict_mult": 1.4},
+    "RANGE": {"setup_family": "MEAN_REVERSION", "vwap_buffer_mult": 1.15, "min_move_mult": 0.8, "score_bias": -0.02, "range_extension_mult": 1.2},
 }
+_ALLOWED_REGIMES = frozenset(_PROFILES)
+
 
 def _normalize_bias(bias):
     if not isinstance(bias, str):
@@ -33,10 +30,9 @@ def _normalize_bias(bias):
         return "bearish"
     return None
 
+
 def generate_signal(ltp, vwap, bias, vwap_buffer=0.002, min_move=0.001, debug_stats=None, regime=None, expiry_context=False):
-    """
-    BankNifty intraday signal using VWAP context with bias as a quality input, not a hard gate.
-    """
+    """Canonical BANKNIFTY VWAP signal; rejected evidence never becomes a signal."""
     _update_debug(debug_stats, considered=1)
     if not ltp or not vwap or vwap <= 0:
         _update_debug(debug_stats, rejected=1, reason="missing_reference_price")
@@ -44,123 +40,58 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.002, min_move=0.001, debug_st
 
     bias_norm = _normalize_bias(bias)
     regime_name = resolve_strategy_regime(regime, bias=bias_norm, expiry_context=expiry_context)
-    profile = dict(_PROFILES.get(regime_name, _PROFILES["TRENDING_UP"]))
+    if regime_name not in _ALLOWED_REGIMES:
+        _update_debug(debug_stats, rejected=1, reason="regime_not_declared_by_strategy_spec")
+        return None
+    profile = dict(_PROFILES[regime_name])
     profile["regime"] = regime_name
     record_strategy_regime_path("banknifty_intraday", regime_name, profile, debug_stats=debug_stats)
+
     vwap_buffer = float(vwap_buffer) * float(profile.get("vwap_buffer_mult", 1.0))
     min_move = float(min_move) * float(profile.get("min_move_mult", 1.0))
-    diff = (ltp - vwap) / vwap
+    diff = (float(ltp) - float(vwap)) / float(vwap)
     abs_diff = abs(diff)
-    weak_move_floor = float(min_move) * 0.65
-    if abs_diff < weak_move_floor:
+    if abs_diff < float(min_move) * 0.65 or diff == 0:
         _update_debug(debug_stats, rejected=1, reason="move_too_small")
-        direction = "BUY_CALL" if diff >= 0 else "BUY_PUT"
-        return soft_signal(
-            reason="move_too_small",
-            direction=direction,
-            setup_type="SOFT_REJECT",
-            regime_path=regime_name,
-        )
+        return None
 
-    if diff == 0:
-        _update_debug(debug_stats, rejected=1, reason="flat_vs_vwap")
-        direction = "BUY_CALL"
-        return soft_signal(
-            reason="flat_vs_vwap",
-            direction=direction,
-            setup_type="SOFT_REJECT",
-            regime_path=regime_name,
-        )
-
-    setup_type = str(profile.get("setup_family") or "BREAKOUT")
     direction = "BUY_CALL" if diff > 0 else "BUY_PUT"
     soft_flags = []
-    reason = "VWAP directional setup"
     if regime_name == "RANGE":
-        if abs_diff < (vwap_buffer * float(profile.get("range_extension_mult", 1.20))):
+        if abs_diff < vwap_buffer * float(profile.get("range_extension_mult", 1.20)):
             _update_debug(debug_stats, rejected=1, reason="range_extension_too_small")
             return None
         direction = "BUY_PUT" if diff > 0 else "BUY_CALL"
         setup_type = "MEAN_REVERSION"
         reason = "VWAP mean reversion setup"
-        soft_flags.append("breakout_suppressed_range_regime")
         score = 0.46 + min(0.26, abs_diff / max(vwap_buffer, 1e-6) * 0.08)
     else:
-        score = 0.5 + min(0.30, abs_diff / max(vwap_buffer, 1e-6) * 0.10)
-        if regime_name == "VOLATILE":
-            if abs_diff < (vwap_buffer * float(profile.get("strict_move_mult", 1.15))):
-                _update_debug(debug_stats, rejected=1, reason="volatile_move_too_small")
-                return None
-            soft_flags.append("volatile_regime_path")
-        elif regime_name == "EXPIRY_CONTEXT":
-            soft_flags.append("expiry_context_path")
-        else:
-            soft_flags.append(f"regime_{regime_name.lower()}")
+        setup_type = "BREAKOUT"
+        reason = "VWAP directional setup"
+        score = 0.50 + min(0.30, abs_diff / max(vwap_buffer, 1e-6) * 0.10)
+
     if abs_diff < vwap_buffer:
-        soft_flags.append("below_primary_vwap_buffer")
         score -= 0.08
+        soft_flags.append("below_primary_vwap_buffer")
     if bias_norm is None:
-        soft_flags.append("bias_missing")
         score -= 0.05
-    elif (bias_norm == "bullish" and direction == "BUY_PUT") or (
-        bias_norm == "bearish" and direction == "BUY_CALL"
-    ):
-        if regime_name in {"TRENDING_UP", "TRENDING_DOWN"} and abs_diff < (vwap_buffer * float(profile.get("trend_conflict_mult", 1.40))):
+        soft_flags.append("bias_missing")
+    elif (bias_norm == "bullish" and direction == "BUY_PUT") or (bias_norm == "bearish" and direction == "BUY_CALL"):
+        if regime_name in {"TRENDING_UP", "TRENDING_DOWN"} and abs_diff < vwap_buffer * float(profile.get("trend_conflict_mult", 1.40)):
             _update_debug(debug_stats, rejected=1, reason="trend_regime_conflict")
-            return soft_signal(
-                reason="trend_regime_conflict",
-                direction=direction,
-                setup_type="SOFT_REJECT",
-                regime_path=regime_name,
-            )
-        if abs_diff < (vwap_buffer * 1.30):
+            return None
+        if abs_diff < vwap_buffer * 1.30:
             _update_debug(debug_stats, rejected=1, reason="bias_conflict_without_price_override")
             return None
-        soft_flags.append("bias_conflict_price_override")
         score -= 0.11
+        soft_flags.append("bias_conflict_price_override")
     else:
-        soft_flags.append("bias_aligned")
         score += 0.04
+        soft_flags.append("bias_aligned")
 
-    score += float(profile.get("score_bias", 0.0))
-    score = max(0.05, min(0.95, score))
+    score = max(0.05, min(0.95, score + float(profile.get("score_bias", 0.0))))
     _update_debug(debug_stats, scored=1)
-    return {
-        "direction": direction,
-        "reason": reason,
-        "score": round(score, 3),
-        "soft_flags": soft_flags,
-        "setup_type": setup_type,
-        "regime_path": regime_name,
-    }
+    return {"direction": direction, "reason": reason, "score": round(score, 3), "soft_flags": soft_flags, "setup_type": setup_type, "regime_path": regime_name}
 
-from datetime import date
-from core.strategy_registry.strategy_contract import StrategyContract
 
-contract = StrategyContract(
-    strategy_id="banknifty_intraday",
-    strategy_name="BankNifty Intraday Volatility",
-    version="1.0.0",
-    owner="System",
-    created_date=date(2026, 1, 1),
-    description="Intraday volatility breakout on BankNifty",
-    market_hypothesis="BankNifty expands rapidly after compression",
-    primary_market="NSE",
-    supported_indices=["BANKNIFTY"],
-    supported_option_types=["CE", "PE"],
-    entry_rules_summary="Breakout from opening range",
-    exit_rules_summary="End of day",
-    stop_logic_summary="Fixed risk",
-    target_logic_summary="Trailing stop",
-    time_stop="15:15",
-    required_indicators=["ORB"],
-    required_market_data=["BANKNIFTY_SPOT"],
-    required_option_data=["BANKNIFTY_OPTIONS"],
-    required_sessions=["INTRADAY"],
-    required_liquidity="HIGH",
-    allowed_regimes=["VOLATILE"],
-    forbidden_regimes=["CHOPPY"],
-    required_confirmations=["OPTION_CHAIN"],
-    known_limitations=["Fake breakouts"],
-    known_assumptions=["Momentum"]
-)
+__all__ = ["generate_signal"]
