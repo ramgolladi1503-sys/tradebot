@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "campaign_id": "SEALED_RESEARCH_CAMPAIGN_V1",
+  "status": "FROZEN_PRE_AUTOMATION",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "sealed_kernel_commit": "46dd4f7df9b63486eb633a12baf25412cd4f761d",
+  "dataset_sha256": "66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32",
+  "budget": {
+    "max_generations": 10,
+    "max_total_frozen_configurations": 500,
+    "stop_on_first_certification_candidate": true,
+    "stop_when_budget_exhausted": true
+  },
+  "global_validation_gate": {
+    "minimum_trades": 20,
+    "require_positive_mean_net_bps": true,
+    "require_positive_total_net_bps": true
+  },
+  "pre_holdout_robustness_gate": {
+    "cost_stress_bps": [2.0, 4.0, 8.0],
+    "require_positive_mean_at_base_cost": true,
+    "require_nonpositive_degradation_with_higher_cost": true,
+    "negative_controls_required": [
+      "NO_SAME_BAR_FILL",
+      "FUTURE_BAR_SHIFT_MUST_NOT_AUTHORIZE_EDGE",
+      "RANDOMIZED_DIRECTION_NULL",
+      "SESSION_PERMUTATION_NULL"
+    ]
+  },
+  "holdout_gate": {
+    "minimum_trades": 20,
+    "require_positive_mean_net_bps": true,
+    "require_positive_total_net_bps": true,
+    "one_time_access_only": true
+  },
+  "multiple_testing_policy": {
+    "family_scope": "ALL_GENERATIONS_IN_THIS_CAMPAIGN",
+    "discovery_claim_requires_correction": true,
+    "uncorrected_positive_result_may_only_be_called_CANDIDATE_NOT_CERTIFIED": true
+  },
+  "generation_registry": [
+    {
+      "generation_id": "HUNT_V4_GENERATION_FREEZE",
+      "freeze_path": "research/strategy_certification/passports/HUNT_V4_GENERATION_FREEZE.json",
+      "development_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_hunt_v4_development_screen.py", "--repo-root", "."],
+      "development_output": "research/evidence/strategy_certification/HUNT_V4_DEVELOPMENT_SCREEN.json"
+    }
+  ],
+  "extension_rule": "NEW GENERATIONS MAY BE APPENDED ONLY BEFORE THEIR DEVELOPMENT OUTCOMES ARE ACCESSED. APPENDING A GENERATION DOES NOT CHANGE ANY EXISTING GENERATION OR GLOBAL GATE.",
+  "terminal_states": [
+    "STRUCTURAL_EDGE_CANDIDATE_FOUND",
+    "CAMPAIGN_EXHAUSTED_NO_EDGE",
+    "BLOCKED_MISSING_STAGE_IMPLEMENTATION",
+    "FAIL_CLOSED"
+  ]
+}
