@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "atlas_id": "MARKET_STRUCTURE_PATTERN_ATLAS_V1",
+  "status": "FROZEN_DISCOVERY_ONLY",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "purpose": "Convert OHLC history into causal structural episodes before any strategy hypothesis or profitability test.",
+  "campaign_v1_holdout_policy": "FORBIDDEN. THE SEALED CAMPAIGN V1 HOLDOUT MUST NOT BE OPENED OR USED BY THIS ATLAS.",
+  "causality_contract": {
+    "pivot_rule": "A swing pivot is not observable at its extreme bar. It becomes confirmed only after price reverses by the frozen zigzag threshold. Both pivot_timestamp and confirmation_timestamp must be recorded.",
+    "support_resistance_rule": "Only previously confirmed pivots may define a level/zone at a given timestamp.",
+    "indicator_rule": "Descriptors use current and prior completed bars only.",
+    "outcome_rule": "V1 atlas construction records no forward profitability label and performs no parameter selection by future returns."
+  },
+  "zigzag_thresholds_bps": [20, 35, 50],
+  "zone_tolerance_bps": 15,
+  "zone_min_confirmed_touches": 2,
+  "rolling_context_bars": 12,
+  "structural_primitives": [
+    "CONFIRMED_SWING_HIGH",
+    "CONFIRMED_SWING_LOW",
+    "HIGHER_HIGH",
+    "LOWER_HIGH",
+    "HIGHER_LOW",
+    "LOWER_LOW",
+    "DOUBLE_TOP_LIKE",
+    "DOUBLE_BOTTOM_LIKE",
+    "SUPPORT_ZONE_TOUCH",
+    "RESISTANCE_ZONE_TOUCH",
+    "SUPPORT_BREAK",
+    "RESISTANCE_BREAK",
+    "RANGE_COMPRESSION",
+    "RANGE_EXPANSION",
+    "STRONG_BULL_BODY",
+    "STRONG_BEAR_BODY",
+    "UPPER_WICK_REJECTION",
+    "LOWER_WICK_REJECTION"
+  ],
+  "episode_policy": "Episodes are descriptive observations, not trades. Textbook names are secondary labels derived from objective primitives.",
+  "next_stage_rule": "Only recurring primitives/episodes with adequate occurrence counts may later be converted into separately frozen hypotheses for the sealed certification kernel."
+}
