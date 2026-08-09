@@ -17,7 +17,7 @@ import argparse
 import csv
 import importlib.util
 import json
-import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,11 +27,12 @@ RUNNER_PATH = HERE / "run_corpus_screen.py"
 spec = importlib.util.spec_from_file_location("run_corpus_screen", RUNNER_PATH)
 runner = importlib.util.module_from_spec(spec)
 assert spec and spec.loader
+sys.modules[spec.name] = runner
 spec.loader.exec_module(runner)
 
-CACHE_SCHEMA = "tradebot-canonical-corpus-cache-v1"
+CACHE_SCHEMA = "tradebot-canonical-corpus-cache-v2"
 CANONICAL_FIELDS = [
-    "timestamp", "instrument", "open", "high", "low", "close",
+    "timestamp", "instrument", "raw_instrument", "open", "high", "low", "close",
     "volume", "vwap", "bid", "ask", "is_fallback", "source_path",
 ]
 
@@ -86,23 +87,22 @@ def load_one(path: Path, max_rows: int | None) -> tuple[list[dict[str, Any]], di
 
 
 def dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Deduplicate exact instrument/timestamp/OHLC/source rows without fabricating aggregation."""
+    """Deduplicate exact contract/timestamp/OHLC/source rows without fabricating aggregation."""
     seen: set[tuple[str, ...]] = set()
     out: list[dict[str, Any]] = []
     for row in rows:
         if str(row.get("is_fallback", "")).strip().lower() in {"true", "1", "yes", "fallback", "recovered_fallback"}:
             continue
         key = (
-            str(row.get("instrument", "")), str(row.get("timestamp", "")),
-            str(row.get("open", "")), str(row.get("high", "")),
-            str(row.get("low", "")), str(row.get("close", "")),
+            str(row.get("instrument", "")), str(row.get("raw_instrument", "")), str(row.get("timestamp", "")),
+            str(row.get("open", "")), str(row.get("high", "")), str(row.get("low", "")), str(row.get("close", "")),
             str(row.get("source_path", "")),
         )
         if key in seen:
             continue
         seen.add(key)
         out.append(row)
-    out.sort(key=lambda r: (str(r.get("instrument", "")), str(r.get("timestamp", "")), str(r.get("source_path", ""))))
+    out.sort(key=lambda r: (str(r.get("instrument", "")), str(r.get("raw_instrument", "")), str(r.get("timestamp", "")), str(r.get("source_path", ""))))
     return out
 
 
@@ -113,6 +113,8 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     index_path = cache_dir / "corpus_index.json"
     prior = read_json(index_path, {})
     prior_files = prior.get("files", {}) if isinstance(prior, dict) else {}
+    prior_schema = str(prior.get("schema_version", "")) if isinstance(prior, dict) else ""
+    schema_matches = prior_schema == CACHE_SCHEMA
 
     roots = runner.discover_roots(args.corpus_root, not args.no_known_roots, not args.no_gdrive_discovery)
     files = runner.discover_files(roots, args.pattern or runner.DEFAULT_GLOBS, args.max_files)
@@ -129,7 +131,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         sig = file_signature(path)
         ckey = cache_key(path)
         cached_rows_path = file_cache_dir / f"{ckey}.csv"
-        old = prior_files.get(pkey, {})
+        old = prior_files.get(pkey, {}) if schema_matches else {}
         unchanged = old.get("signature") == sig
         can_reuse = unchanged and old.get("status") == "USABLE" and cached_rows_path.exists()
         can_reuse_bad = unchanged and old.get("status") == "UNUSABLE"
