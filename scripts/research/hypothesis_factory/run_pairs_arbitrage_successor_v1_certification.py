@@ -7,7 +7,7 @@ or passport. Holdout is chronological and is never used for parameter selection.
 """
 from __future__ import annotations
 
-import argparse, csv, hashlib, importlib, json, math, random
+import argparse, csv, hashlib, importlib, json, math, random, sys
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import mean
@@ -51,7 +51,6 @@ def pct_return(entry: float, exit_: float) -> float:
 
 
 def gross_pair_return(direction: str, beta: float, a0: float, b0: float, a1: float, b1: float) -> float:
-    # normalized one-A-notional plus abs(beta)-B-notional return
     wa, wb = 1.0, abs(beta)
     ra, rb = pct_return(a0,a1), pct_return(b0,b1)
     if direction == "SELL_SPREAD":
@@ -63,7 +62,6 @@ def gross_pair_return(direction: str, beta: float, a0: float, b0: float, a1: flo
 
 
 def cost_return(round_trip_bps_per_leg: float, beta: float) -> float:
-    # passport defines per-leg RT bps on absolute traded notional; normalization cancels weights
     return float(round_trip_bps_per_leg) / 10000.0
 
 @dataclass
@@ -77,7 +75,6 @@ def run_pair(rows, idxs, leg_a, leg_b, signal_fn, history_window, min_z, max_hl,
     while i <= i1-1:
         if i not in idxs: i+=1; continue
         r=rows[i]; sess=r["session"]
-        # require history from same chronological subset and exact aligned matrix
         hist_idx=[j for j in range(i-history_window, i) if j in idxs]
         if len(hist_idx) != history_window: i+=1; continue
         ha=[f(rows[j][leg_a]) for j in hist_idx]; hb=[f(rows[j][leg_b]) for j in hist_idx]
@@ -89,8 +86,6 @@ def run_pair(rows, idxs, leg_a, leg_b, signal_fn, history_window, min_z, max_hl,
         if entry_i>i1 or entry_i not in idxs: i+=1; continue
         if rows[entry_i]["session"] != sess: i+=1; continue
         beta=float(sig["hedge_ratio"]); direction=sig["direction"]
-        # entry at next synchronized bar open proxy: matrix only has banknifty open, while leaders only close.
-        # Therefore use next-bar closes for all legs consistently and mark limitation; no same-bar fill.
         a0=f(rows[entry_i][leg_a]); b0=f(rows[entry_i][leg_b])
         exit_i=None; reason=None
         entry_z=float(sig["spread_truth"]["zscore"])
@@ -98,7 +93,6 @@ def run_pair(rows, idxs, leg_a, leg_b, signal_fn, history_window, min_z, max_hl,
         for k in range(entry_i, max_exit+1):
             if k not in idxs or rows[k]["session"] != sess:
                 exit_i=k-1 if k-1>=entry_i else entry_i; reason="SESSION_EXIT"; break
-            # recompute causal signal state on completed history through k
             hstart=max(i0,k-history_window)
             hk=[j for j in range(hstart,k) if j in idxs and rows[j]["session"]==sess]
             if len(hk)<9: continue
@@ -139,6 +133,9 @@ def main(argv=None):
         rows=load_rows(ds)
         dev,val,hold=split_sessions(rows,p["certification_split"]["development_fraction"],p["certification_split"]["validation_fraction"])
         sets={"development":dev,"validation":val,"holdout":hold}
+        root_text=str(root)
+        if root_text not in sys.path:
+            sys.path.insert(0, root_text)
         mod=importlib.import_module("strategies.pairs_arbitrage"); signal_fn=mod.generate_signal
         pairs=[("BANKNIFTY_NIFTY","banknifty_close","nifty_close"),("BANKNIFTY_SENSEX","banknifty_close","sensex_close")]
         base={}; neighborhood={}; stress={}
@@ -156,7 +153,6 @@ def main(argv=None):
             stress[name]={}
             idxs={i for i,r in enumerate(rows) if r["session"] in hold}
             for c in [2.0]+[float(x) for x in p["cost_contract"]["stress_round_trip_bps_per_leg"]]: stress[name][str(c)]=metrics(run_pair(rows,idxs,la,lb,signal_fn,36,2.0,36.0,c))
-        # conservative verdict: both pairs require >=30 holdout trades and positive mean net at base and 8 bps/leg stress
         ok=True; reasons=[]
         for name in base:
             hm=base[name]["holdout"]; sm=stress[name]["8.0"]
