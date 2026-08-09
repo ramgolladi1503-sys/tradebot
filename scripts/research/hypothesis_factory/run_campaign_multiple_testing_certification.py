@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse,json,math
+import argparse,json
 from pathlib import Path
 
 def authority(x,label):
  if x.get('runtime_authority')!='NONE' or x.get('broker_actions_permitted') is not False:raise ValueError(label+':authority_violation')
 def ledger_config_count(path):
- total=0
+ by_generation={}
  if not path.exists():return 0
  for line in path.read_text(encoding='utf-8').splitlines():
   if not line.strip():continue
   x=json.loads(line)
-  if x.get('event')=='DEVELOPMENT_COMPLETE':total+=int(x.get('configs_tested',0) or 0)
- return total
+  if x.get('event')=='DEVELOPMENT_COMPLETE' and x.get('generation_id'):
+   gid=str(x['generation_id']);n=int(x.get('configs_tested',0) or 0)
+   if gid in by_generation and by_generation[gid]!=n:raise ValueError('ledger_generation_config_count_changed:'+gid)
+   by_generation[gid]=n
+ return sum(by_generation.values())
 def main(argv=None):
  ap=argparse.ArgumentParser();ap.add_argument('--repo-root',default='.');ap.add_argument('--holdout-output',required=True);ap.add_argument('--campaign-policy',default='research/strategy_certification/SEALED_RESEARCH_CAMPAIGN_V1.json');ap.add_argument('--ledger',default='research/evidence/strategy_certification/SEALED_RESEARCH_CAMPAIGN_V1_LEDGER.jsonl');ap.add_argument('--output',required=True);a=ap.parse_args(argv)
  root=Path(a.repo_root).resolve();hp=root/a.holdout_output;pp=root/a.campaign_policy;lp=root/a.ledger;out=root/a.output;res={'status':'FAIL_CLOSED','runtime_authority':'NONE','broker_actions_permitted':False,'edge_claimed':False}
