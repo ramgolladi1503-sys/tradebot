@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "request_id": "S003_CALIBRATION_R119_B426D978",
+  "created_at": "2026-08-09",
+  "created_by": "mros-m8-autopilot",
+  "backend": "codex",
+  "job_type": "reviewer",
+  "role_id": "R119",
+  "candidate_sha": "b426d9785abb51e7d12d7457cbe94a28d4160e3e",
+  "packet_path": "research/evidence/sprints/S003/agent_queue/packets/S003_CALIBRATION_R119_B426D978.md",
+  "output_path": "research/evidence/sprints/S003/agent_queue/results/S003_CALIBRATION_R119_B426D978.md"
+}
