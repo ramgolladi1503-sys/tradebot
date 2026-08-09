@@ -77,7 +77,7 @@ def main(argv=None)->int:
         'closures':[c1,c2],
         'candidate_of_record':None,
         'next_legal_action':'OPEN_NEW_PREDECLARED_INFORMATION_SET_OR_STOP_DISCOVERY',
-        'certification_engine_status':'SEPARATE_TRUTH_CONTRACT_REQUIRED',
+        'certification_engine_status':'TRUTH_CONTRACT_PRESENT_NATIVE_PASS_REQUIRED',
         'runtime_authority':'NONE','broker_actions_allowed':False,
     }
     closer.life.write(out/'FINALIZATION_SUMMARY.json',summary)
