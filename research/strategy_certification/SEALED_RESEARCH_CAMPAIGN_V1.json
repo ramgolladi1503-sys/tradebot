@@ -22,7 +22,10 @@
   "pre_holdout_robustness_gate": {
     "cost_stress_bps": [2.0, 4.0, 8.0],
     "require_positive_mean_at_base_cost": true,
+    "require_positive_mean_at_max_stress": true,
     "require_nonpositive_degradation_with_higher_cost": true,
+    "randomized_direction_null_max_mean_bps": 0.0,
+    "session_permutation_null_max_mean_bps": 0.0,
     "negative_controls_required": [
       "NO_SAME_BAR_FILL",
       "FUTURE_BAR_SHIFT_MUST_NOT_AUTHORIZE_EDGE",
@@ -39,7 +42,11 @@
   "multiple_testing_policy": {
     "family_scope": "ALL_GENERATIONS_IN_THIS_CAMPAIGN",
     "discovery_claim_requires_correction": true,
-    "uncorrected_positive_result_may_only_be_called_CANDIDATE_NOT_CERTIFIED": true
+    "uncorrected_positive_result_may_only_be_called_CANDIDATE_NOT_CERTIFIED": true,
+    "test": "DETERMINISTIC_ONE_SIDED_SIGN_FLIP_MONTE_CARLO_ON_HOLDOUT_TRADE_RETURNS",
+    "signflip_iterations": 10000,
+    "correction": "BONFERRONI_OVER_ALL_DEVELOPMENT_CONFIGURATIONS_TESTED_IN_CAMPAIGN",
+    "familywise_alpha": 0.05
   },
   "generation_registry": [
     {
@@ -48,7 +55,13 @@
       "development_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_hunt_v4_development_screen.py", "--repo-root", "."],
       "development_output": "research/evidence/strategy_certification/HUNT_V4_DEVELOPMENT_SCREEN.json",
       "validation_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_exact_nomination_validation.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V4_GENERATION_FREEZE.json", "--development-output", "research/evidence/strategy_certification/HUNT_V4_DEVELOPMENT_SCREEN.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v4_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V4_VALIDATION_RESULT.json"],
-      "validation_output": "research/evidence/strategy_certification/HUNT_V4_VALIDATION_RESULT.json"
+      "validation_output": "research/evidence/strategy_certification/HUNT_V4_VALIDATION_RESULT.json",
+      "robustness_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_preholdout_robustness.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V4_GENERATION_FREEZE.json", "--validation-output", "research/evidence/strategy_certification/HUNT_V4_VALIDATION_RESULT.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v4_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V4_ROBUSTNESS_RESULT.json"],
+      "robustness_output": "research/evidence/strategy_certification/HUNT_V4_ROBUSTNESS_RESULT.json",
+      "holdout_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_generic_one_time_holdout.py", "--repo-root", ".", "--freeze", "research/strategy_certification/passports/HUNT_V4_GENERATION_FREEZE.json", "--robustness-output", "research/evidence/strategy_certification/HUNT_V4_ROBUSTNESS_RESULT.json", "--development-runner", "scripts/research/hypothesis_factory/run_hunt_v4_development_screen.py", "--output", "research/evidence/strategy_certification/HUNT_V4_HOLDOUT_RESULT.json"],
+      "holdout_output": "research/evidence/strategy_certification/HUNT_V4_HOLDOUT_RESULT.json",
+      "certification_command": ["python3", "-u", "scripts/research/hypothesis_factory/run_campaign_multiple_testing_certification.py", "--repo-root", ".", "--holdout-output", "research/evidence/strategy_certification/HUNT_V4_HOLDOUT_RESULT.json", "--output", "research/evidence/strategy_certification/HUNT_V4_CAMPAIGN_CERTIFICATION.json"],
+      "certification_output": "research/evidence/strategy_certification/HUNT_V4_CAMPAIGN_CERTIFICATION.json"
     }
   ],
   "extension_rule": "NEW GENERATIONS MAY BE APPENDED ONLY BEFORE THEIR DEVELOPMENT OUTCOMES ARE ACCESSED. APPENDING A GENERATION DOES NOT CHANGE ANY EXISTING GENERATION OR GLOBAL GATE.",
