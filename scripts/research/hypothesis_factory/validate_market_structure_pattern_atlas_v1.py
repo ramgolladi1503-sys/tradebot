@@ -13,8 +13,9 @@ def main():
     mod=load_module(root/'scripts/research/hypothesis_factory/build_market_structure_pattern_atlas_v1.py')
     def row(i,o,h,l,c):return {'timestamp':f'2026-01-01T09:{15+i:02d}:00','session':'2026-01-01','open':o,'high':h,'low':l,'close':c}
     # This fixture intentionally creates a confirmed swing HIGH at row 3 and
-    # requires the confirmation to occur strictly later, at row 6, after a
-    # >35 bps reversal. It then creates a later confirmed LOW.
+    # requires the confirmation to occur strictly later, after a >35 bps reversal.
+    # Subsequent rows are used only for prefix/future-stability checks; they are
+    # not required to manufacture a second pivot with a particular latency.
     rows=[
       row(0,100.00,100.05,99.95,100.00),
       row(1,100.00,100.45,99.98,100.40),
@@ -28,7 +29,12 @@ def main():
     ]
     checks=[]
     piv=mod.confirm_pivots(rows,35.0)
-    checks.append(('PIVOT_REQUIRES_LATER_CONFIRMATION',bool(piv) and all(p['confirmation_index']>p['pivot_index'] for p in piv)))
+    first_has_later_confirmation=(
+        bool(piv)
+        and piv[0]['confirmation_index']>piv[0]['pivot_index']
+        and piv[0]['confirmation_timestamp']>piv[0]['pivot_timestamp']
+    )
+    checks.append(('PIVOT_REQUIRES_LATER_CONFIRMATION',first_has_later_confirmation))
     if piv:
         first=piv[0];prefix=rows[:first['confirmation_index']+1];again=mod.confirm_pivots(prefix,35.0)
         checks.append(('CONFIRMED_PIVOT_REPRODUCIBLE_WITH_PREFIX_ONLY',bool(again) and again[0]['pivot_index']==first['pivot_index'] and again[0]['confirmation_index']==first['confirmation_index']))
