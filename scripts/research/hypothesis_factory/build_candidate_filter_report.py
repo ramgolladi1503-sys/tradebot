@@ -39,11 +39,14 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         min_net_expectancy_bps=args.min_net_expectancy_bps,
         min_profit_factor=args.min_profit_factor,
         max_drawdown_bps_abs=args.max_drawdown_bps_abs,
+        min_sessions_traded=args.min_sessions_traded,
+        max_top_session_trade_share=args.max_top_session_trade_share,
+        max_top_session_abs_pnl_share=args.max_top_session_abs_pnl_share,
     )
     summary = sca.summarize_annotations(annotated)
 
     report = {
-        "schema_version": "tradebot-candidate-filter-report-v1",
+        "schema_version": "tradebot-candidate-filter-report-v2",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "screen_run_id": manifest.get("run_id"),
         "screen_run_dir": str(run_dir),
@@ -57,6 +60,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "min_net_expectancy_bps": args.min_net_expectancy_bps,
             "min_profit_factor": args.min_profit_factor,
             "max_drawdown_bps_abs": args.max_drawdown_bps_abs,
+            "min_sessions_traded": args.min_sessions_traded,
+            "max_top_session_trade_share": args.max_top_session_trade_share,
+            "max_top_session_abs_pnl_share": args.max_top_session_abs_pnl_share,
         },
         "summary": summary,
         "candidates": annotated,
@@ -75,6 +81,12 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         f"- Eligible for robustness: `{summary['eligible_for_robustness']}`",
         f"- Runtime authority: `{report['runtime_authority']}`",
         f"- Broker actions allowed: `{report['broker_actions_allowed']}`",
+        "",
+        "## Thresholds",
+        "",
+        "```json",
+        json.dumps(report["thresholds"], indent=2, sort_keys=True),
+        "```",
         "",
         "## Rejection Reason Counts",
         "",
@@ -98,11 +110,15 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
                     f"- instrument: `{row.get('instrument')}`",
                     f"- family: `{row.get('family')}`",
                     f"- direction: `{row.get('direction')}`",
+                    f"- exit_rule: `{row.get('exit_rule')}`",
                     f"- trades: `{row.get('trades')}`",
+                    f"- sessions_traded: `{row.get('sessions_traded')}`",
                     f"- win_rate: `{row.get('win_rate')}`",
                     f"- net_expectancy_bps: `{row.get('net_expectancy_bps')}`",
                     f"- profit_factor: `{row.get('profit_factor')}`",
                     f"- max_drawdown_bps: `{row.get('max_drawdown_bps')}`",
+                    f"- top_session_trade_share: `{row.get('top_session_trade_share')}`",
+                    f"- top_session_abs_pnl_share: `{row.get('top_session_abs_pnl_share')}`",
                     "",
                     "Verdict: `ROBUSTNESS_REQUIRED`.",
                     "",
@@ -125,6 +141,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-net-expectancy-bps", type=float, default=0.0)
     parser.add_argument("--min-profit-factor", type=float, default=1.05)
     parser.add_argument("--max-drawdown-bps-abs", type=float, default=1000.0)
+    parser.add_argument("--min-sessions-traded", type=int, default=10)
+    parser.add_argument("--max-top-session-trade-share", type=float, default=0.25)
+    parser.add_argument("--max-top-session-abs-pnl-share", type=float, default=0.35)
     return parser
 
 
