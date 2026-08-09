@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "study_id": "MARKET_STRUCTURE_PATTERN_ANATOMY_V1",
+  "status": "FROZEN_PRE_ANALYSIS",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "source_outcome_study": "MARKET_STRUCTURE_POST_CONFIRMATION_OUTCOME_V1",
+  "source_outcome_scope": "CHARACTERIZATION_80_PERCENT_ONLY",
+  "locked_outcome_sessions_must_remain_unread": true,
+  "motif_families": [
+    "DOUBLE_BOTTOM_STRUCTURE",
+    "DOWNTREND_CONTINUATION_SWING"
+  ],
+  "favorable_excursion_cohorts_bps": [20, 30],
+  "descriptor_policy": "DESCRIPTIVE_GEOMETRY_ONLY_NO_COMBINATION_SEARCH_NO_THRESHOLD_OPTIMIZATION",
+  "descriptors": [
+    "formation_bars",
+    "first_to_middle_bars",
+    "middle_to_second_bars",
+    "leg_duration_ratio",
+    "first_to_middle_bps",
+    "middle_to_second_bps",
+    "first_to_second_bps",
+    "absolute_first_second_separation_bps",
+    "rebound_retracement_ratio",
+    "confirmation_delay_bars",
+    "formation_session_bucket",
+    "preformation_leader_state",
+    "preformation_volatility_state",
+    "preformation_banknifty_ret_3_bps",
+    "preformation_banknifty_ret_6_bps"
+  ],
+  "comparison_rule": "FOR EACH MOTIF AND EACH PREDECLARED FAVORABLE EXCURSION COHORT, SUMMARIZE DESCRIPTORS FOR COHORT_TRUE VS COHORT_FALSE. DO NOT RANK COMBINATIONS OR SELECT CUTPOINTS.",
+  "terminal_interpretation": "DESCRIPTIVE_ANATOMY_ONLY_NOT_A_STRATEGY_NOT_EDGE_EVIDENCE"
+}
