@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "candidate_family_id": "COMPACT_MATCHED_DOUBLE_BOTTOM_V1",
+  "status": "FROZEN_BEFORE_DOUBLE_BOTTOM_LOCKED_OUTCOME_ACCESS",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "source_motif": "DOUBLE_BOTTOM_STRUCTURE",
+  "directional_reference": "UP",
+  "development_source": "FIRST_80_PERCENT_ALREADY_EXPOSED_CHARACTERIZATION_POOL_ONLY",
+  "locked_source": "FINAL_20_PERCENT_99_SESSIONS_DOUBLE_BOTTOM_OUTCOMES_UNACCESSED",
+  "motif_specific_locked_policy": true,
+  "hypothesis": "Double bottoms that form compactly, complete the second leg quickly, revisit the first low closely, and confirm promptly may have stronger post-confirmation upside follow-through than generic double bottoms.",
+  "definition": {
+    "candidate_id": "COMPACT_MATCHED",
+    "formation_bars_max": 16,
+    "middle_to_second_bars_max": 8,
+    "absolute_first_second_separation_bps_max": 6.0,
+    "confirmation_delay_bars_max": 5
+  },
+  "allowed_features": [
+    "formation_bars",
+    "middle_to_second_bars",
+    "absolute_first_second_separation_bps",
+    "confirmation_delay_bars"
+  ],
+  "forbidden_filters": [
+    "leader_state",
+    "volatility_state",
+    "session_bucket",
+    "preformation_return_thresholds",
+    "support_resistance_filters",
+    "indicator_filters",
+    "post_confirmation_information",
+    "price_target_optimization"
+  ],
+  "development_gate": {
+    "minimum_candidate_episodes": 20,
+    "primary_outcome": "up_30bps_within_12_bars",
+    "secondary_outcome": "up_20bps_within_12_bars",
+    "minimum_absolute_primary_rate_improvement_vs_parent": 0.10,
+    "minimum_secondary_rate_improvement_vs_parent": 0.05,
+    "no_cutpoint_search": true,
+    "no_retuning_after_result": true,
+    "single_candidate_only": true
+  },
+  "locked_test_policy": {
+    "allowed_only_after_development_pass": true,
+    "one_time_access_per_motif_family": true,
+    "no_parameter_changes_after_access": true,
+    "minimum_locked_episodes": 12,
+    "required_primary_rate_not_below_parent_characterization_rate": true,
+    "edge_certification": "NOT_PART_OF_THIS_FREEZE"
+  },
+  "prior_locked_exposure_note": "The final 20 percent has been consumed for DOWNTREND_CONTINUATION_SWING by RAPID_DOWNTREND_CONTINUATION_V1. That does not authorize reuse of those downtrend outcomes and does not imply DOUBLE_BOTTOM_STRUCTURE outcomes have been accessed. This family must maintain motif-specific exposure accounting."
+}
