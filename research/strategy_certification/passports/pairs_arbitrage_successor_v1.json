@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "passport_id": "PAIRS_ARBITRAGE_SUCCESSOR_V1",
+  "status": "FROZEN_PRE_HOLDOUT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "parent_strategy_id": "pairs_arbitrage",
+  "parent_implementation_commit": "561041b2e11f03283ebca3fd5eb70e6ef6fc1d6d",
+  "parent_module": "strategies.pairs_arbitrage",
+  "parent_callable": "generate_signal",
+  "dataset_id": "BANKNIFTY_NIFTY_SENSEX_SYNC_5M_V1",
+  "dataset_sha256": "66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32",
+  "dataset_rows": 36849,
+  "dataset_sessions": 493,
+  "entry_contract": {
+    "logic": "UNCHANGED_PARENT_GENERATE_SIGNAL",
+    "min_zscore": 2.0,
+    "max_half_life_periods": 36.0,
+    "adf_pvalue_max": 0.05,
+    "history_window_bars": 36,
+    "decision_timing": "BAR_T_USES_ONLY_COMPLETED_BARS_THROUGH_T_AND_ENTRY_FILLED_AT_NEXT_BAR_OPEN",
+    "freshness_replay": "ALIGNED_SYNCHRONIZED_BARS_ARE_ASSIGNED_AGE_ZERO_ONLY_WHEN_BOTH_LEGS_EXIST_AT_THE_SAME_EXACT_TIMESTAMP",
+    "cross_asset_health_replay": "TRUE_ONLY_WHEN_BOTH_REQUIRED_LEGS_EXIST_AND_ARE_FINITE_AT_THE_EXACT_DECISION_TIMESTAMP"
+  },
+  "position_contract": {
+    "spread_definition": "A_MINUS_BETA_TIMES_B_MINUS_INTERCEPT_USING_PARENT_KALMAN_STATE",
+    "direction_sell_spread": "SHORT_A_LONG_BETA_UNITS_B",
+    "direction_buy_spread": "LONG_A_SHORT_BETA_UNITS_B",
+    "sizing": "ONE_NOTIONAL_UNIT_OF_A_WITH_ABS_BETA_UNITS_OF_B",
+    "concurrent_positions": 1,
+    "new_signals_while_open": "IGNORED"
+  },
+  "exit_contract": {
+    "primary_exit": "FIRST_COMPLETED_BAR_WHERE_SPREAD_Z_CROSSES_ZERO_OR_CHANGES_SIGN_RELATIVE_TO_ENTRY_DIRECTION",
+    "stationarity_failure_exit": "EXIT_AT_NEXT_BAR_OPEN_IF_PARENT_CAUSAL_RECOMPUTATION_NO_LONGER_PASSES_ADF_OR_HALF_LIFE_GATE",
+    "max_holding_bars": 36,
+    "session_exit": "FORCE_EXIT_AT_LAST_AVAILABLE BAR_OPEN_BEFORE_SESSION_END_IF_POSITION_REMAINS_OPEN",
+    "data_health_exit": "EXIT_AT_NEXT_AVAILABLE_SYNCHRONIZED_BAR_OPEN_IF_EITHER_LEG_BECOMES_UNAVAILABLE_OR_NONFINITE",
+    "fill_timing": "ALL_EXIT_DECISIONS_FILL_AT_NEXT_SYNCHRONIZED_BAR_OPEN; SESSION_TERMINAL EXIT USES LAST AVAILABLE SYNCHRONIZED BAR CLOSE ONLY WHEN NO NEXT BAR EXISTS"
+  },
+  "cost_contract": {
+    "base_round_trip_bps_per_leg": 2.0,
+    "stress_round_trip_bps_per_leg": [4.0, 8.0, 12.0],
+    "application": "APPLY_TO_ABSOLUTE_TRADED_NOTIONAL_OF_EACH_LEG_ON_ENTRY_AND_EXIT",
+    "note": "Research stress model, not a claim of broker-specific realized costs."
+  },
+  "certification_split": {
+    "ordering": "CHRONOLOGICAL_BY_SESSION",
+    "development_fraction": 0.6,
+    "validation_fraction": 0.2,
+    "holdout_fraction": 0.2,
+    "holdout_rule": "HOLDOUT_MUST_NOT_BE_USED_TO_CHANGE_THIS_PASSPORT"
+  },
+  "parameter_neighborhood": {
+    "min_zscore": [1.8, 2.0, 2.2],
+    "max_half_life_periods": [24.0, 36.0, 48.0],
+    "history_window_bars": [24, 36, 48],
+    "rule": "NEIGHBORHOOD_IS_DIAGNOSTIC_ONLY; NO HOLDOUT-BASED SELECTION"
+  },
+  "negative_controls": [
+    "SHIFT_B_LEG_FORWARD_ONE_BAR_MUST_NOT_IMPROVE_OR_AUTHORIZE_CAUSAL_RESULT",
+    "PERMUTE_SESSION_ORDER_WITHIN_LEG_FOR_NULL_EDGE_CHECK",
+    "RANDOMIZE_ENTRY_DIRECTION_WITH_FIXED_ENTRY_TIMES",
+    "REQUIRE_NO_SAME_BAR_ENTRY_FILL"
+  ],
+  "terminal_verdicts": ["CERTIFIED", "REJECTED", "INSUFFICIENT_EVIDENCE"],
+  "freeze_rule": "ANY CHANGE TO ENTRY, EXIT, SIZING, TIMING, COSTS, DATASET HASH, SPLIT, OR PARAMETERS CREATES A NEW PASSPORT IDENTITY.",
+  "edge_claimed": false
+}
