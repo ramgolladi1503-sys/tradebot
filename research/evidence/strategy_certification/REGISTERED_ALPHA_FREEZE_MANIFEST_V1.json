@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "manifest_id": "REGISTERED_ALPHA_FREEZE_MANIFEST_V1",
+  "status": "FROZEN_FOR_CERTIFICATION",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "implementation_source_commit": "561041b2e11f03283ebca3fd5eb70e6ef6fc1d6d",
+  "implementation_integrity_evidence_commit": "16b85146a53407e8d0da8af6da257e2886957bc3",
+  "structural_gate_source_commit": "2a9f0c498a1206f0bbe03dc957f1d1d3e9d06845",
+  "registry_source_path": "core/strategy_spec.py",
+  "structural_gate_path": "scripts/research/hypothesis_factory/audit_registered_strategy_structure.py",
+  "support_component_ids": [
+    "option_pressure_confirmation",
+    "no_trade_chop"
+  ],
+  "support_component_policy": "EXCLUDED_FROM_STANDALONE_ALPHA_CERTIFICATION",
+  "certification_eligible_count": 19,
+  "certification_eligible": [
+    {"strategy_id":"ensemble","module_path":"strategies.ensemble","callable_name":"ensemble_signal","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"vwap_orb","module_path":"strategies.vwap_orb","callable_name":"vwap_orb_strategy","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"nifty_intraday","module_path":"strategies.nifty_intraday","callable_name":"generate_signal","instruments":["NIFTY"]},
+    {"strategy_id":"banknifty_intraday","module_path":"strategies.banknifty_intraday","callable_name":"generate_signal","instruments":["BANKNIFTY"]},
+    {"strategy_id":"sensex_intraday","module_path":"strategies.sensex_intraday","callable_name":"generate_signal","instruments":["SENSEX"]},
+    {"strategy_id":"zero_hero_expiry","module_path":"strategies.zero_hero","callable_name":"generate_signal","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"pairs_arbitrage","module_path":"strategies.pairs_arbitrage","callable_name":"generate_signal","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"opening_range_retest","module_path":"strategies.movement.opening_range_breakout","callable_name":"generate_opening_range_retest_candidates","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"trend_pullback","module_path":"strategies.movement.trend_pullback","callable_name":"generate_trend_pullback_candidates","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"mean_reversion_extension","module_path":"strategies.movement.mean_reversion_extension","callable_name":"generate_mean_reversion_extension_candidates","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"opening_drive","module_path":"strategies.movement.opening_drive","callable_name":"generate_opening_drive_candidates","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"compression_breakout","module_path":"strategies.movement.compression_breakout","callable_name":"generate_compression_breakout_candidates","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"failed_breakout_trap","module_path":"strategies.movement.failed_breakout_trap","callable_name":"generate_failed_breakout_trap_candidates","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"exhaustion_reversal","module_path":"strategies.movement.exhaustion_reversal","callable_name":"generate_exhaustion_reversal_candidates","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"late_day_momentum","module_path":"strategies.movement.late_day_momentum","callable_name":"generate_late_day_momentum_candidates","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"vwap_reclaim_rejection","module_path":"strategies.movement.vwap_reclaim","callable_name":"generate_vwap_reclaim_rejection_candidates","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"event_volatility_expansion","module_path":"strategies.movement.event_volatility_expansion","callable_name":"generate_event_volatility_expansion_candidates","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"volatility_trend","module_path":"strategies.volatility_trend","callable_name":"volatility_scaled_trend_strategy","instruments":["NIFTY","BANKNIFTY","SENSEX"]},
+    {"strategy_id":"pro_strategy","module_path":"strategies.pro_layer.pro_strategy_engine","callable_name":"ProStrategyEngine","instruments":["NIFTY","BANKNIFTY","SENSEX"]}
+  ],
+  "frozen_dataset_catalog": [
+    {"dataset_id":"BANKNIFTY_5M_FROZEN_V1","instrument":"BANKNIFTY","sessions":493,"rows":36849,"date_start":"2024-07-09","date_end":"2026-07-08","sha256":"ff5474cb0662e9f4bc0642dab6e00a2648cfe2da16161ab174c9324c0f22ef50","provenance_status":"DECLARED_IN_AUTHORITATIVE_HANDOFF_REQUIRES_LOCAL_HASH_REVERIFICATION_BEFORE_CERTIFICATION"},
+    {"dataset_id":"NIFTY_5M_FROZEN_V1","instrument":"NIFTY","sessions":493,"rows":36849,"sha256":"6a145d4d17f124f9dc8ee272c5a19ca98988873a14b294765f44a27284d8b7e8","provenance_status":"DECLARED_IN_AUTHORITATIVE_HANDOFF_REQUIRES_LOCAL_HASH_REVERIFICATION_BEFORE_CERTIFICATION"},
+    {"dataset_id":"SENSEX_5M_FROZEN_V1","instrument":"SENSEX","sessions":493,"rows":36849,"sha256":"ad2cf219cd5054a0cac8771da504f3b9215fa6220341b92fd5ac4563e2d342a7","provenance_status":"DECLARED_IN_AUTHORITATIVE_HANDOFF_REQUIRES_LOCAL_HASH_REVERIFICATION_BEFORE_CERTIFICATION"},
+    {"dataset_id":"BANKNIFTY_NIFTY_SENSEX_SYNC_5M_V1","instruments":["BANKNIFTY","NIFTY","SENSEX"],"sessions":493,"rows":36849,"join":"EXACT_INTERSECTION","feature_timing":"CURRENT_OR_PRIOR_ONLY","sha256":"66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32","provenance_status":"DECLARED_IN_AUTHORITATIVE_HANDOFF_REQUIRES_LOCAL_HASH_REVERIFICATION_BEFORE_CERTIFICATION"}
+  ],
+  "dataset_binding_rule": "NO_STRATEGY_MAY_RUN_CERTIFICATION_UNTIL_REQUIRED_EVIDENCE_FIELDS_ARE_MAPPED_TO_AND_VERIFIED_PRESENT_IN_A_FROZEN_DATASET. MISSING_OPTION_CHAIN_OI_DEPTH_IV_EVENT_OR_OTHER_REQUIRED_INPUTS MUST PRODUCE INSUFFICIENT_EVIDENCE, NOT SYNTHETIC_OR_FALLBACK_DATA.",
+  "freeze_rule": "ANY CHANGE TO STRATEGY LOGIC, THRESHOLD, PARAMETER, FEATURE TIMING, ENTRY_EXIT SEMANTICS, COST MODEL, OR DATASET ID/HASH CREATES A NEW STRATEGY PASSPORT IDENTITY.",
+  "selection_rule": "HOLDOUT_OR_CERTIFICATION_RESULTS MUST NOT BE USED TO MODIFY THIS FROZEN GENERATION IN PLACE.",
+  "terminal_verdicts": ["CERTIFIED","REJECTED","INSUFFICIENT_EVIDENCE"],
+  "required_certification_controls": [
+    "CAUSAL_REPLAY",
+    "CHRONOLOGICAL_OOS_OR_WALK_FORWARD",
+    "PARAMETER_NEIGHBORHOOD_ROBUSTNESS",
+    "COST_AND_SLIPPAGE_STRESS",
+    "NEGATIVE_CONTROLS",
+    "MULTIPLE_TESTING_CORRECTION_WHERE_APPLICABLE",
+    "REGIME_STABILITY",
+    "SUFFICIENT_TRADE_COUNT"
+  ]
+}
