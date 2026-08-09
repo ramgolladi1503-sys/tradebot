@@ -73,7 +73,8 @@ def record_live_source_shadow_tick(
         return {"accepted": False, "status": "INVALID_SHADOW_TICK"}
     if token <= 0 or price_value <= 0:
         return {"accepted": False, "status": "INVALID_SHADOW_TICK"}
-    if str(source_type).lower() != "live_websocket":
+    normalized_source_type = str(source_type).lower().strip()
+    if normalized_source_type not in {"live_websocket", "deterministic_test"}:
         return {"accepted": False, "status": "NON_LIVE_SOURCE"}
     if str(provider).strip().lower() != "kite" or str(token_domain).strip() != "kite_instrument_token":
         return {"accepted": False, "status": "CAPTURE_IDENTITY_INVALID"}
@@ -108,13 +109,14 @@ def record_live_source_shadow_tick(
         return {"accepted": False, "status": "STALE_OR_REPEATED_TICK", "capture_identity": capture_identity}
 
     tick_dt = datetime.fromtimestamp(tick_epoch, tz=timezone.utc).astimezone(IST_TZ)
+    offline_fixture = normalized_source_type == "deterministic_test"
     result = shadow_ohlc_buffer.update_tick(
         str(symbol).upper(),
         price_value,
         volume=None,
         ts=tick_dt,
         provenance={
-            "source_type": str(source_type).lower(),
+            "source_type": normalized_source_type,
             "symbol": str(symbol).upper(),
             "live_feed_session_id": session_id,
             "reconnect_generation": generation_int,
@@ -125,7 +127,9 @@ def record_live_source_shadow_tick(
             "token_domain": token_domain,
             "universe_hash": universe_hash,
             "historical_seed": False,
-            "replay_fixture": False,
+            "replay_fixture": offline_fixture,
+            "fixture_kind": "OFFLINE_DETERMINISTIC_TEST" if offline_fixture else None,
+            "live_evidence": not offline_fixture,
             "non_live_fallback": False,
             "recovered_synthetic": False,
         },
@@ -137,6 +141,10 @@ def record_live_source_shadow_tick(
     result["bar_written"] = bool(result.get("accepted"))
     result["packet_kind"] = str(packet_kind or "")
     result["is_full_payload"] = bool(is_full_payload)
+    result["live_evidence"] = not offline_fixture
+    result["replay_fixture"] = offline_fixture
+    if offline_fixture:
+        result["fixture_kind"] = "OFFLINE_DETERMINISTIC_TEST"
     return result
 
 
