@@ -1,70 +1,60 @@
 import strategies.ensemble as ensemble
 
 
-def test_event_regime_calls_event_breakout(monkeypatch):
-    calls = {"event": 0, "micro": 0}
+def _child(strategy_id, direction, score, confidence=0.8, sha="abc123"):
+    return {
+        "direction": direction,
+        "score": score,
+        "confidence": confidence,
+        "reason": strategy_id,
+        "source_strategy_id": strategy_id,
+        "source_sha256": sha,
+        "structural_status": "STRUCTURALLY_VALID",
+        "evidence": {"freshness_valid": True, "contract_valid": True},
+    }
 
-    monkeypatch.setattr(ensemble, "volatility_filter", lambda atr, ltp: True)
 
-    def _event(*_args, **_kwargs):
-        calls["event"] += 1
-        return ensemble.StrategySignal("BUY_CALL", 0.9, "event")
+def test_ensemble_requires_proven_child_signals_and_never_synthesizes_alpha():
+    assert ensemble.ensemble_signal({"regime": "TREND", "ltp": 102.0, "vwap": 100.0}) is None
 
-    def _micro(*_args, **_kwargs):
-        calls["micro"] += 1
-        return ensemble.StrategySignal("BUY_CALL", 0.7, "micro")
-
-    monkeypatch.setattr(ensemble, "event_breakout_signal", _event)
-    monkeypatch.setattr(ensemble, "micro_pattern_signal", _micro)
-    monkeypatch.setattr(ensemble, "orb_breakout_signal", lambda *_args, **_kwargs: None)
-
-    signal = ensemble.ensemble_signal(
-        {
-            "regime": "EVENT",
-            "ltp": 100.0,
-            "vwap": 100.0,
-            "vwap_slope": 0.1,
-            "rsi_mom": 0.0,
-            "atr": 1.0,
-            "ltp_change_window": 2.0,
-            "vol_z": 1.0,
-        }
-    )
-
+    signal = ensemble.ensemble_signal({
+        "child_signals": [
+            _child("opening_range_retest", "BUY_CALL", 0.78, sha="orbsha"),
+            _child("trend_pullback", "BUY_CALL", 0.70, sha="tpsha"),
+        ]
+    })
     assert signal is not None
-    assert calls["event"] >= 1
-    assert calls["micro"] == 0
+    assert signal.direction == "BUY_CALL"
+    assert signal.source_strategy_id == "ensemble"
+    assert signal.structural_status == "STRUCTURALLY_VALID"
+    assert signal.evidence["child_strategy_ids"] == ("opening_range_retest", "trend_pullback")
 
 
-def test_range_regime_calls_mean_reversion_and_micro(monkeypatch):
-    calls = {"mr": 0, "micro": 0}
+def test_ensemble_fails_closed_on_missing_or_invalid_provenance():
+    missing_hash = _child("trend_pullback", "BUY_CALL", 0.8)
+    missing_hash["source_sha256"] = ""
+    assert ensemble.ensemble_signal({"child_signals": [missing_hash]}) is None
 
-    monkeypatch.setattr(ensemble, "volatility_filter", lambda atr, ltp: True)
+    stale = _child("trend_pullback", "BUY_CALL", 0.8)
+    stale["evidence"]["freshness_valid"] = False
+    assert ensemble.ensemble_signal({"child_signals": [stale]}) is None
 
-    def _mr(*_args, **_kwargs):
-        calls["mr"] += 1
-        return ensemble.StrategySignal("BUY_CALL", 0.7, "mr")
+    unvalidated = _child("trend_pullback", "BUY_CALL", 0.8)
+    unvalidated["structural_status"] = "UNKNOWN"
+    assert ensemble.ensemble_signal({"child_signals": [unvalidated]}) is None
 
-    def _micro(*_args, **_kwargs):
-        calls["micro"] += 1
-        return ensemble.StrategySignal("BUY_CALL", 0.8, "micro")
 
-    monkeypatch.setattr(ensemble, "mean_reversion_signal", _mr)
-    monkeypatch.setattr(ensemble, "micro_pattern_signal", _micro)
+def test_ensemble_rejects_material_direction_conflict():
+    signal = ensemble.ensemble_signal({
+        "child_signals": [
+            _child("opening_range_retest", "BUY_CALL", 0.8, confidence=0.8, sha="a"),
+            _child("failed_breakout_trap", "BUY_PUT", 0.78, confidence=0.8, sha="b"),
+        ]
+    })
+    assert signal is None
 
-    signal = ensemble.ensemble_signal(
-        {
-            "regime": "RANGE",
-            "ltp": 100.0,
-            "vwap": 100.0,
-            "vwap_slope": 0.0,
-            "rsi_mom": 0.0,
-            "atr": 1.0,
-            "ltp_change_5m": 12.0,
-            "ltp_change_10m": 4.0,
-        }
-    )
 
-    assert signal is not None
-    assert calls["mr"] >= 1
-    assert calls["micro"] >= 1
+def test_equity_and_futures_aliases_obey_same_contract():
+    payload = {"child_signals": [_child("trend_pullback", "BUY_CALL", 0.8)]}
+    assert ensemble.equity_signal(payload) is not None
+    assert ensemble.futures_signal(payload) is not None
