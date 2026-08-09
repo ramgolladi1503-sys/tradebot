@@ -147,9 +147,10 @@ def inventory(roots: list[Path], hash_files: bool = False) -> dict[str, Any]:
     }
 
     return {
-        "schema_version": "tradebot-historical-session-corpus-index-v1",
+        "schema_version": "tradebot-historical-session-corpus-index-v2",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "roots": [str(r) for r in roots],
+        "local_bytes_available": bool(files),
         "files": files,
         "sessions": sessions,
         "summary": {
@@ -160,6 +161,8 @@ def inventory(roots: list[Path], hash_files: bool = False) -> dict[str, Any]:
             "underlying_session_counts": {k: len(v) for k, v in usable_underlying_sessions.items()},
             "underlying_sessions": usable_underlying_sessions,
         },
+        "status": "READY_LOCAL_CORPUS" if files else "HISTORICAL_CORPUS_NOT_LOCAL",
+        "next_action": "BUILD_CACHE" if files else "SYNC_OR_MOUNT_DRIVE_FOLDER_OR_PASS_EXPLICIT_ROOT",
         "certification": "NOT_CERTIFIED",
         "runtime_authority": "NONE",
         "broker_actions_allowed": False,
@@ -168,7 +171,7 @@ def inventory(roots: list[Path], hash_files: bool = False) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--historical-root", action="append", default=[])
+    p.add_argument("--historical-root", action="append", default=[], help="Explicit local/synced tradebot_historical_data root; repeatable")
     p.add_argument("--output", default="research/hypotheses/historical_corpus/historical_session_index.json")
     p.add_argument("--hash-files", action="store_true")
     args = p.parse_args(argv)
@@ -179,10 +182,12 @@ def main(argv: list[str] | None = None) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({
+        "status": result["status"],
         "roots": result["roots"],
         "files": result["summary"]["files"],
         "sessions": result["summary"]["sessions"],
         "underlying_session_counts": result["summary"]["underlying_session_counts"],
+        "next_action": result["next_action"],
         "runtime_authority": "NONE",
     }, indent=2))
     return 0 if result["summary"]["files"] else 2
