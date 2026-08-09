@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "generation_id": "HUNT_V7_GENERATION_FREEZE",
+  "status": "FROZEN_PRE_DEVELOPMENT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "sealed_kernel_commit": "46dd4f7df9b63486eb633a12baf25412cd4f761d",
+  "dataset_id": "BANKNIFTY_NIFTY_SENSEX_SYNC_5M_V1",
+  "dataset_sha256": "66ddbfead966388262b9a1e49937fb227b711ce32f70eaf715a93a5e32572b32",
+  "multiple_testing_family": "HUNT_V7_SESSION_SHAPE_FAMILY",
+  "prior_generation_policy": "V1_V2_V3_HOLDOUT_OUTCOMES_FORBIDDEN; V4_V5_V6 OUTCOMES MAY NOT ALTER V7 RULES",
+  "split_contract": {"development_fraction":0.6,"validation_fraction":0.2,"holdout_fraction":0.2,"ordering":"CHRONOLOGICAL_BY_SESSION","validation_access":"FORBIDDEN_UNTIL_DEVELOPMENT_NOMINATION","holdout_access":"FORBIDDEN_UNTIL_VALIDATION_PASS_AND_ROBUSTNESS_CONTROLS"},
+  "execution_contract": {"decision":"COMPLETED_BAR_T_USING_ONLY_T_AND_PRIOR_BARS","entry":"NEXT_SYNCHRONIZED_BAR_CLOSE_T_PLUS_1","exit":"FIXED_HORIZON_SYNCHRONIZED_CLOSE","max_concurrent_positions_per_configuration":1,"base_round_trip_cost_bps":2.0,"development_horizons_bars":[1,3,6]},
+  "development_gate": {"minimum_trades":50,"require_positive_mean_net_bps":true,"selection":"BEST_MEAN_WITHIN_PASSPORT_DEVELOPMENT_ONLY"},
+  "negative_controls_required_later":["NO_SAME_BAR_FILL","FUTURE_BAR_SHIFT_MUST_NOT_AUTHORIZE_EDGE","RANDOMIZED_DIRECTION_NULL","SESSION_PERMUTATION_NULL"],
+  "freeze_rule":"ANY CHANGE TO SIGNAL, GRID, HORIZON, COST, SPLIT, DATASET HASH, OR SELECTION RULE CREATES A NEW GENERATION IDENTITY.",
+  "passports":[
+    {"passport_id":"HUNT_V7_MIDSESSION_FROM_OPEN_CONTINUATION","signal_rule":"between min_bar_index and max_bar_index, BANKNIFTY from-open abs >= open_bps and current return shares from-open sign","direction_rule":"FROM_OPEN_DIRECTION","grid":{"min_bar_index":[18,30],"max_bar_index":[42,54],"open_bps":[20,35]}},
+    {"passport_id":"HUNT_V7_MIDSESSION_FROM_OPEN_FADE","signal_rule":"between min_bar_index and max_bar_index, BANKNIFTY from-open abs >= open_bps and current return opposes from-open sign","direction_rule":"CURRENT_RETURN_DIRECTION","grid":{"min_bar_index":[18,30],"max_bar_index":[42,54],"open_bps":[20,35]}},
+    {"passport_id":"HUNT_V7_LATE_SESSION_LEADER_CONSENSUS","signal_rule":"after bar_index_min, NIFTY and SENSEX from-open signs agree with min abs >= leader_open_bps and BANKNIFTY current return shares consensus","direction_rule":"LEADER_CONSENSUS_DIRECTION","grid":{"bar_index_min":[45,60],"leader_open_bps":[20,35]}},
+    {"passport_id":"HUNT_V7_LATE_SESSION_CROSS_MARKET_DISLOCATION_FADE","signal_rule":"after bar_index_min, BANKNIFTY from-open sign opposes NIFTY and SENSEX shared from-open sign and abs BANKNIFTY from-open >= bn_open_bps","direction_rule":"LEADER_FROM_OPEN_CONSENSUS","grid":{"bar_index_min":[45,60],"bn_open_bps":[20,35]}}
+  ]
+}
