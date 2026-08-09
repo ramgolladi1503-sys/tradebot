@@ -64,6 +64,13 @@ def main():
  bad=dict(n);bad['source_output_sha256']='0'*64;seto('CAL-026',not bool(verify_native_sources(bad,source_output_text=src,receipt=nr,candidate_head=head,source_output_ref=n['source_output_ref'],execution_receipt_ref=n['execution_receipt_ref'])))
  td,q,rmp,amp=_trusted_queue(head,rm,am,reviews,audits)
  try:
+  # The strengthened advancement gate verifies native provenance by resolving
+  # the declared source output and execution receipt from the canonical queue.
+  # Materialize those controlled GOOD-case artifacts in the isolated queue so
+  # CAL-032 exercises the real gate instead of relying on self-attested fields.
+  native_source=q/Path(n['source_output_ref']);native_source.parent.mkdir(parents=True,exist_ok=True);native_source.write_text(src,encoding='utf-8')
+  _write_json(q/Path(n['execution_receipt_ref']),nr)
+  _git(q,'add','.');_git(q,'commit','-m','stage calibration native evidence sources')
   qrr,re=load_exact_receipts(queue_repo=q,manifest=rm);qar,ae=load_exact_receipts(queue_repo=q,manifest=am)
   assert not re and not ae
   rg_auth=ar(rpl,candidate_head=head,receipts=qrr,manifest=rm,expected_sprint='S003',expected_round='R001',minimum_required=10,require_receipt_path=True);rg_auth.update({'review_round':'R001','population_manifest':rmp.as_posix()})
