@@ -1,86 +1,69 @@
 """Failed Breakout / Trap movement strategy.
 
-Detects bull-trap and bear-trap style range re-entry after ORB/day-level breaks.
-This emits read-only StrategyCandidate objects only and does not alter execution.
+A trap is valid only when completed bars prove a break first and a strictly later
+re-entry second. Metadata flags are retained only as diagnostics and never as
+sufficient proof of the setup.
 """
-
 from __future__ import annotations
-
-from typing import Any
 
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
-from strategies.movement._utils import (
-    clamp_score,
-    make_candidate,
-    ratio_score,
-    safe_float,
-    side_evidence,
-)
+from strategies.movement._temporal_evidence import failed_break_reentry
+from strategies.movement._utils import clamp_score, make_candidate, ratio_score, safe_float, side_evidence
 
 STRATEGY_ID = "failed_breakout_trap_v1"
 MOVEMENT_TYPE = "FAILED_BREAKOUT_TRAP"
 
 
-def generate_failed_breakout_trap_candidates(
-    ctx: StrategyContext,
-    regime: MovementRegimeResult,
-) -> tuple[StrategyCandidate, ...]:
-    """Generate opposite-side candidates after failed breakout/breakdown."""
-
+def generate_failed_breakout_trap_candidates(ctx: StrategyContext, regime: MovementRegimeResult) -> tuple[StrategyCandidate, ...]:
+    """Generate opposite-side candidates only after completed-bar break/re-entry proof."""
     profile = get_default_profile(STRATEGY_ID, "v1")
     params = profile.params if profile else {}
-    min_trap_evidence_score = float(params.get("MIN_TRAP_EVIDENCE_SCORE", 0.45))
-
+    min_score = float(params.get("MIN_TRAP_EVIDENCE_SCORE", 0.45))
+    min_break = float(params.get("MIN_FAILED_BREAK_DISTANCE_PCT", 0.0006))
+    max_reentry = float(params.get("MAX_REENTRY_DISTANCE_PCT", 0.0035))
     spot = safe_float(ctx.spot_ltp)
     if spot is None:
         return ()
 
     candidates: list[StrategyCandidate] = []
-    bull_trap_score = _bull_trap_score(ctx, regime)
-    if bull_trap_score >= min_trap_evidence_score:
-        candidates.append(
-            _build_candidate(
-                ctx,
-                regime,
-                "BUY_PUT",
-                bull_trap_score,
-                "failed_upside_breakout_reentry",
-            )
-        )
+    high = _failed_high_level(ctx)
+    if high is not None and spot < high:
+        proof = failed_break_reentry(ctx, level=high, side="UP", min_break_distance_pct=min_break)
+        if proof is not None:
+            distance = (high - spot) / abs(high)
+            if distance <= max_reentry:
+                score = _trap_score(ctx, regime, distance, max_reentry, "UP")
+                if score >= min_score:
+                    candidates.append(_build_candidate(ctx, regime, "BUY_PUT", score, "failed_upside_breakout_reentry", high, proof))
 
-    bear_trap_score = _bear_trap_score(ctx, regime)
-    if bear_trap_score >= min_trap_evidence_score:
-        candidates.append(
-            _build_candidate(
-                ctx,
-                regime,
-                "BUY_CALL",
-                bear_trap_score,
-                "failed_downside_breakdown_reentry",
-            )
-        )
-
+    low = _failed_low_level(ctx)
+    if low is not None and spot > low:
+        proof = failed_break_reentry(ctx, level=low, side="DOWN", min_break_distance_pct=min_break)
+        if proof is not None:
+            distance = (spot - low) / abs(low)
+            if distance <= max_reentry:
+                score = _trap_score(ctx, regime, distance, max_reentry, "DOWN")
+                if score >= min_score:
+                    candidates.append(_build_candidate(ctx, regime, "BUY_CALL", score, "failed_downside_breakdown_reentry", low, proof))
     return tuple(candidates)
 
 
-def _build_candidate(
-    ctx: StrategyContext,
-    regime: MovementRegimeResult,
-    direction: str,
-    trap_score: float,
-    trap_type: str,
-) -> StrategyCandidate:
+def _trap_score(ctx: StrategyContext, regime: MovementRegimeResult, reentry_distance: float, max_reentry: float, side: str) -> float:
+    option_stall = _option_stall_for_failed_upside(ctx) if side == "UP" else _option_stall_for_failed_downside(ctx)
+    return clamp_score(
+        0.40 * ratio_score(reentry_distance, start=0.0, full=max_reentry)
+        + 0.30 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))
+        + 0.20 * option_stall
+        + 0.10 * ratio_score(abs(safe_float(ctx.volume_z) or 0.0), start=0.4, full=2.0)
+    )
+
+
+def _build_candidate(ctx: StrategyContext, regime: MovementRegimeResult, direction: str, trap_score: float, trap_type: str, failed_level: float, proof: dict[str, float]) -> StrategyCandidate:
     profile = get_default_profile(STRATEGY_ID, "v1")
     params = profile.params if profile else {}
-
     side = side_evidence(ctx, direction)
-    price_structure_score = clamp_score(
-        0.55 * trap_score
-        + 0.25 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))
-        + 0.20 * ratio_score(abs(safe_float(ctx.volume_z) or 0.0), start=0.4, full=2.0)
-    )
     evidence = {
         "spot_ltp": ctx.spot_ltp,
         "vwap": ctx.vwap,
@@ -88,32 +71,34 @@ def _build_candidate(
         "day_low": ctx.day_low,
         "orb_high": ctx.orb_high,
         "orb_low": ctx.orb_low,
+        "completed_bar_history": True,
         "trap_type": trap_type,
         "trap_score": trap_score,
-        "previous_break_high": _metadata_float(ctx, "previous_break_high"),
-        "previous_break_low": _metadata_float(ctx, "previous_break_low"),
-        "price_reentered_range": _metadata_bool(ctx, "price_reentered_range"),
+        "failed_level": failed_level,
+        "break_extreme": proof["break_extreme"],
+        "reentry_close": proof["reentry_close"],
+        "break_index": proof["break_index"],
+        "reentry_index": proof["reentry_index"],
         "option_ltp": side.option_ltp,
         "premium_change": side.premium_change,
         "spread_pct": side.spread_pct,
         "depth": side.depth,
     }
-    suppression_tags = ("suppress_weak_breakout_followthrough",)
     return make_candidate(
         ctx=ctx,
         regime=regime,
         strategy_id=STRATEGY_ID,
         movement_type=MOVEMENT_TYPE,
         direction=direction,
-        price_structure_score=price_structure_score,
+        price_structure_score=trap_score,
         side=side,
-        entry_trigger="failed_breakout_reentry_with_opposite_option_confirmation",
+        entry_trigger="completed_break_then_later_completed_reentry_with_opposite_option_confirmation",
         invalid_if="price_rebreaks_failed_level_or_option_quote_degrades",
-        rank_reason="failed breakout/breakdown re-entered range with opposite option confirmation",
+        rank_reason="completed bars prove a break followed by a later range re-entry",
         evidence=evidence,
         warnings=(),
-        confluence_tags=("trap", "range_reentry", "opposite_option_confirmation"),
-        suppression_tags=suppression_tags,
+        confluence_tags=("trap", "range_reentry", "completed_bar_history", "opposite_option_confirmation"),
+        suppression_tags=("suppress_weak_breakout_followthrough",),
         strategy_version="v1",
         params_used=params,
         params_hash=profile.params_hash if profile else None,
@@ -121,80 +106,8 @@ def _build_candidate(
     )
 
 
-def _bull_trap_score(ctx: StrategyContext, regime: MovementRegimeResult) -> float:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    max_reentry_distance_pct = float(params.get("MAX_REENTRY_DISTANCE_PCT", 0.0035))
-    min_failed_break_distance_pct = float(
-        params.get("MIN_FAILED_BREAK_DISTANCE_PCT", 0.0006)
-    )
-    spot = safe_float(ctx.spot_ltp)
-    failed_high = _failed_high_level(ctx)
-    if spot is None or failed_high is None or spot >= failed_high:
-        return 0.0
-    reentry_distance = (failed_high - spot) / abs(failed_high)
-    if reentry_distance > max_reentry_distance_pct:
-        return 0.0
-    previous_break = _metadata_float(ctx, "previous_break_high")
-    had_break = previous_break is not None and previous_break > failed_high
-    explicit_reentry = _metadata_bool(ctx, "price_reentered_range") or _metadata_bool(
-        ctx, "failed_breakout_confirmed"
-    )
-    if not had_break and not explicit_reentry:
-        return 0.0
-    option_stall = _option_stall_for_failed_upside(ctx)
-    return clamp_score(
-        0.40
-        * ratio_score(
-            reentry_distance,
-            start=min_failed_break_distance_pct,
-            full=max_reentry_distance_pct,
-        )
-        + 0.25 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))
-        + 0.20 * option_stall
-        + 0.15 * (1.0 if explicit_reentry else 0.5)
-    )
-
-
-def _bear_trap_score(ctx: StrategyContext, regime: MovementRegimeResult) -> float:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    max_reentry_distance_pct = float(params.get("MAX_REENTRY_DISTANCE_PCT", 0.0035))
-    min_failed_break_distance_pct = float(
-        params.get("MIN_FAILED_BREAK_DISTANCE_PCT", 0.0006)
-    )
-    spot = safe_float(ctx.spot_ltp)
-    failed_low = _failed_low_level(ctx)
-    if spot is None or failed_low is None or spot <= failed_low:
-        return 0.0
-    reentry_distance = (spot - failed_low) / abs(failed_low)
-    if reentry_distance > max_reentry_distance_pct:
-        return 0.0
-    previous_break = _metadata_float(ctx, "previous_break_low")
-    had_break = previous_break is not None and previous_break < failed_low
-    explicit_reentry = _metadata_bool(ctx, "price_reentered_range") or _metadata_bool(
-        ctx, "failed_breakdown_confirmed"
-    )
-    if not had_break and not explicit_reentry:
-        return 0.0
-    option_stall = _option_stall_for_failed_downside(ctx)
-    return clamp_score(
-        0.40
-        * ratio_score(
-            reentry_distance,
-            start=min_failed_break_distance_pct,
-            full=max_reentry_distance_pct,
-        )
-        + 0.25 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))
-        + 0.20 * option_stall
-        + 0.15 * (1.0 if explicit_reentry else 0.5)
-    )
-
-
 def _failed_high_level(ctx: StrategyContext) -> float | None:
-    for value in (ctx.orb_high, ctx.day_high, ctx.nearest_resistance):
+    for value in (ctx.orb_high, ctx.nearest_resistance):
         level = safe_float(value)
         if level is not None and level > 0:
             return level
@@ -202,7 +115,7 @@ def _failed_high_level(ctx: StrategyContext) -> float | None:
 
 
 def _failed_low_level(ctx: StrategyContext) -> float | None:
-    for value in (ctx.orb_low, ctx.day_low, ctx.nearest_support):
+    for value in (ctx.orb_low, ctx.nearest_support):
         level = safe_float(value)
         if level is not None and level > 0:
             return level
@@ -223,18 +136,6 @@ def _option_stall_for_failed_downside(ctx: StrategyContext) -> float:
     pe_stall = 1.0 if pe_change is None or pe_change <= 0 else 0.0
     ce_confirm = ratio_score(ce_change, start=0.0, full=15.0)
     return clamp_score(0.55 * pe_stall + 0.45 * ce_confirm)
-
-
-def _metadata_bool(ctx: StrategyContext, key: str) -> bool:
-    value = (ctx.metadata or {}).get(key)
-    if isinstance(value, bool):
-        return value
-    return str(value or "").strip().lower() in {"1", "true", "yes", "y"}
-
-
-def _metadata_float(ctx: StrategyContext, key: str) -> float | None:
-    value: Any = (ctx.metadata or {}).get(key)
-    return safe_float(value)
 
 
 __all__ = ["STRATEGY_ID", "MOVEMENT_TYPE", "generate_failed_breakout_trap_candidates"]
