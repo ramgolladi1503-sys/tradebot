@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "local_time_ist": "2026-08-10T14:47:17+05:30",
+  "session_date_ist": "2026-08-10",
+  "opening_window_start_ist": "09:15",
+  "opening_window_end_ist": "11:30",
+  "is_current_time_within_opening_window": false,
+  "is_current_time_after_opening_window": true,
+  "same_day_forward_observation_allowed": false,
+  "same_day_forward_observation_claimed": false,
+  "eligible_action": "PREPARE_NEXT_ELIGIBLE_SESSION_OR_PROCESS_ALREADY_COLLECTED_BARS_ONLY",
+  "reason": "Current local time (14:47 IST) is past the 11:30 IST opening window boundary for session 2026-08-10. Fresh live opening-window observations cannot be initiated for today's session."
+}

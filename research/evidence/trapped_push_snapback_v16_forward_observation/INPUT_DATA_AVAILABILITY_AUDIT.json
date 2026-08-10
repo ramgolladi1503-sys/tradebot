@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "observation_date": "2026-08-10",
+  "input_source_found": false,
+  "input_source_path": null,
+  "input_source_type": null,
+  "completed_bars_only": true,
+  "opening_window_bars_available": 0,
+  "outcome_bars_available_for_triggers": 0,
+  "data_availability_status": "NO_COMPLETED_FORWARD_BARS_AVAILABLE",
+  "reason": "No unobserved fresh forward completed bar files exist for session 2026-08-10 after the opening window. No run was executed to prevent fabricating prospective evidence."
+}
