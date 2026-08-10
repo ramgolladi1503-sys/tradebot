@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "local_branch": "research/strategy-certification-kernel-v0",
+  "local_head": "78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6",
+  "origin_branch": "research/strategy-certification-kernel-v0",
+  "origin_head_after_fetch_pull": "78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6",
+  "user_reported_commit": "4c68939cf629ea3ee373eaac4a42b10a26ddf9cd",
+  "user_reported_commit_resolved_by_git": false,
+  "is_origin_head_equal_user_reported_commit": false,
+  "authoritative_latest_commit": "78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6",
+  "resolution_status": "ORIGIN_HEAD_USED_AS_AUTHORITY",
+  "notes": "User-reported commit hash 4c68939cf629ea3ee373eaac4a42b10a26ddf9cd could not be resolved in git history via git cat-file. Authoritative latest commit is origin/HEAD at 78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6."
+}

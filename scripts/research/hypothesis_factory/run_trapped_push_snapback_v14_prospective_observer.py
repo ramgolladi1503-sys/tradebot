@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Run Trapped Push Snapback V14 Prospective Observer (No Orders) - Repaired Scope V14.1
+Run Trapped Push Snapback V14 Prospective Observer (No Orders) - Repaired Scope V15
 Evaluates completed 5-minute bars and logs H1 triggers, snapshot data, and post-event outcomes.
 Enforces opening window scope (09:15-11:30 IST by default).
 Strictly enforced read-only governance: broker_write_authority = false, order_authority = false.
+Dynamic commit binding via CLI arguments --evidence-commit and --registry-commit.
 """
 import os
 import sys
@@ -38,7 +39,7 @@ def evaluate_h1_predicate(df):
     triggers = (range_t1 > 12.0) & (wick_t1 > 4.0) & (body_t < -2.0)
     return triggers, range_t1, wick_t1
 
-def run_observer(mode, input_bars_path, output_root, run_id, candidate_id, opening_start="09:15", opening_end="11:30", order_authority=False, broker_write_authority=False, paper_authorized=False, live_authorized=False):
+def run_observer(mode, input_bars_path, output_root, run_id, candidate_id, opening_start="09:15", opening_end="11:30", evidence_commit=None, registry_commit=None, order_authority=False, broker_write_authority=False, paper_authorized=False, live_authorized=False):
     # Safety Check: Enforce NO order placement or broker write authority
     if order_authority or broker_write_authority or paper_authorized or live_authorized:
         raise ValueError("UNSAFE AUTHORITY STATE: Prospective observer must run with zero order/broker authority.")
@@ -103,6 +104,11 @@ def run_observer(mode, input_bars_path, output_root, run_id, candidate_id, openi
     w_t1_vals = wick_t1_series.values
     trig_vals = triggers.values
     in_scope_vals = in_opening_series.values
+
+    # Commit metadata handling
+    bound_evidence_commit = evidence_commit if evidence_commit else "UNKNOWN_NOT_PROVIDED"
+    bound_registry_commit = registry_commit if registry_commit else "UNKNOWN_NOT_PROVIDED"
+    metadata_status = "COMMIT_BOUND" if evidence_commit else "COMMIT_NOT_BOUND"
 
     for idx in range(bars_total):
         in_opening_scope = bool(in_scope_vals[idx])
@@ -222,11 +228,14 @@ def run_observer(mode, input_bars_path, output_root, run_id, candidate_id, openi
     write_jsonl("governance_verdict_log.jsonl", verdict_rows)
 
     manifest = {
-        "schema_version": "V14_REPAIRED_PROSPECTIVE_MANIFEST_V1",
+        "schema_version": "V15_METADATA_BOUND_PROSPECTIVE_MANIFEST_V1",
         "run_id": run_id,
         "candidate_id": candidate_id,
         "mode": mode,
         "input_bars_path": str(input_bars_path),
+        "evidence_commit": bound_evidence_commit,
+        "registry_commit": bound_registry_commit,
+        "metadata_status": metadata_status,
         "bars_total": bars_total,
         "bars_in_scope_opening_window": bars_in_scope_opening_window,
         "bars_out_of_scope": bars_out_of_scope,
@@ -242,8 +251,10 @@ def run_observer(mode, input_bars_path, output_root, run_id, candidate_id, openi
         json.dump(manifest, f, indent=2)
 
     verdict_file = {
-        "controlled_verdict": "V14_REPAIRED_PROSPECTIVE_OBSERVER_DRY_RUN_PASS",
-        "latest_commit": "78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6",
+        "controlled_verdict": "V15_OBSERVER_METADATA_BOUND_DRY_RUN_PASS",
+        "evidence_commit": bound_evidence_commit,
+        "registry_commit": bound_registry_commit,
+        "metadata_status": metadata_status,
         "candidate_id": candidate_id,
         "bars_total": bars_total,
         "bars_in_scope_opening_window": bars_in_scope_opening_window,
@@ -271,7 +282,7 @@ def run_observer(mode, input_bars_path, output_root, run_id, candidate_id, openi
     return manifest
 
 def main():
-    parser = argparse.ArgumentParser(description="V14 Trapped Push Prospective Observer Repaired Scope")
+    parser = argparse.ArgumentParser(description="V15 Trapped Push Prospective Observer Metadata Bound")
     parser.add_argument("--mode", choices=["historical_replay", "manual_append"], required=True)
     parser.add_argument("--input-bars", required=True)
     parser.add_argument("--output-root", required=True)
@@ -279,9 +290,11 @@ def main():
     parser.add_argument("--candidate-id", default="H1_TRAPPED_PUSH_SNAPBACK")
     parser.add_argument("--opening-start", default="09:15", help="Opening window start IST (HH:MM)")
     parser.add_argument("--opening-end", default="11:30", help="Opening window end IST (HH:MM)")
+    parser.add_argument("--evidence-commit", default=None, help="Evidence commit hash (SHA)")
+    parser.add_argument("--registry-commit", default=None, help="Registry commit hash (SHA)")
     args = parser.parse_args()
 
-    manifest = run_observer(args.mode, args.input_bars, args.output_root, args.run_id, args.candidate_id, args.opening_start, args.opening_end)
+    manifest = run_observer(args.mode, args.input_bars, args.output_root, args.run_id, args.candidate_id, args.opening_start, args.opening_end, args.evidence_commit, args.registry_commit)
     print(f"PROSPECTIVE OBSERVER RUN COMPLETE. Total Bars: {manifest['bars_total']}, In Scope: {manifest['bars_in_scope_opening_window']}, Out of Scope: {manifest['bars_out_of_scope']}, Triggers In Scope: {manifest['triggers_in_scope']}, Orders: {manifest['orders_created']}")
 
 if __name__ == "__main__":

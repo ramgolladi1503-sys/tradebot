@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Unit tests for V14 Trapped Push Prospective Observer (Repaired Scope V14.1)
+Unit tests for V14 Trapped Push Prospective Observer (Repaired Scope V15 Metadata Bound)
 Verifies zero-order enforcement, opening window scope filtering, completed bar handling,
-trigger logging, and outcome status (available vs pending).
+trigger logging, outcome status, and dynamic commit binding.
 """
 import os
 import sys
@@ -24,18 +24,6 @@ class TestV14ProspectiveObserverRepaired(unittest.TestCase):
         self.input_path = os.path.join(self.tmp_dir.name, "fixture_bars.csv")
         
         # Create fixture data across two times: opening (09:15-11:30) and afternoon (13:00-14:00)
-        # Non-trigger bars have range_bps <= 12 or upper_wick <= 4 or body_bps >= -2
-        # Bar 0 (09:15): range_bps=10, upper_wick=2, body_bps=5
-        # Bar 1 (09:20): range_bps=80, upper_wick=50, body_bps=20
-        # Bar 2 (09:25): range_bps=10, upper_wick=2, body_bps=-30 -> TRIGGER! (t-1: range=80 > 12, wick=50 > 4, body=-30 < -2)
-        # Bar 3 (09:30): range_bps=10, upper_wick=2, body_bps=5
-        # Bar 4 (09:35): range_bps=10, upper_wick=2, body_bps=5
-        # Bar 5 (09:40): range_bps=10, upper_wick=2, body_bps=5
-        # Bar 6 (09:45): range_bps=10, upper_wick=2, body_bps=5
-        # Bar 7 (09:50): range_bps=10, upper_wick=2, body_bps=5
-        # Bar 8 (13:00): range_bps=80, upper_wick=50, body_bps=20
-        # Bar 9 (13:05): range_bps=10, upper_wick=2, body_bps=-30 -> OUT-OF-SCOPE TRIGGER!
-        
         data = {
             'datetime': [
                 "2026-08-10 09:15:00",
@@ -105,7 +93,6 @@ class TestV14ProspectiveObserverRepaired(unittest.TestCase):
 
     def test_outcome_pending_when_less_than_6_future_bars(self):
         """Test that when < 6 future bars exist after trigger, outcome_status is OUTCOME_PENDING_INSUFFICIENT_FUTURE_BARS."""
-        # Setup fixture where trigger is at index 2, but total bars = 5 (so index 2+6 > 5)
         data = {
             'datetime': [f"2026-08-10 09:{15+i*5:02d}:00" for i in range(5)],
             'open': [100.0, 100.0, 100.5, 100.2, 100.0],
@@ -167,6 +154,28 @@ class TestV14ProspectiveObserverRepaired(unittest.TestCase):
         self.assertFalse(verdict["paper_authorized"])
         self.assertFalse(verdict["live_authorized"])
         self.assertFalse(verdict["prospective_supported"])
+
+    def test_evidence_commit_passed_through_to_run_verdict(self):
+        """Test that evidence_commit argument is correctly bound and logged."""
+        manifest = run_observer("historical_replay", self.input_path, self.tmp_dir.name, "RUN_COMM", "H1_TRAPPED_PUSH_SNAPBACK", evidence_commit="78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6")
+        self.assertEqual(manifest["evidence_commit"], "78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6")
+        self.assertEqual(manifest["metadata_status"], "COMMIT_BOUND")
+
+        run_dir = Path(self.tmp_dir.name) / "RUN_COMM"
+        verdict = json.loads((run_dir / "CONTROLLED_VERDICT.json").read_text())
+        self.assertEqual(verdict["evidence_commit"], "78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6")
+        self.assertEqual(verdict["metadata_status"], "COMMIT_BOUND")
+
+    def test_missing_evidence_commit_records_unknown_not_provided(self):
+        """Test that missing evidence_commit records UNKNOWN_NOT_PROVIDED and COMMIT_NOT_BOUND."""
+        manifest = run_observer("historical_replay", self.input_path, self.tmp_dir.name, "RUN_NOCOMM", "H1_TRAPPED_PUSH_SNAPBACK")
+        self.assertEqual(manifest["evidence_commit"], "UNKNOWN_NOT_PROVIDED")
+        self.assertEqual(manifest["metadata_status"], "COMMIT_NOT_BOUND")
+
+    def test_registry_commit_passed_through_if_provided(self):
+        """Test that registry_commit argument is correctly recorded."""
+        manifest = run_observer("historical_replay", self.input_path, self.tmp_dir.name, "RUN_REGCOMM", "H1_TRAPPED_PUSH_SNAPBACK", registry_commit="b57197b5643b0e99087dbfac091eb9a2054a5e1b")
+        self.assertEqual(manifest["registry_commit"], "b57197b5643b0e99087dbfac091eb9a2054a5e1b")
 
 if __name__ == "__main__":
     unittest.main()
