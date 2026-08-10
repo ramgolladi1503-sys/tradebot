@@ -1,0 +1,3 @@
+{"timestamp": "2026-08-10T15:43:00+05:30", "event_type": "UPSTOX_FETCH_BLOCKED", "details": {"status": "UPSTOX_FETCH_BLOCKED_MISSING_TOKEN", "reason": "No valid Upstox access token found."}}
+{"timestamp": "2026-08-10T15:43:00+05:30", "event_type": "KITE_FETCH_BLOCKED", "details": {"status": "KITE_FETCH_BLOCKED_MISSING_TOKEN", "reason": "No valid Kite access token found."}}
+{"timestamp": "2026-08-10T15:43:00+05:30", "event_type": "NO_VALID_INPUT_OR_TOKEN", "details": {"verdict": "V20B_BLOCKED_NO_VALID_INPUT_OR_TOKEN", "reason": "Neither Upstox nor Kite tokens exist, and manual CSV file is not present."}}

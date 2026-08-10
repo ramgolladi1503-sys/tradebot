@@ -1,0 +1,13 @@
+{
+  "upstox_token_candidates_found": false,
+  "upstox_read_only_fetchers_found": true,
+  "upstox_instrument_mapping_found": true,
+  "upstox_local_completed_bar_files_found": false,
+  "kite_token_candidates_found": false,
+  "kite_read_only_fetchers_found": true,
+  "kite_instrument_mapping_found": true,
+  "manual_intake_path_available": true,
+  "unsafe_sources_excluded": true,
+  "recommended_data_access_mode": "BLOCKED_NO_SAFE_COMPLETED_BAR_SOURCE",
+  "reason": "Neither Upstox nor Kite API tokens/credentials are available in environment or local runtime files, and no pre-populated manual CSV file exists for session 2026-08-10."
+}

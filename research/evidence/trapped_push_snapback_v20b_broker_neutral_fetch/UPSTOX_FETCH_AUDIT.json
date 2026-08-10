@@ -1,0 +1,7 @@
+{
+  "upstox_fetch_status": "UPSTOX_FETCH_BLOCKED_MISSING_TOKEN",
+  "reason": "No valid Upstox access token found in environment variables or runtime credentials directory.",
+  "orders_created": 0,
+  "broker_writes_created": 0,
+  "authority_flags_all_false": true
+}

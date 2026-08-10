@@ -1,0 +1,9 @@
+{
+  "prospective_sessions_observed": 0,
+  "prospective_events_observed": 0,
+  "minimum_sessions_required": 20,
+  "minimum_events_required": 20,
+  "minimum_sessions_met": false,
+  "minimum_events_met": false,
+  "prospective_supported": false
+}

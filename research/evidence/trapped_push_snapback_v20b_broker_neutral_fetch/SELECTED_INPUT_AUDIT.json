@@ -1,0 +1,9 @@
+{
+  "selected_data_path": "NONE_AVAILABLE",
+  "selected_input_file": null,
+  "selection_reason": "No manual completed bar CSV exists at research/evidence/trapped_push_snapback_v18_today_readonly_fetch/input_bars/NIFTY_5MIN_2026-08-10_COMPLETED.csv; Upstox token is missing; Kite token is missing.",
+  "manual_input_exists": false,
+  "upstox_fetch_available": false,
+  "kite_fetch_available": false,
+  "blocked_reason": "V20B_BLOCKED_NO_VALID_INPUT_OR_TOKEN"
+}

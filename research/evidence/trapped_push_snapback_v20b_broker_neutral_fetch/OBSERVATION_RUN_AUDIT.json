@@ -1,0 +1,19 @@
+{
+  "selected_data_path": "NONE_AVAILABLE",
+  "selected_input_file": null,
+  "input_bar_validation_verdict": "FORWARD_BAR_INTAKE_BLOCKED_NO_INPUT",
+  "observer_run_executed": false,
+  "run_id": null,
+  "runner_exit_code": null,
+  "bars_total": 0,
+  "bars_in_scope_opening_window": 0,
+  "bars_out_of_scope": 0,
+  "trigger_count": 0,
+  "pending_outcomes": 0,
+  "available_outcomes": 0,
+  "orders_created": 0,
+  "broker_writes_created": 0,
+  "authority_flags_all_false": true,
+  "prospective_support_evaluated": false,
+  "prospective_support_status": "PROSPECTIVE_SUPPORT_UNEVALUATED_NO_BARS"
+}
