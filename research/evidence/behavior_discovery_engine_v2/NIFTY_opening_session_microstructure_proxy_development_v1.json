@@ -1,0 +1,388 @@
+{
+  "schema_version": 1,
+  "runner_id": "OPENING_SESSION_MICROSTRUCTURE_DEVELOPMENT_OUTCOME_V1",
+  "search_family_id": "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1",
+  "development_only": true,
+  "forward_outcomes_computed": true,
+  "forward_outcomes_scope": "development_sessions_only",
+  "locked_outcomes_accessed": false,
+  "edge_claimed": false,
+  "status": "NO_DEVELOPMENT_SUPPORTED_OPENING_SESSION_MICROSTRUCTURE_CANDIDATE",
+  "supported_candidates": [],
+  "candidate_summaries": [
+    {
+      "candidate_id": "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1_OPENING_30_60_DIRECTIONAL_DOWN",
+      "opening_bucket": "OPENING_30_60",
+      "required_state": "DIRECTIONAL_DOWN",
+      "matches": 15,
+      "distinct_sessions": 15,
+      "ret3_bps": {
+        "n": 15,
+        "mean": -5.917504353127879,
+        "median": -5.4144141857648265
+      },
+      "ret6_bps": {
+        "n": 15,
+        "mean": -6.912368944166876,
+        "median": -4.8079215474350345
+      },
+      "ret12_bps": {
+        "n": 15,
+        "mean": -3.219002589406624,
+        "median": -9.442420122095507
+      },
+      "ret18_bps": {
+        "n": 15,
+        "mean": -3.7948888255303626,
+        "median": -5.573042174585874
+      },
+      "up_excursion_rate_20bps": 0.2,
+      "down_excursion_rate_20bps": 0.4666666666666667,
+      "up_excursion_rate_30bps": 0.13333333333333333,
+      "down_excursion_rate_30bps": 0.3333333333333333,
+      "inferred_direction": "DOWN",
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL"
+      ]
+    },
+    {
+      "candidate_id": "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1_OPENING_30_60_LOWER_REJECTION",
+      "opening_bucket": "OPENING_30_60",
+      "required_state": "LOWER_REJECTION",
+      "matches": 15,
+      "distinct_sessions": 15,
+      "ret3_bps": {
+        "n": 15,
+        "mean": -5.917504353127879,
+        "median": -5.4144141857648265
+      },
+      "ret6_bps": {
+        "n": 15,
+        "mean": -6.912368944166876,
+        "median": -4.8079215474350345
+      },
+      "ret12_bps": {
+        "n": 15,
+        "mean": -3.219002589406624,
+        "median": -9.442420122095507
+      },
+      "ret18_bps": {
+        "n": 15,
+        "mean": -3.7948888255303626,
+        "median": -5.573042174585874
+      },
+      "up_excursion_rate_20bps": 0.2,
+      "down_excursion_rate_20bps": 0.4666666666666667,
+      "up_excursion_rate_30bps": 0.13333333333333333,
+      "down_excursion_rate_30bps": 0.3333333333333333,
+      "inferred_direction": "DOWN",
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL"
+      ]
+    },
+    {
+      "candidate_id": "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1_OPENING_30_60_UPPER_REJECTION",
+      "opening_bucket": "OPENING_30_60",
+      "required_state": "UPPER_REJECTION",
+      "matches": 13,
+      "distinct_sessions": 13,
+      "ret3_bps": {
+        "n": 13,
+        "mean": -6.333475839560908,
+        "median": -5.4144141857648265
+      },
+      "ret6_bps": {
+        "n": 13,
+        "mean": -6.036428559412264,
+        "median": -4.8079215474350345
+      },
+      "ret12_bps": {
+        "n": 13,
+        "mean": -3.1441783849366187,
+        "median": -10.635857861096554
+      },
+      "ret18_bps": {
+        "n": 13,
+        "mean": -4.833795015727167,
+        "median": -5.573042174585874
+      },
+      "up_excursion_rate_20bps": 0.23076923076923078,
+      "down_excursion_rate_20bps": 0.46153846153846156,
+      "up_excursion_rate_30bps": 0.15384615384615385,
+      "down_excursion_rate_30bps": 0.3076923076923077,
+      "inferred_direction": "DOWN",
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL",
+        "MIN_DISTINCT_DEVELOPMENT_SESSIONS_FAIL"
+      ]
+    },
+    {
+      "candidate_id": "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1_OPENING_30_60_COMPRESSION",
+      "opening_bucket": "OPENING_30_60",
+      "required_state": "COMPRESSION",
+      "matches": 15,
+      "distinct_sessions": 15,
+      "ret3_bps": {
+        "n": 15,
+        "mean": -5.917504353127879,
+        "median": -5.4144141857648265
+      },
+      "ret6_bps": {
+        "n": 15,
+        "mean": -6.912368944166876,
+        "median": -4.8079215474350345
+      },
+      "ret12_bps": {
+        "n": 15,
+        "mean": -3.219002589406624,
+        "median": -9.442420122095507
+      },
+      "ret18_bps": {
+        "n": 15,
+        "mean": -3.7948888255303626,
+        "median": -5.573042174585874
+      },
+      "up_excursion_rate_20bps": 0.2,
+      "down_excursion_rate_20bps": 0.4666666666666667,
+      "up_excursion_rate_30bps": 0.13333333333333333,
+      "down_excursion_rate_30bps": 0.3333333333333333,
+      "inferred_direction": "DOWN",
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL"
+      ]
+    },
+    {
+      "candidate_id": "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1_OPENING_30_60_DIRECTIONAL_ACCELERATION",
+      "opening_bucket": "OPENING_30_60",
+      "required_state": "DIRECTIONAL_ACCELERATION",
+      "matches": 14,
+      "distinct_sessions": 14,
+      "ret3_bps": {
+        "n": 14,
+        "mean": -6.633172415157405,
+        "median": -7.183142943130716
+      },
+      "ret6_bps": {
+        "n": 14,
+        "mean": -7.734695578919895,
+        "median": -6.385067386403542
+      },
+      "ret12_bps": {
+        "n": 14,
+        "mean": -3.0272459844085273,
+        "median": -10.03913899159603
+      },
+      "ret18_bps": {
+        "n": 14,
+        "mean": -3.634683193470584,
+        "median": -5.3409442150603725
+      },
+      "up_excursion_rate_20bps": 0.21428571428571427,
+      "down_excursion_rate_20bps": 0.5,
+      "up_excursion_rate_30bps": 0.14285714285714285,
+      "down_excursion_rate_30bps": 0.35714285714285715,
+      "inferred_direction": "DOWN",
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL",
+        "MIN_DISTINCT_DEVELOPMENT_SESSIONS_FAIL"
+      ]
+    },
+    {
+      "candidate_id": "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1_OPENING_30_60_RANGE_BALANCE",
+      "opening_bucket": "OPENING_30_60",
+      "required_state": "RANGE_BALANCE",
+      "matches": 5,
+      "distinct_sessions": 5,
+      "ret3_bps": {
+        "n": 5,
+        "mean": -13.897954621799437,
+        "median": -10.529227897911886
+      },
+      "ret6_bps": {
+        "n": 5,
+        "mean": -12.981428316935384,
+        "median": -17.83126494635745
+      },
+      "ret12_bps": {
+        "n": 5,
+        "mean": 5.468707880937451,
+        "median": -9.442420122095507
+      },
+      "ret18_bps": {
+        "n": 5,
+        "mean": 5.423909217609602,
+        "median": -5.108846255534871
+      },
+      "up_excursion_rate_20bps": 0.2,
+      "down_excursion_rate_20bps": 0.8,
+      "up_excursion_rate_30bps": 0.2,
+      "down_excursion_rate_30bps": 0.4,
+      "inferred_direction": "DOWN",
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL",
+        "MIN_DISTINCT_DEVELOPMENT_SESSIONS_FAIL"
+      ]
+    },
+    {
+      "candidate_id": "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1_OPENING_0_30_COMPRESSION",
+      "opening_bucket": "OPENING_0_30",
+      "required_state": "COMPRESSION",
+      "matches": 6,
+      "distinct_sessions": 6,
+      "ret3_bps": {
+        "n": 6,
+        "mean": -1.5192147539725787,
+        "median": -1.0818931814254862
+      },
+      "ret6_bps": {
+        "n": 6,
+        "mean": -8.065288221752638,
+        "median": 0.7902577507240549
+      },
+      "ret12_bps": {
+        "n": 6,
+        "mean": -7.609889426133386,
+        "median": -1.6830462701483695
+      },
+      "ret18_bps": {
+        "n": 6,
+        "mean": -10.396485224272723,
+        "median": -7.865566308594696
+      },
+      "up_excursion_rate_20bps": 0.16666666666666666,
+      "down_excursion_rate_20bps": 0.3333333333333333,
+      "up_excursion_rate_30bps": 0.16666666666666666,
+      "down_excursion_rate_30bps": 0.16666666666666666,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL",
+        "MIN_DISTINCT_DEVELOPMENT_SESSIONS_FAIL",
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET6_RET12_SIGN_CONSISTENCY_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1_OPENING_30_60_DIRECTIONAL_UP",
+      "opening_bucket": "OPENING_30_60",
+      "required_state": "DIRECTIONAL_UP",
+      "matches": 10,
+      "distinct_sessions": 10,
+      "ret3_bps": {
+        "n": 10,
+        "mean": -1.7170221047480005,
+        "median": -1.898551923872338
+      },
+      "ret6_bps": {
+        "n": 10,
+        "mean": -6.205950675629901,
+        "median": -6.385067386403542
+      },
+      "ret12_bps": {
+        "n": 10,
+        "mean": -6.923814742695434,
+        "median": -10.03913899159603
+      },
+      "ret18_bps": {
+        "n": 10,
+        "mean": -4.0762495094052165,
+        "median": -5.060688791928003
+      },
+      "up_excursion_rate_20bps": 0.2,
+      "down_excursion_rate_20bps": 0.5,
+      "up_excursion_rate_30bps": 0.1,
+      "down_excursion_rate_30bps": 0.3,
+      "inferred_direction": "DOWN",
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL",
+        "MIN_DISTINCT_DEVELOPMENT_SESSIONS_FAIL"
+      ]
+    },
+    {
+      "candidate_id": "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1_OPENING_30_60_DIRECTIONAL_DECELERATION",
+      "opening_bucket": "OPENING_30_60",
+      "required_state": "DIRECTIONAL_DECELERATION",
+      "matches": 13,
+      "distinct_sessions": 13,
+      "ret3_bps": {
+        "n": 13,
+        "mean": -2.2581660589592576,
+        "median": -5.346764511795499
+      },
+      "ret6_bps": {
+        "n": 13,
+        "mean": -4.289878169375137,
+        "median": -3.257108533623043
+      },
+      "ret12_bps": {
+        "n": 13,
+        "mean": -1.0672587067578774,
+        "median": -6.53556969346436
+      },
+      "ret18_bps": {
+        "n": 13,
+        "mean": -2.8651906534857483,
+        "median": -5.108846255534871
+      },
+      "up_excursion_rate_20bps": 0.23076923076923078,
+      "down_excursion_rate_20bps": 0.38461538461538464,
+      "up_excursion_rate_30bps": 0.15384615384615385,
+      "down_excursion_rate_30bps": 0.23076923076923078,
+      "inferred_direction": "DOWN",
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL",
+        "MIN_DISTINCT_DEVELOPMENT_SESSIONS_FAIL"
+      ]
+    },
+    {
+      "candidate_id": "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1_OPENING_30_60_DOWNSIDE_ESCAPE",
+      "opening_bucket": "OPENING_30_60",
+      "required_state": "DOWNSIDE_ESCAPE",
+      "matches": 7,
+      "distinct_sessions": 7,
+      "ret3_bps": {
+        "n": 7,
+        "mean": 0.1304631039089621,
+        "median": 1.5698710350942058
+      },
+      "ret6_bps": {
+        "n": 7,
+        "mean": -1.0387371953682731,
+        "median": -0.6565779159017904
+      },
+      "ret12_bps": {
+        "n": 7,
+        "mean": 8.429871003988572,
+        "median": -1.5071247775433338
+      },
+      "ret18_bps": {
+        "n": 7,
+        "mean": 5.07693701218218,
+        "median": -1.8267694799589673
+      },
+      "up_excursion_rate_20bps": 0.42857142857142855,
+      "down_excursion_rate_20bps": 0.2857142857142857,
+      "up_excursion_rate_30bps": 0.2857142857142857,
+      "down_excursion_rate_30bps": 0.2857142857142857,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "MIN_DEVELOPMENT_MATCHES_FAIL",
+        "MIN_DISTINCT_DEVELOPMENT_SESSIONS_FAIL",
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    }
+  ]
+}
