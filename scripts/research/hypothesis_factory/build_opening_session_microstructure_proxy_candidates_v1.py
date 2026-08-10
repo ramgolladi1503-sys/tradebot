@@ -64,7 +64,7 @@ def main():
 
     for (op_bucket, state), count in opening_state_counts.items():
         cand_id = f"{TARGET_FAMILY}_{op_bucket}_{state}"
-        if state in opening_high_info_states and count >= 15:
+        if count >= 10:
             cand = {
                 "candidate_id": cand_id,
                 "search_family_id": TARGET_FAMILY,
