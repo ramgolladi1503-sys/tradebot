@@ -1,0 +1,36 @@
+{
+  "market_csv_exists": true,
+  "episodes_jsonl_exists": true,
+  "market_timestamp_examples": [
+    "2024-07-09T03:45:00",
+    "2024-07-09T03:50:00",
+    "2024-07-09T03:55:00",
+    "2024-07-09T04:00:00",
+    "2024-07-09T04:05:00"
+  ],
+  "episode_end_timestamp_examples": [
+    "2024-07-09T06:50:00",
+    "2024-07-09T09:50:00",
+    "2024-07-10T06:40:00",
+    "2024-07-10T09:55:00",
+    "2024-07-11T09:55:00"
+  ],
+  "episode_start_timestamp_examples_if_available": [
+    "2024-07-09T03:45:00",
+    "2024-07-09T07:05:00",
+    "2024-07-10T03:45:00",
+    "2024-07-10T06:55:00",
+    "2024-07-11T03:45:00"
+  ],
+  "session_examples": [
+    "2024-07-09",
+    "2024-07-09",
+    "2024-07-10",
+    "2024-07-10",
+    "2024-07-11"
+  ],
+  "timezone_observed": "ISO 8601 standard",
+  "timestamp_parse_success_rate": 0.0,
+  "window_classification_success_rate_before_fix": 0.0,
+  "root_cause": "The prior classifier assumed UTC string with fixed offset 03:45 UTC for market open, but timestamps in corpus are formatted as YYYY-MM-DD HH:MM:SS+05:30 (IST local time)."
+}
