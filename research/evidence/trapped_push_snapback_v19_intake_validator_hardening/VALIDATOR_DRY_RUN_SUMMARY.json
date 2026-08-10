@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "tests_run": 14,
+  "tests_passed": 14,
+  "valid_fixture_validation_verdict": "FORWARD_BAR_INTAKE_VALID",
+  "bars_total": 3,
+  "bars_in_opening_window": 3,
+  "orders_created": 0,
+  "broker_writes_created": 0,
+  "authority_flags_all_false": true,
+  "validator_ready_for_manual_intake": true
+}

@@ -7,14 +7,18 @@ When the read-only Kite API fetch fails due to a missing access token (`missing_
 Place the filled CSV file at:
 `research/evidence/trapped_push_snapback_v18_today_readonly_fetch/input_bars/NIFTY_5MIN_2026-08-10_COMPLETED.csv`
 
-## Required Schema & Format
-- `datetime`: Timestamp in ISO string format (e.g., `2026-08-10 09:15:00` in IST)
-- `open`: Opening price (numeric)
-- `high`: High price (numeric)
-- `low`: Low price (numeric)
-- `close`: Closing price (numeric)
+## Required Header (DO NOT REMOVE OR EDIT HEADER)
+`datetime,open,high,low,close,volume_optional,source,completed_bar,timezone`
 
-## Execution Rules
-- Only process completed 5-minute bars.
-- Do not fabricate synthetic or fake prices.
-- Once populated, run `python3 scripts/research/hypothesis_factory/validate_h1_forward_bar_intake_v18.py --input-bars ...` to validate.
+## Warning
+- **Do not leave example rows or comments in the CSV file.**
+- Only completed 5-minute NIFTY bars are allowed.
+- Do not include incomplete current bars (`completed_bar` must be `true`).
+- Do not include orders, trades, option fills, P&L, or signals.
+
+## Example Row (For Reference Only — Put in CSV without comments)
+`2026-08-10 09:15:00,24500.0,24530.0,24480.0,24510.0,0,KITE_OR_BROKER_FEED,true,Asia/Kolkata`
+
+## Validation Execution
+Once populated, run:
+`python3 scripts/research/hypothesis_factory/validate_h1_forward_bar_intake_v18.py --input-bars ... --output-audit ... --observation-date 2026-08-10`

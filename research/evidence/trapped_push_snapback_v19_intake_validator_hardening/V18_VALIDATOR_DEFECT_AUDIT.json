@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "reviewed_commit": "c93398c22",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "validator_file_reviewed": "scripts/research/hypothesis_factory/validate_h1_forward_bar_intake_v18.py",
+  "checks_present": [
+    "file_exists",
+    "csv_or_parquet_parse",
+    "open_high_low_close_columns_exist",
+    "datetime_or_timestamp_column_exists",
+    "opening_window_bar_count_greater_than_zero"
+  ],
+  "checks_missing": [
+    "required_completed_bar_column",
+    "completed_bar_equals_true_enforcement",
+    "timezone_column_and_ist_verification",
+    "observation_date_match",
+    "duplicate_timestamp_rejection",
+    "strictly_increasing_chronological_order",
+    "exact_5min_alignment",
+    "exact_5min_spacing",
+    "numeric_and_positive_ohlc",
+    "high_gte_max_open_close",
+    "low_lte_min_open_close",
+    "source_column_presence"
+  ],
+  "does_v18_validator_safely_admit_manual_intake": false,
+  "manual_intake_admission_allowed_before_repair": false,
+  "reason": "V18 validator does not verify completed_bar status, timestamp alignment/spacing, observation date match, duplicate timestamps, or OHLC prices sanity. Admitting manual CSV files through V18 without these checks introduces unvalidated data risk."
+}

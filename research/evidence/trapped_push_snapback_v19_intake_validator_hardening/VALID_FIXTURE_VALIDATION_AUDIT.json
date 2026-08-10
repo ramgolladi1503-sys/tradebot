@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "observation_date": "2026-08-10",
+  "input_bars_path": "research/evidence/trapped_push_snapback_v19_intake_validator_hardening/fixtures/valid_completed_opening_bars.csv",
+  "orders_created": 0,
+  "broker_writes_created": 0,
+  "authority_flags_all_false": true,
+  "allow_missing_bars": false,
+  "validation_verdict": "FORWARD_BAR_INTAKE_VALID",
+  "bars_total": 3,
+  "bars_in_opening_window": 3,
+  "bars_out_of_opening_window": 0,
+  "first_timestamp_ist": "2026-08-10 09:15:00+05:30",
+  "last_timestamp_ist": "2026-08-10 09:25:00+05:30",
+  "duplicate_count": 0,
+  "missing_expected_opening_bars": 0,
+  "completed_bar_false_count": 0,
+  "ohlc_invalid_count": 0,
+  "reason": "Input bar file passed all hardened V19 schema, temporal, alignment, spacing, completion, and OHLC validation checks."
+}

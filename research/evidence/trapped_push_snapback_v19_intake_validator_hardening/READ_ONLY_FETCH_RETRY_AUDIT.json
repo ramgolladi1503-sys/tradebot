@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "token_file_present": false,
+  "fetch_retry_attempted": false,
+  "fetch_retry_status": "FETCH_RETRY_SKIPPED_MISSING_TOKEN",
+  "output_bars_path": null,
+  "validation_attempted_after_fetch": false,
+  "validation_verdict_after_fetch": null,
+  "observer_run_allowed_after_fetch": false,
+  "reason": "Token file /Users/madhuram/tradebot-strategy-certification-kernel-v0/.runtime/kite_access_token is absent. Read-only fetch retry skipped to prevent redundant auth errors."
+}

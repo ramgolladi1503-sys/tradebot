@@ -1,0 +1,4 @@
+datetime,open,high,low,close,volume_optional,source,completed_bar,timezone
+2026-08-10 09:15:00,24500.0,24540.0,24480.0,24510.0,100,MANUAL_INTAKE,true,Asia/Kolkata
+2026-08-10 09:20:00,24510.0,24550.0,24500.0,24530.0,120,MANUAL_INTAKE,true,Asia/Kolkata
+2026-08-10 09:25:00,24530.0,24560.0,24515.0,24520.0,110,MANUAL_INTAKE,true,Asia/Kolkata

@@ -1,3 +1,1 @@
 datetime,open,high,low,close,volume_optional,source,completed_bar,timezone
-# Example row template:
-# 2026-08-10 09:15:00,24500.0,24530.0,24480.0,24510.0,0,KITE_OR_BROKER_FEED,true,Asia/Kolkata
