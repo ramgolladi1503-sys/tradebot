@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "runner_id": "TOD_SESSION_POSITION_LOCKED_VALIDATOR_V1",
+  "search_family_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1",
+  "input_development_evidence_sha256": "891dbe64d670d35338a39003ce69b67b6bc61e2a3fe495077a7bd448cca6930f",
+  "input_narrowed_candidates_sha256": "764f22b27ff74c13550708de4acc8e24f3e611ee5b5cfcb5e085185455d19430",
+  "dataset_sha256": "6a145d4d17f124f9dc8ee272c5a19ca98988873a14b294765f44a27284d8b7e8",
+  "development_candidates_frozen": true,
+  "locked_sessions": 99,
+  "locked_matches_skipped_or_computed_policy": "STRICT_ISOLATION_AND_EVALUATION",
+  "locked_outcomes_accessed": true,
+  "locked_outcomes_scope": "locked_sessions_only",
+  "edge_claimed": false,
+  "candidate_summaries": [
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_UPSIDE_ESCAPE",
+      "tod_bucket": "PRE_CLOSE_30",
+      "required_state": "UPSIDE_ESCAPE",
+      "matches": 35,
+      "distinct_sessions": 35,
+      "ret3_bps": {
+        "n": 35,
+        "mean": 23.152792063410445,
+        "median": 10.21844867309607
+      },
+      "ret6_bps": {
+        "n": 35,
+        "mean": 22.861096713213712,
+        "median": 23.850316155353823
+      },
+      "ret12_bps": {
+        "n": 35,
+        "mean": 23.20123298347787,
+        "median": 27.722832273617826
+      },
+      "ret18_bps": {
+        "n": 35,
+        "mean": 23.208232012482963,
+        "median": 26.337772737698995
+      },
+      "up_excursion_rate_20bps": 0.6571428571428571,
+      "down_excursion_rate_20bps": 0.4,
+      "up_excursion_rate_30bps": 0.6285714285714286,
+      "down_excursion_rate_30bps": 0.37142857142857144,
+      "inferred_direction": "UP",
+      "verdict": "LOCKED_STRUCTURE_SUPPORTED",
+      "reasons": []
+    },
+    {
+      "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_FAILED_UPSIDE_ESCAPE",
+      "tod_bucket": "PRE_CLOSE_30",
+      "required_state": "FAILED_UPSIDE_ESCAPE",
+      "matches": 53,
+      "distinct_sessions": 53,
+      "ret3_bps": {
+        "n": 52,
+        "mean": -7.753406021753805,
+        "median": 0.010052947762573261
+      },
+      "ret6_bps": {
+        "n": 52,
+        "mean": -8.013692492783656,
+        "median": 8.779651880864714
+      },
+      "ret12_bps": {
+        "n": 52,
+        "mean": -8.244890974279558,
+        "median": 11.742589589830432
+      },
+      "ret18_bps": {
+        "n": 52,
+        "mean": -6.219927775130695,
+        "median": 2.7970668824972567
+      },
+      "up_excursion_rate_20bps": 0.5576923076923077,
+      "down_excursion_rate_20bps": 0.5192307692307693,
+      "up_excursion_rate_30bps": 0.5192307692307693,
+      "down_excursion_rate_30bps": 0.4807692307692308,
+      "inferred_direction": null,
+      "verdict": "LOCKED_STRUCTURE_REJECTED",
+      "reasons": [
+        "NO_DIRECTION_INFERRED"
+      ]
+    }
+  ],
+  "supported_candidate_count": 1,
+  "supported_candidates": [
+    "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_UPSIDE_ESCAPE"
+  ],
+  "status": "LOCKED_VALIDATION_SUPPORTED",
+  "next_action": "ADVANCE_TO_WFA_AND_ROBUSTNESS"
+}
