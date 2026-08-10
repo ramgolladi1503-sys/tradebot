@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "runner_id": "SAME_CORPUS_MASSIVE_HYPOTHESIS_DISCOVERY_V3",
+  "total_generated": 1000,
+  "max_candidates_limit": 1000,
+  "max_family_groups_limit": 25,
+  "forward_outcomes_used": false,
+  "locked_outcomes_accessed": false
+}

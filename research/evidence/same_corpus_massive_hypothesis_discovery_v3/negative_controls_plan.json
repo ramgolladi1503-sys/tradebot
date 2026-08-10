@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "mandatory_controls": [
+    "WRONG_TIME_WINDOW_CONTROL",
+    "WRONG_STATE_CONTROL",
+    "DIRECTION_INVERSION_CONTROL",
+    "SESSION_PERMUTATION_CONTROL",
+    "GENERIC_STATE_BASELINE_CONTROL"
+  ],
+  "status": "PLANNED_IF_SURVIVORS_ADVANCE"
+}

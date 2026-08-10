@@ -1,0 +1,12 @@
+{
+  "candidate_specs_generated": 1000,
+  "candidate_specs_evaluated": 1000,
+  "family_groups_generated": 15,
+  "development_tests_run": 1000,
+  "effective_trials_estimate": 1500.0,
+  "selection_method": "PRE_OUTCOME_GRAMMAR_DISCOVERY_V3",
+  "survivor_count": 0,
+  "selection_bias_risk": "HIGH",
+  "locked_gate_allowed": true,
+  "restriction_reason": "REQUIRES_STRICT_PRE_OUTCOME_NARROWING_MAX_5_SURVIVORS"
+}
