@@ -1,6 +1,6 @@
 {
   "controlled_verdict": "V20B_BLOCKED_NO_VALID_INPUT_OR_TOKEN",
-  "artifact_commit": "PENDING_COMMIT",
+  "artifact_commit": "9389889de1736b683e333a9a1eb1e34a45dc4850",
   "source_evidence_commit": "97593c523d334e0378ccf9138e1ab688e71a4589",
   "registry_commit": "b57197b5643b0e99087dbfac091eb9a2054a5e1b",
   "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
