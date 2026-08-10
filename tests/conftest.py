@@ -25,6 +25,11 @@ _PR763_CERTIFICATION_FILES = {
     "test_pr763_gate1_structured_evidence.py",
     "test_pr763_offline_remaining_gates.py",
 }
+_LEGACY_IMMEDIATE_TICK_DB_FILES = {
+    "test_market_feed_race_conditions.py",
+    "test_tick_schema_consistency.py",
+    "test_ws_tick_ingestion_updates_tick_store.py",
+}
 
 
 def pytest_collection_modifyitems(items):
@@ -87,6 +92,9 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
     monkeypatch.setenv("REPORTS_ROOT", str(runtime_root / "reports"))
     monkeypatch.setenv("ANALYTICS_RUNTIME_DIR", str(runtime_root / "analytics"))
 
+    test_path = Path(str(request.node.fspath)).as_posix()
+    test_name = Path(test_path).name
+
     try:
         from config import config as cfg
 
@@ -97,10 +105,11 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
         monkeypatch.setattr(cfg, "DB_ROOT", str(runtime_root / "db"), raising=False)
         monkeypatch.setattr(cfg, "REPORTS_ROOT", str(runtime_root / "reports"), raising=False)
         monkeypatch.setattr(cfg, "ANALYTICS_RUNTIME_DIR", str(runtime_root / "analytics"), raising=False)
-        # Ordinary unit tests historically assert immediately persisted tick DB
-        # truth. Keep that deterministic by default; async/pressure tests
-        # explicitly opt back into async writes in their own setup.
-        monkeypatch.setattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", False, raising=False)
+        # A few legacy tests assert SQLite visibility immediately after insert.
+        # Scope synchronous writes only to those tests. Persistence/callback
+        # certification must retain the production async-worker contract.
+        if test_name in _LEGACY_IMMEDIATE_TICK_DB_FILES:
+            monkeypatch.setattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", False, raising=False)
     except Exception as exc:
         monkeypatch.setenv("PYTEST_CFG_RUNTIME_ISOLATION_ERROR", type(exc).__name__)
 
@@ -163,7 +172,6 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
     # Trade-builder behavior tests exercise candidate semantics, not broker
     # authentication. Give only those test modules inert credentials so auth
     # bootstrap cannot silently downgrade otherwise deterministic candidates.
-    test_path = Path(str(request.node.fspath)).as_posix()
     if "trade_builder" in test_path or "/strategy_truth/" in test_path:
         monkeypatch.setenv("KITE_API_KEY", "pytest_inert_api_key")
         monkeypatch.setenv("KITE_ACCESS_TOKEN", "pytest_inert_access_token")
