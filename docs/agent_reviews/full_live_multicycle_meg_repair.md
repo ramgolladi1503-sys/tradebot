@@ -9,6 +9,24 @@
   root did not contain enough callback, persistence, or watchdog evidence to
   localize that defect safely.
 
+## Agent Work Contract
+
+- source_agent: Codex
+- action: surgical offline repair
+- title: fresh selected-tick evidence per MEG cycle
+- requested_paths: the three runtime files and focused causality tests listed above
+- allowed_paths: those runtime files, focused tests, and this review record
+- forbidden_paths: main, dirty checkout, credentials, broker/order/risk behavior,
+  feed watchdog policy, and sealed live evidence
+- expected_tests: focused multi-cycle controls, eight MEG shadow gates, compile,
+  diff check, and agent review evidence
+
+## Scope Guard
+
+The implementation is restricted to request/cycle evidence provenance. It does
+not alter candidate generation, ranking, execution routing, risk gates,
+credentials, broker adapters, or reconnect thresholds.
+
 ## Grill Me Review
 
 The failed live root derived 51 unique selected tick IDs from 153 rows. Each
@@ -41,6 +59,37 @@ strategy, or watchdog behavior was changed.
 - Broker write authority: false.
 - Order authority: false.
 - Live/paper execution authorization: false.
+
+## High-Risk Path Review
+
+`core/kite_depth_ws.py` is a feed/WebSocket path. The change only records and
+resets the latest eligible tick identity already observed by the callback. It
+does not change connection, subscription, restart, watchdog, or broker-call
+control flow. The selected evidence writer fails closed on stale, missing, or
+future cycle data.
+
+## Acceptance Proof
+
+The deterministic 51-token, three-cycle fixture proves 153 selected rows with
+zero selected-tick ID reuse. Stale-cycle and future-tick controls fail closed.
+The final committed SHA must be rerun through the eight-gate verifier before
+any live retry.
+
+## Runtime Proof Required After Merge
+
+A fresh governed read-only session must produce at least three MEG cycles with
+zero selected-tick reuse and advancing callback/persistence/watchdog evidence.
+This repair is not live-certified by offline tests.
+
+## What This PR Does Not Prove
+
+It does not prove feed availability, broker connectivity, strategy edge,
+profitability, fill quality, execution viability, or paper/live readiness.
+
+## Human Approval
+
+Human approval is required before any new live observation. No merge to main or
+execution authority change is authorized by this repair.
 
 ## Remaining limitation
 
