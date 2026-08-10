@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "runner_id": "SAME_CORPUS_REGIME_TRANSITION_VOL_SHOCK_V6",
+  "campaign_version": "v6",
+  "development_only": true,
+  "forward_outcomes_computed": true,
+  "forward_outcomes_scope": "development_sessions_only",
+  "locked_outcomes_accessed": false,
+  "edge_claimed": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "structural_edges_certified_count": 0,
+  "candidate_specs_generated": 48,
+  "valid_candidate_specs_evaluated": 48,
+  "development_tests_run": 48,
+  "development_survivors_count": 0,
+  "blocked_candidate_specs": 0,
+  "duplicate_candidate_specs": 0,
+  "selection_bias_risk": "LOW"
+}

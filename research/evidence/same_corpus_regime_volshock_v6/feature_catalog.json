@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "features": [
+    {
+      "feature_name": "realized_range_bps",
+      "inputs": [
+        "completed_ohlc_bars"
+      ],
+      "lookback": 1,
+      "causal_availability_time": "COMPLETED_BAR",
+      "uses_completed_bars_only": true,
+      "uses_future_data": false,
+      "missing_data_behavior": "BLOCK",
+      "validation_examples": [
+        "(high-low)/close * 10000.0"
+      ]
+    },
+    {
+      "feature_name": "rolling_realized_range_percentile",
+      "inputs": [
+        "completed_ohlc_bars"
+      ],
+      "lookback": 12,
+      "causal_availability_time": "COMPLETED_BAR",
+      "uses_completed_bars_only": true,
+      "uses_future_data": false,
+      "missing_data_behavior": "BLOCK",
+      "validation_examples": [
+        "percentile rank of current bar range over previous 12 bars"
+      ]
+    },
+    {
+      "feature_name": "intraday_range_expansion_ratio",
+      "inputs": [
+        "completed_ohlc_bars"
+      ],
+      "lookback": 6,
+      "causal_availability_time": "COMPLETED_BAR",
+      "uses_completed_bars_only": true,
+      "uses_future_data": false,
+      "missing_data_behavior": "BLOCK",
+      "validation_examples": [
+        "current bar range / mean(previous 6 bar ranges)"
+      ]
+    },
+    {
+      "feature_name": "gap_size_bps",
+      "inputs": [
+        "session_open",
+        "prior_session_close"
+      ],
+      "lookback": 1,
+      "causal_availability_time": "SESSION_OPEN",
+      "uses_completed_bars_only": true,
+      "uses_future_data": false,
+      "missing_data_behavior": "BLOCK",
+      "validation_examples": [
+        "(open - prior_close)/prior_close * 10000.0"
+      ]
+    },
+    {
+      "feature_name": "prior_session_realized_range_percentile",
+      "inputs": [
+        "prior_session_ohlc"
+      ],
+      "lookback": 20,
+      "causal_availability_time": "PRIOR_SESSION_CLOSE",
+      "uses_completed_bars_only": true,
+      "uses_future_data": false,
+      "missing_data_behavior": "BLOCK",
+      "validation_examples": [
+        "prior session range percentile rank over 20 sessions"
+      ]
+    }
+  ]
+}

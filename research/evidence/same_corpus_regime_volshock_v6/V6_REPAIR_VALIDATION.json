@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "candidate_specs_generated": 48,
+  "placeholder_specs": 0,
+  "unenforced_fields": 0,
+  "single_dimension_candidates": 0,
+  "v3_duplicates": 0,
+  "v4_duplicates": 0,
+  "v5_duplicates": 0,
+  "prior_failed_duplicates": 0,
+  "missing_input_matches_true": 0,
+  "all_candidates_have_regime_transition_or_shock_dimension": true,
+  "all_features_documented": true,
+  "completed_bar_causality_passed": true,
+  "locked_outcomes_accessed": false,
+  "edge_claimed": false,
+  "validation_passed": true
+}
