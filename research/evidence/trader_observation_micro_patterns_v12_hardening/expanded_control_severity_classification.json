@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "overall_severity": "HARD_REJECT",
+  "severities_summary": [
+    "PASS",
+    "HARD_REJECT",
+    "PASS",
+    "PASS",
+    "PASS"
+  ],
+  "controls_passed": 4,
+  "total_controls_run": 5
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "linkage_audits": [
+    {
+      "hypothesis_id": "H1_TRAPPED_PUSH_SNAPBACK",
+      "source_observation_ids_original": ["OBS_TRAPPED_PUSH_FAMILY"],
+      "matching_real_observation_ids": ["OBS_009", "OBS_036", "OBS_066", "OBS_097", "OBS_099", "OBS_116", "OBS_142", "OBS_168", "OBS_174", "OBS_181"],
+      "real_observation_count": 49,
+      "linkage_status": "PLACEHOLDER_SOURCE_IDS_REPAIRED_WITH_REAL_OBSERVATION_LINKAGE",
+      "governance_caveat": "Original frozen hypotheses file used family placeholder string. Real matching observations confirmed in ledger without altering frozen entry/exit causal specification."
+    },
+    {
+      "hypothesis_id": "H2_ABSORPTION_AFTER_WIDE_CANDLE",
+      "source_observation_ids_original": ["OBS_ABSORPTION_FAMILY"],
+      "matching_real_observation_ids": ["OBS_040", "OBS_046", "OBS_050", "OBS_069", "OBS_109", "OBS_223", "OBS_312"],
+      "real_observation_count": 7,
+      "linkage_status": "PLACEHOLDER_SOURCE_IDS_REPAIRED_WITH_REAL_OBSERVATION_LINKAGE",
+      "governance_caveat": "Original frozen hypotheses file used family placeholder string. Real matching observations confirmed in ledger without altering frozen entry/exit causal specification."
+    },
+    {
+      "hypothesis_id": "H3_CONSTITUENT_DISAGREEMENT_INDEX_HOLD",
+      "source_observation_ids_original": ["OBS_DISAGREEMENT_FAMILY"],
+      "matching_real_observation_ids": ["OBS_001", "OBS_002", "OBS_003", "OBS_004", "OBS_005", "OBS_006", "OBS_007", "OBS_008", "OBS_010", "OBS_011"],
+      "real_observation_count": 295,
+      "linkage_status": "PLACEHOLDER_SOURCE_IDS_REPAIRED_WITH_REAL_OBSERVATION_LINKAGE",
+      "governance_caveat": "Original frozen hypotheses file used family placeholder string. Real matching observations confirmed in ledger without altering frozen entry/exit causal specification."
+    }
+  ]
+}

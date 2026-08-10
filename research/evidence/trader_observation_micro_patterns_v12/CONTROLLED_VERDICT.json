@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "controlled_verdict": "V12_PROMISING_NOT_CERTIFIED_CONTROL_PENDING",
-  "latest_commit": "d4ea6254f2534dd447d75e44029c514552655389",
+  "latest_commit": "80d8da2650e712f47a83199d65ee0757dab9fa77",
   "v10_metadata_repaired": true,
   "observation_rows": 351,
   "frozen_hypotheses_count": 3,
@@ -12,11 +12,12 @@
   "control_severity": "PASS",
   "economic_shape_status": "APPLIED_V11_METRICS",
   "historical_micro_pattern_supported": false,
+  "historical_micro_pattern_support_status": "PARTIAL_LOCKED_SUPPORT_CONTROLS_INCOMPLETE",
   "structural_edge_certified": false,
   "edge_claimed": false,
   "execution_viable": false,
   "prospective_supported": false,
   "vendor_contact_recommended_now": false,
   "tick_bidask_required_now": false,
-  "next_action": "EVALUATE_CROSS_ASSET_LIQUIDITY_VACUUM_OR_VOLATILITY_EXPANSION_MODELS"
+  "next_action": "HARDEN_EVIDENCE_AND_RUN_EXPANDED_NEGATIVE_CONTROLS"
 }

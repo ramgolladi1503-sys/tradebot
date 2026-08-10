@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "v12_commit": "80d8da2650e712f47a83199d65ee0757dab9fa77",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "controlled_verdict_latest_commit_before": "d4ea6254f2534dd447d75e44029c514552655389",
+  "controlled_verdict_latest_commit_should_be": "80d8da2650e712f47a83199d65ee0757dab9fa77",
+  "latest_commit_metadata_repaired": true,
+  "locked_survivor_count": 1,
+  "negative_controls_present": ["DIRECTION_INVERSION"],
+  "negative_controls_missing": [
+    "WRONG_TIME_WINDOW",
+    "SESSION_PERMUTATION",
+    "SYMBOL_PERMUTATION",
+    "RANDOM_SUBSET_PLACEBO",
+    "PRIOR_FAILED_FAMILY_COMPARATOR"
+  ],
+  "historical_micro_pattern_supported_before": false,
+  "historical_micro_pattern_supported_reconciled": "PARTIAL_LOCKED_SUPPORT_CONTROLS_INCOMPLETE",
+  "source_observation_ids_are_real": false,
+  "source_observation_id_defects": "FROZEN_MICRO_PATTERN_HYPOTHESES.json used placeholder source observation IDs (e.g. OBS_TRAPPED_PUSH_FAMILY) instead of real MARKET_OBSERVATION_LEDGER.jsonl observation IDs.",
+  "does_this_modify_strategy_logic": false,
+  "does_this_modify_edge_claim": false,
+  "does_this_modify_certification_status": false,
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false
+}

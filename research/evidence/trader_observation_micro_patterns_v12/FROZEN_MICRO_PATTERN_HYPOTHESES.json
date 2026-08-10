@@ -4,7 +4,7 @@
   "frozen_hypotheses": [
     {
       "hypothesis_id": "H1_TRAPPED_PUSH_SNAPBACK",
-      "source_observation_ids": ["OBS_TRAPPED_PUSH_FAMILY"],
+      "source_observation_ids": ["OBS_009", "OBS_036", "OBS_066", "OBS_097", "OBS_099", "OBS_116", "OBS_142", "OBS_168", "OBS_174", "OBS_181"],
       "market_behavior_name": "TRAPPED_PUSH_SNAPBACK",
       "causal_specification": "Prior bar expansion (range > 12 bps) with upper wick rejection (> 4 bps), followed by current bar negative body (< -2 bps).",
       "entry_condition_completed_bars_only": "Completed bar t-1 range > 12 bps, upper wick > 4 bps, completed bar t body < -2 bps.",
@@ -20,7 +20,7 @@
     },
     {
       "hypothesis_id": "H2_ABSORPTION_AFTER_WIDE_CANDLE",
-      "source_observation_ids": ["OBS_ABSORPTION_FAMILY"],
+      "source_observation_ids": ["OBS_040", "OBS_046", "OBS_050", "OBS_069", "OBS_109", "OBS_223", "OBS_312"],
       "market_behavior_name": "ABSORPTION_AFTER_WIDE_CANDLE",
       "causal_specification": "Prior bar wide range (> 15 bps), current bar tight absorption range (< 5 bps) with constituent dispersion > 10 bps.",
       "entry_condition_completed_bars_only": "Completed bar t-1 range > 15 bps, completed bar t range < 5 bps.",
@@ -36,7 +36,7 @@
     },
     {
       "hypothesis_id": "H3_CONSTITUENT_DISAGREEMENT_INDEX_HOLD",
-      "source_observation_ids": ["OBS_DISAGREEMENT_FAMILY"],
+      "source_observation_ids": ["OBS_001", "OBS_002", "OBS_003", "OBS_004", "OBS_005", "OBS_006", "OBS_007", "OBS_008", "OBS_010", "OBS_011"],
       "market_behavior_name": "CONSTITUENT_DISAGREEMENT_INDEX_HOLD",
       "causal_specification": "Current NIFTY body stagnant (|body| < 2 bps) while core constituent breadth is extreme (up >= 0.8 or <= 0.2).",
       "entry_condition_completed_bars_only": "Completed bar t index |body| < 2 bps, constituent breadth >= 0.8.",

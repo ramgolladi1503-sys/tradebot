@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "dev_trade_count": 12,
+  "dev_metrics": {
+    "trade_count": 12,
+    "win_rate": 0.6666666666666666,
+    "loss_rate": 0.3333333333333333,
+    "expectancy_bps": 10.347766246009416,
+    "cost_adjusted_expectancy_bps": 7.3477662460094155,
+    "average_win_bps": 28.41291168374616,
+    "average_loss_bps": -25.782524629464064,
+    "payoff_ratio": 1.102022090236893,
+    "profit_factor": 2.204044180473786,
+    "average_R": 0.5173883123004708,
+    "median_R": 0.5355415961618426
+  },
+  "locked_trade_count": 26,
+  "locked_metrics": {
+    "trade_count": 26,
+    "win_rate": 0.6538461538461539,
+    "loss_rate": 0.34615384615384615,
+    "expectancy_bps": 12.857148318996451,
+    "cost_adjusted_expectancy_bps": 9.857148318996451,
+    "average_win_bps": 26.731995054637093,
+    "average_loss_bps": -13.35089551499142,
+    "payoff_ratio": 2.002262322000823,
+    "profit_factor": 3.782051052668221,
+    "average_R": 0.6428574159498227,
+    "median_R": 0.621503053641892
+  },
+  "matches_existing_v12_locked_metrics": true,
+  "differences_if_any": "None",
+  "future_leak_audit": {
+    "entry_condition_causal": true,
+    "entry_uses_completed_bars_only": true,
+    "target_starts_after_entry_bar": true,
+    "locked_data_accessed_before_dev_freeze": false,
+    "future_leak_detected": false
+  },
+  "split_audit": {
+    "total_bars": 1888,
+    "dev_bars": 1132,
+    "locked_bars": 377,
+    "dev_ratio": 0.6,
+    "locked_ratio": 0.2
+  }
+}

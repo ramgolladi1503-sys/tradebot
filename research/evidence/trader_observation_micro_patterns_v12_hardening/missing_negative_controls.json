@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "controls": [
+    {
+      "control_type": "DIRECTION_INVERSION",
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.34615384615384615,
+        "loss_rate": 0.6538461538461539,
+        "expectancy_bps": -12.857148318996451,
+        "cost_adjusted_expectancy_bps": -15.857148318996451,
+        "average_win_bps": 13.35089551499142,
+        "average_loss_bps": -26.731995054637093,
+        "payoff_ratio": 0.49943505853954184,
+        "profit_factor": 0.2644067956974045,
+        "average_R": -0.6428574159498227,
+        "median_R": -0.621503053641892
+      },
+      "sample_size": 26,
+      "severity": "PASS",
+      "reason": "SIGNAL_OUTPERFORMS_CONTROL_CLEANLY",
+      "candidate_status_after_control": "ECONOMIC_SHAPE_PASS_CONTROL_PENDING"
+    },
+    {
+      "control_type": "WRONG_TIME_WINDOW_CONTROL",
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "sample_size": 26,
+      "severity": "HARD_REJECT",
+      "reason": "CONTROL_COMPARABLE_OR_STRONGER",
+      "candidate_status_after_control": "CONTROL_REJECTED"
+    },
+    {
+      "control_type": "SESSION_PERMUTATION_CONTROL",
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.5384615384615384,
+        "loss_rate": 0.46153846153846156,
+        "expectancy_bps": -1.7537784404718906,
+        "cost_adjusted_expectancy_bps": -4.753778440471891,
+        "average_win_bps": 22.141276926325645,
+        "average_loss_bps": -29.631343035069012,
+        "payoff_ratio": 0.747224886166017,
+        "profit_factor": 0.8717623671936865,
+        "average_R": -0.08768892202359452,
+        "median_R": 0.15305847161059538
+      },
+      "sample_size": 26,
+      "severity": "PASS",
+      "reason": "SIGNAL_OUTPERFORMS_CONTROL_CLEANLY",
+      "candidate_status_after_control": "ECONOMIC_SHAPE_PASS_CONTROL_PENDING"
+    },
+    {
+      "control_type": "SYMBOL_PERMUTATION_CONTROL",
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "loss_rate": 0.0,
+        "expectancy_bps": 0.0,
+        "cost_adjusted_expectancy_bps": 0.0,
+        "average_win_bps": 0.0,
+        "average_loss_bps": 0.0,
+        "payoff_ratio": 0.0,
+        "profit_factor": 0.0,
+        "average_R": 0.0,
+        "median_R": 0.0
+      },
+      "sample_size": 0,
+      "severity": "NOT_APPLICABLE",
+      "reason": "H1_PREDICATE_SOURCES_ONLY_NIFTY_INDEX_BARS",
+      "candidate_status_after_control": "PASS"
+    },
+    {
+      "control_type": "RANDOM_SUBSET_PLACEBO_CONTROL",
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.5,
+        "loss_rate": 0.5,
+        "expectancy_bps": -1.6799096194865997,
+        "cost_adjusted_expectancy_bps": -4.679909619486599,
+        "average_win_bps": 12.829378353842886,
+        "average_loss_bps": -16.189197592816083,
+        "payoff_ratio": 0.7924653634183755,
+        "profit_factor": 0.7924653634183755,
+        "average_R": -0.08399548097432998,
+        "median_R": -0.08964116411419587
+      },
+      "sample_size": 26,
+      "severity": "PASS",
+      "reason": "SIGNAL_OUTPERFORMS_CONTROL_CLEANLY",
+      "candidate_status_after_control": "ECONOMIC_SHAPE_PASS_CONTROL_PENDING"
+    },
+    {
+      "control_type": "PRIOR_FAILED_FAMILY_COMPARATOR",
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "cost_adjusted_expectancy_bps": 0.67,
+        "profit_factor": 1.15,
+        "trade_count": 26
+      },
+      "sample_size": 26,
+      "severity": "PASS",
+      "reason": "SIGNAL_OUTPERFORMS_CONTROL_CLEANLY",
+      "candidate_status_after_control": "ECONOMIC_SHAPE_PASS_CONTROL_PENDING"
+    }
+  ]
+}
