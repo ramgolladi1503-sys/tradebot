@@ -133,7 +133,34 @@ def main():
 
         print(f"Development outcome verdict for {family}: {status}")
 
-        if "NO_DEVELOPMENT_SUPPORTED" in status or "FAIL" in status or "REJECTED" in status:
+        if status == "DEVELOPMENT_STRUCTURE_SUPPORTED":
+            # Step 3: Locked validation if supported
+            locked_script = script_dir / "run_pre_close_imbalance_proxy_locked_validation_v1.py"
+            if locked_script.exists():
+                print(f"Executing locked validation for {family}...")
+                try:
+                    out_locked = subprocess.check_output([sys.executable, str(locked_script)], cwd=root).decode("utf-8").strip()
+                    status = out_locked.split("\n")[-1]
+                except subprocess.CalledProcessError as e:
+                    status = "BLOCKED_GOVERNANCE_OR_IMPLEMENTATION_DEFECT"
+                    print(f"Locked validation failed: {e}")
+
+                print(f"Locked validation verdict for {family}: {status}")
+
+                if status == "LOCKED_VALIDATION_SUPPORTED":
+                    # Step 4: Certification layers (WFA / Negative Controls / Costs)
+                    cert_script = script_dir / "run_tod_session_position_certification_layers_v1.py"
+                    if cert_script.exists():
+                        print(f"Executing certification layers for {family}...")
+                        try:
+                            out_cert = subprocess.check_output([sys.executable, str(cert_script)], cwd=root).decode("utf-8").strip()
+                            status = out_cert.split("\n")[-1]
+                        except subprocess.CalledProcessError as e:
+                            status = "BLOCKED_GOVERNANCE_OR_IMPLEMENTATION_DEFECT"
+
+                        print(f"Certification layers verdict for {family}: {status}")
+
+        if "NO_DEVELOPMENT_SUPPORTED" in status or "FAIL" in status or "REJECTED" in status or "NOT_CERTIFIED" in status:
             families_failed.append(family)
             failure_entries.append(f"- **{family}**: {status}")
 
