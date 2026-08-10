@@ -1,6 +1,14 @@
 # MEG #803 Surgical Identity and Canonical Manifest Repair
 
+mode: SIM
+candidate_id: PR803_MEG_IDENTITY_MANIFEST_REPAIR
+decision: REVIEW_PASS_READ_ONLY_REPAIR
+reason: producer identity and canonical sealed-root contracts repaired without execution authority
+timestamp: 2026-08-10
+is_order_action: false
+broker_api_called: false
 source: docs/agent_reviews/meg803_identity_manifest_repair.md
+
 title: MEG #803 producer identity propagation and canonical sealed-root verification
 scope: parent commit-SHA propagation, fail-closed producer identity, and #803 consumption of the canonical PR #782 sealed-root contract
 requested_paths:
