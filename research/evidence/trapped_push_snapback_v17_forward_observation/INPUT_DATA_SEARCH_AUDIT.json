@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "observation_date": "2026-08-10",
+  "searched_paths": [
+    "research/",
+    "data/",
+    ".runtime/"
+  ],
+  "candidate_files_found": [],
+  "selected_input_file": null,
+  "selected_input_file_reason": "No unobserved completed forward 5-minute OHLC bar files exist for session 2026-08-10.",
+  "completed_bars_only": true,
+  "contains_opening_window_bars": false,
+  "contains_required_columns": false,
+  "data_status": "NO_FORWARD_COMPLETED_BARS_FOUND",
+  "reason": "No fresh completed forward bars exist for 2026-08-10. Observer was not executed to prevent fabricating prospective evidence or reusing historical dry-run data."
+}

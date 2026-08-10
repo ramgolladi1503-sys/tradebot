@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "local_time_ist": "2026-08-10T14:50:22+05:30",
+  "session_date_ist": "2026-08-10",
+  "is_trading_day_assumed": true,
+  "opening_window_start_ist": "09:15",
+  "opening_window_end_ist": "11:30",
+  "current_time_relation_to_opening_window": "AFTER_OPENING_WINDOW",
+  "completed_opening_window_expected": true,
+  "eligible_to_process_completed_bars": true,
+  "same_day_forward_observation_claim_allowed": false,
+  "reason": "Current time 14:50 IST is after 11:30 IST opening window. Allowed to process completed forward bars already collected for 2026-08-10 if available, but cannot claim fresh same-day live observation initiation."
+}

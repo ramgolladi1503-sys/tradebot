@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "run_id": null,
+  "observation_date": "2026-08-10",
+  "input_source_path": null,
+  "runner_exit_code": null,
+  "bars_total": 0,
+  "bars_in_scope_opening_window": 0,
+  "bars_out_of_scope": 0,
+  "trigger_count": 0,
+  "pending_outcomes": 0,
+  "available_outcomes": 0,
+  "orders_created": 0,
+  "broker_writes_created": 0,
+  "authority_flags_all_false": true,
+  "prospective_support_evaluated": false,
+  "prospective_support_status": "NOT_EVALUATED_INSUFFICIENT_PROSPECTIVE_EVIDENCE",
+  "reason": "No run executed due to absence of forward completed bars."
+}
