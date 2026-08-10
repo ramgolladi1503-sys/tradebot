@@ -1,6 +1,6 @@
 {
   "controlled_verdict": "V18_TODAY_COMPLETED_BARS_NOT_AVAILABLE_MANUAL_TEMPLATE_CREATED",
-  "artifact_commit": "d683b007957ef21b594f0089a80267bb5415e387",
+  "artifact_commit": "d6fdfe9434861b58532454b5dfa5eb3beaa79998",
   "evidence_commit": "d683b007957ef21b594f0089a80267bb5415e387",
   "registry_commit": "b57197b5643b0e99087dbfac091eb9a2054a5e1b",
   "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
