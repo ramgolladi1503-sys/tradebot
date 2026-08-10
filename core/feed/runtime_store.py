@@ -47,7 +47,7 @@ def _db_path() -> Path:
 
 @contextmanager
 def _conn():
-    conn = sqlite3.connect(str(_db_path()), timeout=30.0, check_same_thread=False)
+    conn = sqlite3.connect(str(_db_path()), timeout=30.0)
     try:
         try:
             conn.execute("PRAGMA busy_timeout=30000")
