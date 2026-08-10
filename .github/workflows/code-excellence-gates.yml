@@ -61,6 +61,7 @@ jobs:
               '.github/workflows/tests.yml',
               'docs/agent_reviews/meg803_identity_manifest_repair.md',
               'scripts/adjudicate_full_system_merge_readiness.py',
+              'tests/conftest.py',
               'tests/test_kite_read_only_observation_runtime.py',
           }
           unexpected = sorted(actual - allowed)
@@ -76,8 +77,8 @@ jobs:
           print(f'post-live delta exact-scope PASS paths={len(actual)}')
           PY
             # CE static gates operate on the product verifier and evidence artifact.
-            # Workflow-only changes are exercised by Actions themselves; the changed
-            # test fixture is exercised by PR782 and the repository unit-test suite.
+            # Workflow-only changes are exercised by Actions themselves; changed
+            # test fixtures/harness are exercised by PR782 and generic unit CI.
             printf '%s\n' \
               'docs/agent_reviews/meg803_identity_manifest_repair.md' \
               'scripts/adjudicate_full_system_merge_readiness.py' \
