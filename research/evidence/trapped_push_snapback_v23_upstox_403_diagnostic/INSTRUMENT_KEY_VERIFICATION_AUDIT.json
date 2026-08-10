@@ -1,0 +1,11 @@
+{
+  "schema_version": "V23_INSTRUMENT_KEY_VERIFICATION_AUDIT_V1",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "instrument_key": "NSE_INDEX|Nifty 50",
+  "repository_mapping_source": "scripts/replay_candidate_generator_strategy.py",
+  "local_instrument_master_checked": false,
+  "instrument_key_found_in_master": null,
+  "instrument_key_ambiguous": false,
+  "verification_status": "INSTRUMENT_KEY_REPOSITORY_ONLY_NOT_MASTER_VERIFIED",
+  "reason": "Instrument key resolved from canonical repository mapping."
+}

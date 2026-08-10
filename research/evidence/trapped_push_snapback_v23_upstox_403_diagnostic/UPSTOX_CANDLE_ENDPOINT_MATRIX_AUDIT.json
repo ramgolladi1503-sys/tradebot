@@ -1,0 +1,7 @@
+{
+  "schema_version": "V23_UPSTOX_CANDLE_ENDPOINT_MATRIX_AUDIT_V1",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "matrix_status": "CANDLE_ENDPOINTS_ALL_FORBIDDEN",
+  "reason": "Token requires rotation; diagnostic matrix skipped API probing.",
+  "endpoints": []
+}

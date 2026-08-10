@@ -1,0 +1,19 @@
+{
+  "schema_version": "V23_TOKEN_HYGIENE_AND_AUTH_DIAGNOSTIC_AUDIT_V1",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "source_evidence_commit": "bb12c1b97adccfe746eae5338322d936a47d229c",
+  "token_found": true,
+  "token_source": ".runtime/upstox_access_token",
+  "token_value_logged": false,
+  "token_was_pasted_in_chat": true,
+  "token_rotation_required": true,
+  "jwt_decode_attempted": true,
+  "jwt_exp_utc": "2026-08-10 21:20:00 UTC",
+  "jwt_iat_utc": "2026-08-10 09:57:59 UTC",
+  "jwt_expiry_status": "NOT_EXPIRED",
+  "auth_profile_check_attempted": false,
+  "auth_profile_check_status": "SKIPPED_TOKEN_ROTATION_REQUIRED",
+  "auth_profile_http_status": null,
+  "diagnostic_status": "TOKEN_COMPROMISED_ROTATION_REQUIRED",
+  "reason": "Upstox access token was pasted in chat transcript; security governance requires token rotation and local provisioning only."
+}

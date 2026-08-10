@@ -1,0 +1,22 @@
+{
+  "schema_version": "V23_UPSTOX_COMPLETED_BAR_FETCH_AUDIT_V1",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "token_found": true,
+  "token_value_logged": false,
+  "instrument_key_found": true,
+  "fetcher_used": null,
+  "fetch_attempted": false,
+  "endpoint_family": null,
+  "fetch_command_redacted": null,
+  "fetch_exit_code": null,
+  "fetch_status": "UPSTOX_FETCH_SKIPPED_TOKEN_ROTATION_REQUIRED",
+  "raw_candles_returned": 0,
+  "bars_written": 0,
+  "output_bars_path": null,
+  "first_bar_ist": null,
+  "last_bar_ist": null,
+  "orders_created": 0,
+  "broker_writes_created": 0,
+  "authority_flags_all_false": true,
+  "reason": "Fetch skipped because token was pasted in chat and requires rotation."
+}
