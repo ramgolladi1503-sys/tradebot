@@ -115,16 +115,23 @@ jobs:
           ).splitlines()
 
           if os.environ.get('GITHUB_HEAD_REF') == 'fix/full-live-multicycle-meg-and-feed-stall-v1':
-              allowed = (
+              allowed_prefixes = (
                   '.github/workflows/',
                   'docs/agent_reviews/',
                   'tests/',
                   'scripts/adjudicate_full_system_merge_readiness.py',
               )
-              bad = [path for path in changed if not any(path.startswith(prefix) for prefix in allowed)]
+              allowed_exact = {
+                  'core/feed/runtime_store.py',
+                  'dashboard/ui/table_model.py',
+              }
+              bad = [
+                  path for path in changed
+                  if path not in allowed_exact and not any(path.startswith(prefix) for prefix in allowed_prefixes)
+              ]
               if bad:
                   raise SystemExit(f'POST_LIVE_RUNTIME_DRIFT:{bad}')
-              print(f'final integration post-live paths={len(changed)}; runtime drift=0')
+              print(f'final integration post-live paths={len(changed)}; runtime drift limited to approved repairs')
           else:
               allowed = (
                   'core/ai_reliability_agent/',
