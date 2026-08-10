@@ -1,6 +1,6 @@
 {
   "controlled_verdict": "V14_PROSPECTIVE_OBSERVER_IMPLEMENTED_DRY_RUN_PASS",
-  "latest_commit": "b57197b5643b0e99087dbfac091eb9a2054a5e1b",
+  "latest_commit": "78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6",
   "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
   "v13_final_metadata_repaired": true,
   "observer_implemented": true,

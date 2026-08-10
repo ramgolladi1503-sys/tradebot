@@ -1,0 +1,17 @@
+{
+  "schema_version": "V14_METADATA_REPAIR_AUDIT_V1",
+  "repaired_file": "research/evidence/trapped_push_snapback_v14_prospective_observation/CONTROLLED_VERDICT.json",
+  "incorrect_latest_commit_before": "b57197b5643b0e99087dbfac091eb9a2054a5e1b",
+  "correct_latest_commit_after": "78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6",
+  "does_this_modify_research_logic": false,
+  "does_this_modify_edge_claim": false,
+  "does_this_modify_certification_status": false,
+  "prospective_supported": false,
+  "execution_viable": false,
+  "structural_edge_certified": false,
+  "edge_claimed": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "order_authority": false,
+  "broker_write_authority": false
+}

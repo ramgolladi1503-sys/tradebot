@@ -1,0 +1,31 @@
+{
+  "schema_version": "V14_OBSERVER_DEFECT_AUDIT_V1",
+  "reviewed_commit": "78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "controlled_verdict_latest_commit_before": "b57197b5643b0e99087dbfac091eb9a2054a5e1b",
+  "controlled_verdict_latest_commit_should_be": "78676a3e2d74cbbb2f8739cce9b5cde80f0e44b6",
+  "metadata_stale": true,
+  "registered_support_scope": "OPENING_WINDOW_5MIN_OHLC_INDEX_BPS",
+  "opening_window_required": "09:15-11:30 IST",
+  "current_dry_run_total_bars": 36849,
+  "current_dry_run_trigger_count": 1090,
+  "opening_filter_enforced_before": false,
+  "trigger_count_scope_drift_detected": true,
+  "tests_run_before": 2,
+  "tests_required": [
+    "test_refuse_order_authority",
+    "test_refuse_broker_write_authority",
+    "test_refuse_paper_authorized_true",
+    "test_refuse_live_authorized_true",
+    "test_opening_window_filter_excludes_out_of_scope_trigger",
+    "test_completed_bar_h1_trigger_detected",
+    "test_outcome_pending_when_less_than_6_future_bars",
+    "test_outcome_available_when_6_future_bars_exist",
+    "test_logs_created_and_no_order_instructions",
+    "test_governance_verdict_all_authority_flags_false"
+  ],
+  "tests_insufficient": true,
+  "timestamp_field_misnamed": true,
+  "manual_append_future_outcome_policy_missing": true,
+  "does_current_observer_ready_verdict_stand": false
+}
