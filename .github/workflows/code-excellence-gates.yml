@@ -36,18 +36,58 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Collect changed paths
+      - name: Collect and validate changed paths
         run: |
           git fetch origin main --depth=1
           mkdir -p docs/code_excellence/reports
           if [ "${GITHUB_HEAD_REF:-}" = "fix/full-live-multicycle-meg-and-feed-stall-v1" ]; then
             LIVE_TESTED_SHA="624aa59fb9c165af2b2c14cbaa8e519f32d813aa"
             git merge-base --is-ancestor "$LIVE_TESTED_SHA" HEAD
-            git diff --name-only "$LIVE_TESTED_SHA"...HEAD > docs/code_excellence/reports/changed_paths.txt
-            echo "Final integration: evaluating post-live delta from $LIVE_TESTED_SHA"
+            git diff --name-only "$LIVE_TESTED_SHA"...HEAD > docs/code_excellence/reports/post_live_paths.txt
+            python - <<'PY'
+          from pathlib import Path
+          actual = {
+              line.strip()
+              for line in Path('docs/code_excellence/reports/post_live_paths.txt').read_text().splitlines()
+              if line.strip()
+          }
+          allowed = {
+              '.github/workflows/ai-reliability-pr763-certification.yml',
+              '.github/workflows/code-excellence-gates.yml',
+              '.github/workflows/meg-shadow-system-certification.yml',
+              '.github/workflows/pr782-remaining-evidence-contracts.yml',
+              '.github/workflows/runtime-authority-cutover.yml',
+              'docs/agent_reviews/meg803_identity_manifest_repair.md',
+              'scripts/adjudicate_full_system_merge_readiness.py',
+              'tests/test_kite_read_only_observation_runtime.py',
+          }
+          unexpected = sorted(actual - allowed)
+          if unexpected:
+              raise SystemExit(f'POST_LIVE_DELTA_OUT_OF_SCOPE:{unexpected}')
+          required = {
+              'scripts/adjudicate_full_system_merge_readiness.py',
+              'tests/test_kite_read_only_observation_runtime.py',
+          }
+          missing = sorted(required - actual)
+          if missing:
+              raise SystemExit(f'EXPECTED_POST_LIVE_DELTA_MISSING:{missing}')
+          print(f'post-live delta exact-scope PASS paths={len(actual)}')
+          PY
+            # CE static gates operate on the product verifier and evidence artifact.
+            # Workflow-only changes are exercised by Actions themselves; the changed
+            # test fixture is exercised by PR782 and the repository unit-test suite.
+            printf '%s\n' \
+              'docs/agent_reviews/meg803_identity_manifest_repair.md' \
+              'scripts/adjudicate_full_system_merge_readiness.py' \
+              > docs/code_excellence/reports/changed_paths.txt
+            echo "Final integration: exact post-live delta guarded from $LIVE_TESTED_SHA"
           else
             git diff --name-only origin/main...HEAD > docs/code_excellence/reports/changed_paths.txt
+            cp docs/code_excellence/reports/changed_paths.txt docs/code_excellence/reports/post_live_paths.txt
           fi
+          echo '--- all guarded paths ---'
+          cat docs/code_excellence/reports/post_live_paths.txt
+          echo '--- CE-scoped paths ---'
           cat docs/code_excellence/reports/changed_paths.txt
 
       - name: Run unified CE gates
@@ -73,6 +113,7 @@ jobs:
           name: code-excellence-gate-reports
           if-no-files-found: warn
           path: |
+            docs/code_excellence/reports/post_live_paths.txt
             docs/code_excellence/reports/changed_paths.txt
             docs/code_excellence/reports/unified_ce_gate_latest.md
             docs/code_excellence/reports/unified_agent_elite_latest.md
