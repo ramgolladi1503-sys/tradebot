@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "execution_proxy_status_index_only": "EXECUTION_PROXY_SUPPORTED_INDEX_ONLY",
+  "execution_viable": false,
+  "requires_tick_bidask_for_execution_certification": true
+}

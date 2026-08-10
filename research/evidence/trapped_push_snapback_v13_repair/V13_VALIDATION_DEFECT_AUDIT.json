@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "reviewed_commit": "0e05b50bcd9ea42c7ada2cf4cfaee31b13e6af54",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "controlled_verdict_latest_commit_before": "e012b478d253a48c8792a8a63b5330c85d9a548a",
+  "controlled_verdict_latest_commit_should_be": "0e05b50bcd9ea42c7ada2cf4cfaee31b13e6af54",
+  "latest_commit_metadata_stale": true,
+  "wfa_train_validation_overlap_detected": true,
+  "wfa_overlapping_folds": [
+    "FOLD_1: train_start == validation_start (2025-08-26 09:15:00), train_end == validation_end (2025-11-13 13:40:00)",
+    "FOLD_2: train_start == validation_start (2025-11-13 13:45:00), train_end == validation_end (2026-02-04 12:40:00)",
+    "FOLD_3: train_start == validation_start (2026-02-04 12:45:00), train_end == validation_end (2026-04-29 11:35:00)",
+    "FOLD_4: train_start == validation_start (2026-04-29 11:40:00), train_end == validation_end (2026-07-08 15:25:00)"
+  ],
+  "fold_gate_violation_detected": true,
+  "fold_gate_violations": [
+    "FOLD_1: validation_event_count = 4 (< 5 required threshold) but passes_fold_gate was set to true"
+  ],
+  "regime_robustness_incomplete": true,
+  "regime_buckets_required": 11,
+  "regime_buckets_present": 3,
+  "execution_proxy_index_only_valid": true,
+  "does_current_wfa_supported_stand": false,
+  "does_current_regime_robustness_supported_stand": false,
+  "does_current_out_of_sample_supported_stand": false
+}
