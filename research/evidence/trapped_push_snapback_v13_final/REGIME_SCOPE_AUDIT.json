@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "total_event_count": 51,
+  "opening_event_count": 51,
+  "midday_event_count": 0,
+  "pre_close_event_count": 0,
+  "positive_prior_drift_event_count": 0,
+  "negative_prior_drift_event_count": 51,
+  "low_range_event_count": 0,
+  "high_range_event_count": 51,
+  "constituent_breadth_supported": true,
+  "constituent_dispersion_supported": true,
+  "prior_regime_status": "REGIME_ROBUSTNESS_SUPPORTED",
+  "corrected_regime_status": "OPENING_WINDOW_REGIME_SUPPORTED_BROAD_REGIME_UNPROVEN",
+  "broad_regime_robustness_supported": false,
+  "opening_window_specific_support": true,
+  "reason": "100% of all 51 H1 events occur strictly during the opening window (09:15-11:30) following high-range prior bars with negative body. Zero events exist in midday, pre-close, or low-range regimes. Therefore, broad regime robustness is unproven and support is strictly opening-window-specific."
+}

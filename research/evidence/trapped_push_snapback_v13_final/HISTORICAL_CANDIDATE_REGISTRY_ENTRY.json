@@ -1,0 +1,28 @@
+{
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "candidate_name": "Trapped Push Snapback (Opening Window Micro-Pattern)",
+  "family": "TRAPPED_PUSH_SNAPBACK",
+  "direction": "DOWN",
+  "frozen_predicate": "(range_bps[t-1] > 12.0) & (upper_wick_bps[t-1] > 4.0) & (body_bps[t] < -2.0)",
+  "target": "NIFTY 6-bar / 30-minute short return",
+  "support_label": "HISTORICAL_OOS_SUPPORTED_OPENING_MICRO_PATTERN_EXECUTION_UNVERIFIED",
+  "support_scope": "OPENING_WINDOW_5MIN_OHLC_INDEX_BPS",
+  "source_commits": [
+    "80d8da2650e712f47a83199d65ee0757dab9fa77",
+    "e012b478d253a48c8792a8a63b5330c85d9a548a",
+    "0e05b50bcd9ea42c7ada2cf4cfaee31b13e6af54",
+    "d7984144382df1cbc217790d68fb5e6ffbf9b397"
+  ],
+  "required_next_validation": "PROSPECTIVE_PAPER_OBSERVATION_AND_OPTIONS_MICROSTRUCTURE_EXECUTION_REALISM",
+  "forbidden_usage": [
+    "Do not trade.",
+    "Do not route to live.",
+    "Do not claim execution viability.",
+    "Do not claim structural edge.",
+    "Do not use for user-facing signal until prospective observation and execution evidence exist."
+  ],
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false
+}

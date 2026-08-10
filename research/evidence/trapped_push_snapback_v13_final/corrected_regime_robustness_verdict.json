@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "overall_status": "OPENING_WINDOW_REGIME_SUPPORTED_BROAD_REGIME_UNPROVEN",
+  "broad_regime_robustness_supported": false,
+  "opening_window_specific_support": true,
+  "buckets_evaluated": 11,
+  "buckets_supported": 5,
+  "buckets_unproven_no_events": 6,
+  "verdict_note": "Broad regime robustness is NOT certified because all candidate events occur in the opening window. Opening-window specific support is confirmed."
+}

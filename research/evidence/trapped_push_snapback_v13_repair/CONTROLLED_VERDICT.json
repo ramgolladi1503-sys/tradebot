@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "controlled_verdict": "V13_H1_REPAIR_WFA_SUPPORTED_EXECUTION_UNVERIFIED",
-  "latest_commit": "0e05b50bcd9ea42c7ada2cf4cfaee31b13e6af54",
+  "latest_commit": "d7984144382df1cbc217790d68fb5e6ffbf9b397",
   "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
   "prior_v13_wfa_supported_invalidated": true,
   "metadata_repaired": true,

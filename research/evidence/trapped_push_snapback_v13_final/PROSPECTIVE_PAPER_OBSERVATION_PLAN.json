@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "observation_mode": "PAPER_OBSERVATION_ONLY_NO_ORDERS",
+  "paper_authorized": false,
+  "live_authorized": false,
+  "order_authority": false,
+  "broker_write_authority": false,
+  "observation_start_condition": "MANUAL_FORWARD_PAPER_LOGGING_TRIGGERED",
+  "minimum_sessions": 20,
+  "minimum_events": 20,
+  "required_logs": [
+    "candidate_trigger_log",
+    "missed_trigger_log",
+    "bar_snapshot_log",
+    "post_event_return_log",
+    "adverse_favorable_excursion_log",
+    "governance_verdict_log"
+  ],
+  "pass_fail_criteria": {
+    "minimum_prospective_cost_adj_expectancy_bps": 5.0,
+    "minimum_prospective_win_rate": 0.55,
+    "maximum_prospective_drawdown_bps": 50.0
+  },
+  "stop_conditions": [
+    "3_consecutive_losing_triggers",
+    "cumulative_prospective_loss_exceeds_40bps",
+    "broker_or_feed_anomaly_detected"
+  ]
+}

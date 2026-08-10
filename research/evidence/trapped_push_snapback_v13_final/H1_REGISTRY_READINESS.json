@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "registry_status": "HISTORICAL_CANDIDATE_REGISTERED",
+  "allowed_registry_label": "HISTORICAL_OOS_SUPPORTED_OPENING_MICRO_PATTERN_EXECUTION_UNVERIFIED",
+  "disallowed_registry_labels": [
+    "STRUCTURAL_EDGE_CERTIFIED",
+    "EXECUTION_VIABLE",
+    "LIVE_READY",
+    "OPTIONS_TRADABLE_EDGE",
+    "PROFITABLE_STRATEGY"
+  ],
+  "historical_micro_pattern_supported": true,
+  "out_of_sample_supported": true,
+  "support_scope": "OPENING_WINDOW_5MIN_OHLC_INDEX_BPS",
+  "wfa_status": "WFA_SUPPORTED",
+  "wfa_passed_blocks": 3,
+  "wfa_failed_blocks": 1,
+  "control_recheck_status": "CONTROL_RECHECK_PASS",
+  "execution_proxy_status": "EXECUTION_PROXY_SUPPORTED_INDEX_ONLY",
+  "execution_viable": false,
+  "structural_edge_certified": false,
+  "edge_claimed": false,
+  "prospective_supported": false,
+  "requires_prospective_observation_before_live": true,
+  "requires_tick_bidask_before_execution_certification": true
+}
