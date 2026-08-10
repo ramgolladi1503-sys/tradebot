@@ -1,7 +1,7 @@
 {
   "schema_version": "V23_AUTH_PROBE_AUDIT_V1",
   "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
-  "auth_probe_status": "AUTH_PROBE_SKIPPED_TOKEN_ROTATION_REQUIRED",
-  "http_status": null,
-  "reason": "Skipped auth probe because current token was pasted in chat transcript and requires rotation."
+  "auth_probe_status": "AUTH_PROBE_403_FORBIDDEN",
+  "http_status": 403,
+  "reason": "Upstox profile endpoint GET /v2/user/profile returned HTTP 403 Forbidden."
 }

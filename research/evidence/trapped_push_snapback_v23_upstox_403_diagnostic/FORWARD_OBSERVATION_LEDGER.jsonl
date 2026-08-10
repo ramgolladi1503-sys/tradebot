@@ -1,1 +1,1 @@
-{"timestamp": "2026-08-10T16:09:40+05:30", "event_type": "V23_BLOCKED_TOKEN_COMPROMISED_ROTATION_REQUIRED", "details": {"verdict": "V23_BLOCKED_TOKEN_COMPROMISED_ROTATION_REQUIRED", "reason": "Token was pasted in chat transcript; security policy blocks execution until rotated locally."}}
+{"timestamp": "2026-08-10T16:19:54+05:30", "event_type": "V23_BLOCKED_TOKEN_COMPROMISED_ROTATION_REQUIRED", "details": {"verdict": "V23_BLOCKED_TOKEN_COMPROMISED_ROTATION_REQUIRED", "reason": "Token exposed in chat transcript and Upstox API returned HTTP 403."}}

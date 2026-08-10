@@ -2,6 +2,47 @@
   "schema_version": "V23_UPSTOX_CANDLE_ENDPOINT_MATRIX_AUDIT_V1",
   "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
   "matrix_status": "CANDLE_ENDPOINTS_ALL_FORBIDDEN",
-  "reason": "Token requires rotation; diagnostic matrix skipped API probing.",
-  "endpoints": []
+  "reason": "All 4 tested candle endpoints returned HTTP 403 Forbidden.",
+  "endpoints": [
+    {
+      "endpoint_name": "v3_intraday",
+      "url_shape_redacted": "GET /v3/historical-candle/intraday/NSE_INDEX%7CNifty%2050/minutes/5",
+      "http_status": 403,
+      "api_status": "FAILED",
+      "candles_returned": 0,
+      "error_code": "HTTP_403",
+      "error_message_sanitized": "HTTP Error 403: Forbidden",
+      "selected_for_fetch": false
+    },
+    {
+      "endpoint_name": "v3_historical_date",
+      "url_shape_redacted": "GET /v3/historical-candle/NSE_INDEX%7CNifty%2050/minutes/5/2026-08-10/2026-08-10",
+      "http_status": 403,
+      "api_status": "FAILED",
+      "candles_returned": 0,
+      "error_code": "HTTP_403",
+      "error_message_sanitized": "HTTP Error 403: Forbidden",
+      "selected_for_fetch": false
+    },
+    {
+      "endpoint_name": "v2_intraday",
+      "url_shape_redacted": "GET /v2/historical-candle/intraday/NSE_INDEX%7CNifty%2050/5minute",
+      "http_status": 403,
+      "api_status": "FAILED",
+      "candles_returned": 0,
+      "error_code": "HTTP_403",
+      "error_message_sanitized": "HTTP Error 403: Forbidden",
+      "selected_for_fetch": false
+    },
+    {
+      "endpoint_name": "v2_historical_date",
+      "url_shape_redacted": "GET /v2/historical-candle/NSE_INDEX%7CNifty%2050/5minute/2026-08-10/2026-08-10",
+      "http_status": 403,
+      "api_status": "FAILED",
+      "candles_returned": 0,
+      "error_code": "HTTP_403",
+      "error_message_sanitized": "HTTP Error 403: Forbidden",
+      "selected_for_fetch": false
+    }
+  ]
 }

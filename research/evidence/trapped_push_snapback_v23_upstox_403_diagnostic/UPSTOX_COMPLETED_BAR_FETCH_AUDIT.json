@@ -5,11 +5,11 @@
   "token_value_logged": false,
   "instrument_key_found": true,
   "fetcher_used": null,
-  "fetch_attempted": false,
+  "fetch_attempted": true,
   "endpoint_family": null,
-  "fetch_command_redacted": null,
-  "fetch_exit_code": null,
-  "fetch_status": "UPSTOX_FETCH_SKIPPED_TOKEN_ROTATION_REQUIRED",
+  "fetch_command_redacted": "GET /v3/historical-candle/intraday/NSE_INDEX%7CNifty%2050/minutes/5",
+  "fetch_exit_code": 403,
+  "fetch_status": "UPSTOX_FETCH_BLOCKED_API_ERROR",
   "raw_candles_returned": 0,
   "bars_written": 0,
   "output_bars_path": null,
@@ -18,5 +18,5 @@
   "orders_created": 0,
   "broker_writes_created": 0,
   "authority_flags_all_false": true,
-  "reason": "Fetch skipped because token was pasted in chat and requires rotation."
+  "reason": "Upstox API call returned HTTP 403 Forbidden for profile and candle endpoints."
 }

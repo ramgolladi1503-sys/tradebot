@@ -11,9 +11,9 @@
   "jwt_exp_utc": "2026-08-10 21:20:00 UTC",
   "jwt_iat_utc": "2026-08-10 09:57:59 UTC",
   "jwt_expiry_status": "NOT_EXPIRED",
-  "auth_profile_check_attempted": false,
-  "auth_profile_check_status": "SKIPPED_TOKEN_ROTATION_REQUIRED",
-  "auth_profile_http_status": null,
+  "auth_profile_check_attempted": true,
+  "auth_profile_check_status": "AUTH_PROBE_FAILED",
+  "auth_profile_http_status": 403,
   "diagnostic_status": "TOKEN_COMPROMISED_ROTATION_REQUIRED",
-  "reason": "Upstox access token was pasted in chat transcript; security governance requires token rotation and local provisioning only."
+  "reason": "Token present in .runtime/upstox_access_token is identical to the token exposed in transcript, and API returns HTTP 403 Forbidden."
 }

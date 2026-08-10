@@ -14,5 +14,5 @@
   "minimum_events_met": false,
   "prospective_support_evaluation_allowed": false,
   "prospective_supported": false,
-  "reason": "Observer run not executed because token security rotation is required."
+  "reason": "Observer run not executed because Upstox API returned HTTP 403 Forbidden."
 }
