@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "controlled_verdict_dev_trade_count": 131,
+  "independent_recomputation_dev_trade_count": 12,
+  "development_screen_dev_trade_count": 12,
+  "which_value_is_authoritative": 12,
+  "reason": "Prior hardening CONTROLLED_VERDICT.json recorded a typo of 131. Raw dataset evaluation of H1 predicate on 60% dev split (1132 bars) yields exactly 12 events.",
+  "files_to_repair": [
+    "research/evidence/trader_observation_micro_patterns_v12_hardening/CONTROLLED_VERDICT.json"
+  ]
+}

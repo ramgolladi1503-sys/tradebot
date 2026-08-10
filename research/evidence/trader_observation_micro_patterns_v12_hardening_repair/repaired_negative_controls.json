@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "controls": [
+    {
+      "control_type": "DIRECTION_INVERSION",
+      "disjoint_from_real_events": true,
+      "real_event_count": 26,
+      "control_event_count": 26,
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.34615384615384615,
+        "loss_rate": 0.6538461538461539,
+        "expectancy_bps": -12.857148318996451,
+        "cost_adjusted_expectancy_bps": -15.857148318996451,
+        "average_win_bps": 13.35089551499142,
+        "average_loss_bps": -26.731995054637093,
+        "payoff_ratio": 0.49943505853954184,
+        "profit_factor": 0.2644067956974045,
+        "average_R": -0.6428574159498227,
+        "median_R": -0.621503053641892
+      },
+      "severity": "PASS",
+      "valid_control": true,
+      "reason": "SIGNAL_OUTPERFORMS_CONTROL_CLEANLY"
+    },
+    {
+      "control_type": "NON_OPENING_WINDOW_EXCLUSION",
+      "disjoint_from_real_events": true,
+      "real_event_count": 26,
+      "control_event_count": 0,
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "loss_rate": 0.0,
+        "expectancy_bps": 0.0,
+        "cost_adjusted_expectancy_bps": 0.0,
+        "average_win_bps": 0.0,
+        "average_loss_bps": 0.0,
+        "payoff_ratio": 0.0,
+        "profit_factor": 0.0,
+        "average_R": 0.0,
+        "median_R": 0.0
+      },
+      "severity": "NOT_APPLICABLE",
+      "valid_control": false,
+      "reason": "NOT_APPLICABLE_INSUFFICIENT_DISJOINT_EVENTS"
+    },
+    {
+      "control_type": "TIME_OF_DAY_MATCHED_RANDOM",
+      "disjoint_from_real_events": true,
+      "real_event_count": 26,
+      "control_event_count": 26,
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.5769230769230769,
+        "loss_rate": 0.4230769230769231,
+        "expectancy_bps": 1.6393372921288305,
+        "cost_adjusted_expectancy_bps": -1.3606627078711695,
+        "average_win_bps": 15.032812321685258,
+        "average_loss_bps": -16.62449229362993,
+        "payoff_ratio": 0.9042569274398495,
+        "profit_factor": 1.2330776283270675,
+        "average_R": 0.08196686460644154,
+        "median_R": 0.05261104863846233
+      },
+      "severity": "PASS",
+      "valid_control": true,
+      "reason": "SIGNAL_OUTPERFORMS_CONTROL_CLEANLY"
+    },
+    {
+      "control_type": "SESSION_PERMUTATION_CONTROL",
+      "disjoint_from_real_events": true,
+      "real_event_count": 26,
+      "control_event_count": 26,
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6153846153846154,
+        "loss_rate": 0.38461538461538464,
+        "expectancy_bps": 2.0030103715243603,
+        "cost_adjusted_expectancy_bps": -0.9969896284756397,
+        "average_win_bps": 16.32182511634113,
+        "average_loss_bps": -20.907093220182475,
+        "payoff_ratio": 0.7806836150988701,
+        "profit_factor": 1.2490937841581922,
+        "average_R": 0.10015051857621798,
+        "median_R": 0.25348154734827766
+      },
+      "severity": "PASS",
+      "valid_control": true,
+      "reason": "SIGNAL_OUTPERFORMS_CONTROL_CLEANLY"
+    },
+    {
+      "control_type": "RANDOM_SUBSET_PLACEBO_CONTROL",
+      "disjoint_from_real_events": true,
+      "real_event_count": 26,
+      "control_event_count": 26,
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": -0.8102323821761714,
+        "cost_adjusted_expectancy_bps": -3.8102323821761717,
+        "average_win_bps": 14.242397207864572,
+        "average_loss_bps": -29.242977163364237,
+        "payoff_ratio": 0.48703649865402643,
+        "profit_factor": 0.9199578307909388,
+        "average_R": -0.04051161910880859,
+        "median_R": 0.35685651532135765
+      },
+      "severity": "PASS",
+      "valid_control": true,
+      "reason": "SIGNAL_OUTPERFORMS_CONTROL_CLEANLY"
+    },
+    {
+      "control_type": "PRIOR_FAILED_FAMILY_COMPARATOR",
+      "disjoint_from_real_events": true,
+      "real_event_count": 26,
+      "control_event_count": 26,
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "cost_adjusted_expectancy_bps": 0.67,
+        "profit_factor": 1.15,
+        "trade_count": 26
+      },
+      "severity": "PASS",
+      "valid_control": true,
+      "reason": "SIGNAL_OUTPERFORMS_CONTROL_CLEANLY"
+    },
+    {
+      "control_type": "SYMBOL_PERMUTATION_CONTROL",
+      "disjoint_from_real_events": true,
+      "real_event_count": 26,
+      "control_event_count": 0,
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "loss_rate": 0.0,
+        "expectancy_bps": 0.0,
+        "cost_adjusted_expectancy_bps": 0.0,
+        "average_win_bps": 0.0,
+        "average_loss_bps": 0.0,
+        "payoff_ratio": 0.0,
+        "profit_factor": 0.0,
+        "average_R": 0.0,
+        "median_R": 0.0
+      },
+      "severity": "NOT_APPLICABLE",
+      "valid_control": false,
+      "reason": "H1_PREDICATE_SOURCES_ONLY_NIFTY_INDEX_BARS"
+    }
+  ]
+}

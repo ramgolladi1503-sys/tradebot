@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "reviewed_commit": "6eec9ea4e7eb096281288c82cc39d33868c4ef8a",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "hard_reject_control_type": "WRONG_TIME_WINDOW_CONTROL",
+  "hard_reject_control_real_metrics": {
+    "trade_count": 26,
+    "cost_adjusted_expectancy_bps": 9.857148318996451,
+    "payoff_ratio": 2.002262322000823,
+    "profit_factor": 3.782051052668221
+  },
+  "hard_reject_control_control_metrics": {
+    "trade_count": 26,
+    "cost_adjusted_expectancy_bps": 9.857148318996451,
+    "payoff_ratio": 2.002262322000823,
+    "profit_factor": 3.782051052668221
+  },
+  "control_metrics_identical_to_real_metrics": true,
+  "wrong_window_mask_definition": "h1_mask & (locked_df.index.time >= 09:15) & (locked_df.index.time <= 10:15)",
+  "wrong_window_sample_is_same_as_real_sample": true,
+  "is_wrong_window_control_valid": false,
+  "reason": "The wrong_window_mask was defined such that all 26 real H1 locked events fell inside the selected 09:15-10:15 time window, making the control sample 100% identical to the real candidate sample rather than a disjoint non-event control.",
+  "does_current_hard_reject_stand": false
+}

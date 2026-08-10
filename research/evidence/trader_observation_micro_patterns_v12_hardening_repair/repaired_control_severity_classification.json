@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "controls_attempted": 7,
+  "controls_applicable": 5,
+  "controls_valid": 5,
+  "controls_invalid": 0,
+  "controls_passed": 5,
+  "hard_reject_controls_valid": 0,
+  "soft_reject_controls_valid": 0,
+  "diagnostic_caution_controls_valid": 0,
+  "overall_severity_after_invalid_control_repair": "PASS"
+}
