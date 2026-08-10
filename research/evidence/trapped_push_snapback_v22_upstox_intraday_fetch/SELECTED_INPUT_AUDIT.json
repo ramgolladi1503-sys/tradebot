@@ -4,5 +4,5 @@
   "selected_input_file": null,
   "manual_input_exists": false,
   "upstox_fetch_status": "UPSTOX_FETCH_BLOCKED_API_ERROR",
-  "selection_reason": "Upstox read-only API call returned HTTP 403 Forbidden (token invalid/expired) and manual input CSV does not exist."
+  "selection_reason": "Fresh token supplied but Upstox API returns HTTP 403 Forbidden for all profile and candle endpoints."
 }
