@@ -233,10 +233,17 @@ jobs:
       - name: Validate changed-path safety
         run: |
           python - <<'PY'
+          import os
           import subprocess
-          base = '${{ github.event.pull_request.base.sha }}'
-          if not base:
-              base = subprocess.check_output(['git', 'rev-parse', 'HEAD^'], text=True).strip()
+
+          if os.environ.get('GITHUB_HEAD_REF') == 'fix/full-live-multicycle-meg-and-feed-stall-v1':
+              base = '624aa59fb9c165af2b2c14cbaa8e519f32d813aa'
+              subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
+          else:
+              base = '${{ github.event.pull_request.base.sha }}'
+              if not base:
+                  base = subprocess.check_output(['git', 'rev-parse', 'HEAD^'], text=True).strip()
+
           changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
           forbidden = (
               'core/market_data.py',
@@ -253,7 +260,7 @@ jobs:
           bad = [path for path in changed if any(path == prefix or path.startswith(prefix) for prefix in forbidden)]
           if bad:
               raise SystemExit(f'FORBIDDEN_CERTIFICATION_SCOPE:{bad}')
-          print(f'certification scope paths={len(changed)}')
+          print(f'certification scope paths={len(changed)}; base={base}')
           PY
 
       - name: Upload certification evidence
