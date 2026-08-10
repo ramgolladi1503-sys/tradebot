@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "rerun_started_at_utc": "2026-08-10T06:02:29.864581+00:00",
+  "rerun_completed_at_utc": "2026-08-10T06:02:48.647180+00:00",
+  "rerun_performed_at_head": "5325d73721d8d2e3cd7689dea84fba1a474fc1c1",
+  "commands_run": [
+    "validate_same_corpus_ohlc_feature_discovery_v4.py",
+    "run_same_corpus_ohlc_feature_discovery_v4.py",
+    "same_corpus_v4_pre_outcome_narrowing.py",
+    "same_corpus_v4_locked_validation.py",
+    "same_corpus_v4_negative_controls.py"
+  ],
+  "candidate_specs_generated": 654,
+  "candidate_specs_evaluated": 654,
+  "development_survivors": 84,
+  "locked_validation_run": true,
+  "locked_survivors": 3,
+  "negative_controls_status": "NEGATIVE_CONTROLS_FAILED",
+  "certification_status": "STRUCTURAL_EDGE_NOT_CERTIFIED",
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false
+}
