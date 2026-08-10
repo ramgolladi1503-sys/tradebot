@@ -7,8 +7,9 @@ from pathlib import Path
 from same_corpus_hypothesis_grammar_v3 import generate_candidate_specs
 from same_corpus_candidate_evaluator_v3 import evaluate_candidates_development
 from same_corpus_selection_pressure_v3 import calculate_selection_pressure
+from validate_same_corpus_hypothesis_discovery_v3 import validate_candidate_specs
 
-RUNNER_ID = "SAME_CORPUS_MASSIVE_HYPOTHESIS_DISCOVERY_V3"
+RUNNER_ID = "SAME_CORPUS_MASSIVE_HYPOTHESIS_DISCOVERY_V3_REPAIRED"
 
 def main():
     parser = argparse.ArgumentParser()
@@ -28,17 +29,22 @@ def main():
         print(f"BLOCKED: Missing required inputs dataset/episodes")
         sys.exit(1)
 
-    print(f"Generating candidate specs (max_candidates={args.max_candidates}, max_family_groups={args.max_family_groups})...")
+    print(f"Generating repaired candidate specs (max_candidates={args.max_candidates}, max_family_groups={args.max_family_groups})...")
     candidates = generate_candidate_specs(max_candidates=args.max_candidates, max_family_groups=args.max_family_groups)
-    print(f"Generated {len(candidates)} candidate specifications across family groups.")
+    
+    # Audit specs
+    audit_metrics = validate_candidate_specs(candidates)
+    print(f"Audit Metrics: Valid Specs={audit_metrics['valid_specs']}, Blocked Specs={audit_metrics['blocked_specs']}, Placeholders={audit_metrics['placeholder_specs']}")
+
+    if audit_metrics["placeholder_specs"] > 0 or audit_metrics["specs_with_unenforced_fields"] > 0 or audit_metrics["valid_specs"] < 500:
+        print("BLOCKED_GOVERNANCE_OR_IMPLEMENTATION_DEFECT: Candidate registry quality gates failed!")
+        sys.exit(1)
 
     # 1. Save grammar and candidate registry
     grammar_payload = {
         "schema_version": 1,
         "runner_id": RUNNER_ID,
-        "total_generated": len(candidates),
-        "max_candidates_limit": args.max_candidates,
-        "max_family_groups_limit": args.max_family_groups,
+        "audit_metrics": audit_metrics,
         "forward_outcomes_used": False,
         "locked_outcomes_accessed": False
     }
@@ -51,7 +57,8 @@ def main():
 
     with (v3_dir / "candidate_registry_summary.json").open("w") as f:
         json.dump({
-            "total_candidates": len(candidates),
+            "schema_version": 1,
+            **audit_metrics,
             "edge_claimed": False,
             "forward_outcomes_used": False,
             "locked_outcomes_accessed": False
@@ -74,7 +81,7 @@ def main():
         "edge_claimed": False,
         "total_evaluated": len(summaries),
         "supported_survivors_count": len(survivors),
-        "status": "DEVELOPMENT_STRUCTURE_SUPPORTED" if survivors else "NO_DEVELOPMENT_SUPPORTED_CANDIDATE_IN_V3_BATCH",
+        "status": "V3_REPAIRED_DEVELOPMENT_SURVIVORS_REQUIRES_PRE_OUTCOME_NARROWING" if survivors else "V3_REPAIRED_NO_DEVELOPMENT_SURVIVORS",
         "candidate_summaries": summaries
     }
     with (v3_dir / "development_screen.json").open("w") as f:
@@ -95,25 +102,10 @@ def main():
     with (v3_dir / "selection_pressure.json").open("w") as f:
         json.dump(selection_pressure, f, indent=2)
 
-    # 4. Negative Controls Plan
-    neg_plan = {
-        "schema_version": 1,
-        "mandatory_controls": [
-            "WRONG_TIME_WINDOW_CONTROL",
-            "WRONG_STATE_CONTROL",
-            "DIRECTION_INVERSION_CONTROL",
-            "SESSION_PERMUTATION_CONTROL",
-            "GENERIC_STATE_BASELINE_CONTROL"
-        ],
-        "status": "PLANNED_IF_SURVIVORS_ADVANCE"
-    }
-    with (v3_dir / "negative_controls_plan.json").open("w") as f:
-        json.dump(neg_plan, f, indent=2)
-
-    # 5. Failure Registry
+    # 4. Failure Registry
     failed_candidates = [s for s in summaries if s.get("verdict") != "DEVELOPMENT_STRUCTURE_SUPPORTED"]
     with (v3_dir / "failure_registry.md").open("w") as f:
-        f.write("# Campaign V3 Discovery Batch Failure Registry\n\n")
+        f.write("# Repaired Campaign V3 Discovery Batch Failure Registry\n\n")
         f.write(f"**Total Evaluated**: {len(summaries)}\n")
         f.write(f"**Failed Candidates**: {len(failed_candidates)}\n\n")
         f.write("## Failure Reason Breakdown\n")
@@ -126,17 +118,20 @@ def main():
 
     # Campaign Endpoint calculation
     if survivors:
-        campaign_endpoint = "DEVELOPMENT_STRUCTURE_SUPPORTED_REQUIRES_NARROWING_AND_VALIDATION"
+        campaign_endpoint = "V3_REPAIRED_DEVELOPMENT_SURVIVORS_REQUIRES_PRE_OUTCOME_NARROWING"
     else:
-        campaign_endpoint = "NO_STRUCTURAL_EDGE_FOUND_IN_V3_BATCH"
+        campaign_endpoint = "V3_REPAIRED_NO_DEVELOPMENT_SURVIVORS"
 
     manifest = {
         "schema_version": 1,
         "runner_id": RUNNER_ID,
-        "campaign_version": "v3",
+        "campaign_version": "v3_repaired",
         "campaign_endpoint": campaign_endpoint,
         "candidate_specs_generated": len(candidates),
-        "candidate_specs_evaluated": len(summaries),
+        "valid_candidate_specs_evaluated": audit_metrics["valid_specs"],
+        "invalid_candidate_specs": audit_metrics["invalid_specs"],
+        "blocked_candidate_specs": audit_metrics["blocked_specs"],
+        "placeholder_specs": audit_metrics["placeholder_specs"],
         "family_groups_generated": family_groups_count,
         "development_tests_run": len(summaries),
         "development_survivors_count": len(survivors),
@@ -156,7 +151,7 @@ def main():
     with (v3_dir / "campaign_manifest.json").open("w") as f:
         json.dump(manifest, f, indent=2)
 
-    print(f"\nCAMPAIGN V3 COMPLETE. Endpoint: {campaign_endpoint}")
+    print(f"\nREPAIRED CAMPAIGN V3 COMPLETE. Endpoint: {campaign_endpoint}")
 
 if __name__ == "__main__":
     main()
