@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "controlled_verdict": "ECONOMIC_SHAPE_GATE_IMPLEMENTED_AND_TESTED",
+  "latest_commit": "12db36d35",
+  "does_this_weaken_certification": false,
+  "does_this_allow_promising_not_certified_bucket": true,
+  "prior_promising_candidates_reviewed": 2,
+  "revivable_candidates_found": 0,
+  "tick_bidask_required_now": false,
+  "vendor_contact_recommended_now": false,
+  "v10_application_status": "BLOCKED_V10_NOT_RUN_YET",
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "next_action": "APPLY_ECONOMIC_SHAPE_METRICS_TO_NEW_DATASET_CAMPAIGNS"
+}

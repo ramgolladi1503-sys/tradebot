@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "purpose": "Separates signal discovery shape, economic trading shape, negative control severity diagnostics, and final certification gates without weakening certification laws.",
+  "does_not_weaken_certification_controls": true,
+  "new_intermediate_statuses": [
+    "ECONOMIC_SHAPE_PASS_CONTROL_PENDING",
+    "PROMISING_DIRECTIONAL_SHAPE_BUT_CONTROL_WEAK",
+    "PROMISING_R_MULTIPLE_BUT_LOW_FREQUENCY",
+    "PROMISING_FREQUENCY_BUT_WEAK_R_MULTIPLE",
+    "CONTROL_REJECTED",
+    "NO_ECONOMIC_SHAPE"
+  ],
+  "hard_reject_conditions": [
+    "control_cost_adjusted_expectancy >= real_cost_adjusted_expectancy",
+    "control_profit_factor >= real_profit_factor AND control_expectancy_comparable",
+    "wrong_direction_control_positive_and_comparable_or_stronger",
+    "random_permutation_control_positive_and_comparable_or_stronger"
+  ],
+  "diagnostic_caution_conditions": [
+    "control_sample_size_too_small_n_lt_10",
+    "control_expectancy_close_within_20_percent_margin",
+    "high_r_multiple_low_win_rate_asymmetric_payoff"
+  ],
+  "economic_shape_metrics": [
+    "trade_count",
+    "win_rate",
+    "payoff_ratio",
+    "expectancy_bps",
+    "cost_adjusted_expectancy_bps",
+    "profit_factor",
+    "max_drawdown_bps"
+  ],
+  "risk_reward_metrics": [
+    "average_R",
+    "median_R",
+    "max_favorable_excursion_bps",
+    "max_adverse_excursion_bps"
+  ],
+  "allowed_positive_non_certifying_status": "PROMISING_DIRECTIONAL_SHAPE_BUT_CONTROL_WEAK",
+  "forbidden_claims": [
+    "STRUCTURAL_EDGE_CERTIFIED",
+    "EXECUTION_VIABLE",
+    "LIVE_READY",
+    "OPTIONS_TRADABLE_EDGE",
+    "PROFITABLE_STRATEGY"
+  ],
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false
+}

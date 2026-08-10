@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "severity_levels": [
+    "HARD_REJECT",
+    "SOFT_REJECT",
+    "DIAGNOSTIC_CAUTION",
+    "PASS",
+    "NOT_APPLICABLE"
+  ],
+  "policy_rules": [
+    {
+      "severity": "HARD_REJECT",
+      "conditions": [
+        "control_cost_adjusted_expectancy >= real_cost_adjusted_expectancy",
+        "control_profit_factor >= real_profit_factor AND control_expectancy_comparable",
+        "wrong_direction_control_positive_and_comparable"
+      ],
+      "action": "Immediate candidate rejection. Cannot proceed to certification."
+    },
+    {
+      "severity": "SOFT_REJECT",
+      "conditions": [
+        "real_expectancy - control_expectancy < 3.0_bps_margin",
+        "control passes one economic metric but fails overall"
+      ],
+      "action": "Requires candidate mechanism repair or feature dimension refactoring."
+    },
+    {
+      "severity": "DIAGNOSTIC_CAUTION",
+      "conditions": [
+        "control_sample_size_n_lt_10",
+        "control_expectancy_unstable_across_folds",
+        "candidate_has_strong_r_multiple_gt_2_0_but_low_win_rate_lt_0_40"
+      ],
+      "action": "Allows candidate to be bucketed as PROMISING_DIRECTIONAL_SHAPE_BUT_CONTROL_WEAK."
+    },
+    {
+      "severity": "PASS",
+      "conditions": [
+        "real_expectancy significantly outperforms controls across expectancy, R-multiple, and profit factor"
+      ],
+      "action": "Passed negative control gate."
+    }
+  ]
+}

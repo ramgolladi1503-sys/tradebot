@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "reviewed_candidates": [
+    {
+      "candidate_id": "V3_PRED_SEQ_PRE_CLOSE_30_DIRECTIONAL_DOWN_THEN_COMPRESSION",
+      "source_campaign": "Campaign V3",
+      "historical_support_stage": "LOCKED_HOLD_SUPPORTED",
+      "why_it_looked_promising": "Mean ret6 return 0.67 bps / median 3.48 bps on locked holdout",
+      "negative_control_failure_reason": "Inversion control ret6 mean 1.14 bps outperformed signal; wrong window control sample n=4",
+      "economic_shape_summary": {
+        "expectancy_bps": 0.67,
+        "payoff_ratio": 1.15,
+        "win_rate": 0.52
+      },
+      "reclassified_status": "CONTROL_REJECTED_DO_NOT_REVIVE_AS_STRATEGY",
+      "can_be_revived_without_new_mechanism": false,
+      "can_be_used_as_feature_not_strategy": true,
+      "requires_tick_bidask_for_execution_only": false,
+      "requires_new_data_for_signal_retest": true,
+      "final_verdict": "REJECTED_SIGNAL_NOT_SPECIFIC"
+    },
+    {
+      "candidate_id": "V4_PRED_BAR_BODY_PRE_CLOSE_30_B70_LOWER_REJECTION",
+      "source_campaign": "Campaign V4",
+      "historical_support_stage": "LOCKED_HOLD_SUPPORTED",
+      "why_it_looked_promising": "High bar-body compression ratio with lower rejection wick in pre-close window",
+      "negative_control_failure_reason": "Wrong window control (OPENING_0_30) yielded mean return 6.78 bps vs real -2.02 bps",
+      "economic_shape_summary": {
+        "expectancy_bps": -2.02,
+        "payoff_ratio": 0.88,
+        "win_rate": 0.44
+      },
+      "reclassified_status": "CONTROL_REJECTED_DO_NOT_REVIVE_AS_STRATEGY",
+      "can_be_revived_without_new_mechanism": false,
+      "can_be_used_as_feature_not_strategy": true,
+      "requires_tick_bidask_for_execution_only": false,
+      "requires_new_data_for_signal_retest": true,
+      "final_verdict": "REJECTED_WRONG_TIME_WINDOW_DOMINATED"
+    }
+  ]
+}

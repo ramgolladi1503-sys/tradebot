@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "v10_evidence_present": false,
+  "application_status": "BLOCKED_V10_NOT_RUN_YET",
+  "note": "Selective constituent pilot Campaign V10 evidence is not present in repository storage. When V10 is executed, its candidates will be evaluated using economic_shape_metrics_v11.py before control classification."
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "metric_definitions": [
+    {
+      "name": "expectancy_bps",
+      "formula": "win_rate * average_win_bps - loss_rate * abs(average_loss_bps)",
+      "description": "Gross mathematical expectancy per trade in basis points"
+    },
+    {
+      "name": "cost_adjusted_expectancy_bps",
+      "formula": "expectancy_bps - conservative_cost_proxy_bps",
+      "description": "Net mathematical expectancy per trade after friction"
+    },
+    {
+      "name": "R_multiple",
+      "formula": "realized_return / initial_risk",
+      "description": "Excursion-based or stop/target-based payoff multiple per trade"
+    },
+    {
+      "name": "payoff_ratio",
+      "formula": "average_win_bps / abs(average_loss_bps)",
+      "description": "Ratio of mean win magnitude to mean loss magnitude"
+    },
+    {
+      "name": "profit_factor",
+      "formula": "sum(winning_returns_bps) / abs(sum(losing_returns_bps))",
+      "description": "Gross profit divided by gross loss"
+    }
+  ],
+  "required_fields": [
+    "trade_count",
+    "session_count",
+    "win_rate",
+    "loss_rate",
+    "average_win_bps",
+    "average_loss_bps",
+    "median_win_bps",
+    "median_loss_bps",
+    "payoff_ratio",
+    "expectancy_bps",
+    "cost_adjusted_expectancy_bps",
+    "average_R",
+    "median_R",
+    "profit_factor",
+    "max_drawdown_bps",
+    "drawdown_cluster_count",
+    "tail_loss_bps",
+    "max_adverse_excursion_bps",
+    "max_favorable_excursion_bps",
+    "time_to_target_bars",
+    "time_to_stop_bars",
+    "holding_time_bars",
+    "frequency_per_month"
+  ]
+}
