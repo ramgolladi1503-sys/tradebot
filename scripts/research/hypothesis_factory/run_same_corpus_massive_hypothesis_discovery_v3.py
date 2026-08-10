@@ -8,8 +8,9 @@ from same_corpus_hypothesis_grammar_v3 import generate_candidate_specs
 from same_corpus_candidate_evaluator_v3 import evaluate_candidates_development
 from same_corpus_selection_pressure_v3 import calculate_selection_pressure
 from validate_same_corpus_hypothesis_discovery_v3 import validate_candidate_specs
+from same_corpus_time_window_v3 import classify_session_position_window_v3
 
-RUNNER_ID = "SAME_CORPUS_MASSIVE_HYPOTHESIS_DISCOVERY_V3_REPAIRED"
+RUNNER_ID = "SAME_CORPUS_MASSIVE_HYPOTHESIS_DISCOVERY_V3_WINDOW_FIXED"
 
 def main():
     parser = argparse.ArgumentParser()
@@ -40,11 +41,43 @@ def main():
         print("BLOCKED_GOVERNANCE_OR_IMPLEMENTATION_DEFECT: Candidate registry quality gates failed!")
         sys.exit(1)
 
+    # Window classifier metrics
+    with episodes_path.open() as f:
+        episodes = [json.loads(line) for line in f if line.strip()]
+
+    parsed_count = len(episodes)
+    classified_count = 0
+    parse_failed_count = 0
+    unclassifiable_count = 0
+
+    for ep in episodes:
+        ts = ep.get("end_timestamp", "")
+        win, err = classify_session_position_window_v3(ts)
+        if err == "TIMESTAMP_PARSE_FAILED":
+            parse_failed_count += 1
+        elif err == "UNCLASSIFIABLE_WINDOW":
+            unclassifiable_count += 1
+        else:
+            classified_count += 1
+
+    success_rate = classified_count / parsed_count if parsed_count > 0 else 0.0
+
+    if success_rate <= 0.80:
+        print("V3_REPAIRED_WINDOW_FIXED_BLOCKED_IMPLEMENTATION_DEFECT: Classifier failed >80% success rate threshold!")
+        sys.exit(1)
+
     # 1. Save grammar and candidate registry
     grammar_payload = {
         "schema_version": 1,
         "runner_id": RUNNER_ID,
         "audit_metrics": audit_metrics,
+        "window_classifier_metrics": {
+            "total_episodes": parsed_count,
+            "classified_count": classified_count,
+            "timestamp_parse_failed_count": parse_failed_count,
+            "unclassifiable_window_count": unclassifiable_count,
+            "window_classification_success_rate": success_rate
+        },
         "forward_outcomes_used": False,
         "locked_outcomes_accessed": False
     }
@@ -81,7 +114,7 @@ def main():
         "edge_claimed": False,
         "total_evaluated": len(summaries),
         "supported_survivors_count": len(survivors),
-        "status": "V3_REPAIRED_DEVELOPMENT_SURVIVORS_REQUIRES_PRE_OUTCOME_NARROWING" if survivors else "V3_REPAIRED_NO_DEVELOPMENT_SURVIVORS",
+        "status": "V3_REPAIRED_WINDOW_FIXED_DEVELOPMENT_SURVIVORS_REQUIRES_PRE_OUTCOME_NARROWING" if survivors else "V3_REPAIRED_WINDOW_FIXED_NO_DEVELOPMENT_SURVIVORS",
         "candidate_summaries": summaries
     }
     with (v3_dir / "development_screen.json").open("w") as f:
@@ -105,7 +138,7 @@ def main():
     # 4. Failure Registry
     failed_candidates = [s for s in summaries if s.get("verdict") != "DEVELOPMENT_STRUCTURE_SUPPORTED"]
     with (v3_dir / "failure_registry.md").open("w") as f:
-        f.write("# Repaired Campaign V3 Discovery Batch Failure Registry\n\n")
+        f.write("# Window-Fixed Repaired Campaign V3 Discovery Batch Failure Registry\n\n")
         f.write(f"**Total Evaluated**: {len(summaries)}\n")
         f.write(f"**Failed Candidates**: {len(failed_candidates)}\n\n")
         f.write("## Failure Reason Breakdown\n")
@@ -118,14 +151,14 @@ def main():
 
     # Campaign Endpoint calculation
     if survivors:
-        campaign_endpoint = "V3_REPAIRED_DEVELOPMENT_SURVIVORS_REQUIRES_PRE_OUTCOME_NARROWING"
+        campaign_endpoint = "V3_REPAIRED_WINDOW_FIXED_DEVELOPMENT_SURVIVORS_REQUIRES_PRE_OUTCOME_NARROWING"
     else:
-        campaign_endpoint = "V3_REPAIRED_NO_DEVELOPMENT_SURVIVORS"
+        campaign_endpoint = "V3_REPAIRED_WINDOW_FIXED_NO_DEVELOPMENT_SURVIVORS"
 
     manifest = {
         "schema_version": 1,
         "runner_id": RUNNER_ID,
-        "campaign_version": "v3_repaired",
+        "campaign_version": "v3_window_fixed",
         "campaign_endpoint": campaign_endpoint,
         "candidate_specs_generated": len(candidates),
         "valid_candidate_specs_evaluated": audit_metrics["valid_specs"],
@@ -133,6 +166,11 @@ def main():
         "blocked_candidate_specs": audit_metrics["blocked_specs"],
         "placeholder_specs": audit_metrics["placeholder_specs"],
         "family_groups_generated": family_groups_count,
+        "timestamp_parse_success_rate": 1.0 - (parse_failed_count / parsed_count if parsed_count > 0 else 0.0),
+        "window_classification_success_rate": success_rate,
+        "timestamp_parse_failed_count": parse_failed_count,
+        "unclassifiable_window_count": unclassifiable_count,
+        "classifiable_episode_count": classified_count,
         "development_tests_run": len(summaries),
         "development_survivors_count": len(survivors),
         "locked_validation_run": False,
@@ -151,7 +189,7 @@ def main():
     with (v3_dir / "campaign_manifest.json").open("w") as f:
         json.dump(manifest, f, indent=2)
 
-    print(f"\nREPAIRED CAMPAIGN V3 COMPLETE. Endpoint: {campaign_endpoint}")
+    print(f"\nWINDOW-FIXED REPAIRED CAMPAIGN V3 COMPLETE. Endpoint: {campaign_endpoint}")
 
 if __name__ == "__main__":
     main()

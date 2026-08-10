@@ -6,27 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-def classify_session_position_window(timestamp_str: str) -> str | None:
-    try:
-        time_part = timestamp_str.split("T")[1]
-        h, m, s = map(int, time_part.split(":"))
-        minutes_since_midnight = h * 60 + m
-        market_open = 3 * 60 + 45  # 09:15 IST -> 03:45 UTC
-        minutes_since_open = minutes_since_midnight - market_open
-
-        if 0 <= minutes_since_open <= 30:
-            return "OPENING_0_30"
-        if 30 < minutes_since_open <= 60:
-            return "OPENING_30_60"
-        if 60 < minutes_since_open < 375 - 60:
-            return "MID_SESSION"
-        if 375 - 60 <= minutes_since_open < 375 - 30:
-            return "PRE_CLOSE_60"
-        if 375 - 30 <= minutes_since_open <= 375:
-            return "PRE_CLOSE_30"
-        return None
-    except Exception:
-        return None
+from same_corpus_time_window_v3 import classify_session_position_window_v3
 
 def evaluate_predicate_condition(cond: dict[str, Any], episode: dict[str, Any], context: dict[str, Any]) -> tuple[bool, str | None]:
     c_type = cond.get("type")
@@ -47,17 +27,15 @@ def evaluate_predicate_condition(cond: dict[str, Any], episode: dict[str, Any], 
 
     elif c_type == "session_position_window_is":
         target_win = cond.get("window")
-        actual_win = classify_session_position_window(ts)
-        if actual_win is None:
-            return (False, "UNCLASSIFIABLE_WINDOW")
+        actual_win, err_code = classify_session_position_window_v3(ts)
+        if err_code:
+            return (False, err_code)
         return (actual_win == target_win, None)
 
     elif c_type == "volatility_regime_is":
-        # Volatility regime data is not available in canonical OHLC/episodes corpus
         return (False, "BLOCKED_MISSING_REQUIRED_INPUT")
 
     elif c_type == "gap_direction_is":
-        # Gap direction data is not available in canonical OHLC/episodes corpus
         return (False, "BLOCKED_MISSING_REQUIRED_INPUT")
 
     elif c_type == "range_location_is":
