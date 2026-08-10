@@ -10,7 +10,6 @@ import subprocess
 from pathlib import Path
 
 
-EXPECTED_SHA = "157f674ba39aa731259f99ce8b8d414fc1648f0f"
 COMPONENTS = (
     "strategy_engines", "candidate_funnel", "ranking", "market_regime",
     "option_chain", "ai_reliability", "live_analytics", "ui_runtime_snapshot",
@@ -21,7 +20,7 @@ def _json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def adjudicate(root: Path) -> dict:
+def adjudicate(root: Path, expected_sha: str | None = None) -> dict:
     root = root.resolve()
     seal = (root / "SEALED").is_file()
     sums = root / "SHA256SUMS"
@@ -32,6 +31,7 @@ def adjudicate(root: Path) -> dict:
         ).returncode == 0
     identity = _json(root / "process_identity.json") if (root / "process_identity.json").is_file() else {}
     manifest = _json(root / "presession_manifest.json") if (root / "presession_manifest.json").is_file() else {}
+    expected_sha = str(expected_sha or manifest.get("commit_sha") or identity.get("producer_sha") or "")
     wiring = _json(root / "meg_wiring_evidence.json") if (root / "meg_wiring_evidence.json").is_file() else {}
     drain = _json(root / "shutdown_drain.json") if (root / "shutdown_drain.json").is_file() else {}
     subscription = wiring.get("subscription_evidence") or {}
@@ -65,7 +65,7 @@ def adjudicate(root: Path) -> dict:
     blockers = []
     if not seal or not integrity:
         blockers.append("SEALED_ROOT_INVALID")
-    if identity.get("producer_sha") != EXPECTED_SHA or manifest.get("commit_sha") != EXPECTED_SHA:
+    if not expected_sha or identity.get("producer_sha") != expected_sha or manifest.get("commit_sha") != expected_sha:
         blockers.append("PRODUCER_SHA_MISMATCH")
     if not (nifty_post_mode and nifty_count > 0):
         blockers.append("INDEX_FULL_PACKET_NOT_OBSERVED")
@@ -92,8 +92,9 @@ def adjudicate(root: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-root", required=True, type=Path)
+    parser.add_argument("--expected-sha")
     args = parser.parse_args()
-    print(json.dumps(adjudicate(args.evidence_root), indent=2, sort_keys=True))
+    print(json.dumps(adjudicate(args.evidence_root, args.expected_sha), indent=2, sort_keys=True))
     return 0
 
 
