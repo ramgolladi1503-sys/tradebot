@@ -1,0 +1,1 @@
+{"timestamp": "2026-08-10T15:53:50+05:30", "event_type": "V21_BLOCKED_NO_TOKEN_OR_MANUAL_INPUT", "details": {"verdict": "V21_BLOCKED_NO_TOKEN_OR_MANUAL_INPUT", "reason": "Neither Upstox token nor manual CSV available."}}

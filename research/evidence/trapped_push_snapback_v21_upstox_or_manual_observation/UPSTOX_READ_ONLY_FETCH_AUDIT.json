@@ -1,0 +1,15 @@
+{
+  "schema_version": "V21_UPSTOX_READ_ONLY_FETCH_AUDIT_V1",
+  "token_found": false,
+  "token_value_logged": false,
+  "fetcher_used": null,
+  "fetch_attempted": false,
+  "fetch_command": null,
+  "fetch_exit_code": null,
+  "fetch_status": "UPSTOX_FETCH_BLOCKED_MISSING_TOKEN",
+  "output_bars_path": null,
+  "orders_created": 0,
+  "broker_writes_created": 0,
+  "authority_flags_all_false": true,
+  "reason": "Upstox access token was not found in environment or local runtime credential files."
+}

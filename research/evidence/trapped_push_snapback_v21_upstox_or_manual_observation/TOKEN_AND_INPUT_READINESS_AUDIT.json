@@ -1,0 +1,19 @@
+{
+  "schema_version": "V21_TOKEN_AND_INPUT_READINESS_AUDIT_V1",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "session_date_ist": "2026-08-10",
+  "source_evidence_commit": "106c702da80b904951576fa0fc32cc863bbb1f23",
+  "upstox_token_file_candidates_checked": [
+    ".runtime/upstox_access_token",
+    ".runtime/upstox_token",
+    ".runtime/UPSTOX_ACCESS_TOKEN",
+    "UPSTOX_ACCESS_TOKEN env var"
+  ],
+  "upstox_token_found": false,
+  "upstox_token_source": null,
+  "manual_input_path_checked": "research/evidence/trapped_push_snapback_v18_today_readonly_fetch/input_bars/NIFTY_5MIN_2026-08-10_COMPLETED.csv",
+  "manual_input_exists": false,
+  "kite_token_found": false,
+  "selected_path": "BLOCKED_NO_TOKEN_OR_MANUAL_INPUT",
+  "reason": "Neither Upstox access token nor manual CSV file exists for session 2026-08-10."
+}

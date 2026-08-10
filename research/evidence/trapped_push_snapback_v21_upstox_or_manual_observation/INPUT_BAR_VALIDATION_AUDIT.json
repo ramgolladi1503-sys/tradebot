@@ -1,0 +1,6 @@
+{
+  "input_bars_file": null,
+  "observation_date": "2026-08-10",
+  "validation_verdict": "FORWARD_BAR_INTAKE_BLOCKED_NO_INPUT",
+  "reason": "No input bar file was available to validate."
+}
