@@ -177,7 +177,11 @@ def test_real_composition_wires_launch_plan_to_feed_start(
 
     token_path = tmp_path / "token"
     token_path.write_text("redacted")
-    plan = {"final_union_tokens": [256265, 6401], "observation_tokens": [256265, 6401]}
+    plan = {
+        "final_union_tokens": [256265, 6401],
+        "observation_tokens": [256265, 6401],
+        "commit_sha": "1" * 40,
+    }
     from core.kite_read_only_observation_runtime import run_observation
     assert run_observation(launch_plan=plan, output_root=tmp_path / "out", token_path=token_path, session_date="2026-08-04", max_runtime_sec=0.06) == 0
     assert observed["tokens"] == [256265, 6401]
@@ -266,7 +270,13 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     assert len(row["constituent_bar_details"]) == 50
     assert row["read_only"] is True
     from core.kite_read_only_observation_runtime import write_meg_wiring_evidence
-    write_meg_wiring_evidence(bridge=bridge, result=result, output_path=tmp_path / "meg_wiring_evidence.json", cycle_count=1)
+    write_meg_wiring_evidence(
+        bridge=bridge,
+        result=result,
+        output_path=tmp_path / "meg_wiring_evidence.json",
+        cycle_count=1,
+        producer_commit_sha="1" * 40,
+    )
     from core.kite_read_only_observation_runtime import ObservationLifecycle
     shutdown = ObservationLifecycle(feed).shutdown()
     (tmp_path / "shutdown_drain.json").write_text(json.dumps(shutdown) + "\n")
