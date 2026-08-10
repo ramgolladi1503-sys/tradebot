@@ -1,0 +1,11 @@
+{
+  "schema_version": "V22_UPSTOX_INSTRUMENT_KEY_AUDIT_V1",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "symbol_requested": "NIFTY 50",
+  "instrument_key_found": true,
+  "instrument_key": "NSE_INDEX|Nifty 50",
+  "instrument_key_source": "scripts/replay_candidate_generator_strategy.py",
+  "instrument_key_source_hash_if_file": null,
+  "resolution_status": "UPSTOX_INSTRUMENT_KEY_RESOLVED_FROM_REPOSITORY_MAPPING",
+  "reason": "Instrument key resolved from canonical repository symbol mapping."
+}

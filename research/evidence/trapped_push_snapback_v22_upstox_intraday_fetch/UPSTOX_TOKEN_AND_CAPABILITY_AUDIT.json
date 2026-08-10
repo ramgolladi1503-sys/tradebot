@@ -1,0 +1,21 @@
+{
+  "schema_version": "V22_UPSTOX_TOKEN_AND_CAPABILITY_AUDIT_V1",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "session_date_ist": "2026-08-10",
+  "source_evidence_commit": "ff2b92afdc9e2f34733037100c2b5311bf460265",
+  "upstox_token_file_candidates_checked": [
+    ".runtime/upstox_access_token",
+    ".runtime/upstox_token",
+    ".runtime/UPSTOX_ACCESS_TOKEN"
+  ],
+  "upstox_token_found": true,
+  "upstox_token_source": ".runtime/upstox_access_token",
+  "token_value_logged": false,
+  "upstox_clients_found": true,
+  "upstox_fetchers_found": true,
+  "instrument_mapping_candidates_found": true,
+  "manual_input_path_checked": "research/evidence/trapped_push_snapback_v18_today_readonly_fetch/input_bars/NIFTY_5MIN_2026-08-10_COMPLETED.csv",
+  "manual_input_exists": false,
+  "selected_fetch_mode": "CREATE_NARROW_UPSTOX_INTRADAY_FETCHER",
+  "reason": "Upstox token found in .runtime/upstox_access_token and instrument key resolved from repository mapping."
+}

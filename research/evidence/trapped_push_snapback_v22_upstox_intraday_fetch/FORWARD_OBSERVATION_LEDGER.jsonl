@@ -1,0 +1,1 @@
+{"timestamp": "2026-08-10T16:05:26+05:30", "event_type": "V22_UPSTOX_FETCH_FAILED", "details": {"verdict": "UPSTOX_FETCH_BLOCKED_API_ERROR", "http_status": 403, "reason": "HTTP Error 403: Forbidden"}}

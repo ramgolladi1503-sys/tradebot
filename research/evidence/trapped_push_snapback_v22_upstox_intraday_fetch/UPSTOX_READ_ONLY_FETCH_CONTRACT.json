@@ -1,0 +1,28 @@
+{
+  "schema_version": "V22_UPSTOX_READ_ONLY_FETCH_CONTRACT_V1",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "session_date_ist": "2026-08-10",
+  "broker": "Upstox",
+  "endpoint_family": "Intraday Candle Data V3",
+  "symbol": "NIFTY 50",
+  "instrument_key": "NSE_INDEX|Nifty 50",
+  "bar_unit": "minutes",
+  "bar_interval": 5,
+  "opening_window_start_ist": "09:15",
+  "opening_window_end_ist": "11:30",
+  "read_only_data_authority": true,
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "forbidden_operations": [
+    "place_order",
+    "modify_order",
+    "cancel_order",
+    "broker_writes",
+    "live_routing",
+    "paper_routing"
+  ],
+  "required_output_schema": "datetime,open,high,low,close,volume_optional,source,completed_bar,timezone",
+  "output_path": "research/evidence/trapped_push_snapback_v22_upstox_intraday_fetch/input_bars/NIFTY_5MIN_2026-08-10_COMPLETED.csv"
+}
