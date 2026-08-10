@@ -20,4 +20,3 @@ upstox-python-sdk
 protobuf
 websockets
 zstandard
-pandas<3.0
