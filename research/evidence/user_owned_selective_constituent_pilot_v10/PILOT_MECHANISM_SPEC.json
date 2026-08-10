@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "allowed_families": [
+    "SELECTIVE_CONSTITUENT_MOMENTUM_LEAD_LAG",
+    "SELECTIVE_CONSTITUENT_DISPERSION_SHOCK",
+    "SELECTIVE_CONSTITUENT_BREADTH_DIVERGENCE"
+  ],
+  "candidate_requirements": {
+    "pilot_scope": "SELECTIVE_9_SYMBOLS_ONLY",
+    "not_full_nifty_breadth": true,
+    "execution_viability": false,
+    "edge_claimed": false,
+    "structural_edge_certified": false
+  },
+  "target_asset": "NIFTY future index return proxy from existing NIFTY.csv",
+  "execution_constraints": {
+    "future_leakage": false,
+    "completed_bars_only": true,
+    "options_execution_claimed": false
+  }
+}

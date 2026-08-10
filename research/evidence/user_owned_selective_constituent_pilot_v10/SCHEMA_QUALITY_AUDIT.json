@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "required_columns_present": true,
+  "timestamp_parseable": true,
+  "symbol_consistency": true,
+  "duplicate_rows": 0,
+  "negative_or_zero_prices": 0,
+  "high_low_violations": 0,
+  "open_close_outside_high_low": 0,
+  "zero_volume_rate": 0.0,
+  "total_rows_audited": 71836,
+  "overlapping_bars_all_9_symbols_and_nifty": 0,
+  "overlapping_bars_core_5_symbols_and_nifty": 1899,
+  "symbols_with_nifty_overlap": {
+    "BEL": 4131,
+    "INDIGO": 1899,
+    "ITCHOTELS": 94,
+    "JIOFIN": 3015,
+    "KWIL": 81,
+    "MAXHEALTH": 1899,
+    "TMCV": 45,
+    "TRENT": 4131,
+    "ZOMATO": 3015
+  },
+  "date_overlap_across_symbols": true,
+  "overlap_with_nifty_index_corpus": true,
+  "quality_verdict": "DATA_QUALITY_PASS_WITH_WARNINGS",
+  "note": "All 9 symbols pass basic data quality (no high/low violations, valid OHLCV). Across all 9 symbols, zero-timestamp overlap is 0 due to 3 newly listed/incomplete symbols (ITCHOTELS, KWIL, TMCV). However, core 5 symbols (BEL, INDIGO, JIOFIN, TRENT, ZOMATO) have 1,899 overlapping 5-minute bars with the NIFTY index, which allows proceeding to the selective pilot using the 5 core symbols."
+}

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "repair_reason": "V11 CONTROLLED_VERDICT.json recorded stale commit hash 12db36d35 prior to V11 commit finalization.",
+  "incorrect_latest_commit_before": "12db36d35",
+  "correct_latest_commit_after": "1ae8204b95fe874d55569e9bf853476c5f8a2ab0",
+  "actual_v11_commit_verified": "1ae8204b95fe874d55569e9bf853476c5f8a2ab0",
+  "files_changed": [
+    "research/evidence/economic_shape_gate_v11/CONTROLLED_VERDICT.json",
+    "research/evidence/economic_shape_gate_v11/V11_PROVENANCE_REPAIR_AUDIT.json"
+  ],
+  "does_this_modify_research_logic": false,
+  "does_this_modify_edge_claim": false,
+  "does_this_modify_certification_status": false,
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false
+}

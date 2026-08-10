@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "campaign_id": "user_owned_selective_constituent_pilot_v10",
+  "symbols_used": [
+    "BEL",
+    "INDIGO",
+    "JIOFIN",
+    "TRENT",
+    "ZOMATO"
+  ],
+  "total_aligned_bars": 1888,
+  "dev_bars": 1132,
+  "locked_bars": 377
+}

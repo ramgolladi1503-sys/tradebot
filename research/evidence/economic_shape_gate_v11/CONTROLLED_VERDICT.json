@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "controlled_verdict": "ECONOMIC_SHAPE_GATE_IMPLEMENTED_AND_TESTED",
-  "latest_commit": "12db36d35",
+  "latest_commit": "1ae8204b95fe874d55569e9bf853476c5f8a2ab0",
   "does_this_weaken_certification": false,
   "does_this_allow_promising_not_certified_bucket": true,
   "prior_promising_candidates_reviewed": 2,

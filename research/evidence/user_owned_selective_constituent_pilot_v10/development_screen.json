@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "total_candidates": 4,
+  "survivors_count": 0,
+  "results": [
+    {
+      "candidate_id": "V10_SELECTIVE_LEAD_LAG_MOMENTUM_UP",
+      "dev_trade_count": 245,
+      "metrics": {
+        "trade_count": 245,
+        "win_rate": 0.49795918367346936,
+        "loss_rate": 0.49795918367346936,
+        "expectancy_bps": 0.025016809292054284,
+        "cost_adjusted_expectancy_bps": -2.974983190707946,
+        "average_win_bps": 10.291862405892322,
+        "average_loss_bps": -10.241623731494348,
+        "payoff_ratio": 1.0049053427186045,
+        "profit_factor": 1.0049053427186045,
+        "average_R": 0.001250840464602717,
+        "median_R": 0.0
+      },
+      "passed_dev_screen": false
+    },
+    {
+      "candidate_id": "V10_SELECTIVE_LEAD_LAG_MOMENTUM_DOWN",
+      "dev_trade_count": 301,
+      "metrics": {
+        "trade_count": 301,
+        "win_rate": 0.45514950166112955,
+        "loss_rate": 0.5448504983388704,
+        "expectancy_bps": -0.7988428175374309,
+        "cost_adjusted_expectancy_bps": -3.798842817537431,
+        "average_win_bps": 13.922243066690442,
+        "average_loss_bps": -13.096335293996079,
+        "payoff_ratio": 1.0630640369350497,
+        "profit_factor": 0.8880473967079378,
+        "average_R": -0.039942140876871535,
+        "median_R": -0.08114013480853277
+      },
+      "passed_dev_screen": false
+    },
+    {
+      "candidate_id": "V10_SELECTIVE_DISPERSION_SHOCK_EXPANSION",
+      "dev_trade_count": 129,
+      "metrics": {
+        "trade_count": 129,
+        "win_rate": 0.5503875968992248,
+        "loss_rate": 0.4496124031007752,
+        "expectancy_bps": 1.1339762072000812,
+        "cost_adjusted_expectancy_bps": -1.8660237927999188,
+        "average_win_bps": 10.956553457913389,
+        "average_loss_bps": -10.890213185914485,
+        "payoff_ratio": 1.0060917330878985,
+        "profit_factor": 1.2315950525731172,
+        "average_R": 0.056698810360004064,
+        "median_R": 0.08719339495000256
+      },
+      "passed_dev_screen": false
+    },
+    {
+      "candidate_id": "V10_SELECTIVE_BREADTH_DIVERGENCE_BULLISH",
+      "dev_trade_count": 163,
+      "metrics": {
+        "trade_count": 163,
+        "win_rate": 0.3374233128834356,
+        "loss_rate": 0.6625766871165644,
+        "expectancy_bps": -6.1577500941473495,
+        "cost_adjusted_expectancy_bps": -9.15775009414735,
+        "average_win_bps": 10.245298112331142,
+        "average_loss_bps": -14.511154273372508,
+        "payoff_ratio": 0.7060291634505552,
+        "profit_factor": 0.3595518887942642,
+        "average_R": -0.3078875047073675,
+        "median_R": -0.3316714712832125
+      },
+      "passed_dev_screen": false
+    }
+  ]
+}

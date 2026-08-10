@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "v9_commit": "def94d6a1",
+  "v9_final_verdict": "NO_NEW_USER_OWNED_DATA_AVAILABLE_FOR_HIGH_INFORMATION_RESEARCH",
+  "v9_inventory_found_selective_constituent_data": true,
+  "v9_final_verdict_ignored_limited_pilot_possibility": true,
+  "corrected_interpretation": "FULL_NIFTY_BREADTH_BLOCKED_BUT_SELECTIVE_USER_OWNED_PILOT_ALLOWED",
+  "full_nifty_breadth_supported": false,
+  "selective_9_symbol_pilot_allowed": true,
+  "vendor_contact_recommended_now": false,
+  "tick_bidask_required_now": false,
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false
+}
