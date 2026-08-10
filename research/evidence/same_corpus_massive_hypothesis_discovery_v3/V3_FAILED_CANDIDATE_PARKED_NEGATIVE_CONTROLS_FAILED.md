@@ -1,0 +1,21 @@
+# V3 Candidate Parking Report
+
+CONTROLLED_VERDICT: STRUCTURAL_EDGE_NOT_CERTIFIED
+CANDIDATE_ID: V3_PRED_SEQ_PRE_CLOSE_30_DIRECTIONAL_DOWN_THEN_COMPRESSION
+LOCKED_VALIDATION: SUPPORTED
+NEGATIVE_CONTROLS_STATUS: NEGATIVE_CONTROLS_FAILED
+FAILURE_REASONS:
+  - WRONG_TIME_WINDOW_CONTROL_COMPARABLE_OR_STRONGER
+  - DIRECTION_INVERSION_CONTROL_COMPARABLE_OR_STRONGER
+EDGE_CLAIMED: false
+STRUCTURAL_EDGE_CERTIFIED: false
+EXECUTION_VIABLE: false
+PROSPECTIVE_SUPPORTED: false
+DO_NOT_RETEST_WITHOUT_MATERIAL_NEW_MECHANISM: true
+DO_NOT_RESCUE_WITH_OPTIONS_DATA: true
+NEXT_ACTION: FORMULATE_MATERIALLY_NEW_SAME_CORPUS_FEATURE_PREDICATES
+
+## Explanation
+Candidate `V3_PRED_SEQ_PRE_CLOSE_30_DIRECTIONAL_DOWN_THEN_COMPRESSION` passed locked OOS validation, but failed negative controls. Control variations (evaluating the same pattern in `OPENING_0_30` or evaluating `DIRECTIONAL_UP THEN COMPRESSION`) achieved performance comparable to or exceeding the target candidate.
+
+Per repository governance standards, a signal that fails specificity controls must not advance to execution/options data testing. The candidate is permanently parked.
