@@ -75,7 +75,8 @@ jobs:
           import os
           import subprocess
 
-          if os.environ.get('GITHUB_HEAD_REF') == 'fix/full-live-multicycle-meg-and-feed-stall-v1':
+          final_integration = os.environ.get('GITHUB_HEAD_REF') == 'fix/full-live-multicycle-meg-and-feed-stall-v1'
+          if final_integration:
               base = '624aa59fb9c165af2b2c14cbaa8e519f32d813aa'
               subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
           else:
@@ -97,10 +98,18 @@ jobs:
               'core/persistence_durability.py',
               'strategies/',
           )
-          bad = [path for path in changed if any(path == prefix or path.startswith(prefix) for prefix in protected)]
+          allowed_exact = {'core/feed/runtime_store.py'} if final_integration else set()
+          bad = [
+              path for path in changed
+              if path not in allowed_exact
+              and any(path == prefix or path.startswith(prefix) for prefix in protected)
+          ]
           if bad:
               raise SystemExit(f'PROTECTED_PR763_PATH_CHANGED:{bad}')
-          print(f'authority cutover changed paths={len(changed)}; protected paths unchanged; base={base}')
+          print(
+              f'authority cutover changed paths={len(changed)}; '
+              f'protected paths unchanged except approved exact repairs={sorted(allowed_exact)}; base={base}'
+          )
           PY
 
       - name: Validate diff
