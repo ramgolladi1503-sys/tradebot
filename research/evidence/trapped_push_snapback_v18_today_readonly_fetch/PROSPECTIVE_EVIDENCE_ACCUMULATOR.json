@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "session_date_ist": "2026-08-10",
+  "prospective_sessions_observed": 0,
+  "prospective_events_observed": 0,
+  "prospective_trigger_count_total": 0,
+  "prospective_available_outcomes_total": 0,
+  "prospective_pending_outcomes_total": 0,
+  "authority_violations": 0,
+  "missing_trigger_log_defects": 0,
+  "minimum_sessions_required": 20,
+  "minimum_events_required": 20,
+  "minimum_sessions_met": false,
+  "minimum_events_met": false,
+  "prospective_support_evaluation_allowed": false,
+  "prospective_supported": false,
+  "reason": "0 / 20 required prospective sessions and 0 / 20 required prospective events accumulated. Read-only fetch was blocked due to missing access token."
+}

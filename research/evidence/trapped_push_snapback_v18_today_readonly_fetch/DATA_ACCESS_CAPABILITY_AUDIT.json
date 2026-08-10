@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "session_date_ist": "2026-08-10",
+  "reviewed_commit": "d683b007957ef21b594f0089a80267bb5415e387",
+  "searched_paths": [
+    "scripts/",
+    "research/",
+    "data/",
+    ".runtime/"
+  ],
+  "read_only_fetchers_found": [
+    "scripts/fetch_kite_intraday.py"
+  ],
+  "token_loaders_found": [
+    "core/kite_client.py"
+  ],
+  "instrument_mapping_found": [
+    "NIFTY 50 -> 256265"
+  ],
+  "candidate_local_bar_files_found": [],
+  "manual_append_path_available": true,
+  "unsafe_sources_excluded": true,
+  "recommended_data_access_mode": "CREATE_MANUAL_APPEND_CSV_INTAKE",
+  "reason": "Existing read-only Kite fetcher (scripts/fetch_kite_intraday.py) failed cleanly with missing_kite_access_token at /Users/madhuram/tradebot-strategy-certification-kernel-v0/.runtime/kite_access_token. Live login/token creation requires browser interaction. To prevent block and obey read-only governance, fallback mode CREATE_MANUAL_APPEND_CSV_INTAKE is activated."
+}

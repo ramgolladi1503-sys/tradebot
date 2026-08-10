@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "session_date_ist": "2026-08-10",
+  "fetch_attempted": true,
+  "fetch_command": "python3 scripts/fetch_kite_intraday.py --symbol \"NIFTY 50\" --interval 5minute --start 2026-08-10T00:00:00Z --end 2026-08-10T23:59:59Z --output-dir research/evidence/trapped_push_snapback_v18_today_readonly_fetch/input_bars",
+  "fetch_exit_code": 1,
+  "fetch_status": "FETCH_BLOCKED_MISSING_KITE_TOKEN",
+  "fetch_error_message": "[FETCH_KITE][ERROR] RuntimeError: [AUTH] missing_kite_access_token at /Users/madhuram/tradebot-strategy-certification-kernel-v0/.runtime/kite_access_token",
+  "fallback_action": "CREATE_MANUAL_APPEND_TEMPLATE"
+}

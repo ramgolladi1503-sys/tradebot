@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "observation_date": "2026-08-10",
+  "input_bars_path": "research/evidence/trapped_push_snapback_v18_today_readonly_fetch/input_bars/NIFTY_5MIN_2026-08-10_COMPLETED.csv",
+  "validation_verdict": "FORWARD_BAR_INTAKE_BLOCKED_NO_INPUT",
+  "reason": "Input bar file does not exist at research/evidence/trapped_push_snapback_v18_today_readonly_fetch/input_bars/NIFTY_5MIN_2026-08-10_COMPLETED.csv"
+}
