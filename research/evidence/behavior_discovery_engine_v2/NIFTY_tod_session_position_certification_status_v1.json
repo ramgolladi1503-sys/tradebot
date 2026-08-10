@@ -18,5 +18,5 @@
   "paper_authorized": false,
   "live_authorized": false,
   "status": "STRUCTURAL_EDGE_NOT_CERTIFIED",
-  "next_action": "ACQUIRE_OPTIONS_DEPTH_DATA_BEFORE_EXECUTION_CERTIFICATION"
+  "next_action": "CONTINUE_TO_NEXT_MATERIALLY_DISTINCT_FAMILY"
 }
