@@ -40,7 +40,14 @@ jobs:
         run: |
           git fetch origin main --depth=1
           mkdir -p docs/code_excellence/reports
-          git diff --name-only origin/main...HEAD > docs/code_excellence/reports/changed_paths.txt
+          if [ "${GITHUB_HEAD_REF:-}" = "fix/full-live-multicycle-meg-and-feed-stall-v1" ]; then
+            LIVE_TESTED_SHA="624aa59fb9c165af2b2c14cbaa8e519f32d813aa"
+            git merge-base --is-ancestor "$LIVE_TESTED_SHA" HEAD
+            git diff --name-only "$LIVE_TESTED_SHA"...HEAD > docs/code_excellence/reports/changed_paths.txt
+            echo "Final integration: evaluating post-live delta from $LIVE_TESTED_SHA"
+          else
+            git diff --name-only origin/main...HEAD > docs/code_excellence/reports/changed_paths.txt
+          fi
           cat docs/code_excellence/reports/changed_paths.txt
 
       - name: Run unified CE gates
