@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "capabilities": [
+    {
+      "capability_name": "INDEX_OHLC_STATE_CORPUS",
+      "available_now": true,
+      "available_path": "research/hypotheses/historical_corpus/kite_nifty_cache_v2/canonical/NIFTY.csv",
+      "schema_known": true,
+      "historical_depth_known": true,
+      "intraday_granularity_known": true,
+      "causal_research_possible": true,
+      "execution_viability_possible": false,
+      "structural_edge_family_enabled": "INDEX_OHLC_REGIME_SEARCH",
+      "minimum_sample_needed": "200+ sessions",
+      "main_risk": "Corpus exhaustion under coarse OHLC predicates (proven by V3-V6 negative controls)",
+      "status": "AVAILABLE_RESEARCH_READY"
+    },
+    {
+      "capability_name": "CONSTITUENT_BREADTH_DISPERSION",
+      "available_now": false,
+      "available_path": null,
+      "schema_known": false,
+      "historical_depth_known": false,
+      "intraday_granularity_known": false,
+      "causal_research_possible": false,
+      "execution_viability_possible": false,
+      "structural_edge_family_enabled": "CONSTITUENT_INDEX_LEAD_LAG_BREADTH",
+      "minimum_sample_needed": "50 NIFTY constituent 1-min/5-min OHLC series for 12+ months",
+      "main_risk": "Survivorship bias & index membership changes over time",
+      "status": "BLOCKED_VENDOR_SAMPLE_REQUIRED"
+    },
+    {
+      "capability_name": "FUTURES_BASIS_AND_TERM_STRUCTURE",
+      "available_now": false,
+      "available_path": null,
+      "schema_known": false,
+      "historical_depth_known": false,
+      "intraday_granularity_known": false,
+      "causal_research_possible": false,
+      "execution_viability_possible": false,
+      "structural_edge_family_enabled": "FUTURES_SPOT_BASIS_DISLOCATION",
+      "minimum_sample_needed": "1-min NIFTY near-month futures OHLC + spot for 12+ months",
+      "main_risk": "Roll date misalignment and cost of carry distortion",
+      "status": "BLOCKED_VENDOR_SAMPLE_REQUIRED"
+    },
+    {
+      "capability_name": "OPTIONS_CHAIN_OI_IV_SURFACE",
+      "available_now": false,
+      "available_path": null,
+      "schema_known": true,
+      "historical_depth_known": false,
+      "intraday_granularity_known": false,
+      "causal_research_possible": false,
+      "execution_viability_possible": false,
+      "structural_edge_family_enabled": "OPTIONS_IV_SKEW_SURFACE_DISLOCATION",
+      "minimum_sample_needed": "1-min option strike OHLC + OI + IV for NIFTY weekly/monthly contracts",
+      "main_risk": "Illiquidity in far OTM strikes and IV interpolation noise",
+      "status": "BLOCKED_VENDOR_SAMPLE_REQUIRED"
+    },
+    {
+      "capability_name": "OPTIONS_BID_ASK_DEPTH",
+      "available_now": false,
+      "available_path": null,
+      "schema_known": false,
+      "historical_depth_known": false,
+      "intraday_granularity_known": false,
+      "causal_research_possible": false,
+      "execution_viability_possible": false,
+      "structural_edge_family_enabled": "LIQUIDITY_SPREAD_IMPACT_FILTERING",
+      "minimum_sample_needed": "Level 2/5 depth snapshots (bid/ask price/qty) for active strikes",
+      "main_risk": "Massive storage volume & missing historical depth coverage",
+      "status": "BLOCKED_VENDOR_SAMPLE_REQUIRED"
+    },
+    {
+      "capability_name": "TICK_TRADE_QUOTE_MICROSTRUCTURE",
+      "available_now": false,
+      "available_path": null,
+      "schema_known": false,
+      "historical_depth_known": false,
+      "intraday_granularity_known": false,
+      "causal_research_possible": false,
+      "execution_viability_possible": false,
+      "structural_edge_family_enabled": "TICK_ORDER_FLOW_IMBALANCE",
+      "minimum_sample_needed": "Tick-level trade & quote stream",
+      "main_risk": "High search pressure & microstructure noise",
+      "status": "MISSING_DATASET"
+    },
+    {
+      "capability_name": "BROKER_FILL_REPLAY",
+      "available_now": false,
+      "available_path": null,
+      "schema_known": false,
+      "historical_depth_known": false,
+      "intraday_granularity_known": false,
+      "causal_research_possible": false,
+      "execution_viability_possible": false,
+      "structural_edge_family_enabled": "REALISTIC_SLIPPAGE_FILL_SIMULATION",
+      "minimum_sample_needed": "Execution log from paper/live trade capture",
+      "main_risk": "Requires live/paper engine execution",
+      "status": "MISSING_DATASET"
+    }
+  ]
+}

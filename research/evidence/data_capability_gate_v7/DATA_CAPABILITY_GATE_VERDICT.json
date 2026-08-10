@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "controlled_verdict": "BLOCKED_VENDOR_SAMPLE_REQUIRED",
+  "recommended_next_action": "ACQUIRE_CONSTITUENT_BREADTH_OR_FUTURES_BASIS_SAMPLE_FILE",
+  "highest_priority_mechanism_family": "CONSTITUENT_INDEX_LEAD_LAG_BREADTH",
+  "can_run_next_research_now": false,
+  "smallest_true_blocker": "MISSING_CONSTITUENT_OHLC_HISTORICAL_DATASET",
+  "data_to_request_from_vendor": "NIFTY 50 constituent 1-minute or 5-minute OHLCV historical dataset (12+ months) or near-month futures 1-minute OHLCV data",
+  "sample_file_requirements": "1-month sample CSV/Parquet conforming to research/evidence/data_capability_gate_v7/schema_contracts/constituent_breadth_schema_contract.json",
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false
+}

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "prioritization": [
+    {
+      "priority_rank": 1,
+      "mechanism_family": "CONSTITUENT_INDEX_LEAD_LAG_BREADTH",
+      "economic_rationale": "Index price is driven by constituent buying/selling pressure. Microstructure lead-lag between top 10 NIFTY heavyweights (Reliance, HDFCBANK, ICICIBANK, INFYS, TCS) and the index provides high-causality signals before index-level OHLC reflects it.",
+      "required_data": "5-min OHLC + volume for NIFTY 50 constituent stocks",
+      "available_now": false,
+      "missing_data": "Historical constituent OHLC cache",
+      "expected_false_discovery_risk": "LOW_TO_MEDIUM",
+      "expected_execution_risk": "LOW (Index futures/options trade with deep liquidity)",
+      "can_run_now": false,
+      "if_can_run_now_next_runner": null,
+      "if_blocked_smallest_true_blocker": "MISSING_CONSTITUENT_OHLC_HISTORICAL_DATASET",
+      "reason": "Highest information gain; falsifies single-index OHLC limitations directly by providing underlying order-flow breadth."
+    },
+    {
+      "priority_rank": 2,
+      "mechanism_family": "FUTURES_SPOT_BASIS_DISLOCATION",
+      "economic_rationale": "Near-month futures premium/discount to spot reflects institutional hedging/speculative positioning and arbitrage boundaries.",
+      "required_data": "1-min NIFTY futures OHLC + spot index",
+      "available_now": false,
+      "missing_data": "Historical NIFTY futures minute OHLC dataset",
+      "expected_false_discovery_risk": "MEDIUM",
+      "expected_execution_risk": "MEDIUM",
+      "can_run_now": false,
+      "if_can_run_now_next_runner": null,
+      "if_blocked_smallest_true_blocker": "MISSING_FUTURES_MINUTE_HISTORICAL_DATASET",
+      "reason": "Direct measure of market participant leverage & positioning dislocation."
+    },
+    {
+      "priority_rank": 3,
+      "mechanism_family": "OPTIONS_IV_SKEW_SURFACE_DISLOCATION",
+      "economic_rationale": "Atmospheric IV shifts and put/call skew changes precede major directional breaks.",
+      "required_data": "Historical options chain with implied volatility and open interest snapshots",
+      "available_now": false,
+      "missing_data": "Historical option chain minute/hourly snapshots",
+      "expected_false_discovery_risk": "MEDIUM",
+      "expected_execution_risk": "HIGH",
+      "can_run_now": false,
+      "if_can_run_now_next_runner": null,
+      "if_blocked_smallest_true_blocker": "MISSING_OPTIONS_HISTORICAL_CHAIN_DATASET",
+      "reason": "Required for options execution certification, but data storage requirements are high."
+    }
+  ]
+}

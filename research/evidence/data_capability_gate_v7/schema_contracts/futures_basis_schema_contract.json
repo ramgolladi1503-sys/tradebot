@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FuturesBasisSchemaContract",
+  "dataset_family": "FUTURES_BASIS_AND_TERM_STRUCTURE",
+  "minimum_required_fields": [
+    "timestamp",
+    "spot_close",
+    "futures_symbol",
+    "futures_open",
+    "futures_high",
+    "futures_low",
+    "futures_close",
+    "open_interest",
+    "volume"
+  ],
+  "recommended_fields": [
+    "expiry_date",
+    "days_to_expiry",
+    "cost_of_carry_annualized"
+  ],
+  "timestamp_timezone": "UTC or IST (ISO 8601 string)",
+  "granularity": "1-minute OHLC",
+  "symbols_required": "NIFTY-I (Near month futures), NIFTY-II (Next month futures)",
+  "expiry_fields_if_applicable": "expiry_date",
+  "quote_fields_if_applicable": null,
+  "data_quality_checks": [
+    "Futures close minus spot close within expected arbitrage band (+/- 2.5%)",
+    "Continuous expiry rollover mapping"
+  ],
+  "sample_size_minimum": "240 trading sessions",
+  "sample_file_request_notes": "1-minute futures data matched with spot index timestamps.",
+  "research_families_enabled": [
+    "FUTURES_SPOT_BASIS_DISLOCATION",
+    "TERM_STRUCTURE_CALENDAR_ARBITRAGE"
+  ],
+  "execution_families_enabled": [
+    "NIFTY_FUTURES_BASIS_EXECUTION"
+  ]
+}

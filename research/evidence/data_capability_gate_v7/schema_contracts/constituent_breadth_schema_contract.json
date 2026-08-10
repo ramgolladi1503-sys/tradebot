@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConstituentBreadthSchemaContract",
+  "dataset_family": "CONSTITUENT_BREADTH_DISPERSION",
+  "minimum_required_fields": [
+    "timestamp",
+    "symbol",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "recommended_fields": [
+    "weight",
+    "trades",
+    "vwap"
+  ],
+  "timestamp_timezone": "UTC or IST (ISO 8601 string)",
+  "granularity": "1-minute or 5-minute OHLC",
+  "symbols_required": "Top 50 NIFTY constituent symbols (e.g., RELIANCE, HDFCBANK, ICICIBANK, INFY, TCS, LTIM, KOTAKBANK, LT, AXISBANK, SBIN, etc.)",
+  "expiry_fields_if_applicable": null,
+  "quote_fields_if_applicable": null,
+  "data_quality_checks": [
+    "No missing timestamps during market hours (09:15 to 15:30 IST)",
+    "Non-zero positive volume",
+    "High >= max(open, close) and Low <= min(open, close)"
+  ],
+  "sample_size_minimum": "240 trading sessions (~1 year)",
+  "sample_file_request_notes": "CSV or Parquet files partitioned by date or symbol.",
+  "research_families_enabled": [
+    "CONSTITUENT_INDEX_LEAD_LAG_BREADTH",
+    "DISPERSION_REGIME_AND_INDEX_REVERSAL"
+  ],
+  "execution_families_enabled": [
+    "INDEX_FUTURES_BREADTH_EXECUTION"
+  ]
+}
