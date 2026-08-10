@@ -53,10 +53,12 @@ jobs:
           }
           allowed = {
               '.github/workflows/ai-reliability-pr763-certification.yml',
+              '.github/workflows/ci.yml',
               '.github/workflows/code-excellence-gates.yml',
               '.github/workflows/meg-shadow-system-certification.yml',
               '.github/workflows/pr782-remaining-evidence-contracts.yml',
               '.github/workflows/runtime-authority-cutover.yml',
+              '.github/workflows/tests.yml',
               'docs/agent_reviews/meg803_identity_manifest_repair.md',
               'scripts/adjudicate_full_system_merge_readiness.py',
               'tests/test_kite_read_only_observation_runtime.py',
