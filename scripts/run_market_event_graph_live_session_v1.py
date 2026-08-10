@@ -266,11 +266,12 @@ def main() -> int:
     capture_dir.mkdir(parents=True, exist_ok=False)
     launch_plan_path = capture_dir / "launch_plan.json"
     write_launch_plan(launch_plan_path, launch_plan)
+    commit_sha = _commit_sha()
     manifest = {
         "launch_plan_sha256": plan_sha,
         "master_sha256": master_sha,
         "universe_sha256": registry.canonical_sha256,
-        "commit_sha": _commit_sha(),
+        "commit_sha": commit_sha,
         "session_date": session_date,
         "capture_session_id": run_id,
         "output_paths": {
@@ -299,6 +300,7 @@ def main() -> int:
     env.update(
         {
             "RUN_ID": run_id,
+            "TRADEBOT_COMMIT_SHA": commit_sha,
             "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE": "true",
             "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH": registry.contract_path,
             "MARKET_EVENT_GRAPH_LIVE_SOURCE_PATH": str(capture_dir / "captured_metadata.jsonl"),

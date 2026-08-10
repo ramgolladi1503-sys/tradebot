@@ -352,6 +352,8 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         or os.environ.get("TRADEBOT_COMMIT_SHA")
         or ""
     )
+    if not producer_commit:
+        raise RuntimeError("MEG_PRODUCER_SHA_REQUIRED")
     write_json_atomic(output_root / "process_identity.json", {
         "run_id": run_id, "pid": os.getpid(), "producer_sha": producer_commit,
         "session_root": str(output_root.resolve()), "state": "RUNNING",

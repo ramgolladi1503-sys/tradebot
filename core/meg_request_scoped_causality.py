@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from core.read_only_live_evidence import append_jsonl_record
+from core.ai_reliability_agent.pr763_session import verify_sealed_evidence_root
 
 SCHEMA_VERSION = 1
 FILES = {
@@ -32,6 +33,8 @@ def append_primitives(root: Path, *, session_id: str, producer_commit_sha: str,
                       accepted: Mapping[str, Any] | None = None,
                       persisted: Mapping[str, Any] | None = None) -> None:
     """Append factual rows, refusing incomplete rows before touching disk."""
+    if not producer_commit_sha:
+        raise ValueError("producer_commit_sha_required")
     common = {"schema_version": SCHEMA_VERSION, "session_id": session_id,
               "producer_commit_sha": producer_commit_sha}
     specs = (
@@ -133,9 +136,9 @@ def verify_root(root: Path) -> dict[str, Any]:
         commits = {row.get("producer_commit_sha") for row in all_rows}
         if len(sessions) != 1 or len(commits) != 1 or not all_rows:
             raise ValueError("mixed_or_missing_session")
-        manifest = root / "manifest.json"
-        if not manifest.is_file():
-            raise ValueError("manifest_missing")
+        canonical_gate = verify_sealed_evidence_root(root)
+        if not canonical_gate.passed:
+            raise ValueError("canonical_sealed_root_invalid:" + ",".join(canonical_gate.evidence.get("errors", [])))
         result.update(session_id=next(iter(sessions)), producer_commit_sha=next(iter(commits)))
         for kind, values in rows.items():
             for row in values:
@@ -174,7 +177,7 @@ def verify_root(root: Path) -> dict[str, Any]:
                       causality_violations=causal, accepted_cycle_persistence_mismatch=mismatch,
                       accepted_not_persisted=sorted(accepted_ids - persisted_ids),
                       persisted_without_accepted_authority=sorted(persisted_ids - accepted_ids),
-                      manifest_verified=True, seal_verified=(root / "SEALED").is_file())
+                      manifest_verified=True, seal_verified=True)
         if result["manifest_verified"] and result["seal_verified"] and all(result[k] == 0 for k in (
             "request_id_reuse", "selected_tick_id_reuse", "wrong_generation_ticks",
             "wrong_symbol_ticks", "causality_violations", "accepted_cycle_persistence_mismatch")):
