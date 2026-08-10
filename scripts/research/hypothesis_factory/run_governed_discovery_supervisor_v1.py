@@ -54,82 +54,38 @@ def main():
     out_dir = root / "research" / "evidence" / "governed_discovery_supervisor_v1"
     out_dir.mkdir(parents=True, exist_ok=True)
     
-    # We will pick the first family in the queue that is not completed.
-    # For this exercise, we focus on TIME_OF_DAY_SESSION_POSITION_FAMILY_V1.
-    target_family = FAMILY_QUEUE[0]
+    # After parking TOD family, advance directly to OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1
+    target_family = "OPENING_SESSION_MICROSTRUCTURE_PROXY_FAMILY_V1"
     
     print(f"Targeting: {target_family}")
     
     script_dir = root / "scripts" / "research" / "hypothesis_factory"
     
-    print("Pre-outcome stage starting...")
-    subprocess.check_call([sys.executable, str(script_dir / "build_tod_session_position_candidates_v1.py")], cwd=root)
+    print("Pre-outcome stage starting for Opening Session Microstructure Proxy family...")
+    subprocess.check_call([sys.executable, str(script_dir / "build_opening_session_microstructure_proxy_candidates_v1.py")], cwd=root)
     
-    print("Development-only outcome stage starting...")
+    print("Development-only outcome stage starting for Opening Session Microstructure Proxy family...")
     try:
-        out = subprocess.check_output([sys.executable, str(script_dir / "run_tod_session_position_development_v1.py")], cwd=root).decode("utf-8").strip()
+        out = subprocess.check_output([sys.executable, str(script_dir / "run_opening_session_microstructure_proxy_development_v1.py")], cwd=root).decode("utf-8").strip()
         status = out.split("\n")[-1]
     except subprocess.CalledProcessError as e:
-        print(f"BLOCKED: Outcome stage failed {e}")
+        print(f"BLOCKED: Opening development outcome stage failed {e}")
         sys.exit(1)
         
-    print(f"Outcome status: {status}")
-    
-    if status == "DEVELOPMENT_SUPPORTED_TOO_MANY_REQUIRES_PRE_OUTCOME_NARROWING":
-        print("Too many candidates supported. Initiating pre-outcome structural narrowing...")
-        subprocess.check_call([sys.executable, str(script_dir / "narrow_tod_session_position_candidates_v1.py")], cwd=root)
-        
-        print("Re-running development outcome stage on narrowed candidates...")
-        try:
-            out_narrowed = subprocess.check_output([
-                sys.executable, 
-                str(script_dir / "run_tod_session_position_development_v1.py"),
-                "--candidates-input", "research/evidence/behavior_discovery_engine_v2/NIFTY_tod_session_position_candidates_v1_narrowed.jsonl",
-                "--development-output", "research/evidence/behavior_discovery_engine_v2/NIFTY_tod_session_position_narrowed_development_v1.json"
-            ], cwd=root).decode("utf-8").strip()
-            status = out_narrowed.split("\n")[-1]
-        except subprocess.CalledProcessError as e:
-            print(f"BLOCKED: Narrowed outcome stage failed {e}")
-            sys.exit(1)
-            
-        print(f"Narrowed Outcome status: {status}")
-        
-    if status == "DEVELOPMENT_STRUCTURE_SUPPORTED":
-        print("Executing locked validation on supported narrowed candidates...")
-        try:
-            out_locked = subprocess.check_output([sys.executable, str(script_dir / "run_tod_session_position_locked_validation_v1.py")], cwd=root).decode("utf-8").strip()
-            status = out_locked.split("\n")[-1]
-        except subprocess.CalledProcessError as e:
-            print(f"BLOCKED: Locked validation stage failed {e}")
-            sys.exit(1)
-            
-        print(f"Locked Validation status: {status}")
-
-    if status == "LOCKED_VALIDATION_SUPPORTED":
-        print("Executing WFA robustness, negative controls, and cost-slippage certification layers...")
-        try:
-            out_cert = subprocess.check_output([sys.executable, str(script_dir / "run_tod_session_position_certification_layers_v1.py")], cwd=root).decode("utf-8").strip()
-            status = out_cert.split("\n")[-1]
-        except subprocess.CalledProcessError as e:
-            print(f"BLOCKED: Certification layers stage failed {e}")
-            sys.exit(1)
-            
-        print(f"Certification Status: {status}")
+    print(f"Opening Development Outcome status: {status}")
     
     with (out_dir / "run_manifest.json").open("w") as f:
         json.dump({
+            "target_family": target_family,
             "status": status, 
-            "locked_outcomes_accessed": True, 
+            "locked_outcomes_accessed": False, 
             "edge_claimed": False,
             "structural_edge_certified": False,
             "execution_viable": False
         }, f, indent=2)
         
     with (out_dir / "family_queue.json").open("w") as f:
-        if status in ("NO_LOCKED_SUPPORTED_TOD_SESSION_POSITION_CANDIDATE", "NO_STRUCTURAL_EDGE_FOUND", "STRUCTURAL_EDGE_NOT_CERTIFIED"):
-            json.dump({"queue": FAMILY_QUEUE[1:]}, f, indent=2)
-        else:
-            json.dump({"queue": FAMILY_QUEUE}, f, indent=2)
+        json.dump({"queue": FAMILY_QUEUE[2:]}, f, indent=2)
         
     with (out_dir / "family_results.jsonl").open("a") as f:
         f.write(json.dumps({"family": target_family, "status": status, "timestamp": "2026-08-10T00:00:00Z"}) + "\n")
