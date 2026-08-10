@@ -137,7 +137,10 @@ def _assert_dirty_candidate(candidate, reason: str) -> None:
     assert reason in _list_field(candidate, "gate_reasons")
     assert reason in _list_field(candidate, "tradable_reasons_blocking")
     assert _field(candidate, "candidate_status") == "advisory_only"
-    assert _field(candidate, "execution_status") == "advisory_only"
+    # Candidate lifecycle and execution truth are distinct. Dirty rows remain
+    # advisory candidates, while canonical execution truth labels them as not
+    # executable rather than implying an executable advisory state.
+    assert _field(candidate, "execution_status") == "not_executable"
     assert _field(candidate, "execution_allowed") is False
     assert _field(candidate, "execution_ok") is False
     assert _field(candidate, "tradable") is False
