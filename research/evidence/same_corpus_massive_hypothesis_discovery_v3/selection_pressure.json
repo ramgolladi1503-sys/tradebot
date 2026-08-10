@@ -5,7 +5,7 @@
   "development_tests_run": 945,
   "effective_trials_estimate": 1417.5,
   "selection_method": "PRE_OUTCOME_GRAMMAR_DISCOVERY_V3",
-  "survivor_count": 0,
+  "survivor_count": 63,
   "selection_bias_risk": "HIGH",
   "locked_gate_allowed": true,
   "restriction_reason": "REQUIRES_STRICT_PRE_OUTCOME_NARROWING_MAX_5_SURVIVORS"

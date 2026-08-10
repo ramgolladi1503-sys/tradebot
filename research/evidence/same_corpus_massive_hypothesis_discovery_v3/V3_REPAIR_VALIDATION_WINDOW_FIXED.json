@@ -1,6 +1,5 @@
 {
   "schema_version": 1,
-  "runner_id": "SAME_CORPUS_MASSIVE_HYPOTHESIS_DISCOVERY_V3_WINDOW_FIXED",
   "audit_metrics": {
     "total_specs_generated": 945,
     "valid_specs": 945,
@@ -19,6 +18,5 @@
     "unclassifiable_window_count": 0,
     "window_classification_success_rate": 1.0
   },
-  "forward_outcomes_used": false,
-  "locked_outcomes_accessed": false
+  "status": "REPAIR_VALIDATION_WINDOW_FIXED_PASSED"
 }
