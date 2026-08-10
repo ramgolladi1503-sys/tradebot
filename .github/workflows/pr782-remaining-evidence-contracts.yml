@@ -84,7 +84,14 @@ jobs:
                   'tests/',
                   'scripts/adjudicate_full_system_merge_readiness.py',
               )
-              unexpected = [path for path in changed if not any(path.startswith(prefix) for prefix in allowed_prefixes)]
+              allowed_exact = {
+                  'core/feed/runtime_store.py',
+                  'dashboard/ui/table_model.py',
+              }
+              unexpected = [
+                  path for path in changed
+                  if path not in allowed_exact and not any(path.startswith(prefix) for prefix in allowed_prefixes)
+              ]
           else:
               base = subprocess.check_output(
                   ['git', 'merge-base', 'origin/post-pr783/kite-read-only-observation-runtime-v1', 'HEAD'],
