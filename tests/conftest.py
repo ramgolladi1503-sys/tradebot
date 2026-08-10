@@ -30,6 +30,23 @@ _LEGACY_IMMEDIATE_TICK_DB_FILES = {
     "test_tick_schema_consistency.py",
     "test_ws_tick_ingestion_updates_tick_store.py",
 }
+_RUNTIME_PERSISTENCE_READ_AFTER_WRITE_TESTS = {
+    "test_runtime_store_writes_canonical_truth_to_required_artifacts",
+    "test_runtime_store_feed_truth_fails_closed_when_ticks_missing",
+    "test_feed_debug_uses_feed_runtime_row_when_present",
+    "test_feed_freshness_prefers_runtime_snapshot_over_stale_db",
+    "test_runtime_store_roundtrip_with_state_fields",
+    "test_runtime_store_connection_uses_busy_tolerant_settings",
+    "test_start_depth_ws_writes_import_missing_state",
+    "test_write_runtime_snapshot_emits_transport_health_fields",
+    "test_recovery_blocked_snapshot_sets_executable_false_everywhere",
+    "test_healthy_runtime_snapshot_still_reports_executable_true_everywhere",
+    "test_runtime_snapshot_mirrors_share_canonical_blocked_truth",
+}
+_RUNTIME_PERSISTENCE_THREAD_PATCH_TEST_FILES = {
+    "test_kite_depth_restart.py",
+    "test_kite_depth_ws_stability.py",
+}
 
 
 def pytest_collection_modifyitems(items):
@@ -144,6 +161,50 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
         import core.feed.runtime_store as runtime_store
         if hasattr(runtime_store, "reset_runtime_persistence_for_tests"):
             runtime_store.reset_runtime_persistence_for_tests()
+
+        # Some websocket unit tests replace ws.threading.Thread. Because
+        # ``threading`` is a shared module object, that replacement would also
+        # replace runtime_store.threading.Thread and make persistence-worker
+        # creation look like a websocket restart. Start the real persistence
+        # worker before those test-local thread substitutions are installed.
+        if test_name in _RUNTIME_PERSISTENCE_THREAD_PATCH_TEST_FILES:
+            runtime_store._ensure_runtime_worker()
+
+        # Production runtime persistence is asynchronous. A small set of older
+        # tests intentionally validates the persisted DB/artifact immediately
+        # after a write. Preserve the real async worker and only wait for its
+        # queue to drain at the exact legacy assertion boundary.
+        if request.node.name in _RUNTIME_PERSISTENCE_READ_AFTER_WRITE_TESTS:
+            original_runtime_write = runtime_store.write_runtime_snapshot
+
+            def write_runtime_snapshot_and_wait(payload):
+                ok = original_runtime_write(payload)
+                if ok:
+                    runtime_store._RUNTIME_WRITE_QUEUE.join()
+                return ok
+
+            monkeypatch.setattr(
+                runtime_store,
+                "write_runtime_snapshot",
+                write_runtime_snapshot_and_wait,
+            )
+
+            test_module = request.node.module
+            if getattr(test_module, "write_runtime_snapshot", None) is original_runtime_write:
+                monkeypatch.setattr(
+                    test_module,
+                    "write_runtime_snapshot",
+                    write_runtime_snapshot_and_wait,
+                )
+
+            with contextlib.suppress(Exception):
+                import core.kite_depth_ws as depth_ws
+                if getattr(depth_ws, "write_feed_runtime_snapshot", None) is original_runtime_write:
+                    monkeypatch.setattr(
+                        depth_ws,
+                        "write_feed_runtime_snapshot",
+                        write_runtime_snapshot_and_wait,
+                    )
 
     # Tick persistence also carries process-wide init/shutdown state. Restore a
     # clean test worker state without changing production lifecycle semantics.
