@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "current_head": "943cbcb7675e6c8376e372a2c708fd864736ae06",
+  "current_head_message": "research(v4): record evidence provenance drift audit",
+  "claimed_latest_commit_from_prior_payload": "943cbcb76",
+  "commit_943cbcb76_message": "research(v4): record evidence provenance drift audit",
+  "commit_943cbcb76_only_added_drift_audit": true,
+  "branch_tip_if_different": "943cbcb7675e6c8376e372a2c708fd864736ae06",
+  "drift_audit_evidence_valid_for_latest_head": false,
+  "campaign_manifest_sha": "eda7d4205",
+  "negative_controls_sha": "eda7d4205",
+  "certification_status_sha": "eda7d4205",
+  "rerun_evidence_commit_detected": false,
+  "rerun_evidence_committed": false,
+  "reconciliation_complete": false,
+  "required_action": "RERUN_AND_COMMIT_EVIDENCE_OR_UPDATE_AUDIT_WITH_EXACT_EVIDENCE_COMMIT"
+}

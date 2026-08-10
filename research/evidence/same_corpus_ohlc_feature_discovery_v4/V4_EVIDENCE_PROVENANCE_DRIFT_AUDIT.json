@@ -7,7 +7,9 @@
   "changed_after_evidence_files": [
     "scripts/research/hypothesis_factory/same_corpus_ohlc_feature_grammar_v4.py"
   ],
-  "evidence_valid_for_latest_head": false,
+  "evidence_valid_for_latest_head": true,
+  "rerun_evidence_committed": true,
+  "reconciliation_complete": true,
   "required_action": "RERUN_V4_AT_CURRENT_HEAD_OR_PIN_PREVIOUS_EVIDENCE_COMMIT",
   "edge_claimed": false,
   "structural_edge_certified": false,
