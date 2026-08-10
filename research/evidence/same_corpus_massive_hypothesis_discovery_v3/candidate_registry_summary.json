@@ -1,5 +1,14 @@
 {
-  "total_candidates": 1000,
+  "schema_version": 1,
+  "total_specs_generated": 945,
+  "valid_specs": 945,
+  "invalid_specs": 0,
+  "blocked_specs": 0,
+  "placeholder_specs": 0,
+  "duplicate_specs": 0,
+  "specs_with_unenforced_fields": 0,
+  "specs_with_window_policy": 945,
+  "specs_with_predicate_tree": 945,
   "edge_claimed": false,
   "forward_outcomes_used": false,
   "locked_outcomes_accessed": false
