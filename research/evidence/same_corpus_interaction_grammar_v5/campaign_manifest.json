@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "runner_id": "SAME_CORPUS_INTERACTION_GRAMMAR_V5",
+  "campaign_version": "v5",
+  "development_only": true,
+  "forward_outcomes_computed": true,
+  "forward_outcomes_scope": "development_sessions_only",
+  "locked_outcomes_accessed": false,
+  "edge_claimed": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "structural_edges_certified_count": 0,
+  "candidate_specs_generated": 123,
+  "valid_candidate_specs_evaluated": 123,
+  "development_tests_run": 123,
+  "development_survivors_count": 0,
+  "selection_bias_risk": "LOW"
+}

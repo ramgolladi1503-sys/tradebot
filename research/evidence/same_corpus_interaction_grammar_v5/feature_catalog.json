@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "features": [
+    {
+      "feature_name": "state_persistence_count",
+      "inputs": [
+        "bde2_states"
+      ],
+      "causal_availability_time": "COMPLETED_BAR",
+      "uses_completed_bars_only": true,
+      "uses_future_data": false,
+      "missing_data_behavior": "BLOCK",
+      "validation_examples": [
+        "count of consecutive identical state classifications"
+      ]
+    },
+    {
+      "feature_name": "bar_body_ratio",
+      "inputs": [
+        "completed_ohlc_bars"
+      ],
+      "causal_availability_time": "COMPLETED_BAR",
+      "uses_completed_bars_only": true,
+      "uses_future_data": false,
+      "missing_data_behavior": "BLOCK",
+      "validation_examples": [
+        "abs(close-open)/(high-low)"
+      ]
+    },
+    {
+      "feature_name": "session_range_percentile_so_far",
+      "inputs": [
+        "completed_ohlc_bars"
+      ],
+      "causal_availability_time": "COMPLETED_BAR",
+      "uses_completed_bars_only": true,
+      "uses_future_data": false,
+      "missing_data_behavior": "BLOCK",
+      "validation_examples": [
+        "(close-session_low)/(session_high-session_low)"
+      ]
+    },
+    {
+      "feature_name": "prior_session_close_location",
+      "inputs": [
+        "prior_session_ohlc"
+      ],
+      "causal_availability_time": "PRIOR_SESSION_CLOSE",
+      "uses_completed_bars_only": true,
+      "uses_future_data": false,
+      "missing_data_behavior": "BLOCK",
+      "validation_examples": [
+        "prior_close_location_in_prior_range"
+      ]
+    },
+    {
+      "feature_name": "retest_count_so_far",
+      "inputs": [
+        "completed_ohlc_bars"
+      ],
+      "causal_availability_time": "COMPLETED_BAR",
+      "uses_completed_bars_only": true,
+      "uses_future_data": false,
+      "missing_data_behavior": "BLOCK",
+      "validation_examples": [
+        "count of touches within 10bps of session extreme"
+      ]
+    },
+    {
+      "feature_name": "gap_from_prior_close",
+      "inputs": [
+        "session_open",
+        "prior_session_close"
+      ],
+      "causal_availability_time": "SESSION_OPEN",
+      "uses_completed_bars_only": true,
+      "uses_future_data": false,
+      "missing_data_behavior": "BLOCK",
+      "validation_examples": [
+        "(open-prior_close)/prior_close"
+      ]
+    }
+  ]
+}

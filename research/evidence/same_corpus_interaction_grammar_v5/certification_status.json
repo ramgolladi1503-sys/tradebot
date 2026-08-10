@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "candidates_evaluated": 123,
+  "development_survivors_count": 0,
+  "locked_validation_run": false,
+  "locked_survivors_count": 0,
+  "negative_controls_status": "NOT_APPLICABLE_NO_LOCKED_SURVIVORS",
+  "historical_candidate_supported": false,
+  "structural_edge_certified": false,
+  "edge_claimed": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "status": "V5_NO_DEVELOPMENT_SURVIVORS"
+}
