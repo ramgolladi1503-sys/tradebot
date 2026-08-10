@@ -174,6 +174,8 @@ _FIRST_LIVE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _SUBSCRIPTION_REQUEST_ID_BY_TOKEN: dict[int, str] = {}
 _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN: dict[int, str] = {}
+_LATEST_POST_REQUEST_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_LATEST_POST_REQUEST_TICK_ID_BY_TOKEN: dict[int, str] = {}
 _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
@@ -397,6 +399,8 @@ def _record_subscription_request_succeeded(tokens: Sequence[int]) -> None:
             request_sequence = _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN[token]
             _SUBSCRIPTION_REQUEST_ID_BY_TOKEN[token] = f"{identity['feed_session_id']}:{identity['reconnect_generation']}:{request_sequence}:{token}"
             _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.pop(token, None)
+            _LATEST_POST_REQUEST_TICK_EPOCH_BY_TOKEN.pop(token, None)
+            _LATEST_POST_REQUEST_TICK_ID_BY_TOKEN.pop(token, None)
             if token in _MODE_COMMAND_FINAL_FULL_TOKENS:
                 _MODE_COMMAND_FINAL_FULL_TOKENS.discard(token)
         _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = epoch
@@ -613,6 +617,8 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "request_generation": _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN.get(token_int),
             "first_post_request_tick_id": _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.get(token_int),
             "selected_post_request_tick_id": _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.get(token_int),
+            "latest_post_request_tick_epoch": _LATEST_POST_REQUEST_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "latest_post_request_tick_id": _LATEST_POST_REQUEST_TICK_ID_BY_TOKEN.get(token_int),
             "latest_live_tick_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
             "first_full_payload_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
             "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
@@ -1624,6 +1630,8 @@ _FIRST_LIVE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_POST_REQUEST_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _SUBSCRIPTION_REQUEST_ID_BY_TOKEN: dict[int, str] = {}
 _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN: dict[int, str] = {}
+_LATEST_POST_REQUEST_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_LATEST_POST_REQUEST_TICK_ID_BY_TOKEN: dict[int, str] = {}
 _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN: dict[int, float] = {}
@@ -1766,6 +1774,8 @@ def _record_subscription_request_succeeded(tokens: Sequence[int]) -> None:
             request_sequence = _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN[token]
             _SUBSCRIPTION_REQUEST_ID_BY_TOKEN[token] = f"{identity['feed_session_id']}:{identity['reconnect_generation']}:{request_sequence}:{token}"
             _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.pop(token, None)
+            _LATEST_POST_REQUEST_TICK_EPOCH_BY_TOKEN.pop(token, None)
+            _LATEST_POST_REQUEST_TICK_ID_BY_TOKEN.pop(token, None)
             if token in _MODE_COMMAND_FINAL_FULL_TOKENS:
                 _MODE_COMMAND_FINAL_FULL_TOKENS.discard(token)
         _SUBSCRIPTION_REQUEST_SUCCEEDED_EPOCH = epoch
@@ -1913,6 +1923,8 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "request_generation": _LATEST_SUBSCRIBE_SEQUENCE_BY_TOKEN.get(token_int),
             "first_post_request_tick_id": _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.get(token_int),
             "selected_post_request_tick_id": _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.get(token_int),
+            "latest_post_request_tick_epoch": _LATEST_POST_REQUEST_TICK_EPOCH_BY_TOKEN.get(token_int),
+            "latest_post_request_tick_id": _LATEST_POST_REQUEST_TICK_ID_BY_TOKEN.get(token_int),
             "latest_live_tick_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
             "first_full_payload_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
             "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
@@ -6447,6 +6459,8 @@ def on_ticks(ws, ticks):
                     identity = get_current_feed_session_identity()
                     tick_id = f"{identity['feed_session_id']}:{identity['reconnect_generation']}:{_FEED_ON_TICKS_ROW_SEQ}:{token_int}"
                     _FIRST_POST_REQUEST_TICK_ID_BY_TOKEN.setdefault(int(token_int), tick_id)
+                    _LATEST_POST_REQUEST_TICK_EPOCH_BY_TOKEN[int(token_int)] = float(now_epoch)
+                    _LATEST_POST_REQUEST_TICK_ID_BY_TOKEN[int(token_int)] = tick_id
             if payload_tick_epoch is not None:
                 _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.setdefault(int(token_int), float(payload_tick_epoch))
         observation_identity = (

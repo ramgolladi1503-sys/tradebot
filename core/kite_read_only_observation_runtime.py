@@ -187,6 +187,7 @@ def write_meg_wiring_evidence(
     session_date: str | None = None,
     run_id: str | None = None,
     interval_end_epoch: float | None = None,
+    cycle_cutoff_epoch: float | None = None,
     producer_commit: str = "",
 ) -> dict[str, Any]:
     """Persist latest measured facts plus append-only traversal/export ledgers."""
@@ -217,6 +218,7 @@ def write_meg_wiring_evidence(
         cycle_id=str(payload.get("source_interval_identity") or f"{resolved_session}:{cycle_count}"),
         accepted=bool(getattr(result, "exported", False)),
         subscription_evidence=dict(payload.get("subscription_evidence") or {}),
+        cycle_cutoff_epoch=cycle_cutoff_epoch,
     )
     payload.update(_measured_meg_facts(bridge=bridge, result=result))
     payload["market_event_graph_traversal_count"] = int(payload.get("cumulative_session_export_count") or 0)
@@ -385,6 +387,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                     session_date=session_date,
                     run_id=run_id,
                     interval_end_epoch=interval_end,
+                    cycle_cutoff_epoch=cycle_cutoff.timestamp(),
                     producer_commit=producer_commit,
                 )
                 if interval_end is not None:

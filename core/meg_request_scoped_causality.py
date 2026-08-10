@@ -71,9 +71,29 @@ def append_primitives(root: Path, *, session_id: str, producer_commit_sha: str,
 
 def append_meg_cycle_primitives(root: Path, *, session_id: str, producer_commit_sha: str,
                                 cycle_id: str, accepted: bool,
-                                subscription_evidence: Mapping[str, Any]) -> None:
+                                subscription_evidence: Mapping[str, Any],
+                                cycle_cutoff_epoch: float | None = None) -> None:
     """Project authoritative request/tick/cycle facts into append-only ledgers."""
+    accepted_path = root / FILES["accepted"]
+    if accepted and accepted_path.is_file():
+        prior_cycles = {
+            json.loads(line).get("cycle_id")
+            for line in accepted_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        }
+        if cycle_id in prior_cycles:
+            return
     lifecycle = subscription_evidence.get("token_lifecycle") or {}
+    used_tick_ids = set()
+    tick_path = root / FILES["tick"]
+    if tick_path.is_file():
+        used_tick_ids = {
+            json.loads(line).get("selected_tick_id")
+            for line in tick_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        }
+    cycle_ticks: list[tuple[Mapping[str, Any], str, float]] = []
+    request_rows: list[dict[str, Any]] = []
     for item in lifecycle.values():
         request_id = item.get("request_id")
         if not request_id or item.get("subscribe_call_succeeded_epoch") is None:
@@ -85,16 +105,30 @@ def append_meg_cycle_primitives(root: Path, *, session_id: str, producer_commit_
                       reconnect_generation=item.get("reconnect_generation"),
                       expected_instrument_token=item.get("instrument_token"),
                       expected_symbol=item.get("symbol"))
+        request_rows.append(common)
+        tick_id = item.get("latest_post_request_tick_id") or item.get("selected_post_request_tick_id")
+        tick_epoch = item.get("latest_post_request_tick_epoch")
+        if tick_epoch is None:
+            tick_epoch = item.get("first_post_request_tick_epoch")
+        if accepted:
+            if not tick_id or tick_epoch is None:
+                raise ValueError("missing_current_cycle_selected_tick")
+            if cycle_cutoff_epoch is not None and float(tick_epoch) > float(cycle_cutoff_epoch):
+                raise ValueError("future_selected_tick")
+            if tick_id in used_tick_ids or any(tick_id == prior_id for _, prior_id, _ in cycle_ticks):
+                raise ValueError("selected_tick_id_reuse")
+            cycle_ticks.append((item, str(tick_id), float(tick_epoch)))
+    for request in request_rows:
         append_primitives(root, session_id=session_id, producer_commit_sha=producer_commit_sha,
-                          request=common)
-        tick_id = item.get("selected_post_request_tick_id")
-        if accepted and tick_id and item.get("first_post_request_tick_epoch") is not None:
+                          request=request)
+    if accepted:
+        for item, tick_id, tick_epoch in cycle_ticks:
             append_primitives(root, session_id=session_id, producer_commit_sha=producer_commit_sha,
                               tick=dict(selected_tick_event_id=f"{cycle_id}:{item['instrument_token']}",
-                                        cycle_id=cycle_id, request_id=request_id,
+                                        cycle_id=cycle_id, request_id=item["request_id"],
                                         request_generation=item.get("request_generation"),
                                         selected_tick_id=tick_id,
-                                        selected_tick_receipt_timestamp=item.get("first_post_request_tick_epoch"),
+                                        selected_tick_receipt_timestamp=tick_epoch,
                                         selected_tick_feed_session_id=item.get("feed_session_id"),
                                         selected_tick_reconnect_generation=item.get("reconnect_generation"),
                                         selected_tick_instrument_token=item.get("instrument_token"),

@@ -58,6 +58,75 @@ def test_runtime_projection_is_idempotent(tmp_path):
     assert verify_root(root)["verdict"] == "PASS_MEG_REQUEST_SCOPED_CAUSALITY"
 
 
+def _multi_cycle_evidence(cycle: int, *, fresh: bool = True, cutoff: float = 100.0):
+    lifecycle = {}
+    for token in range(1000, 1051):
+        lifecycle[str(token)] = {
+            "request_id": f"request-{token}",
+            "request_generation": 1,
+            "subscribe_call_succeeded_epoch": 10.0,
+            "feed_session_id": "feed-1",
+            "reconnect_generation": 1,
+            "instrument_token": token,
+            "symbol": f"SYM{token}",
+            "latest_post_request_tick_id": f"tick-{cycle}-{token}" if fresh else f"tick-1-{token}",
+            "latest_post_request_tick_epoch": float(20 + cycle),
+        }
+    return {"token_lifecycle": lifecycle}
+
+
+def test_three_accepted_cycles_use_causally_new_ticks(tmp_path):
+    root = tmp_path / "multi"; root.mkdir()
+    for token in range(1000, 1051):
+        append_primitives(root, session_id="s1", producer_commit_sha="c1", request={
+            "request_event_id": f"request-{token}", "request_id": f"request-{token}",
+            "request_generation": 1, "request_success_timestamp": 10.0,
+            "feed_session_id": "feed-1", "reconnect_generation": 1,
+            "expected_instrument_token": token, "expected_symbol": f"SYM{token}",
+        })
+    for cycle in (1, 2, 3):
+        append_meg_cycle_primitives(root, session_id="s1", producer_commit_sha="c1",
+                                    cycle_id=f"cycle-{cycle}", accepted=True,
+                                    subscription_evidence=_multi_cycle_evidence(cycle),
+                                    cycle_cutoff_epoch=100.0)
+    seal_evidence_root(root)
+    verified = verify_root(root)
+    assert verified["selected_tick_event_count"] == 153
+    assert verified["selected_tick_id_reuse"] == 0
+    assert verified["verdict"] == "PASS_MEG_REQUEST_SCOPED_CAUSALITY"
+
+
+def test_cycle_without_new_tick_fails_closed(tmp_path):
+    root = tmp_path / "stale"; root.mkdir()
+    evidence = _multi_cycle_evidence(1)
+    for token in range(1000, 1051):
+        append_primitives(root, session_id="s1", producer_commit_sha="c1", request={
+            "request_event_id": f"request-{token}", "request_id": f"request-{token}",
+            "request_generation": 1, "request_success_timestamp": 10.0,
+            "feed_session_id": "feed-1", "reconnect_generation": 1,
+            "expected_instrument_token": token, "expected_symbol": f"SYM{token}",
+        })
+    append_meg_cycle_primitives(root, session_id="s1", producer_commit_sha="c1",
+                                cycle_id="cycle-1", accepted=True,
+                                subscription_evidence=evidence, cycle_cutoff_epoch=100.0)
+    import pytest
+    with pytest.raises(ValueError, match="selected_tick_id_reuse"):
+        append_meg_cycle_primitives(root, session_id="s1", producer_commit_sha="c1",
+                                    cycle_id="cycle-2", accepted=True,
+                                    subscription_evidence=_multi_cycle_evidence(2, fresh=False),
+                                    cycle_cutoff_epoch=100.0)
+
+
+def test_future_tick_fails_closed(tmp_path):
+    root = tmp_path / "future"; root.mkdir()
+    import pytest
+    with pytest.raises(ValueError, match="future_selected_tick"):
+        append_meg_cycle_primitives(root, session_id="s1", producer_commit_sha="c1",
+                                    cycle_id="cycle-1", accepted=True,
+                                    subscription_evidence=_multi_cycle_evidence(1),
+                                    cycle_cutoff_epoch=20.0)
+
+
 def test_real_observation_persistence_path_seals_and_verifies(tmp_path):
     root = tmp_path / "session"; root.mkdir()
     source = root / "source.jsonl"
