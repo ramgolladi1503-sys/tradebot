@@ -46,7 +46,7 @@ Review outcome:
 - The H1 strategy module emits only shadow intent records and intentionally excludes routeable execution fields such as `tradingsymbol`, `instrument_token`, `quantity`, `order_type`, `product_type`, broker order id, and exchange order id.
 - Authority flags remain false in emitted records.
 
-## Grill Me
+## Grill Me Review
 
 Attack questions:
 
@@ -61,7 +61,7 @@ Attack questions:
 5. Does it prove structural edge certification?
    - Expected answer: no.
 
-## Hermes
+## Hermes Review
 
 Message to future operator:
 
@@ -78,7 +78,7 @@ python scripts/research/hypothesis_factory/run_h1_shadow_daily_adapter.py \
 
 Do not use this branch to enable paper trading or live trading.
 
-## GSD
+## GSD Review
 
 Get-stuff-done checklist:
 
@@ -91,7 +91,7 @@ Get-stuff-done checklist:
 - [ ] CI green.
 - [ ] Offline certification output committed only after repository-native execution if required by reviewer.
 
-## QA/Safety
+## QA / Safety Review
 
 Safety invariants required before merge:
 
