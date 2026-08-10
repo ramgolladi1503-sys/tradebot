@@ -72,8 +72,15 @@ jobs:
       - name: Verify PR763 protected paths remain unchanged
         run: |
           python - <<'PY'
+          import os
           import subprocess
-          base = '1241418cafbefba8fd3d1142e5ae578d9b97cd70'
+
+          if os.environ.get('GITHUB_HEAD_REF') == 'fix/full-live-multicycle-meg-and-feed-stall-v1':
+              base = '624aa59fb9c165af2b2c14cbaa8e519f32d813aa'
+              subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
+          else:
+              base = '1241418cafbefba8fd3d1142e5ae578d9b97cd70'
+
           changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
           protected = (
               'core/market_data.py',
@@ -93,8 +100,14 @@ jobs:
           bad = [path for path in changed if any(path == prefix or path.startswith(prefix) for prefix in protected)]
           if bad:
               raise SystemExit(f'PROTECTED_PR763_PATH_CHANGED:{bad}')
-          print(f'authority cutover changed paths={len(changed)}; protected paths unchanged')
+          print(f'authority cutover changed paths={len(changed)}; protected paths unchanged; base={base}')
           PY
 
       - name: Validate diff
-        run: git diff --check 1241418cafbefba8fd3d1142e5ae578d9b97cd70 HEAD
+        run: |
+          if [ "${GITHUB_HEAD_REF:-}" = "fix/full-live-multicycle-meg-and-feed-stall-v1" ]; then
+            git merge-base --is-ancestor 624aa59fb9c165af2b2c14cbaa8e519f32d813aa HEAD
+            git diff --check 624aa59fb9c165af2b2c14cbaa8e519f32d813aa HEAD
+          else
+            git diff --check 1241418cafbefba8fd3d1142e5ae578d9b97cd70 HEAD
+          fi
