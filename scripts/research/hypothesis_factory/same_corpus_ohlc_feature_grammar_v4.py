@@ -21,7 +21,7 @@ def generate_candidate_specs(max_candidates: int = 1500, max_family_groups: int 
 
     # Category 1: Bar Morphology + Window Predicates
     for w in WINDOW_CODES:
-        for b_thresh in BODY_RATIO_THRESHOLDS:
+        for b_thresh in [0.50, 0.60, 0.70, 0.80]:
             for st in PRIMARY_STATES:
                 cid = f"V4_PRED_BAR_BODY_{w}_B{int(b_thresh*100)}_{st}"
                 if cid in seen_ids: continue
@@ -43,7 +43,7 @@ def generate_candidate_specs(max_candidates: int = 1500, max_family_groups: int 
                     "confirmation_time_policy": "BAR_CLOSE",
                     "window_policy": w,
                     "predicate_tree": tree,
-                    "parameters": {"window": w, "body_threshold": b_thresh, "state": st},
+                    "parameters": {"window": w, "threshold": b_thresh, "state": st},
                     "lookback_bars": 1,
                     "uses_completed_bars_only": True,
                     "forward_outcomes_used": False,
@@ -57,9 +57,9 @@ def generate_candidate_specs(max_candidates: int = 1500, max_family_groups: int 
 
     # Category 2: Upper / Lower Wick Rejection Predicates
     for w in WINDOW_CODES:
-        for w_thresh in WICK_RATIO_THRESHOLDS:
+        for w_thresh in [0.25, 0.35, 0.50]:
             for w_type, cond_type, label in [("UPPER", "upper_wick_ratio_gte", "Upper Wick"), ("LOWER", "lower_wick_ratio_gte", "Lower Wick")]:
-                for st in ["COMPRESSION", "EXPANSION", "RANGE_BALANCE", "UPPER_REJECTION", "LOWER_REJECTION"]:
+                for st in PRIMARY_STATES:
                     cid = f"V4_PRED_WICK_{w}_{w_type}_W{int(w_thresh*100)}_{st}"
                     if cid in seen_ids: continue
                     tree = {
@@ -80,7 +80,7 @@ def generate_candidate_specs(max_candidates: int = 1500, max_family_groups: int 
                         "confirmation_time_policy": "BAR_CLOSE",
                         "window_policy": w,
                         "predicate_tree": tree,
-                        "parameters": {"window": w, "wick_threshold": w_thresh, "wick_type": w_type, "state": st},
+                        "parameters": {"window": w, "threshold": w_thresh, "state": st},
                         "lookback_bars": 1,
                         "uses_completed_bars_only": True,
                         "forward_outcomes_used": False,
@@ -93,8 +93,8 @@ def generate_candidate_specs(max_candidates: int = 1500, max_family_groups: int 
                     if len(candidates) >= max_candidates: return candidates
 
     # Category 3: Session Range Percentile Location Predicates
-    for w in ["MID_SESSION", "PRE_CLOSE_60", "PRE_CLOSE_30"]:
-        for p_val, cond_type, p_label in [(0.80, "range_percentile_gte", "Upper Range"), (0.20, "range_percentile_lte", "Lower Range")]:
+    for w in WINDOW_CODES:
+        for p_val, cond_type, p_label in [(0.80, "range_percentile_gte", "Upper Range"), (0.70, "range_percentile_gte", "Upper Mid Range"), (0.30, "range_percentile_lte", "Lower Mid Range"), (0.20, "range_percentile_lte", "Lower Range")]:
             for st in PRIMARY_STATES:
                 cid = f"V4_PRED_RANGE_LOC_{w}_{p_label.replace(' ', '_')}_{st}"
                 if cid in seen_ids: continue
@@ -116,7 +116,7 @@ def generate_candidate_specs(max_candidates: int = 1500, max_family_groups: int 
                     "confirmation_time_policy": "BAR_CLOSE",
                     "window_policy": w,
                     "predicate_tree": tree,
-                    "parameters": {"window": w, "range_percentile": p_val, "state": st},
+                    "parameters": {"window": w, "threshold": p_val, "state": st},
                     "lookback_bars": 1,
                     "uses_completed_bars_only": True,
                     "forward_outcomes_used": False,
