@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "go_no_go_plans": [
+    {
+      "sample_type": "NIFTY_50_CONSTITUENT_1MIN_OR_5MIN_OHLCV",
+      "minimum_duration": "1 month for feasibility validation, 12+ months for full research",
+      "required_symbols": ["RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS", "LTIM", "KOTAKBANK", "LT", "AXISBANK", "SBIN"],
+      "required_fields": ["timestamp", "symbol", "open", "high", "low", "close", "volume"],
+      "data_quality_checks": [
+        "Timestamp alignment across constituents",
+        "Non-zero positive volume during market hours",
+        "High/Low sanity bounds"
+      ],
+      "first_research_family": "CONSTITUENT_INDEX_LEAD_LAG_BREADTH",
+      "development_gate": "Minimum 20 distinct sessions, return magnitude >= 15bps in 60% dev split",
+      "locked_gate": "Statistically significant return in 20% locked holdout",
+      "negative_controls": "Wrong window control, symbol permutation control, sector placebo",
+      "cost_proxy_without_bidask": "Apply 3.0 bps fixed index cost proxy",
+      "decision_threshold_to_buy_full_dataset": "Survives negative controls with > 10bps net edge on 1-month sample",
+      "decision_threshold_to_reject_dataset_purchase": "Fails negative controls or exhibits < 5bps return in development"
+    },
+    {
+      "sample_type": "NIFTY_SPOT_PLUS_NEAR_MONTH_FUTURES_1MIN_OHLCV",
+      "minimum_duration": "1 month sample for validation",
+      "required_symbols": ["NIFTY_SPOT", "NIFTY_NEAR_FUTURES"],
+      "required_fields": ["timestamp", "spot_close", "futures_symbol", "futures_close", "volume", "expiry"],
+      "data_quality_checks": [
+        "Basis boundary check (basis within +/- 2.5% of spot)"
+      ],
+      "first_research_family": "FUTURES_SPOT_BASIS_DISLOCATION",
+      "development_gate": "Minimum 15 sessions, return magnitude >= 15bps",
+      "locked_gate": "Locked holdout support",
+      "negative_controls": "Wrong time window, basis sign inversion, expiry placebo",
+      "cost_proxy_without_bidask": "Apply 2.5 bps futures cost proxy",
+      "decision_threshold_to_buy_full_dataset": "Survives negative controls with > 8bps net edge",
+      "decision_threshold_to_reject_dataset_purchase": "Fails negative controls or zero development survivors"
+    }
+  ]
+}

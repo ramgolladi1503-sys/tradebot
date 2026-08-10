@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "mechanisms": [
+    {
+      "mechanism_family": "CONSTITUENT_INDEX_LEAD_LAG_BREADTH",
+      "requires_tick_bidask": false,
+      "minimum_non_tick_data_required": "5-min OHLCV for NIFTY 50 constituent stocks",
+      "can_test_directional_signal": true,
+      "can_test_execution_viability": false,
+      "available_in_repo_now": false,
+      "blocked_reason": "MISSING_CONSTITUENT_OHLC_HISTORICAL_DATASET",
+      "expected_information_gain": "HIGH",
+      "false_discovery_risk": "LOW_TO_MEDIUM",
+      "execution_risk": "LOW",
+      "recommended_priority": 1,
+      "verdict": "FEASIBLE_WITHOUT_TICK_BIDASK_BUT_REQUIRES_SAMPLE"
+    },
+    {
+      "mechanism_family": "FUTURES_SPOT_BASIS_DISLOCATION",
+      "requires_tick_bidask": false,
+      "minimum_non_tick_data_required": "1-min NIFTY near-month futures OHLCV + spot index",
+      "can_test_directional_signal": true,
+      "can_test_execution_viability": false,
+      "available_in_repo_now": false,
+      "blocked_reason": "MISSING_FUTURES_MINUTE_HISTORICAL_DATASET",
+      "expected_information_gain": "HIGH",
+      "false_discovery_risk": "MEDIUM",
+      "execution_risk": "MEDIUM",
+      "recommended_priority": 2,
+      "verdict": "FEASIBLE_WITHOUT_TICK_BIDASK_BUT_REQUIRES_SAMPLE"
+    },
+    {
+      "mechanism_family": "CONSTITUENT_DISPERSION_REGIME",
+      "requires_tick_bidask": false,
+      "minimum_non_tick_data_required": "Daily/5-min OHLCV for NIFTY 50 constituents",
+      "can_test_directional_signal": true,
+      "can_test_execution_viability": false,
+      "available_in_repo_now": false,
+      "blocked_reason": "MISSING_CONSTITUENT_OHLC_HISTORICAL_DATASET",
+      "expected_information_gain": "MEDIUM",
+      "false_discovery_risk": "MEDIUM",
+      "execution_risk": "LOW",
+      "recommended_priority": 3,
+      "verdict": "FEASIBLE_WITHOUT_TICK_BIDASK_BUT_REQUIRES_SAMPLE"
+    },
+    {
+      "mechanism_family": "FUTURES_ROLL_EXPIRY_PRESSURE",
+      "requires_tick_bidask": false,
+      "minimum_non_tick_data_required": "Near-month and far-month futures OHLCV + open interest",
+      "can_test_directional_signal": true,
+      "can_test_execution_viability": false,
+      "available_in_repo_now": false,
+      "blocked_reason": "MISSING_FUTURES_MINUTE_HISTORICAL_DATASET",
+      "expected_information_gain": "MEDIUM",
+      "false_discovery_risk": "MEDIUM",
+      "execution_risk": "MEDIUM",
+      "recommended_priority": 4,
+      "verdict": "FEASIBLE_WITHOUT_TICK_BIDASK_BUT_REQUIRES_SAMPLE"
+    },
+    {
+      "mechanism_family": "OPTIONS_CHAIN_OI_IV_SURFACE_WITHOUT_BIDASK",
+      "requires_tick_bidask": false,
+      "minimum_non_tick_data_required": "1-min option strike OHLC + OI + IV",
+      "can_test_directional_signal": true,
+      "can_test_execution_viability": false,
+      "available_in_repo_now": false,
+      "blocked_reason": "MISSING_OPTIONS_HISTORICAL_CHAIN_DATASET",
+      "expected_information_gain": "MEDIUM",
+      "false_discovery_risk": "HIGH",
+      "execution_risk": "HIGH",
+      "recommended_priority": 5,
+      "verdict": "FEASIBLE_FOR_DIRECTIONAL_SIGNAL_ONLY"
+    },
+    {
+      "mechanism_family": "INDEX_OHLC_ONLY_EXTENSION",
+      "requires_tick_bidask": false,
+      "minimum_non_tick_data_required": "5-min NIFTY index OHLC",
+      "can_test_directional_signal": true,
+      "can_test_execution_viability": false,
+      "available_in_repo_now": true,
+      "blocked_reason": "EXHAUSTED_UNDER_COARSE_SEARCH_PROVEN_BY_V3_TO_V6_CONTROLLED_NEGATIVES",
+      "expected_information_gain": "LOW",
+      "false_discovery_risk": "HIGH",
+      "execution_risk": "HIGH",
+      "recommended_priority": 6,
+      "verdict": "DEPRECATED_EXHAUSTED_SAME_CORPUS"
+    }
+  ]
+}

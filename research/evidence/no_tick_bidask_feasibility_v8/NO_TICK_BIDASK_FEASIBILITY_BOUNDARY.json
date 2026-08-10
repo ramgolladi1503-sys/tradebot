@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "can_test_without_tick_bidask": [
+    "HISTORICAL_DIRECTIONAL_SIGNAL",
+    "INDEX_FUTURES_PROXY_EDGE",
+    "CONSTITUENT_BREADTH_LEAD_LAG",
+    "FUTURES_BASIS_DISLOCATION"
+  ],
+  "cannot_test_without_tick_bidask": [
+    "OPTIONS_EXECUTION_VIABLE",
+    "REALISTIC_SPREAD_SLIPPAGE",
+    "FILL_PROBABILITY",
+    "CAPACITY",
+    "LIVE_TRADABILITY",
+    "STRUCTURAL_EDGE_CERTIFIED"
+  ],
+  "maximum_possible_verdict_without_tick_bidask": "HISTORICAL_DIRECTIONAL_CANDIDATE_SUPPORTED_BUT_EXECUTION_UNVERIFIED",
+  "minimum_data_needed_to_continue": "NIFTY_50_CONSTITUENT_OHLCV_OR_NEAR_MONTH_FUTURES_OHLCV_SAMPLE",
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false
+}

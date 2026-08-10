@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "controlled_verdict": "UNKNOWN_VENDOR_SAMPLE_REQUIRED",
+  "can_find_directional_edge_without_tick_bidask": true,
+  "can_certify_execution_without_tick_bidask": false,
+  "can_certify_structural_edge_without_tick_bidask": false,
+  "best_non_tick_dataset_to_request": "NIFTY_50_CONSTITUENT_1MIN_OR_5MIN_OHLCV",
+  "second_best_non_tick_dataset_to_request": "NIFTY_SPOT_PLUS_NEAR_MONTH_FUTURES_1MIN_OHLCV",
+  "why_not_options_bidask_first": "Options bid/ask depth data is orders of magnitude larger and more expensive. Testing directional signal feasibility first via constituent/futures OHLCV sample provides a high-information, low-cost gate before investing in options depth infrastructure.",
+  "why_current_repo_data_is_insufficient": "The repository only contains 5-minute index OHLC data (NIFTY/BANKNIFTY/SENSEX), which has been exhaustively tested and killed under negative controls in Campaigns V3-V6. Constituent OHLCV and futures OHLCV are not currently present in local storage.",
+  "smallest_true_blocker": "MISSING_CONSTITUENT_OHLC_HISTORICAL_DATASET",
+  "recommended_next_action": "REQUEST_1_MONTH_VENDOR_SAMPLE_FOR_CONSTITUENT_OHLCV_OR_FUTURES_BASIS",
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false
+}
