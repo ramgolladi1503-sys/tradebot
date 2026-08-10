@@ -1,5 +1,7 @@
 {
-  "status": "LOCKED_VALIDATION_SUPPORTED",
+  "status": "STRUCTURAL_EDGE_NOT_CERTIFIED",
   "locked_outcomes_accessed": true,
-  "edge_claimed": false
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false
 }

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "runner_id": "TOD_SESSION_POSITION_CERTIFICATION_LAYERS_V1",
+  "search_family_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1",
+  "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_UPSIDE_ESCAPE",
+  "development_supported": true,
+  "locked_supported": true,
+  "wfa_robustness_status": "WFA_ROBUSTNESS_SUPPORTED",
+  "negative_controls_status": "NEGATIVE_CONTROLS_FAILED",
+  "cost_slippage_status": "COST_SLIPPAGE_SUPPORTED_INDEX_ONLY",
+  "execution_viable": false,
+  "prospective_supported": false,
+  "structural_edge_certified": false,
+  "edge_claimed": false,
+  "runtime_authority": "NONE",
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "status": "STRUCTURAL_EDGE_NOT_CERTIFIED",
+  "next_action": "ACQUIRE_OPTIONS_DEPTH_DATA_BEFORE_EXECUTION_CERTIFICATION"
+}

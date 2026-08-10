@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "runner_id": "TOD_SESSION_POSITION_CERTIFICATION_LAYERS_V1",
+  "search_family_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1",
+  "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_UPSIDE_ESCAPE",
+  "gross_ret6_median_bps": 23.850316155353823,
+  "gross_ret12_median_bps": 27.722832273617826,
+  "cost_scenarios": [
+    {
+      "cost_bps": 2,
+      "net_ret6_bps": 21.850316155353823,
+      "net_ret12_bps": 25.722832273617826,
+      "survives_min_3bps_gate": true
+    },
+    {
+      "cost_bps": 5,
+      "net_ret6_bps": 18.850316155353823,
+      "net_ret12_bps": 22.722832273617826,
+      "survives_min_3bps_gate": true
+    },
+    {
+      "cost_bps": 8,
+      "net_ret6_bps": 15.850316155353823,
+      "net_ret12_bps": 19.722832273617826,
+      "survives_min_3bps_gate": true
+    },
+    {
+      "cost_bps": 12,
+      "net_ret6_bps": 11.850316155353823,
+      "net_ret12_bps": 15.722832273617826,
+      "survives_min_3bps_gate": true
+    },
+    {
+      "cost_bps": 20,
+      "net_ret6_bps": 3.8503161553538234,
+      "net_ret12_bps": 7.722832273617826,
+      "survives_min_3bps_gate": true
+    }
+  ],
+  "execution_viable": false,
+  "blocked_options_execution_data": true,
+  "runtime_authority": "NONE",
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "status": "COST_SLIPPAGE_SUPPORTED_INDEX_ONLY"
+}

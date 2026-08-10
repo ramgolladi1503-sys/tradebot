@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "runner_id": "TOD_SESSION_POSITION_CERTIFICATION_LAYERS_V1",
+  "search_family_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1",
+  "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_UPSIDE_ESCAPE",
+  "runtime_authority": "NONE",
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "controls": [
+    {
+      "matches": 72,
+      "distinct_sessions": 70,
+      "ret3_bps": {
+        "n": 72,
+        "mean": -2.310129334985373,
+        "median": -1.470442503685998
+      },
+      "ret6_bps": {
+        "n": 72,
+        "mean": -2.599759051980726,
+        "median": -1.9159222771636397
+      },
+      "ret12_bps": {
+        "n": 72,
+        "mean": -6.8270046284805055,
+        "median": -4.234848395359703
+      },
+      "ret18_bps": {
+        "n": 72,
+        "mean": -5.145995171387499,
+        "median": -3.1308462085594124
+      },
+      "up_excursion_rate_20bps": 0.2361111111111111,
+      "down_excursion_rate_20bps": 0.4166666666666667,
+      "up_excursion_rate_30bps": 0.09722222222222222,
+      "down_excursion_rate_30bps": 0.2361111111111111,
+      "inferred_direction": null,
+      "verdict": "REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ],
+      "control_id": "WRONG_TIME_MID_SESSION_UPSIDE_ESCAPE"
+    },
+    {
+      "matches": 460,
+      "distinct_sessions": 457,
+      "ret3_bps": {
+        "n": 459,
+        "mean": 2.888906468692772,
+        "median": 3.784558230062185
+      },
+      "ret6_bps": {
+        "n": 459,
+        "mean": 2.608938924117105,
+        "median": 5.024194946645633
+      },
+      "ret12_bps": {
+        "n": 459,
+        "mean": 1.205663030218296,
+        "median": 5.011973046722407
+      },
+      "ret18_bps": {
+        "n": 459,
+        "mean": 1.7709730110343842,
+        "median": 6.956455265596517
+      },
+      "up_excursion_rate_20bps": 0.6122004357298475,
+      "down_excursion_rate_20bps": 0.485838779956427,
+      "up_excursion_rate_30bps": 0.49455337690631807,
+      "down_excursion_rate_30bps": 0.39215686274509803,
+      "inferred_direction": "UP",
+      "verdict": "SUPPORTED",
+      "reasons": [],
+      "control_id": "WRONG_STATE_PRE_CLOSE_30_RANGE_BALANCE"
+    },
+    {
+      "matches": 162,
+      "distinct_sessions": 162,
+      "ret3_bps": {
+        "n": 162,
+        "mean": 10.609280365447262,
+        "median": 4.393491837045849
+      },
+      "ret6_bps": {
+        "n": 162,
+        "mean": 10.170831985673384,
+        "median": 9.889821761182027
+      },
+      "ret12_bps": {
+        "n": 162,
+        "mean": 9.232501315977418,
+        "median": 9.519266428683615
+      },
+      "ret18_bps": {
+        "n": 162,
+        "mean": 10.382980090392337,
+        "median": 10.30635353619802
+      },
+      "up_excursion_rate_20bps": 0.6481481481481481,
+      "down_excursion_rate_20bps": 0.4567901234567901,
+      "up_excursion_rate_30bps": 0.5493827160493827,
+      "down_excursion_rate_30bps": 0.38271604938271603,
+      "inferred_direction": "UP",
+      "verdict": "SUPPORTED",
+      "reasons": [],
+      "control_id": "DIRECTION_INVERSION_TEST_DOWN",
+      "passed_down_gates": true
+    }
+  ],
+  "status": "NEGATIVE_CONTROLS_FAILED"
+}

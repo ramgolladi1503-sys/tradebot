@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "runner_id": "TOD_SESSION_POSITION_CERTIFICATION_LAYERS_V1",
+  "search_family_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1",
+  "candidate_id": "TIME_OF_DAY_SESSION_POSITION_FAMILY_V1_PRE_CLOSE_30_UPSIDE_ESCAPE",
+  "chronological_folds": 4,
+  "candidate_definition_frozen": true,
+  "minimum_passing_folds_fraction": 0.6,
+  "passing_folds": 3,
+  "no_catastrophic_opposite_fold": true,
+  "runtime_authority": "NONE",
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "fold_results": [
+    {
+      "matches": 41,
+      "distinct_sessions": 41,
+      "ret3_bps": {
+        "n": 41,
+        "mean": 13.192604206020583,
+        "median": 6.5272573431651715
+      },
+      "ret6_bps": {
+        "n": 41,
+        "mean": 11.177084090526106,
+        "median": 9.776714416707133
+      },
+      "ret12_bps": {
+        "n": 41,
+        "mean": 10.84215802707759,
+        "median": 8.077447526579906
+      },
+      "ret18_bps": {
+        "n": 41,
+        "mean": 11.969556496828396,
+        "median": 14.777531709282421
+      },
+      "up_excursion_rate_20bps": 0.7560975609756098,
+      "down_excursion_rate_20bps": 0.36585365853658536,
+      "up_excursion_rate_30bps": 0.5609756097560976,
+      "down_excursion_rate_30bps": 0.3170731707317073,
+      "inferred_direction": "UP",
+      "verdict": "SUPPORTED",
+      "reasons": [],
+      "fold_id": "fold_1",
+      "sessions_in_fold": 123
+    },
+    {
+      "matches": 56,
+      "distinct_sessions": 56,
+      "ret3_bps": {
+        "n": 56,
+        "mean": 0.7962607313011434,
+        "median": -4.936518894916309
+      },
+      "ret6_bps": {
+        "n": 56,
+        "mean": 1.1666027913407755,
+        "median": -1.8833333984435985
+      },
+      "ret12_bps": {
+        "n": 56,
+        "mean": -0.028718673256096956,
+        "median": 1.809647094588307
+      },
+      "ret18_bps": {
+        "n": 56,
+        "mean": 2.713047939831193,
+        "median": 5.516231962977569
+      },
+      "up_excursion_rate_20bps": 0.5892857142857143,
+      "down_excursion_rate_20bps": 0.5714285714285714,
+      "up_excursion_rate_30bps": 0.5,
+      "down_excursion_rate_30bps": 0.4642857142857143,
+      "inferred_direction": null,
+      "verdict": "REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET6_RET12_SIGN_CONSISTENCY_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ],
+      "fold_id": "fold_2",
+      "sessions_in_fold": 123
+    },
+    {
+      "matches": 22,
+      "distinct_sessions": 22,
+      "ret3_bps": {
+        "n": 22,
+        "mean": 1.031807627866325,
+        "median": 5.440181016693746
+      },
+      "ret6_bps": {
+        "n": 22,
+        "mean": 2.976116869548068,
+        "median": 12.026738912619406
+      },
+      "ret12_bps": {
+        "n": 22,
+        "mean": 2.0274093835159266,
+        "median": 15.397879436124251
+      },
+      "ret18_bps": {
+        "n": 22,
+        "mean": 0.31448767532284805,
+        "median": 11.783264522827741
+      },
+      "up_excursion_rate_20bps": 0.5909090909090909,
+      "down_excursion_rate_20bps": 0.36363636363636365,
+      "up_excursion_rate_30bps": 0.5,
+      "down_excursion_rate_30bps": 0.2727272727272727,
+      "inferred_direction": "UP",
+      "verdict": "SUPPORTED",
+      "reasons": [],
+      "fold_id": "fold_3",
+      "sessions_in_fold": 123
+    },
+    {
+      "matches": 43,
+      "distinct_sessions": 43,
+      "ret3_bps": {
+        "n": 43,
+        "mean": 25.82595995324859,
+        "median": 10.21844867309607
+      },
+      "ret6_bps": {
+        "n": 43,
+        "mean": 24.618837360985506,
+        "median": 23.34143084159912
+      },
+      "ret12_bps": {
+        "n": 43,
+        "mean": 23.44516217077097,
+        "median": 25.47537917468423
+      },
+      "ret18_bps": {
+        "n": 43,
+        "mean": 24.01026848339406,
+        "median": 15.177012887916952
+      },
+      "up_excursion_rate_20bps": 0.6511627906976745,
+      "down_excursion_rate_20bps": 0.4418604651162791,
+      "up_excursion_rate_30bps": 0.627906976744186,
+      "down_excursion_rate_30bps": 0.3953488372093023,
+      "inferred_direction": "UP",
+      "verdict": "SUPPORTED",
+      "reasons": [],
+      "fold_id": "fold_4",
+      "sessions_in_fold": 124
+    }
+  ],
+  "status": "WFA_ROBUSTNESS_SUPPORTED"
+}
