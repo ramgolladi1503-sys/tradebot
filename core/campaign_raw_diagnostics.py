@@ -1,0 +1,321 @@
+"""Bounded campaign-only pre-decode and callback diagnostics."""
+
+from __future__ import annotations
+
+from collections import deque
+import json
+import os
+from pathlib import Path
+import queue
+import sys
+import traceback
+import threading
+import time
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+
+_IST = ZoneInfo("Asia/Kolkata")
+_QUEUE: queue.Queue[dict] = queue.Queue(maxsize=256)
+_RECENT = deque(maxlen=128)
+_LOCK = threading.Lock()
+_THREAD: threading.Thread | None = None
+_STOP = threading.Event()
+_LAST_SAMPLE = 0.0
+_STATE = {
+    "raw_message_count": 0,
+    "binary_message_count": 0,
+    "text_message_count": 0,
+    "raw_byte_count": 0,
+    "on_ticks_entry_count": 0,
+    "on_ticks_exit_count": 0,
+    "on_ticks_exception_count": 0,
+    "on_ticks_inflight": 0,
+    "decoded_tick_count": 0,
+    "store_insert_success_count": 0,
+    "store_insert_failure_count": 0,
+    "last_raw_message_monotonic_ns": None,
+    "last_on_ticks_entry_monotonic_ns": None,
+    "last_on_ticks_exit_monotonic_ns": None,
+    "maximum_callback_duration_ms": 0.0,
+    "queue_drop_count": 0,
+    "reactor_heartbeat_count": 0,
+    "maximum_reactor_drift_ms": 0.0,
+    "process_heartbeat_count": 0,
+    "ping_count": 0,
+    "pong_count": 0,
+}
+_PROCESS_THREAD: threading.Thread | None = None
+_REACTOR_CALL = None
+_REGISTRY_PATH = "diagnostic_wiring_registry.jsonl"
+_ACTIVE = {"sequence": 0, "stage": None, "entry_ns": None, "reactor_ident": None, "last_reactor_ns": None, "episode": None, "snapshots": set()}
+
+
+def _enabled() -> bool:
+    return str(os.getenv("UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE", "")).lower() in {"1", "true", "yes", "on"}
+
+
+def _identity() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "run_id": os.getenv("UNIFIED_LIVE_VALIDATION_PR748_756_RUN_ID"),
+        "session_date": os.getenv("UNIFIED_LIVE_VALIDATION_PR748_756_SESSION_DATE"),
+        "campaign_commit_sha": os.getenv("UNIFIED_LIVE_VALIDATION_PR748_756_COMMIT_SHA"),
+        "process_id": os.getpid(),
+        "thread_name": threading.current_thread().name,
+        "feed_session_id": None,
+        "reconnect_generation": None,
+        "subscription_generation": None,
+        "connection_id": None,
+    }
+
+
+def _enqueue(path: str, payload: dict) -> None:
+    try:
+        _QUEUE.put_nowait({"path": path, "payload": payload})
+    except queue.Full:
+        with _LOCK:
+            _STATE["queue_drop_count"] += 1
+
+
+def record_wiring(milestone: str, *, component: str, status: str = "PASS", reason: str = "", instance_fingerprint: str = "", parent_instance_fingerprint: str = "") -> None:
+    if not _enabled():
+        return
+    if _THREAD is None or not _THREAD.is_alive():
+        start()
+    _enqueue(_REGISTRY_PATH, {**_identity(), "milestone": milestone, "component": component,
+        "status": status, "reason": reason, "instance_fingerprint": instance_fingerprint,
+        "parent_instance_fingerprint": parent_instance_fingerprint, "monotonic_ns": time.monotonic_ns(),
+        "wall_ts_utc": time.time(), "diagnostic_self_test": False})
+
+
+def run_diagnostic_self_test() -> bool:
+    if not _enabled():
+        return False
+    start()
+    base = {**_identity(), "diagnostic_self_test": True, "event_type": "diagnostic_self_test"}
+    for filename, event in (("predecode_raw_message_timeline.jsonl", "synthetic_predecode_binary"),
+                            ("callback_execution_timeline.jsonl", "synthetic_predecode_text"),
+                            ("callback_execution_timeline.jsonl", "synthetic_on_ticks_entry_exit"),
+                            ("reactor_heartbeat_timeline.jsonl", "synthetic_reactor_heartbeat"),
+                            ("process_heartbeat_timeline.jsonl", "synthetic_process_heartbeat"),
+                            ("protocol_lifecycle_timeline.jsonl", "synthetic_protocol_lifecycle")):
+        _enqueue(filename, {**base, "event_type": event, "monotonic_ns": time.monotonic_ns()})
+    record_wiring("CALLBACK_SELF_TEST_PASSED", component="diagnostic_recorder", instance_fingerprint=f"pid:{os.getpid()}:recorder:{id(_QUEUE):x}")
+    _QUEUE.join()
+    root = Path(os.getenv("UNIFIED_LIVE_VALIDATION_PR748_756_EVIDENCE_ROOT", "")) / "live"
+    required = ("predecode_raw_message_timeline.jsonl", "callback_execution_timeline.jsonl",
+                "reactor_heartbeat_timeline.jsonl", "process_heartbeat_timeline.jsonl",
+                "protocol_lifecycle_timeline.jsonl", _REGISTRY_PATH)
+    return all((root / name).is_file() and (root / name).stat().st_size > 0 for name in required)
+
+
+def _writer() -> None:
+    while not _STOP.is_set() or not _QUEUE.empty():
+        try:
+            item = _QUEUE.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        try:
+            root = Path(os.getenv("UNIFIED_LIVE_VALIDATION_PR748_756_EVIDENCE_ROOT", ""))
+            path = root / "live" / item["path"]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(item["payload"], sort_keys=True, default=str) + "\n")
+        finally:
+            _QUEUE.task_done()
+
+
+def start() -> bool:
+    global _THREAD
+    if not _enabled():
+        return False
+    with _LOCK:
+        if _THREAD is None or not _THREAD.is_alive():
+            _STOP.clear()
+            _THREAD = threading.Thread(target=_writer, name="campaign-diagnostic-writer", daemon=True)
+            _THREAD.start()
+            record_wiring("DIAGNOSTIC_WRITER_STARTED", component="diagnostic_writer", instance_fingerprint=f"pid:{os.getpid()}:writer:{id(_THREAD):x}")
+    return True
+
+
+def observe_protocol(event_type: str, *, code: object = None, reason: object = None) -> None:
+    if not _enabled():
+        return
+    start()
+    payload = {**_identity(), "event_type": event_type, "monotonic_ns": time.monotonic_ns(),
+               "close_code": code, "close_reason_category": str(reason or "")[:80]}
+    _enqueue("protocol_lifecycle_timeline.jsonl", payload)
+
+
+def start_process_heartbeat() -> None:
+    global _PROCESS_THREAD
+    if not _enabled() or (_PROCESS_THREAD and _PROCESS_THREAD.is_alive()):
+        return
+    start()
+    def loop() -> None:
+        while not _STOP.wait(1.0):
+            with _LOCK:
+                _STATE["process_heartbeat_count"] += 1
+                payload = {**_identity(), **_STATE, "event_type": "process_heartbeat",
+                           "process_heartbeat_monotonic_ns": time.monotonic_ns(),
+                           "diagnostic_writer_alive": bool(_THREAD and _THREAD.is_alive()),
+                           "diagnostic_queue_depth": _QUEUE.qsize(),
+                           "diagnostic_queue_capacity": _QUEUE.maxsize}
+                _watchdog_snapshot_locked()
+            _enqueue("process_heartbeat_timeline.jsonl", payload)
+    _PROCESS_THREAD = threading.Thread(target=loop, name="campaign-process-heartbeat", daemon=True)
+    _PROCESS_THREAD.start()
+
+
+def start_reactor_heartbeat(reactor: object) -> None:
+    global _REACTOR_CALL
+    if not _enabled() or reactor is None:
+        return
+    start()
+    expected = time.monotonic()
+    def beat() -> None:
+        nonlocal expected
+        if _STOP.is_set():
+            return
+        actual = time.monotonic()
+        drift_ms = max(0.0, (actual - expected) * 1000.0)
+        with _LOCK:
+            _ACTIVE["reactor_ident"] = threading.get_ident()
+            _ACTIVE["last_reactor_ns"] = time.monotonic_ns()
+            _STATE["reactor_heartbeat_count"] += 1
+            _STATE["maximum_reactor_drift_ms"] = max(float(_STATE["maximum_reactor_drift_ms"]), drift_ms)
+            payload = {**_identity(), **_STATE, "event_type": "reactor_heartbeat",
+                       "scheduled_monotonic_ns": int(expected * 1_000_000_000),
+                       "executed_monotonic_ns": time.monotonic_ns(),
+                       "reactor_drift_ms": drift_ms, "reactor_running": bool(getattr(reactor, "running", True)),
+                       "reactor_thread_name": threading.current_thread().name,
+                       "reactor_thread_ident": threading.get_ident()}
+        _enqueue("reactor_heartbeat_timeline.jsonl", payload)
+        expected = expected + 1.0
+        try:
+            global _REACTOR_CALL
+            _REACTOR_CALL = reactor.callLater(max(0.0, expected - time.monotonic()), beat)
+        except Exception:
+            return
+    try:
+        _REACTOR_CALL = reactor.callLater(1.0, beat)
+    except Exception:
+        _REACTOR_CALL = None
+
+
+def observe_raw_message(payload: object, is_binary: bool) -> None:
+    if not _enabled():
+        return
+    start()
+    now = time.monotonic_ns()
+    with _LOCK:
+        previous = _STATE.get("last_raw_message_monotonic_ns")
+        _STATE["raw_message_count"] += 1
+        _STATE["binary_message_count"] += int(bool(is_binary))
+        _STATE["text_message_count"] += int(not is_binary)
+        _STATE["raw_byte_count"] += len(payload) if isinstance(payload, (bytes, bytearray, str)) else 0
+        _STATE["last_raw_message_monotonic_ns"] = now
+        _RECENT.append(now)
+    _sample("raw_message", previous)
+
+
+def on_ticks_entry(batch_size: int) -> int | None:
+    if not _enabled():
+        return None
+    start()
+    now = time.monotonic_ns()
+    with _LOCK:
+        _STATE["on_ticks_entry_count"] += 1
+        _STATE["on_ticks_inflight"] += 1
+        _STATE["last_on_ticks_entry_monotonic_ns"] = now
+        _STATE["decoded_tick_count"] += int(batch_size)
+        _ACTIVE["sequence"] = int(_ACTIVE["sequence"]) + 1
+        _ACTIVE["stage"] = "ON_TICKS"
+        _ACTIVE["entry_ns"] = now
+        _ACTIVE["episode"] = f"{os.getpid()}-{_ACTIVE['sequence']}"
+        _ACTIVE["snapshots"] = set()
+    _sample("on_ticks_entry", None)
+    return now
+
+
+def on_ticks_exit(start_ns: int | None, *, exception: bool = False) -> None:
+    if not _enabled():
+        return
+    now = time.monotonic_ns()
+    with _LOCK:
+        _STATE["on_ticks_exit_count"] += 1
+        _STATE["on_ticks_inflight"] = max(0, int(_STATE["on_ticks_inflight"]) - 1)
+        _STATE["on_ticks_exception_count"] += int(exception)
+        _STATE["last_on_ticks_exit_monotonic_ns"] = now
+        if start_ns is not None:
+            _STATE["maximum_callback_duration_ms"] = max(
+                float(_STATE["maximum_callback_duration_ms"]), (now - start_ns) / 1_000_000.0
+            )
+        _ACTIVE["stage"] = None
+        _ACTIVE["entry_ns"] = None
+        _ACTIVE["episode"] = None
+    _sample("on_ticks_exit", None)
+
+
+def _sample(event: str, previous_ns: int | None) -> None:
+    global _LAST_SAMPLE
+    now = time.monotonic()
+    if now - _LAST_SAMPLE < 1.0 and event != "on_ticks_exit":
+        return
+    _LAST_SAMPLE = now
+    with _LOCK:
+        payload = {**_identity(), **_STATE, "event_type": event, "monotonic_ns": time.monotonic_ns(),
+                   "queue_depth": _QUEUE.qsize(), "queue_capacity": _QUEUE.maxsize}
+        if previous_ns is not None:
+            payload["intermessage_gap_ms"] = (payload["monotonic_ns"] - previous_ns) / 1_000_000.0
+    _enqueue("predecode_raw_message_timeline.jsonl", payload)
+    _enqueue("callback_execution_timeline.jsonl", payload)
+
+
+def _watchdog_snapshot_locked() -> None:
+    now = time.monotonic_ns()
+    entry = _ACTIVE.get("entry_ns")
+    reactor_last = _ACTIVE.get("last_reactor_ns")
+    if entry is None:
+        return
+    callback_age = (now - int(entry)) / 1_000_000_000.0
+    reactor_age = (now - int(reactor_last)) / 1_000_000_000.0 if reactor_last else callback_age
+    threshold = next((value for value in (5, 15, 30) if value not in _ACTIVE["snapshots"] and max(callback_age, reactor_age) >= value), None)
+    if threshold is None:
+        return
+    _ACTIVE["snapshots"].add(threshold)
+    thread_ident = _ACTIVE.get("reactor_ident")
+    frames = sys._current_frames()
+    frame = frames.get(thread_ident) if thread_ident else None
+    reason = "ACTIVE_CALLBACK_STAGE_OVERDUE" if callback_age >= threshold else "NO_ACTIVE_CALLBACK_REACTOR_OVERDUE"
+    if frame is None:
+        reason = "REACTOR_THREAD_FRAME_UNAVAILABLE"
+    formatted = "".join(traceback.format_stack(frame)) if frame is not None else ""
+    top = traceback.extract_stack(frame)[-1] if frame is not None else None
+    _enqueue("reactor_stall_stack_snapshots.jsonl", {**_identity(), "stall_episode_id": _ACTIVE.get("episode"),
+        "trigger_reason": reason, "snapshot_threshold_sec": threshold, "wall_ts_utc": time.time(),
+        "monotonic_ns": now, "process_heartbeat_age_ms": 0.0, "reactor_heartbeat_age_ms": reactor_age * 1000,
+        "callback_inflight_age_ms": callback_age * 1000, "active_callback_sequence": _ACTIVE.get("sequence"),
+        "active_callback_stage": _ACTIVE.get("stage"), "reactor_thread_ident": thread_ident,
+        "reactor_thread_name": "Thread-2 (run)", "formatted_stack": formatted,
+        "top_frame_file": top.filename if top else None, "top_frame_function": top.name if top else None,
+        "top_frame_line": top.lineno if top else None})
+
+
+def shutdown() -> None:
+    if _THREAD is None:
+        return
+    _STOP.set()
+    if _REACTOR_CALL is not None:
+        try:
+            if _REACTOR_CALL.active():
+                _REACTOR_CALL.cancel()
+        except Exception:
+            pass
+    if _PROCESS_THREAD is not None:
+        _PROCESS_THREAD.join(timeout=2.0)
+    _THREAD.join(timeout=2.0)
+
+
+__all__ = ["observe_raw_message", "on_ticks_entry", "on_ticks_exit", "shutdown", "start", "record_wiring", "run_diagnostic_self_test"]

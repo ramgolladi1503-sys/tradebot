@@ -23,6 +23,7 @@ from core.readiness_gate import run_readiness_check
 from core.freshness_sla import get_freshness_status
 from core.market_data_monitor import get_feed_health_monitor
 from core.feed.gate import check_execution_allowed
+from core.runtime_authority_cutover import preflight_execution_authority
 
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,16 @@ class ExecutionRouter:
 
     def execute(self, trade, bid, ask, volume, depth=None, snapshot_fn=None, spread_pct=None, depth_imbalance=None, vol_z=None):
         mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+        authority = preflight_execution_authority(trade, mode=mode)
+        if authority is not None and not bool(authority.get("allowed")):
+            return False, None, {
+                "decision_mid": None,
+                "decision_spread": None,
+                "fill_price": None,
+                "slippage": None,
+                "reason_if_aborted": f"runtime_authority_blocked:{authority.get('reason')}",
+                "runtime_authority": authority,
+            }
         try:
             execution_plan = ExecutionPlan.from_trade(trade, mode=mode)
         except Exception as exc:

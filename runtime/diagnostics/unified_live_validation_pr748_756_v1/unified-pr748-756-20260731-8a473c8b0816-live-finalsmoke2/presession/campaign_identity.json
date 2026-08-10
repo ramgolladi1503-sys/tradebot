@@ -1,0 +1,12 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "campaign_commit_sha": "a3341c4e26716c405243af80e16bbed12b57dfe1",
+  "composition_manifest_sha": "8a473c8b08167a262a5b355ea49bce30bda68f1ed53cf1730d0d64f5d589ad69",
+  "evidence_root": "runtime/diagnostics/unified_live_validation_pr748_756_v1/unified-pr748-756-20260731-8a473c8b0816-live-finalsmoke2",
+  "is_order_action": false,
+  "read_only": true,
+  "run_id": "unified-pr748-756-20260731-8a473c8b0816-live-finalsmoke2",
+  "schema_version": 1,
+  "session_date": "2026-07-31"
+}

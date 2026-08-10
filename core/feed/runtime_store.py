@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from pathlib import Path
-from typing import Any, Iterator
+import queue
+import threading
+import time
+import logging
+from copy import deepcopy
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Any
 
 from config import config as cfg
 from core.events import write_json_atomic
@@ -16,6 +21,20 @@ from core.fs_utils import ensure_parent_dir
 from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.paths import repo_root, trade_db_path
 from core.time_utils import now_utc_epoch
+from core.persistence_durability import record_degradation
+
+logger = logging.getLogger(__name__)
+
+_RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=2048)
+_RUNTIME_STOP = threading.Event()
+_RUNTIME_LOCK = threading.Lock()
+_RUNTIME_WORKER = None
+_RUNTIME_ENQUEUED = 0
+_RUNTIME_REJECTED = 0
+_RUNTIME_FAILURES = 0
+_RUNTIME_DEGRADED = False
+_RUNTIME_PERSISTED = 0
+_RUNTIME_SHUTDOWN = False
 
 
 def _db_path() -> Path:
@@ -27,15 +46,15 @@ def _db_path() -> Path:
 
 
 @contextmanager
-def _conn() -> Iterator[sqlite3.Connection]:
-    conn = sqlite3.connect(str(_db_path()), timeout=30.0, check_same_thread=False)
+def _conn():
+    conn = sqlite3.connect(str(_db_path()), timeout=30.0)
     try:
-        conn.execute("PRAGMA busy_timeout=30000")
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-    except Exception:
-        pass
-    try:
+        try:
+            conn.execute("PRAGMA busy_timeout=30000")
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+        except Exception:
+            pass
         with conn:
             yield conn
     finally:
@@ -164,6 +183,13 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
     out = dict(payload or {})
     out["ts_epoch"] = float(ts_epoch)
     reconnect_blocked_reason = str(out.get("reconnect_blocked_reason") or "").strip().lower() or None
+    if reconnect_blocked_reason == "partial_recovery":
+        reconnect_blocked_reason = None
+        out["reconnect_blocked_reason"] = None
+        out["restart_blocked_reason"] = None
+        out["process_restart_required"] = False
+        out["restart_suppressed"] = False
+        out.setdefault("runtime_state", "VERIFYING_RECOVERY")
     restart_failure_reason = str(
         out.get("restart_failure_reason")
         or out.get("restart_blocked_reason")
@@ -245,7 +271,7 @@ def _write_canonical_runtime_artifacts(payload: dict[str, Any], *, ts_epoch: flo
             pass
 
 
-def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
+def _write_runtime_snapshot_sync(payload: dict[str, Any]) -> bool:
     if not isinstance(payload, dict):
         return False
     init_feed_runtime_table()
@@ -325,6 +351,114 @@ def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
         now_epoch=ts_epoch,
     )
     return True
+
+
+def _runtime_write_loop() -> None:
+    global _RUNTIME_FAILURES, _RUNTIME_DEGRADED, _RUNTIME_PERSISTED
+    while not _RUNTIME_STOP.is_set() or not _RUNTIME_WRITE_QUEUE.empty():
+        try:
+            payload = _RUNTIME_WRITE_QUEUE.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        try:
+            if not _write_runtime_snapshot_sync(payload):
+                with _RUNTIME_LOCK:
+                    _RUNTIME_FAILURES += 1
+                    _RUNTIME_DEGRADED = True
+                    record_degradation("runtime", "RUNTIME_PERSISTENCE_FAILURE")
+                logger.warning("feed_runtime_snapshot_persist_failed")
+            else:
+                with _RUNTIME_LOCK:
+                    _RUNTIME_PERSISTED += 1
+        finally:
+            _RUNTIME_WRITE_QUEUE.task_done()
+
+
+def _ensure_runtime_worker() -> None:
+    global _RUNTIME_WORKER
+    with _RUNTIME_LOCK:
+        if _RUNTIME_WORKER is None or not _RUNTIME_WORKER.is_alive():
+            _RUNTIME_STOP.clear()
+            _RUNTIME_WORKER = threading.Thread(target=_runtime_write_loop, name="feed-runtime-persistence", daemon=True)
+            _RUNTIME_WORKER.start()
+
+
+def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
+    global _RUNTIME_ENQUEUED, _RUNTIME_REJECTED, _RUNTIME_DEGRADED, _RUNTIME_SHUTDOWN
+    if not isinstance(payload, dict):
+        return False
+    with _RUNTIME_LOCK:
+        if _RUNTIME_SHUTDOWN:
+            _RUNTIME_REJECTED += 1
+            _RUNTIME_DEGRADED = True
+            record_degradation('runtime', 'RUNTIME_PERSISTENCE_SHUTDOWN')
+            return False
+    _ensure_runtime_worker()
+    try:
+        _RUNTIME_WRITE_QUEUE.put_nowait(deepcopy(payload))
+    except queue.Full:
+        with _RUNTIME_LOCK:
+            _RUNTIME_REJECTED += 1
+            _RUNTIME_DEGRADED = True
+            record_degradation("runtime", "RUNTIME_QUEUE_FULL")
+        logger.error("feed_runtime_snapshot_queue_full")
+        return False
+    with _RUNTIME_LOCK:
+        _RUNTIME_ENQUEUED += 1
+    return True
+
+
+def shutdown_runtime_persistence(deadline_seconds: float = 2.0) -> dict:
+    global _RUNTIME_SHUTDOWN
+    with _RUNTIME_LOCK:
+        _RUNTIME_SHUTDOWN = True
+    deadline = time.monotonic() + max(0.0, float(deadline_seconds))
+    while _RUNTIME_WRITE_QUEUE.unfinished_tasks and time.monotonic() < deadline:
+        time.sleep(0.01)
+    _RUNTIME_STOP.set()
+    worker = _RUNTIME_WORKER
+    if worker is not None:
+        worker.join(max(0.0, deadline - time.monotonic()))
+    with _RUNTIME_LOCK:
+        state = {"queue_depth": _RUNTIME_WRITE_QUEUE.qsize(), "worker_alive": bool(worker and worker.is_alive()),
+                 "enqueued": _RUNTIME_ENQUEUED, "rejected": _RUNTIME_REJECTED,
+                 "failures": _RUNTIME_FAILURES, "durability_degraded": _RUNTIME_DEGRADED}
+    state["complete"] = state["queue_depth"] == 0 and not state["worker_alive"]
+    return state
+
+
+def reset_runtime_persistence_for_tests() -> None:
+    """Reset the terminal runtime persistence lifecycle between tests only."""
+    global _RUNTIME_WRITE_QUEUE, _RUNTIME_WORKER, _RUNTIME_ENQUEUED
+    global _RUNTIME_REJECTED, _RUNTIME_FAILURES, _RUNTIME_DEGRADED
+    global _RUNTIME_PERSISTED, _RUNTIME_SHUTDOWN
+    result = shutdown_runtime_persistence(deadline_seconds=1.0)
+    if result.get('worker_alive'):
+        raise RuntimeError('runtime persistence worker did not stop for test reset')
+    with _RUNTIME_LOCK:
+        _RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=2048)
+        _RUNTIME_STOP.clear()
+        _RUNTIME_WORKER = None
+        _RUNTIME_ENQUEUED = 0
+        _RUNTIME_REJECTED = 0
+        _RUNTIME_FAILURES = 0
+        _RUNTIME_DEGRADED = False
+        _RUNTIME_PERSISTED = 0
+        _RUNTIME_SHUTDOWN = False
+
+
+def runtime_persistence_state() -> dict:
+    with _RUNTIME_LOCK:
+        return {
+            "enqueued": _RUNTIME_ENQUEUED,
+            "persisted": _RUNTIME_PERSISTED,
+            "rejected": _RUNTIME_REJECTED,
+            "failures": _RUNTIME_FAILURES,
+            "pending": _RUNTIME_WRITE_QUEUE.qsize(),
+            "worker_alive": bool(_RUNTIME_WORKER and _RUNTIME_WORKER.is_alive()),
+            "worker_ident": _RUNTIME_WORKER.ident if _RUNTIME_WORKER else None,
+            "shutdown": bool(_RUNTIME_SHUTDOWN),
+        }
 
 
 def read_latest_runtime_snapshot() -> dict[str, Any] | None:

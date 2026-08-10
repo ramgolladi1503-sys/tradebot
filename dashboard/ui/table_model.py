@@ -7,6 +7,7 @@ import hashlib
 import pandas as pd
 
 from core.top_opportunity_executable_truth import classify_top_opportunity_row
+from core.runtime_authority_cutover import apply_runtime_authority
 from dashboard.ui.utils.derive_fields import parse_option_side
 
 _ENTRY_STATUSES_WITH_QUOTE_BACKFILL = {
@@ -39,7 +40,7 @@ family_gate_override_applied fallback_candidate fresh_quote_ok liquidity_ok spre
 selection_probability simulation_outcome simulation_fill_status mfe mae simulated_pnl realized_r_multiple
 stop_hit_before_target risk_plan_respected readiness execution_status entry_status entry_source execution_entry_status
 display_entry_status execution_entry_source display_entry_source quote_source option_ltp_source is_executable
-ui_execution_truth ui_execution_truth_reason top_opportunity_truth_reason hard_blockers soft_penalties warnings trade_key tradingsymbol
+ui_execution_truth ui_execution_truth_reason top_opportunity_truth_reason authority_state authority_allowed authority_reason authority_blockers operator_bucket diagnostic_score opportunity_score selection_score selected_for_execution capital_assigned hard_blockers soft_penalties warnings trade_id candidate_id trade_key tradingsymbol
 """.split()
 
 NUMERIC_COLUMNS = """
@@ -196,6 +197,43 @@ def _stamp_ui_execution_truth(out: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _authority_record_value(value):
+    """Normalize dataframe missing scalars before authority classification.
+
+    Pandas materializes a column that exists on only some rows with NaN/NaT/
+    pd.NA on the other rows. Numeric NaN is truthy in Python, so passing it to
+    boolean fallback fields can falsely classify a clean row as fallback-driven.
+    Container values are preserved because pd.isna(container) is vectorized.
+    """
+    if isinstance(value, (dict, list, tuple, set)):
+        return value
+    try:
+        if bool(pd.isna(value)):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return value
+
+
+def _stamp_runtime_authority(out: pd.DataFrame) -> pd.DataFrame:
+    if out.empty:
+        return out
+    mode = str(getattr(__import__("config.config", fromlist=["EXECUTION_MODE"]), "EXECUTION_MODE", "SIM") or "SIM")
+    records = [
+        {key: _authority_record_value(value) for key, value in row.items()}
+        for row in out.to_dict(orient="records")
+    ]
+    rows = [apply_runtime_authority(row, mode=mode) for row in records]
+    stamped = pd.DataFrame(rows, index=out.index)
+    # Preserve all original columns and expose authority fields as additional
+    # operator truth. Non-executable rows retain diagnostic/opportunity scores,
+    # but selection_score and capital are forced to zero by the authority layer.
+    for column in out.columns:
+        if column not in stamped.columns:
+            stamped[column] = out[column]
+    return stamped
+
+
 def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
     if df is None or df.empty:
         return _empty_df()
@@ -286,7 +324,7 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
         out["opt_type"] = out["opt_type"].where(out["opt_type"].isin(["CE", "PE"]), inferred)
     out["opt_type"] = out["opt_type"].where(out["opt_type"].isin(["CE", "PE"]), "")
     out["status"] = out["status"].astype(str).str.upper()
-    return _stamp_ui_execution_truth(out)
+    return _stamp_runtime_authority(_stamp_ui_execution_truth(out))
 
 
 def compute_trade_key(df: pd.DataFrame) -> pd.DataFrame:

@@ -1,0 +1,246 @@
+{
+  "broker_instrument_master": {
+    "path": "runtime/upstox_instruments/complete.json",
+    "sha256": "5da2bc38bc0f54c9fccd14ad5cd6712c6b9f066766d3c621fb82330e6292fe40"
+  },
+  "canonical_sha256": "1e83284e578caaaef41d68f64ebf095d525c7073dd28d56f2a48609a80668992",
+  "capture_session_id": null,
+  "constituents": [
+    {
+      "instrument_token": 42301024,
+      "symbol": "ADANIENT"
+    },
+    {
+      "instrument_token": 74201042,
+      "symbol": "ADANIPORTS"
+    },
+    {
+      "instrument_token": 43701024,
+      "symbol": "APOLLOHOSP"
+    },
+    {
+      "instrument_token": 2101026,
+      "symbol": "ASIANPAINT"
+    },
+    {
+      "instrument_token": 23801034,
+      "symbol": "AXISBANK"
+    },
+    {
+      "instrument_token": 91701010,
+      "symbol": "BAJAJ-AUTO"
+    },
+    {
+      "instrument_token": 29601032,
+      "symbol": "BAJFINANCE"
+    },
+    {
+      "instrument_token": 91801026,
+      "symbol": "BAJAJFINSV"
+    },
+    {
+      "instrument_token": 26301024,
+      "symbol": "BEL"
+    },
+    {
+      "instrument_token": 39701024,
+      "symbol": "BHARTIARTL"
+    },
+    {
+      "instrument_token": 5901026,
+      "symbol": "CIPLA"
+    },
+    {
+      "instrument_token": 52201014,
+      "symbol": "COALINDIA"
+    },
+    {
+      "instrument_token": 8901031,
+      "symbol": "DRREDDY"
+    },
+    {
+      "instrument_token": 6601021,
+      "symbol": "EICHERMOT"
+    },
+    {
+      "instrument_token": 75801015,
+      "symbol": "ETERNAL"
+    },
+    {
+      "instrument_token": 4701021,
+      "symbol": "GRASIM"
+    },
+    {
+      "instrument_token": 86001027,
+      "symbol": "HCLTECH"
+    },
+    {
+      "instrument_token": 4001034,
+      "symbol": "HDFCBANK"
+    },
+    {
+      "instrument_token": 79501014,
+      "symbol": "HDFCLIFE"
+    },
+    {
+      "instrument_token": 3801020,
+      "symbol": "HINDALCO"
+    },
+    {
+      "instrument_token": 3001027,
+      "symbol": "HINDUNILVR"
+    },
+    {
+      "instrument_token": 9001021,
+      "symbol": "ICICIBANK"
+    },
+    {
+      "instrument_token": 15401025,
+      "symbol": "ITC"
+    },
+    {
+      "instrument_token": 901021,
+      "symbol": "INFY"
+    },
+    {
+      "instrument_token": 64601027,
+      "symbol": "INDIGO"
+    },
+    {
+      "instrument_token": 1901038,
+      "symbol": "JSWSTEEL"
+    },
+    {
+      "instrument_token": 75801017,
+      "symbol": "JIOFIN"
+    },
+    {
+      "instrument_token": 23701036,
+      "symbol": "KOTAKBANK"
+    },
+    {
+      "instrument_token": 1801030,
+      "symbol": "LT"
+    },
+    {
+      "instrument_token": 10101026,
+      "symbol": "M&M"
+    },
+    {
+      "instrument_token": 58501010,
+      "symbol": "MARUTI"
+    },
+    {
+      "instrument_token": 2701010,
+      "symbol": "MAXHEALTH"
+    },
+    {
+      "instrument_token": 73301010,
+      "symbol": "NTPC"
+    },
+    {
+      "instrument_token": 23901024,
+      "symbol": "NESTLEIND"
+    },
+    {
+      "instrument_token": 21301029,
+      "symbol": "ONGC"
+    },
+    {
+      "instrument_token": 75201010,
+      "symbol": "POWERGRID"
+    },
+    {
+      "instrument_token": 201018,
+      "symbol": "RELIANCE"
+    },
+    {
+      "instrument_token": 12301016,
+      "symbol": "SBILIFE"
+    },
+    {
+      "instrument_token": 72101047,
+      "symbol": "SHRIRAMFIN"
+    },
+    {
+      "instrument_token": 6201020,
+      "symbol": "SBIN"
+    },
+    {
+      "instrument_token": 4401036,
+      "symbol": "SUNPHARMA"
+    },
+    {
+      "instrument_token": 46701029,
+      "symbol": "TCS"
+    },
+    {
+      "instrument_token": 19201025,
+      "symbol": "TATACONSUM"
+    },
+    {
+      "instrument_token": 15501022,
+      "symbol": "TMPV"
+    },
+    {
+      "instrument_token": 8101020,
+      "symbol": "TATASTEEL"
+    },
+    {
+      "instrument_token": 66901036,
+      "symbol": "TECHM"
+    },
+    {
+      "instrument_token": 28001028,
+      "symbol": "TITAN"
+    },
+    {
+      "instrument_token": 84901020,
+      "symbol": "TRENT"
+    },
+    {
+      "instrument_token": 48101011,
+      "symbol": "ULTRACEMCO"
+    },
+    {
+      "instrument_token": 7501022,
+      "symbol": "WIPRO"
+    }
+  ],
+  "effective_date": null,
+  "index_instrument_token": 50,
+  "index_symbol": "NIFTY",
+  "mapping_summary": {
+    "ambiguous_count": 0,
+    "duplicate_token_count": 0,
+    "index_mapping_status": "MAPPED",
+    "missing_count": 0,
+    "official_constituent_count": 50,
+    "uniquely_mapped_count": 50
+  },
+  "name": "NIFTY50_LIVE_UNIVERSE",
+  "official_raw_sha256": "9fb8832853c279448d2bc05f0e7dd5f460ed2ff35332fea8c40fc1250362ad28",
+  "official_source_provenance": {
+    "http_metadata": {
+      "content_type": "text/csv",
+      "etag": "W/\"3352-1785382253738\"",
+      "last_modified": "Thu, 30 Jul 2026 03:30:53 GMT",
+      "status": 200
+    },
+    "parse_report": {
+      "duplicate_symbols": [],
+      "invalid_symbols": [],
+      "parser_version": "market_event_graph_live_universe_builder_v1",
+      "row_count": 50,
+      "unique_symbol_count": 50
+    },
+    "raw_path": "runtime/reference/market_event_graph/official_nse/ind_nifty50list_9fb8832853c27944.csv",
+    "retrieved_at_ist": "2026-07-30T15:23:22.780758+05:30",
+    "retrieved_at_utc": "2026-07-30T09:53:22.780758Z"
+  },
+  "official_source_url": "https://nsearchives.nseindia.com/content/indices/ind_nifty50list.csv",
+  "schema_version": 1,
+  "source_page_updated_date": "Thu, 30 Jul 2026 03:30:53 GMT",
+  "source_retrieval_date": "2026-07-30",
+  "version": "9fb8832853c27944"
+}

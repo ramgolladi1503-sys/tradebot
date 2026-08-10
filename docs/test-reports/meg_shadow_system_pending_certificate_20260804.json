@@ -1,0 +1,41 @@
+{
+  "allowed_for_live_execution": false,
+  "allowed_for_paper_execution": false,
+  "broker_write_authority": false,
+  "claim_boundary": {
+    "broker_connectivity_certified": false,
+    "paper_or_live_execution_authorized": false,
+    "real_fill_quality_certified": false,
+    "strategy_profitability_certified": false,
+    "structural_edge_certified": false,
+    "unattended_autonomy_authorized": false
+  },
+  "errors": [],
+  "generated_at": "2026-08-03T20:24:55.474200+00:00",
+  "head_sha": "5cb34cfdbf66846d9b991b7d223f0fc7019abf4e",
+  "offline_contracts_passed": true,
+  "offline_report_semantic_sha256": "d7b6d8051949bf1a56e306f5e6c13f4da1be54a2a60b19aabd24a6fb81ccd3c4",
+  "offline_validation": {
+    "errors": [],
+    "head_sha": "5cb34cfdbf66846d9b991b7d223f0fc7019abf4e",
+    "passed": true,
+    "semantic_sha256": "d7b6d8051949bf1a56e306f5e6c13f4da1be54a2a60b19aabd24a6fb81ccd3c4"
+  },
+  "order_authority": false,
+  "post_market_reliability_passed": false,
+  "post_market_semantic_sha256": "",
+  "post_market_validation": {
+    "errors": [],
+    "passed": false,
+    "pending": true,
+    "semantic_sha256": "",
+    "valid": true,
+    "verdict": "MISSING"
+  },
+  "read_only": true,
+  "remaining_gate": "FRESH_PR763_MARKET_SESSION",
+  "schema_version": 1,
+  "semantic_sha256": "d69f46ea557303f8337c9bafc1463f66ad3753a1380397b6db64f6971a14f2c8",
+  "target": "SUPERVISED_READ_ONLY_MEG_SHADOW",
+  "verdict": "IMPLEMENTATION_COMPLETE_LIVE_EVIDENCE_PENDING"
+}

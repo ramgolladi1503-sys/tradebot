@@ -1,0 +1,12 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "campaign_commit_sha": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
+  "composition_manifest_sha": "31842075bdd3f98222bb26c56d034c2a44682a6fa04e80ac79c34029552ed32e",
+  "evidence_root": "runtime/diagnostics/unified_live_validation_pr748_756_v1/unified-pr748-756-20260731-31842075bdd3-presession",
+  "is_order_action": false,
+  "read_only": true,
+  "run_id": "unified-pr748-756-20260731-31842075bdd3-presession",
+  "schema_version": 1,
+  "session_date": "2026-07-31"
+}

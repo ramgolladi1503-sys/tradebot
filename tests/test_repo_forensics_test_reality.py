@@ -126,3 +126,22 @@ def test_score_test_strength_penalizes_fake_confidence_and_mock_only_proof():
     assert mock_score.score == 35
     assert mock_score.grade == "weak"
     assert "mock_without_negative_proof:-10" in mock_score.reasons
+
+
+def test_classifier_does_not_poison_mixed_behavior_file_with_one_count_assertion(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(
+        tmp_path / "tests" / "test_mixed.py",
+        "def test_mixed_behavior():\n"
+        "    values = ['accepted', 'blocked']\n"
+        "    assert len(values) == 2\n"
+        "    assert values == ['accepted', 'blocked']\n"
+        "    assert 'unsafe' not in values\n",
+    )
+    config = load_config(_write_profile(tmp_path))
+
+    report = classify_tests(tmp_path, config)
+    status = next(item for item in report.tests if item.path == "tests/test_mixed.py")
+
+    assert status.test_class == "UNIT_BEHAVIOR"
+    assert status.evidence == "behavior_assertions_present"

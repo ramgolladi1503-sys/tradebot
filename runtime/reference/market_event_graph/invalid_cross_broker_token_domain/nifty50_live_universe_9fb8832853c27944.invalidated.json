@@ -1,0 +1,18 @@
+{
+  "invalidated_at_utc": "2026-07-30T10:00:00Z",
+  "invalidated_at_ist": "2026-07-30T15:30:00+05:30",
+  "invalidation_verdict": "INVALID_CROSS_BROKER_TOKEN_DOMAIN",
+  "original_contract_path": "runtime/reference/market_event_graph/nifty50_live_universe_9fb8832853c27944.json",
+  "original_reconciliation_path": "runtime/reference/market_event_graph/nifty50_live_universe_reconciliation_9fb8832853c27944.json",
+  "official_raw_sha256": "9fb8832853c279448d2bc05f0e7dd5f460ed2ff35332fea8c40fc1250362ad28",
+  "source_master_path": "runtime/upstox_instruments/complete.json",
+  "source_master_sha256": "5da2bc38bc0f54c9fccd14ad5cd6712c6b9f066766d3c621fb82330e6292fe40",
+  "consuming_runtime_provider": "kite",
+  "consuming_runtime_module": "core/kite_depth_ws.py",
+  "reason": "Upstox-derived broker tokens were previously treated as a Kite live universe. That is a cross-broker token-domain mismatch and is not valid for Kite live certification.",
+  "superseding_contract_path": null,
+  "read_only": true,
+  "is_order_action": false,
+  "broker_api_called": false,
+  "allowed_for_live_execution": false
+}

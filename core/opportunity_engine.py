@@ -3047,3 +3047,31 @@ def select_best_opportunity(
             )
         ranked[0] = best
     return best, ranked
+
+# _RUNTIME_AUTHORITY_CUTOVER_WRAPPER_V1
+# The legacy scorer remains intact; authoritative eligibility is now applied
+# before it can select or allocate capital, and the returned result is checked
+# again before leaving this module.
+_RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY = select_best_opportunity
+
+
+def select_best_opportunity(candidates, *args, **kwargs):  # noqa: F811
+    from core.runtime_authority_cutover import (
+        apply_runtime_authority,
+        authority_allows_execution,
+        normalize_selection_result,
+    )
+
+    mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()
+    stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in list(candidates or [])]
+    executable = [candidate for candidate in stamped if authority_allows_execution(candidate)]
+    selection_pool = executable if mode in {"LIVE", "REAL"} else stamped
+    result = _RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY(
+        selection_pool,
+        *args,
+        **kwargs,
+    )
+    return normalize_selection_result(result, mode=mode)
+
+
+select_best_opportunity._runtime_authority_cutover = True

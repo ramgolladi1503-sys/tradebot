@@ -1,0 +1,23 @@
+{
+  "broker_write_authority": false,
+  "logs": {
+    "compile": "",
+    "diff": "",
+    "scope": "changed_paths=18 protected_paths_unchanged=true\n",
+    "tests": "...........................................................              [100%]\n=============================== warnings summary ===============================\ntests/test_runtime_authority_cutover_v1.py: 50 warnings\n  /home/runner/work/tradebot/tradebot/dashboard/ui/table_model.py:288: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`\n    out[col] = None\n\ntests/test_runtime_authority_cutover_v1.py::test_dashboard_model_separates_operator_truth_and_zeroes_selection_score\n  /home/runner/work/tradebot/tradebot/dashboard/ui/table_model.py:312: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`\n    out[\"display_ts_utc\"] = pd.to_datetime(out[\"display_ts_epoch\"], errors=\"coerce\", unit=\"s\", utc=True)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n59 passed, 51 warnings in 2.03s\n"
+  },
+  "order_authority": false,
+  "outcomes": {
+    "compile": "success",
+    "diff": "success",
+    "scope": "success",
+    "tests": "success"
+  },
+  "passed": true,
+  "pr763_base_sha": "1241418cafbefba8fd3d1142e5ae578d9b97cd70",
+  "read_only": true,
+  "schema_version": 4,
+  "semantic_sha256": "aca5ba7db017bd0ac8e2096df8f0aeb324abc9f0c943e204a069acd916f9c6f3",
+  "tested_head_sha": "39bc1adbba73e6af6efc6d4fb9a3f62ce05dd2bf",
+  "verdict": "PASS_RUNTIME_AUTHORITY_CUTOVER_FOCUSED_CERTIFICATION"
+}

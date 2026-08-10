@@ -1,0 +1,35 @@
+{
+  "allowed_for_live_execution": false,
+  "allowed_for_paper_execution": false,
+  "broker_write_authority": false,
+  "evidence": {
+    "focused_workflow_run_id": 30848157053,
+    "test_count": 164,
+    "test_result": "164 passed",
+    "changed_path_count": 45,
+    "runtime_authority_semantic_sha256": "aca5ba7db017bd0ac8e2096df8f0aeb324abc9f0c943e204a069acd916f9c6f3"
+  },
+  "limitations": [
+    "A fresh governed PR #763 market session is still required.",
+    "No profitability or structural edge is certified.",
+    "No paper or live execution authority is granted.",
+    "No broker connectivity or real-fill quality is certified."
+  ],
+  "live_evidence_complete": false,
+  "offline_passed": true,
+  "order_authority": false,
+  "outcomes": {
+    "authority_certificate": "success",
+    "compile": "success",
+    "diff": "success",
+    "scope": "success",
+    "temporary_machinery_absent": "success",
+    "tests": "success"
+  },
+  "read_only": true,
+  "runtime_authority_head_sha": "5934968bed198e4c80fcb9900b99d2142912b5c4",
+  "schema_version": 1,
+  "semantic_sha256": "e8efd4fa919ce0a69e40c6abdf9fe3d00226fa3e13a5d169e62d24a6023dec42",
+  "tested_head_sha": "b54a9d6ea76ed48dbc441651d337179f376d86f7",
+  "verdict": "IMPLEMENTATION_COMPLETE_LIVE_EVIDENCE_PENDING"
+}

@@ -504,6 +504,61 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             tokens = [t for t in tokens if t in known or t in preserve]
 
     tokens, truncated, _budget_meta = ws._enforce_subscription_budget(tokens, max_tokens=max_tokens, option_rank_by_token=option_rank, underlying_tokens=underlying_tokens, sticky_tokens=sticky, active_trade_tokens=sticky)
+    try:
+        observation_registry = ws.load_observation_registry(force=False)
+    except Exception as exc:
+        ws.reset_market_event_graph_observation_plan_state()
+        try:
+            ws._log_ws(
+                "MARKET_EVENT_GRAPH_OBSERVATION_PLAN_BLOCKED",
+                {"reason": f"registry_load_failed:{type(exc).__name__}:{exc}"},
+            )
+        except Exception:
+            pass
+        observation_registry = None
+    if observation_registry is not None:
+        observation_token_list = [int(token) for token in observation_registry.all_tokens]
+        merge = ws.build_observation_subscription_merge(
+            production_tokens=[int(token) for token in tokens],
+            observation_tokens=observation_token_list,
+            budget=max_tokens,
+        )
+        plan = {
+            "ok": bool(merge.get("ok")),
+            "verdict": (
+                "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+                if bool(merge.get("ok"))
+                else str(merge.get("reason") or ws.BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET)
+            ),
+            "production_tokens": [int(token) for token in tokens],
+            "observation_tokens": observation_token_list,
+            "final_union_tokens": [int(token) for token in list(merge.get("tokens") or [])],
+            "missing_observation_tokens": [int(token) for token in list(merge.get("missing_or_pruned_observation_tokens") or [])],
+            "configured_budget": max_tokens,
+            "launch_plan_sha256": str(getattr(observation_registry, "canonical_sha256", "") or ""),
+        }
+        ws.activate_market_event_graph_launch_plan(plan)
+        if bool(merge.get("ok")):
+            tokens = [int(token) for token in list(merge.get("tokens") or [])]
+            for symbol, token in dict(observation_registry.token_by_symbol).items():
+                token_to_symbol[int(token)] = str(symbol).upper()
+                ws._TOKEN_TO_SYMBOL[int(token)] = str(symbol).upper()
+        else:
+            try:
+                ws._log_ws(
+                    "MARKET_EVENT_GRAPH_OBSERVATION_PLAN_BLOCKED",
+                    {
+                        "reason": str(merge.get("reason") or ws.BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET),
+                        "production_token_count": len(tokens),
+                        "observation_token_count": len(observation_token_list),
+                        "configured_budget": max_tokens,
+                        "missing_observation_tokens": list(merge.get("missing_or_pruned_observation_tokens") or [])[:20],
+                    },
+                )
+            except Exception:
+                pass
+    else:
+        ws.reset_market_event_graph_observation_plan_state()
 
     final_by_symbol: dict[str, list[int]] = {}
     final_options: dict[str, int] = {}

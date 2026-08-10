@@ -1,0 +1,18 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "child_pid": 1045,
+  "command": [
+    "python3",
+    "-m",
+    "core.unified_live_validation_pr748_756.launcher"
+  ],
+  "cwd": ".",
+  "end_epoch": 1785469732.350901,
+  "exit_code": 0,
+  "is_order_action": false,
+  "parent_pid": 991,
+  "read_only": true,
+  "run_id": "unified-pr748-756-20260731-8a473c8b0816-live-finalsmoke2",
+  "start_epoch": 1785469728.9900439
+}

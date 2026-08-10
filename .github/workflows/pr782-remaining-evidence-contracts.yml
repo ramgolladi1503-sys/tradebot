@@ -1,0 +1,99 @@
+name: PR782 Remaining Evidence Contracts
+
+on:
+  pull_request:
+    paths:
+      - "core/read_only_live_evidence.py"
+      - "core/kite_read_only_observation_runtime.py"
+      - "scripts/seal_pr763_read_only_evidence.py"
+      - "tests/test_pr782_remaining_evidence_contracts.py"
+      - "tests/test_kite_read_only_observation_runtime.py"
+      - "tests/test_ai_reliability_pr763_session.py"
+      - "docs/agent_reviews/pr782_remaining_evidence_contracts_v1.md"
+      - "docs/certification/pr782_remaining_evidence_contracts_v1.md"
+      - "research/pr782_remaining_evidence_contracts_v1/**"
+      - ".github/workflows/pr782-remaining-evidence-contracts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .
+      TRADEBOT_READ_ONLY: "true"
+      TRADING_MODE: "SIM"
+      EXECUTION_MODE: "SIM"
+      LIVE_BROKER_ADAPTER_ACTIVE: "0"
+      ALLOW_LIVE_ORDERS: "0"
+      PAPER_TRADING_ENABLED: "false"
+      LIVE_TRADING_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pandas numpy pyarrow scikit-learn streamlit python-dotenv requests openai kiteconnect holidays
+
+      - name: Compile changed paths
+        run: |
+          python -m py_compile \
+            core/read_only_live_evidence.py \
+            core/kite_read_only_observation_runtime.py \
+            scripts/seal_pr763_read_only_evidence.py \
+            tests/test_pr782_remaining_evidence_contracts.py \
+            tests/test_kite_read_only_observation_runtime.py
+
+      - name: Run focused evidence contracts
+        run: |
+          pytest -q -o addopts='' tests/test_kite_read_only_observation_runtime.py
+          pytest -q -o addopts='' tests/test_pr782_remaining_evidence_contracts.py
+          pytest -q -o addopts='' tests/test_ai_reliability_pr763_session.py
+
+      - name: Run alternate isolated order
+        run: |
+          pytest -q -o addopts='' tests/test_ai_reliability_pr763_session.py
+          pytest -q -o addopts='' tests/test_pr782_remaining_evidence_contracts.py
+          pytest -q -o addopts='' tests/test_kite_read_only_observation_runtime.py
+
+      - name: Verify protected runtime scope
+        run: |
+          python - <<'PY'
+          import subprocess
+          base = subprocess.check_output(
+              ['git', 'merge-base', 'origin/post-pr783/kite-read-only-observation-runtime-v1', 'HEAD'],
+              text=True,
+          ).strip()
+          changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+          allowed = {
+              'core/read_only_live_evidence.py',
+              'core/kite_read_only_observation_runtime.py',
+              'scripts/seal_pr763_read_only_evidence.py',
+              'tests/test_pr782_remaining_evidence_contracts.py',
+              'tests/test_kite_read_only_observation_runtime.py',
+              'docs/agent_reviews/pr782_remaining_evidence_contracts_v1.md',
+              'docs/certification/pr782_remaining_evidence_contracts_v1.md',
+              'research/pr782_remaining_evidence_contracts_v1/offline_closure.json',
+              'research/pr782_remaining_evidence_contracts_v1/offline_closure.md',
+              '.github/workflows/pr782-remaining-evidence-contracts.yml',
+          }
+          unexpected = sorted(set(changed) - allowed)
+          if unexpected:
+              raise SystemExit(f'PROTECTED_RUNTIME_DRIFT:{unexpected}')
+          print(f'changed_paths={len(changed)} protected_runtime_drift=false')
+          PY
+
+      - name: Validate diff
+        run: git diff --check origin/post-pr783/kite-read-only-observation-runtime-v1...HEAD

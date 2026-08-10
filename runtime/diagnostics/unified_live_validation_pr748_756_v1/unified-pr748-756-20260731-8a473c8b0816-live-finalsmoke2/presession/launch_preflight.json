@@ -1,0 +1,27 @@
+{
+  "allowed_for_live_execution": false,
+  "artifact_manifest_sha256": "48b272206ed951f5122278a2c23d4cb6ba795ca0942b44599a0b37c9001ae31b",
+  "blockers": [],
+  "broker_api_called": false,
+  "campaign_runtime_wired": true,
+  "child_exit_code": 0,
+  "child_pid": 1045,
+  "evidence_root": "runtime/diagnostics/unified_live_validation_pr748_756_v1/unified-pr748-756-20260731-8a473c8b0816-live-finalsmoke2",
+  "is_order_action": false,
+  "launch_command": "PYTHONPATH=. UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE=true python3 -B scripts/run_unified_live_validation_pr748_756_v1.py --origin-main-sha 17262b4b6a42eb09d4d508bfdf6fe0d649ee32af --launch-live",
+  "live_observers_registered": true,
+  "presession_run_id_rejected": true,
+  "read_only": true,
+  "recorder_instantiated": true,
+  "run_id": "unified-pr748-756-20260731-8a473c8b0816-live-finalsmoke2",
+  "runtime_command": [
+    "python3",
+    "-m",
+    "core.unified_live_validation_pr748_756.launcher"
+  ],
+  "sealed": true,
+  "shutdown_seal_registered": true,
+  "single_runtime_process_proven": true,
+  "single_websocket_path_proven": true,
+  "state": "READY_FOR_LIVE_START"
+}

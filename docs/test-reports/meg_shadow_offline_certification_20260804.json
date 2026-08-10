@@ -1,0 +1,97 @@
+{
+  "allowed_for_live_execution": false,
+  "allowed_for_paper_execution": false,
+  "broker_write_authority": false,
+  "claim_boundary": {
+    "broker_connectivity_certified": false,
+    "paper_or_live_execution_authorized": false,
+    "strategy_profitability_certified": false,
+    "structural_edge_certified": false,
+    "target": "SUPERVISED_READ_ONLY_MEG_SHADOW"
+  },
+  "failed_gate_ids": [],
+  "gate_count": 8,
+  "gate_results": {
+    "AI_RELIABILITY_AND_EVIDENCE_INTEGRITY": {
+      "duration_seconds": 3.156406,
+      "passed": true,
+      "process_test_counts": [170],
+      "return_code": 0,
+      "test_invocations": 170,
+      "timed_out": false
+    },
+    "AUTHENTICATION_AND_STARTUP": {
+      "duration_seconds": 2.736162,
+      "passed": true,
+      "process_test_counts": [20],
+      "return_code": 0,
+      "test_invocations": 20,
+      "timed_out": false
+    },
+    "AUTHORITY_RANKING_AND_UI": {
+      "duration_seconds": 2.516849,
+      "passed": true,
+      "process_test_counts": [24],
+      "return_code": 0,
+      "test_invocations": 24,
+      "timed_out": false
+    },
+    "FEED_AND_SUBSCRIPTION_TRUTH": {
+      "duration_seconds": 2.841705,
+      "passed": true,
+      "process_test_counts": [43],
+      "return_code": 0,
+      "test_invocations": 43,
+      "timed_out": false
+    },
+    "MANUAL_APPROVAL_AND_BROKER_FIREWALL": {
+      "duration_seconds": 2.593687,
+      "passed": true,
+      "process_test_counts": [16],
+      "return_code": 0,
+      "test_invocations": 16,
+      "timed_out": false
+    },
+    "MARKET_EVENT_GRAPH_OBSERVATION": {
+      "duration_seconds": 5.626695,
+      "passed": true,
+      "process_test_counts": [40],
+      "return_code": 0,
+      "test_invocations": 40,
+      "timed_out": false
+    },
+    "PERSISTENCE_AND_SHUTDOWN": {
+      "duration_seconds": 9.640252,
+      "passed": true,
+      "process_test_counts": [57],
+      "return_code": 0,
+      "test_invocations": 57,
+      "timed_out": false
+    },
+    "RESTART_AND_RECONCILIATION": {
+      "duration_seconds": 11.50146,
+      "passed": true,
+      "process_test_counts": [53, 6, 1, 1, 1],
+      "return_code": 0,
+      "test_invocations": 62,
+      "timed_out": false
+    }
+  },
+  "gate_test_invocations": 432,
+  "order_authority": false,
+  "read_only": true,
+  "remaining_gate": "FRESH_PR763_MARKET_SESSION",
+  "schema_version": 1,
+  "semantic_sha256": "9e0ed483fac3aab25468f4a86c160af21d1181a10f965033ea7f8b4432ba9345",
+  "source_report_semantic_sha256": "d7b6d8051949bf1a56e306f5e6c13f4da1be54a2a60b19aabd24a6fb81ccd3c4",
+  "tested_branch_head_sha": "a2cf86b5ca624e179661f68394d7cd47548f9abb",
+  "tested_pull_request_merge_sha": "5cb34cfdbf66846d9b991b7d223f0fc7019abf4e",
+  "upstream_reliability_head_sha": "74bd2942c96d7c871575c889387ab10d2a42b658",
+  "upstream_reliability_semantic_sha256": "e8efd4fa919ce0a69e40c6abdf9fe3d00226fa3e13a5d169e62d24a6023dec42",
+  "upstream_runtime_authority_head_sha": "5934968bed198e4c80fcb9900b99d2142912b5c4",
+  "upstream_runtime_authority_semantic_sha256": "aca5ba7db017bd0ac8e2096df8f0aeb324abc9f0c943e204a069acd916f9c6f3",
+  "verdict": "PASS_OFFLINE_MEG_SHADOW_CONTRACTS",
+  "workflow_artifact_id": 8870228801,
+  "workflow_artifact_sha256": "9cb74603045ff2133b383f2c10185bad5a2ffce759ce74be66a35d191beadf07",
+  "workflow_run_id": 30849955485
+}

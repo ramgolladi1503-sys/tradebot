@@ -11,6 +11,8 @@ MARKET_CLOSED = "MARKET_CLOSED"
 STARTING = "STARTING"
 LIVE = "LIVE"
 DEGRADED = "DEGRADED"
+DEGRADED_LOCAL = "DEGRADED_LOCAL"
+VERIFYING_RECOVERY = "VERIFYING_RECOVERY"
 DEAD = "DEAD"
 AUTH_BLOCKED = "AUTH_BLOCKED"
 RESTARTING = "RESTARTING"
@@ -25,6 +27,8 @@ _ALL_STATES = {
     STARTING,
     LIVE,
     DEGRADED,
+    DEGRADED_LOCAL,
+    VERIFYING_RECOVERY,
     DEAD,
     AUTH_BLOCKED,
     RESTARTING,
@@ -171,9 +175,9 @@ def classify_feed_truth_state(
         )
 
     ws_connected = _bool_or_none(snapshot.get("effective_ws_connected", snapshot.get("ws_connected")))
-    if runtime_state in {RECONNECTING, RESUBSCRIBING, RECOVERING_WS_DROP}:
+    if runtime_state in {DEGRADED_LOCAL, VERIFYING_RECOVERY, RECONNECTING, RESUBSCRIBING, RECOVERING_WS_DROP}:
         return FeedTruthStateDecision(
-            state=DEGRADED,
+            state=VERIFYING_RECOVERY if runtime_state == VERIFYING_RECOVERY else DEGRADED,
             reason_code=runtime_state or "recovering",
             reasons=(runtime_state or "recovering",),
             feed_health_truth=None,
