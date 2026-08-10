@@ -94,29 +94,28 @@ def main():
             
         print(f"Narrowed Outcome status: {status}")
         
-    if status == "DEVELOPMENT_STRUCTURE_SUPPORTED":
-        print("Executing locked validation on supported narrowed candidates...")
+    if status == "LOCKED_VALIDATION_SUPPORTED":
+        print("Executing WFA robustness, negative controls, and cost-slippage certification layers...")
         try:
-            out_locked = subprocess.check_output([sys.executable, str(script_dir / "run_tod_session_position_locked_validation_v1.py")], cwd=root).decode("utf-8").strip()
-            status = out_locked.split("\n")[-1]
+            out_cert = subprocess.check_output([sys.executable, str(script_dir / "run_tod_session_position_certification_layers_v1.py")], cwd=root).decode("utf-8").strip()
+            status = out_cert.split("\n")[-1]
         except subprocess.CalledProcessError as e:
-            print(f"BLOCKED: Locked validation stage failed {e}")
+            print(f"BLOCKED: Certification layers stage failed {e}")
             sys.exit(1)
             
-        print(f"Locked Validation status: {status}")
-        
-        if status == "LOCKED_VALIDATION_FAILED":
-            # Write failure registry
-            failure_registry = root / "research" / "evidence" / "behavior_discovery_engine_v2" / "BDE2_TOD_SESSION_POSITION_FAMILY_V1_FAILURE_REGISTRY.md"
-            with failure_registry.open("w") as f:
-                f.write("# TOD Session Position Family Failure Registry\n\nReason: ALL NARROWED CANDIDATES FAILED STRICT LOCKED OUT-OF-SAMPLE GATES.\nResult: NO_LOCKED_SUPPORTED_TOD_SESSION_POSITION_CANDIDATE\nEdge claimed: false\n")
-            status = "NO_LOCKED_SUPPORTED_TOD_SESSION_POSITION_CANDIDATE"
+        print(f"Certification Status: {status}")
     
     with (out_dir / "run_manifest.json").open("w") as f:
-        json.dump({"status": status, "locked_outcomes_accessed": True if "LOCKED" in status else False, "edge_claimed": False}, f, indent=2)
+        json.dump({
+            "status": status, 
+            "locked_outcomes_accessed": True, 
+            "edge_claimed": False,
+            "structural_edge_certified": False,
+            "execution_viable": False
+        }, f, indent=2)
         
     with (out_dir / "family_queue.json").open("w") as f:
-        if status in ("NO_LOCKED_SUPPORTED_TOD_SESSION_POSITION_CANDIDATE", "NO_STRUCTURAL_EDGE_FOUND"):
+        if status in ("NO_LOCKED_SUPPORTED_TOD_SESSION_POSITION_CANDIDATE", "NO_STRUCTURAL_EDGE_FOUND", "STRUCTURAL_EDGE_NOT_CERTIFIED"):
             json.dump({"queue": FAMILY_QUEUE[1:]}, f, indent=2)
         else:
             json.dump({"queue": FAMILY_QUEUE}, f, indent=2)
