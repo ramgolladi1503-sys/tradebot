@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "latest_head": "26c43d1c7a839fb87be8286432f55e492784d588",
+  "latest_head_message": "research(v4): update grammar generator thresholds",
+  "evidence_commit_if_detectable": "eda7d4205",
+  "post_evidence_code_change_detected": true,
+  "changed_after_evidence_files": [
+    "scripts/research/hypothesis_factory/same_corpus_ohlc_feature_grammar_v4.py"
+  ],
+  "evidence_valid_for_latest_head": false,
+  "required_action": "RERUN_V4_AT_CURRENT_HEAD_OR_PIN_PREVIOUS_EVIDENCE_COMMIT",
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false
+}
