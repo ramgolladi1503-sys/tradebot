@@ -1,0 +1,20 @@
+{
+  "schema_version": "V15_METADATA_BOUND_PROSPECTIVE_MANIFEST_V1",
+  "run_id": "KITE_UPLOAD_PARTIAL_H1_FORWARD_OBS_20260810",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "mode": "manual_append",
+  "input_bars_path": "research/evidence/trapped_push_snapback_v18_today_readonly_fetch/input_bars/NIFTY_5MIN_2026-08-10_COMPLETED.csv",
+  "evidence_commit": "76ead51c1c82d125388b0add8bab018437f7bcbb",
+  "registry_commit": "b57197b5643b0e99087dbfac091eb9a2054a5e1b",
+  "metadata_status": "COMMIT_BOUND",
+  "bars_total": 9,
+  "bars_in_scope_opening_window": 9,
+  "bars_out_of_scope": 0,
+  "triggers_in_scope": 1,
+  "misses_in_scope": 8,
+  "pending_outcomes": 0,
+  "available_outcomes": 1,
+  "orders_created": 0,
+  "broker_writes_created": 0,
+  "authority_flags_all_false": true
+}
