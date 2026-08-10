@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "target_candidate_id": "V3_PRED_SEQ_PRE_CLOSE_30_DIRECTIONAL_DOWN_THEN_COMPRESSION",
+  "real_signal_ret6": {
+    "n": 452,
+    "mean": 0.6746660174206404,
+    "median": 3.488812554869325
+  },
+  "wrong_window_control_ret6": {
+    "n": 4,
+    "mean": -7.059465300008616,
+    "median": -3.367961357136906
+  },
+  "inversion_control_ret6": {
+    "n": 447,
+    "mean": 1.1395642243880124,
+    "median": 2.2029441941184835
+  },
+  "verdict": "NEGATIVE_CONTROLS_FAILED",
+  "reasons": [
+    "WRONG_TIME_WINDOW_CONTROL_COMPARABLE_OR_STRONGER",
+    "DIRECTION_INVERSION_CONTROL_COMPARABLE_OR_STRONGER"
+  ]
+}

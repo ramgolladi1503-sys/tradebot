@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "development_candidates_frozen": true,
+  "locked_outcomes_accessed": true,
+  "locked_outcomes_scope": "locked_sessions_only",
+  "search_pressure_adjustment_applied": true,
+  "edge_claimed": false,
+  "locked_supported_count": 1,
+  "candidates_evaluated": [
+    {
+      "candidate_id": "V3_PRED_SEQ_PRE_CLOSE_30_DIRECTIONAL_DOWN_THEN_COMPRESSION",
+      "locked_matches": 184,
+      "locked_distinct_sessions": 183,
+      "locked_ret6_mean": -3.3774919883391097,
+      "locked_ret12_mean": -3.584219548427894,
+      "up_excursion_rate_20bps": 0.5846994535519126,
+      "down_excursion_rate_20bps": 0.5136612021857924,
+      "verdict": "LOCKED_VALIDATION_SUPPORTED",
+      "reasons": []
+    },
+    {
+      "candidate_id": "V3_PRED_SEQ_PRE_CLOSE_30_DIRECTIONAL_UP_THEN_LOWER_REJECTION",
+      "locked_matches": 170,
+      "locked_distinct_sessions": 170,
+      "locked_ret6_mean": -2.102372396131939,
+      "locked_ret12_mean": -2.048576822025888,
+      "up_excursion_rate_20bps": 0.5680473372781065,
+      "down_excursion_rate_20bps": 0.5266272189349113,
+      "verdict": "LOCKED_VALIDATION_REJECTED",
+      "reasons": [
+        "LOCKED_RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "LOCKED_RET12_MEDIAN_MAGNITUDE_GATE_FAIL"
+      ]
+    },
+    {
+      "candidate_id": "V3_PRED_SEQ_PRE_CLOSE_30_COMPRESSION_THEN_RANGE_BALANCE",
+      "locked_matches": 171,
+      "locked_distinct_sessions": 171,
+      "locked_ret6_mean": -0.523424398115911,
+      "locked_ret12_mean": -0.34436301385581036,
+      "up_excursion_rate_20bps": 0.5941176470588235,
+      "down_excursion_rate_20bps": 0.5,
+      "verdict": "LOCKED_VALIDATION_REJECTED",
+      "reasons": [
+        "LOCKED_RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "LOCKED_RET12_MEDIAN_MAGNITUDE_GATE_FAIL"
+      ]
+    }
+  ]
+}
