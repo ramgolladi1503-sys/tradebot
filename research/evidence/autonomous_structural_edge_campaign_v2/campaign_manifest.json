@@ -1,0 +1,17 @@
+{
+  "campaign_version": "v2",
+  "campaign_endpoint": "NO_STRUCTURAL_EDGE_FOUND_IN_AVAILABLE_DATA",
+  "families_attempted_count": 6,
+  "families_failed_count": 3,
+  "families_blocked_count": 3,
+  "historical_candidates_supported_count": 0,
+  "structural_edges_certified_count": 0,
+  "edge_claimed": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "runtime_authority": "NONE",
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false
+}

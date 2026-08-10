@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "runner_id": "SESSION_GAP_DEVELOPMENT_OUTCOME_V1",
+  "search_family_id": "SESSION_GAP_CONTINUATION_REVERSAL_FAMILY_V1",
+  "development_only": true,
+  "forward_outcomes_computed": true,
+  "forward_outcomes_scope": "development_sessions_only",
+  "locked_outcomes_accessed": false,
+  "edge_claimed": false,
+  "status": "NO_DEVELOPMENT_SUPPORTED_SESSION_GAP_CONTINUATION_REVERSAL_CANDIDATE",
+  "supported_candidates": [],
+  "candidate_summaries": [
+    {
+      "candidate_id": "SESSION_GAP_CONTINUATION_REVERSAL_FAMILY_V1_DOWNSIDE_ESCAPE_GAP_PROXIMAL",
+      "required_state": "DOWNSIDE_ESCAPE",
+      "matches": 227,
+      "distinct_sessions": 201,
+      "ret3_bps": {
+        "n": 227,
+        "mean": 0.6462868721166448,
+        "median": 1.259113340508211
+      },
+      "ret6_bps": {
+        "n": 227,
+        "mean": 0.779233327139228,
+        "median": 1.163098494387782
+      },
+      "ret12_bps": {
+        "n": 227,
+        "mean": 0.4278479314278672,
+        "median": 3.0730351276209156
+      },
+      "ret18_bps": {
+        "n": 227,
+        "mean": 2.2574196391083836,
+        "median": 2.145668406361434
+      },
+      "up_excursion_rate_20bps": 0.5594713656387665,
+      "down_excursion_rate_20bps": 0.46255506607929514,
+      "up_excursion_rate_30bps": 0.3964757709251101,
+      "down_excursion_rate_30bps": 0.33480176211453744,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "SESSION_GAP_CONTINUATION_REVERSAL_FAMILY_V1_FAILED_DOWNSIDE_ESCAPE_GAP_PROXIMAL",
+      "required_state": "FAILED_DOWNSIDE_ESCAPE",
+      "matches": 318,
+      "distinct_sessions": 270,
+      "ret3_bps": {
+        "n": 318,
+        "mean": 1.429464773479238,
+        "median": 0.3568483078986162
+      },
+      "ret6_bps": {
+        "n": 318,
+        "mean": 1.349134085836159,
+        "median": -1.056787044327323
+      },
+      "ret12_bps": {
+        "n": 318,
+        "mean": 1.5288564650547307,
+        "median": 1.5234394808649743
+      },
+      "ret18_bps": {
+        "n": 318,
+        "mean": 2.116404832488623,
+        "median": -0.21516141639810193
+      },
+      "up_excursion_rate_20bps": 0.48742138364779874,
+      "down_excursion_rate_20bps": 0.44654088050314467,
+      "up_excursion_rate_30bps": 0.3490566037735849,
+      "down_excursion_rate_30bps": 0.3081761006289308,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET6_RET12_SIGN_CONSISTENCY_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "SESSION_GAP_CONTINUATION_REVERSAL_FAMILY_V1_UPSIDE_ESCAPE_GAP_PROXIMAL",
+      "required_state": "UPSIDE_ESCAPE",
+      "matches": 197,
+      "distinct_sessions": 180,
+      "ret3_bps": {
+        "n": 197,
+        "mean": 4.087931808196234,
+        "median": 1.4195514217507643
+      },
+      "ret6_bps": {
+        "n": 197,
+        "mean": 3.750400482429493,
+        "median": 1.3069346811178661
+      },
+      "ret12_bps": {
+        "n": 197,
+        "mean": 2.49164343762211,
+        "median": 3.969553118350344
+      },
+      "ret18_bps": {
+        "n": 197,
+        "mean": 4.335326444234721,
+        "median": 3.930393344806493
+      },
+      "up_excursion_rate_20bps": 0.5329949238578681,
+      "down_excursion_rate_20bps": 0.45685279187817257,
+      "up_excursion_rate_30bps": 0.4010152284263959,
+      "down_excursion_rate_30bps": 0.3401015228426396,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "SESSION_GAP_CONTINUATION_REVERSAL_FAMILY_V1_FAILED_UPSIDE_ESCAPE_GAP_PROXIMAL",
+      "required_state": "FAILED_UPSIDE_ESCAPE",
+      "matches": 278,
+      "distinct_sessions": 244,
+      "ret3_bps": {
+        "n": 278,
+        "mean": 3.9938730360228845,
+        "median": 1.4815517953137292
+      },
+      "ret6_bps": {
+        "n": 278,
+        "mean": 4.09769438674797,
+        "median": 1.8182213685646875
+      },
+      "ret12_bps": {
+        "n": 278,
+        "mean": 3.7528613732870144,
+        "median": 4.421752111156696
+      },
+      "ret18_bps": {
+        "n": 278,
+        "mean": 4.242609740161875,
+        "median": 6.226557400839106
+      },
+      "up_excursion_rate_20bps": 0.5215827338129496,
+      "down_excursion_rate_20bps": 0.4136690647482014,
+      "up_excursion_rate_30bps": 0.38489208633093525,
+      "down_excursion_rate_30bps": 0.302158273381295,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    }
+  ]
+}

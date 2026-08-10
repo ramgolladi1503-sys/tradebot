@@ -1,0 +1,8 @@
+{
+  "search_family_id": "PRE_CLOSE_IMBALANCE_PROXY_FAMILY_V1",
+  "total_candidates": 10,
+  "total_rejections": 16,
+  "edge_claimed": false,
+  "forward_outcomes_used": false,
+  "locked_outcomes_accessed": false
+}

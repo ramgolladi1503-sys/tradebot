@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "runner_id": "VOLATILITY_REGIME_DEVELOPMENT_OUTCOME_V1",
+  "search_family_id": "VOLATILITY_REGIME_CONDITIONAL_FAMILY_V1",
+  "development_only": true,
+  "forward_outcomes_computed": true,
+  "forward_outcomes_scope": "development_sessions_only",
+  "locked_outcomes_accessed": false,
+  "edge_claimed": false,
+  "status": "NO_DEVELOPMENT_SUPPORTED_VOLATILITY_REGIME_CONDITIONAL_CANDIDATE",
+  "supported_candidates": [],
+  "candidate_summaries": [
+    {
+      "candidate_id": "VOLATILITY_REGIME_CONDITIONAL_FAMILY_V1_COMPRESSION_REGIME",
+      "required_state": "COMPRESSION",
+      "matches": 694,
+      "distinct_sessions": 394,
+      "ret3_bps": {
+        "n": 694,
+        "mean": 1.0288978099679225,
+        "median": 0.2261877482967467
+      },
+      "ret6_bps": {
+        "n": 694,
+        "mean": 0.8567145435642756,
+        "median": -0.051774190507059004
+      },
+      "ret12_bps": {
+        "n": 694,
+        "mean": 0.07707974542604422,
+        "median": 0.6456278813882221
+      },
+      "ret18_bps": {
+        "n": 694,
+        "mean": 0.38413209501882084,
+        "median": 0.11173268766206945
+      },
+      "up_excursion_rate_20bps": 0.42363112391930835,
+      "down_excursion_rate_20bps": 0.414985590778098,
+      "up_excursion_rate_30bps": 0.30547550432276654,
+      "down_excursion_rate_30bps": 0.28530259365994237,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET6_RET12_SIGN_CONSISTENCY_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    },
+    {
+      "candidate_id": "VOLATILITY_REGIME_CONDITIONAL_FAMILY_V1_EXPANSION_REGIME",
+      "required_state": "EXPANSION",
+      "matches": 577,
+      "distinct_sessions": 389,
+      "ret3_bps": {
+        "n": 577,
+        "mean": 0.6834577839716329,
+        "median": 0.5990569683844704
+      },
+      "ret6_bps": {
+        "n": 577,
+        "mean": 0.4130472133980471,
+        "median": -0.5723747419206227
+      },
+      "ret12_bps": {
+        "n": 577,
+        "mean": -0.6788125398182299,
+        "median": 1.3530596544675255
+      },
+      "ret18_bps": {
+        "n": 577,
+        "mean": -0.500783639541858,
+        "median": -0.19267971236747172
+      },
+      "up_excursion_rate_20bps": 0.4610051993067591,
+      "down_excursion_rate_20bps": 0.43500866551126516,
+      "up_excursion_rate_30bps": 0.32582322357019067,
+      "down_excursion_rate_30bps": 0.3119584055459272,
+      "inferred_direction": null,
+      "verdict": "DEVELOPMENT_STRUCTURE_REJECTED",
+      "reasons": [
+        "RET6_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET12_MEDIAN_MAGNITUDE_GATE_FAIL",
+        "RET6_RET12_SIGN_CONSISTENCY_FAIL",
+        "NO_DIRECTION_INFERRED"
+      ]
+    }
+  ]
+}
