@@ -60,13 +60,18 @@ os.environ.setdefault("ANALYTICS_RUNTIME_DIR", str(_TEST_RUNTIME_ROOT / "analyti
 
 @pytest.fixture(autouse=True)
 def _isolate_runtime_state(monkeypatch, tmp_path, request):
-    """Evidence contract: every test gets isolated runtime state.
+    """Evidence contract: every test gets isolated runtime and persistence state.
 
     The suite frequently monkeypatches cfg.EXECUTION_MODE directly. A leftover
     TRADING_MODE or DRY_RUN env var from a manual run can override that and push
     live-mode safety tests through paper/sim branches. Runtime files also need a
     per-test root so run locks and auth cooldown breadcrumbs cannot leak between
     tests.
+
+    Runtime and tick persistence both have process-wide lifecycle state. A test
+    that proves shutdown must not poison the next unrelated test in the same
+    pytest worker. Production shutdown semantics remain terminal; this fixture
+    uses only test isolation/reset controls.
     """
 
     monkeypatch.delenv("TRADING_MODE", raising=False)
@@ -92,6 +97,10 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
         monkeypatch.setattr(cfg, "DB_ROOT", str(runtime_root / "db"), raising=False)
         monkeypatch.setattr(cfg, "REPORTS_ROOT", str(runtime_root / "reports"), raising=False)
         monkeypatch.setattr(cfg, "ANALYTICS_RUNTIME_DIR", str(runtime_root / "analytics"), raising=False)
+        # Ordinary unit tests historically assert immediately persisted tick DB
+        # truth. Keep that deterministic by default; async/pressure tests
+        # explicitly opt back into async writes in their own setup.
+        monkeypatch.setattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", False, raising=False)
     except Exception as exc:
         monkeypatch.setenv("PYTEST_CFG_RUNTIME_ISOLATION_ERROR", type(exc).__name__)
 
@@ -118,14 +127,50 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
                 sie._default_recorder.shutdown()
             sie._default_recorder = None
 
-    # Runtime persistence has a terminal production shutdown latch. PR #763
-    # certification tests intentionally exercise shutdown repeatedly in one
-    # pytest process, so each test starts from the explicit test-only reset.
-    if Path(str(request.node.fspath)).name in _PR763_CERTIFICATION_FILES:
+    # Runtime persistence shutdown is intentionally terminal in production.
+    # Reset that terminal latch for EVERY isolated unit test, not only PR763
+    # certification files, because ordinary tests and teardown paths can also
+    # exercise shutdown in the same pytest process.
+    with contextlib.suppress(Exception):
+        import core.feed.runtime_store as runtime_store
+        if hasattr(runtime_store, "reset_runtime_persistence_for_tests"):
+            runtime_store.reset_runtime_persistence_for_tests()
+
+    # Tick persistence also carries process-wide init/shutdown state. Restore a
+    # clean test worker state without changing production lifecycle semantics.
+    with contextlib.suppress(Exception):
+        import core.tick_store as tick_store
+        with tick_store._WRITE_QUEUE_LOCK:
+            tick_store._WRITE_QUEUE.clear()
+        tick_store._FLUSH_THREAD_STOP.clear()
+        tick_store._FLUSH_THREAD = None
+        tick_store._FLUSH_THREAD_IDENT = None
+        tick_store._FLUSH_THREAD_NAME = None
+        tick_store._FLUSH_THREAD_JOIN_COMPLETED = False
+        tick_store._FLUSH_THREAD_TERMINATED = False
+        tick_store._ACCEPTING_WRITES = True
+        tick_store._SHUTDOWN_STARTED_MONOTONIC_NS = None
+        tick_store._SHUTDOWN_FINISHED_MONOTONIC_NS = None
+        tick_store._SHUTDOWN_STATE = None
+        tick_store._SHUTDOWN_RESULT = None
+        tick_store._INITIAL_SHUTDOWN_RESULT = None
+        tick_store._CLEANUP_SHUTDOWN_RESULT = None
+        tick_store._INIT_DONE = False
+        tick_store._INIT_DB_PATH = None
+        tick_store._LAST_TICK_EPOCH = None
+        tick_store._LAST_TICK_BY_TOKEN.clear()
+
+    # Trade-builder behavior tests exercise candidate semantics, not broker
+    # authentication. Give only those test modules inert credentials so auth
+    # bootstrap cannot silently downgrade otherwise deterministic candidates.
+    test_path = Path(str(request.node.fspath)).as_posix()
+    if "trade_builder" in test_path or "/strategy_truth/" in test_path:
+        monkeypatch.setenv("KITE_API_KEY", "pytest_inert_api_key")
+        monkeypatch.setenv("KITE_ACCESS_TOKEN", "pytest_inert_access_token")
         with contextlib.suppress(Exception):
-            import core.feed.runtime_store as runtime_store
-            if hasattr(runtime_store, "reset_runtime_persistence_for_tests"):
-                runtime_store.reset_runtime_persistence_for_tests()
+            from config import config as cfg
+            monkeypatch.setattr(cfg, "KITE_API_KEY", "pytest_inert_api_key", raising=False)
+            monkeypatch.setattr(cfg, "KITE_ACCESS_TOKEN", "pytest_inert_access_token", raising=False)
 
     # PR #763 callback-negative controls reuse fixed synthetic timestamps. The
     # immediately preceding positive reconciliation test records those tokens in
