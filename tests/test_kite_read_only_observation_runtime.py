@@ -275,7 +275,7 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
         result=result,
         output_path=tmp_path / "meg_wiring_evidence.json",
         cycle_count=1,
-        producer_commit_sha="1" * 40,
+        producer_commit="1" * 40,
     )
     from core.kite_read_only_observation_runtime import ObservationLifecycle
     shutdown = ObservationLifecycle(feed).shutdown()
