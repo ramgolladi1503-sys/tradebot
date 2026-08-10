@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "run_id": "V14_DRY_RUN_001",
+  "runner_exit_code": 0,
+  "logs_created": [
+    "candidate_trigger_log.jsonl",
+    "missed_trigger_log.jsonl",
+    "bar_snapshot_log.jsonl",
+    "post_event_return_log.jsonl",
+    "adverse_favorable_excursion_log.jsonl",
+    "governance_verdict_log.jsonl",
+    "run_manifest.json",
+    "CONTROLLED_VERDICT.json"
+  ],
+  "trigger_count": 1090,
+  "outcome_rows_created": 1090,
+  "orders_created": 0,
+  "broker_writes_created": 0,
+  "authority_flags_all_false": true,
+  "dry_run_status": "DRY_RUN_PASS"
+}

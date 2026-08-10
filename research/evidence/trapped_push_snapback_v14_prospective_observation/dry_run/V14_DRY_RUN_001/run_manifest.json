@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "run_id": "V14_DRY_RUN_001",
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "mode": "historical_replay",
+  "input_bars_path": "research/hypotheses/historical_corpus/kite_nifty_cache_v2/canonical/NIFTY.csv",
+  "total_bars_evaluated": 36849,
+  "trigger_count": 1090,
+  "outcome_count": 1090,
+  "orders_created": 0,
+  "broker_writes_created": 0,
+  "authority_flags_all_false": true
+}

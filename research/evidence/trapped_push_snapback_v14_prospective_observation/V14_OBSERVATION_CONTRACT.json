@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "source_registry_commit": "b57197b5643b0e99087dbfac091eb9a2054a5e1b",
+  "source_support_label": "HISTORICAL_OOS_SUPPORTED_OPENING_MICRO_PATTERN_EXECUTION_UNVERIFIED",
+  "observation_mode": "PAPER_OBSERVATION_ONLY_NO_ORDERS",
+  "paper_authorized": false,
+  "live_authorized": false,
+  "order_authority": false,
+  "broker_write_authority": false,
+  "allowed_runtime_actions": [
+    "evaluate_completed_5min_bars",
+    "log_candidate_trigger_state",
+    "log_missed_trigger_state",
+    "log_adverse_favorable_excursion",
+    "write_read_only_evidence"
+  ],
+  "forbidden_runtime_actions": [
+    "place_order",
+    "modify_order",
+    "cancel_order",
+    "send_broker_write",
+    "route_live_signal",
+    "mark_execution_viable",
+    "claim_edge",
+    "claim_structural_certification"
+  ],
+  "minimum_sessions": 20,
+  "minimum_events": 20,
+  "opening_window": "09:15-11:30 IST",
+  "bar_granularity": "completed 5-minute bars",
+  "trigger_predicate": "(range_bps[t-1] > 12.0) & (upper_wick_bps[t-1] > 4.0) & (body_bps[t] < -2.0)",
+  "target_measurement": "NIFTY 6-bar / 30-minute short return",
+  "logs_required": [
+    "candidate_trigger_log.jsonl",
+    "missed_trigger_log.jsonl",
+    "bar_snapshot_log.jsonl",
+    "post_event_return_log.jsonl",
+    "adverse_favorable_excursion_log.jsonl",
+    "governance_verdict_log.jsonl"
+  ],
+  "pass_fail_criteria": {
+    "minimum_cost_adj_expectancy_bps": 5.0,
+    "minimum_win_rate": 0.55
+  },
+  "stop_conditions": [
+    "3_consecutive_losing_triggers",
+    "cumulative_loss_exceeds_40bps"
+  ]
+}
