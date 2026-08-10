@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "controls": [
+    {
+      "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+      "control_type": "DIRECTION_INVERSION",
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      },
+      "control_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.34615384615384615,
+        "loss_rate": 0.6538461538461539,
+        "expectancy_bps": -12.857148318996451,
+        "cost_adjusted_expectancy_bps": -15.857148318996451,
+        "average_win_bps": 13.35089551499142,
+        "average_loss_bps": -26.731995054637093,
+        "payoff_ratio": 0.49943505853954184,
+        "profit_factor": 0.2644067956974045,
+        "average_R": -0.6428574159498227,
+        "median_R": -0.621503053641892
+      },
+      "severity_classification": {
+        "severity": "PASS",
+        "reason": "SIGNAL_OUTPERFORMS_CONTROL_CLEANLY",
+        "candidate_status": "ECONOMIC_SHAPE_PASS_CONTROL_PENDING"
+      }
+    }
+  ]
+}

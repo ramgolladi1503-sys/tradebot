@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "controlled_verdict": "V11_PROVENANCE_REPAIRED_V10_NO_PILOT_DEVELOPMENT_SURVIVORS",
-  "latest_commit": "1ae8204b95fe874d55569e9bf853476c5f8a2ab0",
+  "latest_commit": "d4ea6254f2534dd447d75e44029c514552655389",
   "v11_provenance_repaired": true,
   "v10_pilot_run": true,
   "user_owned_selective_data_found": true,

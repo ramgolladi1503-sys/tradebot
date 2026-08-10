@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "index_data_path": "/Users/madhuram/tradebot-strategy-certification-kernel-v0/research/hypotheses/historical_corpus/kite_nifty_cache_v2/canonical/NIFTY.csv",
+  "constituent_data_path": "/Users/madhuram/tradebot-ml-evidence/context-transition-atlas-v1/context-transition-v3/constituent-structure-v1/selective-upstox-missing-v1",
+  "symbols_available": ["BEL", "INDIGO", "ITCHOTELS", "JIOFIN", "KWIL", "MAXHEALTH", "TMCV", "TRENT", "ZOMATO"],
+  "symbols_used": ["BEL", "INDIGO", "JIOFIN", "TRENT", "ZOMATO"],
+  "date_range": "2025-08-26 to 2026-07-08",
+  "bar_granularity": "5-minute completed bars",
+  "aligned_bar_count": 1888,
+  "session_count": 75,
+  "known_limitations": "Selective 5 constituent symbols only; incomplete NIFTY 50 breadth.",
+  "safe_to_use_for_research": true,
+  "not_full_nifty_breadth": true
+}

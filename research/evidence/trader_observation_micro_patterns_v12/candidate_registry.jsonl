@@ -1,0 +1,3 @@
+{"candidate_id": "H1_TRAPPED_PUSH_SNAPBACK", "family": "TRAPPED_PUSH_SNAPBACK", "target_direction": "DOWN", "economic_rationale": "Buyers fail at upper wick and get trapped; immediate snapback selling follow-through."}
+{"candidate_id": "H2_ABSORPTION_AFTER_WIDE_CANDLE", "family": "ABSORPTION_AFTER_WIDE_CANDLE", "target_direction": "UP", "economic_rationale": "Impulse bar halts into tight absorption before continuation."}
+{"candidate_id": "H3_CONSTITUENT_DISAGREEMENT_INDEX_HOLD", "family": "CONSTITUENT_DISAGREEMENT_INDEX_HOLD", "target_direction": "UP", "economic_rationale": "Constituent breadth leads while index body hesitates."}

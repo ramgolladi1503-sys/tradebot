@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "frozen_hypotheses_count": 3,
+  "frozen_hypotheses": [
+    {
+      "hypothesis_id": "H1_TRAPPED_PUSH_SNAPBACK",
+      "source_observation_ids": ["OBS_TRAPPED_PUSH_FAMILY"],
+      "market_behavior_name": "TRAPPED_PUSH_SNAPBACK",
+      "causal_specification": "Prior bar expansion (range > 12 bps) with upper wick rejection (> 4 bps), followed by current bar negative body (< -2 bps).",
+      "entry_condition_completed_bars_only": "Completed bar t-1 range > 12 bps, upper wick > 4 bps, completed bar t body < -2 bps.",
+      "invalidating_condition": "Bar t close above bar t-1 high.",
+      "target_outcome": "NIFTY index 6-bar return (30 min)",
+      "expected_direction": "DOWN",
+      "expected_holding_bars": 6,
+      "economic_rationale_from_observation": "Buyers fail at candle high and get trapped; subsequent immediate negative body triggers stop runs and short-term snapback selling.",
+      "why_not_duplicate_of_failed_V3_V4_V5_V6_V10": "Differs from V3/V4 single OHLC features by explicitly requiring upper wick rejection paired with immediate bar-to-bar body sign flip.",
+      "allowed_data_sources": ["NIFTY 5-min completed bars"],
+      "forbidden_data_sources": ["Future bars", "Tick/bid-ask/depth", "Uncompleted bars"],
+      "frozen_before_outcome_test": true
+    },
+    {
+      "hypothesis_id": "H2_ABSORPTION_AFTER_WIDE_CANDLE",
+      "source_observation_ids": ["OBS_ABSORPTION_FAMILY"],
+      "market_behavior_name": "ABSORPTION_AFTER_WIDE_CANDLE",
+      "causal_specification": "Prior bar wide range (> 15 bps), current bar tight absorption range (< 5 bps) with constituent dispersion > 10 bps.",
+      "entry_condition_completed_bars_only": "Completed bar t-1 range > 15 bps, completed bar t range < 5 bps.",
+      "invalidating_condition": "Bar t range > 10 bps.",
+      "target_outcome": "NIFTY index 6-bar return (30 min)",
+      "expected_direction": "UP",
+      "expected_holding_bars": 6,
+      "economic_rationale_from_observation": "Impulse candle halts abruptly into a narrow body, absorbing selling liquidity before trend continuation.",
+      "why_not_duplicate_of_failed_V3_V4_V5_V6_V10": "Measures multi-bar range compression ratio immediately after expansion rather than static indicator thresholds.",
+      "allowed_data_sources": ["NIFTY 5-min completed bars", "Selective constituent returns"],
+      "forbidden_data_sources": ["Future bars", "Tick/bid-ask/depth"],
+      "frozen_before_outcome_test": true
+    },
+    {
+      "hypothesis_id": "H3_CONSTITUENT_DISAGREEMENT_INDEX_HOLD",
+      "source_observation_ids": ["OBS_DISAGREEMENT_FAMILY"],
+      "market_behavior_name": "CONSTITUENT_DISAGREEMENT_INDEX_HOLD",
+      "causal_specification": "Current NIFTY body stagnant (|body| < 2 bps) while core constituent breadth is extreme (up >= 0.8 or <= 0.2).",
+      "entry_condition_completed_bars_only": "Completed bar t index |body| < 2 bps, constituent breadth >= 0.8.",
+      "invalidating_condition": "Constituent breadth between 0.3 and 0.7.",
+      "target_outcome": "NIFTY index 6-bar return (30 min)",
+      "expected_direction": "UP",
+      "expected_holding_bars": 6,
+      "economic_rationale_from_observation": "Constituent stocks lead directional pressure while index price hesitates, predicting imminent index catch-up.",
+      "why_not_duplicate_of_failed_V3_V4_V5_V6_V10": "Focuses on price-stagnation cross-sectional breadth divergence rather than simple lead-lag return diffs (V10).",
+      "allowed_data_sources": ["NIFTY 5-min completed bars", "Selective constituent 5-min completed bars"],
+      "forbidden_data_sources": ["Future bars", "Tick/bid-ask/depth"],
+      "frozen_before_outcome_test": true
+    }
+  ]
+}

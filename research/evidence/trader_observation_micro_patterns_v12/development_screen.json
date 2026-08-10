@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "total_candidates": 3,
+  "survivors_count": 1,
+  "results": [
+    {
+      "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+      "dev_trade_count": 12,
+      "metrics": {
+        "trade_count": 12,
+        "win_rate": 0.6666666666666666,
+        "loss_rate": 0.3333333333333333,
+        "expectancy_bps": 10.347766246009416,
+        "cost_adjusted_expectancy_bps": 7.3477662460094155,
+        "average_win_bps": 28.41291168374616,
+        "average_loss_bps": -25.782524629464064,
+        "payoff_ratio": 1.102022090236893,
+        "profit_factor": 2.204044180473786,
+        "average_R": 0.5173883123004708,
+        "median_R": 0.5355415961618426
+      },
+      "passed_dev_screen": true
+    },
+    {
+      "candidate_id": "H2_ABSORPTION_AFTER_WIDE_CANDLE",
+      "dev_trade_count": 5,
+      "metrics": {
+        "trade_count": 5,
+        "win_rate": 0.4,
+        "loss_rate": 0.6,
+        "expectancy_bps": -2.531339749259453,
+        "cost_adjusted_expectancy_bps": -5.531339749259454,
+        "average_win_bps": 20.280110692542095,
+        "average_loss_bps": -17.738973377127152,
+        "payoff_ratio": 1.1432516561917567,
+        "profit_factor": 0.7621677707945044,
+        "average_R": -0.12656698746297268,
+        "median_R": -0.230122547663969
+      },
+      "passed_dev_screen": false
+    },
+    {
+      "candidate_id": "H3_CONSTITUENT_DISAGREEMENT_INDEX_HOLD",
+      "dev_trade_count": 97,
+      "metrics": {
+        "trade_count": 97,
+        "win_rate": 0.4536082474226804,
+        "loss_rate": 0.5360824742268041,
+        "expectancy_bps": -0.7069075052685354,
+        "cost_adjusted_expectancy_bps": -3.7069075052685356,
+        "average_win_bps": 9.68832435885863,
+        "average_loss_bps": -9.51646730386207,
+        "payoff_ratio": 1.0180589129883117,
+        "profit_factor": 0.8614344648362638,
+        "average_R": -0.03534537526342678,
+        "median_R": -0.06785694205596604
+      },
+      "passed_dev_screen": false
+    }
+  ]
+}

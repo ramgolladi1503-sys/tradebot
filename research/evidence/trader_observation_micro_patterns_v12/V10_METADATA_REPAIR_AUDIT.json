@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "repair_reason": "V10 CONTROLLED_VERDICT.json recorded prior commit 1ae8204b95fe874d55569e9bf853476c5f8a2ab0 instead of final V10 commit d4ea6254f2534dd447d75e44029c514552655389.",
+  "incorrect_latest_commit_before": "1ae8204b95fe874d55569e9bf853476c5f8a2ab0",
+  "correct_latest_commit_after": "d4ea6254f2534dd447d75e44029c514552655389",
+  "does_this_modify_research_logic": false,
+  "does_this_modify_edge_claim": false,
+  "does_this_modify_certification_status": false,
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false
+}

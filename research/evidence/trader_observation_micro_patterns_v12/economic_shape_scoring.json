@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "scoring_results": [
+    {
+      "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+      "economic_shape_classification": "ECONOMIC_SHAPE_PASS_CONTROL_PENDING",
+      "real_metrics": {
+        "trade_count": 26,
+        "win_rate": 0.6538461538461539,
+        "loss_rate": 0.34615384615384615,
+        "expectancy_bps": 12.857148318996451,
+        "cost_adjusted_expectancy_bps": 9.857148318996451,
+        "average_win_bps": 26.731995054637093,
+        "average_loss_bps": -13.35089551499142,
+        "payoff_ratio": 2.002262322000823,
+        "profit_factor": 3.782051052668221,
+        "average_R": 0.6428574159498227,
+        "median_R": 0.621503053641892
+      }
+    }
+  ]
+}
