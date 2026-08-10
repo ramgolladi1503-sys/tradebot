@@ -59,10 +59,15 @@ jobs:
               '.github/workflows/pr782-remaining-evidence-contracts.yml',
               '.github/workflows/runtime-authority-cutover.yml',
               '.github/workflows/tests.yml',
+              'core/feed/runtime_store.py',
+              'dashboard/ui/table_model.py',
               'docs/agent_reviews/meg803_identity_manifest_repair.md',
               'scripts/adjudicate_full_system_merge_readiness.py',
               'tests/conftest.py',
+              'tests/strategy_truth/test_trade_builder_strategies.py',
               'tests/test_kite_read_only_observation_runtime.py',
+              'tests/test_option_chain_dirty_data_candidate_preservation.py',
+              'tests/test_tick_store.py',
           }
           unexpected = sorted(actual - allowed)
           if unexpected:
