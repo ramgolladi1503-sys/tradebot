@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "target_candidate_id": "V4_PRED_BAR_BODY_PRE_CLOSE_30_B70_LOWER_REJECTION",
+  "real_signal_ret6": {
+    "n": 98,
+    "mean": -2.0269619445653815,
+    "median": 1.1864139229789128
+  },
+  "wrong_window_control_ret6": {
+    "n": 3,
+    "mean": 6.786035498230757,
+    "median": 4.299183354199432
+  },
+  "state_placebo_control_ret6": {
+    "n": 94,
+    "mean": -2.4112619910147104,
+    "median": 1.1864139229789128
+  },
+  "verdict": "NEGATIVE_CONTROLS_FAILED",
+  "reasons": [
+    "WRONG_TIME_WINDOW_CONTROL_COMPARABLE_OR_STRONGER",
+    "STATE_PLACEBO_CONTROL_COMPARABLE_OR_STRONGER"
+  ]
+}

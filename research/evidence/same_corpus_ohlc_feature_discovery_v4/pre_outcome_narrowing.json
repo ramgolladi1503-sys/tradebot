@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "raw_survivors_count": 84,
+  "narrowed_survivors_count": 3,
+  "narrowing_rules": [
+    "MIN_DISTINCT_SESSIONS_30",
+    "PRE_OUTCOME_FEATURE_SPECIFICITY"
+  ],
+  "frozen_candidates": [
+    {
+      "candidate_id": "V4_PRED_BAR_BODY_PRE_CLOSE_30_B70_LOWER_REJECTION",
+      "family_group": "BAR_MORPHOLOGY_STATE_INTERACTION",
+      "candidate_type": "BAR_MORPHOLOGY_PREDICATE",
+      "predicate_tree_hash": "daee90e059ad2ce3a71499a13ad21fd8e4a9d8113d498a25f24752a65778fb30",
+      "matches": 62,
+      "distinct_sessions": 62,
+      "ret3_bps": {
+        "n": 62,
+        "mean": 10.89794497906636,
+        "median": 4.650220239873493
+      },
+      "ret6_bps": {
+        "n": 62,
+        "mean": 8.958728602081342,
+        "median": 4.913522521503566
+      },
+      "ret12_bps": {
+        "n": 62,
+        "mean": 3.883584896537396,
+        "median": 6.373218557346183
+      },
+      "ret18_bps": {
+        "n": 62,
+        "mean": 5.744849915658067,
+        "median": 9.658723216348086
+      },
+      "up_excursion_rate_20bps": 0.6612903225806451,
+      "down_excursion_rate_20bps": 0.5161290322580645,
+      "up_excursion_rate_30bps": 0.5483870967741935,
+      "down_excursion_rate_30bps": 0.43548387096774194,
+      "inferred_direction": "UP",
+      "verdict": "DEVELOPMENT_STRUCTURE_SUPPORTED",
+      "reasons": []
+    },
+    {
+      "candidate_id": "V4_PRED_BAR_BODY_PRE_CLOSE_30_B70_COMPRESSION",
+      "family_group": "BAR_MORPHOLOGY_STATE_INTERACTION",
+      "candidate_type": "BAR_MORPHOLOGY_PREDICATE",
+      "predicate_tree_hash": "39dcbe97f7c8252395dbdac6f08db8688f4cb52792437f41ac8fef746ae65608",
+      "matches": 61,
+      "distinct_sessions": 61,
+      "ret3_bps": {
+        "n": 61,
+        "mean": 10.297210030164285,
+        "median": 4.13733416361417
+      },
+      "ret6_bps": {
+        "n": 61,
+        "mean": 8.31198204534931,
+        "median": 4.8028500963614995
+      },
+      "ret12_bps": {
+        "n": 61,
+        "mean": 2.9899223163623367,
+        "median": 5.308923346198924
+      },
+      "ret18_bps": {
+        "n": 61,
+        "mean": 4.931300561782861,
+        "median": 9.209948363564369
+      },
+      "up_excursion_rate_20bps": 0.6557377049180327,
+      "down_excursion_rate_20bps": 0.5245901639344263,
+      "up_excursion_rate_30bps": 0.5409836065573771,
+      "down_excursion_rate_30bps": 0.4426229508196721,
+      "inferred_direction": "UP",
+      "verdict": "DEVELOPMENT_STRUCTURE_SUPPORTED",
+      "reasons": []
+    },
+    {
+      "candidate_id": "V4_PRED_BAR_BODY_PRE_CLOSE_30_B70_UPPER_REJECTION",
+      "family_group": "BAR_MORPHOLOGY_STATE_INTERACTION",
+      "candidate_type": "BAR_MORPHOLOGY_PREDICATE",
+      "predicate_tree_hash": "8ac684a1b2adbd30e0fd037be44d92a87d76ee7fe7b14cf133ccf8e6674b387b",
+      "matches": 58,
+      "distinct_sessions": 58,
+      "ret3_bps": {
+        "n": 58,
+        "mean": 11.143292331298777,
+        "median": 4.650220239873493
+      },
+      "ret6_bps": {
+        "n": 58,
+        "mean": 9.04334556381861,
+        "median": 7.073139586613042
+      },
+      "ret12_bps": {
+        "n": 58,
+        "mean": 4.321768501641313,
+        "median": 8.282441874862823
+      },
+      "ret18_bps": {
+        "n": 58,
+        "mean": 6.313548029933343,
+        "median": 12.002699243230941
+      },
+      "up_excursion_rate_20bps": 0.6551724137931034,
+      "down_excursion_rate_20bps": 0.5,
+      "up_excursion_rate_30bps": 0.5517241379310345,
+      "down_excursion_rate_30bps": 0.43103448275862066,
+      "inferred_direction": "UP",
+      "verdict": "DEVELOPMENT_STRUCTURE_SUPPORTED",
+      "reasons": []
+    }
+  ]
+}

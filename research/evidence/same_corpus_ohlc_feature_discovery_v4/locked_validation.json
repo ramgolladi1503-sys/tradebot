@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "development_candidates_frozen": true,
+  "locked_outcomes_accessed": true,
+  "locked_supported_count": 3,
+  "results": [
+    {
+      "candidate_id": "V4_PRED_BAR_BODY_PRE_CLOSE_30_B70_LOWER_REJECTION",
+      "locked_matches": 36,
+      "locked_distinct_sessions": 36,
+      "locked_ret6_mean": -20.946762330456963,
+      "locked_ret12_mean": -19.475614240203086,
+      "verdict": "LOCKED_VALIDATION_SUPPORTED",
+      "reasons": []
+    },
+    {
+      "candidate_id": "V4_PRED_BAR_BODY_PRE_CLOSE_30_B70_COMPRESSION",
+      "locked_matches": 37,
+      "locked_distinct_sessions": 37,
+      "locked_ret6_mean": -19.93598979035247,
+      "locked_ret12_mean": -17.919559548220697,
+      "verdict": "LOCKED_VALIDATION_SUPPORTED",
+      "reasons": []
+    },
+    {
+      "candidate_id": "V4_PRED_BAR_BODY_PRE_CLOSE_30_B70_UPPER_REJECTION",
+      "locked_matches": 36,
+      "locked_distinct_sessions": 36,
+      "locked_ret6_mean": -20.86590749602395,
+      "locked_ret12_mean": -18.547094062626293,
+      "verdict": "LOCKED_VALIDATION_SUPPORTED",
+      "reasons": []
+    }
+  ]
+}

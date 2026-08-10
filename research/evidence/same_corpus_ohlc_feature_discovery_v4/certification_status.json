@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "candidate_id": "V4_PRED_BAR_BODY_PRE_CLOSE_30_B70_LOWER_REJECTION",
+  "locked_validation": "SUPPORTED",
+  "negative_controls": "NEGATIVE_CONTROLS_FAILED",
+  "structural_edge_certified": false,
+  "edge_claimed": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "status": "STRUCTURAL_EDGE_NOT_CERTIFIED"
+}

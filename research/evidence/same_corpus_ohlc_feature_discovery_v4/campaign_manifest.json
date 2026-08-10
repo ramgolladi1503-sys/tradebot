@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "runner_id": "SAME_CORPUS_OHLC_FEATURE_DISCOVERY_V4",
+  "campaign_version": "v4",
+  "campaign_endpoint": "V4_DEVELOPMENT_SCREEN_COMPLETE",
+  "candidate_specs_generated": 654,
+  "valid_candidate_specs_evaluated": 654,
+  "development_tests_run": 654,
+  "development_survivors_count": 84,
+  "locked_validation_run": false,
+  "edge_claimed": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "structural_edges_certified_count": 0
+}

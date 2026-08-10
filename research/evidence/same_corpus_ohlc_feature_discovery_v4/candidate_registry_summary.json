@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "total_specs_generated": 654,
+  "valid_specs": 654,
+  "invalid_specs": 0,
+  "blocked_specs": 0,
+  "placeholder_specs": 0,
+  "duplicate_specs": 0,
+  "specs_with_unenforced_fields": 0,
+  "specs_with_window_policy": 654,
+  "specs_with_predicate_tree": 654
+}

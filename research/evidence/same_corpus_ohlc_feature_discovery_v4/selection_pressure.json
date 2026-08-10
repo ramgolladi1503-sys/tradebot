@@ -1,0 +1,8 @@
+{
+  "candidate_specs_generated": 654,
+  "valid_candidate_specs_evaluated": 654,
+  "development_tests_run": 654,
+  "survivor_count": 84,
+  "selection_bias_risk": "HIGH",
+  "locked_gate_allowed": true
+}

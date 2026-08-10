@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "available_features": [
+    "bar_body_ratio",
+    "upper_wick_ratio",
+    "lower_wick_ratio",
+    "close_location_value",
+    "range_percentile_so_far",
+    "session_open_to_now_return",
+    "prior_session_close_location"
+  ]
+}
