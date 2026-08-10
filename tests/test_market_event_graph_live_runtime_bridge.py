@@ -357,6 +357,30 @@ def test_default_subscription_provider_reads_feed_lifecycle_snapshot(monkeypatch
     assert result.audit["subscription_evidence"]["subscription_evidence_id"] == "feed-proof"
 
 
+def test_post_mode_full_lifecycle_truth_overrides_pre_mode_full_timestamp(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    contract_payload = _contract()
+    _install_bars(monkeypatch, contract_payload=contract_payload)
+
+    def provider(contract):
+        payload = _evidence(contract)
+        for lifecycle in payload["token_lifecycle"].values():
+            lifecycle["first_full_payload_epoch"] = 10.0
+            lifecycle["first_post_mode_full_epoch"] = 14.0
+            lifecycle["post_mode_full_count"] = 1
+            lifecycle["mode_request_succeeded_epoch"] = 12.0
+        return payload
+
+    bridge = LiveSourceRuntimeBridge(
+        exporter=LiveCapturedMetadataExporter(tmp_path / "out.jsonl"),
+        universe_contract=contract_payload,
+        subscription_evidence_provider=provider,
+    )
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+
+    assert result.exported is True
+
+
 def test_token_resolution_without_callback_proof_is_rejected(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     contract_payload = _contract()

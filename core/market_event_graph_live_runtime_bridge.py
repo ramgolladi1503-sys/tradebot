@@ -331,6 +331,12 @@ class LiveSourceRuntimeBridge:
             live_tick_first = _coerce_float(row.get("first_post_request_tick_epoch"))
             mode_success = _coerce_float(row.get("mode_request_succeeded_epoch"))
             full_first = _coerce_float(row.get("first_full_payload_epoch"))
+            post_mode_full_first = _coerce_float(
+                row.get("latest_post_mode_full_epoch")
+                or row.get("latest_post_mode_full_receipt_epoch")
+                or row.get("first_post_mode_full_epoch")
+            )
+            post_mode_full_count = _coerce_float(row.get("post_mode_full_count")) or 0.0
             latest_packet = row.get("latest_observation_packet") if isinstance(row.get("latest_observation_packet"), Mapping) else {}
             instrument_class = str((latest_packet or {}).get("instrument_class") or ("INDEX" if symbol == contract.index_symbol else "NSE_EQUITY")).upper()
             if subscribe_success is None:
@@ -341,6 +347,16 @@ class LiveSourceRuntimeBridge:
                 return False, "MODE_REQUEST_FAILED", (symbol,)
             if not bool(row.get("final_current_generation_local_mode_is_full")):
                 return False, "MODE_COMMAND_SUPERSEDED_BY_SUBSCRIBE", (symbol,)
+            # A reconnect can legitimately observe a full packet before the
+            # latest mode request.  The canonical lifecycle fields prove the
+            # stronger fact needed here: a full packet after that mode request.
+            canonical_post_mode_full = (
+                post_mode_full_count > 0
+                and post_mode_full_first is not None
+                and post_mode_full_first > mode_success
+            )
+            if canonical_post_mode_full:
+                continue
             if full_first is None or full_first < mode_success:
                 latest_callback = _coerce_float(row.get("latest_callback_receipt_epoch"))
                 if latest_callback is None or latest_callback <= mode_success:

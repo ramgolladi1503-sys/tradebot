@@ -322,6 +322,12 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     env = safe_environment()
     contract = safety_contract(env, child_command=[sys.executable, "-B", "core.kite_read_only_observation_runtime.py"])
     output_root.mkdir(parents=True, exist_ok=True)
+    import core.depth_store as depth_store
+    depth_store.depth_store.configure_rejection_provenance(
+        output_root / "depth_rejections.jsonl",
+        session_id=str(launch_plan.get("run_id") or output_root.name),
+        producer_sha=str(launch_plan.get("commit_sha") or os.environ.get("TRADEBOT_PRODUCER_SHA") or ""),
+    )
     (output_root / "startup_safety_contract.json").write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.environ.update(env)
     assert_import_boundary()
