@@ -305,6 +305,8 @@ def main() -> int:
             "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH": registry.contract_path,
             "MARKET_EVENT_GRAPH_LIVE_SOURCE_PATH": str(capture_dir / "captured_metadata.jsonl"),
             "MARKET_EVENT_GRAPH_LIVE_LAUNCH_PLAN_PATH": str(launch_plan_path),
+            "FEED_FORENSICS_ENABLED": "true",
+            "TRADEBOT_FEED_FORENSICS_ROOT": str(capture_dir),
         }
     )
     with log_path.open("w", encoding="utf-8") as log_file:

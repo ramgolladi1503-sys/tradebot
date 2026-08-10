@@ -53,6 +53,7 @@ from core.market_event_graph_live_launch_plan import load_launch_plan
 from core.unified_live_validation_pr748_756.campaign_contract import EVIDENCE_ROOT_ENV
 from core.feed.runtime_store import write_runtime_snapshot as write_feed_runtime_snapshot
 from core.feed.runtime_store import canonicalize_feed_runtime_snapshot_truth
+from core.feed_forensics import append_event as append_feed_forensic_event
 from core.feed_health_duration import build_feed_health_duration_artifact
 from core.runtime_status_overlay import (
     derive_effective_ws_connected,
@@ -6361,6 +6362,7 @@ def on_ticks(ws, ticks):
     _ = ws
     if not ticks:
         return
+    now_epoch = float(time.time())
     record_fd_trace(
         "on_ticks.callback_entry",
         row_index=_FEED_ON_TICKS_ROW_SEQ + 1,
@@ -6371,6 +6373,25 @@ def on_ticks(ws, ticks):
     )
     try:
         feed_evidence.callback(len(ticks or []), callback_epoch=float(time.time()), rows=ticks)
+    except Exception:
+        pass
+    try:
+        identity = get_current_feed_session_identity()
+        append_feed_forensic_event(
+            "WS_CALLBACK", receipt_epoch=now_epoch,
+            feed_session_id=identity.get("feed_session_id"),
+            reconnect_generation=identity.get("reconnect_generation"),
+            callback_sequence=_FEED_ON_TICKS_ROW_SEQ + 1,
+            batch_size=len(ticks or []),
+            observed_token_count=len({int(row.get("instrument_token")) for row in ticks if isinstance(row, dict) and row.get("instrument_token") is not None}),
+        )
+        append_feed_forensic_event(
+            "FULL_PACKET_PROGRESS", receipt_epoch=now_epoch,
+            feed_session_id=identity.get("feed_session_id"),
+            reconnect_generation=identity.get("reconnect_generation"),
+            full_packet_count=len(_FULL_PAYLOAD_OBSERVED_TOKENS),
+            observed_token_count=len(_OBSERVATION_CALLBACK_COUNT_BY_TOKEN),
+        )
     except Exception:
         pass
     try:
@@ -6746,6 +6767,32 @@ def on_ticks(ws, ticks):
         last_error=_LAST_RUNTIME_ERROR,
         reconnect_blocked_reason=_RECONNECT_BLOCKED_REASON if _reconnect_recovery_blocked_active() else None,
     )
+    try:
+        identity = get_current_feed_session_identity()
+        append_feed_forensic_event(
+            "TICK_PERSISTENCE_PROGRESS", receipt_epoch=now_epoch,
+            feed_session_id=identity.get("feed_session_id"),
+            reconnect_generation=identity.get("reconnect_generation"),
+            enqueue_count=write_enqueue_count(), flush_count=write_flush_count(),
+            queue_depth=write_queue_depth(), worker_alive=None,
+            latest_persisted_tick_epoch=_LAST_WS_TICK_EPOCH,
+        )
+        append_feed_forensic_event(
+            "DEPTH_PERSISTENCE_PROGRESS", receipt_epoch=now_epoch,
+            feed_session_id=identity.get("feed_session_id"),
+            reconnect_generation=identity.get("reconnect_generation"),
+            enqueue_count=None, flush_count=None, queue_depth=None,
+            worker_alive=None, latest_persisted_depth_epoch=None,
+        )
+        append_feed_forensic_event(
+            "RUNTIME_PERSISTENCE_PROGRESS", receipt_epoch=now_epoch,
+            feed_session_id=identity.get("feed_session_id"),
+            reconnect_generation=identity.get("reconnect_generation"),
+            snapshot_count=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
+            latest_snapshot_epoch=now_epoch,
+        )
+    except Exception:
+        pass
     record_fd_trace(
         "on_ticks.post_runtime_snapshot",
         row_index=_FEED_ON_TICKS_ROW_SEQ,
@@ -6835,6 +6882,16 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
 
     _log_ws("feed_restart_required", {"reason": reason})
+    try:
+        identity = get_current_feed_session_identity()
+        append_feed_forensic_event(
+            "RECOVERY_REQUESTED", feed_session_id=identity.get("feed_session_id"),
+            reconnect_generation=identity.get("reconnect_generation"), reason=reason,
+            old_feed_session_id=identity.get("feed_session_id"),
+            old_reconnect_generation=identity.get("reconnect_generation"),
+        )
+    except Exception:
+        pass
     if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
         _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
         return False
@@ -6876,7 +6933,17 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
             )
             soft_ok = _soft_resubscribe_current(reason=reason)
             if soft_ok:
+                try:
+                    append_feed_forensic_event("RECOVERY_SUCCEEDED", reason=reason,
+                                               status="PROGRESS")
+                except Exception:
+                    pass
                 return True
+            try:
+                append_feed_forensic_event("RECOVERY_FAILED", reason="soft_resubscribe_failed",
+                                           status="FAILED")
+            except Exception:
+                pass
             _log_ws(
                 "FEED_RESTART_SOFT_PATH_FAILED",
                 {"reason": reason, "detail": "soft_resubscribe_failed", "ws_connected": True},
@@ -6961,6 +7028,12 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
             return False
 
         _log_ws("FEED_FULL_RESTART_BEGIN", {"reason": reason, "tokens": len(tokens), **selection_payload})
+        try:
+            append_feed_forensic_event("RECOVERY_STARTED", reason=reason, status="STARTED")
+            append_feed_forensic_event("RECOVERY_RESUBSCRIBE", reason=reason,
+                                       status="REQUESTED", instrument_token=None)
+        except Exception:
+            pass
         _RUNTIME_STATE = "RESTARTING"
         _LAST_RUNTIME_ERROR = str(reason)
         import multiprocessing
@@ -7042,6 +7115,11 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
             _FULL_RESTARTS.append(now)
             _STALE_STRIKES = 0
             _log_ws("FEED_FULL_RESTART_OK", {"reason": reason, "tokens": len(tokens), **selection_payload})
+            try:
+                append_feed_forensic_event("RECOVERY_SUCCEEDED", reason=reason,
+                                           status="PROGRESS")
+            except Exception:
+                pass
             _begin_feed_restart_verification(
                 reason=str(reason or ""),
                 start_epoch=float(_DEPTH_WS_START_EPOCH or 0.0),
@@ -8066,6 +8144,24 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 runtime_state=_RUNTIME_STATE,
                 last_error=_LAST_RUNTIME_ERROR,
             )
+            try:
+                identity = get_current_feed_session_identity()
+                append_feed_forensic_event(
+                    "FEED_WATCHDOG", receipt_epoch=now_epoch,
+                    feed_session_id=identity.get("feed_session_id"),
+                    reconnect_generation=identity.get("reconnect_generation"),
+                    feed_state=state_machine.get("state"),
+                    feed_ok=state_machine.get("state") == "LIVE",
+                    effective_ws_connected=ws_connected,
+                    latest_callback_epoch=_LAST_WS_TICK_EPOCH or None,
+                    latest_tick_epoch=last_tick_epoch,
+                    latest_payload_epoch=_LAST_PAYLOAD_TS_BY_TOKEN and max(_LAST_PAYLOAD_TS_BY_TOKEN.values()) or None,
+                    stale_age_seconds=last_tick_age_sec,
+                    decision=state_machine.get("state"),
+                    reason=state_machine.get("reason"),
+                )
+            except Exception:
+                pass
 
         while True:
             if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():

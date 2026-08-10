@@ -329,6 +329,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     from core.auth import get_kite_client, get_kite_credentials
     from core import kite_depth_ws
     from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
+    from core.feed_forensics import append_event as append_feed_forensic_event
     assert_import_boundary()
 
     api_key, _ = get_kite_credentials(repo_root_path=Path.cwd())
@@ -370,6 +371,12 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             latest_runtime_outputs = produce_and_store_runtime_snapshots(
                 market_snapshot=None,
                 producer="kite_read_only_observation",
+            )
+            append_feed_forensic_event(
+                "RUNTIME_PERSISTENCE_PROGRESS",
+                snapshot_count=1,
+                latest_snapshot_epoch=time.time(),
+                status="PROGRESS",
             )
             cycle_cutoff = datetime.now(timezone.utc)
             interval_end = latest_completed_index_interval(
