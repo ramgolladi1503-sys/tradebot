@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from pathlib import Path
 
 from core.feed_forensics import classify_session
@@ -33,7 +34,7 @@ def main() -> int:
         "runtime_queue_depth": (latest.get("RUNTIME_PERSISTENCE_PROGRESS") or {}).get("queue_depth"),
         "watchdog_state": (latest.get("FEED_WATCHDOG") or {}).get("status"),
         "recovery_state": (latest.get("RECOVERY_SUCCEEDED") or latest.get("RECOVERY_FAILED") or {}).get("event_type"),
-        "disk_free": None,
+        "disk_free": shutil.disk_usage(root).free,
         "forensic_classification": classify_session(root),
     }
     print(json.dumps(result, sort_keys=True))
