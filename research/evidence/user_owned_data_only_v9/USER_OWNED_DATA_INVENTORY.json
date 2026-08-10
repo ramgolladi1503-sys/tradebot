@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "inspection_timestamp_utc": "2026-08-10T07:31:00Z",
+  "inspected_paths": [
+    {
+      "path": "research/hypotheses/historical_corpus/kite_nifty_cache_v2/canonical/NIFTY.csv",
+      "exists": true,
+      "file_count": 1,
+      "approx_size_bytes": 6946186,
+      "sample_file_names": ["NIFTY.csv"],
+      "data_family": "INDEX_OHLC_STATE_CORPUS",
+      "date_range_if_inferable": "2024-01-01 to 2024-12-31",
+      "schema_inferable": true,
+      "is_raw_or_derived": "DERIVED_CANONICAL_OHLC",
+      "provenance_known": true,
+      "user_owned_or_repository_owned": "REPOSITORY_OWNED",
+      "safe_to_use_for_research": true,
+      "limitations": "Already exhaustively screened in Campaigns V3-V6 (controlled negatives recorded)"
+    },
+    {
+      "path": "/Users/madhuram/tradebot-ml-evidence/context-transition-atlas-v1/context-transition-v3/constituent-structure-v1/selective-upstox-missing-v1",
+      "exists": true,
+      "file_count": 272,
+      "approx_size_bytes": 45000000,
+      "sample_file_names": ["BEL_202501.parquet", "TRENT_202501.parquet", "ZOMATO_202501.parquet"],
+      "data_family": "CONSTITUENT_BREADTH_DISPERSION",
+      "date_range_if_inferable": "2024-2026 (selective subset)",
+      "schema_inferable": true,
+      "is_raw_or_derived": "RAW_UPSTOX_OHLCV",
+      "provenance_known": true,
+      "user_owned_or_repository_owned": "USER_OWNED_LOCAL",
+      "safe_to_use_for_research": true,
+      "limitations": "Contains only 9 selective constituent symbols (BEL, INDIGO, ITCHOTELS, JIOFIN, KWIL, MAXHEALTH, TMCV, TRENT, ZOMATO); incomplete NIFTY 50 coverage for full index breadth lead-lag"
+    }
+  ]
+}

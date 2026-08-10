@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "controlled_verdict": "NO_NEW_USER_OWNED_DATA_AVAILABLE_FOR_HIGH_INFORMATION_RESEARCH",
+  "can_rely_fully_on_user_data_now": false,
+  "can_find_directional_edge_without_tick_bidask": true,
+  "can_certify_execution_without_tick_bidask": false,
+  "can_certify_structural_edge_without_tick_bidask": false,
+  "vendor_contact_recommended_now": false,
+  "tick_bidask_required_now": false,
+  "best_available_user_owned_dataset": "INDEX_OHLC_STATE_CORPUS (Exhausted under V3-V6 search)",
+  "research_family_run_if_any": "NONE_STOPPED_TO_PREVENT_REPETITIVE_SAME_CORPUS_VARIANTS",
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false,
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "next_action": "PARK_RESEARCH_UNTIL_USER_OWNED_CONSTITUENT_OR_FUTURES_DATA_IS_LOCALLY_PROVIDED"
+}

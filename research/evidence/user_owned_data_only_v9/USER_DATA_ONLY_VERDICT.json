@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "controlled_verdict": "NO_NEW_USER_OWNED_DATA_AVAILABLE_FOR_HIGH_INFORMATION_RESEARCH",
+  "usable_user_owned_data": [
+    "INDEX_OHLC_STATE_CORPUS (NIFTY/BANKNIFTY/SENSEX 5m)"
+  ],
+  "already_exhausted_or_failed_families": [
+    "TOD_SESSION_POSITION_FAMILY_V1 (Negative Controls Failed)",
+    "V3_PRED_SEQ_PRE_CLOSE_30 (Negative Controls Failed)",
+    "V4_PRED_BAR_BODY_PRE_CLOSE_30 (Negative Controls Failed)",
+    "V5_INTERACTION_GRAMMAR (No Development Survivors)",
+    "V6_REGIME_VOLSHOCK (No Development Survivors)"
+  ],
+  "can_run_new_high_information_research_now": false,
+  "smallest_true_blocker": "MISSING_USER_OWNED_CONSTITUENT_OHLCV_DATA",
+  "vendor_contact_recommended_now": false,
+  "tick_bidask_required_now": false,
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false
+}

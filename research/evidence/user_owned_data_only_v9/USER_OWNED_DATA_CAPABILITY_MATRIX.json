@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "capabilities": [
+    {
+      "capability_name": "INDEX_OHLC_STATE_CORPUS",
+      "available_now": true,
+      "available_path": "research/hypotheses/historical_corpus/kite_nifty_cache_v2/canonical/NIFTY.csv",
+      "schema_known": true,
+      "historical_depth_known": true,
+      "intraday_granularity_known": true,
+      "causal_research_possible": true,
+      "execution_viability_possible": false,
+      "can_run_research_now": false,
+      "status": "AVAILABLE_RESEARCH_READY",
+      "smallest_true_blocker": "EXHAUSTED_UNDER_V3_V6_CONTROLLED_NEGATIVES"
+    },
+    {
+      "capability_name": "CONSTITUENT_BREADTH_DISPERSION",
+      "available_now": true,
+      "available_path": "/Users/madhuram/tradebot-ml-evidence/context-transition-atlas-v1/context-transition-v3/constituent-structure-v1/selective-upstox-missing-v1",
+      "schema_known": true,
+      "historical_depth_known": true,
+      "intraday_granularity_known": true,
+      "causal_research_possible": true,
+      "execution_viability_possible": false,
+      "can_run_research_now": false,
+      "status": "PARTIAL_BLOCKED_SCHEMA",
+      "smallest_true_blocker": "INCOMPLETE_CONSTITUENT_COVERAGE_9_SYMBOLS_ONLY"
+    },
+    {
+      "capability_name": "FUTURES_BASIS_AND_TERM_STRUCTURE",
+      "available_now": false,
+      "available_path": null,
+      "schema_known": false,
+      "historical_depth_known": false,
+      "intraday_granularity_known": false,
+      "causal_research_possible": false,
+      "execution_viability_possible": false,
+      "can_run_research_now": false,
+      "status": "MISSING_FROM_USER_OWNED_DATA",
+      "smallest_true_blocker": "MISSING_USER_OWNED_FUTURES_BASIS_DATA"
+    },
+    {
+      "capability_name": "OPTIONS_CHAIN_OI_IV_SURFACE",
+      "available_now": false,
+      "available_path": null,
+      "schema_known": false,
+      "historical_depth_known": false,
+      "intraday_granularity_known": false,
+      "causal_research_possible": false,
+      "execution_viability_possible": false,
+      "can_run_research_now": false,
+      "status": "MISSING_FROM_USER_OWNED_DATA",
+      "smallest_true_blocker": "MISSING_USER_OWNED_OPTIONS_CHAIN_DATA"
+    },
+    {
+      "capability_name": "OPTIONS_BID_ASK_DEPTH",
+      "available_now": false,
+      "available_path": null,
+      "schema_known": false,
+      "historical_depth_known": false,
+      "intraday_granularity_known": false,
+      "causal_research_possible": false,
+      "execution_viability_possible": false,
+      "can_run_research_now": false,
+      "status": "MISSING_FROM_USER_OWNED_DATA",
+      "smallest_true_blocker": "MISSING_USER_OWNED_OPTIONS_BID_ASK_DEPTH"
+    },
+    {
+      "capability_name": "TICK_TRADE_QUOTE_MICROSTRUCTURE",
+      "available_now": false,
+      "available_path": null,
+      "schema_known": false,
+      "historical_depth_known": false,
+      "intraday_granularity_known": false,
+      "causal_research_possible": false,
+      "execution_viability_possible": false,
+      "can_run_research_now": false,
+      "status": "MISSING_FROM_USER_OWNED_DATA",
+      "smallest_true_blocker": "MISSING_USER_OWNED_TICK_DATA"
+    },
+    {
+      "capability_name": "BROKER_FILL_REPLAY",
+      "available_now": false,
+      "available_path": null,
+      "schema_known": false,
+      "historical_depth_known": false,
+      "intraday_granularity_known": false,
+      "causal_research_possible": false,
+      "execution_viability_possible": false,
+      "can_run_research_now": false,
+      "status": "MISSING_FROM_USER_OWNED_DATA",
+      "smallest_true_blocker": "MISSING_USER_OWNED_FILL_LOGS"
+    }
+  ]
+}
