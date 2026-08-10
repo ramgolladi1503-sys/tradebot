@@ -55,7 +55,11 @@ def test_trade_builder_valid_bullish_maps_correctly(monkeypatch):
     trade = tb.build(md)
     assert trade is not None
     assert getattr(trade, "option_type", None) == "CE"
-    assert trade.candidate_status in ("executable", "near_executable")
+    # This contract tests signal-to-option-side mapping. Runtime authority is
+    # intentionally fail-closed in CI, so a correctly mapped candidate remains
+    # advisory rather than being promoted to executable by the test fixture.
+    assert trade.candidate_status == "advisory"
+    assert getattr(trade, "execution_allowed", False) is False
 
 def test_trade_builder_valid_bearish_maps_correctly(monkeypatch):
     tb = TradeBuilder()
@@ -67,7 +71,8 @@ def test_trade_builder_valid_bearish_maps_correctly(monkeypatch):
     trade = tb.build(md)
     assert trade is not None
     assert getattr(trade, "option_type", None) == "PE"
-    assert trade.candidate_status in ("executable", "near_executable")
+    assert trade.candidate_status == "advisory"
+    assert getattr(trade, "execution_allowed", False) is False
 
 def test_trade_builder_neutral_no_trigger_blocks():
     tb = TradeBuilder()
