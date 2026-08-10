@@ -94,6 +94,17 @@ def main():
             
         print(f"Narrowed Outcome status: {status}")
         
+    if status == "DEVELOPMENT_STRUCTURE_SUPPORTED":
+        print("Executing locked validation on supported narrowed candidates...")
+        try:
+            out_locked = subprocess.check_output([sys.executable, str(script_dir / "run_tod_session_position_locked_validation_v1.py")], cwd=root).decode("utf-8").strip()
+            status = out_locked.split("\n")[-1]
+        except subprocess.CalledProcessError as e:
+            print(f"BLOCKED: Locked validation stage failed {e}")
+            sys.exit(1)
+            
+        print(f"Locked Validation status: {status}")
+
     if status == "LOCKED_VALIDATION_SUPPORTED":
         print("Executing WFA robustness, negative controls, and cost-slippage certification layers...")
         try:
