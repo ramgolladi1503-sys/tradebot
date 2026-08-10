@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "candidate_id": "H1_TRAPPED_PUSH_SNAPBACK",
+  "source_candidate_commit": "80d8da2650e712f47a83199d65ee0757dab9fa77",
+  "source_evidence_commit": "e012b478d253a48c8792a8a63b5330c85d9a548a",
+  "frozen_predicate": "(range_bps[t-1] > 12.0) & (upper_wick_bps[t-1] > 4.0) & (body_bps[t] < -2.0)",
+  "target_outcome": "6-bar NIFTY short/down return",
+  "cost_proxy_bps": 3.0,
+  "initial_risk_proxy_bps": 20.0,
+  "data_sources": [
+    "NIFTY 5-min completed bars",
+    "Selective constituent 5-min completed bars"
+  ],
+  "split_method": "Chronological rolling session folds (WFA)",
+  "walk_forward_method": "4 rolling chronological folds across dev and locked splits",
+  "regime_dimensions": [
+    "TIME_OF_DAY_WINDOW",
+    "NIFTY_BAR_RANGE_REGIME",
+    "PRIOR_NIFTY_DRIFT_REGIME",
+    "CONSTITUENT_BREADTH_SUPPORT",
+    "CONSTITUENT_DISPERSION_LEVEL"
+  ],
+  "execution_realism_proxy_dimensions": [
+    "ADVERSE_EXCURSION_PROXY",
+    "FAVORABLE_EXCURSION_PROXY",
+    "SLIPPAGE_SENSITIVITY_BPS",
+    "TIME_TO_FAVORABLE_MOVE"
+  ],
+  "forbidden_claims": [
+    "STRUCTURAL_EDGE_CERTIFIED",
+    "EXECUTION_VIABLE",
+    "LIVE_READY",
+    "OPTIONS_TRADABLE_EDGE",
+    "PROFITABLE_STRATEGY"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "repaired_file": "research/evidence/trader_observation_micro_patterns_v12_hardening_repair/CONTROLLED_VERDICT.json",
+  "invalid_value_before": "\"dev_trade_count_reconciled\": True",
+  "valid_value_after": "\"dev_trade_count_reconciled\": true",
+  "json_validation_command": "python3 -m json.tool research/evidence/trader_observation_micro_patterns_v12_hardening_repair/CONTROLLED_VERDICT.json >/tmp/v12_h1_controlled_verdict_json_validated.json",
+  "json_validation_exit_code": 0,
+  "does_this_modify_research_logic": false,
+  "does_this_modify_edge_claim": false,
+  "does_this_modify_certification_status": false,
+  "edge_claimed": false,
+  "structural_edge_certified": false,
+  "execution_viable": false,
+  "prospective_supported": false
+}

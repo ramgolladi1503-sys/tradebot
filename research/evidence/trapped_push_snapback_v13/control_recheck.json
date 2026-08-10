@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "controls_attempted": 7,
+  "controls_applicable": 5,
+  "controls_valid": 5,
+  "controls_passed": 5,
+  "hard_reject_controls": 0,
+  "soft_reject_controls": 0,
+  "diagnostic_caution_controls": 0,
+  "overall_control_status": "CONTROL_RECHECK_PASS"
+}

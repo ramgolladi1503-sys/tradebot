@@ -7,7 +7,7 @@
   "invalid_control_type": "WRONG_TIME_WINDOW_CONTROL",
   "hard_reject_stands": false,
   "metadata_repaired": true,
-  "dev_trade_count_reconciled": True,
+  "dev_trade_count_reconciled": true,
   "independent_recomputation_passed": true,
   "locked_trade_count": 26,
   "locked_cost_adjusted_expectancy_bps": 9.857148318996451,

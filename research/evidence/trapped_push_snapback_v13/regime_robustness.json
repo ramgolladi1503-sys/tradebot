@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "overall_status": "REGIME_ROBUSTNESS_SUPPORTED",
+  "buckets": [
+    {
+      "bucket_name": "OPENING_WINDOW_0915_1130",
+      "event_count": 51,
+      "metrics": {
+        "trade_count": 51,
+        "win_rate": 0.7058823529411765,
+        "loss_rate": 0.29411764705882354,
+        "expectancy_bps": 15.445389024148502,
+        "cost_adjusted_expectancy_bps": 12.445389024148502,
+        "average_win_bps": 28.712303601856767,
+        "average_loss_bps": -16.395205962351334,
+        "payoff_ratio": 1.7512621474710017,
+        "profit_factor": 4.203029153930404,
+        "average_R": 0.7722694512074252,
+        "median_R": 0.6857767037136697
+      },
+      "status": "REGIME_SUPPORTED"
+    },
+    {
+      "bucket_name": "AFTERNOON_WINDOW_1130_1530",
+      "event_count": 0,
+      "metrics": {
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "loss_rate": 0.0,
+        "expectancy_bps": 0.0,
+        "cost_adjusted_expectancy_bps": 0.0,
+        "average_win_bps": 0.0,
+        "average_loss_bps": 0.0,
+        "payoff_ratio": 0.0,
+        "profit_factor": 0.0,
+        "average_R": 0.0,
+        "median_R": 0.0
+      },
+      "status": "REGIME_WEAK_SMALL_SAMPLE"
+    },
+    {
+      "bucket_name": "HIGH_RANGE_REGIME",
+      "event_count": 39,
+      "metrics": {
+        "trade_count": 39,
+        "win_rate": 0.7692307692307693,
+        "loss_rate": 0.23076923076923078,
+        "expectancy_bps": 21.04022074135494,
+        "cost_adjusted_expectancy_bps": 18.04022074135494,
+        "average_win_bps": 31.00075319395427,
+        "average_loss_bps": -12.161554100642816,
+        "payoff_ratio": 2.5490782623181096,
+        "profit_factor": 8.496927541060366,
+        "average_R": 1.0520110370677471,
+        "median_R": 0.776725386100463
+      },
+      "status": "REGIME_SUPPORTED"
+    }
+  ]
+}

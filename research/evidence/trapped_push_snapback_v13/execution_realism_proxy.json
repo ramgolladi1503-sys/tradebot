@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "overall_status": "EXECUTION_PROXY_SUPPORTED_INDEX_ONLY",
+  "entry_bar_mean_range_bps": 17.536846635594625,
+  "slippage_sensitivity_tests": [
+    {
+      "slippage_bps": 3,
+      "cost_adjusted_expectancy_bps": 12.445389024148502,
+      "profit_factor": 4.203029153930404,
+      "average_R": 0.7722694512074252,
+      "survives_proxy": true
+    },
+    {
+      "slippage_bps": 5,
+      "cost_adjusted_expectancy_bps": 10.445389024148502,
+      "profit_factor": 4.203029153930404,
+      "average_R": 0.7722694512074252,
+      "survives_proxy": true
+    },
+    {
+      "slippage_bps": 8,
+      "cost_adjusted_expectancy_bps": 7.445389024148502,
+      "profit_factor": 4.203029153930404,
+      "average_R": 0.7722694512074252,
+      "survives_proxy": true
+    },
+    {
+      "slippage_bps": 12,
+      "cost_adjusted_expectancy_bps": 3.4453890241485023,
+      "profit_factor": 4.203029153930404,
+      "average_R": 0.7722694512074252,
+      "survives_proxy": true
+    },
+    {
+      "slippage_bps": 15,
+      "cost_adjusted_expectancy_bps": 0.44538902414850234,
+      "profit_factor": 4.203029153930404,
+      "average_R": 0.7722694512074252,
+      "survives_proxy": true
+    }
+  ],
+  "note": "Execution proxy tests index return sensitivity under varying slippage/fee assumptions. Execution viability remains false without tick/bid-ask/depth."
+}
