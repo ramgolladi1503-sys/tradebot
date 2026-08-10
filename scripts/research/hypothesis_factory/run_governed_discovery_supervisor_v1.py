@@ -93,12 +93,33 @@ def main():
             sys.exit(1)
             
         print(f"Narrowed Outcome status: {status}")
+        
+    if status == "DEVELOPMENT_STRUCTURE_SUPPORTED":
+        print("Executing locked validation on supported narrowed candidates...")
+        try:
+            out_locked = subprocess.check_output([sys.executable, str(script_dir / "run_tod_session_position_locked_validation_v1.py")], cwd=root).decode("utf-8").strip()
+            status = out_locked.split("\n")[-1]
+        except subprocess.CalledProcessError as e:
+            print(f"BLOCKED: Locked validation stage failed {e}")
+            sys.exit(1)
+            
+        print(f"Locked Validation status: {status}")
+        
+        if status == "LOCKED_VALIDATION_FAILED":
+            # Write failure registry
+            failure_registry = root / "research" / "evidence" / "behavior_discovery_engine_v2" / "BDE2_TOD_SESSION_POSITION_FAMILY_V1_FAILURE_REGISTRY.md"
+            with failure_registry.open("w") as f:
+                f.write("# TOD Session Position Family Failure Registry\n\nReason: ALL NARROWED CANDIDATES FAILED STRICT LOCKED OUT-OF-SAMPLE GATES.\nResult: NO_LOCKED_SUPPORTED_TOD_SESSION_POSITION_CANDIDATE\nEdge claimed: false\n")
+            status = "NO_LOCKED_SUPPORTED_TOD_SESSION_POSITION_CANDIDATE"
     
     with (out_dir / "run_manifest.json").open("w") as f:
-        json.dump({"status": status, "locked_outcomes_accessed": False, "edge_claimed": False}, f, indent=2)
+        json.dump({"status": status, "locked_outcomes_accessed": True if "LOCKED" in status else False, "edge_claimed": False}, f, indent=2)
         
     with (out_dir / "family_queue.json").open("w") as f:
-        json.dump({"queue": FAMILY_QUEUE[1:]}, f, indent=2)
+        if status in ("NO_LOCKED_SUPPORTED_TOD_SESSION_POSITION_CANDIDATE", "NO_STRUCTURAL_EDGE_FOUND"):
+            json.dump({"queue": FAMILY_QUEUE[1:]}, f, indent=2)
+        else:
+            json.dump({"queue": FAMILY_QUEUE}, f, indent=2)
         
     with (out_dir / "family_results.jsonl").open("a") as f:
         f.write(json.dumps({"family": target_family, "status": status, "timestamp": "2026-08-10T00:00:00Z"}) + "\n")
