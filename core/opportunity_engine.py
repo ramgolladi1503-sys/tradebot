@@ -3082,6 +3082,8 @@ def select_best_opportunity(candidates, *args, **kwargs):  # noqa: F811
         *partition["blocked_debug"],
     ]
     ranked_visible = list(ranked_executable or []) + visible_non_executable
+    if best is None and visible_non_executable:
+        best = visible_non_executable[0]
     return best, ranked_visible
 
 
