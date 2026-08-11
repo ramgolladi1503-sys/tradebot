@@ -1,24 +1,41 @@
 from core.strategy_certification.certification_models import StrategyCertificationReport
+from core.strategy_certification.certification_types import CertificationState, GateStatus
+
 
 class CertificationPolicyValidator:
-    """
-    Verifies that the outputs strictly align with policy, preventing "proof of edge" claims.
+    """Fail-closed validation of certification-policy outputs.
+
+    PRODUCTION_CANDIDATE is governance eligibility only. It is not proof of
+    profitability, structural edge, execution viability, paper authority, or
+    live authority.
     """
 
     @staticmethod
     def validate_report(report: StrategyCertificationReport) -> bool:
-        """
-        Validates the generated report to ensure no policy violations occurred.
-        Returns True if valid. Raises an exception if a policy is violated.
-        """
-        # Ensure that if evidence is insufficient, it's not a PRODUCTION_CANDIDATE
-        if report.final_state == "PRODUCTION_CANDIDATE":
-            if report.gate_results["evidence"].status != "PASS":
-                pass # This is checked by the Engine logic, but here is a second line of defense
-                
-        # Check that we haven't magically upgraded a rejected state
-        if report.initial_state.name in ["REJECTED", "SUSPENDED", "REVOKED"]:
-            if report.final_state.name != report.initial_state.name:
-                raise ValueError(f"Policy Violation: Cannot automatically upgrade a {report.initial_state.name} strategy.")
+        """Raise on contradictory or authority-inflating certification output."""
+        if report.final_state == CertificationState.PRODUCTION_CANDIDATE:
+            required = ("registry", "truth", "evidence", "statistics")
+            for gate_name in required:
+                result = report.gate_results.get(gate_name)
+                if result is None:
+                    raise ValueError(
+                        f"Policy Violation: PRODUCTION_CANDIDATE missing required gate {gate_name}."
+                    )
+                if result.status != GateStatus.PASS:
+                    raise ValueError(
+                        "Policy Violation: PRODUCTION_CANDIDATE requires PASS for "
+                        f"{gate_name}; found {result.status.name}."
+                    )
+
+        if report.initial_state in (
+            CertificationState.REJECTED,
+            CertificationState.SUSPENDED,
+            CertificationState.REVOKED,
+        ):
+            if report.final_state != report.initial_state:
+                raise ValueError(
+                    "Policy Violation: Cannot automatically upgrade a "
+                    f"{report.initial_state.name} strategy."
+                )
 
         return True

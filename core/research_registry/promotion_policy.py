@@ -3,9 +3,12 @@ from core.research_registry.research_types import PromotionStatus, ResearchStage
 
 
 class PromotionPolicy:
-    """
-    Decides PromotionRecommendation based on evidence.
-    Never automatically advances stages, only recommends them.
+    """Legacy registry recommendation policy.
+
+    This registry is descriptive lineage infrastructure, not research authority.
+    It may recommend pre-evidence engineering transitions, but it MUST NOT
+    authorize PAPER_READY, SHADOW_READY, or STRATEGY_REGISTRY. Those states
+    require the governed, hash-pinned research/certification path.
     """
 
     @staticmethod
@@ -13,7 +16,7 @@ class PromotionPolicy:
         reasons = []
         status = PromotionStatus.KEEP_RESEARCH
         target = None
-        
+
         if version.stage == ResearchStage.IDEA:
             if version.result.expected_behavior:
                 status = PromotionStatus.READY_FOR_IMPLEMENTATION
@@ -22,12 +25,12 @@ class PromotionPolicy:
             else:
                 status = PromotionStatus.REQUIRES_MORE_DATA
                 reasons.append("Idea lacks expected behavior definition.")
-                
+
         elif version.stage == ResearchStage.HYPOTHESIS:
             status = PromotionStatus.READY_FOR_IMPLEMENTATION
             target = ResearchStage.DESIGN
             reasons.append("Hypothesis can proceed to design.")
-            
+
         elif version.stage == ResearchStage.DESIGN:
             status = PromotionStatus.READY_FOR_IMPLEMENTATION
             target = ResearchStage.IMPLEMENTED
@@ -44,19 +47,25 @@ class PromotionPolicy:
                 target = ResearchStage.FAILED
                 reasons.append("Testing failed.")
             else:
-                status = PromotionStatus.READY_FOR_IMPLEMENTATION
-                target = ResearchStage.PAPER_READY
-                reasons.append("Testing passed, ready for paper.")
+                status = PromotionStatus.REQUIRES_MORE_DATA
+                reasons.append(
+                    "Legacy TESTED status cannot authorize PAPER_READY; governed "
+                    "hash-pinned validation evidence is required."
+                )
 
         elif version.stage == ResearchStage.PAPER_READY:
-            status = PromotionStatus.READY_FOR_IMPLEMENTATION
-            target = ResearchStage.SHADOW_READY
-            reasons.append("Ready for shadow deployment.")
+            status = PromotionStatus.REQUIRES_MORE_DATA
+            reasons.append(
+                "Legacy PAPER_READY status cannot authorize SHADOW_READY; governed "
+                "authority evidence is required."
+            )
 
         elif version.stage == ResearchStage.SHADOW_READY:
-            status = PromotionStatus.READY_FOR_STRATEGY_REGISTRY
-            target = ResearchStage.STRATEGY_REGISTRY
-            reasons.append("Shadow testing complete. Ready for strategy registry.")
+            status = PromotionStatus.REQUIRES_MORE_DATA
+            reasons.append(
+                "Legacy SHADOW_READY status cannot authorize STRATEGY_REGISTRY; "
+                "governed authority evidence is required."
+            )
 
         elif version.stage == ResearchStage.FAILED:
             status = PromotionStatus.DO_NOT_PROMOTE
@@ -64,6 +73,9 @@ class PromotionPolicy:
 
         elif version.stage == ResearchStage.STRATEGY_REGISTRY:
             status = PromotionStatus.KEEP_RESEARCH
-            reasons.append("Experiment is already in Strategy Registry.")
+            reasons.append(
+                "Experiment is recorded in the legacy Strategy Registry; this is "
+                "not evidence of structural edge or execution authority."
+            )
 
         return PromotionRecommendation(status=status, reasons=reasons, target_stage=target)
