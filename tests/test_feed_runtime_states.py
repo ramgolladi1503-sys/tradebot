@@ -120,7 +120,7 @@ def test_runtime_store_connection_uses_busy_tolerant_settings(monkeypatch, tmp_p
 
     assert ok is True
     assert captured["kwargs"]["timeout"] == 30.0
-    assert captured["kwargs"]["check_same_thread"] is False
+    assert captured["kwargs"].get("check_same_thread", True) is True
 
 
 def test_start_depth_ws_writes_import_missing_state(monkeypatch, tmp_path):
