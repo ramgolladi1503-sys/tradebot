@@ -64,6 +64,7 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
         direction = "BUY_PUT" if diff > 0 else "BUY_CALL"
         setup_type = "MEAN_REVERSION"
         reason = "VWAP mean reversion setup"
+        soft_flags.append("breakout_suppressed_range_regime")
         score = 0.44 + min(0.28, abs_diff / max(vwap_buffer, 1e-6) * 0.08)
     else:
         setup_type = "BREAKOUT"
