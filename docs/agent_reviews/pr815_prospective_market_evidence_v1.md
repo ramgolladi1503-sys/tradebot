@@ -1,5 +1,14 @@
 # PR #815 — Prospective Market Evidence V1 Review Evidence
 
+mode: RESEARCH_READ_ONLY
+candidate_id: PR815_PROSPECTIVE_MARKET_EVIDENCE_V1
+ decision: IMPLEMENTATION_HARDENING_PENDING_EXACT_HEAD_CI
+reason: Read-only three-index evidence hardening with adversarial and replay validation; no trading authority granted.
+timestamp: 2026-08-11T18:10:48Z
+is_order_action: false
+broker_api_called: false
+source: GITHUB_PR_815_REPOSITORY_EVIDENCE
+
 ## Agent Work Contract
 
 Objective: implement and harden a read-only, fail-closed NIFTY/BANKNIFTY/SENSEX prospective evidence finalizer without changing trading decisions or granting execution authority. Scope is limited to the sidecar module, focused tests, its focused workflow, research documentation, and this review artifact.
