@@ -136,14 +136,6 @@ def _normalize_regime(regime: Any) -> str:
     return aliases.get(key, key or "UNKNOWN")
 
 
-def mean_reversion_signal(market_data: dict) -> StrategySignal | None:
-    """Compatibility alias; does not implement or certify mean-reversion alpha."""
-    return ensemble_signal(market_data)
-
-
-def event_breakout_signal(market_data: dict) -> StrategySignal | None:
-    """Compatibility alias; does not implement or certify event-breakout alpha."""
-    return ensemble_signal(market_data)
 
 
 def micro_pattern_signal(market_data: dict) -> StrategySignal | None:
@@ -156,8 +148,6 @@ __all__ = [
     "ensemble_signal",
     "equity_signal",
     "futures_signal",
-    "mean_reversion_signal",
-    "event_breakout_signal",
     "micro_pattern_signal",
     "_normalize_regime",
 ]
