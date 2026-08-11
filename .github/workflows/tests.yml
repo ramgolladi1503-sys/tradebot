@@ -31,7 +31,6 @@ jobs:
     env:
       PYTHONPATH: .
       DATA_ROOT: ${{ github.workspace }}/.runtime
-      EXECUTION_MODE: PAPER
       KITE_USE_API: "false"
     steps:
       - name: Checkout
