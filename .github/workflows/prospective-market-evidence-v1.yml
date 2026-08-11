@@ -19,11 +19,18 @@ jobs:
     env:
       PYTHONPATH: .
       TRADEBOT_READ_ONLY: "true"
+      EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           lfs: false
+      - name: Verify exact checkout
+        run: |
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$EXPECTED_HEAD_SHA"
+          echo "EXACT_HEAD_SHA=$actual"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
