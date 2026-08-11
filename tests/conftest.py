@@ -42,6 +42,7 @@ _RUNTIME_PERSISTENCE_READ_AFTER_WRITE_TESTS = {
     "test_recovery_blocked_snapshot_sets_executable_false_everywhere",
     "test_healthy_runtime_snapshot_still_reports_executable_true_everywhere",
     "test_runtime_snapshot_mirrors_share_canonical_blocked_truth",
+    "test_ws1006_auth_failure_blocks_reconnect_loop",
 }
 _RUNTIME_PERSISTENCE_THREAD_PATCH_TEST_FILES = {
     "test_kite_depth_restart.py",
