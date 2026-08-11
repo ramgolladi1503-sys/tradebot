@@ -234,7 +234,9 @@ def _row_snapshot_timestamp(row: dict[str, Any]) -> Any:
         "created_ts_epoch",
         "last_seen_ts_epoch",
         "timestamp_epoch",
+        "ts_epoch",
         "timestamp",
+        "ts_ist",
         "last_seen_ts",
         "last_seen",
     ):
