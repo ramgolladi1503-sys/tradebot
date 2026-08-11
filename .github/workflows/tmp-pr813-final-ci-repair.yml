@@ -61,7 +61,20 @@ jobs:
               raise SystemExit(f'DESK_ISOLATION_TARGET_COUNT={s.count(cfg_marker)}')
           p.write_text(s.replace(cfg_marker, cfg_add, 1), encoding='utf-8')
 
-          # 3) Remove all temporary self-repair machinery from Code Excellence;
+          # 3) Candidate-decision fallback is operator visibility only. Runtime
+          # authority correctly blocks it, but the authority vocabulary uses
+          # not_executable while advisory_schema requires non_executable and a
+          # queue/advisory execution status. Normalize only schema vocabulary
+          # after authority stamping; never restore executable fields.
+          p = Path('core/runtime_snapshot_producer.py')
+          s = p.read_text(encoding='utf-8')
+          old = '''    advisory_payload = apply_runtime_authority(\n        advisory_payload,\n        mode=str(getattr(cfg, 'EXECUTION_MODE', 'SIM') or 'SIM'),\n    )\n    return serialize_advisory_row(advisory_payload, allow_legacy=True)\n'''
+          new = '''    advisory_payload = apply_runtime_authority(\n        advisory_payload,\n        mode=str(payload.get("mode") or getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),\n    )\n    if not execution_allowed:\n        advisory_payload["execution_allowed"] = False\n        advisory_payload["eligible_for_execution"] = False\n        advisory_payload["selected_for_execution"] = False\n        advisory_payload["execution_entry"] = None\n        advisory_payload["execution_entry_source"] = "none"\n        advisory_payload["execution_entry_status"] = "non_executable"\n        advisory_payload["execution_status"] = execution_status\n        advisory_payload["readiness"] = readiness\n    return serialize_advisory_row(advisory_payload, allow_legacy=True)\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f'ADVISORY_FALLBACK_TARGET_COUNT={s.count(old)}')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          # 4) Remove all temporary self-repair machinery from Code Excellence;
           # retain the strengthened final-integration exact-scope gate.
           p = Path('.github/workflows/code-excellence-gates.yml')
           s = p.read_text(encoding='utf-8')
@@ -77,9 +90,9 @@ jobs:
           rm -f .github/workflows/tmp-pr813-selector-repair.yml
           rm -f .github/workflows/tmp-pr813-final-ci-repair.yml
 
-          python -m py_compile core/opportunity_engine.py
+          python -m py_compile core/opportunity_engine.py core/runtime_snapshot_producer.py
           git diff --check
-          git diff -- core/opportunity_engine.py tests/conftest.py .github/workflows/code-excellence-gates.yml .github/workflows/tmp-pr813-selector-repair.yml .github/workflows/tmp-pr813-final-ci-repair.yml
+          git diff -- core/opportunity_engine.py core/runtime_snapshot_producer.py tests/conftest.py .github/workflows/code-excellence-gates.yml .github/workflows/tmp-pr813-selector-repair.yml .github/workflows/tmp-pr813-final-ci-repair.yml
 
       - name: Run focused deterministic regressions
         env:
@@ -103,7 +116,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add core/opportunity_engine.py tests/conftest.py .github/workflows/code-excellence-gates.yml
+          git add core/opportunity_engine.py core/runtime_snapshot_producer.py tests/conftest.py .github/workflows/code-excellence-gates.yml
           git add -u .github/workflows/tmp-pr813-selector-repair.yml .github/workflows/tmp-pr813-final-ci-repair.yml || true
           git diff --cached --check
           git commit -m "fix: close PR813 deterministic CI regressions"
