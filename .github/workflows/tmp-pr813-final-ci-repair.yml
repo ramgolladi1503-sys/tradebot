@@ -20,19 +20,15 @@ jobs:
           ref: fix/full-live-multicycle-meg-and-feed-stall-v1
           fetch-depth: 0
           lfs: false
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Apply narrow deterministic repairs
+      - name: Apply validated non-workflow repairs
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          # 1) Build-stage ranking is pre-runtime-authority. Preserve its native
-          # ranking/selection metadata; runtime/execution boundaries remain
-          # authority-stamped and fail closed.
           p = Path('core/opportunity_engine.py')
           s = p.read_text(encoding='utf-8')
           old = '''    mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()\n    stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in list(candidates or [])]\n    executable = [candidate for candidate in stamped if authority_allows_execution(candidate)]\n'''
@@ -41,9 +37,6 @@ jobs:
               raise SystemExit(f'OPPORTUNITY_WRAPPER_TARGET_COUNT={s.count(old)}')
           p.write_text(s.replace(old, new, 1), encoding='utf-8')
 
-          # 2) Runtime persistence is intentionally async. These WS tests assert
-          # the persisted artifact immediately, so drain the real worker queue at
-          # that exact test boundary (same pattern already used by neighboring tests).
           p = Path('tests/conftest.py')
           s = p.read_text(encoding='utf-8')
           marker = '    "test_ws1006_auth_failure_blocks_reconnect_loop",\n'
@@ -51,21 +44,12 @@ jobs:
           if s.count(marker) != 1:
               raise SystemExit(f'WS_WAIT_LIST_TARGET_COUNT={s.count(marker)}')
           s = s.replace(marker, addition, 1)
-
-          # The candidate-decision fallback test writes to the DEFAULT desk and
-          # explicitly assumes that desk. Isolate it from process-wide DESK_ID
-          # mutations performed by unrelated tests.
           cfg_marker = '        monkeypatch.setattr(cfg, "ANALYTICS_RUNTIME_DIR", str(runtime_root / "analytics"), raising=False)\n'
           cfg_add = cfg_marker + '        if request.node.name == "test_runtime_snapshot_producer_falls_back_to_candidate_decisions_when_suggestions_are_stale":\n            monkeypatch.setattr(cfg, "DESK_ID", "DEFAULT", raising=False)\n'
           if s.count(cfg_marker) != 1:
               raise SystemExit(f'DESK_ISOLATION_TARGET_COUNT={s.count(cfg_marker)}')
           p.write_text(s.replace(cfg_marker, cfg_add, 1), encoding='utf-8')
 
-          # 3) Candidate-decision fallback is operator visibility only. Runtime
-          # authority correctly blocks it, but the authority vocabulary uses
-          # not_executable while advisory_schema requires non_executable and a
-          # queue/advisory execution status. Normalize only schema vocabulary
-          # after authority stamping; never restore executable fields.
           p = Path('core/runtime_snapshot_producer.py')
           s = p.read_text(encoding='utf-8')
           old = '''    advisory_payload = apply_runtime_authority(\n        advisory_payload,\n        mode=str(getattr(cfg, 'EXECUTION_MODE', 'SIM') or 'SIM'),\n    )\n    return serialize_advisory_row(advisory_payload, allow_legacy=True)\n'''
@@ -73,28 +57,11 @@ jobs:
           if s.count(old) != 1:
               raise SystemExit(f'ADVISORY_FALLBACK_TARGET_COUNT={s.count(old)}')
           p.write_text(s.replace(old, new, 1), encoding='utf-8')
-
-          # 4) Remove all temporary self-repair machinery from Code Excellence;
-          # retain the strengthened final-integration exact-scope gate.
-          p = Path('.github/workflows/code-excellence-gates.yml')
-          s = p.read_text(encoding='utf-8')
-          start = s.find('permissions:\n  contents: write\n\njobs:\n  pr813-selector-repair:')
-          end = s.find('  code-excellence-gates:\n', start)
-          if start < 0 or end < 0:
-              raise SystemExit(f'CE_TEMP_BLOCK_NOT_FOUND start={start} end={end}')
-          replacement = 'permissions:\n  contents: read\n\njobs:\n  code-excellence-gates:\n'
-          s = s[:start] + replacement + s[end + len('  code-excellence-gates:\n'):]
-          p.write_text(s, encoding='utf-8')
           PY
-
-          rm -f .github/workflows/tmp-pr813-selector-repair.yml
-          rm -f .github/workflows/tmp-pr813-final-ci-repair.yml
-
           python -m py_compile core/opportunity_engine.py core/runtime_snapshot_producer.py
           git diff --check
-          git diff -- core/opportunity_engine.py core/runtime_snapshot_producer.py tests/conftest.py .github/workflows/code-excellence-gates.yml .github/workflows/tmp-pr813-selector-repair.yml .github/workflows/tmp-pr813-final-ci-repair.yml
 
-      - name: Run focused deterministic regressions
+      - name: Re-prove affected contracts
         env:
           PYTHONPATH: .
           KITE_USE_API: "false"
@@ -104,7 +71,6 @@ jobs:
           pip install 'pandas<3.0'
           pytest -q -o addopts='' \
             tests/core/test_runtime_snapshot_producer.py::test_runtime_snapshot_producer_falls_back_to_candidate_decisions_when_suggestions_are_stale \
-            tests/test_code_excellence_ci_wiring.py \
             tests/test_kite_depth_ws_stability.py::test_ws1006_peer_drop_on_error_is_recoverable_first \
             tests/test_kite_depth_ws_stability.py::test_fatal_on_error_schedules_async_forced_full_restart \
             tests/test_trade_builder_mark_price.py::test_trade_builder_uses_depth_proxy_and_sets_price_source \
@@ -112,12 +78,11 @@ jobs:
             tests/test_trade_builder_soft_vetoes.py::test_stale_quote_survives_as_advisory_gate_without_soft_penalty \
             tests/test_runtime_authority_cutover_v1.py::test_actual_opportunity_selector_never_receives_advisory
 
-      - name: Commit clean repair candidate
+      - name: Commit only non-workflow repairs
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add core/opportunity_engine.py core/runtime_snapshot_producer.py tests/conftest.py .github/workflows/code-excellence-gates.yml
-          git add -u .github/workflows/tmp-pr813-selector-repair.yml .github/workflows/tmp-pr813-final-ci-repair.yml || true
+          git add core/opportunity_engine.py core/runtime_snapshot_producer.py tests/conftest.py
           git diff --cached --check
-          git commit -m "fix: close PR813 deterministic CI regressions"
+          git commit -m "fix: close PR813 deterministic source regressions"
           git push origin HEAD:fix/full-live-multicycle-meg-and-feed-stall-v1
