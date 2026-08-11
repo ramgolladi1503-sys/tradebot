@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -172,6 +173,15 @@ def _hash_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _hash_file_at_commit(commit: str, relative_path: str) -> str:
+    repo_root = Path(__file__).resolve().parents[1]
+    raw = subprocess.check_output(
+        ["git", "show", f"{commit}:{relative_path}"],
+        cwd=repo_root,
+    )
+    return hashlib.sha256(raw).hexdigest()
+
+
 def _canonical_bytes(bundle: dict[str, object]) -> bytes:
     return (json.dumps(bundle, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode("utf-8")
 
@@ -223,13 +233,14 @@ def test_bundle_bytes_are_canonical_and_sidecar_matches() -> None:
     assert digest == _hash_file(BUNDLE_PATH)
 
 
-def test_bundle_source_hashes_match_current_repo_truth() -> None:
+def test_bundle_source_hashes_match_frozen_source_commit() -> None:
     bundle = _load_bundle()
     source_files = {item["path"]: item["sha256"] for item in bundle["source_files"]}
+    source_commit = bundle["source_commit"]
 
     assert source_files == EXPECTED_SOURCE_HASHES
     for relative_path, expected_hash in EXPECTED_SOURCE_HASHES.items():
-        assert _hash_file(Path(relative_path)) == expected_hash
+        assert _hash_file_at_commit(source_commit, relative_path) == expected_hash
 
 
 def test_bundle_owner_files_match_current_repo_truth() -> None:

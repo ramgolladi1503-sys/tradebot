@@ -29,17 +29,19 @@ def test_banknifty_range_path_is_mean_reversion():
     assert signal["regime_path"] == "RANGE"
 
 
-def test_sensex_unknown_regime_still_marks_explicit_regime_path():
+def test_sensex_unknown_regime_fails_closed():
+    debug = {}
     signal = sensex_generate_signal(
         ltp=80000.0,
         vwap=79900.0,
         bias="bullish",
         regime="mystery",
+        debug_stats=debug,
     )
 
-    assert signal is not None
-    assert signal["regime_path"] == "UNKNOWN"
-    assert "regime_unknown" in signal["soft_flags"]
+    assert signal is None
+    assert debug["candidates_rejected_pre_score"] == 1
+    assert debug["rejection_reason_counts"]["regime_not_declared_by_strategy_spec"] == 1
 
 
 def test_zero_hero_non_expiry_context_falls_back_to_directed_regime():

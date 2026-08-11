@@ -28,7 +28,6 @@ from strategies.ensemble import (
     ensemble_signal,
     equity_signal,
     futures_signal,
-    micro_pattern_signal,
 )
 
 
@@ -48,6 +47,16 @@ def event_breakout_signal(*_args, **_kwargs):
     The canonical event implementation is no longer synthesized by
     strategies.ensemble.  Retain this local hook only so legacy routing/tests
     can monkeypatch it explicitly; production behavior fails closed.
+    """
+    return None
+
+
+def micro_pattern_signal(*_args, **_kwargs):
+    """Legacy TradeBuilder hook disabled after structural ensemble repair.
+
+    Micro-pattern alpha is no longer synthesized by strategies.ensemble.
+    Keep a local monkeypatchable hook for legacy routing tests; production
+    behavior fails closed.
     """
     return None
 from core.feature_builder import (

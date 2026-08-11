@@ -40,6 +40,21 @@ def _market_data():
         "day_type": "TREND_DAY",
         "regime": "TREND",
         "orb_bias": "UP",
+        "child_signals": [
+            {
+                "direction": "BUY_CALL",
+                "score": 0.90,
+                "confidence": 0.90,
+                "reason": "test_structural_child",
+                "source_strategy_id": "test_structural_child",
+                "source_sha256": "test-source-sha256",
+                "structural_status": "STRUCTURALLY_VALID",
+                "evidence": {
+                    "freshness_valid": True,
+                    "contract_valid": True,
+                },
+            }
+        ],
         "option_chain": [
             {
                 "type": "CE",

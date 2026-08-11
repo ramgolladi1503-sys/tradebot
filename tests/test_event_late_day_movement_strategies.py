@@ -52,6 +52,7 @@ def _base_context(**overrides):
         "minutes_since_open": 260,
         "minutes_to_close": 70,
         "expiry_context": False,
+        "metadata": {"event_state": "ACTIVE"},
     }
     payload.update(overrides)
     return StrategyContext(**payload)

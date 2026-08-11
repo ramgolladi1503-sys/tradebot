@@ -8,9 +8,9 @@ freshness logic, feed logic, broker wiring, or execution gates.
 |---|---|---|---|
 | `strategies/ensemble.py` | `core/strategy_spec.py` | `ENSEMBLE` meta-strategy | Contract-backed directional meta-signal; rank via standard candidate pipeline |
 | `strategies/vwap_orb.py` | `core/strategy_spec.py` | `VWAP_ORB` directional intraday | Directional candidate path; freshness before executable ranking |
-| `strategies/nifty_intraday.py` | `core/strategy_spec.py` | `VWAP` directional intraday | Regime-aware directional path; unknown regime is degraded fallback |
-| `strategies/banknifty_intraday.py` | `core/strategy_spec.py` | `VWAP` directional intraday | Regime-aware directional path; unknown regime is degraded fallback |
-| `strategies/sensex_intraday.py` | `core/strategy_spec.py` | `VWAP` directional intraday | Regime-aware directional path; unknown regime is degraded fallback |
+| `strategies/nifty_intraday.py` | `core/strategy_spec.py` | `VWAP` directional intraday | Regime-aware directional path; undeclared regime fails closed before scoring |
+| `strategies/banknifty_intraday.py` | `core/strategy_spec.py` | `VWAP` directional intraday | Regime-aware directional path; undeclared regime fails closed before scoring |
+| `strategies/sensex_intraday.py` | `core/strategy_spec.py` | `VWAP` directional intraday | Regime-aware directional path; undeclared regime fails closed before scoring |
 | `strategies/zero_hero.py` | `core/strategy_spec.py` | `EXPIRY` special-case | Expiry-specialized path; not a generic intraday strategy |
 | `strategies/pairs_arbitrage.py` | `core/strategy_spec.py` | `PAIR_ARBITRAGE` relative-value | Pair-specific spread contract; two-leg identity/freshness sensitive |
 | `strategies/volatility_trend.py` | `core/strategy_spec.py` | `EVENT` / volatility-trend directional | Volatility-scaled trend family; contract-backed and freshness-sensitive |
@@ -32,9 +32,11 @@ freshness logic, feed logic, broker wiring, or execution gates.
 | `strategies/simple_orb.py` | `core/strategy_spec.py` | `MOVEMENT` opening-drive helper | Movement family entrypoint; candidate boundary before ranking |
 | `strategies/soft_signal.py` | no strategy contract owner | Support utility | Not a strategy family; signal wrapper only |
 | `strategies/movement/_utils.py` | no strategy contract owner | Support utility | Movement helper functions only |
+| `strategies/movement/_temporal_evidence.py` | no strategy contract owner | Support utility | Temporal-evidence helper only; not an independent alpha or execution strategy |
 | `strategies/position_sizer.py` | no strategy contract owner | Support utility | Not a strategy family; sizing support only |
 | `strategies/risk_manager.py` | no strategy contract owner | Support utility | Risk support only; not a strategy family |
 | `strategies/trade_builder.py` | no strategy contract owner | Support utility | Orchestration/support module; not a standalone strategy family |
+| `strategies/shadow/h1_trapped_push_snapback.py` | H1 frozen shadow contract | `SHADOW` measurement-only strategy adapter | Frozen H1 predicate emits unrouteable BUY_PUT shadow intents only; broker/order/paper/live authority remain false |
 
 ## Boundary Notes
 
