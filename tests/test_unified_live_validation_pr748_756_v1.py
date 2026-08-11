@@ -80,7 +80,7 @@ def test_enrich_row_overwrites_unsafe_inputs_fail_closed(tmp_path):
         pr_number=748,
     )
 
-    assert row["run_id"] == "unified-pr748-756-" + __import__("datetime").datetime.now().strftime("%Y%m%d") + "-ffffffffffff-presession-test"
+    assert row["run_id"] == identity.run_id
     assert row["read_only"] is True
     assert row["is_order_action"] is False
     assert row["broker_api_called"] is False
