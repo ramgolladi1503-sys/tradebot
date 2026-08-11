@@ -20,9 +20,42 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  repair-pr813-selector:
+    if: github.head_ref == 'fix/full-live-multicycle-meg-and-feed-stall-v1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/full-live-multicycle-meg-and-feed-stall-v1
+          fetch-depth: 0
+          lfs: false
+      - name: Apply exact execution-selector / visibility split
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('core/opportunity_engine.py')
+          text = path.read_text()
+          old = '''    from core.runtime_authority_cutover import (\n        apply_runtime_authority,\n        normalize_selection_result,\n    )\n\n    mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()\n    stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in list(candidates or [])]\n    result = _RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY(\n        stamped,\n        *args,\n        **kwargs,\n    )\n    return normalize_selection_result(result, mode=mode)\n'''
+          new = '''    from core.runtime_authority_cutover import (\n        apply_runtime_authority,\n        authority_allows_execution,\n        normalize_selection_result,\n        partition_operator_candidates,\n    )\n\n    mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()\n    stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in list(candidates or [])]\n    executable = [candidate for candidate in stamped if authority_allows_execution(candidate)]\n    result = _RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY(\n        executable,\n        *args,\n        **kwargs,\n    )\n    normalized = normalize_selection_result(result, mode=mode)\n    if not isinstance(normalized, tuple):\n        return normalized\n\n    best, ranked_executable = normalized\n    partition = partition_operator_candidates(stamped, mode=mode)\n    visible_non_executable = [\n        *partition["advisory"],\n        *partition["blocked_debug"],\n    ]\n    ranked_visible = list(ranked_executable or []) + visible_non_executable\n    return best, ranked_visible\n'''
+          if old not in text:
+              raise SystemExit('PR813_SELECTOR_REPAIR_TARGET_NOT_FOUND')
+          updated = text.replace(old, new, 1)
+          if updated.count('authority_allows_execution') != text.count('authority_allows_execution') + 2:
+              raise SystemExit('PR813_SELECTOR_REPAIR_COUNT_UNEXPECTED')
+          path.write_text(updated)
+          PY
+          git diff --check
+          git diff -- core/opportunity_engine.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add core/opportunity_engine.py
+          git commit -m "fix: separate execution selection from advisory visibility"
+          git push origin HEAD:fix/full-live-multicycle-meg-and-feed-stall-v1
+
   focused-certification:
     runs-on: ubuntu-latest
     timeout-minutes: 30
