@@ -3058,17 +3058,31 @@ _RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY = select_best_opportunity
 def select_best_opportunity(candidates, *args, **kwargs):  # noqa: F811
     from core.runtime_authority_cutover import (
         apply_runtime_authority,
+        authority_allows_execution,
         normalize_selection_result,
+        partition_operator_candidates,
     )
 
     mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()
     stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in list(candidates or [])]
+    executable = [candidate for candidate in stamped if authority_allows_execution(candidate)]
     result = _RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY(
-        stamped,
+        executable,
         *args,
         **kwargs,
     )
-    return normalize_selection_result(result, mode=mode)
+    normalized = normalize_selection_result(result, mode=mode)
+    if not isinstance(normalized, tuple):
+        return normalized
+
+    best, ranked_executable = normalized
+    partition = partition_operator_candidates(stamped, mode=mode)
+    visible_non_executable = [
+        *partition["advisory"],
+        *partition["blocked_debug"],
+    ]
+    ranked_visible = list(ranked_executable or []) + visible_non_executable
+    return best, ranked_visible
 
 
 select_best_opportunity._runtime_authority_cutover = True
