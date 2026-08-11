@@ -43,6 +43,8 @@ _RUNTIME_PERSISTENCE_READ_AFTER_WRITE_TESTS = {
     "test_healthy_runtime_snapshot_still_reports_executable_true_everywhere",
     "test_runtime_snapshot_mirrors_share_canonical_blocked_truth",
     "test_ws1006_auth_failure_blocks_reconnect_loop",
+    "test_ws1006_peer_drop_on_error_is_recoverable_first",
+    "test_fatal_on_error_schedules_async_forced_full_restart",
 }
 _RUNTIME_PERSISTENCE_THREAD_PATCH_TEST_FILES = {
     "test_kite_depth_restart.py",
@@ -123,6 +125,8 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
         monkeypatch.setattr(cfg, "DB_ROOT", str(runtime_root / "db"), raising=False)
         monkeypatch.setattr(cfg, "REPORTS_ROOT", str(runtime_root / "reports"), raising=False)
         monkeypatch.setattr(cfg, "ANALYTICS_RUNTIME_DIR", str(runtime_root / "analytics"), raising=False)
+        if request.node.name == "test_runtime_snapshot_producer_falls_back_to_candidate_decisions_when_suggestions_are_stale":
+            monkeypatch.setattr(cfg, "DESK_ID", "DEFAULT", raising=False)
         # A few legacy tests assert SQLite visibility immediately after insert.
         # Scope synchronous writes only to those tests. Persistence/callback
         # certification must retain the production async-worker contract.

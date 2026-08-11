@@ -3064,7 +3064,15 @@ def select_best_opportunity(candidates, *args, **kwargs):  # noqa: F811
     )
 
     mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()
-    stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in list(candidates or [])]
+    candidate_list = list(candidates or [])
+    scope = str(kwargs.get("scope") or "")
+    if scope.startswith("build:"):
+        return _RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY(
+            candidate_list,
+            *args,
+            **kwargs,
+        )
+    stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in candidate_list]
     executable = [candidate for candidate in stamped if authority_allows_execution(candidate)]
     result = _RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY(
         executable,

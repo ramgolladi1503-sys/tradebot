@@ -463,8 +463,17 @@ def _candidate_decision_to_advisory_row(payload: dict[str, Any]) -> dict[str, An
     advisory_payload.setdefault("non_canonical_levels", False)
     advisory_payload = apply_runtime_authority(
         advisory_payload,
-        mode=str(getattr(cfg, 'EXECUTION_MODE', 'SIM') or 'SIM'),
+        mode=str(payload.get("mode") or getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
     )
+    if not execution_allowed:
+        advisory_payload["execution_allowed"] = False
+        advisory_payload["eligible_for_execution"] = False
+        advisory_payload["selected_for_execution"] = False
+        advisory_payload["execution_entry"] = None
+        advisory_payload["execution_entry_source"] = "none"
+        advisory_payload["execution_entry_status"] = "non_executable"
+        advisory_payload["execution_status"] = execution_status
+        advisory_payload["readiness"] = readiness
     return serialize_advisory_row(advisory_payload, allow_legacy=True)
 
 
