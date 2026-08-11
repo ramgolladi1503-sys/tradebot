@@ -1,0 +1,91 @@
+name: TMP PR813 Selector Repair
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.head_ref == 'fix/full-live-multicycle-meg-and-feed-stall-v1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/full-live-multicycle-meg-and-feed-stall-v1
+          fetch-depth: 0
+      - name: Apply safe selector visibility split
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('core/opportunity_engine.py')
+          s = p.read_text(encoding='utf-8')
+          old = '''def select_best_opportunity(candidates, *args, **kwargs):  # noqa: F811
+    from core.runtime_authority_cutover import (
+        apply_runtime_authority,
+        normalize_selection_result,
+    )
+
+    mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()
+    stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in list(candidates or [])]
+    result = _RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY(
+        stamped,
+        *args,
+        **kwargs,
+    )
+    return normalize_selection_result(result, mode=mode)
+'''
+          new = '''def select_best_opportunity(candidates, *args, **kwargs):  # noqa: F811
+    from core.runtime_authority_cutover import (
+        apply_runtime_authority,
+        authority_allows_execution,
+        normalize_selection_result,
+    )
+
+    mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()
+    stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in list(candidates or [])]
+    executable = [candidate for candidate in stamped if authority_allows_execution(candidate)]
+    result = _RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY(
+        executable if mode in {"LIVE", "REAL"} else stamped,
+        *args,
+        **kwargs,
+    )
+    normalized = normalize_selection_result(result, mode=mode)
+    if mode not in {"LIVE", "REAL"} or executable:
+        return normalized
+
+    # Visibility-only fallback: advisory survivors remain rankable/displayable,
+    # but never enter the legacy execution selector or gain execution authority.
+    scope = kwargs.get("scope")
+    ranked_visibility = annotate_relative_opportunity_ranks(
+        stamped,
+        scope=str(scope or "runtime:visibility"),
+    )
+    if not ranked_visibility:
+        return normalized
+    return normalize_selection_result(
+        (ranked_visibility[0], ranked_visibility),
+        mode=mode,
+    )
+'''
+          count = s.count(old)
+          if count != 1:
+              raise SystemExit(f'EXPECTED_WRAPPER_BLOCK_COUNT={count}')
+          p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+          python -m py_compile core/opportunity_engine.py
+          git diff --check
+      - name: Run authority regression
+        run: |
+          python -m pip install -q pytest pandas numpy scikit-learn holidays
+          pytest -q -o addopts='' tests/test_runtime_authority_cutover_v1.py::test_actual_opportunity_selector_never_receives_advisory
+      - name: Commit repair and self-remove
+        run: |
+          rm .github/workflows/tmp-pr813-selector-repair.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add core/opportunity_engine.py .github/workflows/tmp-pr813-selector-repair.yml
+          git commit -m "fix(ranking): separate advisory visibility from execution selector"
+          git push origin HEAD:fix/full-live-multicycle-meg-and-feed-stall-v1
