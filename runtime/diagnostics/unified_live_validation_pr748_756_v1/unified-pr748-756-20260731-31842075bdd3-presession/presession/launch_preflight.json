@@ -1,0 +1,20 @@
+{
+  "allowed_for_live_execution": false,
+  "blockers": [
+    "CURRENT_LAUNCH_COMMAND_DOES_NOT_ACTIVATE_CAMPAIGN"
+  ],
+  "broker_api_called": false,
+  "campaign_runtime_wired": false,
+  "evidence_root": "runtime/diagnostics/unified_live_validation_pr748_756_v1/unified-pr748-756-20260731-31842075bdd3-presession",
+  "is_order_action": false,
+  "launch_command": "PYTHONPATH=. UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE=true python3 -B scripts/run_unified_live_validation_pr748_756_v1.py --origin-main-sha 17262b4b6a42eb09d4d508bfdf6fe0d649ee32af --launch-live",
+  "live_observers_registered": false,
+  "presession_run_id_rejected": true,
+  "read_only": true,
+  "recorder_instantiated": false,
+  "run_id": "unified-pr748-756-20260731-31842075bdd3-presession",
+  "shutdown_seal_registered": true,
+  "single_runtime_process_proven": false,
+  "single_websocket_path_proven": false,
+  "state": "BLOCKED_BY_RUNTIME_WIRING"
+}

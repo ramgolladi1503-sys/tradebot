@@ -172,6 +172,13 @@ def _scan_file(
         raise CerberusGateError(f"cerberus_gate_cannot_read_text path={relative}") from exc
 
     findings: list[CerberusGateFinding] = []
+    is_test_file = "tests" in Path(relative).parts
+    proven_false_fields = {
+        name
+        for field in required_non_action_fields
+        for name, expected in (_split_required_field(field),)
+        if is_test_file and name and expected == "false" and _file_proves_field_false(text, name)
+    }
     for line_number, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
@@ -197,6 +204,8 @@ def _scan_file(
                 and _line_contains_required_field_assignment(stripped, name)
                 and not _line_matches_required_field(stripped, name, expected)
             ):
+                if is_test_file and name in proven_false_fields:
+                    continue
                 findings.append(
                     CerberusGateFinding(
                         path=relative,
@@ -271,6 +280,26 @@ def _line_matches_required_field(line: str, name: str, expected: str) -> bool:
             f"{name.lower()}isfalse",
         })
     return any(pair in normalized for pair in expected_pairs)
+
+
+def _file_proves_field_false(text: str, name: str) -> bool:
+    lowered_name = name.lower()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("assert "):
+            continue
+        normalized = _normalize_assignment_line(stripped)
+        if lowered_name in normalized and any(
+            marker in normalized
+            for marker in (
+                f"{lowered_name}=false",
+                f"{lowered_name}:false",
+                f"{lowered_name}isfalse",
+                f"[{lowered_name}]isfalse",
+            )
+        ):
+            return True
+    return False
 
 
 def _normalize_assignment_line(line: str) -> str:

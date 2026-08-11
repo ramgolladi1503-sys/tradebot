@@ -8,7 +8,7 @@ class OhlcBuffer:
     def __init__(self):
         self._bars = defaultdict(lambda: deque(maxlen=getattr(cfg, "OHLC_BUFFER_MAX_BARS", 500)))
 
-    def update_tick(self, symbol, price, volume=None, ts=None):
+    def update_tick(self, symbol, price, volume=None, ts=None, provenance=None):
         if price is None:
             return {
                 "accepted": False,
@@ -38,6 +38,9 @@ class OhlcBuffer:
 
             if tail_bucket is not None and bucket == tail_bucket:
                 bar = bars[-1]
+                provenance_status = _merge_live_bar_provenance(bar, provenance, ts)
+                if provenance_status.get("accepted") is False:
+                    return provenance_status
                 bar["high"] = max(bar["high"], price)
                 bar["low"] = min(bar["low"], price)
                 bar["close"] = price
@@ -51,14 +54,18 @@ class OhlcBuffer:
                     "current_tail_bucket": tail_bucket,
                 }
             else:
-                bars.append({
+                row = {
                     "ts": bucket,
                     "open": price,
                     "high": price,
                     "low": price,
                     "close": price,
                     "volume": volume if volume is not None else 0,
-                })
+                }
+                provenance_status = _merge_live_bar_provenance(row, provenance, ts)
+                if provenance_status.get("accepted") is False:
+                    return provenance_status
+                bars.append(row)
                 return {
                     "accepted": True,
                     "status": "NEW_BAR",
@@ -154,6 +161,16 @@ class OhlcBuffer:
                     "low": low_val,
                     "close": close_val,
                     "volume": vol_val,
+                    "bar_provenance": {
+                        "source_type": "historical_seed",
+                        "live_feed_session_id": None,
+                        "first_live_tick_epoch": None,
+                        "last_live_tick_epoch": None,
+                        "historical_seed": True,
+                        "replay_fixture": False,
+                        "non_live_fallback": False,
+                        "recovered_synthetic": False,
+                    },
                 })
 
             if not normalized:
@@ -196,3 +213,71 @@ class OhlcBuffer:
             return {"accepted": False, "status": "INVALID_SEED_BATCH", "symbol": symbol, "seeded_bars": 0, "overlap_preserved": 0}
 
 ohlc_buffer = OhlcBuffer()
+
+
+def _merge_live_bar_provenance(bar, provenance, tick_ts):
+    payload = dict(provenance or {})
+    if not payload:
+        payload = {
+            "source_type": "unknown",
+            "live_feed_session_id": None,
+            "historical_seed": False,
+            "replay_fixture": False,
+            "non_live_fallback": False,
+            "recovered_synthetic": False,
+        }
+    try:
+        tick_epoch = float(tick_ts.timestamp()) if hasattr(tick_ts, "timestamp") else float(tick_ts)
+    except Exception:
+        tick_epoch = None
+    existing = dict(bar.get("bar_provenance") or {})
+    def _prefer_present(payload_map, existing_map, key):
+        if key in payload_map and payload_map[key] is not None:
+            return payload_map[key]
+        return existing_map.get(key)
+
+    immutable_keys = (
+        "provider",
+        "token_domain",
+        "universe_hash",
+        "symbol",
+        "instrument_token",
+        "live_feed_session_id",
+        "reconnect_generation",
+    )
+    for key in immutable_keys:
+        incoming = payload.get(key)
+        existing_value = existing.get(key)
+        if incoming is not None and existing_value is not None and incoming != existing_value:
+            return {
+                "accepted": False,
+                "status": "PROVENANCE_IDENTITY_MISMATCH",
+                "field": key,
+                "existing": existing_value,
+                "incoming": incoming,
+            }
+    first_epoch = existing.get("first_live_tick_epoch")
+    last_epoch = existing.get("last_live_tick_epoch")
+    source_type = str(payload.get("source_type") or existing.get("source_type") or "unknown")
+    if tick_epoch is not None and source_type.lower() in {"live_websocket", "tick_store_live"}:
+        first_epoch = tick_epoch if first_epoch is None else min(float(first_epoch), tick_epoch)
+        last_epoch = tick_epoch if last_epoch is None else max(float(last_epoch), tick_epoch)
+    bar["bar_provenance"] = {
+        "source_type": source_type,
+        "live_feed_session_id": _prefer_present(payload, existing, "live_feed_session_id"),
+        "reconnect_generation": _prefer_present(payload, existing, "reconnect_generation"),
+        "instrument_token": _prefer_present(payload, existing, "instrument_token"),
+        "payload_mode": _prefer_present(payload, existing, "payload_mode"),
+        "provider": _prefer_present(payload, existing, "provider"),
+        "token_domain": _prefer_present(payload, existing, "token_domain"),
+        "universe_hash": _prefer_present(payload, existing, "universe_hash"),
+        "symbol": _prefer_present(payload, existing, "symbol"),
+        "packet_kind": _prefer_present(payload, existing, "packet_kind"),
+        "first_live_tick_epoch": first_epoch,
+        "last_live_tick_epoch": last_epoch,
+        "historical_seed": bool(payload.get("historical_seed", existing.get("historical_seed", False))),
+        "replay_fixture": bool(payload.get("replay_fixture", existing.get("replay_fixture", False))),
+        "non_live_fallback": bool(payload.get("non_live_fallback", existing.get("non_live_fallback", False))),
+        "recovered_synthetic": bool(payload.get("recovered_synthetic", existing.get("recovered_synthetic", False))),
+    }
+    return {"accepted": True, "status": "OK"}

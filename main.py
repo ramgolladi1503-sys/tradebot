@@ -39,6 +39,8 @@ from core.runtime_bootstrap import (
     global_readiness_blocker_sets as _global_readiness_blocker_sets,
     is_global_readiness_blocker as _is_global_readiness_blocker,
 )
+from core.unified_live_validation_pr748_756 import runtime_observer as _unified_live_campaign
+from core import campaign_raw_diagnostics as _campaign_diagnostics
 
 _ACTION_FLAG_KEY = "is_" + "order_action"
 
@@ -122,12 +124,52 @@ def _record_startup_lifecycle(event_name: str, *, details: dict | None = None, e
         pass
 
 
+def _shutdown_unified_live_campaign(state: str = "PROCESS_EXIT") -> None:
+    try:
+        from core.depth_store import depth_store
+        from core.feed import runtime_store
+        depth_result = depth_store.shutdown_persistence(deadline_seconds=2.0)
+        runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=2.0)
+        if not depth_result.get("complete") or not runtime_result.get("complete"):
+            print(f"[PERSISTENCE_WARN] shutdown_incomplete depth={depth_result} runtime={runtime_result}")
+    except Exception as exc:
+        print(f"[PERSISTENCE_WARN] shutdown_failed: {exc}")
+    try:
+        result = _unified_live_campaign.shutdown_current(seal=True, state=state)
+        if result is not None:
+            print(f"[UNIFIED_LIVE_VALIDATION] shutdown sealed={result.get('sealed')}")
+    except Exception as exc:
+        print(f"[UNIFIED_LIVE_VALIDATION_WARN] shutdown_failed: {exc}")
+
+
 def main():
     repo_root = Path(__file__).resolve().parent
     print(f"[BOOT] repo_root={repo_root}")
     exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
     print(f"[BOOT] exec_mode={exec_mode}")
     _validate_runtime_mode_config_alignment(exec_mode)
+    campaign_observer = None
+    try:
+        campaign_observer = _unified_live_campaign.init_from_env()
+        if campaign_observer is not None:
+            campaign_observer.write_process_identity({"exec_mode": exec_mode, "repo_root": str(repo_root)})
+            _campaign_diagnostics.record_wiring(
+                "RUNTIME_OBSERVER_CREATED",
+                component="runtime_observer",
+                instance_fingerprint=f"pid:{os.getpid()}:observer:{id(campaign_observer):x}",
+            )
+            _campaign_diagnostics.record_wiring(
+                "DIAGNOSTIC_RECORDER_CREATED",
+                component="diagnostic_recorder",
+                instance_fingerprint=f"pid:{os.getpid()}:recorder:{id(_campaign_diagnostics):x}",
+                parent_instance_fingerprint=f"pid:{os.getpid()}:observer:{id(campaign_observer):x}",
+            )
+            _campaign_diagnostics.run_diagnostic_self_test()
+            atexit.register(_shutdown_unified_live_campaign)
+            print("[UNIFIED_LIVE_VALIDATION] runtime observer initialized")
+    except Exception as exc:
+        print(f"[UNIFIED_LIVE_VALIDATION_ERROR] {exc}")
+        raise SystemExit(2)
 
     try:
         boot_safety = enforce_runtime_boot_safety(mode=exec_mode, config=cfg)
@@ -452,6 +494,9 @@ def main():
 
     try:
         orchestrator.live_monitoring()
+    except Exception as exc:
+        _unified_live_campaign.safe_call("observe_exception", exc, source="main.orchestrator")
+        raise
     finally:
         if broker_truth_reconciler is not None:
             try:
@@ -465,6 +510,7 @@ def main():
             print("[RECON] reconciliation daemon stopped")
         except Exception as exc:
             print(f"[RECON_WARN] failed_to_stop_reconciliation_daemon: {exc}")
+        _shutdown_unified_live_campaign(state="STOPPED")
 
 
 if __name__ == "__main__":

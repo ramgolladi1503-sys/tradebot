@@ -177,6 +177,55 @@ def test_cerberus_gate_blocks_non_action_field_regression(tmp_path):
     assert finding.marker == "no_action=false"
 
 
+def test_cerberus_gate_allows_unsafe_test_fixture_when_false_output_is_proven(tmp_path):
+    config = _write_config(tmp_path)
+    _write_file(
+        tmp_path,
+        "tests/test_fail_closed.py",
+        """
+        def test_fail_closed():
+            unsafe = {"no_action": True, "client_called": True}
+            result = {"no_action": False, "client_called": False}
+            assert result["no_action"] is False
+            assert result["client_called"] is False
+        """,
+    )
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tests/test_fail_closed.py",),
+    )
+
+    assert report.block_count == 0
+    assert report.exit_code == 0
+
+
+def test_cerberus_gate_still_blocks_unproven_unsafe_test_fixture(tmp_path):
+    config = _write_config(tmp_path)
+    _write_file(
+        tmp_path,
+        "tests/test_unproven_fixture.py",
+        """
+        def test_unproven_fixture():
+            unsafe = {"no_action": True, "client_called": True}
+            assert unsafe
+        """,
+    )
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tests/test_unproven_fixture.py",),
+    )
+
+    assert report.block_count == 2
+    assert {finding.marker for finding in report.blocked_findings} == {
+        "no_action=false",
+        "client_called=false",
+    }
+
+
 def test_cerberus_gate_ignores_required_field_name_constants(tmp_path):
     config = _write_config(tmp_path)
     _write_file(

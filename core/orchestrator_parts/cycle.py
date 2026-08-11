@@ -4,6 +4,7 @@ import time
 from config import config as cfg
 from core.execution_core_fast import FastExecutionCore
 from core.execution_engine_fast import FastExecutionEngine
+from core.market_event_graph_constituent_refresh import refresh_market_event_graph_constituent_source
 from core.runtime_startup_lifecycle import record_runtime_startup_event
 
 
@@ -29,6 +30,51 @@ def _record_runtime_boundary(event: str, *, details=None, error: str | None = No
         )
     except Exception:
         pass
+
+
+def _market_event_graph_live_source_enabled() -> bool:
+    import os
+
+    raw = os.getenv("MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE")
+    if raw is None:
+        raw = getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _refresh_constituent_source_for_cycle(*, feed_epoch: float | None) -> dict | None:
+    if not _market_event_graph_live_source_enabled():
+        return None
+    try:
+        as_of_epoch = float(feed_epoch or 0.0)
+    except (TypeError, ValueError):
+        as_of_epoch = 0.0
+    if as_of_epoch <= 0.0:
+        as_of_epoch = time.time()
+    result = refresh_market_event_graph_constituent_source(
+        symbol="NIFTY",
+        as_of_epoch=as_of_epoch,
+        metadata={
+            "market_event_graph_live_source_enable": True,
+            "owner": "NIFTY",
+            "identity": "NIFTY",
+        },
+    )
+    _record_runtime_boundary(
+        "PR749_CONSTITUENT_SOURCE_REFRESH",
+        details={
+            "feed_epoch": feed_epoch,
+            "status": result.get("status"),
+            "reason": result.get("reason"),
+            "invoked": result.get("invoked"),
+            "completed_bar_count": result.get("completed_bar_count"),
+            "target_boundary_count": result.get("target_boundary_count"),
+            "state_created": result.get("state_created"),
+            "state_persisted": result.get("state_persisted"),
+        },
+    )
+    return result
 
 
 def run_live_monitoring(orch, run_once=False, time_module=None):
@@ -62,6 +108,7 @@ def run_live_monitoring(orch, run_once=False, time_module=None):
         try:
             t0 = time.perf_counter()
             _record_runtime_boundary("RUNTIME_STATUS_WRITE_ATTEMPTED", details={"stage": "fast_engine_cycle"})
+            source_refresh = _refresh_constituent_source_for_cycle(feed_epoch=feed_epoch)
             _record_runtime_boundary("FAST_ENGINE_EVALUATE_STARTED", details={"feed_epoch": feed_epoch})
             try:
                 decision = engine.evaluate()
@@ -75,7 +122,10 @@ def run_live_monitoring(orch, run_once=False, time_module=None):
             t1 = time.perf_counter()
             _record_runtime_boundary(
                 "FAST_ENGINE_EVALUATE_COMPLETED",
-                details={"decision_type": type(decision).__name__},
+                details={
+                    "decision_type": type(decision).__name__,
+                    "pr749_refresh_status": (source_refresh or {}).get("status"),
+                },
             )
 
             _record_runtime_boundary(

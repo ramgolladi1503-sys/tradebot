@@ -1,0 +1,36 @@
+{
+  "allowed_for_live_execution": false,
+  "auth_authority_used": {
+    "active_access_token_present": true,
+    "active_api_key_present": true,
+    "mode": "existing_authenticated_kite_client",
+    "secret_values_recorded": false
+  },
+  "broker_api_called": false,
+  "is_order_action": false,
+  "provider": "kite",
+  "raw_sha256": "828c0c378e4939720c34ee7e727e5ae6f0265441e0e0a1888a386f85ab9c2a93",
+  "read_only": true,
+  "read_only_broker_metadata_endpoint_called": true,
+  "retrieval_ist": "2026-07-30T17:04:57.661860+05:30",
+  "retrieval_utc": "2026-07-30T11:34:57.661860Z",
+  "row_count": 9976,
+  "schema_fields_observed": [
+    "exchange",
+    "exchange_token",
+    "expiry",
+    "instrument_token",
+    "instrument_type",
+    "last_price",
+    "lot_size",
+    "name",
+    "segment",
+    "strike",
+    "tick_size",
+    "tradingsymbol"
+  ],
+  "source_file": null,
+  "source_method": "core.kite_client.kite_client.instruments(exchange=\"NSE\", force=True)",
+  "token_domain": "kite_instrument_token",
+  "verdict": "PASS_KITE_INSTRUMENT_MASTER_ACQUIRED"
+}

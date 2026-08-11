@@ -1,0 +1,1132 @@
+{
+  "authorities": {
+    "depth": {
+      "accepted_delta": 1,
+      "drain": {
+        "complete": true,
+        "durability_degraded": false,
+        "enqueued": 1,
+        "failures": 0,
+        "persisted": 1,
+        "queue_depth": 0,
+        "rejected": 0,
+        "shutdown": true,
+        "worker_alive": false
+      },
+      "drain_complete": true,
+      "failure_delta": 0,
+      "pending_after_drain": 0,
+      "persisted_delta": 1,
+      "rejected_delta": 0,
+      "same_instance": true,
+      "worker_alive_after_drain": false
+    },
+    "runtime": {
+      "accepted_delta": 1,
+      "drain": {
+        "complete": true,
+        "durability_degraded": false,
+        "enqueued": 1,
+        "failures": 0,
+        "queue_depth": 0,
+        "rejected": 0,
+        "worker_alive": false
+      },
+      "drain_complete": true,
+      "failure_delta": 0,
+      "pending_after_drain": 0,
+      "persisted_delta": 1,
+      "rejected_delta": 0,
+      "worker_alive_after_drain": false
+    },
+    "tick": {
+      "accepted_delta": 2,
+      "drain": {
+        "committed_batches": 1,
+        "deadline_expired": false,
+        "deadline_seconds": 2.0,
+        "drain_duration_ns": 4293505,
+        "final_flush_attempted": false,
+        "final_flush_completed": false,
+        "in_flight_rows": 0,
+        "join_duration_ns": 4277201,
+        "pending_writes": 0,
+        "queue_depth": 0,
+        "rows_committed": 2,
+        "rows_dequeued": 2,
+        "rows_enqueued": 2,
+        "shutdown_finished_monotonic_ns": 135291393996,
+        "shutdown_started_monotonic_ns": 135287100491,
+        "shutdown_state": "DRAIN_COMPLETE",
+        "status": "COMPLETE_DRAIN",
+        "worker_alive": false,
+        "worker_daemon": true,
+        "worker_failures": 0,
+        "worker_join_completed": true,
+        "worker_terminated": true,
+        "writes_rejected_after_shutdown": 0
+      },
+      "drain_complete": true,
+      "failure_delta": 0,
+      "pending_after_drain": 0,
+      "persisted_delta": 2,
+      "rejected_delta": 0,
+      "worker_alive_after_drain": false
+    }
+  },
+  "callback": {
+    "delegate_entries": 1,
+    "delegate_exits": 1,
+    "duration_ms": 2.125261,
+    "exceptions": 0,
+    "frozen_sla_ms": 5000.0,
+    "maximum_duration_ms": 2.125261,
+    "thread_id": 139900093975424,
+    "thread_name": "MainThread",
+    "wrapper_entries": 1,
+    "wrapper_exits": 1
+  },
+  "enqueue_counts": {
+    "depth": 1,
+    "diagnostic": 12,
+    "raw": 1,
+    "runtime": 1,
+    "tick": 2
+  },
+  "evidence_generator_version": "pr763-gate1-structured-v2",
+  "filesystem": {
+    "fsync_scope_authority": "CALLBACK_THREAD_ONLY; descriptor ownership is not asserted without a path-resolvable descriptor",
+    "monitored_roots": [
+      "/tmp/pr763-gate1-l2l5ntg0/positive"
+    ],
+    "negative_controls": {
+      "Path.open": {
+        "detected": true,
+        "detected_target": "Path.open",
+        "violations": [
+          [
+            "filesystem",
+            "Path.open",
+            "/tmp/pr763-gate1-l2l5ntg0/path_open/injected-path-open.txt",
+            139635216604032,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.open",
+            "/tmp/pr763-gate1-l2l5ntg0/path_open/injected-path-open.txt",
+            139635216604032,
+            "MainThread"
+          ]
+        ]
+      },
+      "builtins.open": {
+        "detected": true,
+        "detected_target": "builtins.open",
+        "violations": [
+          [
+            "filesystem",
+            "builtins.open",
+            "/tmp/pr763-gate1-l2l5ntg0/builtins_open/injected-open.txt",
+            139777284160384,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "builtins.open",
+            "/tmp/pr763-gate1-l2l5ntg0/builtins_open/injected-open.txt",
+            139777284160384,
+            "MainThread"
+          ]
+        ]
+      }
+    },
+    "normal_violations": [],
+    "target_inventory": [
+      "builtins.open",
+      "Path.open",
+      "Path.exists",
+      "Path.stat",
+      "Path.mkdir",
+      "Path.read_text",
+      "Path.read_bytes",
+      "Path.write_text",
+      "Path.write_bytes",
+      "os.stat",
+      "os.makedirs",
+      "os.fsync"
+    ],
+    "unscoped_control": {
+      "detected_as_scoped": false,
+      "file_created": true,
+      "violations": []
+    }
+  },
+  "generated_at": "2026-08-03T14:33:16.625187+00:00",
+  "implementation_sha": "eda4a92561c903b2c60eafab75d4b4b61b578063",
+  "launcher_hooks": {
+    "constituent": {
+      "configuration_consumer": "launch plan / constituent source",
+      "configuration_source": "launcher.build_child_environment",
+      "configured_state": true,
+      "disabled_reason": "NOT_APPLICABLE_TO_GATE1_PERSISTENCE_FIXTURE",
+      "effective_state": false,
+      "launcher_environment_key": "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH",
+      "launcher_value": "runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json",
+      "observed_traversal_count": 0,
+      "traversal_required": false
+    },
+    "live_source": {
+      "configuration_consumer": "core.kite_depth_ws launch-plan activation",
+      "configuration_source": "launcher.build_child_environment",
+      "configured_state": true,
+      "disabled_reason": null,
+      "effective_state": true,
+      "launcher_environment_key": "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE",
+      "launcher_value": "true",
+      "observed_traversal_count": 0,
+      "traversal_required": false
+    },
+    "meg": {
+      "configuration_consumer": "market-event-graph runtime bridge",
+      "configuration_source": "launcher.build_child_environment",
+      "configured_state": true,
+      "disabled_reason": "NOT_APPLICABLE_TO_GATE1_PERSISTENCE_FIXTURE",
+      "effective_state": false,
+      "launcher_environment_key": "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE",
+      "launcher_value": "true",
+      "observed_traversal_count": 0,
+      "traversal_required": false
+    },
+    "observer": {
+      "configuration_consumer": "runtime_observer.enabled/from_env",
+      "configuration_source": "launcher.build_child_environment",
+      "configured_state": true,
+      "disabled_reason": null,
+      "effective_state": true,
+      "launcher_environment_key": "UNIFIED_LIVE_VALIDATION_PR748_756_ENABLE",
+      "launcher_value": "true",
+      "observed_traversal_count": 1,
+      "traversal_required": true
+    }
+  },
+  "live_started": false,
+  "missing_controls": [],
+  "registered_callback_path": "_register_on_ticks_callback -> kws.on_ticks -> core.kite_depth_ws.on_ticks",
+  "schema_version": 2,
+  "sqlite": {
+    "connection_inventory": [
+      "runtime_store._conn",
+      "tick_store._conn",
+      "trade_store._conn"
+    ],
+    "negative_controls": {
+      "connection.close": {
+        "detected": true,
+        "detected_target": "connection.close",
+        "violations": [
+          [
+            "sqlite_operation",
+            "connection.close",
+            140110349515648,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "connection.close",
+            140110349515648,
+            "MainThread"
+          ]
+        ]
+      },
+      "connection.commit": {
+        "detected": true,
+        "detected_target": "connection.commit",
+        "violations": [
+          [
+            "sqlite_operation",
+            "connection.commit",
+            139641707338624,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "connection.commit",
+            139641707338624,
+            "MainThread"
+          ]
+        ]
+      },
+      "connection.execute": {
+        "detected": true,
+        "detected_target": "connection.execute",
+        "violations": [
+          [
+            "sqlite_operation",
+            "connection.execute",
+            139875025951616,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "connection.execute",
+            139875025951616,
+            "MainThread"
+          ]
+        ]
+      },
+      "connection.executemany": {
+        "detected": true,
+        "detected_target": "connection.executemany",
+        "violations": [
+          [
+            "sqlite_operation",
+            "connection.executemany",
+            140171876088704,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "connection.executemany",
+            140171876088704,
+            "MainThread"
+          ]
+        ]
+      },
+      "connection.rollback": {
+        "detected": true,
+        "detected_target": "connection.rollback",
+        "violations": [
+          [
+            "sqlite_operation",
+            "connection.rollback",
+            140468553636736,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "connection.rollback",
+            140468553636736,
+            "MainThread"
+          ]
+        ]
+      },
+      "cursor.close": {
+        "detected": true,
+        "detected_target": "cursor.close",
+        "violations": [
+          [
+            "sqlite_operation",
+            "connection.cursor",
+            139980917476224,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "cursor.close",
+            139980917476224,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "connection.cursor",
+            139980917476224,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "cursor.close",
+            139980917476224,
+            "MainThread"
+          ]
+        ]
+      },
+      "cursor.execute": {
+        "detected": true,
+        "detected_target": "cursor.execute",
+        "violations": [
+          [
+            "sqlite_operation",
+            "connection.cursor",
+            139986749590400,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "cursor.execute",
+            139986749590400,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "connection.cursor",
+            139986749590400,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "cursor.execute",
+            139986749590400,
+            "MainThread"
+          ]
+        ]
+      },
+      "cursor.executemany": {
+        "detected": true,
+        "detected_target": "cursor.executemany",
+        "violations": [
+          [
+            "sqlite_operation",
+            "connection.cursor",
+            140478949747584,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "cursor.executemany",
+            140478949747584,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "connection.cursor",
+            140478949747584,
+            "MainThread"
+          ],
+          [
+            "sqlite_operation",
+            "cursor.executemany",
+            140478949747584,
+            "MainThread"
+          ]
+        ]
+      }
+    },
+    "normal_violations": [],
+    "operation_inventory": [
+      "connection.execute",
+      "connection.executemany",
+      "connection.commit",
+      "connection.rollback",
+      "connection.close",
+      "cursor.execute",
+      "cursor.executemany",
+      "cursor.close"
+    ],
+    "worker_operations": []
+  },
+  "synchronous_stores": {
+    "negative_controls": {
+      "events.write_json_atomic": {
+        "detected": true,
+        "detected_target": "events.write_json_atomic",
+        "violations": [
+          [
+            "store",
+            "events.write_json_atomic",
+            140213471103872,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.mkdir",
+            "/tmp/pr763-gate1-l2l5ntg0/event_json",
+            140213471103872,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/event_json",
+            140213471103872,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/event_json",
+            140213471103872,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.open",
+            "/tmp/pr763-gate1-l2l5ntg0/event_json/injected-event.json.tmp.2996.ddd48ca0c4314b1d8c71358de9020c08",
+            140213471103872,
+            "MainThread"
+          ],
+          [
+            "store",
+            "events.write_json_atomic",
+            140213471103872,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.mkdir",
+            "/tmp/pr763-gate1-l2l5ntg0/event_json",
+            140213471103872,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/event_json",
+            140213471103872,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/event_json",
+            140213471103872,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.open",
+            "/tmp/pr763-gate1-l2l5ntg0/event_json/injected-event.json.tmp.2996.0265edb429544abfa394aac513c422fd",
+            140213471103872,
+            "MainThread"
+          ]
+        ]
+      },
+      "runtime_store._write_runtime_snapshot_sync": {
+        "detected": true,
+        "detected_target": "runtime_store._write_runtime_snapshot_sync",
+        "violations": [
+          [
+            "store",
+            "runtime_store._write_runtime_snapshot_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "sqlite",
+            "runtime_store._conn",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.exists",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.mkdir",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "sqlite",
+            "runtime_store._conn",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.exists",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.mkdir",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "store",
+            "runtime_store._write_runtime_snapshot_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "sqlite",
+            "runtime_store._conn",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.exists",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.mkdir",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "sqlite",
+            "runtime_store._conn",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.exists",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.mkdir",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/runtime_sync",
+            140106763258752,
+            "MainThread"
+          ]
+        ]
+      },
+      "tick_store._write_rows": {
+        "detected": true,
+        "detected_target": "tick_store._write_rows",
+        "violations": [
+          [
+            "store",
+            "tick_store._write_rows",
+            139750984395648,
+            "MainThread"
+          ],
+          [
+            "store",
+            "tick_store._write_rows",
+            139750984395648,
+            "MainThread"
+          ]
+        ]
+      },
+      "trade_store.insert_depth_snapshot": {
+        "detected": true,
+        "detected_target": "trade_store.insert_depth_snapshot",
+        "violations": [
+          [
+            "store",
+            "trade_store.insert_depth_snapshot",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.exists",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.mkdir",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.exists",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.mkdir",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.exists",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.mkdir",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "store",
+            "trade_store.insert_depth_snapshot",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.exists",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.mkdir",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.exists",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.mkdir",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "Path.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ],
+          [
+            "filesystem",
+            "os.stat",
+            "/tmp/pr763-gate1-l2l5ntg0/depth_sync",
+            140272606714752,
+            "MainThread"
+          ]
+        ]
+      }
+    },
+    "normal_violations": [],
+    "target_inventory": [
+      "tick_store._write_rows",
+      "trade_store.insert_depth_snapshot",
+      "runtime_store._write_runtime_snapshot_sync",
+      "events.write_json_atomic"
+    ]
+  },
+  "validation": {
+    "callback_regressions": {
+      "command": "/opt/hostedtoolcache/Python/3.11.15/x64/bin/python -m pytest -q tests/test_kite_depth_ws_observation_on_ticks.py tests/test_kite_depth_ws_market_event_graph_lifecycle.py tests/test_feed_subscription_generation.py",
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ".........................................                                [100%]\n41 passed in 0.39s\n"
+    },
+    "compilation": {
+      "command": "/opt/hostedtoolcache/Python/3.11.15/x64/bin/python -m py_compile tools/pr763_gate1_structured_evidence.py scripts/run_pr763_gate1_offline_certification.py tests/test_pr763_gate1_structured_evidence.py tests/test_pr763_callback_persistence_cutover_certification.py core/kite_depth_ws.py core/tick_store.py core/depth_store.py core/feed/runtime_store.py",
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    },
+    "focused_gate1": {
+      "command": "/opt/hostedtoolcache/Python/3.11.15/x64/bin/python -m pytest -q tests/test_pr763_callback_persistence_cutover_certification.py tests/test_pr763_gate1_structured_evidence.py",
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "...........................................                              [100%]\n43 passed in 52.48s\n"
+    },
+    "gate1a": {
+      "command": "/opt/hostedtoolcache/Python/3.11.15/x64/bin/python -m pytest -q tests/test_pr763_callback_persistence_cutover_certification.py -k real_on_ticks_tripwire or registered_callback_fixture",
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "..                                                                       [100%]\n2 passed, 38 deselected in 0.22s\n"
+    },
+    "gate6": {
+      "command": "/opt/hostedtoolcache/Python/3.11.15/x64/bin/python -m pytest -q tests/test_pr763_callback_persistence_cutover_certification.py -k saturation or durability or degradation",
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ".......                                                                  [100%]\n7 passed, 33 deselected in 0.21s\n"
+    }
+  },
+  "verdict": "REAL_CALLBACK_PERSISTENCE_GATE_CLOSED",
+  "workers": {
+    "depth": {
+      "thread_id": 139899581757120,
+      "thread_name": "depth-store-persistence"
+    },
+    "runtime": {
+      "thread_id": 139899531417280,
+      "thread_name": "feed-runtime-persistence"
+    },
+    "tick": {
+      "thread_id": 139899548198592,
+      "thread_name": "tick-store-flush"
+    }
+  }
+}

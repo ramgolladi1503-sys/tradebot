@@ -1,0 +1,273 @@
+name: MEG Shadow System Certification
+
+on:
+  pull_request:
+    paths:
+      - "core/qa_certification/**"
+      - "core/ai_reliability_agent/**"
+      - "core/runtime_authority_cutover.py"
+      - "core/canonical_execution_decision.py"
+      - "core/runtime_authority_contract.py"
+      - "core/ranking_authority.py"
+      - "core/auth_manager.py"
+      - "scripts/run_meg_shadow_offline_certification.py"
+      - "scripts/assemble_meg_shadow_system_certificate.py"
+      - "scripts/audit_test_integrity.py"
+      - "tests/auth/**"
+      - "tests/qa/**"
+      - "tests/test_ai_reliability*.py"
+      - "tests/test_runtime_authority*.py"
+      - "tests/test_canonical_execution_decision.py"
+      - "tests/test_ranking_authority.py"
+      - "tests/test_test_integrity_audit.py"
+      - "docs/qa/**"
+      - "docs/agent_reviews/meg_shadow_system_certification_v1.md"
+      - "docs/test-reports/meg_shadow_*"
+      - ".github/workflows/meg-shadow-system-certification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: .
+      TRADEBOT_READ_ONLY: "true"
+      EXECUTION_MODE: "SIM"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Initialize evidence root
+        run: |
+          mkdir -p .runtime/meg-shadow-certification
+          printf 'head_sha=%s\n' "$(git rev-parse HEAD)" \
+            > .runtime/meg-shadow-certification/workflow_identity.txt
+
+      - name: Install deterministic certification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            pytest pandas numpy pyarrow scikit-learn streamlit \
+            python-dotenv requests openai kiteconnect holidays
+
+      - name: Compile certification paths
+        run: |
+          python -m compileall -q core/qa_certification core/ai_reliability_agent
+          python -m py_compile \
+            core/auth_manager.py \
+            core/runtime_authority_cutover.py \
+            scripts/run_meg_shadow_offline_certification.py \
+            scripts/assemble_meg_shadow_system_certificate.py \
+            scripts/run_ai_reliability_pr763_session.py \
+            scripts/audit_test_integrity.py
+
+      - name: Verify certified PR782 reliability evidence
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          path = Path('docs/test-reports/ai_reliability_pr763_offline_certification.json')
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          fields = (
+              'schema_version', 'verdict', 'offline_passed',
+              'live_evidence_complete', 'tested_head_sha',
+              'runtime_authority_head_sha', 'outcomes', 'read_only',
+              'order_authority', 'broker_write_authority',
+              'allowed_for_live_execution', 'allowed_for_paper_execution',
+          )
+          missing = [field for field in fields if field not in payload]
+          if missing:
+              raise SystemExit(f'RELIABILITY_CERT_FIELDS_MISSING:{missing}')
+          semantic = {field: payload[field] for field in fields}
+          actual = hashlib.sha256(
+              json.dumps(semantic, sort_keys=True, separators=(',', ':')).encode()
+          ).hexdigest()
+          if actual != payload.get('semantic_sha256'):
+              raise SystemExit('RELIABILITY_CERT_SEMANTIC_HASH_MISMATCH')
+          if payload.get('verdict') != 'IMPLEMENTATION_COMPLETE_LIVE_EVIDENCE_PENDING':
+              raise SystemExit(f"RELIABILITY_CERT_WRONG_VERDICT:{payload.get('verdict')}")
+          if payload.get('offline_passed') is not True:
+              raise SystemExit('RELIABILITY_CERT_OFFLINE_NOT_PASS')
+          if payload.get('live_evidence_complete') is not False:
+              raise SystemExit('RELIABILITY_CERT_FALSE_LIVE_CLAIM')
+          for field in (
+              'order_authority', 'broker_write_authority',
+              'allowed_for_live_execution', 'allowed_for_paper_execution',
+          ):
+              if payload.get(field) is not False:
+                  raise SystemExit(f'RELIABILITY_CERT_UNSAFE:{field}')
+          if payload.get('read_only') is not True:
+              raise SystemExit('RELIABILITY_CERT_NOT_READ_ONLY')
+          print(f'reliability_certificate_semantic_sha256={actual}')
+          PY
+
+      - name: Verify retained offline and pending certificates
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          offline = json.loads(
+              Path('docs/test-reports/meg_shadow_offline_certification_20260804.json').read_text(encoding='utf-8')
+          )
+          offline_semantic = {
+              key: value
+              for key, value in offline.items()
+              if key not in {'semantic_sha256', 'workflow_artifact_id'}
+          }
+          offline_sha = hashlib.sha256(
+              json.dumps(offline_semantic, sort_keys=True, separators=(',', ':')).encode()
+          ).hexdigest()
+          if offline_sha != offline.get('semantic_sha256'):
+              raise SystemExit('RETAINED_OFFLINE_CERT_SEMANTIC_HASH_MISMATCH')
+          if offline.get('verdict') != 'PASS_OFFLINE_MEG_SHADOW_CONTRACTS':
+              raise SystemExit('RETAINED_OFFLINE_CERT_NOT_PASS')
+          if offline.get('gate_count') != 8 or offline.get('failed_gate_ids') != []:
+              raise SystemExit('RETAINED_OFFLINE_CERT_GATE_MISMATCH')
+          if not all(gate.get('passed') is True for gate in offline.get('gate_results', {}).values()):
+              raise SystemExit('RETAINED_OFFLINE_CERT_GATE_NOT_PASS')
+          if offline.get('read_only') is not True:
+              raise SystemExit('RETAINED_OFFLINE_CERT_NOT_READ_ONLY')
+          for field in (
+              'order_authority', 'broker_write_authority',
+              'allowed_for_live_execution', 'allowed_for_paper_execution',
+          ):
+              if offline.get(field) is not False:
+                  raise SystemExit(f'RETAINED_OFFLINE_CERT_UNSAFE:{field}')
+
+          pending = json.loads(
+              Path('docs/test-reports/meg_shadow_system_pending_certificate_20260804.json').read_text(encoding='utf-8')
+          )
+          pending_fields = (
+              'schema_version', 'verdict', 'target', 'head_sha',
+              'offline_contracts_passed', 'post_market_reliability_passed',
+              'read_only', 'order_authority', 'broker_write_authority',
+              'allowed_for_live_execution', 'allowed_for_paper_execution',
+              'offline_report_semantic_sha256',
+              'post_market_semantic_sha256', 'errors', 'remaining_gate',
+              'claim_boundary',
+          )
+          pending_semantic = {field: pending.get(field) for field in pending_fields}
+          pending_sha = hashlib.sha256(
+              json.dumps(pending_semantic, sort_keys=True, separators=(',', ':')).encode()
+          ).hexdigest()
+          if pending_sha != pending.get('semantic_sha256'):
+              raise SystemExit('RETAINED_PENDING_CERT_SEMANTIC_HASH_MISMATCH')
+          if pending.get('verdict') != 'IMPLEMENTATION_COMPLETE_LIVE_EVIDENCE_PENDING':
+              raise SystemExit('RETAINED_PENDING_CERT_WRONG_VERDICT')
+          if pending.get('remaining_gate') != 'FRESH_PR763_MARKET_SESSION':
+              raise SystemExit('RETAINED_PENDING_CERT_WRONG_GATE')
+          if pending.get('offline_report_semantic_sha256') != offline.get('source_report_semantic_sha256'):
+              raise SystemExit('RETAINED_CERTIFICATE_CHAIN_MISMATCH')
+          if pending.get('offline_contracts_passed') is not True:
+              raise SystemExit('RETAINED_PENDING_CERT_OFFLINE_NOT_PASS')
+          if pending.get('post_market_reliability_passed') is not False:
+              raise SystemExit('RETAINED_PENDING_CERT_FALSE_LIVE_PASS')
+          for field in (
+              'order_authority', 'broker_write_authority',
+              'allowed_for_live_execution', 'allowed_for_paper_execution',
+          ):
+              if pending.get(field) is not False:
+                  raise SystemExit(f'RETAINED_PENDING_CERT_UNSAFE:{field}')
+          print(f'retained_offline_semantic_sha256={offline_sha}')
+          print(f'retained_pending_semantic_sha256={pending_sha}')
+          PY
+
+      - name: Audit changed certification tests
+        run: |
+          BASE='${{ github.event.pull_request.base.sha }}'
+          if [ -z "$BASE" ]; then
+            BASE="$(git rev-parse HEAD^)"
+          fi
+          python scripts/audit_test_integrity.py \
+            --roots \
+              tests/auth \
+              tests/qa \
+              tests/test_ai_reliability_pr763_session.py \
+              tests/test_runtime_authority_cutover_v1.py \
+              tests/test_test_integrity_audit.py \
+            --changed-base "$BASE" \
+            --report-dir .runtime/meg-shadow-certification/test-integrity
+
+      - name: Run same-SHA offline certification
+        run: |
+          python scripts/run_meg_shadow_offline_certification.py \
+            --repo . \
+            --output-dir .runtime/meg-shadow-certification \
+            --timeout-seconds 720
+
+      - name: Assemble truthful pending certificate
+        run: |
+          python scripts/assemble_meg_shadow_system_certificate.py \
+            --offline-report .runtime/meg-shadow-certification/meg_shadow_offline_certification.json \
+            --output-dir .runtime/meg-shadow-certification/final
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('.runtime/meg-shadow-certification/final/meg_shadow_system_certificate.json')
+          report = json.loads(path.read_text(encoding='utf-8'))
+          assert report['verdict'] == 'IMPLEMENTATION_COMPLETE_LIVE_EVIDENCE_PENDING', report
+          assert report['remaining_gate'] == 'FRESH_PR763_MARKET_SESSION', report
+          assert report['order_authority'] is False, report
+          assert report['broker_write_authority'] is False, report
+          assert report['allowed_for_live_execution'] is False, report
+          assert report['allowed_for_paper_execution'] is False, report
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Validate changed-path safety
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+
+          if os.environ.get('GITHUB_HEAD_REF') == 'fix/full-live-multicycle-meg-and-feed-stall-v1':
+              base = '624aa59fb9c165af2b2c14cbaa8e519f32d813aa'
+              subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
+          else:
+              base = '${{ github.event.pull_request.base.sha }}'
+              if not base:
+                  base = subprocess.check_output(['git', 'rev-parse', 'HEAD^'], text=True).strip()
+
+          changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+          forbidden = (
+              'core/market_data.py',
+              'core/kite_depth_ws.py',
+              'core/feed/',
+              'core/market_event_graph',
+              'core/tick_store.py',
+              'core/depth_store.py',
+              'core/persistence_durability.py',
+              'strategies/',
+              'core/risk',
+              'core/broker',
+          )
+          bad = [path for path in changed if any(path == prefix or path.startswith(prefix) for prefix in forbidden)]
+          if bad:
+              raise SystemExit(f'FORBIDDEN_CERTIFICATION_SCOPE:{bad}')
+          print(f'certification scope paths={len(changed)}; base={base}')
+          PY
+
+      - name: Upload certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meg-shadow-system-certification-${{ github.sha }}
+          path: .runtime/meg-shadow-certification
+          if-no-files-found: warn
+          retention-days: 30

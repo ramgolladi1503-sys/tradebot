@@ -25,6 +25,7 @@ def test_write_runtime_snapshot_records_start_and_snapshot_events(tmp_path, monk
     )
 
     assert ok is True
+    store.shutdown_runtime_persistence()
     latest = json.loads((tmp_path / "feed_startup_lifecycle_latest.json").read_text())
     assert latest["run_id"] == "run-runtime-store-lifecycle"
     assert latest["last_event"] == "FEED_RUNTIME_SNAPSHOT_WRITTEN"
@@ -57,9 +58,27 @@ def test_write_runtime_snapshot_records_auth_blocked_event(tmp_path, monkeypatch
     )
 
     assert ok is True
+    store.shutdown_runtime_persistence()
     latest = json.loads((tmp_path / "feed_startup_lifecycle_latest.json").read_text())
     assert [event["event"] for event in latest["events"]] == [
         "AUTH_BLOCKED",
         "FEED_RUNTIME_SNAPSHOT_WRITTEN",
     ]
     assert latest["events"][0]["error"] == "missing_access_token"
+
+
+def test_runtime_snapshot_is_deep_copied_before_worker_persistence(monkeypatch):
+    captured = []
+
+    def _capture(payload):
+        captured.append(payload)
+        return True
+
+    monkeypatch.setattr(store, "_write_runtime_snapshot_sync", _capture)
+    payload = {"source": "test", "nested": {"value": 1}}
+    assert store.write_runtime_snapshot(payload) is True
+    payload["nested"]["value"] = 99
+    result = store.shutdown_runtime_persistence()
+
+    assert result["complete"] is True
+    assert captured[0]["nested"]["value"] == 1

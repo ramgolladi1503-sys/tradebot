@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import strategies.trade_builder as trade_builder_module
 from config import config as cfg
+from core.runtime_authority_cutover import apply_runtime_authority
 from strategies.trade_builder import TradeBuilder
 
 
@@ -136,11 +137,19 @@ def _assert_dirty_candidate(candidate, reason: str) -> None:
     assert _field(candidate, "execution_block_reason") == reason
     assert reason in _list_field(candidate, "gate_reasons")
     assert reason in _list_field(candidate, "tradable_reasons_blocking")
+    # This object is the builder-internal candidate before the runtime-authority
+    # cutover, so preserve its lifecycle label while proving it cannot execute.
     assert _field(candidate, "candidate_status") == "advisory_only"
     assert _field(candidate, "execution_status") == "advisory_only"
     assert _field(candidate, "execution_allowed") is False
     assert _field(candidate, "execution_ok") is False
     assert _field(candidate, "tradable") is False
+
+    # Canonical execution truth is applied at the authority boundary. The same
+    # dirty candidate must become explicitly not_executable there.
+    canonical = apply_runtime_authority(candidate, mode="PAPER")
+    assert _field(canonical, "execution_status") == "not_executable"
+    assert _field(canonical, "execution_allowed") is False
 
 
 def test_dirty_option_rows_are_preserved_into_ranked_advisory_candidates(monkeypatch):

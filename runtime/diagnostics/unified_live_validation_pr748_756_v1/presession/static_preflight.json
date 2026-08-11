@@ -1,0 +1,12 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "is_order_action": false,
+  "notes": [
+    "Additive package only",
+    "No broker/order imports in campaign package",
+    "Wrapper emits launch command; it does not start live process automatically"
+  ],
+  "read_only": true,
+  "verdict": "PASS_OBSERVATION_ONLY_STATIC_PREFLIGHT"
+}

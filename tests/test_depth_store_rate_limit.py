@@ -3,6 +3,9 @@ from __future__ import annotations
 from config import config as cfg
 import core.depth_store as depth_store_module
 from core.depth_store import DepthStore
+import threading
+import time
+import json
 
 
 def test_depth_store_rate_limits_snapshot_persistence(monkeypatch):
@@ -30,5 +33,41 @@ def test_depth_store_rate_limits_snapshot_persistence(monkeypatch):
     store.update(111, sample_depth)
     store.update(111, sample_depth)
     store.update(111, sample_depth)
+    result = store.shutdown_persistence()
 
     assert calls["count"] == 2
+    assert result["complete"] is True
+
+
+def test_depth_persistence_runs_off_callback_thread_and_drains(monkeypatch):
+    calls = []
+
+    def _slow_insert(*_args, **_kwargs):
+        time.sleep(0.03)
+        calls.append(threading.current_thread().name)
+        return True
+
+    monkeypatch.setattr(depth_store_module, "insert_depth_snapshot", _slow_insert)
+    store = DepthStore()
+    store.update(222, {"buy": [{"quantity": 10}], "sell": [{"quantity": 8}]})
+    result = store.shutdown_persistence(deadline_seconds=1.0)
+
+    assert result["complete"] is True
+    assert calls == ["depth-store-persistence"]
+    assert result["persisted"] == 1
+
+
+def test_depth_rejection_provenance_records_shutdown_reject(tmp_path, monkeypatch):
+    monkeypatch.setattr(depth_store_module, "insert_depth_snapshot", lambda *_args: True)
+    store = DepthStore()
+    path = tmp_path / "depth_rejections.jsonl"
+    store.configure_rejection_provenance(path, session_id="s1", producer_sha="p1")
+    store.shutdown_persistence()
+    store.update(333, {"buy": [], "sell": []})
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    assert len(rows) == 1
+    assert rows[0]["reason_code"] == "SHUTDOWN_REJECT"
+    assert rows[0]["instrument_token"] == 333
+    assert rows[0]["session_id"] == "s1"
+    assert rows[0]["producer_sha"] == "p1"
+    assert rows[0]["row_sha256"]

@@ -1,6 +1,6 @@
 import threading
 from dataclasses import dataclass
-from typing import Optional, List, Tuple, Callable
+from typing import Optional, List, Tuple, Callable, Any
 
 @dataclass(frozen=True)
 class WsMutationResult:
@@ -167,7 +167,53 @@ def _safe_mutate(ws, action: str, tokens: List[int], reason: str, now_epoch: flo
 
 
 def safe_subscribe_full_mode(ws, tokens: List[int], reason: str, now_epoch: float, on_applied_callback: Optional[Callable[[], None]] = None) -> Tuple[WsMutationResult, WsMutationResult]:
+    return safe_subscribe_full_mode_observed(
+        ws,
+        tokens,
+        reason,
+        now_epoch,
+        on_applied_callback=on_applied_callback,
+    )
+
+
+def safe_subscribe_full_mode_observed(
+    ws,
+    tokens: List[int],
+    reason: str,
+    now_epoch: float,
+    on_applied_callback: Optional[Callable[[], None]] = None,
+    *,
+    socket_generation: Optional[int] = None,
+    active_generation: Optional[Callable[[], int]] = None,
+    event_callback: Optional[Callable[[str, dict[str, Any]], None]] = None,
+) -> Tuple[WsMutationResult, WsMutationResult]:
+    """Subscribe and set full mode without letting an old socket mutate current truth.
+
+    The returned result describes the state at return time. Reactor-scheduled work is
+    queued, never applied. Its eventual outcome is reported through ``event_callback``.
+    """
     present, connected, fail_reason = _check_socket_health(ws)
+    unique_tokens = sorted(list(set(tokens)))
+
+    def emit(event: str, *, result: str, failure_reason: Optional[str] = None) -> None:
+        if event_callback is None:
+            return
+        event_callback(
+            event,
+            {
+                "socket_generation": socket_generation,
+                "token_count": len(unique_tokens),
+                "token_ids": list(unique_tokens),
+                "callback_thread": threading.current_thread().name,
+                "timestamp": now_epoch,
+                "result": result,
+                "failure_reason": failure_reason,
+                "reason": reason,
+            },
+        )
+
+    emit("FEED_SUBSCRIBE_REQUESTED", result="requested")
+    emit("FEED_MODE_FULL_REQUESTED", result="requested")
     if not present or connected is False:
         res_sub = WsMutationResult(
             ok=False, action="subscribe", tokens_count=len(tokens),
@@ -181,9 +227,10 @@ def safe_subscribe_full_mode(ws, tokens: List[int], reason: str, now_epoch: floa
             scheduled=False, queued=True, applied=False,
             failure_reason=fail_reason or "ws_disconnected", reason=reason, ts_epoch=now_epoch
         )
+        emit("FEED_SUBSCRIBE_QUEUED", result="queued", failure_reason=res_sub.failure_reason)
+        emit("FEED_MODE_FULL_QUEUED", result="queued", failure_reason=res_mode.failure_reason)
         return res_sub, res_mode
 
-    unique_tokens = sorted(list(set(tokens)))
     if not unique_tokens:
         if on_applied_callback:
             on_applied_callback()
@@ -214,9 +261,43 @@ def safe_subscribe_full_mode(ws, tokens: List[int], reason: str, now_epoch: floa
         if getattr(ws, "MODE_FULL", None) is None:
             raise ValueError("MODE_FULL not found on ws")
 
+        callback_status = {"subscribe": False, "mode_full": False, "failure_reason": None}
+
         def _apply_and_notify():
-            ws.subscribe(unique_tokens)
-            ws.set_mode(ws.MODE_FULL, unique_tokens)
+            if socket_generation is not None and active_generation is not None:
+                current_generation = int(active_generation())
+                if int(socket_generation) != current_generation:
+                    emit(
+                        "FEED_OLD_GENERATION_CALLBACK_IGNORED",
+                        result="ignored",
+                        failure_reason=f"active_generation:{current_generation}",
+                    )
+                    callback_status["failure_reason"] = "old_socket_generation"
+                    return
+            try:
+                ws.subscribe(unique_tokens)
+                callback_status["subscribe"] = True
+                emit("FEED_SUBSCRIBE_CALLBACK_APPLIED", result="applied")
+            except Exception as exc:
+                emit(
+                    "FEED_SUBSCRIBE_CALLBACK_FAILED",
+                    result="failed",
+                    failure_reason=f"{type(exc).__name__}:{exc}",
+                )
+                callback_status["failure_reason"] = f"{type(exc).__name__}:{exc}"
+                return
+            try:
+                ws.set_mode(ws.MODE_FULL, unique_tokens)
+                callback_status["mode_full"] = True
+                emit("FEED_MODE_FULL_CALLBACK_APPLIED", result="applied")
+            except Exception as exc:
+                emit(
+                    "FEED_MODE_FULL_CALLBACK_FAILED",
+                    result="failed",
+                    failure_reason=f"{type(exc).__name__}:{exc}",
+                )
+                callback_status["failure_reason"] = f"{type(exc).__name__}:{exc}"
+                return
             if on_applied_callback:
                 on_applied_callback()
 
@@ -225,6 +306,8 @@ def safe_subscribe_full_mode(ws, tokens: List[int], reason: str, now_epoch: floa
             from twisted.internet import reactor
             if reactor.running:
                 reactor.callFromThread(_apply_and_notify)
+                emit("FEED_SUBSCRIBE_QUEUED", result="queued", failure_reason="mutation_scheduled_not_applied")
+                emit("FEED_MODE_FULL_QUEUED", result="queued", failure_reason="mutation_scheduled_not_applied")
                 res_sub = WsMutationResult(
                     ok=False, action="subscribe", tokens_count=len(unique_tokens),
                     socket_present=True, ws_connected=connected,
@@ -241,16 +324,16 @@ def safe_subscribe_full_mode(ws, tokens: List[int], reason: str, now_epoch: floa
 
         _apply_and_notify()
         res_sub = WsMutationResult(
-            ok=True, action="subscribe", tokens_count=len(unique_tokens),
+            ok=bool(callback_status["subscribe"]), action="subscribe", tokens_count=len(unique_tokens),
             socket_present=True, ws_connected=connected,
-            scheduled=False, queued=False, applied=True,
-            failure_reason=None, reason=reason, ts_epoch=now_epoch
+            scheduled=False, queued=False, applied=bool(callback_status["subscribe"]),
+            failure_reason=callback_status["failure_reason"], reason=reason, ts_epoch=now_epoch
         )
         res_mode = WsMutationResult(
-            ok=True, action="set_mode_full", tokens_count=len(unique_tokens),
+            ok=bool(callback_status["mode_full"]), action="set_mode_full", tokens_count=len(unique_tokens),
             socket_present=True, ws_connected=connected,
-            scheduled=False, queued=False, applied=True,
-            failure_reason=None, reason=reason, ts_epoch=now_epoch
+            scheduled=False, queued=False, applied=bool(callback_status["mode_full"]),
+            failure_reason=callback_status["failure_reason"], reason=reason, ts_epoch=now_epoch
         )
         return res_sub, res_mode
     except Exception as exc:

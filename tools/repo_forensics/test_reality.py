@@ -261,23 +261,33 @@ def _assertion_count(source: str) -> int:
     return sum(1 for node in ast.walk(tree) if isinstance(node, ast.Assert))
 
 
-def _has_fake_confidence_markers(lowered: str, source: str) -> bool:
-    weak_assertions = [
+def _weak_assertion_marker_count(lowered: str) -> int:
+    markers = (
         _ASSERT_MARKER + "true",
         _ASSERT_MARKER + "len(",
         _ASSERT_MARKER + "result is not none",
         _ASSERT_MARKER + "response is not none",
         _ASSERT_MARKER + "data is not none",
-    ]
-    if any(marker in lowered for marker in weak_assertions):
-        return True
+        " in result",
+        " in data",
+        " in report",
+    )
+    return sum(lowered.count(marker) for marker in markers)
+
+
+def _weak_assertions_are_only_proof(lowered: str, source: str) -> bool:
+    assertion_count = _assertion_count(source)
+    if assertion_count <= 0:
+        return False
+    return _weak_assertion_marker_count(lowered) >= assertion_count
+
+
+def _has_fake_confidence_markers(lowered: str, source: str) -> bool:
     if "except exception" in lowered and "pass" in lowered:
         return True
     if "mock" in lowered and _ORDER_MARKER in lowered and "broker_api_called" not in lowered:
         return True
-    if source.count(_ASSERT_MARKER) == 1 and any(marker in lowered for marker in [" in result", " in data", " in report"]):
-        return True
-    return False
+    return _weak_assertions_are_only_proof(lowered, source)
 
 
 def _has_safety_markers(lowered: str) -> bool:
@@ -354,7 +364,12 @@ def _looks_shape_only(source: str, lowered: str, assertion_count: int) -> bool:
         "len(",
     ]
     behavior_markers = ["== false", " is false", "raises(", "not in", "!=", "blocked", "rejected"]
-    return any(marker in lowered for marker in shape_markers) and not any(marker in lowered for marker in behavior_markers)
+    shape_marker_count = sum(lowered.count(marker) for marker in shape_markers)
+    return (
+        shape_marker_count >= assertion_count
+        and any(marker in lowered for marker in shape_markers)
+        and not any(marker in lowered for marker in behavior_markers)
+    )
 
 
 def _risk_markers(lowered: str) -> list[str]:

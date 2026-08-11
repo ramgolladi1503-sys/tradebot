@@ -2680,7 +2680,29 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             continue
         try:
             if ltp and ltp > 0:
-                ohlc_buffer.update_tick(symbol, ltp, volume=None, ts=cycle_cutoff)
+                live_source_type = "tick_store_live" if str(ltp_source) == "tick_store" else ("live_websocket" if str(ltp_source) == "live" else "unknown")
+                feed_identity = {}
+                try:
+                    from core.kite_depth_ws import get_current_feed_session_identity
+
+                    feed_identity = dict(get_current_feed_session_identity() or {})
+                except Exception:
+                    feed_identity = {}
+                ohlc_buffer.update_tick(
+                    symbol,
+                    ltp,
+                    volume=None,
+                    ts=cycle_cutoff,
+                    provenance={
+                        "source_type": live_source_type,
+                        "live_feed_session_id": str(feed_identity.get("feed_session_id") or ""),
+                        "reconnect_generation": feed_identity.get("reconnect_generation"),
+                        "historical_seed": False,
+                        "replay_fixture": False,
+                        "non_live_fallback": False,
+                        "recovered_synthetic": False,
+                    },
+                )
         except Exception:
             pass
         vwap = ltp
@@ -3996,6 +4018,15 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "ltp_change_5m": ltp_change_5m,
                 "ltp_change_10m": ltp_change_10m,
             })
+
+    try:
+        if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
+            from core.market_event_graph_live_runtime_bridge import get_live_source_bridge
+
+            bridge = get_live_source_bridge()
+            bridge.observe_cycle(results, cycle_cutoff=cycle_cutoff)
+    except Exception as exc:
+        logger.warning("market_event_graph_live_source_bridge_error err=%s", exc)
 
     return results
 

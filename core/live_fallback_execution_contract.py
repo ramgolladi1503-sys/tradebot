@@ -12,11 +12,15 @@ _FALLBACK_BOOL_KEYS = {
     "phase2_spread_fallback_used",
     "phase2_liquidity_fallback_used",
     "phase2_quote_age_fallback_used",
+    "fallback_candidate",
+    "fallback_used",
     "fallback_quote",
     "fallback_quote_used",
     "synthetic_quote",
     "synthetic_quote_used",
+    "recovered_fallback",
     "recovered_fallback_candidate",
+    "soft_reject_recovered",
     "softened_fallback_candidate",
 }
 
@@ -71,7 +75,9 @@ def _append_unique(row: dict[str, Any], key: str, value: str) -> None:
     row[key] = values
 
 
-def is_fallback_execution_candidate(candidate: Mapping[str, Any] | None) -> bool:
+def is_fallback_execution_candidate(
+    candidate: Mapping[str, Any] | None,
+) -> bool:
     if not isinstance(candidate, Mapping):
         return False
     contexts: list[Mapping[str, Any]] = [candidate]
@@ -106,7 +112,10 @@ def is_fallback_execution_candidate(candidate: Mapping[str, Any] | None) -> bool
     return False
 
 
-def enforce_live_fallback_execution_contract(candidate: Mapping[str, Any], mode: str) -> dict[str, Any]:
+def enforce_live_fallback_execution_contract(
+    candidate: Mapping[str, Any],
+    mode: str,
+) -> dict[str, Any]:
     """Return a candidate that cannot execute when LIVE fallback evidence exists.
 
     Non-LIVE modes are intentionally preserved. This is a read-only normalization
@@ -115,18 +124,29 @@ def enforce_live_fallback_execution_contract(candidate: Mapping[str, Any], mode:
     """
 
     row = dict(candidate or {})
-    row["live_fallback_contract_schema_version"] = LIVE_FALLBACK_CONTRACT_SCHEMA_VERSION
+    row["live_fallback_contract_schema_version"] = (
+        LIVE_FALLBACK_CONTRACT_SCHEMA_VERSION
+    )
     if not _live_mode(mode) or not is_fallback_execution_candidate(row):
         return row
 
     row["execution_allowed"] = False
+    row["eligible_for_execution"] = False
     row["truth_allows_execution"] = False
     row["tradable"] = False
     row["execution_ok"] = False
     row["execution_blocked"] = True
     row["forced_fallback_execution"] = False
+    row["selected_for_execution"] = False
+    row["portfolio_optimization_selected"] = False
+    row["selection_score"] = 0.0
+    row["capital_assigned"] = 0.0
+    row["allocated_capital"] = 0.0
+    row["position_size_estimate"] = 0.0
+    row["slot_id"] = None
     row["candidate_status"] = "watchlist"
     row["execution_status"] = "not_executable"
+    row["execution_entry_status"] = "not_executable"
     row["max_final_action"] = "QUEUE_ONLY"
     row["final_action"] = "QUEUE_ONLY"
     row["permission"] = "QUEUE_ONLY"

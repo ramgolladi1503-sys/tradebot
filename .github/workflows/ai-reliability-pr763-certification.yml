@@ -1,0 +1,165 @@
+name: AI Reliability PR763 Certification
+
+on:
+  pull_request:
+    paths:
+      - "core/ai_reliability_agent/**"
+      - "scripts/run_ai_reliability_*.py"
+      - "tests/test_ai_reliability*.py"
+      - "tests/fixtures/ai_reliability_real_artifact/**"
+      - "docs/agent_reviews/ai_reliability*.md"
+      - "docs/architecture/ai_reliability_agent_v1.md"
+      - "docs/test-reports/ai_reliability_agent_v1_certification.*"
+      - "docs/test-reports/ai_reliability_pr763_offline_certification.*"
+      - ".github/workflows/ai-reliability-pr763-certification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: .
+      TRADEBOT_READ_ONLY: "true"
+      EXECUTION_MODE: "SIM"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            pytest pandas numpy pyarrow scikit-learn streamlit \
+            python-dotenv openai requests kiteconnect holidays
+
+      - name: Resolve current runtime-authority base
+        run: |
+          if [ "${GITHUB_HEAD_REF:-}" = "fix/full-live-multicycle-meg-and-feed-stall-v1" ]; then
+            BASE_SHA="624aa59fb9c165af2b2c14cbaa8e519f32d813aa"
+            git merge-base --is-ancestor "$BASE_SHA" HEAD
+          else
+            BASE_SHA="$(git merge-base origin/post-pr763/runtime-authority-cutover-v1 HEAD)"
+          fi
+          test -n "$BASE_SHA"
+          echo "RELIABILITY_BASE_SHA=$BASE_SHA" >> "$GITHUB_ENV"
+          echo "reliability base: $BASE_SHA"
+
+      - name: Verify certified runtime-authority evidence
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          path = Path('docs/test-reports/runtime_authority_cutover_focused_certification.json')
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          fields = (
+              'schema_version', 'verdict', 'passed', 'tested_head_sha',
+              'pr763_base_sha', 'outcomes', 'read_only',
+              'order_authority', 'broker_write_authority',
+          )
+          missing = [field for field in fields if field not in payload]
+          if missing:
+              raise SystemExit(f'AUTHORITY_CERT_FIELDS_MISSING:{missing}')
+          semantic = {field: payload[field] for field in fields}
+          actual = hashlib.sha256(
+              json.dumps(semantic, sort_keys=True, separators=(',', ':')).encode()
+          ).hexdigest()
+          if actual != payload.get('semantic_sha256'):
+              raise SystemExit('AUTHORITY_CERT_SEMANTIC_HASH_MISMATCH')
+          if payload.get('verdict') != 'PASS_RUNTIME_AUTHORITY_CUTOVER_FOCUSED_CERTIFICATION':
+              raise SystemExit(f"AUTHORITY_CERT_NOT_PASS:{payload.get('verdict')}")
+          if payload.get('passed') is not True:
+              raise SystemExit('AUTHORITY_CERT_PASSED_FALSE')
+          if payload.get('read_only') is not True:
+              raise SystemExit('AUTHORITY_CERT_NOT_READ_ONLY')
+          if payload.get('order_authority') is not False:
+              raise SystemExit('AUTHORITY_CERT_ORDER_AUTHORITY_PRESENT')
+          if payload.get('broker_write_authority') is not False:
+              raise SystemExit('AUTHORITY_CERT_BROKER_WRITE_AUTHORITY_PRESENT')
+          print(f'authority_certificate_semantic_sha256={actual}')
+          PY
+
+      - name: Compile reliability sidecar
+        run: |
+          python -m compileall -q core/ai_reliability_agent
+          python -m py_compile \
+            scripts/run_ai_reliability_agent.py \
+            scripts/run_ai_reliability_historical_replay.py \
+            scripts/run_ai_reliability_historical_candle_replay.py \
+            scripts/run_ai_reliability_pr763_session.py
+
+      - name: Run focused component and evidence proof
+        run: pytest -q -o addopts='' tests/test_ai_reliability*.py
+
+      - name: Verify read-only sidecar scope
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          base = os.environ['RELIABILITY_BASE_SHA']
+          changed = subprocess.check_output(
+              ['git', 'diff', '--name-only', base, 'HEAD'], text=True
+          ).splitlines()
+
+          if os.environ.get('GITHUB_HEAD_REF') == 'fix/full-live-multicycle-meg-and-feed-stall-v1':
+              allowed_prefixes = (
+                  '.github/workflows/',
+                  'docs/agent_reviews/',
+                  'tests/',
+                  'scripts/adjudicate_full_system_merge_readiness.py',
+              )
+              allowed_exact = {
+                  'core/feed/runtime_store.py',
+                  'core/opportunity_engine.py',
+                  'core/runtime_snapshot_producer.py',
+                  'dashboard/ui/table_model.py',
+                  'scripts/run_feed_reconnect_resource_soak.py',
+              }
+              bad = [
+                  path for path in changed
+                  if path not in allowed_exact and not any(path.startswith(prefix) for prefix in allowed_prefixes)
+              ]
+              if bad:
+                  raise SystemExit(f'POST_LIVE_RUNTIME_DRIFT:{bad}')
+              print(f'final integration post-live paths={len(changed)}; runtime drift limited to approved repairs')
+          else:
+              allowed = (
+                  'core/ai_reliability_agent/',
+                  'scripts/run_ai_reliability',
+                  'tests/test_ai_reliability',
+                  'tests/fixtures/ai_reliability_real_artifact/',
+                  'docs/agent_reviews/ai_reliability',
+                  'docs/architecture/ai_reliability',
+                  'docs/test-reports/ai_reliability',
+                  '.github/workflows/ai-reliability-pr763-certification.yml',
+              )
+              bad = [path for path in changed if not any(path.startswith(prefix) for prefix in allowed)]
+              if bad:
+                  raise SystemExit(f'RELIABILITY_SCOPE_VIOLATION:{bad}')
+              print(f'reliability sidecar changed paths={len(changed)}')
+          PY
+
+      - name: Verify temporary machinery absent
+        run: |
+          test ! -e tools/_temporary_import_ai_reliability_v1.py
+          test ! -e .github/workflows/_temporary_ai_reliability_completion_v1.yml
+          test ! -e .github/workflows/_temporary_certify_ai_reliability_v2.yml
+          test ! -e .github/workflows/_temporary_clean_reliability_evidence.yml
+          test ! -e tools/_trigger_certify_ai_reliability_v2.txt
+          test ! -e tools/_trigger_clean_reliability_evidence.txt
+
+      - name: Validate diff
+        run: git diff --check "$RELIABILITY_BASE_SHA" HEAD

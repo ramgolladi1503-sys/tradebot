@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "campaign": "pr782_remaining_evidence_contracts_v1",
+  "generated_at_utc": "2026-08-04T11:25:00Z",
+  "base_branch": "post-pr783/kite-read-only-observation-runtime-v1",
+  "base_commit": "ee96d826c466189cd6d29297d7acb238a21edc2c",
+  "implementation_branch": "fix/pr782-remaining-evidence-contracts-v1",
+  "draft_pr": 786,
+  "tested_commit": "d539964696733ea691b1e2a13db2ef0ad14c6fd0",
+  "previous_live_evidence": {
+    "session_date": "2026-08-04",
+    "classification": "VALID_LIVE_RUNTIME_EVIDENCE_INVALID_FINAL_CERTIFICATION_PACKAGE",
+    "immutable": true,
+    "manifest_sha256": "4027de0f3e62124b671313150b6a53d166219c22c7037ae824a509074d7b8416"
+  },
+  "closed_offline_gaps": {
+    "canonical_pr782_seal_markers": true,
+    "append_only_authority_snapshots": true,
+    "append_only_meg_traversal_events": true,
+    "append_only_meg_live_source_exports": true,
+    "bounded_completed_interval_scheduler": true
+  },
+  "focused_ci": {
+    "workflow": "PR782 Remaining Evidence Contracts",
+    "run_id": 30904439706,
+    "job_id": 91976101114,
+    "compile": "PASS",
+    "primary_order": {
+      "observer_runtime_tests": 9,
+      "remaining_contract_tests": 5,
+      "pr782_verifier_tests": 7,
+      "total_passed": 21
+    },
+    "reverse_order": {
+      "pr782_verifier_tests": 7,
+      "remaining_contract_tests": 5,
+      "observer_runtime_tests": 9,
+      "total_passed": 21
+    },
+    "protected_runtime_drift": false,
+    "diff_check": "PASS"
+  },
+  "governance": {
+    "agent_review_evidence_gate": "PASS",
+    "draft_only": true,
+    "merge_authorized": false,
+    "fresh_governed_kite_session_required": true
+  },
+  "safety": {
+    "read_only": true,
+    "is_order_action": false,
+    "broker_write_authority": false,
+    "order_authority": false,
+    "allowed_for_live_execution": false,
+    "allowed_for_paper_execution": false,
+    "strategy_logic_changed": false,
+    "risk_logic_changed": false,
+    "broker_execution_logic_changed": false
+  },
+  "verdict": "PASS_PR782_REMAINING_GAPS_OFFLINE",
+  "next_gate": "FRESH_GOVERNED_KITE_SESSION_REQUIRED",
+  "claims_not_made": [
+    "strategy profitability",
+    "structural trading edge",
+    "broker execution correctness",
+    "fill quality",
+    "capital performance",
+    "autonomous trading readiness",
+    "retroactive certification of the 2026-08-04 session"
+  ]
+}

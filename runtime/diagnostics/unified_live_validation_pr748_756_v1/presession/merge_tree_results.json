@@ -1,0 +1,76 @@
+{
+  "merge_tree_results": [
+    {
+      "pr": 748,
+      "exit_code": 128,
+      "conflict": true,
+      "stdout_head": "",
+      "stderr_head": "fatal: unknown rev --write-tree\n",
+      "output_sha256": "8741e34eb4061ef1eb89ac19327c1c8ca5b0acd0c68bcc725c596508c1d7be3d"
+    },
+    {
+      "pr": 749,
+      "exit_code": 128,
+      "conflict": true,
+      "stdout_head": "",
+      "stderr_head": "fatal: unknown rev --write-tree\n",
+      "output_sha256": "8741e34eb4061ef1eb89ac19327c1c8ca5b0acd0c68bcc725c596508c1d7be3d"
+    },
+    {
+      "pr": 750,
+      "exit_code": 128,
+      "conflict": true,
+      "stdout_head": "",
+      "stderr_head": "fatal: unknown rev --write-tree\n",
+      "output_sha256": "8741e34eb4061ef1eb89ac19327c1c8ca5b0acd0c68bcc725c596508c1d7be3d"
+    },
+    {
+      "pr": 751,
+      "exit_code": 128,
+      "conflict": true,
+      "stdout_head": "",
+      "stderr_head": "fatal: unknown rev --write-tree\n",
+      "output_sha256": "8741e34eb4061ef1eb89ac19327c1c8ca5b0acd0c68bcc725c596508c1d7be3d"
+    },
+    {
+      "pr": 752,
+      "exit_code": 128,
+      "conflict": true,
+      "stdout_head": "",
+      "stderr_head": "fatal: unknown rev --write-tree\n",
+      "output_sha256": "8741e34eb4061ef1eb89ac19327c1c8ca5b0acd0c68bcc725c596508c1d7be3d"
+    },
+    {
+      "pr": 753,
+      "exit_code": 128,
+      "conflict": true,
+      "stdout_head": "",
+      "stderr_head": "fatal: unknown rev --write-tree\n",
+      "output_sha256": "8741e34eb4061ef1eb89ac19327c1c8ca5b0acd0c68bcc725c596508c1d7be3d"
+    },
+    {
+      "pr": 754,
+      "exit_code": 128,
+      "conflict": true,
+      "stdout_head": "",
+      "stderr_head": "fatal: unknown rev --write-tree\n",
+      "output_sha256": "8741e34eb4061ef1eb89ac19327c1c8ca5b0acd0c68bcc725c596508c1d7be3d"
+    },
+    {
+      "pr": 755,
+      "exit_code": 128,
+      "conflict": true,
+      "stdout_head": "",
+      "stderr_head": "fatal: unknown rev --write-tree\n",
+      "output_sha256": "8741e34eb4061ef1eb89ac19327c1c8ca5b0acd0c68bcc725c596508c1d7be3d"
+    },
+    {
+      "pr": 756,
+      "exit_code": 128,
+      "conflict": true,
+      "stdout_head": "",
+      "stderr_head": "fatal: unknown rev --write-tree\n",
+      "output_sha256": "8741e34eb4061ef1eb89ac19327c1c8ca5b0acd0c68bcc725c596508c1d7be3d"
+    }
+  ]
+}

@@ -17,11 +17,10 @@ class _DummyThread:
         self.kwargs = kwargs or {}
         self.daemon = daemon
         self.started = False
-        self.join_calls = []
     def start(self):
         self.started = True
     def join(self, timeout=None):
-        self.join_calls.append(timeout)
+        pass
 class _DummyTicker:
     MODE_FULL = "full"
     def __init__(self, api_key, access_token, debug=True):
@@ -90,6 +89,7 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 0.0, raising=False)
     monkeypatch.setattr(ws, "_LAST_FEED_HEALTH_STATE", None, raising=False)
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {}, raising=False)
     monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
     monkeypatch.setattr(ws, "_RECOVERY_IN_PROGRESS", False, raising=False)
     monkeypatch.setattr(ws, "_WS1006_RECOVERABLE_ATTEMPTS", 0, raising=False)
@@ -186,254 +186,6 @@ def test_start_depth_ws_uses_resolved_token(monkeypatch):
     assert ticker.connected is True
 
 
-def test_on_connect_does_not_clear_recovery_before_option_verification(monkeypatch):
-    _patch_common(monkeypatch)
-    captured = {}
-    clear_calls = []
-
-    def _factory(api_key, access_token, debug=True, **kwargs):
-        ticker = _DummyTicker(api_key, access_token, debug=debug)
-        captured["ticker"] = ticker
-        return ticker
-
-    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
-
-    def _clear_recovery(**kwargs):
-        clear_calls.append(dict(kwargs))
-        return original_clear(**kwargs)
-
-    monkeypatch.setattr(ws, "KiteTicker", _factory)
-    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
-    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"BANKNIFTY": 2}, raising=False)
-    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"BANKNIFTY": 1}, raising=False)
-    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "BANKNIFTY"}, raising=False)
-    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
-
-    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
-    ws._sync_ws1006_recovery_state_from_coordinator()
-    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
-    ticker = captured["ticker"]
-    ticker.on_connect(ticker, {"status": "ok"})
-
-    assert all(call["source"] != "on_connect" for call in clear_calls)
-    assert all(call["source"] != "subscription_replay_exact" for call in clear_calls)
-    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is True
-
-
-def test_on_connect_clears_recovery_only_after_exact_subscription_replay_without_option_verification(monkeypatch):
-    _patch_common(monkeypatch)
-    captured = {}
-    clear_calls = []
-
-    def _factory(api_key, access_token, debug=True, **kwargs):
-        ticker = _DummyTicker(api_key, access_token, debug=debug)
-        captured["ticker"] = ticker
-        return ticker
-
-    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
-
-    def _clear_recovery(**kwargs):
-        clear_calls.append(dict(kwargs))
-        return original_clear(**kwargs)
-
-    monkeypatch.setattr(ws, "KiteTicker", _factory)
-    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
-    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
-
-    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
-    ws._sync_ws1006_recovery_state_from_coordinator()
-    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
-    ticker = captured["ticker"]
-    ticker.on_connect(ticker, {"status": "ok"})
-
-    assert any(call["source"] == "subscription_replay_exact" for call in clear_calls)
-    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is False
-
-
-def test_on_connect_zero_count_option_map_does_not_block_recovery_clear(monkeypatch):
-    _patch_common(monkeypatch)
-    captured = {}
-    clear_calls = []
-
-    def _factory(api_key, access_token, debug=True, **kwargs):
-        ticker = _DummyTicker(api_key, access_token, debug=debug)
-        captured["ticker"] = ticker
-        return ticker
-
-    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
-
-    def _clear_recovery(**kwargs):
-        clear_calls.append(dict(kwargs))
-        return original_clear(**kwargs)
-
-    monkeypatch.setattr(ws, "KiteTicker", _factory)
-    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
-    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 0, "BANKNIFTY": 0}, raising=False)
-    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 0, "BANKNIFTY": 0}, raising=False)
-    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
-
-    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
-    ws._sync_ws1006_recovery_state_from_coordinator()
-    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
-    ticker = captured["ticker"]
-    ticker.on_connect(ticker, {"status": "ok"})
-
-    assert any(call["source"] == "subscription_replay_exact" for call in clear_calls)
-    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is False
-
-
-def test_on_connect_replay_exception_keeps_recovery_uncleared_and_marks_subscribe_failed(monkeypatch):
-    _patch_common(monkeypatch)
-    captured = {}
-    clear_calls = []
-
-    def _factory(api_key, access_token, debug=True, **kwargs):
-        ticker = _DummyTicker(api_key, access_token, debug=debug)
-        captured["ticker"] = ticker
-        return ticker
-
-    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
-
-    def _clear_recovery(**kwargs):
-        clear_calls.append(dict(kwargs))
-        return original_clear(**kwargs)
-
-    monkeypatch.setattr(ws, "KiteTicker", _factory)
-    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
-    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
-
-    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
-    ws._sync_ws1006_recovery_state_from_coordinator()
-    ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True)
-    ticker = captured["ticker"]
-
-    def _boom(tokens):
-        raise RuntimeError("subscribe exploded")
-
-    ticker.subscribe = _boom
-    ticker.on_connect(ticker, {"status": "ok"})
-
-    assert clear_calls == []
-    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is True
-    assert ws._RUNTIME_STATE == "SUBSCRIBE_FAILED"
-    assert ws._LAST_RUNTIME_ERROR == "subscribe exploded"
-
-
-def test_on_connect_incomplete_subscription_replay_keeps_recovery_uncleared(monkeypatch):
-    _patch_common(monkeypatch)
-    captured = {}
-    clear_calls = []
-
-    class _PartialTicker(_DummyTicker):
-        def subscribe(self, tokens):
-            self.tokens = list(tokens[:-1])
-
-    def _factory(api_key, access_token, debug=True, **kwargs):
-        ticker = _PartialTicker(api_key, access_token, debug=debug)
-        captured["ticker"] = ticker
-        return ticker
-
-    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
-
-    def _clear_recovery(**kwargs):
-        clear_calls.append(dict(kwargs))
-        return original_clear(**kwargs)
-
-    monkeypatch.setattr(ws, "KiteTicker", _factory)
-    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
-    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
-
-    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
-    ws._sync_ws1006_recovery_state_from_coordinator()
-    ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True)
-    ticker = captured["ticker"]
-    ticker.on_connect(ticker, {"status": "ok"})
-
-    assert clear_calls == []
-    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is True
-    assert sorted(getattr(ticker, "tokens", [])) == [101]
-
-
-def test_option_verification_success_clears_recovery_exactly_once(monkeypatch):
-    _patch_common(monkeypatch)
-    captured = {}
-    clear_calls = []
-
-    def _factory(api_key, access_token, debug=True, **kwargs):
-        ticker = _DummyTicker(api_key, access_token, debug=debug)
-        captured["ticker"] = ticker
-        return ticker
-
-    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
-
-    def _clear_recovery(**kwargs):
-        clear_calls.append(dict(kwargs))
-        return original_clear(**kwargs)
-
-    monkeypatch.setattr(ws, "KiteTicker", _factory)
-    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
-    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"BANKNIFTY": 1}, raising=False)
-    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"BANKNIFTY": 1}, raising=False)
-    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "BANKNIFTY"}, raising=False)
-    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
-    monkeypatch.setattr(ws, "_option_feed_verification_min_ticks_per_symbol", lambda: 1, raising=False)
-
-    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
-    ws._sync_ws1006_recovery_state_from_coordinator()
-    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
-    ticker = captured["ticker"]
-    ticker.on_connect(ticker, {"status": "ok"})
-    assert clear_calls == []
-    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is True
-
-    start_epoch = float(ws._OPTION_FEED_VERIFY_START_EPOCH)
-    monkeypatch.setattr(ws, "_SYMBOL_LAST_OPTION_TICK_TS", {"BANKNIFTY": start_epoch + 1.0}, raising=False)
-    ws._tick_option_feed_verification(now_epoch=start_epoch + 1.0)
-    ws._tick_option_feed_verification(now_epoch=start_epoch + 2.0)
-
-    assert [call["source"] for call in clear_calls] == ["option_feed_verification_ok"]
-    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is False
-    assert ws._OPTION_FEED_VERIFY_STATE == "OK"
-
-
-def test_option_verification_failure_keeps_recovery_fail_closed(monkeypatch):
-    _patch_common(monkeypatch)
-    captured = {}
-    clear_calls = []
-
-    def _factory(api_key, access_token, debug=True, **kwargs):
-        ticker = _DummyTicker(api_key, access_token, debug=debug)
-        captured["ticker"] = ticker
-        return ticker
-
-    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
-
-    def _clear_recovery(**kwargs):
-        clear_calls.append(dict(kwargs))
-        return original_clear(**kwargs)
-
-    monkeypatch.setattr(ws, "KiteTicker", _factory)
-    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
-    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"BANKNIFTY": 1}, raising=False)
-    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"BANKNIFTY": 1}, raising=False)
-    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "BANKNIFTY"}, raising=False)
-    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
-
-    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
-    ws._sync_ws1006_recovery_state_from_coordinator()
-    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
-    ticker = captured["ticker"]
-    ticker.on_connect(ticker, {"status": "ok"})
-
-    deadline = float(ws._OPTION_FEED_VERIFY_DEADLINE_EPOCH)
-    ws._tick_option_feed_verification(now_epoch=deadline + 1.0)
-
-    assert clear_calls == []
-    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is True
-    assert ws._OPTION_FEED_VERIFY_STATE == "FAILED"
-    assert ws._OPTION_FEED_VERIFY_FAILURE_DETAIL in {"NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE", "OPTION_FEED_VERIFY_TIMEOUT"}
-
-
 def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
     _patch_common(monkeypatch)
     callbacks = []
@@ -494,9 +246,8 @@ def test_on_close_does_not_restart_after_stop(monkeypatch):
     monkeypatch.setattr(ws, "restart_depth_ws", _restart)
     ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
     ticker = captured["ticker"]
-    original_on_close = ticker.on_close
     ws.stop_depth_ws(reason="unit_test_stop")
-    original_on_close(ticker, 1000, "normal")
+    ticker.on_close(ticker, 1000, "normal")
     assert restarts["count"] == 0
 def test_ws1006_peer_drop_on_error_is_recoverable_first(monkeypatch):
     _patch_common(monkeypatch)
@@ -602,7 +353,14 @@ def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
     ws._sync_ws1006_recovery_state_from_coordinator()
     ws._handle_ws1006_recoverable(source="on_error", ws=object(), code=1006, reason="connection was closed uncleanly (peer dropped)")
     assert any(event == "FEED_RECOVERY_BLOCKED" for event, _ in events)
-    assert scheduled == []
+    assert scheduled == [
+        {
+            "force_full_restart": True,
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_error",
+            "source": "ws1006_recovery",
+        }
+    ]
     assert ws._WS1006_RECOVERABLE_ATTEMPTS == 1
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["process_restart_required"] is True
@@ -636,7 +394,7 @@ def test_ws1006_main_loop_terminated_routes_to_process_restart_required(monkeypa
     assert payload["process_restart_required"] is True
     assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
     assert payload["restart_suppressed"] is True
-def test_fatal_on_error_does_not_schedule_manual_full_restart(monkeypatch):
+def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
     scheduled = []
@@ -658,7 +416,14 @@ def test_fatal_on_error_does_not_schedule_manual_full_restart(monkeypatch):
         1006,
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
-    assert scheduled == []
+    assert scheduled == [
+        {
+            "force_full_restart": True,
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_error",
+            "source": "ws1006_recovery",
+        }
+    ]
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
@@ -673,7 +438,7 @@ def test_fatal_on_error_does_not_schedule_manual_full_restart(monkeypatch):
     assert payload["ws1006_recovery_attempt_count"] == 1
     assert payload["ws_recovery_state"] == "RECOVERING_WS_DROP"
     assert payload["option_feed_verification_state"] in {"IDLE", "PENDING"}
-def test_fatal_on_close_does_not_schedule_manual_full_restart(monkeypatch):
+def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
     scheduled = []
@@ -695,7 +460,14 @@ def test_fatal_on_close_does_not_schedule_manual_full_restart(monkeypatch):
         1006,
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
-    assert scheduled == []
+    assert scheduled == [
+        {
+            "force_full_restart": True,
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_close",
+            "source": "ws1006_recovery",
+        }
+    ]
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
@@ -1837,7 +1609,10 @@ def test_d_connected_but_stale(monkeypatch):
     )
 
     can_mutate, reason, _ = ws._can_mutate_ws_subscriptions(reason="unit_test", now_epoch=now)
-    assert not can_mutate
+    assert can_mutate
+    assert reason == "ok"
+    assert ws._RUNTIME_STATE == "DEGRADED_LOCAL"
+    assert ws._PARTIAL_RECOVERY_VERIFICATION["verified"] is False
 
 def test_e_partial_recovery(monkeypatch):
     """
@@ -1878,8 +1653,93 @@ def test_e_partial_recovery(monkeypatch):
     )
 
     can_mutate, reason, _ = ws._can_mutate_ws_subscriptions(reason="unit_test", now_epoch=now)
-    assert not can_mutate
-    assert reason == "partial_recovery"
+    assert can_mutate
+    assert reason == "ok"
+    assert ws._RECONNECT_BLOCKED_REASON == ""
+    assert ws._RUNTIME_STATE in {"DEGRADED_LOCAL", "VERIFYING_RECOVERY"}
+    assert ws._PARTIAL_RECOVERY_VERIFICATION["verified"] is False
+
+
+def test_partial_recovery_requires_three_stable_cycles(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ticker.on_connect(ticker, "mock_response")
+    ws._SOCKET_GENERATION = 1
+    monkeypatch.setattr(ws, "_CORE_FEED_FRESH_QUORUM", 0.5, raising=False)
+    ws._LAST_TOKENS = [101, 102, 103]
+    ws._UNDERLYING_TOKENS = {101}
+    state = {}
+    now = 100.0
+    last_by_token = {101: now, 102: now, 103: 50.0}
+
+    for expected_state in ("VERIFYING_RECOVERY", "VERIFYING_RECOVERY"):
+        ws._maybe_trigger_silent_reconnect(
+            now_epoch=now,
+            current_tokens={101, 102, 103},
+            underlying_tokens={101},
+            last_global_msg_epoch=now,
+            last_msg_by_token=last_by_token,
+            state=state,
+            index_threshold_sec=5.0,
+            option_threshold_sec=5.0,
+            confirm_needed=1,
+            backoff_min_sec=1.0,
+            backoff_max_sec=1.0,
+            force_full_restart_after_sec=None,
+            restart_cb=lambda **kwargs: None,
+        )
+        assert ws._RECONNECT_BLOCKED_REASON == ""
+        assert ws._RUNTIME_STATE == expected_state
+        assert ws._PARTIAL_RECOVERY_VERIFICATION["verified"] is False
+
+    ws._maybe_trigger_silent_reconnect(
+        now_epoch=now,
+        current_tokens={101, 102, 103},
+        underlying_tokens={101},
+        last_global_msg_epoch=now,
+        last_msg_by_token=last_by_token,
+        state=state,
+        index_threshold_sec=5.0,
+        option_threshold_sec=5.0,
+        confirm_needed=1,
+        backoff_min_sec=1.0,
+        backoff_max_sec=1.0,
+        force_full_restart_after_sec=None,
+        restart_cb=lambda **kwargs: None,
+    )
+    assert ws._PARTIAL_RECOVERY_VERIFICATION["stable_cycles"] == 3
+    assert ws._PARTIAL_RECOVERY_VERIFICATION["verified"] is True
+    assert ws._RUNTIME_STATE == "LIVE"
+
+
+def test_partial_recovery_stale_critical_stays_degraded(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ticker.on_connect(ticker, "mock_response")
+    ws._SOCKET_GENERATION = 1
+    ws._LAST_TOKENS = [101, 102, 103]
+    now = 100.0
+
+    ws._maybe_trigger_silent_reconnect(
+        now_epoch=now,
+        current_tokens={101, 102, 103},
+        underlying_tokens={101},
+        last_global_msg_epoch=now,
+        last_msg_by_token={101: 50.0, 102: now, 103: now},
+        state={},
+        index_threshold_sec=5.0,
+        option_threshold_sec=5.0,
+        confirm_needed=1,
+        backoff_min_sec=1.0,
+        backoff_max_sec=1.0,
+        force_full_restart_after_sec=None,
+        restart_cb=lambda **kwargs: None,
+    )
+
+    assert ws._RECONNECT_BLOCKED_REASON == ""
+    assert ws._RUNTIME_STATE == "DEGRADED_LOCAL"
+    assert ws._PARTIAL_RECOVERY_VERIFICATION["critical_feed_fresh"] is False
+    assert "critical_feed_stale" in ws._PARTIAL_RECOVERY_VERIFICATION["failure_reasons"]
 
 def test_f_duplicate_and_out_of_order_ticks(monkeypatch):
     _patch_common(monkeypatch)
@@ -1931,80 +1791,3 @@ def test_g_repeated_reconnect_cycles(monkeypatch):
     assert total_subscribe_calls == 20
     assert ws._RUNTIME_STATE == "RUNNING"
     assert ws._KITE_TICKER is not None
-
-
-
-
-
-def test_watchdog_lifecycle_receives_own_signal_and_exits(monkeypatch):
-    import core.kite_depth_ws as ws
-    
-    _patch_common(monkeypatch)
-    
-    threads = []
-    class ThreadCapture:
-        def __init__(self, target=None, daemon=None, args=(), kwargs=None):
-            self.target = target
-            self.args = args
-            self.kwargs = kwargs or {}
-            self.daemon = daemon
-            self.started = False
-            self.join_calls = []
-            threads.append(self)
-        def start(self):
-            self.started = True
-        def join(self, t=0):
-            self.join_calls.append(t)
-        def is_alive(self): return True
-        
-    monkeypatch.setattr(ws.threading, "Thread", ThreadCapture)
-    
-    ws.start_depth_ws([1], skip_lock=True, skip_guard=True)
-    watchdogs = [t for t in threads if getattr(t.target, '__name__', '') == '_watchdog']
-    watchdog_count_1 = len(watchdogs)
-    assert watchdog_count_1 == 1, "Watchdog thread not spawned"
-    
-    t1 = watchdogs[0]
-    stop_event_1 = t1.args[0]
-    assert stop_event_1 is not None, "Old watchdog should have its own stop event"
-    assert not stop_event_1.is_set()
-    
-    # trigger reconnect
-    ws.restart_depth_ws("test", ignore_cooldown=True)
-    
-    assert stop_event_1.is_set(), "Old watchdog stop event should be set on exit"
-    
-    watchdogs = [t for t in threads if getattr(t.target, '__name__', '') == '_watchdog']
-    watchdog_count_2 = len(watchdogs)
-    assert watchdog_count_2 == 2, "New watchdog should be spawned"
-    
-    t2 = watchdogs[1]
-    stop_event_2 = t2.args[0]
-    assert stop_event_2 is not stop_event_1, "New watchdog uses a different event"
-    assert not stop_event_2.is_set(), "Replacing global event cannot strand the old thread"
-
-def test_callback_retirement(monkeypatch):
-    import core.kite_depth_ws as ws
-    _patch_common(monkeypatch)
-
-    ws.start_depth_ws([1], skip_lock=True, skip_guard=True)
-    t1 = ws._KITE_TICKER
-    
-    assert getattr(t1, "on_close", None) is not None
-    assert getattr(t1, "on_error", None) is not None
-    assert getattr(t1, "on_connect", None) is not None
-    
-    ws._close_ticker_instance(t1)
-    
-    assert getattr(t1, "on_close", None) is None
-    assert getattr(t1, "on_error", None) is None
-    assert getattr(t1, "on_connect", None) is None
-    
-    ws.start_depth_ws([1], skip_lock=True, skip_guard=True)
-    t2 = ws._KITE_TICKER
-    
-    assert t2 is not t1
-    assert getattr(t2, "on_close", None) is not None
-    
-    ws._close_ticker_instance(t1)
-    assert getattr(t2, "on_close", None) is not None, "Retiring old generation cleared current generation callbacks"

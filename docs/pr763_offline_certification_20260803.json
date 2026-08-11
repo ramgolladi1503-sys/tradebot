@@ -1,0 +1,79 @@
+{
+  "artifact_digest": "sha256:c33e917d706eb8057c115b67ab6abe269a4813c781988c14e3b377b3d137ccd8",
+  "certification_workflow_run_id": "30822994914",
+  "gates": {
+    "1": {
+      "evidence": "docs/pr763_gate1_evidence_20260803.json",
+      "status": "PASS",
+      "verdict": "REAL_CALLBACK_PERSISTENCE_GATE_CLOSED"
+    },
+    "2": {
+      "proof": "static callback guard and injected forbidden-call control",
+      "status": "PASS"
+    },
+    "3": {
+      "proof": "authority-local FIFO and immutable envelopes; no cross-authority total order claimed",
+      "status": "PASS"
+    },
+    "4": {
+      "proof": "SQLite create/execute-or-executemany/commit/close and runtime JSON writer owned by persistence workers",
+      "status": "PASS"
+    },
+    "5": {
+      "proof": "registered callback 2x2x2 slow-writer matrix; complete drains and callback below frozen SLA",
+      "status": "PASS"
+    },
+    "6": {
+      "proof": {
+        "command": "/opt/hostedtoolcache/Python/3.11.15/x64/bin/python -m pytest -q tests/test_pr763_callback_persistence_cutover_certification.py -k saturation or durability or degradation",
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ".......                                                                  [100%]\n7 passed, 33 deselected in 0.21s\n"
+      },
+      "status": "PASS"
+    },
+    "7": {
+      "proof": "tick, depth, and runtime durable restart reconstruction",
+      "status": "PASS"
+    },
+    "8": {
+      "proof": "terminal shutdown rejection, immutable sealed root, authoritative hashes",
+      "status": "PASS"
+    }
+  },
+  "generated_at": "2026-08-03T14:39:58.730175+00:00",
+  "implementation_sha": "eda4a92561c903b2c60eafab75d4b4b61b578063",
+  "live_started": false,
+  "live_verification_boundary": [
+    "fresh governed market-session run from the certified implementation SHA",
+    "actual post-mode FULL NIFTY packet delivery",
+    "completed constituent bars and required Market Event Graph traversal",
+    "fresh evidence root only; do not mix earlier partial-session roots",
+    "read-only campaign only; no execution or order authority"
+  ],
+  "offline_verdict": "OFFLINE_GATES_CLOSED_LIVE_VERIFICATION_REQUIRED",
+  "schema_version": 1,
+  "suites": {
+    "legacy_gate1": {
+      "duration_seconds": 11.557,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "tests": 40
+    },
+    "remaining_offline": {
+      "duration_seconds": 2.906,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "tests": 6
+    },
+    "structured_gate1": {
+      "duration_seconds": 49.08,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "tests": 3
+    }
+  }
+}

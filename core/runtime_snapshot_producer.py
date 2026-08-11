@@ -29,6 +29,7 @@ from core.runtime_snapshot_store import (
     write_snapshot_atomic,
 )
 from core.observability import ObservabilityMetricsRegistry, build_default_metrics_registry
+from core.runtime_authority_cutover import apply_runtime_authority, authority_allows_execution
 from core.runtime_snapshot_stages import (
     build_advisory_latest_payload as stages_build_advisory_latest_payload,
     build_feed_health_truth_latest_payload as stages_build_feed_health_truth_latest_payload,
@@ -78,6 +79,120 @@ def _candidate_decisions_log_path() -> Path:
     return logs_dir() / "desks" / desk_id / "candidate_decisions.jsonl"
 
 
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value not in (None, "", "None"):
+            return value
+    return None
+
+
+def _safe_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"true", "1", "yes", "y", "on"}:
+            return True
+        if text in {"false", "0", "no", "n", "off"}:
+            return False
+    return None
+
+
+def _regime_policy_context(data: dict[str, Any]) -> dict[str, Any]:
+    regime = data.get("regime") if isinstance(data.get("regime"), dict) else {}
+    feature_quality = _first_present(
+        regime.get("feature_quality"),
+        data.get("feature_quality"),
+    )
+    context = {
+        "session_bucket": _first_present(
+            regime.get("session_bucket"),
+            data.get("session_bucket"),
+        ),
+        "regime_entropy": _first_present(
+            regime.get("regime_entropy"),
+            regime.get("entropy"),
+            data.get("regime_entropy"),
+        ),
+        "regime_entropy_normalized": _first_present(
+            regime.get("regime_entropy_normalized"),
+            regime.get("normalized_entropy"),
+            data.get("regime_entropy_normalized"),
+        ),
+        "regime_entropy_state": _first_present(
+            regime.get("regime_entropy_state"),
+            regime.get("entropy_state"),
+            data.get("regime_entropy_state"),
+        ),
+        "regime_status": _first_present(
+            regime.get("regime_status"),
+            data.get("regime_status"),
+        ),
+        "primary_regime": _first_present(
+            regime.get("primary_regime"),
+            data.get("primary_regime"),
+            data.get("regime_hint"),
+        ),
+        "stable_regime": _first_present(
+            regime.get("stable_regime"),
+            data.get("stable_regime"),
+        ),
+        "stable_regime_confirmed": _safe_bool(
+            _first_present(
+                regime.get("stable_regime_confirmed"),
+                data.get("stable_regime_confirmed"),
+            )
+        ),
+        "trend_state": _first_present(
+            regime.get("trend_state"),
+            data.get("trend_state"),
+        ),
+        "is_expiry_day": _safe_bool(
+            _first_present(
+                regime.get("is_expiry_day"),
+                data.get("is_expiry_day"),
+            )
+        ),
+        "volume_impulse": _safe_bool(
+            _first_present(
+                regime.get("volume_impulse"),
+                data.get("volume_impulse"),
+            )
+        ),
+        "liquidity_quality": _first_present(
+            data.get("liquidity_quality"),
+            (data.get("option_chain_summary") or {}).get("liquidity_quality"),
+        ),
+        "model_source": _first_present(
+            regime.get("model_source"),
+            data.get("model_source"),
+        ),
+        "model_hash": _first_present(
+            regime.get("model_hash"),
+            data.get("model_hash"),
+        ),
+        "probability_calibrated": _safe_bool(
+            _first_present(
+                regime.get("probability_calibrated"),
+                data.get("probability_calibrated"),
+            )
+        ),
+        "probability_semantics": _first_present(
+            regime.get("probability_semantics"),
+            data.get("probability_semantics"),
+        ),
+        "regime_top_two_margin": _first_present(
+            regime.get("regime_top_two_margin"),
+            regime.get("top_two_margin"),
+            data.get("regime_top_two_margin"),
+        ),
+        "feature_quality": feature_quality if isinstance(feature_quality, dict) else None,
+    }
+    return {key: value for key, value in context.items() if value is not None}
+
+
 def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> StrategyContext:
     allowed = {field.name for field in dataclass_fields(StrategyContext)}
     payload: dict[str, Any] = {"symbol": str(symbol or "").strip().upper() or "UNKNOWN"}
@@ -98,9 +213,13 @@ def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> S
     payload["fallback_used"] = (data.get("feed_health") or {}).get("fallback_used", data.get("fallback_used"))
     payload["option_ltp_age_sec"] = (data.get("feed_health") or {}).get("option_ltp_age_sec", data.get("option_ltp_age_sec"))
     payload["ts_epoch"] = data.get("ts_epoch")
-    payload["metadata"] = dict(data.get("metadata") or {})
+    metadata = dict(data.get("metadata") or {})
+    policy_context = _regime_policy_context(data)
+    if policy_context:
+        metadata["regime_policy_context"] = policy_context
+    payload["metadata"] = metadata
     payload["evidence"] = dict(data.get("evidence") or {})
-    payload["lineage"] = dict(data.get("lineage") or {})
+    payload["lineage"] = dict(data.get("lineage") or {"source": "market_snapshot"})
     filtered = {key: value for key, value in payload.items() if key in allowed and value is not None}
     return StrategyContext(**filtered)
 
@@ -115,7 +234,9 @@ def _row_snapshot_timestamp(row: dict[str, Any]) -> Any:
         "created_ts_epoch",
         "last_seen_ts_epoch",
         "timestamp_epoch",
+        "ts_epoch",
         "timestamp",
+        "ts_ist",
         "last_seen_ts",
         "last_seen",
     ):
@@ -340,8 +461,20 @@ def _candidate_decision_to_advisory_row(payload: dict[str, Any]) -> dict[str, An
     advisory_payload.setdefault("source_bucket", "candidate_decisions")
     advisory_payload.setdefault("row_kind", "canonical_suggestion")
     advisory_payload.setdefault("non_canonical_levels", False)
+    advisory_payload = apply_runtime_authority(
+        advisory_payload,
+        mode=str(payload.get("mode") or getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
+    )
+    if not execution_allowed:
+        advisory_payload["execution_allowed"] = False
+        advisory_payload["eligible_for_execution"] = False
+        advisory_payload["selected_for_execution"] = False
+        advisory_payload["execution_entry"] = None
+        advisory_payload["execution_entry_source"] = "none"
+        advisory_payload["execution_entry_status"] = "non_executable"
+        advisory_payload["execution_status"] = execution_status
+        advisory_payload["readiness"] = readiness
     return serialize_advisory_row(advisory_payload, allow_legacy=True)
-
 
 
 def _build_and_write_canonical_ranked_snapshot(
@@ -383,6 +516,10 @@ def _build_and_write_canonical_ranked_snapshot(
                 rank_dict["ranked_report_id"] = getattr(report.ranking, "ranked_report_id", None)
                 rank_dict["generated_epoch"] = report.generated_epoch
                 row = adapt_candidate_rank_record_to_ui(rank_dict)
+                row = apply_runtime_authority(
+                    row,
+                    mode=str(getattr(cfg, 'EXECUTION_MODE', 'SIM') or 'SIM'),
+                )
 
                 # Check for fake entry prices (Point 3)
                 has_entry = rank.outcome_contract and rank.outcome_contract.entry_price
@@ -391,7 +528,7 @@ def _build_and_write_canonical_ranked_snapshot(
                     row["display_entry"] = row["entry"]
 
                 # Executable classification (Point 2)
-                if rank.bucket == "EXECUTABLE_CANDIDATE" and has_entry:
+                if authority_allows_execution(row) and has_entry:
                     row["execution_status"] = "executable"
                     row["readiness"] = "READY"
                     top_executable.append(row)
@@ -490,6 +627,16 @@ def produce_and_store_runtime_snapshots(
     else:
         feed_truth_payload, feed_truth_decision = stages_build_feed_health_truth_latest_payload(feed_payload)
     outputs["feed_health_truth_latest"] = feed_truth_payload
+    try:
+        from core.unified_live_validation_pr748_756.runtime_observer import safe_call
+
+        safe_call(
+            "observe_feed_truth",
+            feed_truth_payload,
+            source="core.runtime_snapshot_producer.feed_health_truth_latest",
+        )
+    except Exception:
+        pass
     timings.append({"stage": "feed_health_truth", "elapsed_ms": round((time.perf_counter() - t1) * 1000.0, 3)})
     cycle_context = RuntimeCycleContext(
         cycle_id=str(loop_id or producer or "runtime_snapshot"),
@@ -522,6 +669,16 @@ def produce_and_store_runtime_snapshots(
     timings.append({"stage": "runtime_snapshot_producer_total", "elapsed_ms": round((time.perf_counter() - cycle_started) * 1000.0, 3)})
     outputs["runtime_cycle_timings"] = timings
     outputs["runtime_cycle_context"] = cycle_context.to_dict()
+    try:
+        from core.unified_live_validation_pr748_756.runtime_observer import safe_call
+
+        safe_call(
+            "observe_feed_truth",
+            outputs["runtime_cycle_context"],
+            source="core.runtime_snapshot_producer.runtime_cycle_context",
+        )
+    except Exception:
+        pass
     registry = metrics_registry or build_default_metrics_registry()
     try:
         registry.observe_latency_ms(
