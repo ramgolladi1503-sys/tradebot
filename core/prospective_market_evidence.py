@@ -8,6 +8,7 @@ sidecar cannot block or degrade the trading runtime.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import math
 import os
@@ -19,9 +20,19 @@ from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
 REQUIRED = ("NIFTY", "BANKNIFTY", "SENSEX")
 SCHEMA = "tradebot-prospective-market-evidence-v1"
+ATTESTATION_SCHEMA = "tradebot-live-session-attestation-v1"
+ATTESTATION_SOURCE = "tradebot_live_runtime_bridge"
 SESSION_OPEN = time(9, 15)
 SESSION_LAST_BAR = time(15, 29)
 SESSION_MINUTES = 375
+_REQUIRED_PROVENANCE_FIELDS = (
+    "source_type",
+    "live_feed_session_id",
+    "provider",
+    "token_domain",
+    "symbol",
+    "instrument_token",
+)
 
 
 def _canonical(obj: Mapping[str, Any]) -> bytes:
@@ -54,7 +65,110 @@ def _number(value: Any, *, field: str, symbol: str, ts: datetime) -> float:
     return result
 
 
-def _live_provenance(bar: Mapping[str, Any], *, symbol: str) -> Mapping[str, Any]:
+def _attestation_unsigned(attestation: Mapping[str, Any]) -> dict[str, Any]:
+    payload = dict(attestation)
+    payload.pop("attestation_hmac_sha256", None)
+    return payload
+
+
+def sign_live_session_attestation(
+    attestation: Mapping[str, Any], *, attestation_key: str
+) -> dict[str, Any]:
+    """Sign a separately-produced live-session attestation.
+
+    The signing key is runtime-secret material and must not be persisted in the
+    evidence artifact. This helper is deterministic so independent tooling can
+    reproduce the signature contract without granting any trading authority.
+    """
+    key = str(attestation_key or "").encode("utf-8")
+    if len(key) < 32:
+        raise ValueError("LIVE_ATTESTATION_KEY_INVALID")
+    unsigned = _attestation_unsigned(attestation)
+    signed = dict(unsigned)
+    signed["attestation_hmac_sha256"] = hmac.new(
+        key, _canonical(unsigned), hashlib.sha256
+    ).hexdigest()
+    return signed
+
+
+def _verify_live_attestation(
+    *,
+    live_attestation: Mapping[str, Any] | None,
+    attestation_key: str | None,
+    session_date: date,
+    code_sha: str,
+) -> dict[str, Any]:
+    if not isinstance(live_attestation, Mapping):
+        raise ValueError("LIVE_ATTESTATION_REQUIRED")
+    key = str(attestation_key or "").encode("utf-8")
+    if len(key) < 32:
+        raise ValueError("LIVE_ATTESTATION_KEY_REQUIRED")
+
+    att = dict(live_attestation)
+    claimed = str(att.get("attestation_hmac_sha256") or "")
+    expected = hmac.new(
+        key, _canonical(_attestation_unsigned(att)), hashlib.sha256
+    ).hexdigest()
+    if not claimed or not hmac.compare_digest(claimed, expected):
+        raise ValueError("LIVE_ATTESTATION_SIGNATURE_INVALID")
+
+    if att.get("schema") != ATTESTATION_SCHEMA:
+        raise ValueError("LIVE_ATTESTATION_SCHEMA_INVALID")
+    if att.get("source") != ATTESTATION_SOURCE:
+        raise ValueError("LIVE_ATTESTATION_SOURCE_INVALID")
+    if att.get("status") != "VERIFIED_LIVE_SESSION":
+        raise ValueError("LIVE_ATTESTATION_STATUS_INVALID")
+    if str(att.get("session_date") or "") != session_date.isoformat():
+        raise ValueError("LIVE_ATTESTATION_SESSION_MISMATCH")
+    if str(att.get("code_sha") or "") != code_sha:
+        raise ValueError("LIVE_ATTESTATION_CODE_SHA_MISMATCH")
+    if str(att.get("provider") or "").lower() != "kite":
+        raise ValueError("LIVE_ATTESTATION_PROVIDER_INVALID")
+    if str(att.get("token_domain") or "") != "kite_instrument_token":
+        raise ValueError("LIVE_ATTESTATION_TOKEN_DOMAIN_INVALID")
+    if not str(att.get("live_feed_session_id") or "").strip():
+        raise ValueError("LIVE_ATTESTATION_SESSION_ID_MISSING")
+
+    try:
+        attested_at = datetime.fromisoformat(str(att.get("attested_at_ist") or ""))
+    except Exception as exc:
+        raise ValueError("LIVE_ATTESTATION_TIMESTAMP_INVALID") from exc
+    if attested_at.tzinfo is None:
+        raise ValueError("LIVE_ATTESTATION_TIMESTAMP_INVALID")
+    attested_at = attested_at.astimezone(IST)
+    if attested_at.date() < session_date or attested_at.time() < time(15, 30):
+        raise ValueError("LIVE_ATTESTATION_TIMESTAMP_INVALID")
+
+    indices = att.get("indices")
+    if not isinstance(indices, Mapping) or set(indices) != set(REQUIRED):
+        raise ValueError("LIVE_ATTESTATION_INDEX_SET_INVALID")
+    normalized_indices: dict[str, dict[str, Any]] = {}
+    for symbol in REQUIRED:
+        row = indices.get(symbol)
+        if not isinstance(row, Mapping):
+            raise ValueError(f"LIVE_ATTESTATION_INDEX_IDENTITY_INVALID:{symbol}")
+        declared_symbol = str(row.get("symbol") or "").upper().strip()
+        try:
+            instrument_token = int(row.get("instrument_token"))
+        except Exception as exc:
+            raise ValueError(
+                f"LIVE_ATTESTATION_INDEX_IDENTITY_INVALID:{symbol}"
+            ) from exc
+        if declared_symbol != symbol or instrument_token <= 0:
+            raise ValueError(f"LIVE_ATTESTATION_INDEX_IDENTITY_INVALID:{symbol}")
+        normalized_indices[symbol] = {
+            "symbol": symbol,
+            "instrument_token": instrument_token,
+        }
+
+    att["attested_at_ist"] = attested_at.isoformat(timespec="seconds")
+    att["indices"] = normalized_indices
+    return att
+
+
+def _live_provenance(
+    bar: Mapping[str, Any], *, symbol: str, attestation: Mapping[str, Any]
+) -> Mapping[str, Any]:
     p = dict(bar.get("bar_provenance") or {})
     if (
         p.get("historical_seed")
@@ -63,22 +177,46 @@ def _live_provenance(bar: Mapping[str, Any], *, symbol: str) -> Mapping[str, Any
         or p.get("recovered_synthetic")
     ):
         raise ValueError(f"NON_LIVE_PROVENANCE:{symbol}")
-    if p.get("source_type") != "live_websocket" or not p.get("live_feed_session_id"):
+    missing = [
+        field
+        for field in _REQUIRED_PROVENANCE_FIELDS
+        if p.get(field) is None or str(p.get(field)).strip() == ""
+    ]
+    if missing:
+        raise ValueError(f"LIVE_PROVENANCE_INCOMPLETE:{symbol}:{','.join(missing)}")
+    if p.get("source_type") != "live_websocket":
         raise ValueError(f"LIVE_PROVENANCE_INCOMPLETE:{symbol}")
-    declared_symbol = str(p.get("symbol") or "").upper().strip()
-    if declared_symbol and declared_symbol != symbol:
-        raise ValueError(f"SOURCE_IDENTITY_MISMATCH:{symbol}:symbol:{declared_symbol}")
+
+    expected = attestation["indices"][symbol]
+    checks = {
+        "live_feed_session_id": str(attestation["live_feed_session_id"]),
+        "provider": str(attestation["provider"]),
+        "token_domain": str(attestation["token_domain"]),
+        "symbol": symbol,
+        "instrument_token": str(expected["instrument_token"]),
+    }
+    actual = {
+        "live_feed_session_id": str(p.get("live_feed_session_id")),
+        "provider": str(p.get("provider")),
+        "token_domain": str(p.get("token_domain")),
+        "symbol": str(p.get("symbol")).upper().strip(),
+        "instrument_token": str(p.get("instrument_token")),
+    }
+    for field, expected_value in checks.items():
+        if actual[field] != expected_value:
+            raise ValueError(f"SOURCE_IDENTITY_MISMATCH:{symbol}:{field}")
     return p
 
 
 def _semantic_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     semantic = dict(payload)
-    semantic.pop("created_at_ist", None)
     semantic.pop("semantic_sha256", None)
     return semantic
 
 
-def _validate_existing_artifact(path: Path, expected_semantic: Mapping[str, Any]) -> dict[str, Any]:
+def _validate_existing_artifact(
+    path: Path, expected_semantic: Mapping[str, Any]
+) -> dict[str, Any]:
     try:
         old = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
@@ -106,6 +244,8 @@ def finalize_session(
     bars_by_symbol: Mapping[str, Sequence[Mapping[str, Any]]],
     output_root: Path,
     code_sha: str | None = None,
+    live_attestation: Mapping[str, Any] | None = None,
+    attestation_key: str | None = None,
 ) -> dict[str, Any]:
     """Validate and immutably seal one completed live Indian-index session."""
     if not isinstance(session_date, date):
@@ -113,16 +253,25 @@ def finalize_session(
     if not isinstance(bars_by_symbol, Mapping):
         raise ValueError("BARS_BY_SYMBOL_INVALID")
 
+    code_sha_value = str(code_sha or os.getenv("TRADEBOT_CODE_SHA") or "").strip()
+    if not code_sha_value or code_sha_value.upper() == "UNKNOWN":
+        raise ValueError("CODE_SHA_REQUIRED")
+
     now = datetime.now(IST)
     if session_date > now.date():
         raise ValueError("FUTURE_SESSION_DATE")
     if session_date == now.date() and now.time() < time(15, 30):
         raise ValueError("SESSION_NOT_COMPLETE_YET")
 
+    attestation = _verify_live_attestation(
+        live_attestation=live_attestation,
+        attestation_key=attestation_key,
+        session_date=session_date,
+        code_sha=code_sha_value,
+    )
+
     rows: dict[str, Any] = {}
     session_ids: set[str] = set()
-    cross_symbol_provider_ids: set[str] = set()
-
     session_start = datetime.combine(session_date, SESSION_OPEN, tzinfo=IST)
     session_end = datetime.combine(session_date, SESSION_LAST_BAR, tzinfo=IST)
 
@@ -155,33 +304,21 @@ def finalize_session(
                     f"SESSION_GAP:{symbol}:{expected_ts.isoformat()}:{ts.isoformat()}"
                 )
 
-        provenance = [_live_provenance(bar, symbol=symbol) for bar, _ in converted]
+        provenance = [
+            _live_provenance(bar, symbol=symbol, attestation=attestation)
+            for bar, _ in converted
+        ]
         ids = {str(p.get("live_feed_session_id")) for p in provenance}
         if len(ids) != 1:
             raise ValueError(f"SESSION_ID_CONFLICT:{symbol}")
         session_ids |= ids
 
-        # Preserve source identity without inventing fields the live feed does not provide.
-        # Any identity field that is present must remain stable throughout the session.
-        stable_identity: dict[str, Any] = {}
-        for field in (
-            "provider",
-            "token_domain",
-            "universe_hash",
-            "instrument_token",
-            "symbol",
-        ):
-            values = {
-                str(p.get(field))
-                for p in provenance
-                if p.get(field) is not None and str(p.get(field)).strip() != ""
-            }
-            if len(values) > 1:
-                raise ValueError(f"SOURCE_IDENTITY_MISMATCH:{symbol}:{field}")
-            stable_identity[field] = next(iter(values)) if values else None
-        provider_id = stable_identity.get("provider")
-        if provider_id:
-            cross_symbol_provider_ids.add(str(provider_id))
+        stable_identity = {
+            "provider": str(attestation["provider"]),
+            "token_domain": str(attestation["token_domain"]),
+            "instrument_token": int(attestation["indices"][symbol]["instrument_token"]),
+            "symbol": symbol,
+        }
 
         vals: list[tuple[float, float, float, float]] = []
         for bar, ts in converted:
@@ -206,15 +343,15 @@ def finalize_session(
             "source_identity": stable_identity,
         }
 
-    if len(session_ids) != 1:
+    if len(session_ids) != 1 or next(iter(session_ids)) != str(
+        attestation["live_feed_session_id"]
+    ):
         raise ValueError("CROSS_SYMBOL_SESSION_ID_CONFLICT")
-    if len(cross_symbol_provider_ids) > 1:
-        raise ValueError("CROSS_SYMBOL_PROVIDER_CONFLICT")
 
     payload = {
         "schema": SCHEMA,
         "session_date": session_date.isoformat(),
-        "created_at_ist": now.isoformat(timespec="seconds"),
+        "created_at_ist": attestation["attested_at_ist"],
         "claim": "READ_ONLY_LIVE_MARKET_EVIDENCE_NO_EDGE_CLAIM",
         "research_only": True,
         "broker_write_authority": False,
@@ -222,9 +359,10 @@ def finalize_session(
         "paper_authorized": False,
         "live_authorized": False,
         "source": "existing_tradebot_completed_live_ohlc",
-        "live_feed_session_id": next(iter(session_ids)),
-        "provider": next(iter(cross_symbol_provider_ids)) if cross_symbol_provider_ids else None,
-        "code_sha": str(code_sha or os.getenv("TRADEBOT_CODE_SHA") or "UNKNOWN"),
+        "live_feed_session_id": str(attestation["live_feed_session_id"]),
+        "provider": str(attestation["provider"]),
+        "code_sha": code_sha_value,
+        "live_attestation_sha256": _sha(_canonical(_attestation_unsigned(attestation))),
         "indices": rows,
     }
     semantic = _semantic_payload(payload)
@@ -250,6 +388,19 @@ def finalize_session(
     }
 
 
+def _load_runtime_attestation(path_text: str) -> Mapping[str, Any]:
+    path = Path(path_text)
+    if not path.exists() or not path.is_file():
+        raise ValueError("LIVE_ATTESTATION_PATH_INVALID")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError("LIVE_ATTESTATION_PATH_INVALID") from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError("LIVE_ATTESTATION_PATH_INVALID")
+    return payload
+
+
 def safe_finalize_live_session(
     *, session_date: date | None = None, output_root: Path | None = None
 ) -> dict[str, Any]:
@@ -264,8 +415,22 @@ def safe_finalize_live_session(
                 ".runtime/research/prospective_market_evidence_v1",
             )
         )
+        attestation_path = str(
+            os.getenv("TRADEBOT_LIVE_SESSION_ATTESTATION_PATH") or ""
+        ).strip()
+        attestation_key = str(os.getenv("TRADEBOT_LIVE_SESSION_ATTESTATION_KEY") or "")
+        if not attestation_path:
+            raise ValueError("LIVE_ATTESTATION_PATH_REQUIRED")
+        live_attestation = _load_runtime_attestation(attestation_path)
         bars = {symbol: ohlc_buffer.get_bars(symbol) for symbol in REQUIRED}
-        return finalize_session(session_date=d, bars_by_symbol=bars, output_root=root)
+        return finalize_session(
+            session_date=d,
+            bars_by_symbol=bars,
+            output_root=root,
+            code_sha=os.getenv("TRADEBOT_CODE_SHA"),
+            live_attestation=live_attestation,
+            attestation_key=attestation_key,
+        )
     except Exception as exc:
         return {
             "status": "NOT_SEALED",
