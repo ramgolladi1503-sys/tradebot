@@ -86,6 +86,8 @@ jobs:
               )
               allowed_exact = {
                   'core/feed/runtime_store.py',
+                  'core/opportunity_engine.py',
+                  'core/runtime_snapshot_producer.py',
                   'dashboard/ui/table_model.py',
               }
               unexpected = [
