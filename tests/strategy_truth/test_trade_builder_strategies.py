@@ -1,3 +1,4 @@
+from core.runtime_authority_cutover import apply_runtime_authority, authority_allows_execution
 from strategies.trade_builder import TradeBuilder
 
 def _base_market_data(overrides=None):
@@ -55,11 +56,13 @@ def test_trade_builder_valid_bullish_maps_correctly(monkeypatch):
     trade = tb.build(md)
     assert trade is not None
     assert getattr(trade, "option_type", None) == "CE"
-    # This contract tests signal-to-option-side mapping. Runtime authority is
-    # intentionally fail-closed in CI, so a correctly mapped candidate remains
-    # advisory rather than being promoted to executable by the test fixture.
-    assert trade.candidate_status == "advisory"
+    # TradeBuilder owns lifecycle viability, not final execution authority.
+    # A valid LIVE mapping can remain near-executable while the runtime-authority
+    # firewall independently keeps order authority fail-closed.
+    assert trade.candidate_status == "near_executable"
     assert getattr(trade, "execution_allowed", False) is False
+    stamped = apply_runtime_authority(trade, mode="LIVE")
+    assert authority_allows_execution(stamped) is False
 
 def test_trade_builder_valid_bearish_maps_correctly(monkeypatch):
     tb = TradeBuilder()
@@ -71,8 +74,10 @@ def test_trade_builder_valid_bearish_maps_correctly(monkeypatch):
     trade = tb.build(md)
     assert trade is not None
     assert getattr(trade, "option_type", None) == "PE"
-    assert trade.candidate_status == "advisory"
+    assert trade.candidate_status == "near_executable"
     assert getattr(trade, "execution_allowed", False) is False
+    stamped = apply_runtime_authority(trade, mode="LIVE")
+    assert authority_allows_execution(stamped) is False
 
 def test_trade_builder_neutral_no_trigger_blocks():
     tb = TradeBuilder()
