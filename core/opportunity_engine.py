@@ -3081,9 +3081,14 @@ def select_best_opportunity(candidates, *args, **kwargs):  # noqa: F811
         *partition["advisory"],
         *partition["blocked_debug"],
     ]
-    ranked_visible = list(ranked_executable or []) + visible_non_executable
-    if best is None and visible_non_executable:
-        best = visible_non_executable[0]
+    visibility_scope = f"{kwargs.get('scope', 'runtime_authority')}:visibility"
+    ranked_non_executable = annotate_relative_opportunity_ranks(
+        visible_non_executable,
+        scope=visibility_scope,
+    )
+    ranked_visible = list(ranked_executable or []) + ranked_non_executable
+    if best is None and ranked_non_executable:
+        best = ranked_non_executable[0]
     return best, ranked_visible
 
 
