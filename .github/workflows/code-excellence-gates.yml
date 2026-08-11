@@ -60,6 +60,8 @@ jobs:
               '.github/workflows/runtime-authority-cutover.yml',
               '.github/workflows/tests.yml',
               'core/feed/runtime_store.py',
+              'core/opportunity_engine.py',
+              'core/runtime_snapshot_producer.py',
               'dashboard/ui/table_model.py',
               'docs/agent_reviews/meg803_identity_manifest_repair.md',
               'scripts/adjudicate_full_system_merge_readiness.py',
