@@ -134,6 +134,26 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
         )
         return post_warmup
 
+    def _cleanup_runtime(self, reason: str) -> None:
+        super()._cleanup_runtime(reason)
+        if str(reason) != "soak_finish":
+            return
+
+        # stop_depth_ws() persists its final lifecycle snapshot asynchronously.
+        # Resource accounting must wait until that real persistence work has
+        # completed; otherwise lsof can observe transient SQLite/WAL/SHM handles
+        # and misclassify them as reconnect-correlated FD leaks.
+        import core.feed.runtime_store as runtime_store
+
+        persistence_state = runtime_store.shutdown_runtime_persistence(
+            deadline_seconds=2.0
+        )
+        if not persistence_state.get("complete"):
+            raise RuntimeError(
+                "runtime persistence did not quiesce before resource measurement: "
+                f"{persistence_state}"
+            )
+
     def _cycle_condition_snapshot(self, old_generation_id: int) -> dict:
         ticker = getattr(impl.ws, "_KITE_TICKER", None)
         recovery_state = getattr(impl.ws._FEED_RECOVERY_COORDINATOR, "state", None)
