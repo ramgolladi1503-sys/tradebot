@@ -11,7 +11,13 @@ from core.ohlc_buffer import OhlcBuffer
 IST = ZoneInfo("Asia/Kolkata")
 D = date(2026, 8, 11)
 KEY = "test-attestation-key-32-bytes-minimum-0001"
+ATTACKER_KEY = "attacker-selected-key-32-bytes-minimum-0002"
 TOKENS = {"NIFTY": 256265, "BANKNIFTY": 260105, "SENSEX": 265}
+
+
+@pytest.fixture(autouse=True)
+def trusted_attestation_key(monkeypatch):
+    monkeypatch.setenv("TRADEBOT_LIVE_SESSION_ATTESTATION_KEY", KEY)
 
 
 def bars(
@@ -60,33 +66,40 @@ def good():
     return {s: bars(s) for s in pme.REQUIRED}
 
 
-def signed_attestation(*, code_sha="candidate-sha", key=KEY, session_id="live-1"):
+def signed_attestation(
+    *,
+    code_sha="candidate-sha",
+    key=KEY,
+    session_id="live-1",
+    attested_at="2026-08-11T15:31:00+05:30",
+    tokens=None,
+):
+    token_map = tokens or TOKENS
     raw = {
         "schema": pme.ATTESTATION_SCHEMA,
         "source": pme.ATTESTATION_SOURCE,
         "status": "VERIFIED_LIVE_SESSION",
         "session_date": D.isoformat(),
-        "attested_at_ist": "2026-08-11T15:31:00+05:30",
+        "attested_at_ist": attested_at,
         "provider": "kite",
         "token_domain": "kite_instrument_token",
         "live_feed_session_id": session_id,
         "code_sha": code_sha,
         "indices": {
-            symbol: {"symbol": symbol, "instrument_token": TOKENS[symbol]}
+            symbol: {"symbol": symbol, "instrument_token": token_map[symbol]}
             for symbol in pme.REQUIRED
         },
     }
     return pme.sign_live_session_attestation(raw, attestation_key=key)
 
 
-def finalize(tmp_path, candidate=None, *, code_sha="candidate-sha", attestation=None, key=KEY):
+def finalize(tmp_path, candidate=None, *, code_sha="candidate-sha", attestation=None):
     return pme.finalize_session(
         session_date=D,
         bars_by_symbol=candidate if candidate is not None else good(),
         output_root=tmp_path,
         code_sha=code_sha,
         live_attestation=attestation or signed_attestation(code_sha=code_sha),
-        attestation_key=key,
     )
 
 
@@ -116,14 +129,56 @@ def test_self_declared_live_metadata_without_independent_attestation_is_rejected
         )
 
 
-def test_forged_or_wrong_key_attestation_is_rejected(tmp_path):
+def test_verification_key_is_not_a_finalize_session_caller_argument(tmp_path):
+    with pytest.raises(TypeError, match="attestation_key"):
+        pme.finalize_session(
+            session_date=D,
+            bars_by_symbol=good(),
+            output_root=tmp_path,
+            code_sha="candidate-sha",
+            live_attestation=signed_attestation(),
+            attestation_key=ATTACKER_KEY,
+        )
+
+
+def test_missing_trusted_verification_key_fails_closed(monkeypatch, tmp_path):
+    monkeypatch.delenv("TRADEBOT_LIVE_SESSION_ATTESTATION_KEY", raising=False)
+    with pytest.raises(ValueError, match="TRUSTED_LIVE_ATTESTATION_KEY_REQUIRED"):
+        finalize(tmp_path)
+
+
+def test_forged_or_attacker_selected_key_attestation_is_rejected(tmp_path):
     att = signed_attestation()
     att["live_feed_session_id"] = "forged-session"
     with pytest.raises(ValueError, match="LIVE_ATTESTATION_SIGNATURE_INVALID"):
         finalize(tmp_path, attestation=att)
 
+    attacker_signed = signed_attestation(key=ATTACKER_KEY)
     with pytest.raises(ValueError, match="LIVE_ATTESTATION_SIGNATURE_INVALID"):
-        finalize(tmp_path, attestation=signed_attestation(), key="wrong-key-that-is-still-long-enough-000000")
+        finalize(tmp_path, attestation=attacker_signed)
+
+
+def test_consistently_wrong_tokens_in_bars_and_signed_attestation_are_rejected(tmp_path):
+    wrong_tokens = {"NIFTY": 999999, "BANKNIFTY": 888888, "SENSEX": 777777}
+    candidate = {
+        symbol: bars(symbol, instrument_token=wrong_tokens[symbol])
+        for symbol in pme.REQUIRED
+    }
+    attestation = signed_attestation(tokens=wrong_tokens)
+    with pytest.raises(ValueError, match="LIVE_ATTESTATION_INDEX_IDENTITY_INVALID"):
+        finalize(tmp_path, candidate, attestation=attestation)
+
+
+def test_future_attestation_timestamp_is_rejected_even_with_trusted_signature(tmp_path):
+    attestation = signed_attestation(attested_at="2099-01-01T16:00:00+05:30")
+    with pytest.raises(ValueError, match="LIVE_ATTESTATION_TIMESTAMP_INVALID"):
+        finalize(tmp_path, attestation=attestation)
+
+
+def test_attestation_from_different_calendar_date_is_rejected(tmp_path):
+    attestation = signed_attestation(attested_at="2026-08-12T15:31:00+05:30")
+    with pytest.raises(ValueError, match="LIVE_ATTESTATION_TIMESTAMP_INVALID"):
+        finalize(tmp_path, attestation=attestation)
 
 
 def test_feed_stop_at_1400_is_rejected(tmp_path):
@@ -277,9 +332,16 @@ def test_safe_wrapper_fails_closed_without_attestation(monkeypatch, tmp_path):
     assert result["live_authorized"] is False
 
 
+def test_safe_wrapper_fails_closed_without_trusted_key(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRADEBOT_LIVE_SESSION_ATTESTATION_PATH", "ignored.json")
+    monkeypatch.delenv("TRADEBOT_LIVE_SESSION_ATTESTATION_KEY", raising=False)
+    result = pme.safe_finalize_live_session(session_date=D, output_root=tmp_path)
+    assert result["status"] == "NOT_SEALED"
+    assert "TRUSTED_LIVE_ATTESTATION_KEY_REQUIRED" in result["reason"]
+
+
 def test_safe_wrapper_contains_sidecar_failure(monkeypatch, tmp_path):
     monkeypatch.setenv("TRADEBOT_LIVE_SESSION_ATTESTATION_PATH", "ignored.json")
-    monkeypatch.setenv("TRADEBOT_LIVE_SESSION_ATTESTATION_KEY", KEY)
     monkeypatch.setenv("TRADEBOT_CODE_SHA", "candidate-sha")
     monkeypatch.setattr(pme, "_load_runtime_attestation", lambda _path: signed_attestation())
 
