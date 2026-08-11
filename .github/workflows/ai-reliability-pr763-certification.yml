@@ -126,6 +126,7 @@ jobs:
                   'core/opportunity_engine.py',
                   'core/runtime_snapshot_producer.py',
                   'dashboard/ui/table_model.py',
+                  'scripts/run_feed_reconnect_resource_soak.py',
               }
               bad = [
                   path for path in changed
