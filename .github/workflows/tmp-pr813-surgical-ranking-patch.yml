@@ -1,0 +1,86 @@
+name: TMP PR813 Surgical Ranking Patch
+
+on:
+  push:
+    branches:
+      - tmp/pr813-tree-api-probe2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp/pr813-tree-api-probe2
+          fetch-depth: 0
+      - name: Apply exact selector split
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('core/opportunity_engine.py')
+          s = p.read_text(encoding='utf-8')
+          old = '''def select_best_opportunity(candidates, *args, **kwargs):  # noqa: F811
+    from core.runtime_authority_cutover import (
+        apply_runtime_authority,
+        normalize_selection_result,
+    )
+
+    mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()
+    stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in list(candidates or [])]
+    result = _RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY(
+        stamped,
+        *args,
+        **kwargs,
+    )
+    return normalize_selection_result(result, mode=mode)
+'''
+          new = '''def select_best_opportunity(candidates, *args, **kwargs):  # noqa: F811
+    from core.runtime_authority_cutover import (
+        apply_runtime_authority,
+        authority_allows_execution,
+        normalize_selection_result,
+    )
+
+    mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()
+    stamped = [apply_runtime_authority(candidate, mode=mode) for candidate in list(candidates or [])]
+    executable = [candidate for candidate in stamped if authority_allows_execution(candidate)]
+    result = _RUNTIME_AUTHORITY_LEGACY_SELECT_BEST_OPPORTUNITY(
+        executable if mode in {"LIVE", "REAL"} else stamped,
+        *args,
+        **kwargs,
+    )
+    normalized = normalize_selection_result(result, mode=mode)
+    if mode not in {"LIVE", "REAL"} or executable:
+        return normalized
+
+    # Visibility-only fallback: preserve a safely stamped advisory survivor for
+    # operator ranking without ever passing it through the execution selector.
+    scope = kwargs.get("scope")
+    if scope is None and args:
+        scope = args[0]
+    ranked_visibility = annotate_relative_opportunity_ranks(
+        stamped,
+        scope=str(scope or "runtime:visibility"),
+    )
+    if not ranked_visibility:
+        return normalized
+    visibility_best = ranked_visibility[0]
+    return normalize_selection_result((visibility_best, ranked_visibility), mode=mode)
+'''
+          if s.count(old) != 1:
+              raise SystemExit(f'EXPECTED_WRAPPER_BLOCK_COUNT={s.count(old)}')
+          p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+          python -m py_compile core/opportunity_engine.py
+          git diff --check
+      - name: Commit patched tree and remove temporary workflow
+        run: |
+          rm .github/workflows/tmp-pr813-surgical-ranking-patch.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add core/opportunity_engine.py .github/workflows/tmp-pr813-surgical-ranking-patch.yml
+          git commit -m "fix(ranking): separate advisory visibility from execution selector"
+          git push origin HEAD:tmp/pr813-tree-api-probe2
