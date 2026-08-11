@@ -14,6 +14,7 @@ import math
 import os
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
@@ -25,6 +26,20 @@ ATTESTATION_SOURCE = "tradebot_live_runtime_bridge"
 SESSION_OPEN = time(9, 15)
 SESSION_LAST_BAR = time(15, 29)
 SESSION_MINUTES = 375
+ATTESTATION_MAX_CLOCK_SKEW = timedelta(minutes=5)
+
+# Repository-pinned canonical identities for the three index streams accepted by
+# this evidence boundary. A consistently wrong positive token must not become
+# valid merely because bars and attestation agree with each other. Any future
+# legitimate token migration therefore requires a reviewed code change.
+TRUSTED_INDEX_TOKENS = MappingProxyType(
+    {
+        "NIFTY": 256265,
+        "BANKNIFTY": 260105,
+        "SENSEX": 265,
+    }
+)
+
 _REQUIRED_PROVENANCE_FIELDS = (
     "source_type",
     "live_feed_session_id",
@@ -74,11 +89,11 @@ def _attestation_unsigned(attestation: Mapping[str, Any]) -> dict[str, Any]:
 def sign_live_session_attestation(
     attestation: Mapping[str, Any], *, attestation_key: str
 ) -> dict[str, Any]:
-    """Sign a separately-produced live-session attestation.
+    """Deterministically implement the producer-side HMAC contract.
 
-    The signing key is runtime-secret material and must not be persisted in the
-    evidence artifact. This helper is deterministic so independent tooling can
-    reproduce the signature contract without granting any trading authority.
+    This helper does not establish trust. Verification is anchored separately to
+    ``TRADEBOT_LIVE_SESSION_ATTESTATION_KEY`` and ``finalize_session`` has no API
+    parameter that can substitute an attacker-selected verification key.
     """
     key = str(attestation_key or "").encode("utf-8")
     if len(key) < 32:
@@ -91,19 +106,27 @@ def sign_live_session_attestation(
     return signed
 
 
+def _trusted_attestation_key() -> bytes:
+    """Read the verification key only from the runtime trust configuration."""
+    key = str(os.getenv("TRADEBOT_LIVE_SESSION_ATTESTATION_KEY") or "").encode("utf-8")
+    if len(key) < 32:
+        raise ValueError("TRUSTED_LIVE_ATTESTATION_KEY_REQUIRED")
+    return key
+
+
 def _verify_live_attestation(
     *,
     live_attestation: Mapping[str, Any] | None,
-    attestation_key: str | None,
     session_date: date,
     code_sha: str,
+    now_ist: datetime | None = None,
 ) -> dict[str, Any]:
     if not isinstance(live_attestation, Mapping):
         raise ValueError("LIVE_ATTESTATION_REQUIRED")
-    key = str(attestation_key or "").encode("utf-8")
-    if len(key) < 32:
-        raise ValueError("LIVE_ATTESTATION_KEY_REQUIRED")
 
+    # Critical trust boundary: the verifier does not accept a key from the same
+    # caller that supplies the attestation.
+    key = _trusted_attestation_key()
     att = dict(live_attestation)
     claimed = str(att.get("attestation_hmac_sha256") or "")
     expected = hmac.new(
@@ -136,12 +159,22 @@ def _verify_live_attestation(
     if attested_at.tzinfo is None:
         raise ValueError("LIVE_ATTESTATION_TIMESTAMP_INVALID")
     attested_at = attested_at.astimezone(IST)
-    if attested_at.date() < session_date or attested_at.time() < time(15, 30):
+    current = (now_ist or datetime.now(IST)).astimezone(IST)
+
+    # A session attestation must belong to that exact trading date, be created
+    # only after the last 15:29 bar has completed, and cannot be from the future
+    # beyond a small operational clock-skew allowance.
+    if (
+        attested_at.date() != session_date
+        or attested_at.time() < time(15, 30)
+        or attested_at > current + ATTESTATION_MAX_CLOCK_SKEW
+    ):
         raise ValueError("LIVE_ATTESTATION_TIMESTAMP_INVALID")
 
     indices = att.get("indices")
     if not isinstance(indices, Mapping) or set(indices) != set(REQUIRED):
         raise ValueError("LIVE_ATTESTATION_INDEX_SET_INVALID")
+
     normalized_indices: dict[str, dict[str, Any]] = {}
     for symbol in REQUIRED:
         row = indices.get(symbol)
@@ -154,11 +187,12 @@ def _verify_live_attestation(
             raise ValueError(
                 f"LIVE_ATTESTATION_INDEX_IDENTITY_INVALID:{symbol}"
             ) from exc
-        if declared_symbol != symbol or instrument_token <= 0:
+        trusted_token = TRUSTED_INDEX_TOKENS[symbol]
+        if declared_symbol != symbol or instrument_token != trusted_token:
             raise ValueError(f"LIVE_ATTESTATION_INDEX_IDENTITY_INVALID:{symbol}")
         normalized_indices[symbol] = {
             "symbol": symbol,
-            "instrument_token": instrument_token,
+            "instrument_token": trusted_token,
         }
 
     att["attested_at_ist"] = attested_at.isoformat(timespec="seconds")
@@ -245,7 +279,6 @@ def finalize_session(
     output_root: Path,
     code_sha: str | None = None,
     live_attestation: Mapping[str, Any] | None = None,
-    attestation_key: str | None = None,
 ) -> dict[str, Any]:
     """Validate and immutably seal one completed live Indian-index session."""
     if not isinstance(session_date, date):
@@ -265,9 +298,9 @@ def finalize_session(
 
     attestation = _verify_live_attestation(
         live_attestation=live_attestation,
-        attestation_key=attestation_key,
         session_date=session_date,
         code_sha=code_sha_value,
+        now_ist=now,
     )
 
     rows: dict[str, Any] = {}
@@ -418,9 +451,10 @@ def safe_finalize_live_session(
         attestation_path = str(
             os.getenv("TRADEBOT_LIVE_SESSION_ATTESTATION_PATH") or ""
         ).strip()
-        attestation_key = str(os.getenv("TRADEBOT_LIVE_SESSION_ATTESTATION_KEY") or "")
         if not attestation_path:
             raise ValueError("LIVE_ATTESTATION_PATH_REQUIRED")
+        # Fail before reading bars if the trusted verification key is absent.
+        _trusted_attestation_key()
         live_attestation = _load_runtime_attestation(attestation_path)
         bars = {symbol: ohlc_buffer.get_bars(symbol) for symbol in REQUIRED}
         return finalize_session(
@@ -429,7 +463,6 @@ def safe_finalize_live_session(
             output_root=root,
             code_sha=os.getenv("TRADEBOT_CODE_SHA"),
             live_attestation=live_attestation,
-            attestation_key=attestation_key,
         )
     except Exception as exc:
         return {
