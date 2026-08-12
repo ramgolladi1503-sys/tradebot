@@ -552,7 +552,7 @@ tasks:
     task_id: T31
     title: Incremental OOS research
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T30]
     blocks: [T32]
     objective: Test each V2 family against frozen V1 baseline using leakage audits, negative/permutation controls, OOS/WFA and multiple-testing controls.
@@ -563,13 +563,13 @@ tasks:
     ci: {required: true}
     exit_gates: [KEEP_DISCARD_OR_NO_EDGE]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T31_T35_concrete_449fdaafd.yaml]
+    evidence: {candidate_sha: 449fdaafd8de92b1859cfded45295d3034a40dd3}
   T32:
     task_id: T32
     title: Global Context V2 freeze
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T31]
     blocks: [T33]
     objective: Freeze exact V2 features/transforms/coefficients/cutoffs/evidence SHA/model SHA only if incremental evidence qualifies; never overwrite V1.
@@ -580,13 +580,13 @@ tasks:
     ci: {required: true}
     exit_gates: [GLOBAL_CONTEXT_V2_MODEL_FROZEN_OR_NO_EDGE]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T31_T35_concrete_449fdaafd.yaml]
+    evidence: {candidate_sha: 449fdaafd8de92b1859cfded45295d3034a40dd3}
   T33:
     task_id: T33
     title: V2 independent certification
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T32]
     blocks: [T34]
     objective: Adversarially verify exact V2 candidate, missing/future/provenance/tamper/idempotency paths and independence from execution.
@@ -597,13 +597,13 @@ tasks:
     ci: {required: true}
     exit_gates: [GLOBAL_CONTEXT_V2_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T31_T35_concrete_449fdaafd.yaml]
+    evidence: {candidate_sha: 449fdaafd8de92b1859cfded45295d3034a40dd3}
   T34:
     task_id: T34
     title: Intraday regime research specification
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T33]
     blocks: [T35]
     objective: Define separate 30m/60m/120m post-open targets, causal pre-open inputs, baselines, controls and ledgers without gap-target relabeling.
@@ -614,13 +614,13 @@ tasks:
     ci: {required: true}
     exit_gates: [INTRADAY_REGIME_SPEC_FROZEN]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T31_T35_concrete_449fdaafd.yaml]
+    evidence: {candidate_sha: 449fdaafd8de92b1859cfded45295d3034a40dd3}
   T35:
     task_id: T35
     title: Intraday regime discovery and prospective path
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T34]
     blocks: []
     objective: Run governed historical/OOS validation; freeze only if qualified; then shadow/prospective observation under its own certification ladder.
@@ -631,5 +631,5 @@ tasks:
     ci: {required: true}
     exit_gates: [INTRADAY_MODEL_FROZEN_OR_NO_EDGE]
     stop_conditions: [BLOCKED_DATA, BLOCKED_LIVE_WINDOW]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T31_T35_concrete_449fdaafd.yaml]
+    evidence: {candidate_sha: 449fdaafd8de92b1859cfded45295d3034a40dd3}

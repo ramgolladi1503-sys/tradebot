@@ -1,0 +1,9 @@
+task_ids: [T31, T32, T33, T34, T35]
+candidate_sha: 449fdaafd8de92b1859cfded45295d3034a40dd3
+status: IMPLEMENTATION_VALID
+implementation_paths: [research/mros_certification/research_v2.py]
+tests: {focused: PASS, adversarial: PASS, integration: PASS, command: "pytest -q tests/research/test_mros_research_v2.py", result: "4 passed"}
+outcomes: {T31: BLOCKED_DATA_OR_NO_STRUCTURAL_EDGE_FOUND, T32: NO_STRUCTURAL_EDGE_PATH_VALIDATED, T33: INDEPENDENT_VERIFICATION_PENDING, T34: SPEC_FROZEN, T35: BLOCKED_DATA_OR_NO_STRUCTURAL_EDGE_FOUND}
+claims: {live: NOT_CLAIMED, prospective: NOT_CLAIMED, profitability: NOT_CLAIMED, independent_verification: PENDING, checkpoint_ci: PENDING}
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+protected_scope: {feed: untouched, PR813_PR814: untouched, main_merge: false}
