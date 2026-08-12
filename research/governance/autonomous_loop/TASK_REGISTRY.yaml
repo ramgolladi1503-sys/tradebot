@@ -88,7 +88,7 @@ tasks:
     task_id: T04
     title: BANKNIFTY research specification
     architecture_version: V2
-    status: PENDING
+    status: SPEC_FROZEN
     depends_on: [T03]
     blocks: [T05]
     objective: Freeze target, cutoff, dev/OOS, candidate families, controls and search accounting.
@@ -99,8 +99,12 @@ tasks:
     ci: {required: true}
     exit_gates: [BANKNIFTY_SPEC_FROZEN]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths:
+      - research/governance/autonomous_loop/evidence/T04_spec_83db2f8611f3b5fb2de6165697886c6b3ee26a42.yaml
+    evidence:
+      candidate_sha: 83db2f8611f3b5fb2de6165697886c6b3ee26a42
+      focused: {status: PASS, candidate_sha: 83db2f8611f3b5fb2de6165697886c6b3ee26a42}
+      adversarial: {status: PASS, candidate_sha: 83db2f8611f3b5fb2de6165697886c6b3ee26a42}
   T05:
     task_id: T05
     title: BANKNIFTY discovery and validation

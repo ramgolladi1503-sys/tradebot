@@ -1,0 +1,13 @@
+task_id: T04
+checkpoint: C02
+candidate_sha: 83db2f8611f3b5fb2de6165697886c6b3ee26a42
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+state: SPEC_FROZEN
+evidence:
+  focused: {status: PASS, candidate_sha: 83db2f8611f3b5fb2de6165697886c6b3ee26a42, result: 2 passed}
+  adversarial: {status: PASS, candidate_sha: 83db2f8611f3b5fb2de6165697886c6b3ee26a42, source: tests/research/test_banknifty_specification.py}
+  integration: {status: NOT_APPLICABLE, candidate_sha: 83db2f8611f3b5fb2de6165697886c6b3ee26a42}
+  independent_verification: {status: PENDING, candidate_sha: 83db2f8611f3b5fb2de6165697886c6b3ee26a42}
+  ci: {status: PENDING, candidate_sha: 83db2f8611f3b5fb2de6165697886c6b3ee26a42}
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+findings: {critical: 0, major: 0, mandatory_unknowns: 1}
