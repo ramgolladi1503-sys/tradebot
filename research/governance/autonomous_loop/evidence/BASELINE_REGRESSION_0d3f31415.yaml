@@ -1,0 +1,10 @@
+candidate_sha: 0d3f314154413150ea5065d5b91fb5968404618f
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+authority_base_blockers:
+  - {file: research/opening_range_retest/replay_engine.py, line: 1238, error: "f-string expression part cannot include a backslash", reproduced: true, candidate_touched: false}
+  - {file: core/backtest_elite.py, line: 279, error: "unterminated string literal", reproduced: true, candidate_touched: false}
+environment_blockers:
+  - {component: libomp.dylib, effect: xgboost_collection_failure, status: BLOCKED_ENVIRONMENT_LIBOMP}
+candidate_only_blockers: []
+governance_suite: {status: PASS, result: "33 passed"}
+full_regression: {status: BLOCKED_BASELINE_AND_ENVIRONMENT, candidate_caused_failures: UNKNOWN}

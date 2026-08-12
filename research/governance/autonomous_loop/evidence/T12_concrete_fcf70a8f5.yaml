@@ -1,10 +1,10 @@
 task_ids: [T12]
-candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd
+candidate_sha: 0d3f314154413150ea5065d5b91fb5968404618f
 status: IMPLEMENTATION_VALID
 implementation_paths: [research/global_v1/raw_collector.py]
 tests:
-  focused: {status: PASS, command: "pytest -q tests/research/test_global_raw_collector.py", result: "2 passed", candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd}
-  adversarial: {status: PASS, covered: [sha_tamper, missing_provenance, non_mapping_payload], candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd}
-  integration: {status: PASS, candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd}
+  focused: {status: PASS, command: "pytest -q tests/research/test_global_raw_collector.py", result: "2 passed", candidate_sha: 0d3f314154413150ea5065d5b91fb5968404618f}
+  adversarial: {status: PASS, covered: [sha_tamper, missing_provenance, non_mapping_payload], candidate_sha: 0d3f314154413150ea5065d5b91fb5968404618f}
+  integration: {status: PASS, candidate_sha: 0d3f314154413150ea5065d5b91fb5968404618f}
 claims: {live: NOT_CLAIMED, prospective: NOT_CLAIMED, independent_verification: PENDING, checkpoint_ci: PENDING}
 safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}

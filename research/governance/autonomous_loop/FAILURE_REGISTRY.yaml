@@ -49,5 +49,16 @@ failures:
     repair_scope: registry_state_and_evidence
     repair: Restore T13-T35 to PENDING until T12 is concretely implemented and its required gates are satisfied; retain artifacts as unsealed preparatory evidence only.
     regression_test: task-dependency-integrity-audit-after-build
-    status: REPAIRED_PENDING_EXACT_SHA_REVALIDATION
+    status: REPAIRED
     repair_evidence: tests/test_autonomous_loop_framework.py
+  - failure_id: ALF-006
+    task: T13-T35
+    classification: GOVERNANCE_GAP
+    severity: MAJOR
+    discovered_at_sha: 0d3f314154413150ea5065d5b91fb5968404618f
+    finding: Evidence freshness was modeled only as exact task SHA equality, causing unchanged task surfaces to remain pending after unrelated program commits.
+    repair_scope: evidence_lineage_and_transition_gate
+    repair: Scope-aware freshness proofs now bind historical task SHA, current program SHA, owned/spec/dependency paths, artifact integrity, compatibility, and invalidating findings.
+    regression_test: tests/test_evidence_freshness.py
+    status: REPAIRED
+    repair_evidence: [tests/test_evidence_freshness.py, research/governance/autonomous_loop/evidence/T13_T35_freshness_89880f511.yaml]

@@ -1,0 +1,10 @@
+checkpoint_id: C01
+checkpoint_candidate_sha: 89880f5112bbee38c7deff99765e87b95d39dd7a
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+covered_tasks: [T01, T02, T03]
+task_states: {T01: INTEGRATION_VALID, T02: ADVERSARIAL_VALID, T03: INTEGRATION_VALID}
+freshness: NOT_APPLICABLE
+regression: {status: BLOCKED_BASELINE_AND_ENVIRONMENT, libomp: BLOCKED_ENVIRONMENT_LIBOMP}
+independent_verification: PENDING
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+protected_scope: {feed: untouched, PR813_PR814: untouched, main_merged: false}

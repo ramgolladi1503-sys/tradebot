@@ -1,0 +1,10 @@
+checkpoint_id: C02
+checkpoint_candidate_sha: 89880f5112bbee38c7deff99765e87b95d39dd7a
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+covered_tasks: [T04, T05, T06, T07, T08, T09, T10, T11]
+task_states: {T04: SPEC_FROZEN, T05: IMPLEMENTATION_VALID, T06: IMPLEMENTATION_VALID, T07: IMPLEMENTATION_VALID, T08: SPEC_FROZEN, T09: IMPLEMENTATION_VALID, T10: IMPLEMENTATION_VALID, T11: IMPLEMENTATION_VALID}
+freshness: historical_evidence_pending_exact_review
+regression: {status: BLOCKED_BASELINE_AND_ENVIRONMENT, authority_base_syntax_blockers: 2, libomp: BLOCKED_ENVIRONMENT_LIBOMP}
+independent_verification: PENDING
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+protected_scope: {feed: untouched, PR813_PR814: untouched, main_merged: false}

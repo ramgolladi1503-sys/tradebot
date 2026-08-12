@@ -1,0 +1,10 @@
+checkpoint_id: C03
+checkpoint_candidate_sha: 89880f5112bbee38c7deff99765e87b95d39dd7a
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+covered_tasks: [T12, T13, T14, T15, T16, T17, T18, T19, T20]
+task_states: {T12: IMPLEMENTATION_VALID, T13: IMPLEMENTATION_VALID, T14: IMPLEMENTATION_VALID, T15: IMPLEMENTATION_VALID, T16: IMPLEMENTATION_VALID, T17: IMPLEMENTATION_VALID, T18: IMPLEMENTATION_VALID, T19: IMPLEMENTATION_VALID, T20: IMPLEMENTATION_VALID}
+freshness: research/governance/autonomous_loop/evidence/T13_T35_freshness_89880f511.yaml
+regression: {status: BLOCKED_BASELINE_AND_ENVIRONMENT, authority_base_syntax_blockers: 2, libomp: BLOCKED_ENVIRONMENT_LIBOMP}
+independent_verification: PENDING
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+protected_scope: {feed: untouched, PR813_PR814: untouched, main_merged: false}

@@ -1,0 +1,8 @@
+task_ids: [T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, T24, T25, T26, T27, T28, T29, T30, T31, T32, T33, T34, T35]
+candidate_sha: 0d3f314154413150ea5065d5b91fb5968404618f
+status: IMPLEMENTATION_VALID
+ordered_dependency_replay: PASS
+replay_proof: "Supervisor transitioned each task SPEC_FROZEN -> IMPLEMENTING -> IMPLEMENTATION_VALID after its direct prerequisite build gate."
+task_local_suite: {status: PASS, result: "59 passed"}
+claims: {independent_verification: PENDING, checkpoint_ci: PENDING, live: NOT_CLAIMED, prospective: NOT_CLAIMED, profitability: NOT_CLAIMED}
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}

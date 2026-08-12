@@ -1,0 +1,5 @@
+failure_id: ALF-005
+candidate_sha: 0d3f314154413150ea5065d5b91fb5968404618f
+status: REPAIRED
+tests: {command: "pytest -q tests/test_autonomous_loop_framework.py", result: "28 passed", dependency_bypass: PASS, transitive_bypass: PASS, prepared_metadata: PASS, sealing_fail_closed: PASS}
+build_vs_certification_distinct: PASS

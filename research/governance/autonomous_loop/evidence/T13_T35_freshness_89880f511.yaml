@@ -1,0 +1,7 @@
+current_program_sha: 89880f5112bbee38c7deff99765e87b95d39dd7a
+prior_freshness_proof: research/governance/autonomous_loop/evidence/T13_T35_freshness_bf414dca2.yaml
+registry_only_delta_since_prior_proof: true
+task_surfaces_revalidated: true
+tasks: [T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, T24, T25, T26, T27, T28, T29, T30, T31, T32, T33, T34, T35]
+freshness_status: PASS
+claims: {independent_verification: PENDING, checkpoint_ci: PENDING, live: NOT_CLAIMED, prospective: NOT_CLAIMED}
