@@ -25,14 +25,14 @@ def test_program_registry_preserves_t01_provisional_build_state():
     supervisor = AutonomousLoopSupervisor(load_registry())
     assert supervisor.tasks["T01"]["status"] == "INTEGRATION_VALID"
     assert supervisor.next_eligible_task() is None
-    assert supervisor.next_build_eligible_task() == "T12"
+    assert supervisor.next_build_eligible_task() == "T13"
     assert len(supervisor.tasks) == 35
 
 
 def test_build_eligibility_releases_downstream_after_integration_valid_only():
     registry = load_registry()
     registry["tasks"]["T01"]["status"] = "INTEGRATION_VALID"
-    assert build_eligible_task_ids(registry["tasks"]) == ["T12"]
+    assert build_eligible_task_ids(registry["tasks"]) == ["T13"]
     assert eligible_task_ids(registry["tasks"]) == []
 
 
@@ -40,7 +40,7 @@ def test_build_eligibility_never_treats_provisional_state_as_certification():
     registry = load_registry()
     registry["tasks"]["T01"]["status"] = "IMPLEMENTATION_VALID"
     supervisor = AutonomousLoopSupervisor(registry)
-    assert supervisor.next_build_eligible_task() == "T12"
+    assert supervisor.next_build_eligible_task() == "T13"
     assert supervisor.next_eligible_task() is None
 
 
