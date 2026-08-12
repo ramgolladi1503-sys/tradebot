@@ -433,7 +433,7 @@ tasks:
     task_id: T24
     title: Prospective model evaluation
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T23]
     blocks: [T25]
     objective: Evaluate each index independently against frozen baselines and predeclared gates.
@@ -444,13 +444,13 @@ tasks:
     ci: {required: true}
     exit_gates: [SUPPORTED_OR_INVALIDATED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T24_T26_concrete_6e295bee9.yaml]
+    evidence: {candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372, focused: {status: PASS, candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372}, adversarial: {status: PASS, candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372}, integration: {status: PASS, candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372}}
   T25:
     task_id: T25
     title: Structural-edge decision
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T24]
     blocks: [T26]
     objective: Decide structural-edge certification only after sufficient evidence; prediction quality is not tradable edge.
@@ -461,13 +461,13 @@ tasks:
     ci: {required: true}
     exit_gates: [CERTIFIED_OR_NOT_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T24_T26_concrete_6e295bee9.yaml]
+    evidence: {candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372, focused: {status: PASS, candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372}, adversarial: {status: PASS, candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372}, integration: {status: PASS, candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372}}
   T26:
     task_id: T26
     title: Separate trading-integration decision
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T25]
     blocks: [T27]
     objective: Preserve trading integration as a separate future-authority decision outside this architecture.
@@ -478,8 +478,8 @@ tasks:
     ci: {required: true}
     exit_gates: [SEPARATE_FUTURE_AUTHORITY]
     stop_conditions: [BLOCKED_AUTH]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T24_T26_concrete_6e295bee9.yaml]
+    evidence: {candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372, focused: {status: PASS, candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372}, adversarial: {status: PASS, candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372}, integration: {status: PASS, candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372}}
   T27:
     task_id: T27
     title: V2 raw-source contracts

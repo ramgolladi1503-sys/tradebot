@@ -1,0 +1,7 @@
+task_ids: [T24, T25, T26]
+candidate_sha: 6e295bee9771fccefff2f3d7b9a4769b8b9f0372
+status: IMPLEMENTATION_VALID
+implementation_paths: [research/mros_certification/evaluation.py]
+tests: {focused: PASS, adversarial: PASS, integration: PASS, command: "pytest -q tests/research/test_mros_evaluation.py", result: "3 passed"}
+claims: {prospective: NOT_CLAIMED, structural_edge: NOT_CERTIFIED, execution_integration: SEPARATE_AUTHORIZATION_REQUIRED, independent_verification: PENDING, checkpoint_ci: PENDING}
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
