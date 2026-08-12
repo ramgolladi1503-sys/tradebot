@@ -1,0 +1,47 @@
+task_id: T01
+checkpoint: C01
+candidate_sha: cf876ff230bd534a7a936a926f14f2da0e3f3cb2
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+state: INTEGRATION_VALID
+changed_files:
+  - core/prospective_market_evidence.py
+  - tests/test_prospective_market_evidence.py
+  - .github/workflows/prospective-market-evidence-v1.yml
+  - docs/research/prospective_market_evidence_pipeline_v1.md
+  - docs/agent_reviews/pr815_prospective_market_evidence_v1.md
+evidence:
+  focused:
+    status: PASS
+    candidate_sha: cf876ff230bd534a7a936a926f14f2da0e3f3cb2
+    command: /Users/madhuram/tradebot/.venv/bin/pytest -q tests/test_prospective_market_evidence.py
+    result: 33 passed
+  adversarial:
+    status: PASS
+    candidate_sha: cf876ff230bd534a7a936a926f14f2da0e3f3cb2
+    source: tests/test_prospective_market_evidence.py
+    result: adversarial and replay cases included in focused suite
+  integration:
+    status: PASS
+    candidate_sha: cf876ff230bd534a7a936a926f14f2da0e3f3cb2
+    source: OhlcBuffer integration cases in tests/test_prospective_market_evidence.py
+  regression:
+    status: NOT_RUN
+    candidate_sha: cf876ff230bd534a7a936a926f14f2da0e3f3cb2
+  independent_verification:
+    status: PENDING
+    candidate_sha: cf876ff230bd534a7a936a926f14f2da0e3f3cb2
+  ci:
+    status: BLOCKED
+    candidate_sha: cf876ff230bd534a7a936a926f14f2da0e3f3cb2
+    reason: PR815 exact-head repository CI has a failed unit_tests check and no passing checkpoint CI exists
+safety:
+  broker_write_authority: false
+  order_authority: false
+  paper_authorized: false
+  live_authorized: false
+  protected_feed_modified: false
+findings:
+  critical: 0
+  major: 0
+  mandatory_unknowns: 1
+  note: T01 is not independently verified or sealed; no live proof is claimed.

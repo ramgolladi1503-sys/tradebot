@@ -20,7 +20,7 @@ tasks:
     task_id: T01
     title: PR815 core evidence pipeline
     architecture_version: V2
-    status: PENDING
+    status: INTEGRATION_VALID
     priority: 1
     depends_on: []
     blocks: [T02]
@@ -33,8 +33,13 @@ tasks:
     ci: {required: true}
     exit_gates: [OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_AUTH, BLOCKED_LIVE_WINDOW, BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths:
+      - research/governance/autonomous_loop/evidence/T01_provisional_cf876ff230bd534a7a936a926f14f2da0e3f3cb2.yaml
+    evidence:
+      candidate_sha: cf876ff230bd534a7a936a926f14f2da0e3f3cb2
+      focused: {status: PASS, candidate_sha: cf876ff230bd534a7a936a926f14f2da0e3f3cb2}
+      adversarial: {status: PASS, candidate_sha: cf876ff230bd534a7a936a926f14f2da0e3f3cb2}
+      integration: {status: PASS, candidate_sha: cf876ff230bd534a7a936a926f14f2da0e3f3cb2}
   T02:
     task_id: T02
     title: PR815 adversarial certification
