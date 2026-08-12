@@ -243,6 +243,14 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
         out["feed_truth_strict_live"] = bool(feed_truth.strict_live)
     out = canonicalize_feed_runtime_snapshot_truth(out)
     out = attach_feed_execution_truth(out)
+    # Finalize all semantic and safety fields before hashing.  The verifier
+    # intentionally includes these fields, so mutating them after the hash
+    # creates a false SNAPSHOT_HASH_MISMATCH on every persisted artifact.
+    out["read_only"] = True
+    out["append"] = False
+    out["is_order_action"] = False
+    out["broker_api_called"] = False
+    out["source"] = str(out.get("source") or "core.feed.runtime_store.write_runtime_snapshot")
     out.update(
         build_truth_integrity_payload(
             source_payload=out,
@@ -252,11 +260,6 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
             heartbeat_epoch=ts_epoch,
         )
     )
-    out["read_only"] = True
-    out["append"] = False
-    out["is_order_action"] = False
-    out["broker_api_called"] = False
-    out["source"] = str(out.get("source") or "core.feed.runtime_store.write_runtime_snapshot")
     return out
 
 

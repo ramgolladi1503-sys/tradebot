@@ -132,6 +132,9 @@ def build_truth_integrity_payload(
             "transport_heartbeat_state",
             "transport_heartbeat_reason",
             "truth_integrity",
+            "truth_integrity_alerts",
+            "truth_integrity_alert_count",
+            "truth_integrity_status",
         ),
     )
     heartbeat = build_transport_heartbeat(
