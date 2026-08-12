@@ -263,7 +263,7 @@ tasks:
     task_id: T14
     title: Extended global research umbrella
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T13]
     blocks: [T15]
     objective: Research GIFT, USDINR, crude, yields and Asian markets incrementally without automatic V1 mutation.
@@ -274,8 +274,8 @@ tasks:
     ci: {required: true}
     exit_gates: [KEEP_DISCARD_EVIDENCE]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T14_concrete_273531e45.yaml]
+    evidence: {candidate_sha: 273531e450bbcca27568e119e0e8c9684fc3cb67, focused: {status: PASS, candidate_sha: 273531e450bbcca27568e119e0e8c9684fc3cb67}, adversarial: {status: PASS, candidate_sha: 273531e450bbcca27568e119e0e8c9684fc3cb67}, integration: {status: PASS, candidate_sha: 273531e450bbcca27568e119e0e8c9684fc3cb67}}
   T15:
     task_id: T15
     title: Indian after-close finalizer

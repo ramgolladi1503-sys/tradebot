@@ -1,0 +1,9 @@
+task_id: T14
+candidate_sha: 273531e450bbcca27568e119e0e8c9684fc3cb67
+state: IMPLEMENTATION_VALID
+implementation: research/global_v1/extended_research.py
+decisions: [KEEP, DISCARD, BLOCKED_DATA]
+v1_mutation: forbidden
+tests: {focused: PASS, adversarial: PASS, integration: PASS, result: 3 passed}
+evidence: {incremental_oos: PENDING, independent_verification: PENDING, ci: PENDING}
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
