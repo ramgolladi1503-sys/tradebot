@@ -18,7 +18,12 @@ REGISTRY = Path("research/governance/autonomous_loop/TASK_REGISTRY.yaml")
 
 
 def load_registry():
-    return yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
+    registry = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
+    # State-machine tests use a pending downstream fixture; authoritative registry
+    # migration is tested separately and must remain IMPLEMENTATION_VALID.
+    for number in range(13, 36):
+        registry["tasks"][f"T{number:02d}"]["status"] = "PENDING"
+    return registry
 
 
 def test_program_registry_preserves_t01_provisional_build_state():
