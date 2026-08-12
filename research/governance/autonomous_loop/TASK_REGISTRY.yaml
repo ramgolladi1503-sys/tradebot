@@ -178,7 +178,7 @@ tasks:
     task_id: T09
     title: SENSEX discovery and validation
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T08]
     blocks: [T10]
     objective: Governed discovery, leakage audit, controls, OOS/WFA, robustness and benchmarks.
@@ -189,13 +189,13 @@ tasks:
     ci: {required: true}
     exit_gates: [HISTORICAL_OOS_VERDICT]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T09_T11_concrete_b59df2e4b.yaml]
+    evidence: {candidate_sha: b59df2e4b7be82478526db93178e68fbd9a026a8, focused: {status: PASS, candidate_sha: b59df2e4b7be82478526db93178e68fbd9a026a8}}
   T10:
     task_id: T10
     title: SENSEX model freeze
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T09]
     blocks: [T11]
     objective: Freeze only if qualified; otherwise record NO_STRUCTURAL_EDGE_FOUND.
@@ -206,13 +206,13 @@ tasks:
     ci: {required: true}
     exit_gates: [MODEL_FROZEN_OR_NO_EDGE]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T09_T11_concrete_b59df2e4b.yaml]
+    evidence: {candidate_sha: b59df2e4b7be82478526db93178e68fbd9a026a8, focused: {status: PASS, candidate_sha: b59df2e4b7be82478526db93178e68fbd9a026a8}}
   T11:
     task_id: T11
     title: SENSEX independent certification
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T10]
     blocks: [T12]
     objective: Independent adversarial exact-candidate review.
@@ -223,8 +223,8 @@ tasks:
     ci: {required: true}
     exit_gates: [SENSEX_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T09_T11_concrete_b59df2e4b.yaml]
+    evidence: {candidate_sha: b59df2e4b7be82478526db93178e68fbd9a026a8, focused: {status: PASS, candidate_sha: b59df2e4b7be82478526db93178e68fbd9a026a8}}
   T12:
     task_id: T12
     title: Global raw evidence collector

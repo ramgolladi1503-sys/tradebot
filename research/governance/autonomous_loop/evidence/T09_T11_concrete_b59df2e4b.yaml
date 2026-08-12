@@ -1,0 +1,9 @@
+tasks: [T09, T10, T11]
+candidate_sha: b59df2e4b7be82478526db93178e68fbd9a026a8
+states: {T09: IMPLEMENTATION_VALID, T10: IMPLEMENTATION_VALID, T11: IMPLEMENTATION_VALID}
+source: tests/research/test_sensex_discovery.py
+result: NO_STRUCTURAL_EDGE_FOUND
+tests: {focused: PASS, adversarial: PASS, integration: PASS, result: 4 passed across BANKNIFTY/SENSEX evaluator suites}
+independent_verification: PENDING
+ci: PENDING
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
