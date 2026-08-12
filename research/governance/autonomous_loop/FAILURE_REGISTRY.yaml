@@ -1,2 +1,32 @@
 schema_version: 1
-failures: []
+failures:
+  - failure_id: ALF-001
+    task: FRAMEWORK_PR816
+    classification: GOVERNANCE_GAP
+    severity: MAJOR
+    discovered_at_sha: 068da59cfc8e80bb79533c76b32fd4c544295f78
+    finding: Generic INVALIDATED task state was treated as dependency completion, allowing downstream work to advance after an invalidated prerequisite.
+    repair_scope: current_framework_task
+    repair: Dependency completion now requires SEALED or an explicitly declared honest terminal outcome encoded by the frozen exit gate.
+    regression_test: test_dependencies_do_not_treat_blocked_or_generic_invalidated_as_pass
+    status: REPAIRED_PENDING_EXACT_SHA_REVALIDATION
+  - failure_id: ALF-002
+    task: FRAMEWORK_PR816
+    classification: GOVERNANCE_GAP
+    severity: MAJOR
+    discovered_at_sha: 068da59cfc8e80bb79533c76b32fd4c544295f78
+    finding: Dynamic task blocks metadata was documentary only; creating T36 that claimed to block T02 did not add T36 to T02 dependencies.
+    repair_scope: current_framework_task
+    repair: Dynamic task creation now atomically rewrites declared blocked tasks to depend on the new task and validates the resulting graph before commit.
+    regression_test: test_dynamic_task_blocks_field_becomes_real_dependency
+    status: REPAIRED_PENDING_EXACT_SHA_REVALIDATION
+  - failure_id: ALF-003
+    task: FRAMEWORK_PR816
+    classification: GOVERNANCE_GAP
+    severity: MAJOR
+    discovered_at_sha: 068da59cfc8e80bb79533c76b32fd4c544295f78
+    finding: Task sealing accepted truthy string gate evidence and did not prove focused/adversarial/integration/regression/independent/CI evidence belonged to the exact candidate SHA.
+    repair_scope: current_framework_task
+    repair: Sealing now requires a 40-hex candidate Git SHA and structured PASS evidence for every mandatory gate bound to that same candidate SHA.
+    regression_test: test_seal_rejects_unbound_gate_evidence
+    status: REPAIRED_PENDING_EXACT_SHA_REVALIDATION
