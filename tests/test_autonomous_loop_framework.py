@@ -21,9 +21,11 @@ def load_registry():
     return yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
 
 
-def test_registry_bootstraps_and_selects_t01():
+def test_program_registry_preserves_t01_provisional_build_state():
     supervisor = AutonomousLoopSupervisor(load_registry())
-    assert supervisor.next_eligible_task() == "T01"
+    assert supervisor.tasks["T01"]["status"] == "INTEGRATION_VALID"
+    assert supervisor.next_eligible_task() is None
+    assert supervisor.next_build_eligible_task() == "T02"
     assert len(supervisor.tasks) == 35
 
 
