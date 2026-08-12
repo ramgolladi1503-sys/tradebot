@@ -1,0 +1,20 @@
+task_ids: [T21]
+candidate_sha: 667e80f9a7c1c9015f1bf9ba3ea0599b1c02bb6f
+status: IMPLEMENTATION_VALID
+implementation_paths:
+  - research/mros_certification/offline.py
+tests:
+  focused: {status: PASS, command: "pytest -q tests/research/test_mros_offline_certification.py", result: "5 passed", candidate_sha: 667e80f9a7c1c9015f1bf9ba3ea0599b1c02bb6f}
+  adversarial: {status: PASS, covered: [sha_mismatch, live_claim, authority_flags, tamper], candidate_sha: 667e80f9a7c1c9015f1bf9ba3ea0599b1c02bb6f}
+  integration: {status: PASS, command: "pytest -q tests/research/test_mros_offline_certification.py tests/research/test_mros_v1_lifecycle.py", result: "8 passed", candidate_sha: 667e80f9a7c1c9015f1bf9ba3ea0599b1c02bb6f}
+  broad_ci: NOT_RUN_BY_PROGRAM_BOUNDARY
+claims:
+  live: NOT_CLAIMED
+  prospective: NOT_CLAIMED
+  independent_verification: PENDING
+  checkpoint_ci: PENDING
+safety:
+  broker_write_authority: false
+  order_authority: false
+  paper_authorized: false
+  live_authorized: false

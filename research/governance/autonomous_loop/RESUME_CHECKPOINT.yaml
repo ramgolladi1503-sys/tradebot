@@ -1,8 +1,8 @@
 schema_version: 1
 checkpoint_type: hard_limit_resume
-source_head: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb
-last_concretely_completed_task: T20
-next_concrete_task: T21
+source_head: 3ec76c68f8e6c07797f01e8caeb694c2d97a7620
+last_concretely_completed_task: T22
+next_concrete_task: T23
 state_integrity_repaired: true
 open_failure: ALF-004
 certification_pending: [C01, C02, C03, C04, C05, FINAL]

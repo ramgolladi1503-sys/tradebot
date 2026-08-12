@@ -382,7 +382,7 @@ tasks:
     task_id: T21
     title: Repository-wide offline certification
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T20]
     blocks: [T22]
     objective: Focused, integration, adversarial, regression, code-quality and independent verifier on exact SHA.
@@ -393,13 +393,13 @@ tasks:
     ci: {required: true}
     exit_gates: [SYSTEM_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T21_concrete_667e80f9a.yaml]
+    evidence: {candidate_sha: 667e80f9a7c1c9015f1bf9ba3ea0599b1c02bb6f, focused: {status: PASS, candidate_sha: 667e80f9a7c1c9015f1bf9ba3ea0599b1c02bb6f}, adversarial: {status: PASS, candidate_sha: 667e80f9a7c1c9015f1bf9ba3ea0599b1c02bb6f}, integration: {status: PASS, candidate_sha: 667e80f9a7c1c9015f1bf9ba3ea0599b1c02bb6f}}
   T22:
     task_id: T22
     title: Shadow live validation
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T21]
     blocks: [T23]
     objective: Run exact offline-certified SHA in genuine live sessions with no trading-runtime effect.
@@ -410,8 +410,8 @@ tasks:
     ci: {required: true}
     exit_gates: [SHADOW_LIVE_VALID]
     stop_conditions: [BLOCKED_LIVE_WINDOW, BLOCKED_AUTH]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T22_concrete_3ec76c68f.yaml]
+    evidence: {candidate_sha: 3ec76c68f8e6c07797f01e8caeb694c2d97a7620, focused: {status: PASS, candidate_sha: 3ec76c68f8e6c07797f01e8caeb694c2d97a7620}, adversarial: {status: PASS, candidate_sha: 3ec76c68f8e6c07797f01e8caeb694c2d97a7620}, integration: {status: PASS, candidate_sha: 3ec76c68f8e6c07797f01e8caeb694c2d97a7620}}
   T23:
     task_id: T23
     title: Prospective observation program

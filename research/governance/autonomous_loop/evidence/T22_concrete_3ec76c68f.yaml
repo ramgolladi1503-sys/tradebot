@@ -1,0 +1,11 @@
+task_ids: [T22]
+candidate_sha: 3ec76c68f8e6c07797f01e8caeb694c2d97a7620
+status: IMPLEMENTATION_VALID
+implementation_paths: [research/mros_certification/shadow_live.py]
+tests:
+  focused: {status: PASS, command: "pytest -q tests/research/test_mros_shadow_live.py", result: "3 passed", candidate_sha: 3ec76c68f8e6c07797f01e8caeb694c2d97a7620}
+  adversarial: {status: PASS, covered: [replay, synthetic, sha_mismatch, authority], candidate_sha: 3ec76c68f8e6c07797f01e8caeb694c2d97a7620}
+  integration: {status: PASS, command: "pytest -q tests/research/test_mros_shadow_live.py tests/research/test_mros_offline_certification.py", result: "8 passed", candidate_sha: 3ec76c68f8e6c07797f01e8caeb694c2d97a7620}
+  broad_ci: NOT_RUN_BY_PROGRAM_BOUNDARY
+claims: {genuine_live: NOT_CLAIMED, prospective: NOT_CLAIMED, independent_verification: PENDING, checkpoint_ci: PENDING}
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
