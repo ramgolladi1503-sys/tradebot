@@ -484,7 +484,7 @@ tasks:
     task_id: T27
     title: V2 raw-source contracts
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T26]
     blocks: [T28]
     objective: Define authoritative provider, timestamps, causal cutoff, freshness and missingness for GIFT, USDINR, crude, yields, Asia, India VIX and permitted flow/news inputs.
@@ -495,8 +495,8 @@ tasks:
     ci: {required: true}
     exit_gates: [GLOBAL_V2_SOURCE_SPEC_FROZEN]
     stop_conditions: [BLOCKED_DATA, BLOCKED_AUTH]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T27_concrete_571f86b6d.yaml]
+    evidence: {candidate_sha: 571f86b6d0a88a17afb1400e39bcb17fc7c9f3bc, focused: {status: PASS, candidate_sha: 571f86b6d0a88a17afb1400e39bcb17fc7c9f3bc}, adversarial: {status: PASS, candidate_sha: 571f86b6d0a88a17afb1400e39bcb17fc7c9f3bc}, integration: {status: PASS, candidate_sha: 571f86b6d0a88a17afb1400e39bcb17fc7c9f3bc}}
   T28:
     task_id: T28
     title: V2 collector implementation
