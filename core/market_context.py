@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 SESSION_NORMAL_OPEN = "NORMAL_OPEN"
@@ -21,6 +22,7 @@ SESSION_CLOSED = "CLOSED"
 from config import config as cfg
 from config.profile import resolve_trading_mode
 from core.time_utils import is_market_open_ist, now_ist
+from core.paths import regime_runtime_evidence_path
 
 logger = logging.getLogger(__name__)
 
@@ -233,8 +235,13 @@ def derive_market_context(
     try:
         import time
         import json
-        from pathlib import Path
-        timeline_path = Path("runtime/strategy_validation/regime_timeline.jsonl")
+        source_value = str(normalized.get("source") or "").strip().lower()
+        replay_evidence = bool(normalized.get("replay_mode")) or source_value in {"replay", "paper_replay"}
+        timeline_path = (
+            Path("runtime/strategy_validation/regime_timeline.jsonl")
+            if replay_evidence
+            else regime_runtime_evidence_path()
+        )
         timeline_path.parent.mkdir(parents=True, exist_ok=True)
         
         regime = str(
@@ -245,17 +252,16 @@ def derive_market_context(
         row = {
             "market_timestamp": normalized.get("market_timestamp") or str(time.time()),
             "symbol": extracted_symbol or "UNKNOWN",
-            "open": normalized.get("open", 0.0),
-            "high": normalized.get("high", 0.0),
-            "low": normalized.get("low", 0.0),
-            "close": normalized.get("close", 0.0),
             "tradebot_regime": regime,
             "selected_strategy": "Unknown",
-            "source": "replay",
-            "source_file": normalized.get("source_file", "unknown")
+            "source": "replay" if replay_evidence else "runtime",
+            "source_file": normalized.get("source_file") or normalized.get("session_id") or ("replay" if replay_evidence else "market_context"),
         }
-        with open(timeline_path, "a") as f:
-            f.write(json.dumps(row) + "\n")
+        for field in ("open", "high", "low", "close"):
+            if field not in normalized:
+                row.pop(field, None)
+        with timeline_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
     except Exception:
         pass
 
