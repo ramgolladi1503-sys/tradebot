@@ -4249,6 +4249,11 @@ def _write_feed_runtime_snapshot(
     option_active_blockers_by_symbol: dict[str, list[str]] | None = None,
     restart_count_1h: int = 0,
     stale_strikes: int = 0,
+    option_ticks_verified: bool | None = None,
+    verified_option_symbols: list[str] | None = None,
+    missing_option_symbols: list[str] | None = None,
+    warmup_clean_cycles: int | None = None,
+    warmup_required_clean_cycles: int | None = None,
     runtime_state: str | None = None,
     last_error: str | None = None,
     disconnected_code: int | None = None,
@@ -4478,6 +4483,17 @@ def _write_feed_runtime_snapshot(
     payload["ws_error_code"] = canonical_feed_truth.ws_error_code
     payload["ws_error_reason"] = canonical_feed_truth.ws_error_reason
     payload["ws_fault_class"] = canonical_feed_truth.ws_fault_class
+    for key, value in (
+        ("option_ticks_verified", option_ticks_verified),
+        ("warmup_clean_cycles", warmup_clean_cycles),
+        ("warmup_required_clean_cycles", warmup_required_clean_cycles),
+    ):
+        if value is not None:
+            payload[key] = value
+    if verified_option_symbols:
+        payload["verified_option_symbols"] = list(verified_option_symbols)
+    if missing_option_symbols:
+        payload["missing_option_symbols"] = list(missing_option_symbols)
     stage_started = _mark_stage("canonical_feed_truth_ms", stage_started)
     payload = canonicalize_feed_runtime_snapshot_truth(payload)
     payload = attach_feed_execution_truth(payload)
@@ -4663,6 +4679,11 @@ def _persist_runtime_snapshot_row(
         "reconnect_blocked_reason": normalized_blocked_reason,
         "restart_blocked_reason": str(restart_blocked_reason or normalized_blocked_reason or "").strip().lower() or None,
     }
+    option_feed_verification = _option_feed_verification_overlay_payload()
+    if option_feed_verification:
+        payload["option_ticks_verified"] = bool(str(option_feed_verification.get("state") or "").upper() == "OK")
+        payload["verified_option_symbols"] = list(option_feed_verification.get("verified_symbols") or [])
+        payload["missing_option_symbols"] = list(option_feed_verification.get("missing_symbols") or [])
     payload.update(
         _runtime_transport_truth_fields(
             now_epoch=ts_epoch,
@@ -4762,6 +4783,11 @@ def _persist_runtime_snapshot_row(
         last_option_tick_ts_by_symbol=dict(option_state.get("last_tick_ts_by_symbol") or {}),
         option_feed_block_reason_by_symbol=option_feed_block_reason_by_symbol,
         option_active_blockers_by_symbol=option_active_blockers_by_symbol,
+        option_ticks_verified=payload.get("option_ticks_verified"),
+        verified_option_symbols=payload.get("verified_option_symbols"),
+        missing_option_symbols=payload.get("missing_option_symbols"),
+        warmup_clean_cycles=payload.get("warmup_clean_cycles"),
+        warmup_required_clean_cycles=payload.get("warmup_required_clean_cycles"),
         restart_count_1h=_restart_count_1h(ts_epoch),
         stale_strikes=_STALE_STRIKES,
         runtime_state=effective_state_text,

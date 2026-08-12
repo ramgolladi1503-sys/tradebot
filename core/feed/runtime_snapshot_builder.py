@@ -44,6 +44,11 @@ class FeedRuntimeSnapshotInputs:
     reconnect_blocked_reason: str | None = None
     restart_count_1h: int = 0
     stale_strikes: int = 0
+    option_ticks_verified: bool | None = None
+    verified_option_symbols: Sequence[str] = field(default_factory=tuple)
+    missing_option_symbols: Sequence[str] = field(default_factory=tuple)
+    warmup_clean_cycles: int | None = None
+    warmup_required_clean_cycles: int | None = None
 
 
 def coerce_epoch(value: Any) -> float | None:
@@ -215,6 +220,17 @@ def build_feed_runtime_latest_payload(
         "transport_healthy": bool(transport_health["healthy"]),
         "transport": dict(transport_health),
     }
+    for key, value in (
+        ("option_ticks_verified", inputs.option_ticks_verified),
+        ("warmup_clean_cycles", inputs.warmup_clean_cycles),
+        ("warmup_required_clean_cycles", inputs.warmup_required_clean_cycles),
+    ):
+        if value is not None:
+            payload[key] = value
+    if inputs.verified_option_symbols:
+        payload["verified_option_symbols"] = list_copy(inputs.verified_option_symbols)
+    if inputs.missing_option_symbols:
+        payload["missing_option_symbols"] = list_copy(inputs.missing_option_symbols)
     if derive_effective_ws_connected is not None:
         payload["effective_ws_connected"] = derive_effective_ws_connected(dict(payload))
     if derive_feed_ok is not None:
