@@ -241,12 +241,13 @@ tasks:
     exit_gates: [GLOBAL_COLLECTOR_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA, BLOCKED_AUTH]
     evidence_paths: [research/governance/autonomous_loop/evidence/T12_concrete_fcf70a8f5.yaml]
-    evidence: {candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd, focused: {status: PASS, candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd}, adversarial: {status: PASS, candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd}, integration: {status: PASS, candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd}}
+    evidence: {candidate_sha: 0d3f314154413150ea5065d5b91fb5968404618f, focused: {status: PASS, candidate_sha: 0d3f314154413150ea5065d5b91fb5968404618f}, adversarial: {status: PASS, candidate_sha: 0d3f314154413150ea5065d5b91fb5968404618f}, integration: {status: PASS, candidate_sha: 0d3f314154413150ea5065d5b91fb5968404618f}}
   T13:
     task_id: T13
     title: Causal global snapshot builder V1
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T12]
     blocks: [T14]
     objective: Shared target-session V1 snapshot rejecting stale, missing and future-leaking inputs.
@@ -257,13 +258,14 @@ tasks:
     ci: {required: true}
     exit_gates: [GLOBAL_SNAPSHOT_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: [research/governance/autonomous_loop/evidence/T13_concrete_bbbec08cf.yaml]
+    evidence_paths: [research/governance/autonomous_loop/evidence/T13_T35_replay_0d3f31415.yaml]
     evidence: {candidate_sha: bbbec08cfab6973b9220ae7d05314a494638e04c, focused: {status: PASS, candidate_sha: bbbec08cfab6973b9220ae7d05314a494638e04c}, adversarial: {status: PASS, candidate_sha: bbbec08cfab6973b9220ae7d05314a494638e04c}, integration: {status: PASS, candidate_sha: bbbec08cfab6973b9220ae7d05314a494638e04c}}
   T14:
     task_id: T14
     title: Extended global research umbrella
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T13]
     blocks: [T15]
     objective: Research GIFT, USDINR, crude, yields and Asian markets incrementally without automatic V1 mutation.
@@ -274,13 +276,14 @@ tasks:
     ci: {required: true}
     exit_gates: [KEEP_DISCARD_EVIDENCE]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: [research/governance/autonomous_loop/evidence/T14_concrete_273531e45.yaml]
+    evidence_paths: [research/governance/autonomous_loop/evidence/T13_T35_replay_0d3f31415.yaml]
     evidence: {candidate_sha: 273531e450bbcca27568e119e0e8c9684fc3cb67, focused: {status: PASS, candidate_sha: 273531e450bbcca27568e119e0e8c9684fc3cb67}, adversarial: {status: PASS, candidate_sha: 273531e450bbcca27568e119e0e8c9684fc3cb67}, integration: {status: PASS, candidate_sha: 273531e450bbcca27568e119e0e8c9684fc3cb67}}
   T15:
     task_id: T15
     title: Indian after-close finalizer
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T14]
     blocks: [T16]
     objective: Finalize complete three-index session after close into immutable daily state.
@@ -297,7 +300,8 @@ tasks:
     task_id: T16
     title: Three-model scoring orchestrator
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T15]
     blocks: [T17]
     objective: Consume exact Indian state plus global snapshot plus frozen model SHAs; certified models only.
@@ -314,7 +318,8 @@ tasks:
     task_id: T17
     title: Pre-open report
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T16]
     blocks: [T18]
     objective: Emit prior close, predicted gap/open, model SHA/status, global context and cutoff/leakage status.
@@ -331,7 +336,8 @@ tasks:
     task_id: T18
     title: Actual-open recorder
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T17]
     blocks: [T19]
     objective: Record authoritative opens bound to prediction SHA without mutating predictions.
@@ -348,7 +354,8 @@ tasks:
     task_id: T19
     title: Prospective ledgers
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T18]
     blocks: [T20]
     objective: Append-only per-index prediction/outcome/error ledgers plus shared snapshot bindings.
@@ -365,7 +372,8 @@ tasks:
     task_id: T20
     title: Daily scheduler and orchestration
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T19]
     blocks: [T21]
     objective: Automate capture, finalization, snapshot, scoring/report and outcome recording fail-closed.
@@ -382,7 +390,8 @@ tasks:
     task_id: T21
     title: Repository-wide offline certification
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T20]
     blocks: [T22]
     objective: Focused, integration, adversarial, regression, code-quality and independent verifier on exact SHA.
@@ -399,7 +408,8 @@ tasks:
     task_id: T22
     title: Shadow live validation
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T21]
     blocks: [T23]
     objective: Run exact offline-certified SHA in genuine live sessions with no trading-runtime effect.
@@ -416,7 +426,8 @@ tasks:
     task_id: T23
     title: Prospective observation program
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T22]
     blocks: [T24]
     objective: Accumulate untouched predictions and outcomes without outcome-conditioned tuning.
@@ -433,7 +444,8 @@ tasks:
     task_id: T24
     title: Prospective model evaluation
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T23]
     blocks: [T25]
     objective: Evaluate each index independently against frozen baselines and predeclared gates.
@@ -450,7 +462,8 @@ tasks:
     task_id: T25
     title: Structural-edge decision
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T24]
     blocks: [T26]
     objective: Decide structural-edge certification only after sufficient evidence; prediction quality is not tradable edge.
@@ -467,7 +480,8 @@ tasks:
     task_id: T26
     title: Separate trading-integration decision
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T25]
     blocks: [T27]
     objective: Preserve trading integration as a separate future-authority decision outside this architecture.
@@ -484,7 +498,8 @@ tasks:
     task_id: T27
     title: V2 raw-source contracts
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T26]
     blocks: [T28]
     objective: Define authoritative provider, timestamps, causal cutoff, freshness and missingness for GIFT, USDINR, crude, yields, Asia, India VIX and permitted flow/news inputs.
@@ -501,7 +516,8 @@ tasks:
     task_id: T28
     title: V2 collector implementation
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T27]
     blocks: [T29]
     objective: Build read-only collectors with immutable raw artifacts, provenance and SHA binding.
@@ -518,7 +534,8 @@ tasks:
     task_id: T29
     title: V2 causal builder
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T28]
     blocks: [T30]
     objective: Create deterministic target-session feature artifact preserving missingness and raw SHA lineage and rejecting future data.
@@ -535,7 +552,8 @@ tasks:
     task_id: T30
     title: Interaction hypothesis registry
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T29]
     blocks: [T31]
     objective: Predeclare economically justified interactions and track search pressure.
@@ -552,7 +570,8 @@ tasks:
     task_id: T31
     title: Incremental OOS research
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T30]
     blocks: [T32]
     objective: Test each V2 family against frozen V1 baseline using leakage audits, negative/permutation controls, OOS/WFA and multiple-testing controls.
@@ -569,7 +588,8 @@ tasks:
     task_id: T32
     title: Global Context V2 freeze
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T31]
     blocks: [T33]
     objective: Freeze exact V2 features/transforms/coefficients/cutoffs/evidence SHA/model SHA only if incremental evidence qualifies; never overwrite V1.
@@ -586,7 +606,8 @@ tasks:
     task_id: T33
     title: V2 independent certification
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T32]
     blocks: [T34]
     objective: Adversarially verify exact V2 candidate, missing/future/provenance/tamper/idempotency paths and independence from execution.
@@ -603,7 +624,8 @@ tasks:
     task_id: T34
     title: Intraday regime research specification
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T33]
     blocks: [T35]
     objective: Define separate 30m/60m/120m post-open targets, causal pre-open inputs, baselines, controls and ledgers without gap-target relabeling.
@@ -620,7 +642,8 @@ tasks:
     task_id: T35
     title: Intraday regime discovery and prospective path
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
+    evidence_lineage_path: research/governance/autonomous_loop/evidence/T13_T35_lineage_migration_bf414dca2.yaml
     depends_on: [T34]
     blocks: []
     objective: Run governed historical/OOS validation; freeze only if qualified; then shadow/prospective observation under its own certification ladder.
