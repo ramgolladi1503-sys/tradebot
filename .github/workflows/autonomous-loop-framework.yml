@@ -6,6 +6,7 @@ on:
       - "research/governance/autonomous_loop/**"
       - "tests/test_autonomous_loop_framework.py"
       - "tests/test_autonomous_loop_release_policy.py"
+      - "tests/test_autonomous_loop_certification_policy.py"
       - ".github/workflows/autonomous-loop-framework.yml"
   workflow_dispatch:
 
@@ -46,6 +47,7 @@ jobs:
           pytest -q -o addopts=''
           tests/test_autonomous_loop_framework.py
           tests/test_autonomous_loop_release_policy.py
+          tests/test_autonomous_loop_certification_policy.py
 
       - name: Enforce execution-isolation scope
         run: |
