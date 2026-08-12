@@ -106,11 +106,15 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         "transport_healthy": feed_debug.get("transport_healthy"),
         "feed_truth_state": _first_non_none(feed_debug.get("feed_truth_state"), feed_runtime_payload.get("feed_truth_state")),
         "feed_truth_reason_code": _first_non_none(feed_debug.get("feed_truth_reason_code"), feed_runtime_payload.get("feed_truth_reason_code")),
-        "snapshot_hash": _first_non_none(feed_debug.get("snapshot_hash"), feed_runtime_payload.get("snapshot_hash")),
-        "snapshot_hash_version": _first_non_none(feed_debug.get("snapshot_hash_version"), feed_runtime_payload.get("snapshot_hash_version")),
-        "transport_heartbeat_epoch": _first_non_none(feed_debug.get("transport_heartbeat_epoch"), feed_runtime_payload.get("transport_heartbeat_epoch")),
-        "transport_heartbeat_age_sec": _first_non_none(feed_debug.get("transport_heartbeat_age_sec"), feed_runtime_payload.get("transport_heartbeat_age_sec")),
-        "transport_heartbeat_state": _first_non_none(feed_debug.get("transport_heartbeat_state"), feed_runtime_payload.get("transport_heartbeat_state")),
+        # The persisted feed_runtime_latest artifact is the authoritative
+        # snapshot. In-memory feed_debug may lag one atomic write behind;
+        # preferring its hash creates false mismatch alerts against the
+        # current persisted payload.
+        "snapshot_hash": _first_non_none(feed_runtime_payload.get("snapshot_hash"), feed_debug.get("snapshot_hash")),
+        "snapshot_hash_version": _first_non_none(feed_runtime_payload.get("snapshot_hash_version"), feed_debug.get("snapshot_hash_version")),
+        "transport_heartbeat_epoch": _first_non_none(feed_runtime_payload.get("transport_heartbeat_epoch"), feed_debug.get("transport_heartbeat_epoch")),
+        "transport_heartbeat_age_sec": _first_non_none(feed_runtime_payload.get("transport_heartbeat_age_sec"), feed_debug.get("transport_heartbeat_age_sec")),
+        "transport_heartbeat_state": _first_non_none(feed_runtime_payload.get("transport_heartbeat_state"), feed_debug.get("transport_heartbeat_state")),
         "sla_state": sla_state,
         "sla_status": raw_sla_status or freshness.get("state"),
         "reasons": list(freshness.get("reasons") or []),
