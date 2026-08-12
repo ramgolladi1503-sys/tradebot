@@ -280,7 +280,7 @@ tasks:
     task_id: T15
     title: Indian after-close finalizer
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T14]
     blocks: [T16]
     objective: Finalize complete three-index session after close into immutable daily state.
@@ -291,13 +291,13 @@ tasks:
     ci: {required: true}
     exit_gates: [AFTER_CLOSE_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T15_T20_concrete_7c1426565.yaml]
+    evidence: {candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb, focused: {status: PASS, candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb}}
   T16:
     task_id: T16
     title: Three-model scoring orchestrator
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T15]
     blocks: [T17]
     objective: Consume exact Indian state plus global snapshot plus frozen model SHAs; certified models only.
@@ -308,13 +308,13 @@ tasks:
     ci: {required: true}
     exit_gates: [SCORER_ORCHESTRATOR_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T15_T20_concrete_7c1426565.yaml]
+    evidence: {candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb, focused: {status: PASS, candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb}}
   T17:
     task_id: T17
     title: Pre-open report
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T16]
     blocks: [T18]
     objective: Emit prior close, predicted gap/open, model SHA/status, global context and cutoff/leakage status.
@@ -325,13 +325,13 @@ tasks:
     ci: {required: true}
     exit_gates: [REPORT_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T15_T20_concrete_7c1426565.yaml]
+    evidence: {candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb, focused: {status: PASS, candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb}}
   T18:
     task_id: T18
     title: Actual-open recorder
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T17]
     blocks: [T19]
     objective: Record authoritative opens bound to prediction SHA without mutating predictions.
@@ -342,13 +342,13 @@ tasks:
     ci: {required: true}
     exit_gates: [OUTCOME_RECORDER_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T15_T20_concrete_7c1426565.yaml]
+    evidence: {candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb, focused: {status: PASS, candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb}}
   T19:
     task_id: T19
     title: Prospective ledgers
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T18]
     blocks: [T20]
     objective: Append-only per-index prediction/outcome/error ledgers plus shared snapshot bindings.
@@ -359,13 +359,13 @@ tasks:
     ci: {required: true}
     exit_gates: [LEDGER_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T15_T20_concrete_7c1426565.yaml]
+    evidence: {candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb, focused: {status: PASS, candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb}}
   T20:
     task_id: T20
     title: Daily scheduler and orchestration
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T19]
     blocks: [T21]
     objective: Automate capture, finalization, snapshot, scoring/report and outcome recording fail-closed.
@@ -376,8 +376,8 @@ tasks:
     ci: {required: true}
     exit_gates: [DAILY_AUTOMATION_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_AUTH, BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T15_T20_concrete_7c1426565.yaml]
+    evidence: {candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb, focused: {status: PASS, candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb}}
   T21:
     task_id: T21
     title: Repository-wide offline certification

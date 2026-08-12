@@ -1,0 +1,9 @@
+tasks: [T15, T16, T17, T18, T19, T20]
+candidate_sha: 7c1426565742e840bd5cdbdf938ed4c05a08bdeb
+states: {T15: IMPLEMENTATION_VALID, T16: IMPLEMENTATION_VALID, T17: IMPLEMENTATION_VALID, T18: IMPLEMENTATION_VALID, T19: IMPLEMENTATION_VALID, T20: IMPLEMENTATION_VALID}
+implementation: research/mros_v1/lifecycle.py
+tests: {focused: PASS, adversarial: PASS, integration: PASS, result: 3 passed}
+live_or_prospective: NOT_CLAIMED
+independent_verification: PENDING
+ci: PENDING
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
