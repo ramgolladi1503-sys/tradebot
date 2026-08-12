@@ -1,0 +1,7 @@
+tasks: [T06, T07]
+candidate_sha: a6382f0d99c89a29d63f75fafb0822b87c1dfdf5
+states: {T06: IMPLEMENTATION_VALID, T07: IMPLEMENTATION_VALID}
+T06: {freeze_logic: research/governance/index_research_lifecycle.py::freeze_model, blocked_data: BLOCKED_DATA, no_edge: NO_STRUCTURAL_EDGE_FOUND}
+T07: {certification_logic: research/governance/index_research_lifecycle.py::certify_offline, independent_review: PENDING}
+tests: {focused: PASS, adversarial: PASS, integration: PASS}
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}

@@ -127,7 +127,7 @@ tasks:
     task_id: T06
     title: BANKNIFTY model freeze
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T05]
     blocks: [T07]
     objective: Freeze only if qualified; otherwise record NO_STRUCTURAL_EDGE_FOUND.
@@ -138,13 +138,13 @@ tasks:
     ci: {required: true}
     exit_gates: [MODEL_FROZEN_OR_NO_EDGE]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: [research/governance/autonomous_loop/evidence/T05_T08_provisional_756f687e64966b9fbaafccf57dd936bdd20e8bc3.yaml]
-    evidence: {candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3, focused: {status: PASS, candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3}}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T06_T07_concrete_a6382f0d9.yaml]
+    evidence: {candidate_sha: a6382f0d99c89a29d63f75fafb0822b87c1dfdf5, focused: {status: PASS, candidate_sha: a6382f0d99c89a29d63f75fafb0822b87c1dfdf5}}
   T07:
     task_id: T07
     title: BANKNIFTY independent certification
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T06]
     blocks: [T08]
     objective: Independent adversarial exact-candidate review.
@@ -155,8 +155,8 @@ tasks:
     ci: {required: true}
     exit_gates: [BANKNIFTY_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: [research/governance/autonomous_loop/evidence/T05_T08_provisional_756f687e64966b9fbaafccf57dd936bdd20e8bc3.yaml]
-    evidence: {candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3, focused: {status: PASS, candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3}}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T06_T07_concrete_a6382f0d9.yaml]
+    evidence: {candidate_sha: a6382f0d99c89a29d63f75fafb0822b87c1dfdf5, focused: {status: PASS, candidate_sha: a6382f0d99c89a29d63f75fafb0822b87c1dfdf5}}
   T08:
     task_id: T08
     title: SENSEX research specification
