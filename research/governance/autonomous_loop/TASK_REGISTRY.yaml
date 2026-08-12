@@ -416,7 +416,7 @@ tasks:
     task_id: T23
     title: Prospective observation program
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T22]
     blocks: [T24]
     objective: Accumulate untouched predictions and outcomes without outcome-conditioned tuning.
@@ -427,8 +427,8 @@ tasks:
     ci: {required: true}
     exit_gates: [PROSPECTIVE_DATASET]
     stop_conditions: [BLOCKED_LIVE_WINDOW, BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T23_concrete_b37ffbcb0.yaml]
+    evidence: {candidate_sha: b37ffbcb031c14d5e9a732b7a4673a76906d2b55, focused: {status: PASS, candidate_sha: b37ffbcb031c14d5e9a732b7a4673a76906d2b55}, adversarial: {status: PASS, candidate_sha: b37ffbcb031c14d5e9a732b7a4673a76906d2b55}, integration: {status: PASS, candidate_sha: b37ffbcb031c14d5e9a732b7a4673a76906d2b55}}
   T24:
     task_id: T24
     title: Prospective model evaluation

@@ -1,0 +1,11 @@
+task_ids: [T23]
+candidate_sha: b37ffbcb031c14d5e9a732b7a4673a76906d2b55
+status: IMPLEMENTATION_VALID
+implementation_paths: [research/mros_certification/prospective.py]
+tests:
+  focused: {status: PASS, command: "pytest -q tests/research/test_mros_prospective.py", result: "3 passed", candidate_sha: b37ffbcb031c14d5e9a732b7a4673a76906d2b55}
+  adversarial: {status: PASS, covered: [spec_mismatch, outcome_conditioning, duplicate_identity, immutable_append], candidate_sha: b37ffbcb031c14d5e9a732b7a4673a76906d2b55}
+  integration: {status: PASS, candidate_sha: b37ffbcb031c14d5e9a732b7a4673a76906d2b55}
+  broad_ci: NOT_RUN_BY_PROGRAM_BOUNDARY
+claims: {prospective_dataset: NOT_CLAIMED, live: NOT_CLAIMED, independent_verification: PENDING, checkpoint_ci: PENDING}
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
