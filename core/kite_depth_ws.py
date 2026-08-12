@@ -121,6 +121,7 @@ _LAST_MUTATION_RESULT = None
 _SOCKET_GENERATION = 0
 
 _LAST_DESIRED_TOKENS: list[int] | None = None
+_INTENDED_TOKENS: list[int] | None = None
 _UNDERLYING_TOKENS: set[int] = set()
 _UNDERLYING_TOKEN_TO_SYMBOL: dict[int, str] = {}
 _TOKEN_TO_SYMBOL: dict[int, str] = {}
@@ -3012,8 +3013,25 @@ def _can_mutate_ws_subscriptions(reason: str, now_epoch: float | None = None) ->
     return True, "ok", guard_payload
 
 
+def _reconcile_rebalance_intended_tokens(
+    *, reason: str, current_tokens, desired_tokens, actual_tokens, pending_tokens: bool
+) -> tuple[list[int], bool]:
+    """Commit the exact dynamic target only after actual truth converges."""
+    current = sorted({int(token) for token in (current_tokens or []) if int(token) > 0})
+    desired = sorted({int(token) for token in (desired_tokens or []) if int(token) > 0})
+    actual = {int(token) for token in (actual_tokens or []) if int(token) > 0}
+    if (
+        not str(reason or "").startswith(("atm_shift_steps=", "preserve_tokens_missing"))
+        or pending_tokens
+        or not desired
+        or set(desired) != actual
+    ):
+        return current, False
+    return desired, True
+
+
 def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
-    global _LAST_TOKENS, _PENDING_SUBSCRIBE_TOKENS, _PENDING_UNSUBSCRIBE_TOKENS, _PENDING_MODE_FULL_TOKENS, _LAST_MUTATION_RESULT, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+    global _LAST_TOKENS, _PENDING_SUBSCRIBE_TOKENS, _PENDING_UNSUBSCRIBE_TOKENS, _PENDING_MODE_FULL_TOKENS, _LAST_MUTATION_RESULT, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS
     to_subscribe = sorted(set(int(t) for t in (subscribe_tokens or []) if int(t) > 0))
     to_unsubscribe = sorted(set(int(t) for t in (unsubscribe_tokens or []) if int(t) > 0))
 
@@ -3150,13 +3168,20 @@ def _runtime_transport_truth_fields(
         getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0))
     ) * 3.0
     subscribed_count = len(set(int(token) for token in list(_LAST_TOKENS or []) if int(token) > 0))
-    intended_count = int(_INTENDED_TOKEN_COUNT if _INTENDED_TOKEN_COUNT > 0 else subscribed_count)
+    intended_tokens = set(int(token) for token in (_INTENDED_TOKENS or []) if int(token) > 0)
+    subscribed_tokens = set(int(token) for token in (_LAST_TOKENS or []) if int(token) > 0)
+    intended_count = len(intended_tokens) if intended_tokens else int(_INTENDED_TOKEN_COUNT if _INTENDED_TOKEN_COUNT > 0 else subscribed_count)
+    missing_tokens = sorted(intended_tokens - subscribed_tokens)
+    extra_tokens = sorted(subscribed_tokens - intended_tokens) if intended_tokens else []
     subscription_registry_consistent = (
         len(_PENDING_SUBSCRIBE_TOKENS or set()) == 0
         and len(_PENDING_UNSUBSCRIBE_TOKENS or set()) == 0
         and len(_PENDING_MODE_FULL_TOKENS or set()) == 0
+        and bool(intended_tokens)
+        and not missing_tokens
+        and not extra_tokens
     )
-    subscription_truth_complete = subscription_registry_consistent and (intended_count <= 0 or subscribed_count >= intended_count)
+    subscription_truth_complete = subscription_registry_consistent
     mode_full_truth_complete = subscription_registry_consistent and len(_PENDING_MODE_FULL_TOKENS or set()) == 0
     critical_feed_fresh = bool(verification.get("critical_feed_fresh", True))
     core_feed_fresh_ratio = float(verification.get("core_fresh_ratio", 1.0) or 0.0)
@@ -3184,6 +3209,10 @@ def _runtime_transport_truth_fields(
         "transport_last_tick_epoch": tick_epoch,
         "transport_callback_activity_present": bool(callback_activity_present),
         "subscription_registry_consistent": bool(subscription_registry_consistent),
+        "intended_tokens": sorted(intended_tokens),
+        "subscribed_tokens": sorted(subscribed_tokens),
+        "missing_tokens": missing_tokens,
+        "extra_tokens": extra_tokens,
         "subscription_truth_complete": bool(subscription_truth_complete),
         "mode_full_truth_complete": bool(mode_full_truth_complete),
         "critical_feed_fresh": bool(critical_feed_fresh),
@@ -4269,6 +4298,7 @@ def _write_feed_runtime_snapshot(
     auto_reconnect_disabled: bool | None = None,
     internal_retry_error: str | None = None,
     internal_retry_reason: str | None = None,
+    process_restart_required: bool | None = None,
 ) -> None:
     global _FEED_RUNTIME_SNAPSHOT_WRITE_COUNT
     _FEED_RUNTIME_SNAPSHOT_WRITE_COUNT += 1
@@ -4355,6 +4385,9 @@ def _write_feed_runtime_snapshot(
         "reconnect_attempted": bool(restart_attempted) if restart_attempted is not None else bool(_RECOVERY_IN_PROGRESS or disconnected_code_value is not None or str(disconnected_reason_value or "").strip()),
         "resubscribe_attempted": bool(restart_attempted) if restart_attempted is not None else bool(_RECOVERY_IN_PROGRESS),
         "option_feed_verification_state": str(_option_feed_verification_overlay_payload().get("state") or "IDLE"),
+        "process_restart_required": bool(process_restart_required)
+        if process_restart_required is not None
+        else bool(normalized_blocked_reason),
     }
     payload.update(
         _runtime_transport_truth_fields(
@@ -4409,8 +4442,12 @@ def _write_feed_runtime_snapshot(
     else:
         payload.update(
             {
-                "process_restart_required": False,
-                "recovery_blocked": False,
+                "process_restart_required": bool(process_restart_required)
+                or str(effective_state_text).strip().upper() == "RECOVERY_BLOCKED"
+                or bool(str(restart_blocked_reason or "").strip()),
+                "recovery_blocked": bool(process_restart_required)
+                or str(effective_state_text).strip().upper() == "RECOVERY_BLOCKED"
+                or bool(str(restart_blocked_reason or "").strip()),
                 "restart_attempt_allowed": bool(restart_attempt_allowed) if restart_attempt_allowed is not None else (str(effective_state_text).strip().upper() not in {"STOPPED", "AUTH_BLOCKED", "IMPORT_MISSING"}),
                 "restart_attempted": bool(restart_attempted) if restart_attempted is not None else bool(
                     disconnected_code_value is not None or str(disconnected_reason_value or "").strip()
@@ -4810,6 +4847,7 @@ def _persist_runtime_snapshot_row(
         auto_reconnect_disabled=auto_reconnect_disabled,
         internal_retry_error=internal_retry_error,
         internal_retry_reason=internal_retry_reason,
+        process_restart_required=payload.get("process_restart_required"),
     )
 
 
@@ -7169,7 +7207,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
-    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION
+    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
         try:
@@ -7191,6 +7229,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _RUNTIME_STATE = "STARTING"
     _LAST_RUNTIME_ERROR = ""
     _INTENDED_TOKEN_COUNT = len(list(dict.fromkeys(instrument_tokens or [])))
+    _INTENDED_TOKENS = sorted({int(token) for token in (instrument_tokens or []) if int(token) > 0})
     _persist_runtime_snapshot_row(
         ws_connected=None,
         source="start_depth_ws:starting",
@@ -7620,6 +7659,21 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     client_mode_before=client_mode_before_final,
                     socket_generation=socket_generation,
                 )
+        # ATM rebalance is allowed to rotate the target option universe.  The
+        # builder publishes that target in _LAST_DESIRED_TOKENS; keep the intended
+        # registry aligned only after the real subscribe/unsubscribe operations and
+        # final mode application have succeeded.  A partial mutation deliberately
+        # leaves the old intended count in place, so readiness remains fail-closed.
+        intended_count_before = int(_INTENDED_TOKEN_COUNT)
+        intended_before = list(_INTENDED_TOKENS or [])
+        _INTENDED_TOKENS, intended_registry_updated = _reconcile_rebalance_intended_tokens(
+            reason=reason,
+            current_tokens=_INTENDED_TOKENS,
+            desired_tokens=_LAST_DESIRED_TOKENS,
+            actual_tokens=_LAST_TOKENS,
+            pending_tokens=bool(_PENDING_SUBSCRIBE_TOKENS or _PENDING_UNSUBSCRIBE_TOKENS or _PENDING_MODE_FULL_TOKENS),
+        )
+        _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
         _log_ws(
             "FEED_REBALANCE_APPLIED",
             {
@@ -7627,6 +7681,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 "subscribe_count": len(to_subscribe),
                 "unsubscribe_count": len(to_unsubscribe),
                 "total_tokens": len(_LAST_TOKENS),
+                "intended_count_before": intended_count_before,
+                "intended_count_after": int(_INTENDED_TOKEN_COUNT),
+                "intended_registry_updated": intended_registry_updated,
+                "intended_tokens": list(_INTENDED_TOKENS),
+                "intended_tokens_before": intended_before,
             },
         )
         _RUNTIME_STATE = "RUNNING"

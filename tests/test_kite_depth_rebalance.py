@@ -1,6 +1,30 @@
 import core.kite_depth_ws as ws
 
 
+def test_exact_registry_rejects_same_count_wrong_identity_and_partial_state():
+    assert ws._reconcile_rebalance_intended_tokens(
+        reason="atm_shift_steps=1.00",
+        current_tokens=[1, 2, 3],
+        desired_tokens=[1, 2, 3],
+        actual_tokens=[1, 2, 4],
+        pending_tokens=False,
+    ) == ([1, 2, 3], False)
+    assert ws._reconcile_rebalance_intended_tokens(
+        reason="atm_shift_steps=1.00",
+        current_tokens=[1, 2, 3],
+        desired_tokens=[1, 2, 3],
+        actual_tokens=[1, 2],
+        pending_tokens=False,
+    ) == ([1, 2, 3], False)
+    assert ws._reconcile_rebalance_intended_tokens(
+        reason="atm_shift_steps=1.00",
+        current_tokens=[1, 2, 3],
+        desired_tokens=[1, 2, 3],
+        actual_tokens=[1, 2, 3],
+        pending_tokens=False,
+    ) == ([1, 2, 3], True)
+
+
 def test_rebalance_triggers_on_second_build_when_atm_shifts():
     first = ws._compute_rebalance_decision(
         current_tokens={256265, 101, 102, 777001},
