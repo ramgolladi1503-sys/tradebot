@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+import re
 
 import yaml
 
@@ -51,11 +52,23 @@ class AutonomousLoopSupervisor:
         current = TaskState(task["status"])
         target_state = TaskState(target)
         assert_transition(current, target_state)
+        if target_state == TaskState.NO_STRUCTURAL_EDGE_FOUND:
+            exit_gates = {str(gate) for gate in task.get("exit_gates", [])}
+            if not any("NO_EDGE" in gate or "NO_STRUCTURAL_EDGE_FOUND" in gate for gate in exit_gates):
+                raise RegistryError("NO_STRUCTURAL_EDGE_FOUND is not a declared terminal outcome for this task")
         if target_state == TaskState.SEALED:
             self._assert_sealable(task)
         task["status"] = target_state.value
 
     def create_dynamic_task(self, task: dict) -> None:
+        """Add a governed T36+ task and make its declared blockers real dependencies.
+
+        A task's `blocks` field is not documentation-only. If T36 says it blocks T02,
+        T02 must depend on T36 before the registry update is accepted. The update is
+        built on a copy and committed to supervisor state only after complete graph
+        validation, so a malformed dynamic task cannot partially mutate orchestration.
+        """
+
         validate_dynamic_task(task)
         task_id = task["task_id"]
         if task_id in self.tasks:
@@ -63,7 +76,24 @@ class AutonomousLoopSupervisor:
         expected = self.next_dynamic_task_id()
         if task_id != expected:
             raise RegistryError(f"dynamic task ids are monotonic; expected {expected}, got {task_id}")
-        self.tasks[task_id] = deepcopy(task)
+
+        existing_ids = set(self.tasks)
+        unknown_dependencies = [dep for dep in task.get("depends_on", []) if dep not in existing_ids]
+        unknown_blockers = [blocked for blocked in task.get("blocks", []) if blocked not in existing_ids]
+        if unknown_dependencies:
+            raise RegistryError(f"dynamic task depends on unknown tasks: {unknown_dependencies}")
+        if unknown_blockers:
+            raise RegistryError(f"dynamic task blocks unknown tasks: {unknown_blockers}")
+
+        proposed = deepcopy(self.tasks)
+        proposed[task_id] = deepcopy(task)
+        for blocked_id in task.get("blocks", []):
+            deps = proposed[blocked_id].setdefault("depends_on", [])
+            if task_id not in deps:
+                deps.append(task_id)
+
+        validate_dependencies(proposed)
+        self.registry["tasks"] = proposed
         self._validate_registry()
 
     def next_dynamic_task_id(self) -> str:
@@ -98,15 +128,30 @@ class AutonomousLoopSupervisor:
             raise RegistryError("cannot seal with mandatory UNKNOWNs")
         if task.get("major_findings", 0) != 0 or task.get("critical_findings", 0) != 0:
             raise RegistryError("cannot seal with unresolved MAJOR/CRITICAL findings")
+
         evidence = task.get("evidence", {})
-        required = ["candidate_sha", "focused", "adversarial", "integration", "regression"]
+        candidate_sha = evidence.get("candidate_sha")
+        if not isinstance(candidate_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", candidate_sha):
+            raise RegistryError("cannot seal; candidate_sha must be an exact 40-hex Git SHA")
+
+        required = ["focused", "adversarial", "integration", "regression"]
         if task.get("independent_verification", {}).get("required", True):
             required.append("independent_verification")
         if task.get("ci", {}).get("required", True):
             required.append("ci")
+
         missing = [name for name in required if not evidence.get(name)]
         if missing:
             raise RegistryError(f"cannot seal; missing evidence: {missing}")
+
+        for name in required:
+            gate = evidence[name]
+            if not isinstance(gate, dict):
+                raise RegistryError(f"cannot seal; {name} evidence must be SHA-bound structured evidence")
+            if gate.get("status") != "PASS":
+                raise RegistryError(f"cannot seal; {name} evidence is not PASS")
+            if gate.get("candidate_sha") != candidate_sha:
+                raise RegistryError(f"cannot seal; {name} evidence is not bound to candidate_sha")
 
 
 def _task_number(task_id: str) -> int:
