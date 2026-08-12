@@ -5,6 +5,7 @@ on:
     paths:
       - "research/governance/autonomous_loop/**"
       - "tests/test_autonomous_loop_framework.py"
+      - "tests/test_autonomous_loop_release_policy.py"
       - ".github/workflows/autonomous-loop-framework.yml"
   workflow_dispatch:
 
@@ -41,7 +42,10 @@ jobs:
         run: python -m compileall -q research/governance/autonomous_loop
 
       - name: Run focused and adversarial framework tests
-        run: pytest -q -o addopts='' tests/test_autonomous_loop_framework.py
+        run: >-
+          pytest -q -o addopts=''
+          tests/test_autonomous_loop_framework.py
+          tests/test_autonomous_loop_release_policy.py
 
       - name: Enforce execution-isolation scope
         run: |
