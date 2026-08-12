@@ -1,0 +1,46 @@
+checkpoint_id: C01
+candidate_sha: 7d12a6fe21fb6d8f7d4a5e75cdeb4d39331f0717
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+covered_tasks: [T01, T02, T03]
+changed_files:
+  - research/governance/autonomous_loop/dependency_graph.py
+  - research/governance/autonomous_loop/supervisor.py
+  - research/governance/autonomous_loop/TASK_REGISTRY.yaml
+  - research/governance/autonomous_loop/evidence/T01_provisional_cf876ff230bd534a7a936a926f14f2da0e3f3cb2.yaml
+  - research/governance/autonomous_loop/evidence/T02_adversarial_36137bf9c2555b2c375310c0684ab01889b03ec8.yaml
+  - research/governance/autonomous_loop/evidence/T03_frozen_v1_36137bf9c2555b2c375310c0684ab01889b03ec8.yaml
+  - core/prospective_market_evidence.py
+  - core/frozen_global_context_v1.py
+  - tests/test_prospective_market_evidence.py
+  - tests/test_frozen_global_context_v1.py
+  - tests/test_autonomous_loop_framework.py
+  - docs/agent_reviews/autonomous_loop_build_eligibility_v1.md
+task_evidence_paths:
+  T01: research/governance/autonomous_loop/evidence/T01_provisional_cf876ff230bd534a7a936a926f14f2da0e3f3cb2.yaml
+  T02: research/governance/autonomous_loop/evidence/T02_adversarial_36137bf9c2555b2c375310c0684ab01889b03ec8.yaml
+  T03: research/governance/autonomous_loop/evidence/T03_frozen_v1_36137bf9c2555b2c375310c0684ab01889b03ec8.yaml
+tests:
+  focused: PASS - T01/T03 suites 39 passed
+  adversarial: PASS - T01 provenance/replay/tamper attacks and T03 mutation/refit attacks
+  integration: PASS - T01 OhlcBuffer path and T03 metadata binding
+  regression: PENDING - broad checkpoint regression intentionally not run before independent review
+  checkpoint_ci: PENDING - broad checkpoint CI intentionally not run before independent review
+independent_review:
+  status: INDEPENDENT_VERIFICATION_PENDING
+  reason: no genuinely separate reviewer context is available through the current execution surface
+  required_action: fresh independent C01 review before regression/CI and sealing
+findings:
+  critical: 0
+  major: 0
+  mandatory_unknowns: 1
+safety:
+  broker_write_authority: false
+  order_authority: false
+  paper_authorized: false
+  live_authorized: false
+protected_scope:
+  feed_modified: false
+  pr813_pr814_modified: false
+merge:
+  main_merged: false
+  human_authorization_required: true
