@@ -1,0 +1,6 @@
+current_program_sha: 8e5308e21404ee18a6f97aedecf41ec086bc601a
+prior_freshness_proof: research/governance/autonomous_loop/evidence/T13_T35_freshness_89880f511.yaml
+delta_since_prior_proof: test-fixture-only
+task_surfaces_unchanged: true
+freshness_status: PASS
+tasks: [T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, T24, T25, T26, T27, T28, T29, T30, T31, T32, T33, T34, T35]

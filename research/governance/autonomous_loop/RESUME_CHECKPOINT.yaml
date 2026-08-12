@@ -1,6 +1,6 @@
 schema_version: 1
 checkpoint_type: hard_limit_resume
-source_head: 89880f5112bbee38c7deff99765e87b95d39dd7a
+source_head: 8e5308e21404ee18a6f97aedecf41ec086bc601a
 last_concretely_completed_task: T35
 next_concrete_task: BASELINE_COMPARATIVE_REGRESSION
 integrity_repair: ALF-005

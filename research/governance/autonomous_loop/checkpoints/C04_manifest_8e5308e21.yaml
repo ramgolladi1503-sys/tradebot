@@ -1,0 +1,10 @@
+checkpoint_id: C04
+checkpoint_candidate_sha: 8e5308e21404ee18a6f97aedecf41ec086bc601a
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+covered_tasks: [T21, T22, T23, T24, T25, T26]
+task_states: {T21: IMPLEMENTATION_VALID, T22: IMPLEMENTATION_VALID, T23: IMPLEMENTATION_VALID, T24: IMPLEMENTATION_VALID, T25: IMPLEMENTATION_VALID, T26: IMPLEMENTATION_VALID}
+freshness_proof: research/governance/autonomous_loop/evidence/T13_T35_freshness_8e5308e21.yaml
+regression_status: BASELINE_COMPARATIVE_REGRESSION_PENDING
+independent_verification: PENDING
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+protected_scope: {feed: untouched, PR813_PR814: untouched, main_merged: false}

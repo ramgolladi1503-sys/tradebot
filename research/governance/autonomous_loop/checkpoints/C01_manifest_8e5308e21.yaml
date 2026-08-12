@@ -1,0 +1,9 @@
+checkpoint_id: C01
+checkpoint_candidate_sha: 8e5308e21404ee18a6f97aedecf41ec086bc601a
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+covered_tasks: [T01, T02, T03]
+task_states: {T01: INTEGRATION_VALID, T02: ADVERSARIAL_VALID, T03: INTEGRATION_VALID}
+regression_status: BASELINE_COMPARATIVE_REGRESSION_PENDING
+independent_verification: PENDING
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+protected_scope: {feed: untouched, PR813_PR814: untouched, main_merged: false}
