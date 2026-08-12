@@ -5,7 +5,8 @@ from core import runtime_health
 from core.runtime_truth_integrity import truth_hash_from_mapping
 
 
-def test_runtime_health_shape(monkeypatch):
+def test_runtime_health_shape(monkeypatch, tmp_path):
+    monkeypatch.setattr(runtime_health, "logs_dir", lambda: tmp_path)
     monkeypatch.setattr(
         runtime_health,
         "get_freshness_status",
@@ -107,6 +108,7 @@ def test_runtime_health_keeps_missing_warmup_proof_fail_closed(monkeypatch):
 
 def test_runtime_health_emits_truth_integrity_alert_on_snapshot_hash_mismatch(monkeypatch, tmp_path):
     monkeypatch.setattr(runtime_health, "runtime_dir", lambda: tmp_path)
+    monkeypatch.setattr(runtime_health, "logs_dir", lambda: tmp_path)
     captured_events = []
     monkeypatch.setattr(
         runtime_health,

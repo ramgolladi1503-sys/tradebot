@@ -51,7 +51,10 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
     ts_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
     freshness = dict(get_freshness_status(force=False) or {})
     feed_debug = dict(get_feed_debug(now_epoch=ts_epoch) or {})
-    feed_runtime_path = runtime_dir() / "feed_runtime_latest.json"
+    # The feed writer's authoritative latest artifact lives under the shared
+    # runtime logs root. Reading runtime_dir()/feed_runtime_latest.json would
+    # select a different, usually absent, path and recreate the dual-path race.
+    feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
     feed_runtime_payload = _safe_json_payload(feed_runtime_path)
 
     market_open = bool(freshness.get("market_open", is_market_open_ist()))

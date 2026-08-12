@@ -40,6 +40,7 @@ def test_runtime_health_prefers_persisted_snapshot_hash_over_stale_debug(monkeyp
     stale_debug["snapshot_hash"] = "older-in-memory-hash"
     monkeypatch.setattr(runtime_health, "get_feed_debug", lambda now_epoch=None: stale_debug)
     monkeypatch.setattr(runtime_health, "runtime_dir", lambda: tmp_path)
+    monkeypatch.setattr(runtime_health, "logs_dir", lambda: tmp_path)
     monkeypatch.setattr(
         runtime_health,
         "get_freshness_status",
@@ -55,6 +56,7 @@ def test_runtime_health_prefers_persisted_snapshot_hash_over_stale_debug(monkeyp
 
 def test_runtime_health_does_not_verify_in_memory_hash_against_empty_persisted_snapshot(monkeypatch, tmp_path):
     monkeypatch.setattr(runtime_health, "runtime_dir", lambda: tmp_path)
+    monkeypatch.setattr(runtime_health, "logs_dir", lambda: tmp_path)
     monkeypatch.setattr(
         runtime_health,
         "get_freshness_status",
@@ -82,6 +84,7 @@ def test_runtime_health_does_not_verify_in_memory_hash_against_empty_persisted_s
 
 def test_runtime_health_still_fails_closed_for_persisted_missing_hash(monkeypatch, tmp_path):
     monkeypatch.setattr(runtime_health, "runtime_dir", lambda: tmp_path)
+    monkeypatch.setattr(runtime_health, "logs_dir", lambda: tmp_path)
     monkeypatch.setattr(
         runtime_health,
         "get_freshness_status",
