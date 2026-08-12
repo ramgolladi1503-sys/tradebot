@@ -4928,6 +4928,15 @@ class Orchestrator:
                 live_market_data = fetch_live_market_data()
                 feature_timing["fetch_live_market_data_ms"] = _perf_ms(t0)
 
+                # Readiness owns underlying/index indicator truth.  The cycle
+                # snapshot below is intentionally narrowed to option rows for
+                # candidate evaluation, so using it here loses OHLC/indicator
+                # inputs and creates a false missing-warmup verdict.
+                readiness_market_data = [
+                    row for row in list(live_market_data or [])
+                    if isinstance(row, dict) and row.get("ohlc_bars_count") is not None
+                ] or live_market_data
+
                 t0 = time.perf_counter()
                 market_data_list = self._build_cycle_market_data(live_market_data)
                 feature_timing["build_cycle_market_data_ms"] = _perf_ms(t0)
@@ -4935,7 +4944,7 @@ class Orchestrator:
                 t_gap = time.perf_counter()
                 try:
                     indicator_report = build_live_indicator_readiness_report(
-                        [row for row in list(market_data_list or []) if isinstance(row, dict)],
+                        [row for row in list(readiness_market_data or []) if isinstance(row, dict)],
                         now_epoch=float(time.time()),
                         warmup_min_bars=int(getattr(cfg, "WARMUP_MIN_BARS", 50)),
                         source="orchestrator_live_indicator_readiness_v2",
@@ -7472,7 +7481,7 @@ class Orchestrator:
                             # Refresh indicator readiness artifact from current cycle market snapshots so
                             # it cannot remain stale when the orchestrator is actively running.
                             indicator_report = build_live_indicator_readiness_report(
-                                [row for row in list(market_data_list or []) if isinstance(row, dict)],
+                                [row for row in list(readiness_market_data or []) if isinstance(row, dict)],
                                 now_epoch=float(time.time()),
                                 warmup_min_bars=int(getattr(cfg, "WARMUP_MIN_BARS", 50)),
                                 source="orchestrator_live_indicator_readiness_v2",
