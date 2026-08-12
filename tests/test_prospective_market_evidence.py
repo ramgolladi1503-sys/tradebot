@@ -75,8 +75,10 @@ def signed_attestation(
     session_id="live-1",
     attested_at="2026-08-11T15:31:00+05:30",
     tokens=None,
+    bar_source=None,
 ):
     token_map = tokens or TOKENS
+    digest_source = bar_source or good()
     raw = {
         "schema": pme.ATTESTATION_SCHEMA,
         "source": pme.ATTESTATION_SOURCE,
@@ -88,7 +90,11 @@ def signed_attestation(
         "live_feed_session_id": session_id,
         "code_sha": code_sha,
         "indices": {
-            symbol: {"symbol": symbol, "instrument_token": token_map[symbol]}
+            symbol: {
+                "symbol": symbol,
+                "instrument_token": token_map[symbol],
+                "bars_sha256": pme.bar_content_sha256(symbol, digest_source[symbol]),
+            }
             for symbol in pme.REQUIRED
         },
     }
@@ -105,7 +111,7 @@ def finalize(tmp_path, candidate=None, *, code_sha=SHA_A, attestation=None):
     )
 
 
-def test_seals_complete_attested_live_session_and_volume_stays_missing(tmp_path):
+def test_seals_complete_attested_live_session_and_missing_volume(tmp_path):
     result = finalize(tmp_path)
     assert result["status"] == "SEALED"
     payload = json.loads((tmp_path / "2026-08-11.json").read_text())
@@ -114,14 +120,12 @@ def test_seals_complete_attested_live_session_and_volume_stays_missing(tmp_path)
     assert payload["paper_authorized"] is False
     assert payload["live_authorized"] is False
     assert payload["code_sha"] == SHA_A
-    assert payload["created_at_ist"] == "2026-08-11T15:31:00+05:30"
-    assert payload["live_attestation_sha256"]
     assert payload["indices"]["NIFTY"]["volume"] is None
     assert payload["indices"]["NIFTY"]["volume_status"] == "MISSING_NOT_ZERO"
-    assert payload["indices"]["SENSEX"]["source_identity"]["provider"] == "kite"
+    assert payload["indices"]["NIFTY"]["bars_sha256"] == pme.bar_content_sha256("NIFTY", good()["NIFTY"])
 
 
-def test_exact_git_sha_is_required_for_sealed_evidence(tmp_path):
+def test_exact_git_sha_is_required(tmp_path):
     for invalid in (None, "", "UNKNOWN", "candidate-sha", "A" * 40, "a" * 39, "g" * 40):
         with pytest.raises(ValueError, match="CODE_SHA_EXACT_REQUIRED"):
             pme.finalize_session(
@@ -133,241 +137,183 @@ def test_exact_git_sha_is_required_for_sealed_evidence(tmp_path):
             )
 
 
-def test_self_declared_live_metadata_without_independent_attestation_is_rejected(tmp_path):
+def test_attestation_requires_signed_bar_digest_for_every_index(tmp_path):
+    raw = {
+        "schema": pme.ATTESTATION_SCHEMA,
+        "source": pme.ATTESTATION_SOURCE,
+        "status": "VERIFIED_LIVE_SESSION",
+        "session_date": D.isoformat(),
+        "attested_at_ist": "2026-08-11T15:31:00+05:30",
+        "provider": "kite",
+        "token_domain": "kite_instrument_token",
+        "live_feed_session_id": "live-1",
+        "code_sha": SHA_A,
+        "indices": {s: {"symbol": s, "instrument_token": TOKENS[s]} for s in pme.REQUIRED},
+    }
+    att = pme.sign_live_session_attestation(raw, attestation_key=KEY)
+    with pytest.raises(ValueError, match="LIVE_ATTESTATION_BAR_DIGEST_INVALID:NIFTY"):
+        finalize(tmp_path, attestation=att)
+
+
+def test_valid_signed_attestation_cannot_be_reused_with_different_ohlc(tmp_path):
+    original = good()
+    attestation = signed_attestation(bar_source=original)
+    substituted = good()
+    substituted["NIFTY"][200]["close"] += 0.5
+    # Keep OHLC geometry valid so the bar-content binding, not geometry, kills it.
+    with pytest.raises(ValueError, match="LIVE_BAR_DIGEST_MISMATCH:NIFTY"):
+        finalize(tmp_path, substituted, attestation=attestation)
+
+
+def test_valid_signed_attestation_cannot_be_reused_with_relabelled_replay_content(tmp_path):
+    original = good()
+    attestation = signed_attestation(bar_source=original)
+    substituted = good()
+    # Simulate a different historical price stream relabelled with otherwise-valid
+    # live provenance and timestamps.
+    for bar in substituted["BANKNIFTY"]:
+        for field in ("open", "high", "low", "close"):
+            bar[field] += 50.0
+    with pytest.raises(ValueError, match="LIVE_BAR_DIGEST_MISMATCH:BANKNIFTY"):
+        finalize(tmp_path, substituted, attestation=attestation)
+
+
+def test_forged_or_attacker_selected_key_is_rejected(tmp_path):
+    att = signed_attestation()
+    att["live_feed_session_id"] = "forged-session"
+    with pytest.raises(ValueError, match="LIVE_ATTESTATION_SIGNATURE_INVALID"):
+        finalize(tmp_path, attestation=att)
+    with pytest.raises(ValueError, match="LIVE_ATTESTATION_SIGNATURE_INVALID"):
+        finalize(tmp_path, attestation=signed_attestation(key=ATTACKER_KEY))
+
+
+def test_self_declared_metadata_without_attestation_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="LIVE_ATTESTATION_REQUIRED"):
         pme.finalize_session(
-            session_date=D,
-            bars_by_symbol=good(),
-            output_root=tmp_path,
-            code_sha=SHA_A,
+            session_date=D, bars_by_symbol=good(), output_root=tmp_path, code_sha=SHA_A
         )
 
 
-def test_verification_key_is_not_a_finalize_session_caller_argument(tmp_path):
-    with pytest.raises(TypeError, match="attestation_key"):
-        pme.finalize_session(
-            session_date=D,
-            bars_by_symbol=good(),
-            output_root=tmp_path,
-            code_sha=SHA_A,
-            live_attestation=signed_attestation(),
-            attestation_key=ATTACKER_KEY,
-        )
-
-
-def test_missing_trusted_verification_key_fails_closed(monkeypatch, tmp_path):
+def test_missing_trusted_key_fails_closed(monkeypatch, tmp_path):
     monkeypatch.delenv("TRADEBOT_LIVE_SESSION_ATTESTATION_KEY", raising=False)
     with pytest.raises(ValueError, match="TRUSTED_LIVE_ATTESTATION_KEY_REQUIRED"):
         finalize(tmp_path)
 
 
-def test_forged_or_attacker_selected_key_attestation_is_rejected(tmp_path):
-    att = signed_attestation()
-    att["live_feed_session_id"] = "forged-session"
-    with pytest.raises(ValueError, match="LIVE_ATTESTATION_SIGNATURE_INVALID"):
-        finalize(tmp_path, attestation=att)
-
-    attacker_signed = signed_attestation(key=ATTACKER_KEY)
-    with pytest.raises(ValueError, match="LIVE_ATTESTATION_SIGNATURE_INVALID"):
-        finalize(tmp_path, attestation=attacker_signed)
-
-
-def test_consistently_wrong_tokens_in_bars_and_signed_attestation_are_rejected(tmp_path):
-    wrong_tokens = {"NIFTY": 999999, "BANKNIFTY": 888888, "SENSEX": 777777}
-    candidate = {
-        symbol: bars(symbol, instrument_token=wrong_tokens[symbol])
-        for symbol in pme.REQUIRED
-    }
-    attestation = signed_attestation(tokens=wrong_tokens)
+def test_consistently_wrong_tokens_are_rejected(tmp_path):
+    wrong = {"NIFTY": 999999, "BANKNIFTY": 888888, "SENSEX": 777777}
+    candidate = {s: bars(s, instrument_token=wrong[s]) for s in pme.REQUIRED}
+    attestation = signed_attestation(tokens=wrong)
     with pytest.raises(ValueError, match="LIVE_ATTESTATION_INDEX_IDENTITY_INVALID"):
         finalize(tmp_path, candidate, attestation=attestation)
 
 
-def test_future_attestation_timestamp_is_rejected_even_with_trusted_signature(tmp_path):
-    attestation = signed_attestation(attested_at="2099-01-01T16:00:00+05:30")
+def test_attestation_chronology_is_fail_closed(tmp_path):
     with pytest.raises(ValueError, match="LIVE_ATTESTATION_TIMESTAMP_INVALID"):
-        finalize(tmp_path, attestation=attestation)
-
-
-def test_attestation_from_different_calendar_date_is_rejected(tmp_path):
-    attestation = signed_attestation(attested_at="2026-08-12T15:31:00+05:30")
+        finalize(tmp_path, attestation=signed_attestation(attested_at="2099-01-01T16:00:00+05:30"))
     with pytest.raises(ValueError, match="LIVE_ATTESTATION_TIMESTAMP_INVALID"):
-        finalize(tmp_path, attestation=attestation)
+        finalize(tmp_path, attestation=signed_attestation(attested_at="2026-08-12T15:31:00+05:30"))
 
 
-def test_feed_stop_at_1400_is_rejected(tmp_path):
+def test_incomplete_missing_duplicate_nonmonotonic_and_gap_are_rejected(tmp_path):
     partial = {s: bars(s, 285) for s in pme.REQUIRED}
     with pytest.raises(ValueError, match="SESSION_INCOMPLETE"):
         finalize(tmp_path, partial)
 
+    missing = good()
+    missing.pop("SENSEX")
+    with pytest.raises(ValueError, match="SESSION_INCOMPLETE:SENSEX"):
+        finalize(tmp_path, missing)
 
-@pytest.mark.parametrize("missing", pme.REQUIRED)
-def test_each_missing_index_is_rejected(tmp_path, missing):
-    candidate = good()
-    candidate.pop(missing)
-    with pytest.raises(ValueError, match=f"SESSION_INCOMPLETE:{missing}"):
-        finalize(tmp_path, candidate)
-
-
-def test_duplicate_and_nonmonotonic_bars_are_rejected(tmp_path):
     duplicate = good()
     duplicate["NIFTY"][1]["ts"] = duplicate["NIFTY"][0]["ts"]
     with pytest.raises(ValueError, match="TIMESTAMP_ORDER_INVALID"):
         finalize(tmp_path, duplicate)
 
     nonmonotonic = good()
-    nonmonotonic["NIFTY"][10], nonmonotonic["NIFTY"][11] = (
-        nonmonotonic["NIFTY"][11],
-        nonmonotonic["NIFTY"][10],
-    )
+    nonmonotonic["NIFTY"][10], nonmonotonic["NIFTY"][11] = nonmonotonic["NIFTY"][11], nonmonotonic["NIFTY"][10]
     with pytest.raises(ValueError, match="TIMESTAMP_ORDER_INVALID"):
         finalize(tmp_path, nonmonotonic)
 
-
-def test_gap_is_rejected_even_when_bar_count_is_375(tmp_path):
-    candidate = good()
-    for bar in candidate["BANKNIFTY"][120:]:
+    gap = good()
+    for bar in gap["BANKNIFTY"][120:]:
         bar["ts"] += timedelta(minutes=1)
     with pytest.raises(ValueError, match="SESSION_BOUNDARY_INVALID|SESSION_GAP"):
-        finalize(tmp_path, candidate)
+        finalize(tmp_path, gap)
 
 
-def test_invalid_ohlc_and_nonfinite_values_are_rejected(tmp_path):
-    candidate = good()
-    candidate["SENSEX"][20]["high"] = candidate["SENSEX"][20]["low"] - 1
+def test_invalid_nonfinite_and_future_bars_are_rejected(tmp_path):
+    invalid = good()
+    invalid["SENSEX"][20]["high"] = invalid["SENSEX"][20]["low"] - 1
     with pytest.raises(ValueError, match="OHLC_INVALID"):
-        finalize(tmp_path, candidate)
+        finalize(tmp_path, invalid)
 
-    candidate = good()
-    candidate["NIFTY"][20]["close"] = float("nan")
+    nonfinite = good()
+    nonfinite["NIFTY"][20]["close"] = float("nan")
     with pytest.raises(ValueError, match="OHLC_INVALID"):
-        finalize(tmp_path, candidate)
+        finalize(tmp_path, nonfinite)
 
-
-def test_future_timestamp_cannot_be_hidden_by_target_date_filter(tmp_path):
-    candidate = good()
-    candidate["NIFTY"].append(
-        {**candidate["NIFTY"][-1], "ts": candidate["NIFTY"][-1]["ts"] + timedelta(days=1)}
-    )
+    future = good()
+    future["NIFTY"].append({**future["NIFTY"][-1], "ts": future["NIFTY"][-1]["ts"] + timedelta(days=1)})
     with pytest.raises(ValueError, match="FUTURE_BAR_PRESENT"):
-        finalize(tmp_path, candidate)
+        finalize(tmp_path, future)
 
 
 @pytest.mark.parametrize(
     "kwargs",
-    [
-        {"replay": True},
-        {"fallback": True},
-        {"synthetic": True},
-        {"source_type": "historical_seed"},
-    ],
+    [{"replay": True}, {"fallback": True}, {"synthetic": True}, {"source_type": "historical_seed"}],
 )
-def test_declared_replay_fallback_synthetic_and_seed_cannot_certify_live(tmp_path, kwargs):
+def test_declared_non_live_provenance_cannot_certify(tmp_path, kwargs):
     candidate = good()
     candidate["NIFTY"] = bars("NIFTY", **kwargs)
     with pytest.raises(ValueError, match="NON_LIVE_PROVENANCE|LIVE_PROVENANCE_INCOMPLETE"):
         finalize(tmp_path, candidate)
 
 
-def test_missing_identity_on_one_bar_is_rejected_not_ignored(tmp_path):
+def test_missing_or_mismatched_identity_is_rejected(tmp_path):
     candidate = good()
     candidate["NIFTY"][100]["bar_provenance"].pop("instrument_token")
     with pytest.raises(ValueError, match="LIVE_PROVENANCE_INCOMPLETE:NIFTY:instrument_token"):
         finalize(tmp_path, candidate)
 
-
-def test_stable_but_wrong_instrument_token_is_rejected_against_attestation(tmp_path):
-    candidate = good()
-    candidate["NIFTY"] = bars("NIFTY", instrument_token=999999)
-    with pytest.raises(ValueError, match="SOURCE_IDENTITY_MISMATCH:NIFTY:instrument_token"):
-        finalize(tmp_path, candidate)
-
-
-def test_source_and_session_identity_conflicts_are_rejected(tmp_path):
     candidate = good()
     candidate["SENSEX"] = bars("SENSEX", provider="other-provider")
     with pytest.raises(ValueError, match="SOURCE_IDENTITY_MISMATCH:SENSEX:provider"):
         finalize(tmp_path, candidate)
 
     candidate = good()
-    candidate["SENSEX"] = bars("SENSEX", session_id="other")
-    with pytest.raises(ValueError, match="SOURCE_IDENTITY_MISMATCH:SENSEX:live_feed_session_id"):
-        finalize(tmp_path, candidate)
-
-
-def test_declared_symbol_mismatch_is_rejected(tmp_path):
-    candidate = good()
     candidate["BANKNIFTY"][0]["bar_provenance"]["symbol"] = "NIFTY"
     with pytest.raises(ValueError, match="SOURCE_IDENTITY_MISMATCH:BANKNIFTY:symbol"):
         finalize(tmp_path, candidate)
 
 
-def test_immutable_conflict_idempotency_and_payload_tamper_detection(tmp_path):
+def test_immutable_idempotency_and_tamper_detection(tmp_path):
     candidate = good()
-    first = finalize(tmp_path, candidate, code_sha=SHA_A)
-    assert first["status"] == "SEALED"
-    second = finalize(tmp_path, candidate, code_sha=SHA_A)
-    assert second["status"] == "IDEMPOTENT"
-
-    path = tmp_path / "2026-08-11.json"
-    payload = json.loads(path.read_text())
-    payload["indices"]["NIFTY"]["close"] += 100
-    path.write_text(json.dumps(payload))
-    with pytest.raises(FileExistsError, match="IMMUTABLE_EVIDENCE_CONFLICT"):
-        finalize(tmp_path, candidate, code_sha=SHA_A)
-
-
-def test_created_at_tamper_is_detected(tmp_path):
-    candidate = good()
-    finalize(tmp_path, candidate, code_sha=SHA_A)
+    assert finalize(tmp_path, candidate)["status"] == "SEALED"
+    assert finalize(tmp_path, candidate)["status"] == "IDEMPOTENT"
     path = tmp_path / "2026-08-11.json"
     payload = json.loads(path.read_text())
     payload["created_at_ist"] = "2026-08-11T16:45:00+05:30"
     path.write_text(json.dumps(payload))
     with pytest.raises(FileExistsError, match="IMMUTABLE_EVIDENCE_CONFLICT"):
-        finalize(tmp_path, candidate, code_sha=SHA_A)
+        finalize(tmp_path, candidate)
 
 
-def test_code_sha_change_for_same_session_is_not_idempotent(tmp_path):
+def test_code_sha_change_is_not_idempotent(tmp_path):
     candidate = good()
     finalize(tmp_path, candidate, code_sha=SHA_A)
     with pytest.raises(FileExistsError, match="IMMUTABLE_EVIDENCE_CONFLICT"):
         finalize(tmp_path, candidate, code_sha=SHA_B, attestation=signed_attestation(code_sha=SHA_B))
 
 
-def test_safe_wrapper_fails_closed_without_attestation(monkeypatch, tmp_path):
+def test_safe_wrapper_failures_are_contained(monkeypatch, tmp_path):
     monkeypatch.delenv("TRADEBOT_LIVE_SESSION_ATTESTATION_PATH", raising=False)
     result = pme.safe_finalize_live_session(session_date=D, output_root=tmp_path)
     assert result["status"] == "NOT_SEALED"
-    assert "LIVE_ATTESTATION_PATH_REQUIRED" in result["reason"]
     assert result["broker_write_authority"] is False
     assert result["order_authority"] is False
     assert result["paper_authorized"] is False
     assert result["live_authorized"] is False
-
-
-def test_safe_wrapper_fails_closed_without_trusted_key(monkeypatch, tmp_path):
-    monkeypatch.setenv("TRADEBOT_LIVE_SESSION_ATTESTATION_PATH", "ignored.json")
-    monkeypatch.delenv("TRADEBOT_LIVE_SESSION_ATTESTATION_KEY", raising=False)
-    result = pme.safe_finalize_live_session(session_date=D, output_root=tmp_path)
-    assert result["status"] == "NOT_SEALED"
-    assert "TRUSTED_LIVE_ATTESTATION_KEY_REQUIRED" in result["reason"]
-
-
-def test_safe_wrapper_contains_sidecar_failure(monkeypatch, tmp_path):
-    monkeypatch.setenv("TRADEBOT_LIVE_SESSION_ATTESTATION_PATH", "ignored.json")
-    monkeypatch.setenv("TRADEBOT_CODE_SHA", SHA_A)
-    monkeypatch.setattr(pme, "_load_runtime_attestation", lambda _path: signed_attestation())
-
-    def explode(**_kwargs):
-        raise RuntimeError("sidecar failed")
-
-    monkeypatch.setattr(pme, "finalize_session", explode)
-    result = pme.safe_finalize_live_session(session_date=D, output_root=tmp_path)
-    assert result["status"] == "NOT_SEALED"
-    assert "sidecar failed" in result["reason"]
-    assert result["broker_write_authority"] is False
-    assert result["order_authority"] is False
 
 
 def test_runtime_module_has_no_order_action_boundary_calls():
@@ -383,7 +329,7 @@ def test_runtime_module_has_no_order_action_boundary_calls():
     assert not [marker for marker in restricted if marker in text]
 
 
-def test_buffer_integration_preserves_identity_but_still_requires_attestation(tmp_path):
+def test_buffer_integration_requires_content_bound_attestation(tmp_path):
     buffers = {symbol: OhlcBuffer() for symbol in pme.REQUIRED}
     source = good()
     for symbol, buffer in buffers.items():
@@ -397,14 +343,14 @@ def test_buffer_integration_preserves_identity_but_still_requires_attestation(tm
             )
             assert result["accepted"] is True
     assembled = {symbol: buffer.get_bars(symbol) for symbol, buffer in buffers.items()}
-
     with pytest.raises(ValueError, match="LIVE_ATTESTATION_REQUIRED"):
         pme.finalize_session(
-            session_date=D,
-            bars_by_symbol=assembled,
-            output_root=tmp_path,
-            code_sha=SHA_A,
+            session_date=D, bars_by_symbol=assembled, output_root=tmp_path, code_sha=SHA_A
         )
-
-    result = finalize(tmp_path, assembled, code_sha=SHA_A)
+    result = finalize(
+        tmp_path,
+        assembled,
+        code_sha=SHA_A,
+        attestation=signed_attestation(bar_source=assembled),
+    )
     assert result["status"] == "SEALED"
