@@ -25,14 +25,14 @@ def test_program_registry_preserves_t01_provisional_build_state():
     supervisor = AutonomousLoopSupervisor(load_registry())
     assert supervisor.tasks["T01"]["status"] == "INTEGRATION_VALID"
     assert supervisor.next_eligible_task() is None
-    assert supervisor.next_build_eligible_task() == "T02"
+    assert supervisor.next_build_eligible_task() == "T12"
     assert len(supervisor.tasks) == 35
 
 
 def test_build_eligibility_releases_downstream_after_integration_valid_only():
     registry = load_registry()
     registry["tasks"]["T01"]["status"] = "INTEGRATION_VALID"
-    assert build_eligible_task_ids(registry["tasks"]) == ["T02"]
+    assert build_eligible_task_ids(registry["tasks"]) == ["T12"]
     assert eligible_task_ids(registry["tasks"]) == []
 
 
@@ -40,7 +40,7 @@ def test_build_eligibility_never_treats_provisional_state_as_certification():
     registry = load_registry()
     registry["tasks"]["T01"]["status"] = "IMPLEMENTATION_VALID"
     supervisor = AutonomousLoopSupervisor(registry)
-    assert supervisor.next_build_eligible_task() == "T02"
+    assert supervisor.next_build_eligible_task() == "T12"
     assert supervisor.next_eligible_task() is None
 
 
@@ -49,6 +49,39 @@ def test_build_eligibility_remains_fail_closed_for_blocked_or_generic_invalidate
     for state in ("BLOCKED", "INVALIDATED"):
         registry["tasks"]["T01"]["status"] = state
         assert "T02" not in build_eligible_task_ids(registry["tasks"])
+
+
+def test_transition_rejects_direct_downstream_implementation_inflation():
+    registry = load_registry()
+    supervisor = AutonomousLoopSupervisor(registry)
+    with pytest.raises((RegistryError, ValueError)):
+        supervisor.transition("T13", TaskState.IMPLEMENTATION_VALID)
+
+
+def test_transitive_downstream_transition_cannot_bypass_pending_t12():
+    registry = load_registry()
+    supervisor = AutonomousLoopSupervisor(registry)
+    supervisor.transition("T35", TaskState.SPEC_FROZEN)
+    supervisor.transition("T35", TaskState.IMPLEMENTING)
+    with pytest.raises(RegistryError):
+        supervisor.transition("T35", TaskState.IMPLEMENTATION_VALID)
+
+
+def test_prepared_artifacts_do_not_change_authoritative_state():
+    supervisor = AutonomousLoopSupervisor(load_registry())
+    supervisor.record_prepared_artifacts("T35", prepared_candidate_sha="a" * 40, artifacts=["research/mros_certification/research_v2.py"])
+    assert supervisor.tasks["T35"]["status"] == "PENDING"
+    assert supervisor.tasks["T35"]["evidence"]["implementation_artifacts_ready"]
+
+
+def test_ordered_replay_allows_downstream_only_after_prerequisite_gate():
+    registry = load_registry()
+    registry["tasks"]["T12"]["status"] = "IMPLEMENTATION_VALID"
+    supervisor = AutonomousLoopSupervisor(registry)
+    supervisor.transition("T13", TaskState.SPEC_FROZEN)
+    supervisor.transition("T13", TaskState.IMPLEMENTING)
+    supervisor.transition("T13", TaskState.IMPLEMENTATION_VALID)
+    assert supervisor.tasks["T13"]["status"] == "IMPLEMENTATION_VALID"
 
 
 def test_safety_boundary_is_fail_closed():
@@ -100,6 +133,7 @@ def test_declared_no_edge_terminal_releases_research_dependent():
     for task_id in ["T01", "T02", "T03", "T04", "T05"]:
         registry["tasks"][task_id]["status"] = "SEALED"
     registry["tasks"]["T06"]["status"] = "NO_STRUCTURAL_EDGE_FOUND"
+    registry["tasks"]["T07"]["status"] = "PENDING"
     assert "T07" in eligible_task_ids(registry["tasks"])
 
 

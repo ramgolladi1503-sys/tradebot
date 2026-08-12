@@ -7,7 +7,7 @@ import re
 
 import yaml
 
-from .dependency_graph import build_eligible_task_ids, eligible_task_ids, validate_dependencies
+from .dependency_graph import build_dependencies_satisfied, build_eligible_task_ids, eligible_task_ids, validate_dependencies
 from .evidence_contract import SafetyBoundary, validate_dynamic_task, validate_task_shape
 from .task_state_machine import TaskState, assert_transition
 
@@ -60,6 +60,8 @@ class AutonomousLoopSupervisor:
         current = TaskState(task["status"])
         target_state = TaskState(target)
         assert_transition(current, target_state)
+        if target_state == TaskState.IMPLEMENTATION_VALID and not build_dependencies_satisfied(task, self.tasks):
+            raise RegistryError("cannot mark implementation valid before build-eligible prerequisites")
         if target_state == TaskState.NO_STRUCTURAL_EDGE_FOUND:
             exit_gates = {str(gate) for gate in task.get("exit_gates", [])}
             if not any("NO_EDGE" in gate or "NO_STRUCTURAL_EDGE_FOUND" in gate for gate in exit_gates):
@@ -67,6 +69,14 @@ class AutonomousLoopSupervisor:
         if target_state == TaskState.SEALED:
             self._assert_sealable(task)
         task["status"] = target_state.value
+
+    def record_prepared_artifacts(self, task_id: str, *, prepared_candidate_sha: str, artifacts: list[str]) -> None:
+        """Record downstream readiness without changing the authoritative task state."""
+        task = self._task(task_id)
+        if not re.fullmatch(r"[0-9a-f]{40}", prepared_candidate_sha):
+            raise RegistryError("prepared_candidate_sha must be an exact 40-hex Git SHA")
+        task.setdefault("evidence", {})["prepared_candidate_sha"] = prepared_candidate_sha
+        task["evidence"]["implementation_artifacts_ready"] = list(artifacts)
 
     def create_dynamic_task(self, task: dict) -> None:
         """Add a governed T36+ task and make its declared blockers real dependencies.
