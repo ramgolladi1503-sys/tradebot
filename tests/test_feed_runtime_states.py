@@ -491,6 +491,8 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
             "truth_integrity_alert_count", "truth_integrity_status",
         ),
     )
+    assert payload["feed_ok"] is False
+    assert payload["execution_feed_ready"] is True
     assert (logs_path / "feed_runtime_latest.json").exists()
 
 

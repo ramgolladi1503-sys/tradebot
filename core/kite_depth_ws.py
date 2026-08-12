@@ -4367,6 +4367,7 @@ def _write_feed_runtime_snapshot(
             reconnect_blocked_reason=normalized_blocked_reason,
         )
     )
+    payload["feed_ok"] = derive_feed_ok(payload)
     stage_started = _mark_stage("payload_assembly_ms", stage_started)
     if (
         internal_retry_disabled is not None

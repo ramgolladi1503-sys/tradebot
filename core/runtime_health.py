@@ -91,6 +91,11 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         "missing_option_tokens_count": feed_debug.get("missing_option_tokens_count"),
         "subscribed_option_tokens_count": feed_debug.get("subscribed_option_tokens_count"),
         "option_ticks_verified": feed_debug.get("option_ticks_verified"),
+        "feed_ok": _first_non_none(feed_runtime_payload.get("feed_ok"), feed_debug.get("feed_ok")),
+        "execution_feed_ready": _first_non_none(
+            feed_runtime_payload.get("execution_feed_ready"),
+            feed_debug.get("execution_feed_ready"),
+        ),
         "runtime_state": feed_debug.get("feed_runtime_state"),
         "last_error": feed_debug.get("feed_runtime_last_error"),
         "last_tick_age_sec": feed_debug.get("last_tick_age_sec"),
