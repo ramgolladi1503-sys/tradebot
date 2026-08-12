@@ -9,6 +9,18 @@ class DependencyError(ValueError):
     pass
 
 
+# Broad CI is intentionally decoupled from build-order progression.  A downstream
+# task may be implemented provisionally only after every dependency has reached
+# REGRESSION_VALID or stronger local validation.  This does not satisfy the
+# stricter dependency rule used for sealing.
+_BUILD_READY_STATES = {
+    TaskState.REGRESSION_VALID,
+    TaskState.INDEPENDENTLY_VERIFIED,
+    TaskState.CI_GREEN,
+    TaskState.SEALED,
+}
+
+
 def validate_dependencies(tasks: Mapping[str, dict]) -> None:
     ids = set(tasks)
     for task_id, task in tasks.items():
@@ -67,19 +79,50 @@ def _declared_terminal_satisfies_dependency(task: dict) -> bool:
 
 
 def dependencies_satisfied(task: dict, tasks: Mapping[str, dict]) -> bool:
+    """Strict dependency completion used for final sealing/release semantics."""
     for dep_id in task.get("depends_on", []):
         if not _declared_terminal_satisfies_dependency(tasks[dep_id]):
             return False
     return True
 
 
+def build_dependencies_satisfied(task: dict, tasks: Mapping[str, dict]) -> bool:
+    """Return whether dependencies are strong enough for provisional build progress.
+
+    This exists to avoid paying repository-wide CI cost after every task.  It only
+    permits implementation of the next task after the prerequisite has passed its
+    focused/adversarial/integration/regression path.  It never allows a downstream
+    task to be SEALED; strict ``dependencies_satisfied`` is still required at seal.
+    """
+    for dep_id in task.get("depends_on", []):
+        dependency = tasks[dep_id]
+        if _declared_terminal_satisfies_dependency(dependency):
+            continue
+        if TaskState(dependency["status"]) not in _BUILD_READY_STATES:
+            return False
+    return True
+
+
 def eligible_task_ids(tasks: Mapping[str, dict]) -> list[str]:
+    """Strict eligible tasks whose dependencies are finally complete."""
     validate_dependencies(tasks)
     eligible: list[str] = []
     for task_id, task in tasks.items():
         if TaskState(task["status"]) not in {TaskState.PENDING, TaskState.REPAIR_REQUIRED}:
             continue
         if dependencies_satisfied(task, tasks):
+            eligible.append(task_id)
+    return sorted(eligible, key=_task_sort_key)
+
+
+def build_eligible_task_ids(tasks: Mapping[str, dict]) -> list[str]:
+    """Tasks eligible for provisional implementation under checkpoint batching."""
+    validate_dependencies(tasks)
+    eligible: list[str] = []
+    for task_id, task in tasks.items():
+        if TaskState(task["status"]) not in {TaskState.PENDING, TaskState.REPAIR_REQUIRED}:
+            continue
+        if build_dependencies_satisfied(task, tasks):
             eligible.append(task_id)
     return sorted(eligible, key=_task_sort_key)
 

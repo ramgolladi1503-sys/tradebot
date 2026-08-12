@@ -1,0 +1,81 @@
+schema_version: 1
+policy_id: AUTONOMOUS_LOOP_BATCHED_CERTIFICATION_EXECUTION_V1
+mode: CHECKPOINT_BATCHED
+purpose: Reduce repeated repository-wide CI cost without weakening per-task evidence or final seal gates.
+
+task_local_progression:
+  required_before_provisional_downstream_build:
+    - focused
+    - adversarial
+    - integration
+    - regression
+  minimum_state: REGRESSION_VALID
+  broad_repository_ci_required_after_every_task: false
+  independent_verification_required_for_final_seal: true
+  exact_sha_binding_required_for_final_seal: true
+  provisional_downstream_work_may_not_seal_over_unsealed_dependency: true
+
+checkpoint_groups:
+  CP1:
+    tasks: [T01, T02, T03]
+    broad_ci_required: true
+    combined_independent_verification_required: true
+  CP2:
+    tasks: [T04, T05, T06, T07, T08, T09, T10, T11]
+    broad_ci_required: true
+    combined_independent_verification_required: true
+  CP3:
+    tasks: [T12, T13, T14, T15, T16, T17, T18, T19, T20]
+    broad_ci_required: true
+    combined_independent_verification_required: true
+  CP4:
+    tasks: [T21, T22, T23, T24, T25, T26]
+    broad_ci_required: true
+    combined_independent_verification_required: true
+  CP5:
+    tasks: [T27, T28, T29, T30, T31, T32, T33, T34, T35]
+    broad_ci_required: true
+    combined_independent_verification_required: true
+  DYNAMIC_FINAL:
+    tasks: T36_PLUS_EVIDENCE_CREATED_ONLY
+    broad_ci_required: true
+    combined_independent_verification_required: true
+
+ci_evidence_reuse:
+  allowed: true
+  conditions:
+    - Evidence is bound to the exact checkpoint candidate SHA.
+    - The checkpoint candidate contains the complete changed surface of every task claiming the CI evidence.
+    - Focused and adversarial suites for each claimed task are rerun or otherwise exact-SHA-bound on that checkpoint candidate.
+    - No task claims CI coverage for code outside the executed checkpoint surface.
+    - A later code change invalidates earlier exact-SHA CI evidence for final sealing unless the final candidate is re-certified.
+
+failure_handling:
+  if_upstream_task_enters_repair_required: provisional_dependents_remain_unsealed
+  if_checkpoint_ci_fails: repair_root_cause_without_gate_weakening
+  if_failure_is_external_or_out_of_scope: record_blocker_and_do_not_modify_protected_runtime_paths
+  unknown_never_becomes_pass: true
+  missing_never_becomes_zero: true
+
+final_program_certification:
+  required: true
+  after_tasks: T01_THROUGH_T35_PLUS_GOVERNED_T36_PLUS
+  require_full_repository_regression: true
+  require_exact_sha_independent_verification: true
+  require_zero_unresolved_major_critical: true
+  require_zero_mandatory_unknowns: true
+  require_program_ci_green: true
+  main_merge_authorized: false
+
+protected_boundaries:
+  broker_write_authority: false
+  order_authority: false
+  paper_authorized: false
+  live_authorized: false
+  do_not_modify_feed_for_unrelated_ci_repair: true
+
+notes:
+  - Task-local validation is continuous; broad CI is checkpointed, not removed.
+  - REGRESSION_VALID permits only provisional downstream implementation, never final sealing.
+  - Strict dependencies must still be finally satisfied before a downstream task can be SEALED.
+  - The framework may be certified independently but remains held from main by PROGRAM_RELEASE_POLICY.yaml.

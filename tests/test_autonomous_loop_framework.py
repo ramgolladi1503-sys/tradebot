@@ -5,7 +5,12 @@ import pytest
 import yaml
 
 from research.governance.autonomous_loop import AutonomousLoopSupervisor, RegistryError, TaskState, assert_transition
-from research.governance.autonomous_loop.dependency_graph import DependencyError, eligible_task_ids, validate_dependencies
+from research.governance.autonomous_loop.dependency_graph import (
+    DependencyError,
+    build_eligible_task_ids,
+    eligible_task_ids,
+    validate_dependencies,
+)
 from research.governance.autonomous_loop.evidence_contract import SafetyBoundary
 
 
@@ -19,6 +24,7 @@ def load_registry():
 def test_registry_bootstraps_and_selects_t01():
     supervisor = AutonomousLoopSupervisor(load_registry())
     assert supervisor.next_eligible_task() == "T01"
+    assert supervisor.next_build_eligible_task() == "T01"
     assert len(supervisor.tasks) == 35
 
 
@@ -62,8 +68,10 @@ def test_dependencies_do_not_treat_blocked_or_generic_invalidated_as_pass():
     registry = load_registry()
     registry["tasks"]["T01"]["status"] = "BLOCKED"
     assert "T02" not in eligible_task_ids(registry["tasks"])
+    assert "T02" not in build_eligible_task_ids(registry["tasks"])
     registry["tasks"]["T01"]["status"] = "INVALIDATED"
     assert "T02" not in eligible_task_ids(registry["tasks"])
+    assert "T02" not in build_eligible_task_ids(registry["tasks"])
 
 
 def test_declared_no_edge_terminal_releases_research_dependent():
@@ -72,6 +80,7 @@ def test_declared_no_edge_terminal_releases_research_dependent():
         registry["tasks"][task_id]["status"] = "SEALED"
     registry["tasks"]["T06"]["status"] = "NO_STRUCTURAL_EDGE_FOUND"
     assert "T07" in eligible_task_ids(registry["tasks"])
+    assert "T07" in build_eligible_task_ids(registry["tasks"])
 
 
 def test_undeclared_no_edge_terminal_is_rejected_by_supervisor():
@@ -79,6 +88,24 @@ def test_undeclared_no_edge_terminal_is_rejected_by_supervisor():
     supervisor.tasks["T01"]["status"] = "IMPLEMENTATION_VALID"
     with pytest.raises(RegistryError):
         supervisor.transition("T01", "NO_STRUCTURAL_EDGE_FOUND")
+
+
+def test_checkpoint_build_progress_requires_regression_valid_not_weaker_state():
+    registry = load_registry()
+    registry["tasks"]["T01"]["status"] = "INTEGRATION_VALID"
+    assert "T02" not in build_eligible_task_ids(registry["tasks"])
+    registry["tasks"]["T01"]["status"] = "REGRESSION_VALID"
+    assert "T02" in build_eligible_task_ids(registry["tasks"])
+    # Strict completion is intentionally unchanged: T02 cannot be finally eligible
+    # until T01 is SEALED or ends in a declared terminal outcome.
+    assert "T02" not in eligible_task_ids(registry["tasks"])
+
+
+def test_supervisor_exposes_provisional_build_scheduler_without_relaxing_strict_scheduler():
+    supervisor = AutonomousLoopSupervisor(load_registry())
+    supervisor.tasks["T01"]["status"] = "REGRESSION_VALID"
+    assert supervisor.next_build_eligible_task() == "T02"
+    assert supervisor.next_eligible_task() is None
 
 
 def dynamic_task(task_id="T36"):
@@ -145,6 +172,7 @@ def test_dynamic_task_blocks_field_becomes_real_dependency():
     assert "T36" in supervisor.tasks["T02"]["depends_on"]
     supervisor.tasks["T01"]["status"] = "SEALED"
     assert "T02" not in eligible_task_ids(supervisor.tasks)
+    assert "T02" not in build_eligible_task_ids(supervisor.tasks)
 
 
 def test_dynamic_task_rejects_unknown_block_target_atomically():
@@ -216,6 +244,32 @@ def test_seal_rejects_major_finding_even_with_evidence():
     task["evidence"] = _complete_evidence()
     with pytest.raises(RegistryError):
         supervisor.transition("T01", "SEALED")
+
+
+def test_downstream_seal_is_blocked_until_strict_dependency_is_finally_satisfied():
+    supervisor = AutonomousLoopSupervisor(load_registry())
+    supervisor.tasks["T01"]["status"] = "REGRESSION_VALID"
+    task = supervisor.tasks["T02"]
+    task["status"] = "CI_GREEN"
+    task["major_findings"] = 0
+    task["critical_findings"] = 0
+    task["mandatory_unknowns"] = 0
+    task["evidence"] = _complete_evidence()
+    with pytest.raises(RegistryError, match="strict dependencies"):
+        supervisor.transition("T02", "SEALED")
+
+
+def test_downstream_seal_can_proceed_after_dependency_is_sealed_and_evidence_is_complete():
+    supervisor = AutonomousLoopSupervisor(load_registry())
+    supervisor.tasks["T01"]["status"] = "SEALED"
+    task = supervisor.tasks["T02"]
+    task["status"] = "CI_GREEN"
+    task["major_findings"] = 0
+    task["critical_findings"] = 0
+    task["mandatory_unknowns"] = 0
+    task["evidence"] = _complete_evidence()
+    supervisor.transition("T02", "SEALED")
+    assert supervisor.tasks["T02"]["status"] == "SEALED"
 
 
 def test_seal_accepts_only_complete_fail_closed_evidence():
