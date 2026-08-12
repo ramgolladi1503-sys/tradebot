@@ -51,6 +51,58 @@ def test_runtime_health_shape(monkeypatch):
     assert payload["feed"]["transport_healthy"] is True
 
 
+def test_runtime_health_publishes_orchestrator_warmup_proof(monkeypatch):
+    monkeypatch.setattr(
+        runtime_health,
+        "get_freshness_status",
+        lambda force=False: {"state": "OK", "market_open": True, "ltp": {"age_sec": 1.0}, "depth": {"age_sec": 1.0}, "reasons": []},
+    )
+    monkeypatch.setattr(
+        runtime_health,
+        "get_feed_debug",
+        lambda now_epoch=None: {
+            "ws_connected": True,
+            "subscribed_tokens_count": 2,
+            "last_tick_age_sec": 1.0,
+            "last_depth_age_sec": 1.0,
+            "option_ticks_verified": True,
+            "verified_option_symbols": ["NIFTY"],
+            "missing_option_symbols": [],
+            "feed_truth_state": "LIVE",
+            "feed_truth_reason_code": "LIVE",
+            "transport_state": "CONNECTED",
+            "transport_healthy": True,
+        },
+    )
+    orch = SimpleNamespace(
+        _pilot_unlock_clean_cycles=3,
+        execution_engine=SimpleNamespace(
+            kill_switch_triggered=False,
+            kill_switch_reason=None,
+            get_last_spread_decision=lambda: {},
+            get_reconciliation_status=lambda: {},
+        ),
+        risk_state=SimpleNamespace(mode="NORMAL", daily_pnl_pct=0.0, open_risk_pct=0.0),
+    )
+
+    payload = runtime_health.get_runtime_health(orchestrator=orch, now_epoch=123.0)
+
+    assert payload["feed"]["warmup_clean_cycles"] == 3
+    assert payload["feed"]["warmup_required_clean_cycles"] == 3
+    assert "WARMUP_INCOMPLETE" not in payload["feed"]["full_feed_proof_blockers"]
+
+
+def test_runtime_health_keeps_missing_warmup_proof_fail_closed(monkeypatch):
+    monkeypatch.setattr(runtime_health, "get_freshness_status", lambda force=False: {"state": "OK", "market_open": True, "ltp": {}, "depth": {}, "reasons": []})
+    monkeypatch.setattr(runtime_health, "get_feed_debug", lambda now_epoch=None: {"ws_connected": True, "feed_truth_state": "LIVE", "transport_state": "CONNECTED"})
+    orch = SimpleNamespace(execution_engine=SimpleNamespace(kill_switch_triggered=False, kill_switch_reason=None, get_last_spread_decision=lambda: {}, get_reconciliation_status=lambda: {}), risk_state=SimpleNamespace(mode="NORMAL", daily_pnl_pct=0.0, open_risk_pct=0.0))
+
+    payload = runtime_health.get_runtime_health(orchestrator=orch, now_epoch=123.0)
+
+    assert payload["feed"]["warmup_clean_cycles"] is None
+    assert "WARMUP_INCOMPLETE" in payload["feed"]["full_feed_proof_blockers"]
+
+
 def test_runtime_health_emits_truth_integrity_alert_on_snapshot_hash_mismatch(monkeypatch, tmp_path):
     monkeypatch.setattr(runtime_health, "runtime_dir", lambda: tmp_path)
     captured_events = []

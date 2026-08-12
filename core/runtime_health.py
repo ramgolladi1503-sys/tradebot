@@ -154,6 +154,20 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
     feed["truth_integrity_alerts"] = integrity_alerts
     feed["truth_integrity_alert_count"] = len(integrity_alerts)
     feed["truth_integrity_status"] = "ALERT" if integrity_alerts else "OK"
+    warmup_clean_cycles = feed_debug.get("warmup_clean_cycles")
+    warmup_required_clean_cycles = feed_debug.get("warmup_required_clean_cycles")
+    # The orchestrator owns the consecutive clean-cycle counter. Preserve
+    # missing-proof fail-closed behavior when no owner is supplied, while
+    # publishing the current owner state for the recovery proof reader.
+    if orchestrator is not None:
+        owner_cycles = getattr(orchestrator, "_pilot_unlock_clean_cycles", None)
+        if isinstance(owner_cycles, int) and owner_cycles >= 0:
+            warmup_clean_cycles = owner_cycles
+            configured_required = getattr(cfg, "PAPER_PILOT_UNLOCK_CLEAN_CYCLES", None)
+            if isinstance(configured_required, int) and configured_required > 0:
+                warmup_required_clean_cycles = configured_required
+    feed["warmup_clean_cycles"] = warmup_clean_cycles
+    feed["warmup_required_clean_cycles"] = warmup_required_clean_cycles
     recovery_runtime = classify_feed_recovery_runtime(feed)
     feed["recovery_runtime"] = recovery_runtime.to_payload()
     feed["full_feed_proof_ready"] = bool(recovery_runtime.context.get("full_feed_proof_ready"))
@@ -170,8 +184,6 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
     feed["underlying_ltp_age_by_symbol"] = dict(feed_debug.get("option_last_tick_age_by_symbol") or {})
     feed["underlying_ltp_proof_state"] = "FULL" if bool(recovery_runtime.context.get("full_feed_proof_ready")) else "STALE"
     feed["depth_proof_state"] = "FULL" if bool(feed_debug.get("last_depth_age_sec") is not None and float(feed_debug.get("last_depth_age_sec")) <= float(getattr(cfg, "FEED_HEALTH_MAX_DEPTH_AGE_SEC", 6.0))) else "STALE"
-    feed["warmup_clean_cycles"] = feed_debug.get("warmup_clean_cycles")
-    feed["warmup_required_clean_cycles"] = feed_debug.get("warmup_required_clean_cycles")
     feed["recovery_generation_id"] = feed_debug.get("recovery_generation_id")
     feed["last_recovery_generation_id"] = feed_debug.get("last_recovery_generation_id")
     feed["subscription_generation_id"] = feed_debug.get("subscription_generation_id")
