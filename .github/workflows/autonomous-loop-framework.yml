@@ -18,6 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           lfs: false
 
@@ -56,14 +57,13 @@ jobs:
               "order_authority: true",
               "broker_write_authority: true",
           )
-          roots = [Path("research/governance/autonomous_loop")]
-          for root in roots:
-              for path in root.rglob("*"):
-                  if not path.is_file() or path.suffix not in {".py", ".yaml", ".yml", ".md"}:
-                      continue
-                  text = path.read_text(encoding="utf-8").lower()
-                  for token in forbidden:
-                      if token in text:
-                          raise SystemExit(f"FORBIDDEN_EXECUTION_AUTHORITY_TOKEN:{path}:{token}")
+          root = Path("research/governance/autonomous_loop")
+          for path in root.rglob("*"):
+              if not path.is_file() or path.suffix not in {".py", ".yaml", ".yml", ".md"}:
+                  continue
+              text = path.read_text(encoding="utf-8").lower()
+              for token in forbidden:
+                  if token in text:
+                      raise SystemExit(f"FORBIDDEN_EXECUTION_AUTHORITY_TOKEN:{path}:{token}")
           print("execution_isolation=PASS")
           PY
