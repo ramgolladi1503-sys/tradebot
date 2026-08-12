@@ -40,3 +40,13 @@ failures:
     repair: Restore affected tasks to PENDING; retain scaffolding only as preparatory evidence metadata and require concrete task-local implementation before advancement.
     regression_test: task-state-integrity-audit-at-resume
     status: OPEN
+  - failure_id: ALF-005
+    task: T12-T35
+    classification: GOVERNANCE_GAP
+    severity: MAJOR
+    discovered_at_sha: e816b5db3ad221ca33380d7edba3b3afcecb40f7
+    finding: Dependent tasks T13-T35 were marked IMPLEMENTATION_VALID while prerequisite T12 remained PENDING; downstream implementation evidence cannot satisfy the dependency gate.
+    repair_scope: registry_state_and_evidence
+    repair: Restore T13-T35 to PENDING until T12 is concretely implemented and its required gates are satisfied; retain artifacts as unsealed preparatory evidence only.
+    regression_test: task-dependency-integrity-audit-after-build
+    status: OPEN
