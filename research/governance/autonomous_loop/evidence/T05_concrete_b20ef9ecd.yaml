@@ -1,0 +1,12 @@
+task_id: T05
+candidate_sha: b20ef9ecdebe0cd9d2619b9f3eb916afa19b31eb
+state: IMPLEMENTATION_VALID
+source_artifact: research/local_evidence_consolidation_v1/external_local_dirs/tradebot-data/independent_underlying_confirmation_v3/monthly_staging/BANKNIFTY/BANKNIFTY_2023-01-02_2023-01-31.json
+source_artifact_sha256: abfe3e240a09e758cba06844be958a527d9195c84a6851f794444447045d3c89
+result: NO_STRUCTURAL_EDGE_FOUND
+counts: {development: 12, validation: 4, oos: 4}
+permutation_control: {sign_permutation_positive_rate: 0.25, seed: 17}
+search_pressure: {families_tested: 1, predeclared_family_count: 3, unplanned_family_addition: false, oos_untouched: true}
+tests: {focused: PASS, adversarial: PASS, integration: PASS, result: 3 passed}
+certification: {independent_verification: PENDING, ci: PENDING, live: NOT_CLAIMED}
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}

@@ -109,7 +109,7 @@ tasks:
     task_id: T05
     title: BANKNIFTY discovery and validation
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T04]
     blocks: [T06]
     objective: Governed discovery, leakage audit, controls, OOS/WFA, robustness and benchmarks.
@@ -120,8 +120,9 @@ tasks:
     ci: {required: true}
     exit_gates: [HISTORICAL_OOS_VERDICT]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: [research/governance/autonomous_loop/evidence/T05_T08_provisional_756f687e64966b9fbaafccf57dd936bdd20e8bc3.yaml]
-    evidence: {candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3, focused: {status: PASS, candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3}}
+    evidence_paths:
+      - research/governance/autonomous_loop/evidence/T05_concrete_b20ef9ecd.yaml
+    evidence: {candidate_sha: b20ef9ecdebe0cd9d2619b9f3eb916afa19b31eb, focused: {status: PASS, candidate_sha: b20ef9ecdebe0cd9d2619b9f3eb916afa19b31eb}, adversarial: {status: PASS, candidate_sha: b20ef9ecdebe0cd9d2619b9f3eb916afa19b31eb}, integration: {status: PASS, candidate_sha: b20ef9ecdebe0cd9d2619b9f3eb916afa19b31eb}}
   T06:
     task_id: T06
     title: BANKNIFTY model freeze
