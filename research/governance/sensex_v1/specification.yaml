@@ -1,0 +1,10 @@
+schema_version: 1
+task_id: T08
+spec_id: SENSEX_RESEARCH_SPEC_V1
+target: {label: next_session_open_gap, horizon: first_authoritative_session_open, instrument: SENSEX}
+causal_cutoff: {timezone: Asia/Kolkata, latest_allowed_input: 09:14:59}
+splits: {development: chronological_60_percent, validation: chronological_20_percent, untouched_oos: chronological_latest_20_percent}
+candidate_families: [prior_close_gap_baseline, session_range_context, volatility_regime]
+negative_controls: [constant_baseline, sign_permutation, timestamp_shuffle]
+search_accounting: {multiple_testing_correction: required, outcome_conditioned_tuning: forbidden}
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
