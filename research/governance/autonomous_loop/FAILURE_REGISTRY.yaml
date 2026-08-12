@@ -30,3 +30,13 @@ failures:
     repair: Sealing now requires a 40-hex candidate Git SHA and structured PASS evidence for every mandatory gate bound to that same candidate SHA.
     regression_test: test_seal_rejects_unbound_gate_evidence
     status: REPAIRED_PENDING_EXACT_SHA_REVALIDATION
+  - failure_id: ALF-004
+    task: T05-T35
+    classification: GOVERNANCE_GAP
+    severity: MAJOR
+    discovered_at_sha: c91da8f35cf39748e883995ab148668219933261
+    finding: Provisional interface scaffolding was recorded as IMPLEMENTATION_VALID for tasks whose concrete task-specific implementation and validation were absent.
+    repair_scope: registry_state_and_evidence
+    repair: Restore affected tasks to PENDING; retain scaffolding only as preparatory evidence metadata and require concrete task-local implementation before advancement.
+    regression_test: task-state-integrity-audit-at-resume
+    status: OPEN
