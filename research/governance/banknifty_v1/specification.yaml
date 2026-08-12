@@ -1,0 +1,37 @@
+schema_version: 1
+task_id: T04
+spec_id: BANKNIFTY_RESEARCH_SPEC_V1
+architecture_version: TRADEBOT_THREE_INDEX_GLOBAL_CONTEXT_LOCKED_ARCHITECTURE_V2
+target:
+  label: next_session_open_gap
+  horizon: first_authoritative_session_open
+  instrument: BANKNIFTY
+causal_cutoff:
+  timezone: Asia/Kolkata
+  latest_allowed_input: 09:14:59
+  outcome_available_after_cutoff: false
+splits:
+  development: chronological_earliest_60_percent
+  validation: chronological_next_20_percent
+  untouched_oos: chronological_latest_20_percent
+candidate_families:
+  - prior_close_gap_baseline
+  - session_range_context
+  - volatility_regime
+controls:
+  - constant_prediction_baseline
+  - sign_permutation_control
+  - timestamp_shuffle_negative_control
+search_accounting:
+  predeclared_family_count: 3
+  unplanned_family_addition: forbidden
+  multiple_testing_correction: required
+  outcome_conditioned_tuning: forbidden
+decision:
+  positive_result_not_required: true
+  honest_no_edge_outcome: NO_STRUCTURAL_EDGE_FOUND
+  execution_authority: false
+  broker_write_authority: false
+  order_authority: false
+  paper_authorized: false
+  live_authorized: false
