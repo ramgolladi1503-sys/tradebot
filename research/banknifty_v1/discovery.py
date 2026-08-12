@@ -82,8 +82,8 @@ def build_sessions(artifacts: Sequence[Artifact]) -> tuple[SessionObservation, .
 
 def evaluate(spec: ResearchSpec, artifacts: Sequence[Artifact], *, permutation_seed: int = 17) -> DiscoveryReport:
     spec.validate()
-    if spec.index != "BANKNIFTY":
-        raise ValueError("BANKNIFTY_SPEC_REQUIRED")
+    if spec.index not in {"BANKNIFTY", "SENSEX"}:
+        raise ValueError("INDEX_SPEC_REQUIRED")
     sessions = build_sessions(artifacts)
     if len(sessions) < 5:
         return DiscoveryReport(ResearchOutcome.BLOCKED_DATA, tuple(a.sha256 for a in artifacts), {"all": len(sessions)}, {}, {"families_tested": 0, "predeclared_family_count": len(spec.candidate_families)})
