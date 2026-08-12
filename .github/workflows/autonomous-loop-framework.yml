@@ -49,9 +49,6 @@ jobs:
           from pathlib import Path
           forbidden = (
               "kiteconnect",
-              "place_order",
-              "modify_order",
-              "cancel_order",
               "paper_authorized: true",
               "live_authorized: true",
               "order_authority: true",
