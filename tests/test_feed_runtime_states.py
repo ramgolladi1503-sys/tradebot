@@ -10,6 +10,7 @@ import core.kite_depth_ws as depth_ws
 from core.blocker_lifecycle import reset_blocker_registries
 from core.runtime_status_overlay import derive_effective_ws_connected, derive_feed_ok
 import pytest
+from core.runtime_truth_integrity import truth_hash_from_mapping
 
 
 def _reset_depth_ws_test_state(monkeypatch):
@@ -479,6 +480,17 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
     assert logs_path / "feed_runtime_latest.json" in captured_paths
     assert logs_path / "feed_health_duration_latest.json" in captured_paths
     assert captured_payloads[logs_path / "feed_runtime_latest.json"]["ws_connected"] is True
+    payload = captured_payloads[logs_path / "feed_runtime_latest.json"]
+    assert payload["snapshot_hash"] == truth_hash_from_mapping(
+        payload,
+        exclude_keys=(
+            "snapshot_hash", "snapshot_hash_version", "transport_heartbeat",
+            "transport_heartbeat_epoch", "transport_heartbeat_age_sec",
+            "transport_heartbeat_source", "transport_heartbeat_state",
+            "transport_heartbeat_reason", "truth_integrity_alerts",
+            "truth_integrity_alert_count", "truth_integrity_status",
+        ),
+    )
     assert (logs_path / "feed_runtime_latest.json").exists()
 
 

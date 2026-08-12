@@ -28,6 +28,7 @@ from core.tick_store import (
 )
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.runtime_boot_identity import stamp_runtime_payload
+from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.feed_runtime import build_canonical_feed_truth_state
 from core.feed_robustness_evidence import collector as feed_evidence
 from core.feed_fd_trace import process_fd_count, record_trace as record_fd_trace, reset_trace as reset_fd_trace
@@ -4497,17 +4498,26 @@ def _write_feed_runtime_snapshot(
     stage_started = _mark_stage("canonical_feed_truth_ms", stage_started)
     payload = canonicalize_feed_runtime_snapshot_truth(payload)
     payload = attach_feed_execution_truth(payload)
-    payload = stamp_runtime_payload(
-        payload,
-        writer="kite_depth_ws.feed_runtime",
-    )
-    stage_started = _mark_stage("execution_truth_stamp_ms", stage_started)
     if stage_timing_enabled:
         stage_timing_ms["total_pre_write_ms"] = round(
             max(0.0, time.perf_counter() - float(stage_total_start)) * 1000.0,
             3,
         )
         payload["feed_runtime_stage_timing_ms"] = dict(stage_timing_ms)
+    payload = stamp_runtime_payload(
+        payload,
+        writer="kite_depth_ws.feed_runtime",
+    )
+    payload.update(
+        build_truth_integrity_payload(
+            source_payload=payload,
+            transport_state=payload.get("transport_state"),
+            feed_truth_state=payload.get("feed_truth_state"),
+            reason_code=payload.get("feed_truth_reason_code"),
+            heartbeat_epoch=float(now_epoch),
+        )
+    )
+    stage_started = _mark_stage("execution_truth_stamp_ms", stage_started)
     try:
         write_started = time.perf_counter()
         write_json_atomic(path, payload)
