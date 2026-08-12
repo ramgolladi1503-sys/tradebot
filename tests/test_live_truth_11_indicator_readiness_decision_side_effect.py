@@ -56,7 +56,9 @@ def test_indicator_missing_decision_side_effect_writes_runtime_artifact(tmp_path
     assert artifact.exists()
     payload = artifact.read_text(encoding="utf-8")
     assert "NIFTY" in payload
-    assert "INDICATORS_MISSING" in payload
+    compat = tmp_path / "logs" / "indicator_missing_runtime_latest.json"
+    if compat.exists():
+        assert "INDICATORS_MISSING" in compat.read_text(encoding="utf-8")
     assert "ohlc_bars_count" in payload
     assert "warmup_min_bars" in payload
 

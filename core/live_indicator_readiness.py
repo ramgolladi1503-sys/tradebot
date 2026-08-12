@@ -248,7 +248,7 @@ def build_live_indicator_readiness_runtime_payload(
     generated_epoch = _finite_float_or_none(payload.get("generated_epoch"))
     if generated_epoch is None:
         generated_epoch = float(time.time() if now_epoch is None else now_epoch)
-    decisions = [_indicator_missing_symbol_payload(decision) for decision in _decision_payloads(payload)]
+    decisions = [_runtime_symbol_payload(decision) for decision in _decision_payloads(payload)]
     decisions = [decision for decision in decisions if decision is not None]
     symbols = [str(item.get("symbol") or "") for item in decisions if str(item.get("symbol") or "")]
     out = {
@@ -274,6 +274,22 @@ def build_live_indicator_readiness_runtime_payload(
     return out
 
 
+def _runtime_symbol_payload(decision: Mapping[str, Any]) -> dict[str, Any]:
+    """Serialize current readiness truth without applying legacy missing labels."""
+    allowed = (
+        "symbol", "status", "ready", "indicators_ok", "indicator_inputs_ok",
+        "ohlc_bars_count", "warmup_min_bars", "indicator_last_update_epoch",
+        "indicators_age_sec", "missing_inputs", "indicator_missing_inputs",
+        "compute_indicators_error", "vwap_present", "rsi_present", "ema_present",
+        "atr_present", "decision_gate_reason", "blockers", "warnings", "source",
+    )
+    out = {key: decision.get(key) for key in allowed if key in decision}
+    out["symbol"] = str(out.get("symbol") or "UNKNOWN")
+    out["decision_gate_reason"] = str(out.get("decision_gate_reason") or "unknown")
+    out["blockers"] = list(out.get("blockers") or [])
+    return out
+
+
 def build_indicator_missing_runtime_evidence_payload(
     report: LiveIndicatorReadinessReport | Mapping[str, Any],
     *,
@@ -295,7 +311,12 @@ def build_indicator_missing_runtime_evidence_payload(
         return None
     # Backward-compat helper used by older call-sites; keep existing semantics:
     # emit only when INDICATORS_MISSING is present.
+    missing_decisions = [_indicator_missing_symbol_payload(decision) for decision in _decision_payloads(payload)]
+    missing_decisions = [decision for decision in missing_decisions if decision is not None]
     out = build_live_indicator_readiness_runtime_payload(payload, now_epoch=now_epoch)
+    out["by_symbol"] = {str(item["symbol"]): dict(item) for item in missing_decisions}
+    out["symbols"] = [str(item["symbol"]) for item in missing_decisions]
+    out["symbol_count"] = len(missing_decisions)
     out["metadata"]["emits_only_for"] = INDICATORS_MISSING_GATE_REASON
     out["decision_gate_reason"] = INDICATORS_MISSING_GATE_REASON
     return out

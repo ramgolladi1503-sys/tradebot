@@ -1,5 +1,5 @@
 from __future__ import annotations
-from core.paths import logs_dir
+from core.paths import data_root, logs_dir
 
 import json
 from pathlib import Path
@@ -20,7 +20,8 @@ from core.live_indicator_readiness import (
 from core.time_utils import now_ist
 
 
-_INDICATOR_MISSING_COMPAT_PATH = logs_dir() / "indicator_missing_runtime_latest.json"
+def _indicator_missing_compat_path() -> Path:
+    return data_root() / "logs" / "indicator_missing_runtime_latest.json"
 
 
 def _blocked_candidates_path() -> Path:
@@ -97,7 +98,7 @@ def _maybe_write_indicator_missing_runtime_evidence(
         # label to overwrite current valid readiness truth.
         write_indicator_missing_runtime_evidence(
             report,
-            path=_INDICATOR_MISSING_COMPAT_PATH,
+            path=_indicator_missing_compat_path(),
             now_epoch=float(snapshot.ts_epoch),
         )
     except Exception:
