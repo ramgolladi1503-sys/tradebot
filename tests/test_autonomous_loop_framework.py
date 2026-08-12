@@ -39,25 +39,46 @@ def test_illegal_state_skip_is_rejected():
 
 def test_dependency_cycle_is_rejected():
     tasks = {
-        "T01": {"status": "PENDING", "depends_on": ["T02"]},
-        "T02": {"status": "PENDING", "depends_on": ["T01"]},
+        "T01": {"status": "PENDING", "depends_on": ["T02"], "blocks": []},
+        "T02": {"status": "PENDING", "depends_on": ["T01"], "blocks": []},
     }
     with pytest.raises(DependencyError):
         validate_dependencies(tasks)
 
 
 def test_unknown_dependency_is_rejected():
-    tasks = {"T01": {"status": "PENDING", "depends_on": ["T99"]}}
+    tasks = {"T01": {"status": "PENDING", "depends_on": ["T99"], "blocks": []}}
     with pytest.raises(DependencyError):
         validate_dependencies(tasks)
 
 
-def test_dependencies_do_not_treat_blocked_or_unknown_as_pass():
+def test_unknown_block_target_is_rejected():
+    tasks = {"T01": {"status": "PENDING", "depends_on": [], "blocks": ["T99"]}}
+    with pytest.raises(DependencyError):
+        validate_dependencies(tasks)
+
+
+def test_dependencies_do_not_treat_blocked_or_generic_invalidated_as_pass():
     registry = load_registry()
     registry["tasks"]["T01"]["status"] = "BLOCKED"
     assert "T02" not in eligible_task_ids(registry["tasks"])
     registry["tasks"]["T01"]["status"] = "INVALIDATED"
-    assert "T02" in eligible_task_ids(registry["tasks"])
+    assert "T02" not in eligible_task_ids(registry["tasks"])
+
+
+def test_declared_no_edge_terminal_releases_research_dependent():
+    registry = load_registry()
+    for task_id in ["T01", "T02", "T03", "T04", "T05"]:
+        registry["tasks"][task_id]["status"] = "SEALED"
+    registry["tasks"]["T06"]["status"] = "NO_STRUCTURAL_EDGE_FOUND"
+    assert "T07" in eligible_task_ids(registry["tasks"])
+
+
+def test_undeclared_no_edge_terminal_is_rejected_by_supervisor():
+    supervisor = AutonomousLoopSupervisor(load_registry())
+    supervisor.tasks["T01"]["status"] = "IMPLEMENTATION_VALID"
+    with pytest.raises(RegistryError):
+        supervisor.transition("T01", "NO_STRUCTURAL_EDGE_FOUND")
 
 
 def dynamic_task(task_id="T36"):
@@ -118,11 +139,69 @@ def test_dynamic_task_requires_complete_six_question_rationale():
         supervisor.create_dynamic_task(task)
 
 
+def test_dynamic_task_blocks_field_becomes_real_dependency():
+    supervisor = AutonomousLoopSupervisor(load_registry())
+    supervisor.create_dynamic_task(dynamic_task())
+    assert "T36" in supervisor.tasks["T02"]["depends_on"]
+    supervisor.tasks["T01"]["status"] = "SEALED"
+    assert "T02" not in eligible_task_ids(supervisor.tasks)
+
+
+def test_dynamic_task_rejects_unknown_block_target_atomically():
+    supervisor = AutonomousLoopSupervisor(load_registry())
+    task = dynamic_task()
+    task["blocks"] = ["T99"]
+    with pytest.raises(RegistryError):
+        supervisor.create_dynamic_task(task)
+    assert "T36" not in supervisor.tasks
+
+
+def _complete_evidence(candidate_sha="b" * 40):
+    return {
+        "candidate_sha": candidate_sha,
+        "focused": {"status": "PASS", "candidate_sha": candidate_sha},
+        "adversarial": {"status": "PASS", "candidate_sha": candidate_sha},
+        "integration": {"status": "PASS", "candidate_sha": candidate_sha},
+        "regression": {"status": "PASS", "candidate_sha": candidate_sha},
+        "independent_verification": {"status": "PASS", "candidate_sha": candidate_sha},
+        "ci": {"status": "PASS", "candidate_sha": candidate_sha},
+    }
+
+
 def test_seal_rejects_missing_exact_sha_and_gate_evidence():
     registry = load_registry()
     supervisor = AutonomousLoopSupervisor(registry)
     task = supervisor.tasks["T01"]
     task["status"] = "CI_GREEN"
+    with pytest.raises(RegistryError):
+        supervisor.transition("T01", "SEALED")
+
+
+def test_seal_rejects_non_exact_candidate_sha():
+    supervisor = AutonomousLoopSupervisor(load_registry())
+    task = supervisor.tasks["T01"]
+    task["status"] = "CI_GREEN"
+    task["evidence"] = _complete_evidence("not-a-git-sha")
+    with pytest.raises(RegistryError):
+        supervisor.transition("T01", "SEALED")
+
+
+def test_seal_rejects_unbound_gate_evidence():
+    supervisor = AutonomousLoopSupervisor(load_registry())
+    task = supervisor.tasks["T01"]
+    task["status"] = "CI_GREEN"
+    task["evidence"] = _complete_evidence()
+    task["evidence"]["adversarial"]["candidate_sha"] = "c" * 40
+    with pytest.raises(RegistryError):
+        supervisor.transition("T01", "SEALED")
+
+
+def test_seal_rejects_string_pass_without_sha_binding():
+    supervisor = AutonomousLoopSupervisor(load_registry())
+    task = supervisor.tasks["T01"]
+    task["status"] = "CI_GREEN"
+    task["evidence"] = _complete_evidence()
+    task["evidence"]["focused"] = "pass"
     with pytest.raises(RegistryError):
         supervisor.transition("T01", "SEALED")
 
@@ -134,15 +213,7 @@ def test_seal_rejects_major_finding_even_with_evidence():
     task["status"] = "CI_GREEN"
     task["major_findings"] = 1
     task["mandatory_unknowns"] = 0
-    task["evidence"] = {
-        "candidate_sha": "b" * 40,
-        "focused": "pass",
-        "adversarial": "pass",
-        "integration": "pass",
-        "regression": "pass",
-        "independent_verification": "pass",
-        "ci": "pass",
-    }
+    task["evidence"] = _complete_evidence()
     with pytest.raises(RegistryError):
         supervisor.transition("T01", "SEALED")
 
@@ -155,15 +226,7 @@ def test_seal_accepts_only_complete_fail_closed_evidence():
     task["major_findings"] = 0
     task["critical_findings"] = 0
     task["mandatory_unknowns"] = 0
-    task["evidence"] = {
-        "candidate_sha": "b" * 40,
-        "focused": "pass",
-        "adversarial": "pass",
-        "integration": "pass",
-        "regression": "pass",
-        "independent_verification": "pass",
-        "ci": "pass",
-    }
+    task["evidence"] = _complete_evidence()
     supervisor.transition("T01", "SEALED")
     assert supervisor.tasks["T01"]["status"] == "SEALED"
 
