@@ -4,24 +4,24 @@
 
 Objective: build a generic, execution-isolated autonomous-loop governance framework from current main authority `694c2b106416c2b4bbb1093bbbffed28262a0ce9`. PR815 remains an external T01 implementation vehicle and is not a framework code dependency.
 
-Allowed work: governance package, registry, handbook, tests, CI and review evidence. Prohibited work: TradeBuilder/ranking/strategy/risk/broker/order changes, execution authority, frozen-model economics and PR815 implementation changes.
+Allowed work: governance package, registry, handbook, tests, CI, review evidence and the dependency manifest required by the registry loader. Prohibited work: TradeBuilder/ranking/strategy/risk/broker/order changes, execution authority, frozen-model economics and PR815 implementation changes.
 
 ## Scope Guard
 
-Changed files are restricted to autonomous-loop governance, its tests, its dedicated workflow, handbook and this review artifact. Safety defaults remain `broker_write_authority=false`, `order_authority=false`, `paper_authorized=false`, `live_authorized=false`.
+Changed files are restricted to autonomous-loop governance, its tests, its dedicated workflow, handbook, review artifact and `requirements.txt` for the explicit PyYAML registry dependency. Safety defaults remain `broker_write_authority=false`, `order_authority=false`, `paper_authorized=false`, `live_authorized=false`.
 
 ## Evidence Contract
 
 mode: GOVERNANCE_READ_ONLY
 candidate_id: PR816_AUTONOMOUS_LOOP_FRAMEWORK
- decision: IMPLEMENTATION_CANDIDATE
-reason: Exact-head focused and adversarial framework certification passed; repository-wide CI and fresh independent verification remain required before merge readiness.
-timestamp: 2026-08-12T10:02:41Z
+decision: IMPLEMENTATION_CANDIDATE
+reason: Exact-head framework certification and Code Excellence passed before the dependency repair; generic Python 3.12 CI exposed the undeclared PyYAML dependency, which is now explicitly declared and must be revalidated on the new exact head. Fresh independent verification remains required before merge readiness.
+timestamp: 2026-08-12T10:15:16Z
 is_order_action: false
 broker_api_called: false
 live_order_action: false
 broker_order_action: false
-source: github_actions_pr816_exact_head
+source: github_actions_pr816_exact_head_and_pytest_failure_artifact
 
 ## Grill Me Review
 
@@ -32,6 +32,7 @@ Adversarial questions applied:
 - Can a T36+ task be created without protecting an existing locked guarantee? Rejected by `change_budget_required` validation.
 - Can dynamic task numbering skip from T36 to T38? Rejected by monotonic-ID validation.
 - Can a task seal without exact candidate SHA or mandatory gate evidence? Rejected by sealing guard.
+- Does the framework work only because its dedicated CI installs an undeclared package? Generic CI proved that defect by failing collection with `ModuleNotFoundError: yaml`; the repair declares PyYAML in the repository dependency manifest rather than weakening the test.
 
 ## Hermes Review
 
@@ -43,7 +44,7 @@ The implementation is deliberately small: state transitions, dependency resoluti
 
 ## QA / Safety Review
 
-Focused/adversarial tests cover registry bootstrap, safety boundary, illegal transition skips, dependency cycles, unknown dependencies, blocked dependency behavior, T36+ monotonic IDs, scope-growth rejection, six-question rationale enforcement and exact-evidence sealing. Dedicated CI compiles the package, runs tests, checks exact PR-head checkout and scans the governance package for execution-authority markers.
+Focused/adversarial tests cover registry bootstrap, safety boundary, illegal transition skips, dependency cycles, unknown dependencies, blocked dependency behavior, T36+ monotonic IDs, scope-growth rejection, six-question rationale enforcement and exact-evidence sealing. Dedicated CI compiles the package, runs tests, checks exact PR-head checkout and scans the governance package for execution-authority markers. Generic CI is also required to prove the declared runtime/test dependencies are sufficient under the repository's Python 3.12 lane.
 
 ## Acceptance Proof
 
