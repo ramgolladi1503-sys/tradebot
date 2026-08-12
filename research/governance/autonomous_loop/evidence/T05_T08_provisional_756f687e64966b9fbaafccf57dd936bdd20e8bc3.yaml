@@ -1,0 +1,17 @@
+tasks: [T05, T06, T07, T08]
+checkpoint: C02
+candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+states: {T05: IMPLEMENTATION_VALID, T06: IMPLEMENTATION_VALID, T07: IMPLEMENTATION_VALID, T08: SPEC_FROZEN}
+tests:
+  focused: PASS
+  adversarial: PASS
+  integration: PASS
+  result: 6 passed for index research contracts/lifecycle
+evidence:
+  live_or_prospective: NOT_CLAIMED
+  data: BLOCKED_DATA when dataset is absent
+  independent_verification: PENDING
+  ci: PENDING
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+findings: {critical: 0, major: 0, mandatory_unknowns: 1}

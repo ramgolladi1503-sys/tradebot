@@ -109,7 +109,7 @@ tasks:
     task_id: T05
     title: BANKNIFTY discovery and validation
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T04]
     blocks: [T06]
     objective: Governed discovery, leakage audit, controls, OOS/WFA, robustness and benchmarks.
@@ -120,13 +120,13 @@ tasks:
     ci: {required: true}
     exit_gates: [HISTORICAL_OOS_VERDICT]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T05_T08_provisional_756f687e64966b9fbaafccf57dd936bdd20e8bc3.yaml]
+    evidence: {candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3, focused: {status: PASS, candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3}}
   T06:
     task_id: T06
     title: BANKNIFTY model freeze
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T05]
     blocks: [T07]
     objective: Freeze only if qualified; otherwise record NO_STRUCTURAL_EDGE_FOUND.
@@ -137,13 +137,13 @@ tasks:
     ci: {required: true}
     exit_gates: [MODEL_FROZEN_OR_NO_EDGE]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T05_T08_provisional_756f687e64966b9fbaafccf57dd936bdd20e8bc3.yaml]
+    evidence: {candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3, focused: {status: PASS, candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3}}
   T07:
     task_id: T07
     title: BANKNIFTY independent certification
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T06]
     blocks: [T08]
     objective: Independent adversarial exact-candidate review.
@@ -154,13 +154,13 @@ tasks:
     ci: {required: true}
     exit_gates: [BANKNIFTY_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T05_T08_provisional_756f687e64966b9fbaafccf57dd936bdd20e8bc3.yaml]
+    evidence: {candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3, focused: {status: PASS, candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3}}
   T08:
     task_id: T08
     title: SENSEX research specification
     architecture_version: V2
-    status: PENDING
+    status: SPEC_FROZEN
     depends_on: [T07]
     blocks: [T09]
     objective: Freeze target, cutoff, dev/OOS, candidate families, controls and search accounting.
@@ -171,8 +171,8 @@ tasks:
     ci: {required: true}
     exit_gates: [SENSEX_SPEC_FROZEN]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T05_T08_provisional_756f687e64966b9fbaafccf57dd936bdd20e8bc3.yaml]
+    evidence: {candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3, focused: {status: PASS, candidate_sha: 756f687e64966b9fbaafccf57dd936bdd20e8bc3}}
   T09:
     task_id: T09
     title: SENSEX discovery and validation
