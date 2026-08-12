@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from .task_state_machine import TaskState, is_valid_terminal
+from .task_state_machine import TaskState
 
 
 class DependencyError(ValueError):
@@ -17,6 +17,11 @@ def validate_dependencies(tasks: Mapping[str, dict]) -> None:
                 raise DependencyError(f"{task_id} depends on unknown task {dep}")
             if dep == task_id:
                 raise DependencyError(f"{task_id} cannot depend on itself")
+        for blocked in task.get("blocks", []):
+            if blocked not in ids:
+                raise DependencyError(f"{task_id} blocks unknown task {blocked}")
+            if blocked == task_id:
+                raise DependencyError(f"{task_id} cannot block itself")
 
     visiting: set[str] = set()
     visited: set[str] = set()
@@ -36,11 +41,34 @@ def validate_dependencies(tasks: Mapping[str, dict]) -> None:
         visit(task_id)
 
 
+def _declared_terminal_satisfies_dependency(task: dict) -> bool:
+    """Return whether this task's current terminal outcome legally releases dependents.
+
+    SEALED is always completion. Honest research outcomes such as NO_STRUCTURAL_EDGE_FOUND
+    or INVALIDATED release dependents only when the task's frozen exit gate explicitly
+    declares that outcome. A generic INVALIDATED/SUPERSEDED state must never become an
+    implicit PASS for downstream work.
+    """
+
+    state = TaskState(task["status"])
+    if state == TaskState.SEALED:
+        return True
+
+    exit_gates = {str(gate) for gate in task.get("exit_gates", [])}
+    if state == TaskState.NO_STRUCTURAL_EDGE_FOUND:
+        return any("NO_EDGE" in gate or "NO_STRUCTURAL_EDGE_FOUND" in gate for gate in exit_gates)
+    if state == TaskState.INVALIDATED:
+        return any("INVALIDATED" in gate for gate in exit_gates)
+
+    # SUPERSEDED is intentionally fail-closed until an explicit successor binding is
+    # implemented and independently validated. Blocked/repair/in-progress states also
+    # never satisfy dependencies.
+    return False
+
+
 def dependencies_satisfied(task: dict, tasks: Mapping[str, dict]) -> bool:
     for dep_id in task.get("depends_on", []):
-        dep = tasks[dep_id]
-        state = TaskState(dep["status"])
-        if not is_valid_terminal(state):
+        if not _declared_terminal_satisfies_dependency(tasks[dep_id]):
             return False
     return True
 
