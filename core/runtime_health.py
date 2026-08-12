@@ -124,9 +124,13 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         "sla_status": raw_sla_status or freshness.get("state"),
         "reasons": list(freshness.get("reasons") or []),
     }
+    # Only the persisted feed snapshot is authoritative for integrity. During
+    # startup or atomic replacement it may be absent/empty while feed_debug
+    # still contains an in-memory hash from a different state.
+    authoritative_snapshot_available = bool(feed_runtime_payload)
     expected_snapshot_hash = ""
     integrity_alerts: list[dict[str, Any]] = []
-    has_integrity_evidence = bool(feed_runtime_payload) or bool(feed.get("snapshot_hash")) or bool(feed.get("feed_truth_state"))
+    has_integrity_evidence = authoritative_snapshot_available
     if has_integrity_evidence:
         expected_snapshot_hash = truth_hash_from_mapping(
             feed_runtime_payload,
@@ -150,6 +154,8 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
             snapshot_hash=feed.get("snapshot_hash"),
             expected_snapshot_hash=expected_snapshot_hash,
         )
+    if not authoritative_snapshot_available:
+        feed["snapshot_hash"] = None
     feed["snapshot_hash_expected"] = expected_snapshot_hash or None
     feed["snapshot_hash_match"] = bool(
         feed.get("snapshot_hash")
