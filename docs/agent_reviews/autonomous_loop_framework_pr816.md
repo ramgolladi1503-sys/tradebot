@@ -10,6 +10,19 @@ Allowed work: governance package, registry, handbook, tests, CI and review evide
 
 Changed files are restricted to autonomous-loop governance, its tests, its dedicated workflow, handbook and this review artifact. Safety defaults remain `broker_write_authority=false`, `order_authority=false`, `paper_authorized=false`, `live_authorized=false`.
 
+## Evidence Contract
+
+mode: GOVERNANCE_READ_ONLY
+candidate_id: PR816_AUTONOMOUS_LOOP_FRAMEWORK
+ decision: IMPLEMENTATION_CANDIDATE
+reason: Exact-head focused and adversarial framework certification passed; repository-wide CI and fresh independent verification remain required before merge readiness.
+timestamp: 2026-08-12T10:02:41Z
+is_order_action: false
+broker_api_called: false
+live_order_action: false
+broker_order_action: false
+source: github_actions_pr816_exact_head
+
 ## Grill Me Review
 
 Adversarial questions applied:
@@ -30,7 +43,7 @@ The implementation is deliberately small: state transitions, dependency resoluti
 
 ## QA / Safety Review
 
-Focused/adversarial tests cover registry bootstrap, safety boundary, illegal transition skips, dependency cycles, unknown dependencies, blocked dependency behavior, T36+ monotonic IDs, scope-growth rejection, six-question rationale enforcement and exact-evidence sealing. Dedicated CI compiles the package, runs tests, checks exact PR-head checkout and scans the governance package for execution-authority/broker-order tokens.
+Focused/adversarial tests cover registry bootstrap, safety boundary, illegal transition skips, dependency cycles, unknown dependencies, blocked dependency behavior, T36+ monotonic IDs, scope-growth rejection, six-question rationale enforcement and exact-evidence sealing. Dedicated CI compiles the package, runs tests, checks exact PR-head checkout and scans the governance package for execution-authority markers.
 
 ## Acceptance Proof
 
