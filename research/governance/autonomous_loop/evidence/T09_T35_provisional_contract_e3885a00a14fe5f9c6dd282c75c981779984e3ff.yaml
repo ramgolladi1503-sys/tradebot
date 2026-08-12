@@ -1,0 +1,17 @@
+tasks: [T09, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, T24, T25, T26, T27, T28, T29, T30, T31, T32, T33, T34, T35]
+candidate_sha: e3885a00a14fe5f9c6dd282c75c981779984e3ff
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+state: PROVISIONAL_IMPLEMENTATION_INTERFACES
+focused_tests: {status: PASS, result: 6 passed, source: tests/test_mros_program_contracts.py}
+adversarial_tests: {status: PASS, source: tests/test_mros_program_contracts.py}
+integration_tests: {status: PASS, source: tests/test_mros_program_contracts.py}
+deferred:
+  T09_T11: BANKNIFTY/SENSEX source data and independent certification
+  T12_T14: authoritative global source collection and live provenance
+  T15_T20: end-to-end orchestration integration
+  T21: broad offline certification intentionally deferred
+  T22_T25: genuine live/prospective window and untouched outcomes
+  T27_T35: V2 research data, OOS/WFA and intraday prospective evidence
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+protected_feed_modified: false
+main_merged: false
