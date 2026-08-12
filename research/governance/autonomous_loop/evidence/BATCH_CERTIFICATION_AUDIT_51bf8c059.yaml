@@ -1,0 +1,23 @@
+candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd
+phase: STATE_INTEGRITY_AND_BROAD_REGRESSION
+integrity:
+  finding: ALF-005
+  severity: MAJOR
+  repair: transition helper now rejects IMPLEMENTATION_VALID before prerequisite build gates; tests pass
+  protected_scope_untouched: true
+broad_regression:
+  command: pytest -q
+  status: BLOCKED_ENVIRONMENT
+  collection_errors:
+    - missing_dependency: yaml
+    - missing_dependency: zstandard
+    - missing_runtime: libomp.dylib for xgboost
+  candidate_caused_failures: UNKNOWN
+static_compile:
+  command: "python3 -m compileall -q research/mros_certification research/global_v1 research/governance/autonomous_loop tests/research"
+  status: PASS
+task_local_research_suite: {status: PASS, result: "31 passed"}
+checkpoint_ci: NOT_RUN
+independent_reviews: NOT_RUN
+mandatory_unknowns: 1
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}

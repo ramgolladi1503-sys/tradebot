@@ -1,0 +1,11 @@
+checkpoint_id: C02
+candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+covered_tasks: [T04, T05, T06, T07, T08, T09, T10, T11]
+task_status: {T04: SPEC_FROZEN, T05: IMPLEMENTATION_VALID, T06: IMPLEMENTATION_VALID, T07: IMPLEMENTATION_VALID, T08: SPEC_FROZEN, T09: IMPLEMENTATION_VALID, T10: IMPLEMENTATION_VALID, T11: IMPLEMENTATION_VALID}
+evidence: {focused: PASS, adversarial: PASS, integration: PASS, regression: BLOCKED_ENVIRONMENT, checkpoint_ci: NOT_RUN}
+unresolved_findings: {critical: 0, major: 1, mandatory_unknowns: 1}
+blockers: [T12_PREREQUISITE_PENDING, INDEPENDENT_VERIFICATION_PENDING, REQUIRED_CI_PENDING]
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+protected_scope: {feed: untouched, PR813_PR814: untouched, main_merged: false}
+independent_review_required: true

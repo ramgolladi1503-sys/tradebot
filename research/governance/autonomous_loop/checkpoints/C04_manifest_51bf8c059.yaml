@@ -1,0 +1,11 @@
+checkpoint_id: C04
+candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+covered_tasks: [T21, T22, T23, T24, T25, T26]
+task_status: {T21: PENDING, T22: PENDING, T23: PENDING, T24: PENDING, T25: PENDING, T26: PENDING}
+evidence: {focused: PASS, adversarial: PASS, integration: PASS, regression: BLOCKED_ENVIRONMENT, checkpoint_ci: NOT_RUN}
+unresolved_findings: {critical: 0, major: 1, mandatory_unknowns: 1}
+blockers: [UPSTREAM_T12_T20_PENDING, LIVE_PROSPECTIVE_UNAVAILABLE, INDEPENDENT_VERIFICATION_PENDING, REQUIRED_CI_PENDING]
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+protected_scope: {feed: untouched, PR813_PR814: untouched, main_merged: false}
+independent_review_required: true

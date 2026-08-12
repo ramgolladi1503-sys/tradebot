@@ -229,7 +229,7 @@ tasks:
     task_id: T12
     title: Global raw evidence collector
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T11]
     blocks: [T13]
     objective: Read-only DXY/SPX/NASDAQ/VIX collection with provenance, freshness and immutable artifacts.
@@ -240,8 +240,8 @@ tasks:
     ci: {required: true}
     exit_gates: [GLOBAL_COLLECTOR_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA, BLOCKED_AUTH]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T12_concrete_fcf70a8f5.yaml]
+    evidence: {candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd, focused: {status: PASS, candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd}, adversarial: {status: PASS, candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd}, integration: {status: PASS, candidate_sha: fcf70a8f54ac7b0cf3c7ae9076814a9c090eb8dd}}
   T13:
     task_id: T13
     title: Causal global snapshot builder V1

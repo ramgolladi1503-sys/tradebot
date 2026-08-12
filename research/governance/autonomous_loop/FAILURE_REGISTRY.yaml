@@ -49,4 +49,5 @@ failures:
     repair_scope: registry_state_and_evidence
     repair: Restore T13-T35 to PENDING until T12 is concretely implemented and its required gates are satisfied; retain artifacts as unsealed preparatory evidence only.
     regression_test: task-dependency-integrity-audit-after-build
-    status: OPEN
+    status: REPAIRED_PENDING_EXACT_SHA_REVALIDATION
+    repair_evidence: tests/test_autonomous_loop_framework.py
