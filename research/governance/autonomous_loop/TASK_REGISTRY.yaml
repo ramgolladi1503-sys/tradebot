@@ -501,7 +501,7 @@ tasks:
     task_id: T28
     title: V2 collector implementation
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T27]
     blocks: [T29]
     objective: Build read-only collectors with immutable raw artifacts, provenance and SHA binding.
@@ -512,13 +512,13 @@ tasks:
     ci: {required: true}
     exit_gates: [GLOBAL_V2_COLLECTOR_IMPLEMENTATION_VALID]
     stop_conditions: [BLOCKED_DATA, BLOCKED_AUTH]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T28_T30_concrete_90fb54731.yaml]
+    evidence: {candidate_sha: 90fb547312f162fdb0519a189ac10e40c24f242f}
   T29:
     task_id: T29
     title: V2 causal builder
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T28]
     blocks: [T30]
     objective: Create deterministic target-session feature artifact preserving missingness and raw SHA lineage and rejecting future data.
@@ -529,13 +529,13 @@ tasks:
     ci: {required: true}
     exit_gates: [GLOBAL_V2_BUILDER_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T28_T30_concrete_90fb54731.yaml]
+    evidence: {candidate_sha: 90fb547312f162fdb0519a189ac10e40c24f242f}
   T30:
     task_id: T30
     title: Interaction hypothesis registry
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T29]
     blocks: [T31]
     objective: Predeclare economically justified interactions and track search pressure.
@@ -546,8 +546,8 @@ tasks:
     ci: {required: true}
     exit_gates: [INTERACTION_SPEC_FROZEN]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T28_T30_concrete_90fb54731.yaml]
+    evidence: {candidate_sha: 90fb547312f162fdb0519a189ac10e40c24f242f}
   T31:
     task_id: T31
     title: Incremental OOS research
