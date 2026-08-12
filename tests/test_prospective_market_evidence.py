@@ -12,6 +12,8 @@ IST = ZoneInfo("Asia/Kolkata")
 D = date(2026, 8, 11)
 KEY = "test-attestation-key-32-bytes-minimum-0001"
 ATTACKER_KEY = "attacker-selected-key-32-bytes-minimum-0002"
+SHA_A = "a" * 40
+SHA_B = "b" * 40
 TOKENS = {"NIFTY": 256265, "BANKNIFTY": 260105, "SENSEX": 265}
 
 
@@ -68,7 +70,7 @@ def good():
 
 def signed_attestation(
     *,
-    code_sha="candidate-sha",
+    code_sha=SHA_A,
     key=KEY,
     session_id="live-1",
     attested_at="2026-08-11T15:31:00+05:30",
@@ -93,7 +95,7 @@ def signed_attestation(
     return pme.sign_live_session_attestation(raw, attestation_key=key)
 
 
-def finalize(tmp_path, candidate=None, *, code_sha="candidate-sha", attestation=None):
+def finalize(tmp_path, candidate=None, *, code_sha=SHA_A, attestation=None):
     return pme.finalize_session(
         session_date=D,
         bars_by_symbol=candidate if candidate is not None else good(),
@@ -111,12 +113,24 @@ def test_seals_complete_attested_live_session_and_volume_stays_missing(tmp_path)
     assert payload["order_authority"] is False
     assert payload["paper_authorized"] is False
     assert payload["live_authorized"] is False
-    assert payload["code_sha"] == "candidate-sha"
+    assert payload["code_sha"] == SHA_A
     assert payload["created_at_ist"] == "2026-08-11T15:31:00+05:30"
     assert payload["live_attestation_sha256"]
     assert payload["indices"]["NIFTY"]["volume"] is None
     assert payload["indices"]["NIFTY"]["volume_status"] == "MISSING_NOT_ZERO"
     assert payload["indices"]["SENSEX"]["source_identity"]["provider"] == "kite"
+
+
+def test_exact_git_sha_is_required_for_sealed_evidence(tmp_path):
+    for invalid in (None, "", "UNKNOWN", "candidate-sha", "A" * 40, "a" * 39, "g" * 40):
+        with pytest.raises(ValueError, match="CODE_SHA_EXACT_REQUIRED"):
+            pme.finalize_session(
+                session_date=D,
+                bars_by_symbol=good(),
+                output_root=tmp_path,
+                code_sha=invalid,
+                live_attestation=signed_attestation(),
+            )
 
 
 def test_self_declared_live_metadata_without_independent_attestation_is_rejected(tmp_path):
@@ -125,7 +139,7 @@ def test_self_declared_live_metadata_without_independent_attestation_is_rejected
             session_date=D,
             bars_by_symbol=good(),
             output_root=tmp_path,
-            code_sha="candidate-sha",
+            code_sha=SHA_A,
         )
 
 
@@ -135,7 +149,7 @@ def test_verification_key_is_not_a_finalize_session_caller_argument(tmp_path):
             session_date=D,
             bars_by_symbol=good(),
             output_root=tmp_path,
-            code_sha="candidate-sha",
+            code_sha=SHA_A,
             live_attestation=signed_attestation(),
             attestation_key=ATTACKER_KEY,
         )
@@ -290,9 +304,9 @@ def test_declared_symbol_mismatch_is_rejected(tmp_path):
 
 def test_immutable_conflict_idempotency_and_payload_tamper_detection(tmp_path):
     candidate = good()
-    first = finalize(tmp_path, candidate, code_sha="sha-a")
+    first = finalize(tmp_path, candidate, code_sha=SHA_A)
     assert first["status"] == "SEALED"
-    second = finalize(tmp_path, candidate, code_sha="sha-a")
+    second = finalize(tmp_path, candidate, code_sha=SHA_A)
     assert second["status"] == "IDEMPOTENT"
 
     path = tmp_path / "2026-08-11.json"
@@ -300,25 +314,25 @@ def test_immutable_conflict_idempotency_and_payload_tamper_detection(tmp_path):
     payload["indices"]["NIFTY"]["close"] += 100
     path.write_text(json.dumps(payload))
     with pytest.raises(FileExistsError, match="IMMUTABLE_EVIDENCE_CONFLICT"):
-        finalize(tmp_path, candidate, code_sha="sha-a")
+        finalize(tmp_path, candidate, code_sha=SHA_A)
 
 
 def test_created_at_tamper_is_detected(tmp_path):
     candidate = good()
-    finalize(tmp_path, candidate, code_sha="sha-a")
+    finalize(tmp_path, candidate, code_sha=SHA_A)
     path = tmp_path / "2026-08-11.json"
     payload = json.loads(path.read_text())
     payload["created_at_ist"] = "2026-08-11T16:45:00+05:30"
     path.write_text(json.dumps(payload))
     with pytest.raises(FileExistsError, match="IMMUTABLE_EVIDENCE_CONFLICT"):
-        finalize(tmp_path, candidate, code_sha="sha-a")
+        finalize(tmp_path, candidate, code_sha=SHA_A)
 
 
 def test_code_sha_change_for_same_session_is_not_idempotent(tmp_path):
     candidate = good()
-    finalize(tmp_path, candidate, code_sha="sha-a")
+    finalize(tmp_path, candidate, code_sha=SHA_A)
     with pytest.raises(FileExistsError, match="IMMUTABLE_EVIDENCE_CONFLICT"):
-        finalize(tmp_path, candidate, code_sha="sha-b")
+        finalize(tmp_path, candidate, code_sha=SHA_B, attestation=signed_attestation(code_sha=SHA_B))
 
 
 def test_safe_wrapper_fails_closed_without_attestation(monkeypatch, tmp_path):
@@ -342,7 +356,7 @@ def test_safe_wrapper_fails_closed_without_trusted_key(monkeypatch, tmp_path):
 
 def test_safe_wrapper_contains_sidecar_failure(monkeypatch, tmp_path):
     monkeypatch.setenv("TRADEBOT_LIVE_SESSION_ATTESTATION_PATH", "ignored.json")
-    monkeypatch.setenv("TRADEBOT_CODE_SHA", "candidate-sha")
+    monkeypatch.setenv("TRADEBOT_CODE_SHA", SHA_A)
     monkeypatch.setattr(pme, "_load_runtime_attestation", lambda _path: signed_attestation())
 
     def explode(**_kwargs):
@@ -389,8 +403,8 @@ def test_buffer_integration_preserves_identity_but_still_requires_attestation(tm
             session_date=D,
             bars_by_symbol=assembled,
             output_root=tmp_path,
-            code_sha="integration-sha",
+            code_sha=SHA_A,
         )
 
-    result = finalize(tmp_path, assembled, code_sha="integration-sha")
+    result = finalize(tmp_path, assembled, code_sha=SHA_A)
     assert result["status"] == "SEALED"
