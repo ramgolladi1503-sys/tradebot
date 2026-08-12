@@ -1,0 +1,10 @@
+task_id: T13
+candidate_sha: bbbec08cfab6973b9220ae7d05314a494638e04c
+state: IMPLEMENTATION_VALID
+implementation: research/global_v1/snapshot_builder.py
+guarantees: [causal_cutoff, future_rejection, stale_rejection, missingness_preserved, sha_lineage, deterministic_idempotency, tamper_detection, execution_isolation]
+tests: {focused: PASS, adversarial: PASS, integration: PASS, result: 6 passed}
+live_or_prospective: NOT_CLAIMED
+independent_verification: PENDING
+ci: PENDING
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}

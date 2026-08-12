@@ -246,7 +246,7 @@ tasks:
     task_id: T13
     title: Causal global snapshot builder V1
     architecture_version: V2
-    status: PENDING
+    status: IMPLEMENTATION_VALID
     depends_on: [T12]
     blocks: [T14]
     objective: Shared target-session V1 snapshot rejecting stale, missing and future-leaking inputs.
@@ -257,8 +257,8 @@ tasks:
     ci: {required: true}
     exit_gates: [GLOBAL_SNAPSHOT_OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths: [research/governance/autonomous_loop/evidence/T13_concrete_bbbec08cf.yaml]
+    evidence: {candidate_sha: bbbec08cfab6973b9220ae7d05314a494638e04c, focused: {status: PASS, candidate_sha: bbbec08cfab6973b9220ae7d05314a494638e04c}, adversarial: {status: PASS, candidate_sha: bbbec08cfab6973b9220ae7d05314a494638e04c}, integration: {status: PASS, candidate_sha: bbbec08cfab6973b9220ae7d05314a494638e04c}}
   T14:
     task_id: T14
     title: Extended global research umbrella
