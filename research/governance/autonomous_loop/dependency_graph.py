@@ -73,6 +73,42 @@ def dependencies_satisfied(task: dict, tasks: Mapping[str, dict]) -> bool:
     return True
 
 
+def _build_state_satisfies_dependency(task: dict) -> bool:
+    """Return whether a predecessor has reached its declared build gate.
+
+    Build eligibility is intentionally weaker than certification eligibility.  It
+    allows a later task to be implemented against an upstream interface while
+    keeping checkpoint sealing dependent on the strict terminal rules above.
+    """
+
+    state = TaskState(task["status"])
+    if state in {
+        TaskState.IMPLEMENTATION_VALID,
+        TaskState.ADVERSARIAL_VALID,
+        TaskState.INTEGRATION_VALID,
+        TaskState.REGRESSION_VALID,
+        TaskState.INDEPENDENTLY_VERIFIED,
+        TaskState.CI_GREEN,
+        TaskState.SEALED,
+    }:
+        return True
+
+    # Honest research exits can release implementation of a dependent task only
+    # when the predecessor explicitly declares that exit gate.
+    exit_gates = {str(gate) for gate in task.get("exit_gates", [])}
+    if state == TaskState.NO_STRUCTURAL_EDGE_FOUND:
+        return any("NO_EDGE" in gate or "NO_STRUCTURAL_EDGE_FOUND" in gate for gate in exit_gates)
+    if state == TaskState.INVALIDATED:
+        return any("INVALIDATED" in gate for gate in exit_gates)
+    return False
+
+
+def build_dependencies_satisfied(task: dict, tasks: Mapping[str, dict]) -> bool:
+    """Check provisional implementation dependencies, never certification gates."""
+
+    return all(_build_state_satisfies_dependency(tasks[dep_id]) for dep_id in task.get("depends_on", []))
+
+
 def eligible_task_ids(tasks: Mapping[str, dict]) -> list[str]:
     validate_dependencies(tasks)
     eligible: list[str] = []
@@ -80,6 +116,19 @@ def eligible_task_ids(tasks: Mapping[str, dict]) -> list[str]:
         if TaskState(task["status"]) not in {TaskState.PENDING, TaskState.REPAIR_REQUIRED}:
             continue
         if dependencies_satisfied(task, tasks):
+            eligible.append(task_id)
+    return sorted(eligible, key=_task_sort_key)
+
+
+def build_eligible_task_ids(tasks: Mapping[str, dict]) -> list[str]:
+    """Return PENDING/REPAIR_REQUIRED tasks eligible for implementation work."""
+
+    validate_dependencies(tasks)
+    eligible: list[str] = []
+    for task_id, task in tasks.items():
+        if TaskState(task["status"]) not in {TaskState.PENDING, TaskState.REPAIR_REQUIRED}:
+            continue
+        if build_dependencies_satisfied(task, tasks):
             eligible.append(task_id)
     return sorted(eligible, key=_task_sort_key)
 

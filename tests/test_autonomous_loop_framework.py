@@ -5,7 +5,12 @@ import pytest
 import yaml
 
 from research.governance.autonomous_loop import AutonomousLoopSupervisor, RegistryError, TaskState, assert_transition
-from research.governance.autonomous_loop.dependency_graph import DependencyError, eligible_task_ids, validate_dependencies
+from research.governance.autonomous_loop.dependency_graph import (
+    DependencyError,
+    build_eligible_task_ids,
+    eligible_task_ids,
+    validate_dependencies,
+)
 from research.governance.autonomous_loop.evidence_contract import SafetyBoundary
 
 
@@ -20,6 +25,28 @@ def test_registry_bootstraps_and_selects_t01():
     supervisor = AutonomousLoopSupervisor(load_registry())
     assert supervisor.next_eligible_task() == "T01"
     assert len(supervisor.tasks) == 35
+
+
+def test_build_eligibility_releases_downstream_after_integration_valid_only():
+    registry = load_registry()
+    registry["tasks"]["T01"]["status"] = "INTEGRATION_VALID"
+    assert build_eligible_task_ids(registry["tasks"]) == ["T02"]
+    assert eligible_task_ids(registry["tasks"]) == []
+
+
+def test_build_eligibility_never_treats_provisional_state_as_certification():
+    registry = load_registry()
+    registry["tasks"]["T01"]["status"] = "IMPLEMENTATION_VALID"
+    supervisor = AutonomousLoopSupervisor(registry)
+    assert supervisor.next_build_eligible_task() == "T02"
+    assert supervisor.next_eligible_task() is None
+
+
+def test_build_eligibility_remains_fail_closed_for_blocked_or_generic_invalidated():
+    registry = load_registry()
+    for state in ("BLOCKED", "INVALIDATED"):
+        registry["tasks"]["T01"]["status"] = state
+        assert "T02" not in build_eligible_task_ids(registry["tasks"])
 
 
 def test_safety_boundary_is_fail_closed():

@@ -7,7 +7,7 @@ import re
 
 import yaml
 
-from .dependency_graph import eligible_task_ids, validate_dependencies
+from .dependency_graph import build_eligible_task_ids, eligible_task_ids, validate_dependencies
 from .evidence_contract import SafetyBoundary, validate_dynamic_task, validate_task_shape
 from .task_state_machine import TaskState, assert_transition
 
@@ -45,6 +45,14 @@ class AutonomousLoopSupervisor:
         if not candidates:
             return None
         # Critical-path/safety weighting can be encoded explicitly in registry priority.
+        return min(candidates, key=lambda task_id: (self.tasks[task_id].get("priority", 1000), _task_number(task_id)))
+
+    def next_build_eligible_task(self) -> str | None:
+        """Select the next implementation task without weakening certification."""
+
+        candidates = build_eligible_task_ids(self.tasks)
+        if not candidates:
+            return None
         return min(candidates, key=lambda task_id: (self.tasks[task_id].get("priority", 1000), _task_number(task_id)))
 
     def transition(self, task_id: str, target: TaskState | str) -> None:
