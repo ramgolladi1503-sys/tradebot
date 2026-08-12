@@ -44,7 +44,7 @@ tasks:
     task_id: T02
     title: PR815 adversarial certification
     architecture_version: V2
-    status: PENDING
+    status: ADVERSARIAL_VALID
     depends_on: [T01]
     blocks: [T03]
     objective: Attack incomplete/missing/duplicate/future/replay/fallback/mutation/sidecar/broker-order paths.
@@ -55,13 +55,18 @@ tasks:
     ci: {required: true}
     exit_gates: [OFFLINE_CERTIFIED]
     stop_conditions: [BLOCKED_AUTH, BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths:
+      - research/governance/autonomous_loop/evidence/T02_adversarial_36137bf9c2555b2c375310c0684ab01889b03ec8.yaml
+    evidence:
+      candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8
+      focused: {status: PASS, candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8}
+      adversarial: {status: PASS, candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8}
+      integration: {status: PASS, candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8}
   T03:
     task_id: T03
     title: NIFTY frozen model preservation
     architecture_version: V2
-    status: PENDING
+    status: INTEGRATION_VALID
     depends_on: [T02]
     blocks: [T04]
     objective: Bind frozen NIFTY Global Context V1 to common evidence adapter without refit or feature drift.
@@ -72,8 +77,13 @@ tasks:
     ci: {required: true}
     exit_gates: [NIFTY_MODEL_FROZEN_VERIFIED]
     stop_conditions: [BLOCKED_DATA]
-    evidence_paths: []
-    evidence: {}
+    evidence_paths:
+      - research/governance/autonomous_loop/evidence/T03_frozen_v1_36137bf9c2555b2c375310c0684ab01889b03ec8.yaml
+    evidence:
+      candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8
+      focused: {status: PASS, candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8}
+      adversarial: {status: PASS, candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8}
+      integration: {status: PASS, candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8}
   T04:
     task_id: T04
     title: BANKNIFTY research specification

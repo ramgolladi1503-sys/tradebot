@@ -1,0 +1,13 @@
+task_id: T02
+checkpoint: C01
+candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+state: ADVERSARIAL_VALID
+evidence:
+  focused: {status: PASS, candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8, result: 39 passed}
+  adversarial: {status: PASS, candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8, source: tests/test_prospective_market_evidence.py}
+  integration: {status: PASS, candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8, source: OhlcBuffer integration cases}
+  independent_verification: {status: PENDING, candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8}
+  ci: {status: PENDING, candidate_sha: 36137bf9c2555b2c375310c0684ab01889b03ec8}
+safety: {broker_write_authority: false, order_authority: false, paper_authorized: false, live_authorized: false}
+findings: {critical: 0, major: 0, mandatory_unknowns: 1}
