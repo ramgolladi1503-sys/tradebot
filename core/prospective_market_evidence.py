@@ -12,6 +12,7 @@ import hmac
 import json
 import math
 import os
+import re
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from types import MappingProxyType
@@ -58,6 +59,14 @@ def _canonical(obj: Mapping[str, Any]) -> bytes:
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _exact_git_sha(value: Any) -> str:
+    """Require an exact canonical 40-hex Git commit SHA for sealed evidence."""
+    text = str(value or "").strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", text):
+        raise ValueError("CODE_SHA_EXACT_REQUIRED")
+    return text
 
 
 def _dt(value: Any) -> datetime:
@@ -286,9 +295,7 @@ def finalize_session(
     if not isinstance(bars_by_symbol, Mapping):
         raise ValueError("BARS_BY_SYMBOL_INVALID")
 
-    code_sha_value = str(code_sha or os.getenv("TRADEBOT_CODE_SHA") or "").strip()
-    if not code_sha_value or code_sha_value.upper() == "UNKNOWN":
-        raise ValueError("CODE_SHA_REQUIRED")
+    code_sha_value = _exact_git_sha(code_sha or os.getenv("TRADEBOT_CODE_SHA"))
 
     now = datetime.now(IST)
     if session_date > now.date():
