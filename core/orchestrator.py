@@ -4942,6 +4942,54 @@ class Orchestrator:
                     )
                     self._apply_cycle_indicator_readiness_truth(market_data_list, indicator_report)
                     write_live_indicator_readiness_latest(indicator_report, now_epoch=float(time.time()))
+                    try:
+                        from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+                        for row in list(market_data_list or []):
+                            if not isinstance(row, dict):
+                                continue
+                            symbol = str(row.get("symbol") or "").strip().upper()
+                            if not symbol:
+                                continue
+                            emit_candle_pipeline_event(
+                                symbol=symbol, timeframe="1m", stage="T8_WARMUP_EVALUATED",
+                                source_event_ts=time.time(), bar_ts=row.get("last_candle_ts"),
+                                bar_state=str(row.get("warmup_status") or "UNKNOWN"),
+                                bar_count=row.get("ohlc_bars_count"),
+                                producer="core.live_indicator_readiness.build_live_indicator_readiness_report",
+                                consumer="orchestrator.live_monitoring",
+                                details={
+                                    "warmup_status": row.get("warmup_status"),
+                                    "required_bars": row.get("warmup_min_bars"),
+                                    "available_bars": row.get("ohlc_bars_count"),
+                                    "accepted_bars": row.get("ohlc_bars_count"),
+                                    "rejected_bars": 0,
+                                    "last_valid_bar_ts": row.get("last_candle_ts"),
+                                    "indicator_last_update_epoch": row.get("indicator_last_update_epoch"),
+                                    "warmup_watermark": row.get("indicator_last_update_epoch"),
+                                    "warmup_reason_codes": row.get("warmup_reasons") or row.get("regime_reasons") or [],
+                                },
+                            )
+                            emit_candle_pipeline_event(
+                                symbol=symbol, timeframe="1m", stage="T9_READINESS_EVALUATED",
+                                source_event_ts=time.time(), bar_ts=row.get("last_candle_ts"),
+                                bar_state="ALLOWED" if bool(row.get("indicator_readiness_ready")) else "BLOCKED",
+                                producer="core.live_indicator_readiness.build_live_indicator_readiness_report",
+                                consumer="orchestrator.live_monitoring",
+                                details={
+                                    "readiness_state": row.get("indicator_readiness_state"),
+                                    "allowed": bool(row.get("indicator_readiness_ready")),
+                                    "blockers": row.get("indicator_readiness_blockers") or row.get("regime_reasons") or [],
+                                    "feed_ok": row.get("feed_ok"),
+                                    "execution_feed_ready": row.get("execution_feed_ready"),
+                                    "truth_integrity_status": row.get("truth_integrity_status"),
+                                    "option_feed_block_reason": row.get("option_feed_block_reason"),
+                                    "latest_completed_bar_ts": row.get("last_candle_ts"),
+                                    "indicator_last_update_epoch": row.get("indicator_last_update_epoch"),
+                                    "warmup_status": row.get("warmup_status"),
+                                },
+                            )
+                    except Exception:
+                        pass
                 except Exception as exc:
                     logger.warning("cycle_indicator_truth_refresh_failed err=%s", exc)
                 cycle_market_open = bool(
@@ -7598,6 +7646,41 @@ class Orchestrator:
                             indicator_payload=indicator_payload if isinstance(indicator_payload, dict) else {},
                             cycle_blockers=dict(cycle_blockers),
                         )
+                        try:
+                            from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+                            emit_candle_pipeline_event(
+                                symbol="__CYCLE__", timeframe="cycle", stage="T10_CANDIDATE_EVALUATED",
+                                source_event_ts=time.time(), bar_state="COMPLETED",
+                                bar_count=int(cycle_candidate_pool_count),
+                                producer="orchestrator.live_monitoring",
+                                details={
+                                    "evaluation_started": True,
+                                    "evaluation_completed": True,
+                                    "candidate_created": int(cycle_candidate_pool_count),
+                                    "rankable": len(cycle_ranked_candidates),
+                                    "executable": int(top_payload.get("top_executable_count") or 0),
+                                    "blockers": dict(cycle_blockers),
+                                    "readiness_state": top_payload.get("phase2_state"),
+                                },
+                            )
+                            emit_candle_pipeline_event(
+                                symbol="__CYCLE__", timeframe="cycle", stage="T11_RANKING_EVALUATED",
+                                source_event_ts=time.time(), bar_state="COMPLETED",
+                                bar_count=len(cycle_ranked_candidates),
+                                producer="core.ranked_pipeline_evidence.write_ranked_pipeline_evidence",
+                                details={
+                                    "ranking_cycle_id": top_payload.get("cycle_id") or top_payload.get("generated_epoch"),
+                                    "input_candidate_count": len(cycle_ranked_candidates),
+                                    "rankable_count": int(top_payload.get("phase2_ranked_count") or 0),
+                                    "executable_count": int(top_payload.get("top_executable_count") or 0),
+                                    "ranked_count": len(cycle_ranked_candidates),
+                                    "top_candidate_id": top_payload.get("phase2_selected_trade_id"),
+                                    "ranking_completed": True,
+                                    "blockers": dict(cycle_blockers),
+                                },
+                            )
+                        except Exception:
+                            pass
                     except Exception as ranked_pipeline_exc:
                         logger.error("[RANKED_PIPELINE_RUNTIME_ERROR] error=%s", ranked_pipeline_exc)
                     feature_timing["GAP_write_ranked_pipeline_ms"] = _perf_ms(t0)

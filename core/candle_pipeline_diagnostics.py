@@ -47,6 +47,7 @@ def emit_candle_pipeline_event(
     instrument_token: int | str | None = None,
     producer: str = "",
     consumer: str = "",
+    details: dict[str, Any] | None = None,
 ) -> bool:
     """Append one compact transition event, at most once per material key."""
     key = (str(symbol), str(timeframe), str(stage), str(bar_ts or bucket_start or ""))
@@ -77,6 +78,12 @@ def emit_candle_pipeline_event(
             "read_only": True,
             "is_order_action": False,
         }
+        if isinstance(details, dict):
+            payload["details"] = {
+                str(key): _json_value(value)
+                for key, value in details.items()
+                if str(key) not in {"secret", "token", "access_token", "api_key"}
+            }
         target = Path(TRACE_PATH)
         ensure_dir(target.parent)
         with target.open("a", encoding="utf-8") as handle:
