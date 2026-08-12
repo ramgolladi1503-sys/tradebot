@@ -9,6 +9,7 @@ import yaml
 
 from .dependency_graph import build_dependencies_satisfied, build_eligible_task_ids, eligible_task_ids, validate_dependencies
 from .evidence_contract import SafetyBoundary, validate_dynamic_task, validate_task_shape
+from .freshness import validate_freshness_record
 from .task_state_machine import TaskState, assert_transition
 
 
@@ -62,6 +63,11 @@ class AutonomousLoopSupervisor:
         assert_transition(current, target_state)
         if target_state == TaskState.IMPLEMENTATION_VALID and not build_dependencies_satisfied(task, self.tasks):
             raise RegistryError("cannot mark implementation valid before build-eligible prerequisites")
+        if target_state == TaskState.IMPLEMENTATION_VALID and task.get("evidence", {}).get("task_candidate_sha"):
+            try:
+                validate_freshness_record(task["evidence"])
+            except ValueError as exc:
+                raise RegistryError(str(exc)) from exc
         if target_state == TaskState.NO_STRUCTURAL_EDGE_FOUND:
             exit_gates = {str(gate) for gate in task.get("exit_gates", [])}
             if not any("NO_EDGE" in gate or "NO_STRUCTURAL_EDGE_FOUND" in gate for gate in exit_gates):
