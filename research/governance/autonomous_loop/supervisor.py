@@ -7,7 +7,12 @@ import re
 
 import yaml
 
-from .dependency_graph import eligible_task_ids, validate_dependencies
+from .dependency_graph import (
+    build_eligible_task_ids,
+    dependencies_satisfied,
+    eligible_task_ids,
+    validate_dependencies,
+)
 from .evidence_contract import SafetyBoundary, validate_dynamic_task, validate_task_shape
 from .task_state_machine import TaskState, assert_transition
 
@@ -41,10 +46,26 @@ class AutonomousLoopSupervisor:
         return self.registry["tasks"]
 
     def next_eligible_task(self) -> str | None:
+        """Return next task whose dependencies are finally complete.
+
+        This remains the strict path for seal/release semantics.
+        """
         candidates = eligible_task_ids(self.tasks)
         if not candidates:
             return None
-        # Critical-path/safety weighting can be encoded explicitly in registry priority.
+        return min(candidates, key=lambda task_id: (self.tasks[task_id].get("priority", 1000), _task_number(task_id)))
+
+    def next_build_eligible_task(self) -> str | None:
+        """Return next task safe to implement provisionally under CI batching.
+
+        A dependency at REGRESSION_VALID or stronger may release provisional build
+        work, but this never authorizes downstream sealing.  If an upstream task later
+        requires repair, the provisional downstream work must remain unsealed until
+        the dependency is repaired and finally completed.
+        """
+        candidates = build_eligible_task_ids(self.tasks)
+        if not candidates:
+            return None
         return min(candidates, key=lambda task_id: (self.tasks[task_id].get("priority", 1000), _task_number(task_id)))
 
     def transition(self, task_id: str, target: TaskState | str) -> None:
@@ -57,6 +78,8 @@ class AutonomousLoopSupervisor:
             if not any("NO_EDGE" in gate or "NO_STRUCTURAL_EDGE_FOUND" in gate for gate in exit_gates):
                 raise RegistryError("NO_STRUCTURAL_EDGE_FOUND is not a declared terminal outcome for this task")
         if target_state == TaskState.SEALED:
+            if not dependencies_satisfied(task, self.tasks):
+                raise RegistryError("cannot seal while strict dependencies are not finally satisfied")
             self._assert_sealable(task)
         task["status"] = target_state.value
 
