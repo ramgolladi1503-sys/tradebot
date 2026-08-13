@@ -18,7 +18,7 @@ from core.freshness_sla import get_freshness_status
 from core.runtime_truth_integrity import build_truth_integrity_alerts, truth_hash_from_mapping
 from core.time_utils import is_market_open_ist, now_utc_epoch
 from core.runtime_boot_identity import stamp_runtime_payload
-from core.feed.runtime_provenance import validate_feed_runtime_provenance
+from core.feed.artifact_loader import load_current_feed_runtime
 from core.paths import runtime_dir
 from core.events import append_event
 
@@ -56,8 +56,9 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
     # runtime logs root. Reading runtime_dir()/feed_runtime_latest.json would
     # select a different, usually absent, path and recreate the dual-path race.
     feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
-    feed_runtime_payload = _safe_json_payload(feed_runtime_path)
-    provenance = validate_feed_runtime_provenance(feed_runtime_payload, current_generation=feed_debug.get("recovery_generation_id"))
+    loaded_runtime = load_current_feed_runtime(feed_runtime_path)
+    feed_runtime_payload = dict(loaded_runtime.get("payload") or {}) if loaded_runtime.get("valid") else {}
+    provenance = {"valid": bool(loaded_runtime.get("valid")), "reasons": list(loaded_runtime.get("reasons") or []), "reason_code": loaded_runtime.get("reason_code")}
 
     market_open = bool(freshness.get("market_open", is_market_open_ist()))
     mode = str(
@@ -134,11 +135,11 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
     # startup or atomic replacement it may be absent/empty while feed_debug
     # still contains an in-memory hash from a different state.
     authoritative_snapshot_available = bool(feed_runtime_payload)
-    expected_snapshot_hash = ""
+    expected_snapshot_hash = str(loaded_runtime.get("expected_snapshot_hash") or "")
     integrity_alerts: list[dict[str, Any]] = []
     has_integrity_evidence = authoritative_snapshot_available
     if has_integrity_evidence:
-        expected_snapshot_hash = truth_hash_from_mapping(
+        expected_snapshot_hash = expected_snapshot_hash or truth_hash_from_mapping(
             feed_runtime_payload,
             exclude_keys=(
                 "snapshot_hash",
@@ -162,6 +163,17 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         )
     if not authoritative_snapshot_available:
         feed["snapshot_hash"] = None
+    if not provenance["valid"] and (
+        provenance.get("reason_code") == "INTEGRITY_MISMATCH"
+        or loaded_runtime.get("observed_snapshot_hash")
+    ):
+        integrity_alerts.append(
+            {
+                "code": "SNAPSHOT_HASH_MISMATCH",
+                "message": "Validated feed runtime artifact failed integrity validation.",
+                "details": {"provenance_reason": provenance.get("reasons")},
+            }
+        )
     feed["snapshot_hash_expected"] = expected_snapshot_hash or None
     feed["snapshot_hash_match"] = bool(
         feed.get("snapshot_hash")

@@ -12,6 +12,7 @@ from core.market_context import derive_market_context
 from core.paths import logs_dir
 from core.feed_debug import get_feed_debug
 from core.feed.runtime_provenance import validate_feed_runtime_provenance
+from core.feed.artifact_loader import load_current_feed_runtime
 from core.time_utils import compute_age_sec, now_utc_epoch
 from core.trade_schema import build_instrument_id
 
@@ -223,14 +224,12 @@ def normalize_feed_runtime_payload(raw: dict) -> dict:
 
 def read_latest_feed_runtime_payload() -> tuple[dict, Path | None]:
     path = logs_dir() / "feed_runtime_latest.json"
-    payload = read_json_dict(path)
-    if payload:
-        current_generation = (get_feed_debug() or {}).get("recovery_generation_id")
-        provenance = validate_feed_runtime_provenance(payload, current_generation=current_generation)
-        payload["provenance"] = provenance
-        if not provenance["valid"]:
-            payload["feed_ok"] = False
-            payload["execution_feed_ready"] = False
+    loaded = load_current_feed_runtime(path)
+    payload = dict(loaded.get("payload") or {}) if loaded.get("valid") else {}
+    payload["provenance"] = {"valid": bool(loaded.get("valid")), "reasons": list(loaded.get("reasons") or []), "reason_code": loaded.get("reason_code")}
+    if not loaded.get("valid"):
+        payload["feed_ok"] = False
+        payload["execution_feed_ready"] = False
     return payload, path if path.exists() else None
 
 

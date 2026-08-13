@@ -266,6 +266,7 @@ from core.orchestrator_truth import (
     structurally_valid_cycle_candidate as _is_structurally_valid_cycle_candidate,
     trade_attr as _trade_attr,
 )
+from core.feed.artifact_loader import load_current_feed_runtime
 
 _perf_ms = _orchestrator_perf_ms
 from core.orchestrator_latency import (
@@ -837,23 +838,14 @@ def _normalize_feed_runtime_payload(raw: dict) -> dict:
 
 
 def _read_latest_feed_runtime_payload() -> tuple[dict, Path | None]:
-    candidates = [
-        logs_dir() / "feed_runtime_latest.json",
-    ]
-    newest: tuple[dict, Path | None, float] = ({}, None, 0.0)
-    for path in candidates:
-        try:
-            if not path.exists():
-                continue
-            mtime = float(path.stat().st_mtime)
-        except Exception:
-            continue
-        payload = _normalize_feed_runtime_payload(_read_json_dict(path))
-        if not payload:
-            continue
-        if newest[1] is None or mtime >= newest[2]:
-            newest = (payload, path, mtime)
-    return newest[0], newest[1]
+    path = logs_dir() / "feed_runtime_latest.json"
+    loaded = load_current_feed_runtime(path)
+    payload = dict(loaded.get("payload") or {}) if loaded.get("valid") else {}
+    payload["provenance"] = {"valid": bool(loaded.get("valid")), "reasons": list(loaded.get("reasons") or []), "reason_code": loaded.get("reason_code")}
+    if not loaded.get("valid"):
+        payload["feed_ok"] = False
+        payload["execution_feed_ready"] = False
+    return payload, path if path.exists() else None
 
 
 def _canonical_feed_truth_state_payload(feed_runtime_payload: dict | None) -> dict:
@@ -3970,13 +3962,10 @@ class Orchestrator:
         if not market_open:
             return True, []
 
-        feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
-        feed_runtime_payload = {}
-        if feed_runtime_path.exists():
-            try:
-                feed_runtime_payload = json.loads(feed_runtime_path.read_text(encoding="utf-8"))
-            except Exception:
-                feed_runtime_payload = {}
+        loaded_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
+        if not loaded_runtime.get("valid"):
+            return False, [f"feed_runtime:{loaded_runtime.get('reason_code') or 'INVALID_ARTIFACT'}"]
+        feed_runtime_payload = dict(loaded_runtime.get("payload") or {})
 
         def _runtime_health_feed_reasons() -> tuple[bool, list[str], bool]:
             now_epoch = float(now_utc_epoch())
@@ -4390,7 +4379,8 @@ class Orchestrator:
         )
 
     def _feed_status_for_heartbeat(self) -> dict:
-        payload = _read_json_dict(logs_dir() / "feed_runtime_latest.json")
+        loaded_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
+        payload = dict(loaded_runtime.get("payload") or {}) if loaded_runtime.get("valid") else {}
         feed_ok = False
         try:
             feed_ok, _ = self._pilot_feed_ok()

@@ -40,6 +40,10 @@ def _invalid(path: Path, artifact_type: str, reason_code: str, reasons: list[str
     return {"valid": False, "artifact_type": artifact_type, "path": str(path), "payload": None, "reason_code": reason_code, "reasons": reasons, **extra}
 
 
+def _diagnostic_fields(raw: dict[str, Any]) -> dict[str, Any]:
+    return {key: raw[key] for key in ("ws_connected", "runtime_state", "intended_tokens_count", "subscribed_option_tokens_count", "option_feed_block_reason_by_symbol") if key in raw}
+
+
 def _load(path_value: str | Path, artifact_type: str, expected_writer: str, expected_schema: int, required: tuple[str, ...]) -> dict[str, Any]:
     path = Path(path_value)
     if not path.exists():
@@ -50,9 +54,11 @@ def _load(path_value: str | Path, artifact_type: str, expected_writer: str, expe
         return _invalid(path, artifact_type, "MALFORMED_ARTIFACT", ["invalid_json"])
     if not isinstance(raw, dict):
         return _invalid(path, artifact_type, "MALFORMED_ARTIFACT", ["artifact_not_object"])
+    observed_hash = raw.get("snapshot_hash")
+    expected_hash = truth_hash_from_mapping(raw, exclude_keys=_INTEGRITY_EXCLUDED_KEYS)
     missing = [field for field in required if field not in raw]
     if missing:
-        return _invalid(path, artifact_type, "MISSING_REQUIRED_FIELD", missing)
+        return _invalid(path, artifact_type, "MISSING_REQUIRED_FIELD", missing, observed_snapshot_hash=observed_hash, expected_snapshot_hash=expected_hash, diagnostic_fields=_diagnostic_fields(raw))
     if raw.get("writer") != expected_writer:
         return _invalid(path, artifact_type, "WRITER_MISMATCH", ["writer_mismatch"], observed_writer=raw.get("writer"))
     if type(raw.get("schema_version")) is not int or raw["schema_version"] != expected_schema:
@@ -68,9 +74,8 @@ def _load(path_value: str | Path, artifact_type: str, expected_writer: str, expe
         return _invalid(path, artifact_type, "EPOCH_MISMATCH", ["feed_epoch_invalid_or_not_current"])
     if type(raw.get("produced_at")) not in (int, float) or isinstance(raw.get("produced_at"), bool):
         return _invalid(path, artifact_type, "MISSING_REQUIRED_FIELD", ["produced_at_invalid"])
-    expected_hash = truth_hash_from_mapping(raw, exclude_keys=_INTEGRITY_EXCLUDED_KEYS)
-    if raw.get("snapshot_hash") != expected_hash:
-        return _invalid(path, artifact_type, "INTEGRITY_MISMATCH", ["snapshot_hash_mismatch"])
+    if observed_hash != expected_hash:
+        return _invalid(path, artifact_type, "INTEGRITY_MISMATCH", ["snapshot_hash_mismatch"], observed_snapshot_hash=observed_hash, expected_snapshot_hash=expected_hash)
     return {"valid": True, "artifact_type": artifact_type, "path": str(path), "payload": deepcopy(raw), "reason_code": "VALID_CURRENT_ARTIFACT", "reasons": []}
 
 
