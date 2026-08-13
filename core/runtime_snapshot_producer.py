@@ -34,6 +34,7 @@ from core.runtime_snapshot_stages import (
     build_advisory_latest_payload as stages_build_advisory_latest_payload,
     build_feed_health_truth_latest_payload as stages_build_feed_health_truth_latest_payload,
 )
+from core.feed.artifact_loader import load_current_feed_runtime
 
 
 logger = logging.getLogger(__name__)
@@ -613,7 +614,9 @@ def produce_and_store_runtime_snapshots(
     outputs["advisory_latest"] = advisory_payload
 
     t1 = time.perf_counter()
-    feed_payload, _feed_notes = _read_json_payload(logs_dir() / "feed_runtime_latest.json")
+    loaded_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
+    feed_payload = dict(loaded_runtime.get("payload") or {}) if loaded_runtime.get("valid") else None
+    _feed_notes = [] if loaded_runtime.get("valid") else [str(loaded_runtime.get("reason_code") or "canonical_feed_runtime_invalid")]
     outputs["feed_runtime_latest"] = feed_payload
     shared_cycle_feed_truth = dict(cycle_feed_truth_payload or {})
     if shared_cycle_feed_truth:

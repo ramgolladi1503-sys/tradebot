@@ -1,0 +1,9 @@
+attack,expected,observed,covered_by_test,status
+stale epoch with raw feed_ok true,fail closed,canonical loader rejects,yes,RESOLVED
+invalid lineage with raw readiness true,not ready,lineage validation rejects,yes,RESOLVED
+wrong snapshot hash/run/boot,fail closed,loader rejects,yes,RESOLVED
+missing or malformed canonical artifact,fail closed,invalid loader result,yes,RESOLVED
+cross-session runtime/callback/tick/MEG,fail closed,session binding rejects,yes,RESOLVED
+legacy generation matching stale epoch,fail closed,legacy non-authoritative,yes,RESOLVED
+future/intended epoch,fail closed,current epoch equality required,yes,RESOLVED
+ADVERSARIAL_MATRIX_UNRESOLVED,0,,,UNRESOLVED_TEST_EVIDENCE

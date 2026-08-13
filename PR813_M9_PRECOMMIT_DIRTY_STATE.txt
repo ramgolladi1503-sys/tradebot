@@ -1,0 +1,14 @@
+M9 pre-commit dirty-state capture
+WORKTREE=/Users/madhuram/tradebot-pr813-atm-repair
+BRANCH=ram/pr813-atm-rebalance-repair
+HEAD=d8bcca55caa0df1c54087d83fd65d64c05a42eb9
+MODIFIED=M9_SOURCE core/orchestrator.py
+MODIFIED=M9_SOURCE core/orchestrator_helpers.py
+MODIFIED=M9_SOURCE core/review_queue.py
+MODIFIED=M9_SOURCE core/runtime_snapshot_producer.py
+MODIFIED=M9_TEST tests/core/test_runtime_snapshot_producer.py
+UNTRACKED=M9_EVIDENCE PR813_M9_REPAIR_REPORT.md
+UNKNOWN_DIRTY_FILES=0
+CREDENTIAL_OR_SECRET=0
+DIFF_SHA256=d8649dd6ddffca4ff83421b33bf5b68d262c5293113b2c072bcaed651eb9eede
+NOTE=Current M9 changes preserved; no reset or discard.
