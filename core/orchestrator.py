@@ -848,6 +848,23 @@ def _read_latest_feed_runtime_payload() -> tuple[dict, Path | None]:
     return payload, path if path.exists() else None
 
 
+def _validated_depth_ws_startup_snapshot() -> tuple[dict, float | None]:
+    """Return only a current canonical runtime artifact for startup decisions."""
+    loaded_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
+    if not loaded_runtime.get("valid"):
+        reason_code = str(loaded_runtime.get("reason_code") or "INVALID_ARTIFACT")
+        raise RuntimeError(f"kite_depth_ws_init_failed:feed_runtime={reason_code}")
+    snapshot = dict(loaded_runtime.get("payload") or {})
+    snapshot_age_sec = None
+    try:
+        produced_at = float(snapshot.get("produced_at")) if snapshot.get("produced_at") is not None else None
+        if produced_at is not None:
+            snapshot_age_sec = max(0.0, float(time.time()) - produced_at)
+    except Exception:
+        snapshot_age_sec = None
+    return snapshot, snapshot_age_sec
+
+
 def _canonical_feed_truth_state_payload(feed_runtime_payload: dict | None) -> dict:
     payload = dict(feed_runtime_payload or {})
     canonical_payload = payload.get("canonical_feed_truth") if isinstance(payload.get("canonical_feed_truth"), dict) else None
@@ -8148,19 +8165,10 @@ class Orchestrator:
             start_depth_ws_subprocess(tokens, profile_verified=True)
         else:
             start_depth_ws(tokens, profile_verified=True)
-        from core.feed.runtime_store import read_latest_runtime_snapshot
-
-        snapshot = read_latest_runtime_snapshot() or {}
+        snapshot, snapshot_age_sec = _validated_depth_ws_startup_snapshot()
         runtime_state = str(snapshot.get("runtime_state") or "").strip().upper()
         runtime_source = str(snapshot.get("source") or "").strip()
         ws_connected = snapshot.get("ws_connected")
-        snapshot_age_sec = None
-        try:
-            ts_epoch = float(snapshot.get("ts_epoch")) if snapshot.get("ts_epoch") is not None else None
-            if ts_epoch is not None:
-                snapshot_age_sec = max(0.0, float(time.time()) - float(ts_epoch))
-        except Exception:
-            snapshot_age_sec = None
         age_text = f"{snapshot_age_sec:.3f}" if snapshot_age_sec is not None else "none"
         logger.info(
             "WS: start_depth_ws dispatched runtime_state=%s source=%s ws_connected=%s snapshot_age_sec=%s",
