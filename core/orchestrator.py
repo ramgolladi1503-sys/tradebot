@@ -155,6 +155,7 @@ from core.runtime_candidate_handoff_root_cause import (
     build_candidate_handoff_root_cause_payload,
     write_candidate_handoff_root_cause_latest,
 )
+from core.phase1_observability import build_phase1_observation, record_phase1_observation
 from core.runtime_notrade_reason_truth import (
     build_notrade_reason_truth_payload,
     write_notrade_reason_truth_latest,
@@ -5577,14 +5578,29 @@ class Orchestrator:
                         allow_builder_baseline,
                         getattr(gate, "family", None),
                     )
-                    trade, decision_trace = self.trade_builder.build_with_trace(
-                        market_data,
-                        quick_mode=False,
-                        debug_reasons=debug_flag,
-                        force_family=gate.family,
-                        allow_fallbacks=allow_builder_fallbacks,
-                        allow_baseline=allow_builder_baseline,
-                    )
+                    try:
+                        trade, decision_trace = self.trade_builder.build_with_trace(
+                            market_data,
+                            quick_mode=False,
+                            debug_reasons=debug_flag,
+                            force_family=gate.family,
+                            allow_fallbacks=allow_builder_fallbacks,
+                            allow_baseline=allow_builder_baseline,
+                        )
+                    except Exception as phase1_exc:
+                        phase1_exception_type = type(phase1_exc).__name__
+                        try:
+                            record_phase1_observation(build_phase1_observation(
+                                cycle_id=str(getattr(self, "_gate_status_cycle_id", "")),
+                                market_data=market_data,
+                                scan_summary={},
+                                survivor_count=0,
+                                phase2_handoff_count=0,
+                                exception_type=phase1_exception_type,
+                            ))
+                        except Exception:
+                            pass
+                        raise
                     if isinstance(trade, dict):
                         candidate_status = str(trade.get("candidate_status") or "").strip().lower()
                         execution_status = str(trade.get("execution_status") or "").strip().lower()
@@ -5935,6 +5951,19 @@ class Orchestrator:
                     if ranked_candidates:
                         cycle_ranked_candidates.extend(ranked_candidates)
                     cycle_ranked_candidates_after_append = len(cycle_ranked_candidates)
+                    try:
+                        record_phase1_observation(build_phase1_observation(
+                            cycle_id=str(getattr(self, "_gate_status_cycle_id", "")),
+                            market_data=market_data,
+                            scan_summary=scan_summary,
+                            survivor_count=post_scan_survivor_count,
+                            phase2_handoff_count=(
+                                cycle_ranked_candidates_after_append
+                                - cycle_ranked_candidates_before_append
+                            ),
+                        ))
+                    except Exception:
+                        pass
                     if ranked_executable_candidates:
                         try:
                             cycle_candidate_handoff_snapshots.append(
