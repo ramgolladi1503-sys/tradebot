@@ -396,7 +396,7 @@ def test_startup_seed_populates_buffer_and_sets_indicator_timestamp(tmp_path, mo
     assert bars_count >= 30
 
 
-def test_startup_seed_uses_configured_5m_200_bar_bootstrap(tmp_path, monkeypatch):
+def test_startup_seed_uses_minute_contract_by_default(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     symbol = "NIFTY_STARTUP_5M"
     calls = []
@@ -404,7 +404,7 @@ def test_startup_seed_uses_configured_5m_200_bar_bootstrap(tmp_path, monkeypatch
     monkeypatch.setattr(cfg, "SYMBOLS", [symbol], raising=False)
     monkeypatch.setattr(cfg, "OHLC_MIN_BARS", 30, raising=False)
     monkeypatch.setattr(cfg, "SYSTEM_WARMUP_MIN_BARS", 30, raising=False)
-    monkeypatch.setattr(cfg, "STARTUP_WARMUP_INTERVAL", "5minute", raising=False)
+    monkeypatch.setattr(cfg, "STARTUP_WARMUP_INTERVAL", "minute", raising=False)
     monkeypatch.setattr(cfg, "STARTUP_WARMUP_TARGET_BARS", 200, raising=False)
     monkeypatch.setattr(cfg, "STARTUP_WARMUP_SYMBOLS", [symbol], raising=False)
     monkeypatch.setattr(market_data.kite_client, "ensure", lambda: None)
@@ -413,7 +413,7 @@ def test_startup_seed_uses_configured_5m_200_bar_bootstrap(tmp_path, monkeypatch
 
     def _hist(_instrument_token, from_dt, to_dt, interval="minute", **kwargs):
         calls.append(interval)
-        return _build_hist_rows(220, base_price=25200.0, step_minutes=5)
+        return _build_hist_rows(220, base_price=25200.0, step_minutes=1)
 
     monkeypatch.setattr(market_data.kite_client, "historical_data", _hist)
     market_data.ohlc_buffer._bars.pop(symbol, None)
@@ -423,12 +423,55 @@ def test_startup_seed_uses_configured_5m_200_bar_bootstrap(tmp_path, monkeypatch
     row_count = len(rows)
     assert row_count == 1
     row = rows[0]
-    assert row["seed_interval"] == "5minute"
+    assert row["seed_interval"] == "minute"
     assert row["target_bars"] == 200
     assert row["seeded_bars_count"] >= 200
     assert row["warmup_ok"] is True
     assert row["indicators_ok_after_seed"] is True
-    assert calls and all(interval == "5minute" for interval in calls)
+    assert calls and all(interval == "minute" for interval in calls)
+
+
+def test_minute_seed_does_not_treat_old_five_minute_open_as_current(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    symbol = "NIFTY_INTERVAL_CONTRACT"
+    fixed_now = market_data.now_ist().replace(hour=13, minute=0, second=13, microsecond=0)
+    monkeypatch.setattr(market_data, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(cfg, "STARTUP_WARMUP_INTERVAL", "minute", raising=False)
+    monkeypatch.setattr(cfg, "MAX_CANDLE_AGE_SEC", 120, raising=False)
+
+    calls = []
+    monkeypatch.setattr(market_data.kite_client, "ensure", lambda: None)
+    monkeypatch.setattr(market_data.kite_client, "kite", object(), raising=False)
+    monkeypatch.setattr(market_data.kite_client, "resolve_index_token", lambda _symbol: 256265)
+
+    def _hist(_token, _from_dt, _to_dt, interval="minute", **kwargs):
+        calls.append(interval)
+        return _build_hist_rows(40, base_price=25200.0, step_minutes=1)
+
+    monkeypatch.setattr(market_data.kite_client, "historical_data", _hist)
+    market_data.ohlc_buffer._bars.pop(symbol, None)
+    bars, seeded_ok, reason = market_data._warm_seed_ohlc_from_history(
+        symbol=symbol,
+        bars=[],
+        min_bars=30,
+        as_of=fixed_now,
+        interval="minute",
+    )
+
+    assert seeded_ok is True
+    assert reason is None
+    assert calls and all(interval == "minute" for interval in calls)
+    latest = bars[-1]["ts"].timestamp()
+    sanity = market_data.check_market_data_time_sanity(
+        ltp_ts_epoch=fixed_now.timestamp(),
+        candle_ts_epoch=latest,
+        market_open=True,
+        require_live_quotes=True,
+        max_candle_age_sec=120,
+        now_epoch=fixed_now.timestamp(),
+    )
+    assert sanity["candle_age_sec"] <= 120
+    assert "CANDLE_STALE" not in sanity["reasons"]
 
 
 def test_startup_seed_windows_include_calendar_lookback(monkeypatch):
