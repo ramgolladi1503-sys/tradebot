@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from core.feed.feed_epoch import _reset_feed_epoch_for_tests, current_feed_epoch
+
 
 def _resubscribe_source() -> str:
     return Path("core/kite_depth_ws.py").read_text(encoding="utf-8")
@@ -39,3 +41,21 @@ def test_resubscribe_full_has_no_epoch_advancement():
         and node.func.id == "advance_feed_epoch"
         for node in ast.walk(function)
     )
+
+
+def test_transition_identity_advances_once_for_duplicate_completion():
+    _reset_feed_epoch_for_tests()
+    seen = set()
+
+    def advance_once(kind, identity):
+        key = (kind, identity)
+        if key in seen:
+            return
+        seen.add(key)
+        from core.feed.feed_epoch import advance_feed_epoch
+
+        advance_feed_epoch(kind)
+
+    advance_once("SUBSCRIPTION_REBUILD_COMPLETED", "socket-1:set-a")
+    advance_once("SUBSCRIPTION_REBUILD_COMPLETED", "socket-1:set-a")
+    assert current_feed_epoch() == 1

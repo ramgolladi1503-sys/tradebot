@@ -29,6 +29,7 @@ from core.tick_store import (
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.runtime_boot_identity import stamp_runtime_payload
 from core.feed.artifact_provenance import stamp_feed_runtime_provenance
+from core.feed.feed_epoch import advance_feed_epoch
 from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.feed_runtime import build_canonical_feed_truth_state
 from core.feed_robustness_evidence import collector as feed_evidence
@@ -7564,6 +7565,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         _KITE_TICKER = kws
 
     handshake_soft_reset_used = False
+    feed_epoch_transition_ids: set[tuple[str, int | str]] = set()
+
+    def _advance_completed_transition(kind: str, identity: int | str, metadata: dict[str, Any]) -> None:
+        transition_id = (str(kind), identity)
+        if transition_id in feed_epoch_transition_ids:
+            return
+        feed_epoch_transition_ids.add(transition_id)
+        advance_feed_epoch(str(kind), metadata)
 
     def _generation_is_current(callback: str) -> bool:
         if socket_generation == int(_SOCKET_GENERATION):
@@ -7746,6 +7755,12 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             pending_tokens=bool(_PENDING_SUBSCRIBE_TOKENS or _PENDING_UNSUBSCRIBE_TOKENS or _PENDING_MODE_FULL_TOKENS),
         )
         _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
+        if intended_registry_updated:
+            _advance_completed_transition(
+                "ATM_TOKEN_SET_MUTATION_COMPLETED",
+                f"{socket_generation}:{reason}:{tuple(_INTENDED_TOKENS)}",
+                {"socket_generation": int(socket_generation), "reason": str(reason or ""), "token_count": len(_INTENDED_TOKENS)},
+            )
         _log_ws(
             "FEED_REBALANCE_APPLIED",
             {
@@ -7966,7 +7981,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 if isinstance(book, dict):
                     book["ts_epoch"] = None
                     book["ts"] = None
-            _resubscribe_full(ws, reason="connect")
+            resubscribe_result = _resubscribe_full(ws, reason="connect")
+            if resubscribe_result.get("success") is True:
+                _advance_completed_transition(
+                    "FEED_SOCKET_CONNECTED",
+                    int(socket_generation),
+                    {"socket_generation": int(socket_generation), "resubscribe_status": resubscribe_result.get("status")},
+                )
             _log_ws(
                 "FEED_SUBSCRIPTION_REGISTRY_SNAPSHOT",
                 {
@@ -8674,8 +8695,17 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     if time.time() - last_soft >= backoff:
                         last_soft = time.time()
                         try:
-                            _resubscribe_full(kws, reason=f"soft_reset:strikes={depth_stale_strikes}")
-                            _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
+                            resubscribe_result = _resubscribe_full(kws, reason=f"soft_reset:strikes={depth_stale_strikes}")
+                            if resubscribe_result.get("success") is True:
+                                if resubscribe_result.get("changed") is True:
+                                    _advance_completed_transition(
+                                        "SUBSCRIPTION_REBUILD_COMPLETED",
+                                        f"watchdog:{socket_generation}:{resubscribe_result.get('new_tokens')}",
+                                        {"socket_generation": int(socket_generation), "reason": "watchdog_soft_reset"},
+                                    )
+                                _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
+                            else:
+                                _log_ws("FEED_SOFT_RESET_ERROR", {"reason": resubscribe_result.get("reason")})
                         except Exception as exc:
                             _log_ws("FEED_SOFT_RESET_ERROR", {"error": str(exc), "backoff_sec": backoff})
 
