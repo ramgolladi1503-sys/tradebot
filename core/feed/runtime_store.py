@@ -263,7 +263,19 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
                 out["recovery_generation_id"] = int(current_generation)
         except Exception:
             pass
-    out = stamp_feed_runtime_provenance(out)
+    truth_payload = None
+    try:
+        import json as _json
+        from core.paths import logs_dir as _logs_dir
+
+        truth_path = _logs_dir() / "feed_truth_latest.json"
+        if truth_path.exists():
+            candidate_truth = _json.loads(truth_path.read_text(encoding="utf-8"))
+            if isinstance(candidate_truth, dict):
+                truth_payload = candidate_truth
+    except Exception:
+        truth_payload = None
+    out = stamp_feed_runtime_provenance(out, truth_payload=truth_payload)
     # Finalize all semantic and safety fields before hashing. The verifier
     # intentionally includes these fields, so mutating them after the hash
     # creates a false SNAPSHOT_HASH_MISMATCH on every persisted artifact.

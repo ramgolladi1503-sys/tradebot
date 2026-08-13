@@ -6,6 +6,8 @@ import pytest
 
 import core.orchestrator as orchestrator
 from core.feed.artifact_loader import FEED_RUNTIME_CANONICAL_WRITER, FEED_RUNTIME_SCHEMA_VERSION
+from core.feed.artifact_provenance import stamp_feed_runtime_provenance, stamp_feed_truth_provenance
+from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.feed.feed_epoch import current_feed_epoch
 from core.runtime_boot_identity import get_runtime_boot_identity
 from core.runtime_truth_integrity import truth_hash_from_mapping
@@ -29,10 +31,20 @@ def _runtime_artifact(runtime_state: str) -> dict:
     return payload
 
 
+def _truth_artifact() -> dict:
+    payload = stamp_feed_truth_provenance({"feed_fresh": False})
+    payload.update(build_truth_integrity_payload(source_payload=payload, transport_state="DISCONNECTED", feed_truth_state="DEAD", heartbeat_epoch=payload["produced_at"]))
+    return payload
+
+
 @pytest.mark.parametrize("runtime_state", ["SUBSCRIBE_FAILED", "AUTH_BLOCKED", "IMPORT_MISSING"])
 def test_valid_current_startup_failure_state_is_returned(monkeypatch, tmp_path, runtime_state):
     path = tmp_path / "feed_runtime_latest.json"
-    path.write_text(json.dumps(_runtime_artifact(runtime_state)), encoding="utf-8")
+    truth = _truth_artifact()
+    runtime = stamp_feed_runtime_provenance(_runtime_artifact(runtime_state), truth_payload=truth)
+    runtime.update(build_truth_integrity_payload(source_payload=runtime, transport_state="DISCONNECTED", feed_truth_state="DEAD", heartbeat_epoch=runtime["produced_at"]))
+    path.write_text(json.dumps(runtime), encoding="utf-8")
+    (tmp_path / "feed_truth_latest.json").write_text(json.dumps(truth), encoding="utf-8")
     monkeypatch.setattr(orchestrator, "logs_dir", lambda: tmp_path)
 
     snapshot, age = orchestrator._validated_depth_ws_startup_snapshot()

@@ -12,8 +12,10 @@ def setup_function():
     _reset_feed_epoch_for_tests()
 
 
-def _write(path, payload, *, truth=False):
+def _write(path, payload, *, truth=False, truth_payload=None):
     stamped = stamp_feed_truth_provenance(payload) if truth else stamp_feed_runtime_provenance(payload)
+    if truth_payload is not None:
+        stamped = stamp_feed_runtime_provenance(payload, truth_payload=truth_payload)
     stamped.update(build_truth_integrity_payload(source_payload=stamped, transport_state="CONNECTED", feed_truth_state="LIVE", heartbeat_epoch=stamped["produced_at"]))
     path.write_text(json.dumps(stamped), encoding="utf-8")
     return stamped
@@ -21,9 +23,9 @@ def _write(path, payload, *, truth=False):
 
 def test_valid_truth_and_runtime_are_accepted(tmp_path):
     truth = tmp_path / "truth.json"; runtime = tmp_path / "runtime.json"
-    _write(truth, {"feed_fresh": True}, truth=True); _write(runtime, {"feed_ok": False})
+    truth_payload = _write(truth, {"feed_fresh": True}, truth=True); _write(runtime, {"feed_ok": False}, truth_payload=truth_payload)
     assert load_current_feed_truth(truth)["reason_code"] == "VALID_CURRENT_ARTIFACT"
-    result = load_current_feed_runtime(runtime)
+    result = load_current_feed_runtime(runtime, truth)
     assert result["valid"] is True and result["payload"]["feed_ok"] is False
 
 
@@ -54,14 +56,16 @@ def test_provenance_mismatch_fails_closed(tmp_path, field, value):
 
 
 def test_wrong_epoch_type_and_integrity_mismatch_fail_closed(tmp_path):
-    path = tmp_path / "runtime.json"; payload = _write(path, {"feed_ok": True}); payload["feed_epoch"] = "0"
+    truth_path = tmp_path / "truth.json"; truth_payload = _write(truth_path, {"feed_fresh": True}, truth=True)
+    path = tmp_path / "runtime.json"; payload = _write(path, {"feed_ok": True}, truth_payload=truth_payload); payload["feed_epoch"] = "0"
     path.write_text(json.dumps(payload), encoding="utf-8")
-    assert load_current_feed_runtime(path)["reason_code"] == "EPOCH_MISMATCH"
+    assert load_current_feed_runtime(path, truth_path)["reason_code"] == "EPOCH_MISMATCH"
     payload["feed_epoch"] = 0; payload["feed_ok"] = False; path.write_text(json.dumps(payload), encoding="utf-8")
-    assert load_current_feed_runtime(path)["reason_code"] == "INTEGRITY_MISMATCH"
+    assert load_current_feed_runtime(path, truth_path)["reason_code"] == "INTEGRITY_MISMATCH"
 
 
 def test_returned_payload_is_detached(tmp_path):
-    path = tmp_path / "runtime.json"; _write(path, {"feed_ok": True, "nested": {"x": 1}})
-    result = load_current_feed_runtime(path); result["payload"]["nested"]["x"] = 9
-    assert load_current_feed_runtime(path)["payload"]["nested"]["x"] == 1
+    truth_path = tmp_path / "truth.json"; truth_payload = _write(truth_path, {"feed_fresh": True}, truth=True)
+    path = tmp_path / "runtime.json"; _write(path, {"feed_ok": True, "nested": {"x": 1}}, truth_payload=truth_payload)
+    result = load_current_feed_runtime(path, truth_path); result["payload"]["nested"]["x"] = 9
+    assert load_current_feed_runtime(path, truth_path)["payload"]["nested"]["x"] == 1

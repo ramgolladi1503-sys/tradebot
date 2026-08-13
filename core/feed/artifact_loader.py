@@ -17,6 +17,7 @@ from core.feed.feed_epoch import current_feed_epoch
 from core.paths import logs_dir
 from core.runtime_boot_identity import get_runtime_boot_identity
 from core.runtime_truth_integrity import truth_hash_from_mapping
+from core.feed.lineage import LINEAGE_KEY, validate_truth_lineage
 
 FEED_TRUTH_FILENAME = "feed_truth_latest.json"
 FEED_RUNTIME_FILENAME = "feed_runtime_latest.json"
@@ -32,8 +33,18 @@ def load_current_feed_truth(path: str | Path | None = None) -> dict[str, Any]:
     return _load(path or logs_dir() / FEED_TRUTH_FILENAME, "feed_truth", FEED_TRUTH_CANONICAL_WRITER, FEED_TRUTH_SCHEMA_VERSION, ("run_id", "boot_epoch", "feed_epoch", "writer", "schema_version", "produced_at"))
 
 
-def load_current_feed_runtime(path: str | Path | None = None) -> dict[str, Any]:
-    return _load(path or logs_dir() / FEED_RUNTIME_FILENAME, "feed_runtime", FEED_RUNTIME_CANONICAL_WRITER, FEED_RUNTIME_SCHEMA_VERSION, ("run_id", "boot_epoch", "feed_epoch", "writer", "schema_version", "produced_at", "feed_ok"))
+def load_current_feed_runtime(path: str | Path | None = None, truth_path: str | Path | None = None) -> dict[str, Any]:
+    result = _load(path or logs_dir() / FEED_RUNTIME_FILENAME, "feed_runtime", FEED_RUNTIME_CANONICAL_WRITER, FEED_RUNTIME_SCHEMA_VERSION, ("run_id", "boot_epoch", "feed_epoch", "writer", "schema_version", "produced_at", "feed_ok", LINEAGE_KEY))
+    if not result.get("valid"):
+        return result
+    runtime_path = Path(path or logs_dir() / FEED_RUNTIME_FILENAME)
+    truth_result = load_current_feed_truth(truth_path or runtime_path.parent / FEED_TRUTH_FILENAME)
+    if not truth_result.get("valid"):
+        return _invalid(Path(path or logs_dir() / FEED_RUNTIME_FILENAME), "feed_runtime", "CANONICAL_TRUTH_INVALID", [truth_result.get("reason_code", "truth_invalid")])
+    ok, reason = validate_truth_lineage(result["payload"], truth_result["payload"])
+    if not ok:
+        return _invalid(Path(path or logs_dir() / FEED_RUNTIME_FILENAME), "feed_runtime", reason, [reason])
+    return result
 
 
 def _invalid(path: Path, artifact_type: str, reason_code: str, reasons: list[str], **extra: Any) -> dict[str, Any]:

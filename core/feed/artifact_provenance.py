@@ -19,8 +19,17 @@ def stamp_feed_truth_provenance(payload: Mapping[str, Any] | None) -> dict[str, 
     return _stamp(payload, schema_version=FEED_TRUTH_SCHEMA_VERSION, writer=FEED_TRUTH_CANONICAL_WRITER)
 
 
-def stamp_feed_runtime_provenance(payload: Mapping[str, Any] | None) -> dict[str, Any]:
-    return _stamp(payload, schema_version=FEED_RUNTIME_SCHEMA_VERSION, writer=FEED_RUNTIME_CANONICAL_WRITER)
+def stamp_feed_runtime_provenance(
+    payload: Mapping[str, Any] | None,
+    *,
+    truth_payload: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    out = _stamp(payload, schema_version=FEED_RUNTIME_SCHEMA_VERSION, writer=FEED_RUNTIME_CANONICAL_WRITER)
+    if truth_payload is not None:
+        from core.feed.lineage import LINEAGE_KEY, build_truth_lineage
+
+        out[LINEAGE_KEY] = build_truth_lineage(truth_payload)
+    return out
 
 
 def _stamp(payload: Mapping[str, Any] | None, *, schema_version: int, writer: str) -> dict[str, Any]:
