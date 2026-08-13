@@ -44,6 +44,8 @@ _RUNTIME_PERSISTENCE_READ_AFTER_WRITE_TESTS = {
     "test_runtime_snapshot_mirrors_share_canonical_blocked_truth",
     "test_ws1006_auth_failure_blocks_reconnect_loop",
     "test_ws1006_peer_drop_on_error_is_recoverable_first",
+    "test_ws1006_recovery_timeout_is_fail_closed",
+    "test_ws1006_peer_drop_escalates_after_max_recoverable_attempts",
     "test_ws1006_main_loop_terminated_routes_to_process_restart_required",
     "test_fatal_on_error_schedules_async_forced_full_restart",
     "test_fatal_on_close_schedules_async_forced_full_restart",
