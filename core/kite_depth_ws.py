@@ -82,6 +82,38 @@ from core.blocker_lifecycle import (
     top_active_code,
 )
 
+_FEED_EPOCH_TRANSITION_LOCK = threading.RLock()
+_FEED_EPOCH_TRANSITION_IDS: set[tuple[str, str]] = set()
+
+
+def _advance_completed_feed_transition(
+    kind: str, identity: str, metadata: dict[str, Any]
+) -> None:
+    """Advance once for one completed subscription authority transition."""
+    transition_id = (str(kind), str(identity))
+    with _FEED_EPOCH_TRANSITION_LOCK:
+        if transition_id in _FEED_EPOCH_TRANSITION_IDS:
+            return
+        _FEED_EPOCH_TRANSITION_IDS.add(transition_id)
+    advance_feed_epoch(str(kind), metadata)
+
+
+def _record_completed_subscription_delta(
+    *, old_tokens: list[int], new_tokens: list[int], reason: str, socket_generation: int
+) -> None:
+    if sorted(old_tokens) == sorted(new_tokens):
+        return
+    _advance_completed_feed_transition(
+        "SUBSCRIPTION_AUTHORITY_CHANGED_COMPLETED",
+        f"delta:{socket_generation}:{reason}:{tuple(sorted(old_tokens))}->{tuple(sorted(new_tokens))}",
+        {
+            "socket_generation": int(socket_generation),
+            "reason": str(reason or ""),
+            "old_tokens": list(sorted(old_tokens)),
+            "new_tokens": list(sorted(new_tokens)),
+        },
+    )
+
 def get_latest_tick_rows_db(tokens: list[int] | None) -> dict[int, dict]:
     """
     Backward-compat shim for tests/legacy call sites.
@@ -3095,6 +3127,7 @@ def _reconcile_rebalance_intended_tokens(
 
 def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
     global _LAST_TOKENS, _PENDING_SUBSCRIBE_TOKENS, _PENDING_UNSUBSCRIBE_TOKENS, _PENDING_MODE_FULL_TOKENS, _LAST_MUTATION_RESULT, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS
+    old_tokens = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
     to_subscribe = sorted(set(int(t) for t in (subscribe_tokens or []) if int(t) > 0))
     to_unsubscribe = sorted(set(int(t) for t in (unsubscribe_tokens or []) if int(t) > 0))
 
@@ -3180,6 +3213,13 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
         phase="after",
         result={"all_applied": bool(all_applied)},
     )
+    if all_applied:
+        _record_completed_subscription_delta(
+            old_tokens=old_tokens,
+            new_tokens=sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0}),
+            reason=reason,
+            socket_generation=int(_SOCKET_GENERATION),
+        )
     return all_applied
 
 
@@ -7565,14 +7605,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         _KITE_TICKER = kws
 
     handshake_soft_reset_used = False
-    feed_epoch_transition_ids: set[tuple[str, int | str]] = set()
-
     def _advance_completed_transition(kind: str, identity: int | str, metadata: dict[str, Any]) -> None:
-        transition_id = (str(kind), identity)
-        if transition_id in feed_epoch_transition_ids:
-            return
-        feed_epoch_transition_ids.add(transition_id)
-        advance_feed_epoch(str(kind), metadata)
+        _advance_completed_feed_transition(str(kind), str(identity), metadata)
 
     def _generation_is_current(callback: str) -> bool:
         if socket_generation == int(_SOCKET_GENERATION):
@@ -7592,6 +7626,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
 
     def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
         global _LAST_TOKENS, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+        old_tokens = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
         to_subscribe = sorted(set(int(t) for t in (subscribe_tokens or []) if int(t) > 0))
         to_unsubscribe = sorted(set(int(t) for t in (unsubscribe_tokens or []) if int(t) > 0))
         can_mutate, guard_reason, guard_payload = _can_mutate_ws_subscriptions(reason=reason)
@@ -7764,12 +7799,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             pending_tokens=bool(_PENDING_SUBSCRIBE_TOKENS or _PENDING_UNSUBSCRIBE_TOKENS or _PENDING_MODE_FULL_TOKENS),
         )
         _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
-        if intended_registry_updated:
-            _advance_completed_transition(
-                "ATM_TOKEN_SET_MUTATION_COMPLETED",
-                f"{socket_generation}:{reason}:{tuple(_INTENDED_TOKENS)}",
-                {"socket_generation": int(socket_generation), "reason": str(reason or ""), "token_count": len(_INTENDED_TOKENS)},
-            )
+        _record_completed_subscription_delta(
+            old_tokens=old_tokens,
+            new_tokens=sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0}),
+            reason=reason,
+            socket_generation=socket_generation,
+        )
+        # _advance_completed_transition remains the closure compatibility name;
+        # the canonical owner above prevents duplicate epoch advancement.
         _log_ws(
             "FEED_REBALANCE_APPLIED",
             {
@@ -7991,11 +8028,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     book["ts_epoch"] = None
                     book["ts"] = None
             resubscribe_result = _resubscribe_full(ws, reason="connect")
-            if resubscribe_result.get("success") is True:
+            if resubscribe_result.get("status") == "SUCCESS_CHANGED":
                 _advance_completed_transition(
-                    "FEED_SOCKET_CONNECTED",
-                    int(socket_generation),
-                    {"socket_generation": int(socket_generation), "resubscribe_status": resubscribe_result.get("status")},
+                    "SUBSCRIPTION_REBUILD_COMPLETED",
+                    f"connect:{socket_generation}:{tuple(resubscribe_result.get('old_tokens') or [])}->{tuple(resubscribe_result.get('new_tokens') or [])}",
+                    {"socket_generation": int(socket_generation), "reason": "connect", "old_tokens": resubscribe_result.get("old_tokens"), "new_tokens": resubscribe_result.get("new_tokens")},
                 )
             _log_ws(
                 "FEED_SUBSCRIPTION_REGISTRY_SNAPSHOT",
@@ -8086,8 +8123,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             if not handshake_soft_reset_used:
                 handshake_soft_reset_used = True
                 try:
-                    _resubscribe_full(ws, reason="handshake_soft_reset")
-                    _log_ws("FEED_HANDSHAKE_SOFT_RESET", {"code": code, "reason": reason_text})
+                    resubscribe_result = _resubscribe_full(ws, reason="handshake_soft_reset")
+                    if resubscribe_result.get("status") == "SUCCESS_CHANGED":
+                        _advance_completed_transition(
+                            "SUBSCRIPTION_REBUILD_COMPLETED",
+                            f"handshake:{socket_generation}:{tuple(resubscribe_result.get('old_tokens') or [])}->{tuple(resubscribe_result.get('new_tokens') or [])}",
+                            {"socket_generation": int(socket_generation), "reason": "handshake_soft_reset", "old_tokens": resubscribe_result.get("old_tokens"), "new_tokens": resubscribe_result.get("new_tokens")},
+                        )
+                    _log_ws("FEED_HANDSHAKE_SOFT_RESET", {"code": code, "reason": reason_text, "result": resubscribe_result.get("status")})
                 except Exception as exc:
                     _log_ws("FEED_HANDSHAKE_SOFT_RESET_ERROR", {"code": code, "reason": reason_text, "error": str(exc)})
             _log_ws("FEED_HANDSHAKE_SUPPRESS_RESTART", {"code": code, "reason": reason_text})
