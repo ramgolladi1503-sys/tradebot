@@ -8214,7 +8214,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             restart_depth_ws(reason=f"ws_close:{code}", ignore_cooldown=ignore_cooldown)
 
     def _watchdog():
-        global _STALE_STRIKES, _WARMUP_PENDING
+        global _STALE_STRIKES, _WARMUP_PENDING, _INTENDED_TOKENS
         max_age = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)))
         soft_cooldown = float(getattr(cfg, "FEED_RECONNECT_COOLDOWN_SEC", 30))
         strikes_to_restart = int(getattr(cfg, "FEED_RESTART_STRIKES", 3))
