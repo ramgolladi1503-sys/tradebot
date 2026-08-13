@@ -8288,7 +8288,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 now_epoch=now_epoch,
                 ws_connected=ws_connected,
                 subscribed_tokens_count=len(_LAST_TOKENS or []),
-                intended_tokens_count=int(_INTENDED_TOKEN_COUNT if _INTENDED_TOKEN_COUNT > 0 else len(_LAST_TOKENS or [])),
+                intended_tokens_count=len(_INTENDED_TOKENS or []) or len(_LAST_TOKENS or []),
                 subscribed_tokens_count_by_symbol=sub_counts,
                 missing_option_tokens_count=missing_count,
                 missing_option_tokens_count_by_symbol=missing_counts_by_symbol,

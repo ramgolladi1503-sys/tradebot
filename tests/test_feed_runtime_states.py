@@ -158,7 +158,11 @@ def test_persist_runtime_snapshot_row_updates_json_artifact(monkeypatch, tmp_pat
     monkeypatch.setattr(depth_ws, "_latest_depth_epoch_from_store", lambda: 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_latest_db_tick_epoch", lambda: 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKENS", [1, 101], raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
 
     depth_ws._persist_runtime_snapshot_row(
         ws_connected=True,
@@ -277,7 +281,11 @@ def test_persist_runtime_snapshot_row_normalizes_ws1006_recovery_blocked_state(m
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKENS", [1, 101], raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
     monkeypatch.setattr(depth_ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
     monkeypatch.setattr(depth_ws, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(depth_ws, "is_market_open_ist", lambda: True)
@@ -459,7 +467,11 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKENS", [1, 101], raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
 
     depth_ws._write_feed_runtime_snapshot(
         now_epoch=200.0,
