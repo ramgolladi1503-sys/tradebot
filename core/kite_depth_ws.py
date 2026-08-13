@@ -28,6 +28,7 @@ from core.tick_store import (
 )
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.runtime_boot_identity import stamp_runtime_payload
+from core.feed.artifact_provenance import stamp_feed_runtime_provenance
 from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.feed_runtime import build_canonical_feed_truth_state
 from core.feed_robustness_evidence import collector as feed_evidence
@@ -4616,10 +4617,7 @@ def _write_feed_runtime_snapshot(
             3,
         )
         payload["feed_runtime_stage_timing_ms"] = dict(stage_timing_ms)
-    payload = stamp_runtime_payload(
-        payload,
-        writer="kite_depth_ws.feed_runtime",
-    )
+    payload = stamp_feed_runtime_provenance(payload)
     payload.update(
         build_truth_integrity_payload(
             source_payload=payload,

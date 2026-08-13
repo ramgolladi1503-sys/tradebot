@@ -21,6 +21,7 @@ from core.runtime_status_overlay import derive_feed_ok
 from core.fs_utils import ensure_parent_dir
 from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.runtime_boot_identity import stamp_runtime_payload
+from core.feed.artifact_provenance import stamp_feed_runtime_provenance
 from core.paths import repo_root, trade_db_path
 from core.time_utils import now_utc_epoch
 from core.persistence_durability import record_degradation
@@ -250,7 +251,6 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
     # canonical runtime predicates before persistence; never let an omitted
     # field become an accidental bool(None) at a downstream consumer.
     out["feed_ok"] = bool(derive_feed_ok(out))
-    out = stamp_runtime_payload(out, writer="feed.runtime_store")
     if "recovery_generation_id" not in out:
         # Reuse the live feed coordinator's generation for queued writes.  A
         # missing coordinator generation is deliberately left missing so the
@@ -263,6 +263,7 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
                 out["recovery_generation_id"] = int(current_generation)
         except Exception:
             pass
+    out = stamp_feed_runtime_provenance(out)
     # Finalize all semantic and safety fields before hashing. The verifier
     # intentionally includes these fields, so mutating them after the hash
     # creates a false SNAPSHOT_HASH_MISMATCH on every persisted artifact.

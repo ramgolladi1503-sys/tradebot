@@ -8,10 +8,14 @@ from typing import Any, Mapping
 from config import config as cfg
 from core.events import write_json_atomic_if_changed
 from core.runtime_truth_integrity import build_truth_integrity_payload
+from core.feed.artifact_provenance import (
+    FEED_TRUTH_SCHEMA_VERSION,
+    stamp_feed_truth_provenance,
+)
 from core.paths import logs_dir, repo_logs_dir, runtime_dir
 
 
-RUNTIME_FEED_TRUTH_SNAPSHOT_SCHEMA_VERSION = 1
+RUNTIME_FEED_TRUTH_SNAPSHOT_SCHEMA_VERSION = FEED_TRUTH_SCHEMA_VERSION
 RUNTIME_FEED_TRUTH_SNAPSHOT_SOURCE = "runtime_feed_truth_snapshot_v1"
 RUNTIME_FEED_TRUTH_SNAPSHOT_FILENAME = "feed_truth_latest.json"
 
@@ -129,6 +133,7 @@ def build_feed_truth_snapshot(
         "is_order_action": False,
         "broker_api_called": False,
     }
+    payload = stamp_feed_truth_provenance(payload)
     payload.update(
         build_truth_integrity_payload(
             source_payload=payload,
