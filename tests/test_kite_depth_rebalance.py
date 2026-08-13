@@ -42,6 +42,17 @@ def test_freshness_addition_commits_exact_desired_registry_after_success():
     ) == ([1, 2, 3], False)
 
 
+def test_freshness_refresh_reconciliation_uses_post_apply_actual_set():
+    actual = [1, 2, 3, 215731205, 216159237]
+    assert ws._reconcile_rebalance_intended_tokens(
+        reason="stale_option_prune_refresh",
+        current_tokens=[1, 2, 3],
+        desired_tokens=actual,
+        actual_tokens=actual,
+        pending_tokens=False,
+    ) == (actual, True)
+
+
 def test_rebalance_triggers_on_second_build_when_atm_shifts():
     first = ws._compute_rebalance_decision(
         current_tokens={256265, 101, 102, 777001},

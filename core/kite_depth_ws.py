@@ -8446,6 +8446,32 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                             unsubscribe_tokens=list(refresh_payload.get("unsubscribe_tokens") or []),
                             reason="stale_option_prune_refresh",
                         )
+                    if refresh_ok:
+                        intended_before = list(_INTENDED_TOKENS or [])
+                        reconciled_tokens, intended_registry_updated = _reconcile_rebalance_intended_tokens(
+                            reason="stale_option_prune_refresh",
+                            current_tokens=_INTENDED_TOKENS,
+                            desired_tokens=_LAST_TOKENS,
+                            actual_tokens=_LAST_TOKENS,
+                            pending_tokens=bool(
+                                _PENDING_SUBSCRIBE_TOKENS
+                                or _PENDING_UNSUBSCRIBE_TOKENS
+                                or _PENDING_MODE_FULL_TOKENS
+                            ),
+                        )
+                        if intended_registry_updated:
+                            _INTENDED_TOKENS = list(reconciled_tokens)
+                            _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
+                            _log_ws(
+                                "FEED_INTENDED_REGISTRY_RECONCILED",
+                                {
+                                    "reason": "stale_option_prune_refresh",
+                                    "previous_intended_count": len(intended_before),
+                                    "intended_count": len(_INTENDED_TOKENS),
+                                    "intended_tokens": list(_INTENDED_TOKENS),
+                                    "actual_tokens": list(_LAST_TOKENS or []),
+                                },
+                            )
                     _log_ws(
                         "FEED_OPTION_PRUNE_REFRESH",
                         {
