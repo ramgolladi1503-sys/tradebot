@@ -290,9 +290,20 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
             )
 
     import json
+    from core.feed.artifact_provenance import stamp_feed_runtime_provenance
+    from core.feed.artifact_loader import FEED_RUNTIME_CANONICAL_WRITER, FEED_RUNTIME_SCHEMA_VERSION
+    from core.runtime_truth_integrity import truth_hash_from_mapping
     feed_path = runtime_root / "logs" / "feed_runtime_latest.json"
     feed_path.parent.mkdir(parents=True, exist_ok=True)
-    feed_path.write_text(json.dumps({"feed_ok": True}), encoding="utf-8")
+    feed_payload = stamp_feed_runtime_provenance(
+        {
+            "feed_ok": True,
+            "writer": FEED_RUNTIME_CANONICAL_WRITER,
+            "schema_version": FEED_RUNTIME_SCHEMA_VERSION,
+        }
+    )
+    feed_payload["snapshot_hash"] = truth_hash_from_mapping(feed_payload)
+    feed_path.write_text(json.dumps(feed_payload), encoding="utf-8")
 
     yield
 

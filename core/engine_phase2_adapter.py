@@ -14,6 +14,7 @@ from config import config as cfg
 from core import _engine_phase2_adapter_base as _phase2_base
 from core._engine_phase2_adapter_base import *  # noqa: F401,F403
 from core.paths import logs_dir
+from core.feed.artifact_loader import load_current_feed_runtime
 from core.runtime_phase2_rejection_evidence import (
     build_phase2_rejection_evidence_payload,
     write_phase2_rejection_evidence_latest,
@@ -388,9 +389,10 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
     feed_ok = False
     tick_age = 0.0
     depth_age = 0.0
-    if feed_path.exists():
+    loaded_runtime = load_current_feed_runtime(feed_path)
+    if loaded_runtime.get("valid"):
         try:
-            feed_payload = json.loads(feed_path.read_text(encoding="utf-8"))
+            feed_payload = dict(loaded_runtime.get("payload") or {})
             feed_ok = bool(feed_payload.get("feed_ok"))
             tick_age = float(feed_payload.get("last_tick_age_sec") or 0.0)
             depth_age = float(feed_payload.get("last_depth_age_sec") or 0.0)
