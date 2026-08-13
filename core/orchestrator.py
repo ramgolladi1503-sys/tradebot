@@ -5330,6 +5330,12 @@ class Orchestrator:
                     # Phase C: Build trade suggestion
                     debug_flag = getattr(cfg, "DEBUG_TRADE_REASONS", False) or getattr(cfg, "DEBUG_TRADE_MODE", False)
                     gate = self._strategy_gate_for_symbol(market_snapshot)
+                    phase1_raw_input_count = len(
+                        market_data.get("option_chain")
+                        if isinstance(market_data.get("option_chain"), (list, tuple))
+                        else []
+                    )
+                    phase1_strategy_evaluation_count = int(gate is not None)
                     gate_softened_no_strategy = self._should_soften_nonlive_no_strategy_gate(market_data, gate)
                     if gate_softened_no_strategy:
                         cycle_candidates_softened += 1
@@ -5596,6 +5602,8 @@ class Orchestrator:
                                 scan_summary={},
                                 survivor_count=0,
                                 phase2_handoff_count=0,
+                                raw_input_count=phase1_raw_input_count,
+                                strategy_evaluation_count=phase1_strategy_evaluation_count,
                                 exception_type=phase1_exception_type,
                             ))
                         except Exception:
@@ -5961,6 +5969,8 @@ class Orchestrator:
                                 cycle_ranked_candidates_after_append
                                 - cycle_ranked_candidates_before_append
                             ),
+                            raw_input_count=phase1_raw_input_count,
+                            strategy_evaluation_count=phase1_strategy_evaluation_count,
                         ))
                     except Exception:
                         pass
