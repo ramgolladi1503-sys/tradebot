@@ -7740,6 +7740,15 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     client_mode_before=client_mode_before_final,
                     socket_generation=socket_generation,
                 )
+                _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+                _LAST_RUNTIME_ERROR = f"final_set_mode:{exc}"[:1000]
+                _persist_runtime_snapshot_row(
+                    ws_connected=False,
+                    source=f"rebalance_final_mode_error:{reason}",
+                    runtime_state="SUBSCRIBE_FAILED",
+                    last_error=_LAST_RUNTIME_ERROR,
+                )
+                return False
         # ATM rebalance is allowed to rotate the target option universe.  The
         # builder publishes that target in _LAST_DESIRED_TOKENS; keep the intended
         # registry aligned only after the real subscribe/unsubscribe operations and

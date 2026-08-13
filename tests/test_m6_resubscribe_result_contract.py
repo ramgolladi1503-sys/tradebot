@@ -59,3 +59,15 @@ def test_transition_identity_advances_once_for_duplicate_completion():
     advance_once("SUBSCRIPTION_REBUILD_COMPLETED", "socket-1:set-a")
     advance_once("SUBSCRIPTION_REBUILD_COMPLETED", "socket-1:set-a")
     assert current_feed_epoch() == 1
+
+
+def test_final_set_mode_failure_returns_before_registry_convergence():
+    source = _resubscribe_source()
+    start = source.index("def _apply_subscription_delta")
+    end = source.index("def _resubscribe_full", start)
+    body = source[start:end]
+    failure = body.index("final_set_mode:")
+    failure_tail = body[failure:]
+    assert "return False" in failure_tail
+    assert failure_tail.index("return False") < failure_tail.index("_reconcile_rebalance_intended_tokens")
+    assert failure_tail.index("return False") < failure_tail.index("_advance_completed_transition")
