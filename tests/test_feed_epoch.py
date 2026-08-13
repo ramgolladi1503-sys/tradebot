@@ -50,6 +50,32 @@ def test_advancement_audit_contains_transition_and_session():
     assert event["timestamp"] > 0
 
 
+def test_input_metadata_is_deeply_copied():
+    metadata = {"nested": {"x": 1}, "items": ["a"]}
+    advance_feed_epoch("TEST", metadata)
+    metadata["nested"]["x"] = 999
+    metadata["items"].append("mutated")
+    event = feed_epoch_audit()[0]
+    assert event["metadata"] == {"nested": {"x": 1}, "items": ["a"]}
+
+
+def test_returned_snapshot_is_deeply_independent():
+    advance_feed_epoch("TEST", {"nested": {"x": 1}, "items": ["a"]})
+    snapshot = feed_epoch_audit()
+    snapshot[0]["metadata"]["nested"]["x"] = 999
+    snapshot[0]["metadata"]["items"].append("mutated")
+    assert feed_epoch_audit()[0]["metadata"] == {"nested": {"x": 1}, "items": ["a"]}
+
+
+def test_multiple_snapshots_do_not_share_mutable_state():
+    advance_feed_epoch("TEST", {"nested": {"x": 1}})
+    first = feed_epoch_audit()
+    second = feed_epoch_audit()
+    first[0]["metadata"]["nested"]["x"] = 2
+    assert second[0]["metadata"]["nested"]["x"] == 1
+    assert feed_epoch_audit()[0]["metadata"]["nested"]["x"] == 1
+
+
 def test_reason_is_required():
     with pytest.raises(ValueError):
         advance_feed_epoch(" ")

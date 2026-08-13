@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import threading
 import time
+from copy import deepcopy
 from collections.abc import Mapping
 from typing import Any
 
@@ -30,7 +31,7 @@ def advance_feed_epoch(reason: str, metadata: Mapping[str, Any] | None = None) -
     reason_text = str(reason or "").strip()
     if not reason_text:
         raise ValueError("feed epoch advancement requires a non-empty reason")
-    metadata_copy = dict(metadata or {})
+    metadata_copy = deepcopy(dict(metadata or {}))
     identity = get_runtime_boot_identity()
     with _LOCK:
         old_epoch = int(_EPOCH)
@@ -52,7 +53,7 @@ def advance_feed_epoch(reason: str, metadata: Mapping[str, Any] | None = None) -
 def feed_epoch_audit() -> tuple[dict[str, Any], ...]:
     """Return an immutable snapshot of advancement evidence."""
     with _LOCK:
-        return tuple(dict(item) for item in _ADVANCEMENT_AUDIT)
+        return tuple(deepcopy(item) for item in _ADVANCEMENT_AUDIT)
 
 
 def _reset_feed_epoch_for_tests() -> None:
