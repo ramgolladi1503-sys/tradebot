@@ -3021,7 +3021,11 @@ def _reconcile_rebalance_intended_tokens(
     desired = sorted({int(token) for token in (desired_tokens or []) if int(token) > 0})
     actual = {int(token) for token in (actual_tokens or []) if int(token) > 0}
     if (
-        not str(reason or "").startswith(("atm_shift_steps=", "preserve_tokens_missing"))
+        not str(reason or "").startswith((
+            "atm_shift_steps=",
+            "preserve_tokens_missing",
+            "stale_option_prune_refresh",
+        ))
         or pending_tokens
         or not desired
         or set(desired) != actual

@@ -25,6 +25,23 @@ def test_exact_registry_rejects_same_count_wrong_identity_and_partial_state():
     ) == ([1, 2, 3], True)
 
 
+def test_freshness_addition_commits_exact_desired_registry_after_success():
+    assert ws._reconcile_rebalance_intended_tokens(
+        reason="stale_option_prune_refresh",
+        current_tokens=[1, 2, 3],
+        desired_tokens=[1, 2, 3, 4, 5],
+        actual_tokens=[1, 2, 3, 4, 5],
+        pending_tokens=False,
+    ) == ([1, 2, 3, 4, 5], True)
+    assert ws._reconcile_rebalance_intended_tokens(
+        reason="stale_option_prune_refresh",
+        current_tokens=[1, 2, 3],
+        desired_tokens=[1, 2, 3, 4, 5],
+        actual_tokens=[1, 2, 3, 4],
+        pending_tokens=True,
+    ) == ([1, 2, 3], False)
+
+
 def test_rebalance_triggers_on_second_build_when_atm_shifts():
     first = ws._compute_rebalance_decision(
         current_tokens={256265, 101, 102, 777001},
