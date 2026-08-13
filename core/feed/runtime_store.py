@@ -17,8 +17,10 @@ from core.feed_execution_truth import attach_feed_execution_truth
 from core.feed_startup_lifecycle import record_feed_startup_event
 from core.feed_truth_state import classify_feed_truth_state
 from core.feed.ws_lifecycle_shell import derive_transport_health
+from core.runtime_status_overlay import derive_feed_ok
 from core.fs_utils import ensure_parent_dir
 from core.runtime_truth_integrity import build_truth_integrity_payload
+from core.runtime_boot_identity import stamp_runtime_payload
 from core.paths import repo_root, trade_db_path
 from core.time_utils import now_utc_epoch
 from core.persistence_durability import record_degradation
@@ -243,6 +245,12 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
         out["feed_truth_strict_live"] = bool(feed_truth.strict_live)
     out = canonicalize_feed_runtime_snapshot_truth(out)
     out = attach_feed_execution_truth(out)
+    # The runtime-store writer is a second persistence path for the same
+    # authoritative artifact.  Always derive the required boolean from the
+    # canonical runtime predicates before persistence; never let an omitted
+    # field become an accidental bool(None) at a downstream consumer.
+    out["feed_ok"] = bool(derive_feed_ok(out))
+    out = stamp_runtime_payload(out, writer="feed.runtime_store")
     # Finalize all semantic and safety fields before hashing. The verifier
     # intentionally includes these fields, so mutating them after the hash
     # creates a false SNAPSHOT_HASH_MISMATCH on every persisted artifact.

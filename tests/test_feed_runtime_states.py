@@ -94,6 +94,60 @@ def test_runtime_store_roundtrip_with_state_fields(monkeypatch, tmp_path):
     assert payload["subscribed_tokens_sample"] == [1, 2, 3]
 
 
+def test_runtime_store_derives_explicit_feed_ok_for_legacy_payload(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    payload = runtime_store._canonical_runtime_artifact_payload(
+        {
+            "ts_epoch": 200.0,
+            "ws_connected": True,
+            "effective_ws_connected": True,
+            "market_open": True,
+            "subscribed_tokens_count": 2,
+            "intended_tokens_count": 2,
+            "subscribed_option_tokens_count": 1,
+            "missing_option_tokens_count": 0,
+            "last_ws_tick_epoch": 199.5,
+            "last_tick_age_sec": 0.5,
+            "last_depth_epoch": 199.0,
+            "last_depth_age_sec": 1.0,
+            "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+            "option_last_tick_age_by_symbol": {"NIFTY": 0.4},
+            "runtime_state": "RUNNING",
+            "source": "legacy-runtime-writer",
+        },
+        ts_epoch=200.0,
+    )
+    assert payload["feed_ok"] is True
+    assert payload["run_id"]
+    assert payload["boot_epoch"]
+    assert payload["writer"] == "feed.runtime_store"
+    assert payload["schema_version"] == 1
+
+
+def test_runtime_store_derives_false_for_unhealthy_legacy_payload(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    payload = runtime_store._canonical_runtime_artifact_payload(
+        {
+            "ts_epoch": 200.0,
+            "ws_connected": True,
+            "market_open": True,
+            "subscribed_tokens_count": 2,
+            "intended_tokens_count": 2,
+            "subscribed_option_tokens_count": 1,
+            "last_tick_age_sec": 9.0,
+            "last_depth_age_sec": 1.0,
+            "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+            "option_last_tick_age_by_symbol": {"NIFTY": 9.0},
+            "runtime_state": "RUNNING",
+            "source": "legacy-runtime-writer",
+        },
+        ts_epoch=200.0,
+    )
+    assert payload["feed_ok"] is False
+
+
 def test_runtime_store_connection_uses_busy_tolerant_settings(monkeypatch, tmp_path):
     db_path = tmp_path / "runtime.sqlite"
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
