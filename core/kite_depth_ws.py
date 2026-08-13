@@ -7786,9 +7786,20 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def _resubscribe_full(ws, reason: str):
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         _log_ws("subscription_replay_requested", {"reason": reason})
+        old_tokens = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
         desired, selection_payload = _resubscribe_token_selection()
         if not desired:
             desired = sorted(set(int(t) for t in (tokens or []) if int(t) > 0))
+        desired = sorted({int(token) for token in (desired or []) if int(token) > 0})
+        if not desired:
+            return {
+                "success": False,
+                "changed": False,
+                "status": "FAILED",
+                "reason": "no_tokens",
+                "old_tokens": old_tokens,
+                "new_tokens": old_tokens,
+            }
         if desired:
             event_base = {
                 "socket_generation": socket_generation,
@@ -7918,6 +7929,15 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         if rebalance_state.get("last_rebalance_ts") is None:
             rebalance_state["last_rebalance_ts"] = time.time()
+        changed = old_tokens != desired
+        return {
+            "success": True,
+            "changed": changed,
+            "status": "SUCCESS_CHANGED" if changed else "SUCCESS_NO_CHANGE",
+            "reason": str(reason or ""),
+            "old_tokens": old_tokens,
+            "new_tokens": list(desired),
+        }
 
     def on_connect(ws, response):
         global _STALE_STRIKES, _WARMUP_PENDING, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
