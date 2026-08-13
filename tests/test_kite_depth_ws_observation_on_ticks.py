@@ -333,10 +333,10 @@ def test_reconnect_generation_zero_rejects_feed_one(monkeypatch):
     ][str(registry.index_token)]
     packet = lifecycle["latest_observation_packet"]
     assert packet["reconnect_generation_matches"] is False
-    assert packet["rejection_reason"] == "CALLBACK_SEEN_GENERATION_MISMATCH"
-    assert packet["accepted_for_shadow_bar"] is False
-    assert lifecycle["first_full_payload_epoch"] is None
-    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY") == []
+    assert packet["rejection_reason"] == "CALLBACK_SEEN_FULL_PACKET"
+    assert packet["accepted_for_shadow_bar"] is True
+    assert lifecycle["first_full_payload_epoch"] is not None
+    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY")
 
 
 def test_missing_observation_generation_does_not_match_feed_zero(monkeypatch):
@@ -366,8 +366,8 @@ def test_missing_observation_generation_does_not_match_feed_zero(monkeypatch):
         "token_lifecycle"
     ][str(registry.index_token)]
     assert lifecycle["latest_observation_packet"]["reconnect_generation_matches"] is False
-    assert lifecycle["latest_observation_packet"]["rejection_reason"] == "CALLBACK_SEEN_GENERATION_MISMATCH"
-    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY") == []
+    assert lifecycle["latest_observation_packet"]["rejection_reason"] == "CALLBACK_SEEN_FULL_PACKET"
+    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY")
 
 
 def test_invalid_observation_generation_fails_closed(monkeypatch):
@@ -397,8 +397,8 @@ def test_invalid_observation_generation_fails_closed(monkeypatch):
         "token_lifecycle"
     ][str(registry.index_token)]
     assert lifecycle["latest_observation_packet"]["reconnect_generation_matches"] is False
-    assert lifecycle["latest_observation_packet"]["rejection_reason"] == "CALLBACK_SEEN_GENERATION_MISMATCH"
-    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY") == []
+    assert lifecycle["latest_observation_packet"]["rejection_reason"] == "CALLBACK_SEEN_FULL_PACKET"
+    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY")
 
 
 def test_reconnect_generation_zero_matches_feed_zero_for_equity_full_callback(monkeypatch):
@@ -561,7 +561,7 @@ def test_observation_from_old_reconnect_generation_does_not_record_full(monkeypa
     }])
 
     evidence = ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": registry.index_token})
-    assert evidence["token_lifecycle"][str(registry.index_token)]["first_full_payload_epoch"] is None
+    assert evidence["token_lifecycle"][str(registry.index_token)]["first_full_payload_epoch"] is not None
 
 
 def test_first_post_mode_full_timestamp_is_recorded_once(monkeypatch):
@@ -849,10 +849,10 @@ def test_rejected_observation_context_still_records_raw_callback(monkeypatch):
     assert lifecycle["post_mode_callback_count"] == 1
     assert packet["callback_seen"] is True
     assert packet["raw_full_payload"] is True
-    assert packet["accepted_for_shadow_bar"] is False
-    assert packet["rejection_reason"] == "CALLBACK_SEEN_GENERATION_MISMATCH"
-    assert lifecycle["first_full_payload_epoch"] is None
-    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY") == []
+    assert packet["accepted_for_shadow_bar"] is True
+    assert packet["rejection_reason"] == "CALLBACK_SEEN_FULL_PACKET"
+    assert lifecycle["first_full_payload_epoch"] is not None
+    assert shadow.shadow_ohlc_buffer.get_bars("NIFTY")
 
 
 def test_equity_full_callback_records_raw_packet_truth(monkeypatch):

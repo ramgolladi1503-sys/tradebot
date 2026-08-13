@@ -7,4 +7,6 @@ runtime health,core/runtime_health.py,true,diagnostic only,false,legacy values e
 readiness,core/readiness_gate.py,true,indirect via loader,false,invalid current artifact fails closed
 orchestrator,core/orchestrator_truth.py,true,indirect via loader,false,invalid current artifact yields feed_not_ready
 candidate decision telemetry,core/orchestrator_parts/decisions.py,true,diagnostic only,false,legacy values are telemetry
-MEG subscription causality,core/market_event_graph_live_runtime_bridge.py,not applicable,yes,false,local request/tick identity not feed currentness
+MEG subscription causality,core/market_event_graph_live_runtime_bridge.py,true,yes,false,feed_epoch currentness with reconnect metadata only
+callback/tick acceptance,core/kite_depth_ws.py,true,yes,false,feed_epoch plus session/plan checks
+MEG live-bar provenance,core/market_event_graph_live_runtime_bridge.py,true,yes,false,feed_epoch plus session/universe/provenance checks

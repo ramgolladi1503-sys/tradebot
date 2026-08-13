@@ -29,7 +29,7 @@ from core.tick_store import (
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.runtime_boot_identity import stamp_runtime_payload
 from core.feed.artifact_provenance import stamp_feed_runtime_provenance
-from core.feed.feed_epoch import advance_feed_epoch
+from core.feed.feed_epoch import advance_feed_epoch, current_feed_epoch
 from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.feed_runtime import build_canonical_feed_truth_state
 from core.feed_robustness_evidence import collector as feed_evidence
@@ -263,6 +263,7 @@ _OBSERVATION_PLAN_STATE: dict[str, Any] = {
     "missing_observation_tokens": [],
     "configured_budget": None,
     "feed_session_id": "",
+    "feed_epoch": 0,
     "reconnect_generation": 0,
     "plan_sha": "",
     "decision_epoch": None,
@@ -303,6 +304,7 @@ def _set_observation_plan_state(
                 "missing_observation_tokens": sorted({int(token) for token in missing_observation_tokens if int(token) > 0}),
                 "configured_budget": configured_budget,
                 "feed_session_id": _ensure_feed_session_id() if bool(enabled) else "",
+                "feed_epoch": int(current_feed_epoch()),
                 "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
                 "plan_sha": str(plan_sha or ""),
                 "decision_epoch": float(now_utc_epoch()),
@@ -385,6 +387,7 @@ def _record_ws_subscription_operation(
         "operation": str(operation),
         "socket_generation": int(socket_generation if socket_generation is not None else _SOCKET_GENERATION),
         "feed_session_id": _ensure_feed_session_id(),
+        "feed_epoch": int(current_feed_epoch()),
         "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
         "thread_name": threading.current_thread().name,
         "token_count": len(normalized),
@@ -596,6 +599,7 @@ def get_current_feed_session_identity() -> dict[str, Any]:
         "provider": "kite",
         "token_domain": "kite_instrument_token",
         "feed_session_id": _ensure_feed_session_id(),
+        "feed_epoch": int(current_feed_epoch()),
         "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
         "connection_start_epoch": _FEED_CONNECTION_START_EPOCH,
     }
@@ -661,13 +665,15 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
             "latest_observation_packet": dict(_LATEST_OBSERVATION_PACKET_BY_TOKEN.get(token_int) or {}),
             "feed_session_id": identity["feed_session_id"],
+            "feed_epoch": identity["feed_epoch"],
             "reconnect_generation": identity["reconnect_generation"],
         }
     generation_basis = {
         "provider": identity["provider"],
         "token_domain": identity["token_domain"],
-        "feed_session_id": identity["feed_session_id"],
-        "reconnect_generation": identity["reconnect_generation"],
+            "feed_session_id": identity["feed_session_id"],
+            "feed_epoch": identity["feed_epoch"],
+            "reconnect_generation": identity["reconnect_generation"],
         "tokens": sorted(int(token) for token in expected.values()),
         "request_epochs": {
             str(token): lifecycle[str(token)].get("subscription_requested_epoch")
@@ -682,6 +688,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         "provider": identity["provider"],
         "token_domain": identity["token_domain"],
         "feed_session_id": identity["feed_session_id"],
+        "feed_epoch": int(identity["feed_epoch"]),
         "reconnect_generation": int(identity["reconnect_generation"]),
         "connection_start_epoch": identity["connection_start_epoch"],
         "token_by_symbol": dict(expected),
@@ -1732,6 +1739,7 @@ _OBSERVATION_PLAN_STATE: dict[str, Any] = {
     "missing_observation_tokens": [],
     "configured_budget": None,
     "feed_session_id": "",
+    "feed_epoch": 0,
     "reconnect_generation": 0,
     "plan_sha": "",
     "decision_epoch": None,
@@ -1772,6 +1780,7 @@ def _set_observation_plan_state(
                 "missing_observation_tokens": sorted({int(token) for token in missing_observation_tokens if int(token) > 0}),
                 "configured_budget": configured_budget,
                 "feed_session_id": _ensure_feed_session_id() if bool(enabled) else "",
+                "feed_epoch": int(current_feed_epoch()),
                 "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
                 "plan_sha": str(plan_sha or ""),
                 "decision_epoch": float(now_utc_epoch()),
@@ -1923,6 +1932,7 @@ def get_current_feed_session_identity() -> dict[str, Any]:
         "provider": "kite",
         "token_domain": "kite_instrument_token",
         "feed_session_id": _ensure_feed_session_id(),
+        "feed_epoch": int(current_feed_epoch()),
         "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
         "connection_start_epoch": _FEED_CONNECTION_START_EPOCH,
     }
@@ -1988,6 +1998,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
             "latest_observation_packet": dict(_LATEST_OBSERVATION_PACKET_BY_TOKEN.get(token_int) or {}),
             "feed_session_id": identity["feed_session_id"],
+            "feed_epoch": identity["feed_epoch"],
             "reconnect_generation": identity["reconnect_generation"],
         }
     generation_basis = {
@@ -2009,6 +2020,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         "provider": identity["provider"],
         "token_domain": identity["token_domain"],
         "feed_session_id": identity["feed_session_id"],
+        "feed_epoch": int(identity["feed_epoch"]),
         "reconnect_generation": int(identity["reconnect_generation"]),
         "connection_start_epoch": identity["connection_start_epoch"],
         "token_by_symbol": dict(expected),
@@ -6475,7 +6487,9 @@ def _record_observation_callback_truth(
     feed_session_matches = str(observation_state.get("feed_session_id") or "") == str(feed_identity.get("feed_session_id") or "")
     plan_generation = _coerce_generation(observation_state.get("reconnect_generation"), default=-1)
     feed_generation = _coerce_generation(feed_identity.get("reconnect_generation"), default=-1)
-    reconnect_generation_matches = plan_generation == feed_generation
+    plan_feed_epoch = _coerce_generation(observation_state.get("feed_epoch"), default=-1)
+    current_feed_epoch_value = int(current_feed_epoch())
+    feed_epoch_matches = plan_feed_epoch == current_feed_epoch_value
     subscription_send_recorded = token_int in _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS
     mode_full_is_final = token_int in _MODE_COMMAND_FINAL_FULL_TOKENS
     post_mode_callback = bool(mode_epoch is not None and float(callback_receipt_epoch) > float(mode_epoch))
@@ -6484,7 +6498,7 @@ def _record_observation_callback_truth(
         plan_enabled
         and token_in_active_plan
         and feed_session_matches
-        and reconnect_generation_matches
+        and feed_epoch_matches
         and subscription_send_recorded
         and mode_full_is_final
         and post_mode_callback
@@ -6493,8 +6507,8 @@ def _record_observation_callback_truth(
         rejection_reason = "CALLBACK_SEEN_PLAN_DISABLED"
     elif not feed_session_matches:
         rejection_reason = "CALLBACK_SEEN_SESSION_MISMATCH"
-    elif not reconnect_generation_matches:
-        rejection_reason = "CALLBACK_SEEN_GENERATION_MISMATCH"
+    elif not feed_epoch_matches:
+        rejection_reason = "CALLBACK_SEEN_FEED_EPOCH_MISMATCH"
     elif not subscription_send_recorded:
         rejection_reason = "CALLBACK_SEEN_SUBSCRIPTION_UNPROVEN"
     elif not mode_full_is_final:
@@ -6527,7 +6541,8 @@ def _record_observation_callback_truth(
             "token_in_observation_registry": True,
             "token_in_active_plan": bool(token_in_active_plan),
             "feed_session_matches": bool(feed_session_matches),
-            "reconnect_generation_matches": bool(reconnect_generation_matches),
+            "reconnect_generation_matches": bool(plan_generation == feed_generation),
+            "feed_epoch_matches": bool(feed_epoch_matches),
             "subscription_send_recorded": bool(subscription_send_recorded),
             "mode_full_is_final_local_command": bool(mode_full_is_final),
             "post_mode_callback": bool(post_mode_callback),
@@ -6683,8 +6698,8 @@ def on_ticks(ws, ticks):
         tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
         tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None
         observation_state = _observation_state_payload()
-        plan_generation = _coerce_generation(observation_state.get("reconnect_generation"), default=-1)
-        feed_generation = _coerce_generation(_FEED_RECONNECT_GENERATION, default=-1)
+        plan_feed_epoch = _coerce_generation(observation_state.get("feed_epoch"), default=-1)
+        current_feed_epoch_value = int(current_feed_epoch())
         observation_token_allowed = (
             token_int is not None
             and int(token_int) in observation_token_set
@@ -6693,7 +6708,7 @@ def on_ticks(ws, ticks):
             and str(observation_state.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
             and int(token_int) in set(int(tok) for tok in (observation_state.get("observation_tokens") or []))
             and str(observation_state.get("feed_session_id") or "") == _ensure_feed_session_id()
-            and plan_generation == feed_generation
+            and plan_feed_epoch == current_feed_epoch_value
             and int(token_int) in _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS
         )
         if token_int is not None and isinstance(depth, dict) and depth:

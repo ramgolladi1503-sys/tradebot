@@ -8,5 +8,7 @@ core/feed_debug.py,recovery_generation_id,build_feed_debug,read/write,DIAGNOSTIC
 core/orchestrator_parts/decisions.py,recovery_generation_id,decision event assembly,read/write,DIAGNOSTIC_ONLY,carries legacy fields into telemetry,do not gate decisions on value,none
 core/kite_depth_ws.py,_FEED_RECONNECT_GENERATION,websocket lifecycle,read/write,COMPATIBILITY_ONLY,tracks socket/tick lifecycle identity,retain for lifecycle diagnostics not currentness,none
 core/market_event_graph_live_runtime_bridge.py,reconnect_generation,subscription causality validation,read,UNRELATED,binds MEG request/tick/subscription identities,not a feed artifact currentness authority,none
+core/kite_depth_ws.py,reconnect_generation,observation callback/tick evidence,read,DIAGNOSTIC_ONLY,retained in packet diagnostics and identifiers,feed_epoch controls acceptance,repair implemented
+core/market_event_graph_live_runtime_bridge.py,reconnect_generation,live-bar provenance,read,DIAGNOSTIC_ONLY,retained as metadata,feed_epoch controls provenance acceptance,repair implemented
 core/market_event_graph_live_ohlc_buffer.py,reconnect_generation,buffer identity,read/write,UNRELATED,prevents cross-reconnect bar mixing,retain local buffer identity,none
 core/feed/artifact_loader.py,feed_epoch,_load,read,ARTIFACT_ACCEPTANCE_AFFECTING,requires current feed_epoch,sole artifact currentness authority,already implemented in M7

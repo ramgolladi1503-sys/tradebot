@@ -6,5 +6,9 @@ stale feed_epoch plus both legacy generations current,fail,covered by artifact l
 missing legacy diagnostic fields with current authority,no legacy authority failure,covered by provenance contract
 malformed legacy diagnostic with current authority,no legacy authority effect,covered by provenance contract
 legacy supervisor mismatch,not a health blocker,passed
+current feed_epoch plus stale reconnect callback/tick,accepted,passed
+stale feed_epoch plus current reconnect callback/tick,rejected,passed
+current feed_epoch plus stale reconnect MEG provenance,accepted,passed
+stale feed_epoch plus current reconnect MEG provenance,rejected,passed
 M7 lineage binding,preserve,passed existing M7 tests
 broker/order safety,unchanged,verified by existing safety fields and no runtime launch

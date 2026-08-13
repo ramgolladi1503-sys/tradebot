@@ -32,6 +32,7 @@ def _capture_identity_from(feed_identity: Mapping[str, Any] | None, *, provider:
         "token_domain": token_domain,
         "universe_hash": universe_hash,
         "feed_session_id": str((feed_identity or {}).get("feed_session_id") or "").strip(),
+        "feed_epoch": int((feed_identity or {}).get("feed_epoch") or 0),
         "reconnect_generation": int((feed_identity or {}).get("reconnect_generation") or 0),
     }
     return identity
@@ -39,7 +40,7 @@ def _capture_identity_from(feed_identity: Mapping[str, Any] | None, *, provider:
 
 def _identity_changed(identity: Mapping[str, Any]) -> bool:
     current = dict(_ACTIVE_CAPTURE_IDENTITY or {})
-    return any(current.get(key) != identity.get(key) for key in ("provider", "token_domain", "universe_hash", "feed_session_id", "reconnect_generation"))
+    return any(current.get(key) != identity.get(key) for key in ("provider", "token_domain", "universe_hash", "feed_session_id", "feed_epoch"))
 
 
 def _apply_identity(identity: Mapping[str, Any]) -> None:
@@ -119,6 +120,7 @@ def record_live_source_shadow_tick(
             "source_type": normalized_source_type,
             "symbol": str(symbol).upper(),
             "live_feed_session_id": session_id,
+            "feed_epoch": int(capture_identity.get("feed_epoch") or 0),
             "reconnect_generation": generation_int,
             "instrument_token": token,
             "payload_mode": str(payload_mode or ""),
