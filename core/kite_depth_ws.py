@@ -1514,6 +1514,12 @@ def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
         try:
             from core.feed.ws_mutation_queue import safe_unsubscribe
             now_epoch = now_utc_epoch()
+            _log_subscription_mutation_diagnostic(
+                action="refresh",
+                reason=reason,
+                requested_tokens=refresh_tokens,
+                phase="before_unsubscribe",
+            )
             res_unsub = safe_unsubscribe(ws_obj, refresh_tokens, reason, now_epoch)
             if not res_unsub.applied and res_unsub.failure_reason != "ws_method_missing":
                 if res_unsub.queued:
@@ -1535,6 +1541,21 @@ def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
                 _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []).union(set(refresh_tokens))))
 
             res_sub, res_mode = safe_subscribe_full_mode(ws_obj, refresh_tokens, reason, now_epoch, on_applied_callback=on_refresh_applied)
+
+            _log_subscription_mutation_diagnostic(
+                action="refresh",
+                reason=reason,
+                requested_tokens=refresh_tokens,
+                phase="after_subscribe",
+                result={
+                    "unsubscribe_applied": bool(res_unsub.applied),
+                    "subscribe_applied": bool(res_sub.applied),
+                    "mode_applied": bool(res_mode.applied),
+                    "unsubscribe_queued": bool(res_unsub.queued),
+                    "subscribe_queued": bool(res_sub.queued),
+                    "mode_queued": bool(res_mode.queued),
+                },
+            )
 
             if res_sub.queued or res_mode.queued:
                 global _PENDING_SUBSCRIBE_TOKENS
@@ -2226,6 +2247,42 @@ def _log_ws(event: str, extra: dict | None = None, *, throttle_key: str | None =
         _WS_LOGGER.info(json.dumps(payload, sort_keys=True, default=str))
     except Exception as exc:
         logger.error("depth_ws_log_error path=%s err=%s:%s", _LOG_PATH, type(exc).__name__, exc)
+
+
+def _log_subscription_mutation_diagnostic(
+    *, action: str, reason: str, requested_tokens: list[int], phase: str, result: dict | None = None
+) -> None:
+    """Record token-level mutation ownership evidence without changing behavior."""
+    intended = sorted({int(token) for token in (_INTENDED_TOKENS or []) if int(token) > 0})
+    subscribed = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
+    requested = sorted({int(token) for token in (requested_tokens or []) if int(token) > 0})
+    target = 215731205
+    _log_ws(
+        "FEED_SUBSCRIPTION_MUTATION_DIAGNOSTIC",
+        {
+            "action": str(action),
+            "reason": str(reason),
+            "phase": str(phase),
+            "requested_tokens": requested,
+            "requested_token_count": len(requested),
+            "target_token": target,
+            "target_intended_before_or_after": target in intended,
+            "target_subscribed_before_or_after": target in subscribed,
+            "intended_tokens": intended,
+            "subscribed_tokens": subscribed,
+            "missing_tokens": sorted(set(intended) - set(subscribed)),
+            "extra_tokens": sorted(set(subscribed) - set(intended)),
+            "pending_subscribe_tokens": sorted(int(t) for t in (_PENDING_SUBSCRIBE_TOKENS or set())),
+            "pending_unsubscribe_tokens": sorted(int(t) for t in (_PENDING_UNSUBSCRIBE_TOKENS or set())),
+            "pending_mode_full_tokens": sorted(int(t) for t in (_PENDING_MODE_FULL_TOKENS or set())),
+            "runtime_state": str(_RUNTIME_STATE),
+            "run_id": os.getenv("TRADEBOT_RUN_ID", ""),
+            "feed_session_id": _ensure_feed_session_id(),
+            "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+            "socket_generation": int(_SOCKET_GENERATION),
+            "result": dict(result or {}),
+        },
+    )
 
 
 def _masked_secret_stats(label: str, secret: str | None) -> dict:
@@ -3061,6 +3118,12 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
     try:
         from core.feed.ws_mutation_queue import safe_subscribe_full_mode, safe_unsubscribe
         now_epoch = now_utc_epoch()
+        _log_subscription_mutation_diagnostic(
+            action="delta",
+            reason=reason,
+            requested_tokens=sorted(set(to_subscribe + to_unsubscribe)),
+            phase="before",
+        )
 
         if to_subscribe:
             def on_sub_applied():
@@ -3108,6 +3171,13 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
         )
         return False
 
+    _log_subscription_mutation_diagnostic(
+        action="delta",
+        reason=reason,
+        requested_tokens=sorted(set(to_subscribe + to_unsubscribe)),
+        phase="after",
+        result={"all_applied": bool(all_applied)},
+    )
     return all_applied
 
 
