@@ -50,8 +50,9 @@ def test_runtime_health_shape(monkeypatch, tmp_path):
     assert "recon" in payload
     assert payload["feed"]["transport_state"] == "CONNECTED"
     assert payload["feed"]["transport_healthy"] is True
-    assert payload["feed"]["feed_ok"] is None
-    assert payload["feed"]["execution_feed_ready"] is None
+    assert payload["feed"]["feed_ok"] is False
+    assert payload["feed"]["provenance"]["valid"] is False
+    assert payload["feed"]["execution_feed_ready"] is False
 
 
 def test_runtime_health_publishes_orchestrator_warmup_proof(monkeypatch):

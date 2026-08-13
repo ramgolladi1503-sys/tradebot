@@ -26,6 +26,7 @@ from core.readiness_state import ReadinessResult, ReadinessState
 from core.gate_status_log import gate_status_path
 from core.telemetry_streams import decisions_stream_path, iter_recent_events
 from core.decision_telemetry_health import check_decision_telemetry
+from core.feed.runtime_provenance import validate_feed_runtime_provenance
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,15 @@ def _load_fresh_feed_runtime_snapshot(now_epoch: float) -> Dict[str, Any]:
             selected_mtime = mtime
             selected_age_sec = age_sec
             selected_path = path
+
+    if selected is not None:
+        current_generation = (get_feed_debug(now_epoch=now_epoch) or {}).get("recovery_generation_id")
+        provenance = validate_feed_runtime_provenance(selected, current_generation=current_generation)
+        if not provenance["valid"]:
+            selected = dict(selected)
+            selected["feed_ok"] = False
+            selected["provenance_valid"] = False
+            selected["provenance_reasons"] = list(provenance["reasons"])
 
     if not isinstance(selected, dict):
         return {}

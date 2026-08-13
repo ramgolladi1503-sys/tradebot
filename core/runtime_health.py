@@ -18,6 +18,7 @@ from core.freshness_sla import get_freshness_status
 from core.runtime_truth_integrity import build_truth_integrity_alerts, truth_hash_from_mapping
 from core.time_utils import is_market_open_ist, now_utc_epoch
 from core.runtime_boot_identity import stamp_runtime_payload
+from core.feed.runtime_provenance import validate_feed_runtime_provenance
 from core.paths import runtime_dir
 from core.events import append_event
 
@@ -56,6 +57,7 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
     # select a different, usually absent, path and recreate the dual-path race.
     feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
     feed_runtime_payload = _safe_json_payload(feed_runtime_path)
+    provenance = validate_feed_runtime_provenance(feed_runtime_payload, current_generation=feed_debug.get("recovery_generation_id"))
 
     market_open = bool(freshness.get("market_open", is_market_open_ist()))
     mode = str(
@@ -94,11 +96,11 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         "missing_option_tokens_count": feed_debug.get("missing_option_tokens_count"),
         "subscribed_option_tokens_count": feed_debug.get("subscribed_option_tokens_count"),
         "option_ticks_verified": feed_debug.get("option_ticks_verified"),
-        "feed_ok": _first_non_none(feed_runtime_payload.get("feed_ok"), feed_debug.get("feed_ok")),
+        "feed_ok": _first_non_none(feed_runtime_payload.get("feed_ok"), feed_debug.get("feed_ok")) if provenance["valid"] else False,
         "execution_feed_ready": _first_non_none(
             feed_runtime_payload.get("execution_feed_ready"),
             feed_debug.get("execution_feed_ready"),
-        ),
+        ) if provenance["valid"] else False,
         "runtime_state": feed_debug.get("feed_runtime_state"),
         "last_error": feed_debug.get("feed_runtime_last_error"),
         "last_tick_age_sec": feed_debug.get("last_tick_age_sec"),
@@ -126,6 +128,7 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         "sla_state": sla_state,
         "sla_status": raw_sla_status or freshness.get("state"),
         "reasons": list(freshness.get("reasons") or []),
+        "provenance": provenance,
     }
     # Only the persisted feed snapshot is authoritative for integrity. During
     # startup or atomic replacement it may be absent/empty while feed_debug

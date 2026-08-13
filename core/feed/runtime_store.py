@@ -251,6 +251,18 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
     # field become an accidental bool(None) at a downstream consumer.
     out["feed_ok"] = bool(derive_feed_ok(out))
     out = stamp_runtime_payload(out, writer="feed.runtime_store")
+    if "recovery_generation_id" not in out:
+        # Reuse the live feed coordinator's generation for queued writes.  A
+        # missing coordinator generation is deliberately left missing so the
+        # shared consumer validator rejects the artifact fail-closed.
+        try:
+            from core.feed_debug import get_feed_debug
+
+            current_generation = (get_feed_debug() or {}).get("recovery_generation_id")
+            if current_generation is not None:
+                out["recovery_generation_id"] = int(current_generation)
+        except Exception:
+            pass
     # Finalize all semantic and safety fields before hashing. The verifier
     # intentionally includes these fields, so mutating them after the hash
     # creates a false SNAPSHOT_HASH_MISMATCH on every persisted artifact.

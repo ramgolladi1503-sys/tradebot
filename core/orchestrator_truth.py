@@ -10,6 +10,8 @@ from config import config as cfg
 from core.feed_runtime import build_canonical_feed_truth_state
 from core.market_context import derive_market_context
 from core.paths import logs_dir
+from core.feed_debug import get_feed_debug
+from core.feed.runtime_provenance import validate_feed_runtime_provenance
 from core.time_utils import compute_age_sec, now_utc_epoch
 from core.trade_schema import build_instrument_id
 
@@ -221,7 +223,15 @@ def normalize_feed_runtime_payload(raw: dict) -> dict:
 
 def read_latest_feed_runtime_payload() -> tuple[dict, Path | None]:
     path = logs_dir() / "feed_runtime_latest.json"
-    return read_json_dict(path), path if path.exists() else None
+    payload = read_json_dict(path)
+    if payload:
+        current_generation = (get_feed_debug() or {}).get("recovery_generation_id")
+        provenance = validate_feed_runtime_provenance(payload, current_generation=current_generation)
+        payload["provenance"] = provenance
+        if not provenance["valid"]:
+            payload["feed_ok"] = False
+            payload["execution_feed_ready"] = False
+    return payload, path if path.exists() else None
 
 
 def canonical_feed_truth_state_payload(feed_runtime_payload: dict | None) -> dict:
@@ -240,4 +250,3 @@ def build_snapshot_numbers(market_data: dict) -> dict:
 def snapshot_atm_strike(market_data: dict) -> float | None:
     value = safe_float(market_data.get("atm_strike") or market_data.get("strike"))
     return float(value) if value is not None else None
-
