@@ -77,7 +77,7 @@ def test_recovery_during_warmup_resets_quarantine():
     assert "RECOVERING" in snapshot.blockers
 
 
-def test_recovery_generation_change_resets_quarantine():
+def test_legacy_recovery_generation_change_is_diagnostic_only():
     payload = _base_payload()
     payload.update({
         "warmup_clean_cycles": 3,
@@ -86,8 +86,8 @@ def test_recovery_generation_change_resets_quarantine():
     })
     snapshot = build_feed_supervisor_snapshot(payload)
 
-    assert snapshot.state == "WARMING_UP"
-    assert "RECOVERY_GENERATION_CHANGED" in snapshot.blockers
+    assert snapshot.state == "CANDIDATE_READY"
+    assert "RECOVERY_GENERATION_CHANGED" not in snapshot.blockers
 
 
 def test_auth_required_blocks_immediately():

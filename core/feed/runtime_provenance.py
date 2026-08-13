@@ -10,7 +10,7 @@ from core.runtime_boot_identity import RuntimeBootIdentity, get_runtime_boot_ide
 def validate_feed_runtime_provenance(
     payload: Mapping[str, Any] | None,
     *,
-    current_generation: int | None,
+    current_feed_epoch: int | None,
     current_identity: RuntimeBootIdentity | None = None,
 ) -> dict[str, Any]:
     """Validate runtime identity without accepting missing values as current."""
@@ -32,26 +32,26 @@ def validate_feed_runtime_provenance(
     if boot_epoch is not None and boot_epoch != float(identity.boot_epoch):
         reasons.append("boot_epoch_mismatch")
 
-    raw_generation = data.get("recovery_generation_id")
+    raw_feed_epoch = data.get("feed_epoch")
     try:
-        generation = int(raw_generation)
+        feed_epoch = int(raw_feed_epoch)
     except (TypeError, ValueError):
-        generation = None
-        reasons.append("missing_or_invalid_recovery_generation_id")
-    if current_generation is None:
-        reasons.append("missing_current_recovery_generation_id")
-    elif generation is not None and generation != int(current_generation):
-        reasons.append("recovery_generation_id_mismatch")
+        feed_epoch = None
+        reasons.append("missing_or_invalid_feed_epoch")
+    if current_feed_epoch is None:
+        reasons.append("missing_current_feed_epoch")
+    elif feed_epoch is not None and feed_epoch != int(current_feed_epoch):
+        reasons.append("feed_epoch_mismatch")
 
     return {
         "valid": not reasons,
         "reasons": reasons,
         "run_id": run_id or None,
         "boot_epoch": boot_epoch,
-        "recovery_generation_id": generation,
+        "feed_epoch": feed_epoch,
         "current_run_id": identity.run_id,
         "current_boot_epoch": float(identity.boot_epoch),
-        "current_recovery_generation_id": current_generation,
+        "current_feed_epoch": current_feed_epoch,
     }
 
 

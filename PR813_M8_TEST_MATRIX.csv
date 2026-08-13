@@ -1,0 +1,10 @@
+case,expected,result
+current feed_epoch plus stale recovery_generation_id,pass,covered by provenance and supervisor tests
+current feed_epoch plus stale reconnect generation,pass,covered by M8 authority behavior
+stale feed_epoch plus current legacy generations,fail,covered by provenance and artifact loader
+stale feed_epoch plus both legacy generations current,fail,covered by artifact loader epoch gate
+missing legacy diagnostic fields with current authority,no legacy authority failure,covered by provenance contract
+malformed legacy diagnostic with current authority,no legacy authority effect,covered by provenance contract
+legacy supervisor mismatch,not a health blocker,passed
+M7 lineage binding,preserve,passed existing M7 tests
+broker/order safety,unchanged,verified by existing safety fields and no runtime launch

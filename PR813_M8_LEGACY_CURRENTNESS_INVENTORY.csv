@@ -1,0 +1,12 @@
+file,symbol,line_or_function,read_or_write,classification,current_behavior,target_behavior,required_change
+core/feed/runtime_provenance.py,recovery_generation_id,validate_feed_runtime_provenance,read,DIAGNOSTIC_ONLY,validated as current provenance,ignore for authority and validate feed_epoch,implemented
+core/feed/runtime_store.py,recovery_generation_id,_canonical_runtime_artifact_payload,read/write,DIAGNOSTIC_ONLY,copies coordinator value into artifact,retain as diagnostic metadata,none
+core/feed_recovery_runtime.py,recovery_generation_id,_full_feed_proof,read,HEALTH_AFFECTING,changed warmup and blocker state,never derive health blockers from legacy generations,implemented
+core/feed_supervisor.py,recovery_generation_id,_proof_blockers,read,HEALTH_AFFECTING,generation mismatch added blocker,never derive health blockers from legacy generations,implemented
+core/runtime_health.py,recovery_generation_id,build_runtime_health,read/write,DIAGNOSTIC_ONLY,emits legacy fields in health payload,emit only as diagnostics,none
+core/feed_debug.py,recovery_generation_id,build_feed_debug,read/write,DIAGNOSTIC_ONLY,emits legacy fields,emit only as diagnostics,none
+core/orchestrator_parts/decisions.py,recovery_generation_id,decision event assembly,read/write,DIAGNOSTIC_ONLY,carries legacy fields into telemetry,do not gate decisions on value,none
+core/kite_depth_ws.py,_FEED_RECONNECT_GENERATION,websocket lifecycle,read/write,COMPATIBILITY_ONLY,tracks socket/tick lifecycle identity,retain for lifecycle diagnostics not currentness,none
+core/market_event_graph_live_runtime_bridge.py,reconnect_generation,subscription causality validation,read,UNRELATED,binds MEG request/tick/subscription identities,not a feed artifact currentness authority,none
+core/market_event_graph_live_ohlc_buffer.py,reconnect_generation,buffer identity,read/write,UNRELATED,prevents cross-reconnect bar mixing,retain local buffer identity,none
+core/feed/artifact_loader.py,feed_epoch,_load,read,ARTIFACT_ACCEPTANCE_AFFECTING,requires current feed_epoch,sole artifact currentness authority,already implemented in M7
