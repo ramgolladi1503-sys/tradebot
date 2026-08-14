@@ -6,9 +6,9 @@ import pytest
 
 from config import config as cfg
 from core.engine_phase2_adapter import build_candidates_phase2
-from core.feed.artifact_loader import FEED_RUNTIME_CANONICAL_WRITER, FEED_RUNTIME_SCHEMA_VERSION
-from core.feed.artifact_provenance import stamp_feed_runtime_provenance
+from core.feed.artifact_loader import _INTEGRITY_EXCLUDED_KEYS
 from core.runtime_truth_integrity import truth_hash_from_mapping
+from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair
 
 
 @pytest.fixture()
@@ -26,12 +26,13 @@ def _runtime_dirs(tmp_path, monkeypatch):
 def _write_json(path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.name == "feed_runtime_latest.json":
-        payload = stamp_feed_runtime_provenance({
-            **payload,
-            "writer": FEED_RUNTIME_CANONICAL_WRITER,
-            "schema_version": FEED_RUNTIME_SCHEMA_VERSION,
-        })
-        payload["snapshot_hash"] = truth_hash_from_mapping(payload)
+        payload_override = dict(payload)
+        _, runtime_path = make_valid_canonical_feed_pair(path.parent, feed_ok=bool(payload.get("feed_ok", True)))
+        payload = json.loads(runtime_path.read_text(encoding="utf-8"))
+        payload.update({key: value for key, value in payload_override.items() if key != "feed_ok"})
+        payload["snapshot_hash"] = truth_hash_from_mapping(payload, exclude_keys=_INTEGRITY_EXCLUDED_KEYS)
+        payload["truth_integrity_status"] = "OK"
+        payload["snapshot_hash_version"] = 1
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 

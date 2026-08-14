@@ -15,17 +15,11 @@ def _read_json(path):
 
 
 def _write_valid_runtime_artifact(path):
-    from core.feed.artifact_loader import FEED_RUNTIME_CANONICAL_WRITER, FEED_RUNTIME_SCHEMA_VERSION
-    from core.feed.artifact_provenance import stamp_feed_runtime_provenance
-    from core.runtime_truth_integrity import truth_hash_from_mapping
+    from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair
 
-    payload = stamp_feed_runtime_provenance({
-        "feed_ok": True,
-        "writer": FEED_RUNTIME_CANONICAL_WRITER,
-        "schema_version": FEED_RUNTIME_SCHEMA_VERSION,
-    })
-    payload["snapshot_hash"] = truth_hash_from_mapping(payload)
-    path.write_text(json.dumps(payload), encoding="utf-8")
+    _, runtime_path = make_valid_canonical_feed_pair(path.parent)
+    if runtime_path != path:
+        path.write_text(runtime_path.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 @pytest.fixture()
