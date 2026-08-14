@@ -119,12 +119,24 @@ def validate(base_ref: str, candidate_ref: str = "HEAD") -> int:
         )
 
     for review_path in review_paths:
-        if not review_path.exists():
+        if review_path.exists():
+            text = review_path.read_text(encoding="utf-8")
+        else:
+            proc = subprocess.run(
+                ["git", "show", f"{candidate_ref}:{review_path.as_posix()}"],
+                check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            if proc.returncode != 0:
+                errors.append(
+                    f"Agent review file is listed but unavailable in candidate tree: {review_path}"
+                )
+                continue
+            text = proc.stdout
+        if not text.strip():
             errors.append(
-                f"Agent review file is listed as changed but does not exist: {review_path}"
+                f"Agent review file is empty: {review_path}"
             )
             continue
-        text = review_path.read_text(encoding="utf-8")
         missing = _missing_sections(text)
         if missing:
             errors.append(

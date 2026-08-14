@@ -22,6 +22,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+
 jobs:
   focused-certification:
     runs-on: ubuntu-latest
@@ -39,7 +42,6 @@ jobs:
 
       - name: Fetch current base and exact candidate
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git fetch --no-tags --prune origin \
@@ -83,10 +85,10 @@ jobs:
         run: |
           python scripts/validate_runtime_authority_scope.py \
             --base-ref origin/main \
-            --candidate-ref "refs/remotes/origin/pr-${{ github.event.pull_request.number }}-head"
+            --candidate-ref "refs/remotes/origin/pr-${PR_NUMBER}-head"
 
       - name: Validate diff
         run: |
-          candidate_ref="refs/remotes/origin/pr-${{ github.event.pull_request.number }}-head"
+          candidate_ref="refs/remotes/origin/pr-${PR_NUMBER}-head"
           merge_base="$(git merge-base "$candidate_ref" origin/main)"
           python scripts/validate_frozen_head_diff.py "$merge_base" "$candidate_ref"
