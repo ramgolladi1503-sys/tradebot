@@ -1,0 +1,35 @@
+name: Frozen Candidate Read-Only Safety Tests
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-safety-tests-readonly:
+    runs-on: ubuntu-latest
+    env:
+      CANDIDATE_SHA: d7dc45e7c5c76247e7d1b8abd40ec7682fac2f9b
+      TRADEBOT_READ_ONLY: "true"
+      EXECUTION_MODE: SIM
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d7dc45e7c5c76247e7d1b8abd40ec7682fac2f9b
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run read-only candidate safety tests
+        run: |
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test -f tests/test_runtime_health.py
+          test -f tests/test_runtime_truth_integrity_live_path.py
+          test -f tests/test_feed_epoch.py
+          echo "CHECKED_OUT_CANDIDATE_SHA=$CANDIDATE_SHA"
+          python -m pip install -q pytest
+          pytest -q -o addopts='' tests/test_runtime_health.py tests/test_runtime_truth_integrity_live_path.py tests/test_feed_epoch.py

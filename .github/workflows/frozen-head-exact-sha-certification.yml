@@ -1,0 +1,105 @@
+name: Frozen Candidate Exact-SHA Certification
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        required: true
+        type: string
+      candidate_sha:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  exact-sha-identity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch independent base and candidate refs
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
+        run: |
+          git fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
+          BASE_SHA="$(git rev-parse origin/main)"
+          test "$BASE_SHA" = "${{ github.event.pull_request.base.sha || github.sha }}" || \
+            test -n "${{ inputs.pr_number }}"
+          test "$(git rev-parse refs/remotes/origin/pr-${PR_NUMBER}-head)" = "$HEAD_SHA"
+          git merge-base "$BASE_SHA" "$HEAD_SHA"
+          echo "PR_HEAD_SHA=$HEAD_SHA"
+          echo "PR_BASE_SHA=$BASE_SHA"
+          echo "SYNTHETIC_MERGE_REF_USED_AS_AUTHORITY=false"
+
+  agent-review-base-authority:
+    needs: exact-sha-identity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate base-authoritative exact-SHA manifest
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
+          python scripts/validate_frozen_head_bridge.py --pr-number "$PR_NUMBER" --candidate-sha "$HEAD_SHA" --base-sha "$(git rev-parse origin/main)"
+
+  runtime-authority-base-authority:
+    needs: exact-sha-identity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate current-base scope policy
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
+          BASE_SHA="$(git rev-parse origin/main)"
+          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          git diff --check "$MERGE_BASE" "$HEAD_SHA"
+          changed_file=$(mktemp)
+          git diff --name-only "$MERGE_BASE" "$HEAD_SHA" > "$changed_file"
+          python - "$changed_file" <<'PY'
+          import sys
+          from scripts.validate_frozen_head_bridge import high_risk
+          paths = [p.strip() for p in open(sys.argv[1]) if p.strip()]
+          risky = [p for p in paths if high_risk(p)]
+          tests = [p for p in paths if p.startswith("tests/")]
+          if risky and not tests:
+              raise SystemExit(f"UNAUTHORIZED_HIGH_RISK_CHANGE:{risky}")
+          print(f"BASE_AUTHORITATIVE_SCOPE_PASS high_risk={len(risky)} tests={len(tests)}")
+          PY
+
+  code-excellence-base-authority:
+    needs: exact-sha-identity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run CE against explicit base/head diff
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
+          BASE_SHA="$(git rev-parse origin/main)"
+          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          mkdir -p docs/code_excellence/reports
+          git diff --name-only "$MERGE_BASE" "$HEAD_SHA" > docs/code_excellence/reports/changed_paths.txt
+          PYTHONPATH=. python scripts/run_unified_ce_gates.py --repo . --config .gsd-forensics.yaml --changed-paths-file docs/code_excellence/reports/changed_paths.txt --out docs/code_excellence/reports/unified_ce_gate_latest.md
