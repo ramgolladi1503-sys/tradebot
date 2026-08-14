@@ -143,7 +143,7 @@ def initialize_audit_chain(*, run_id: str | None = None, boot_epoch: float | Non
         return {"ok": False, "status": "missing_run_id", "count": 0, "path": str(AUDIT_LOG)}
 
     if AUDIT_LOG.exists():
-        ok, status, count = verify_chain(AUDIT_LOG)
+        ok, status, count = verify_chain(AUDIT_LOG, expected_run_id=session_id)
         return {"ok": bool(ok), "status": status, "count": int(count), "path": str(AUDIT_LOG), "created": False}
 
     try:
@@ -170,7 +170,7 @@ def initialize_audit_chain(*, run_id: str | None = None, boot_epoch: float | Non
             "created": False,
         }
 
-    ok, status, count = verify_chain(AUDIT_LOG)
+    ok, status, count = verify_chain(AUDIT_LOG, expected_run_id=session_id)
     return {"ok": bool(ok), "status": status, "count": int(count), "path": str(AUDIT_LOG), "created": True}
 
 
