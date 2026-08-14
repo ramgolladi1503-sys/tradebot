@@ -41,7 +41,6 @@ jobs:
           lfs: false
 
       - name: Fetch current base and exact candidate
-        env:
         run: |
           git fetch --no-tags --prune origin \
             +refs/heads/main:refs/remotes/origin/main \
