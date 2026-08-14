@@ -51,19 +51,14 @@ def main() -> int:
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     if manifest_proc.returncode != 0:
-        changed_reviews = [
-            Path(p) for p in changed
-            if p.startswith("docs/agent_reviews/") and p.endswith(".md")
-        ]
-        review_ref = changed_reviews[0] if changed_reviews else Path("docs/agent_reviews/pr818_frozen_head_bridge_v2.md")
-        review_source = candidate if changed_reviews else "origin/main"
-        candidate_review = subprocess.run(
-            ["git", "show", f"{review_source}:{review_ref.as_posix()}"],
-            check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        inherited = Path("docs/agent_reviews/pr818_frozen_head_bridge_v2.md")
+        inherited_proc = subprocess.run(
+            ["git", "show", f"origin/main:{inherited.as_posix()}"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
-        if candidate_review.returncode != 0 or not candidate_review.stdout.strip():
+        if inherited_proc.returncode != 0 or not inherited_proc.stdout.strip():
             raise SystemExit(f"MISSING_EXACT_SHA_BASE_MANIFEST:{manifest}")
-        text = candidate_review.stdout.lower()
+        text = inherited_proc.stdout.lower()
     else:
         text = manifest_proc.stdout.lower()
     required = (
