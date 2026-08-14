@@ -49,9 +49,9 @@ def _run_git(args: list[str]) -> str:
     return proc.stdout.strip()
 
 
-def changed_files(base_ref: str) -> list[str]:
-    merge_base = _run_git(["merge-base", "HEAD", base_ref])
-    output = _run_git(["diff", "--name-only", f"{merge_base}..HEAD"])
+def changed_files(base_ref: str, candidate_ref: str = "HEAD") -> list[str]:
+    merge_base = _run_git(["merge-base", candidate_ref, base_ref])
+    output = _run_git(["diff", "--name-only", f"{merge_base}..{candidate_ref}"])
     return [line.strip() for line in output.splitlines() if line.strip()]
 
 
@@ -104,11 +104,11 @@ def _base_external_review(base_ref: str, candidate_sha: str) -> str | None:
     return proc.stdout
 
 
-def validate(base_ref: str) -> int:
-    paths = changed_files(base_ref)
+def validate(base_ref: str, candidate_ref: str = "HEAD") -> int:
+    paths = changed_files(base_ref, candidate_ref)
     review_paths = agent_review_files(paths)
     errors: list[str] = []
-    candidate_sha = _run_git(["rev-parse", "HEAD"])
+    candidate_sha = _run_git(["rev-parse", candidate_ref])
     external_review = _base_external_review(base_ref, candidate_sha)
 
     if not review_paths and external_review is None:
@@ -177,8 +177,13 @@ def main() -> int:
         default=os.environ.get("AGENT_REVIEW_BASE_REF", "origin/main"),
         help="Base ref to diff against. Defaults to AGENT_REVIEW_BASE_REF or origin/main.",
     )
+    parser.add_argument(
+        "--candidate-ref",
+        default="HEAD",
+        help="Exact candidate ref to inspect; defaults to HEAD.",
+    )
     args = parser.parse_args()
-    return validate(args.base_ref)
+    return validate(args.base_ref, args.candidate_ref)
 
 
 if __name__ == "__main__":

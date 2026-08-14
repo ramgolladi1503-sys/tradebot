@@ -1,7 +1,7 @@
 name: Code Excellence Gates
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - main
   workflow_dispatch:
@@ -37,8 +37,17 @@ jobs:
           python-version: "3.12"
 
       - name: Collect and validate changed paths
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          git fetch origin main --depth=1
+          git fetch --no-tags --prune origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
+          test "$(git rev-parse refs/remotes/origin/pr-${PR_NUMBER}-head)" = "$HEAD_SHA"
+          BASE_SHA="$(git rev-parse origin/main)"
+          CANDIDATE_REF="refs/remotes/origin/pr-${PR_NUMBER}-head"
+          MERGE_BASE="$(git merge-base "$BASE_SHA" "$CANDIDATE_REF")"
           mkdir -p docs/code_excellence/reports
           if [ "${GITHUB_HEAD_REF:-}" = "fix/full-live-multicycle-meg-and-feed-stall-v1" ]; then
             LIVE_TESTED_SHA="624aa59fb9c165af2b2c14cbaa8e519f32d813aa"
@@ -92,7 +101,7 @@ jobs:
               > docs/code_excellence/reports/changed_paths.txt
             echo "Final integration: exact post-live delta guarded from $LIVE_TESTED_SHA"
           else
-            git diff --name-only origin/main...HEAD > docs/code_excellence/reports/changed_paths.txt
+            git diff --name-only "$MERGE_BASE" "$CANDIDATE_REF" > docs/code_excellence/reports/changed_paths.txt
             cp docs/code_excellence/reports/changed_paths.txt docs/code_excellence/reports/post_live_paths.txt
           fi
           echo '--- all guarded paths ---'
