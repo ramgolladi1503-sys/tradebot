@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 from config import config as cfg
-from core.audit_log import append_event as audit_append
+from core.audit_log import AUDIT_LOG, append_event as audit_append, verify_chain
 from core.events import append_event as append_runtime_event, events_path
 from core.event_integrity import repair_events_file, validate_events_file
 from core.observability.pipeline import observability_dir
@@ -128,6 +129,51 @@ def ensure_runtime_dirs(repo_root: Path) -> None:
         print(f"[STARTUP_WARN] runtime dir init failed: {exc}")
 
 
+def initialize_audit_chain(*, run_id: str | None = None, boot_epoch: float | None = None) -> dict:
+    """Create one legitimate fresh-session audit event before readiness evaluation.
+
+    Existing logs are never replaced or repaired here.  A present log must already
+    verify; corruption therefore remains fail-closed.  The caller owns the runtime
+    root, so a newly created log is session-scoped by that root and carries the
+    session identity for independent inspection.
+    """
+
+    session_id = str(run_id or os.getenv("TRADEBOT_RUN_ID", "")).strip()
+    if not session_id:
+        return {"ok": False, "status": "missing_run_id", "count": 0, "path": str(AUDIT_LOG)}
+
+    if AUDIT_LOG.exists():
+        ok, status, count = verify_chain(AUDIT_LOG)
+        return {"ok": bool(ok), "status": status, "count": int(count), "path": str(AUDIT_LOG), "created": False}
+
+    try:
+        AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        audit_append(
+            {
+                "event": "AUDIT_CHAIN_BOOTSTRAP",
+                "run_id": session_id,
+                "boot_epoch": float(boot_epoch if boot_epoch is not None else time.time()),
+                "source": "runtime_bootstrap.initialize_audit_chain",
+                "is_order_action": False,
+                "broker_write_authority": False,
+                "order_authority": False,
+                "paper_authorized": False,
+                "live_authorized": False,
+            }
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "status": f"bootstrap_error:{type(exc).__name__}",
+            "count": 0,
+            "path": str(AUDIT_LOG),
+            "created": False,
+        }
+
+    ok, status, count = verify_chain(AUDIT_LOG)
+    return {"ok": bool(ok), "status": status, "count": int(count), "path": str(AUDIT_LOG), "created": True}
+
+
 def repair_events_log_if_needed() -> None:
     try:
         target = events_path()
@@ -171,4 +217,3 @@ def audit_startup_state(event_name: str, *, message: str, extra: dict | None = N
         append_runtime_event(str(event_name).lower(), dict(payload))
     except Exception as exc:
         print(f"[EVENTS_ERROR] {event_name.lower()} err={exc}")
-
