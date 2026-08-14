@@ -1,7 +1,7 @@
 name: Runtime Authority Cutover Certification
 
 on:
-  pull_request_target:
+  pull_request:
     paths:
       - "core/canonical_execution_decision.py"
       - "core/runtime_authority_contract.py"
