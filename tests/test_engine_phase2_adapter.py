@@ -3,6 +3,14 @@ from core.engine_phase2_adapter import build_candidates_phase2, run_engine_phase
 import logging
 import core.engine_phase2_adapter as phase2_adapter
 import time
+import pytest
+from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair
+
+
+@pytest.fixture(autouse=True)
+def canonical_feed_artifact(tmp_path, monkeypatch):
+    make_valid_canonical_feed_pair(tmp_path)
+    monkeypatch.setattr(phase2_adapter, "logs_dir", lambda: tmp_path)
 
 
 def test_build_candidates_phase2_applies_hard_filters(monkeypatch):

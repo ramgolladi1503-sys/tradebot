@@ -1,0 +1,5 @@
+failure_group,count,root_cause,repair,status
+runtime_health,3,incomplete pre-M9 JSON fixture,shared canonical factory plus fail-closed assertions,PASS
+phase2,32,missing current canonical runtime fixture,shared autouse canonical factory,PASS
+candidate_caused_source_defects,0,none,none,PASS
+unclassified,0,none,none,PASS
