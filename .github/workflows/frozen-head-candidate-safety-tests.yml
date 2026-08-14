@@ -1,0 +1,27 @@
+name: Frozen Candidate Read-Only Safety Tests
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-safety-tests-readonly:
+    runs-on: ubuntu-latest
+    env:
+      TRADEBOT_READ_ONLY: "true"
+      EXECUTION_MODE: SIM
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run read-only candidate safety tests
+        run: |
+          python -m pip install -q pytest
+          pytest -q -o addopts='' tests/test_runtime_health.py tests/test_runtime_truth_integrity_live_path.py tests/test_feed_epoch.py
