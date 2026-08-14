@@ -31,6 +31,7 @@ HIGH_RISK_PATHS = (
 )
 
 AGENT_REVIEW_DIR = Path("docs/agent_reviews")
+EXTERNAL_REVIEW_DIR = AGENT_REVIEW_DIR / "external_exact_sha_reviews"
 
 
 def _run_git(args: list[str]) -> str:
@@ -88,12 +89,29 @@ def _high_risk_changed(paths: list[str]) -> bool:
     return False
 
 
+def _base_external_review(base_ref: str, candidate_sha: str) -> str | None:
+    """Read only an exact-SHA manifest from the trusted base tree."""
+    manifest = EXTERNAL_REVIEW_DIR / f"{candidate_sha}.md"
+    proc = subprocess.run(
+        ["git", "show", f"{base_ref}:{manifest.as_posix()}"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    return proc.stdout
+
+
 def validate(base_ref: str) -> int:
     paths = changed_files(base_ref)
     review_paths = agent_review_files(paths)
     errors: list[str] = []
+    candidate_sha = _run_git(["rev-parse", "HEAD"])
+    external_review = _base_external_review(base_ref, candidate_sha)
 
-    if not review_paths:
+    if not review_paths and external_review is None:
         errors.append(
             "Missing mandatory agent review evidence file under docs/agent_reviews/*.md. "
             "Every PR must include Agent Work Contract, Scope Guard, Grill Me, Hermes, GSD, QA/Safety, "
@@ -121,7 +139,10 @@ def validate(base_ref: str) -> int:
     if high_risk:
         combined = "\n".join(
             path.read_text(encoding="utf-8") for path in review_paths if path.exists()
-        ).lower()
+        )
+        if external_review:
+            combined += "\n" + external_review
+        combined = combined.lower()
         if "high-risk path review" not in combined:
             errors.append(
                 "High-risk files changed, but no agent review doc contains 'High-Risk Path Review'. "
@@ -142,6 +163,8 @@ def validate(base_ref: str) -> int:
     print("Agent review files:")
     for path in review_paths:
         print(f"  - {path}")
+    if external_review:
+        print(f"  - {EXTERNAL_REVIEW_DIR / (candidate_sha + '.md')} (trusted base manifest)")
     return 0
 
 

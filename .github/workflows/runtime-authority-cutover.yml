@@ -69,54 +69,12 @@ jobs:
             tests/test_manual_approval_enforcement.py \
             tests/test_opportunity_engine.py
 
-      - name: Verify PR763 protected paths remain unchanged
+      - name: Verify governed high-risk path scope
         run: |
-          python - <<'PY'
-          import os
-          import subprocess
-
-          final_integration = os.environ.get('GITHUB_HEAD_REF') == 'fix/full-live-multicycle-meg-and-feed-stall-v1'
-          if final_integration:
-              base = '624aa59fb9c165af2b2c14cbaa8e519f32d813aa'
-              subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
-          else:
-              base = '1241418cafbefba8fd3d1142e5ae578d9b97cd70'
-
-          changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
-          protected = (
-              'core/market_data.py',
-              'core/kite_depth_ws.py',
-              'core/feed/',
-              'core/feed_runtime.py',
-              'core/feed_health_truth.py',
-              'core/feed_hold_gate.py',
-              'core/recovery_state_machine.py',
-              'core/kite_ws_subprocess.py',
-              'core/market_event_graph',
-              'core/tick_store.py',
-              'core/depth_store.py',
-              'core/persistence_durability.py',
-              'strategies/',
-          )
-          allowed_exact = {'core/feed/runtime_store.py'} if final_integration else set()
-          bad = [
-              path for path in changed
-              if path not in allowed_exact
-              and any(path == prefix or path.startswith(prefix) for prefix in protected)
-          ]
-          if bad:
-              raise SystemExit(f'PROTECTED_PR763_PATH_CHANGED:{bad}')
-          print(
-              f'authority cutover changed paths={len(changed)}; '
-              f'protected paths unchanged except approved exact repairs={sorted(allowed_exact)}; base={base}'
-          )
-          PY
+          base_ref="${GITHUB_BASE_REF:-main}"
+          python scripts/validate_runtime_authority_scope.py --base-ref "origin/${base_ref}"
 
       - name: Validate diff
         run: |
-          if [ "${GITHUB_HEAD_REF:-}" = "fix/full-live-multicycle-meg-and-feed-stall-v1" ]; then
-            git merge-base --is-ancestor 624aa59fb9c165af2b2c14cbaa8e519f32d813aa HEAD
-            git diff --check 624aa59fb9c165af2b2c14cbaa8e519f32d813aa HEAD
-          else
-            git diff --check 1241418cafbefba8fd3d1142e5ae578d9b97cd70 HEAD
-          fi
+          base_ref="${GITHUB_BASE_REF:-main}"
+          git diff --check "$(git merge-base HEAD "origin/${base_ref}")" HEAD
