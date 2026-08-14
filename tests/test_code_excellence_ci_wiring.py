@@ -16,7 +16,7 @@ def test_code_excellence_workflow_runs_unified_gate_on_prs():
     text = WORKFLOW_PATH.read_text(encoding="utf-8")
 
     assert "name: Code Excellence Gates" in text
-    assert "pull_request:" in text
+    assert "pull_request_target:" in text
     assert "branches:" in text
     assert "- main" in text
     assert "workflow_dispatch:" in text
@@ -27,7 +27,9 @@ def test_code_excellence_workflow_runs_unified_gate_on_prs():
 def test_code_excellence_workflow_uses_changed_paths_file():
     text = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-    assert "git diff --name-only origin/main...HEAD" in text
+    assert "+refs/heads/main:refs/remotes/origin/main" in text
+    assert "+refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head" in text
+    assert 'git diff --name-only "$MERGE_BASE" "$CANDIDATE_REF"' in text
     assert "docs/code_excellence/reports/changed_paths.txt" in text
     assert "--changed-paths-file docs/code_excellence/reports/changed_paths.txt" in text
 
