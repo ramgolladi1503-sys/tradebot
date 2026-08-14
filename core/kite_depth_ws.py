@@ -4670,7 +4670,10 @@ def _write_feed_runtime_snapshot(
             3,
         )
         payload["feed_runtime_stage_timing_ms"] = dict(stage_timing_ms)
-    payload = stamp_feed_runtime_provenance(payload)
+    from core.feed.runtime_store import _ensure_current_feed_truth_payload
+
+    truth_payload = _ensure_current_feed_truth_payload(payload)
+    payload = stamp_feed_runtime_provenance(payload, truth_payload=truth_payload)
     payload.update(
         build_truth_integrity_payload(
             source_payload=payload,

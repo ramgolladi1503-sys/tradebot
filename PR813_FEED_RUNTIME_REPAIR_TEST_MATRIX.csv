@@ -1,0 +1,7 @@
+suite,result,detail
+required-field repair,pass,first runtime write publishes truth lineage
+loader and provenance,pass,48 focused tests
+exact 257 manifest,pass,257 passed
+compile,pass,python compileall
+git diff check,pass,git diff --check
+live smoke,not run,explicitly prohibited in this task

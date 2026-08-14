@@ -22,6 +22,7 @@ from core.fs_utils import ensure_parent_dir
 from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.runtime_boot_identity import stamp_runtime_payload
 from core.feed.artifact_provenance import stamp_feed_runtime_provenance
+from core.feed.artifact_loader import load_current_feed_truth
 from core.paths import repo_root, trade_db_path
 from core.time_utils import now_utc_epoch
 from core.persistence_durability import record_degradation
@@ -164,6 +165,35 @@ def canonicalize_feed_runtime_snapshot_truth(payload: dict[str, Any]) -> dict[st
     return out
 
 
+def _ensure_current_feed_truth_payload(runtime_payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Return a current canonical truth artifact before binding runtime lineage.
+
+    A runtime artifact is not valid without a lineage reference.  The first
+    startup snapshot can legitimately precede the first tick, but it still
+    has a truthful ``DEAD``/``DEGRADED`` feed state.  Publish that canonical
+    truth through the existing builder instead of emitting an unbound runtime
+    artifact and relying on a later cycle to repair it.
+    """
+    loaded = load_current_feed_truth()
+    if loaded.get("valid"):
+        return dict(loaded.get("payload") or {})
+    try:
+        from core.runtime_feed_truth_snapshot import (
+            build_feed_truth_snapshot,
+            write_feed_truth_snapshot_latest,
+        )
+
+        truth_payload = build_feed_truth_snapshot(
+            feed_runtime=dict(runtime_payload or {}),
+            phase2_rejection={},
+        )
+        write_feed_truth_snapshot_latest(payload=truth_payload)
+        return dict(truth_payload)
+    except Exception:
+        logger.warning("feed_truth_bootstrap_failed", exc_info=True)
+        return None
+
+
 def _startup_event_for_runtime_source(source: str, runtime_state: str) -> str | None:
     source_text = str(source or "")
     state_text = str(runtime_state or "").strip().upper()
@@ -263,18 +293,7 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
                 out["recovery_generation_id"] = int(current_generation)
         except Exception:
             pass
-    truth_payload = None
-    try:
-        import json as _json
-        from core.paths import logs_dir as _logs_dir
-
-        truth_path = _logs_dir() / "feed_truth_latest.json"
-        if truth_path.exists():
-            candidate_truth = _json.loads(truth_path.read_text(encoding="utf-8"))
-            if isinstance(candidate_truth, dict):
-                truth_payload = candidate_truth
-    except Exception:
-        truth_payload = None
+    truth_payload = _ensure_current_feed_truth_payload(out)
     out = stamp_feed_runtime_provenance(out, truth_payload=truth_payload)
     # Finalize all semantic and safety fields before hashing. The verifier
     # intentionally includes these fields, so mutating them after the hash
