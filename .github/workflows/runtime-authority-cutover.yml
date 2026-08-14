@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 env:
-  PR_NUMBER: ${{ github.event.pull_request.number }}
+  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
 jobs:
   focused-certification:
@@ -42,12 +42,12 @@ jobs:
 
       - name: Fetch current base and exact candidate
         env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git fetch --no-tags --prune origin \
             +refs/heads/main:refs/remotes/origin/main \
-            +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
-          test "$(git rev-parse refs/remotes/origin/pr-${PR_NUMBER}-head)" = "$HEAD_SHA"
+            "$HEAD_SHA"
+          git update-ref refs/remotes/origin/pr-head "$HEAD_SHA"
+          test "$(git rev-parse refs/remotes/origin/pr-head)" = "$HEAD_SHA"
 
       - uses: actions/setup-python@v5
         with:
@@ -85,10 +85,10 @@ jobs:
         run: |
           python scripts/validate_runtime_authority_scope.py \
             --base-ref origin/main \
-            --candidate-ref "refs/remotes/origin/pr-${PR_NUMBER}-head"
+            --candidate-ref refs/remotes/origin/pr-head
 
       - name: Validate diff
         run: |
-          candidate_ref="refs/remotes/origin/pr-${PR_NUMBER}-head"
+          candidate_ref=refs/remotes/origin/pr-head
           merge_base="$(git merge-base "$candidate_ref" origin/main)"
           python scripts/validate_frozen_head_diff.py "$merge_base" "$candidate_ref"

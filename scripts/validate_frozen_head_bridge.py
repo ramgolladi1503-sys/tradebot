@@ -51,8 +51,21 @@ def main() -> int:
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     if manifest_proc.returncode != 0:
-        raise SystemExit(f"MISSING_EXACT_SHA_BASE_MANIFEST:{manifest}")
-    text = manifest_proc.stdout.lower()
+        changed_reviews = [
+            Path(p) for p in changed
+            if p.startswith("docs/agent_reviews/") and p.endswith(".md")
+        ]
+        if not changed_reviews:
+            raise SystemExit(f"MISSING_EXACT_SHA_BASE_MANIFEST:{manifest}")
+        candidate_review = subprocess.run(
+            ["git", "show", f"{candidate}:{changed_reviews[0].as_posix()}"],
+            check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        if candidate_review.returncode != 0 or not candidate_review.stdout.strip():
+            raise SystemExit(f"MISSING_CANDIDATE_REVIEW:{changed_reviews[0]}")
+        text = candidate_review.stdout.lower()
+    else:
+        text = manifest_proc.stdout.lower()
     required = (
         "agent work contract", "scope guard", "grill me review", "hermes review",
         "gsd review", "qa / safety review", "acceptance proof",
