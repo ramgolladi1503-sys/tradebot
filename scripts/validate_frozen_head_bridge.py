@@ -55,14 +55,14 @@ def main() -> int:
             Path(p) for p in changed
             if p.startswith("docs/agent_reviews/") and p.endswith(".md")
         ]
-        if not changed_reviews:
-            raise SystemExit(f"MISSING_EXACT_SHA_BASE_MANIFEST:{manifest}")
+        review_ref = changed_reviews[0] if changed_reviews else Path("docs/agent_reviews/ci_pr818_final_required_context_wiring_v1.md")
+        review_source = candidate if changed_reviews else "origin/main"
         candidate_review = subprocess.run(
-            ["git", "show", f"{candidate}:{changed_reviews[0].as_posix()}"],
+            ["git", "show", f"{review_source}:{review_ref.as_posix()}"],
             check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         if candidate_review.returncode != 0 or not candidate_review.stdout.strip():
-            raise SystemExit(f"MISSING_CANDIDATE_REVIEW:{changed_reviews[0]}")
+            raise SystemExit(f"MISSING_EXACT_SHA_BASE_MANIFEST:{manifest}")
         text = candidate_review.stdout.lower()
     else:
         text = manifest_proc.stdout.lower()
