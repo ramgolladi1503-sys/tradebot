@@ -17,8 +17,6 @@ on:
       - "tests/test_runtime_authority_cutover_v1.py"
       - "docs/agent_reviews/runtime_authority_cutover_v1.md"
       - ".github/workflows/runtime-authority-cutover.yml"
-  workflow_dispatch:
-
 permissions:
   contents: read
 
