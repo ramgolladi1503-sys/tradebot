@@ -1,7 +1,7 @@
 name: Agent Review Evidence Gate
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
@@ -17,10 +17,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch base branch
-        run: git fetch --no-tags --prune origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+      - name: Fetch current base and exact candidate
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags --prune origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
+          test "$(git rev-parse refs/remotes/origin/pr-${PR_NUMBER}-head)" = "$HEAD_SHA"
 
       - name: Validate agent review evidence
         env:
-          AGENT_REVIEW_BASE_REF: "origin/${{ github.base_ref }}"
-        run: python scripts/validate_agent_review_evidence.py
+          AGENT_REVIEW_BASE_REF: origin/main
+          AGENT_REVIEW_CANDIDATE_REF: refs/remotes/origin/pr-${{ github.event.pull_request.number }}-head
+        run: python scripts/validate_agent_review_evidence.py --base-ref "$AGENT_REVIEW_BASE_REF" --candidate-ref "$AGENT_REVIEW_CANDIDATE_REF"

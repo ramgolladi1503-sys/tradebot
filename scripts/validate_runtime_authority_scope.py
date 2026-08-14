@@ -42,12 +42,13 @@ def classify_scope(changed_paths: list[str]) -> tuple[str, list[str]]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-ref", default=os.environ.get("GITHUB_BASE_REF", "main"))
+    parser.add_argument("--candidate-ref", default="HEAD")
     args = parser.parse_args()
     base_ref = args.base_ref
     if not base_ref.startswith("origin/"):
         base_ref = f"origin/{base_ref}"
-    merge_base = _git("merge-base", "HEAD", base_ref)
-    changed = [p for p in _git("diff", "--name-only", f"{merge_base}..HEAD").splitlines() if p]
+    merge_base = _git("merge-base", args.candidate_ref, base_ref)
+    changed = [p for p in _git("diff", "--name-only", f"{merge_base}..{args.candidate_ref}").splitlines() if p]
     classification, paths = classify_scope(changed)
     print(f"RUNTIME_AUTHORITY_SCOPE={classification}")
     print(f"MERGE_BASE={merge_base}")

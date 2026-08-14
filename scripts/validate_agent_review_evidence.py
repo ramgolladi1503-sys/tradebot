@@ -49,9 +49,9 @@ def _run_git(args: list[str]) -> str:
     return proc.stdout.strip()
 
 
-def changed_files(base_ref: str) -> list[str]:
-    merge_base = _run_git(["merge-base", "HEAD", base_ref])
-    output = _run_git(["diff", "--name-only", f"{merge_base}..HEAD"])
+def changed_files(base_ref: str, candidate_ref: str = "HEAD") -> list[str]:
+    merge_base = _run_git(["merge-base", candidate_ref, base_ref])
+    output = _run_git(["diff", "--name-only", f"{merge_base}..{candidate_ref}"])
     return [line.strip() for line in output.splitlines() if line.strip()]
 
 
@@ -104,11 +104,11 @@ def _base_external_review(base_ref: str, candidate_sha: str) -> str | None:
     return proc.stdout
 
 
-def validate(base_ref: str) -> int:
-    paths = changed_files(base_ref)
+def validate(base_ref: str, candidate_ref: str = "HEAD") -> int:
+    paths = changed_files(base_ref, candidate_ref)
     review_paths = agent_review_files(paths)
     errors: list[str] = []
-    candidate_sha = _run_git(["rev-parse", "HEAD"])
+    candidate_sha = _run_git(["rev-parse", candidate_ref])
     external_review = _base_external_review(base_ref, candidate_sha)
 
     if not review_paths and external_review is None:
@@ -119,12 +119,24 @@ def validate(base_ref: str) -> int:
         )
 
     for review_path in review_paths:
-        if not review_path.exists():
+        if review_path.exists():
+            text = review_path.read_text(encoding="utf-8")
+        else:
+            proc = subprocess.run(
+                ["git", "show", f"{candidate_ref}:{review_path.as_posix()}"],
+                check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            if proc.returncode != 0:
+                errors.append(
+                    f"Agent review file is listed but unavailable in candidate tree: {review_path}"
+                )
+                continue
+            text = proc.stdout
+        if not text.strip():
             errors.append(
-                f"Agent review file is listed as changed but does not exist: {review_path}"
+                f"Agent review file is empty: {review_path}"
             )
             continue
-        text = review_path.read_text(encoding="utf-8")
         missing = _missing_sections(text)
         if missing:
             errors.append(
@@ -177,8 +189,13 @@ def main() -> int:
         default=os.environ.get("AGENT_REVIEW_BASE_REF", "origin/main"),
         help="Base ref to diff against. Defaults to AGENT_REVIEW_BASE_REF or origin/main.",
     )
+    parser.add_argument(
+        "--candidate-ref",
+        default="HEAD",
+        help="Exact candidate ref to inspect; defaults to HEAD.",
+    )
     args = parser.parse_args()
-    return validate(args.base_ref)
+    return validate(args.base_ref, args.candidate_ref)
 
 
 if __name__ == "__main__":
