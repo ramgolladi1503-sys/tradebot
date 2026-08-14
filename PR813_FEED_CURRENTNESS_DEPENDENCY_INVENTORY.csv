@@ -1,0 +1,21 @@
+file,symbol/function,read_or_write,artifact_or_state,authority_used,consumer_class,health_affecting,decision_affecting,diagnostic_only,writer,lifecycle_owner,migration_action,notes
+core/feed_recovery_coordinator.py,FeedRecoveryCoordinator.request_recovery/clear_recovery,write,recovery_generation_id,recovery coordinator,INTERNAL_STATE,no,no,no,coordinator,recovery lifecycle,RETAIN_INTERNAL,not a final artifact authority
+core/kite_depth_ws.py,_FEED_RECONNECT_GENERATION,read/state,websocket reconnect generation,local module,DIAGNOSTIC_ONLY,no,no,yes,no,websocket lifecycle,DEPRECATE,duplicate declarations and no coherent increment contract
+core/kite_depth_ws.py,_persist_runtime_snapshot_row,write,feed_runtime_latest.json,recovery_generation_id,HEALTH_AFFECTING,yes,yes,no,kite_depth_ws.feed_runtime,feed/socket/subscription,DERIVE_FROM_FEED_EPOCH,canonical runtime writer candidate
+core/feed/runtime_store.py,_canonical_runtime_artifact_payload/write_runtime_snapshot,write,feed_runtime_latest.json,recovery_generation_id,HEALTH_AFFECTING,yes,yes,no,feed.runtime_store,queued/sync runtime persistence,DERIVE_FROM_FEED_EPOCH,second writer must delegate to canonical schema
+core/runtime_feed_truth_snapshot.py,build/write_feed_truth_snapshot_latest,write,feed_truth_latest.json,none,HEALTH_AFFECTING,yes,yes,no,runtime_feed_truth_snapshot_v1,phase2 truth publication,MIGRATE_TO_FEED_EPOCH,currently lacks enforced session/generation provenance
+core/runtime_health.py,get_runtime_health,read,feed_runtime_latest.json,recovery_generation_id,HEALTH_AFFECTING,yes,yes,no,no,health evaluation,MIGRATE_TO_FEED_EPOCH,raw JSON read plus validator
+core/readiness_gate.py,_load_fresh_feed_runtime_snapshot,read,feed_runtime_latest.json,recovery_generation_id,READINESS_AFFECTING,yes,yes,no,no,readiness evaluation,MIGRATE_TO_FEED_EPOCH,raw candidate selection before validation
+core/orchestrator_truth.py,read_latest_feed_runtime_payload,read,feed_runtime_latest.json,recovery_generation_id,DECISION_AFFECTING,yes,yes,no,no,orchestrator truth,MIGRATE_TO_FEED_EPOCH,shared loader target
+core/orchestrator.py,feed runtime read blocks,read,feed_runtime_latest.json,raw file,DECISION_AFFECTING,yes,yes,no,no,orchestrator,MIGRATE_TO_FEED_EPOCH,multiple direct reads remain
+core/engine_phase2_adapter.py,phase2 feed reads,read,feed_runtime_latest.json/raw feed truth,raw file,DECISION_AFFECTING,yes,yes,no,no,phase2 adapter,MIGRATE_TO_FEED_EPOCH,mandatory consumer migration
+core/freshness_sla.py,get_freshness_status,read,latest runtime snapshot,legacy runtime store,HEALTH_AFFECTING,yes,yes,no,no,freshness evaluation,MIGRATE_TO_FEED_EPOCH,adapter must validate internally
+core/kite_ws_subprocess.py,subprocess health read,read,latest runtime snapshot,legacy runtime store,HEALTH_AFFECTING,yes,no,no,no,feed supervisor,MIGRATE_TO_FEED_EPOCH,supervisor health path
+core/feed_supervisor.py,build/evaluate supervisor state,read,state fields,recovery/subscription generations,HEALTH_AFFECTING,yes,no,no,no,supervisor,MIGRATE_TO_FEED_EPOCH,retain fields as internal diagnostics only
+core/feed_debug.py,get_feed_debug,read,feed runtime artifact,recovery/subscription generations,DIAGNOSTIC_ONLY,no,no,yes,no,debug path,RETAIN_INTERNAL,may not feed currentness after cutover
+core/orchestrator_parts/decisions.py,decision event enrichment,read,feed health fields,recovery/subscription generations,DECISION_AFFECTING,yes,yes,no,no,decision orchestration,MIGRATE_TO_FEED_EPOCH,metadata must come from validated state
+core/review_queue.py,review artifact loaders,read,feed_runtime_latest.json,raw file,DIAGNOSTIC_ONLY,no,no,yes,no,review tooling,RETAIN_INTERNAL,not allowed to authorize health
+core/runtime_snapshot_producer.py,_read_json_payload,read,feed_runtime_latest.json,raw file,DIAGNOSTIC_ONLY,no,no,yes,no,snapshot evidence,RETAIN_INTERNAL,read-only evidence consumer
+core/incident_bundle.py,_load_and_track,read,feed_runtime_latest.json,raw file,DIAGNOSTIC_ONLY,no,no,yes,no,incident capture,RETAIN_INTERNAL,read-only evidence
+core/agents/readers.py,artifact readers,read,feed_runtime_latest.json,raw file,DIAGNOSTIC_ONLY,no,no,yes,no,agent diagnostics,RETAIN_INTERNAL,not runtime authority
+tests/*,generation/provenance tests,read/write,test fixtures,test-defined,TEST_ONLY,no,no,no,no,test lifecycle,TEST_UPDATE,update with explicit bridge contracts

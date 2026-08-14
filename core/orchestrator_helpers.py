@@ -15,6 +15,7 @@ import pandas as pd
 from config import config as cfg
 from core.feed_runtime import build_canonical_feed_truth_state
 from core.paths import logs_dir
+from core.feed.artifact_loader import load_current_feed_runtime
 from core.risk_utils import to_pct
 from core.time_utils import now_ist, now_utc_epoch
 
@@ -204,7 +205,10 @@ def _normalize_feed_runtime_payload(raw: dict) -> dict:
 
 def _read_latest_feed_runtime_payload() -> tuple[dict, Path | None]:
     path = logs_dir() / "feed_runtime_latest.json"
-    return _read_json_dict(path), path if path.exists() else None
+    loaded = load_current_feed_runtime(path)
+    if not loaded.get("valid"):
+        return {}, None
+    return dict(loaded.get("payload") or {}), path
 
 
 def freeze_cycle_feed_truth_payload(feed_truth_payload: Mapping[str, Any] | None) -> MappingProxyType:

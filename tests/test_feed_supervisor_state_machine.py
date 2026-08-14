@@ -108,8 +108,9 @@ def test_supervisor_requires_full_feed_proof_after_reconnect():
     })
 
     assert warming.state == "WARMING_UP"
-    assert "WARMUP_INCOMPLETE" in warming.blockers
-    assert "RECOVERY_GENERATION_CHANGED" in warming.blockers or "SUBSCRIPTION_GENERATION_CHANGED" in warming.blockers
+    assert "WARMUP_INCOMPLETE" not in warming.blockers
+    assert "RECOVERY_GENERATION_CHANGED" not in warming.blockers
+    assert "SUBSCRIPTION_GENERATION_CHANGED" not in warming.blockers
     assert ready.state == "CANDIDATE_READY"
     assert ready.blockers == ()
 

@@ -80,6 +80,21 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_THREAD", None, raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [], raising=False)
+    monkeypatch.setattr(ws, "_INTENDED_TOKENS", None, raising=False)
+    monkeypatch.setattr(ws, "_INTENDED_TOKEN_COUNT", 0, raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", None, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "UNKNOWN", raising=False)
+    monkeypatch.setattr(ws, "_LAST_RUNTIME_ERROR", "", raising=False)
+    monkeypatch.setattr(ws, "_LAST_MUTATION_RESULT", None, raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_SINCE_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_LAST_DISCONNECTED_CODE", None, raising=False)
+    monkeypatch.setattr(ws, "_LAST_DISCONNECTED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 0, raising=False)
+    monkeypatch.setattr(ws, "_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT", 0, raising=False)
+    monkeypatch.setattr(ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
     monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
     monkeypatch.setattr(ws, "_SYMBOL_LAST_OPTION_TICK_TS", {}, raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 0.0, raising=False)
@@ -109,8 +124,18 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
+    from core.feed import runtime_store
+    # Drain the shared persistence worker before deleting the session artifact;
+    # otherwise a prior test can write its older snapshot after cleanup.
+    with contextlib.suppress(Exception):
+        runtime_store._RUNTIME_WRITE_QUEUE.join()
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
     monkeypatch.setattr(ws, "repo_root", lambda: Path("/tmp"))
+    # Each test owns its synthetic runtime snapshot; do not let a prior
+    # recovery scenario supply the next scenario's latest-row evidence.
+    with contextlib.suppress(FileNotFoundError):
+        (ws.logs_dir() / "feed_runtime_latest.json").unlink()
+        (Path.cwd() / ".runtime" / "feed_runtime_latest.json").unlink()
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: False)
     monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True})
     monkeypatch.setattr(ws, "set_auth_required_state", lambda **kwargs: {"status": "AUTH_REQUIRED"})

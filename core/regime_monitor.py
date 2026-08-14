@@ -9,7 +9,7 @@ from typing import Any
 
 from config import config as cfg
 from core.events import write_json_atomic
-from core.paths import logs_dir
+from core.paths import logs_dir, regime_runtime_evidence_path
 from core.time_utils import now_utc_epoch
 
 
@@ -188,25 +188,18 @@ class RegimeMonitor:
                 self._append_log({"event": "regime_outcome", **latest_outcome})
                 
                 try:
-                    import time
-                    from pathlib import Path
-                    import json
-                    timeline_path = Path("runtime/strategy_validation/regime_timeline.jsonl")
+                    timeline_path = regime_runtime_evidence_path()
                     timeline_path.parent.mkdir(parents=True, exist_ok=True)
                     row = {
-                        "market_timestamp": str(ts_val) if ts_val else str(time.time()),
+                        "market_timestamp": str(ts_val),
                         "symbol": sym,
-                        "open": 0.0,
-                        "high": 0.0,
-                        "low": 0.0,
-                        "close": 0.0,
                         "tradebot_regime": prev_regime,
                         "selected_strategy": "Unknown",
-                        "source": "replay",
-                        "source_file": "unknown"
+                        "source": "runtime",
+                        "source_file": "regime_monitor",
                     }
-                    with open(timeline_path, "a") as f:
-                        f.write(json.dumps(row) + "\n")
+                    with timeline_path.open("a", encoding="utf-8") as handle:
+                        handle.write(json.dumps(row, sort_keys=True) + "\n")
                 except Exception:
                     pass
 

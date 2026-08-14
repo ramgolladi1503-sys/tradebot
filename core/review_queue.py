@@ -11,6 +11,7 @@ from typing import Any, Mapping
 from core.orders.order_intent import OrderIntent
 from core.learning_paths import canonical_suggestions_log_path, rejected_candidates_paths, suggestion_log_paths
 from core.paths import logs_dir, data_root, repo_root
+from core.feed.artifact_loader import load_current_feed_runtime
 from core.upstox_resolver import resolve_upstox_key
 from core.market_calendar import choose_nearest_available_expiry
 from core.trade_schema import build_instrument_id
@@ -6729,29 +6730,12 @@ def _write_json(path: Path, payload):
 
 
 def _runtime_feed_status_snapshot() -> dict:
-    payload = _read_json(logs_dir() / "feed_runtime_latest.json", {})
-    if not isinstance(payload, dict):
-        payload = {}
+    loaded = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
+    payload = dict(loaded.get("payload") or {}) if loaded.get("valid") else {}
     auth_snapshot = runtime_auth_snapshot()
     feed_truth_state = str(payload.get("feed_truth_state") or "").strip().upper() or None
     feed_truth_strict_live = payload.get("feed_truth_strict_live")
-    feed_ok = payload.get("feed_ok")
-    if not isinstance(feed_ok, bool):
-        runtime_state = str(payload.get("runtime_state") or "").strip().upper()
-        ws_connected = payload.get("ws_connected")
-        last_tick_age_sec = _safe_float(payload.get("last_tick_age_sec"))
-        last_depth_age_sec = _safe_float(payload.get("last_depth_age_sec"))
-        option_blockers = payload.get("option_feed_block_reason_by_symbol") or {}
-        option_ok = True
-        if isinstance(option_blockers, dict) and option_blockers:
-            option_ok = all(str(v or "").strip().upper() == "OK" for v in option_blockers.values())
-        feed_ok = bool(
-            ws_connected is True
-            and runtime_state == "RUNNING"
-            and (last_tick_age_sec is None or last_tick_age_sec <= float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)))
-            and (last_depth_age_sec is None or last_depth_age_sec <= float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)))
-            and option_ok
-        )
+    feed_ok = bool(payload.get("feed_ok")) if loaded.get("valid") else False
     return {
         "feed_ok": feed_ok,
         "ws_connected": payload.get("effective_ws_connected", payload.get("ws_connected")),

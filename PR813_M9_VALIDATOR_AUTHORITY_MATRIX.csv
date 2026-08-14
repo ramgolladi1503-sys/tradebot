@@ -1,0 +1,6 @@
+authority,implementation,delegates_to,authoritative,duplicate,status
+currentness,core.feed.artifact_loader.load_current_feed_runtime,core.feed.artifact_loader._load,true,false,implementation candidate
+integrity,core.feed.artifact_loader._load,core.runtime_truth_integrity.truth_hash_from_mapping,true,false,implementation candidate
+lineage,core.feed.artifact_loader.load_current_feed_runtime,core.feed.lineage.validate_truth_lineage,true,false,implementation candidate
+consumer projection,core.orchestrator_helpers._read_latest_feed_runtime_payload,load_current_feed_runtime,false,false,wrapper
+independent architecture review,not run,-,-,-,PENDING

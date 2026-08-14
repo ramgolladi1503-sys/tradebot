@@ -44,6 +44,8 @@ _RUNTIME_PERSISTENCE_READ_AFTER_WRITE_TESTS = {
     "test_runtime_snapshot_mirrors_share_canonical_blocked_truth",
     "test_ws1006_auth_failure_blocks_reconnect_loop",
     "test_ws1006_peer_drop_on_error_is_recoverable_first",
+    "test_ws1006_recovery_timeout_is_fail_closed",
+    "test_ws1006_peer_drop_escalates_after_max_recoverable_attempts",
     "test_ws1006_main_loop_terminated_routes_to_process_restart_required",
     "test_fatal_on_error_schedules_async_forced_full_restart",
     "test_fatal_on_close_schedules_async_forced_full_restart",
@@ -288,9 +290,20 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
             )
 
     import json
+    from core.feed.artifact_provenance import stamp_feed_runtime_provenance
+    from core.feed.artifact_loader import FEED_RUNTIME_CANONICAL_WRITER, FEED_RUNTIME_SCHEMA_VERSION
+    from core.runtime_truth_integrity import truth_hash_from_mapping
     feed_path = runtime_root / "logs" / "feed_runtime_latest.json"
     feed_path.parent.mkdir(parents=True, exist_ok=True)
-    feed_path.write_text(json.dumps({"feed_ok": True}), encoding="utf-8")
+    feed_payload = stamp_feed_runtime_provenance(
+        {
+            "feed_ok": True,
+            "writer": FEED_RUNTIME_CANONICAL_WRITER,
+            "schema_version": FEED_RUNTIME_SCHEMA_VERSION,
+        }
+    )
+    feed_payload["snapshot_hash"] = truth_hash_from_mapping(feed_payload)
+    feed_path.write_text(json.dumps(feed_payload), encoding="utf-8")
 
     yield
 

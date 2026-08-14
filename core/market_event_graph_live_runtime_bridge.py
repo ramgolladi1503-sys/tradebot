@@ -27,6 +27,7 @@ from core.market_event_graph_live_source import (
     default_live_capture_path,
 )
 from core.time_utils import IST_TZ
+from core.feed.feed_epoch import current_feed_epoch
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +296,8 @@ class LiveSourceRuntimeBridge:
         if not str(evidence.get("feed_session_id") or "").strip():
             return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, required
         try:
-            int(evidence.get("reconnect_generation"))
+            if int(evidence.get("feed_epoch")) != int(current_feed_epoch()):
+                return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, required
         except Exception:
             return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, required
         observed_tokens = {
@@ -313,7 +315,6 @@ class LiveSourceRuntimeBridge:
         if not isinstance(token_lifecycle, Mapping):
             return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
         evidence_session_id = str(evidence.get("feed_session_id") or "")
-        evidence_generation = int(evidence.get("reconnect_generation"))
         for symbol in required:
             token = int(expected_tokens[symbol])
             row = token_lifecycle.get(str(token)) or token_lifecycle.get(token) or {}
@@ -321,12 +322,6 @@ class LiveSourceRuntimeBridge:
                 return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, (symbol,)
             if str(row.get("feed_session_id") or "") != evidence_session_id:
                 return False, FEED_SESSION_ID_MISMATCH, (symbol,)
-            try:
-                row_generation = int(row.get("reconnect_generation"))
-            except Exception:
-                return False, RECONNECT_GENERATION_MISMATCH, (symbol,)
-            if row_generation != evidence_generation:
-                return False, RECONNECT_GENERATION_MISMATCH, (symbol,)
             subscribe_success = _coerce_float(row.get("subscribe_call_succeeded_epoch"))
             live_tick_first = _coerce_float(row.get("first_post_request_tick_epoch"))
             mode_success = _coerce_float(row.get("mode_request_succeeded_epoch"))
@@ -663,7 +658,8 @@ def _bar_has_live_provenance(
     if not str(prov.get("live_feed_session_id") or "").strip():
         return False, LIVE_BAR_PROVENANCE_UNPROVEN
     try:
-        int(prov.get("reconnect_generation"))
+        if int(prov.get("feed_epoch")) != int(current_feed_epoch()):
+            return False, LIVE_BAR_PROVENANCE_UNPROVEN
     except Exception:
         return False, LIVE_BAR_PROVENANCE_UNPROVEN
     if bool(prov.get("historical_seed")) or bool(prov.get("replay_fixture")):
@@ -683,10 +679,10 @@ def _bar_has_live_provenance(
         if str(prov.get("live_feed_session_id") or "") != str(subscription.get("feed_session_id") or ""):
             return False, FEED_SESSION_ID_MISMATCH
         try:
-            if int(prov.get("reconnect_generation")) != int(subscription.get("reconnect_generation")):
-                return False, RECONNECT_GENERATION_MISMATCH
+            if int(prov.get("feed_epoch")) != int(subscription.get("feed_epoch")):
+                return False, "FEED_EPOCH_MISMATCH"
         except Exception:
-            return False, RECONNECT_GENERATION_MISMATCH
+            return False, "FEED_EPOCH_MISMATCH"
     if expected_symbol is not None and str(prov.get("symbol") or bar.get("symbol") or "").upper() != str(expected_symbol).upper():
         return False, BAR_SYMBOL_MISMATCH
     if expected_token is not None:

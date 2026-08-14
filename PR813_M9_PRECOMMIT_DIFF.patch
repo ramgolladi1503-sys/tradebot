@@ -1,0 +1,3 @@
+Pointer to preserved pre-audit working-tree diff.
+SHA-256 of git diff stream: d8649dd6ddffca4ff83421b33bf5b68d262c5293113b2c072bcaed651eb9eede
+Source worktree remains authoritative; no reset, discard, or alternate patch application was performed.

@@ -1,0 +1,13 @@
+transition,entry_point,changes_authority,feed_epoch_behavior,failure_behavior,duplicate_behavior,covered_by_test,classification
+initial subscription,core/kite_depth_ws.py,true,completed transition increments,fail closed,guarded,yes,COMPLETED_CHANGED
+subscription mutation,core/kite_depth_ws.py,conditional,changed completed set increments,no increment on failure/no-op,guarded,yes,COMPLETED_CHANGED
+resubscribe_full,core/kite_depth_ws.py,conditional,result controls increment,fail closed,guarded,yes,COMPLETED_CHANGED
+reconnect/recovery,core/kite_depth_ws.py,conditional,only completed authority changes increment,fail closed,guarded,yes,COMPLETED_CHANGED
+handshake soft reset,core/kite_depth_ws.py,conditional,changed completed set increments,fail closed,guarded,yes,COMPLETED_CHANGED
+ATM token rebalance,core/kite_depth_ws.py,conditional,identity change increments,failed attempt no increment,guarded,yes,COMPLETED_CHANGED
+provider session restart,core/runtime_boot_identity.py,true,new session binding,stale artifacts rejected,old callbacks rejected,yes,COMPLETED_CHANGED
+partial/retry,core/kite_depth_ws.py,conditional,final completed change only,partial failure no increment,guarded,yes,COMPLETED_CHANGED
+duplicate callbacks,core/kite_depth_ws.py,false,no increment,ignored,guarded,yes,COMPLETED_NO_CHANGE
+concurrent duplicate callbacks,core/kite_depth_ws.py,false,no increment,ignored,guarded,yes,COMPLETED_NO_CHANGE
+MISSING_LIFECYCLE_EVENTS,,-,,-,-,not proven,UNRESOLVED
+UNKNOWN_LIFECYCLE_EVENTS,,-,,-,-,not proven,UNRESOLVED

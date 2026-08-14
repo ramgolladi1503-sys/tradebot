@@ -28,6 +28,9 @@ from core.tick_store import (
 )
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.runtime_boot_identity import stamp_runtime_payload
+from core.feed.artifact_provenance import stamp_feed_runtime_provenance
+from core.feed.feed_epoch import advance_feed_epoch, current_feed_epoch
+from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.feed_runtime import build_canonical_feed_truth_state
 from core.feed_robustness_evidence import collector as feed_evidence
 from core.feed_fd_trace import process_fd_count, record_trace as record_fd_trace, reset_trace as reset_fd_trace
@@ -79,6 +82,38 @@ from core.blocker_lifecycle import (
     top_active_code,
 )
 
+_FEED_EPOCH_TRANSITION_LOCK = threading.RLock()
+_FEED_EPOCH_TRANSITION_IDS: set[tuple[str, str]] = set()
+
+
+def _advance_completed_feed_transition(
+    kind: str, identity: str, metadata: dict[str, Any]
+) -> None:
+    """Advance once for one completed subscription authority transition."""
+    transition_id = (str(kind), str(identity))
+    with _FEED_EPOCH_TRANSITION_LOCK:
+        if transition_id in _FEED_EPOCH_TRANSITION_IDS:
+            return
+        _FEED_EPOCH_TRANSITION_IDS.add(transition_id)
+    advance_feed_epoch(str(kind), metadata)
+
+
+def _record_completed_subscription_delta(
+    *, old_tokens: list[int], new_tokens: list[int], reason: str, socket_generation: int
+) -> None:
+    if sorted(old_tokens) == sorted(new_tokens):
+        return
+    _advance_completed_feed_transition(
+        "SUBSCRIPTION_AUTHORITY_CHANGED_COMPLETED",
+        f"delta:{socket_generation}:{reason}:{tuple(sorted(old_tokens))}->{tuple(sorted(new_tokens))}",
+        {
+            "socket_generation": int(socket_generation),
+            "reason": str(reason or ""),
+            "old_tokens": list(sorted(old_tokens)),
+            "new_tokens": list(sorted(new_tokens)),
+        },
+    )
+
 def get_latest_tick_rows_db(tokens: list[int] | None) -> dict[int, dict]:
     """
     Backward-compat shim for tests/legacy call sites.
@@ -120,6 +155,7 @@ _LAST_MUTATION_RESULT = None
 _SOCKET_GENERATION = 0
 
 _LAST_DESIRED_TOKENS: list[int] | None = None
+_INTENDED_TOKENS: list[int] | None = None
 _UNDERLYING_TOKENS: set[int] = set()
 _UNDERLYING_TOKEN_TO_SYMBOL: dict[int, str] = {}
 _TOKEN_TO_SYMBOL: dict[int, str] = {}
@@ -227,6 +263,7 @@ _OBSERVATION_PLAN_STATE: dict[str, Any] = {
     "missing_observation_tokens": [],
     "configured_budget": None,
     "feed_session_id": "",
+    "feed_epoch": 0,
     "reconnect_generation": 0,
     "plan_sha": "",
     "decision_epoch": None,
@@ -267,6 +304,7 @@ def _set_observation_plan_state(
                 "missing_observation_tokens": sorted({int(token) for token in missing_observation_tokens if int(token) > 0}),
                 "configured_budget": configured_budget,
                 "feed_session_id": _ensure_feed_session_id() if bool(enabled) else "",
+                "feed_epoch": int(current_feed_epoch()),
                 "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
                 "plan_sha": str(plan_sha or ""),
                 "decision_epoch": float(now_utc_epoch()),
@@ -349,6 +387,7 @@ def _record_ws_subscription_operation(
         "operation": str(operation),
         "socket_generation": int(socket_generation if socket_generation is not None else _SOCKET_GENERATION),
         "feed_session_id": _ensure_feed_session_id(),
+        "feed_epoch": int(current_feed_epoch()),
         "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
         "thread_name": threading.current_thread().name,
         "token_count": len(normalized),
@@ -560,6 +599,7 @@ def get_current_feed_session_identity() -> dict[str, Any]:
         "provider": "kite",
         "token_domain": "kite_instrument_token",
         "feed_session_id": _ensure_feed_session_id(),
+        "feed_epoch": int(current_feed_epoch()),
         "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
         "connection_start_epoch": _FEED_CONNECTION_START_EPOCH,
     }
@@ -625,13 +665,15 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
             "latest_observation_packet": dict(_LATEST_OBSERVATION_PACKET_BY_TOKEN.get(token_int) or {}),
             "feed_session_id": identity["feed_session_id"],
+            "feed_epoch": identity["feed_epoch"],
             "reconnect_generation": identity["reconnect_generation"],
         }
     generation_basis = {
         "provider": identity["provider"],
         "token_domain": identity["token_domain"],
-        "feed_session_id": identity["feed_session_id"],
-        "reconnect_generation": identity["reconnect_generation"],
+            "feed_session_id": identity["feed_session_id"],
+            "feed_epoch": identity["feed_epoch"],
+            "reconnect_generation": identity["reconnect_generation"],
         "tokens": sorted(int(token) for token in expected.values()),
         "request_epochs": {
             str(token): lifecycle[str(token)].get("subscription_requested_epoch")
@@ -646,6 +688,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         "provider": identity["provider"],
         "token_domain": identity["token_domain"],
         "feed_session_id": identity["feed_session_id"],
+        "feed_epoch": int(identity["feed_epoch"]),
         "reconnect_generation": int(identity["reconnect_generation"]),
         "connection_start_epoch": identity["connection_start_epoch"],
         "token_by_symbol": dict(expected),
@@ -1512,6 +1555,12 @@ def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
         try:
             from core.feed.ws_mutation_queue import safe_unsubscribe
             now_epoch = now_utc_epoch()
+            _log_subscription_mutation_diagnostic(
+                action="refresh",
+                reason=reason,
+                requested_tokens=refresh_tokens,
+                phase="before_unsubscribe",
+            )
             res_unsub = safe_unsubscribe(ws_obj, refresh_tokens, reason, now_epoch)
             if not res_unsub.applied and res_unsub.failure_reason != "ws_method_missing":
                 if res_unsub.queued:
@@ -1533,6 +1582,21 @@ def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
                 _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []).union(set(refresh_tokens))))
 
             res_sub, res_mode = safe_subscribe_full_mode(ws_obj, refresh_tokens, reason, now_epoch, on_applied_callback=on_refresh_applied)
+
+            _log_subscription_mutation_diagnostic(
+                action="refresh",
+                reason=reason,
+                requested_tokens=refresh_tokens,
+                phase="after_subscribe",
+                result={
+                    "unsubscribe_applied": bool(res_unsub.applied),
+                    "subscribe_applied": bool(res_sub.applied),
+                    "mode_applied": bool(res_mode.applied),
+                    "unsubscribe_queued": bool(res_unsub.queued),
+                    "subscribe_queued": bool(res_sub.queued),
+                    "mode_queued": bool(res_mode.queued),
+                },
+            )
 
             if res_sub.queued or res_mode.queued:
                 global _PENDING_SUBSCRIBE_TOKENS
@@ -1675,6 +1739,7 @@ _OBSERVATION_PLAN_STATE: dict[str, Any] = {
     "missing_observation_tokens": [],
     "configured_budget": None,
     "feed_session_id": "",
+    "feed_epoch": 0,
     "reconnect_generation": 0,
     "plan_sha": "",
     "decision_epoch": None,
@@ -1715,6 +1780,7 @@ def _set_observation_plan_state(
                 "missing_observation_tokens": sorted({int(token) for token in missing_observation_tokens if int(token) > 0}),
                 "configured_budget": configured_budget,
                 "feed_session_id": _ensure_feed_session_id() if bool(enabled) else "",
+                "feed_epoch": int(current_feed_epoch()),
                 "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
                 "plan_sha": str(plan_sha or ""),
                 "decision_epoch": float(now_utc_epoch()),
@@ -1866,6 +1932,7 @@ def get_current_feed_session_identity() -> dict[str, Any]:
         "provider": "kite",
         "token_domain": "kite_instrument_token",
         "feed_session_id": _ensure_feed_session_id(),
+        "feed_epoch": int(current_feed_epoch()),
         "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
         "connection_start_epoch": _FEED_CONNECTION_START_EPOCH,
     }
@@ -1931,6 +1998,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "latest_full_payload_epoch": _LATEST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
             "latest_observation_packet": dict(_LATEST_OBSERVATION_PACKET_BY_TOKEN.get(token_int) or {}),
             "feed_session_id": identity["feed_session_id"],
+            "feed_epoch": identity["feed_epoch"],
             "reconnect_generation": identity["reconnect_generation"],
         }
     generation_basis = {
@@ -1952,6 +2020,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         "provider": identity["provider"],
         "token_domain": identity["token_domain"],
         "feed_session_id": identity["feed_session_id"],
+        "feed_epoch": int(identity["feed_epoch"]),
         "reconnect_generation": int(identity["reconnect_generation"]),
         "connection_start_epoch": identity["connection_start_epoch"],
         "token_by_symbol": dict(expected),
@@ -2224,6 +2293,42 @@ def _log_ws(event: str, extra: dict | None = None, *, throttle_key: str | None =
         _WS_LOGGER.info(json.dumps(payload, sort_keys=True, default=str))
     except Exception as exc:
         logger.error("depth_ws_log_error path=%s err=%s:%s", _LOG_PATH, type(exc).__name__, exc)
+
+
+def _log_subscription_mutation_diagnostic(
+    *, action: str, reason: str, requested_tokens: list[int], phase: str, result: dict | None = None
+) -> None:
+    """Record token-level mutation ownership evidence without changing behavior."""
+    intended = sorted({int(token) for token in (_INTENDED_TOKENS or []) if int(token) > 0})
+    subscribed = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
+    requested = sorted({int(token) for token in (requested_tokens or []) if int(token) > 0})
+    target = 215731205
+    _log_ws(
+        "FEED_SUBSCRIPTION_MUTATION_DIAGNOSTIC",
+        {
+            "action": str(action),
+            "reason": str(reason),
+            "phase": str(phase),
+            "requested_tokens": requested,
+            "requested_token_count": len(requested),
+            "target_token": target,
+            "target_intended_before_or_after": target in intended,
+            "target_subscribed_before_or_after": target in subscribed,
+            "intended_tokens": intended,
+            "subscribed_tokens": subscribed,
+            "missing_tokens": sorted(set(intended) - set(subscribed)),
+            "extra_tokens": sorted(set(subscribed) - set(intended)),
+            "pending_subscribe_tokens": sorted(int(t) for t in (_PENDING_SUBSCRIBE_TOKENS or set())),
+            "pending_unsubscribe_tokens": sorted(int(t) for t in (_PENDING_UNSUBSCRIBE_TOKENS or set())),
+            "pending_mode_full_tokens": sorted(int(t) for t in (_PENDING_MODE_FULL_TOKENS or set())),
+            "runtime_state": str(_RUNTIME_STATE),
+            "run_id": os.getenv("TRADEBOT_RUN_ID", ""),
+            "feed_session_id": _ensure_feed_session_id(),
+            "reconnect_generation": int(_FEED_RECONNECT_GENERATION),
+            "socket_generation": int(_SOCKET_GENERATION),
+            "result": dict(result or {}),
+        },
+    )
 
 
 def _masked_secret_stats(label: str, secret: str | None) -> dict:
@@ -3011,8 +3116,30 @@ def _can_mutate_ws_subscriptions(reason: str, now_epoch: float | None = None) ->
     return True, "ok", guard_payload
 
 
+def _reconcile_rebalance_intended_tokens(
+    *, reason: str, current_tokens, desired_tokens, actual_tokens, pending_tokens: bool
+) -> tuple[list[int], bool]:
+    """Commit the exact dynamic target only after actual truth converges."""
+    current = sorted({int(token) for token in (current_tokens or []) if int(token) > 0})
+    desired = sorted({int(token) for token in (desired_tokens or []) if int(token) > 0})
+    actual = {int(token) for token in (actual_tokens or []) if int(token) > 0}
+    if (
+        not str(reason or "").startswith((
+            "atm_shift_steps=",
+            "preserve_tokens_missing",
+            "stale_option_prune_refresh",
+        ))
+        or pending_tokens
+        or not desired
+        or set(desired) != actual
+    ):
+        return current, False
+    return desired, True
+
+
 def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
-    global _LAST_TOKENS, _PENDING_SUBSCRIBE_TOKENS, _PENDING_UNSUBSCRIBE_TOKENS, _PENDING_MODE_FULL_TOKENS, _LAST_MUTATION_RESULT, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+    global _LAST_TOKENS, _PENDING_SUBSCRIBE_TOKENS, _PENDING_UNSUBSCRIBE_TOKENS, _PENDING_MODE_FULL_TOKENS, _LAST_MUTATION_RESULT, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS
+    old_tokens = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
     to_subscribe = sorted(set(int(t) for t in (subscribe_tokens or []) if int(t) > 0))
     to_unsubscribe = sorted(set(int(t) for t in (unsubscribe_tokens or []) if int(t) > 0))
 
@@ -3038,6 +3165,12 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
     try:
         from core.feed.ws_mutation_queue import safe_subscribe_full_mode, safe_unsubscribe
         now_epoch = now_utc_epoch()
+        _log_subscription_mutation_diagnostic(
+            action="delta",
+            reason=reason,
+            requested_tokens=sorted(set(to_subscribe + to_unsubscribe)),
+            phase="before",
+        )
 
         if to_subscribe:
             def on_sub_applied():
@@ -3085,6 +3218,20 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
         )
         return False
 
+    _log_subscription_mutation_diagnostic(
+        action="delta",
+        reason=reason,
+        requested_tokens=sorted(set(to_subscribe + to_unsubscribe)),
+        phase="after",
+        result={"all_applied": bool(all_applied)},
+    )
+    if all_applied:
+        _record_completed_subscription_delta(
+            old_tokens=old_tokens,
+            new_tokens=sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0}),
+            reason=reason,
+            socket_generation=int(_SOCKET_GENERATION),
+        )
     return all_applied
 
 
@@ -3149,13 +3296,20 @@ def _runtime_transport_truth_fields(
         getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0))
     ) * 3.0
     subscribed_count = len(set(int(token) for token in list(_LAST_TOKENS or []) if int(token) > 0))
-    intended_count = int(_INTENDED_TOKEN_COUNT if _INTENDED_TOKEN_COUNT > 0 else subscribed_count)
+    intended_tokens = set(int(token) for token in (_INTENDED_TOKENS or []) if int(token) > 0)
+    subscribed_tokens = set(int(token) for token in (_LAST_TOKENS or []) if int(token) > 0)
+    intended_count = len(intended_tokens) if intended_tokens else int(_INTENDED_TOKEN_COUNT if _INTENDED_TOKEN_COUNT > 0 else subscribed_count)
+    missing_tokens = sorted(intended_tokens - subscribed_tokens)
+    extra_tokens = sorted(subscribed_tokens - intended_tokens) if intended_tokens else []
     subscription_registry_consistent = (
         len(_PENDING_SUBSCRIBE_TOKENS or set()) == 0
         and len(_PENDING_UNSUBSCRIBE_TOKENS or set()) == 0
         and len(_PENDING_MODE_FULL_TOKENS or set()) == 0
+        and bool(intended_tokens)
+        and not missing_tokens
+        and not extra_tokens
     )
-    subscription_truth_complete = subscription_registry_consistent and (intended_count <= 0 or subscribed_count >= intended_count)
+    subscription_truth_complete = subscription_registry_consistent
     mode_full_truth_complete = subscription_registry_consistent and len(_PENDING_MODE_FULL_TOKENS or set()) == 0
     critical_feed_fresh = bool(verification.get("critical_feed_fresh", True))
     core_feed_fresh_ratio = float(verification.get("core_fresh_ratio", 1.0) or 0.0)
@@ -3183,6 +3337,10 @@ def _runtime_transport_truth_fields(
         "transport_last_tick_epoch": tick_epoch,
         "transport_callback_activity_present": bool(callback_activity_present),
         "subscription_registry_consistent": bool(subscription_registry_consistent),
+        "intended_tokens": sorted(intended_tokens),
+        "subscribed_tokens": sorted(subscribed_tokens),
+        "missing_tokens": missing_tokens,
+        "extra_tokens": extra_tokens,
         "subscription_truth_complete": bool(subscription_truth_complete),
         "mode_full_truth_complete": bool(mode_full_truth_complete),
         "critical_feed_fresh": bool(critical_feed_fresh),
@@ -4249,6 +4407,11 @@ def _write_feed_runtime_snapshot(
     option_active_blockers_by_symbol: dict[str, list[str]] | None = None,
     restart_count_1h: int = 0,
     stale_strikes: int = 0,
+    option_ticks_verified: bool | None = None,
+    verified_option_symbols: list[str] | None = None,
+    missing_option_symbols: list[str] | None = None,
+    warmup_clean_cycles: int | None = None,
+    warmup_required_clean_cycles: int | None = None,
     runtime_state: str | None = None,
     last_error: str | None = None,
     disconnected_code: int | None = None,
@@ -4263,6 +4426,7 @@ def _write_feed_runtime_snapshot(
     auto_reconnect_disabled: bool | None = None,
     internal_retry_error: str | None = None,
     internal_retry_reason: str | None = None,
+    process_restart_required: bool | None = None,
 ) -> None:
     global _FEED_RUNTIME_SNAPSHOT_WRITE_COUNT
     _FEED_RUNTIME_SNAPSHOT_WRITE_COUNT += 1
@@ -4349,6 +4513,9 @@ def _write_feed_runtime_snapshot(
         "reconnect_attempted": bool(restart_attempted) if restart_attempted is not None else bool(_RECOVERY_IN_PROGRESS or disconnected_code_value is not None or str(disconnected_reason_value or "").strip()),
         "resubscribe_attempted": bool(restart_attempted) if restart_attempted is not None else bool(_RECOVERY_IN_PROGRESS),
         "option_feed_verification_state": str(_option_feed_verification_overlay_payload().get("state") or "IDLE"),
+        "process_restart_required": bool(process_restart_required)
+        if process_restart_required is not None
+        else bool(normalized_blocked_reason),
     }
     payload.update(
         _runtime_transport_truth_fields(
@@ -4361,6 +4528,7 @@ def _write_feed_runtime_snapshot(
             reconnect_blocked_reason=normalized_blocked_reason,
         )
     )
+    payload["feed_ok"] = derive_feed_ok(payload)
     stage_started = _mark_stage("payload_assembly_ms", stage_started)
     if (
         internal_retry_disabled is not None
@@ -4402,8 +4570,12 @@ def _write_feed_runtime_snapshot(
     else:
         payload.update(
             {
-                "process_restart_required": False,
-                "recovery_blocked": False,
+                "process_restart_required": bool(process_restart_required)
+                or str(effective_state_text).strip().upper() == "RECOVERY_BLOCKED"
+                or bool(str(restart_blocked_reason or "").strip()),
+                "recovery_blocked": bool(process_restart_required)
+                or str(effective_state_text).strip().upper() == "RECOVERY_BLOCKED"
+                or bool(str(restart_blocked_reason or "").strip()),
                 "restart_attempt_allowed": bool(restart_attempt_allowed) if restart_attempt_allowed is not None else (str(effective_state_text).strip().upper() not in {"STOPPED", "AUTH_BLOCKED", "IMPORT_MISSING"}),
                 "restart_attempted": bool(restart_attempted) if restart_attempted is not None else bool(
                     disconnected_code_value is not None or str(disconnected_reason_value or "").strip()
@@ -4478,20 +4650,40 @@ def _write_feed_runtime_snapshot(
     payload["ws_error_code"] = canonical_feed_truth.ws_error_code
     payload["ws_error_reason"] = canonical_feed_truth.ws_error_reason
     payload["ws_fault_class"] = canonical_feed_truth.ws_fault_class
+    for key, value in (
+        ("option_ticks_verified", option_ticks_verified),
+        ("warmup_clean_cycles", warmup_clean_cycles),
+        ("warmup_required_clean_cycles", warmup_required_clean_cycles),
+    ):
+        if value is not None:
+            payload[key] = value
+    if verified_option_symbols:
+        payload["verified_option_symbols"] = list(verified_option_symbols)
+    if missing_option_symbols:
+        payload["missing_option_symbols"] = list(missing_option_symbols)
     stage_started = _mark_stage("canonical_feed_truth_ms", stage_started)
     payload = canonicalize_feed_runtime_snapshot_truth(payload)
     payload = attach_feed_execution_truth(payload)
-    payload = stamp_runtime_payload(
-        payload,
-        writer="kite_depth_ws.feed_runtime",
-    )
-    stage_started = _mark_stage("execution_truth_stamp_ms", stage_started)
     if stage_timing_enabled:
         stage_timing_ms["total_pre_write_ms"] = round(
             max(0.0, time.perf_counter() - float(stage_total_start)) * 1000.0,
             3,
         )
         payload["feed_runtime_stage_timing_ms"] = dict(stage_timing_ms)
+    from core.feed.runtime_store import _ensure_current_feed_truth_payload
+
+    truth_payload = _ensure_current_feed_truth_payload(payload)
+    payload = stamp_feed_runtime_provenance(payload, truth_payload=truth_payload)
+    payload.update(
+        build_truth_integrity_payload(
+            source_payload=payload,
+            transport_state=payload.get("transport_state"),
+            feed_truth_state=payload.get("feed_truth_state"),
+            reason_code=payload.get("feed_truth_reason_code"),
+            heartbeat_epoch=float(now_epoch),
+        )
+    )
+    stage_started = _mark_stage("execution_truth_stamp_ms", stage_started)
     try:
         write_started = time.perf_counter()
         write_json_atomic(path, payload)
@@ -4663,6 +4855,11 @@ def _persist_runtime_snapshot_row(
         "reconnect_blocked_reason": normalized_blocked_reason,
         "restart_blocked_reason": str(restart_blocked_reason or normalized_blocked_reason or "").strip().lower() or None,
     }
+    option_feed_verification = _option_feed_verification_overlay_payload()
+    if option_feed_verification:
+        payload["option_ticks_verified"] = bool(str(option_feed_verification.get("state") or "").upper() == "OK")
+        payload["verified_option_symbols"] = list(option_feed_verification.get("verified_symbols") or [])
+        payload["missing_option_symbols"] = list(option_feed_verification.get("missing_symbols") or [])
     payload.update(
         _runtime_transport_truth_fields(
             now_epoch=ts_epoch,
@@ -4762,6 +4959,11 @@ def _persist_runtime_snapshot_row(
         last_option_tick_ts_by_symbol=dict(option_state.get("last_tick_ts_by_symbol") or {}),
         option_feed_block_reason_by_symbol=option_feed_block_reason_by_symbol,
         option_active_blockers_by_symbol=option_active_blockers_by_symbol,
+        option_ticks_verified=payload.get("option_ticks_verified"),
+        verified_option_symbols=payload.get("verified_option_symbols"),
+        missing_option_symbols=payload.get("missing_option_symbols"),
+        warmup_clean_cycles=payload.get("warmup_clean_cycles"),
+        warmup_required_clean_cycles=payload.get("warmup_required_clean_cycles"),
         restart_count_1h=_restart_count_1h(ts_epoch),
         stale_strikes=_STALE_STRIKES,
         runtime_state=effective_state_text,
@@ -4773,6 +4975,7 @@ def _persist_runtime_snapshot_row(
         auto_reconnect_disabled=auto_reconnect_disabled,
         internal_retry_error=internal_retry_error,
         internal_retry_reason=internal_retry_reason,
+        process_restart_required=payload.get("process_restart_required"),
     )
 
 
@@ -6287,7 +6490,9 @@ def _record_observation_callback_truth(
     feed_session_matches = str(observation_state.get("feed_session_id") or "") == str(feed_identity.get("feed_session_id") or "")
     plan_generation = _coerce_generation(observation_state.get("reconnect_generation"), default=-1)
     feed_generation = _coerce_generation(feed_identity.get("reconnect_generation"), default=-1)
-    reconnect_generation_matches = plan_generation == feed_generation
+    plan_feed_epoch = _coerce_generation(observation_state.get("feed_epoch"), default=-1)
+    current_feed_epoch_value = int(current_feed_epoch())
+    feed_epoch_matches = plan_feed_epoch == current_feed_epoch_value
     subscription_send_recorded = token_int in _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS
     mode_full_is_final = token_int in _MODE_COMMAND_FINAL_FULL_TOKENS
     post_mode_callback = bool(mode_epoch is not None and float(callback_receipt_epoch) > float(mode_epoch))
@@ -6296,7 +6501,7 @@ def _record_observation_callback_truth(
         plan_enabled
         and token_in_active_plan
         and feed_session_matches
-        and reconnect_generation_matches
+        and feed_epoch_matches
         and subscription_send_recorded
         and mode_full_is_final
         and post_mode_callback
@@ -6305,8 +6510,8 @@ def _record_observation_callback_truth(
         rejection_reason = "CALLBACK_SEEN_PLAN_DISABLED"
     elif not feed_session_matches:
         rejection_reason = "CALLBACK_SEEN_SESSION_MISMATCH"
-    elif not reconnect_generation_matches:
-        rejection_reason = "CALLBACK_SEEN_GENERATION_MISMATCH"
+    elif not feed_epoch_matches:
+        rejection_reason = "CALLBACK_SEEN_FEED_EPOCH_MISMATCH"
     elif not subscription_send_recorded:
         rejection_reason = "CALLBACK_SEEN_SUBSCRIPTION_UNPROVEN"
     elif not mode_full_is_final:
@@ -6339,7 +6544,8 @@ def _record_observation_callback_truth(
             "token_in_observation_registry": True,
             "token_in_active_plan": bool(token_in_active_plan),
             "feed_session_matches": bool(feed_session_matches),
-            "reconnect_generation_matches": bool(reconnect_generation_matches),
+            "reconnect_generation_matches": bool(plan_generation == feed_generation),
+            "feed_epoch_matches": bool(feed_epoch_matches),
             "subscription_send_recorded": bool(subscription_send_recorded),
             "mode_full_is_final_local_command": bool(mode_full_is_final),
             "post_mode_callback": bool(post_mode_callback),
@@ -6495,8 +6701,8 @@ def on_ticks(ws, ticks):
         tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
         tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None
         observation_state = _observation_state_payload()
-        plan_generation = _coerce_generation(observation_state.get("reconnect_generation"), default=-1)
-        feed_generation = _coerce_generation(_FEED_RECONNECT_GENERATION, default=-1)
+        plan_feed_epoch = _coerce_generation(observation_state.get("feed_epoch"), default=-1)
+        current_feed_epoch_value = int(current_feed_epoch())
         observation_token_allowed = (
             token_int is not None
             and int(token_int) in observation_token_set
@@ -6505,7 +6711,7 @@ def on_ticks(ws, ticks):
             and str(observation_state.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
             and int(token_int) in set(int(tok) for tok in (observation_state.get("observation_tokens") or []))
             and str(observation_state.get("feed_session_id") or "") == _ensure_feed_session_id()
-            and plan_generation == feed_generation
+            and plan_feed_epoch == current_feed_epoch_value
             and int(token_int) in _SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS
         )
         if token_int is not None and isinstance(depth, dict) and depth:
@@ -7132,7 +7338,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
-    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION
+    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
         try:
@@ -7154,6 +7360,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _RUNTIME_STATE = "STARTING"
     _LAST_RUNTIME_ERROR = ""
     _INTENDED_TOKEN_COUNT = len(list(dict.fromkeys(instrument_tokens or [])))
+    _INTENDED_TOKENS = sorted({int(token) for token in (instrument_tokens or []) if int(token) > 0})
     _persist_runtime_snapshot_row(
         ws_connected=None,
         source="start_depth_ws:starting",
@@ -7416,6 +7623,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         _KITE_TICKER = kws
 
     handshake_soft_reset_used = False
+    def _advance_completed_transition(kind: str, identity: int | str, metadata: dict[str, Any]) -> None:
+        _advance_completed_feed_transition(str(kind), str(identity), metadata)
 
     def _generation_is_current(callback: str) -> bool:
         if socket_generation == int(_SOCKET_GENERATION):
@@ -7435,6 +7644,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
 
     def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
         global _LAST_TOKENS, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+        old_tokens = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
         to_subscribe = sorted(set(int(t) for t in (subscribe_tokens or []) if int(t) > 0))
         to_unsubscribe = sorted(set(int(t) for t in (unsubscribe_tokens or []) if int(t) > 0))
         can_mutate, guard_reason, guard_payload = _can_mutate_ws_subscriptions(reason=reason)
@@ -7583,6 +7793,38 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     client_mode_before=client_mode_before_final,
                     socket_generation=socket_generation,
                 )
+                _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+                _LAST_RUNTIME_ERROR = f"final_set_mode:{exc}"[:1000]
+                _persist_runtime_snapshot_row(
+                    ws_connected=False,
+                    source=f"rebalance_final_mode_error:{reason}",
+                    runtime_state="SUBSCRIBE_FAILED",
+                    last_error=_LAST_RUNTIME_ERROR,
+                )
+                return False
+        # ATM rebalance is allowed to rotate the target option universe.  The
+        # builder publishes that target in _LAST_DESIRED_TOKENS; keep the intended
+        # registry aligned only after the real subscribe/unsubscribe operations and
+        # final mode application have succeeded.  A partial mutation deliberately
+        # leaves the old intended count in place, so readiness remains fail-closed.
+        intended_count_before = int(_INTENDED_TOKEN_COUNT)
+        intended_before = list(_INTENDED_TOKENS or [])
+        _INTENDED_TOKENS, intended_registry_updated = _reconcile_rebalance_intended_tokens(
+            reason=reason,
+            current_tokens=_INTENDED_TOKENS,
+            desired_tokens=_LAST_DESIRED_TOKENS,
+            actual_tokens=_LAST_TOKENS,
+            pending_tokens=bool(_PENDING_SUBSCRIBE_TOKENS or _PENDING_UNSUBSCRIBE_TOKENS or _PENDING_MODE_FULL_TOKENS),
+        )
+        _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
+        _record_completed_subscription_delta(
+            old_tokens=old_tokens,
+            new_tokens=sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0}),
+            reason=reason,
+            socket_generation=socket_generation,
+        )
+        # _advance_completed_transition remains the closure compatibility name;
+        # the canonical owner above prevents duplicate epoch advancement.
         _log_ws(
             "FEED_REBALANCE_APPLIED",
             {
@@ -7590,6 +7832,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 "subscribe_count": len(to_subscribe),
                 "unsubscribe_count": len(to_unsubscribe),
                 "total_tokens": len(_LAST_TOKENS),
+                "intended_count_before": intended_count_before,
+                "intended_count_after": int(_INTENDED_TOKEN_COUNT),
+                "intended_registry_updated": intended_registry_updated,
+                "intended_tokens": list(_INTENDED_TOKENS),
+                "intended_tokens_before": intended_before,
             },
         )
         _RUNTIME_STATE = "RUNNING"
@@ -7618,9 +7865,20 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def _resubscribe_full(ws, reason: str):
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         _log_ws("subscription_replay_requested", {"reason": reason})
+        old_tokens = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
         desired, selection_payload = _resubscribe_token_selection()
         if not desired:
             desired = sorted(set(int(t) for t in (tokens or []) if int(t) > 0))
+        desired = sorted({int(token) for token in (desired or []) if int(token) > 0})
+        if not desired:
+            return {
+                "success": False,
+                "changed": False,
+                "status": "FAILED",
+                "reason": "no_tokens",
+                "old_tokens": old_tokens,
+                "new_tokens": old_tokens,
+            }
         if desired:
             event_base = {
                 "socket_generation": socket_generation,
@@ -7750,6 +8008,15 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         if rebalance_state.get("last_rebalance_ts") is None:
             rebalance_state["last_rebalance_ts"] = time.time()
+        changed = old_tokens != desired
+        return {
+            "success": True,
+            "changed": changed,
+            "status": "SUCCESS_CHANGED" if changed else "SUCCESS_NO_CHANGE",
+            "reason": str(reason or ""),
+            "old_tokens": old_tokens,
+            "new_tokens": list(desired),
+        }
 
     def on_connect(ws, response):
         global _STALE_STRIKES, _WARMUP_PENDING, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
@@ -7778,7 +8045,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 if isinstance(book, dict):
                     book["ts_epoch"] = None
                     book["ts"] = None
-            _resubscribe_full(ws, reason="connect")
+            resubscribe_result = _resubscribe_full(ws, reason="connect")
+            if resubscribe_result.get("status") == "SUCCESS_CHANGED":
+                _advance_completed_transition(
+                    "SUBSCRIPTION_REBUILD_COMPLETED",
+                    f"connect:{socket_generation}:{tuple(resubscribe_result.get('old_tokens') or [])}->{tuple(resubscribe_result.get('new_tokens') or [])}",
+                    {"socket_generation": int(socket_generation), "reason": "connect", "old_tokens": resubscribe_result.get("old_tokens"), "new_tokens": resubscribe_result.get("new_tokens")},
+                )
             _log_ws(
                 "FEED_SUBSCRIPTION_REGISTRY_SNAPSHOT",
                 {
@@ -7868,8 +8141,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             if not handshake_soft_reset_used:
                 handshake_soft_reset_used = True
                 try:
-                    _resubscribe_full(ws, reason="handshake_soft_reset")
-                    _log_ws("FEED_HANDSHAKE_SOFT_RESET", {"code": code, "reason": reason_text})
+                    resubscribe_result = _resubscribe_full(ws, reason="handshake_soft_reset")
+                    if resubscribe_result.get("status") == "SUCCESS_CHANGED":
+                        _advance_completed_transition(
+                            "SUBSCRIPTION_REBUILD_COMPLETED",
+                            f"handshake:{socket_generation}:{tuple(resubscribe_result.get('old_tokens') or [])}->{tuple(resubscribe_result.get('new_tokens') or [])}",
+                            {"socket_generation": int(socket_generation), "reason": "handshake_soft_reset", "old_tokens": resubscribe_result.get("old_tokens"), "new_tokens": resubscribe_result.get("new_tokens")},
+                        )
+                    _log_ws("FEED_HANDSHAKE_SOFT_RESET", {"code": code, "reason": reason_text, "result": resubscribe_result.get("status")})
                 except Exception as exc:
                     _log_ws("FEED_HANDSHAKE_SOFT_RESET_ERROR", {"code": code, "reason": reason_text, "error": str(exc)})
             _log_ws("FEED_HANDSHAKE_SUPPRESS_RESTART", {"code": code, "reason": reason_text})
@@ -8044,7 +8323,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             restart_depth_ws(reason=f"ws_close:{code}", ignore_cooldown=ignore_cooldown)
 
     def _watchdog():
-        global _STALE_STRIKES, _WARMUP_PENDING
+        global _STALE_STRIKES, _WARMUP_PENDING, _INTENDED_TOKENS
         max_age = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)))
         soft_cooldown = float(getattr(cfg, "FEED_RECONNECT_COOLDOWN_SEC", 30))
         strikes_to_restart = int(getattr(cfg, "FEED_RESTART_STRIKES", 3))
@@ -8118,7 +8397,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 now_epoch=now_epoch,
                 ws_connected=ws_connected,
                 subscribed_tokens_count=len(_LAST_TOKENS or []),
-                intended_tokens_count=int(_INTENDED_TOKEN_COUNT if _INTENDED_TOKEN_COUNT > 0 else len(_LAST_TOKENS or [])),
+                intended_tokens_count=len(_INTENDED_TOKENS or []) or len(_LAST_TOKENS or []),
                 subscribed_tokens_count_by_symbol=sub_counts,
                 missing_option_tokens_count=missing_count,
                 missing_option_tokens_count_by_symbol=missing_counts_by_symbol,
@@ -8276,6 +8555,32 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                             unsubscribe_tokens=list(refresh_payload.get("unsubscribe_tokens") or []),
                             reason="stale_option_prune_refresh",
                         )
+                    if refresh_ok:
+                        intended_before = list(_INTENDED_TOKENS or [])
+                        reconciled_tokens, intended_registry_updated = _reconcile_rebalance_intended_tokens(
+                            reason="stale_option_prune_refresh",
+                            current_tokens=_INTENDED_TOKENS,
+                            desired_tokens=_LAST_TOKENS,
+                            actual_tokens=_LAST_TOKENS,
+                            pending_tokens=bool(
+                                _PENDING_SUBSCRIBE_TOKENS
+                                or _PENDING_UNSUBSCRIBE_TOKENS
+                                or _PENDING_MODE_FULL_TOKENS
+                            ),
+                        )
+                        if intended_registry_updated:
+                            _INTENDED_TOKENS = list(reconciled_tokens)
+                            _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
+                            _log_ws(
+                                "FEED_INTENDED_REGISTRY_RECONCILED",
+                                {
+                                    "reason": "stale_option_prune_refresh",
+                                    "previous_intended_count": len(intended_before),
+                                    "intended_count": len(_INTENDED_TOKENS),
+                                    "intended_tokens": list(_INTENDED_TOKENS),
+                                    "actual_tokens": list(_LAST_TOKENS or []),
+                                },
+                            )
                     _log_ws(
                         "FEED_OPTION_PRUNE_REFRESH",
                         {
@@ -8460,8 +8765,17 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     if time.time() - last_soft >= backoff:
                         last_soft = time.time()
                         try:
-                            _resubscribe_full(kws, reason=f"soft_reset:strikes={depth_stale_strikes}")
-                            _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
+                            resubscribe_result = _resubscribe_full(kws, reason=f"soft_reset:strikes={depth_stale_strikes}")
+                            if resubscribe_result.get("success") is True:
+                                if resubscribe_result.get("changed") is True:
+                                    _advance_completed_transition(
+                                        "SUBSCRIPTION_REBUILD_COMPLETED",
+                                        f"watchdog:{socket_generation}:{resubscribe_result.get('new_tokens')}",
+                                        {"socket_generation": int(socket_generation), "reason": "watchdog_soft_reset"},
+                                    )
+                                _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
+                            else:
+                                _log_ws("FEED_SOFT_RESET_ERROR", {"reason": resubscribe_result.get("reason")})
                         except Exception as exc:
                             _log_ws("FEED_SOFT_RESET_ERROR", {"error": str(exc), "backoff_sec": backoff})
 

@@ -1,0 +1,5 @@
+scope,result,classification,action
+runtime health snapshot authority,3 failed due invalid canonical fixtures,STALE_TEST_EXPECTATION,update fixtures in separate task
+Phase 2 consumer contract,32 failed due absent canonical runtime fixture,STALE_TEST_EXPECTATION,add governed canonical fixture setup
+focused M9 regression,54 passed,RELEVANT_CANDIDATE_CONTRACT,preserved
+candidate-caused failures,0,UNKNOWN,none

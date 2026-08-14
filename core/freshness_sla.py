@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from config import config as cfg
 from core.depth_store import depth_store
 from core.fs_utils import ensure_parent_dir
-from core.feed.runtime_store import read_latest_runtime_snapshot
+from core.feed.artifact_loader import load_current_feed_runtime
 from core.market_context import derive_market_context
 from core.freshness_policy import resolve_freshness_policy
 from core.tick_store import init_ticks as _init_ticks_schema
@@ -92,7 +92,8 @@ def _runtime_snapshot_epochs(symbol: str | None) -> dict[str, Any]:
     if not bool(getattr(cfg, "FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE", True)):
         return {}
     try:
-        snapshot = read_latest_runtime_snapshot()
+        loaded = load_current_feed_runtime()
+        snapshot = dict(loaded.get("payload") or {}) if loaded.get("valid") else None
     except Exception:
         snapshot = None
     if not isinstance(snapshot, dict):

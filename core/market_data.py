@@ -2770,6 +2770,19 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         bars = []
         try:
             bars = ohlc_buffer.get_completed_bars(symbol, as_of=cycle_cutoff)
+            try:
+                from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+                latest_completed = bars[-1].get("ts") if bars else None
+                emit_candle_pipeline_event(
+                    symbol=str(symbol), timeframe="1m", stage="T6_INDICATOR_CONSUMED",
+                    source_event_ts=cycle_cutoff, bar_ts=latest_completed,
+                    bar_state="COMPLETED" if latest_completed is not None else "MISSING",
+                    bar_count=len(bars), consumer="core.market_data.fetch_live_market_data",
+                    producer="core.ohlc_buffer.get_completed_bars",
+                    reason="completed_bars_read",
+                )
+            except Exception:
+                pass
             if len(bars) < min_bars and bool(allow_history_seed):
                 startup_degraded_row = _startup_hist_empty_degraded_row(symbol)
                 if (
@@ -2856,6 +2869,17 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                     else (ohlc_last_bar_epoch if ohlc_last_bar_epoch is not None else now_epoch_for_indicators)
                 )
                 _INDICATOR_LAST_UPDATE_EPOCH[symbol] = float(indicator_last_update_epoch)
+                try:
+                    from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+                    emit_candle_pipeline_event(
+                        symbol=str(symbol), timeframe="1m", stage="T7_INDICATOR_UPDATED",
+                        source_event_ts=cycle_cutoff, bar_ts=last_ts,
+                        bar_state="UPDATED", bar_count=ohlc_bars_count,
+                        consumer="core.market_data.fetch_live_market_data",
+                        producer="core.indicators_live.compute_indicators",
+                    )
+                except Exception:
+                    pass
             else:
                 if ohlc_bars_count == 0:
                     missing_inputs.append("never_computed")

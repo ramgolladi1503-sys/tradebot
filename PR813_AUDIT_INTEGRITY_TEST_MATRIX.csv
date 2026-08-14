@@ -1,0 +1,8 @@
+test,result
+valid fresh bootstrap,pass
+missing run id,pass
+prior run rejected,current focused test added
+empty audit log,current focused test added
+zero event non-bootstrap,current focused test added
+tampered prior record,covered by existing independent reproduction
+truncated chain,covered by hash/JSON validator contract

@@ -10,6 +10,7 @@ import core.kite_depth_ws as depth_ws
 from core.blocker_lifecycle import reset_blocker_registries
 from core.runtime_status_overlay import derive_effective_ws_connected, derive_feed_ok
 import pytest
+from core.runtime_truth_integrity import truth_hash_from_mapping
 
 
 def _reset_depth_ws_test_state(monkeypatch):
@@ -93,6 +94,60 @@ def test_runtime_store_roundtrip_with_state_fields(monkeypatch, tmp_path):
     assert payload["subscribed_tokens_sample"] == [1, 2, 3]
 
 
+def test_runtime_store_derives_explicit_feed_ok_for_legacy_payload(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    payload = runtime_store._canonical_runtime_artifact_payload(
+        {
+            "ts_epoch": 200.0,
+            "ws_connected": True,
+            "effective_ws_connected": True,
+            "market_open": True,
+            "subscribed_tokens_count": 2,
+            "intended_tokens_count": 2,
+            "subscribed_option_tokens_count": 1,
+            "missing_option_tokens_count": 0,
+            "last_ws_tick_epoch": 199.5,
+            "last_tick_age_sec": 0.5,
+            "last_depth_epoch": 199.0,
+            "last_depth_age_sec": 1.0,
+            "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+            "option_last_tick_age_by_symbol": {"NIFTY": 0.4},
+            "runtime_state": "RUNNING",
+            "source": "legacy-runtime-writer",
+        },
+        ts_epoch=200.0,
+    )
+    assert payload["feed_ok"] is True
+    assert payload["run_id"]
+    assert payload["boot_epoch"]
+    assert payload["writer"] == "feed.runtime_store"
+    assert payload["schema_version"] == 1
+
+
+def test_runtime_store_derives_false_for_unhealthy_legacy_payload(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    payload = runtime_store._canonical_runtime_artifact_payload(
+        {
+            "ts_epoch": 200.0,
+            "ws_connected": True,
+            "market_open": True,
+            "subscribed_tokens_count": 2,
+            "intended_tokens_count": 2,
+            "subscribed_option_tokens_count": 1,
+            "last_tick_age_sec": 9.0,
+            "last_depth_age_sec": 1.0,
+            "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+            "option_last_tick_age_by_symbol": {"NIFTY": 9.0},
+            "runtime_state": "RUNNING",
+            "source": "legacy-runtime-writer",
+        },
+        ts_epoch=200.0,
+    )
+    assert payload["feed_ok"] is False
+
+
 def test_runtime_store_connection_uses_busy_tolerant_settings(monkeypatch, tmp_path):
     db_path = tmp_path / "runtime.sqlite"
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
@@ -157,7 +212,11 @@ def test_persist_runtime_snapshot_row_updates_json_artifact(monkeypatch, tmp_pat
     monkeypatch.setattr(depth_ws, "_latest_depth_epoch_from_store", lambda: 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_latest_db_tick_epoch", lambda: 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKENS", [1, 101], raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
 
     depth_ws._persist_runtime_snapshot_row(
         ws_connected=True,
@@ -276,7 +335,11 @@ def test_persist_runtime_snapshot_row_normalizes_ws1006_recovery_blocked_state(m
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKENS", [1, 101], raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
     monkeypatch.setattr(depth_ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
     monkeypatch.setattr(depth_ws, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(depth_ws, "is_market_open_ist", lambda: True)
@@ -458,7 +521,11 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKENS", [1, 101], raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(depth_ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
 
     depth_ws._write_feed_runtime_snapshot(
         now_epoch=200.0,
@@ -479,6 +546,19 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
     assert logs_path / "feed_runtime_latest.json" in captured_paths
     assert logs_path / "feed_health_duration_latest.json" in captured_paths
     assert captured_payloads[logs_path / "feed_runtime_latest.json"]["ws_connected"] is True
+    payload = captured_payloads[logs_path / "feed_runtime_latest.json"]
+    assert payload["snapshot_hash"] == truth_hash_from_mapping(
+        payload,
+        exclude_keys=(
+            "snapshot_hash", "snapshot_hash_version", "transport_heartbeat",
+            "transport_heartbeat_epoch", "transport_heartbeat_age_sec",
+            "transport_heartbeat_source", "transport_heartbeat_state",
+            "transport_heartbeat_reason", "truth_integrity_alerts",
+            "truth_integrity_alert_count", "truth_integrity_status",
+        ),
+    )
+    assert payload["feed_ok"] is False
+    assert payload["execution_feed_ready"] is True
     assert (logs_path / "feed_runtime_latest.json").exists()
 
 

@@ -22,6 +22,18 @@ def test_valid_complete_session_passes(tmp_path):
     assert verify_root(_root(tmp_path))["verdict"] == "PASS_MEG_REQUEST_SCOPED_CAUSALITY"
 
 
+def test_legacy_reconnect_generation_mismatch_is_diagnostic_only(tmp_path):
+    root = tmp_path / "mismatched"
+    root.mkdir()
+    common = dict(session_id="s1", producer_commit_sha="c1")
+    append_primitives(root, **common, request=dict(request_event_id="re1", request_id="r1", request_generation=1, request_success_timestamp=10, feed_session_id="f", reconnect_generation=2, expected_instrument_token=101, expected_symbol="NIFTY"))
+    append_primitives(root, **common, tick=dict(selected_tick_event_id="te1", cycle_id="cy1", request_id="r1", request_generation=1, selected_tick_id="t1", selected_tick_receipt_timestamp=11, selected_tick_feed_session_id="f", selected_tick_reconnect_generation=999, selected_tick_instrument_token=101, selected_tick_symbol="NIFTY"), accepted=dict(cycle_id="cy1", accepted=True), persisted=dict(cycle_id="cy1", persistence_identity="p1"))
+    seal_evidence_root(root)
+    result = verify_root(root)
+    assert result["wrong_generation_ticks"] == 1
+    assert result["verdict"] == "PASS_MEG_REQUEST_SCOPED_CAUSALITY"
+
+
 def test_wrong_token_and_causality_fail(tmp_path):
     root = _root(tmp_path)
     path = root / "meg_selected_tick_events.jsonl"

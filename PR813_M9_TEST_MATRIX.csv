@@ -1,0 +1,5 @@
+area,command,result,independent
+focused M9 consumers,python -m pytest -q tests/test_orchestrator_helpers.py tests/test_orchestrator_runtime_snapshots.py tests/test_pr_feed_12_runtime_snapshot_feed_decision.py tests/core/test_runtime_snapshot_producer.py tests/test_review_queue_loader.py tests/test_review_queue_decision_engine.py,54 passed,false
+compile,python -m compileall -q core/orchestrator.py,PASS,false
+diff check,git diff --check,PASS,false
+M1-M8 architecture review,not run,PENDING,false

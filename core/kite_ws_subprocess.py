@@ -8,7 +8,7 @@ import time
 from typing import Any
 
 from core.kite_depth_ws import start_depth_ws, stop_depth_ws
-from core.feed.runtime_store import read_latest_runtime_snapshot
+from core.feed.artifact_loader import load_current_feed_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +85,15 @@ def monitor_depth_ws_subprocess() -> None:
     else:
         # Check health via JSON file
         try:
-            snapshot = read_latest_runtime_snapshot() or {}
+            loaded = load_current_feed_runtime()
+            if not loaded.get("valid"):
+                needs_restart = True
+                reason = f"invalid_runtime_artifact:{loaded.get('reason_code') or 'INVALID_ARTIFACT'}"
+                snapshot = {}
+            else:
+                snapshot = dict(loaded.get("payload") or {})
             runtime_state = str(snapshot.get("runtime_state") or "").strip().upper()
-            if runtime_state in {"FEED_LIFECYCLE_FATAL", "RESTART_REQUIRED"}:
+            if not needs_restart and runtime_state in {"FEED_LIFECYCLE_FATAL", "RESTART_REQUIRED"}:
                 needs_restart = True
                 reason = f"fatal_state:{runtime_state}"
             elif snapshot.get("process_restart_required"):
