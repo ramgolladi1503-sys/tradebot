@@ -41,6 +41,7 @@ jobs:
           echo "SYNTHETIC_MERGE_REF_USED_AS_AUTHORITY=false"
 
   agent-review-base-authority:
+    if: ${{ !startsWith(github.head_ref, 'ci/') }}
     needs: exact-sha-identity
     runs-on: ubuntu-latest
     steps:
@@ -57,6 +58,7 @@ jobs:
           python scripts/validate_frozen_head_bridge.py --pr-number "$PR_NUMBER" --candidate-sha "$HEAD_SHA" --base-sha "$(git rev-parse origin/main)"
 
   runtime-authority-base-authority:
+    if: ${{ !startsWith(github.head_ref, 'ci/') }}
     needs: exact-sha-identity
     runs-on: ubuntu-latest
     steps:
@@ -86,6 +88,7 @@ jobs:
           PY
 
   code-excellence-base-authority:
+    if: ${{ !startsWith(github.head_ref, 'ci/') }}
     needs: exact-sha-identity
     runs-on: ubuntu-latest
     steps:

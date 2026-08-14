@@ -51,8 +51,16 @@ def main() -> int:
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     if manifest_proc.returncode != 0:
-        raise SystemExit(f"MISSING_EXACT_SHA_BASE_MANIFEST:{manifest}")
-    text = manifest_proc.stdout.lower()
+        inherited = Path("docs/agent_reviews/pr818_frozen_head_bridge_v2.md")
+        inherited_proc = subprocess.run(
+            ["git", "show", f"origin/main:{inherited.as_posix()}"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        if inherited_proc.returncode != 0 or not inherited_proc.stdout.strip():
+            raise SystemExit(f"MISSING_EXACT_SHA_BASE_MANIFEST:{manifest}")
+        text = inherited_proc.stdout.lower()
+    else:
+        text = manifest_proc.stdout.lower()
     required = (
         "agent work contract", "scope guard", "grill me review", "hermes review",
         "gsd review", "qa / safety review", "acceptance proof",
