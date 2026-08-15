@@ -182,7 +182,6 @@ class OhlcBuffer:
 
                 bucket = ts.replace(second=0, microsecond=0)
 
-                # validate required OHLC values
                 try:
                     open_val = float(b.get("open"))
                     high_val = float(b.get("high"))
@@ -202,6 +201,7 @@ class OhlcBuffer:
                     "bar_provenance": {
                         "source_type": "historical_seed",
                         "live_feed_session_id": None,
+                        "feed_epoch": None,
                         "first_live_tick_epoch": None,
                         "last_live_tick_epoch": None,
                         "historical_seed": True,
@@ -259,6 +259,7 @@ def _merge_live_bar_provenance(bar, provenance, tick_ts):
         payload = {
             "source_type": "unknown",
             "live_feed_session_id": None,
+            "feed_epoch": None,
             "historical_seed": False,
             "replay_fixture": False,
             "non_live_fallback": False,
@@ -274,6 +275,9 @@ def _merge_live_bar_provenance(bar, provenance, tick_ts):
             return payload_map[key]
         return existing_map.get(key)
 
+    # feed_epoch is canonical currentness identity.  It must survive aggregation
+    # and it must never silently change inside one OHLC bar, just like provider,
+    # session, token domain, symbol, and instrument token.
     immutable_keys = (
         "provider",
         "token_domain",
@@ -281,6 +285,7 @@ def _merge_live_bar_provenance(bar, provenance, tick_ts):
         "symbol",
         "instrument_token",
         "live_feed_session_id",
+        "feed_epoch",
         "reconnect_generation",
     )
     for key in immutable_keys:
@@ -303,6 +308,7 @@ def _merge_live_bar_provenance(bar, provenance, tick_ts):
     bar["bar_provenance"] = {
         "source_type": source_type,
         "live_feed_session_id": _prefer_present(payload, existing, "live_feed_session_id"),
+        "feed_epoch": _prefer_present(payload, existing, "feed_epoch"),
         "reconnect_generation": _prefer_present(payload, existing, "reconnect_generation"),
         "instrument_token": _prefer_present(payload, existing, "instrument_token"),
         "payload_mode": _prefer_present(payload, existing, "payload_mode"),
