@@ -27,9 +27,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install 'pandas<3.0'
-      - name: Run known failing modules with canonical baseline plugin
+      - name: Run known failing modules against permanent canonical fixtures
         run: >-
-          pytest -q -o addopts='' -p tests.pr818_diag_plugin
+          pytest -q -o addopts=''
           tests/strategy_truth/test_legacy_quarantine.py
           tests/test_blocker_lifecycle.py
           tests/test_feed_runtime_states.py
