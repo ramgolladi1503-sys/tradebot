@@ -1,26 +1,35 @@
 name: Repo Forensics PR Gate
 
+# Stage-A bootstrap. The ordinary pull_request job emits the currently-required
+# repo-forensics-pr-gate context. A completely separate pull_request_target job
+# is loaded from protected main and performs only trusted-base freeze checks.
+# The jobs intentionally share no checkout or execution path.
 on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:
+  pull_request_target:
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
   repo-forensics-pr-gate:
+    if: github.event_name == 'pull_request'
     name: repo-forensics-pr-gate
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       PYTHONPATH: .
       EXECUTION_MODE: PAPER
       KITE_USE_API: "false"
     steps:
-      - name: Checkout
+      - name: Checkout ordinary PR candidate
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,8 +37,7 @@ jobs:
           python-version: "3.12"
 
       - name: Run baseline-aware repo-forensics gate
-        run: |
-          python scripts/run_repo_forensics_pr_gate.py --repo . --config .gsd-forensics.yaml
+        run: python scripts/run_repo_forensics_pr_gate.py --repo . --config .gsd-forensics.yaml
 
       - name: Upload PR gate report
         if: always()
@@ -38,3 +46,95 @@ jobs:
           name: repo-forensics-pr-gate-report
           path: docs/repo_forensics/reports/pr_gate_latest.md
           if-no-files-found: warn
+
+  pr818-live-flow-freeze-target:
+    if: github.event_name == 'pull_request_target'
+    name: pr818-live-flow-freeze-target
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PR818_FROZEN_LIVE_SHA: d7dc45e7c5c76247e7d1b8abd40ec7682fac2f9b
+      PR818_FROZEN_MAIN_BASELINE: 0d2a32290ccbacc76b608ecdae92df9312106198
+    steps:
+      - name: Checkout trusted protected main only
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Enforce frozen PR818 live-flow production surface
+        shell: bash
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$PR_HEAD"
+          git fetch --no-tags --depth=1 origin "$PR_BASE"
+          git fetch --no-tags --depth=1 origin "$PR818_FROZEN_MAIN_BASELINE"
+
+          frozen_production=(
+            requirements.txt
+            pyproject.toml
+            config/config.py
+            main.py
+            core/audit_log.py
+            core/candle_pipeline_diagnostics.py
+            core/decision_side_effects.py
+            core/depth_subscription_engine.py
+            core/engine_phase2_adapter.py
+            core/feed
+            core/feed_recovery_runtime.py
+            core/feed_supervisor.py
+            core/freshness_sla.py
+            core/kite_depth_ws.py
+            core/kite_ws_subprocess.py
+            core/live_indicator_readiness.py
+            core/market_context.py
+            core/market_data.py
+            core/market_event_graph_live_ohlc_buffer.py
+            core/market_event_graph_live_runtime_bridge.py
+            core/meg_request_scoped_causality.py
+            core/ohlc_buffer.py
+            core/orchestrator.py
+            core/orchestrator_helpers.py
+            core/orchestrator_truth.py
+            core/paths.py
+            core/phase1_observability.py
+            core/readiness_gate.py
+            core/regime_monitor.py
+            core/review_queue.py
+            core/runtime_bootstrap.py
+            core/runtime_feed_truth_snapshot.py
+            core/runtime_health.py
+            core/runtime_snapshot_producer.py
+            core/runtime_truth_integrity.py
+          )
+          governance=(
+            .github/workflows/repo-forensics-pr-gate.yml
+            .github/workflows/frozen-head-candidate-safety-tests.yml
+          )
+
+          base_drift="$(git diff --name-only "$PR818_FROZEN_MAIN_BASELINE" "$PR_BASE" -- "${frozen_production[@]}")"
+          if [[ -n "$base_drift" ]]; then
+            echo 'PR818_FROZEN_MAIN_BASELINE_DRIFT'
+            printf '%s\n' "$base_drift"
+            exit 1
+          fi
+
+          pr_drift="$(git diff --name-only "$PR_BASE" "$PR_HEAD" -- "${frozen_production[@]}" "${governance[@]}")"
+          if [[ -n "$pr_drift" ]]; then
+            if [[ "$PR_HEAD_REF" == 'governance/freeze-pr818-live-flow-finalize-v1' ]] && [[ "$pr_drift" == '.github/workflows/repo-forensics-pr-gate.yml' ]]; then
+              echo 'PR818_FREEZE_BOOTSTRAP_FINALIZE_ONLY'
+            else
+              echo 'PR818_FROZEN_LIVE_FLOW_VIOLATION'
+              echo "Frozen live-reviewed SHA: $PR818_FROZEN_LIVE_SHA"
+              echo "Frozen integrated baseline: $PR818_FROZEN_MAIN_BASELINE"
+              printf '%s\n' "$pr_drift"
+              echo 'Use a separate governed live-flow recertification for intentional production changes.'
+              exit 1
+            fi
+          fi
+          echo 'PR818_FROZEN_LIVE_FLOW_PRESERVED'
