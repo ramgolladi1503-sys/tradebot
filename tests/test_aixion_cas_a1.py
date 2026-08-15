@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import json
 
 import pytest
@@ -40,8 +41,8 @@ def _contract():
 
 
 def _dt(hour: int, minute: int, second: int = 0):
-    # 2026-08-18 IST converted to UTC.
-    return datetime(2026, 8, 18, hour - 5, minute - 30, second, tzinfo=timezone.utc)
+    local = datetime(2026, 8, 18, hour, minute, second, tzinfo=ZoneInfo("Asia/Kolkata"))
+    return local.astimezone(timezone.utc)
 
 
 def _observation(*, end_price: float = 100.01):
