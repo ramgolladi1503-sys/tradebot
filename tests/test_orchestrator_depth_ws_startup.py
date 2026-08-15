@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -102,11 +102,19 @@ def _patch_start_depth_ws_dependencies(monkeypatch, *, runtime_snapshot: dict):
     monkeypatch.setattr(ws, "build_depth_subscription_tokens", lambda symbols: ([101], [{"symbol": "NIFTY", "count": 1}]))
     monkeypatch.setattr(runtime_store, "read_latest_runtime_snapshot", lambda: runtime_snapshot)
     root = Path(os.environ["DATA_ROOT"]) / "logs"
-    make_valid_canonical_feed_pair(
-        root,
-        feed_ok=bool(runtime_snapshot.get("ws_connected", False)),
-        runtime_updates=runtime_snapshot,
-    )
+
+    # Canonical provenance stamping owns produced_at and intentionally ignores
+    # caller-supplied authority fields.  Freeze only the factory's stamp clock
+    # so the stale-snapshot test creates a genuinely stale but valid canonical
+    # artifact, then restore real time before startup computes its age.
+    stamp_epoch = float(runtime_snapshot.get("produced_at", time.time()))
+    with patch("core.feed.artifact_provenance.time.time", return_value=stamp_epoch):
+        make_valid_canonical_feed_pair(
+            root,
+            feed_ok=bool(runtime_snapshot.get("ws_connected", False)),
+            runtime_updates=runtime_snapshot,
+        )
+
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
     monkeypatch.setattr(cfg, "SYMBOLS", ["NIFTY"], raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_STARTUP_SNAPSHOT_MAX_AGE_SEC", 30.0, raising=False)
