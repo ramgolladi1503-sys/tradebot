@@ -86,10 +86,9 @@ jobs:
         run: pytest -q -o addopts='' tests/test_review_queue_live_entry.py tests/fixtures/canonical_feed_factory.py
       - name: Assert test-only diff
         run: |
-          # Git LFS checkout leaves this tracked parquet smudged/non-pointer on
-          # hosted runners. Restore it before evaluating the repair diff; never
-          # stage or commit it as part of this task.
-          git restore --source=HEAD -- runtime/strategy_validation/resolved_option_ticks_20260702.parquet || true
+          # Hosted checkout smudges this malformed-LFS tracked file. Restore the
+          # exact committed blob bytes without invoking the LFS checkout filter.
+          git show HEAD:runtime/strategy_validation/resolved_option_ticks_20260702.parquet > runtime/strategy_validation/resolved_option_ticks_20260702.parquet
           git diff --name-only
           python - <<'PY'
           import subprocess
