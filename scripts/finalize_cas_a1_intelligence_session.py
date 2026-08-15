@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 import argparse
 import json
 import sys
@@ -12,15 +12,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from aixion_trade_intelligence.cas_a1 import (
+    CasA1EvidenceError,
     CasA1Observation,
     ConstituentMark,
-    append_events,
     build_cas_a1_events,
     cumulative_summary,
     evaluate_cas_a1,
     write_prospective_result,
 )
-from aixion_trade_intelligence.storage import atomic_write_json
+from aixion_trade_intelligence.contracts import CanonicalEvent, canonical_json
+from aixion_trade_intelligence.publisher import FilePublisher
+from aixion_trade_intelligence.storage import atomic_write_json, load_events
 
 
 def _dt(value: Any, field: str) -> datetime:
@@ -71,6 +73,37 @@ def _load_observation(path: Path) -> tuple[CasA1Observation, dict[str, Any]]:
         source_event_ids=tuple(raw.get("source_event_ids") or ()),
     )
     return observation, contract
+
+
+def _semantic_event(event: CanonicalEvent) -> str:
+    payload = event.to_dict()
+    # parse/persist times are local processing metadata and may legitimately differ on an identical rerun.
+    payload["parse_time"] = None
+    payload["persist_time"] = None
+    return canonical_json(payload)
+
+
+def _append_events_idempotent(events_path: Path, events: Sequence[CanonicalEvent]) -> int:
+    existing_by_id: dict[str, CanonicalEvent] = {}
+    if events_path.exists():
+        for event in load_events(events_path):
+            prior = existing_by_id.get(event.event_id)
+            if prior is not None and _semantic_event(prior) != _semantic_event(event):
+                raise CasA1EvidenceError(f"existing canonical event ID already conflicts: {event.event_id}")
+            existing_by_id[event.event_id] = event
+
+    publisher = FilePublisher(events_path, fsync=True)
+    appended = 0
+    for event in events:
+        prior = existing_by_id.get(event.event_id)
+        if prior is not None:
+            if _semantic_event(prior) != _semantic_event(event):
+                raise CasA1EvidenceError(f"immutable canonical event conflict: {event.event_id}")
+            continue
+        publisher.publish(event)
+        existing_by_id[event.event_id] = event
+        appended += 1
+    return appended
 
 
 def _markdown(result: dict[str, Any], cumulative: dict[str, Any]) -> str:
@@ -151,7 +184,7 @@ def main() -> int:
 
     args.output_root.mkdir(parents=True, exist_ok=True)
     result_path = write_prospective_result(result=result, output_dir=args.output_root / "sessions")
-    append_events(args.events, events)
+    appended = _append_events_idempotent(args.events, events)
 
     cumulative = cumulative_summary(args.output_root / "sessions")
     atomic_write_json(args.output_root / "cumulative_summary.json", cumulative)
@@ -168,7 +201,8 @@ def main() -> int:
         "result_path": str(result_path),
         "report_path": str(report_path),
         "cumulative_path": str(args.output_root / "cumulative_summary.json"),
-        "canonical_events_appended": len(events),
+        "canonical_events_total": len(events),
+        "canonical_events_appended": appended,
         "broker_write_authority": False,
         "order_authority": False,
         "paper_authorized": False,
