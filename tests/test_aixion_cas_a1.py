@@ -125,6 +125,16 @@ def test_final_cas_cannot_be_available_before_1528_ist():
         evaluate_cas_a1(observation, _contract())
 
 
+def test_target_1529_cannot_precede_final_cas_prediction_availability():
+    observation = replace(
+        _observation(),
+        final_cas_available_time=_dt(15, 29, 10),
+        future_1529_available_time=_dt(15, 29, 5),
+    )
+    with pytest.raises(CasA1EvidenceError, match="TARGET_START_PRECEDES_PREDICTION"):
+        evaluate_cas_a1(observation, _contract())
+
+
 def test_target_1539_must_be_causally_available_at_or_after_1539():
     observation = replace(_observation(), future_1539_available_time=_dt(15, 38, 59))
     with pytest.raises(CasA1EvidenceError, match="FUTURE_1539_AVAILABLE_TOO_EARLY"):
