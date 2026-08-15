@@ -100,10 +100,6 @@ def _patch_start_depth_ws_dependencies(monkeypatch, *, runtime_snapshot: dict):
     monkeypatch.setattr(orchestrator_mod.kite_client, "kite", _KiteOk("api_key_1234"), raising=False)
     monkeypatch.setattr(auth_health, "get_kite_auth_health", lambda force=True: {"ok": True, "user_id": "ABCD1234"})
     monkeypatch.setattr(ws, "build_depth_subscription_tokens", lambda symbols: ([101], [{"symbol": "NIFTY", "count": 1}]))
-    # Keep the legacy runtime-store boundary available for the startup method,
-    # but seed the authoritative currentness source as a production-shaped
-    # canonical truth/runtime pair.  The startup validator must decide from
-    # canonical feed authority, not from an ad-hoc dict alone.
     monkeypatch.setattr(runtime_store, "read_latest_runtime_snapshot", lambda: runtime_snapshot)
     root = Path(os.environ["DATA_ROOT"]) / "logs"
     make_valid_canonical_feed_pair(
@@ -120,6 +116,7 @@ def _patch_start_depth_ws_dependencies(monkeypatch, *, runtime_snapshot: dict):
 def test_start_depth_ws_raises_on_fresh_failed_runtime_snapshot(monkeypatch):
     runtime_snapshot = {
         "ts_epoch": time.time(),
+        "produced_at": time.time(),
         "runtime_state": "SUBSCRIBE_FAILED",
         "source": "start_depth_ws:subscribe_failed",
         "last_error": "no_instrument_tokens",
@@ -136,8 +133,10 @@ def test_start_depth_ws_raises_on_fresh_failed_runtime_snapshot(monkeypatch):
 
 
 def test_start_depth_ws_ignores_stale_failed_runtime_snapshot(monkeypatch):
+    stale_epoch = time.time() - 120.0
     runtime_snapshot = {
-        "ts_epoch": time.time() - 120.0,
+        "ts_epoch": stale_epoch,
+        "produced_at": stale_epoch,
         "runtime_state": "SUBSCRIBE_FAILED",
         "source": "start_depth_ws:subscribe_failed",
         "last_error": "stale_failure",
