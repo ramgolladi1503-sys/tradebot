@@ -43,13 +43,14 @@ surprise < 0 -> DOWN
 surprise == 0 -> NO_PREDICTION
 ```
 
-No refit, threshold search, dead-band, or feature substitution is permitted under `CAS_A1_FROZEN_PROSPECTIVE_V1`.
+No refit, threshold search, dead-band, feature substitution, tick-to-minute inference, forward fill, instrument substitution, or timestamp shifting is permitted under `CAS_A1_FROZEN_PROSPECTIVE_V1`.
 
 ## Evidence architecture
 
 ```text
-already-persisted market evidence
-  -> validated post-close CAS observation JSON
+governed completed-minute / post-close evidence
+  -> scripts/build_cas_a1_postclose_observation.py
+  -> exact source-parity observation JSON
   -> scripts/finalize_cas_a1_intelligence_session.py
   -> CAS_A1_EXPECTATION_FROZEN
   -> CAS_FINAL_PRICE_OBSERVED
@@ -62,74 +63,78 @@ already-persisted market evidence
   -> cumulative prospective summary
 ```
 
-The script deliberately consumes an already-validated post-close observation JSON. It does not start a feed, open a WebSocket, fetch broker metadata, or create market data.
+The source adapter does not infer minute closes from arbitrary ticks. Every frozen constituent must supply an explicit completed 15:10 bar and completed 15:14 bar. NIFTY must supply an explicit completed 15:14 bar. The final CAS price and 15:29/15:39 futures marks must be explicit point evidence with preserved causal availability timestamps.
 
-A separate read-only adapter may later build the observation JSON from the governed session evidence. That adapter must preserve source timestamps, exact instrument identity, session identity, and missingness.
+The adapter fails closed on missing bars, incomplete bars, duplicate/ambiguous bars, mixed providers, cross-session timestamps, non-positive/non-finite prices, or missing required point marks.
 
-## Required input JSON
+## Source-bundle contract
 
-The JSON must contain:
+The source bundle contains:
 
 - `session_id`
 - `session_date`
 - `index_instrument`
 - `futures_instrument`
-- exactly 49 frozen `constituent_marks`
-- each constituent's causal `price_1510` and `price_1514`
-- `nifty_1514`
-- causal availability timestamp for the 15:14 NIFTY mark
-- final CAS index and its causal availability timestamp
-- futures 15:29 mark and causal availability timestamp
-- futures 15:39 mark and causal availability timestamp
-- source provider
 - exact frozen `analytics_contract.cas_a1`
+- `completed_minute_bars`
+- `point_marks`
 
-Missing values are not converted to zero.
-
-## Frozen analytics-contract example
+Each completed-minute bar requires:
 
 ```json
 {
-  "analytics_contract": {
-    "cas_a1": {
-      "enabled": true,
-      "spec_version": "CAS_A1_FROZEN_PROSPECTIVE_V1",
-      "expectation_intercept": 15.5350561749,
-      "expectation_slope": 2.9081599522,
-      "constituent_window_start": "15:10:00",
-      "constituent_window_end": "15:14:59",
-      "index_reference_time": "15:14:00",
-      "cas_finalization_not_before": "15:28:00",
-      "target_start": "15:29:00",
-      "target_end": "15:39:00",
-      "prediction_rule": "SIGN_OF_REALIZED_SURPRISE",
-      "refit_authorized": false,
-      "threshold_search_authorized": false,
-      "frozen_constituents": ["<49 exact instrument keys>"]
-    }
-  }
+  "instrument_key": "<exact instrument key>",
+  "minute": "15:10",
+  "close": 123.45,
+  "available_time": "<causal timestamp>",
+  "source_event_id": "<immutable evidence id>",
+  "source_provider": "<single governed provider>",
+  "bar_complete": true
 }
 ```
 
-The optional `spec_sha256`, when supplied, must match the implementation's frozen spec hash.
+Point marks use labels `FINAL_CAS`, `15:29`, and `15:39` for the exact index/futures instruments.
 
-## Post-close execution
+Missing values are never converted to zero.
 
-Recommended operator time is after all 15:39 futures evidence has been durably persisted, for example approximately 15:50 IST.
+## Build the exact post-close observation
 
 ```bash
 cd /Users/madhuram/tradebot
 source .venv-cas-fetch/bin/activate
 
+PYTHONPATH=. python scripts/build_cas_a1_postclose_observation.py \
+  --bundle .runtime/aixion_trade_intelligence/cas_a1/source_bundles/YYYY-MM-DD.json \
+  --output .runtime/aixion_trade_intelligence/cas_a1/inbox/YYYY-MM-DD.json
+```
+
+A successful adapter run proves only that the supplied evidence satisfies the frozen source-parity contract. It does not prove the upstream producer actually observed a live market session; source provenance must remain independently governed.
+
+## Finalize the session
+
+Run after all 15:39 futures evidence has been durably persisted, normally around 15:50 IST.
+
+```bash
 PYTHONPATH=. python scripts/finalize_cas_a1_intelligence_session.py \
   --input .runtime/aixion_trade_intelligence/cas_a1/inbox/YYYY-MM-DD.json \
   --events .runtime/aixion_trade_intelligence/YYYY-MM-DD/events.jsonl \
   --output-root .runtime/aixion_trade_intelligence/cas_a1/prospective
 ```
 
+Or use the daily wrapper, which performs both stages:
+
+```bash
+TRADEBOT_ROOT=/Users/madhuram/tradebot \
+CAS_A1_PYTHON=/Users/madhuram/tradebot/.venv-cas-fetch/bin/python \
+./scripts/run_cas_a1_postclose_daily.sh
+```
+
+If the source bundle is absent or empty, the wrapper returns `NO_VALID_SESSION_INPUT` and does not score the hypothesis. This is the required exchange-holiday/failed-capture behavior.
+
 ## Outputs
 
 ```text
+.runtime/aixion_trade_intelligence/cas_a1/inbox/YYYY-MM-DD.json
 .runtime/aixion_trade_intelligence/cas_a1/prospective/
   sessions/YYYY-MM-DD_CAS_A1_FROZEN_PROSPECTIVE_V1.json
   YYYY-MM-DD_CAS_A1_REPORT.md
@@ -158,11 +163,9 @@ Never pool development and prospective counts.
 
 ## Scheduling boundary
 
-A macOS `launchd` timer may invoke this script around 15:50 IST on weekdays only after the input observation JSON has been generated by a separately governed read-only evidence adapter.
+The intended machine-local timer is 15:50 IST on weekdays. The repository contains the deterministic daily runner, but it does not install or enable a `launchd` job because machine-specific paths, environment, and credentials remain operator-controlled.
 
-This PR does not install or enable machine-specific scheduling automatically.
-
-Exchange holiday / absent-session behavior must fail closed as `NO_VALID_SESSION_INPUT`; it must not be recorded as a wrong hypothesis prediction.
+The scheduler must invoke only the post-close wrapper. It must never start trading, modify/cancel/place orders, or change execution authority.
 
 ## Claim boundary
 
