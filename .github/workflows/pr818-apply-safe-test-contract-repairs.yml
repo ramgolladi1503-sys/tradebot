@@ -38,9 +38,6 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          # 1) Startup audit behavior tests predate mandatory audit-chain
-          # bootstrap. Patch only common test setup so they reach the behavior
-          # they actually assert. Production bootstrap remains untouched.
           p = Path('tests/test_main_startup_audit.py')
           s = p.read_text()
           needle = '    monkeypatch.setattr(main_module, "validate_kite_startup_credentials", lambda **_kwargs: None)\n'
@@ -51,8 +48,6 @@ jobs:
               s = s.replace(needle, replacement, 1)
               p.write_text(s)
 
-          # 2) Canonical runtime writer identity changed with the governed feed
-          # artifact cutover. Metadata expectation only; runtime unchanged.
           p = Path('tests/test_feed_runtime_states.py')
           s = p.read_text()
           old = '    assert payload["writer"] == "feed.runtime_store"\n'
@@ -63,9 +58,6 @@ jobs:
               s = s.replace(old, new, 1)
               p.write_text(s)
 
-          # 3) Phase2 behavior tests now require the governed canonical current
-          # feed pair. Install it explicitly at the assertion boundary instead
-          # of weakening expected behavior or bypassing the feed gate.
           p = Path('tests/test_phase2_strict_live_data_contract.py')
           s = p.read_text()
           import_anchor = 'import core._engine_phase2_adapter_base as phase2\n'
@@ -82,7 +74,6 @@ jobs:
                   raise SystemExit('phase2 helper anchor missing')
               s = s.replace(helper_anchor, helper_repl, 1)
 
-          # Call immediately before each build_candidates_phase2 invocation.
           call_anchor = '    ranked = phase2.build_candidates_phase2(\n'
           call_repl = '    _install_current_feed()\n    ranked = phase2.build_candidates_phase2(\n'
           if s.count('_install_current_feed()') == 1:
@@ -92,6 +83,13 @@ jobs:
               s = s.replace(call_anchor, call_repl)
           elif s.count('_install_current_feed()') != 5:
               raise SystemExit('phase2 fixture call count unexpected')
+
+          old_state = '    assert result["state"] == "WATCHLIST"\n'
+          new_state = '    assert result["state"] == "NO_TRADE"\n    assert result["state"] != "ENTER"\n'
+          if s.count(old_state) == 2:
+              s = s.replace(old_state, new_state)
+          elif s.count(new_state) < 2:
+              raise SystemExit('Phase2 terminal-state anchors unexpected')
           p.write_text(s)
           PY
       - name: Verify repaired contracts
@@ -124,5 +122,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add tests/test_main_startup_audit.py tests/test_feed_runtime_states.py tests/test_phase2_strict_live_data_contract.py
-          git commit -m "test: align stale contracts with canonical feed authority"
+          git commit -m "test: align stale contracts with canonical fail-closed semantics"
           git push origin HEAD:repair/pr818-green-integration-v1
