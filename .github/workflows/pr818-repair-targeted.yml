@@ -11,7 +11,7 @@ permissions:
 jobs:
   targeted:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       PYTHONPATH: .
       DATA_ROOT: ${{ github.workspace }}/.runtime
@@ -27,38 +27,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install 'pandas<3.0'
-      - name: Diagnostic canonical fixture migration
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('tests/conftest.py')
-          s = p.read_text()
-          old = '''    import json
-    from core.feed.artifact_provenance import stamp_feed_runtime_provenance
-    from core.feed.artifact_loader import FEED_RUNTIME_CANONICAL_WRITER, FEED_RUNTIME_SCHEMA_VERSION
-    from core.runtime_truth_integrity import truth_hash_from_mapping
-    feed_path = runtime_root / "logs" / "feed_runtime_latest.json"
-    feed_path.parent.mkdir(parents=True, exist_ok=True)
-    feed_payload = stamp_feed_runtime_provenance(
-        {
-            "feed_ok": True,
-            "writer": FEED_RUNTIME_CANONICAL_WRITER,
-            "schema_version": FEED_RUNTIME_SCHEMA_VERSION,
-        }
-    )
-    feed_payload["snapshot_hash"] = truth_hash_from_mapping(feed_payload)
-    feed_path.write_text(json.dumps(feed_payload), encoding="utf-8")
-'''
-          new = '''    from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair
-    make_valid_canonical_feed_pair(runtime_root / "logs", feed_ok=True)
-'''
-          if old not in s:
-              raise SystemExit('expected legacy canonical fixture block not found')
-          p.write_text(s.replace(old, new))
-          PY
-      - name: Run known failing modules
+      - name: Run known failing modules with canonical baseline plugin
         run: >-
-          pytest -q -o addopts=''
+          pytest -q -o addopts='' -p tests.pr818_diag_plugin
           tests/strategy_truth/test_legacy_quarantine.py
           tests/test_blocker_lifecycle.py
           tests/test_feed_runtime_states.py
