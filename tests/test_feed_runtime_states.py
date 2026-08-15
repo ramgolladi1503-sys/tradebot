@@ -121,7 +121,7 @@ def test_runtime_store_derives_explicit_feed_ok_for_legacy_payload(monkeypatch, 
     assert payload["feed_ok"] is True
     assert payload["run_id"]
     assert payload["boot_epoch"]
-    assert payload["writer"] == "feed.runtime_store"
+    assert payload["writer"] == "feed_runtime.canonical"
     assert payload["schema_version"] == 1
 
 

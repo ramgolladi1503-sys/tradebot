@@ -47,6 +47,7 @@ def _patch_common_startup(monkeypatch):
     monkeypatch.setattr(main_module, "ensure_trade_log_exists", lambda: None)
     monkeypatch.setattr(main_module, "auto_clear_risk_halt_if_safe", lambda: {"cleared": False, "reason_code": "HALT_NOT_ACTIVE"})
     monkeypatch.setattr(main_module, "validate_kite_startup_credentials", lambda **_kwargs: None)
+    monkeypatch.setattr(main_module, "_initialize_audit_chain", lambda **_kwargs: {"ok": True, "status": "OK", "path": "unit-test"})
 
 
 def test_runtime_mode_alignment_guard_blocks_mismatch(monkeypatch):
