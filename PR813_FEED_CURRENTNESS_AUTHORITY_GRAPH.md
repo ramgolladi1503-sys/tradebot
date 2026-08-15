@@ -45,4 +45,3 @@ runtime health / readiness / orchestrator / Phase 2 / freshness / supervisor
 ```
 
 Diagnostic and evidence readers may retain raw access only when their output cannot alter feed health, readiness, candidate flow, or decisions.
-
