@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 import time
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
 from config import config as cfg
+from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair
 
 
 def test_start_depth_ws_or_raise_fail_closed(monkeypatch):
@@ -97,7 +100,17 @@ def _patch_start_depth_ws_dependencies(monkeypatch, *, runtime_snapshot: dict):
     monkeypatch.setattr(orchestrator_mod.kite_client, "kite", _KiteOk("api_key_1234"), raising=False)
     monkeypatch.setattr(auth_health, "get_kite_auth_health", lambda force=True: {"ok": True, "user_id": "ABCD1234"})
     monkeypatch.setattr(ws, "build_depth_subscription_tokens", lambda symbols: ([101], [{"symbol": "NIFTY", "count": 1}]))
+    # Keep the legacy runtime-store boundary available for the startup method,
+    # but seed the authoritative currentness source as a production-shaped
+    # canonical truth/runtime pair.  The startup validator must decide from
+    # canonical feed authority, not from an ad-hoc dict alone.
     monkeypatch.setattr(runtime_store, "read_latest_runtime_snapshot", lambda: runtime_snapshot)
+    root = Path(os.environ["DATA_ROOT"]) / "logs"
+    make_valid_canonical_feed_pair(
+        root,
+        feed_ok=bool(runtime_snapshot.get("ws_connected", False)),
+        runtime_updates=runtime_snapshot,
+    )
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
     monkeypatch.setattr(cfg, "SYMBOLS", ["NIFTY"], raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_STARTUP_SNAPSHOT_MAX_AGE_SEC", 30.0, raising=False)
