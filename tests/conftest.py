@@ -219,25 +219,7 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
     # clean test worker state without changing production lifecycle semantics.
     with contextlib.suppress(Exception):
         import core.tick_store as tick_store
-        with tick_store._WRITE_QUEUE_LOCK:
-            tick_store._WRITE_QUEUE.clear()
-        tick_store._FLUSH_THREAD_STOP.clear()
-        tick_store._FLUSH_THREAD = None
-        tick_store._FLUSH_THREAD_IDENT = None
-        tick_store._FLUSH_THREAD_NAME = None
-        tick_store._FLUSH_THREAD_JOIN_COMPLETED = False
-        tick_store._FLUSH_THREAD_TERMINATED = False
-        tick_store._ACCEPTING_WRITES = True
-        tick_store._SHUTDOWN_STARTED_MONOTONIC_NS = None
-        tick_store._SHUTDOWN_FINISHED_MONOTONIC_NS = None
-        tick_store._SHUTDOWN_STATE = None
-        tick_store._SHUTDOWN_RESULT = None
-        tick_store._INITIAL_SHUTDOWN_RESULT = None
-        tick_store._CLEANUP_SHUTDOWN_RESULT = None
-        tick_store._INIT_DONE = False
-        tick_store._INIT_DB_PATH = None
-        tick_store._LAST_TICK_EPOCH = None
-        tick_store._LAST_TICK_BY_TOKEN.clear()
+        tick_store.reset_runtime_state_for_tests()
 
     # Trade-builder behavior tests exercise candidate semantics, not broker
     # authentication. Give only those test modules inert credentials so auth
