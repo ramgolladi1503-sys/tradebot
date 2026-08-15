@@ -1,3 +1,4 @@
+import threading
 import time
 
 import pytest
@@ -43,23 +44,28 @@ def test_get_last_tick_get_ltp_and_age_for_fresh_tick(monkeypatch, tmp_path):
 
 def test_async_insert_does_not_flush_sqlite_on_callback_thread(monkeypatch, tmp_path):
     _setup_isolated_tick_store(monkeypatch, tmp_path)
-    called = []
+    callback_thread_ident = threading.get_ident()
+    callback_flushes_before_shutdown = []
     original_flush_pending_ticks = tick_store._flush_pending_ticks
+    shutdown_started = False
 
     def _record_flush(*args, **kwargs):
-        called.append((args, kwargs))
+        if not shutdown_started and threading.get_ident() == callback_thread_ident:
+            callback_flushes_before_shutdown.append((args, kwargs))
         return original_flush_pending_ticks(*args, **kwargs)
 
     with monkeypatch.context() as scoped:
         scoped.setattr(tick_store, "_flush_pending_ticks", _record_flush)
         assert tick_store.insert_tick(time.time(), 123456, 101.25, 10, 5) is True
-        # Join the worker while the contract-preserving probe is still installed.
-        # This prevents a background worker from outliving the monkeypatch scope.
+        # The safety contract is specifically that callback/direct insertion does
+        # not synchronously flush SQLite. Governed shutdown is allowed to perform
+        # its own final drain on the caller thread, so exclude that phase from the
+        # callback-thread assertion while keeping the probe installed until the
+        # worker is joined.
+        shutdown_started = True
         tick_store.shutdown_persistence_worker(deadline_seconds=1.0)
-    # The async worker may drain immediately. What this safety contract forbids
-    # is a callback/direct flush; any observed flush must therefore be explicitly
-    # worker-owned rather than requiring a timing-dependent empty call list.
-    assert all(kwargs.get("worker_owned") is True for _args, kwargs in called)
+
+    assert callback_flushes_before_shutdown == []
 
 
 def test_get_last_tick_db_fallback_when_memory_missing(monkeypatch, tmp_path):
