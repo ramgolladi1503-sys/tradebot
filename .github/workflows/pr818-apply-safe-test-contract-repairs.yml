@@ -84,25 +84,27 @@ jobs:
           PY
       - name: Verify review-queue family
         run: pytest -q -o addopts='' tests/test_review_queue_live_entry.py tests/fixtures/canonical_feed_factory.py
-      - name: Assert test-only diff
+      - name: Stage and verify exact test-only commit surface
         run: |
-          # Hosted checkout smudges this malformed-LFS tracked file. Restore the
-          # exact committed blob bytes without invoking the LFS checkout filter.
-          git show HEAD:runtime/strategy_validation/resolved_option_ticks_20260702.parquet > runtime/strategy_validation/resolved_option_ticks_20260702.parquet
-          git diff --name-only
+          # The repository currently contains one malformed-LFS tracked parquet
+          # that checkout reports dirty. It is deliberately never staged here.
+          # Prove the exact commit surface from the index, not from unrelated
+          # checkout smudge state.
+          git add tests/fixtures/canonical_feed_factory.py tests/test_review_queue_live_entry.py
+          git diff --cached --name-only
           python - <<'PY'
           import subprocess
-          changed = set(subprocess.check_output(['git','diff','--name-only'], text=True).splitlines())
+          staged = set(subprocess.check_output(['git','diff','--cached','--name-only'], text=True).splitlines())
           allowed = {'tests/fixtures/canonical_feed_factory.py','tests/test_review_queue_live_entry.py'}
-          unexpected = changed - allowed
+          unexpected = staged - allowed
           if unexpected:
-              raise SystemExit(f'unexpected changed files: {sorted(unexpected)}')
+              raise SystemExit(f'unexpected staged files: {sorted(unexpected)}')
+          if not staged:
+              raise SystemExit('expected canonical fixture repairs were not staged')
           PY
       - name: Commit verified repairs
         run: |
-          if git diff --quiet; then exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/fixtures/canonical_feed_factory.py tests/test_review_queue_live_entry.py
           git commit -m "test: use canonical feed authority in review-queue fixtures"
           git push origin HEAD:repair/pr818-green-integration-v1
