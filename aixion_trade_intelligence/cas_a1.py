@@ -226,6 +226,8 @@ def _validate_observation(observation: CasA1Observation, contract: Mapping[str, 
         blockers.append("FUTURE_1529_AVAILABLE_TOO_EARLY")
     if _ist_clock(observation.future_1539_available_time) < (15, 39, 0):
         blockers.append("FUTURE_1539_AVAILABLE_TOO_EARLY")
+    if observation.future_1529_available_time < observation.final_cas_available_time:
+        blockers.append("TARGET_START_PRECEDES_PREDICTION")
     if observation.future_1539_available_time < observation.future_1529_available_time:
         blockers.append("NON_MONOTONIC_FUTURES_TIMESTAMPS")
 
