@@ -20,7 +20,7 @@ def orchestrator():
     orch.risk_state = MagicMock()
     orch.execution_engine = MagicMock()
     orch._build_trade_ticket = MagicMock()
-    
+
     # Mock heavy operations
     orch._update_decision_breakers = MagicMock()
     orch._update_pilot_unlock_clean_cycles = MagicMock()
@@ -31,6 +31,7 @@ def orchestrator():
     orch._apply_cycle_indicator_readiness_truth = MagicMock()
     orch._pilot_exec_degradation = MagicMock()
     return orch
+
 
 @patch("core.tick_store.get_last_tick")
 @patch("core.market_data.get_token_for_symbol")
@@ -62,15 +63,15 @@ def test_jit_quote_revalidation_blocks_stale_quote(
     mock_get_token,
     mock_get_last_tick,
     orchestrator,
-    monkeypatch
+    monkeypatch,
 ):
-    """Test Case 1: Quote is older than 2.5s at execution time, should be blocked."""
+    """A stale final quote is vetoed by the JIT quote guard."""
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "LIVE_PILOT_MODE", False, raising=False)
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
     monkeypatch.setattr(cfg, "EXEC_SLIPPAGE_BUDGET_ENABLE", False, raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_OPTIMIZER_ENABLE", False, raising=False)
-    
+
     trade = Trade(
         trade_id="test_stale_quote",
         symbol="NIFTY",
@@ -89,33 +90,32 @@ def test_jit_quote_revalidation_blocks_stale_quote(
         capital_at_risk=1000.0,
         expected_slippage=1.0,
         confidence=0.9,
-        strategy="TEST"
+        strategy="TEST",
     )
     object.__setattr__(trade, "contract_resolved", True)
-    
+
     mock_fetch_live.return_value = [{"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True}]
     mock_read_json.return_value = {"feed_runtime_state": "HEALTHY", "canonical_feed_truth": {"state": "HEALTHY", "reason_code": "OK"}, "feed_ok": True, "feed_fresh": True}
     mock_indicator_report.return_value = {"feed_runtime_state": "HEALTHY", "canonical_feed_truth": {"state": "HEALTHY", "reason_code": "OK"}}
-    
+
     orchestrator._build_cycle_market_data = MagicMock(return_value=[{"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True}])
     orchestrator.trade_builder.evaluate_cycle_candidates = MagicMock(return_value=[trade])
     orchestrator.trade_builder.build_with_trace = MagicMock(return_value=(trade, {}))
     orchestrator.trade_builder._last_ranked_candidates = [trade]
     orchestrator._validate_market_snapshot = MagicMock(return_value=(True, False))
     orchestrator._immutable_cycle_snapshot = MagicMock(return_value={"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True})
-    
+
     mock_gate = MagicMock()
     mock_gate.allowed = True
     mock_gate.blockers = []
     mock_eval_decision.return_value = mock_gate
     mock_is_halted.return_value = False
     mock_slo_status.return_value = {"allowed": True}
-    
     mock_prepare.return_value = (trade, True, [])
 
     orchestrator.strategy_allocator = MagicMock()
     orchestrator.strategy_allocator.should_trade = MagicMock(return_value=True)
-    
+
     alloc_mock = MagicMock()
     alloc_mock.allowed = True
     alloc_mock.max_qty = 1
@@ -123,18 +123,20 @@ def test_jit_quote_revalidation_blocks_stale_quote(
     alloc_mock.report = {}
     orchestrator.portfolio_allocator = MagicMock()
     orchestrator.portfolio_allocator.allocate = MagicMock(return_value=alloc_mock)
-    
+
     orchestrator.risk_engine = MagicMock()
     orchestrator.risk_engine.size_trade = MagicMock(return_value=1)
-    
-    # Tick is 3s old
+
     mock_get_token.return_value = 123
     mock_get_last_tick.return_value = {"ts_epoch": time.time() - 3.0}
-    
-    # Mock loop delay to avoid infinite loops and sleeping
-    with patch("core.orchestrator.time.sleep"), patch("core.orchestrator._pace_loop"), patch("core.orchestrator.write_pipeline_funnel"), patch("core.orchestrator.audit_append"), patch("core.orchestrator.write_candidate_handoff_root_cause_latest"), patch("core.orchestrator.write_live_indicator_readiness_latest"), patch("core.orchestrator.write_notrade_reason_truth_latest"), patch("core.orchestrator.write_ranking_quality_latest"), patch("core.orchestrator.write_live_workload_latest"), patch("core.orchestrator.write_candidate_flow_trace_latest"), patch("core.orchestrator.write_strategy_no_qualified_reasons_latest"), patch("core.orchestrator.write_candidate_lineage_ledger"), patch("core.orchestrator.write_top_opportunities_snapshots"), patch("core.orchestrator.write_runtime_health_snapshot"):
+
+    # This test is about the final executable-quote guard.  Feed lifecycle
+    # fatality is independently covered by feed-state tests; suppress that
+    # unrelated outer-loop short-circuit while retaining the canonical feed
+    # truth gate and all downstream JIT logic.
+    with patch("core.orchestrator.is_fatal_state", return_value=False), patch("core.orchestrator.time.sleep"), patch("core.orchestrator._pace_loop"), patch("core.orchestrator.write_pipeline_funnel"), patch("core.orchestrator.audit_append"), patch("core.orchestrator.write_candidate_handoff_root_cause_latest"), patch("core.orchestrator.write_live_indicator_readiness_latest"), patch("core.orchestrator.write_notrade_reason_truth_latest"), patch("core.orchestrator.write_ranking_quality_latest"), patch("core.orchestrator.write_live_workload_latest"), patch("core.orchestrator.write_candidate_flow_trace_latest"), patch("core.orchestrator.write_strategy_no_qualified_reasons_latest"), patch("core.orchestrator.write_candidate_lineage_ledger"), patch("core.orchestrator.write_top_opportunities_snapshots"), patch("core.orchestrator.write_runtime_health_snapshot"):
         orchestrator._legacy_live_monitoring(run_once=True)
-        
+
     mock_update_exec.assert_any_call(
         "test_stale_quote",
         {
@@ -142,8 +144,9 @@ def test_jit_quote_revalidation_blocks_stale_quote(
             "exec_guard_reason": "stale_final_executable_quote",
             "exec_guard_reason_code": "stale_quote",
             "veto_reasons": ["stale_quote"],
-        }
+        },
     )
+
 
 @patch("core.tick_store.get_last_tick")
 @patch("core.market_data.get_token_for_symbol")
@@ -175,15 +178,15 @@ def test_jit_quote_revalidation_allows_fresh_quote(
     mock_get_token,
     mock_get_last_tick,
     orchestrator,
-    monkeypatch
+    monkeypatch,
 ):
-    """Test Case 2: Quote is fresh (<=2.5s) at execution time, should be allowed."""
+    """A fresh final quote reaches the allowed JIT execution-guard record."""
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "LIVE_PILOT_MODE", False, raising=False)
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
     monkeypatch.setattr(cfg, "EXEC_SLIPPAGE_BUDGET_ENABLE", False, raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_OPTIMIZER_ENABLE", False, raising=False)
-    
+
     trade = Trade(
         trade_id="test_fresh_quote",
         symbol="NIFTY",
@@ -202,33 +205,32 @@ def test_jit_quote_revalidation_allows_fresh_quote(
         capital_at_risk=1000.0,
         expected_slippage=1.0,
         confidence=0.9,
-        strategy="TEST"
+        strategy="TEST",
     )
     object.__setattr__(trade, "contract_resolved", True)
-    
+
     mock_fetch_live.return_value = [{"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True}]
     mock_read_json.return_value = {"feed_runtime_state": "HEALTHY", "canonical_feed_truth": {"state": "HEALTHY", "reason_code": "OK"}, "feed_ok": True, "feed_fresh": True}
     mock_indicator_report.return_value = {"feed_runtime_state": "HEALTHY", "canonical_feed_truth": {"state": "HEALTHY", "reason_code": "OK"}}
-    
+
     orchestrator._build_cycle_market_data = MagicMock(return_value=[{"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True}])
     orchestrator.trade_builder.evaluate_cycle_candidates = MagicMock(return_value=[trade])
     orchestrator.trade_builder.build_with_trace = MagicMock(return_value=(trade, {}))
     orchestrator.trade_builder._last_ranked_candidates = [trade]
     orchestrator._validate_market_snapshot = MagicMock(return_value=(True, False))
     orchestrator._immutable_cycle_snapshot = MagicMock(return_value={"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True})
-    
+
     mock_gate = MagicMock()
     mock_gate.allowed = True
     mock_gate.blockers = []
     mock_eval_decision.return_value = mock_gate
     mock_is_halted.return_value = False
     mock_slo_status.return_value = {"allowed": True}
-
     mock_prepare.return_value = (trade, True, [])
 
     orchestrator.strategy_allocator = MagicMock()
     orchestrator.strategy_allocator.should_trade = MagicMock(return_value=True)
-    
+
     alloc_mock = MagicMock()
     alloc_mock.allowed = True
     alloc_mock.max_qty = 1
@@ -236,18 +238,15 @@ def test_jit_quote_revalidation_allows_fresh_quote(
     alloc_mock.report = {}
     orchestrator.portfolio_allocator = MagicMock()
     orchestrator.portfolio_allocator.allocate = MagicMock(return_value=alloc_mock)
-    
+
     orchestrator.risk_engine = MagicMock()
     orchestrator.risk_engine.size_trade = MagicMock(return_value=1)
-    
-    # Tick is 1s old
+
     mock_get_token.return_value = 123
     mock_get_last_tick.return_value = {"ts_epoch": time.time() - 1.0}
-    
-    with patch("core.orchestrator.time.sleep"), patch("core.orchestrator._pace_loop"), patch("core.orchestrator.write_pipeline_funnel"), patch("core.orchestrator.audit_append"), patch("core.orchestrator.write_candidate_handoff_root_cause_latest"), patch("core.orchestrator.write_live_indicator_readiness_latest"), patch("core.orchestrator.write_notrade_reason_truth_latest"), patch("core.orchestrator.write_ranking_quality_latest"), patch("core.orchestrator.write_live_workload_latest"), patch("core.orchestrator.write_candidate_flow_trace_latest"), patch("core.orchestrator.write_strategy_no_qualified_reasons_latest"), patch("core.orchestrator.write_candidate_lineage_ledger"), patch("core.orchestrator.write_top_opportunities_snapshots"), patch("core.orchestrator.write_runtime_health_snapshot"):
+
+    with patch("core.orchestrator.is_fatal_state", return_value=False), patch("core.orchestrator.time.sleep"), patch("core.orchestrator._pace_loop"), patch("core.orchestrator.write_pipeline_funnel"), patch("core.orchestrator.audit_append"), patch("core.orchestrator.write_candidate_handoff_root_cause_latest"), patch("core.orchestrator.write_live_indicator_readiness_latest"), patch("core.orchestrator.write_notrade_reason_truth_latest"), patch("core.orchestrator.write_ranking_quality_latest"), patch("core.orchestrator.write_live_workload_latest"), patch("core.orchestrator.write_candidate_flow_trace_latest"), patch("core.orchestrator.write_strategy_no_qualified_reasons_latest"), patch("core.orchestrator.write_candidate_lineage_ledger"), patch("core.orchestrator.write_top_opportunities_snapshots"), patch("core.orchestrator.write_runtime_health_snapshot"):
         orchestrator._legacy_live_monitoring(run_once=True)
-        
-    print("CALLS:", mock_update_exec.call_args_list)
 
     from unittest.mock import ANY
     mock_update_exec.assert_any_call(
@@ -259,23 +258,19 @@ def test_jit_quote_revalidation_allows_fresh_quote(
             "planning_only": False,
             "cycle_processing_latency_ms": ANY,
             "final_quote_revalidation_age_ms": ANY,
-        }
+        },
     )
 
+
 def test_observability_ordering_is_at_end():
-    """Test Case 3: Ensure `produce_and_store_runtime_snapshots` is called after decision phases."""
+    """Ensure runtime snapshot generation remains after decision truth logging."""
     with open("core/orchestrator.py", "r") as f:
         content = f.read()
-    
-    # Check that it's moved from around line 4975 to after write_candidate_flow_trace_latest or at least near the end of the loop
-    # We can check that `produce_and_store_runtime_snapshots` is strictly after `write_top_opportunities_snapshots` or `write_candidate_handoff_root_cause_latest`
-    
+
     heavy_io_idx = content.find("produce_and_store_runtime_snapshots(")
     assert heavy_io_idx != -1, "produce_and_store_runtime_snapshots not found!"
-    
+
     top_opps_idx = content.find("write_notrade_reason_truth_latest(")
     assert top_opps_idx != -1, "write_notrade_reason_truth_latest not found!"
-    
-    # Ensure the heavy IO observability call is placed far down in the file
-    assert heavy_io_idx > top_opps_idx, "Observability snapshot generation must be at the end, after trade decisions and truth logging."
 
+    assert heavy_io_idx > top_opps_idx, "Observability snapshot generation must be at the end, after trade decisions and truth logging."
