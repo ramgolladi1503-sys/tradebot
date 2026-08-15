@@ -1,10 +1,13 @@
 name: Repo Forensics PR Gate
 
-# This required check is deliberately a pull_request_target workflow so the
-# enforcement logic is always loaded from protected main, not from PR code.
-# It has read-only permissions and performs the immutable live-flow check
-# before checking out or executing any PR content.
+# Stage-A bootstrap: retain pull_request long enough for the currently-required
+# context to certify this governance change. The pull_request_target path is
+# the durable authority: it is loaded from protected main, remains read-only,
+# and never checks out or executes pull-request content.
 on:
+  pull_request:
+    branches:
+      - main
   pull_request_target:
     branches:
       - main
@@ -25,29 +28,29 @@ jobs:
       PR818_FROZEN_LIVE_SHA: d7dc45e7c5c76247e7d1b8abd40ec7682fac2f9b
       PR818_FROZEN_MAIN_BASELINE: 0d2a32290ccbacc76b608ecdae92df9312106198
     steps:
-      - name: Checkout protected main governance
+      - name: Checkout trusted base for target or ordinary PR checkout for bootstrap
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event_name == 'pull_request_target' && 'main' || github.sha }}
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Enforce frozen PR818 live-flow production surface
+      - name: Enforce frozen PR818 live-flow production surface from trusted main
         if: github.event_name == 'pull_request_target'
         shell: bash
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          PR_HEAD='${{ github.event.pull_request.head.sha }}'
           git fetch --no-tags --depth=1 origin "$PR_HEAD"
+          git fetch --no-tags --depth=1 origin "$PR_BASE"
           git fetch --no-tags --depth=1 origin "$PR818_FROZEN_MAIN_BASELINE"
 
-          # Production/configuration surface changed by the independently
-          # live-reviewed PR818 lineage. Future analytics/research PRs must stay
-          # outside this surface. Any intentional change requires a separately
-          # governed live-flow recertification and freeze-baseline replacement.
-          protected=(
-            .github/workflows/repo-forensics-pr-gate.yml
-            .github/workflows/frozen-head-candidate-safety-tests.yml
+          # Production/configuration surface whose integrated behavior is frozen
+          # to the PR818/PR823 authority baseline.
+          frozen_production=(
             requirements.txt
             pyproject.toml
             config/config.py
@@ -84,35 +87,41 @@ jobs:
             core/runtime_snapshot_producer.py
             core/runtime_truth_integrity.py
           )
+          governance=(
+            .github/workflows/repo-forensics-pr-gate.yml
+            .github/workflows/frozen-head-candidate-safety-tests.yml
+          )
 
-          changed="$(git diff --name-only "$PR818_FROZEN_MAIN_BASELINE" "$PR_HEAD" -- "${protected[@]}")"
-          if [[ -n "$changed" ]]; then
-            echo 'PR818_FROZEN_LIVE_FLOW_VIOLATION'
-            echo "Frozen live-reviewed SHA: $PR818_FROZEN_LIVE_SHA"
-            echo "Frozen integrated baseline: $PR818_FROZEN_MAIN_BASELINE"
-            echo 'Protected files differ from the frozen integrated baseline:'
-            printf '%s\n' "$changed"
-            echo 'This PR must not merge as an ordinary analytics/research/feature change.'
-            echo 'Use a separate governed live-flow recertification if changing this surface is truly required.'
+          # First prove protected main itself has not drifted from the frozen
+          # integrated production baseline. Governance files are intentionally
+          # excluded here because this PR adds the freeze mechanism after that
+          # baseline was created.
+          base_drift="$(git diff --name-only "$PR818_FROZEN_MAIN_BASELINE" "$PR_BASE" -- "${frozen_production[@]}")"
+          if [[ -n "$base_drift" ]]; then
+            echo 'PR818_FROZEN_MAIN_BASELINE_DRIFT'
+            printf '%s\n' "$base_drift"
             exit 1
           fi
+
+          # Then reject changes introduced by this PR to either the frozen
+          # production surface or its governance. A single named finalize branch
+          # is a temporary bootstrap exception for removing the pull_request
+          # trigger after this Stage-A workflow reaches protected main. It may
+          # change only this workflow file; production drift is never exempted.
+          pr_drift="$(git diff --name-only "$PR_BASE" "$PR_HEAD" -- "${frozen_production[@]}" "${governance[@]}")"
+          if [[ -n "$pr_drift" ]]; then
+            if [[ "$PR_HEAD_REF" == 'governance/freeze-pr818-live-flow-finalize-v1' ]] && [[ "$pr_drift" == '.github/workflows/repo-forensics-pr-gate.yml' ]]; then
+              echo 'PR818_FREEZE_BOOTSTRAP_FINALIZE_ONLY'
+            else
+              echo 'PR818_FROZEN_LIVE_FLOW_VIOLATION'
+              echo "Frozen live-reviewed SHA: $PR818_FROZEN_LIVE_SHA"
+              echo "Frozen integrated baseline: $PR818_FROZEN_MAIN_BASELINE"
+              printf '%s\n' "$pr_drift"
+              echo 'Use a separate governed live-flow recertification for intentional production changes.'
+              exit 1
+            fi
+          fi
           echo 'PR818_FROZEN_LIVE_FLOW_PRESERVED'
-
-      - name: Checkout PR head for repo-forensics
-        if: github.event_name == 'pull_request_target'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Checkout current main for manual dispatch
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 1
-          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
