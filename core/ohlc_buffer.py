@@ -37,6 +37,15 @@ class OhlcBuffer:
                 }
 
             if tail_bucket is not None and bucket == tail_bucket:
+                from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+                emit_candle_pipeline_event(
+                    symbol=str(symbol), timeframe="1m", stage="T3_IN_PROGRESS_BAR",
+                    source_event_ts=ts, bucket_start=bucket, bar_ts=bucket,
+                    bar_state="IN_PROGRESS", bar_count=len(bars),
+                    feed_session_id=(provenance or {}).get("live_feed_session_id"),
+                    instrument_token=(provenance or {}).get("instrument_token"),
+                    producer="core.ohlc_buffer.update_tick",
+                )
                 bar = bars[-1]
                 provenance_status = _merge_live_bar_provenance(bar, provenance, ts)
                 if provenance_status.get("accepted") is False:
@@ -54,6 +63,25 @@ class OhlcBuffer:
                     "current_tail_bucket": tail_bucket,
                 }
             else:
+                from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+                emit_candle_pipeline_event(
+                    symbol=str(symbol), timeframe="1m", stage="T2_CANDLE_INPUT",
+                    source_event_ts=ts, bucket_start=bucket, bar_ts=bucket,
+                    bar_state="INPUT", bar_count=len(bars) + 1,
+                    feed_session_id=(provenance or {}).get("live_feed_session_id"),
+                    instrument_token=(provenance or {}).get("instrument_token"),
+                    producer="live_tick_dispatch",
+                )
+                if tail_bucket is not None:
+                    emit_candle_pipeline_event(
+                        symbol=str(symbol), timeframe="1m", stage="T4_BAR_FINALIZED",
+                        source_event_ts=ts, bucket_start=tail_bucket,
+                        bucket_end=bucket, bar_ts=tail_bucket,
+                        bar_state="COMPLETED", bar_count=len(bars),
+                        feed_session_id=(provenance or {}).get("live_feed_session_id"),
+                        instrument_token=(provenance or {}).get("instrument_token"),
+                        producer="core.ohlc_buffer.update_tick",
+                    )
                 row = {
                     "ts": bucket,
                     "open": price,
@@ -115,6 +143,16 @@ class OhlcBuffer:
                     completed_bar = dict(bar)
                     completed_bar["ts"] = ts
                     completed_bars.append(completed_bar)
+                    if len(completed_bars) == 1 or ts == self._bars.get(symbol, [])[-1].get("ts"):
+                        from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+                        emit_candle_pipeline_event(
+                            symbol=str(symbol), timeframe="1m",
+                            stage="T5_BAR_PERSISTED", source_event_ts=as_of,
+                            bar_ts=ts, bar_state="COMPLETED_IN_MEMORY",
+                            bar_count=len(completed_bars),
+                            producer="core.ohlc_buffer.get_completed_bars",
+                            reason="in_memory_buffer_observed;no_external_store",
+                        )
                 last_ts = ts
             return completed_bars
         except Exception:
@@ -144,7 +182,6 @@ class OhlcBuffer:
 
                 bucket = ts.replace(second=0, microsecond=0)
 
-                # validate required OHLC values
                 try:
                     open_val = float(b.get("open"))
                     high_val = float(b.get("high"))
@@ -164,6 +201,7 @@ class OhlcBuffer:
                     "bar_provenance": {
                         "source_type": "historical_seed",
                         "live_feed_session_id": None,
+                        "feed_epoch": None,
                         "first_live_tick_epoch": None,
                         "last_live_tick_epoch": None,
                         "historical_seed": True,
@@ -221,6 +259,7 @@ def _merge_live_bar_provenance(bar, provenance, tick_ts):
         payload = {
             "source_type": "unknown",
             "live_feed_session_id": None,
+            "feed_epoch": None,
             "historical_seed": False,
             "replay_fixture": False,
             "non_live_fallback": False,
@@ -236,6 +275,9 @@ def _merge_live_bar_provenance(bar, provenance, tick_ts):
             return payload_map[key]
         return existing_map.get(key)
 
+    # feed_epoch is canonical currentness identity.  It must survive aggregation
+    # and it must never silently change inside one OHLC bar, just like provider,
+    # session, token domain, symbol, and instrument token.
     immutable_keys = (
         "provider",
         "token_domain",
@@ -243,6 +285,7 @@ def _merge_live_bar_provenance(bar, provenance, tick_ts):
         "symbol",
         "instrument_token",
         "live_feed_session_id",
+        "feed_epoch",
         "reconnect_generation",
     )
     for key in immutable_keys:
@@ -265,6 +308,7 @@ def _merge_live_bar_provenance(bar, provenance, tick_ts):
     bar["bar_provenance"] = {
         "source_type": source_type,
         "live_feed_session_id": _prefer_present(payload, existing, "live_feed_session_id"),
+        "feed_epoch": _prefer_present(payload, existing, "feed_epoch"),
         "reconnect_generation": _prefer_present(payload, existing, "reconnect_generation"),
         "instrument_token": _prefer_present(payload, existing, "instrument_token"),
         "payload_mode": _prefer_present(payload, existing, "payload_mode"),

@@ -1,0 +1,10 @@
+case,result
+pre_repair_cross_session_reuse,reproduced
+pre_repair_empty_log_authorization,reproduced
+valid_fresh_bootstrap,pass
+missing_log,fail_closed
+empty_touched_log,fail_closed
+zero_event_non_bootstrap_log,fail_closed
+wrong_run_id,fail_closed
+tampered_hash,fail_closed
+truncated_chain,fail_closed

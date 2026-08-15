@@ -156,6 +156,30 @@ def test_runtime_latest_payload_shape_supports_derivation_and_stamping_hooks():
     assert payload["last_error"] == "x" * 1000
 
 
+def test_runtime_latest_payload_preserves_explicit_current_proof_fields():
+    payload = build_feed_runtime_latest_payload(
+        _sample_inputs(
+            option_ticks_verified=True,
+            verified_option_symbols=("NIFTY", "BANKNIFTY"),
+            warmup_clean_cycles=3,
+            warmup_required_clean_cycles=3,
+        )
+    )
+
+    assert payload["option_ticks_verified"] is True
+    assert payload["verified_option_symbols"] == ["NIFTY", "BANKNIFTY"]
+    assert payload["warmup_clean_cycles"] == 3
+    assert payload["warmup_required_clean_cycles"] == 3
+
+
+def test_runtime_latest_payload_does_not_invent_missing_proof():
+    payload = build_feed_runtime_latest_payload(_sample_inputs())
+
+    assert "option_ticks_verified" not in payload
+    assert "warmup_clean_cycles" not in payload
+    assert "warmup_required_clean_cycles" not in payload
+
+
 def test_runtime_latest_payload_marks_reconnecting_transport_when_reconnect_is_pending():
     payload = build_feed_runtime_latest_payload(
         _sample_inputs(ws_connected=False, runtime_state="RECOVERING", reconnect_pending=True, reconnect_blocked_reason=None),

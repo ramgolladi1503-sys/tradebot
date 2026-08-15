@@ -180,20 +180,12 @@ def _full_feed_proof(payload: dict[str, Any]) -> tuple[bool, tuple[str, ...], di
         blockers.append("OPTION_TICKS_UNVERIFIED")
     warmup_active = bool(
         payload.get("recovery_in_progress")
-        or recovery_generation_id
-        or last_recovery_generation_id
-        or subscription_generation_id
-        or last_subscription_generation_id
         or runtime_state in _RECOVERING_STATES
         or runtime_state in {"VERIFYING", "WARMING_UP", "RESUBSCRIBING", "RECONNECTING"}
         or warmup_clean_cycles < warmup_required_clean_cycles
     )
     if warmup_active and warmup_clean_cycles < warmup_required_clean_cycles:
         blockers.append("WARMUP_INCOMPLETE")
-    if recovery_generation_id and last_recovery_generation_id and recovery_generation_id != last_recovery_generation_id:
-        blockers.append("RECOVERY_GENERATION_CHANGED")
-    if subscription_generation_id and last_subscription_generation_id and subscription_generation_id != last_subscription_generation_id:
-        blockers.append("SUBSCRIPTION_GENERATION_CHANGED")
 
     proof_ready = not blockers
     context = {

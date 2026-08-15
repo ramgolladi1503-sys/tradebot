@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from config import config as cfg
 import core._engine_phase2_adapter_base as phase2
+from core.paths import logs_dir
+from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair
+
+
+def _install_current_feed():
+    make_valid_canonical_feed_pair(logs_dir(), feed_ok=True)
 
 
 def _base_candidate(**overrides):
@@ -30,6 +36,7 @@ def test_live_missing_spread_and_bbo_is_not_executable(monkeypatch):
     monkeypatch.setattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True, raising=False)
     monkeypatch.setattr(cfg, "PHASE2_PLAYBOOK_SELECTION_ENABLE", False, raising=False)
 
+    _install_current_feed()
     ranked = phase2.build_candidates_phase2(
         [
             _base_candidate(
@@ -62,6 +69,7 @@ def test_live_missing_quote_age_is_not_executable(monkeypatch):
     monkeypatch.setattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True, raising=False)
     monkeypatch.setattr(cfg, "PHASE2_PLAYBOOK_SELECTION_ENABLE", False, raising=False)
 
+    _install_current_feed()
     ranked = phase2.build_candidates_phase2(
         [
             _base_candidate(
@@ -76,7 +84,8 @@ def test_live_missing_quote_age_is_not_executable(monkeypatch):
     assert ranked[0]["execution_quality_reason_code"] == "missing_live_timing_context"
     assert "missing_live_timing_context" in (ranked[0].get("gate_reasons") or [])
     result = phase2.run_engine_phase2(ranked)
-    assert result["state"] == "WATCHLIST"
+    assert result["state"] == "NO_TRADE"
+    assert result["state"] != "ENTER"
 
 
 def test_live_estimated_rr_is_not_executable(monkeypatch):
@@ -89,6 +98,7 @@ def test_live_estimated_rr_is_not_executable(monkeypatch):
     monkeypatch.setattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True, raising=False)
     monkeypatch.setattr(cfg, "PHASE2_PLAYBOOK_SELECTION_ENABLE", False, raising=False)
 
+    _install_current_feed()
     ranked = phase2.build_candidates_phase2(
         [
             _base_candidate(
@@ -104,7 +114,8 @@ def test_live_estimated_rr_is_not_executable(monkeypatch):
     assert ranked[0]["execution_quality_reason_code"] == "rr_estimated_context"
     assert "rr_estimated_context" in (ranked[0].get("gate_reasons") or [])
     result = phase2.run_engine_phase2(ranked)
-    assert result["state"] == "WATCHLIST"
+    assert result["state"] == "NO_TRADE"
+    assert result["state"] != "ENTER"
 
 
 def test_paper_missing_fields_can_still_be_scored_as_before(monkeypatch):
@@ -115,6 +126,7 @@ def test_paper_missing_fields_can_still_be_scored_as_before(monkeypatch):
     monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
     monkeypatch.setattr(cfg, "PHASE2_PLAYBOOK_SELECTION_ENABLE", False, raising=False)
 
+    _install_current_feed()
     ranked = phase2.build_candidates_phase2(
         [
             _base_candidate(

@@ -1,153 +1,109 @@
-import json
-
 import core.orchestrator as orchestrator_module
 from core.orchestrator import Orchestrator
+from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair
 
 
-def test_pilot_feed_ok_uses_runtime_health_when_no_decision_rows(monkeypatch, tmp_path):
+def _configure_market_open(monkeypatch, tmp_path):
     monkeypatch.setattr(orchestrator_module, "is_market_open_ist", lambda now=None: True)
     monkeypatch.setattr(orchestrator_module, "now_utc_epoch", lambda: 1772800000.0)
     monkeypatch.setattr(orchestrator_module, "logs_dir", lambda: tmp_path)
+    monkeypatch.setattr(orchestrator_module.cfg, "RUNTIME_HEALTH_MAX_AGE_SEC", 30.0, raising=False)
+    monkeypatch.setattr(orchestrator_module.cfg, "FEED_RUNTIME_MAX_AGE_SEC", 30.0, raising=False)
 
-    payload = {
-        "ts_epoch": 1772800000.0,
-        "snapshot_ts_epoch": 1772800000.0,
-        "feed": {
-            "ws_connected": True,
-            "ltp_required": False,
-            "ltp_age_sec": 120.0,
-            "ltp_max_age_sec": 900.0,
-            "sla_status": "PLANNING",
-        },
-    }
-    (tmp_path / "runtime_health_latest.json").write_text(json.dumps(payload), encoding="utf-8")
 
+def _orch_without_decisions(monkeypatch):
     orch = Orchestrator.__new__(Orchestrator)
     monkeypatch.setattr(orch, "_latest_decision_rows", lambda max_age_sec=None: {})
+    return orch
 
-    ok, reasons = orch._pilot_feed_ok()
+
+def test_pilot_feed_ok_uses_canonical_runtime_when_no_decision_rows(monkeypatch, tmp_path):
+    _configure_market_open(monkeypatch, tmp_path)
+    make_valid_canonical_feed_pair(
+        tmp_path,
+        feed_ok=True,
+        runtime_updates={
+            "ts_epoch": 1772800000.0,
+            "runtime_state": "RUNNING",
+            "ws_connected": True,
+            "last_tick_age_sec": 0.5,
+            "last_db_tick_age_sec": 0.5,
+        },
+    )
+
+    ok, reasons = _orch_without_decisions(monkeypatch)._pilot_feed_ok()
     assert ok is True
     assert reasons == []
 
 
-def test_pilot_feed_ok_returns_truthful_unknown_when_no_health_sources(monkeypatch, tmp_path):
-    monkeypatch.setattr(orchestrator_module, "is_market_open_ist", lambda now=None: True)
-    monkeypatch.setattr(orchestrator_module, "now_utc_epoch", lambda: 1772800000.0)
-    monkeypatch.setattr(orchestrator_module, "logs_dir", lambda: tmp_path)
+def test_pilot_feed_ok_fails_closed_when_canonical_runtime_missing(monkeypatch, tmp_path):
+    _configure_market_open(monkeypatch, tmp_path)
 
-    orch = Orchestrator.__new__(Orchestrator)
-    monkeypatch.setattr(orch, "_latest_decision_rows", lambda max_age_sec=None: {})
-
-    ok, reasons = orch._pilot_feed_ok()
+    ok, reasons = _orch_without_decisions(monkeypatch)._pilot_feed_ok()
     assert ok is False
-    assert "feed_stale:UNKNOWN" in reasons
+    assert reasons == ["feed_runtime:MISSING_ARTIFACT"]
 
 
-def test_pilot_feed_ok_respects_runtime_health_stale_breaker(monkeypatch, tmp_path):
-    monkeypatch.setattr(orchestrator_module, "is_market_open_ist", lambda now=None: True)
-    monkeypatch.setattr(orchestrator_module, "now_utc_epoch", lambda: 1772800000.0)
-    monkeypatch.setattr(orchestrator_module, "logs_dir", lambda: tmp_path)
-
-    payload = {
-        "ts_epoch": 1772800000.0,
-        "snapshot_ts_epoch": 1772800000.0,
-        "execution": {
-            "decision_breakers": {
-                "blocked": True,
-                "blocked_reasons": ["STALE_FEED"],
-            }
-        },
-        "feed": {
+def test_pilot_feed_ok_respects_canonical_feed_not_ok(monkeypatch, tmp_path):
+    _configure_market_open(monkeypatch, tmp_path)
+    make_valid_canonical_feed_pair(
+        tmp_path,
+        feed_ok=False,
+        runtime_updates={
+            "ts_epoch": 1772800000.0,
+            "runtime_state": "RUNNING",
             "ws_connected": True,
-            "ltp_required": False,
-            "ltp_age_sec": 1.0,
-            "ltp_max_age_sec": 900.0,
-            "sla_status": "OK",
+            "feed_reasons": ["STALE_FEED"],
+            "last_tick_age_sec": 1.0,
         },
-    }
-    (tmp_path / "runtime_health_latest.json").write_text(json.dumps(payload), encoding="utf-8")
+    )
 
-    orch = Orchestrator.__new__(Orchestrator)
-    monkeypatch.setattr(orch, "_latest_decision_rows", lambda max_age_sec=None: {})
-
-    ok, reasons = orch._pilot_feed_ok()
+    ok, reasons = _orch_without_decisions(monkeypatch)._pilot_feed_ok()
     assert ok is False
-    assert "feed_stale:DECISION_BREAKER_STALE_FEED" in reasons
+    assert "feed_stale:FEED_RUNTIME_DEAD" in reasons or "feed_stale:STALE_FEED" in reasons
 
 
-def test_pilot_feed_ok_prefers_fresh_feed_runtime_over_stale_runtime_health(monkeypatch, tmp_path):
-    monkeypatch.setattr(orchestrator_module, "is_market_open_ist", lambda now=None: True)
-    monkeypatch.setattr(orchestrator_module, "now_utc_epoch", lambda: 1772800000.0)
-    monkeypatch.setattr(orchestrator_module, "logs_dir", lambda: tmp_path)
-    monkeypatch.setattr(orchestrator_module.cfg, "RUNTIME_HEALTH_MAX_AGE_SEC", 5.0, raising=False)
-    monkeypatch.setattr(orchestrator_module.cfg, "FEED_RUNTIME_MAX_AGE_SEC", 30.0, raising=False)
-
-    runtime_health_payload = {
-        "ts_epoch": 1772799900.0,
-        "snapshot_ts_epoch": 1772799900.0,
-        "feed": {
+def test_pilot_feed_ok_accepts_fresh_canonical_runtime_without_legacy_health(monkeypatch, tmp_path):
+    _configure_market_open(monkeypatch, tmp_path)
+    make_valid_canonical_feed_pair(
+        tmp_path,
+        feed_ok=True,
+        runtime_updates={
+            "ts_epoch": 1772800000.0,
             "ws_connected": True,
-            "ltp_required": False,
-            "ltp_age_sec": 1.0,
-            "ltp_max_age_sec": 900.0,
-            "sla_status": "OK",
+            "runtime_state": "RUNNING",
+            "feed_truth_state": "LIVE",
+            "feed_truth_reason_code": "OK",
+            "last_tick_age_sec": 0.5,
+            "last_depth_age_sec": 1.0,
+            "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+            "option_active_blockers_by_symbol": {"NIFTY": []},
         },
-    }
-    feed_runtime_payload = {
-        "ts_epoch": 1772800000.0,
-        "ws_connected": True,
-        "runtime_state": "RUNNING",
-        "feed_truth_state": "LIVE",
-        "feed_truth_reason_code": "live",
-        "feed_ok": True,
-        "last_tick_age_sec": 0.5,
-        "last_depth_age_sec": 1.0,
-        "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
-        "option_active_blockers_by_symbol": {"NIFTY": []},
-    }
-    (tmp_path / "runtime_health_latest.json").write_text(json.dumps(runtime_health_payload), encoding="utf-8")
-    (tmp_path / "feed_runtime_latest.json").write_text(json.dumps(feed_runtime_payload), encoding="utf-8")
+    )
 
-    orch = Orchestrator.__new__(Orchestrator)
-    monkeypatch.setattr(orch, "_latest_decision_rows", lambda max_age_sec=None: {})
-
-    ok, reasons = orch._pilot_feed_ok()
+    ok, reasons = _orch_without_decisions(monkeypatch)._pilot_feed_ok()
     assert ok is True
     assert reasons == []
 
 
-def test_pilot_feed_ok_blocks_when_full_feed_proof_reports_stale_required_symbol(monkeypatch, tmp_path):
-    monkeypatch.setattr(orchestrator_module, "is_market_open_ist", lambda now=None: True)
-    monkeypatch.setattr(orchestrator_module, "now_utc_epoch", lambda: 1772800000.0)
-    monkeypatch.setattr(orchestrator_module, "logs_dir", lambda: tmp_path)
+def test_pilot_feed_ok_blocks_stale_canonical_runtime(monkeypatch, tmp_path):
+    _configure_market_open(monkeypatch, tmp_path)
     monkeypatch.setattr(orchestrator_module.cfg, "RUNTIME_HEALTH_MAX_AGE_SEC", 5.0, raising=False)
-    monkeypatch.setattr(orchestrator_module.cfg, "FEED_RUNTIME_MAX_AGE_SEC", 30.0, raising=False)
-
-    runtime_health_payload = {
-        "ts_epoch": 1772800000.0,
-        "snapshot_ts_epoch": 1772800000.0,
-        "feed": {
+    monkeypatch.setattr(orchestrator_module.cfg, "FEED_RUNTIME_MAX_AGE_SEC", 5.0, raising=False)
+    make_valid_canonical_feed_pair(
+        tmp_path,
+        feed_ok=True,
+        runtime_updates={
+            "ts_epoch": 1772799900.0,
             "ws_connected": True,
-            "ltp_required": True,
-            "ltp_age_sec": 4.0,
-            "ltp_max_age_sec": 2.5,
-            "sla_status": "OK",
-            "full_feed_proof_ready": False,
-            "full_feed_proof_blockers": ["UNDERLYING_TICK_STALE"],
-            "underlying_ltp_stale_symbols": ["NIFTY"],
-            "underlying_ltp_age_by_symbol": {"NIFTY": 4.0},
-            "underlying_ltp_proof_state": "STALE",
+            "runtime_state": "RUNNING",
+            "last_tick_age_sec": 1.0,
         },
-    }
-    (tmp_path / "runtime_health_latest.json").write_text(json.dumps(runtime_health_payload), encoding="utf-8")
+    )
 
-    orch = Orchestrator.__new__(Orchestrator)
-    monkeypatch.setattr(orch, "_latest_decision_rows", lambda max_age_sec=None: {})
-
-    ok, reasons = orch._pilot_feed_ok()
+    ok, reasons = _orch_without_decisions(monkeypatch)._pilot_feed_ok()
     assert ok is False
-    assert "feed_stale:UNDERLYING_LTP_STALE" in reasons
-    assert "feed_stale:UNDERLYING_TICK_STALE" in reasons or "feed_stale:UNDERLYING_TICK_STALE" not in reasons
+    assert "feed_stale:RUNTIME_HEALTH_STALE" in reasons
 
 
 def test_update_decision_breakers_skips_stale_feed_on_tiny_option_sample(monkeypatch):

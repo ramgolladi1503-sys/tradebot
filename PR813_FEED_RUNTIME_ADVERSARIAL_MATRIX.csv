@@ -1,0 +1,7 @@
+case,expected_result,evidence
+missing_truth_lineage,rejected,MISSING_REQUIRED_FIELD test
+missing_truth_artifact,rejected,canonical truth bootstrap required before lineage
+stale_truth_session,rejected,truth builder refreshes current identity; loader remains fail-closed
+mutated_lineage,rejected,existing M7 lineage test
+snapshot_hash_mutation,rejected,existing artifact-loader integrity test
+first_startup_runtime,accepted_if_truth_bound,new repair regression test

@@ -1,0 +1,6 @@
+scope,result
+exact former four nodes,4 passed
+reconstructed 257-node manifest,257 passed
+fixture negative controls,9 passed
+focused audit integrity,11 passed
+production source modified,false

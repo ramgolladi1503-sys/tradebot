@@ -27,6 +27,7 @@ from core.auth import validate_kite_startup_credentials
 from core.runtime_safety_boot_guard import enforce_runtime_boot_safety
 from core.runtime_bootstrap import (
     audit_startup_state as _audit_startup_state,
+    initialize_audit_chain as _initialize_audit_chain,
     classify_readiness_abort as _classify_readiness_abort,
     ensure_runtime_dirs as _ensure_runtime_dirs,
     normalize_readiness_blocker as _normalize_readiness_blocker,
@@ -186,6 +187,19 @@ def main():
 
     _ensure_runtime_dirs(repo_root)
     _repair_events_log_if_needed()
+
+    audit_bootstrap = _initialize_audit_chain(
+        run_id=os.getenv("TRADEBOT_RUN_ID"),
+        boot_epoch=time.time(),
+    )
+    if not bool(audit_bootstrap.get("ok")):
+        _audit_startup_state(
+            "STARTUP_AUDIT_CHAIN_FAIL",
+            message=str(audit_bootstrap.get("status") or "audit_chain_invalid"),
+            extra={"stage": "audit_chain_bootstrap", "audit_log": audit_bootstrap.get("path")},
+        )
+        print(f"[AUDIT_BOOTSTRAP_ERROR] {audit_bootstrap.get('status')}")
+        return
 
     try:
         validate_kite_startup_credentials(

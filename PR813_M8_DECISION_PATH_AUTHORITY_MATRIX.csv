@@ -1,0 +1,12 @@
+path,consumer,feed_epoch_used,legacy_generation_read,legacy_generation_affects_decision,result
+artifact acceptance,core/feed/artifact_loader.py,true,false,false,feed_epoch currentness plus integrity and lineage
+feed runtime provenance,core/feed/runtime_provenance.py,true,diagnostic only,false,run_id boot_epoch feed_epoch validation
+feed recovery health,core/feed_recovery_runtime.py,upstream canonical truth,yes,false,legacy mismatch cannot create blocker
+feed supervisor health,core/feed_supervisor.py,upstream canonical truth,yes,false,legacy mismatch cannot create blocker
+runtime health,core/runtime_health.py,true,diagnostic only,false,legacy values emitted only
+readiness,core/readiness_gate.py,true,indirect via loader,false,invalid current artifact fails closed
+orchestrator,core/orchestrator_truth.py,true,indirect via loader,false,invalid current artifact yields feed_not_ready
+candidate decision telemetry,core/orchestrator_parts/decisions.py,true,diagnostic only,false,legacy values are telemetry
+MEG subscription causality,core/market_event_graph_live_runtime_bridge.py,true,yes,false,feed_epoch currentness with reconnect metadata only
+callback/tick acceptance,core/kite_depth_ws.py,true,yes,false,feed_epoch plus session/plan checks
+MEG live-bar provenance,core/market_event_graph_live_runtime_bridge.py,true,yes,false,feed_epoch plus session/universe/provenance checks

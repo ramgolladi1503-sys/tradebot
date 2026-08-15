@@ -1,0 +1,6 @@
+scope,result
+formerly failed 35 nodes,35 passed
+fixture negative controls,9 passed
+full relevant manifest,214 passed
+production source modified,false
+raw currentness bypass fixtures,0

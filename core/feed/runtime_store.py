@@ -17,8 +17,12 @@ from core.feed_execution_truth import attach_feed_execution_truth
 from core.feed_startup_lifecycle import record_feed_startup_event
 from core.feed_truth_state import classify_feed_truth_state
 from core.feed.ws_lifecycle_shell import derive_transport_health
+from core.runtime_status_overlay import derive_feed_ok
 from core.fs_utils import ensure_parent_dir
 from core.runtime_truth_integrity import build_truth_integrity_payload
+from core.runtime_boot_identity import stamp_runtime_payload
+from core.feed.artifact_provenance import stamp_feed_runtime_provenance
+from core.feed.artifact_loader import load_current_feed_truth
 from core.paths import repo_root, trade_db_path
 from core.time_utils import now_utc_epoch
 from core.persistence_durability import record_degradation
@@ -161,6 +165,35 @@ def canonicalize_feed_runtime_snapshot_truth(payload: dict[str, Any]) -> dict[st
     return out
 
 
+def _ensure_current_feed_truth_payload(runtime_payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Return a current canonical truth artifact before binding runtime lineage.
+
+    A runtime artifact is not valid without a lineage reference.  The first
+    startup snapshot can legitimately precede the first tick, but it still
+    has a truthful ``DEAD``/``DEGRADED`` feed state.  Publish that canonical
+    truth through the existing builder instead of emitting an unbound runtime
+    artifact and relying on a later cycle to repair it.
+    """
+    loaded = load_current_feed_truth()
+    if loaded.get("valid"):
+        return dict(loaded.get("payload") or {})
+    try:
+        from core.runtime_feed_truth_snapshot import (
+            build_feed_truth_snapshot,
+            write_feed_truth_snapshot_latest,
+        )
+
+        truth_payload = build_feed_truth_snapshot(
+            feed_runtime=dict(runtime_payload or {}),
+            phase2_rejection={},
+        )
+        write_feed_truth_snapshot_latest(payload=truth_payload)
+        return dict(truth_payload)
+    except Exception:
+        logger.warning("feed_truth_bootstrap_failed", exc_info=True)
+        return None
+
+
 def _startup_event_for_runtime_source(source: str, runtime_state: str) -> str | None:
     source_text = str(source or "")
     state_text = str(runtime_state or "").strip().upper()
@@ -243,6 +276,34 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
         out["feed_truth_strict_live"] = bool(feed_truth.strict_live)
     out = canonicalize_feed_runtime_snapshot_truth(out)
     out = attach_feed_execution_truth(out)
+    # The runtime-store writer is a second persistence path for the same
+    # authoritative artifact.  Always derive the required boolean from the
+    # canonical runtime predicates before persistence; never let an omitted
+    # field become an accidental bool(None) at a downstream consumer.
+    out["feed_ok"] = bool(derive_feed_ok(out))
+    if "recovery_generation_id" not in out:
+        # Reuse the live feed coordinator's generation for queued writes.  A
+        # missing coordinator generation is deliberately left missing so the
+        # shared consumer validator rejects the artifact fail-closed.
+        try:
+            from core.feed_debug import get_feed_debug
+
+            current_generation = (get_feed_debug() or {}).get("recovery_generation_id")
+            if current_generation is not None:
+                out["recovery_generation_id"] = int(current_generation)
+        except Exception:
+            pass
+    truth_payload = _ensure_current_feed_truth_payload(out)
+    out = stamp_feed_runtime_provenance(out, truth_payload=truth_payload)
+    # Finalize all semantic and safety fields before hashing. The verifier
+    # intentionally includes these fields, so mutating them after the hash
+    # creates a false SNAPSHOT_HASH_MISMATCH on every persisted artifact.
+    out["read_only"] = True
+    out["append"] = False
+    out["is_order_action"] = False
+    out["broker_api_called"] = False
+    out["source"] = str(out.get("source") or "core.feed.runtime_store.write_runtime_snapshot")
+    incoming_snapshot_hash = out.get("snapshot_hash")
     out.update(
         build_truth_integrity_payload(
             source_payload=out,
@@ -252,11 +313,23 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
             heartbeat_epoch=ts_epoch,
         )
     )
-    out["read_only"] = True
-    out["append"] = False
-    out["is_order_action"] = False
-    out["broker_api_called"] = False
-    out["source"] = str(out.get("source") or "core.feed.runtime_store.write_runtime_snapshot")
+    if incoming_snapshot_hash and incoming_snapshot_hash != out["snapshot_hash"]:
+        out["truth_integrity_alerts"] = [
+            {
+                "code": "SNAPSHOT_HASH_MISMATCH",
+                "message": "Feed runtime snapshot hash does not match the canonical recomputation.",
+                "details": {
+                    "snapshot_hash": incoming_snapshot_hash,
+                    "expected_snapshot_hash": out["snapshot_hash"],
+                },
+            }
+        ]
+        out["truth_integrity_alert_count"] = 1
+        out["truth_integrity_status"] = "ALERT"
+    return out
+
+
+    out.update(build_truth_integrity_payload(source_payload=out, transport_state=out.get("transport_state"), feed_truth_state=out.get("feed_truth_state"), reason_code=out.get("feed_truth_reason_code"), heartbeat_epoch=ts_epoch))
     return out
 
 

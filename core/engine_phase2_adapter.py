@@ -14,6 +14,7 @@ from config import config as cfg
 from core import _engine_phase2_adapter_base as _phase2_base
 from core._engine_phase2_adapter_base import *  # noqa: F401,F403
 from core.paths import logs_dir
+from core.feed.artifact_loader import load_current_feed_runtime, load_current_feed_truth
 from core.runtime_phase2_rejection_evidence import (
     build_phase2_rejection_evidence_payload,
     write_phase2_rejection_evidence_latest,
@@ -388,9 +389,10 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
     feed_ok = False
     tick_age = 0.0
     depth_age = 0.0
-    if feed_path.exists():
+    loaded_runtime = load_current_feed_runtime(feed_path)
+    if loaded_runtime.get("valid"):
         try:
-            feed_payload = json.loads(feed_path.read_text(encoding="utf-8"))
+            feed_payload = dict(loaded_runtime.get("payload") or {})
             feed_ok = bool(feed_payload.get("feed_ok"))
             tick_age = float(feed_payload.get("last_tick_age_sec") or 0.0)
             depth_age = float(feed_payload.get("last_depth_age_sec") or 0.0)
@@ -437,13 +439,8 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
     try:
         if bool(getattr(cfg, "PHASE2_REJECTION_EVIDENCE_ENABLE", True)):
             drop_counts = getattr(_phase2_base.build_candidates_phase2, "_last_drop_reason_counts", {}) or {}
-            feed_truth_payload = {}
-            try:
-                feed_path = logs_dir() / "feed_truth_latest.json"
-                if feed_path.exists():
-                    feed_truth_payload = json.loads(feed_path.read_text(encoding="utf-8"))
-            except Exception:
-                feed_truth_payload = {}
+            loaded_truth = load_current_feed_truth(logs_dir() / "feed_truth_latest.json")
+            feed_truth_payload = dict(loaded_truth.get("payload") or {}) if loaded_truth.get("valid") else {}
             payload = build_phase2_rejection_evidence_payload(
                 phase2_state=None,
                 raw_candidates=[row for row in list(raw_candidates or []) if isinstance(row, dict)],
@@ -453,10 +450,8 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
             )
             write_phase2_rejection_evidence_latest(payload=payload)
             try:
-                feed_payload = {}
-                feed_path = (logs_dir() / "feed_runtime_latest.json")
-                if feed_path.exists():
-                    feed_payload = json.loads(feed_path.read_text(encoding="utf-8"))
+                loaded_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
+                feed_payload = dict(loaded_runtime.get("payload") or {}) if loaded_runtime.get("valid") else {}
                 truth_payload = build_feed_truth_snapshot(
                     feed_runtime=feed_payload if isinstance(feed_payload, dict) else {},
                     phase2_rejection=payload,

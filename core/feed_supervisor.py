@@ -110,15 +110,10 @@ def _proof_blockers(
     no_live_option_feed: bool,
 ) -> list[str]:
     blockers: list[str] = []
-    generation_changed = (
-        (recovery_generation_id and last_recovery_generation_id and recovery_generation_id != last_recovery_generation_id)
-        or (subscription_generation_id and last_subscription_generation_id and subscription_generation_id != last_subscription_generation_id)
-    )
     warmup_active = bool(
         recovery_in_progress
         or recovery_blocked
         or recovery_timeout
-        or generation_changed
         or feed_truth_state in {"DEAD", "RECOVERY_BLOCKED"}
         or feed_truth_reason_code in {"FEED_UNHEALTHY", "WS1006_PROCESS_RESTART_REQUIRED", "REACTOR_NOT_RESTARTABLE_PROCESS_RESTART_REQUIRED"}
         or runtime_state in _RECOVERING_STATES
@@ -149,8 +144,6 @@ def _proof_blockers(
         blockers.append("DEPTH_STALE")
     if warmup_active and warmup_clean_cycles < warmup_required_clean_cycles:
         blockers.append("WARMUP_INCOMPLETE")
-    if generation_changed:
-        blockers.append("RECOVERY_GENERATION_CHANGED" if recovery_generation_id and last_recovery_generation_id and recovery_generation_id != last_recovery_generation_id else "SUBSCRIPTION_GENERATION_CHANGED")
     if feed_truth_reason_code in {"FEED_UNHEALTHY", "WS1006_PROCESS_RESTART_REQUIRED", "REACTOR_NOT_RESTARTABLE_PROCESS_RESTART_REQUIRED"}:
         blockers.append(feed_truth_reason_code)
     return blockers

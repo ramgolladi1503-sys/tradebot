@@ -212,9 +212,12 @@ def verify_root(root: Path) -> dict[str, Any]:
                       accepted_not_persisted=sorted(accepted_ids - persisted_ids),
                       persisted_without_accepted_authority=sorted(persisted_ids - accepted_ids),
                       manifest_verified=True, seal_verified=True)
+        # reconnect_generation is retained in the evidence report as a legacy
+        # diagnostic, but it is not a provenance authority. Canonical session,
+        # feed-epoch, lineage, and integrity checks govern acceptance.
         if result["manifest_verified"] and result["seal_verified"] and all(result[k] == 0 for k in (
-            "request_id_reuse", "selected_tick_id_reuse", "wrong_generation_ticks",
-            "wrong_symbol_ticks", "causality_violations", "accepted_cycle_persistence_mismatch")):
+            "request_id_reuse", "selected_tick_id_reuse", "wrong_symbol_ticks",
+            "causality_violations", "accepted_cycle_persistence_mismatch")):
             result["verdict"] = "PASS_MEG_REQUEST_SCOPED_CAUSALITY"
         else:
             result["verdict"] = "FAIL_MEG_REQUEST_SCOPED_CAUSALITY"

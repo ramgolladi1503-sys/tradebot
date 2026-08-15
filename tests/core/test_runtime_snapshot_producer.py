@@ -220,7 +220,8 @@ def test_runtime_snapshot_producer_writes_expected_structure(tmp_path, monkeypat
     assert advisory_wrapper["payload"]["row_count"] == 1
     assert advisory_wrapper["payload"]["rows"][0]["entry"] == 72.8
     assert advisory_wrapper["payload"]["rows"][0]["warnings"] == ["DISPLAY_ENTRY_FALLBACK"]
-    assert json.loads((runtime_root / "feed_runtime_latest.json").read_text(encoding="utf-8"))["payload"]["ws_connected"] is True
+    # Invalid raw runtime input must not be exposed as an authoritative payload.
+    assert json.loads((runtime_root / "feed_runtime_latest.json").read_text(encoding="utf-8"))["payload"] is None
 
 
 def test_runtime_snapshot_producer_drops_stale_advisory_rows(tmp_path, monkeypatch):

@@ -1,5 +1,6 @@
 import json
 import hashlib
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, Tuple
@@ -63,9 +64,12 @@ def append_event(event: Dict[str, Any]) -> str:
     return event["event_hash"]
 
 
-def verify_chain(path: Path = AUDIT_LOG) -> Tuple[bool, str, int]:
+def verify_chain(path: Path = AUDIT_LOG, *, expected_run_id: str | None = None) -> Tuple[bool, str, int]:
     if not path.exists():
         return False, "missing_log", 0
+    expected_run_id = str(
+        expected_run_id if expected_run_id is not None else os.getenv("TRADEBOT_RUN_ID", "")
+    ).strip()
     prev = GENESIS
     count = 0
     with path.open("r") as f:
@@ -83,8 +87,17 @@ def verify_chain(path: Path = AUDIT_LOG) -> Tuple[bool, str, int]:
                 return False, "prev_hash_mismatch", count
             if _compute_hash(event) != event["event_hash"]:
                 return False, "event_hash_mismatch", count
+            if count == 0:
+                if event.get("event") != "AUDIT_CHAIN_BOOTSTRAP":
+                    return False, "missing_bootstrap", count
+                if not str(event.get("run_id", "")).strip():
+                    return False, "missing_run_id", count
+                if expected_run_id and event.get("run_id") != expected_run_id:
+                    return False, "run_id_mismatch", count
             prev = event["event_hash"]
             count += 1
+    if count == 0:
+        return False, "empty_log", 0
     return True, prev, count
 
 

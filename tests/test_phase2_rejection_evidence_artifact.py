@@ -14,6 +14,14 @@ def _read_json(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _write_valid_runtime_artifact(path):
+    from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair
+
+    _, runtime_path = make_valid_canonical_feed_pair(path.parent)
+    if runtime_path != path:
+        path.write_text(runtime_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+
 @pytest.fixture()
 def _runtime_dirs(tmp_path, monkeypatch):
     runtime_root = tmp_path / "runtime"
@@ -120,7 +128,7 @@ def test_phase2_rejection_evidence_counts_unknown_quote_source(_runtime_dirs, mo
     _runtime_dirs
     from core.paths import logs_dir
     logs_dir().mkdir(parents=True, exist_ok=True)
-    (logs_dir() / "feed_runtime_latest.json").write_text(json.dumps({"feed_ok": True}), encoding="utf-8")
+    _write_valid_runtime_artifact(logs_dir() / "feed_runtime_latest.json")
 
     out = build_candidates_phase2(
         [
@@ -363,7 +371,7 @@ def test_phase2_evidence_failure_does_not_crash_runtime(monkeypatch, tmp_path):
     monkeypatch.setenv("REPO_LOG_DIR", str(tmp_path / "logs"))
     feed_path = tmp_path / "logs" / "feed_runtime_latest.json"
     feed_path.parent.mkdir(parents=True, exist_ok=True)
-    feed_path.write_text(json.dumps({"feed_ok": True}), encoding="utf-8")
+    _write_valid_runtime_artifact(feed_path)
 
     payload = build_candidates_phase2(
         [

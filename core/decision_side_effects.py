@@ -1,5 +1,5 @@
 from __future__ import annotations
-from core.paths import logs_dir
+from core.paths import data_root, logs_dir
 
 import json
 from pathlib import Path
@@ -18,6 +18,10 @@ from core.live_indicator_readiness import (
     write_live_indicator_readiness_latest,
 )
 from core.time_utils import now_ist
+
+
+def _indicator_missing_compat_path() -> Path:
+    return data_root() / "logs" / "indicator_missing_runtime_latest.json"
 
 
 def _blocked_candidates_path() -> Path:
@@ -88,7 +92,15 @@ def _maybe_write_indicator_missing_runtime_evidence(
         )
         # Always write the schema-v2 latest artifact when we have a concrete snapshot.
         write_live_indicator_readiness_latest(report, now_epoch=float(snapshot.ts_epoch))
-        write_indicator_missing_runtime_evidence(report, now_epoch=float(snapshot.ts_epoch))
+        # Keep the legacy rejection diagnostic separate from the authoritative
+        # readiness artifact.  Both writers previously targeted
+        # live_indicator_readiness_latest.json, allowing a stale compatibility
+        # label to overwrite current valid readiness truth.
+        write_indicator_missing_runtime_evidence(
+            report,
+            path=_indicator_missing_compat_path(),
+            now_epoch=float(snapshot.ts_epoch),
+        )
     except Exception:
         return
 

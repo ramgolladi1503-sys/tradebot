@@ -543,8 +543,11 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
         if pressure_controller is not None and pressure_controller.enabled:
             pressure_controller._record_queue_event("producer_completed", scenario=scenario, rows_produced=len(rows))
             pressure_controller.record_worker_event("shutdown_started", scenario=scenario)
-        else:
-            tick_store.flush_pending_ticks()
+        # Use shutdown as the sole async drain authority. Calling the public flush
+        # concurrently with the persistence worker creates two queue consumers;
+        # batches can then commit in a different order even though dequeue order is
+        # FIFO. The governed shutdown path stops acceptance, drains, and joins the
+        # worker without introducing that replay-only race.
         shutdown_result = tick_store.shutdown_persistence_worker(deadline_seconds=shutdown_deadline_seconds)
         if pressure_controller is not None and pressure_controller.enabled:
             pressure_controller.record_worker_event(

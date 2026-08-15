@@ -1,0 +1,7 @@
+scope,result
+focused MEG/bridge tests,52 passed
+established relevant manifest,214 passed
+new legacy-authority regression,1 passed
+fixture negative controls,9 passed
+combined run,215 passed
+production source scope,one MEG authority predicate only

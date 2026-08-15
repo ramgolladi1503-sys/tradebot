@@ -5,6 +5,7 @@ from pathlib import Path
 from config import config as cfg
 from core.entry_semantics import build_entry_state
 from core import review_queue
+from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair
 from core.blocker_lifecycle import reset_blocker_registries
 from core.option_liquidity_cache import clear_option_liquidity_cache, update_option_liquidity_cache
 
@@ -102,6 +103,13 @@ def test_update_suggestions_status_latest_replaces_stale_visible_counts(tmp_path
         ),
         encoding="utf-8",
     )
+    make_valid_canonical_feed_pair(
+        logs_root,
+        runtime_updates={
+            "subscribed_option_tokens_count": 70,
+            "missing_option_tokens_count": 0,
+        },
+    )
     entry = {
         "trade_id": "T-STATUS-FRESH",
         "entry_status": "ok",
@@ -151,6 +159,17 @@ def test_update_suggestions_status_latest_derives_feed_ok_from_runtime_snapshot(
             }
         ),
         encoding="utf-8",
+    )
+    make_valid_canonical_feed_pair(
+        logs_root,
+        runtime_updates={
+            "runtime_state": "RUNNING",
+            "option_feed_block_reason_by_symbol": {
+                "NIFTY": "OK", "BANKNIFTY": "OK", "SENSEX": "OK"
+            },
+            "subscribed_option_tokens_count": 70,
+            "missing_option_tokens_count": 0,
+        },
     )
     entry = {
         "trade_id": "T-STATUS-DERIVE-FEED-OK",

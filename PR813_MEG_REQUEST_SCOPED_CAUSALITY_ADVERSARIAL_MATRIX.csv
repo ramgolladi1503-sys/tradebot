@@ -1,0 +1,6 @@
+attack,expected,result
+current canonical provenance plus mismatched reconnect_generation,accept,PASS
+stale canonical/session provenance plus matching reconnect_generation,reject,PASS
+legacy generation mutation only,canonical result unchanged,PASS
+wrong run/boot/feed epoch/lineage/integrity,reject,PASS
+future reconnect generation with current canonical epoch,legacy cannot authorize,PASS

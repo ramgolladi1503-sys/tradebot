@@ -1,0 +1,110 @@
+name: PR818 Apply Safe Test Contract Repairs
+
+on:
+  push:
+    branches:
+      - repair/pr818-green-integration-v1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      KITE_USE_API: "false"
+      PYTHONHASHSEED: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: repair/pr818-green-integration-v1
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install 'pandas<3.0'
+      - name: Stage canonical review-queue fixture repair
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('tests/fixtures/canonical_feed_factory.py')
+          s = p.read_text()
+          old_sig = 'def make_valid_canonical_feed_pair(root: Path, *, feed_ok: bool = True) -> tuple[Path, Path]:\n'
+          new_sig = 'def make_valid_canonical_feed_pair(\n    root: Path,\n    *,\n    feed_ok: bool = True,\n    truth_updates: dict[str, Any] | None = None,\n    runtime_updates: dict[str, Any] | None = None,\n) -> tuple[Path, Path]:\n'
+          if old_sig in s:
+              s = s.replace(old_sig, new_sig, 1)
+              truth_anchor = '    truth = stamp_feed_truth_provenance(\n        {\n            "feed_ok": bool(feed_ok),\n            "feed_truth_state": "LIVE" if feed_ok else "DEGRADED",\n            "feed_truth_reason_code": "OK" if feed_ok else "FEED_UNHEALTHY",\n            "ws_connected": bool(feed_ok),\n            "ts_epoch": 10.0,\n        }\n    )\n'
+              truth_repl = '    truth_payload = {\n        "feed_ok": bool(feed_ok),\n        "feed_truth_state": "LIVE" if feed_ok else "DEGRADED",\n        "feed_truth_reason_code": "OK" if feed_ok else "FEED_UNHEALTHY",\n        "ws_connected": bool(feed_ok),\n        "ts_epoch": 10.0,\n    }\n    truth_payload.update(dict(truth_updates or {}))\n    truth = stamp_feed_truth_provenance(truth_payload)\n'
+              if truth_anchor not in s:
+                  raise SystemExit('truth helper anchor missing')
+              s = s.replace(truth_anchor, truth_repl, 1)
+              runtime_anchor = '    runtime = stamp_feed_runtime_provenance(\n        {\n            "feed_ok": bool(feed_ok),\n            "execution_feed_ready": bool(feed_ok),\n            "feed_truth_state": "LIVE" if feed_ok else "DEGRADED",\n            "feed_truth_reason_code": "OK" if feed_ok else "FEED_UNHEALTHY",\n            "ws_connected": bool(feed_ok),\n            "last_tick_age_sec": 0.0,\n            "last_depth_age_sec": 0.0,\n            "ts_epoch": 10.0,\n        },\n        truth_payload=truth,\n    )\n'
+              runtime_repl = '    runtime_payload = {\n        "feed_ok": bool(feed_ok),\n        "execution_feed_ready": bool(feed_ok),\n        "feed_truth_state": "LIVE" if feed_ok else "DEGRADED",\n        "feed_truth_reason_code": "OK" if feed_ok else "FEED_UNHEALTHY",\n        "ws_connected": bool(feed_ok),\n        "last_tick_age_sec": 0.0,\n        "last_depth_age_sec": 0.0,\n        "ts_epoch": 10.0,\n    }\n    runtime_payload.update(dict(runtime_updates or {}))\n    runtime = stamp_feed_runtime_provenance(runtime_payload, truth_payload=truth)\n'
+              if runtime_anchor not in s:
+                  raise SystemExit('runtime helper anchor missing')
+              s = s.replace(runtime_anchor, runtime_repl, 1)
+              p.write_text(s)
+          elif 'runtime_updates: dict[str, Any] | None = None' not in s:
+              raise SystemExit('canonical helper signature unexpected')
+
+          p = Path('tests/test_review_queue_live_entry.py')
+          s = p.read_text()
+          import_anchor = 'from core import review_queue\n'
+          import_repl = import_anchor + 'from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair\n'
+          if 'make_valid_canonical_feed_pair' not in s:
+              if import_anchor not in s:
+                  raise SystemExit('review queue import anchor missing')
+              s = s.replace(import_anchor, import_repl, 1)
+
+          anchor1 = '    entry = {\n        "trade_id": "T-STATUS-FRESH",\n'
+          repl1 = '    make_valid_canonical_feed_pair(\n        logs_root,\n        runtime_updates={\n            "subscribed_option_tokens_count": 70,\n            "missing_option_tokens_count": 0,\n        },\n    )\n    entry = {\n        "trade_id": "T-STATUS-FRESH",\n'
+          if repl1 not in s:
+              if anchor1 not in s:
+                  raise SystemExit('review queue first anchor missing')
+              s = s.replace(anchor1, repl1, 1)
+
+          anchor2 = '    entry = {\n        "trade_id": "T-STATUS-DERIVE-FEED-OK",\n'
+          repl2 = '    make_valid_canonical_feed_pair(\n        logs_root,\n        runtime_updates={\n            "runtime_state": "RUNNING",\n            "option_feed_block_reason_by_symbol": {\n                "NIFTY": "OK", "BANKNIFTY": "OK", "SENSEX": "OK"\n            },\n            "subscribed_option_tokens_count": 70,\n            "missing_option_tokens_count": 0,\n        },\n    )\n    entry = {\n        "trade_id": "T-STATUS-DERIVE-FEED-OK",\n'
+          if repl2 not in s:
+              if anchor2 not in s:
+                  raise SystemExit('review queue second anchor missing')
+              s = s.replace(anchor2, repl2, 1)
+          p.write_text(s)
+          PY
+      - name: Verify review-queue family
+        run: pytest -q -o addopts='' tests/test_review_queue_live_entry.py tests/fixtures/canonical_feed_factory.py
+      - name: Stage and verify exact test-only commit surface
+        run: |
+          # The repository currently contains one malformed-LFS tracked parquet
+          # that checkout reports dirty. It is deliberately never staged here.
+          # Prove the exact commit surface from the index, not from unrelated
+          # checkout smudge state.
+          git add tests/fixtures/canonical_feed_factory.py tests/test_review_queue_live_entry.py
+          git diff --cached --name-only
+          python - <<'PY'
+          import subprocess
+          staged = set(subprocess.check_output(['git','diff','--cached','--name-only'], text=True).splitlines())
+          allowed = {'tests/fixtures/canonical_feed_factory.py','tests/test_review_queue_live_entry.py'}
+          unexpected = staged - allowed
+          if unexpected:
+              raise SystemExit(f'unexpected staged files: {sorted(unexpected)}')
+          if not staged:
+              raise SystemExit('expected canonical fixture repairs were not staged')
+          PY
+      - name: Commit verified repairs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test: use canonical feed authority in review-queue fixtures"
+          git push origin HEAD:repair/pr818-green-integration-v1

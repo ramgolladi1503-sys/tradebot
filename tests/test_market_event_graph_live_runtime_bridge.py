@@ -94,6 +94,7 @@ def _evidence(contract):
             "first_full_payload_epoch": 14.0,
             "latest_full_payload_epoch": 21.0,
             "feed_session_id": "feed-session-1",
+            "feed_epoch": 0,
             "reconnect_generation": 1,
         }
         for symbol, token in token_by_symbol.items()
@@ -103,6 +104,7 @@ def _evidence(contract):
         "provider": "kite",
         "token_domain": "kite_instrument_token",
         "feed_session_id": "feed-session-1",
+        "feed_epoch": 0,
         "reconnect_generation": 1,
         "token_by_symbol": token_by_symbol,
         "token_resolved_symbols": required,
@@ -136,6 +138,7 @@ def _bar(ts_epoch: float, symbol: str, close: float = 100.0, *, token: int | Non
             "source_type": "live_websocket",
             "symbol": str(symbol).upper(),
             "live_feed_session_id": "feed-session-1",
+            "feed_epoch": 0,
             "reconnect_generation": 1,
             "instrument_token": int(token or 0),
             "provider": "kite",
@@ -441,7 +444,7 @@ def test_history_seeded_and_fallback_bars_are_rejected(monkeypatch, tmp_path):
     assert result.exported is False
 
 
-def test_reconnect_generation_stale_bar_is_rejected(monkeypatch, tmp_path):
+def test_reconnect_generation_stale_bar_is_diagnostic_only(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     contract_payload = _contract()
     _install_bars(monkeypatch, contract_payload=contract_payload)
@@ -461,8 +464,8 @@ def test_reconnect_generation_stale_bar_is_rejected(monkeypatch, tmp_path):
 
     result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
 
-    assert result.reason == RECONNECT_GENERATION_MISMATCH
-    assert result.exported is False
+    assert result.exported is True
+    assert result.reason == "OK"
 
 
 def test_live_provenance_with_kite_contract_is_accepted(monkeypatch, tmp_path):

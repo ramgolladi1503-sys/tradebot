@@ -661,8 +661,15 @@ def _maybe_refresh_stale_option_subscription_universe(*, now_epoch: float, refre
     desired = _normalize_positive_tokens(ws, desired_raw)
     current_set = set(current)
     desired_set = set(desired)
+    # A freshness refresh is not the authority for destructive contract
+    # rotation.  The live session has a fixed intended registry and the
+    # resolver may legitimately prune/rotate rows while this watchdog pass is
+    # running.  Unsubscribing that difference here can drop tokens from the
+    # applied registry without updating the session's intended count, which
+    # creates a permanent false subscription-truth blocker.  Controlled
+    # rebalance owns removals; this path only restores missing desired tokens.
     subscribe = sorted(desired_set - current_set)
-    unsubscribe = sorted(current_set - desired_set)
+    unsubscribe: list[int] = []
     by_symbol, overall = _option_freshness_stats(ws, current, now)
     min_ratio = _cfg_float(conf, "FEED_STALE_OPTION_SUBSCRIPTION_MIN_FRESH_RATIO", 0.8)
     drift_sec = _cfg_float(conf, "FEED_STALE_OPTION_SUBSCRIPTION_DRIFT_REFRESH_SEC", 5.0)
@@ -684,14 +691,14 @@ def _maybe_refresh_stale_option_subscription_universe(*, now_epoch: float, refre
         refresh_tokens = _dedupe_tokens(refresh_tokens)
         state["last_refresh_epoch"] = now
         state["last_freshness_refresh_epoch"] = now
-        payload = {"reason": "freshness_drift", "refresh_mode": "symbol_freshness_refresh", "refresh_sec": refresh_sec, "drift_refresh_sec": drift_sec, "previous_count": len(current), "desired_count": len(desired), "subscribe_count": len(subscribe), "unsubscribe_count": len(unsubscribe), "refresh_token_count": len(refresh_tokens), "subscribe_tokens": [] if refresh_tokens else subscribe, "unsubscribe_tokens": [] if refresh_tokens else unsubscribe, "refresh_tokens": refresh_tokens, "refresh_applied": False, "force_resubscribe_current": False, "freshness_urgent": True, "freshness_urgent_symbols": stale_symbols, "freshness_by_symbol": by_symbol, **overall}
+        payload = {"reason": "freshness_drift", "refresh_mode": "symbol_freshness_refresh", "refresh_sec": refresh_sec, "drift_refresh_sec": drift_sec, "previous_count": len(current), "desired_count": len(desired), "subscribe_count": len(subscribe), "unsubscribe_count": 0, "refresh_token_count": len(refresh_tokens), "subscribe_tokens": [] if refresh_tokens else subscribe, "unsubscribe_tokens": [], "refresh_tokens": refresh_tokens, "refresh_applied": False, "force_resubscribe_current": False, "freshness_urgent": True, "freshness_urgent_symbols": stale_symbols, "freshness_by_symbol": by_symbol, **overall}
         return True, payload
     if desired == current:
         return False, {"reason": "no_delta", "refresh_mode": "delta", "refresh_sec": refresh_sec, "drift_refresh_sec": drift_sec, "previous_count": len(current), "desired_count": len(desired), "subscribe_count": 0, "unsubscribe_count": 0, "subscribe_tokens": [], "unsubscribe_tokens": [], "refresh_tokens": [], "refresh_applied": False, "force_resubscribe_current": False, "freshness_urgent": freshness_urgent, "freshness_urgent_symbols": stale_symbols, "freshness_by_symbol": by_symbol, **overall}
     if not freshness_urgent and (now - float(state.get("last_refresh_epoch") or 0.0)) < refresh_sec:
-        return False, {"reason": "refresh_cooldown", "refresh_mode": "delta", "refresh_sec": refresh_sec, "drift_refresh_sec": drift_sec, "previous_count": len(current), "desired_count": len(desired), "subscribe_count": len(subscribe), "unsubscribe_count": len(unsubscribe), "subscribe_tokens": subscribe, "unsubscribe_tokens": unsubscribe, "refresh_tokens": [], "refresh_applied": False, "force_resubscribe_current": False, "freshness_urgent": False, "freshness_urgent_symbols": stale_symbols, "freshness_by_symbol": by_symbol, **overall}
+        return False, {"reason": "refresh_cooldown", "refresh_mode": "delta", "refresh_sec": refresh_sec, "drift_refresh_sec": drift_sec, "previous_count": len(current), "desired_count": len(desired), "subscribe_count": len(subscribe), "unsubscribe_count": 0, "subscribe_tokens": subscribe, "unsubscribe_tokens": [], "refresh_tokens": [], "refresh_applied": False, "force_resubscribe_current": False, "freshness_urgent": False, "freshness_urgent_symbols": stale_symbols, "freshness_by_symbol": by_symbol, **overall}
     state["last_refresh_epoch"] = now
-    return bool(subscribe or unsubscribe), {"reason": "delta_refresh", "refresh_mode": "delta", "refresh_sec": refresh_sec, "drift_refresh_sec": drift_sec, "previous_count": len(current), "desired_count": len(desired), "subscribe_count": len(subscribe), "unsubscribe_count": len(unsubscribe), "subscribe_tokens": subscribe, "unsubscribe_tokens": unsubscribe, "refresh_tokens": [], "refresh_applied": False, "force_resubscribe_current": False, "freshness_urgent": freshness_urgent, "freshness_urgent_symbols": stale_symbols, "freshness_by_symbol": by_symbol, **overall}
+    return bool(subscribe), {"reason": "delta_refresh", "refresh_mode": "delta", "refresh_sec": refresh_sec, "drift_refresh_sec": drift_sec, "previous_count": len(current), "desired_count": len(desired), "subscribe_count": len(subscribe), "unsubscribe_count": 0, "subscribe_tokens": subscribe, "unsubscribe_tokens": [], "refresh_tokens": [], "refresh_applied": False, "force_resubscribe_current": False, "freshness_urgent": freshness_urgent, "freshness_urgent_symbols": stale_symbols, "freshness_by_symbol": by_symbol, **overall}
 
 
 def _patch_module(module: Any) -> None:

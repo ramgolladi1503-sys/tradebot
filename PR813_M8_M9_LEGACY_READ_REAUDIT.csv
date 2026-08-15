@@ -1,0 +1,6 @@
+path,field,classification,authority_effect
+core/meg_request_scoped_causality.py,wrong_generation_ticks,DIAGNOSTIC_ONLY,none after repair
+core/kite_depth_ws.py,reconnect_generation,OBSERVABILITY_ONLY,none in callback acceptance
+core/market_event_graph_live_ohlc_buffer.py,reconnect_generation,OBSERVABILITY_ONLY,metadata only
+core/meg_request_scoped_causality.py,recovery_generation_id,DIAGNOSTIC_ONLY,none
+UNKNOWN_LEGACY_READS,0,-,none

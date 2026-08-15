@@ -26,6 +26,8 @@ from core.readiness_state import ReadinessResult, ReadinessState
 from core.gate_status_log import gate_status_path
 from core.telemetry_streams import decisions_stream_path, iter_recent_events
 from core.decision_telemetry_health import check_decision_telemetry
+from core.feed.runtime_provenance import validate_feed_runtime_provenance
+from core.feed.artifact_loader import load_current_feed_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -84,11 +86,27 @@ def _load_fresh_feed_runtime_snapshot(now_epoch: float) -> Dict[str, Any]:
     selected_path: Path | None = None
 
     for path in _feed_runtime_snapshot_paths():
-        raw = _read_json_dict(path)
         mtime = _safe_mtime(path)
-        if raw is None or mtime is None:
+        if mtime is None:
             continue
-        payload = _unwrap_feed_runtime_payload(raw)
+        loaded = load_current_feed_runtime(path)
+        if not loaded.get("valid"):
+            invalid_age = compute_age_sec(mtime, now_epoch)
+            if invalid_age is not None and invalid_age <= max_age_sec and selected is None:
+                selected = {
+                    "feed_ok": False,
+                    "execution_feed_ready": False,
+                    "runtime_state": "INVALID_ARTIFACT",
+                    "provenance_valid": False,
+                    "provenance_reasons": [str(loaded.get("reason_code") or "INVALID_ARTIFACT")],
+                }
+                selected.update(dict(loaded.get("diagnostic_fields") or {}))
+                selected_ts_epoch = -1.0
+                selected_mtime = mtime
+                selected_age_sec = invalid_age
+                selected_path = path
+            continue
+        payload = dict(loaded.get("payload") or {})
         ts_epoch = normalize_epoch_seconds(payload.get("ts_epoch"))
         age_by_ts = compute_age_sec(ts_epoch, now_epoch) if ts_epoch is not None else None
         age_by_mtime = compute_age_sec(mtime, now_epoch)
@@ -125,6 +143,8 @@ def _feed_runtime_block_reasons(snapshot: Dict[str, Any]) -> list[str]:
         return []
 
     reasons: list[str] = []
+    if snapshot.get("provenance_valid") is False:
+        reasons.append("INVALID_FEED_RUNTIME_ARTIFACT")
     ws_connected = snapshot.get("ws_connected")
     if ws_connected is False:
         reasons.append("NO_LIVE_OPTION_FEED")

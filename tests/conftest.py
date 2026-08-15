@@ -44,6 +44,8 @@ _RUNTIME_PERSISTENCE_READ_AFTER_WRITE_TESTS = {
     "test_runtime_snapshot_mirrors_share_canonical_blocked_truth",
     "test_ws1006_auth_failure_blocks_reconnect_loop",
     "test_ws1006_peer_drop_on_error_is_recoverable_first",
+    "test_ws1006_recovery_timeout_is_fail_closed",
+    "test_ws1006_peer_drop_escalates_after_max_recoverable_attempts",
     "test_ws1006_main_loop_terminated_routes_to_process_restart_required",
     "test_fatal_on_error_schedules_async_forced_full_restart",
     "test_fatal_on_close_schedules_async_forced_full_restart",
@@ -217,25 +219,7 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
     # clean test worker state without changing production lifecycle semantics.
     with contextlib.suppress(Exception):
         import core.tick_store as tick_store
-        with tick_store._WRITE_QUEUE_LOCK:
-            tick_store._WRITE_QUEUE.clear()
-        tick_store._FLUSH_THREAD_STOP.clear()
-        tick_store._FLUSH_THREAD = None
-        tick_store._FLUSH_THREAD_IDENT = None
-        tick_store._FLUSH_THREAD_NAME = None
-        tick_store._FLUSH_THREAD_JOIN_COMPLETED = False
-        tick_store._FLUSH_THREAD_TERMINATED = False
-        tick_store._ACCEPTING_WRITES = True
-        tick_store._SHUTDOWN_STARTED_MONOTONIC_NS = None
-        tick_store._SHUTDOWN_FINISHED_MONOTONIC_NS = None
-        tick_store._SHUTDOWN_STATE = None
-        tick_store._SHUTDOWN_RESULT = None
-        tick_store._INITIAL_SHUTDOWN_RESULT = None
-        tick_store._CLEANUP_SHUTDOWN_RESULT = None
-        tick_store._INIT_DONE = False
-        tick_store._INIT_DB_PATH = None
-        tick_store._LAST_TICK_EPOCH = None
-        tick_store._LAST_TICK_BY_TOKEN.clear()
+        tick_store.reset_runtime_state_for_tests()
 
     # Trade-builder behavior tests exercise candidate semantics, not broker
     # authentication. Give only those test modules inert credentials so auth
@@ -288,9 +272,20 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
             )
 
     import json
+    from core.feed.artifact_provenance import stamp_feed_runtime_provenance
+    from core.feed.artifact_loader import FEED_RUNTIME_CANONICAL_WRITER, FEED_RUNTIME_SCHEMA_VERSION
+    from core.runtime_truth_integrity import truth_hash_from_mapping
     feed_path = runtime_root / "logs" / "feed_runtime_latest.json"
     feed_path.parent.mkdir(parents=True, exist_ok=True)
-    feed_path.write_text(json.dumps({"feed_ok": True}), encoding="utf-8")
+    feed_payload = stamp_feed_runtime_provenance(
+        {
+            "feed_ok": True,
+            "writer": FEED_RUNTIME_CANONICAL_WRITER,
+            "schema_version": FEED_RUNTIME_SCHEMA_VERSION,
+        }
+    )
+    feed_payload["snapshot_hash"] = truth_hash_from_mapping(feed_payload)
+    feed_path.write_text(json.dumps(feed_payload), encoding="utf-8")
 
     yield
 

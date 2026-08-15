@@ -18,6 +18,7 @@ from core.freshness_sla import get_freshness_status
 from core.runtime_truth_integrity import build_truth_integrity_alerts, truth_hash_from_mapping
 from core.time_utils import is_market_open_ist, now_utc_epoch
 from core.runtime_boot_identity import stamp_runtime_payload
+from core.feed.artifact_loader import load_current_feed_runtime
 from core.paths import runtime_dir
 from core.events import append_event
 
@@ -51,8 +52,13 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
     ts_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
     freshness = dict(get_freshness_status(force=False) or {})
     feed_debug = dict(get_feed_debug(now_epoch=ts_epoch) or {})
-    feed_runtime_path = runtime_dir() / "feed_runtime_latest.json"
-    feed_runtime_payload = _safe_json_payload(feed_runtime_path)
+    # The feed writer's authoritative latest artifact lives under the shared
+    # runtime logs root. Reading runtime_dir()/feed_runtime_latest.json would
+    # select a different, usually absent, path and recreate the dual-path race.
+    feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
+    loaded_runtime = load_current_feed_runtime(feed_runtime_path)
+    feed_runtime_payload = dict(loaded_runtime.get("payload") or {}) if loaded_runtime.get("valid") else {}
+    provenance = {"valid": bool(loaded_runtime.get("valid")), "reasons": list(loaded_runtime.get("reasons") or []), "reason_code": loaded_runtime.get("reason_code")}
 
     market_open = bool(freshness.get("market_open", is_market_open_ist()))
     mode = str(
@@ -91,6 +97,11 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         "missing_option_tokens_count": feed_debug.get("missing_option_tokens_count"),
         "subscribed_option_tokens_count": feed_debug.get("subscribed_option_tokens_count"),
         "option_ticks_verified": feed_debug.get("option_ticks_verified"),
+        "feed_ok": _first_non_none(feed_runtime_payload.get("feed_ok"), feed_debug.get("feed_ok")) if provenance["valid"] else False,
+        "execution_feed_ready": _first_non_none(
+            feed_runtime_payload.get("execution_feed_ready"),
+            feed_debug.get("execution_feed_ready"),
+        ) if provenance["valid"] else False,
         "runtime_state": feed_debug.get("feed_runtime_state"),
         "last_error": feed_debug.get("feed_runtime_last_error"),
         "last_tick_age_sec": feed_debug.get("last_tick_age_sec"),
@@ -106,20 +117,29 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         "transport_healthy": feed_debug.get("transport_healthy"),
         "feed_truth_state": _first_non_none(feed_debug.get("feed_truth_state"), feed_runtime_payload.get("feed_truth_state")),
         "feed_truth_reason_code": _first_non_none(feed_debug.get("feed_truth_reason_code"), feed_runtime_payload.get("feed_truth_reason_code")),
-        "snapshot_hash": _first_non_none(feed_debug.get("snapshot_hash"), feed_runtime_payload.get("snapshot_hash")),
-        "snapshot_hash_version": _first_non_none(feed_debug.get("snapshot_hash_version"), feed_runtime_payload.get("snapshot_hash_version")),
-        "transport_heartbeat_epoch": _first_non_none(feed_debug.get("transport_heartbeat_epoch"), feed_runtime_payload.get("transport_heartbeat_epoch")),
-        "transport_heartbeat_age_sec": _first_non_none(feed_debug.get("transport_heartbeat_age_sec"), feed_runtime_payload.get("transport_heartbeat_age_sec")),
-        "transport_heartbeat_state": _first_non_none(feed_debug.get("transport_heartbeat_state"), feed_runtime_payload.get("transport_heartbeat_state")),
+        # The persisted feed_runtime_latest artifact is the authoritative
+        # snapshot. In-memory feed_debug may lag one atomic write behind;
+        # preferring its hash creates false mismatch alerts against the
+        # current persisted payload.
+        "snapshot_hash": _first_non_none(feed_runtime_payload.get("snapshot_hash"), feed_debug.get("snapshot_hash")),
+        "snapshot_hash_version": _first_non_none(feed_runtime_payload.get("snapshot_hash_version"), feed_debug.get("snapshot_hash_version")),
+        "transport_heartbeat_epoch": _first_non_none(feed_runtime_payload.get("transport_heartbeat_epoch"), feed_debug.get("transport_heartbeat_epoch")),
+        "transport_heartbeat_age_sec": _first_non_none(feed_runtime_payload.get("transport_heartbeat_age_sec"), feed_debug.get("transport_heartbeat_age_sec")),
+        "transport_heartbeat_state": _first_non_none(feed_runtime_payload.get("transport_heartbeat_state"), feed_debug.get("transport_heartbeat_state")),
         "sla_state": sla_state,
         "sla_status": raw_sla_status or freshness.get("state"),
         "reasons": list(freshness.get("reasons") or []),
+        "provenance": provenance,
     }
-    expected_snapshot_hash = ""
+    # Only the persisted feed snapshot is authoritative for integrity. During
+    # startup or atomic replacement it may be absent/empty while feed_debug
+    # still contains an in-memory hash from a different state.
+    authoritative_snapshot_available = bool(feed_runtime_payload)
+    expected_snapshot_hash = str(loaded_runtime.get("expected_snapshot_hash") or "")
     integrity_alerts: list[dict[str, Any]] = []
-    has_integrity_evidence = bool(feed_runtime_payload) or bool(feed.get("snapshot_hash")) or bool(feed.get("feed_truth_state"))
+    has_integrity_evidence = authoritative_snapshot_available
     if has_integrity_evidence:
-        expected_snapshot_hash = truth_hash_from_mapping(
+        expected_snapshot_hash = expected_snapshot_hash or truth_hash_from_mapping(
             feed_runtime_payload,
             exclude_keys=(
                 "snapshot_hash",
@@ -141,6 +161,19 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
             snapshot_hash=feed.get("snapshot_hash"),
             expected_snapshot_hash=expected_snapshot_hash,
         )
+    if not authoritative_snapshot_available:
+        feed["snapshot_hash"] = None
+    if not provenance["valid"] and (
+        provenance.get("reason_code") == "INTEGRITY_MISMATCH"
+        or loaded_runtime.get("observed_snapshot_hash")
+    ):
+        integrity_alerts.append(
+            {
+                "code": "SNAPSHOT_HASH_MISMATCH",
+                "message": "Validated feed runtime artifact failed integrity validation.",
+                "details": {"provenance_reason": provenance.get("reasons")},
+            }
+        )
     feed["snapshot_hash_expected"] = expected_snapshot_hash or None
     feed["snapshot_hash_match"] = bool(
         feed.get("snapshot_hash")
@@ -150,6 +183,20 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
     feed["truth_integrity_alerts"] = integrity_alerts
     feed["truth_integrity_alert_count"] = len(integrity_alerts)
     feed["truth_integrity_status"] = "ALERT" if integrity_alerts else "OK"
+    warmup_clean_cycles = feed_debug.get("warmup_clean_cycles")
+    warmup_required_clean_cycles = feed_debug.get("warmup_required_clean_cycles")
+    # The orchestrator owns the consecutive clean-cycle counter. Preserve
+    # missing-proof fail-closed behavior when no owner is supplied, while
+    # publishing the current owner state for the recovery proof reader.
+    if orchestrator is not None:
+        owner_cycles = getattr(orchestrator, "_pilot_unlock_clean_cycles", None)
+        if isinstance(owner_cycles, int) and owner_cycles >= 0:
+            warmup_clean_cycles = owner_cycles
+            configured_required = getattr(cfg, "PAPER_PILOT_UNLOCK_CLEAN_CYCLES", None)
+            if isinstance(configured_required, int) and configured_required > 0:
+                warmup_required_clean_cycles = configured_required
+    feed["warmup_clean_cycles"] = warmup_clean_cycles
+    feed["warmup_required_clean_cycles"] = warmup_required_clean_cycles
     recovery_runtime = classify_feed_recovery_runtime(feed)
     feed["recovery_runtime"] = recovery_runtime.to_payload()
     feed["full_feed_proof_ready"] = bool(recovery_runtime.context.get("full_feed_proof_ready"))
@@ -166,8 +213,6 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
     feed["underlying_ltp_age_by_symbol"] = dict(feed_debug.get("option_last_tick_age_by_symbol") or {})
     feed["underlying_ltp_proof_state"] = "FULL" if bool(recovery_runtime.context.get("full_feed_proof_ready")) else "STALE"
     feed["depth_proof_state"] = "FULL" if bool(feed_debug.get("last_depth_age_sec") is not None and float(feed_debug.get("last_depth_age_sec")) <= float(getattr(cfg, "FEED_HEALTH_MAX_DEPTH_AGE_SEC", 6.0))) else "STALE"
-    feed["warmup_clean_cycles"] = feed_debug.get("warmup_clean_cycles")
-    feed["warmup_required_clean_cycles"] = feed_debug.get("warmup_required_clean_cycles")
     feed["recovery_generation_id"] = feed_debug.get("recovery_generation_id")
     feed["last_recovery_generation_id"] = feed_debug.get("last_recovery_generation_id")
     feed["subscription_generation_id"] = feed_debug.get("subscription_generation_id")

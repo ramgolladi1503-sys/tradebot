@@ -1,0 +1,50 @@
+name: PR818 Repair Targeted Diagnostics
+
+on:
+  push:
+    branches:
+      - repair/pr818-green-integration-v1
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      KITE_USE_API: "false"
+      PYTHONHASHSEED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install 'pandas<3.0'
+      - name: Run known failing modules against permanent canonical fixtures
+        run: >-
+          pytest -q -o addopts=''
+          tests/strategy_truth/test_legacy_quarantine.py
+          tests/test_blocker_lifecycle.py
+          tests/test_feed_runtime_states.py
+          tests/test_jit_quote_revalidation.py
+          tests/test_kite_auth_consistency.py
+          tests/test_kite_depth_ws_stability.py
+          tests/test_kite_read_only_observation_runtime.py
+          tests/test_live_quote_truth_contract_phase2.py
+          tests/test_main_startup_audit.py
+          tests/test_market_data_index_quote_cache.py
+          tests/test_orchestrator_depth_ws_startup.py
+          tests/test_orchestrator_pilot_feed_ok.py
+          tests/test_phase2_fallback_contract_firewall.py
+          tests/test_phase2_live_fallback_disabled.py
+          tests/test_phase2_strict_live_data_contract.py
+          tests/test_pr763_callback_persistence_cutover_certification.py
+          tests/test_readiness_state_machine.py
+          tests/test_review_queue_live_entry.py

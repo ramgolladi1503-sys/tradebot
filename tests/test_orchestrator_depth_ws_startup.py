@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 import time
-from unittest.mock import Mock
+from pathlib import Path
+from unittest.mock import Mock, patch
 
 import pytest
 
 from config import config as cfg
+from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair
 
 
 def test_start_depth_ws_or_raise_fail_closed(monkeypatch):
@@ -98,6 +101,20 @@ def _patch_start_depth_ws_dependencies(monkeypatch, *, runtime_snapshot: dict):
     monkeypatch.setattr(auth_health, "get_kite_auth_health", lambda force=True: {"ok": True, "user_id": "ABCD1234"})
     monkeypatch.setattr(ws, "build_depth_subscription_tokens", lambda symbols: ([101], [{"symbol": "NIFTY", "count": 1}]))
     monkeypatch.setattr(runtime_store, "read_latest_runtime_snapshot", lambda: runtime_snapshot)
+    root = Path(os.environ["DATA_ROOT"]) / "logs"
+
+    # Canonical provenance stamping owns produced_at and intentionally ignores
+    # caller-supplied authority fields.  Freeze only the factory's stamp clock
+    # so the stale-snapshot test creates a genuinely stale but valid canonical
+    # artifact, then restore real time before startup computes its age.
+    stamp_epoch = float(runtime_snapshot.get("produced_at", time.time()))
+    with patch("core.feed.artifact_provenance.time.time", return_value=stamp_epoch):
+        make_valid_canonical_feed_pair(
+            root,
+            feed_ok=bool(runtime_snapshot.get("ws_connected", False)),
+            runtime_updates=runtime_snapshot,
+        )
+
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
     monkeypatch.setattr(cfg, "SYMBOLS", ["NIFTY"], raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_STARTUP_SNAPSHOT_MAX_AGE_SEC", 30.0, raising=False)
@@ -107,6 +124,7 @@ def _patch_start_depth_ws_dependencies(monkeypatch, *, runtime_snapshot: dict):
 def test_start_depth_ws_raises_on_fresh_failed_runtime_snapshot(monkeypatch):
     runtime_snapshot = {
         "ts_epoch": time.time(),
+        "produced_at": time.time(),
         "runtime_state": "SUBSCRIBE_FAILED",
         "source": "start_depth_ws:subscribe_failed",
         "last_error": "no_instrument_tokens",
@@ -123,8 +141,10 @@ def test_start_depth_ws_raises_on_fresh_failed_runtime_snapshot(monkeypatch):
 
 
 def test_start_depth_ws_ignores_stale_failed_runtime_snapshot(monkeypatch):
+    stale_epoch = time.time() - 120.0
     runtime_snapshot = {
-        "ts_epoch": time.time() - 120.0,
+        "ts_epoch": stale_epoch,
+        "produced_at": stale_epoch,
         "runtime_state": "SUBSCRIBE_FAILED",
         "source": "start_depth_ws:subscribe_failed",
         "last_error": "stale_failure",

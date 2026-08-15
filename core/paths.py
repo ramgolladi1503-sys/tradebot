@@ -85,5 +85,10 @@ def desk_logs_dir(desk_id: str) -> Path:
     return logs_dir() / "desks" / str(desk_id)
 
 
+def regime_runtime_evidence_path() -> Path:
+    """Return the governed, ignored path for runtime regime evidence."""
+    return runtime_dir() / "strategy_validation" / "regime_timeline.jsonl"
+
+
 def trade_db_path(desk_id: str) -> Path:
     return db_dir() / f"{str(desk_id)}.sqlite"

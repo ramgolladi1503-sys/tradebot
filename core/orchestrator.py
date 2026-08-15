@@ -155,6 +155,7 @@ from core.runtime_candidate_handoff_root_cause import (
     build_candidate_handoff_root_cause_payload,
     write_candidate_handoff_root_cause_latest,
 )
+from core.phase1_observability import build_phase1_observation, record_phase1_observation
 from core.runtime_notrade_reason_truth import (
     build_notrade_reason_truth_payload,
     write_notrade_reason_truth_latest,
@@ -265,6 +266,7 @@ from core.orchestrator_truth import (
     structurally_valid_cycle_candidate as _is_structurally_valid_cycle_candidate,
     trade_attr as _trade_attr,
 )
+from core.feed.artifact_loader import load_current_feed_runtime
 
 _perf_ms = _orchestrator_perf_ms
 from core.orchestrator_latency import (
@@ -836,23 +838,31 @@ def _normalize_feed_runtime_payload(raw: dict) -> dict:
 
 
 def _read_latest_feed_runtime_payload() -> tuple[dict, Path | None]:
-    candidates = [
-        logs_dir() / "feed_runtime_latest.json",
-    ]
-    newest: tuple[dict, Path | None, float] = ({}, None, 0.0)
-    for path in candidates:
-        try:
-            if not path.exists():
-                continue
-            mtime = float(path.stat().st_mtime)
-        except Exception:
-            continue
-        payload = _normalize_feed_runtime_payload(_read_json_dict(path))
-        if not payload:
-            continue
-        if newest[1] is None or mtime >= newest[2]:
-            newest = (payload, path, mtime)
-    return newest[0], newest[1]
+    path = logs_dir() / "feed_runtime_latest.json"
+    loaded = load_current_feed_runtime(path)
+    payload = dict(loaded.get("payload") or {}) if loaded.get("valid") else {}
+    payload["provenance"] = {"valid": bool(loaded.get("valid")), "reasons": list(loaded.get("reasons") or []), "reason_code": loaded.get("reason_code")}
+    if not loaded.get("valid"):
+        payload["feed_ok"] = False
+        payload["execution_feed_ready"] = False
+    return payload, path if path.exists() else None
+
+
+def _validated_depth_ws_startup_snapshot() -> tuple[dict, float | None]:
+    """Return only a current canonical runtime artifact for startup decisions."""
+    loaded_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
+    if not loaded_runtime.get("valid"):
+        reason_code = str(loaded_runtime.get("reason_code") or "INVALID_ARTIFACT")
+        raise RuntimeError(f"kite_depth_ws_init_failed:feed_runtime={reason_code}")
+    snapshot = dict(loaded_runtime.get("payload") or {})
+    snapshot_age_sec = None
+    try:
+        produced_at = float(snapshot.get("produced_at")) if snapshot.get("produced_at") is not None else None
+        if produced_at is not None:
+            snapshot_age_sec = max(0.0, float(time.time()) - produced_at)
+    except Exception:
+        snapshot_age_sec = None
+    return snapshot, snapshot_age_sec
 
 
 def _canonical_feed_truth_state_payload(feed_runtime_payload: dict | None) -> dict:
@@ -3969,19 +3979,15 @@ class Orchestrator:
         if not market_open:
             return True, []
 
-        feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
-        feed_runtime_payload = {}
-        if feed_runtime_path.exists():
-            try:
-                feed_runtime_payload = json.loads(feed_runtime_path.read_text(encoding="utf-8"))
-            except Exception:
-                feed_runtime_payload = {}
+        loaded_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
+        if not loaded_runtime.get("valid"):
+            return False, [f"feed_runtime:{loaded_runtime.get('reason_code') or 'INVALID_ARTIFACT'}"]
+        feed_runtime_payload = dict(loaded_runtime.get("payload") or {})
 
         def _runtime_health_feed_reasons() -> tuple[bool, list[str], bool]:
             now_epoch = float(now_utc_epoch())
             stale_reasons: list[str] = []
-            health_evidence_found = False
-            runtime_health_path = logs_dir() / "runtime_health_latest.json"
+            health_evidence_found = bool(feed_runtime_payload)
             runtime_health_max_age_sec = float(getattr(cfg, "RUNTIME_HEALTH_MAX_AGE_SEC", 30.0))
             feed_runtime_max_age_sec = float(getattr(cfg, "FEED_RUNTIME_MAX_AGE_SEC", 15.0))
 
@@ -3993,74 +3999,19 @@ class Orchestrator:
                 except Exception:
                     return None
 
-            runtime_payload = {}
-            if runtime_health_path.exists():
-                try:
-                    runtime_payload = json.loads(runtime_health_path.read_text(encoding="utf-8"))
-                except Exception:
-                    runtime_payload = {}
-            if runtime_payload:
-                health_evidence_found = True
-
-            snapshot_ts = _safe_float(runtime_payload.get("snapshot_ts_epoch") or runtime_payload.get("ts_epoch"))
-            snapshot_age = (now_epoch - snapshot_ts) if snapshot_ts is not None else None
-
-            execution_payload = runtime_payload.get("execution") if isinstance(runtime_payload.get("execution"), dict) else {}
-            decision_breakers = execution_payload.get("decision_breakers") if isinstance(execution_payload.get("decision_breakers"), dict) else {}
-            blocked_reasons = [str(x).strip().upper() for x in (decision_breakers.get("blocked_reasons") or []) if str(x).strip()]
-            if bool(decision_breakers.get("blocked")) and any(reason in {"STALE_FEED", "FEED_STALE"} for reason in blocked_reasons):
-                stale_reasons.append("feed_stale:DECISION_BREAKER_STALE_FEED")
-
-            feed_payload = runtime_payload.get("feed") if isinstance(runtime_payload.get("feed"), dict) else {}
-            if feed_payload:
-                full_feed_proof_ready = bool(feed_payload.get("full_feed_proof_ready"))
-                full_feed_proof_blockers = [str(x).strip().upper() for x in (feed_payload.get("full_feed_proof_blockers") or []) if str(x).strip()]
-                if full_feed_proof_ready is False and full_feed_proof_blockers:
-                    stale_reasons.extend([f"feed_stale:{reason}" for reason in full_feed_proof_blockers])
-                ws_connected = feed_payload.get("ws_connected")
-                ltp_required = bool(feed_payload.get("ltp_required", True))
-                ltp_age = _safe_float(feed_payload.get("ltp_age_sec"))
-                ltp_max_age = _safe_float(feed_payload.get("ltp_max_age_sec"))
-                if ws_connected is False:
-                    stale_reasons.append("feed_stale:WS_DISCONNECTED")
-                if ltp_required and ltp_age is not None and ltp_max_age is not None and ltp_age > ltp_max_age:
-                    stale_reasons.append("feed_stale:LTP_STALE")
-                underlying_stale_symbols = [str(symbol).strip().upper() for symbol in (feed_payload.get("underlying_ltp_stale_symbols") or []) if str(symbol).strip()]
-                if underlying_stale_symbols:
-                    stale_reasons.append("feed_stale:UNDERLYING_LTP_STALE")
-                sla_status = str(feed_payload.get("sla_status") or "").upper()
-                if sla_status in {"FAIL", "STALE"}:
-                    stale_reasons.append("feed_stale:SLA_FAIL")
-                blockers = [str(x).strip() for x in (feed_payload.get("blockers") or []) if str(x).strip()]
-                stale_reasons.extend([f"feed_stale:{reason}" for reason in blockers])
-
             feed_runtime_age = None
             if feed_runtime_payload:
-                health_evidence_found = True
                 feed_runtime_ts = _safe_float(feed_runtime_payload.get("ts_epoch"))
                 feed_runtime_age = (now_epoch - feed_runtime_ts) if feed_runtime_ts is not None else None
-                if snapshot_age is None or (feed_runtime_age is not None and feed_runtime_age < snapshot_age):
-                    snapshot_age = feed_runtime_age
-                if not stale_reasons:
-                    feed_runtime_feed = feed_runtime_payload.get("feed_truth_state")
-                    feed_runtime_reason = str(feed_runtime_payload.get("feed_truth_reason_code") or "").strip().upper()
-                    feed_runtime_ok = bool(feed_runtime_payload.get("feed_ok"))
-                    feed_runtime_blockers = [str(x).strip().upper() for x in (feed_runtime_payload.get("feed_reasons") or []) if str(x).strip()]
-                    if feed_runtime_feed == "DEAD" or feed_runtime_reason == "FEED_UNHEALTHY":
-                        stale_reasons.append("feed_stale:FEED_RUNTIME_DEAD")
-                    elif feed_runtime_ok is False:
-                        stale_reasons.extend([f"feed_stale:{reason}" for reason in feed_runtime_blockers or ["FEED_RUNTIME_NOT_OK"]])
-
-            if runtime_payload:
-                state_machine = runtime_payload.get("state_machine")
-                if isinstance(state_machine, dict):
-                    state = str(state_machine.get("state") or "").upper()
-                    reason = str(state_machine.get("reason") or "").strip()
-                    if state == "DOWN":
-                        stale_reasons.append(f"feed_stale:STATE_{reason or 'DOWN'}")
-
-            if snapshot_age is not None and snapshot_age > runtime_health_max_age_sec and not stale_reasons:
-                if feed_runtime_age is None or feed_runtime_age > feed_runtime_max_age_sec:
+                feed_runtime_feed = feed_runtime_payload.get("feed_truth_state")
+                feed_runtime_reason = str(feed_runtime_payload.get("feed_truth_reason_code") or "").strip().upper()
+                feed_runtime_ok = bool(feed_runtime_payload.get("feed_ok"))
+                feed_runtime_blockers = [str(x).strip().upper() for x in (feed_runtime_payload.get("feed_reasons") or []) if str(x).strip()]
+                if feed_runtime_feed == "DEAD" or feed_runtime_reason == "FEED_UNHEALTHY":
+                    stale_reasons.append("feed_stale:FEED_RUNTIME_DEAD")
+                elif feed_runtime_ok is False:
+                    stale_reasons.extend([f"feed_stale:{reason}" for reason in feed_runtime_blockers or ["FEED_RUNTIME_NOT_OK"]])
+                if feed_runtime_age is None or feed_runtime_age > max(runtime_health_max_age_sec, feed_runtime_max_age_sec):
                     stale_reasons.append("feed_stale:RUNTIME_HEALTH_STALE")
 
             return health_evidence_found, sorted(set(stale_reasons)), bool(stale_reasons)
@@ -4070,7 +4021,6 @@ class Orchestrator:
             return False, stale_reasons
 
         if not decision_rows:
-            runtime_health_path = logs_dir() / "runtime_health_latest.json"
             feed_tick_stale_sec = float(getattr(cfg, "FEED_TICK_STALE_RESTART_SEC", 5.0))
 
             if (not stale_reasons) and feed_runtime_payload:
@@ -4389,7 +4339,8 @@ class Orchestrator:
         )
 
     def _feed_status_for_heartbeat(self) -> dict:
-        payload = _read_json_dict(logs_dir() / "feed_runtime_latest.json")
+        loaded_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
+        payload = dict(loaded_runtime.get("payload") or {}) if loaded_runtime.get("valid") else {}
         feed_ok = False
         try:
             feed_ok, _ = self._pilot_feed_ok()
@@ -4928,6 +4879,15 @@ class Orchestrator:
                 live_market_data = fetch_live_market_data()
                 feature_timing["fetch_live_market_data_ms"] = _perf_ms(t0)
 
+                # Readiness owns underlying/index indicator truth.  The cycle
+                # snapshot below is intentionally narrowed to option rows for
+                # candidate evaluation, so using it here loses OHLC/indicator
+                # inputs and creates a false missing-warmup verdict.
+                readiness_market_data = [
+                    row for row in list(live_market_data or [])
+                    if isinstance(row, dict) and row.get("ohlc_bars_count") is not None
+                ] or live_market_data
+
                 t0 = time.perf_counter()
                 market_data_list = self._build_cycle_market_data(live_market_data)
                 feature_timing["build_cycle_market_data_ms"] = _perf_ms(t0)
@@ -4935,13 +4895,61 @@ class Orchestrator:
                 t_gap = time.perf_counter()
                 try:
                     indicator_report = build_live_indicator_readiness_report(
-                        [row for row in list(market_data_list or []) if isinstance(row, dict)],
+                        [row for row in list(readiness_market_data or []) if isinstance(row, dict)],
                         now_epoch=float(time.time()),
                         warmup_min_bars=int(getattr(cfg, "WARMUP_MIN_BARS", 50)),
                         source="orchestrator_live_indicator_readiness_v2",
                     )
                     self._apply_cycle_indicator_readiness_truth(market_data_list, indicator_report)
                     write_live_indicator_readiness_latest(indicator_report, now_epoch=float(time.time()))
+                    try:
+                        from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+                        for row in list(market_data_list or []):
+                            if not isinstance(row, dict):
+                                continue
+                            symbol = str(row.get("symbol") or "").strip().upper()
+                            if not symbol:
+                                continue
+                            emit_candle_pipeline_event(
+                                symbol=symbol, timeframe="1m", stage="T8_WARMUP_EVALUATED",
+                                source_event_ts=time.time(), bar_ts=row.get("last_candle_ts"),
+                                bar_state=str(row.get("warmup_status") or "UNKNOWN"),
+                                bar_count=row.get("ohlc_bars_count"),
+                                producer="core.live_indicator_readiness.build_live_indicator_readiness_report",
+                                consumer="orchestrator.live_monitoring",
+                                details={
+                                    "warmup_status": row.get("warmup_status"),
+                                    "required_bars": row.get("warmup_min_bars"),
+                                    "available_bars": row.get("ohlc_bars_count"),
+                                    "accepted_bars": row.get("ohlc_bars_count"),
+                                    "rejected_bars": 0,
+                                    "last_valid_bar_ts": row.get("last_candle_ts"),
+                                    "indicator_last_update_epoch": row.get("indicator_last_update_epoch"),
+                                    "warmup_watermark": row.get("indicator_last_update_epoch"),
+                                    "warmup_reason_codes": row.get("warmup_reasons") or row.get("regime_reasons") or [],
+                                },
+                            )
+                            emit_candle_pipeline_event(
+                                symbol=symbol, timeframe="1m", stage="T9_READINESS_EVALUATED",
+                                source_event_ts=time.time(), bar_ts=row.get("last_candle_ts"),
+                                bar_state="ALLOWED" if bool(row.get("indicator_readiness_ready")) else "BLOCKED",
+                                producer="core.live_indicator_readiness.build_live_indicator_readiness_report",
+                                consumer="orchestrator.live_monitoring",
+                                details={
+                                    "readiness_state": row.get("indicator_readiness_state"),
+                                    "allowed": bool(row.get("indicator_readiness_ready")),
+                                    "blockers": row.get("indicator_readiness_blockers") or row.get("regime_reasons") or [],
+                                    "feed_ok": row.get("feed_ok"),
+                                    "execution_feed_ready": row.get("execution_feed_ready"),
+                                    "truth_integrity_status": row.get("truth_integrity_status"),
+                                    "option_feed_block_reason": row.get("option_feed_block_reason"),
+                                    "latest_completed_bar_ts": row.get("last_candle_ts"),
+                                    "indicator_last_update_epoch": row.get("indicator_last_update_epoch"),
+                                    "warmup_status": row.get("warmup_status"),
+                                },
+                            )
+                    except Exception:
+                        pass
                 except Exception as exc:
                     logger.warning("cycle_indicator_truth_refresh_failed err=%s", exc)
                 cycle_market_open = bool(
@@ -5272,6 +5280,12 @@ class Orchestrator:
                     # Phase C: Build trade suggestion
                     debug_flag = getattr(cfg, "DEBUG_TRADE_REASONS", False) or getattr(cfg, "DEBUG_TRADE_MODE", False)
                     gate = self._strategy_gate_for_symbol(market_snapshot)
+                    phase1_raw_input_count = len(
+                        market_data.get("option_chain")
+                        if isinstance(market_data.get("option_chain"), (list, tuple))
+                        else []
+                    )
+                    phase1_strategy_evaluation_count = int(gate is not None)
                     gate_softened_no_strategy = self._should_soften_nonlive_no_strategy_gate(market_data, gate)
                     if gate_softened_no_strategy:
                         cycle_candidates_softened += 1
@@ -5520,14 +5534,31 @@ class Orchestrator:
                         allow_builder_baseline,
                         getattr(gate, "family", None),
                     )
-                    trade, decision_trace = self.trade_builder.build_with_trace(
-                        market_data,
-                        quick_mode=False,
-                        debug_reasons=debug_flag,
-                        force_family=gate.family,
-                        allow_fallbacks=allow_builder_fallbacks,
-                        allow_baseline=allow_builder_baseline,
-                    )
+                    try:
+                        trade, decision_trace = self.trade_builder.build_with_trace(
+                            market_data,
+                            quick_mode=False,
+                            debug_reasons=debug_flag,
+                            force_family=gate.family,
+                            allow_fallbacks=allow_builder_fallbacks,
+                            allow_baseline=allow_builder_baseline,
+                        )
+                    except Exception as phase1_exc:
+                        phase1_exception_type = type(phase1_exc).__name__
+                        try:
+                            record_phase1_observation(build_phase1_observation(
+                                cycle_id=str(getattr(self, "_gate_status_cycle_id", "")),
+                                market_data=market_data,
+                                scan_summary={},
+                                survivor_count=0,
+                                phase2_handoff_count=0,
+                                raw_input_count=phase1_raw_input_count,
+                                strategy_evaluation_count=phase1_strategy_evaluation_count,
+                                exception_type=phase1_exception_type,
+                            ))
+                        except Exception:
+                            pass
+                        raise
                     if isinstance(trade, dict):
                         candidate_status = str(trade.get("candidate_status") or "").strip().lower()
                         execution_status = str(trade.get("execution_status") or "").strip().lower()
@@ -5878,6 +5909,21 @@ class Orchestrator:
                     if ranked_candidates:
                         cycle_ranked_candidates.extend(ranked_candidates)
                     cycle_ranked_candidates_after_append = len(cycle_ranked_candidates)
+                    try:
+                        record_phase1_observation(build_phase1_observation(
+                            cycle_id=str(getattr(self, "_gate_status_cycle_id", "")),
+                            market_data=market_data,
+                            scan_summary=scan_summary,
+                            survivor_count=post_scan_survivor_count,
+                            phase2_handoff_count=(
+                                cycle_ranked_candidates_after_append
+                                - cycle_ranked_candidates_before_append
+                            ),
+                            raw_input_count=phase1_raw_input_count,
+                            strategy_evaluation_count=phase1_strategy_evaluation_count,
+                        ))
+                    except Exception:
+                        pass
                     if ranked_executable_candidates:
                         try:
                             cycle_candidate_handoff_snapshots.append(
@@ -7424,7 +7470,7 @@ class Orchestrator:
                             # Refresh indicator readiness artifact from current cycle market snapshots so
                             # it cannot remain stale when the orchestrator is actively running.
                             indicator_report = build_live_indicator_readiness_report(
-                                [row for row in list(market_data_list or []) if isinstance(row, dict)],
+                                [row for row in list(readiness_market_data or []) if isinstance(row, dict)],
                                 now_epoch=float(time.time()),
                                 warmup_min_bars=int(getattr(cfg, "WARMUP_MIN_BARS", 50)),
                                 source="orchestrator_live_indicator_readiness_v2",
@@ -7491,7 +7537,7 @@ class Orchestrator:
                                     p_row.pop(big_key, None)
                                 pruned_md_list.append(p_row)
 
-                        feed_runtime_payload = _read_json_dict(repo_logs_dir() / "feed_runtime_latest.json")
+                        feed_runtime_payload, _ = _read_latest_feed_runtime_payload()
                         workload_payload = build_live_workload_payload(
                             execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
                             market_open=bool(cycle_market_open),
@@ -7598,6 +7644,41 @@ class Orchestrator:
                             indicator_payload=indicator_payload if isinstance(indicator_payload, dict) else {},
                             cycle_blockers=dict(cycle_blockers),
                         )
+                        try:
+                            from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+                            emit_candle_pipeline_event(
+                                symbol="__CYCLE__", timeframe="cycle", stage="T10_CANDIDATE_EVALUATED",
+                                source_event_ts=time.time(), bar_state="COMPLETED",
+                                bar_count=int(cycle_candidate_pool_count),
+                                producer="orchestrator.live_monitoring",
+                                details={
+                                    "evaluation_started": True,
+                                    "evaluation_completed": True,
+                                    "candidate_created": int(cycle_candidate_pool_count),
+                                    "rankable": len(cycle_ranked_candidates),
+                                    "executable": int(top_payload.get("top_executable_count") or 0),
+                                    "blockers": dict(cycle_blockers),
+                                    "readiness_state": top_payload.get("phase2_state"),
+                                },
+                            )
+                            emit_candle_pipeline_event(
+                                symbol="__CYCLE__", timeframe="cycle", stage="T11_RANKING_EVALUATED",
+                                source_event_ts=time.time(), bar_state="COMPLETED",
+                                bar_count=len(cycle_ranked_candidates),
+                                producer="core.ranked_pipeline_evidence.write_ranked_pipeline_evidence",
+                                details={
+                                    "ranking_cycle_id": top_payload.get("cycle_id") or top_payload.get("generated_epoch"),
+                                    "input_candidate_count": len(cycle_ranked_candidates),
+                                    "rankable_count": int(top_payload.get("phase2_ranked_count") or 0),
+                                    "executable_count": int(top_payload.get("top_executable_count") or 0),
+                                    "ranked_count": len(cycle_ranked_candidates),
+                                    "top_candidate_id": top_payload.get("phase2_selected_trade_id"),
+                                    "ranking_completed": True,
+                                    "blockers": dict(cycle_blockers),
+                                },
+                            )
+                        except Exception:
+                            pass
                     except Exception as ranked_pipeline_exc:
                         logger.error("[RANKED_PIPELINE_RUNTIME_ERROR] error=%s", ranked_pipeline_exc)
                     feature_timing["GAP_write_ranked_pipeline_ms"] = _perf_ms(t0)
@@ -8027,19 +8108,10 @@ class Orchestrator:
             start_depth_ws_subprocess(tokens, profile_verified=True)
         else:
             start_depth_ws(tokens, profile_verified=True)
-        from core.feed.runtime_store import read_latest_runtime_snapshot
-
-        snapshot = read_latest_runtime_snapshot() or {}
+        snapshot, snapshot_age_sec = _validated_depth_ws_startup_snapshot()
         runtime_state = str(snapshot.get("runtime_state") or "").strip().upper()
         runtime_source = str(snapshot.get("source") or "").strip()
         ws_connected = snapshot.get("ws_connected")
-        snapshot_age_sec = None
-        try:
-            ts_epoch = float(snapshot.get("ts_epoch")) if snapshot.get("ts_epoch") is not None else None
-            if ts_epoch is not None:
-                snapshot_age_sec = max(0.0, float(time.time()) - float(ts_epoch))
-        except Exception:
-            snapshot_age_sec = None
         age_text = f"{snapshot_age_sec:.3f}" if snapshot_age_sec is not None else "none"
         logger.info(
             "WS: start_depth_ws dispatched runtime_state=%s source=%s ws_connected=%s snapshot_age_sec=%s",
