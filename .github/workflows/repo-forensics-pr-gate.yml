@@ -1,7 +1,11 @@
 name: Repo Forensics PR Gate
 
+# This required check is deliberately a pull_request_target workflow so the
+# enforcement logic is always loaded from protected main, not from PR code.
+# It has read-only permissions and performs the immutable live-flow check
+# before checking out or executing any PR content.
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - main
   workflow_dispatch:
@@ -13,14 +17,102 @@ jobs:
   repo-forensics-pr-gate:
     name: repo-forensics-pr-gate
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       PYTHONPATH: .
       EXECUTION_MODE: PAPER
       KITE_USE_API: "false"
+      PR818_FROZEN_LIVE_SHA: d7dc45e7c5c76247e7d1b8abd40ec7682fac2f9b
+      PR818_FROZEN_MAIN_BASELINE: 0d2a32290ccbacc76b608ecdae92df9312106198
     steps:
-      - name: Checkout
+      - name: Checkout protected main governance
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Enforce frozen PR818 live-flow production surface
+        if: github.event_name == 'pull_request_target'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PR_HEAD='${{ github.event.pull_request.head.sha }}'
+          git fetch --no-tags --depth=1 origin "$PR_HEAD"
+          git fetch --no-tags --depth=1 origin "$PR818_FROZEN_MAIN_BASELINE"
+
+          # Production/configuration surface changed by the independently
+          # live-reviewed PR818 lineage. Future analytics/research PRs must stay
+          # outside this surface. Any intentional change requires a separately
+          # governed live-flow recertification and freeze-baseline replacement.
+          protected=(
+            .github/workflows/repo-forensics-pr-gate.yml
+            .github/workflows/frozen-head-candidate-safety-tests.yml
+            requirements.txt
+            pyproject.toml
+            config/config.py
+            main.py
+            core/audit_log.py
+            core/candle_pipeline_diagnostics.py
+            core/decision_side_effects.py
+            core/depth_subscription_engine.py
+            core/engine_phase2_adapter.py
+            core/feed
+            core/feed_recovery_runtime.py
+            core/feed_supervisor.py
+            core/freshness_sla.py
+            core/kite_depth_ws.py
+            core/kite_ws_subprocess.py
+            core/live_indicator_readiness.py
+            core/market_context.py
+            core/market_data.py
+            core/market_event_graph_live_ohlc_buffer.py
+            core/market_event_graph_live_runtime_bridge.py
+            core/meg_request_scoped_causality.py
+            core/ohlc_buffer.py
+            core/orchestrator.py
+            core/orchestrator_helpers.py
+            core/orchestrator_truth.py
+            core/paths.py
+            core/phase1_observability.py
+            core/readiness_gate.py
+            core/regime_monitor.py
+            core/review_queue.py
+            core/runtime_bootstrap.py
+            core/runtime_feed_truth_snapshot.py
+            core/runtime_health.py
+            core/runtime_snapshot_producer.py
+            core/runtime_truth_integrity.py
+          )
+
+          changed="$(git diff --name-only "$PR818_FROZEN_MAIN_BASELINE" "$PR_HEAD" -- "${protected[@]}")"
+          if [[ -n "$changed" ]]; then
+            echo 'PR818_FROZEN_LIVE_FLOW_VIOLATION'
+            echo "Frozen live-reviewed SHA: $PR818_FROZEN_LIVE_SHA"
+            echo "Frozen integrated baseline: $PR818_FROZEN_MAIN_BASELINE"
+            echo 'Protected files differ from the frozen integrated baseline:'
+            printf '%s\n' "$changed"
+            echo 'This PR must not merge as an ordinary analytics/research/feature change.'
+            echo 'Use a separate governed live-flow recertification if changing this surface is truly required.'
+            exit 1
+          fi
+          echo 'PR818_FROZEN_LIVE_FLOW_PRESERVED'
+
+      - name: Checkout PR head for repo-forensics
+        if: github.event_name == 'pull_request_target'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout current main for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
