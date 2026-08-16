@@ -1,8 +1,10 @@
 import json
+import os
 from pathlib import Path
 from collections import deque
 
 from core import market_data as md
+from config import config as cfg
 
 
 class _DummyNewsCal:
@@ -18,6 +20,12 @@ class _DummyNewsText:
 class _DummyCross:
     def update(self, *_args, **_kwargs):
         return {"features": {}, "data_quality": {}}
+
+
+def test_runtime_fixture_rebinds_trade_db_path(monkeypatch, tmp_path):
+    expected = tmp_path / "runtime" / "db" / "DEFAULT.sqlite"
+    assert Path(os.environ["TRADE_DB_PATH"]) == expected
+    assert Path(cfg.TRADE_DB_PATH) == expected
 
 
 class _DummyRegimeModel:

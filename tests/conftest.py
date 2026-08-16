@@ -111,6 +111,7 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
     monkeypatch.setenv("LOGS_ROOT", str(runtime_root / "logs"))
     monkeypatch.setenv("LOCKS_ROOT", str(runtime_root / "locks"))
     monkeypatch.setenv("DB_ROOT", str(runtime_root / "db"))
+    monkeypatch.setenv("TRADE_DB_PATH", str(runtime_root / "db" / "DEFAULT.sqlite"))
     monkeypatch.setenv("REPORTS_ROOT", str(runtime_root / "reports"))
     monkeypatch.setenv("ANALYTICS_RUNTIME_DIR", str(runtime_root / "analytics"))
 
@@ -125,6 +126,7 @@ def _isolate_runtime_state(monkeypatch, tmp_path, request):
         monkeypatch.setattr(cfg, "LOGS_ROOT", str(runtime_root / "logs"), raising=False)
         monkeypatch.setattr(cfg, "LOCKS_ROOT", str(runtime_root / "locks"), raising=False)
         monkeypatch.setattr(cfg, "DB_ROOT", str(runtime_root / "db"), raising=False)
+        monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(runtime_root / "db" / "DEFAULT.sqlite"), raising=False)
         monkeypatch.setattr(cfg, "REPORTS_ROOT", str(runtime_root / "reports"), raising=False)
         monkeypatch.setattr(cfg, "ANALYTICS_RUNTIME_DIR", str(runtime_root / "analytics"), raising=False)
         if request.node.name == "test_runtime_snapshot_producer_falls_back_to_candidate_decisions_when_suggestions_are_stale":
