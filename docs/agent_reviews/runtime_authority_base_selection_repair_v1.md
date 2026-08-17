@@ -27,7 +27,7 @@ That makes a non-main PR inherit unrelated historical divergence. The repair
 uses the immutable pull-request base SHA and fails closed when it is absent or
 cannot be resolved.
 
-## Hermes Design
+## Hermes Review
 
 For pull-request events, the source of truth is
 `github.event.pull_request.base.sha`; manual dispatch requires an explicit
@@ -36,13 +36,13 @@ authority job verifies both objects and computes changed paths directly from
 `BASE_SHA` to `HEAD_SHA`. Candidate Python is not executed by the governance
 jobs.
 
-## GSD Implementation
+## GSD Review
 
 Updated `exact-sha-identity`, `agent-review-base-authority`,
 `runtime-authority-base-authority`, and `code-excellence-base-authority` to use
 the exact base SHA. Added static tests preventing regression to `origin/main`.
 
-## QA / Safety
+## QA / Safety Review
 
 The PR814 reproduction produced 1,147 files and unrelated whitespace failures
 under the old main comparison, versus 28 files and a passing `git diff --check`
