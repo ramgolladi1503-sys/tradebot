@@ -28,8 +28,27 @@ class PreflightError(ValueError):
     pass
 
 
-def _run(cmd: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, text=True, capture_output=True, check=False, cwd=str(cwd) if cwd else None)
+def _producer_child_env(producer: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(producer) + (os.pathsep + existing if existing else "")
+    return env
+
+
+def _run(
+    cmd: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        cmd,
+        text=True,
+        capture_output=True,
+        check=False,
+        cwd=str(cwd) if cwd else None,
+        env=env,
+    )
 
 
 def _git(root: Path, *args: str) -> str:
@@ -75,7 +94,11 @@ def _readiness_gate(producer: Path, *, python_command: str = "python") -> dict[s
     script = producer / "scripts" / "pre_live_readiness_gate.py"
     if not script.is_file():
         raise PreflightError("PRE_LIVE_GATE_MISSING")
-    p = _run([python_command, str(script), "--mode", "LIVE", "--json"], cwd=producer)
+    p = _run(
+        [python_command, str(script), "--mode", "LIVE", "--json"],
+        cwd=producer,
+        env=_producer_child_env(producer),
+    )
     if p.returncode not in {0, 2}:
         raise PreflightError(f"PRE_LIVE_GATE_EXECUTION_FAILED:{p.returncode}:{p.stderr.strip()}")
     try:
@@ -99,7 +122,11 @@ def _kite_network_auth(producer: Path, *, python_command: str = "python") -> dic
     script = producer / "scripts" / "check_kite_auth.py"
     if not script.is_file():
         raise PreflightError("KITE_AUTH_CHECKER_MISSING")
-    p = _run([python_command, str(script), "--mode", "LIVE"], cwd=producer)
+    p = _run(
+        [python_command, str(script), "--mode", "LIVE"],
+        cwd=producer,
+        env=_producer_child_env(producer),
+    )
     stdout = p.stdout.strip()
     stderr = p.stderr.strip()
     if p.returncode != 0:

@@ -79,7 +79,7 @@ def test_network_auth_checker_redacts_successful_user_id(tmp_path: Path, monkeyp
     scripts = producer / "scripts"
     scripts.mkdir(parents=True)
     (scripts / "check_kite_auth.py").write_text("# fixture\n", encoding="utf-8")
-    monkeypatch.setattr(mod, "_run", lambda cmd, cwd=None: SimpleNamespace(returncode=0, stdout="OK user_id=SECRET-USER\n", stderr=""))
+    monkeypatch.setattr(mod, "_run", lambda cmd, cwd=None, env=None: SimpleNamespace(returncode=0, stdout="OK user_id=SECRET-USER\n", stderr=""))
     result = mod._kite_network_auth(producer)
     assert result["verified"] is True
     assert result["user_id_present"] is True
@@ -92,7 +92,7 @@ def test_network_auth_checker_maps_auth_required_without_echoing_stdout(tmp_path
     scripts = producer / "scripts"
     scripts.mkdir(parents=True)
     (scripts / "check_kite_auth.py").write_text("# fixture\n", encoding="utf-8")
-    monkeypatch.setattr(mod, "_run", lambda cmd, cwd=None: SimpleNamespace(returncode=3, stdout="AUTH_REQUIRED mode=LIVE reason=invalid session\n", stderr=""))
+    monkeypatch.setattr(mod, "_run", lambda cmd, cwd=None, env=None: SimpleNamespace(returncode=3, stdout="AUTH_REQUIRED mode=LIVE reason=invalid session\n", stderr=""))
     with pytest.raises(mod.PreflightError, match="KITE_NETWORK_AUTH_FAILED:AUTH_REQUIRED") as exc:
         mod._kite_network_auth(producer)
     assert "invalid session" not in str(exc.value)
@@ -146,3 +146,45 @@ def test_all_authority_outputs_false(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert result["paper_authorized"] is False
     assert result["live_authorized"] is False
     assert result["STRUCTURAL_EDGE_CERTIFIED"] is False
+
+
+def test_frozen_gate_child_binds_producer_import_root_and_preserves_parent(monkeypatch, tmp_path: Path):
+    producer = tmp_path / "producer"
+    producer.mkdir()
+    scripts = producer / "scripts"
+    scripts.mkdir()
+    (scripts / "pre_live_readiness_gate.py").write_text("# fixture\n", encoding="utf-8")
+    captured = {}
+    monkeypatch.setenv("PYTHONPATH", "/existing/import/root")
+
+    def fake_run(cmd, *, cwd=None, env=None):
+        captured.update(cmd=cmd, cwd=cwd, env=env)
+        return SimpleNamespace(returncode=0, stdout='{"outcome":"MARKET_CLOSED_PENDING_TICK_PROOF"}', stderr="")
+
+    monkeypatch.setattr(mod, "_run", fake_run)
+    mod._readiness_gate(producer)
+    assert captured["cwd"] == producer
+    assert captured["env"]["PYTHONPATH"].startswith(str(producer) + ":")
+    assert captured["env"]["PYTHONPATH"].endswith("/existing/import/root")
+    assert __import__("os").environ["PYTHONPATH"] == "/existing/import/root"
+
+
+def test_auth_checker_uses_same_producer_import_environment(monkeypatch, tmp_path: Path):
+    producer = tmp_path / "producer"
+    scripts = producer / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "check_kite_auth.py").write_text("# fixture\n", encoding="utf-8")
+    captured = {}
+    monkeypatch.setenv("PYTHONPATH", "/existing/import/root")
+
+    def fake_run(cmd, *, cwd=None, env=None):
+        captured.update(cmd=cmd, cwd=cwd, env=env)
+        return SimpleNamespace(returncode=0, stdout="OK user_id=REDACTED\n", stderr="")
+
+    monkeypatch.setattr(mod, "_run", fake_run)
+    result = mod._kite_network_auth(producer)
+    assert result["verified"] is True
+    assert captured["cwd"] == producer
+    assert captured["env"]["PYTHONPATH"].startswith(str(producer) + ":")
+    assert captured["env"]["PYTHONPATH"].endswith("/existing/import/root")
+    assert __import__("os").environ["PYTHONPATH"] == "/existing/import/root"
