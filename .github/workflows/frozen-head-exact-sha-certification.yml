@@ -11,6 +11,9 @@ on:
       candidate_sha:
         required: true
         type: string
+      base_sha:
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -27,12 +30,13 @@ jobs:
         env:
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
         run: |
           git fetch --no-tags origin \
-            +refs/heads/main:refs/remotes/origin/main \
             +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
-          BASE_SHA="$(git rev-parse origin/main)"
+          git fetch --no-tags origin "$BASE_SHA"
           test -n "$BASE_SHA"
+          git cat-file -e "$BASE_SHA^{commit}"
           test "$(git rev-parse refs/remotes/origin/pr-${PR_NUMBER}-head)" = "$HEAD_SHA"
           git merge-base "$BASE_SHA" "$HEAD_SHA"
           echo "PR_HEAD_SHA=$HEAD_SHA"
@@ -51,10 +55,11 @@ jobs:
         env:
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
         run: |
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
-          python scripts/validate_frozen_head_bridge.py --pr-number "$PR_NUMBER" --candidate-sha "$HEAD_SHA" --base-sha "$(git rev-parse origin/main)"
+          test -n "$BASE_SHA"
+          git fetch --no-tags origin "$BASE_SHA" +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
+          python scripts/validate_frozen_head_bridge.py --pr-number "$PR_NUMBER" --candidate-sha "$HEAD_SHA" --base-sha "$BASE_SHA"
 
   runtime-authority-base-authority:
     if: ${{ !startsWith(github.head_ref, 'ci/') }}
@@ -68,13 +73,15 @@ jobs:
         env:
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
         run: |
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
-          BASE_SHA="$(git rev-parse origin/main)"
-          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-          git diff --check "$MERGE_BASE" "$HEAD_SHA"
+          test -n "$BASE_SHA"
+          git fetch --no-tags origin "$BASE_SHA" +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
+          git cat-file -e "$BASE_SHA^{commit}"
+          git cat-file -e "$HEAD_SHA^{commit}"
+          git diff --check "$BASE_SHA" "$HEAD_SHA"
           changed_file=$(mktemp)
-          git diff --name-only "$MERGE_BASE" "$HEAD_SHA" > "$changed_file"
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > "$changed_file"
           python - "$changed_file" <<'PY'
           import sys
           from scripts.validate_frozen_head_bridge import high_risk
@@ -98,10 +105,12 @@ jobs:
         env:
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
         run: |
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
-          BASE_SHA="$(git rev-parse origin/main)"
-          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          test -n "$BASE_SHA"
+          git fetch --no-tags origin "$BASE_SHA" +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
+          git cat-file -e "$BASE_SHA^{commit}"
+          git cat-file -e "$HEAD_SHA^{commit}"
           mkdir -p docs/code_excellence/reports
-          git diff --name-only "$MERGE_BASE" "$HEAD_SHA" > docs/code_excellence/reports/changed_paths.txt
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > docs/code_excellence/reports/changed_paths.txt
           PYTHONPATH=. python scripts/run_unified_ce_gates.py --repo . --config .gsd-forensics.yaml --changed-paths-file docs/code_excellence/reports/changed_paths.txt --out docs/code_excellence/reports/unified_ce_gate_latest.md
