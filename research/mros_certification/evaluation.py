@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
+from pathlib import Path
 import re
 from typing import Mapping
 
@@ -83,17 +86,53 @@ def evaluate_prospective(
     )
 
 
-def _validate_evidence_item(
-    *, candidate_sha: str, name: str, item: Mapping[str, object] | None
+def _load_evidence_artifact(
+    *, candidate_sha: str, name: str, descriptor: Mapping[str, object] | None
 ) -> Mapping[str, object]:
-    if not isinstance(item, Mapping):
-        raise ValueError(f"EDGE_EVIDENCE_INVALID:{name}")
-    if item.get("status") != "PASS":
+    """Load and verify one immutable evidence artifact from its descriptor.
+
+    T25 never treats caller-supplied PASS fields as evidence. The descriptor may
+    identify only a regular, non-symlink JSON artifact and its expected SHA-256.
+    The artifact bytes themselves are hashed and parsed here. The parsed payload
+    must identify the evidence kind, bind the exact candidate SHA, and carry a
+    PASS status before downstream gate-specific fields are consumed.
+    """
+    if not isinstance(descriptor, Mapping):
+        raise ValueError(f"EDGE_EVIDENCE_DESCRIPTOR_INVALID:{name}")
+
+    raw_path = descriptor.get("artifact_path")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError(f"EDGE_EVIDENCE_ARTIFACT_PATH_REQUIRED:{name}")
+    expected_sha = _exact_sha256(descriptor.get("artifact_sha256"))
+
+    path = Path(raw_path).expanduser()
+    if path.is_symlink():
+        raise ValueError(f"EDGE_EVIDENCE_SYMLINK_REJECTED:{name}")
+    if not path.is_file():
+        raise ValueError(f"EDGE_EVIDENCE_ARTIFACT_MISSING:{name}")
+
+    try:
+        payload_bytes = path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"EDGE_EVIDENCE_ARTIFACT_UNREADABLE:{name}") from exc
+
+    actual_sha = hashlib.sha256(payload_bytes).hexdigest()
+    if actual_sha != expected_sha:
+        raise ValueError(f"EDGE_EVIDENCE_ARTIFACT_HASH_MISMATCH:{name}")
+
+    try:
+        payload = json.loads(payload_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"EDGE_EVIDENCE_ARTIFACT_JSON_INVALID:{name}") from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"EDGE_EVIDENCE_ARTIFACT_PAYLOAD_INVALID:{name}")
+    if payload.get("evidence_kind") != name:
+        raise ValueError(f"EDGE_EVIDENCE_KIND_MISMATCH:{name}")
+    if payload.get("status") != "PASS":
         raise ValueError(f"EDGE_EVIDENCE_NOT_PASS:{name}")
-    if item.get("candidate_sha") != candidate_sha:
+    if payload.get("candidate_sha") != candidate_sha:
         raise ValueError(f"EDGE_EVIDENCE_SHA_MISMATCH:{name}")
-    _exact_sha256(item.get("artifact_sha256"))
-    return item
+    return payload
 
 
 def _validate_certification_evidence(
@@ -102,9 +141,14 @@ def _validate_certification_evidence(
     missing = [name for name in _REQUIRED_CERTIFICATION_EVIDENCE if name not in evidence]
     if missing:
         raise ValueError(f"EDGE_EVIDENCE_MISSING:{','.join(missing)}")
-    for name in _REQUIRED_CERTIFICATION_EVIDENCE:
-        _validate_evidence_item(candidate_sha=candidate_sha, name=name, item=evidence[name])
-    return evidence
+    return {
+        name: _load_evidence_artifact(
+            candidate_sha=candidate_sha,
+            name=name,
+            descriptor=evidence[name],
+        )
+        for name in _REQUIRED_CERTIFICATION_EVIDENCE
+    }
 
 
 def structural_edge_decision(
@@ -119,11 +163,12 @@ def structural_edge_decision(
 ) -> dict[str, object]:
     """Return a fail-closed T25 structural-edge decision.
 
-    T25 consumes evidence; it does not manufacture it. Caller-selected booleans are
-    compatibility inputs only. A positive certification requires the complete
-    exact-SHA evidence bundle. An upstream INVALIDATED result requires only its
-    exact-SHA prospective artifact because later economic gates are not relevant.
-    Without adequate evidence, the decision remains NOT_CERTIFIED.
+    T25 consumes verified artifacts; it does not manufacture evidence. Caller
+    booleans/status strings are compatibility assertions only. A positive
+    certification requires the complete exact-SHA evidence bundle, where every
+    descriptor resolves to artifact bytes whose SHA-256 is verified here. An
+    upstream INVALIDATED result requires its verified prospective artifact.
+    Without adequate verified evidence, the decision remains NOT_CERTIFIED.
     """
     candidate_sha = _exact_git_sha(candidate_sha)
     status = "NOT_CERTIFIED"
@@ -133,10 +178,10 @@ def structural_edge_decision(
 
     if prospective_status == "INVALIDATED":
         if evidence is not None:
-            prospective = _validate_evidence_item(
+            prospective = _load_evidence_artifact(
                 candidate_sha=candidate_sha,
                 name="prospective",
-                item=evidence.get("prospective"),
+                descriptor=evidence.get("prospective"),
             )
             if prospective.get("evaluation_status") != "INVALIDATED":
                 raise ValueError("EDGE_EVIDENCE_PROSPECTIVE_STATUS_MISMATCH")
