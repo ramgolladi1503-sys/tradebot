@@ -1,0 +1,81 @@
+name: Full Observation Readiness 20260818 V1
+
+on:
+  pull_request:
+    paths:
+      - "scripts/research/analyze_advisory_candidate_outcomes_postclose_v1.py"
+      - "scripts/research/validate_full_observation_program_readiness_v1.py"
+      - "tests/test_advisory_candidate_outcomes_postclose_v1.py"
+      - "tests/test_full_observation_program_readiness_v1.py"
+      - "docs/agent_reviews/full_observation_readiness_20260818_v1.md"
+      - ".github/workflows/full-observation-readiness-20260818-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  governed-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          lfs: false
+      - name: Verify exact checkout
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused test dependency
+        run: python -m pip install --disable-pip-version-check pytest
+      - name: Compile focused files
+        run: |
+          python -m py_compile \
+            scripts/research/analyze_advisory_candidate_outcomes_postclose_v1.py \
+            scripts/research/validate_full_observation_program_readiness_v1.py \
+            tests/test_advisory_candidate_outcomes_postclose_v1.py \
+            tests/test_full_observation_program_readiness_v1.py
+      - name: Focused tests
+        run: pytest -q -o addopts='' tests/test_advisory_candidate_outcomes_postclose_v1.py tests/test_full_observation_program_readiness_v1.py
+      - name: Fetch exact referenced authorities
+        run: |
+          for sha in \
+            f0f5b3d3659415ab36662291e91b8f57fd8d1e07 \
+            d8adee30f604cd8969a386afe3d74f6ace7016de \
+            94bd5db86f9a2cadd16f0d349710df5c7194bb10 \
+            1dfc08ca1a35f5e57c728201eb35bad3784479d5 \
+            46dd4f7df9b63486eb633a12baf25412cd4f761d \
+            10d2f68b08026a269e9c25095bebca683ada67e5 \
+            21f95a8b5908a8f6b9a0d7bbf459877efed41262 \
+            9ea3c1f38234ae6a5e6af30f734027ef43a79d89 \
+            911ae2455a4fa6bfefedb11dc2d7f2ae82c20d2d
+          do
+            git cat-file -e "$sha^{commit}"
+          done
+      - name: Run exact-SHA cross-lane rehearsal
+        run: python scripts/research/validate_full_observation_program_readiness_v1.py --repo . --output /tmp/full_observation_readiness_20260818.json
+      - name: Verify controlled verdict
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/full_observation_readiness_20260818.json').read_text())
+          assert p['FULL_OBSERVATION_PROGRAM_READY'] == 'PASS'
+          assert p['PASS_SCOPE'] == 'PREMARKET_REPOSITORY_AND_POSTCLOSE_PROGRAM_READINESS_ONLY'
+          assert p['LIVE_READY'] is False
+          assert p['LIVE_VERIFIED'] is False
+          assert p['PROSPECTIVE_SUPPORTED'] is False
+          assert p['STRUCTURAL_EDGE_CERTIFIED'] is False
+          for k in ('broker_write_authority','order_authority','paper_authorized','live_authorized'):
+              assert p[k] is False
+          assert p['no_market_hours_secondary_observer'] is True
+          assert p['aixion_market_hours_attach_allowed'] is False
+          assert p['pr815_live_attestation_producer_implemented'] is False
+          print('FULL_OBSERVATION_PROGRAM_READY=PASS')
+          print('LIVE_READY=false')
+          PY
