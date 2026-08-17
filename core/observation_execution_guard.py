@@ -43,4 +43,3 @@ def assert_execution_allowed(boundary: str) -> None:
     # is still rejected, never silently normalized into an executable session.
     suffix = ":conflicting_authority=" + ",".join(conflicting) if conflicting else ""
     raise ObservationOnlyExecutionBlocked(f"{boundary}{suffix}")
-
