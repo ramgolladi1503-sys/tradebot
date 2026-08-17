@@ -5,8 +5,10 @@ on:
     paths:
       - "scripts/research/analyze_advisory_candidate_outcomes_postclose_v1.py"
       - "scripts/research/validate_full_observation_program_readiness_v1.py"
+      - "scripts/research/run_20260818_operator_preflight_v1.py"
       - "tests/test_advisory_candidate_outcomes_postclose_v1.py"
       - "tests/test_full_observation_program_readiness_v1.py"
+      - "tests/test_20260818_operator_preflight_v1.py"
       - "docs/agent_reviews/full_observation_readiness_20260818_v1.md"
       - ".github/workflows/full-observation-readiness-20260818-v1.yml"
   workflow_dispatch:
@@ -38,10 +40,16 @@ jobs:
           python -m py_compile \
             scripts/research/analyze_advisory_candidate_outcomes_postclose_v1.py \
             scripts/research/validate_full_observation_program_readiness_v1.py \
+            scripts/research/run_20260818_operator_preflight_v1.py \
             tests/test_advisory_candidate_outcomes_postclose_v1.py \
-            tests/test_full_observation_program_readiness_v1.py
+            tests/test_full_observation_program_readiness_v1.py \
+            tests/test_20260818_operator_preflight_v1.py
       - name: Focused tests
-        run: pytest -q -o addopts='' tests/test_advisory_candidate_outcomes_postclose_v1.py tests/test_full_observation_program_readiness_v1.py
+        run: >-
+          pytest -q -o addopts=''
+          tests/test_advisory_candidate_outcomes_postclose_v1.py
+          tests/test_full_observation_program_readiness_v1.py
+          tests/test_20260818_operator_preflight_v1.py
       - name: Fetch exact referenced authorities
         run: |
           for sha in \
