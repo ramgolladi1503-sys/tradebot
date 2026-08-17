@@ -10,6 +10,8 @@ Kite network authentication path.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
+import hashlib
 import json
 import os
 import shutil
@@ -26,6 +28,78 @@ AUTHORITY_ENV = ("BROKER_WRITE_AUTHORITY", "ORDER_AUTHORITY", "PAPER_AUTHORIZED"
 
 class PreflightError(ValueError):
     pass
+
+
+def _normalize_json_value(value: Any, *, path: str = "$", _set_context: bool = False) -> Any:
+    """Convert only explicitly supported representation types to JSON values."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dt.datetime):
+        return value.isoformat()
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        normalized: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise PreflightError(f"JSON_NORMALIZATION_UNKNOWN_TYPE:{path}.<key>:{type(key).__name__}")
+            normalized[key] = _normalize_json_value(item, path=f"{path}.{key}")
+        return normalized
+    if isinstance(value, tuple):
+        return [_normalize_json_value(item, path=f"{path}[{idx}]") for idx, item in enumerate(value)]
+    if isinstance(value, list):
+        return [_normalize_json_value(item, path=f"{path}[{idx}]") for idx, item in enumerate(value)]
+    if isinstance(value, set):
+        normalized = [_normalize_json_value(item, path=f"{path}{{{idx}}}", _set_context=True) for idx, item in enumerate(value)]
+        try:
+            return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True))
+        except TypeError as exc:
+            raise PreflightError(f"JSON_NORMALIZATION_UNKNOWN_TYPE:{path}:set") from exc
+    module_name = type(value).__module__
+    if module_name.startswith("numpy") and hasattr(value, "item"):
+        return _normalize_json_value(value.item(), path=path)
+    raise PreflightError(f"JSON_NORMALIZATION_UNKNOWN_TYPE:{path}:{type(value).__name__}")
+
+
+_READINESS_ADAPTER = r'''
+import datetime as _dt
+import json as _json
+import os as _os
+from pathlib import Path as _Path
+from core.pre_live_readiness_gate import evaluate_pre_live_readiness
+
+def _normalize(value, path="$", set_context=False):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, _dt.datetime):
+        return value.isoformat()
+    if isinstance(value, _dt.date):
+        return value.isoformat()
+    if isinstance(value, _Path):
+        return str(value)
+    if isinstance(value, dict):
+        result = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError("JSON_NORMALIZATION_UNKNOWN_TYPE:%s.<key>:%s" % (path, type(key).__name__))
+            result[key] = _normalize(item, "%s.%s" % (path, key))
+        return result
+    if isinstance(value, tuple):
+        return [_normalize(item, "%s[%d]" % (path, idx)) for idx, item in enumerate(value)]
+    if isinstance(value, list):
+        return [_normalize(item, "%s[%d]" % (path, idx)) for idx, item in enumerate(value)]
+    if isinstance(value, set):
+        result = [_normalize(item, "%s{%d}" % (path, idx), True) for idx, item in enumerate(value)]
+        return sorted(result, key=lambda item: _json.dumps(item, sort_keys=True))
+    if type(value).__module__.startswith("numpy") and hasattr(value, "item"):
+        return _normalize(value.item(), path)
+    raise TypeError("JSON_NORMALIZATION_UNKNOWN_TYPE:%s:%s" % (path, type(value).__name__))
+
+payload = evaluate_pre_live_readiness(mode="LIVE")
+print(_json.dumps(_normalize(payload), sort_keys=True))
+'''
 
 
 def _producer_child_env(producer: Path) -> dict[str, str]:
@@ -91,15 +165,15 @@ def _competing_processes(producer: Path) -> list[dict[str, Any]]:
 
 
 def _readiness_gate(producer: Path, *, python_command: str = "python") -> dict[str, Any]:
-    script = producer / "scripts" / "pre_live_readiness_gate.py"
-    if not script.is_file():
-        raise PreflightError("PRE_LIVE_GATE_MISSING")
+    evaluator = producer / "core" / "pre_live_readiness_gate.py"
+    if not evaluator.is_file():
+        raise PreflightError("PRE_LIVE_GATE_EVALUATOR_MISSING")
     p = _run(
-        [python_command, str(script), "--mode", "LIVE", "--json"],
+        [python_command, "-c", _READINESS_ADAPTER],
         cwd=producer,
         env=_producer_child_env(producer),
     )
-    if p.returncode not in {0, 2}:
+    if p.returncode != 0:
         raise PreflightError(f"PRE_LIVE_GATE_EXECUTION_FAILED:{p.returncode}:{p.stderr.strip()}")
     try:
         payload = json.loads(p.stdout.strip())
@@ -107,6 +181,8 @@ def _readiness_gate(producer: Path, *, python_command: str = "python") -> dict[s
         raise PreflightError("PRE_LIVE_GATE_JSON_INVALID") from exc
     if not isinstance(payload, dict):
         raise PreflightError("PRE_LIVE_GATE_PAYLOAD_INVALID")
+    payload["_preflight_evaluator_source_sha256"] = hashlib.sha256(evaluator.read_bytes()).hexdigest()
+    payload["_preflight_normalization_schema"] = "strict-json-v1"
     return payload
 
 

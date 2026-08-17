@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import datetime as dt
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -151,9 +153,9 @@ def test_all_authority_outputs_false(tmp_path: Path, monkeypatch: pytest.MonkeyP
 def test_frozen_gate_child_binds_producer_import_root_and_preserves_parent(monkeypatch, tmp_path: Path):
     producer = tmp_path / "producer"
     producer.mkdir()
-    scripts = producer / "scripts"
-    scripts.mkdir()
-    (scripts / "pre_live_readiness_gate.py").write_text("# fixture\n", encoding="utf-8")
+    evaluator = producer / "core"
+    evaluator.mkdir()
+    (evaluator / "pre_live_readiness_gate.py").write_text("# fixture\n", encoding="utf-8")
     captured = {}
     monkeypatch.setenv("PYTHONPATH", "/existing/import/root")
 
@@ -188,3 +190,48 @@ def test_auth_checker_uses_same_producer_import_environment(monkeypatch, tmp_pat
     assert captured["env"]["PYTHONPATH"].startswith(str(producer) + ":")
     assert captured["env"]["PYTHONPATH"].endswith("/existing/import/root")
     assert __import__("os").environ["PYTHONPATH"] == "/existing/import/root"
+
+
+def test_json_normalization_preserves_date_datetime_and_path():
+    assert mod._normalize_json_value(dt.date(2026, 8, 18)) == "2026-08-18"
+    value = dt.datetime(2026, 8, 18, 9, 15, tzinfo=dt.timezone.utc)
+    assert mod._normalize_json_value(value) == "2026-08-18T09:15:00+00:00"
+    assert mod._normalize_json_value(Path("/tmp/evidence")) == "/tmp/evidence"
+
+
+def test_json_normalization_unknown_type_fails_closed():
+    with pytest.raises(mod.PreflightError, match="JSON_NORMALIZATION_UNKNOWN_TYPE"):
+        mod._normalize_json_value(object())
+
+
+def test_json_normalization_preserves_blocker_and_option_counts():
+    payload = {
+        "outcome": "FAIL",
+        "blockers": ["token_universe_zero"],
+        "checks": {"token_universe": {"option_token_count": 70, "rows": [{"count": 26, "status": "FULL"}, {"count": 26, "status": "FULL"}, {"count": 18, "status": "FULL"}]}},
+    }
+    normalized = mod._normalize_json_value(payload)
+    assert normalized == payload
+
+
+def test_readiness_gate_uses_selected_python_adapter_and_normalizes(monkeypatch, tmp_path: Path):
+    producer = tmp_path / "producer"
+    evaluator = producer / "core"
+    evaluator.mkdir(parents=True)
+    (evaluator / "pre_live_readiness_gate.py").write_text("# frozen evaluator fixture\n", encoding="utf-8")
+    captured = {}
+    parent_pythonpath = os.environ.get("PYTHONPATH", "")
+
+    def fake_run(cmd, *, cwd=None, env=None):
+        captured.update(cmd=cmd, cwd=cwd, env=env)
+        return SimpleNamespace(returncode=0, stdout='{"outcome":"MARKET_CLOSED_PENDING_TICK_PROOF","blockers":[],"ready":false}', stderr="")
+
+    monkeypatch.setattr(mod, "_run", fake_run)
+    result = mod._readiness_gate(producer, python_command="/external/compatible/python")
+    assert captured["cmd"][0] == "/external/compatible/python"
+    assert captured["cmd"][1] == "-c"
+    assert captured["cwd"] == producer
+    assert result["outcome"] == "MARKET_CLOSED_PENDING_TICK_PROOF"
+    assert result["_preflight_normalization_schema"] == "strict-json-v1"
+    assert os.environ.get("PYTHONPATH", "") == parent_pythonpath
+    assert captured["env"]["PYTHONPATH"].endswith(parent_pythonpath) if parent_pythonpath else True
