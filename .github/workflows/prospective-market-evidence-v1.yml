@@ -1,0 +1,42 @@
+name: Prospective Market Evidence V1
+
+on:
+  pull_request:
+    paths:
+      - "core/prospective_market_evidence.py"
+      - "tests/test_prospective_market_evidence.py"
+      - "docs/research/prospective_market_evidence_pipeline_v1.md"
+      - ".github/workflows/prospective-market-evidence-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: .
+      TRADEBOT_READ_ONLY: "true"
+      EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          lfs: false
+      - name: Verify exact checkout
+        run: |
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$EXPECTED_HEAD_SHA"
+          echo "EXACT_HEAD_SHA=$actual"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: python -m pip install pytest
+      - name: Compile sidecar
+        run: python -m py_compile core/prospective_market_evidence.py tests/test_prospective_market_evidence.py
+      - name: Focused adversarial and replay tests
+        run: pytest -q -o addopts='' tests/test_prospective_market_evidence.py
