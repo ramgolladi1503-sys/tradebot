@@ -102,3 +102,36 @@ python -m pytest -q tests/test_h1_shadow_adapter.py
 ```
 
 This is not a substitute for full repository CI or forward-market evidence.
+
+## Sealed Live-Capture Export Contract
+
+`export_h1_live_capture_bars.py` is a read-only bridge for a sealed TradeBot
+capture. It accepts either a SQLite `ticks` database or `price_trace.jsonl`,
+selects only the explicitly configured NIFTY token (`256265` by default), and
+emits deterministic five-minute OHLC with the exact columns:
+
+```text
+datetime,open,high,low,close
+```
+
+SQLite is opened with `mode=ro`; the source is never migrated, checkpointed,
+vacuumed, or written. Events are ordered by timestamp and then SQLite `rowid`
+(or JSONL line number). Missing bars are reported and never filled. The
+governed path fails closed unless all 27 starts from `09:15` through `11:25`
+IST are present, making the `09:15–11:30 IST` opening-window gate complete and
+leaving at least the seven sequential bars required by the H1 observer.
+
+Example, after the source database is sealed:
+
+```bash
+python3 scripts/research/hypothesis_factory/export_h1_live_capture_bars.py \
+  --sqlite /sealed/session/db/DEFAULT.sqlite \
+  --observation-date 2026-08-17 \
+  --output-csv /sealed/session/observers/h1/finalized_h1_completed_bars_20260817.csv \
+  --manifest /sealed/session/observers/h1/finalized_h1_completed_bars_20260817.manifest.json
+```
+
+`--allow-incomplete` is diagnostic-only and must not be used as replay
+authority. It writes a manifest with `h1_replay_input_valid=false` when the
+opening-window gate fails. This exporter does not alter the frozen predicate,
+create orders, call broker APIs, or authorize paper/live execution.
