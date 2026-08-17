@@ -40,3 +40,20 @@ def test_agent_review_text_can_be_read_from_candidate_git_tree(monkeypatch, tmp_
     )
 
     assert _candidate_file_text("HEAD", path) == "## High-Risk Path Review\n"
+
+
+def test_agent_review_text_prefers_committed_candidate_blob(monkeypatch, tmp_path):
+    path = tmp_path / "review.md"
+    path.write_text("stale checkout text", encoding="utf-8")
+
+    class Result:
+        returncode = 0
+        stdout = "committed candidate text"
+        stderr = ""
+
+    monkeypatch.setattr(
+        "scripts.validate_agent_review_evidence.subprocess.run",
+        lambda *args, **kwargs: Result(),
+    )
+
+    assert _candidate_file_text("HEAD", path) == "committed candidate text"

@@ -90,9 +90,7 @@ def _high_risk_changed(paths: list[str]) -> bool:
 
 
 def _candidate_file_text(candidate_ref: str, path: Path) -> str | None:
-    """Read a candidate file from the checkout, falling back to its Git tree."""
-    if path.exists():
-        return path.read_text(encoding="utf-8")
+    """Read the committed candidate blob, falling back to the checkout."""
     proc = subprocess.run(
         ["git", "show", f"{candidate_ref}:{path.as_posix()}"],
         check=False,
@@ -100,9 +98,11 @@ def _candidate_file_text(candidate_ref: str, path: Path) -> str | None:
         stderr=subprocess.PIPE,
         text=True,
     )
-    if proc.returncode != 0:
-        return None
-    return proc.stdout
+    if proc.returncode == 0:
+        return proc.stdout
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return None
 
 
 def _base_external_review(base_ref: str, candidate_sha: str) -> str | None:
