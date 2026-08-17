@@ -47,6 +47,17 @@ def _evidence(candidate_sha=SHA):
     }
 
 
+def _invalidated_evidence(candidate_sha=SHA):
+    return {
+        "prospective": {
+            "status": "PASS",
+            "candidate_sha": candidate_sha,
+            "artifact_sha256": ARTIFACT,
+            "evaluation_status": "INVALIDATED",
+        }
+    }
+
+
 def test_missing_prospective_data_is_honest():
     assert (
         evaluate_prospective(
@@ -175,15 +186,41 @@ def test_caller_cannot_forge_verifier_pass():
         )
 
 
-def test_invalidated_prospective_state_never_certifies():
+def test_invalidated_status_without_bound_evidence_is_not_authority():
     decision = structural_edge_decision(
         candidate_sha=SHA,
         prospective_status="INVALIDATED",
-        historical_oos=True,
-        cost_evidence=True,
-        robustness=True,
-        independent_verification="PASS",
-        evidence=_evidence(),
+        historical_oos=False,
+        cost_evidence=False,
+        robustness=False,
+        independent_verification="NOT_REQUIRED",
+    )
+    assert decision["status"] == "NOT_CERTIFIED"
+    assert decision["execution_authority"] is False
+
+
+def test_bound_invalidated_prospective_evidence_propagates_invalidated():
+    decision = structural_edge_decision(
+        candidate_sha=SHA,
+        prospective_status="INVALIDATED",
+        historical_oos=False,
+        cost_evidence=False,
+        robustness=False,
+        independent_verification="NOT_REQUIRED",
+        evidence=_invalidated_evidence(),
     )
     assert decision["status"] == "INVALIDATED"
     assert decision["execution_authority"] is False
+
+
+def test_invalidated_evidence_must_match_claimed_status():
+    with pytest.raises(ValueError, match="EDGE_EVIDENCE_PROSPECTIVE_STATUS_MISMATCH"):
+        structural_edge_decision(
+            candidate_sha=SHA,
+            prospective_status="INVALIDATED",
+            historical_oos=False,
+            cost_evidence=False,
+            robustness=False,
+            independent_verification="NOT_REQUIRED",
+            evidence={"prospective": _evidence()["prospective"]},
+        )
