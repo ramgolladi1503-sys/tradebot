@@ -15,15 +15,24 @@ permissions:
 jobs:
   focused-validation:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          lfs: false
+      - name: Verify exact checkout
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install focused test dependency
         run: python -m pip install --disable-pip-version-check pytest
-      - name: Compile orchestrator
-        run: python -m py_compile scripts/research/run_postclose_observation_orchestrator_v1.py
+      - name: Compile focused files
+        run: python -m py_compile scripts/research/run_postclose_observation_orchestrator_v1.py tests/research/test_postclose_observation_orchestrator_v1.py
       - name: Run focused tests
         run: python -m pytest -q -o addopts='' tests/research/test_postclose_observation_orchestrator_v1.py
       - name: Verify frozen safety flags in source
