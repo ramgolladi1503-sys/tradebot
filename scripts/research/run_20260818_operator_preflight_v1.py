@@ -12,10 +12,12 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 import shutil
 import subprocess
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -65,6 +67,8 @@ def _normalize_json_value(value: Any, *, path: str = "$", _set_context: bool = F
 
 _READINESS_ADAPTER = r'''
 import datetime as _dt
+import contextlib as _contextlib
+import io as _io
 import json as _json
 import os as _os
 from pathlib import Path as _Path
@@ -97,7 +101,8 @@ def _normalize(value, path="$", set_context=False):
         return _normalize(value.item(), path)
     raise TypeError("JSON_NORMALIZATION_UNKNOWN_TYPE:%s:%s" % (path, type(value).__name__))
 
-payload = evaluate_pre_live_readiness(mode="LIVE")
+with _contextlib.redirect_stdout(_io.StringIO()):
+    payload = evaluate_pre_live_readiness(mode="LIVE")
 print(_json.dumps(_normalize(payload), sort_keys=True))
 '''
 
