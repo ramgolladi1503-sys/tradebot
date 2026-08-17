@@ -1,0 +1,43 @@
+name: Post-Close Observation Orchestrator V1
+
+on:
+  pull_request:
+    paths:
+      - "scripts/research/run_postclose_observation_orchestrator_v1.py"
+      - "tests/research/test_postclose_observation_orchestrator_v1.py"
+      - "docs/agent_reviews/postclose_observation_orchestrator_v1.md"
+      - ".github/workflows/postclose-observation-orchestrator-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile orchestrator
+        run: python -m py_compile scripts/research/run_postclose_observation_orchestrator_v1.py
+      - name: Run focused tests
+        run: pytest -q -o addopts='' tests/research/test_postclose_observation_orchestrator_v1.py
+      - name: Verify frozen safety flags in source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('scripts/research/run_postclose_observation_orchestrator_v1.py').read_text()
+          required = [
+              '"broker_write_authority": False',
+              '"order_authority": False',
+              '"paper_authorized": False',
+              '"live_authorized": False',
+              '"structural_edge_certified": False',
+          ]
+          missing = [item for item in required if item not in text]
+          if missing:
+              raise SystemExit(f'missing frozen safety declarations: {missing}')
+          print('POSTCLOSE_ORCHESTRATOR_STATIC_SAFETY=PASS')
+          PY
