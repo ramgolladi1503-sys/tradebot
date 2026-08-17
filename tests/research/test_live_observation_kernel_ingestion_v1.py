@@ -122,11 +122,11 @@ def specs(files: dict[str, Path]) -> list[str]:
 def make_bundle(tmp_path: Path, *, count: int = 27, missing_to_zero: bool = False):
     producer, actual_sha = init_producer(tmp_path)
     runtime = tmp_path / "runtime"
-    runtime.mkdir()
+    runtime.mkdir(exist_ok=True)
     files = make_h1_files(runtime, count=count, missing_to_zero=missing_to_zero)
     bundle_path = runtime / "eod" / "kernel_bundle.json"
     kernel_root = tmp_path / "kernel-repo"
-    kernel_root.mkdir()
+    kernel_root.mkdir(exist_ok=True)
     sealer.seal_bundle(
         producer_worktree=producer,
         expected_producer_sha=actual_sha,
@@ -162,7 +162,7 @@ def test_valid_h1_bundle_is_verified_without_authority_promotion(tmp_path: Path)
 def test_sealer_rejects_wrong_producer_sha(tmp_path: Path):
     producer, _ = init_producer(tmp_path)
     runtime = tmp_path / "runtime"
-    runtime.mkdir()
+    runtime.mkdir(exist_ok=True)
     files = make_h1_files(runtime)
     with pytest.raises(ValueError, match="PRODUCER_SHA_MISMATCH"):
         sealer.seal_bundle(
@@ -180,7 +180,7 @@ def test_sealer_rejects_dirty_producer(tmp_path: Path):
     producer, sha = init_producer(tmp_path)
     (producer / "dirty.txt").write_text("drift")
     runtime = tmp_path / "runtime"
-    runtime.mkdir()
+    runtime.mkdir(exist_ok=True)
     files = make_h1_files(runtime)
     with pytest.raises(ValueError, match="PRODUCER_WORKTREE_DIRTY"):
         sealer.seal_bundle(
@@ -246,7 +246,7 @@ def test_ingestion_rejects_incomplete_h1_grid(tmp_path: Path):
 def test_sealer_rejects_symlink_artifact(tmp_path: Path):
     producer, sha = init_producer(tmp_path)
     runtime = tmp_path / "runtime"
-    runtime.mkdir()
+    runtime.mkdir(exist_ok=True)
     files = make_h1_files(runtime)
     link = runtime / "eod" / "linked.csv"
     link.symlink_to(files["bars"])
@@ -267,7 +267,7 @@ def test_sealer_rejects_symlink_artifact(tmp_path: Path):
 def test_sealer_rejects_artifact_outside_runtime(tmp_path: Path):
     producer, sha = init_producer(tmp_path)
     runtime = tmp_path / "runtime"
-    runtime.mkdir()
+    runtime.mkdir(exist_ok=True)
     files = make_h1_files(runtime)
     outside = tmp_path / "outside.json"
     outside.write_text("{}\n")
@@ -287,13 +287,13 @@ def test_sealer_rejects_artifact_outside_runtime(tmp_path: Path):
 def test_cas_cannot_be_promoted_to_live_prospective(tmp_path: Path):
     producer, sha = init_producer(tmp_path)
     runtime = tmp_path / "runtime"
-    runtime.mkdir()
+    runtime.mkdir(exist_ok=True)
     cas = runtime / "eod" / "cas" / "report.json"
-    cas.parent.mkdir(parents=True)
+    cas.parent.mkdir(parents=True, exist_ok=True)
     cas.write_text(json.dumps({"status": "CAPTURE_ONLY"}) + "\n")
     bundle = runtime / "eod" / "bundle.json"
     kernel_root = tmp_path / "kernel"
-    kernel_root.mkdir()
+    kernel_root.mkdir(exist_ok=True)
     sealer.seal_bundle(
         producer_worktree=producer,
         expected_producer_sha=sha,
@@ -316,13 +316,13 @@ def test_cas_cannot_be_promoted_to_live_prospective(tmp_path: Path):
 def test_replay_metadata_cannot_be_promoted(tmp_path: Path):
     producer, sha = init_producer(tmp_path)
     runtime = tmp_path / "runtime"
-    runtime.mkdir()
+    runtime.mkdir(exist_ok=True)
     report = runtime / "eod" / "cas" / "report.json"
-    report.parent.mkdir(parents=True)
+    report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps({"offline_replay": True}) + "\n")
     bundle = runtime / "eod" / "bundle.json"
     kernel_root = tmp_path / "kernel"
-    kernel_root.mkdir()
+    kernel_root.mkdir(exist_ok=True)
     sealer.seal_bundle(
         producer_worktree=producer,
         expected_producer_sha=sha,
