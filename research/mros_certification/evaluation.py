@@ -8,7 +8,7 @@ from typing import Mapping
 
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-_REQUIRED_EDGE_EVIDENCE = (
+_REQUIRED_CERTIFICATION_EVIDENCE = (
     "prospective",
     "historical_oos",
     "cost_evidence",
@@ -83,32 +83,27 @@ def evaluate_prospective(
     )
 
 
-def _validate_edge_evidence(
-    *, candidate_sha: str, evidence: Mapping[str, Mapping[str, object]] | None
-) -> Mapping[str, Mapping[str, object]] | None:
-    """Validate the immutable evidence bundle required for a T25 decision.
+def _validate_evidence_item(
+    *, candidate_sha: str, name: str, item: Mapping[str, object] | None
+) -> Mapping[str, object]:
+    if not isinstance(item, Mapping):
+        raise ValueError(f"EDGE_EVIDENCE_INVALID:{name}")
+    if item.get("status") != "PASS":
+        raise ValueError(f"EDGE_EVIDENCE_NOT_PASS:{name}")
+    if item.get("candidate_sha") != candidate_sha:
+        raise ValueError(f"EDGE_EVIDENCE_SHA_MISMATCH:{name}")
+    _exact_sha256(item.get("artifact_sha256"))
+    return item
 
-    Caller-supplied booleans/status strings are compatibility inputs, not authority.
-    A positive certification or upstream invalidation requires exact-candidate,
-    immutable evidence instead of a caller-selected status string.
-    """
-    if evidence is None:
-        return None
-    if not isinstance(evidence, Mapping):
-        raise ValueError("EDGE_EVIDENCE_BUNDLE_INVALID")
-    missing = [name for name in _REQUIRED_EDGE_EVIDENCE if name not in evidence]
+
+def _validate_certification_evidence(
+    *, candidate_sha: str, evidence: Mapping[str, Mapping[str, object]]
+) -> Mapping[str, Mapping[str, object]]:
+    missing = [name for name in _REQUIRED_CERTIFICATION_EVIDENCE if name not in evidence]
     if missing:
         raise ValueError(f"EDGE_EVIDENCE_MISSING:{','.join(missing)}")
-
-    for name in _REQUIRED_EDGE_EVIDENCE:
-        item = evidence[name]
-        if not isinstance(item, Mapping):
-            raise ValueError(f"EDGE_EVIDENCE_INVALID:{name}")
-        if item.get("status") != "PASS":
-            raise ValueError(f"EDGE_EVIDENCE_NOT_PASS:{name}")
-        if item.get("candidate_sha") != candidate_sha:
-            raise ValueError(f"EDGE_EVIDENCE_SHA_MISMATCH:{name}")
-        _exact_sha256(item.get("artifact_sha256"))
+    for name in _REQUIRED_CERTIFICATION_EVIDENCE:
+        _validate_evidence_item(candidate_sha=candidate_sha, name=name, item=evidence[name])
     return evidence
 
 
@@ -124,15 +119,32 @@ def structural_edge_decision(
 ) -> dict[str, object]:
     """Return a fail-closed T25 structural-edge decision.
 
-    T25 is decision machinery, not evidence production. Neither CERTIFIED nor
-    INVALIDATED may be manufactured from caller-selected flags. Without a complete
-    exact-SHA evidence bundle the decision remains NOT_CERTIFIED.
+    T25 consumes evidence; it does not manufacture it. Caller-selected booleans are
+    compatibility inputs only. A positive certification requires the complete
+    exact-SHA evidence bundle. An upstream INVALIDATED result requires only its
+    exact-SHA prospective artifact because later economic gates are not relevant.
+    Without adequate evidence, the decision remains NOT_CERTIFIED.
     """
     candidate_sha = _exact_git_sha(candidate_sha)
-    validated = _validate_edge_evidence(candidate_sha=candidate_sha, evidence=evidence)
     status = "NOT_CERTIFIED"
 
-    if validated is not None:
+    if evidence is not None and not isinstance(evidence, Mapping):
+        raise ValueError("EDGE_EVIDENCE_BUNDLE_INVALID")
+
+    if prospective_status == "INVALIDATED":
+        if evidence is not None:
+            prospective = _validate_evidence_item(
+                candidate_sha=candidate_sha,
+                name="prospective",
+                item=evidence.get("prospective"),
+            )
+            if prospective.get("evaluation_status") != "INVALIDATED":
+                raise ValueError("EDGE_EVIDENCE_PROSPECTIVE_STATUS_MISMATCH")
+            status = "INVALIDATED"
+    elif evidence is not None:
+        validated = _validate_certification_evidence(
+            candidate_sha=candidate_sha, evidence=evidence
+        )
         prospective = validated["prospective"]
         historical = validated["historical_oos"]
         costs = validated["cost_evidence"]
@@ -150,9 +162,7 @@ def structural_edge_decision(
         if str(verifier.get("verdict") or "") != str(independent_verification):
             raise ValueError("EDGE_EVIDENCE_VERIFIER_STATUS_MISMATCH")
 
-        if prospective_status == "INVALIDATED":
-            status = "INVALIDATED"
-        elif (
+        if (
             prospective_status == "PROSPECTIVE_EVALUATED"
             and historical_oos
             and cost_evidence
