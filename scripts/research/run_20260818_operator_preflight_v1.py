@@ -226,9 +226,10 @@ def _kite_network_auth(producer: Path, *, python_command: str = "python") -> dic
         # token, but keep the surfaced failure bounded regardless.
         bounded_error = stderr[-500:] if stderr else ""
         raise PreflightError(f"KITE_NETWORK_AUTH_FAILED:{reason}:{bounded_error}")
-    if not stdout.startswith("OK user_id="):
+    ok_lines = [line.strip() for line in stdout.splitlines() if line.strip().startswith("OK user_id=")]
+    if not ok_lines:
         raise PreflightError("KITE_NETWORK_AUTH_RESULT_UNRECOGNIZED")
-    user_id_present = bool(stdout.partition("OK user_id=")[2].strip())
+    user_id_present = bool(ok_lines[-1].partition("OK user_id=")[2].strip())
     if not user_id_present:
         raise PreflightError("KITE_NETWORK_AUTH_PROFILE_MISSING_USER_ID")
     return {

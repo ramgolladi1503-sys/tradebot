@@ -89,6 +89,19 @@ def test_network_auth_checker_redacts_successful_user_id(tmp_path: Path, monkeyp
     assert result["access_token_exposed"] is False
 
 
+def test_network_auth_checker_accepts_sanitized_diagnostic_before_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    producer = tmp_path / "producer"
+    scripts = producer / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "check_kite_auth.py").write_text("# fixture\n", encoding="utf-8")
+    output = "KITE_REST api_key_tail4=redacted access_token_tail4=redacted\nOK user_id=REDACTED\n"
+    monkeypatch.setattr(mod, "_run", lambda cmd, cwd=None, env=None: SimpleNamespace(returncode=0, stdout=output, stderr=""))
+    result = mod._kite_network_auth(producer)
+    assert result["verified"] is True
+    assert result["user_id_present"] is True
+    assert result["access_token_exposed"] is False
+
+
 def test_network_auth_checker_maps_auth_required_without_echoing_stdout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     producer = tmp_path / "producer"
     scripts = producer / "scripts"
