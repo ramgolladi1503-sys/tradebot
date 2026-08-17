@@ -1,0 +1,46 @@
+name: PR815 Current-Main Quote Cache Baseline
+
+on:
+  pull_request:
+    branches:
+      - validation/pr815-baseline-quote-cache-base-20260818
+
+permissions:
+  contents: read
+
+jobs:
+  current_main_quote_cache_baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact current main authority
+        uses: actions/checkout@v4
+        with:
+          ref: f0f5b3d3659415ab36662291e91b8f57fd8d1e07
+          fetch-depth: 1
+
+      - name: Verify exact baseline SHA
+        run: test "$(git rev-parse HEAD)" = "f0f5b3d3659415ab36662291e91b8f57fd8d1e07"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install repository test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install 'pandas<3.0'
+
+      - name: Run the three PR815 broad-suite failures on exact main
+        env:
+          PYTHONPATH: .
+          DATA_ROOT: ${{ github.workspace }}/.runtime
+          KITE_USE_API: 'false'
+        run: |
+          python -m pytest -q -o addopts='' \
+            tests/test_market_data_index_quote_cache.py::test_index_depth_missing_synthesizes_quote \
+            tests/test_market_data_index_quote_cache.py::test_index_depth_missing_live_keeps_quote_false \
+            tests/test_market_data_index_quote_cache.py::test_index_depth_missing_live_offhours_allows_synthetic_and_offhours_chain
