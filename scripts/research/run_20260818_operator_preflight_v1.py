@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Fail-closed local operator preflight for the 2026-08-18 observation session.
 
-Run from any checkout. This script never starts TradeBot, never contacts the
-broker directly, and never changes runtime authority. It validates the frozen
-producer worktree, disk, process isolation, safety environment, and the frozen
-producer's read-only cached pre-live readiness gate.
+Run from any checkout. This script never starts TradeBot or a WebSocket feed and
+never changes trading authority. It validates the frozen producer worktree,
+disk, process isolation, safety environment, the frozen producer's cached
+pre-live readiness gate, and optionally the frozen producer's real read-only
+Kite network authentication path.
 """
 from __future__ import annotations
 
@@ -27,8 +28,8 @@ class PreflightError(ValueError):
     pass
 
 
-def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, text=True, capture_output=True, check=False)
+def _run(cmd: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, text=True, capture_output=True, check=False, cwd=str(cwd) if cwd else None)
 
 
 def _git(root: Path, *args: str) -> str:
@@ -70,11 +71,11 @@ def _competing_processes(producer: Path) -> list[dict[str, Any]]:
     return matches
 
 
-def _readiness_gate(producer: Path) -> dict[str, Any]:
+def _readiness_gate(producer: Path, *, python_command: str = "python") -> dict[str, Any]:
     script = producer / "scripts" / "pre_live_readiness_gate.py"
     if not script.is_file():
         raise PreflightError("PRE_LIVE_GATE_MISSING")
-    p = _run(["python3", str(script), "--mode", "LIVE", "--json"])
+    p = _run([python_command, str(script), "--mode", "LIVE", "--json"], cwd=producer)
     if p.returncode not in {0, 2}:
         raise PreflightError(f"PRE_LIVE_GATE_EXECUTION_FAILED:{p.returncode}:{p.stderr.strip()}")
     try:
@@ -86,7 +87,62 @@ def _readiness_gate(producer: Path) -> dict[str, Any]:
     return payload
 
 
-def preflight(producer: Path, runtime: Path, *, min_free_gib: float = MIN_FREE_GIB) -> dict[str, Any]:
+def _kite_network_auth(producer: Path, *, python_command: str = "python") -> dict[str, Any]:
+    """Run the exact frozen launcher's auth checker and return redacted truth.
+
+    The frozen checker resolves canonical credentials, acquires/releases the
+    single-instance lock, and `validate_token(force=True)` performs the real
+    read-only Kite `profile()` REST request. No WebSocket or order path is used.
+    Raw stdout is deliberately not returned because successful output contains
+    the account user_id.
+    """
+    script = producer / "scripts" / "check_kite_auth.py"
+    if not script.is_file():
+        raise PreflightError("KITE_AUTH_CHECKER_MISSING")
+    p = _run([python_command, str(script), "--mode", "LIVE"], cwd=producer)
+    stdout = p.stdout.strip()
+    stderr = p.stderr.strip()
+    if p.returncode != 0:
+        if p.returncode == 3 or "AUTH_REQUIRED" in stdout:
+            reason = "AUTH_REQUIRED"
+        elif p.returncode == 2 and "LOCK_HELD" in stdout:
+            reason = "LOCK_HELD"
+        elif p.returncode == 4 or "LOCK_ERROR" in stdout:
+            reason = "LOCK_ERROR"
+        elif p.returncode == 2 and "AUTH_CONFIG_ERROR" in stdout:
+            reason = "AUTH_CONFIG_ERROR"
+        else:
+            reason = f"EXIT_{p.returncode}"
+        # Never echo child stdout: it may include account identifiers. Stderr is
+        # reduced to its exception class/message path and should not contain the
+        # token, but keep the surfaced failure bounded regardless.
+        bounded_error = stderr[-500:] if stderr else ""
+        raise PreflightError(f"KITE_NETWORK_AUTH_FAILED:{reason}:{bounded_error}")
+    if not stdout.startswith("OK user_id="):
+        raise PreflightError("KITE_NETWORK_AUTH_RESULT_UNRECOGNIZED")
+    user_id_present = bool(stdout.partition("OK user_id=")[2].strip())
+    if not user_id_present:
+        raise PreflightError("KITE_NETWORK_AUTH_PROFILE_MISSING_USER_ID")
+    return {
+        "verified": True,
+        "method": "FROZEN_CHECK_KITE_AUTH_PROFILE_REST",
+        "user_id_present": True,
+        "raw_profile_exposed": False,
+        "access_token_exposed": False,
+        "websocket_started": False,
+        "broker_write_authority": False,
+        "order_authority": False,
+    }
+
+
+def preflight(
+    producer: Path,
+    runtime: Path,
+    *,
+    min_free_gib: float = MIN_FREE_GIB,
+    verify_kite_network_auth: bool = False,
+    python_command: str = "python",
+) -> dict[str, Any]:
     producer = producer.expanduser().resolve()
     runtime = runtime.expanduser().resolve()
     if not producer.is_dir():
@@ -119,15 +175,30 @@ def preflight(producer: Path, runtime: Path, *, min_free_gib: float = MIN_FREE_G
     if processes:
         raise PreflightError(f"COMPETING_LIVE_PROCESS:{processes}")
 
-    gate = _readiness_gate(producer)
+    gate = _readiness_gate(producer, python_command=python_command)
     outcome = str(gate.get("outcome") or "")
     if outcome == "FAIL" or gate.get("hard_fail") is True:
         raise PreflightError(f"FROZEN_PRE_LIVE_GATE_FAIL:{gate.get('blockers')}")
     if outcome not in {"MARKET_CLOSED_PENDING_TICK_PROOF", "PASS"}:
         raise PreflightError(f"FROZEN_PRE_LIVE_GATE_UNKNOWN:{outcome}")
 
+    network_auth = (
+        _kite_network_auth(producer, python_command=python_command)
+        if verify_kite_network_auth
+        else {
+            "verified": False,
+            "method": "NOT_REQUESTED",
+            "user_id_present": False,
+            "raw_profile_exposed": False,
+            "access_token_exposed": False,
+            "websocket_started": False,
+            "broker_write_authority": False,
+            "order_authority": False,
+        }
+    )
+
     return {
-        "schema": "tradebot-operator-preflight-20260818-v1",
+        "schema": "tradebot-operator-preflight-20260818-v2",
         "status": "PREMARKET_OBSERVATION_READY",
         "producer_worktree": str(producer),
         "producer_sha": actual_sha,
@@ -138,6 +209,12 @@ def preflight(producer: Path, runtime: Path, *, min_free_gib: float = MIN_FREE_G
         "competing_live_processes": [],
         "frozen_pre_live_gate_outcome": outcome,
         "frozen_pre_live_gate_blockers": list(gate.get("blockers") or []),
+        "kite_network_auth_requested": bool(verify_kite_network_auth),
+        "kite_network_auth_verified": bool(network_auth["verified"]),
+        "kite_network_auth_method": network_auth["method"],
+        "kite_profile_user_id_present": bool(network_auth["user_id_present"]),
+        "kite_profile_or_token_exposed": False,
+        "kite_auth_probe_websocket_started": False,
         "live_tick_proof_accepted_from_clock_only": False,
         "actual_live_tick_proof_required_after_open": True,
         "broker_write_authority": False,
@@ -155,8 +232,24 @@ def main() -> int:
     parser.add_argument("--producer", type=Path, default=DEFAULT_PRODUCER)
     parser.add_argument("--runtime", type=Path, default=DEFAULT_RUNTIME)
     parser.add_argument("--min-free-gib", type=float, default=MIN_FREE_GIB)
+    parser.add_argument(
+        "--verify-kite-network-auth",
+        action="store_true",
+        help="Require the frozen producer's real read-only Kite profile REST auth check to pass.",
+    )
+    parser.add_argument(
+        "--python-command",
+        default="python",
+        help="Python executable used by the live launcher environment (default: python).",
+    )
     args = parser.parse_args()
-    payload = preflight(args.producer, args.runtime, min_free_gib=args.min_free_gib)
+    payload = preflight(
+        args.producer,
+        args.runtime,
+        min_free_gib=args.min_free_gib,
+        verify_kite_network_auth=args.verify_kite_network_auth,
+        python_command=args.python_command,
+    )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
