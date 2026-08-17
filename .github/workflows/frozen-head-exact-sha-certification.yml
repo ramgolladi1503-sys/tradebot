@@ -101,7 +101,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Run CE against explicit base/head diff
+      - name: Run trusted CE code against exact candidate tree
         env:
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
@@ -111,6 +111,19 @@ jobs:
           git fetch --no-tags origin "$BASE_SHA" +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
           git cat-file -e "$BASE_SHA^{commit}"
           git cat-file -e "$HEAD_SHA^{commit}"
-          mkdir -p docs/code_excellence/reports
-          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > docs/code_excellence/reports/changed_paths.txt
-          PYTHONPATH=. python scripts/run_unified_ce_gates.py --repo . --config .gsd-forensics.yaml --changed-paths-file docs/code_excellence/reports/changed_paths.txt --out docs/code_excellence/reports/unified_ce_gate_latest.md
+          test "$(git rev-parse refs/remotes/origin/pr-${PR_NUMBER}-head)" = "$HEAD_SHA"
+
+          BASE_WORKSPACE="$GITHUB_WORKSPACE"
+          CANDIDATE_TREE="$RUNNER_TEMP/ce-candidate-${HEAD_SHA}"
+          CHANGED_PATHS_FILE="$RUNNER_TEMP/ce-changed-paths.txt"
+          REPORT_FILE="$RUNNER_TEMP/unified-ce-gate-${HEAD_SHA}.md"
+
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > "$CHANGED_PATHS_FILE"
+          git worktree add --detach "$CANDIDATE_TREE" "$HEAD_SHA"
+          test "$(git -C "$CANDIDATE_TREE" rev-parse HEAD)" = "$HEAD_SHA"
+
+          PYTHONPATH="$BASE_WORKSPACE" python "$BASE_WORKSPACE/scripts/run_unified_ce_gates.py" \
+            --repo "$CANDIDATE_TREE" \
+            --config "$BASE_WORKSPACE/.gsd-forensics.yaml" \
+            --changed-paths-file "$CHANGED_PATHS_FILE" \
+            --out "$REPORT_FILE"
