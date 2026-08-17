@@ -124,6 +124,7 @@ def validate(base_ref: str, candidate_ref: str = "HEAD") -> int:
     paths = changed_files(base_ref, candidate_ref)
     review_paths = agent_review_files(paths)
     errors: list[str] = []
+    review_texts: list[str] = []
     candidate_sha = _run_git(["rev-parse", candidate_ref])
     external_review = _base_external_review(base_ref, candidate_sha)
 
@@ -141,6 +142,7 @@ def validate(base_ref: str, candidate_ref: str = "HEAD") -> int:
                 f"Agent review file is listed but unavailable in candidate tree: {review_path}"
             )
             continue
+        review_texts.append(text)
         if not text.strip():
             errors.append(
                 f"Agent review file is empty: {review_path}"
@@ -158,11 +160,7 @@ def validate(base_ref: str, candidate_ref: str = "HEAD") -> int:
 
     high_risk = _high_risk_changed(paths)
     if high_risk:
-        combined = "\n".join(
-            text
-            for path in review_paths
-            if (text := _candidate_file_text(candidate_ref, path)) is not None
-        )
+        combined = "\n".join(review_texts)
         if external_review:
             combined += "\n" + external_review
         combined = combined.lower()
