@@ -2,6 +2,7 @@ from pathlib import Path
 
 
 WORKFLOW = Path(".github/workflows/frozen-head-exact-sha-certification.yml")
+VALIDATOR = Path("scripts/validate_frozen_head_bridge.py")
 
 
 def test_base_authority_uses_event_base_or_dispatch_base_input():
@@ -16,6 +17,15 @@ def test_non_main_workflow_does_not_derive_authority_from_origin_main():
     text = WORKFLOW.read_text()
     assert 'BASE_SHA="$(git rev-parse origin/main)"' not in text
     assert 'git diff --name-only origin/main' not in text
+
+
+def test_validator_uses_explicit_base_sha_not_origin_main():
+    text = VALIDATOR.read_text()
+    assert 'base = git("rev-parse", args.base_sha)' in text
+    assert 'actual_base = git("rev-parse", "origin/main")' not in text
+    assert "BASE_SHA_DRIFT" not in text
+    assert 'merge_base = git("merge-base", base, candidate)' in text
+    assert 'print(f"PR_BASE_SHA={base}")' in text
 
 
 def test_candidate_is_not_executed_by_base_authority_jobs():

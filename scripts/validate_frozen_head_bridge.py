@@ -34,14 +34,14 @@ def main() -> int:
         if not SHA_RE.fullmatch(value):
             raise SystemExit(f"{label}_sha must be a full 40-character SHA")
 
-    actual_base = git("rev-parse", "origin/main")
-    if actual_base != args.base_sha:
-        raise SystemExit(f"BASE_SHA_DRIFT:expected={args.base_sha}:actual={actual_base}")
+    base = git("rev-parse", args.base_sha)
+    if base != args.base_sha:
+        raise SystemExit("BASE_SHA_RESOLUTION_MISMATCH")
     candidate = git("rev-parse", args.candidate_sha)
     if candidate != args.candidate_sha:
         raise SystemExit("CANDIDATE_SHA_RESOLUTION_MISMATCH")
 
-    merge_base = git("merge-base", actual_base, candidate)
+    merge_base = git("merge-base", base, candidate)
     changed = [
         p for p in git("diff", "--name-only", f"{merge_base}..{candidate}").splitlines() if p
     ]
@@ -78,7 +78,7 @@ def main() -> int:
 
     print(f"FROZEN_HEAD_BRIDGE_PASS pr={args.pr_number}")
     print(f"PR_HEAD_SHA={candidate}")
-    print(f"PR_BASE_SHA={actual_base}")
+    print(f"PR_BASE_SHA={base}")
     print(f"MERGE_BASE={merge_base}")
     print(f"CHANGED_PATH_COUNT={len(changed)}")
     print(f"HIGH_RISK_PATH_COUNT={len(risky)}")
