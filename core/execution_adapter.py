@@ -4,6 +4,8 @@ import uuid
 
 from typing import Any
 
+from core.observation_execution_guard import assert_execution_allowed
+
 class AdvancedExecutionAdapter:
     def __init__(self, kite_client: Any | None = None, max_chase_retries: int = 3, retry_delay_sec: float = 2.0, live_mode: bool = False) -> None:
         self.kite = kite_client
@@ -17,6 +19,7 @@ class AdvancedExecutionAdapter:
         Spawns a background daemon thread to hunt the Bid/Ask spread asynchronously,
         returning an internal tracking ID immediately so the main feed is never blocked.
         """
+        assert_execution_allowed("AdvancedExecutionAdapter.execute_limit_hunt")
         internal_id = str(uuid.uuid4())
         
         # Spawn daemon thread to avoid blocking WebSocket
@@ -26,6 +29,14 @@ class AdvancedExecutionAdapter:
         
         self.active_threads.append(t)
         return internal_id
+
+    def modify_order(self, *args: Any, **kwargs: Any) -> None:
+        assert_execution_allowed("AdvancedExecutionAdapter.modify_order")
+        raise NotImplementedError("modify_order is not implemented")
+
+    def cancel_order(self, *args: Any, **kwargs: Any) -> None:
+        assert_execution_allowed("AdvancedExecutionAdapter.cancel_order")
+        raise NotImplementedError("cancel_order is not implemented")
         
     def _hunt_thread(self, internal_id: str, symbol: str, quantity: int, transaction_type: str, live_bid_ask_provider: Any) -> None:
         retries = 0
