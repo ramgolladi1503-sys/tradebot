@@ -2,36 +2,43 @@
 
 ## Agent Work Contract
 
-Objective: review the narrow offline hardening of MROS task T25, `Structural-edge decision`, at the PR832 candidate. The allowed implementation scope is `research/mros_certification/evaluation.py` plus `tests/research/test_mros_evaluation.py`; this review artifact is governance evidence only. The frozen 2026-08-18 live producer, broker integration, order routing, feed ownership, strategy generation, ranking, risk, and runtime authorization are outside scope.
+Objective: review the narrow offline hardening of MROS task T25, `Structural-edge decision`, at the PR832 candidate. The implementation scope is `research/mros_certification/evaluation.py` plus `tests/research/test_mros_evaluation.py`; this review artifact is governance evidence only. The frozen 2026-08-18 live producer, broker integration, order routing, feed ownership, strategy generation, ranking, risk, and runtime authorization are outside scope.
 
 Authority boundary: T25 may decide structural-edge certification only from sufficient immutable evidence. Prediction quality by itself is not tradable edge. T24 prospective evaluation remains an upstream dependency and prospective/live evidence is not supplied by this PR.
 
 ## Scope Guard
 
-Observed implementation scope is limited to the T25 evaluation module and its focused tests. The repair requires exact candidate identity and immutable SHA-256-bound evidence for positive certification; missing or inconsistent evidence remains fail-closed. Separate trading-integration authority remains false. No high-risk production path listed by the repository validator is modified.
+The repair requires exact candidate identity and evidence descriptors that resolve to actual regular, non-symlink JSON artifacts. T25 reads the artifact bytes itself, checks the declared SHA-256 against those bytes, parses the artifact payload, verifies the evidence kind and exact candidate SHA, and only then consumes gate-specific fields. Missing, malformed, mismatched, reused, or tampered evidence remains fail-closed. Separate trading-integration authority remains false. No high-risk production path listed by the repository validator is modified.
 
 ## Grill Me Review
 
-Adversarial questions applied to the change:
+Adversarial review found a material weakness in the earlier PR832 candidate: although it required `artifact_sha256` strings in caller-provided mappings, it did not open or hash any artifact, so a caller could construct an entirely PASS-shaped in-memory bundle using arbitrary 64-hex strings and obtain `CERTIFIED`. That defect is repaired in the current branch by making the artifact bytes, not the caller dictionary, authoritative.
 
-- Can caller-supplied booleans alone produce `CERTIFIED`? The intended repaired contract says no; positive certification requires bound evidence.
-- Can malformed or non-exact candidate identity be accepted? The intended repaired contract requires an exact 40-hex Git SHA.
-- Can missing evidence be treated as success? No; it must remain `NOT_CERTIFIED`.
-- Can an upstream `INVALIDATED` state be propagated without supporting evidence? No; the repair requires evidence for that propagation.
-- Does a T25 machinery pass prove a structural edge exists? No.
+Current adversarial questions include:
+
+- Can caller-supplied booleans alone produce `CERTIFIED`? No; verified artifact evidence is required.
+- Can a PASS-shaped in-memory dictionary with a valid-looking hash produce `CERTIFIED`? It must be rejected because an artifact path is required and the bytes are verified.
+- Can artifact bytes be changed after the descriptor hash is created? The hash mismatch must be rejected.
+- Can one valid artifact be reused for another evidence gate? The artifact `evidence_kind` must match the requested gate.
+- Can malformed or non-exact candidate identity be accepted? The contract requires an exact 40-hex Git SHA.
+- Can missing evidence be treated as success? No; it remains `NOT_CERTIFIED` or raises a fail-closed validation error.
+- Can an upstream `INVALIDATED` state be propagated without verified prospective evidence? No.
+- Does T25 machinery validation prove a structural edge exists? No.
 - Does this change grant broker, paper, order, or live authority? No.
 
 ## Hermes Review
 
-Data/evidence semantics are explicit: candidate identity and evidence digests must bind the decision, caller compatibility assertions must agree with the evidence bundle, and absent evidence cannot be converted into a positive claim. The review found no intended path from the T25 decision function to broker/feed/order execution authority.
+Evidence semantics are now artifact-backed. The caller supplies only descriptors and compatibility assertions. T25 independently reads and hashes each artifact and uses the parsed payload as evidence authority. Candidate identity and evidence kind are checked inside the artifact payload. The review found no intended path from T25 to broker/feed/order execution authority.
 
 ## GSD Review
 
-The repair addresses the smallest proven defect in the previous T25 implementation: positive certification previously depended too heavily on caller-supplied status/boolean values rather than immutable candidate-bound evidence. The chosen scope does not introduce a new observer, generic framework, producer adapter, or live dependency.
+The work remains narrowly focused on the proven T25 evidence-authority defect. It does not introduce a new observer, generic framework, producer adapter, broker dependency, or live dependency. An isolated validation base is used only to execute exact-head focused/freshness CI with full Git history; it is not a production merge target.
 
 ## QA / Safety Review
 
-The PR body records an isolated focused run of the reconstructed exact candidate module/test surface with `12 passed`; this is supporting offline implementation evidence and not a substitute for GitHub CI or prospective evidence. Current repository-wide CI also contains failures outside this two-file T25 scope and separate MROS freshness checks; those must be classified from primitive evidence before any offline PASS verdict. Safety remains:
+The original PR body recorded `12 passed` for the earlier reconstructed candidate. That historical run does not validate the current artifact-backed repair. The current candidate therefore remains pending fresh exact-head focused/adversarial validation. Repository-wide CI has also shown unrelated market-data quote-cache failures and freshness failures caused by shallow Git history; these are not converted into PASS and are being separated with an exact-head full-history validation gate.
+
+Safety remains:
 
 ```text
 broker_write_authority=false
@@ -44,15 +51,15 @@ STRUCTURAL_EDGE_CERTIFIED=false
 
 ## Acceptance Proof
 
-Acceptance requires all of the following before T25 offline validation can be promoted: the focused T25 suite passes on the exact final candidate; positive certification is impossible without immutable candidate-bound evidence; malformed/missing/mismatched evidence fails closed; execution authority remains false; required governance checks pass; and an independent exact-SHA verifier reviews the final candidate. This document does not self-certify those pending gates.
+Acceptance requires the focused T25 and freshness suites to pass on the exact final candidate with full Git history; PASS-shaped in-memory evidence must be rejected; artifact tampering and evidence-kind reuse must be rejected; malformed/missing/mismatched evidence must fail closed; execution authority must remain false; the mandatory governance gate must pass; and an independent exact-SHA review must find no remaining material evidence-authority defect. This document does not self-certify those pending gates.
 
 ## Runtime Proof Required After Merge
 
-No runtime proof is required to establish the narrow offline correctness of the T25 decision machinery. Separately, any future claim of prospective support or structural-edge certification requires fresh prospective evidence through T24 and the governed downstream decision process. Unit tests, fixtures, historical evidence, and this PR cannot substitute for that evidence.
+No live runtime proof is required to establish the narrow offline correctness of the T25 decision machinery. Separately, any future claim of prospective support or structural-edge certification requires fresh prospective evidence through T24 and the governed downstream decision process. Unit tests, fixtures, historical evidence, and this PR cannot substitute for that evidence.
 
 ## What This PR Does Not Prove
 
-This PR does not prove a profitable strategy, historical edge, out-of-sample edge, execution viability, prospective support, structural edge, live readiness, paper readiness, broker readiness, or authorization to trade. It does not certify T01–T35 as a whole. It only hardens T25's offline decision machinery if the final exact-SHA validation gates pass.
+This PR does not prove a profitable strategy, historical edge, out-of-sample edge, execution viability, prospective support, structural edge, live readiness, paper readiness, broker readiness, or authorization to trade. It does not certify T01–T35 as a whole. A later T25 decision may only consume evidence that separately satisfies those gates.
 
 ## Human Approval
 
