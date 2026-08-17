@@ -89,6 +89,25 @@ def _high_risk_changed(paths: list[str]) -> bool:
     return False
 
 
+def _candidate_file_text(candidate_ref: str, path: Path) -> str | None:
+    """Read review evidence from the exact candidate tree.
+
+    `pull_request_target` checks run from the trusted base checkout, so a review
+    document added only by the candidate will not exist on disk. Candidate
+    evidence therefore has to be read explicitly from the candidate ref.
+    """
+    proc = subprocess.run(
+        ["git", "show", f"{candidate_ref}:{path.as_posix()}"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if proc.returncode == 0:
+        return proc.stdout
+    return None
+
+
 def _base_external_review(base_ref: str, candidate_sha: str) -> str | None:
     """Read only an exact-SHA manifest from the trusted base tree."""
     manifest = EXTERNAL_REVIEW_DIR / f"{candidate_sha}.md"
@@ -108,6 +127,7 @@ def validate(base_ref: str, candidate_ref: str = "HEAD") -> int:
     paths = changed_files(base_ref, candidate_ref)
     review_paths = agent_review_files(paths)
     errors: list[str] = []
+    review_texts: list[str] = []
     candidate_sha = _run_git(["rev-parse", candidate_ref])
     external_review = _base_external_review(base_ref, candidate_sha)
 
@@ -119,23 +139,15 @@ def validate(base_ref: str, candidate_ref: str = "HEAD") -> int:
         )
 
     for review_path in review_paths:
-        if review_path.exists():
-            text = review_path.read_text(encoding="utf-8")
-        else:
-            proc = subprocess.run(
-                ["git", "show", f"{candidate_ref}:{review_path.as_posix()}"],
-                check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            )
-            if proc.returncode != 0:
-                errors.append(
-                    f"Agent review file is listed but unavailable in candidate tree: {review_path}"
-                )
-                continue
-            text = proc.stdout
-        if not text.strip():
+        text = _candidate_file_text(candidate_ref, review_path)
+        if text is None:
             errors.append(
-                f"Agent review file is empty: {review_path}"
+                f"Agent review file is listed but unavailable in candidate tree: {review_path}"
             )
+            continue
+        review_texts.append(text)
+        if not text.strip():
+            errors.append(f"Agent review file is empty: {review_path}")
             continue
         missing = _missing_sections(text)
         if missing:
@@ -149,9 +161,7 @@ def validate(base_ref: str, candidate_ref: str = "HEAD") -> int:
 
     high_risk = _high_risk_changed(paths)
     if high_risk:
-        combined = "\n".join(
-            path.read_text(encoding="utf-8") for path in review_paths if path.exists()
-        )
+        combined = "\n".join(review_texts)
         if external_review:
             combined += "\n" + external_review
         combined = combined.lower()
