@@ -1,0 +1,1 @@
+Validation-only trigger. The base-branch workflow checks out exact current main `f0f5b3d3659415ab36662291e91b8f57fd8d1e07` and runs only the three quote-cache tests that failed in the PR815 broad suite. This file is not production work and must not be merged.
