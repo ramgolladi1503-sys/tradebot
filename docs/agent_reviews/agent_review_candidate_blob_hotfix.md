@@ -26,7 +26,7 @@ The change is minimal: one helper reads the exact candidate blob and the same te
 
 ## QA / Safety Review
 
-Expected negative behavior is unchanged: missing review docs, missing mandatory sections, unresolved blockers, and missing `High-Risk Path Review` for high-risk diffs still fail closed.
+Expected negative behavior is unchanged: missing review docs, missing mandatory sections, review evidence that declares an outstanding stop condition, and missing `High-Risk Path Review` for high-risk diffs still fail closed.
 
 ## Acceptance Proof
 
