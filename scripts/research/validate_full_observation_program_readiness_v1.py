@@ -60,18 +60,18 @@ def _require(text: str, terms: list[str], label: str) -> None:
 
 def validate(repo: Path) -> dict[str, Any]:
     root = repo.expanduser().resolve()
-    if not (root / ".git").exists() and not _git(root, "rev-parse", "--is-inside-work-tree").strip() == "true":
+    if _git(root, "rev-parse", "--is-inside-work-tree").strip() != "true":
         raise ReadinessError("REPO_REQUIRED")
 
     producer_launcher = _show(root, FROZEN_PRODUCER_SHA, "scripts/run_live_safe.sh")
     producer_gate = _show(root, FROZEN_PRODUCER_SHA, "core/pre_live_readiness_gate.py")
     cas = _show(root, FROZEN_PRODUCER_SHA, "scripts/run_cas_closing_auction_shadow_v1.py")
     _require(producer_launcher, ["python", "main.py"], "CORE_LAUNCHER")
-    _require(producer_gate, ["PRE_LIVE_READINESS", "market_open"], "CORE_PREMARKET_GATE")
+    _require(producer_gate, ["MARKET_CLOSED_PENDING_TICK_PROOF", "market_open", "credentials_missing"], "CORE_PREMARKET_GATE")
     _require(cas, ["15:15", "15:20", "15:30"], "CAS_WINDOWS")
 
     h1 = _show(root, H1_SHA, "scripts/research/hypothesis_factory/export_h1_live_capture_bars.py")
-    _require(h1, ["256265", "09:15", "11:25", "no forward-fill"], "H1")
+    _require(h1, ["DEFAULT_TOKEN = 256265", 'OPENING_START = "09:15"', 'OPENING_END = "11:30"', "range(27)", "no forward-fill"], "H1")
 
     pr815 = _show(root, PR815_SHA, "docs/research/prospective_market_evidence_pipeline_v1.md")
     _require(pr815, ["broker_write_authority=false", "live_authorized=false", "actual trusted live-runtime attestation producer remains a separate wiring requirement"], "PR815")
