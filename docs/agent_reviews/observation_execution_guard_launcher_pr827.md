@@ -26,15 +26,15 @@ The implementation does not change strategy selection, market-data ingestion, fe
 - Could the launcher contaminate the repository? It rejects repository-contained credential/runtime paths and writes only to an external session namespace.
 - Could it create duplicate producers? It starts one direct `main.py` subprocess and does not run supervisors or sidecar launch loops.
 
-## Hermes Design Review
+## Hermes Review
 
 The design uses one shared runtime predicate, defense-in-depth at adapter/broker boundaries, explicit external path contracts, and a pre-start non-secret manifest. It avoids a new configuration system and reuses existing `DATA_ROOT`, `LOGS_ROOT`, `REPORTS_ROOT`, `LOCKS_ROOT`, and `DB_ROOT` environment overrides.
 
-## GSD Implementation Review
+## GSD Review
 
 The candidate is based on the frozen exact SHA `556f3dc9750212618353ed07f76e11826a01a744`, includes the validated guard commit `96627ad8ed5f3c8b780df975c4a3ca10d3baaad5`, and does not modify either protected checkout.
 
-## QA/Safety Review
+## QA / Safety Review
 
 Focused and regression tests prove callback non-invocation, no mock-broker mutation, flag-conflict rejection, exact-SHA/tree/path gates, manifest creation, and absence of broad process termination. No broker/API call or order action is used by tests.
 
