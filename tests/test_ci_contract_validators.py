@@ -1,5 +1,5 @@
 from scripts.validate_runtime_authority_scope import classify_scope
-from scripts.validate_agent_review_evidence import _missing_sections
+from scripts.validate_agent_review_evidence import _candidate_file_text, _missing_sections
 
 
 def test_unrelated_high_risk_change_without_focused_tests_fails_contract():
@@ -24,3 +24,19 @@ def test_review_contract_still_requires_all_sections():
     missing = _missing_sections("Agent Work Contract\nScope Guard\nHigh-Risk Path Review")
     assert "Human Approval" in missing
     assert "High-Risk Path Review" not in missing
+
+
+def test_agent_review_text_can_be_read_from_candidate_git_tree(monkeypatch, tmp_path):
+    path = tmp_path / "docs" / "agent_reviews" / "review.md"
+
+    class Result:
+        returncode = 0
+        stdout = "## High-Risk Path Review\n"
+        stderr = ""
+
+    monkeypatch.setattr(
+        "scripts.validate_agent_review_evidence.subprocess.run",
+        lambda *args, **kwargs: Result(),
+    )
+
+    assert _candidate_file_text("HEAD", path) == "## High-Risk Path Review\n"
