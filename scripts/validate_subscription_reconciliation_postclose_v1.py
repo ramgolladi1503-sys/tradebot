@@ -57,9 +57,10 @@ def _float(value: Any) -> float | None:
 
 
 def _rows_from_path(path: Path) -> list[dict[str, Any]]:
-    resolved = path.expanduser().resolve()
-    if resolved.is_symlink() or not resolved.is_file():
-        raise ValueError(f"INPUT_REGULAR_FILE_REQUIRED:{resolved}")
+    expanded = path.expanduser().absolute()
+    if expanded.is_symlink() or not expanded.is_file():
+        raise ValueError(f"INPUT_REGULAR_FILE_REQUIRED:{expanded}")
+    resolved = expanded.resolve()
     if resolved.suffix.lower() == ".json":
         payload = _strict_loads(resolved.read_text(encoding="utf-8"))
         if isinstance(payload, Mapping):
