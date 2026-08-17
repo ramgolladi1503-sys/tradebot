@@ -57,7 +57,7 @@ def test_unknown_stages_remain_unknown_when_inputs_absent(tmp_path: Path, monkey
     kernel = tmp_path / "kernel"
     runtime = tmp_path / "runtime"
     for p in (producer, subscription, kernel, runtime):
-        p.mkdir()
+        p.mkdir(exist_ok=True)
 
     for root, rel in (
         (subscription, mod.SUBSCRIPTION_REL),
@@ -108,9 +108,9 @@ def test_runtime_root_inside_any_repo_is_rejected(tmp_path: Path, monkeypatch: p
     subscription = tmp_path / "subscription"
     kernel = tmp_path / "kernel"
     for p in (producer, subscription, kernel):
-        p.mkdir()
+        p.mkdir(exist_ok=True)
     runtime = producer / "runtime"
-    runtime.mkdir()
+    runtime.mkdir(exist_ok=True)
 
     def fake_verify(worktree: Path, expected_sha: str, label: str):
         return {"worktree": str(worktree.resolve()), "git_sha": expected_sha, "git_clean": True, "branch": "fixture"}
