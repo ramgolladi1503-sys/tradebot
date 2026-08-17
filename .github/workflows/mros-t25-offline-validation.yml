@@ -35,8 +35,8 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install focused test dependency
-        run: python -m pip install pytest
+      - name: Install focused validation dependencies
+        run: python -m pip install pytest PyYAML
 
       - name: Run T25 focused and freshness gates
         env:
