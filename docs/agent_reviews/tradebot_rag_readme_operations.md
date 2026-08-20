@@ -136,3 +136,7 @@ Human approval is required before merge. Confirm the README instructions are und
 - live_order_action: false
 - broker_order_action: false
 - source: docs/agent_reviews/tradebot_rag_readme_operations.md
+
+## 2026-08-20 Required-Gate Refresh
+
+This documentation-only PR was refreshed solely to obtain the repository's current required status checks on the final head. Scope and runtime behavior are unchanged.
