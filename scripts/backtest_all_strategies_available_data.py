@@ -333,22 +333,9 @@ def discover_strategy_specs() -> list[StrategySpec]:
     from core.vwap_candidate_generator import build_vwap_candidate_intents
     from core.zero_hero_candidate_generator import build_zero_hero_candidate_intents
     from strategies import banknifty_intraday, nifty_intraday, sensex_intraday
-    from strategies.ensemble import (
-        ensemble_signal,
-        event_breakout_signal,
-        mean_reversion_signal,
-        micro_pattern_signal,
-        orb_breakout_signal,
-        trend_vwap_signal,
-    )
+    from strategies.ensemble import ensemble_signal
     from strategies.pairs_arbitrage import generate_signal as pairs_signal
-    from strategies.pro_layer.pro_strategy_engine import (
-        LiquidityImbalanceStrategy,
-        OptionsFlowStrategy,
-        TimeWindowStrategy,
-        VWAPMeanReversionStrategy,
-        VolatilityExpansionStrategy,
-    )
+    from strategies.pro_layer.pro_strategy_engine import ProStrategyEngine
     from strategies.volatility_trend import volatility_scaled_trend_strategy
     from strategies.vwap_orb import vwap_orb_strategy
     from strategies.zero_hero import zero_hero_strategy
@@ -360,18 +347,9 @@ def discover_strategy_specs() -> list[StrategySpec]:
         StrategySpec("vwap_orb_strategy", "strategies.vwap_orb", "vwap_orb_strategy", ("close", "vwap", "volume/CVD", "option_contract_proxy"), True, True, True, lambda m: vwap_orb_strategy(m["symbol"], m["ltp"], m["vwap"], market_data=m), uses_option_ltp=True, uses_spread=True, reason="emits option trade shape but available data has no option truth"),
         StrategySpec("volatility_scaled_trend_strategy", "strategies.volatility_trend", "volatility_scaled_trend_strategy", ("close", "vwap", "atr", "option_contract_proxy"), True, False, True, lambda m: volatility_scaled_trend_strategy(m["symbol"], m["ltp"], m["vwap"], m["atr"]), uses_option_ltp=True, reason="option premium is derived from index price"),
         StrategySpec("zero_hero_strategy", "strategies.zero_hero", "zero_hero_strategy", ("close", "bias", "expiry", "option_premium"), True, False, False, lambda m: zero_hero_strategy(m["symbol"], m["ltp"], {"bias": m["bias"]}, current_date=pd.Timestamp("2026-06-29").date(), regime=m["regime"]), uses_option_ltp=True, reason="manual option-premium advisory without option LTP"),
-        StrategySpec("ensemble.trend_vwap_signal", "strategies.ensemble", "trend_vwap_signal", ("close", "vwap", "vwap_slope", "atr"), False, False, True, lambda m: trend_vwap_signal(m["ltp"], m["vwap"], m["vwap_slope"], m["atr"])),
-        StrategySpec("ensemble.mean_reversion_signal", "strategies.ensemble", "mean_reversion_signal", ("close", "vwap", "rsi_mom"), False, False, True, lambda m: mean_reversion_signal(m["ltp"], m["vwap"], m["rsi_mom"])),
-        StrategySpec("ensemble.orb_breakout_signal", "strategies.ensemble", "orb_breakout_signal", ("close", "orb_high", "orb_low", "volume_z"), False, True, False, lambda m: orb_breakout_signal(m["ltp"], m["orb_high"], m["orb_low"], m["vol_z"])),
-        StrategySpec("ensemble.event_breakout_signal", "strategies.ensemble", "event_breakout_signal", ("close", "atr", "ltp_change_window"), False, False, False, lambda m: event_breakout_signal(m["ltp"], m["atr"], m["ltp_change_window"])),
-        StrategySpec("ensemble.micro_pattern_signal", "strategies.ensemble", "micro_pattern_signal", ("ltp_change_5m", "ltp_change_10m"), False, False, False, lambda m: micro_pattern_signal(m["ltp_change_5m"], m["ltp_change_10m"])),
         StrategySpec("ensemble.ensemble_signal", "strategies.ensemble", "ensemble_signal", ("close", "vwap", "atr", "orb", "regime"), False, True, True, lambda m: ensemble_signal(dict(m)), uses_regime=True),
         StrategySpec("pairs_arbitrage.generate_signal", "strategies.pairs_arbitrage", "generate_signal", ("NIFTY close", "BANKNIFTY close", "history"), False, False, False, None, signal_only=False),
-        StrategySpec("pro.VolatilityExpansionStrategy", "strategies.pro_layer.pro_strategy_engine", "VolatilityExpansionStrategy.generate", ("atr", "ltp_change_window", "vol_z", "quote_age", "spread"), False, True, False, VolatilityExpansionStrategy().generate, uses_spread=True),
-        StrategySpec("pro.LiquidityImbalanceStrategy", "strategies.pro_layer.pro_strategy_engine", "LiquidityImbalanceStrategy.generate", ("bid_qty", "ask_qty", "spread"), True, False, False, LiquidityImbalanceStrategy().generate, uses_depth=True, uses_spread=True),
-        StrategySpec("pro.VWAPMeanReversionStrategy", "strategies.pro_layer.pro_strategy_engine", "VWAPMeanReversionStrategy.generate", ("close", "vwap", "rsi", "quote_age", "spread"), False, False, True, VWAPMeanReversionStrategy().generate, uses_spread=True),
-        StrategySpec("pro.OptionsFlowStrategy", "strategies.pro_layer.pro_strategy_engine", "OptionsFlowStrategy.generate", ("call_oi_delta", "put_oi_delta", "iv_change", "price_delta"), True, False, False, OptionsFlowStrategy().generate, uses_oi=True, uses_iv=True),
-        StrategySpec("pro.TimeWindowStrategy", "strategies.pro_layer.pro_strategy_engine", "TimeWindowStrategy.generate", ("time", "ltp_change_window"), False, False, False, TimeWindowStrategy().generate),
+        StrategySpec("pro.ProStrategyEngine.run", "strategies.pro_layer.pro_strategy_engine", "ProStrategyEngine.run", ("pro_child_signals", "family_truth", "source_sha256", "contract_valid", "freshness_valid"), False, False, False, lambda m: ProStrategyEngine().run(dict(m)), signal_only=True, reason="pro meta-engine requires externally produced structurally valid child signals"),
         StrategySpec("core.breakout_candidate_generator.build_breakout_candidate_intents", "core.breakout_candidate_generator", "build_breakout_candidate_intents", ("close", "orb_high", "orb_low", "volume_z", "regime"), False, True, False, lambda m: build_breakout_candidate_intents(dict(m), instrument=m["symbol"]), uses_regime=True),
         StrategySpec("core.vwap_candidate_generator.build_vwap_candidate_intents", "core.vwap_candidate_generator", "build_vwap_candidate_intents", ("close", "vwap", "vwap_slope", "regime"), False, False, True, lambda m: build_vwap_candidate_intents(dict(m), instrument=m["symbol"]), uses_regime=True),
         StrategySpec("core.mean_reversion_candidate_generator.build_mean_reversion_candidate_intents", "core.mean_reversion_candidate_generator", "build_mean_reversion_candidate_intents", ("close", "vwap", "rsi_mom", "regime"), False, False, True, lambda m: build_mean_reversion_candidate_intents(dict(m), instrument=m["symbol"]), uses_regime=True),

@@ -79,6 +79,17 @@ def load_strategy_registry() -> Dict[str, StrategyRegistryEntry]:
         certification_track="shadow_live_observation_only",
         blocked_reason="Underlying-only discovery; actual option premium validation and independent certification pending."
     )
+
+    registry["H1_TRAPPED_PUSH_SNAPBACK_SHADOW"] = StrategyRegistryEntry(
+        strategy_id="H1_TRAPPED_PUSH_SNAPBACK_SHADOW",
+        module_path="strategies/shadow/h1_trapped_push_snapback.py",
+        strategy_kind="shadow_trade_intent_strategy",
+        instrument_family="NIFTY_INDEX_OPTION_SHADOW_UNROUTED",
+        callable_name="generate_shadow_trade_intents",
+        certification_supported=True,
+        certification_track="offline_shadow_certification_only",
+        blocked_reason="Shadow trade-intent emission only. Not execution viable; no broker writes, no paper orders, no live orders."
+    )
         
     # 3. Aggregate Engine
     registry["PRO_STRATEGY_ENGINE"] = StrategyRegistryEntry(

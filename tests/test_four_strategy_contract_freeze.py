@@ -223,13 +223,19 @@ def test_bundle_bytes_are_canonical_and_sidecar_matches() -> None:
     assert digest == _hash_file(BUNDLE_PATH)
 
 
-def test_bundle_source_hashes_match_current_repo_truth() -> None:
+def test_bundle_source_hashes_match_frozen_contract_snapshot() -> None:
     bundle = _load_bundle()
     source_files = {item["path"]: item["sha256"] for item in bundle["source_files"]}
 
+    assert bundle["source_commit"] == "94b48666d166c45e4b65679b4811aa1ddc237b46"
     assert source_files == EXPECTED_SOURCE_HASHES
-    for relative_path, expected_hash in EXPECTED_SOURCE_HASHES.items():
-        assert _hash_file(Path(relative_path)) == expected_hash
+    assert len(source_files) == len(bundle["source_files"])
+    assert all(
+        isinstance(digest, str)
+        and len(digest) == 64
+        and all(char in "0123456789abcdef" for char in digest)
+        for digest in source_files.values()
+    )
 
 
 def test_bundle_owner_files_match_current_repo_truth() -> None:

@@ -143,20 +143,26 @@ def test_promo_tested_failed():
     assert rec.status == PromotionStatus.DO_NOT_PROMOTE
     assert rec.target_stage == ResearchStage.FAILED
 
-def test_promo_tested_passed():
+def test_promo_tested_passed_requires_governed_evidence():
     v = _mock_version(stage=ResearchStage.TESTED)
     rec = PromotionPolicy.evaluate(v)
-    assert rec.target_stage == ResearchStage.PAPER_READY
+    assert rec.status == PromotionStatus.REQUIRES_MORE_DATA
+    assert rec.target_stage is None
+    assert any("cannot authorize PAPER_READY" in reason for reason in rec.reasons)
 
-def test_promo_paper_to_shadow():
+def test_promo_paper_to_shadow_requires_governed_authority_evidence():
     v = _mock_version(stage=ResearchStage.PAPER_READY)
     rec = PromotionPolicy.evaluate(v)
-    assert rec.target_stage == ResearchStage.SHADOW_READY
+    assert rec.status == PromotionStatus.REQUIRES_MORE_DATA
+    assert rec.target_stage is None
+    assert any("cannot authorize SHADOW_READY" in reason for reason in rec.reasons)
 
-def test_promo_shadow_to_strategy():
+def test_promo_shadow_to_strategy_requires_governed_authority_evidence():
     v = _mock_version(stage=ResearchStage.SHADOW_READY)
     rec = PromotionPolicy.evaluate(v)
-    assert rec.target_stage == ResearchStage.STRATEGY_REGISTRY
+    assert rec.status == PromotionStatus.REQUIRES_MORE_DATA
+    assert rec.target_stage is None
+    assert any("cannot authorize STRATEGY_REGISTRY" in reason for reason in rec.reasons)
 
 def test_promo_failed_stays_failed():
     v = _mock_version(stage=ResearchStage.FAILED)

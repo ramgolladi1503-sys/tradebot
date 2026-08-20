@@ -111,4 +111,43 @@ def futures_signal(market_data: dict) -> StrategySignal | None:
     return ensemble_signal(market_data)
 
 
-__all__ = ["StrategySignal", "ensemble_signal", "equity_signal", "futures_signal"]
+def _normalize_regime(regime: Any) -> str:
+    """Compatibility-only regime label normalizer.
+
+    This restores the legacy import contract expected by regime-normalization
+    tests. It does not implement alpha logic, alter H1, or grant order/paper/live
+    authority.
+    """
+    if regime is None:
+        return "UNKNOWN"
+    key = str(regime).strip().upper().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "RANGE": "MEAN_REVERT",
+        "RANGING": "MEAN_REVERT",
+        "RANGE_BOUND": "MEAN_REVERT",
+        "MEAN_REVERSION": "MEAN_REVERT",
+        "MEAN_REVERT": "MEAN_REVERT",
+        "TREND": "TREND",
+        "TRENDING": "TREND",
+        "EVENT": "EVENT",
+        "EVENT_BREAKOUT": "EVENT",
+        "NEUTRAL": "NEUTRAL",
+    }
+    return aliases.get(key, key or "UNKNOWN")
+
+
+
+
+def micro_pattern_signal(market_data: dict) -> StrategySignal | None:
+    """Compatibility alias; does not implement or certify micro-pattern alpha."""
+    return ensemble_signal(market_data)
+
+
+__all__ = [
+    "StrategySignal",
+    "ensemble_signal",
+    "equity_signal",
+    "futures_signal",
+    "micro_pattern_signal",
+    "_normalize_regime",
+]

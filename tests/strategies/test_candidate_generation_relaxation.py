@@ -7,7 +7,7 @@ import strategies.nifty_intraday as nifty_intraday
 import strategies.zero_hero as zero_hero
 
 
-def test_nifty_intraday_candidate_survives_moderate_imperfection():
+def test_nifty_intraday_candidate_requires_declared_regime():
     debug = {}
 
     signal = nifty_intraday.generate_signal(
@@ -19,16 +19,14 @@ def test_nifty_intraday_candidate_survives_moderate_imperfection():
         debug_stats=debug,
     )
 
-    assert signal is not None
-    assert signal["direction"] == "BUY_CALL"
-    assert "below_primary_vwap_buffer" in signal["soft_flags"]
-    assert "bias_missing" in signal["soft_flags"]
+    assert signal is None
     assert debug["candidates_considered"] == 1
-    assert debug["candidates_rejected_pre_score"] == 0
-    assert debug["candidates_scored"] == 1
+    assert debug["candidates_rejected_pre_score"] == 1
+    assert debug["candidates_scored"] == 0
+    assert debug["rejection_reason_counts"]["regime_not_declared_by_strategy_spec"] == 1
 
 
-def test_ensemble_scores_soft_trend_mismatch_and_records_debug():
+def test_ensemble_rejects_raw_market_data_without_structural_child_signals():
     market_data = {
         "regime": "TREND",
         "ltp": 100.25,
@@ -43,12 +41,8 @@ def test_ensemble_scores_soft_trend_mismatch_and_records_debug():
 
     signal = ensemble.ensemble_signal(market_data)
 
-    assert signal is not None
-    assert signal.direction == "BUY_CALL"
-    assert "soft slope mismatch" in signal.reason
-    stats = market_data["strategy_debug"]["ensemble"]
-    assert stats["candidates_considered"] >= 1
-    assert stats["candidates_scored"] >= 1
+    assert signal is None
+    assert "child_signals" not in market_data
 
 
 def test_zero_hero_strategy_accepts_expiry_window(monkeypatch):
