@@ -82,12 +82,25 @@ def test_opening_drive_pullback_resumption_is_ordered_and_causal():
     assert mod.first_opening_drive_pullback_resumption(bars, cfg) == (5, 1)
 
 
-def test_opening_prefix_fails_closed_when_session_does_not_start_at_0915():
+def test_opening_prefix_fails_closed_when_first_bars_are_not_contiguous_5m():
     bars = _bars([
         (100, 101, 99, 100.5),
         (100.5, 101, 100, 100.8),
         (100.8, 101.2, 100.4, 101),
         (101, 102, 100.9, 101.8),
     ])
-    bars[0]["timestamp"] = bars[0]["timestamp"] + timedelta(minutes=5)
+    bars[1]["timestamp"] = bars[1]["timestamp"] + timedelta(minutes=1)
     assert not mod.valid_opening_prefix(bars, 3)
+
+
+def test_opening_prefix_does_not_depend_on_literal_clock_zone_serialization():
+    bars = _bars([
+        (100, 101, 99, 100.5),
+        (100.5, 101, 100, 100.8),
+        (100.8, 101.2, 100.4, 101),
+        (101, 102, 100.9, 101.8),
+    ])
+    shift = timedelta(hours=-5, minutes=-30)
+    for bar in bars:
+        bar["timestamp"] = bar["timestamp"] + shift
+    assert mod.valid_opening_prefix(bars, 3)
