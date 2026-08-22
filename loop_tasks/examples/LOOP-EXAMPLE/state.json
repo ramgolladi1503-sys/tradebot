@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "task_id": "LOOP-EXAMPLE",
+  "state": "REVIEWING",
+  "previous_state": "TESTING",
+  "cycle": 2,
+  "code_sha": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
+  "base_sha": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
+  "branch": "infra/github-first-loop-engineering-v1",
+  "worker": "chatgpt",
+  "started_at_utc": "2026-07-31T07:00:00Z",
+  "checkpointed_at_utc": "2026-07-31T07:10:00Z",
+  "completed_gate_ids": [
+    "example_test_proven"
+  ],
+  "failed_gate_ids": [],
+  "blockers": [],
+  "next_action": "Review the committed proof and mark the example review gate only if the evidence is sufficient.",
+  "next_worker": "antigravity",
+  "human_approval_required": false
+}

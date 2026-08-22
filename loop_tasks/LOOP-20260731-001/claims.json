@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "claims": [
+    {
+      "claim_id": "CLM-764-001",
+      "statement": "The GitHub-first loop framework focused tests and both committed loop-task validations pass at code checkpoint cf9276c75e1f53617723c8d598c428c04652adca.",
+      "status": "PROVEN",
+      "proof_ids": [
+        "CI-LOOP-GATE-CF9276C7"
+      ],
+      "owner": "chatgpt",
+      "requires_live_evidence": false
+    },
+    {
+      "claim_id": "CLM-764-002",
+      "statement": "The repository review, code-excellence, forensics, registry, CodeQL, portfolio, and independent tests gates accept the scoped implementation at code checkpoint cf9276c75e1f53617723c8d598c428c04652adca.",
+      "status": "PROVEN",
+      "proof_ids": [
+        "CI-AGENT-REVIEW-CF9276C7",
+        "CI-CODE-EXCELLENCE-CF9276C7",
+        "CI-FORENSICS-CF9276C7",
+        "CI-REGISTRY-CF9276C7",
+        "CI-CODEQL-CF9276C7",
+        "CI-PORTFOLIO-CF9276C7",
+        "CI-TESTS-CF9276C7"
+      ],
+      "owner": "chatgpt",
+      "requires_live_evidence": false
+    },
+    {
+      "claim_id": "CLM-764-003",
+      "statement": "The final PR diff remains inside the frozen infrastructure-only scope and does not modify TradeBot runtime, feed, broker, risk, execution, strategy, credential, PR #748, or PR #750 runtime paths.",
+      "status": "PROVEN",
+      "proof_ids": [
+        "PR-DIFF-SCOPE-764-CF9276C7"
+      ],
+      "owner": "chatgpt",
+      "requires_live_evidence": false
+    },
+    {
+      "claim_id": "CLM-764-004",
+      "statement": "Every final-head PR workflow passes.",
+      "status": "REJECTED",
+      "proof_ids": [
+        "CI-TIMEOUT-CF9276C7"
+      ],
+      "owner": "chatgpt",
+      "requires_live_evidence": false
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+Example focused test: PASS
+Command: pytest -q tests/loop
+Exit code: 0
+Evidence class: test
