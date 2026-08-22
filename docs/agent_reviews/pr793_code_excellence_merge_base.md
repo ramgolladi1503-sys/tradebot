@@ -2,6 +2,10 @@
 
 mode: PAPER
 candidate_id: PR793_CODE_EXCELLENCE_MERGE_BASE
+decision: REPAIR_CI_MERGE_BASE_HISTORY
+reason: Preserve full main ancestry so the existing three-dot Code Excellence comparison remains authoritative after the base branch advances.
+timestamp: 2026-08-22T19:30:00+05:30
+source: PR793_CODE_EXCELLENCE_MERGE_BASE_REVIEW
 is_order_action: false
 broker_api_called: false
 
