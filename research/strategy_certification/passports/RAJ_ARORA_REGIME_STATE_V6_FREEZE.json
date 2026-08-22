@@ -1,0 +1,62 @@
+{
+  "generation_id": "RAJ_ARORA_REGIME_STATE_V6_FREEZE",
+  "status": "FROZEN_PRE_DEVELOPMENT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "exact_video_strategy_claimed": false,
+  "dataset": {
+    "rows": 36849,
+    "sessions": 493,
+    "development_sessions": 295,
+    "validation_sessions_reserved": 98,
+    "holdout_sessions_reserved": 100,
+    "validation_access": "FORBIDDEN_UNTIL_FULL_DEVELOPMENT_ROBUSTNESS_PASS",
+    "holdout_access": "FORBIDDEN_UNTIL_VALIDATION_PASS"
+  },
+  "base_event": {
+    "opening_range_bars": 2,
+    "first_close_breakout_ordering": "DOWNSIDE_FIRST",
+    "breakout_buffer_bps": 5,
+    "reclaim_inside_max_bars": 2,
+    "entry": "NEXT_COMPLETED_5M_CLOSE",
+    "base_cost_bps_round_trip": 5,
+    "stress_cost_bps_round_trip": 7.5,
+    "horizons_bars": [3, 6, 9]
+  },
+  "regime_features": {
+    "prior_5_session_return": "Previous-session close divided by close five sessions earlier minus one; current-session data excluded.",
+    "prior_session_body": "Previous session close minus previous session open; current-session data excluded.",
+    "trailing_20_session_realized_vol": "Standard deviation of the 20 close-to-close returns ending at the previous session; current-session data excluded.",
+    "volatility_split": "Median trailing-20 realized-vol feature across eligible development sessions, computed without any strategy outcome data."
+  },
+  "families": [
+    {"id":"V6_PRIOR5_NEGATIVE","rule":"prior_5_session_return < 0","control_pair":"V6_PRIOR5_POSITIVE"},
+    {"id":"V6_PRIOR5_POSITIVE","rule":"prior_5_session_return >= 0","control_pair":"V6_PRIOR5_NEGATIVE"},
+    {"id":"V6_PREV_SESSION_BEARISH","rule":"previous_session_close < previous_session_open","control_pair":"V6_PREV_SESSION_BULLISH"},
+    {"id":"V6_PREV_SESSION_BULLISH","rule":"previous_session_close >= previous_session_open","control_pair":"V6_PREV_SESSION_BEARISH"},
+    {"id":"V6_TRAILING_VOL_HIGH","rule":"trailing_20_session_realized_vol > development_feature_median","control_pair":"V6_TRAILING_VOL_LOW"},
+    {"id":"V6_TRAILING_VOL_LOW","rule":"trailing_20_session_realized_vol <= development_feature_median","control_pair":"V6_TRAILING_VOL_HIGH"}
+  ],
+  "search_budget": {
+    "signal_families": 6,
+    "horizons_per_family": 3,
+    "total_development_cells": 18,
+    "threshold_grid": "NONE",
+    "post_result_extension": "FORBIDDEN"
+  },
+  "family_advance_gate": {
+    "minimum_trades_at_30m_horizon": 20,
+    "mean_net_5bps_at_30m_positive": true,
+    "mean_net_7_5bps_at_30m_positive": true,
+    "one_extra_5m_entry_delay_30m_positive": true,
+    "positive_horizons_required_of_3": 2,
+    "positive_chronological_thirds_required_of_3": 2,
+    "top5_positive_contribution_fraction_max": 0.8,
+    "paired_control_30m_mean_separation_bps_min": 2.0,
+    "randomized_direction_empirical_p_max_bonferroni": 0.0083,
+    "session_pairing_empirical_p_max_bonferroni": 0.0083
+  },
+  "selection_rule": "EACH_FAMILY_PASSES_OR_FAILS_INDEPENDENTLY; SYMMETRIC CONTROL PAIRS ARE REPORTED TOGETHER; NO_DATE_CUTOFF_SELECTION.",
+  "freeze_rule": "ANY MATERIAL CHANGE AFTER DEVELOPMENT OUTCOME ACCESS CREATES A NEW MULTIPLE_TESTING_FAMILY."
+}
