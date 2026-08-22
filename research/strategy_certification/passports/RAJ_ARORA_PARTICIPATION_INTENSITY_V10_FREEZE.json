@@ -1,0 +1,55 @@
+{
+  "generation_id": "RAJ_ARORA_PARTICIPATION_INTENSITY_V10_FREEZE",
+  "status": "FROZEN_PRE_DEVELOPMENT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "membership_authority": "AVAILABLE_CONSTITUENT_BASKET_PROXY_NOT_POINT_IN_TIME_NIFTY_MEMBERSHIP",
+  "certification_ceiling": "MECHANISM_EVIDENCE_ONLY_UNTIL_MEMBERSHIP_SURVIVORSHIP_RECONCILED",
+  "base_event": {
+    "opening_range_bars": 2,
+    "first_close_breakout_ordering": "DOWNSIDE_FIRST",
+    "breakout_buffer_bps": 5,
+    "reclaim_inside_max_bars": 2,
+    "entry": "NEXT_COMPLETED_5M_CLOSE",
+    "base_cost_bps_round_trip": 5,
+    "stress_cost_bps_round_trip": 7.5,
+    "horizons_bars": [3,6,9]
+  },
+  "participation_feature_thresholds": {
+    "source": "MEDIANS_OF_V9_DEVELOPMENT_PARTICIPATION_FEATURES_ONLY_NO_PNL_OPTIMIZATION",
+    "breakout_volume_expansion_breadth_median": 0.0784313725490196,
+    "reclaim_volume_expansion_breadth_median": 0.35294117647058826,
+    "aligned_reclaim_participation_breadth_median": 0.2549019607843137
+  },
+  "families": [
+    {"id":"V10_BREAK_VOL_INTENSITY_HIGH","rule":"breakout_volume_expansion_breadth >= 0.0784313725490196","paired_control":"V10_BREAK_VOL_INTENSITY_LOW"},
+    {"id":"V10_BREAK_VOL_INTENSITY_LOW","rule":"breakout_volume_expansion_breadth < 0.0784313725490196","paired_control":"V10_BREAK_VOL_INTENSITY_HIGH"},
+    {"id":"V10_RECLAIM_VOL_INTENSITY_HIGH","rule":"reclaim_volume_expansion_breadth >= 0.35294117647058826","paired_control":"V10_RECLAIM_VOL_INTENSITY_LOW"},
+    {"id":"V10_RECLAIM_VOL_INTENSITY_LOW","rule":"reclaim_volume_expansion_breadth < 0.35294117647058826","paired_control":"V10_RECLAIM_VOL_INTENSITY_HIGH"},
+    {"id":"V10_ALIGNED_PARTICIPATION_HIGH","rule":"aligned_reclaim_participation_breadth >= 0.2549019607843137","paired_control":"V10_ALIGNED_PARTICIPATION_LOW"},
+    {"id":"V10_ALIGNED_PARTICIPATION_LOW","rule":"aligned_reclaim_participation_breadth < 0.2549019607843137","paired_control":"V10_ALIGNED_PARTICIPATION_HIGH"}
+  ],
+  "search_budget": {
+    "families": 6,
+    "horizons_per_family": 3,
+    "total_development_cells": 18,
+    "post_result_extension": "FORBIDDEN"
+  },
+  "family_advance_gate": {
+    "minimum_covered_events_at_30m": 15,
+    "mean_net_5bps_30m_positive": true,
+    "mean_net_7_5bps_30m_positive": true,
+    "one_extra_5m_entry_delay_30m_positive": true,
+    "positive_horizons_required_of_3": 2,
+    "positive_chronological_thirds_required_of_3": 2,
+    "top5_positive_contribution_fraction_max": 0.8,
+    "paired_control_mean_separation_bps_min": 2.0,
+    "randomized_direction_empirical_p_max_bonferroni": 0.0083,
+    "session_pairing_empirical_p_max_bonferroni": 0.0083
+  },
+  "validation_access": "FORBIDDEN_IN_V10_REGARDLESS_OF_RESULT_UNTIL_MEMBERSHIP_AUTHORITY_IS_REPAIRED",
+  "holdout_access": "FORBIDDEN",
+  "selection_rule": "NO_BEST_FAMILY_PROMOTION; FEATURE_MEDIAN_HIGH_LOW_COMPLEMENTS_REPORTED_TOGETHER.",
+  "freeze_rule": "V10_CLOSES_CURRENT_NIFTY_PLUS_CONSTITUENT_PROXY_SEARCH_IF_NO_FAMILY_PASSES. ANY FURTHER WORK REQUIRES A MATERIALLY RICHER INFORMATION SET."
+}
