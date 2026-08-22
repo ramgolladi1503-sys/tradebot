@@ -8,7 +8,7 @@ Version: 1.0.0-draft
 TEP Phase 0 passes only if all criteria below are independently reviewable from repository artifacts.
 
 ### AC-001 — Complete constitution
-SPEC-000, SPEC-001, SPEC-002 and documents 00–09 exist on one bounded architecture authority.
+The frozen Phase-0 constitution MUST contain, at one exact SHA, SPEC-000, SPEC-001, SPEC-002 and normative documents `00_MASTER_PLAN.md` through `16_PHASE0_TRACEABILITY_MATRIX.md`. Phase review reports are evidence artifacts, not normative constitution members. Adding/removing a normative Phase-0 document requires this manifest to change before freeze.
 
 ### AC-002 — Terminology consistency
 Canonical terms have one meaning across the package. Conflicting definitions are resolved before freeze.
@@ -23,10 +23,10 @@ The module graph has no prohibited ownership cycles and defines enforceable depe
 Task/mission lifecycle, crash recovery, leases, idempotency, wait behavior and validation-after-restart are specified.
 
 ### AC-006 — Authority model
-Material mutations have explicit capability-specific authority boundaries. Tool possession/access cannot substitute for authorization.
+Material mutations have explicit capability-specific authority boundaries. Tool possession/access cannot substitute for authorization. `11_CAPABILITY_AUTHORITY_CATALOGUE.md` is the canonical authority-default source.
 
-### AC-007 — Evidence model
-Evidence, knowledge, state and worker output are explicitly distinct. Certification scope cannot exceed validator/evidence scope.
+### AC-007 — Evidence and traceability model
+Evidence, knowledge, state and worker output are explicitly distinct. Certification scope cannot exceed validator/evidence scope. Every Phase-0 REQ has architectural traceability through `16_PHASE0_TRACEABILITY_MATRIX.md`; implementation/test/evidence links are explicitly deferred until their milestone exists and cannot be inferred from Phase-0 PASS.
 
 ### AC-008 — Repository convergence model
 The architecture supports independent parallel preparation/CI and serial refreshed-main integration, without requiring successor PR creation as the default.
@@ -50,12 +50,12 @@ v1 non-goals and admission rules prevent unnecessary distributed infrastructure,
 The roadmap explicitly preserves validated existing artifacts until provenance/equivalence and rollback are established.
 
 ### AC-015 — Implementation gate
-No document claims implementation validity merely because architecture text exists. `TEP_IMPLEMENTATION_AUTHORIZED` remains false until the constitution is frozen.
+No document claims implementation validity merely because architecture text exists. `TEP_IMPLEMENTATION_AUTHORIZED` remains false until the constitution is frozen. Phase-0 PASS may authorize only the next explicitly bounded milestone; it does not authorize all M1–M10 work.
 
 ## Phase-0 review procedure
 
 1. Freeze candidate package SHA.
-2. Run mechanical checks for missing documents, duplicate IDs, broken cross-references and prohibited terms/authority contradictions.
+2. Run mechanical checks for missing documents, duplicate IDs, broken cross-references, orphaned REQ/LAW/IR identifiers and prohibited terms/authority contradictions.
 3. Perform architecture consistency review.
 4. Perform adversarial safety/governance review.
 5. Record all findings with severity and exact document/section.
