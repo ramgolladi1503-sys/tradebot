@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "campaign_id": "TWO_CANDIDATE_KERNEL_CERTIFICATION_V1",
+  "base_authority": "research/strategy-certification-kernel-v0",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "production_promotion_permitted": false,
+  "certification_is_discovery": false,
+  "legal_kernel_states": [
+    "VALIDATED_RESEARCH",
+    "REJECTED",
+    "ROBUSTNESS_REQUIRED"
+  ],
+  "candidates": [
+    {
+      "candidate_id": "HTF_RANGE_EXPANSION",
+      "priority": 1,
+      "status": "PRE_CERTIFICATION_DATASET_BINDING_REQUIRED",
+      "information_set": "NIFTY_HTF_OPENING_DRIVE_VOL_EXPANSION",
+      "source_spec": "docs/research/htf_range_expansion_strategy_spec.md",
+      "historical_verdict": "PROMOTE_TO_PAPER",
+      "historical_verdict_is_kernel_certification": false,
+      "identity_reconciliation_required_with": "HTF_OPENING_DRIVE_CONT",
+      "dataset_sha256": null,
+      "candidate_fingerprint": null,
+      "holdout_integrity": "TO_BE_PROVEN",
+      "option_execution_evidence": "PROVENANCE_RECONCILIATION_REQUIRED",
+      "current_30m_contract_compatible": "UNKNOWN",
+      "threshold_changes_permitted": false,
+      "runtime_authority": "NONE"
+    },
+    {
+      "candidate_id": "COMMON_FACTOR_OPTION_UNDERREACTION_V1",
+      "priority": 2,
+      "status": "PRIOR_RESULT_AND_HOLDOUT_INTEGRITY_RECOVERY_REQUIRED",
+      "information_set": "CONSTITUENT_COMMON_FACTOR_INDEX_LAG_OPTION_UNDERREACTION",
+      "source_branch": "research/common-factor-option-underreaction-v1",
+      "source_head": "14507f7e93b08f1dadac3625f687454c18c41643",
+      "source_contract": "research/common_factor_option_underreaction_v1/research_contract.json",
+      "maximum_variants": 3,
+      "dataset_sha256_set": null,
+      "candidate_fingerprint": null,
+      "prior_result_recovered": false,
+      "holdout_integrity": "UNKNOWN_UNTIL_RECOVERY",
+      "exact_rerun_only": true,
+      "threshold_changes_permitted": false,
+      "runtime_authority": "NONE"
+    }
+  ],
+  "required_robustness": [
+    "chronological_oos",
+    "walk_forward_positivity",
+    "cost_slippage_stress",
+    "session_concentration",
+    "negative_controls",
+    "fallback_exclusion",
+    "future_leakage_attack",
+    "independent_verification"
+  ],
+  "passport_schema": "research/passports/CONFIDENCE_PASSPORT_SCHEMA.md",
+  "bounded_lifecycle": "research/strategy_certification/BOUNDED_RESEARCH_LIFECYCLE.md"
+}
