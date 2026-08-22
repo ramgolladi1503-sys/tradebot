@@ -1,0 +1,82 @@
+{
+  "generation_id": "RAJ_ARORA_HYP_B1_INTERSECTION_V11_FREEZE",
+  "status": "FROZEN_WAITING_FOR_ALIGNED_FUTURES_BYTES",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "exact_video_strategy_claimed": false,
+  "purpose": "TEST_INCREMENTAL_VALUE_OF_AN_INDEPENDENT_PREEXISTING_FUTURES_BASIS_MECHANISM_ON_THE_FROZEN_FAILED_DOWNSIDE_BREAKOUT_REBOUND_EVENT",
+  "nifty_base_event": {
+    "opening_range_bars": 2,
+    "opening_range_minutes": 10,
+    "first_close_breakout_ordering": "DOWNSIDE_FIRST",
+    "breakout_buffer_bps": 5,
+    "reclaim_inside_max_bars": 2,
+    "direction": "BULLISH",
+    "entry": "NEXT_COMPLETED_5M_CLOSE_AFTER_RECLAIM",
+    "base_cost_bps_round_trip": 5,
+    "stress_cost_bps_round_trip": 7.5,
+    "horizons_bars": [3,6,9]
+  },
+  "independent_mechanism": {
+    "id": "HYP_B1_RAPID_BASIS_WIDENING",
+    "authority": "PREEXISTING_FUTURES_MECHANISM_DISCOVERY_V1_AND_ADVERSARIAL_VERIFICATION",
+    "aligned_panel_sha256": "2311981231d3fb847a216c9165ef73c3e7b788ab354d6de493ab1a5edb32e7a9",
+    "basis_change_window_minutes": 15,
+    "trigger_threshold_inr": 8.5,
+    "trigger_rule": "basis_chg_15m > 8.5",
+    "threshold_reuse": "EXACT_PREEXISTING_AUTHORITY_NO_REFIT",
+    "decision_alignment": "EVALUATE_HYP_B1_AT_THE_END_OF_THE_COMPLETED_5M_RECLAIM_BAR_USING_ONLY_INFORMATION_AVAILABLE_BY_THAT_TIME",
+    "directional_alignment": "HYP_B1_POSITIVE_FORWARD_SPOT_EFFECT_ALIGNS_WITH_BULLISH_FAILED_DOWNSIDE_BREAKOUT_REBOUND"
+  },
+  "data_contract": {
+    "required_panel": "data/research/nifty_futures_alignment_v1/NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet",
+    "required_panel_sha256": "2311981231d3fb847a216c9165ef73c3e7b788ab354d6de493ab1a5edb32e7a9",
+    "panel_start": "2024-07-26",
+    "panel_end": "2026-07-28",
+    "current_nifty_development_end": "2025-09-15",
+    "pre_panel_failed_breakout_events": "EXCLUDE_AND_REPORT; NEVER_BACKFILL_OR_IMPUTE",
+    "validation_access": "FORBIDDEN_UNTIL_DEVELOPMENT_INTERSECTION_PASSES_ALL_PREDECLARED_GATES",
+    "holdout_access": "FORBIDDEN"
+  },
+  "families": [
+    {
+      "id": "V11_TRAP_PLUS_HYP_B1_ACTIVE",
+      "rule": "FROZEN_FAILED_DOWNSIDE_BREAKOUT_RECLAIM AND basis_chg_15m_at_reclaim_end > 8.5",
+      "paired_control": "V11_TRAP_PLUS_HYP_B1_INACTIVE"
+    },
+    {
+      "id": "V11_TRAP_PLUS_HYP_B1_INACTIVE",
+      "rule": "FROZEN_FAILED_DOWNSIDE_BREAKOUT_RECLAIM AND basis_chg_15m_at_reclaim_end <= 8.5",
+      "paired_control": "V11_TRAP_PLUS_HYP_B1_ACTIVE"
+    }
+  ],
+  "search_budget": {
+    "families": 2,
+    "horizons_per_family": 3,
+    "total_development_cells": 6,
+    "basis_threshold_search": "NONE",
+    "timing_search": "NONE",
+    "post_result_extension": "FORBIDDEN"
+  },
+  "active_family_advance_gate": {
+    "minimum_trades_at_30m": 10,
+    "mean_net_5bps_30m_positive": true,
+    "mean_net_7_5bps_30m_positive": true,
+    "one_extra_5m_entry_delay_30m_positive": true,
+    "positive_horizons_required_of_3": 2,
+    "positive_chronological_development_blocks_required_of_3": 2,
+    "top5_positive_contribution_fraction_max": 0.8,
+    "incremental_mean_vs_inactive_control_bps_min": 2.0,
+    "randomized_direction_empirical_p_max": 0.025,
+    "session_pairing_empirical_p_max": 0.025
+  },
+  "selection_rule": "ONLY_THE_PREEXISTING_HYP_B1_THRESHOLD_IS_USED. NO_NEW_BASIS_THRESHOLD, LAG, WINDOW, OR_COMBINATION_MAY_BE_CHOSEN_FROM_V11_RESULTS.",
+  "claim_boundary": {
+    "if_development_passes": "INCREMENTAL_MECHANISM_CANDIDATE_ONLY",
+    "strategy_certified": false,
+    "execution_viability_known": false,
+    "option_execution_claim": false
+  },
+  "freeze_rule": "ANY CHANGE TO THE 8.5 INR HYP_B1 THRESHOLD, 15M BASIS WINDOW, RECLAIM-TIME ALIGNMENT, NIFTY BASE EVENT, OR GATES AFTER OUTCOME ACCESS CREATES A NEW MULTIPLE_TESTING_FAMILY."
+}
