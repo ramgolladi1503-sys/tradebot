@@ -29,7 +29,7 @@ The legacy standalone outcome replay remains available when pipeline environment
 - Can spread be charged twice? No. Spread is embedded in bid/ask execution, and separate spread cost is fixed at zero.
 - Can slippage be charged twice? No. Slippage changes the fill prices, and no separate slippage charge is added.
 - Can a delayed quote be treated as immediate execution? No. Entry delay is recorded and must remain within the explicit configured limit.
-- Can missing exit data fabricate a result? No. The candidate is marked `INSUFFICIENT_TRACE`; zero complete outcomes blocks the stage with a verified diagnostic artifact.
+- Can an absent exit quote fabricate a result? No. The affected input row is marked `INSUFFICIENT_TRACE`; zero complete outcomes blocks the stage with a verified diagnostic artifact.
 - Are the tax and brokerage rates claimed to be current? No. The stage requires an explicit caller-owned cost configuration with `source_as_of`; this PR validates and hashes the supplied assumptions but does not assert their legal or market freshness.
 
 ## Hermes Review
