@@ -19,6 +19,8 @@ DEV_END = "2025-09-15"
 BASIS_THRESHOLD = 8.5
 RNG_SEED = 20260823
 NULL_DRAWS = 20000
+V3_BASE_TRADES_30M = 33
+V3_BASE_MEAN_NET5_30M = 3.620837288
 
 
 def sha256_file(path: Path) -> str:
@@ -48,31 +50,19 @@ def load_nifty_5m(path: Path) -> dict[str, list[dict]]:
         o, h, l, c = (_finite_pos(r[k]) for k in ("open", "high", "low", "close"))
         if h < max(o, c) or l > min(o, c) or h < l:
             raise ValueError(f"invalid_ohlc:{r['timestamp']}")
-        rows.append({
-            "timestamp": t,
-            "session": t.date().isoformat(),
-            "open": o,
-            "high": h,
-            "low": l,
-            "close": c,
-        })
+        rows.append({"timestamp": t, "session": t.date().isoformat(), "open": o, "high": h, "low": l, "close": c})
     groups: dict[str, list[dict]] = {}
     for r in rows:
         groups.setdefault(r["session"], []).append(r)
     for s, bars in groups.items():
         bars.sort(key=lambda x: x["timestamp"])
-        if any(bars[i]["timestamp"] <= bars[i-1]["timestamp"] for i in range(1, len(bars))):
+        if any(bars[i]["timestamp"] <= bars[i - 1]["timestamp"] for i in range(1, len(bars))):
             raise ValueError(f"nifty_nonmonotonic:{s}")
     return groups
 
 
 def find_failed_downside_reclaim(bars: list[dict]) -> int | None:
-    """Return reclaim-bar index for the frozen V11 base event.
-
-    Opening range = first two completed 5m bars. The first later close outside the
-    range by 5 bps must be downside. A close back inside the opening range must
-    occur within the next two completed 5m bars. No other rule is added.
-    """
+    """Return reclaim-bar index for the frozen V11 base event."""
     n = 2
     if len(bars) < 5:
         return None
@@ -125,13 +115,7 @@ def panel_lookup(panel: pd.DataFrame) -> tuple[dict[str, pd.DataFrame], dict[str
     return groups, starts
 
 
-def basis_at_reclaim_end(
-    session: str,
-    bars: list[dict],
-    reclaim_idx: int,
-    panel_groups: dict[str, pd.DataFrame],
-    panel_starts: dict[str, pd.Timestamp],
-) -> tuple[float | None, str]:
+def basis_at_reclaim_end(session: str, bars: list[dict], reclaim_idx: int, panel_groups: dict[str, pd.DataFrame], panel_starts: dict[str, pd.Timestamp]) -> tuple[float | None, str]:
     if session not in panel_groups:
         return None, "PANEL_SESSION_MISSING"
     elapsed = bars[reclaim_idx]["timestamp"] - bars[0]["timestamp"]
@@ -182,8 +166,7 @@ def empirical_random_direction_p(gross_bps: list[float], observed_net_mean: floa
     ge = 0
     for _ in range(NULL_DRAWS):
         signs = rng.choice(np.array([-1.0, 1.0]), size=len(arr))
-        m = float(np.mean(signs * arr - cost_bps))
-        ge += m >= observed_net_mean
+        ge += float(np.mean(signs * arr - cost_bps)) >= observed_net_mean
     return (ge + 1) / (NULL_DRAWS + 1)
 
 
@@ -199,8 +182,7 @@ def empirical_session_label_p(all_net30: list[float], active_flags: list[bool], 
         idx = rng.choice(n, size=n_active, replace=False)
         mask = np.zeros(n, dtype=bool)
         mask[idx] = True
-        sep = float(arr[mask].mean() - arr[~mask].mean())
-        ge += sep >= observed_sep
+        ge += float(arr[mask].mean() - arr[~mask].mean()) >= observed_sep
     return (ge + 1) / (NULL_DRAWS + 1)
 
 
@@ -244,18 +226,30 @@ def run(nifty_path: Path, panel_path: Path, freeze: dict) -> dict:
     if dev_sessions[-1] != DEV_END:
         raise ValueError(f"development_end_mismatch:{dev_sessions[-1]}")
 
-    panel = load_panel_dev(panel_path)
-    pg, ps = panel_lookup(panel)
-
-    trades: list[dict] = []
-    exclusions: dict[str, int] = {}
-    base_events = 0
+    base_decisions: list[tuple[str, int]] = []
+    base_parity_returns: list[float] = []
     for s in dev_sessions:
         bars = groups[s]
         decision = find_failed_downside_reclaim(bars)
         if decision is None:
             continue
-        base_events += 1
+        base_decisions.append((s, decision))
+        r30 = trade_net_bps(bars, decision, 6, 5.0)
+        if r30 is not None:
+            base_parity_returns.append(r30)
+    parity_mean = mean(base_parity_returns) if base_parity_returns else None
+    if len(base_parity_returns) != V3_BASE_TRADES_30M:
+        raise ValueError(f"v3_base_trade_parity_mismatch:{len(base_parity_returns)}")
+    if parity_mean is None or abs(parity_mean - V3_BASE_MEAN_NET5_30M) > 1e-6:
+        raise ValueError(f"v3_base_mean_parity_mismatch:{parity_mean}")
+
+    panel = load_panel_dev(panel_path)
+    pg, ps = panel_lookup(panel)
+    trades: list[dict] = []
+    exclusions: dict[str, int] = {}
+    base_events = len(base_decisions)
+    for s, decision in base_decisions:
+        bars = groups[s]
         basis, reason = basis_at_reclaim_end(s, bars, decision, pg, ps)
         if reason != "OK":
             exclusions[reason] = exclusions.get(reason, 0) + 1
@@ -276,7 +270,6 @@ def run(nifty_path: Path, panel_path: Path, freeze: dict) -> dict:
     a30 = active["mean_net_5bps_30m"]
     i30 = inactive["mean_net_5bps_30m"]
     separation = (a30 - i30) if a30 is not None and i30 is not None else None
-
     gate = freeze["active_family_advance_gate"]
     pre_null = {
         "minimum_trades": active["trades"] >= int(gate["minimum_trades_at_30m"]),
@@ -289,7 +282,6 @@ def run(nifty_path: Path, panel_path: Path, freeze: dict) -> dict:
         "incremental_separation": separation is not None and separation >= float(gate["incremental_mean_vs_inactive_control_bps_min"]),
     }
     pre_null_pass = all(pre_null.values())
-
     nulls = {"randomized_direction_empirical_p": None, "session_label_empirical_p": None, "executed": False}
     null_pass = False
     if pre_null_pass:
@@ -312,6 +304,8 @@ def run(nifty_path: Path, panel_path: Path, freeze: dict) -> dict:
         "validation_accessed": False,
         "holdout_accessed": False,
         "base_failed_breakout_events": base_events,
+        "v3_base_parity_30m_trades": len(base_parity_returns),
+        "v3_base_parity_mean_net_5bps_30m": parity_mean,
         "intersection_evaluable_events": len(trades),
         "exclusions": exclusions,
         "active": active,
