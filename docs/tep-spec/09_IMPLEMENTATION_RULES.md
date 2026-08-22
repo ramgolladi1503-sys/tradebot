@@ -109,22 +109,11 @@ Related stacked/overlapping PRs are modeled as dependency/integration components
 ## IR-035 — Phase gates are real
 Do not implement later-milestone production behavior simply because scaffolding makes it convenient. Crossing a milestone gate requires its specified evidence.
 
-## Initial authority defaults
+## Authority defaults
 
-Until explicitly changed by a frozen mission and capability decision:
+`11_CAPABILITY_AUTHORITY_CATALOGUE.md` is the single normative source for capability names, owners, default authorization state, required authority, JIT checks and evidence. Implementations MUST NOT maintain a second hand-written authority-default list from this document.
 
-```text
-GITHUB_PR_METADATA_AUTHORIZED=false
-GITHUB_PUSH_AUTHORIZED=false
-GITHUB_PR_MERGE_AUTHORIZED=false
-DESTRUCTIVE_LOCAL_CLEANUP_AUTHORIZED=false
-BROKER_WRITE_AUTHORITY=false
-ORDER_AUTHORITY=false
-PAPER_AUTHORIZED=false
-LIVE_AUTHORIZED=false
-```
-
-Read-only repository/data operations may be separately authorized by mission policy.
+Unless the canonical catalogue and a frozen scoped mission decision explicitly allow a capability, governed mutation is DENY. Tool possession, credentials, historical authorization or omission from an example never imply authorization.
 
 ## Implementation release gate
 
