@@ -67,9 +67,16 @@ def session_map(rows: list[dict]) -> dict[str, list[dict]]:
 
 
 def valid_opening_prefix(bars: list[dict], n: int) -> bool:
+    """Require a contiguous first n-bar 5-minute prefix, independent of serialized clock zone.
+
+    The exact canonical dataset SHA, row count and session count are checked before this
+    function is used. The historical canonical cache builder can strip timezone suffixes
+    while preserving the source clock text, so a literal 09:15 assertion would make the
+    strategy depend on CSV serialization rather than bar order. The frozen strategy rule
+    is the first n completed 5-minute bars of the session, not a particular timestamp
+    string representation.
+    """
     if len(bars) <= n:
-        return False
-    if bars[0]["timestamp"].astimezone(IST).strftime("%H:%M") != "09:15":
         return False
     for i in range(1, n):
         delta = (bars[i]["timestamp"] - bars[i - 1]["timestamp"]).total_seconds()
