@@ -119,7 +119,7 @@ jobs:
           REPORT_FILE="$RUNNER_TEMP/unified-ce-gate-${HEAD_SHA}.md"
 
           git diff --name-only "$BASE_SHA" "$HEAD_SHA" > "$CHANGED_PATHS_FILE"
-          git worktree add --detach "$CANDIDATE_TREE" "$HEAD_SHA"
+          GIT_LFS_SKIP_SMUDGE=1 git worktree add --detach "$CANDIDATE_TREE" "$HEAD_SHA"
           test "$(git -C "$CANDIDATE_TREE" rev-parse HEAD)" = "$HEAD_SHA"
 
           PYTHONPATH="$BASE_WORKSPACE" python "$BASE_WORKSPACE/scripts/run_unified_ce_gates.py" \
