@@ -1,5 +1,14 @@
 # Agent Review — PR804 Remove Closed PR795 Trusted Smoke Hook
 
+mode: CLEANUP_ONLY
+candidate_id: PR804_REMOVE_PR795_TRUSTED_SMOKE
+decision: REMOVE_CLOSED_PR795_SMOKE_INFRASTRUCTURE
+reason: PR #795 is closed and the temporary PR795-specific workflow, helper, focused test, and superseded review record are removed without changing runtime or trading behavior.
+timestamp: 2026-08-22T20:15:00+05:30
+is_order_action: false
+broker_api_called: false
+source: PR804_CURRENT_MAIN_CLEANUP_REVIEW
+
 mode: PAPER
 candidate_id: PR804_REMOVE_PR795_TRUSTED_SMOKE
 is_order_action: false

@@ -9,6 +9,7 @@ reason: PR #795 is closed, and the original review contract explicitly required 
 timestamp: 2026-08-07T18:15:00+05:30
 is_order_action: false
 broker_api_called: false
+source: PR795_CLOSED_CLEANUP_REVIEW
 
 ## Agent Work Contract
 
