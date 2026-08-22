@@ -1,0 +1,56 @@
+{
+  "generation_id": "RAJ_ARORA_BREADTH_INTENSITY_V8_FREEZE",
+  "status": "FROZEN_PRE_DEVELOPMENT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "membership_authority": "AVAILABLE_CONSTITUENT_BASKET_PROXY_NOT_POINT_IN_TIME_NIFTY_MEMBERSHIP",
+  "certification_ceiling": "MECHANISM_EVIDENCE_ONLY_UNTIL_MEMBERSHIP_SURVIVORSHIP_RECONCILED",
+  "base_event": {
+    "opening_range_bars": 2,
+    "first_close_breakout_ordering": "DOWNSIDE_FIRST",
+    "breakout_buffer_bps": 5,
+    "reclaim_inside_max_bars": 2,
+    "entry": "NEXT_COMPLETED_5M_CLOSE",
+    "base_cost_bps_round_trip": 5,
+    "stress_cost_bps_round_trip": 7.5,
+    "horizons_bars": [3,6,9]
+  },
+  "breadth_feature_thresholds": {
+    "source": "MEDIANS_OF_V7_DEVELOPMENT_BREADTH_FEATURES_ONLY_NO_POST_ENTRY_OUTCOMES",
+    "breakout_breadth_median": 0.6862745098039216,
+    "reclaim_move_breadth_median": 0.7647058823529411,
+    "median_breakout_return_median": -0.003252688172042939
+  },
+  "families": [
+    {"id":"V8_BREAK_BREADTH_HIGH","rule":"breakout_breadth >= 0.6862745098039216","paired_control":"V8_BREAK_BREADTH_LOW"},
+    {"id":"V8_BREAK_BREADTH_LOW","rule":"breakout_breadth < 0.6862745098039216","paired_control":"V8_BREAK_BREADTH_HIGH"},
+    {"id":"V8_RECLAIM_BREADTH_HIGH","rule":"reclaim_move_breadth >= 0.7647058823529411","paired_control":"V8_RECLAIM_BREADTH_LOW"},
+    {"id":"V8_RECLAIM_BREADTH_LOW","rule":"reclaim_move_breadth < 0.7647058823529411","paired_control":"V8_RECLAIM_BREADTH_HIGH"},
+    {"id":"V8_BREAK_DEPTH_SHALLOW","rule":"median_breakout_return >= -0.003252688172042939","paired_control":"V8_BREAK_DEPTH_DEEP"},
+    {"id":"V8_BREAK_DEPTH_DEEP","rule":"median_breakout_return < -0.003252688172042939","paired_control":"V8_BREAK_DEPTH_SHALLOW"},
+    {"id":"V8_DUAL_HIGH_REVERSAL_PARTICIPATION","rule":"breakout_breadth >= breakout_breadth_median AND reclaim_move_breadth >= reclaim_move_breadth_median","paired_control":null}
+  ],
+  "search_budget": {
+    "families": 7,
+    "horizons_per_family": 3,
+    "total_development_cells": 21,
+    "post_result_extension": "FORBIDDEN"
+  },
+  "family_advance_gate": {
+    "minimum_covered_events_at_30m": 15,
+    "mean_net_5bps_30m_positive": true,
+    "mean_net_7_5bps_30m_positive": true,
+    "one_extra_5m_entry_delay_30m_positive": true,
+    "positive_horizons_required_of_3": 2,
+    "positive_chronological_thirds_required_of_3": 2,
+    "top5_positive_contribution_fraction_max": 0.8,
+    "paired_control_mean_separation_bps_min": 2.0,
+    "randomized_direction_empirical_p_max_bonferroni": 0.0071,
+    "session_pairing_empirical_p_max_bonferroni": 0.0071
+  },
+  "validation_access": "FORBIDDEN_IN_V8_REGARDLESS_OF_RESULT_UNTIL_MEMBERSHIP_AUTHORITY_IS_REPAIRED",
+  "holdout_access": "FORBIDDEN",
+  "selection_rule": "NO_BEST_FAMILY_PROMOTION; MEDIAN_HIGH_LOW_COMPLEMENTS_REPORTED_TOGETHER.",
+  "freeze_rule": "ANY MATERIAL CHANGE AFTER V8 OUTCOME ACCESS CREATES A NEW MULTIPLE_TESTING_FAMILY."
+}
