@@ -57,6 +57,6 @@ This catalogue repairs Phase-0 review finding F-001. Each requirement is stable 
 
 ## Phase-0 traceability rule
 
-Every frozen ADR, interface, state contract and capability entry MUST reference one or more REQ IDs from this catalogue. M1+ implementation artifacts MUST extend the chain to implementation, tests and evidence.
+Every frozen ADR, interface, state contract and capability MUST be mapped to one or more REQ IDs from this catalogue. `16_PHASE0_TRACEABILITY_MATRIX.md` is the canonical mapping surface and satisfies this requirement without requiring duplicate inline REQ columns in every source table. Source documents MAY carry inline REQ references for readability, but those are secondary and MUST NOT contradict document 16.
 
-A missing implementation/test link before implementation exists is not a Phase-0 defect; a missing architectural mapping is.
+M1+ implementation artifacts MUST extend the chain to implementation, tests and evidence. A missing implementation/test link before implementation exists is not a Phase-0 defect; a missing architectural mapping in document 16 is.
