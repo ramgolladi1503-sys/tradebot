@@ -15,6 +15,8 @@ This repository should be read as a QA/SDET + fintech reliability project, not a
 
 - [Architecture image](docs/architecture/tradebot-architecture.svg)
 - [Fintech QA one-pager](docs/one-pagers/fintech-qa-trading-systems.md)
+- [TradeBot Evidence RAG scope](docs/rag/TRADEBOT_RAG_SCOPE.md)
+- [TradeBot Evidence RAG operations](docs/rag/TRADEBOT_RAG_OPERATIONS_V1.md)
 - [Test reports guide](docs/test-reports/README.md)
 - [Branch protection policy](docs/BRANCH_PROTECTION.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
@@ -223,6 +225,151 @@ Depth websocket is optional:
 ```bash
 python scripts/start_depth_ws.py
 ```
+
+---
+
+## TradeBot Evidence RAG
+
+TradeBot includes a standalone, local, citation-first RAG application for querying repository engineering and research evidence. It is isolated from broker APIs, live market feeds, strategy execution, approval, and risk mutation.
+
+The current implementation uses deterministic chunking and SQLite FTS5 retrieval with extractive answer synthesis. It does not call an LLM, embedding service, vector database, or external web source.
+
+### Pull the current application
+
+```bash
+git checkout main
+git pull origin main
+```
+
+Run all RAG commands from the repository root. The CLI imports repository modules through `PYTHONPATH=.`.
+
+### What the RAG fetches and indexes
+
+By default, the indexer reads only repository evidence from:
+
+- `README.md`
+- `docs/`
+- `research/`
+
+Supported source formats:
+
+- Markdown: `.md`
+- Text: `.txt`
+- JSON: `.json`
+- YAML: `.yaml`, `.yml`
+
+The indexer records the source path, section, line range, content hash, and chunk text. Answers cite evidence using paths such as `docs/example.md:L10-L24`.
+
+The RAG does not fetch or index broker data, live ticks, option chains, runtime databases, logs, models, `.env` files, credentials, secrets, imported external directories, or files outside this repository. It also excludes common generated directories such as `.git`, `.runtime`, virtual environments, caches, `node_modules`, `data`, `logs`, and `models`.
+
+To explicitly select the allowed repository sources during a build:
+
+```bash
+PYTHONPATH=. python scripts/tradebot_rag.py build \
+  --include README.md docs research
+```
+
+### Build or refresh the index
+
+```bash
+PYTHONPATH=. python scripts/tradebot_rag.py build
+```
+
+The local SQLite index is created at:
+
+```text
+.runtime/rag/tradebot_rag.sqlite
+```
+
+Builds are incremental. Re-run the build after `README.md`, `docs/`, or `research/` changes. Unchanged documents are not re-indexed. Supported CLI and Streamlit builds use an atomic lock so competing builds fail closed instead of modifying the index concurrently.
+
+### Inspect index status and integrity
+
+```bash
+PYTHONPATH=. python scripts/tradebot_rag.py status
+PYTHONPATH=. python scripts/tradebot_rag.py doctor
+```
+
+`status` reads index inventory without changing the database. `doctor` performs read-only checks for SQLite integrity, required tables, schema version, document/chunk reconciliation, orphan chunks, metadata counts, FTS row correspondence, foreign-key violations, and active build locks.
+
+Run the deterministic retrieval and refusal evaluation:
+
+```bash
+PYTHONPATH=. python scripts/tradebot_rag.py evaluate
+```
+
+### Run the RAG web application
+
+```bash
+PYTHONPATH=. python -m streamlit run dashboard/tradebot_rag_app.py
+```
+
+Open the local URL printed by Streamlit, normally `http://localhost:8501`.
+
+In the UI:
+
+1. Select **Build / refresh index** if the index does not exist or repository evidence changed.
+2. Select **Run integrity check** to verify the index.
+3. Choose how many evidence chunks to retrieve.
+4. Optionally limit retrieval to `docs`, `research`, or `README.md`.
+5. Enter a question and select **Search evidence**.
+6. Review the grounded answer, confidence, source paths, line ranges, and retrieved chunks.
+
+Example questions:
+
+```text
+Why was the ORB hypothesis rejected?
+What evidence supports the Market Event Graph direction?
+Which strategy research campaigns concluded that no structural edge was found?
+What failures were found in feed freshness recovery work?
+```
+
+### Query from the command line
+
+```bash
+PYTHONPATH=. python scripts/tradebot_rag.py query \
+  "Why was the ORB hypothesis rejected?"
+```
+
+Return structured JSON:
+
+```bash
+PYTHONPATH=. python scripts/tradebot_rag.py query \
+  "Why was the ORB hypothesis rejected?" \
+  --json
+```
+
+Restrict retrieval to research evidence:
+
+```bash
+PYTHONPATH=. python scripts/tradebot_rag.py query \
+  "Which structural-edge campaigns failed?" \
+  --path-prefix research
+```
+
+Increase the retrieved evidence count:
+
+```bash
+PYTHONPATH=. python scripts/tradebot_rag.py query \
+  "Explain the Market Event Graph evidence" \
+  --top-k 12
+```
+
+Unsupported questions are refused when the repository does not contain sufficient evidence. A refusal is intentional and should not be bypassed by adding unsupported claims.
+
+### RAG troubleshooting
+
+- `ModuleNotFoundError`: run the command from the repository root and include `PYTHONPATH=.`.
+- `streamlit: command not found`: install project dependencies or run `python -m pip install streamlit==1.37.1`.
+- `Index not built`: run the build command or use **Build / refresh index** in the UI.
+- `rag_build_in_progress`: another supported build owns the lock. Do not delete a fresh lock or a lock owned by a live same-host process.
+- Failed `doctor`: retain the database for investigation, rebuild through the supported build command, and run `doctor` again. The doctor does not repair the index.
+- Port `8501` already in use: add `--server.port 8502` to the Streamlit command.
+
+Detailed contracts:
+
+- [RAG production scope](docs/rag/TRADEBOT_RAG_SCOPE.md)
+- [RAG index operations](docs/rag/TRADEBOT_RAG_OPERATIONS_V1.md)
 
 ---
 
