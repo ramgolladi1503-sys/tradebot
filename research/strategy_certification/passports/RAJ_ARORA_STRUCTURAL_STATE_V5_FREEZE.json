@@ -1,0 +1,79 @@
+{
+  "generation_id": "RAJ_ARORA_STRUCTURAL_STATE_V5_FREEZE",
+  "status": "FROZEN_PRE_DEVELOPMENT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "exact_video_strategy_claimed": false,
+  "dataset": {
+    "rows": 36849,
+    "sessions": 493,
+    "development_sessions": 295,
+    "validation_sessions_reserved": 98,
+    "holdout_sessions_reserved": 100,
+    "validation_access": "FORBIDDEN_UNTIL_FULL_DEVELOPMENT_ROBUSTNESS_PASS",
+    "holdout_access": "FORBIDDEN_UNTIL_VALIDATION_PASS"
+  },
+  "base_event": {
+    "opening_range_bars": 2,
+    "first_close_breakout_ordering": "DOWNSIDE_FIRST",
+    "breakout_buffer_bps": 5,
+    "reclaim_inside_max_bars": 2,
+    "entry": "NEXT_COMPLETED_5M_CLOSE",
+    "base_cost_bps_round_trip": 5,
+    "stress_cost_bps_round_trip": 7.5,
+    "horizons_bars": [3, 6, 9]
+  },
+  "families": [
+    {
+      "id": "V5_HIGHER_LOW_RECLAIM",
+      "rule": "Reclaim bar low is above the failed-breakout bar low and reclaim close is above the failed-breakout close.",
+      "degree_of_freedom": "RELATIONAL_SIGN_ONLY"
+    },
+    {
+      "id": "V5_BULLISH_ENGULFING_RECLAIM",
+      "rule": "Failed-breakout bar is bearish; reclaim bar is bullish; reclaim body engulfs the failed-breakout body: reclaim_open <= breakout_close and reclaim_close >= breakout_open.",
+      "degree_of_freedom": "CLASSIC_BODY_RELATION_NO_NUMERIC_THRESHOLD"
+    },
+    {
+      "id": "V5_OPENING_UP_CONTEXT",
+      "rule": "The second opening-range bar closes above the first opening-range bar open before the frozen failed-downside-breakout event.",
+      "degree_of_freedom": "SIGN_ONLY"
+    },
+    {
+      "id": "V5_OPENING_DOWN_CONTEXT",
+      "rule": "The second opening-range bar closes below the first opening-range bar open before the frozen failed-downside-breakout event.",
+      "degree_of_freedom": "SIGN_ONLY_SYMMETRIC_CONTROL"
+    },
+    {
+      "id": "V5_EARLY_FAILURE",
+      "rule": "The first downside close-break occurs within the first three completed 5m bars after the 10m opening range, then reclaims inside within the frozen two-bar limit.",
+      "degree_of_freedom": "FIXED_15_MINUTE_POST_OR_STATE"
+    },
+    {
+      "id": "V5_LATE_FAILURE",
+      "rule": "The first downside close-break occurs later than the first three completed 5m bars after the 10m opening range, then reclaims inside within the frozen two-bar limit.",
+      "degree_of_freedom": "SYMMETRIC_COMPLEMENT_CONTROL"
+    }
+  ],
+  "search_budget": {
+    "signal_families": 6,
+    "horizons_per_family": 3,
+    "total_development_cells": 18,
+    "threshold_grid": "NONE",
+    "post_result_extension": "FORBIDDEN"
+  },
+  "family_advance_gate": {
+    "minimum_trades_at_30m_horizon": 20,
+    "mean_net_5bps_at_30m_positive": true,
+    "mean_net_7_5bps_at_30m_positive": true,
+    "one_extra_5m_entry_delay_30m_positive": true,
+    "positive_horizons_required_of_3": 2,
+    "positive_chronological_thirds_required_of_3": 2,
+    "top5_positive_contribution_fraction_max": 0.8,
+    "randomized_direction_empirical_p_max_bonferroni": 0.0083,
+    "session_pairing_empirical_p_max_bonferroni": 0.0083
+  },
+  "selection_rule": "EACH_FAMILY_PASSES_OR_FAILS_INDEPENDENTLY; NO_BEST_FAMILY_ADVANCEMENT_IF_GATES_FAIL.",
+  "freeze_rule": "ANY MATERIAL CHANGE AFTER DEVELOPMENT OUTCOME ACCESS CREATES A NEW MULTIPLE_TESTING_FAMILY."
+}
