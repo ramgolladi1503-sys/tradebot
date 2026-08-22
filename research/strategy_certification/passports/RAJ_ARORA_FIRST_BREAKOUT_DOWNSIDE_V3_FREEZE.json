@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "generation_id": "RAJ_ARORA_FIRST_BREAKOUT_DOWNSIDE_V3_FREEZE",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "edge_claimed": false,
+  "exact_video_strategy_claimed": false,
+  "source_generation": "RAJ_ARORA_EXTERNAL_SEEDED_PROXY_V1_FREEZE",
+  "source_reason": "V1 development-only asymmetry showed that the bullish subset was defined by the first opening-range breakout of the session being downside, followed by failure back inside. V2 tested a broader any-later-downside-breakout rule and failed. V3 is the final bounded generation and preserves the exact V1 event ordering.",
+  "multiple_testing_family": "EXTERNAL_SEEDED_RAJ_ARORA_FIRST_BREAKOUT_DOWNSIDE_BULLISH_REVERSAL_V3",
+  "canonical_dataset": {
+    "path": "research/hypotheses/historical_corpus/kite_nifty_cache_v2/canonical/NIFTY.csv",
+    "sha256": "6a145d4d17f124f9dc8ee272c5a19ca98988873a14b294765f44a27284d8b7e8",
+    "expected_rows": 36849,
+    "expected_sessions": 493
+  },
+  "provisional_replay_development": {
+    "permitted": true,
+    "purpose": "DEVELOPMENT_AND_ROBUSTNESS_ONLY",
+    "required_rows": 36849,
+    "required_sessions": 493,
+    "required_synthetic_rows": 0,
+    "required_fallback_rows": 0,
+    "required_mock_rows": 0,
+    "validation_permitted_without_exact_canonical_sha": false,
+    "holdout_permitted_without_exact_canonical_sha": false
+  },
+  "split_contract": {
+    "ordering": "CHRONOLOGICAL_BY_SESSION",
+    "development_sessions": 295,
+    "validation_sessions": 98,
+    "holdout_sessions": 100,
+    "validation_access": "FORBIDDEN_UNTIL_DEVELOPMENT_AND_ROBUSTNESS_PASS_AND_EXACT_CANONICAL_SHA_PRESENT",
+    "holdout_access": "FORBIDDEN_UNTIL_EXACT_FROZEN_CANDIDATE_PASSES_VALIDATION"
+  },
+  "mechanism": {
+    "name": "FIRST_OPENING_RANGE_BREAKOUT_DOWNSIDE_THEN_FAILURE_TO_BULLISH_REVERSAL",
+    "opening_range": "FIRST_or_bars_COMPLETED_5M_BARS",
+    "first_breakout": "FIRST_LATER_COMPLETED_CLOSE_OUTSIDE_EITHER_OPENING_RANGE_BOUNDARY_BY_breakout_buffer_bps",
+    "direction_gate": "FIRST_BREAKOUT_MUST_BE_DOWNSIDE_OTHERWISE_NO_SIGNAL_FOR_SESSION",
+    "failure": "LATER_COMPLETED_CLOSE_RETURNS_INSIDE_OPENING_RANGE_WITHIN_failure_max_bars",
+    "direction": "BULLISH_ONLY",
+    "entry": "NEXT_COMPLETED_5M_BAR_CLOSE_AFTER_FAILURE_CONFIRMATION",
+    "exit": "FIXED_HORIZON_COMPLETED_5M_BAR_CLOSE",
+    "max_positions_per_session_per_configuration": 1
+  },
+  "development_grid": {
+    "or_bars": [2, 3],
+    "breakout_buffer_bps": [3, 5, 7],
+    "failure_max_bars": [1, 2, 3],
+    "horizon_bars": [3, 6, 9]
+  },
+  "search_budget": {
+    "signal_cells": 54,
+    "extension_after_results": "FORBIDDEN",
+    "material_rule_change": "NEW_GENERATION_REQUIRED",
+    "final_generation_for_this_external_seed_line": true
+  },
+  "economics": {
+    "base_round_trip_cost_bps": 5.0,
+    "stress_cost_bps": [7.5, 10.0],
+    "option_pnl_claim": false,
+    "interpretation": "UNDERLYING_DIRECTIONAL_PROXY_ECONOMICS_ONLY"
+  },
+  "development_gate": {
+    "minimum_trades": 30,
+    "minimum_neighbor_trades": 25,
+    "require_positive_mean_at_base_cost": true,
+    "require_positive_one_bar_delayed_entry_mean_at_base_cost": true,
+    "require_positive_chronological_thirds": 2,
+    "require_positive_adjacent_neighbors": 2,
+    "adjacency": "ONE_GRID_STEP_IN_EXACTLY_ONE_OF_or_bars_breakout_buffer_bps_failure_max_bars_WITH_SAME_HORIZON",
+    "selection_rule": "AMONG_ELIGIBLE_CELLS_MAXIMIZE_MINIMUM_MEAN_NET_BPS_ACROSS_CELL_AND_QUALIFYING_POSITIVE_NEIGHBORS_THEN_TRADE_COUNT",
+    "top5_positive_trade_contribution_max_fraction": 0.80,
+    "random_direction_empirical_p_max": 0.05,
+    "session_pairing_empirical_p_max": 0.05
+  },
+  "robustness": {
+    "random_direction_draws": 20000,
+    "session_pairing_draws": 5000,
+    "random_seed": 260823,
+    "one_bar_entry_delay": true,
+    "chronological_thirds": true,
+    "parameter_neighborhood": true,
+    "cost_stress": true,
+    "profit_concentration": true
+  },
+  "freeze_rule": "ANY CHANGE TO EVENT ORDERING, DIRECTION, GRID, COSTS, SPLITS, GATES, ADJACENCY, SELECTION, DATA AUTHORITY OR ROBUSTNESS COUNTS AS A NEW GENERATION.",
+  "next_if_development_passes": "RECOVER_OR_VERIFY_EXACT_CANONICAL_NIFTY_SHA_THEN_FREEZE_EXACT_CANDIDATE_BEFORE_VALIDATION",
+  "next_if_development_fails": "CLOSE_RAJ_ARORA_EXTERNAL_SEEDED_RESEARCH_LINE_NO_FURTHER_PARAMETER_SEARCH"
+}
