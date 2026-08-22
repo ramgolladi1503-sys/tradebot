@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "claims": [
+    {
+      "claim_id": "CLM-EXAMPLE-1",
+      "statement": "The example focused loop test completed successfully at the recorded code checkpoint.",
+      "status": "PROVEN",
+      "proof_ids": ["TEST-EXAMPLE-1"],
+      "owner": "chatgpt",
+      "requires_live_evidence": false
+    },
+    {
+      "claim_id": "CLM-EXAMPLE-2",
+      "statement": "An independent reviewer has accepted the complete example handoff.",
+      "status": "UNPROVEN",
+      "proof_ids": [],
+      "owner": "antigravity",
+      "requires_live_evidence": false
+    }
+  ]
+}

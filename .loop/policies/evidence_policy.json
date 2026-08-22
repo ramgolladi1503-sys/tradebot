@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "tiers": {
+    "A": "Small continuation-critical evidence committed to the task branch.",
+    "B": "Large GitHub-hosted evidence bundle referenced by durable run or artifact identity and SHA-256.",
+    "C": "Local-only non-authoritative material that cannot satisfy a frozen gate."
+  },
+  "evidence_classes": ["static", "test", "ci", "review", "live", "replay", "synthetic"],
+  "rules": {
+    "proven_claim_requires_proof": true,
+    "immutable_file_requires_sha256": true,
+    "absolute_local_path_cannot_be_sole_proof": true,
+    "live_gate_requires_live_evidence": true,
+    "failed_required_command_blocks_success": true,
+    "tier_c_cannot_satisfy_gate": true,
+    "temporary_artifact_cannot_be_sole_long_term_proof": true
+  }
+}

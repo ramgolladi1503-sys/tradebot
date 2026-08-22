@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "task_id": "LOOP-EXAMPLE",
+  "worker": "chatgpt",
+  "code_sha": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
+  "branch": "infra/github-first-loop-engineering-v1",
+  "pr_number": null,
+  "changed_paths": [],
+  "files_intentionally_not_touched": [
+    "main.py",
+    "run_live.sh",
+    "config/",
+    "core/",
+    "strategies/",
+    "credentials.py"
+  ],
+  "commands": [
+    {
+      "command_id": "CMD-EXAMPLE-1",
+      "command": ["pytest", "-q", "tests/loop"],
+      "working_directory": ".",
+      "exit_code": 0,
+      "required": true,
+      "code_sha": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af"
+    }
+  ],
+  "test_results": [
+    {
+      "test_id": "TEST-EXAMPLE-1",
+      "command": "pytest -q tests/loop",
+      "required": true,
+      "exit_code": 0,
+      "passed": true
+    }
+  ],
+  "claims_created": ["CLM-EXAMPLE-1"],
+  "claims_retired": [],
+  "unresolved_findings": [
+    "Optional backlog: add an external agent dispatcher only after the GitHub handoff protocol is proven."
+  ],
+  "blockers": [],
+  "next_action": "Review the proof and record the independent review result without changing runtime code.",
+  "next_worker": "antigravity",
+  "local_only_evidence": [],
+  "all_continuation_critical_artifacts_in_github": true,
+  "checkpointed_at_utc": "2026-07-31T07:10:00Z"
+}

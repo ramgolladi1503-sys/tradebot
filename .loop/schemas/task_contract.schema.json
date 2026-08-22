@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ramgolladi1503-sys/tradebot/.loop/schemas/task_contract.schema.json",
+  "title": "TradeBot Loop Task Contract",
+  "type": "object",
+  "required": [
+    "schema_version", "task_id", "title", "objective", "repository",
+    "base_branch", "work_branch", "allowed_paths", "forbidden_paths",
+    "acceptance_gates", "required_tests", "human_gates", "stop_conditions",
+    "max_implementation_cycles", "max_review_cycles", "frozen"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_id": {"type": "string", "pattern": "^(LOOP-[0-9]{8}-[0-9]{3}|LOOP-EXAMPLE)$"},
+    "title": {"type": "string", "minLength": 1},
+    "objective": {"type": "string", "minLength": 1},
+    "repository": {"type": "string", "minLength": 1},
+    "base_branch": {"type": "string", "minLength": 1},
+    "work_branch": {"type": "string", "minLength": 1},
+    "allowed_paths": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "forbidden_paths": {"type": "array", "items": {"type": "string"}},
+    "acceptance_gates": {"type": "array"},
+    "required_tests": {"type": "array"},
+    "human_gates": {"type": "array"},
+    "stop_conditions": {"type": "array"},
+    "max_implementation_cycles": {"type": "integer", "minimum": 1},
+    "max_review_cycles": {"type": "integer", "minimum": 1},
+    "frozen": {"const": true}
+  },
+  "additionalProperties": true
+}
