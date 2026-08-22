@@ -1,0 +1,60 @@
+{
+  "generation_id": "RAJ_ARORA_PARTICIPATION_V9_FREEZE",
+  "status": "FROZEN_PRE_DEVELOPMENT",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "membership_authority": "AVAILABLE_CONSTITUENT_BASKET_PROXY_NOT_POINT_IN_TIME_NIFTY_MEMBERSHIP",
+  "certification_ceiling": "MECHANISM_EVIDENCE_ONLY_UNTIL_MEMBERSHIP_SURVIVORSHIP_RECONCILED",
+  "base_event": {
+    "opening_range_bars": 2,
+    "first_close_breakout_ordering": "DOWNSIDE_FIRST",
+    "breakout_buffer_bps": 5,
+    "reclaim_inside_max_bars": 2,
+    "entry": "NEXT_COMPLETED_5M_CLOSE",
+    "base_cost_bps_round_trip": 5,
+    "stress_cost_bps_round_trip": 7.5,
+    "horizons_bars": [3,6,9]
+  },
+  "participation_contract": {
+    "minimum_symbols_per_event": 30,
+    "constituent_bar_alignment": "SUM_1M_VOLUME_OVER_THE_EXACT_COMPLETED_5M_WINDOW",
+    "opening_reference": "MEAN_OF_FIRST_TWO_CONSTITUENT_5M_VOLUME_BARS",
+    "breakout_volume_expansion_breadth": "fraction of symbols whose breakout 5m volume exceeds their mean first-two-opening-bars volume",
+    "reclaim_volume_expansion_breadth": "fraction of symbols whose reclaim 5m volume exceeds their breakout 5m volume",
+    "aligned_reclaim_participation_breadth": "fraction of symbols with positive break-to-reclaim price move AND reclaim 5m volume greater than breakout 5m volume",
+    "missing_values": "EXCLUDE_FROM_DENOMINATOR; NEVER_IMPUTE"
+  },
+  "families": [
+    {"id":"V9_BREAKOUT_VOLUME_EXPANSION","rule":"breakout_volume_expansion_breadth > 0.5","paired_control":"V9_BREAKOUT_VOLUME_NONEXPANSION"},
+    {"id":"V9_BREAKOUT_VOLUME_NONEXPANSION","rule":"breakout_volume_expansion_breadth <= 0.5","paired_control":"V9_BREAKOUT_VOLUME_EXPANSION"},
+    {"id":"V9_RECLAIM_VOLUME_EXPANSION","rule":"reclaim_volume_expansion_breadth > 0.5","paired_control":"V9_RECLAIM_VOLUME_NONEXPANSION"},
+    {"id":"V9_RECLAIM_VOLUME_NONEXPANSION","rule":"reclaim_volume_expansion_breadth <= 0.5","paired_control":"V9_RECLAIM_VOLUME_EXPANSION"},
+    {"id":"V9_ALIGNED_RECLAIM_PARTICIPATION","rule":"aligned_reclaim_participation_breadth > 0.5","paired_control":"V9_UNALIGNED_RECLAIM_PARTICIPATION"},
+    {"id":"V9_UNALIGNED_RECLAIM_PARTICIPATION","rule":"aligned_reclaim_participation_breadth <= 0.5","paired_control":"V9_ALIGNED_RECLAIM_PARTICIPATION"},
+    {"id":"V9_DUAL_PARTICIPATION_EXPANSION","rule":"breakout_volume_expansion_breadth > 0.5 AND aligned_reclaim_participation_breadth > 0.5","paired_control":null}
+  ],
+  "search_budget": {
+    "families": 7,
+    "horizons_per_family": 3,
+    "total_development_cells": 21,
+    "threshold_grid": "NONE",
+    "post_result_extension": "FORBIDDEN"
+  },
+  "family_advance_gate": {
+    "minimum_covered_events_at_30m": 15,
+    "mean_net_5bps_30m_positive": true,
+    "mean_net_7_5bps_30m_positive": true,
+    "one_extra_5m_entry_delay_30m_positive": true,
+    "positive_horizons_required_of_3": 2,
+    "positive_chronological_thirds_required_of_3": 2,
+    "top5_positive_contribution_fraction_max": 0.8,
+    "paired_control_mean_separation_bps_min": 2.0,
+    "randomized_direction_empirical_p_max_bonferroni": 0.0071,
+    "session_pairing_empirical_p_max_bonferroni": 0.0071
+  },
+  "validation_access": "FORBIDDEN_IN_V9_REGARDLESS_OF_RESULT_UNTIL_MEMBERSHIP_AUTHORITY_IS_REPAIRED",
+  "holdout_access": "FORBIDDEN",
+  "selection_rule": "NO_BEST_FAMILY_PROMOTION; RELATIONAL_PARTICIPATION_COMPLEMENTS_REPORTED_TOGETHER.",
+  "freeze_rule": "ANY MATERIAL CHANGE AFTER V9 PARTICIPATION OUTCOME ACCESS CREATES A NEW MULTIPLE_TESTING_FAMILY."
+}
