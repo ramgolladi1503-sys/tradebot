@@ -31,6 +31,40 @@ The removed workflow and helper were explicitly temporary PR795 CI scaffolding. 
 - broker_api_called: false
 - order_action: false
 
+## Grill Me Review
+
+- Is PR #795 closed? YES.
+- Is the removed infrastructure specific to PR795? YES.
+- Does this cleanup alter runtime or trading behavior? NO.
+- Does the final scope include unrelated files? NO.
+
+## Hermes Review
+
+Removing an obsolete closed-PR workflow, helper, focused test, and its superseded
+review record is an architectural cleanup. The replacement review record keeps
+the cleanup rationale and safety boundary auditable without introducing a new
+runtime path or authority.
+
+## GSD Review
+
+The implementation is limited to the four allowed deletions and this review
+record. The dependency order is satisfied because PR795 is closed. No runtime
+wiring, configuration, strategy, feed, risk, broker, order, or execution files
+are included.
+
+## QA / Safety Review
+
+```text
+READ_ONLY=true
+IS_ORDER_ACTION=false
+BROKER_API_CALLED=false
+ALLOWED_FOR_LIVE_EXECUTION=false
+RUNTIME_BEHAVIOR_CHANGED=false
+LIVE_OBSERVATION_CHANGED=false
+RISK_GATE_CHANGED=false
+FEED_FRESHNESS_GATE_CHANGED=false
+```
+
 ## Acceptance Proof
 
 PR804 may merge only if the final diff is limited to the four intended deletions plus this cleanup review record, current required repository checks pass on the exact final head, and no current-main runtime or trading path depends on the deleted PR795 smoke hook.

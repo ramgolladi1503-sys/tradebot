@@ -28,6 +28,13 @@ Retained review path:
 docs/agent_reviews/pr795_trusted_smoke_gate.md
 ```
 
+## Scope Guard
+
+This record is limited to the closed PR795 trusted-smoke cleanup. The authorized
+scope is the removal of the PR795-specific workflow, runner, and focused test
+listed above. No runtime, strategy, ranking, risk, feed, broker, order,
+execution, credential, or data-admission behavior is in scope.
+
 ## Grill Me Review
 
 - Is PR #795 closed? YES.
