@@ -12,33 +12,33 @@
     },
     {
       "source_id": "NSE_HISTORICAL_ORDER_TRADE_FO",
-      "url": "https://www.nseindia.com/market-data/real-time-data-subscription",
+      "url": "https://www.nseindia.com/static/market-data/eod-historical-data-subscription",
       "authority": "OFFICIAL_EXCHANGE",
-      "observed_product_claim": "NSE advertises historical order and trade data for the F&O segment through its data products/platform.",
+      "observed_product_claim": "NSE advertises historical order and trade data for the F&O segment and publishes the historical order/trade specification plus F&O sample files.",
       "primary_short_vol_admissibility": "PRIMARY_CANDIDATE_PENDING_ACQUISITION_SCHEMA_AND_COVERAGE_AUDIT",
       "buyonly_translator_admissibility": "PRIMARY_CANDIDATE_PENDING_ACQUISITION_SCHEMA_AND_COVERAGE_AUDIT",
       "required_proof_before_use": ["NIFTY option contract identity", "2024-2026 coverage or declared subset", "timestamp resolution", "order-book reconstruction semantics", "best bid/ask reconstruction at required snapshots", "immutable source hashes", "usage entitlement"],
-      "reason": "Exchange-grade order/trade truth is the strongest discovered route for reconstructing executable bid/ask instead of substituting OHLC."
+      "reason": "The official specification exposes timestamped order events with buy/sell side, activity type, derivative identity, expiry, strike, option type, order quantity and limit price; this is the strongest discovered route for reconstructing executable quote truth."
     },
     {
       "source_id": "NSE_FO_1M_5M_SNAPSHOT_DATA",
-      "url": "https://www.nseindia.com/market-data/real-time-data-subscription",
+      "url": "https://www.nseindia.com/static/market-data/real-time-data-subscription",
       "authority": "OFFICIAL_EXCHANGE",
-      "observed_product_claim": "NSE advertises 1-minute and 5-minute snapshot products for the F&O segment.",
+      "observed_product_claim": "NSE advertises 1-minute and 5-minute snapshot products for the F&O segment containing trade quotations and related information.",
       "primary_short_vol_admissibility": "CANDIDATE_PENDING_HISTORICAL_ENTITLEMENT_AND_FIELD_AUDIT",
       "buyonly_translator_admissibility": "CANDIDATE_PENDING_HISTORICAL_ENTITLEMENT_AND_FIELD_AUDIT",
       "required_proof_before_use": ["historical availability for target dates", "bid/ask fields", "contract identity", "snapshot timestamp semantics", "IV/delta observed or reproducibly derived"],
-      "reason": "Potentially simpler than full order-book reconstruction if historical snapshots contain the required quote fields."
+      "reason": "Potentially simpler than full order-book reconstruction if historical entitlement exists and required quote fields are present."
     },
     {
       "source_id": "NIFTYTRADER_HISTORICAL_OPTION_CHAIN",
-      "url": "https://www.niftytrader.in/nse-option-chain/nifty",
+      "url": "https://www.niftytrader.in/nse-option-historical-data",
       "authority": "THIRD_PARTY",
-      "observed_product_claim": "Historical option-chain interface advertises strike-wise LTP, IV, OI, volume and bid/ask with CSV export.",
-      "primary_short_vol_admissibility": "CANDIDATE_PENDING_DOWNLOAD_PROVENANCE_TIMESTAMP_AND_COVERAGE_AUDIT",
-      "buyonly_translator_admissibility": "CANDIDATE_PENDING_DOWNLOAD_PROVENANCE_TIMESTAMP_AND_COVERAGE_AUDIT",
-      "missing_or_unproven": ["intraday snapshot granularity", "45DTE-to-21DTE continuity", "historical contract completeness", "source methodology", "stable reproducible export"],
-      "reason": "Promising field coverage, but advertised UI fields are not sufficient evidence until an exported sample is hashed and audited."
+      "observed_product_claim": "Historical chain advertises strike-wise LTP, IV, OI, volume and bid-ask; the default is 15:30 IST EOD and some premium data advertises 09:30, 11:30, 13:30 and 15:00 IST snapshots with CSV/bulk export.",
+      "primary_short_vol_admissibility": "CANDIDATE_PENDING_EXPORTED_SAMPLE_PROVENANCE_AND_CONTINUITY_AUDIT",
+      "buyonly_translator_admissibility": "CANDIDATE_PENDING_EXPORTED_SAMPLE_PROVENANCE_AND_CONTINUITY_AUDIT",
+      "missing_or_unproven": ["45DTE-to-21DTE continuity across required years", "historical contract completeness", "stable source methodology", "whether exported 15:00 rows include all frozen data-contract fields", "delta field versus model derivation"],
+      "reason": "The advertised 15:00 snapshot aligns with the preregistered state time, but no exported sample has yet been acquired and hash-audited."
     },
     {
       "source_id": "HF_ARTIST23_NIFTY_OPTIONS_DATA",
@@ -78,13 +78,7 @@
       "reason": "Authoritative for contract/EOD cross-checking, but standard reports alone do not prove the required 15:00 executable quote path."
     }
   ],
-  "source_priority": [
-    "NSE_HISTORICAL_ORDER_TRADE_FO",
-    "NSE_FO_1M_5M_SNAPSHOT_DATA",
-    "NIFTYTRADER_HISTORICAL_OPTION_CHAIN",
-    "HF_ARTIST23_NIFTY_OPTIONS_DATA",
-    "HF_TRADEMARKK_INDIA_INDEX_OPTIONS_1M"
-  ],
+  "source_priority": ["NSE_HISTORICAL_ORDER_TRADE_FO", "NSE_FO_1M_5M_SNAPSHOT_DATA", "NIFTYTRADER_HISTORICAL_OPTION_CHAIN", "HF_ARTIST23_NIFTY_OPTIONS_DATA", "HF_TRADEMARKK_INDIA_INDEX_OPTIONS_1M"],
   "acquisition_policy": {
     "store_large_raw_data_in_git": false,
     "preferred_storage": "/Volumes/TradeBotData/tradebot-os/research-data/nifty-45dte-vrp-v1/",
