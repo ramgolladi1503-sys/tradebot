@@ -9,6 +9,10 @@ is_order_action: false
 broker_api_called: false
 source: PR839_POSTCLOSE_SUBSCRIPTION_RECONCILIATION_REVIEW
 
+## Current-Main Reconstruction
+
+This candidate was reconstructed from the four unique PR839 paths on current `main` at `0d661f4d2e5aeee70f91de33b7ab1ed77c1202c5`. The reconstruction preserves the postsession-only boundary and does not reinterpret prior-session evidence as prospective or live validation.
+
 ## Agent Work Contract
 
 Objective: add a read-only, post-close verifier for subscription registry truth emitted by the frozen live producer at `f0f5b3d3659415ab36662291e91b8f57fd8d1e07`.
