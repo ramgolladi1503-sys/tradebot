@@ -1,0 +1,35 @@
+{
+  "candidate_id": "HTF_RANGE_EXPANSION_CAUSAL_1M_V1",
+  "complete_sessions": 434,
+  "counts": {
+    "EXACT_MATCH": 434,
+    "HASH_MISMATCH": 0,
+    "MISSING": 0,
+    "ROW_MISMATCH": 7
+  },
+  "dev_outcomes_accessed": false,
+  "incomplete_sessions": 7,
+  "kernel_state": "ROBUSTNESS_REQUIRED",
+  "locked_outcomes_accessed": false,
+  "mismatched_dates": [
+    "2024-11-01",
+    "2025-04-25",
+    "2025-04-30",
+    "2025-05-08",
+    "2025-05-13",
+    "2025-05-21",
+    "2025-10-21"
+  ],
+  "one_minute_five_minute_reconciliation": "FAIL",
+  "raw_exact_match_count": 434,
+  "raw_row_mismatch_count": 7,
+  "raw_selected_count": 441,
+  "reason": "RAW_ONE_MINUTE_SOURCE_SET_INCOMPLETE",
+  "reconstructed_rows": 164755,
+  "reconstructed_sessions": 441,
+  "reconstruction_accepted": false,
+  "reconstruction_attempted": true,
+  "schema_version": 1,
+  "source_manifest_path": "/Volumes/TradeBotData/htf-range-expansion-causal-v1/research/local_evidence_consolidation_v1/worktrees/ml-meta-labeling-sprint-v1/research/unified_nifty_underlying_feature_warehouse_v1/selected_source_manifest.json",
+  "source_manifest_sha256": "fbf74e66664b92712c451769c94da47ef54f73acbadb208e01d3449bd50be192"
+}
