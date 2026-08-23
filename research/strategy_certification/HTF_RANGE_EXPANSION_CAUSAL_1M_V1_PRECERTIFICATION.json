@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "candidate_id": "HTF_RANGE_EXPANSION_CAUSAL_1M_V1",
+  "status": "PRE_CERTIFICATION_PHYSICAL_BYTE_BINDING_REQUIRED",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions_permitted": false,
+  "inherits_historical_htf_expectancy": false,
+  "predecessor": "HTF_RANGE_EXPANSION_CAUSAL_V1",
+  "predecessor_reason_for_new_identity": "FROZEN_493_SESSION_AUTHORITY_IS_5M_ONLY_AND_CANNOT_SUPPORT_NEXT_1M_OPEN_ENTRY",
+  "dataset_authority": {
+    "canonical_1m_path_expected": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/canonical_nifty_1minute.parquet",
+    "physical_sha256": null,
+    "semantic_sha256_expected": "cf7a7c0e385e5f1ccefec772853b7b7b7acbea9c64e7a79c29e36e256a80646c",
+    "rows_expected": 164745,
+    "sessions_expected": 441,
+    "first_timestamp_expected": "2024-09-26T09:15:00+05:30",
+    "last_timestamp_expected": "2026-07-21T15:29:00+05:30",
+    "timezone": "Asia/Kolkata",
+    "expected_bars_per_complete_session": 375,
+    "duplicate_rows_expected": 0,
+    "incomplete_sessions_expected": 0,
+    "ohlc_violations_expected": 0,
+    "one_minute_five_minute_reconciliation_expected": "PASS",
+    "source_hashes_verified_in_prior_audit": true,
+    "source_type": "Upstox V3 historical-candle per-session files",
+    "volume_usable": false,
+    "volume_used_by_candidate": false
+  },
+  "known_excluded_sessions": [
+    "2024-12-12",
+    "2025-03-25",
+    "2025-04-04",
+    "2025-04-23"
+  ],
+  "excluded_session_policy": "DISCLOSE_AND_DO_NOT_SYNTHESIZE_OR_REFETCH_DURING_THIS_CANDIDATE_UNLESS_A_SEPARATE_DATASET_VERSION_IS_CREATED",
+  "partition_policy": {
+    "rule": "chronologically sorted complete sessions; DEV first floor(0.8*N); LOCKED remaining sessions",
+    "total_sessions": 441,
+    "development_sessions": 352,
+    "locked_sessions": 89,
+    "first_locked_session": "2026-03-06",
+    "locked_outcomes_accessed": false,
+    "partition_manifest_sha256": null
+  },
+  "mechanism_identity": {
+    "opening_drive": "first three completed 15m candles 09:15-10:00",
+    "signal_window": "10:15-14:30",
+    "bull_breakout": "completed_15m_close > OD_HIGH",
+    "bear_breakout": "completed_15m_close < OD_LOW",
+    "trend_alignment": "15m and 30m SMA9/SMA21 completed-bar trends must both align with breakout direction",
+    "volatility_gate": "current partial session range as-of T > 1.5 * expanding prior-session mean partial range at same clock T",
+    "volatility_warmup_prior_sessions": 20,
+    "gap_exclusion_abs_fraction": 0.005,
+    "entry": "next available 1m open strictly after signal availability",
+    "stop": "opposite frozen Opening Drive boundary with minimum 2 NIFTY index points risk",
+    "primary_target_r": 2.0,
+    "time_stop": "15:15 Asia/Kolkata",
+    "buy_only_expression": "bull CE / bear PE; option execution authority separate"
+  },
+  "threshold_changes_permitted": false,
+  "outcome_access_permitted_before_physical_hash_and_partition_freeze": false
+}
