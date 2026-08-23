@@ -1,0 +1,206 @@
+{
+  "confirmed_legacy_defect_count": 7,
+  "input_case_count": 17,
+  "invalid_case_count": 0,
+  "output_case_count": 17,
+  "rows": [
+    {
+      "case_id": "call_price",
+      "classification": "MATCH",
+      "explanation": "Legacy and sidecar prices agree under the legacy q=0 convention.",
+      "legacy_output": 7.1558960561,
+      "oracle_output": 7.1558960561,
+      "severity": "NONE",
+      "sidecar_output": 7.1558960561
+    },
+    {
+      "case_id": "put_price",
+      "classification": "MATCH",
+      "explanation": "Legacy and sidecar prices agree under the legacy q=0 convention.",
+      "legacy_output": 4.200449411,
+      "oracle_output": 4.200449411,
+      "severity": "NONE",
+      "sidecar_output": 4.200449411
+    },
+    {
+      "case_id": "call_delta",
+      "classification": "MATCH",
+      "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
+      "legacy_output": 0.6113512946,
+      "oracle_output": 0.6113512946,
+      "severity": "NONE",
+      "sidecar_output": 0.6113512946
+    },
+    {
+      "case_id": "put_delta",
+      "classification": "MATCH",
+      "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
+      "legacy_output": -0.3886487054,
+      "oracle_output": -0.3886487054,
+      "severity": "NONE",
+      "sidecar_output": -0.3886487054
+    },
+    {
+      "case_id": "call_gamma",
+      "classification": "MATCH",
+      "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
+      "legacy_output": 0.0271033697,
+      "oracle_output": 0.0271033697,
+      "severity": "NONE",
+      "sidecar_output": 0.0271033697
+    },
+    {
+      "case_id": "put_gamma",
+      "classification": "MATCH",
+      "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
+      "legacy_output": 0.0271033697,
+      "oracle_output": 0.0271033697,
+      "severity": "NONE",
+      "sidecar_output": 0.0271033697
+    },
+    {
+      "case_id": "call_vega",
+      "classification": "MATCH",
+      "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
+      "legacy_output": 27.1033696776,
+      "oracle_output": 27.1033696776,
+      "severity": "NONE",
+      "sidecar_output": 27.1033696776
+    },
+    {
+      "case_id": "put_vega",
+      "classification": "MATCH",
+      "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
+      "legacy_output": 27.1033696776,
+      "oracle_output": 27.1033696776,
+      "severity": "NONE",
+      "sidecar_output": 27.1033696776
+    },
+    {
+      "case_id": "call_theta",
+      "classification": "MATCH",
+      "explanation": "Call theta agrees under q=0.",
+      "legacy_output": -8.6594279398,
+      "oracle_output": -8.6594279398,
+      "severity": "NONE",
+      "sidecar_output": -8.6594279398
+    },
+    {
+      "case_id": "put_theta",
+      "classification": "LEGACY_DEFECT_CONFIRMED",
+      "explanation": "Legacy put theta subtracts the interest term; the independently finite-difference-validated sidecar uses the correct positive put interest term.",
+      "legacy_output": -8.0045931326,
+      "oracle_output": -2.8367547385,
+      "severity": "HIGH",
+      "sidecar_output": -2.8367547385
+    },
+    {
+      "case_id": "implied_volatility_regular_case",
+      "classification": "MATCH",
+      "explanation": "Both solvers recover a regular ATM case; only the sidecar exposes convergence status and error.",
+      "legacy_output": 0.35,
+      "oracle_output": 0.35,
+      "severity": "NONE",
+      "sidecar_output": 0.3500000003
+    },
+    {
+      "case_id": "negative_volatility_input",
+      "classification": "LEGACY_DEFECT_CONFIRMED",
+      "explanation": "Legacy collapses an invalid volatility into numeric zero; sidecar returns typed failure.",
+      "legacy_output": 0.0,
+      "oracle_output": {
+        "price": null,
+        "status": "INVALID_INPUT"
+      },
+      "severity": "MEDIUM",
+      "sidecar_output": {
+        "price": null,
+        "status": "INVALID_INPUT"
+      }
+    },
+    {
+      "case_id": "price_outside_no_arbitrage_bounds",
+      "classification": "LEGACY_DEFECT_CONFIRMED",
+      "explanation": "Legacy returns a clamped numeric volatility for an impossible price; sidecar rejects it before solving.",
+      "legacy_output": 5.0,
+      "oracle_output": {
+        "iv": null,
+        "status": "OUTSIDE_NO_ARBITRAGE_BOUNDS"
+      },
+      "severity": "HIGH",
+      "sidecar_output": {
+        "iv": null,
+        "status": "OUTSIDE_NO_ARBITRAGE_BOUNDS"
+      }
+    },
+    {
+      "case_id": "hidden_global_rate",
+      "classification": "LEGACY_DEFECT_CONFIRMED",
+      "explanation": "Rate is hidden through global configuration in legacy IV and Greeks APIs.",
+      "legacy_output": {
+        "source_pattern_present": true
+      },
+      "oracle_output": {
+        "explicit_contract": true
+      },
+      "severity": "MEDIUM",
+      "sidecar_output": {
+        "explicit_contract": true
+      }
+    },
+    {
+      "case_id": "solver_status_unavailable",
+      "classification": "LEGACY_DEFECT_CONFIRMED",
+      "explanation": "Legacy IV returns only a number, with no convergence or error status.",
+      "legacy_output": {
+        "source_pattern_present": true
+      },
+      "oracle_output": {
+        "explicit_contract": true
+      },
+      "severity": "HIGH",
+      "sidecar_output": {
+        "explicit_contract": true
+      }
+    },
+    {
+      "case_id": "integer_day_expiry_floor",
+      "classification": "LEGACY_DEFECT_CONFIRMED",
+      "explanation": "Legacy option-chain analytics floor time to at least one calendar day.",
+      "legacy_output": {
+        "source_pattern_present": true
+      },
+      "oracle_output": {
+        "explicit_contract": true
+      },
+      "severity": "HIGH",
+      "sidecar_output": {
+        "explicit_contract": true
+      }
+    },
+    {
+      "case_id": "mark_price_drives_iv",
+      "classification": "LEGACY_DEFECT_CONFIRMED",
+      "explanation": "Option-chain IV uses the selected mark value without a first-class solver/provenance result.",
+      "legacy_output": {
+        "source_pattern_present": true
+      },
+      "oracle_output": {
+        "explicit_contract": true
+      },
+      "severity": "MEDIUM",
+      "sidecar_output": {
+        "explicit_contract": true
+      }
+    }
+  ],
+  "schema_version": "1.0.0",
+  "skipped_case_count": 0,
+  "summary": {
+    "invalid_input_ambiguity": "CONFIRMED",
+    "put_theta_defect": "CONFIRMED",
+    "solver_convergence_ambiguity": "CONFIRMED",
+    "time_to_expiry_defect": "CONFIRMED"
+  },
+  "valid_case_count": 17
+}
