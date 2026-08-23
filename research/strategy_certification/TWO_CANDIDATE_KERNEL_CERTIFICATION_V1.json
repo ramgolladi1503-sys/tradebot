@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "campaign_id": "TWO_CANDIDATE_KERNEL_CERTIFICATION_V1",
   "base_authority": "research/strategy-certification-kernel-v0",
   "research_only": true,
@@ -16,35 +16,59 @@
     {
       "candidate_id": "HTF_RANGE_EXPANSION",
       "priority": 1,
-      "status": "PRE_CERTIFICATION_DATASET_BINDING_REQUIRED",
+      "status": "ROBUSTNESS_REQUIRED",
       "information_set": "NIFTY_HTF_OPENING_DRIVE_VOL_EXPANSION",
       "source_spec": "docs/research/htf_range_expansion_strategy_spec.md",
+      "historical_source_commit": "39612d296b07a4800c4f574c8a0dd92c20906e7c",
       "historical_verdict": "PROMOTE_TO_PAPER",
       "historical_verdict_is_kernel_certification": false,
+      "historical_promotion_evidence_admissible": false,
+      "historical_evidence_disqualification": [
+        "future-derived full-session volatility used for intraday VOL_EXPANSION membership",
+        "15m/30m alignment bypassed in VOL_EXPANSION baseline implementation",
+        "stop/risk implementation does not match locked specification",
+        "exact historical corpus and invocation remain unproven"
+      ],
       "identity_reconciliation_required_with": "HTF_OPENING_DRIVE_CONT",
       "dataset_sha256": null,
       "candidate_fingerprint": null,
-      "holdout_integrity": "TO_BE_PROVEN",
-      "option_execution_evidence": "PROVENANCE_RECONCILIATION_REQUIRED",
+      "holdout_integrity": "NOT_ESTABLISHED",
+      "option_execution_evidence": "HISTORICAL_PROMOTION_EVIDENCE_DISQUALIFIED",
       "current_30m_contract_compatible": "UNKNOWN",
       "threshold_changes_permitted": false,
+      "next_legal_action": "NEW_IDENTITY_RECONSTRUCTION_ON_SHA_BOUND_CAUSAL_CORPUS_IF_MECHANISM_RETAINED",
       "runtime_authority": "NONE"
     },
     {
       "candidate_id": "COMMON_FACTOR_OPTION_UNDERREACTION_V1",
       "priority": 2,
-      "status": "PRIOR_RESULT_AND_HOLDOUT_INTEGRITY_RECOVERY_REQUIRED",
+      "status": "REJECTED",
       "information_set": "CONSTITUENT_COMMON_FACTOR_INDEX_LAG_OPTION_UNDERREACTION",
       "source_branch": "research/common-factor-option-underreaction-v1",
       "source_head": "14507f7e93b08f1dadac3625f687454c18c41643",
       "source_contract": "research/common_factor_option_underreaction_v1/research_contract.json",
       "maximum_variants": 3,
-      "dataset_sha256_set": null,
+      "dataset_sha256_set": [
+        "ae9645a83cb555899145e04ebe5a961fd130df25cba88a8fc8fd43b986bbfad0",
+        "0c65627990d2ef3aaf59e3cc487381bb3103337caccaf338a80a4fed48c66530"
+      ],
+      "data_contract_semantic_sha256": "1e92a382a6dacbc31357c3dab7842f7afbc8ce186e7e71335362e5468cb7ffe6",
+      "pre_outcome_freeze_semantic_sha256": "e324ecd9ee829bc2ac77a3f7d4a5ec615dd81affaa70f0e185bd8df5119a3477",
       "candidate_fingerprint": null,
-      "prior_result_recovered": false,
-      "holdout_integrity": "UNKNOWN_UNTIL_RECOVERY",
+      "candidate_fingerprint_reason": "No candidate-of-record survived the frozen OOF screen; oof_survivors=0.",
+      "prior_result_recovered": true,
+      "authoritative_workflow_run_id": 30554186651,
+      "authoritative_artifact_id": 8764132399,
+      "authoritative_artifact_digest": "sha256:d87c4a4cb61b86ca173cf7877c3c4b64e851fdb5f0e4d6579cb353f24473d57e",
+      "principal_verdict": "NO_COMMON_FACTOR_OPTION_UNDERREACTION_EDGE",
+      "validation_opened": false,
+      "holdout_opened": false,
+      "holdout_integrity": "PRESERVED_AS_OF_AUTHORITATIVE_CI_RUN",
+      "independent_audit": "PASS_INDEPENDENT_AUDIT",
       "exact_rerun_only": true,
+      "rerun_required": false,
       "threshold_changes_permitted": false,
+      "terminal_reason": "Zero frozen OOF survivors; bounded kernel law makes screen rejection terminal without opening validation or holdout.",
       "runtime_authority": "NONE"
     }
   ],
@@ -59,5 +83,7 @@
     "independent_verification"
   ],
   "passport_schema": "research/passports/CONFIDENCE_PASSPORT_SCHEMA.md",
-  "bounded_lifecycle": "research/strategy_certification/BOUNDED_RESEARCH_LIFECYCLE.md"
+  "bounded_lifecycle": "research/strategy_certification/BOUNDED_RESEARCH_LIFECYCLE.md",
+  "any_validated_research": false,
+  "structural_edge_certified": false
 }
