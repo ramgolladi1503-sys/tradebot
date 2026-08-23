@@ -1,5 +1,14 @@
 # PR832 — T25 Structural-Edge Decision Offline Hardening Review
 
+mode: RESEARCH
+candidate_id: PR832_T25_STRUCTURAL_EDGE_OFFLINE_HARDENING
+decision: HARDEN_T25_OFFLINE_EVIDENCE_BINDING
+reason: Require artifact-byte and candidate-identity verification before T25 consumes offline evidence; preserve fail-closed non-live semantics.
+timestamp: 2026-08-23T06:30:00+05:30
+is_order_action: false
+broker_api_called: false
+source: PR832_OFFLINE_HARDENING_REVIEW
+
 ## Agent Work Contract
 
 Objective: review the narrow offline hardening of MROS task T25, `Structural-edge decision`, at the PR832 candidate. The implementation scope is `research/mros_certification/evaluation.py` plus `tests/research/test_mros_evaluation.py`; this review artifact is governance evidence only. The frozen 2026-08-18 live producer, broker integration, order routing, feed ownership, strategy generation, ranking, risk, and runtime authorization are outside scope.
