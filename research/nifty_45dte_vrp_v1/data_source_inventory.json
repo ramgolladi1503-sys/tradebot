@@ -1,58 +1,89 @@
 {
-  "schema_version": "nifty_45dte_data_source_inventory_v1",
+  "schema_version": "nifty_45dte_data_source_inventory_v2",
   "created_date": "2026-08-24",
   "candidate_id": "NIFTY_45DTE_VRP_V1",
   "sources": [
     {
       "source_id": "REPO_HISTORICAL_OPTION_CHAIN_REALISH",
       "location": "core/historical_option_chain_realish.py",
-      "coverage": "software-generated replay",
-      "observed_fields": ["synthetic premiums", "synthetic IV", "synthetic spread", "synthetic Greeks", "synthetic OI/volume"],
       "primary_short_vol_admissibility": "REJECT",
       "buyonly_translator_admissibility": "REJECT",
-      "reason": "Implementation is explicitly synthetic/realish and cannot establish historical market truth."
+      "reason": "Explicitly synthetic/realish premiums, IV, spreads, Greeks and liquidity fields cannot establish historical market truth."
+    },
+    {
+      "source_id": "NSE_HISTORICAL_ORDER_TRADE_FO",
+      "url": "https://www.nseindia.com/market-data/real-time-data-subscription",
+      "authority": "OFFICIAL_EXCHANGE",
+      "observed_product_claim": "NSE advertises historical order and trade data for the F&O segment through its data products/platform.",
+      "primary_short_vol_admissibility": "PRIMARY_CANDIDATE_PENDING_ACQUISITION_SCHEMA_AND_COVERAGE_AUDIT",
+      "buyonly_translator_admissibility": "PRIMARY_CANDIDATE_PENDING_ACQUISITION_SCHEMA_AND_COVERAGE_AUDIT",
+      "required_proof_before_use": ["NIFTY option contract identity", "2024-2026 coverage or declared subset", "timestamp resolution", "order-book reconstruction semantics", "best bid/ask reconstruction at required snapshots", "immutable source hashes", "usage entitlement"],
+      "reason": "Exchange-grade order/trade truth is the strongest discovered route for reconstructing executable bid/ask instead of substituting OHLC."
+    },
+    {
+      "source_id": "NSE_FO_1M_5M_SNAPSHOT_DATA",
+      "url": "https://www.nseindia.com/market-data/real-time-data-subscription",
+      "authority": "OFFICIAL_EXCHANGE",
+      "observed_product_claim": "NSE advertises 1-minute and 5-minute snapshot products for the F&O segment.",
+      "primary_short_vol_admissibility": "CANDIDATE_PENDING_HISTORICAL_ENTITLEMENT_AND_FIELD_AUDIT",
+      "buyonly_translator_admissibility": "CANDIDATE_PENDING_HISTORICAL_ENTITLEMENT_AND_FIELD_AUDIT",
+      "required_proof_before_use": ["historical availability for target dates", "bid/ask fields", "contract identity", "snapshot timestamp semantics", "IV/delta observed or reproducibly derived"],
+      "reason": "Potentially simpler than full order-book reconstruction if historical snapshots contain the required quote fields."
+    },
+    {
+      "source_id": "NIFTYTRADER_HISTORICAL_OPTION_CHAIN",
+      "url": "https://www.niftytrader.in/nse-option-chain/nifty",
+      "authority": "THIRD_PARTY",
+      "observed_product_claim": "Historical option-chain interface advertises strike-wise LTP, IV, OI, volume and bid/ask with CSV export.",
+      "primary_short_vol_admissibility": "CANDIDATE_PENDING_DOWNLOAD_PROVENANCE_TIMESTAMP_AND_COVERAGE_AUDIT",
+      "buyonly_translator_admissibility": "CANDIDATE_PENDING_DOWNLOAD_PROVENANCE_TIMESTAMP_AND_COVERAGE_AUDIT",
+      "missing_or_unproven": ["intraday snapshot granularity", "45DTE-to-21DTE continuity", "historical contract completeness", "source methodology", "stable reproducible export"],
+      "reason": "Promising field coverage, but advertised UI fields are not sufficient evidence until an exported sample is hashed and audited."
     },
     {
       "source_id": "HF_ARTIST23_NIFTY_OPTIONS_DATA",
       "url": "https://huggingface.co/datasets/artist-23/nifty-options-data",
-      "observed_coverage": "2020-12-29 through 2025-12-26 in public Dataset Viewer; approximately 34M rows",
-      "observed_fields": ["timestamp", "open", "high", "low", "close", "iv", "volume", "oi", "strike_price", "spot", "datetime", "date", "expiry_type", "strike_type", "option_type"],
-      "structure": "NIFTY/MONTH and NIFTY/WEEK; moneyness-partitioned parquet files",
-      "missing_or_unproven": ["explicit contract expiry date in surfaced schema", "bid", "ask", "delta", "continuous same-contract identity from 45DTE to 21DTE"],
+      "observed_coverage": "approximately 2020-12-29 through 2025-12-26; about 34M rows in public metadata",
+      "observed_fields": ["timestamp", "open", "high", "low", "close", "iv", "volume", "oi", "strike_price", "spot", "expiry_type", "strike_type", "option_type"],
       "primary_short_vol_admissibility": "REJECT_UNTIL_CONTRACT_AND_EXECUTION_TRUTH_PROVEN",
       "buyonly_translator_admissibility": "EXPLORATORY_ONLY_PENDING_45DTE_EXPIRY_IDENTITY",
-      "reason": "Useful real-looking IV/spot history but the surfaced schema does not prove the exact 45-DTE contract identity or executable bid/ask required by the frozen tests."
+      "missing_or_unproven": ["explicit expiry date in surfaced schema", "bid", "ask", "delta", "same-contract 45DTE-to-21DTE identity"],
+      "reason": "Potentially useful observed-IV history, but insufficient for executable direct-strategy certification."
     },
     {
       "source_id": "HF_TRADEMARKK_INDIA_INDEX_OPTIONS_1M",
       "url": "https://huggingface.co/datasets/thetrademarkk/india-index-options-1m",
-      "observed_coverage": "approximately 2021-2026; public dataset card reports 377M rows / about 4GB",
+      "observed_coverage": "approximately 2021-2026; exact-expiry 1-minute OHLCV/OI layout in public metadata",
       "observed_fields": ["timestamp", "open", "high", "low", "close", "volume", "open_interest", "trading_day", "symbol", "strike", "option_type", "expiry"],
-      "structure": "index/{SYMBOL}.parquet and options/{SYMBOL}/{EXPIRY}.parquet",
       "license": "CC-BY-NC-4.0",
-      "missing_or_unproven": ["bid", "ask", "iv", "delta", "complete far-strike coverage"],
       "primary_short_vol_admissibility": "EXPLORATORY_PROXY_ONLY",
       "buyonly_translator_admissibility": "POTENTIALLY_USABLE_FOR_EXPLORATORY_MODEL_DERIVED_IV",
-      "reason": "Exact-expiry OHLC structure is useful, but final direct-strategy cost evidence requires bid/ask. IV/delta would need reproducible model derivation from option price, spot, DTE and rate assumptions and therefore would remain model-derived rather than observed."
+      "missing_or_unproven": ["bid", "ask", "iv", "delta", "complete far-strike coverage"],
+      "reason": "Exact-expiry OHLC is useful for path diagnostics, but modeled IV/delta and OHLC execution remain proxies."
     },
     {
-      "source_id": "SHOONYA_TRADER_FREE_EXPIRED_NIFTY",
-      "url": "https://shoonya.com/",
-      "observed_coverage": "public expired NIFTY option 1-minute CSV archive advertised online",
-      "observed_fields": ["timestamp", "open", "high", "low", "close", "volume"],
-      "missing_or_unproven": ["bid", "ask", "delta", "iv", "complete contract metadata/provenance"],
+      "source_id": "FREE_EXPIRED_NIFTY_OHLC_ARCHIVES",
+      "authority": "THIRD_PARTY",
+      "observed_fields": ["timestamp", "open", "high", "low", "close", "volume", "sometimes OI"],
       "primary_short_vol_admissibility": "EXPLORATORY_PROXY_ONLY",
-      "buyonly_translator_admissibility": "INSUFFICIENT_WITHOUT_DTE_AND_IV_RECONSTRUCTION",
-      "reason": "OHLCV can support price-path diagnostics but not the frozen executable-side or observed-IV contract."
+      "buyonly_translator_admissibility": "INSUFFICIENT_WITHOUT_EXPIRY_AND_IV_RECONSTRUCTION",
+      "reason": "Useful for rough price-path diagnostics but cannot satisfy observed bid/ask or observed-IV evidence."
     },
     {
       "source_id": "NSE_OFFICIAL_FO_REPORTS",
       "url": "https://www.nseindia.com/all-reports-derivatives",
-      "observed_coverage": "official exchange derivatives reports/bhavcopy family",
+      "authority": "OFFICIAL_EXCHANGE",
       "primary_short_vol_admissibility": "PROVENANCE_REFERENCE_OR_EOD_CROSSCHECK",
       "buyonly_translator_admissibility": "PROVENANCE_REFERENCE_OR_EOD_CROSSCHECK",
-      "reason": "High-authority exchange source, but standard reports do not by themselves supply the required historical 15:00 bid/ask/IV snapshot path."
+      "reason": "Authoritative for contract/EOD cross-checking, but standard reports alone do not prove the required 15:00 executable quote path."
     }
+  ],
+  "source_priority": [
+    "NSE_HISTORICAL_ORDER_TRADE_FO",
+    "NSE_FO_1M_5M_SNAPSHOT_DATA",
+    "NIFTYTRADER_HISTORICAL_OPTION_CHAIN",
+    "HF_ARTIST23_NIFTY_OPTIONS_DATA",
+    "HF_TRADEMARKK_INDIA_INDEX_OPTIONS_1M"
   ],
   "acquisition_policy": {
     "store_large_raw_data_in_git": false,
@@ -62,6 +93,6 @@
     "derived_files_require_parent_sha256": true,
     "holdout_tagged_sources_must_not_be_opened": true
   },
-  "current_decision": "NO_DISCOVERED_PUBLIC_SOURCE_YET_SATISFIES_FINAL_DIRECT_SHORT_VOL_CERTIFICATION_CONTRACT",
-  "next_admissible_step": "Use an exact-expiry OHLC corpus only for exploratory reconstruction, or acquire historical quote snapshots with bid/ask plus sufficient contract identity for final primary/cost evaluation."
+  "current_decision": "NO_ACQUIRED_AND_AUDITED_SOURCE_YET_SATISFIES_FINAL_DIRECT_SHORT_VOL_CERTIFICATION_CONTRACT",
+  "next_admissible_step": "Acquire and hash a small representative sample from the highest-authority source available, run audit_data.py, then scale acquisition only if contract identity and synchronized bid/ask coverage pass."
 }
