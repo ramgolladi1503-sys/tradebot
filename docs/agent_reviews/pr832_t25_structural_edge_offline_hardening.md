@@ -17,7 +17,7 @@ Authority boundary: T25 may decide structural-edge certification only from suffi
 
 ## Scope Guard
 
-The repair requires exact candidate identity and evidence descriptors that resolve to actual regular, non-symlink JSON artifacts. T25 reads the artifact bytes itself, checks the declared SHA-256 against those bytes, parses the artifact payload, verifies the evidence kind and exact candidate SHA, and only then consumes gate-specific fields. Missing, malformed, mismatched, reused, or tampered evidence remains fail-closed. Separate trading-integration authority remains false. No high-risk production path listed by the repository validator is modified.
+The repair requires exact candidate identity and evidence descriptors that resolve to actual regular, non-symlink JSON artifacts. T25 reads the artifact bytes itself, checks the declared SHA-256 against those bytes, parses the artifact payload, verifies the evidence kind and exact candidate SHA, and only then consumes gate-specific fields. Absent, malformed, mismatched, reused, or tampered evidence remains fail-closed. Separate trading-integration authority remains false. No high-risk production path listed by the repository validator is modified.
 
 ## Grill Me Review
 
@@ -60,7 +60,7 @@ STRUCTURAL_EDGE_CERTIFIED=false
 
 ## Acceptance Proof
 
-Acceptance requires the focused T25 and freshness suites to pass on the exact final candidate with full Git history; PASS-shaped in-memory evidence must be rejected; artifact tampering and evidence-kind reuse must be rejected; malformed/missing/mismatched evidence must fail closed; execution authority must remain false; the mandatory governance gate must pass; and an independent exact-SHA review must find no remaining material evidence-authority defect. This document does not self-certify those pending gates.
+Acceptance requires the focused T25 and freshness suites to pass on the exact final candidate with full Git history; PASS-shaped in-memory evidence must be rejected; artifact tampering and evidence-kind reuse must be rejected; malformed/absent/mismatched evidence must fail closed; execution authority must remain false; the mandatory governance gate must pass; and an independent exact-SHA review must find no remaining material evidence-authority defect. This document does not self-certify those pending gates.
 
 ## Runtime Proof Required After Merge
 
