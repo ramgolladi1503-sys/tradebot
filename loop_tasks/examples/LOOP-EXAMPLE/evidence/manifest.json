@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "task_id": "LOOP-EXAMPLE",
+  "proofs": [
+    {
+      "proof_id": "TEST-EXAMPLE-1",
+      "tier": "A",
+      "evidence_class": "test",
+      "evidence_type": "file",
+      "reference": "evidence/example_test_summary.txt",
+      "sha256": "34bd2d8dc76e6e381a667b5ca04f1ace17f72c5be0fad8d27cdcce8197676420",
+      "producing_command": "pytest -q tests/loop",
+      "exit_code": 0,
+      "timestamp_utc": "2026-07-31T07:08:00Z",
+      "code_sha": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
+      "required": true,
+      "continuation_critical": true
+    }
+  ]
+}

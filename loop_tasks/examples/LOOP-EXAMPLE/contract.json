@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "LOOP-EXAMPLE",
+  "title": "Demonstrate a GitHub-first agent handoff",
+  "objective": "Prove that a new worker can resume a bounded non-runtime task from committed GitHub evidence alone.",
+  "repository": "ramgolladi1503-sys/tradebot",
+  "base_branch": "main",
+  "work_branch": "infra/github-first-loop-engineering-v1",
+  "pr_number": null,
+  "owner": "human",
+  "preferred_worker": "codex",
+  "reviewer": "chatgpt-or-antigravity",
+  "allowed_paths": [
+    "docs/example/**"
+  ],
+  "forbidden_paths": [
+    "main.py",
+    "run_live.sh",
+    "config/**",
+    "core/**",
+    "strategies/**",
+    "credentials.py",
+    ".env"
+  ],
+  "acceptance_gates": [
+    "example_test_proven",
+    "example_review_recorded"
+  ],
+  "required_tests": [
+    "pytest -q tests/loop"
+  ],
+  "human_gates": [
+    "push_persistent_branch",
+    "merge_pull_request"
+  ],
+  "stop_conditions": [
+    "workspace_permission_denied",
+    "retry_budget_exhausted"
+  ],
+  "max_implementation_cycles": 3,
+  "max_review_cycles": 2,
+  "created_at_utc": "2026-07-31T07:00:00Z",
+  "frozen": true
+}
