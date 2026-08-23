@@ -1,0 +1,67 @@
+{
+  "schema_version": "nifty_45dte_data_source_inventory_v1",
+  "created_date": "2026-08-24",
+  "candidate_id": "NIFTY_45DTE_VRP_V1",
+  "sources": [
+    {
+      "source_id": "REPO_HISTORICAL_OPTION_CHAIN_REALISH",
+      "location": "core/historical_option_chain_realish.py",
+      "coverage": "software-generated replay",
+      "observed_fields": ["synthetic premiums", "synthetic IV", "synthetic spread", "synthetic Greeks", "synthetic OI/volume"],
+      "primary_short_vol_admissibility": "REJECT",
+      "buyonly_translator_admissibility": "REJECT",
+      "reason": "Implementation is explicitly synthetic/realish and cannot establish historical market truth."
+    },
+    {
+      "source_id": "HF_ARTIST23_NIFTY_OPTIONS_DATA",
+      "url": "https://huggingface.co/datasets/artist-23/nifty-options-data",
+      "observed_coverage": "2020-12-29 through 2025-12-26 in public Dataset Viewer; approximately 34M rows",
+      "observed_fields": ["timestamp", "open", "high", "low", "close", "iv", "volume", "oi", "strike_price", "spot", "datetime", "date", "expiry_type", "strike_type", "option_type"],
+      "structure": "NIFTY/MONTH and NIFTY/WEEK; moneyness-partitioned parquet files",
+      "missing_or_unproven": ["explicit contract expiry date in surfaced schema", "bid", "ask", "delta", "continuous same-contract identity from 45DTE to 21DTE"],
+      "primary_short_vol_admissibility": "REJECT_UNTIL_CONTRACT_AND_EXECUTION_TRUTH_PROVEN",
+      "buyonly_translator_admissibility": "EXPLORATORY_ONLY_PENDING_45DTE_EXPIRY_IDENTITY",
+      "reason": "Useful real-looking IV/spot history but the surfaced schema does not prove the exact 45-DTE contract identity or executable bid/ask required by the frozen tests."
+    },
+    {
+      "source_id": "HF_TRADEMARKK_INDIA_INDEX_OPTIONS_1M",
+      "url": "https://huggingface.co/datasets/thetrademarkk/india-index-options-1m",
+      "observed_coverage": "approximately 2021-2026; public dataset card reports 377M rows / about 4GB",
+      "observed_fields": ["timestamp", "open", "high", "low", "close", "volume", "open_interest", "trading_day", "symbol", "strike", "option_type", "expiry"],
+      "structure": "index/{SYMBOL}.parquet and options/{SYMBOL}/{EXPIRY}.parquet",
+      "license": "CC-BY-NC-4.0",
+      "missing_or_unproven": ["bid", "ask", "iv", "delta", "complete far-strike coverage"],
+      "primary_short_vol_admissibility": "EXPLORATORY_PROXY_ONLY",
+      "buyonly_translator_admissibility": "POTENTIALLY_USABLE_FOR_EXPLORATORY_MODEL_DERIVED_IV",
+      "reason": "Exact-expiry OHLC structure is useful, but final direct-strategy cost evidence requires bid/ask. IV/delta would need reproducible model derivation from option price, spot, DTE and rate assumptions and therefore would remain model-derived rather than observed."
+    },
+    {
+      "source_id": "SHOONYA_TRADER_FREE_EXPIRED_NIFTY",
+      "url": "https://shoonya.com/",
+      "observed_coverage": "public expired NIFTY option 1-minute CSV archive advertised online",
+      "observed_fields": ["timestamp", "open", "high", "low", "close", "volume"],
+      "missing_or_unproven": ["bid", "ask", "delta", "iv", "complete contract metadata/provenance"],
+      "primary_short_vol_admissibility": "EXPLORATORY_PROXY_ONLY",
+      "buyonly_translator_admissibility": "INSUFFICIENT_WITHOUT_DTE_AND_IV_RECONSTRUCTION",
+      "reason": "OHLCV can support price-path diagnostics but not the frozen executable-side or observed-IV contract."
+    },
+    {
+      "source_id": "NSE_OFFICIAL_FO_REPORTS",
+      "url": "https://www.nseindia.com/all-reports-derivatives",
+      "observed_coverage": "official exchange derivatives reports/bhavcopy family",
+      "primary_short_vol_admissibility": "PROVENANCE_REFERENCE_OR_EOD_CROSSCHECK",
+      "buyonly_translator_admissibility": "PROVENANCE_REFERENCE_OR_EOD_CROSSCHECK",
+      "reason": "High-authority exchange source, but standard reports do not by themselves supply the required historical 15:00 bid/ask/IV snapshot path."
+    }
+  ],
+  "acquisition_policy": {
+    "store_large_raw_data_in_git": false,
+    "preferred_storage": "/Volumes/TradeBotData/tradebot-os/research-data/nifty-45dte-vrp-v1/",
+    "required_manifest_fields": ["source_id", "source_url_or_vendor", "acquired_at", "file_path", "bytes", "sha256", "schema", "coverage_start", "coverage_end", "license_or_usage_terms"],
+    "mutate_source_files": false,
+    "derived_files_require_parent_sha256": true,
+    "holdout_tagged_sources_must_not_be_opened": true
+  },
+  "current_decision": "NO_DISCOVERED_PUBLIC_SOURCE_YET_SATISFIES_FINAL_DIRECT_SHORT_VOL_CERTIFICATION_CONTRACT",
+  "next_admissible_step": "Use an exact-expiry OHLC corpus only for exploratory reconstruction, or acquire historical quote snapshots with bid/ask plus sufficient contract identity for final primary/cost evaluation."
+}
