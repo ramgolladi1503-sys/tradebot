@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "candidate_id": "HTF_RANGE_EXPANSION",
+  "recovery_status": "UNPROVEN",
+  "source_commit": "39612d296b07a4800c4f574c8a0dd92c20906e7c",
+  "pr": 597,
+  "required_invocation_authority": "NOT_RECOVERED",
+  "exact_data_dir": null,
+  "source_files": [],
+  "corpus_manifest_sha256": null,
+  "historical_ledger": {"path": null, "sha256": null},
+  "search_scope": [
+    "/Volumes/TradeBotData",
+    "/Users/madhuram",
+    "campaign worktree and retained worktrees"
+  ],
+  "search_terms": [
+    "htf_range_expansion_survival_report.md",
+    "htf_range_expansion_final_survival_verdict.md",
+    "higher_tf_edge_report.md",
+    "htf_signal_funnel.csv",
+    "htf_gate_ablation_matrix.csv",
+    "corrected_cost_adjusted_scoreboard.csv",
+    "HTFEngine(",
+    "data_dir"
+  ],
+  "result": "Exact historical data directory, source-file set, and ledger lineage were not proven. No substitute corpus was accepted.",
+  "certification_authorized": false
+}

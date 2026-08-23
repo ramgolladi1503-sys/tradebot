@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "candidate_id": "COMMON_FACTOR_OPTION_UNDERREACTION_V1",
+  "binding_status": "UNPROVEN",
+  "resolver_path": "research/dispersion_ignition_straddle_v1/data.py",
+  "resolver_present_in_campaign_authority": false,
+  "constituent_source": {
+    "logical_path": "research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet",
+    "original_external_path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet",
+    "sha256": null,
+    "present": false
+  },
+  "contract_inventory_source": {
+    "logical_pattern": "upstox-expired-options-v1/.../manifests/contract_inventory.parquet",
+    "sha256": null,
+    "present": false
+  },
+  "known_normalization_metadata": {
+    "start": "2024-01-01",
+    "end": "2025-08-29",
+    "raw_rows": 2532075,
+    "accepted_rows": 2532066,
+    "invalid_ohlc_quarantined": 9,
+    "conflicting_duplicates_rejected": 0
+  },
+  "reason": "Exact source bytes and frozen resolver were not available in the searched roots; metadata was not substituted for byte authority.",
+  "exact_rerun_authorized": false
+}

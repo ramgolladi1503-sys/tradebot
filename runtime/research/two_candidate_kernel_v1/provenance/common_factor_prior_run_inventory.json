@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "candidate_id": "COMMON_FACTOR_OPTION_UNDERREACTION_V1",
+  "recovery_status": "NO_AUTHORITATIVE_PRIOR_ROOT_RECOVERED",
+  "searched_roots": [
+    "/Volumes/TradeBotData",
+    "/Users/madhuram",
+    "campaign worktree and retained worktrees"
+  ],
+  "artifact_names": [
+    "data_contract_report.json",
+    "session_split_manifest.json",
+    "pre_outcome_freeze.json",
+    "oof_signal_ledger.csv",
+    "oof_trade_ledger.csv",
+    "oof_screen.json",
+    "validation_ledger.csv",
+    "validation_screen.json",
+    "holdout_ledger.csv",
+    "holdout_screen.json",
+    "final_decision.json",
+    "independent_audit_report.json",
+    "SHA256SUMS"
+  ],
+  "roots": [],
+  "holdout_integrity": "UNKNOWN",
+  "reason": "No authoritative coherent prior-run lineage was recovered. Absence of a holdout ledger is not treated as proof of preservation.",
+  "exact_rerun_authorized": false
+}

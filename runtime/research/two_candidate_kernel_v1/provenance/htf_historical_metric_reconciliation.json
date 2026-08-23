@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "candidate_id": "HTF_RANGE_EXPANSION",
+  "metric_reconciliation": "INSUFFICIENT_EVIDENCE",
+  "reported_values": {
+    "all_regime_baseline_expectancy_R": -0.0638245,
+    "vol_expansion_expectancy_R": 0.504796,
+    "vol_expansion_trade_count": 727,
+    "final_verdict": "PROMOTE_TO_PAPER",
+    "final_verdict_expectancy": 0.47,
+    "break_even_friction_multiplier": ">3.00x",
+    "listed_3x_slippage_stress": "FAIL"
+  },
+  "classification": "INSUFFICIENT_EVIDENCE",
+  "reason": "The underlying trade/event ledger, exact invocation, population definition, and cost/slippage definitions were not recovered; favorable interpretation is prohibited.",
+  "historical_ledger_sha256": null,
+  "certification_authorized": false
+}

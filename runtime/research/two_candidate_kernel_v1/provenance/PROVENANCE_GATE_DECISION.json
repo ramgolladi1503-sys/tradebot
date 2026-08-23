@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "campaign_id": "TWO_CANDIDATE_KERNEL_CERTIFICATION_V1",
+  "authority_commit": "3eb04c13f6a1d8d0320e4e0d3be8cdbcad6011ba",
+  "research_only": true,
+  "runtime_authority": "NONE",
+  "broker_actions": 0,
+  "certification_run_started": false,
+  "HTF_CERTIFICATION_AUTHORIZED": false,
+  "COMMON_FACTOR_EXACT_RERUN_AUTHORIZED": false,
+  "htf_state": "ROBUSTNESS_REQUIRED",
+  "common_factor_state": "ROBUSTNESS_REQUIRED",
+  "blockers": [
+    "HTF exact historical corpus, invocation, and ledger lineage unproven",
+    "HTF historical metric/cost discrepancy cannot be reconciled",
+    "Common-factor frozen resolver and exact source bytes unavailable",
+    "Common-factor authoritative prior-run and holdout lineage unavailable"
+  ],
+  "decision": "PROVENANCE_INSUFFICIENT_FAIL_CLOSED"
+}
