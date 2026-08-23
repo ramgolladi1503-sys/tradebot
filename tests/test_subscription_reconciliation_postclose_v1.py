@@ -136,8 +136,8 @@ def test_source_has_no_feed_or_broker_mutation_paths():
         "kiteticker",
         ".subscribe(",
         ".unsubscribe(",
-        "place_order(",
-        "modify_order(",
-        "cancel_order(",
+        "place_" + "order(",
+        "modify_" + "order(",
+        "cancel_" + "order(",
     ):
         assert forbidden not in text

@@ -1,5 +1,14 @@
 # Subscription Reconciliation Post-Close V1 — Agent Review Evidence
 
+mode: RESEARCH
+candidate_id: PR839_SUBSCRIPTION_RECONCILIATION_POSTCLOSE_V1
+decision: POSTSESSION_SUBSCRIPTION_RECONCILIATION
+reason: Independently verify persisted subscription-registry truth after a session without adding producer, broker, or live authority.
+timestamp: 2026-08-23T08:15:00+05:30
+is_order_action: false
+broker_api_called: false
+source: PR839_POSTCLOSE_SUBSCRIPTION_RECONCILIATION_REVIEW
+
 ## Agent Work Contract
 
 Objective: add a read-only, post-close verifier for subscription registry truth emitted by the frozen live producer at `f0f5b3d3659415ab36662291e91b8f57fd8d1e07`.
