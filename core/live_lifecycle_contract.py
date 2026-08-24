@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Mapping
 
+from core.live_artifact_contract import ArtifactRecord, write_immutable_json
+
 
 class LiveState(StrEnum):
     OFFLINE_PREFLIGHT = "OFFLINE_PREFLIGHT"
@@ -71,6 +73,49 @@ class LifecycleEvidence:
         if not self.can_promote(state):
             raise RuntimeError(f"LIFECYCLE_PROMOTION_BLOCKED:{state.value}")
         self.states[state.value] = "PASS"
+
+
+def seal_session(
+    evidence: LifecycleEvidence,
+    *,
+    manifest: Mapping[str, Any],
+    artifacts: tuple[ArtifactRecord, ...],
+    output_path: str,
+) -> ArtifactRecord:
+    """Write one immutable close seal only after close gates and authority checks pass."""
+    if not evidence.can_promote(LiveState.SESSION_SEALED):
+        raise RuntimeError("LIFECYCLE_PROMOTION_BLOCKED:SESSION_SEALED")
+    validate_read_only_snapshot(evidence.facts)
+    session_id = str(manifest.get("session_id") or "")
+    source_sha = str(manifest.get("source_sha") or "")
+    if not session_id or not source_sha:
+        raise ValueError("session_seal_manifest_identity_missing")
+    for artifact in artifacts:
+        artifact.validate()
+        if artifact.session_id != session_id or artifact.source_sha != source_sha:
+            raise ValueError("session_seal_artifact_identity_mismatch")
+    record = write_immutable_json(
+        output_path,
+        {
+            "schema_version": 1,
+            "session_id": session_id,
+            "source_sha": source_sha,
+            "states": dict(evidence.states),
+            "facts": dict(evidence.facts),
+            "artifacts": [artifact.__dict__ for artifact in artifacts],
+            "read_only": True,
+            "broker_write_authority": False,
+            "order_authority": False,
+            "paper_authorized": False,
+            "live_execution_authorized": False,
+            "orders_placed": 0,
+            "orders_modified": 0,
+            "orders_cancelled": 0,
+        },
+        artifact_type="session_close_seal", session_id=session_id, source_sha=source_sha,
+    )
+    evidence.states[LiveState.SESSION_SEALED.value] = "PASS"
+    return record
 
 
 def validate_read_only_snapshot(snapshot: Mapping[str, Any]) -> None:
