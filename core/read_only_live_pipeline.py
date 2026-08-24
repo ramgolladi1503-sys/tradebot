@@ -20,6 +20,7 @@ from core.live_runtime_artifacts import write_pending_runtime_artifacts
 from core.live_session_manifest import LiveSessionManifest, write_session_manifest
 from core.read_only_instrument_authority import build_instrument_authority, fetch_current_instruments
 from core.read_only_launch_plan import build_current_launch_plan, write_current_launch_plan
+from core.read_only_strategy_registry import write_strategy_registry
 
 
 PIPELINE_STAGES = (
@@ -76,6 +77,7 @@ def prepare_current_session(
     validate_consumer_registry(CANONICAL_CONSUMERS)
     registry_path = runtime_root / "CONSUMERS.json"
     write_consumer_registry(registry_path, session_id=session_id, source_sha=source_sha)
+    write_strategy_registry(runtime_root / "STRATEGY_REGISTRY.json", session_id=session_id, source_sha=source_sha)
     write_pending_runtime_artifacts(
         runtime_root, session_id=session_id, source_sha=source_sha,
         include_instrument_authority=False,
