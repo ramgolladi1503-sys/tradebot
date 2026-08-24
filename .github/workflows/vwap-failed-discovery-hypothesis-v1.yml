@@ -5,6 +5,7 @@ on:
     paths:
       - "research/vwap_failed_discovery_hypothesis_v1/**"
       - "tests/research/test_vwap_failed_discovery_hypothesis_v1.py"
+      - "tests/research/test_vwap_failed_discovery_corpus_runner_v1.py"
       - "docs/agent_reviews/vwap_failed_discovery_hypothesis_v1.md"
       - ".github/workflows/vwap-failed-discovery-hypothesis-v1.yml"
   workflow_dispatch:
@@ -21,6 +22,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+          lfs: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -30,9 +32,14 @@ jobs:
           python -m py_compile
           research/vwap_failed_discovery_hypothesis_v1/detector.py
           research/vwap_failed_discovery_hypothesis_v1/evaluation.py
+          research/vwap_failed_discovery_hypothesis_v1/run_corpus.py
           tests/research/test_vwap_failed_discovery_hypothesis_v1.py
-      - name: Focused hypothesis invariants
-        run: pytest -q -o addopts='' tests/research/test_vwap_failed_discovery_hypothesis_v1.py
+          tests/research/test_vwap_failed_discovery_corpus_runner_v1.py
+      - name: Focused hypothesis and runner invariants
+        run: >-
+          pytest -q -o addopts=''
+          tests/research/test_vwap_failed_discovery_hypothesis_v1.py
+          tests/research/test_vwap_failed_discovery_corpus_runner_v1.py
       - name: Reject strategy/execution contamination
         shell: bash
         run: |
