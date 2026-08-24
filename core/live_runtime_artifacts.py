@@ -14,7 +14,10 @@ def _write(path: Path, payload: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
-def write_pending_runtime_artifacts(output_root: str | Path, *, session_id: str, source_sha: str) -> None:
+def write_pending_runtime_artifacts(
+    output_root: str | Path, *, session_id: str, source_sha: str,
+    include_instrument_authority: bool = True,
+) -> None:
     """Declare startup identity without claiming feed, persistence, or readiness."""
     if not session_id or not source_sha:
         raise ValueError("runtime_artifact_identity_missing")
@@ -31,5 +34,8 @@ def write_pending_runtime_artifacts(output_root: str | Path, *, session_id: str,
     root = Path(output_root)
     _write(root / "feed_health.json", {**identity, "verdict": "PENDING", "websocket_connected": False, **authority})
     _write(root / "heartbeat.json", {**identity, "verdict": "PENDING", "state": "STARTING", **authority})
-    _write(root / "instrument_authority_manifest.json", {**identity, "verdict": "PENDING", "instrument_master_sha": None, **authority})
+    # The canonical composition root leaves this absent until current-session
+    # acquisition, while legacy callers may request the explicit PENDING marker.
+    if include_instrument_authority:
+        _write(root / "instrument_authority_manifest.json", {**identity, "verdict": "PENDING", "instrument_master_sha": None, **authority})
     _write(root / "session_exit_gate.json", {**identity, "verdict": "PENDING", "live_observation_e2e_ready": False, **authority})

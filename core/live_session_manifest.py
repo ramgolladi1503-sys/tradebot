@@ -34,6 +34,9 @@ class LiveSessionManifest:
     persistence_state: str
     subscription_count: int | None
     consumer_registry: tuple[str, ...] = field(default_factory=tuple)
+    pipeline_sha: str | None = None
+    consumer_registry_path: str | None = None
+    advisory_queue_path: str | None = None
     authority: Mapping[str, bool] = field(default_factory=lambda: dict(AUTHORITY_FALSE))
 
     def validate(self) -> None:
@@ -64,6 +67,9 @@ class LiveSessionManifest:
             "persistence_state": self.persistence_state,
             "subscription_count": self.subscription_count,
             "consumer_registry": sorted(set(self.consumer_registry)),
+            "pipeline_sha": self.pipeline_sha,
+            "consumer_registry_path": self.consumer_registry_path,
+            "advisory_queue_path": self.advisory_queue_path,
             **AUTHORITY_FALSE,
         }
 
