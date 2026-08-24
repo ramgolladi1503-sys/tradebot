@@ -112,21 +112,33 @@ def test_same_bar_target_and_invalidation_is_adverse_invalidation() -> None:
     assert outcome.invalidated is True
 
 
-def _summary(count: int, risk_diff: float, uplift: float) -> ComparisonSummary:
+def _summary(
+    count: int,
+    risk_diff: float,
+    uplift: float,
+    *,
+    primary_p: float = 0.01,
+    secondary_p: float = 0.01,
+) -> ComparisonSummary:
     event_rate = 0.65
     control_rate = event_rate - risk_diff
     horizons = {h: 3.0 for h in (1, 3, 5, 10, 15, 30)}
     controls = {h: 3.0 - uplift for h in horizons}
     uplifts = {h: uplift for h in horizons}
+    sign_p = {h: secondary_p for h in horizons}
     return ComparisonSummary(
         event_count=count,
         control_count=count,
         event_primary_rate=event_rate,
         control_primary_rate=control_rate,
         primary_risk_difference=risk_diff,
+        primary_event_only_successes=max(1, int(count * 0.20)),
+        primary_control_only_successes=max(0, int(count * 0.05)),
+        primary_mcnemar_exact_p_value=primary_p,
         event_median_directional_bps=horizons,
         control_median_directional_bps=controls,
         directional_uplift_bps=uplifts,
+        directional_sign_test_p_value=sign_p,
         event_median_mfe_bps=8.0,
         control_median_mfe_bps=5.0,
         event_median_mae_bps=4.0,
@@ -136,6 +148,11 @@ def _summary(count: int, risk_diff: float, uplift: float) -> ComparisonSummary:
 
 def test_support_gate_is_fail_closed_on_insufficient_events() -> None:
     assert classify_support(_summary(99, 0.10, 2.0)) == "INCONCLUSIVE"
+
+
+def test_large_point_estimate_without_paired_significance_is_rejected() -> None:
+    assert classify_support(_summary(120, 0.10, 3.0, primary_p=0.20)) == "REJECTED"
+    assert classify_support(_summary(120, 0.10, 3.0, secondary_p=0.20)) == "REJECTED"
 
 
 def test_supported_is_not_robust_without_oos_or_controls() -> None:
