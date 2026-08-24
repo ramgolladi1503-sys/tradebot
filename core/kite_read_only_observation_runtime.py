@@ -19,6 +19,7 @@ from core.read_only_live_evidence import (
     write_authority_snapshot_bundle,
     write_json_atomic,
 )
+from core.live_session_manifest import LiveSessionManifest, write_session_manifest
 
 
 UNSAFE_IMPORT_PREFIXES = (
@@ -368,6 +369,23 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         "session_root": str(output_root.resolve()), "state": "RUNNING",
         "read_only": True, "order_authority": False, "broker_write_authority": False,
     })
+    manifest = LiveSessionManifest(
+        session_date=session_date,
+        session_id=run_id,
+        source_sha=producer_commit,
+        observer_sha=producer_commit,
+        observer_pid=os.getpid(),
+        runtime_root=str(output_root.resolve()),
+        sqlite_path=str(Path(os.getenv("DB_ROOT", str(output_root / "db"))) / "live.sqlite"),
+        instrument_master_path=str(launch_plan.get("instrument_master_path") or "UNKNOWN"),
+        instrument_master_sha=str(launch_plan.get("instrument_master_sha") or "") or None,
+        auth_state="PASS",
+        feed_state="STARTING",
+        persistence_state="STARTING",
+        subscription_count=len(tokens),
+        consumer_registry=("regime", "strategies", "cas_v2", "candidate_ranking", "monitoring", "evidence"),
+    )
+    write_session_manifest(output_root / "SESSION_MANIFEST.json", manifest)
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
     try:
         while not lifecycle.should_stop():
