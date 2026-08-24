@@ -387,10 +387,16 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         persistence_state="STARTING",
         subscription_count=len(tokens),
         consumer_registry=validate_consumer_registry(CANONICAL_CONSUMERS),
+        pipeline_sha=str(launch_plan.get("pipeline_sha") or producer_commit),
+        consumer_registry_path=str(launch_plan.get("consumer_registry_path") or output_root / "CONSUMERS.json"),
+        advisory_queue_path=str(launch_plan.get("advisory_queue_path") or output_root / "advisory_queue.jsonl"),
     )
     write_session_manifest(output_root / "SESSION_MANIFEST.json", manifest)
     write_consumer_registry(output_root / "CONSUMERS.json", session_id=run_id, source_sha=producer_commit)
-    write_pending_runtime_artifacts(output_root, session_id=run_id, source_sha=producer_commit)
+    write_pending_runtime_artifacts(
+        output_root, session_id=run_id, source_sha=producer_commit,
+        include_instrument_authority=False,
+    )
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
     try:
         while not lifecycle.should_stop():
