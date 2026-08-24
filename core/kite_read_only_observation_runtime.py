@@ -401,6 +401,11 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 market_snapshot=None,
                 producer="kite_read_only_observation",
             )
+            from core.read_only_consumer_cycle import run_consumer_cycle
+            run_consumer_cycle(
+                runtime_outputs=latest_runtime_outputs, output_root=output_root,
+                session_id=run_id, source_sha=producer_commit,
+            )
             append_feed_forensic_event(
                 "RUNTIME_PERSISTENCE_PROGRESS",
                 snapshot_count=1,
