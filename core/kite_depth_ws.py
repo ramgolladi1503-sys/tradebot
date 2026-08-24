@@ -7187,7 +7187,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         _log_ws("FEED_RESTART_CONCURRENT_BLOCKED", {"reason": reason})
         return False
     try:
-        if feed_breaker_tripped():
+        if feed_breaker_tripped(session_date=session_policy.session_date):
             _log_ws("FEED_RESTART_BLOCKED_BY_BREAKER", {"reason": reason})
             return False
         if not feed_restart_guard.allow_restart(now=now, reason=reason):
