@@ -35,10 +35,12 @@ def test_authority_snapshot_is_fail_closed():
 def test_consumer_registry_artifact_binds_identity_and_stays_pending(tmp_path):
     import json
     path = tmp_path / "CONSUMERS.json"
-    write_consumer_registry(path, session_id="s1", source_sha="a" * 40)
+    write_consumer_registry(path, session_id="s1", source_sha="a" * 40, canonical_strategy_ids=("CAS_SW_RUNTIME_V2_1514",))
     payload = json.loads(path.read_text())
     assert payload["session_id"] == "s1"
     assert payload["source_sha"] == "a" * 40
     assert len(payload["consumers"]) == len(CANONICAL_CONSUMERS)
     assert {row["health"] for row in payload["consumers"]} == {"PENDING"}
     assert all(row["execution_capable"] is False for row in payload["consumers"])
+    assert all(row["execution_inert"] is True for row in payload["consumers"])
+    assert payload["canonical_strategy_ids"] == ["CAS_SW_RUNTIME_V2_1514"]

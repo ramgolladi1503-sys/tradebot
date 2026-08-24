@@ -77,7 +77,10 @@ def prepare_current_session(
     runtime_root.mkdir(parents=True, exist_ok=True)
     validate_consumer_registry(CANONICAL_CONSUMERS)
     registry_path = runtime_root / "CONSUMERS.json"
-    write_consumer_registry(registry_path, session_id=session_id, source_sha=source_sha)
+    write_consumer_registry(
+        registry_path, session_id=session_id, source_sha=source_sha,
+        canonical_strategy_ids=("CAS_SW_RUNTIME_V2_1514",),
+    )
     write_strategy_registry(runtime_root / "STRATEGY_REGISTRY.json", session_id=session_id, source_sha=source_sha)
     write_sidecar_health(
         registry_path=Path(__file__).resolve().parents[1] / "docs" / "LIVE_PR_SIDECAR_REGISTRY.json",

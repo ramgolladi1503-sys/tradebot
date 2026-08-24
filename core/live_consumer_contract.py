@@ -72,7 +72,8 @@ def consumer_authority_snapshot() -> Mapping[str, object]:
     }
 
 
-def write_consumer_registry(path: str | Path, *, session_id: str, source_sha: str) -> None:
+def write_consumer_registry(path: str | Path, *, session_id: str, source_sha: str,
+                            canonical_strategy_ids: Iterable[str] = ()) -> None:
     """Emit the startup registry; health is proved separately by lifecycle evidence."""
     if not session_id or not source_sha:
         raise ValueError("consumer_registry_identity_missing")
@@ -87,11 +88,13 @@ def write_consumer_registry(path: str | Path, *, session_id: str, source_sha: st
                 "sha": source_sha,
                 "mode": "canonical-read-only",
                 "execution_capable": False,
+                "execution_inert": True,
                 "health": "PENDING",
             }
             for name in CANONICAL_CONSUMERS
         ],
         **consumer_authority_snapshot(),
+        "canonical_strategy_ids": sorted({str(item) for item in canonical_strategy_ids if str(item).strip()}),
     }
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
