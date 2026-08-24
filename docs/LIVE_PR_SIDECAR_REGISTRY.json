@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "canonical_data_input": "current-main read-only runtime evidence",
+  "manifest_contract": "core.live_session_manifest.LiveSessionManifest",
+  "sidecar_contract": "core.live_sidecar_contract.SidecarSpec",
   "sidecars": [],
   "policy": {
     "exact_pr_sha_required": true,
