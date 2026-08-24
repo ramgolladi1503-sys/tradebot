@@ -24,6 +24,9 @@ from .detector import (
 
 HORIZONS = (1, 3, 5, 10, 15, 30)
 PRIMARY_HORIZON_MINUTES = 30
+KEY_SECONDARY_HORIZON_MINUTES = 10
+PRIMARY_P_VALUE_MAX = 0.05
+SECONDARY_P_VALUE_MAX = 0.05
 
 
 @dataclass(frozen=True)
@@ -68,9 +71,13 @@ class ComparisonSummary:
     event_primary_rate: float
     control_primary_rate: float
     primary_risk_difference: float
+    primary_event_only_successes: int
+    primary_control_only_successes: int
+    primary_mcnemar_exact_p_value: float
     event_median_directional_bps: Mapping[int, float | None]
     control_median_directional_bps: Mapping[int, float | None]
     directional_uplift_bps: Mapping[int, float | None]
+    directional_sign_test_p_value: Mapping[int, float | None]
     event_median_mfe_bps: float
     control_median_mfe_bps: float
     event_median_mae_bps: float
@@ -322,25 +329,65 @@ def _median(values: Sequence[float]) -> float | None:
     return statistics.median(clean) if clean else None
 
 
+def _binomial_mass(n: int, k: int) -> float:
+    return math.comb(n, k) / (2.0 ** n)
+
+
+def _mcnemar_exact_two_sided(event_only: int, control_only: int) -> float:
+    """Exact paired binary test under equal discordant-pair probability."""
+    discordant = event_only + control_only
+    if discordant == 0:
+        return 1.0
+    lower = min(event_only, control_only)
+    tail = sum(_binomial_mass(discordant, k) for k in range(lower + 1))
+    return min(1.0, 2.0 * tail)
+
+
+def _sign_test_one_sided_positive(differences: Sequence[float]) -> float | None:
+    nonzero = [float(value) for value in differences if abs(float(value)) > 1e-12]
+    if not nonzero:
+        return None
+    positive = sum(value > 0 for value in nonzero)
+    n = len(nonzero)
+    if positive <= n / 2:
+        return 1.0
+    return sum(_binomial_mass(n, k) for k in range(positive, n + 1))
+
+
 def summarize_pairs(pairs: Sequence[MatchedPair]) -> ComparisonSummary:
     event = [p.event for p in pairs]
     control = [p.control for p in pairs]
     event_rate = sum(o.primary_success for o in event) / len(event) if event else 0.0
     control_rate = sum(o.primary_success for o in control) / len(control) if control else 0.0
+    event_only = sum(p.event.primary_success and not p.control.primary_success for p in pairs)
+    control_only = sum(p.control.primary_success and not p.event.primary_success for p in pairs)
 
     event_medians: dict[int, float | None] = {}
     control_medians: dict[int, float | None] = {}
-    uplifts: dict[int, float | None] = {}
+    paired_uplifts: dict[int, float | None] = {}
+    sign_p_values: dict[int, float | None] = {}
     for horizon in HORIZONS:
-        ev = _median(
-            [o.directional_returns_bps[horizon] for o in event if o.directional_returns_bps[horizon] is not None]
-        )
-        co = _median(
-            [o.directional_returns_bps[horizon] for o in control if o.directional_returns_bps[horizon] is not None]
-        )
-        event_medians[horizon] = ev
-        control_medians[horizon] = co
-        uplifts[horizon] = ev - co if ev is not None and co is not None else None
+        event_values = [
+            o.directional_returns_bps[horizon]
+            for o in event
+            if o.directional_returns_bps[horizon] is not None
+        ]
+        control_values = [
+            o.directional_returns_bps[horizon]
+            for o in control
+            if o.directional_returns_bps[horizon] is not None
+        ]
+        paired_differences = [
+            float(p.event.directional_returns_bps[horizon])
+            - float(p.control.directional_returns_bps[horizon])
+            for p in pairs
+            if p.event.directional_returns_bps[horizon] is not None
+            and p.control.directional_returns_bps[horizon] is not None
+        ]
+        event_medians[horizon] = _median(event_values)
+        control_medians[horizon] = _median(control_values)
+        paired_uplifts[horizon] = _median(paired_differences)
+        sign_p_values[horizon] = _sign_test_one_sided_positive(paired_differences)
 
     return ComparisonSummary(
         event_count=len(event),
@@ -348,9 +395,13 @@ def summarize_pairs(pairs: Sequence[MatchedPair]) -> ComparisonSummary:
         event_primary_rate=event_rate,
         control_primary_rate=control_rate,
         primary_risk_difference=event_rate - control_rate,
+        primary_event_only_successes=event_only,
+        primary_control_only_successes=control_only,
+        primary_mcnemar_exact_p_value=_mcnemar_exact_two_sided(event_only, control_only),
         event_median_directional_bps=event_medians,
         control_median_directional_bps=control_medians,
-        directional_uplift_bps=uplifts,
+        directional_uplift_bps=paired_uplifts,
+        directional_sign_test_p_value=sign_p_values,
         event_median_mfe_bps=_median([o.mfe_bps for o in event]) or 0.0,
         control_median_mfe_bps=_median([o.mfe_bps for o in control]) or 0.0,
         event_median_mae_bps=_median([o.mae_bps for o in event]) or 0.0,
@@ -364,12 +415,17 @@ def support_gate(summary: ComparisonSummary, *, oos: bool = False) -> bool:
         return False
     if summary.primary_risk_difference < 0.05:
         return False
+    if summary.primary_mcnemar_exact_p_value > PRIMARY_P_VALUE_MAX:
+        return False
     required_horizons = (5, 10, 15)
-    return all(
+    if not all(
         summary.directional_uplift_bps[h] is not None
         and summary.directional_uplift_bps[h] > 0
         for h in required_horizons
-    )
+    ):
+        return False
+    key_p = summary.directional_sign_test_p_value[KEY_SECONDARY_HORIZON_MINUTES]
+    return key_p is not None and key_p <= SECONDARY_P_VALUE_MAX
 
 
 def classify_support(
