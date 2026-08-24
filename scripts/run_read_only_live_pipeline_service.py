@@ -26,9 +26,8 @@ def main() -> int:
     payload = json.loads(authority_path.read_text(encoding="utf-8"))
     if payload.get("session_date") != session_date or payload.get("source_sha") != source_sha:
         raise RuntimeError("CURRENT_SUBSCRIPTION_AUTHORITY_MISMATCH")
-    tokens = sorted({int(value) for value in payload.get("subscription_tokens") or () if int(value) > 0})
-    if not tokens:
-        raise RuntimeError("CURRENT_SUBSCRIPTION_TOKENS_MISSING")
+    from core.read_only_subscription_authority import validate_subscription_authority_payload
+    tokens = validate_subscription_authority_payload(payload, session_date=session_date, source_sha=source_sha)
     from core.read_only_live_pipeline import run_pipeline
     return run_pipeline(
         session_date=session_date, runtime_root=runtime_root, token_path=token_path,
@@ -38,4 +37,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

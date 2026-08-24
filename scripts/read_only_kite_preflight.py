@@ -19,7 +19,9 @@ def main() -> int:
     parser.add_argument("--runtime-root", type=Path)
     args = parser.parse_args()
     from core.auth import get_kite_client
+    from core.live_consumer_contract import CANONICAL_CONSUMERS
     from core.read_only_instrument_authority import build_instrument_authority
+    from core.read_only_subscription_authority import build_subscription_authority
 
     client = get_kite_client(repo_root_path=REPO_ROOT)
     client.profile()
@@ -44,27 +46,12 @@ def main() -> int:
             source_sha=str(__import__("os").environ.get("TRADEBOT_COMMIT_SHA") or ""),
             output_root=args.runtime_root,
         )
-        tokens = sorted({
-            int(row["instrument_token"])
-            for row in all_rows
-            if str(row.get("exchange") or "") == "NSE"
-            and str(row.get("name") or "").upper() in {"NIFTY", "BANKNIFTY"}
-            and int(row.get("instrument_token") or 0) > 0
-        })
-        if not tokens:
-            raise RuntimeError("CURRENT_INDEX_SUBSCRIPTION_TOKENS_MISSING")
-        (args.runtime_root / "subscription_tokens.json").write_text(
-            json.dumps({
-                "schema_version": 1,
-                "session_date": date.today().isoformat(),
-                "source_sha": str(__import__("os").environ.get("TRADEBOT_COMMIT_SHA") or ""),
-                "instrument_authority_sha256": authority["raw_instrument_sha256"],
-                "subscription_tokens": tokens,
-                "read_only": True,
-                "broker_write_authority": False,
-                "order_authority": False,
-            }, sort_keys=True, indent=2) + "\n",
-            encoding="utf-8",
+        build_subscription_authority(
+            rows=all_rows, session_id=str(__import__("os").environ.get("RUN_ID") or f"kite-read-only-{date.today().isoformat()}"),
+            session_date=date.today().isoformat(),
+            source_sha=str(__import__("os").environ.get("TRADEBOT_COMMIT_SHA") or ""),
+            instrument_authority=authority, consumer_registry=CANONICAL_CONSUMERS,
+            output_path=args.runtime_root / "subscription_tokens.json",
         )
     print("BROKER_WRITE_AUTHORITY=false")
     print("ORDER_AUTHORITY=false")
