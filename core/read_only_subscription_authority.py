@@ -10,12 +10,12 @@ from typing import Any, Iterable, Mapping
 
 
 INDEX_REQUIREMENTS = (
-    {"consumer_id": "regime", "identity": "NIFTY", "segment": "NSE", "mode": "quote", "reason": "regime/core index input"},
-    {"consumer_id": "regime", "identity": "BANKNIFTY", "segment": "NSE", "mode": "quote", "reason": "regime/core index input"},
-    {"consumer_id": "strategies", "identity": "NIFTY", "segment": "NSE", "mode": "quote", "reason": "canonical strategy market input"},
-    {"consumer_id": "strategies", "identity": "BANKNIFTY", "segment": "NSE", "mode": "quote", "reason": "canonical strategy market input"},
-    {"consumer_id": "cas_v2", "identity": "NIFTY", "segment": "NSE", "mode": "quote", "reason": "CAS_SW_RUNTIME_V2_1514 index input"},
-    {"consumer_id": "cas_v2", "identity": "BANKNIFTY", "segment": "NSE", "mode": "quote", "reason": "CAS_SW_RUNTIME_V2_1514 index input"},
+    {"consumer_id": "regime", "identity": "NIFTY", "required_symbols": ("NIFTY", "NIFTY 50"), "segment": "NSE", "mode": "quote", "reason": "regime/core index input"},
+    {"consumer_id": "regime", "identity": "BANKNIFTY", "required_symbols": ("BANKNIFTY", "NIFTY BANK"), "segment": "NSE", "mode": "quote", "reason": "regime/core index input"},
+    {"consumer_id": "strategies", "identity": "NIFTY", "required_symbols": ("NIFTY", "NIFTY 50"), "segment": "NSE", "mode": "quote", "reason": "canonical strategy market input"},
+    {"consumer_id": "strategies", "identity": "BANKNIFTY", "required_symbols": ("BANKNIFTY", "NIFTY BANK"), "segment": "NSE", "mode": "quote", "reason": "canonical strategy market input"},
+    {"consumer_id": "cas_v2", "identity": "NIFTY", "required_symbols": ("NIFTY", "NIFTY 50"), "segment": "NSE", "mode": "quote", "reason": "CAS_SW_RUNTIME_V2_1514 index input"},
+    {"consumer_id": "cas_v2", "identity": "BANKNIFTY", "required_symbols": ("BANKNIFTY", "NIFTY BANK"), "segment": "NSE", "mode": "quote", "reason": "CAS_SW_RUNTIME_V2_1514 index input"},
 )
 
 
@@ -42,13 +42,11 @@ def build_subscription_authority(*, rows: list[Mapping[str, Any]], session_id: s
     missing_consumers = sorted({item["consumer_id"] for item in requirements} - expected_consumers)
     if missing_consumers:
         raise ValueError("CURRENT_SUBSCRIPTION_AUTHORITY_CONSUMER_REGISTRY_MISMATCH:" + ",".join(missing_consumers))
-    matches: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
-    for row in rows:
-        matches.setdefault(_row_identity(row), []).append(row)
     token_rows: dict[int, dict[str, Any]] = {}
     for requirement in requirements:
-        key = (requirement["identity"], requirement["segment"])
-        candidates = [row for row in matches.get(key, []) if int(row.get("instrument_token") or 0) > 0]
+        candidates = [row for row in rows if _row_identity(row)[1] == requirement["segment"]
+                      and _row_identity(row)[0] in requirement["required_symbols"]
+                      and int(row.get("instrument_token") or 0) > 0]
         if not candidates:
             raise ValueError("CURRENT_SUBSCRIPTION_AUTHORITY_REQUIRED_SYMBOL_MISSING:" + requirement["identity"])
         if len({int(row["instrument_token"]) for row in candidates}) != 1:
