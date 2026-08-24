@@ -7409,18 +7409,6 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         logger.error("depth_ws_not_available")
         return False
-    if not cfg.KITE_API_KEY:
-        _RUNTIME_STATE = "AUTH_BLOCKED"
-        _LAST_RUNTIME_ERROR = "missing_api_key"
-        _persist_runtime_snapshot_row(
-            ws_connected=False,
-            source="start_depth_ws:auth_blocked",
-            runtime_state="AUTH_BLOCKED",
-            last_error=_LAST_RUNTIME_ERROR,
-            intended_tokens_count=_INTENDED_TOKEN_COUNT,
-        )
-        logger.error("depth_ws_missing_api_key")
-        return False
     try:
         cwd = Path.cwd()
         root = repo_root()
