@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "canonical_data_input": "current-main read-only runtime evidence",
+  "sidecars": [],
+  "policy": {
+    "exact_pr_sha_required": true,
+    "order_authority": false,
+    "broker_write_authority": false,
+    "canonical_feed_owner_count": 1,
+    "failure_isolation": true
+  }
+}

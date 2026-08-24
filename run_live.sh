@@ -3,12 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-TOKEN_PATH="$ROOT_DIR/.runtime/kite_access_token"
+TOKEN_PATH="${TRADEBOT_ACCESS_TOKEN_PATH:-$HOME/.tradebot/credentials/kite_access_token}"
+READ_ONLY_OBSERVATION=0
 
 echo "[RUN_LIVE] ROOT_DIR=$ROOT_DIR"
 echo "[RUN_LIVE] TOKEN_PATH=$TOKEN_PATH"
 
-export DATA_ROOT="${DATA_ROOT:-$ROOT_DIR/.runtime}"
+export DATA_ROOT="${DATA_ROOT:-${TRADEBOT_EXTERNAL_RUNTIME_ROOT:-/Volumes/TradeBotData/tradebot-os/live/current-main}}"
 export DESKS_ROOT="${DESKS_ROOT:-$DATA_ROOT/desks}"
 export LOGS_ROOT="${LOGS_ROOT:-$DATA_ROOT/logs}"
 export REPORTS_ROOT="${REPORTS_ROOT:-$DATA_ROOT/reports}"
@@ -36,8 +37,10 @@ for arg in "$@"; do
     --force-login) FORCE_LOGIN=1 ;;
     --login-only) LOGIN_ONLY=1 ;;
     --validate-only) VALIDATE_ONLY=1 ;;
+    --read-only-observation) READ_ONLY_OBSERVATION=1 ;;
+    --preflight-only) VALIDATE_ONLY=1 ;;
     -h|--help)
-      echo "Usage: ./run_live.sh [--skip-login] [--force-login] [--login-only] [--validate-only]"
+      echo "Usage: ./run_live.sh [--skip-login] [--force-login] [--login-only] [--validate-only|--preflight-only|--read-only-observation]"
       echo "  --skip-login   Do not run autologin; just validate token and start bot"
       echo "  --force-login  Always run autologin before starting bot"
       echo "  --login-only   Run autologin and final token validation, then exit"
@@ -195,8 +198,16 @@ if [[ "$FORCE_LOGIN" -eq 1 && "$SKIP_LOGIN" -eq 1 ]]; then
 fi
 
 if [[ -z "${KITE_API_KEY:-}" ]]; then
-  echo "[RUN_LIVE] ERROR: KITE_API_KEY is not set in environment."
-  echo "          Export it (or set in your shell profile) and re-run."
+  if [[ -r "${TRADEBOT_KITE_CREDENTIAL_FILE:-$HOME/.tradebot/credentials/kite_app.env}" ]]; then
+    # The helper validates and exports only the two allow-listed variables;
+    # it never prints values or evaluates arbitrary shell content.
+    source "$ROOT_DIR/scripts/live_credentials.sh"
+  fi
+fi
+
+if [[ -z "${KITE_API_KEY:-}" ]]; then
+  echo "[RUN_LIVE] ERROR: governed KITE_API_KEY binding is missing."
+  echo "          Configure the private credential file or an approved environment binding."
   exit 1
 fi
 
@@ -380,6 +391,25 @@ fi
 export TRADING_MODE="LIVE"
 export EXECUTION_MODE="LIVE"
 export LIVE_BROKER_ADAPTER_ACTIVE="${LIVE_BROKER_ADAPTER_ACTIVE:-1}"
+if [[ "$READ_ONLY_OBSERVATION" -eq 1 ]]; then
+  export TRADING_MODE=SIM
+  export EXECUTION_MODE=SIM
+  export TRADEBOT_MODE=SIM
+  export LIVE_AUDIT_ONLY=1
+  export TRADEBOT_READ_ONLY=true
+  export LIVE_BROKER_ADAPTER_ACTIVE=0
+  export ALLOW_LIVE_ORDERS=0
+  export AUTO_TRADE=0
+  export AUTO_ORDER=0
+  export LIVE_TRADING_ENABLED=false
+  export PAPER_TRADING_ENABLED=false
+  export BROKER_WRITE_AUTHORITY=false
+  export ORDER_AUTHORITY=false
+  export PAPER_AUTHORIZED=false
+  export LIVE_EXECUTION_AUTHORIZED=false
+  export MANUAL_APPROVAL_REQUIRED=1
+  echo "[RUN_LIVE] READ_ONLY_OBSERVATION enforced; order authority disabled."
+fi
 resolve_live_predictor_startup_mode
 
 echo "[RUN_LIVE] exported KITE_ACCESS_TOKEN len=${#KITE_ACCESS_TOKEN} tail4=${KITE_ACCESS_TOKEN: -4}"
