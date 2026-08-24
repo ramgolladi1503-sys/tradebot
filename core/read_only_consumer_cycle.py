@@ -14,6 +14,7 @@ from typing import Any, Mapping
 from core.live_candidate_contract import candidate_from_mapping
 from core.live_ranking_contract import rank_advisory_candidates
 from core.advisory_queue_contract import append_advisory
+from core.read_only_option_eligibility import build_option_surface, evaluate_candidate_eligibility
 
 
 CONSUMERS = (
@@ -76,18 +77,40 @@ def run_consumer_cycle(
     result["consumers"]["candidate_pool"] = _state(
         "PASS" if valid_candidates else "PENDING", candidate_count=len(valid_candidates), rejected_count=rejected,
     )
-    result["consumers"]["option_surface"] = _state("PENDING", reason="current_option_surface_evidence_missing")
-    result["consumers"]["eligibility"] = _state("PENDING", reason="option_surface_not_ready")
-
+    option_rows = runtime_outputs.get("option_surface")
+    option_evidence_by_candidate = option_rows if isinstance(option_rows, Mapping) else {}
+    surfaces = [
+        build_option_surface(
+            candidate=candidate,
+            option_evidence=option_evidence_by_candidate.get(candidate["candidate_id"]),
+        )
+        for candidate in valid_candidates
+    ]
+    option_ready_count = sum(surface["verdict"] == "PASS" for surface in surfaces)
+    result["consumers"]["option_surface"] = _state(
+        "PASS" if valid_candidates and option_ready_count == len(valid_candidates) else "PENDING",
+        reason=None if valid_candidates and option_ready_count == len(valid_candidates) else "current_option_surface_evidence_missing",
+        candidate_count=len(valid_candidates), ready_count=option_ready_count,
+    )
+    eligibility_rows = [
+        evaluate_candidate_eligibility(candidate=candidate, option_surface=surface, regime=regime)
+        for candidate, surface in zip(valid_candidates, surfaces)
+    ]
+    eligible_candidates = [
+        candidate for candidate, eligibility in zip(valid_candidates, eligibility_rows)
+        if eligibility.get("status") == "eligible"
+    ]
+    result["consumers"]["eligibility"] = _state(
+        "PASS" if eligible_candidates else "PENDING",
+        reason=None if eligible_candidates else "no_candidates_passed_common_eligibility",
+        candidate_count=len(valid_candidates), eligible_count=len(eligible_candidates),
+    )
     ranked: list[dict[str, Any]] = []
-    if valid_candidates:
+    if eligible_candidates:
         try:
-            ranked = rank_advisory_candidates(valid_candidates)
+            ranked = rank_advisory_candidates(eligible_candidates)
         except (TypeError, ValueError):
             ranked = []
-    result["consumers"]["eligibility"] = _state(
-        "PENDING", reason="eligibility_requires_option_surface", candidate_count=len(valid_candidates),
-    )
     result["consumers"]["ranking"] = _state(
         "PASS" if ranked else "PENDING", reason=None if ranked else "no_rankable_candidates",
         ranked_count=len(ranked),
@@ -115,4 +138,3 @@ def run_consumer_cycle(
     temporary.write_text(json.dumps(result, sort_keys=True, indent=2, default=str) + "\n", encoding="utf-8")
     temporary.replace(destination)
     return result
-
