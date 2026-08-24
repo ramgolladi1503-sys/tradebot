@@ -19,7 +19,15 @@ from typing import Any, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
 from .detector import Bar, DEFAULT_CONFIG, detect_failed_discoveries
-from .evaluation import HORIZONS, classify_support, match_controls, summarize_pairs
+from .evaluation import (
+    HORIZONS,
+    KEY_SECONDARY_HORIZON_MINUTES,
+    PRIMARY_P_VALUE_MAX,
+    SECONDARY_P_VALUE_MAX,
+    classify_support,
+    match_controls,
+    summarize_pairs,
+)
 
 IST = ZoneInfo("Asia/Kolkata")
 EXPECTED_PARTIAL_CORPUS_SHA256 = "8120d53a270ef2d5ebe1e94e800c8cd289df6e4081d7fa019e7c9ca0bd5bd92b"
@@ -150,6 +158,7 @@ def _jsonable_summary(summary: Any) -> dict[str, Any]:
         "event_median_directional_bps",
         "control_median_directional_bps",
         "directional_uplift_bps",
+        "directional_sign_test_p_value",
     ):
         payload[field] = {str(k): v for k, v in payload[field].items()}
     return payload
@@ -198,8 +207,6 @@ def run(
         if not known_partial_identity_ok:
             raise ValueError("KNOWN_PARTIAL_CORPUS_SESSION_IDENTITY_MISMATCH")
 
-    # A DEV-only run can reject or expose insufficient support, but it cannot
-    # prove robustness because negative controls/OOS/oracle/holdout are absent.
     if preliminary_verdict == "ROBUSTLY_SUPPORTED":
         raise AssertionError("DEV_RUN_MUST_NOT_EMIT_ROBUSTLY_SUPPORTED")
 
@@ -225,7 +232,10 @@ def run(
         "primary_support_threshold": {
             "minimum_dev_matched_pairs": 100,
             "minimum_primary_risk_difference": 0.05,
-            "required_positive_directional_uplift_horizons_minutes": [5, 10, 15],
+            "primary_mcnemar_exact_two_sided_p_max": PRIMARY_P_VALUE_MAX,
+            "required_positive_paired_directional_uplift_horizons_minutes": [5, 10, 15],
+            "key_secondary_horizon_minutes": KEY_SECONDARY_HORIZON_MINUTES,
+            "key_secondary_one_sided_sign_test_p_max": SECONDARY_P_VALUE_MAX,
         },
         "secondary_horizons_minutes": list(HORIZONS),
         "claim_boundary": {
