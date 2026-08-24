@@ -4,7 +4,7 @@ import math
 import statistics
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from research.vwap_auction_state_v1.model import (
     Bar,
@@ -66,8 +66,8 @@ def _structural_exit(
         else:
             stop_hit = bar.high >= signal.structural_stop
             target_hit = bar.low <= signal.structural_target
-        # One-minute ambiguity is resolved adversely. Tick-level truth may replace
-        # this convention in a later separately frozen evaluator.
+        # Resolve one-minute path ambiguity against the strategy. Tick truth may
+        # replace this only in a separately frozen evaluator/version.
         if stop_hit:
             return bar.ts, "STRUCTURAL_STOP"
         if target_hit:
@@ -85,22 +85,30 @@ def _exit_bid(
 ) -> OptionQuote | None:
     candidates = [q for q in quotes if q.symbol == selected.symbol and q.ts >= exit_ts]
     candidates.sort(key=lambda q: q.ts)
-    for q in candidates:
-        q.validate()
-        delay = (q.ts - exit_ts).total_seconds()
+    for quote in candidates:
+        quote.validate()
+        delay = (quote.ts - exit_ts).total_seconds()
         if delay > cfg.option_max_quote_staleness_seconds:
             return None
-        if q.spread_pct > cfg.option_max_spread_pct:
+        if quote.spread_pct > cfg.option_max_spread_pct:
             continue
-        return q
+        return quote
     return None
 
 
 def evaluate_session(
     bars: Sequence[Bar],
     quotes: Sequence[OptionQuote],
+    *,
+    option_reference_by_signal: Mapping[datetime, float],
     cfg: FormulaConfig = DEFAULT_CONFIG,
 ) -> SessionEvaluation:
+    """Evaluate one session using futures for signal truth and spot for option moneyness.
+
+    `option_reference_by_signal` must contain a contemporaneous NIFTY spot/index
+    reference for every signal timestamp. Futures price is deliberately not used
+    as an ATM-strike proxy; missing spot truth fails closed.
+    """
     cfg.validate()
     signals = generate_signals(bars, cfg)
     trades: list[TradeOutcome] = []
@@ -110,7 +118,11 @@ def evaluate_session(
         if last_exit is not None and signal.ts <= last_exit:
             rejects.append(RejectedSignal(signal.ts, signal.setup_type.value, signal.direction, "OVERLAPPING_POSITION"))
             continue
-        selected = select_option_contract(signal, quotes, signal.entry_reference, cfg)
+        spot_reference = option_reference_by_signal.get(signal.ts)
+        if spot_reference is None or not math.isfinite(float(spot_reference)) or float(spot_reference) <= 0:
+            rejects.append(RejectedSignal(signal.ts, signal.setup_type.value, signal.direction, "NO_CAUSAL_OPTION_REFERENCE_PRICE"))
+            continue
+        selected = select_option_contract(signal, quotes, float(spot_reference), cfg)
         if selected is None:
             rejects.append(RejectedSignal(signal.ts, signal.setup_type.value, signal.direction, "NO_EXECUTABLE_CONTRACT"))
             continue
@@ -155,20 +167,20 @@ def summarize(trades: Sequence[TradeOutcome]) -> Summary:
     losses = [x for x in pnl if x < 0]
     gross_profit = sum(wins)
     gross_loss = abs(sum(losses))
-    pf = gross_profit / gross_loss if gross_loss > 0 else (math.inf if gross_profit > 0 else None)
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else (math.inf if gross_profit > 0 else None)
     equity = 0.0
     peak = 0.0
-    max_dd = 0.0
+    max_drawdown = 0.0
     for value in pnl:
         equity += value
         peak = max(peak, equity)
-        max_dd = max(max_dd, peak - equity)
+        max_drawdown = max(max_drawdown, peak - equity)
     return Summary(
         trade_count=len(pnl),
         win_rate=len(wins) / len(pnl),
         avg_option_points=sum(pnl) / len(pnl),
         median_option_points=statistics.median(pnl),
         total_option_points=sum(pnl),
-        profit_factor=pf,
-        max_drawdown_points=max_dd,
+        profit_factor=profit_factor,
+        max_drawdown_points=max_drawdown,
     )
