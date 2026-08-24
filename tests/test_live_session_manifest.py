@@ -3,7 +3,7 @@ import json
 import pytest
 
 from core.live_session_manifest import LiveSessionManifest, load_session_manifest, write_session_manifest
-from core.live_sidecar_contract import SidecarSpec, classify_touches, sidecar_health
+from core.live_sidecar_contract import SidecarSpec, classify_touches, load_sidecar_registry, sidecar_health
 
 
 def _manifest():
@@ -44,3 +44,7 @@ def test_sidecar_failure_is_isolated_and_read_only():
     assert health["STATUS"] == "FAILED_ISOLATED"
     assert health["CAN_MUTATE_MAIN"] is False
     assert health["BROKER_WRITE_AUTHORITY"] is False
+
+
+def test_sidecar_registry_policy_is_validated():
+    assert load_sidecar_registry("docs/LIVE_PR_SIDECAR_REGISTRY.json") == ()
