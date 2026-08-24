@@ -91,6 +91,9 @@ def _archive_existing_runtime(root: Path) -> Path | None:
 
 
 def _run_current_authority_preflight(*, root: Path, source_sha: str) -> list[int]:
+    existing = _load_existing_preflight(root=root, source_sha=source_sha)
+    if existing is not None:
+        return existing
     env = dict(os.environ)
     env["TRADEBOT_COMMIT_SHA"] = source_sha
     env["TRADEBOT_RUNTIME_ROOT"] = str(root)
@@ -105,6 +108,32 @@ def _run_current_authority_preflight(*, root: Path, source_sha: str) -> list[int
     tokens = payload.get("tokens")
     if not isinstance(tokens, list) or not tokens or any(not isinstance(token, int) or token <= 0 for token in tokens):
         raise RuntimeError("CURRENT_SESSION_SUBSCRIPTION_TOKENS_INVALID")
+    return tokens
+
+
+def _load_existing_preflight(*, root: Path, source_sha: str) -> list[int] | None:
+    """Reuse a validated same-session authority instead of rebuilding it."""
+    instrument_path = root / "instrument_authority_manifest.json"
+    subscription_path = root / "subscription_tokens.json"
+    if not instrument_path.is_file() or not subscription_path.is_file():
+        return None
+    try:
+        instrument = json.loads(instrument_path.read_text(encoding="utf-8"))
+        subscription = json.loads(subscription_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (
+        instrument.get("session_date") != date.today().isoformat()
+        or instrument.get("source_sha") != source_sha
+        or instrument.get("verdict") != "PASS"
+        or subscription.get("session_date") != date.today().isoformat()
+        or subscription.get("source_sha") != source_sha
+        or subscription.get("verdict") != "PASS"
+    ):
+        return None
+    tokens = subscription.get("tokens")
+    if not isinstance(tokens, list) or not tokens or any(not isinstance(token, int) or token <= 0 for token in tokens):
+        return None
     return tokens
 
 

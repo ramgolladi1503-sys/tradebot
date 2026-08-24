@@ -37,6 +37,18 @@ def test_launcher_forbidden_startup_references_are_not_in_launcher():
     assert "main.py" not in source
 
 
+def test_launcher_reuses_valid_same_sha_preflight_without_rebuilding(tmp_path):
+    payload = {
+        "session_date": "2026-08-25",
+        "source_sha": "a" * 40,
+        "verdict": "PASS",
+        "tokens": [101, 202],
+    }
+    (tmp_path / "instrument_authority_manifest.json").write_text(json.dumps(payload))
+    (tmp_path / "subscription_tokens.json").write_text(json.dumps(payload))
+    assert launcher._run_current_authority_preflight(root=tmp_path, source_sha="a" * 40) == [101, 202]
+
+
 def test_launcher_safety_metadata_fails_closed(monkeypatch, tmp_path):
     import core.kite_read_only_observation_runtime as runtime
     monkeypatch.setattr(
