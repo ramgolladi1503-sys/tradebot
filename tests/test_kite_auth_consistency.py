@@ -69,6 +69,7 @@ def test_profile_fail_blocks_persist_and_ticker_start(monkeypatch):
     monkeypatch.setattr(orchestrator_mod.kite_client, "ensure", lambda: None)
     monkeypatch.setattr(orchestrator_mod.kite_client, "kite", _KiteFailProfile("api_key_1234"), raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
+    monkeypatch.setattr(orchestrator_mod, "_validated_depth_ws_startup_snapshot", lambda: ({"valid": True, "runtime_state": "RUNNING", "ws_connected": True}, 0.0))
 
     with pytest.raises(RuntimeError, match="kite_depth_ws_profile_failed"):
         orchestrator_mod.Orchestrator._start_depth_ws(object())
@@ -128,6 +129,7 @@ def test_profile_ok_persists_and_ticker_allowed(monkeypatch):
     monkeypatch.setattr(ws, "build_depth_subscription_tokens", lambda symbols: ([101], [{"symbol": "NIFTY", "count": 1}]))
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
     monkeypatch.setattr(cfg, "SYMBOLS", ["NIFTY"], raising=False)
+    monkeypatch.setattr(orchestrator_mod, "_validated_depth_ws_startup_snapshot", lambda: ({"valid": True, "runtime_state": "RUNNING", "ws_connected": True}, 0.0))
 
     orchestrator_mod.Orchestrator._start_depth_ws(object())
     assert start_mock.call_count == 1
@@ -166,6 +168,7 @@ def test_start_depth_ws_does_not_seed_ohlc(monkeypatch):
     monkeypatch.setattr(auth_health, "get_kite_auth_health", lambda force=True: {"ok": True, "user_id": "ABCD1234"})
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
     monkeypatch.setattr(cfg, "SYMBOLS", ["NIFTY"], raising=False)
+    monkeypatch.setattr(orchestrator_mod, "_validated_depth_ws_startup_snapshot", lambda: ({"valid": True, "runtime_state": "RUNNING", "ws_connected": True}, 0.0))
 
     orchestrator_mod.Orchestrator._start_depth_ws(object())
     assert call_order == [("start", (101,), True)]
