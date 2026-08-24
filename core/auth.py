@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import subprocess
 import threading
 from pathlib import Path
 from typing import Tuple
@@ -15,6 +16,24 @@ logger = logging.getLogger(__name__)
 _CREDENTIAL_LOCK = threading.Lock()
 _ACTIVE_API_KEY = ""
 _ACTIVE_ACCESS_TOKEN = ""
+
+
+def _governed_launchctl_value(name: str) -> str:
+    """Read one existing launchd binding without persisting or logging it."""
+    if str(__import__("sys").platform) != "darwin":
+        return ""
+    if name not in {"KITE_API_KEY"}:
+        return ""
+    try:
+        result = subprocess.run(
+            ["launchctl", "getenv", name],
+            check=False, capture_output=True, text=True, timeout=2.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if result.returncode != 0:
+        return ""
+    return str(result.stdout or "").strip()
 
 
 def _tail4(value: str) -> str:
@@ -73,6 +92,8 @@ def _register_runtime_credentials(api_key: str, access_token: str) -> None:
 
 def get_kite_credentials(*, repo_root_path: Path | str | None = None) -> Tuple[str, str]:
     api_key = str(getattr(cfg, "KITE_API_KEY", "") or "").strip()
+    if not api_key:
+        api_key = _governed_launchctl_value("KITE_API_KEY")
     if not api_key:
         logger.error("kite_credentials_missing_api_key")
         raise RuntimeError("kite_api_key_missing")
