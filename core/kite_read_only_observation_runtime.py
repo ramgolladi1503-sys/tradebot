@@ -20,6 +20,7 @@ from core.read_only_live_evidence import (
     write_json_atomic,
 )
 from core.live_session_manifest import LiveSessionManifest, write_session_manifest
+from core.live_consumer_contract import CANONICAL_CONSUMERS, validate_consumer_registry
 
 
 UNSAFE_IMPORT_PREFIXES = (
@@ -383,10 +384,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         feed_state="STARTING",
         persistence_state="STARTING",
         subscription_count=len(tokens),
-        consumer_registry=(
-            "regime", "strategies", "cas_v2", "candidate_pool", "option_surface",
-            "eligibility", "ranking", "advisory_queue", "ui", "monitoring", "evidence",
-        ),
+        consumer_registry=validate_consumer_registry(CANONICAL_CONSUMERS),
     )
     write_session_manifest(output_root / "SESSION_MANIFEST.json", manifest)
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
