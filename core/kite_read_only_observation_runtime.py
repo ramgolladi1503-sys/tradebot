@@ -13,6 +13,7 @@ from typing import Any, Mapping
 
 from core.read_only_live_evidence import (
     MegIntervalScheduler,
+    count_jsonl,
     extract_candidate_rows,
     latest_completed_index_interval,
     persist_meg_cycle,
@@ -21,7 +22,7 @@ from core.read_only_live_evidence import (
 )
 from core.live_session_manifest import LiveSessionManifest, write_session_manifest
 from core.live_consumer_contract import CANONICAL_CONSUMERS, validate_consumer_registry, write_consumer_registry
-from core.live_runtime_artifacts import write_pending_runtime_artifacts
+from core.live_runtime_artifacts import write_pending_runtime_artifacts, write_session_exit_gate
 
 
 UNSAFE_IMPORT_PREFIXES = (
@@ -467,6 +468,15 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         )
         if not report["shutdown_drain_complete"]:
             raise RuntimeError("READ_ONLY_SHUTDOWN_DRAIN_INCOMPLETE")
+        write_session_exit_gate(
+            output_root, session_id=run_id, source_sha=producer_commit,
+            auth_valid=True,
+            feed_current=False,
+            persistence_advancing=count_jsonl(output_root / "meg_traversal_events.jsonl") > 0,
+            instrument_authority_current=bool(launch_plan.get("instrument_authority_sha256")),
+            shutdown_drain_complete=bool(report.get("shutdown_drain_complete")),
+            broker_order_calls=0,
+        )
         write_json_atomic(output_root / "process_identity.json", {
             "run_id": run_id, "pid": os.getpid(), "producer_sha": producer_commit,
             "session_root": str(output_root.resolve()), "state": "STOPPED",

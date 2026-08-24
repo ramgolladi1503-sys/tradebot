@@ -39,3 +39,43 @@ def write_pending_runtime_artifacts(
     if include_instrument_authority:
         _write(root / "instrument_authority_manifest.json", {**identity, "verdict": "PENDING", "instrument_master_sha": None, **authority})
     _write(root / "session_exit_gate.json", {**identity, "verdict": "PENDING", "live_observation_e2e_ready": False, **authority})
+
+
+def write_session_exit_gate(
+    output_root: str | Path, *, session_id: str, source_sha: str,
+    auth_valid: bool, feed_current: bool, persistence_advancing: bool,
+    instrument_authority_current: bool, shutdown_drain_complete: bool,
+    broker_order_calls: int = 0, strategies_ran: list[str] | None = None,
+    candidates_emitted: int = 0, candidates_rejected: int = 0,
+    option_surface_ran: bool = False, eligibility_ran: bool = False,
+    ranking_ran: bool = False, advisory_queue_healthy: bool = False,
+    cas_freeze: bool = False, cas_advisory_before_1515: bool = False,
+    sidecars_completed: list[str] | None = None,
+) -> dict[str, Any]:
+    """Write an evidence-shaped close gate without promoting unknown facts."""
+    order_calls = int(broker_order_calls)
+    core_ready = all((auth_valid, feed_current, persistence_advancing, instrument_authority_current))
+    e2e_ready = bool(core_ready and shutdown_drain_complete and order_calls == 0 and
+                     option_surface_ran and eligibility_ran and ranking_ran and
+                     advisory_queue_healthy and cas_freeze and cas_advisory_before_1515)
+    payload = {
+        "schema_version": 1, "session_id": session_id, "source_sha": source_sha,
+        "verdict": "PASS" if e2e_ready else "BLOCKED_RUNTIME_GATES_PENDING",
+        "live_observation_e2e_ready": e2e_ready,
+        "auth_valid": bool(auth_valid), "feed_current": bool(feed_current),
+        "persistence_advancing": bool(persistence_advancing),
+        "instrument_authority_current": bool(instrument_authority_current),
+        "regime_healthy": False, "strategies_ran": list(strategies_ran or []),
+        "candidates_emitted": int(candidates_emitted), "candidates_rejected": int(candidates_rejected),
+        "option_surface_ran": bool(option_surface_ran), "eligibility_ran": bool(eligibility_ran),
+        "ranking_ran": bool(ranking_ran), "advisory_queue_healthy": bool(advisory_queue_healthy),
+        "cas_freeze": bool(cas_freeze), "cas_advisory_before_1515": bool(cas_advisory_before_1515),
+        "sidecars_completed": list(sidecars_completed or []),
+        "shutdown_drain_complete": bool(shutdown_drain_complete),
+        "broker_order_calls": order_calls,
+        "broker_write_authority": False, "order_authority": False,
+        "paper_authorized": False, "live_execution_authorized": False,
+        "orders_placed": 0, "orders_modified": 0, "orders_cancelled": 0,
+    }
+    _write(Path(output_root) / "session_exit_gate.json", payload)
+    return payload
