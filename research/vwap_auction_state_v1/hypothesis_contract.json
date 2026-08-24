@@ -20,6 +20,8 @@
     "instrument": "NIFTY_OPTIONS",
     "allowed_directions": ["BUY_CALL", "BUY_PUT"],
     "option_selling_allowed": false,
+    "strike_moneyness_reference": "CONTEMPORANEOUS_NIFTY_SPOT_OR_INDEX_MARK_AT_SIGNAL_TIMESTAMP",
+    "futures_price_as_strike_reference_allowed": false,
     "entry_price": "NEXT_EXECUTABLE_ASK_AFTER_COMPLETED_SIGNAL_BAR",
     "exit_price": "FIRST_EXECUTABLE_BID_AT_OR_AFTER_STRUCTURAL_EXIT",
     "primary_dte_days": [1, 7],
