@@ -227,67 +227,81 @@ def accepted_discoveries(
 def detect_failed_discoveries(
     bars: Sequence[Bar], cfg: DetectorConfig = DEFAULT_CONFIG
 ) -> tuple[FailedDiscoveryEvent, ...]:
-    """Detect one causal failure event per accepted discovery episode.
+    """Detect at most one causal failure event per accepted discovery episode.
 
-    A failure requires a previously accepted discovery within the frozen lookback
-    and a completed failure bar that has moved inside |z| <= 0.75 while remaining
-    on the same side of VWAP. This avoids counting a bar that has already touched
-    the primary outcome target (VWAP) as the event itself.
+    Accepted discovery can persist across several consecutive bars. Those bars
+    are one episode, not independent observations. A failure consumes the whole
+    active episode; another failure cannot be emitted until a new accepted
+    discovery occurs after that failure.
     """
     cfg.validate()
     features = compute_features(bars, cfg)
     accepted = [_accepted_side(features, idx, cfg) for idx in range(len(features))]
     events: list[FailedDiscoveryEvent] = []
-    consumed_acceptance_indices: set[int] = set()
+
+    active_side: str | None = None
+    active_acceptance_idx: int | None = None
+    active_episode_start: int | None = None
+    episode_consumed = False
 
     for idx in range(cfg.minimum_history_bars, len(bars)):
         current = features[idx]
+        accepted_now = accepted[idx]
+
+        if accepted_now is not None:
+            # A post-failure accepted discovery starts a new episode, even if it
+            # is in the same direction as the previous consumed episode.
+            if active_side != accepted_now or episode_consumed or active_acceptance_idx is None:
+                active_side = accepted_now
+                active_episode_start = max(0, idx - cfg.acceptance_window + 1)
+                episode_consumed = False
+            active_acceptance_idx = idx
+            continue
+
+        if (
+            active_side is None
+            or active_acceptance_idx is None
+            or active_episode_start is None
+            or episode_consumed
+        ):
+            continue
+
+        if idx - active_acceptance_idx > cfg.failure_lookback_bars:
+            active_side = None
+            active_acceptance_idx = None
+            active_episode_start = None
+            episode_consumed = False
+            continue
+
         if current.sigma <= 1e-12:
             continue
 
-        prior_start = max(0, idx - cfg.failure_lookback_bars)
-        prior_indices = list(range(prior_start, idx))
-        prior_indices.reverse()
-
-        acceptance_idx: int | None = None
-        side: str | None = None
-        for candidate_idx in prior_indices:
-            candidate_side = accepted[candidate_idx]
-            if candidate_side is None or candidate_idx in consumed_acceptance_indices:
-                continue
-            acceptance_idx = candidate_idx
-            side = candidate_side
-            break
-        if acceptance_idx is None or side is None:
-            continue
-
         same_side_reentry = (
-            side == "UP"
-            and 0.0 < current.z <= cfg.failure_reentry_z_abs_max
+            active_side == "UP" and 0.0 < current.z <= cfg.failure_reentry_z_abs_max
         ) or (
-            side == "DOWN"
-            and -cfg.failure_reentry_z_abs_max <= current.z < 0.0
+            active_side == "DOWN" and -cfg.failure_reentry_z_abs_max <= current.z < 0.0
         )
         if not same_side_reentry:
             continue
 
-        episode_start = max(0, acceptance_idx - cfg.acceptance_window + 1)
-        episode = bars[episode_start : idx + 1]
+        episode = bars[active_episode_start : idx + 1]
         extreme = (
             max(bar.high for bar in episode)
-            if side == "UP"
+            if active_side == "UP"
             else min(bar.low for bar in episode)
         )
-        accepted_feature = features[acceptance_idx]
+        accepted_feature = features[active_acceptance_idx]
         events.append(
             FailedDiscoveryEvent(
                 ts=bars[idx].ts,
-                side=f"{side}_FAILED",
-                expected_rotation="DOWN_TO_VWAP" if side == "UP" else "UP_TO_VWAP",
+                side=f"{active_side}_FAILED",
+                expected_rotation=(
+                    "DOWN_TO_VWAP" if active_side == "UP" else "UP_TO_VWAP"
+                ),
                 event_close=bars[idx].close,
                 frozen_vwap=current.vwap,
                 frozen_discovery_extreme=extreme,
-                discovery_accepted_ts=bars[acceptance_idx].ts,
+                discovery_accepted_ts=bars[active_acceptance_idx].ts,
                 discovery_z=accepted_feature.z,
                 failure_z=current.z,
                 atr_pct=current.atr_pct,
@@ -295,7 +309,7 @@ def detect_failed_discoveries(
                 efficiency_at_acceptance=accepted_feature.efficiency,
             )
         )
-        consumed_acceptance_indices.add(acceptance_idx)
+        episode_consumed = True
 
     return tuple(events)
 
