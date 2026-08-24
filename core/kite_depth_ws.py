@@ -26,7 +26,7 @@ from core.tick_store import (
     write_flush_count,
     write_queue_depth,
 )
-from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
+from core.time_utils import IST_TZ, is_market_open_ist, now_utc_epoch, now_ist
 from core.runtime_boot_identity import stamp_runtime_payload
 from core.feed.artifact_provenance import stamp_feed_runtime_provenance
 from core.feed.feed_epoch import advance_feed_epoch, current_feed_epoch
@@ -44,6 +44,7 @@ from core.auth_manager import (
 from core.auth_health import get_kite_auth_health
 from core.feed_restart_guard import feed_restart_guard
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped, trip as trip_feed_breaker
+from core.market_session_state import derive_market_session_policy
 from core.market_data_monitor import get_feed_health_monitor, record_depth, record_tick
 from core.market_event_graph_live_observation_registry import (
     BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET,
@@ -7087,6 +7088,14 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     """
     global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
 
+    session_policy = derive_market_session_policy(now=datetime.fromtimestamp(time.time(), tz=IST_TZ))
+    if not session_policy.feed_restart_allowed:
+        _log_ws(
+            "FEED_RESTART_SKIPPED_MARKET_SESSION",
+            {"reason": reason, "market_state": session_policy.market_state},
+        )
+        return False
+
     _log_ws("feed_restart_required", {"reason": reason})
     try:
         identity = get_current_feed_session_identity()
@@ -8471,6 +8480,16 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     break
                 continue
             now_loop = float(time.time())
+            session_policy = derive_market_session_policy(
+                now=datetime.fromtimestamp(now_loop, tz=IST_TZ)
+            )
+            if not session_policy.feed_staleness_timer_active:
+                _STALE_STRIKES = 0
+                depth_stale_strikes = 0
+                no_tick_strikes = 0
+                silent_state["confirm_hits"] = 0
+                _emit_snapshot(now_loop)
+                continue
             if (now_loop - float(last_tick_watchdog_check)) >= max(0.5, tick_watchdog_poll_sec):
                 last_tick_watchdog_check = now_loop
                 hb = _run_db_tick_watchdog_cycle(

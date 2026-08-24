@@ -1,6 +1,8 @@
 import json
 import logging
+import os
 import time
+from datetime import date
 from pathlib import Path
 from typing import Any, Dict
 
@@ -34,8 +36,10 @@ def _save_state(state: Dict[str, Any]) -> None:
     STATE_PATH.write_text(json.dumps(state, indent=2))
 
 
-def is_tripped() -> bool:
+def is_tripped(*, session_date: str | None = None) -> bool:
     state = _load_state()
+    if state.get("tripped") and session_date and state.get("session_date") != session_date:
+        return False
     return bool(state.get("tripped"))
 
 
@@ -48,6 +52,8 @@ def trip(reason: str, meta: Dict[str, Any] | None = None) -> None:
         "tripped": True,
         "reason": reason,
         "ts_epoch": now,
+        "session_date": date.today().isoformat(),
+        "source_sha": str(os.environ.get("TRADEBOT_COMMIT_SHA") or ""),
         "meta": meta or {},
     }
     _save_state(state)

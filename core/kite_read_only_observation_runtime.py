@@ -23,6 +23,7 @@ from core.read_only_live_evidence import (
 from core.live_session_manifest import LiveSessionManifest, write_session_manifest
 from core.live_consumer_contract import CANONICAL_CONSUMERS, validate_consumer_registry, write_consumer_registry
 from core.live_runtime_artifacts import write_pending_runtime_artifacts, write_session_exit_gate
+from core.market_session_state import derive_market_session_policy
 
 
 UNSAFE_IMPORT_PREFIXES = (
@@ -406,6 +407,21 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             latest_runtime_outputs = produce_and_store_runtime_snapshots(
                 market_snapshot=None,
                 producer="kite_read_only_observation",
+            )
+            session_policy = derive_market_session_policy()
+            write_json_atomic(
+                output_root / "market_session_state.json",
+                {
+                    **session_policy.to_dict(),
+                    "source_sha": producer_commit,
+                    "session_id": run_id,
+                    "read_only": True,
+                    "broker_write_authority": False,
+                    "order_authority": False,
+                    "paper_authorized": False,
+                    "live_authorized": False,
+                    "execution_status": "advisory_only",
+                },
             )
             from core.read_only_consumer_cycle import run_consumer_cycle
             run_consumer_cycle(
