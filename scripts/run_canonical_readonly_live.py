@@ -118,7 +118,10 @@ def run(*, validate_only: bool = False) -> int:
         raise RuntimeError("READ_ONLY_SESSION_DATE_NOT_20260825")
     if not validate_only:
         _archive_existing_runtime(RUNTIME_ROOT)
-    tokens = _run_current_authority_preflight(root=RUNTIME_ROOT, source_sha=source_sha)
+    # Keep builder output separate from the runtime root.  The canonical
+    # prepare_current_session() path owns runtime-root manifests and must not
+    # be asked to overwrite the preflight instrument authority.
+    tokens = _run_current_authority_preflight(root=PREFLIGHT_ROOT, source_sha=source_sha)
     if validate_only:
         return 0
     from core.read_only_live_pipeline import run_pipeline
