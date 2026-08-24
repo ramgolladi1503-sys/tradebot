@@ -54,6 +54,13 @@ def test_detector_finds_upside_failed_discovery_without_strategy_rules() -> None
     assert event.frozen_discovery_extreme > event.event_close
 
 
+def test_one_discovery_episode_cannot_emit_repeated_failures() -> None:
+    bars = list(_up_discovery_then_fail())
+    bars.extend((_bar(26, 107.0), _bar(27, 107.1), _bar(28, 106.9)))
+    events = detect_failed_discoveries(tuple(bars))
+    assert len(events) == 1
+
+
 def test_primary_endpoint_counts_vwap_before_extreme_as_success() -> None:
     bars = [
         _bar(0, 100.0),
