@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import os
 import subprocess
 import threading
 from pathlib import Path
@@ -16,6 +17,13 @@ logger = logging.getLogger(__name__)
 _CREDENTIAL_LOCK = threading.Lock()
 _ACTIVE_API_KEY = ""
 _ACTIVE_ACCESS_TOKEN = ""
+
+
+def _governed_environment_value(name: str) -> str:
+    """Read only credentials exported by the governed launch wrapper."""
+    if name not in {"KITE_API_KEY", "KITE_API_SECRET"}:
+        return ""
+    return str(os.environ.get(name, "") or "").strip()
 
 
 def _governed_launchctl_value(name: str) -> str:
@@ -91,7 +99,9 @@ def _register_runtime_credentials(api_key: str, access_token: str) -> None:
 
 
 def get_kite_credentials(*, repo_root_path: Path | str | None = None) -> Tuple[str, str]:
-    api_key = str(getattr(cfg, "KITE_API_KEY", "") or "").strip()
+    api_key = _governed_environment_value("KITE_API_KEY")
+    if not api_key:
+        api_key = str(getattr(cfg, "KITE_API_KEY", "") or "").strip()
     if not api_key:
         api_key = _governed_launchctl_value("KITE_API_KEY")
     if not api_key:
@@ -130,13 +140,17 @@ def validate_kite_startup_credentials(
     if require_access_token:
         api_key, access_token = get_kite_credentials(repo_root_path=repo_root_path)
     else:
-        api_key = str(getattr(cfg, "KITE_API_KEY", "") or "").strip()
+        api_key = _governed_environment_value("KITE_API_KEY")
+        if not api_key:
+            api_key = str(getattr(cfg, "KITE_API_KEY", "") or "").strip()
         if not api_key:
             logger.error("kite_startup_credentials_missing_api_key caller_module=%s", caller)
             raise RuntimeError("kite_api_key_missing")
     api_secret = ""
     if require_api_secret:
-        api_secret = str(getattr(cfg, "KITE_API_SECRET", "") or "").strip()
+        api_secret = _governed_environment_value("KITE_API_SECRET")
+        if not api_secret:
+            api_secret = str(getattr(cfg, "KITE_API_SECRET", "") or "").strip()
         if not api_secret:
             logger.error("kite_startup_credentials_missing_api_secret caller_module=%s", caller)
             raise RuntimeError("kite_api_secret_missing")
