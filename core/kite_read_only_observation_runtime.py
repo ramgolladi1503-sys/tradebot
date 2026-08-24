@@ -383,7 +383,10 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         feed_state="STARTING",
         persistence_state="STARTING",
         subscription_count=len(tokens),
-        consumer_registry=("regime", "strategies", "cas_v2", "candidate_ranking", "monitoring", "evidence"),
+        consumer_registry=(
+            "regime", "strategies", "cas_v2", "candidate_pool", "option_surface",
+            "eligibility", "ranking", "advisory_queue", "ui", "monitoring", "evidence",
+        ),
     )
     write_session_manifest(output_root / "SESSION_MANIFEST.json", manifest)
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
