@@ -20,7 +20,7 @@ from core.read_only_live_evidence import (
     write_json_atomic,
 )
 from core.live_session_manifest import LiveSessionManifest, write_session_manifest
-from core.live_consumer_contract import CANONICAL_CONSUMERS, validate_consumer_registry
+from core.live_consumer_contract import CANONICAL_CONSUMERS, validate_consumer_registry, write_consumer_registry
 
 
 UNSAFE_IMPORT_PREFIXES = (
@@ -387,6 +387,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         consumer_registry=validate_consumer_registry(CANONICAL_CONSUMERS),
     )
     write_session_manifest(output_root / "SESSION_MANIFEST.json", manifest)
+    write_consumer_registry(output_root / "CONSUMERS.json", session_id=run_id, source_sha=producer_commit)
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
     try:
         while not lifecycle.should_stop():

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from pathlib import Path
 from typing import Iterable, Mapping
 
 
@@ -68,3 +70,29 @@ def consumer_authority_snapshot() -> Mapping[str, object]:
         "paper_authorized": False,
         "live_execution_authorized": False,
     }
+
+
+def write_consumer_registry(path: str | Path, *, session_id: str, source_sha: str) -> None:
+    """Emit the startup registry; health is proved separately by lifecycle evidence."""
+    if not session_id or not source_sha:
+        raise ValueError("consumer_registry_identity_missing")
+    validate_consumer_registry()
+    payload = {
+        "schema_version": 1,
+        "session_id": session_id,
+        "source_sha": source_sha,
+        "consumers": [
+            {
+                "id": name,
+                "sha": source_sha,
+                "mode": "canonical-read-only",
+                "execution_capable": False,
+                "health": "PENDING",
+            }
+            for name in CANONICAL_CONSUMERS
+        ],
+        **consumer_authority_snapshot(),
+    }
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
