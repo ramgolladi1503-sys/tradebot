@@ -128,7 +128,6 @@ def load_sessions(path: Path) -> dict[datetime, tuple[Bar, ...]]:
     sessions: dict[datetime, tuple[Bar, ...]] = {}
     for session_date, bars in sorted(sessions_by_date.items()):
         bars.sort(key=lambda bar: bar.ts)
-        # Bar.validate and strict timestamp ordering are enforced by detector.
         session_anchor = datetime.combine(session_date, datetime.min.time(), tzinfo=IST)
         sessions[session_anchor] = tuple(bars)
     return sessions
@@ -193,14 +192,14 @@ def run(
     if known_partial_corpus:
         known_partial_identity_ok = (
             len(sessions) == EXPECTED_PARTIAL_CORPUS_SESSION_COUNT
-            and dates
+            and bool(dates)
             and (dates[0], dates[-1]) == EXPECTED_PARTIAL_CORPUS_DATE_SPAN
         )
         if not known_partial_identity_ok:
             raise ValueError("KNOWN_PARTIAL_CORPUS_SESSION_IDENTITY_MISMATCH")
 
-    # A partial DEV corpus can reject or expose insufficient support, but may not
-    # produce ROBUSTLY_SUPPORTED because OOS/oracle/untouched holdout are absent.
+    # A DEV-only run can reject or expose insufficient support, but it cannot
+    # prove robustness because negative controls/OOS/oracle/holdout are absent.
     if preliminary_verdict == "ROBUSTLY_SUPPORTED":
         raise AssertionError("DEV_RUN_MUST_NOT_EMIT_ROBUSTLY_SUPPORTED")
 
@@ -230,7 +229,7 @@ def run(
         },
         "secondary_horizons_minutes": list(HORIZONS),
         "claim_boundary": {
-            "strategy_tested": false if False else False,
+            "strategy_tested": False,
             "option_data_used": False,
             "paper_eligibility": False,
             "live_eligibility": False,
