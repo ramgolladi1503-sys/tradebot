@@ -398,6 +398,11 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         output_root, session_id=run_id, source_sha=producer_commit,
         include_instrument_authority=False,
     )
+    from core.canonical_cycle_coordinator import CanonicalCycleCoordinator
+    cycle_coordinator = CanonicalCycleCoordinator(
+        output_root=output_root, session_id=run_id, source_sha=producer_commit,
+        cadence_seconds=float(os.environ.get("TRADEBOT_CANONICAL_CYCLE_CADENCE_SECONDS", "60")),
+    )
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
     try:
         while not lifecycle.should_stop():
@@ -423,11 +428,15 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                     "execution_status": "advisory_only",
                 },
             )
-            from core.read_only_consumer_cycle import run_consumer_cycle
-            run_consumer_cycle(
-                runtime_outputs=latest_runtime_outputs, output_root=output_root,
-                session_id=run_id, source_sha=producer_commit,
+            feed_truth = latest_runtime_outputs.get("feed_health_truth_latest") or {}
+            feed_recovered = str(feed_truth.get("overlay_state") or "").lower() == "feed_recovered"
+            cycle_trigger = cycle_coordinator.should_request(
+                market_open=session_policy.market_state == "MARKET_OPEN",
+                feed_live=str(feed_truth.get("feed_state") or "").upper() == "LIVE",
+                feed_recovered=feed_recovered,
             )
+            if cycle_trigger:
+                cycle_coordinator.run(cycle_coordinator.request(cycle_trigger, cutoff=datetime.now(timezone.utc)))
             append_feed_forensic_event(
                 "RUNTIME_PERSISTENCE_PROGRESS",
                 snapshot_count=1,

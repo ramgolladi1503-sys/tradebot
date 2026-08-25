@@ -3313,6 +3313,13 @@ def _runtime_transport_truth_fields(
     subscription_truth_complete = subscription_registry_consistent
     mode_full_truth_complete = subscription_registry_consistent and len(_PENDING_MODE_FULL_TOKENS or set()) == 0
     critical_feed_fresh = bool(verification.get("critical_feed_fresh", True))
+    critical_required_count = int(verification.get("critical_required_count", 0) or 0)
+    critical_actual_count = int(
+        min(
+            verification.get("critical_subscribe_applied_count", 0) or 0,
+            verification.get("critical_mode_full_applied_count", 0) or 0,
+        )
+    )
     core_feed_fresh_ratio = float(verification.get("core_fresh_ratio", 1.0) or 0.0)
     depth_ratio = float(verification.get("depth_feed_fresh_ratio", 1.0 if last_depth_age_sec is not None else 0.0) or 0.0)
     state_text = str(runtime_state or "").strip().upper()
@@ -3350,6 +3357,11 @@ def _runtime_transport_truth_fields(
         "execution_feed_ready": bool(execution_feed_ready),
         "canonical_feed_state": canonical_state,
         "recovery_verification": verification or None,
+        "critical_required_count": critical_required_count,
+        "critical_actual_count": critical_actual_count,
+        "critical_health": "PASS" if critical_actual_count == critical_required_count and critical_required_count > 0 else "DEGRADED",
+        "subscription_state": "FULL" if subscription_truth_complete else ("DEGRADED_PARTIAL" if critical_actual_count > 0 else "UNVERIFIED"),
+        "subscription_single_source_of_truth": True,
     }
 
 

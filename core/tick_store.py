@@ -28,6 +28,9 @@ _INIT_LOCK = threading.Lock()
 _WRITE_QUEUE: deque[tuple[str, int | None, float | None, float | None, float | None, float, str]] = deque()
 _WRITE_QUEUE_CAPACITY = 10000
 _WRITE_QUEUE_LOCK = threading.Lock()
+_WRITE_SERIAL_LOCK = threading.Lock()
+_SQLITE_RETRY_COUNT = 0
+_SQLITE_RETRY_EXHAUSTED_COUNT = 0
 _FLUSH_THREAD: threading.Thread | None = None
 _FLUSH_THREAD_STOP = threading.Event()
 _FLUSH_LOCK = threading.Lock()
@@ -593,7 +596,7 @@ def _write_rows(
     *,
     worker_owned: bool = False,
 ) -> bool:
-    global _WRITE_FLUSH_COUNT
+    global _WRITE_FLUSH_COUNT, _SQLITE_RETRY_COUNT, _SQLITE_RETRY_EXHAUSTED_COUNT
     if not rows:
         return True
     try:
@@ -618,15 +621,25 @@ def _write_rows(
             except Exception:
                 pass
         init_ticks()
-        with _conn() as conn:
-            conn.executemany(
-                """
-            INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso)
-            VALUES (?,?,?,?,?,?,?)
-            """,
-                rows,
-            )
-            conn.commit()
+        with _WRITE_SERIAL_LOCK:
+            for attempt in range(3):
+                try:
+                    with _conn() as conn:
+                        conn.executemany(
+                            """
+                        INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso)
+                        VALUES (?,?,?,?,?,?,?)
+                        """,
+                            rows,
+                        )
+                        conn.commit()
+                    break
+                except sqlite3.OperationalError as exc:
+                    if "locked" not in str(exc).lower() or attempt == 2:
+                        _SQLITE_RETRY_EXHAUSTED_COUNT += 1
+                        raise
+                    _SQLITE_RETRY_COUNT += 1
+                    time.sleep(0.02 * (attempt + 1))
         _AUDIT_COUNTERS["committed_batches"] += 1
         if worker_owned and _async_db_writes_enabled() and _REPLAY_PRESSURE_POST_COMMIT_HOOK is not None:
             try:
@@ -702,7 +715,13 @@ def pending_tick_count() -> int:
 
 
 def get_audit_counters() -> dict[str, int]:
-    return dict(_AUDIT_COUNTERS)
+    payload = dict(_AUDIT_COUNTERS)
+    payload.update({
+        "sqlite_retry_count": int(_SQLITE_RETRY_COUNT),
+        "sqlite_retry_exhausted_count": int(_SQLITE_RETRY_EXHAUSTED_COUNT),
+        "sqlite_busy_timeout_ms": 30000,
+    })
+    return payload
 
 
 def reset_audit_counters() -> None:

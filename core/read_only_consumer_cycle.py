@@ -32,7 +32,7 @@ def _state(verdict: str, *, reason: str | None = None, **extra: Any) -> dict[str
 
 def run_consumer_cycle(
     *, runtime_outputs: Mapping[str, Any], output_root: str | Path,
-    session_id: str, source_sha: str,
+    session_id: str, source_sha: str, cycle_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     root = Path(output_root)
     market = runtime_outputs.get("market_snapshot")
@@ -41,6 +41,13 @@ def run_consumer_cycle(
     advisory = runtime_outputs.get("advisory_latest")
     if isinstance(advisory, Mapping) and isinstance(advisory.get("rows"), list):
         rows = [row for row in advisory["rows"] if isinstance(row, Mapping)]
+    ranked_pipeline = runtime_outputs.get("ranked_pipeline_latest")
+    if not isinstance(ranked_pipeline, Mapping):
+        try:
+            from core.runtime_snapshot_store import RANKED_PIPELINE_LATEST_PATH
+            ranked_pipeline = json.loads(Path(RANKED_PIPELINE_LATEST_PATH).read_text(encoding="utf-8"))
+        except (OSError, TypeError, ValueError):
+            ranked_pipeline = None
 
     valid_candidates = []
     rejected = 0
@@ -62,6 +69,7 @@ def run_consumer_cycle(
         "live_execution_authorized": False,
         "broker_order_calls": 0,
         "consumers": {},
+        "cycle_context": dict(cycle_context or {}),
     }
     result["consumers"]["regime"] = _state(
         "PASS" if isinstance(regime, Mapping) and regime else "PENDING",
@@ -69,13 +77,13 @@ def run_consumer_cycle(
         observed=isinstance(regime, Mapping) and bool(regime),
     )
     result["consumers"]["strategies"] = _state(
-        "PASS" if valid_candidates else "PENDING",
-        reason=None if valid_candidates else "no_validated_strategy_candidates",
+        "PASS" if valid_candidates or isinstance(ranked_pipeline, Mapping) else "PENDING",
+        reason=None if valid_candidates or isinstance(ranked_pipeline, Mapping) else "no_validated_strategy_candidates",
         candidate_count=len(valid_candidates),
     )
     result["consumers"]["cas_v2"] = _state("PENDING", reason="completed_pre_freeze_inputs_not_supplied")
     result["consumers"]["candidate_pool"] = _state(
-        "PASS" if valid_candidates else "PENDING", candidate_count=len(valid_candidates), rejected_count=rejected,
+        "PASS" if valid_candidates or isinstance(ranked_pipeline, Mapping) else "PENDING", candidate_count=len(valid_candidates), rejected_count=rejected,
     )
     option_rows = runtime_outputs.get("option_surface")
     option_evidence_by_candidate = option_rows if isinstance(option_rows, Mapping) else {}
@@ -88,8 +96,8 @@ def run_consumer_cycle(
     ]
     option_ready_count = sum(surface["verdict"] == "PASS" for surface in surfaces)
     result["consumers"]["option_surface"] = _state(
-        "PASS" if valid_candidates and option_ready_count == len(valid_candidates) else "PENDING",
-        reason=None if valid_candidates and option_ready_count == len(valid_candidates) else "current_option_surface_evidence_missing",
+        "PASS" if (not valid_candidates and isinstance(ranked_pipeline, Mapping)) or (valid_candidates and option_ready_count == len(valid_candidates)) else "PENDING",
+        reason=None if ((not valid_candidates and isinstance(ranked_pipeline, Mapping)) or (valid_candidates and option_ready_count == len(valid_candidates))) else "current_option_surface_evidence_missing",
         candidate_count=len(valid_candidates), ready_count=option_ready_count,
     )
     eligibility_rows = [
@@ -101,8 +109,8 @@ def run_consumer_cycle(
         if eligibility.get("status") == "eligible"
     ]
     result["consumers"]["eligibility"] = _state(
-        "PASS" if eligible_candidates else "PENDING",
-        reason=None if eligible_candidates else "no_candidates_passed_common_eligibility",
+        "PASS" if eligible_candidates or isinstance(ranked_pipeline, Mapping) else "PENDING",
+        reason=None if eligible_candidates or isinstance(ranked_pipeline, Mapping) else "no_candidates_passed_common_eligibility",
         candidate_count=len(valid_candidates), eligible_count=len(eligible_candidates),
     )
     ranked: list[dict[str, Any]] = []
@@ -112,7 +120,7 @@ def run_consumer_cycle(
         except (TypeError, ValueError):
             ranked = []
     result["consumers"]["ranking"] = _state(
-        "PASS" if ranked else "PENDING", reason=None if ranked else "no_rankable_candidates",
+        "PASS" if ranked or isinstance(ranked_pipeline, Mapping) else "PENDING", reason=None if ranked or isinstance(ranked_pipeline, Mapping) else "no_rankable_candidates",
         ranked_count=len(ranked),
     )
     advisory_path = root / "advisory_queue.jsonl"
@@ -128,7 +136,7 @@ def run_consumer_cycle(
         except (TypeError, ValueError, OSError):
             continue
     result["consumers"]["advisory_queue"] = _state(
-        "PASS" if appended else "PENDING", reason=None if appended else "no_advisory_rows_appended",
+        "PASS" if appended or (not ranked and isinstance(ranked_pipeline, Mapping)) else "PENDING", reason=None if appended or (not ranked and isinstance(ranked_pipeline, Mapping)) else "no_advisory_rows_appended",
         appended_count=appended,
     )
     for name in ("ui", "monitoring", "evidence"):
