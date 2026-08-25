@@ -428,7 +428,15 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                     "execution_status": "advisory_only",
                 },
             )
-            feed_truth = latest_runtime_outputs.get("feed_health_truth_latest") or {}
+            from core.canonical_cycle_coordinator import normalize_feed_truth
+            raw_feed_truth = latest_runtime_outputs.get("feed_health_truth_latest") or {}
+            runtime_feed_truth = latest_runtime_outputs.get("feed_runtime_latest") or {}
+            feed_truth = normalize_feed_truth(
+                {"payload": {**dict(raw_feed_truth), "session_id": run_id, "source_sha": producer_commit}},
+                runtime_truth=runtime_feed_truth,
+                expected_session_id=run_id,
+                expected_source_sha=producer_commit,
+            )
             feed_recovered = str(feed_truth.get("overlay_state") or "").lower() == "feed_recovered"
             cycle_trigger = cycle_coordinator.should_request(
                 market_open=session_policy.market_state == "MARKET_OPEN",

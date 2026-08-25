@@ -26,6 +26,70 @@ IDLE, REQUESTED, SCHEDULED, RUNNING, COMPLETE, FAILED = (
 TRIGGERS = frozenset({"MARKET_OPEN_INITIAL", "NORMAL_CADENCE", "FEED_RECOVERY"})
 
 
+def normalize_feed_truth(
+    value: Mapping[str, Any],
+    *,
+    runtime_truth: Mapping[str, Any],
+    expected_session_id: str,
+    expected_source_sha: str,
+    now_epoch: float | None = None,
+    max_age_seconds: float = 10.0,
+) -> dict[str, Any]:
+    """Normalize the canonical feed-truth envelope for cycle admission.
+
+    The persisted artifact is wrapped as ``payload.feed_health_truth`` while
+    the snapshot producer returns that payload directly.  Both forms are
+    accepted, but all required nested fields, current runtime lineage, and
+    freshness are mandatory.  Ambiguous or stale truth fails closed.
+    """
+    if not isinstance(value, Mapping) or not isinstance(runtime_truth, Mapping):
+        raise ValueError("FEED_TRUTH_WRAPPER_INVALID")
+    payload = value.get("payload") if isinstance(value.get("payload"), Mapping) else value
+    nested = payload.get("feed_health_truth")
+    context = nested.get("context") if isinstance(nested, Mapping) else None
+    if not isinstance(nested, Mapping) or not isinstance(context, Mapping):
+        raise ValueError("FEED_TRUTH_REQUIRED_WRAPPER_MISSING")
+    feed_state = context.get("feed_state")
+    runtime_state = context.get("runtime_state")
+    websocket_ok = nested.get("websocket_ok")
+    feed_ok = nested.get("feed_ok")
+    if not isinstance(feed_state, str) or not isinstance(runtime_state, str):
+        raise ValueError("FEED_TRUTH_REQUIRED_CONTEXT_FIELD_INVALID")
+    if not isinstance(websocket_ok, bool) or not isinstance(feed_ok, bool):
+        raise ValueError("FEED_TRUTH_REQUIRED_FIELD_INVALID")
+    session_id = payload.get("session_id")
+    source_sha = payload.get("source_sha")
+    if session_id != expected_session_id:
+        raise ValueError("FEED_TRUTH_SESSION_MISMATCH")
+    if source_sha != expected_source_sha:
+        raise ValueError("FEED_TRUTH_SOURCE_SHA_MISMATCH")
+    ts_epoch = runtime_truth.get("ts_epoch")
+    try:
+        age = float(now_epoch if now_epoch is not None else time.time()) - float(ts_epoch)
+    except (TypeError, ValueError):
+        raise ValueError("FEED_TRUTH_RUNTIME_TIMESTAMP_INVALID") from None
+    if age < -1.0 or age > float(max_age_seconds):
+        raise ValueError("FEED_TRUTH_RUNTIME_STALE")
+    if not isinstance(runtime_truth.get("ws_connected"), bool):
+        raise ValueError("FEED_TRUTH_RUNTIME_WS_INVALID")
+    if str(runtime_truth.get("runtime_state") or "") != runtime_state:
+        raise ValueError("FEED_TRUTH_RUNTIME_STATE_MISMATCH")
+    if str(runtime_truth.get("feed_truth_state") or "").upper() != feed_state.upper():
+        raise ValueError("FEED_TRUTH_RUNTIME_STATE_MISMATCH")
+    if bool(runtime_truth.get("ws_connected")) != websocket_ok:
+        raise ValueError("FEED_TRUTH_RUNTIME_WS_MISMATCH")
+    return {
+        "feed_state": feed_state.upper(),
+        "runtime_state": runtime_state.upper(),
+        "ws_connected": websocket_ok,
+        "feed_ok": feed_ok,
+        "overlay_state": "feed_recovered" if feed_state.upper() == "LIVE" else "feed_unhealthy",
+        "session_id": expected_session_id,
+        "source_sha": expected_source_sha,
+        "runtime_truth_ts_epoch": float(ts_epoch),
+    }
+
+
 @dataclass(frozen=True)
 class CycleRequest:
     cycle_id: str
