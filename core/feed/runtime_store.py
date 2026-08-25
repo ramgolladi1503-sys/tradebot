@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import queue
 import threading
@@ -23,7 +24,7 @@ from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.runtime_boot_identity import stamp_runtime_payload
 from core.feed.artifact_provenance import stamp_feed_runtime_provenance
 from core.feed.artifact_loader import load_current_feed_truth
-from core.paths import repo_root, trade_db_path
+from core.paths import repo_root, trade_db_path, db_dir
 from core.time_utils import now_utc_epoch
 from core.persistence_durability import record_degradation
 
@@ -42,6 +43,9 @@ _RUNTIME_SHUTDOWN = False
 
 
 def _db_path() -> Path:
+    if str(os.getenv("TRADEBOT_CANONICAL_LIVE", "")).strip().lower() in {"1", "true", "yes", "on"}:
+        desk_id = str(getattr(cfg, "DESK_ID", "DEFAULT") or "DEFAULT")
+        return ensure_parent_dir(db_dir() / f"{desk_id}.sqlite")
     raw = str(getattr(cfg, "TRADE_DB_PATH", "") or "").strip()
     if raw:
         return ensure_parent_dir(Path(raw).expanduser())

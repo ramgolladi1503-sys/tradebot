@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from core.paths import repo_root
+from core.paths import repo_root, locks_dir
 
 try:
     import fcntl  # type: ignore
@@ -23,7 +23,7 @@ class InstanceLock:
 
     def __init__(self, lock_path: Path | str | None = None, repo_root_path: Path | str | None = None):
         root = Path(repo_root_path).resolve() if repo_root_path is not None else repo_root()
-        default = root / ".runtime" / "locks" / "kite_session.lock"
+        default = locks_dir() / "kite_session.lock"
         self.lock_path = Path(lock_path).resolve() if lock_path is not None else default.resolve()
         self._fd: int | None = None
         self._acquired = False

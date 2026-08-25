@@ -140,6 +140,14 @@ def _load_existing_preflight(*, root: Path, source_sha: str) -> list[int] | None
 def run(*, validate_only: bool = False) -> int:
     source_sha = _source_sha()
     _require_clean_authority()
+    # Bind every import-time runtime path constant to the same external root
+    # before importing the canonical pipeline or any persistence/feed module.
+    os.environ["TRADEBOT_CANONICAL_LIVE"] = "1"
+    os.environ["TRADEBOT_RUNTIME_ROOT"] = str(RUNTIME_ROOT.resolve())
+    os.environ["DATA_ROOT"] = str(RUNTIME_ROOT.resolve())
+    os.environ["LOGS_ROOT"] = str(RUNTIME_ROOT.resolve() / "logs")
+    os.environ["DB_ROOT"] = str(RUNTIME_ROOT.resolve() / "db")
+    os.environ["LOCKS_ROOT"] = str(RUNTIME_ROOT.resolve() / "locks")
     token_path = Path(os.environ.get("TRADEBOT_TOKEN_PATH", "/Users/madhuram/.tradebot/credentials/kite_access_token")).expanduser()
     session_id = str(os.environ.get("RUN_ID") or f"kite-read-only-{date.today().isoformat()}")
     _metadata_guard(token_path=token_path)

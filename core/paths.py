@@ -45,13 +45,25 @@ def _cfg_path(attr: str) -> Path | None:
 
 
 def runtime_dir() -> Path:
+    # TRADEBOT_RUNTIME_ROOT is the canonical live authority and must win over
+    # import-time config values and source-checkout fallback paths.
+    override = os.getenv("TRADEBOT_RUNTIME_ROOT")
+    if override:
+        from core.runtime_paths import resolve_data_root
+        return resolve_data_root(canonical_live=_canonical_live_mode())
     override = os.getenv("DATA_ROOT")
     if override:
         return Path(override).expanduser()
     return _cfg_path("DATA_ROOT") or DATA_ROOT
 
 
+def _canonical_live_mode() -> bool:
+    return str(os.getenv("TRADEBOT_CANONICAL_LIVE", "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def logs_dir() -> Path:
+    if os.getenv("TRADEBOT_RUNTIME_ROOT"):
+        return runtime_dir() / "logs"
     override = os.getenv("LOG_DIR")
     if override:
         return Path(override).expanduser()
@@ -63,6 +75,9 @@ def data_root() -> Path:
 
 
 def desks_dir(desk_id: str | None = None) -> Path:
+    if os.getenv("TRADEBOT_RUNTIME_ROOT"):
+        base = runtime_dir() / "desks"
+        return base if desk_id is None else base / str(desk_id)
     base = _cfg_path("DESKS_ROOT") or (runtime_dir() / "desks")
     if desk_id is None:
         return base
@@ -70,14 +85,20 @@ def desks_dir(desk_id: str | None = None) -> Path:
 
 
 def reports_dir() -> Path:
+    if os.getenv("TRADEBOT_RUNTIME_ROOT"):
+        return runtime_dir() / "reports"
     return _cfg_path("REPORTS_ROOT") or (runtime_dir() / "reports")
 
 
 def locks_dir() -> Path:
+    if os.getenv("TRADEBOT_RUNTIME_ROOT"):
+        return runtime_dir() / "locks"
     return _cfg_path("LOCKS_ROOT") or (runtime_dir() / "locks")
 
 
 def db_dir() -> Path:
+    if os.getenv("TRADEBOT_RUNTIME_ROOT"):
+        return runtime_dir() / "db"
     return _cfg_path("DB_ROOT") or (runtime_dir() / "db")
 
 

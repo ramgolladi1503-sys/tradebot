@@ -22,6 +22,7 @@ from core.read_only_instrument_authority import build_instrument_authority, fetc
 from core.read_only_launch_plan import build_current_launch_plan, write_current_launch_plan
 from core.read_only_strategy_registry import write_strategy_registry
 from core.read_only_sidecar_manager import write_sidecar_health
+from core.runtime_paths import write_runtime_path_authority
 
 
 PIPELINE_STAGES = (
@@ -75,6 +76,11 @@ def prepare_current_session(
     client.margins()
     session_id = str(os.environ.get("RUN_ID") or f"kite-read-only-{session_date}")
     runtime_root.mkdir(parents=True, exist_ok=True)
+    write_runtime_path_authority(
+        runtime_root / "runtime_path_authority.json",
+        source_sha=source_sha,
+        session_root=runtime_root,
+    )
     validate_consumer_registry(CANONICAL_CONSUMERS)
     registry_path = runtime_root / "CONSUMERS.json"
     write_consumer_registry(
