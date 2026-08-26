@@ -32,6 +32,24 @@ def test_actual_nested_feed_truth_normalizes():
     normalized = normalize_feed_truth(value, runtime_truth=runtime, expected_session_id="session", expected_source_sha="a" * 40)
     assert normalized["feed_state"] == "LIVE"
     assert normalized["ws_connected"] is True
+    assert normalized["normalization_status"] == "VALID_READY"
+
+
+def test_starting_truth_is_valid_not_ready_and_does_not_admit():
+    value, runtime = _valid()
+    nested = value["payload"]["feed_health_truth"]
+    nested["context"]["feed_state"] = "STARTING"
+    nested["context"]["runtime_state"] = "STARTING"
+    nested["feed_ok"] = False
+    nested["websocket_ok"] = None
+    runtime["runtime_state"] = "STARTING"
+    runtime["feed_truth_state"] = "STARTING"
+    runtime["ws_connected"] = None
+    normalized = normalize_feed_truth(value, runtime_truth=runtime, expected_session_id="session", expected_source_sha="a" * 40)
+    assert normalized["normalization_valid"] is True
+    assert normalized["normalization_status"] == "VALID_NOT_READY"
+    assert normalized["coordinator_admission_allowed"] is False
+    assert normalized["waiting_for_feed_truth"] is True
 
 
 @pytest.mark.parametrize("mutator, error", [

@@ -55,7 +55,14 @@ def normalize_feed_truth(
     feed_ok = nested.get("feed_ok")
     if not isinstance(feed_state, str) or not isinstance(runtime_state, str):
         raise ValueError("FEED_TRUTH_REQUIRED_CONTEXT_FIELD_INVALID")
-    if not isinstance(websocket_ok, bool) or not isinstance(feed_ok, bool):
+    if not isinstance(feed_ok, bool):
+        raise ValueError("FEED_TRUTH_REQUIRED_FIELD_INVALID")
+    startup_not_ready = (
+        feed_state.upper() == "STARTING"
+        and runtime_state.upper() == "STARTING"
+        and websocket_ok is None
+    )
+    if not isinstance(websocket_ok, bool) and not startup_not_ready:
         raise ValueError("FEED_TRUTH_REQUIRED_FIELD_INVALID")
     session_id = payload.get("session_id")
     source_sha = payload.get("source_sha")
@@ -70,13 +77,14 @@ def normalize_feed_truth(
         raise ValueError("FEED_TRUTH_RUNTIME_TIMESTAMP_INVALID") from None
     if age < -1.0 or age > float(max_age_seconds):
         raise ValueError("FEED_TRUTH_RUNTIME_STALE")
-    if not isinstance(runtime_truth.get("ws_connected"), bool):
+    runtime_ws = runtime_truth.get("ws_connected")
+    if not isinstance(runtime_ws, bool) and not (startup_not_ready and runtime_ws is None):
         raise ValueError("FEED_TRUTH_RUNTIME_WS_INVALID")
     if str(runtime_truth.get("runtime_state") or "") != runtime_state:
         raise ValueError("FEED_TRUTH_RUNTIME_STATE_MISMATCH")
     if str(runtime_truth.get("feed_truth_state") or "").upper() != feed_state.upper():
         raise ValueError("FEED_TRUTH_RUNTIME_STATE_MISMATCH")
-    if bool(runtime_truth.get("ws_connected")) != websocket_ok:
+    if not startup_not_ready and bool(runtime_ws) != websocket_ok:
         raise ValueError("FEED_TRUTH_RUNTIME_WS_MISMATCH")
     return {
         "feed_state": feed_state.upper(),
@@ -84,6 +92,10 @@ def normalize_feed_truth(
         "ws_connected": websocket_ok,
         "feed_ok": feed_ok,
         "overlay_state": "feed_recovered" if feed_state.upper() == "LIVE" else "feed_unhealthy",
+        "normalization_status": "VALID_NOT_READY" if startup_not_ready else "VALID_READY",
+        "normalization_valid": True,
+        "coordinator_admission_allowed": not startup_not_ready and feed_ok and bool(websocket_ok),
+        "waiting_for_feed_truth": startup_not_ready,
         "session_id": expected_session_id,
         "source_sha": expected_source_sha,
         "runtime_truth_ts_epoch": float(ts_epoch),
