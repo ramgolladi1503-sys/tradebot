@@ -198,10 +198,19 @@ class CanonicalCycleCoordinator:
             counts = _counts(runtime_outputs, consumer)
             completed = datetime.now(timezone.utc)
             base.update(counts)
+            consumer_states = consumer.get("consumers") if isinstance(consumer, Mapping) else {}
+            mandatory_stages = ("regime", "strategies", "candidate_pool", "option_surface", "eligibility", "ranking", "advisory_queue")
+            analytical_complete = (
+                counts["strategies_evaluated_count"] > 0
+                and isinstance(consumer_states, Mapping)
+                and all((consumer_states.get(stage) or {}).get("verdict") == "PASS" for stage in mandatory_stages)
+            )
             base.update({
-                "state": COMPLETE, "cycle_ok": True,
+                "state": COMPLETE, "cycle_ok": analytical_complete,
                 "completed_at": completed.isoformat(),
-                "cycle_outcome": "NO_ELIGIBLE_CANDIDATE" if counts["eligible_count"] == 0 else "ADVISORY_AVAILABLE",
+                "cycle_outcome": (
+                    "NO_ELIGIBLE_CANDIDATE" if counts["eligible_count"] == 0 else "ADVISORY_AVAILABLE"
+                ) if analytical_complete else "ANALYTICAL_PIPELINE_INCOMPLETE",
             })
         except Exception as exc:
             base.update({"state": FAILED, "failure_class": type(exc).__name__,

@@ -40,8 +40,9 @@ def test_failed_overlap_is_explicit_and_no_order_calls(tmp_path: Path):
 
 
 def test_zero_trade_result_is_successful(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(coordinator_module, "produce_and_store_runtime_snapshots", lambda **_: {})
-    monkeypatch.setattr(coordinator_module, "run_consumer_cycle", lambda **_: {"consumers": {}, "rejected_count": 0})
+    monkeypatch.setattr(coordinator_module, "produce_and_store_runtime_snapshots", lambda **_: {"ranked_pipeline_latest": {"reports": [{"candidate_pool": {"generator_count": 1}, "raw_candidate_count": 0, "rankable_candidates": 0, "ranked_candidate_count": 0}]}})
+    stages = ("regime", "strategies", "candidate_pool", "option_surface", "eligibility", "ranking", "advisory_queue")
+    monkeypatch.setattr(coordinator_module, "run_consumer_cycle", lambda **_: {"consumers": {stage: {"verdict": "PASS"} for stage in stages}, "rejected_count": 0})
     owner = CanonicalCycleCoordinator(output_root=tmp_path, session_id="s", source_sha="a" * 40)
     result = owner.run(owner.request("MARKET_OPEN_INITIAL"))
     assert result["state"] == COMPLETE
@@ -49,3 +50,13 @@ def test_zero_trade_result_is_successful(monkeypatch, tmp_path: Path):
     assert result["cycle_outcome"] == "NO_ELIGIBLE_CANDIDATE"
     history = json.loads((tmp_path / "canonical_cycle_latest.json").read_text())
     assert history["causal_data_cutoff"]
+
+
+def test_zero_strategy_evaluation_cannot_masquerade_as_no_trade(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(coordinator_module, "produce_and_store_runtime_snapshots", lambda **_: {})
+    monkeypatch.setattr(coordinator_module, "run_consumer_cycle", lambda **_: {"consumers": {}, "rejected_count": 0})
+    owner = CanonicalCycleCoordinator(output_root=tmp_path, session_id="s", source_sha="a" * 40)
+    result = owner.run(owner.request("MARKET_OPEN_INITIAL"))
+    assert result["state"] == COMPLETE
+    assert result["cycle_ok"] is False
+    assert result["cycle_outcome"] == "ANALYTICAL_PIPELINE_INCOMPLETE"

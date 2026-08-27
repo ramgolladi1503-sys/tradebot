@@ -589,6 +589,7 @@ def _build_and_write_canonical_ranked_snapshot(
         "verdict": verdict
     }
     write_ranked_vs_legacy_snapshot(payload=comparison_evidence, producer=producer)
+    return payload
 
 
 def produce_and_store_runtime_snapshots(
@@ -670,7 +671,7 @@ def produce_and_store_runtime_snapshots(
     try:
         t2 = time.perf_counter()
         if isinstance(market_payload, dict):
-            _build_and_write_canonical_ranked_snapshot(
+            outputs["ranked_pipeline_latest"] = _build_and_write_canonical_ranked_snapshot(
                 market_payload,
                 producer,
                 advisory_payload,
@@ -679,6 +680,7 @@ def produce_and_store_runtime_snapshots(
         timings.append({"stage": "ranked_pipeline_snapshot", "elapsed_ms": round((time.perf_counter() - t2) * 1000.0, 3)})
     except Exception as exc:
         logger.error(f"failed_to_build_canonical_ranked_snapshot: {exc}")
+        outputs["ranked_pipeline_latest"] = {}
 
     token_payload, _token_notes = _read_json_payload(logs_dir() / "token_resolution.json")
     outputs["token_resolution_latest"] = token_payload
