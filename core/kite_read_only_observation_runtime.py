@@ -550,6 +550,28 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         (output_root / "shutdown_drain.json").write_text(
             json.dumps(report, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
         )
+        shutdown_diag = {
+            "schema_version": 1, "session_id": run_id, "source_sha": producer_commit,
+            "shutdown_requested": True, "shutdown_drain_complete": bool(report.get("shutdown_drain_complete")),
+            "tick_queue_depth_initial": report.get("tick_persistence", {}).get("queue_depth_at_shutdown"),
+            "tick_queue_depth_final": report.get("tick_persistence", {}).get("queue_depth"),
+            "depth_queue_depth_initial": report.get("depth_persistence", {}).get("queue_depth"),
+            "depth_queue_depth_final": report.get("depth_persistence", {}).get("queue_depth"),
+            "runtime_queue_depth_initial": report.get("runtime_persistence", {}).get("queue_depth"),
+            "runtime_queue_depth_final": report.get("runtime_persistence", {}).get("queue_depth"),
+            "tick_worker_joined": report.get("tick_state", {}).get("worker_join_completed"),
+            "depth_worker_joined": not bool(report.get("depth_state", {}).get("worker_alive")),
+            "runtime_worker_joined": not bool(report.get("runtime_state", {}).get("worker_alive")),
+            "sqlite_flush_complete": bool(report.get("shutdown_drain_complete")),
+            "locks_released": bool(report.get("shutdown_drain_complete")),
+            "uncommitted_queue_depth": sum(int(report.get(name, {}).get("queue_depth") or 0) for name in ("tick_persistence", "depth_persistence", "runtime_persistence")),
+            "failure_stage": None if report.get("shutdown_drain_complete") else report.get("phase"),
+            "read_only": True, "broker_write_authority": False, "order_authority": False,
+            "paper_authorized": False, "live_authorized": False,
+        }
+        (output_root / "shutdown_diagnostics.json").write_text(
+            json.dumps(shutdown_diag, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         if not report["shutdown_drain_complete"]:
             raise RuntimeError("READ_ONLY_SHUTDOWN_DRAIN_INCOMPLETE")
         write_session_exit_gate(

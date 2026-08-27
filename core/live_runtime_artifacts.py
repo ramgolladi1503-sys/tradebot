@@ -75,6 +75,8 @@ def write_session_exit_gate(
     ranking_ran: bool = False, advisory_queue_healthy: bool = False,
     cas_freeze: bool = False, cas_advisory_before_1515: bool = False,
     sidecars_completed: list[str] | None = None,
+    session_close_clean: bool | None = None,
+    uncommitted_queue_depth: int = 0,
 ) -> dict[str, Any]:
     """Write an evidence-shaped close gate without promoting unknown facts."""
     order_calls = int(broker_order_calls)
@@ -96,6 +98,8 @@ def write_session_exit_gate(
         "cas_freeze": bool(cas_freeze), "cas_advisory_before_1515": bool(cas_advisory_before_1515),
         "sidecars_completed": list(sidecars_completed or []),
         "shutdown_drain_complete": bool(shutdown_drain_complete),
+        "session_close_clean": bool(shutdown_drain_complete if session_close_clean is None else session_close_clean),
+        "uncommitted_queue_depth": int(max(0, uncommitted_queue_depth)),
         "broker_order_calls": order_calls,
         "broker_write_authority": False, "order_authority": False,
         "paper_authorized": False, "live_execution_authorized": False,
