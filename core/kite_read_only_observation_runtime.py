@@ -409,10 +409,25 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             if (output_root / "STOP_REQUESTED").is_file():
                 lifecycle.request_stop("operator_control_file")
                 break
-            latest_runtime_outputs = produce_and_store_runtime_snapshots(
-                market_snapshot=None,
-                producer="kite_read_only_observation",
-            )
+            try:
+                latest_runtime_outputs = produce_and_store_runtime_snapshots(
+                    market_snapshot=None,
+                    producer="kite_read_only_observation",
+                )
+            except RuntimeError as exc:
+                # The producer is intentionally fail-closed when no current-session
+                # index tick exists yet.  The feed has already been started above,
+                # so contain only this expected first-input condition and retry on
+                # the next bounded loop iteration.  All other failures remain fatal.
+                if str(exc) != "CANONICAL_MARKET_SNAPSHOT_INPUTS_UNAVAILABLE":
+                    raise
+                latest_runtime_outputs = {
+                    "market_snapshot": {
+                        "missing": True,
+                        "error": "CANONICAL_MARKET_SNAPSHOT_INPUTS_UNAVAILABLE",
+                        "waiting_for_current_session_input": True,
+                    },
+                }
             session_policy = derive_market_session_policy()
             write_json_atomic(
                 output_root / "market_session_state.json",

@@ -189,6 +189,39 @@ def test_real_composition_wires_launch_plan_to_feed_start(
     assert observed["stopped"] is True
 
 
+def test_pre_first_tick_snapshot_wait_does_not_terminate_observation(
+    monkeypatch, tmp_path, clean_observer_import_boundary,
+):
+    import core.auth as auth
+    import core.kite_depth_ws as feed
+    import core.runtime_snapshot_producer as snapshots
+
+    monkeypatch.setattr(auth, "get_kite_credentials", lambda **_: ("api-key", "token"))
+    monkeypatch.setattr(auth, "get_kite_client", lambda **_: type("Profile", (), {"profile": lambda self: {"user_id": "redacted"}})())
+    monkeypatch.setattr(feed, "activate_market_event_graph_launch_plan", lambda plan: {"ok": True})
+    monkeypatch.setattr(feed, "start_depth_ws", lambda tokens, **kwargs: True)
+    monkeypatch.setattr(feed, "stop_depth_ws", lambda **kwargs: None)
+    calls = {"count": 0}
+
+    def produce(**_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("CANONICAL_MARKET_SNAPSHOT_INPUTS_UNAVAILABLE")
+        return {}
+
+    monkeypatch.setattr(snapshots, "produce_and_store_runtime_snapshots", produce)
+    token_path = tmp_path / "token"
+    token_path.write_text("redacted")
+    plan = {"final_union_tokens": [256265], "commit_sha": "1" * 40}
+
+    from core.kite_read_only_observation_runtime import run_observation
+    assert run_observation(
+        launch_plan=plan, output_root=tmp_path / "out", token_path=token_path,
+        session_date="2026-08-27", max_runtime_sec=0.12,
+    ) == 0
+    assert calls["count"] >= 2
+
+
 def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tmp_path):
     """Drive the real registered callback with a network-free KiteTicker boundary."""
     import importlib
