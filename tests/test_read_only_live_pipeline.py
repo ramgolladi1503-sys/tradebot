@@ -26,8 +26,17 @@ def test_prepare_current_session_writes_single_authority(monkeypatch, tmp_path):
     token = tmp_path / "token"
     token.write_text("opaque", encoding="utf-8")
     token.chmod(0o600)
+    run_root = tmp_path / "run"
+    raw = run_root / "instruments.raw.json"
+    raw.parent.mkdir()
+    raw.write_text("[]", encoding="utf-8")
+    (run_root / "instrument_authority_manifest.json").write_text(json.dumps({
+        "session_date": date.today().isoformat(), "source_sha": "a" * 40,
+        "verdict": "PASS", "raw_instrument_path": str(raw),
+        "raw_instrument_sha256": "b" * 64,
+    }), encoding="utf-8")
     plan = prepare_current_session(
-        session_date=date.today().isoformat(), runtime_root=tmp_path / "run",
+        session_date=date.today().isoformat(), runtime_root=run_root,
         token_path=token, subscription_tokens=[3, 2, 3],
     )
     manifest = json.loads((tmp_path / "run" / "SESSION_MANIFEST.json").read_text())
@@ -54,4 +63,3 @@ def test_prepare_rejects_non_current_session(monkeypatch, tmp_path):
             session_date="1900-01-01", runtime_root=tmp_path / "run",
             token_path=token, subscription_tokens=[1],
         )
-

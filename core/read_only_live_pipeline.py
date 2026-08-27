@@ -55,6 +55,26 @@ def _write_stage_state(root: Path, *, session_id: str, source_sha: str, current:
     temporary.replace(destination)
 
 
+def _load_preflight_instrument_authority(*, runtime_root: Path, session_date: str, source_sha: str) -> dict[str, Any]:
+    """Load the immutable authority produced by the same-session preflight."""
+    manifest_path = runtime_root / "instrument_authority_manifest.json"
+    raw_path = runtime_root / "instruments.raw.json"
+    if not manifest_path.is_file() or not raw_path.is_file():
+        raise RuntimeError("CURRENT_INSTRUMENT_AUTHORITY_MISSING")
+    try:
+        authority = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("CURRENT_INSTRUMENT_AUTHORITY_INVALID") from exc
+    if (
+        authority.get("session_date") != session_date
+        or authority.get("source_sha") != source_sha
+        or authority.get("verdict") != "PASS"
+        or Path(str(authority.get("raw_instrument_path") or "")).resolve() != raw_path.resolve()
+    ):
+        raise RuntimeError("CURRENT_INSTRUMENT_AUTHORITY_MISMATCH")
+    return authority
+
+
 def prepare_current_session(
     *, session_date: str, runtime_root: Path, token_path: Path,
     subscription_tokens: Iterable[int], pipeline_sha: str | None = None,
@@ -97,9 +117,8 @@ def prepare_current_session(
         runtime_root, session_id=session_id, source_sha=source_sha,
         include_instrument_authority=False,
     )
-    rows = fetch_current_instruments(client)
-    authority = build_instrument_authority(
-        rows=rows, session_date=session_date, source_sha=source_sha, output_root=runtime_root,
+    authority = _load_preflight_instrument_authority(
+        runtime_root=runtime_root, session_date=session_date, source_sha=source_sha,
     )
     plan = build_current_launch_plan(
         session_id=session_id, session_date=session_date, source_sha=source_sha,
