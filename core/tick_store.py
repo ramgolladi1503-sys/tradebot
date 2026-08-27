@@ -3,6 +3,7 @@ import sqlite3
 import time
 import json
 import threading
+import math
 from dataclasses import dataclass, asdict
 from contextlib import contextmanager
 from pathlib import Path
@@ -894,7 +895,18 @@ def _shutdown_flush_thread(*, deadline_seconds: float | None = None) -> dict[str
     _FLUSH_THREAD_STOP.set()
 
     deadline_seconds = 2.0 if deadline_seconds is None else float(deadline_seconds)
-    deadline_ns = None if deadline_seconds is None else shutdown_started_monotonic_ns + max(0, int(deadline_seconds * 1_000_000_000))
+    # A fixed join window can expire while a bounded backlog is still being
+    # committed.  Derive a finite drain budget from the actual backlog and the
+    # configured worker policy; this is not an unbounded retry or a blind
+    # timeout increase.
+    backlog = pending_tick_count()
+    estimated_batches = math.ceil(backlog / max(1, _flush_batch_size()))
+    drain_budget = (
+        deadline_seconds
+        if deadline_seconds < 0.01
+        else max(deadline_seconds, (estimated_batches * _flush_interval_sec()) + 2.0)
+    )
+    deadline_ns = shutdown_started_monotonic_ns + max(0, int(drain_budget * 1_000_000_000))
 
     join_started_ns = time.monotonic_ns()
     join_duration_ns: int | None = None
