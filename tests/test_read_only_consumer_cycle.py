@@ -1,42 +1,33 @@
 import json
-
+import pytest
 from core.read_only_consumer_cycle import run_consumer_cycle
 
+SHA = "a" * 40
 
-def test_consumer_cycle_fails_closed_without_candidates(tmp_path):
-    result = run_consumer_cycle(
-        runtime_outputs={"market_snapshot": {}, "advisory_latest": {"rows": []}},
-        output_root=tmp_path, session_id="s1", source_sha="a" * 40,
-    )
-    assert result["consumers"]["candidate_pool"]["verdict"] == "PENDING"
-    assert result["consumers"]["cas_v2"]["verdict"] == "PENDING"
-    assert result["consumers"]["option_surface"]["verdict"] == "PENDING"
+def ranked(*, cycle_id="s:1:x", session_id="s", source_sha=SHA, candidates=None):
+    return {"cycle_provenance": {"cycle_id": cycle_id, "session_id": session_id, "source_sha": source_sha, "session_date": "2026-08-27"}, "reports": [{"candidate_pool": {"regime": {"primary_regime": "RANGE"}, "candidates": list(candidates or [])}}]}
+
+def run(tmp_path, pipeline):
+    return run_consumer_cycle(runtime_outputs={"ranked_pipeline_latest": pipeline, "advisory_latest": {"rows": [{"stale": True}]}}, output_root=tmp_path, session_id="s", source_sha=SHA, cycle_context={"cycle_id": "s:1:x", "causal_data_cutoff": "2026-08-27T09:15:00Z"})
+
+def test_current_cycle_reports_are_the_only_input(tmp_path):
+    result = run(tmp_path, ranked())
+    assert result["current_cycle_input"]["stale_advisory_fallback_used"] is False
+    assert result["consumers"]["regime"]["verdict"] == "PASS"
+    assert result["consumers"]["strategies"]["candidate_count"] == 0
     assert result["broker_order_calls"] == 0
+
+def test_missing_current_reports_fails_closed(tmp_path):
+    with pytest.raises(ValueError, match="CURRENT_CYCLE_RANKED_REPORTS_MISSING"):
+        run(tmp_path, {"cycle_provenance": ranked()["cycle_provenance"], "reports": []})
+
+def test_provenance_mismatch_fails_closed(tmp_path):
+    with pytest.raises(ValueError, match="CURRENT_CYCLE_PROVENANCE_MISMATCH"):
+        run(tmp_path, ranked(source_sha="b" * 40))
+
+def test_stale_advisory_rows_are_not_used(tmp_path):
+    result = run(tmp_path, ranked())
+    assert result["consumers"]["candidate_pool"]["candidate_count"] == 0
     assert not (tmp_path / "advisory_queue.jsonl").exists()
-
-
-def test_consumer_cycle_rejects_invalid_candidate(tmp_path):
-    result = run_consumer_cycle(
-        runtime_outputs={"market_snapshot": {}, "advisory_latest": {"rows": [{"candidate_id": "bad"}]}},
-        output_root=tmp_path, session_id="s1", source_sha="a" * 40,
-    )
-    assert result["consumers"]["candidate_pool"]["rejected_count"] == 1
     stored = json.loads((tmp_path / "consumer_cycle_latest.json").read_text())
-    assert stored["live_execution_authorized"] is False
-
-
-def test_consumer_cycle_does_not_rank_before_option_and_eligibility(tmp_path):
-    row = {
-        "candidate_id": "c1", "strategy_id": "s1", "spec_sha": "b" * 64,
-        "timestamp": "2026-08-24T09:15:00Z", "underlying": "NIFTY",
-        "direction": "UP", "candidate_type": "directional", "confidence_raw": 0.8,
-        "regime": "UNKNOWN", "reason": "test", "data_cutoff": "2026-08-24T09:14:00Z",
-        "execution_status": "advisory_only",
-    }
-    result = run_consumer_cycle(
-        runtime_outputs={"market_snapshot": {"regime": {"primary_regime": "UNKNOWN"}}, "advisory_latest": {"rows": [row]}},
-        output_root=tmp_path, session_id="s1", source_sha="a" * 40,
-    )
-    assert result["consumers"]["option_surface"]["verdict"] == "PENDING"
-    assert result["consumers"]["eligibility"]["eligible_count"] == 0
-    assert result["consumers"]["ranking"]["ranked_count"] == 0
+    assert stored["current_cycle_input"]["report_count"] == 1

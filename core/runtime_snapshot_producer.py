@@ -558,7 +558,13 @@ def _build_and_write_canonical_ranked_snapshot(
         "top_executable": top_executable,
         "top_advisory": top_advisory,
         "reports": reports,
-        "source": "ranked_opportunity_pipeline_v1"
+        "source": "ranked_opportunity_pipeline_v1",
+        "cycle_provenance": {
+            "cycle_id": cycle_context.cycle_id if cycle_context else None,
+            "source_sha": str(os.environ.get("TRADEBOT_COMMIT_SHA") or ""),
+            "session_id": str(os.environ.get("RUN_ID") or ""),
+            "session_date": now_ist().date().isoformat(),
+        },
     }
     write_ranked_pipeline_snapshot(payload=payload, producer=producer)
 

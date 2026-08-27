@@ -35,19 +35,41 @@ def run_consumer_cycle(
     session_id: str, source_sha: str, cycle_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     root = Path(output_root)
-    market = runtime_outputs.get("market_snapshot")
-    regime = market.get("regime") if isinstance(market, Mapping) else None
-    rows = []
-    advisory = runtime_outputs.get("advisory_latest")
-    if isinstance(advisory, Mapping) and isinstance(advisory.get("rows"), list):
-        rows = [row for row in advisory["rows"] if isinstance(row, Mapping)]
+    context = dict(cycle_context or {})
+    cycle_id = str(context.get("cycle_id") or "").strip()
+    if not cycle_id:
+        raise ValueError("CURRENT_CYCLE_INPUT_MISMATCH")
     ranked_pipeline = runtime_outputs.get("ranked_pipeline_latest")
     if not isinstance(ranked_pipeline, Mapping):
-        try:
-            from core.runtime_snapshot_store import RANKED_PIPELINE_LATEST_PATH
-            ranked_pipeline = json.loads(Path(RANKED_PIPELINE_LATEST_PATH).read_text(encoding="utf-8"))
-        except (OSError, TypeError, ValueError):
-            ranked_pipeline = None
+        raise ValueError("CURRENT_CYCLE_RANKED_REPORTS_MISSING")
+    reports = ranked_pipeline.get("reports")
+    if not isinstance(reports, list) or not reports:
+        raise ValueError("CURRENT_CYCLE_RANKED_REPORTS_MISSING")
+    expected_sha = str(source_sha).strip()
+    provenance = ranked_pipeline.get("cycle_provenance")
+    if not isinstance(provenance, Mapping):
+        raise ValueError("CURRENT_CYCLE_PROVENANCE_MISSING")
+    expected_session = str(session_id).strip()
+    for key, expected in (("cycle_id", cycle_id), ("source_sha", expected_sha), ("session_id", expected_session)):
+        if str(provenance.get(key) or "").strip() != expected:
+            raise ValueError("CURRENT_CYCLE_PROVENANCE_MISMATCH")
+    rows: list[Mapping[str, Any]] = []
+    regime: Mapping[str, Any] | None = None
+    for report in reports:
+        if not isinstance(report, Mapping):
+            raise ValueError("CURRENT_CYCLE_RANKED_REPORTS_INVALID")
+        candidate_pool = report.get("candidate_pool")
+        if not isinstance(candidate_pool, Mapping):
+            raise ValueError("CURRENT_CYCLE_CANDIDATE_POOL_MISSING")
+        report_regime = candidate_pool.get("regime")
+        if isinstance(report_regime, Mapping) and report_regime:
+            regime = regime or report_regime
+        candidates = candidate_pool.get("candidates")
+        if not isinstance(candidates, list):
+            raise ValueError("CURRENT_CYCLE_STRATEGY_REPORTS_MISSING")
+        rows.extend(row for row in candidates if isinstance(row, Mapping))
+    if not isinstance(regime, Mapping) or not regime:
+        raise ValueError("CURRENT_CYCLE_REGIME_NOT_TERMINAL")
 
     valid_candidates = []
     rejected = 0
@@ -69,7 +91,17 @@ def run_consumer_cycle(
         "live_execution_authorized": False,
         "broker_order_calls": 0,
         "consumers": {},
-        "cycle_context": dict(cycle_context or {}),
+        "cycle_context": context,
+        "current_cycle_input": {
+            "cycle_id": cycle_id,
+            "source_sha": expected_sha,
+            "session_id": session_id,
+            "report_count": len(reports),
+            "strategy_report_count": sum(1 for report in reports if isinstance(report.get("candidate_pool"), Mapping)),
+            "ranked_report_count": len(reports),
+            "stale_advisory_fallback_used": False,
+            "session_date": str(provenance.get("session_date") or ""),
+        },
     }
     result["consumers"]["regime"] = _state(
         "PASS" if isinstance(regime, Mapping) and regime else "PENDING",
