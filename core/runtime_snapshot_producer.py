@@ -608,6 +608,17 @@ def produce_and_store_runtime_snapshots(
             market_payload = read_market_snapshot(DEFAULT_MARKET_SNAPSHOT_PATH)
         except Exception as exc:
             market_payload = {"missing": True, "error": f"{type(exc).__name__}:{exc}"}
+    if isinstance(market_payload, dict) and (
+        market_payload.get("missing") or (isinstance(market_payload.get("payload"), dict) and market_payload["payload"].get("missing"))
+    ):
+        from core.live_market_snapshot_producer import build_live_market_snapshot
+        market_payload = build_live_market_snapshot(
+            db_path=runtime_dir() / "db" / "DEFAULT.sqlite",
+            output_path=DEFAULT_MARKET_SNAPSHOT_PATH,
+            session_id=str(os.environ.get("RUN_ID") or loop_id or "canonical-live"),
+            session_date=now_ist().date().isoformat(),
+            source_sha=str(os.environ.get("TRADEBOT_COMMIT_SHA") or ""),
+        )
     outputs["market_snapshot"] = market_payload
 
     advisory_payload = _build_advisory_latest_payload()
