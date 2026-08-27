@@ -431,12 +431,29 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             from core.canonical_cycle_coordinator import normalize_feed_truth
             raw_feed_truth = latest_runtime_outputs.get("feed_health_truth_latest") or {}
             runtime_feed_truth = latest_runtime_outputs.get("feed_runtime_latest") or {}
-            feed_truth = normalize_feed_truth(
-                {"payload": {**dict(raw_feed_truth), "session_id": run_id, "source_sha": producer_commit}},
-                runtime_truth=runtime_feed_truth,
-                expected_session_id=run_id,
-                expected_source_sha=producer_commit,
-            )
+            try:
+                feed_truth = normalize_feed_truth(
+                    {"payload": {**dict(raw_feed_truth), "session_id": run_id, "source_sha": producer_commit}},
+                    runtime_truth=runtime_feed_truth,
+                    expected_session_id=run_id,
+                    expected_source_sha=producer_commit,
+                )
+            except ValueError as exc:
+                # Invalid or unavailable truth may never admit a cycle, but it
+                # must not turn a pre-feed startup observation into a fatal
+                # process error.  The normalizer's exact failure remains
+                # visible through the non-admitting status.
+                feed_truth = {
+                    "normalization_status": "INVALID",
+                    "normalization_valid": False,
+                    "coordinator_admission_allowed": False,
+                    "waiting_for_feed_truth": True,
+                    "normalization_failure": str(exc),
+                    "feed_state": "",
+                    "runtime_state": "",
+                    "feed_ok": False,
+                    "ws_connected": False,
+                }
             feed_recovered = str(feed_truth.get("overlay_state") or "").lower() == "feed_recovered"
             cycle_trigger = cycle_coordinator.should_request(
                 market_open=session_policy.market_state == "MARKET_OPEN",
