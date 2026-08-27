@@ -22,7 +22,7 @@ from core.read_only_live_evidence import (
 )
 from core.live_session_manifest import LiveSessionManifest, write_session_manifest
 from core.live_consumer_contract import CANONICAL_CONSUMERS, validate_consumer_registry, write_consumer_registry
-from core.live_runtime_artifacts import write_pending_runtime_artifacts, write_session_exit_gate
+from core.live_runtime_artifacts import write_pending_runtime_artifacts, write_session_exit_gate, publish_runtime_evidence
 from core.market_session_state import derive_market_session_policy
 
 
@@ -360,6 +360,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     meg_cycle_count = 0
     authority_intervals: set[str] = set()
     latest_runtime_outputs: Any = {}
+    latest_cycle_payload: dict[str, Any] = {}
     run_id = str(os.environ.get("RUN_ID") or launch_plan.get("run_id") or f"kite-read-only-{session_date}")
     producer_commit = str(
         launch_plan.get("commit_sha")
@@ -476,7 +477,14 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 feed_recovered=feed_recovered,
             )
             if cycle_trigger:
-                cycle_coordinator.run(cycle_coordinator.request(cycle_trigger, cutoff=datetime.now(timezone.utc)))
+                latest_cycle_payload = cycle_coordinator.run(
+                    cycle_coordinator.request(cycle_trigger, cutoff=datetime.now(timezone.utc))
+                )
+            publish_runtime_evidence(
+                output_root, session_id=run_id, source_sha=producer_commit,
+                feed_payload=dict(latest_runtime_outputs.get("feed_runtime_latest") or {}),
+                cycle_payload=latest_cycle_payload, pid=os.getpid(),
+            )
             append_feed_forensic_event(
                 "RUNTIME_PERSISTENCE_PROGRESS",
                 snapshot_count=1,

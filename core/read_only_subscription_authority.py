@@ -61,7 +61,10 @@ def build_subscription_authority(*, rows: list[Mapping[str, Any]], session_id: s
     payload = {
         "schema_version": 2, "session_id": session_id, "session_date": session_date,
         "source_sha": source_sha, "instrument_authority_sha256": instrument_authority["raw_instrument_sha256"],
-        "generated_at": datetime.now(timezone.utc).isoformat(), "subscription_count": len(token_rows),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "authority_semantics": "BOOTSTRAP_AUTHORITY",
+        "bootstrap_authority_count": len(token_rows),
+        "subscription_count": len(token_rows),
         "tokens": sorted(token_rows), "subscription_tokens": sorted(token_rows),
         "requirements": requirements, "consumers": sorted(expected_consumers), "segments": ["NSE"],
         "token_provenance": sorted(token_rows.values(), key=lambda item: item["token"]),

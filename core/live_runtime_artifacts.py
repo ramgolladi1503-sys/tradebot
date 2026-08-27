@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,29 @@ def write_pending_runtime_artifacts(
     if include_instrument_authority:
         _write(root / "instrument_authority_manifest.json", {**identity, "verdict": "PENDING", "instrument_master_sha": None, **authority})
     _write(root / "session_exit_gate.json", {**identity, "verdict": "PENDING", "live_observation_e2e_ready": False, **authority})
+
+
+def publish_runtime_evidence(output_root: str | Path, *, session_id: str, source_sha: str,
+                             feed_payload: dict[str, Any] | None,
+                             cycle_payload: dict[str, Any] | None,
+                             pid: int) -> None:
+    """Publish current primitive state into canonical root artifacts atomically."""
+    if not session_id or not source_sha:
+        raise ValueError("runtime_artifact_identity_missing")
+    now = datetime.now(timezone.utc).isoformat()
+    feed = dict(feed_payload or {})
+    cycle = dict(cycle_payload or {})
+    authority = {"broker_write_authority": False, "order_authority": False,
+                 "paper_authorized": False, "live_execution_authorized": False,
+                 "orders_placed": 0, "orders_modified": 0, "orders_cancelled": 0}
+    identity = {"session_id": session_id, "source_sha": source_sha, "pid": int(pid), "updated_at": now}
+    _write(Path(output_root) / "heartbeat.json", {**identity, **authority, "state": "RUNNING", "verdict": "PASS", "cycle_id": cycle.get("cycle_id")})
+    connected = bool(feed.get("ws_connected"))
+    intended = int(feed.get("intended_tokens_count") or 0)
+    actual = int(feed.get("subscribed_tokens_count") or 0)
+    _write(Path(output_root) / "feed_health.json", {**identity, **authority, "verdict": "PASS" if connected else "PENDING", "websocket_connected": connected, "runtime_state": feed.get("runtime_state"), "intended_tokens_count": intended, "subscribed_tokens_count": actual, "subscription_truth_complete": bool(intended > 0 and actual >= intended)})
+    cycle_ok = bool(cycle.get("cycle_ok"))
+    _write(Path(output_root) / "pipeline_stage_state.json", {**identity, **authority, "current_stage": "ADVISORY_READY" if cycle_ok else "FEED_READY", "verdict": "PASS" if cycle_ok else "PENDING", "cycle_id": cycle.get("cycle_id"), "cycle_ok": cycle_ok, "cycle_outcome": cycle.get("cycle_outcome"), "runtime_validated": connected, "e2e_ready": False})
 
 
 def write_session_exit_gate(
