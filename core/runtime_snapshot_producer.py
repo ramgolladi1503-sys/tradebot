@@ -615,6 +615,7 @@ def produce_and_store_runtime_snapshots(
         market_payload = build_live_market_snapshot(
             db_path=runtime_dir() / "db" / "DEFAULT.sqlite",
             output_path=DEFAULT_MARKET_SNAPSHOT_PATH,
+            instrument_path=runtime_dir() / "instruments.raw.json",
             session_id=str(os.environ.get("RUN_ID") or loop_id or "canonical-live"),
             session_date=now_ist().date().isoformat(),
             source_sha=str(os.environ.get("TRADEBOT_COMMIT_SHA") or ""),
