@@ -273,6 +273,11 @@ class ObservationLifecycle:
             import core.tick_store as tick_store
             import core.depth_store as depth_store
             import core.feed.runtime_store as runtime_store
+            shutdown_initial_state = {
+                "tick": tick_store.get_persistence_worker_state(),
+                "depth": depth_store.depth_store.persistence_state(),
+                "runtime": runtime_store.runtime_persistence_state(),
+            }
             bridge_module = __import__("core.market_event_graph_live_runtime_bridge", fromlist=["flush_live_source_bridge"])
             self.phase = "IN_FLIGHT_CALLBACKS_SETTLED"
             bridge_result = bridge_module.flush_live_source_bridge()
@@ -312,6 +317,7 @@ class ObservationLifecycle:
                 "tick_state": tick_state,
                 "depth_state": depth_state,
                 "meg_bridge_flush": bridge_result,
+                "shutdown_initial_state": shutdown_initial_state,
                 "read_only": True,
                 "is_order_action": False,
                 "broker_api_called": False,
@@ -553,11 +559,11 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         shutdown_diag = {
             "schema_version": 1, "session_id": run_id, "source_sha": producer_commit,
             "shutdown_requested": True, "shutdown_drain_complete": bool(report.get("shutdown_drain_complete")),
-            "tick_queue_depth_initial": report.get("tick_persistence", {}).get("queue_depth_at_shutdown"),
+            "tick_queue_depth_initial": report.get("shutdown_initial_state", {}).get("tick", {}).get("queue_depth_at_shutdown"),
             "tick_queue_depth_final": report.get("tick_persistence", {}).get("queue_depth"),
-            "depth_queue_depth_initial": report.get("depth_persistence", {}).get("queue_depth"),
+            "depth_queue_depth_initial": report.get("shutdown_initial_state", {}).get("depth", {}).get("queue_depth"),
             "depth_queue_depth_final": report.get("depth_persistence", {}).get("queue_depth"),
-            "runtime_queue_depth_initial": report.get("runtime_persistence", {}).get("queue_depth"),
+            "runtime_queue_depth_initial": report.get("shutdown_initial_state", {}).get("runtime", {}).get("pending"),
             "runtime_queue_depth_final": report.get("runtime_persistence", {}).get("queue_depth"),
             "tick_worker_joined": report.get("tick_state", {}).get("worker_join_completed"),
             "depth_worker_joined": not bool(report.get("depth_state", {}).get("worker_alive")),
