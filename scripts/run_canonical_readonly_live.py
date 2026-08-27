@@ -151,8 +151,11 @@ def run(*, validate_only: bool = False) -> int:
     token_path = Path(os.environ.get("TRADEBOT_TOKEN_PATH", "/Users/madhuram/.tradebot/credentials/kite_access_token")).expanduser()
     session_id = str(os.environ.get("RUN_ID") or f"kite-read-only-{date.today().isoformat()}")
     _metadata_guard(token_path=token_path)
-    if date.today().isoformat() != "2026-08-25":
-        raise RuntimeError("READ_ONLY_SESSION_DATE_NOT_20260825")
+    expected_session_date = str(
+        os.environ.get("TRADEBOT_EXPECTED_SESSION_DATE") or date.today().isoformat()
+    ).strip()
+    if date.today().isoformat() != expected_session_date:
+        raise RuntimeError("READ_ONLY_SESSION_DATE_MISMATCH")
     if not validate_only:
         _archive_existing_runtime(RUNTIME_ROOT)
     # Keep builder output separate from the runtime root.  The canonical
@@ -162,7 +165,7 @@ def run(*, validate_only: bool = False) -> int:
     if validate_only:
         return 0
     from core.read_only_live_pipeline import run_pipeline
-    return int(run_pipeline(session_date=date.today().isoformat(), runtime_root=RUNTIME_ROOT, token_path=token_path, subscription_tokens=tokens))
+    return int(run_pipeline(session_date=expected_session_date, runtime_root=RUNTIME_ROOT, token_path=token_path, subscription_tokens=tokens))
 
 
 def main() -> int:
