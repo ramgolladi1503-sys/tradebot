@@ -62,6 +62,16 @@ def test_launcher_rejects_preflight_source_sha_mismatch(tmp_path):
     assert launcher._load_existing_preflight(root=tmp_path, source_sha="b" * 40) is None
 
 
+def test_launcher_rejects_second_canonical_start(tmp_path):
+    first = launcher._acquire_canonical_singleton_lock(root=tmp_path)
+    try:
+        with pytest.raises(RuntimeError, match="CANONICAL_RUNTIME_ALREADY_ACTIVE"):
+            launcher._acquire_canonical_singleton_lock(root=tmp_path)
+    finally:
+        launcher._release_canonical_singleton_lock()
+        first.close()
+
+
 def test_launcher_safety_metadata_fails_closed(monkeypatch, tmp_path):
     import core.kite_read_only_observation_runtime as runtime
     monkeypatch.setattr(

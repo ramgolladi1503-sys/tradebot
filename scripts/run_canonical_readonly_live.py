@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 from datetime import date, datetime, timezone
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -19,6 +21,33 @@ if str(ROOT) not in sys.path:
 
 RUNTIME_ROOT = Path(os.environ.get("TRADEBOT_RUNTIME_ROOT", "/Volumes/TradeBotData/tradebot-live-runtime/current"))
 PREFLIGHT_ROOT = Path(os.environ.get("TRADEBOT_PREFLIGHT_ROOT", str(RUNTIME_ROOT)))
+_CANONICAL_LOCK_HANDLE = None
+
+
+def _acquire_canonical_singleton_lock(*, root: Path | None = None):
+    """Acquire the one-process canonical read-only runtime authority."""
+    global _CANONICAL_LOCK_HANDLE
+    lock_root = Path(root or os.environ.get("LOCKS_ROOT") or (RUNTIME_ROOT / "locks"))
+    lock_root.mkdir(parents=True, exist_ok=True)
+    handle = (lock_root / "canonical_readonly_live.lock").open("a+")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, OSError) as exc:
+        handle.close()
+        raise RuntimeError("CANONICAL_RUNTIME_ALREADY_ACTIVE") from exc
+    _CANONICAL_LOCK_HANDLE = handle
+    atexit.register(_release_canonical_singleton_lock)
+    return handle
+
+
+def _release_canonical_singleton_lock() -> None:
+    global _CANONICAL_LOCK_HANDLE
+    handle, _CANONICAL_LOCK_HANDLE = _CANONICAL_LOCK_HANDLE, None
+    if handle is not None:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
 
 
 def _source_sha() -> str:
@@ -140,6 +169,7 @@ def _load_existing_preflight(*, root: Path, source_sha: str) -> list[int] | None
 def run(*, validate_only: bool = False) -> int:
     source_sha = _source_sha()
     _require_clean_authority()
+    _acquire_canonical_singleton_lock()
     # Bind every import-time runtime path constant to the same external root
     # before importing the canonical pipeline or any persistence/feed module.
     os.environ["TRADEBOT_CANONICAL_LIVE"] = "1"
