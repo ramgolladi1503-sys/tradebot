@@ -4947,49 +4947,9 @@ def _persist_runtime_snapshot_row(
     ok = write_feed_runtime_snapshot(payload)
     if not ok:
         _log_ws("FEED_RUNTIME_STORE_WRITE_ERROR", {"source": source})
-    _write_feed_runtime_snapshot(
-        now_epoch=ts_epoch,
-        ws_connected=ws_connected,
-        subscribed_tokens_count=len(_LAST_TOKENS or []),
-        intended_tokens_count=int(payload["intended_tokens_count"] or 0),
-        subscribed_tokens_count_by_symbol=sub_counts,
-        missing_option_tokens_count=missing_count,
-        missing_option_tokens_count_by_symbol=missing_counts_by_symbol,
-        last_db_tick_epoch=last_db_tick_epoch,
-        last_db_tick_age_sec=last_db_tick_age_sec,
-        last_ws_tick_epoch=last_ws_tick_epoch,
-        last_tick_age_sec=last_tick_age_sec,
-        last_depth_epoch=last_depth_epoch,
-        last_depth_age_sec=last_depth_age_sec,
-        market_open=market_open,
-        state_machine=state_machine,
-        subscribed_option_tokens_count=int(option_state.get("option_count") or 0),
-        option_last_tick_age_by_symbol=dict(option_state.get("option_age_by_symbol") or {}),
-        option_last_tick_sample=list(option_state.get("sample_rows") or []),
-        option_tokens_resolved_count_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
-        option_tokens_subscribed_count_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
-        option_ticks_received_count_by_symbol=dict(option_state.get("ticks_received_count_by_symbol") or {}),
-        last_option_tick_ts_by_symbol=dict(option_state.get("last_tick_ts_by_symbol") or {}),
-        option_feed_block_reason_by_symbol=option_feed_block_reason_by_symbol,
-        option_active_blockers_by_symbol=option_active_blockers_by_symbol,
-        option_ticks_verified=payload.get("option_ticks_verified"),
-        verified_option_symbols=payload.get("verified_option_symbols"),
-        missing_option_symbols=payload.get("missing_option_symbols"),
-        warmup_clean_cycles=payload.get("warmup_clean_cycles"),
-        warmup_required_clean_cycles=payload.get("warmup_required_clean_cycles"),
-        restart_count_1h=_restart_count_1h(ts_epoch),
-        stale_strikes=_STALE_STRIKES,
-        runtime_state=effective_state_text,
-        last_error=err_text,
-        reconnect_blocked_reason=str(payload.get("reconnect_blocked_reason") or "").strip().lower() or None,
-        internal_retry_disabled=internal_retry_disabled,
-        stop_retry_called=stop_retry_called,
-        factory_stop_trying_called=factory_stop_trying_called,
-        auto_reconnect_disabled=auto_reconnect_disabled,
-        internal_retry_error=internal_retry_error,
-        internal_retry_reason=internal_retry_reason,
-        process_restart_required=payload.get("process_restart_required"),
-    )
+    # Runtime snapshots are persisted by the background runtime-store worker.
+    # The websocket callback must not duplicate that write through the legacy
+    # synchronous publisher, which performs filesystem I/O on this thread.
 
 
 def _run_db_tick_watchdog_cycle(

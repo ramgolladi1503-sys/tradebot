@@ -584,6 +584,83 @@ def test_registered_live_persistence_fixture_traverses_tick_depth_runtime_enqueu
     depth_store.shutdown_persistence()
 
 
+def test_scaled_shutdown_durability_drains_historical_scale_backlog(tmp_path, monkeypatch):
+    """Exercise the real persistence workers with the frozen minimum backlog."""
+    import threading
+    from config import config as cfg
+
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "scaled.sqlite"))
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0)
+    tick_store.reset_runtime_state_for_tests()
+    runtime_store.reset_runtime_persistence_for_tests()
+
+    tick_row = ("2026-08-29T09:15:00Z", 1001, 100.0, 1.0, 1.0, 1787991300.0, "2026-08-29T09:15:00Z")
+    with tick_store._WRITE_QUEUE_LOCK:
+        for _ in range(763):
+            tick_store._WRITE_QUEUE.append(tick_row)
+    tick_initial = tick_store.pending_tick_count()
+
+    depth = depth_store_module.DepthStore()
+    depth.shutdown_persistence(deadline_seconds=1.0)
+    depth._persist_queue = queue.Queue(maxsize=2048)
+    depth._persist_stop = threading.Event()
+    depth._persist_shutdown = False
+    depth._persist_thread = threading.Thread(target=depth._persist_loop, name="scaled-depth-worker", daemon=True)
+    depth_item = ("2026-08-29T09:15:00Z", 2001, '{"depth": {"buy": [], "sell": []}, "imbalance": 0.0}', 1787991300.0)
+    for _ in range(924):
+        depth._persist_queue.put_nowait(depth_item)
+    depth_initial = depth._persist_queue.qsize()
+
+    runtime_payload = {"ts_epoch": 1787991300.0, "ws_connected": False, "runtime_state": "OFFLINE_TEST"}
+    with runtime_store._RUNTIME_LOCK:
+        for _ in range(52):
+            runtime_store._RUNTIME_WRITE_QUEUE.put_nowait(dict(runtime_payload))
+    runtime_initial = runtime_store._RUNTIME_WRITE_QUEUE.qsize()
+    tick_store._ensure_flush_thread()
+    depth._persist_thread.start()
+    runtime_store._ensure_runtime_worker()
+
+    initial = {
+        "tick": tick_initial,
+        "depth": depth_initial,
+        "runtime": runtime_initial,
+    }
+    trajectory = [tuple(initial.values())]
+    worker_observations = []
+    for _ in range(200):
+        state = (tick_store.pending_tick_count(), depth._persist_queue.qsize(), runtime_store._RUNTIME_WRITE_QUEUE.qsize())
+        trajectory.append(state)
+        worker_observations.append((
+            bool(tick_store.get_persistence_worker_state()["worker_terminated"] is False),
+            depth._persist_thread.is_alive(),
+            bool(runtime_store.runtime_persistence_state()["worker_alive"]),
+        ))
+        if state == (0, 0, 0):
+            break
+        time.sleep(0.01)
+
+    tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=10.0)
+    depth_result = depth.shutdown_persistence(deadline_seconds=10.0)
+    runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=10.0)
+    final = (tick_store.pending_tick_count(), depth._persist_queue.qsize(), runtime_store._RUNTIME_WRITE_QUEUE.qsize())
+    assert tick_store._enqueue_row(tick_row) is False
+    assert runtime_store.write_runtime_snapshot(runtime_payload) is False
+
+    assert initial["tick"] >= 763 and initial["depth"] >= 924 and initial["runtime"] >= 52
+    assert trajectory[0] == (initial["tick"], initial["depth"], initial["runtime"])
+    assert any(any(depths) and all(workers) for depths, workers in zip(trajectory[1:], worker_observations))
+    assert final == (0, 0, 0)
+    assert tick_result["status"] == "COMPLETE_DRAIN"
+    assert depth_result["complete"] is True
+    assert runtime_result["complete"] is True
+    assert tick_result["worker_join_completed"] is True
+    assert not depth_result["worker_alive"]
+    assert not runtime_result["worker_alive"]
+    assert tick_result["worker_failures"] == 0
+    assert depth_result["failures"] == 0
+    assert runtime_result["failures"] == 0
+
+
 def test_registered_live_callback_has_zero_sqlite_operations_on_callback_thread(tmp_path, monkeypatch):
     _, counts, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path)
     assert counts["tick"] and counts["runtime"]

@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from datetime import date
 
 import pytest
 
@@ -39,7 +40,7 @@ def test_launcher_forbidden_startup_references_are_not_in_launcher():
 
 def test_launcher_reuses_valid_same_sha_preflight_without_rebuilding(tmp_path):
     payload = {
-        "session_date": "2026-08-25",
+        "session_date": date.today().isoformat(),
         "source_sha": "a" * 40,
         "verdict": "PASS",
         "tokens": [101, 202],
@@ -47,6 +48,18 @@ def test_launcher_reuses_valid_same_sha_preflight_without_rebuilding(tmp_path):
     (tmp_path / "instrument_authority_manifest.json").write_text(json.dumps(payload))
     (tmp_path / "subscription_tokens.json").write_text(json.dumps(payload))
     assert launcher._run_current_authority_preflight(root=tmp_path, source_sha="a" * 40) == [101, 202]
+
+
+def test_launcher_rejects_preflight_source_sha_mismatch(tmp_path):
+    payload = {
+        "session_date": date.today().isoformat(),
+        "source_sha": "a" * 40,
+        "verdict": "PASS",
+        "tokens": [101, 202],
+    }
+    (tmp_path / "instrument_authority_manifest.json").write_text(json.dumps(payload))
+    (tmp_path / "subscription_tokens.json").write_text(json.dumps(payload))
+    assert launcher._load_existing_preflight(root=tmp_path, source_sha="b" * 40) is None
 
 
 def test_launcher_safety_metadata_fails_closed(monkeypatch, tmp_path):
