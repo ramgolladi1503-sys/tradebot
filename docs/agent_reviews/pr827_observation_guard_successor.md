@@ -63,7 +63,7 @@ Observation-only mode dominates `ALLOW_LIVE_PLACEMENT`, `LIVE_TRADING_ENABLED`, 
 - broker API calls: 0
 - orders placed/modified/cancelled: 0
 
-## What This Does Not Prove
+## What This PR Does Not Prove
 
 This offline change does not authorize paper or live execution, establish broker connectivity, or constitute live-market evidence. Any later runtime promotion requires its separate human-controlled authority and evidence gates.
 
