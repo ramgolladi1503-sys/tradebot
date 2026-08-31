@@ -65,7 +65,7 @@ def build_live_market_snapshot(*, db_path: str | Path, output_path: str | Path,
         for symbol, token in index_tokens.items():
             latest = conn.execute(
                 "SELECT last_price, volume, timestamp_epoch FROM ticks "
-                "WHERE instrument_token=? AND timestamp_epoch IS NOT NULL " 
+                "WHERE instrument_token=? AND timestamp_epoch IS NOT NULL "
                 "AND timestamp_epoch <= ? AND timestamp_iso LIKE ? "
                 "ORDER BY timestamp_epoch DESC LIMIT 1",
                 (token, now, str(session_date) + "%"),

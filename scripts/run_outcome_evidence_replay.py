@@ -15,22 +15,22 @@ def main():
     parser.add_argument("--regime-file", type=str, help="Path to regime_monitor.jsonl (optional)")
     parser.add_argument("--dry-run", action="store_true", help="Run without writing to DB")
     parser.add_argument("--json", action="store_true", help="Output summary as JSON")
-    
+
     args = parser.parse_args()
-    
+
     run_id = str(uuid.uuid4())
     store_dir = Path("runtime/outcome_evidence")
-    
+
     runner = OutcomeEvidenceRunner(
         run_id=run_id,
         store_dir=store_dir,
         cost_model=IndianIndexOptionsCostModel()
     )
-    
+
     candidate_path = Path(args.candidate_file)
     trace_path = Path(args.option_trace)
     regime_path = Path(args.regime_file) if args.regime_file else None
-    
+
     if not candidate_path.exists():
         msg = f"Error: Candidate file not found at {candidate_path}"
         if args.json:
@@ -39,7 +39,7 @@ def main():
         else:
             print(msg)
         sys.exit(1)
-        
+
     if not trace_path.exists():
         msg = f"Error: Trace file not found at {trace_path}"
         if args.json:
@@ -48,14 +48,14 @@ def main():
         else:
             print(msg)
         sys.exit(1)
-        
+
     summary = runner.run(
         candidate_file=candidate_path,
         option_trace_file=trace_path,
         regime_file=regime_path,
         dry_run=args.dry_run
     )
-    
+
     if args.json:
         import json
         print(json.dumps({
