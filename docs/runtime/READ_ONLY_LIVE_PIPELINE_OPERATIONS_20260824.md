@@ -85,4 +85,3 @@ is missing. Unit tests, authentication alone, socket connection, requested
 subscriptions, or a nonempty candidate file cannot substitute for fresh ticks,
 subscription confirmation, advancing canonical persistence, consumer health,
 and independently verified close evidence.
-

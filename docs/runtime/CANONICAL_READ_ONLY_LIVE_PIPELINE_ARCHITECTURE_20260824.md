@@ -87,4 +87,3 @@ Unit tests and static contracts cannot advance a current-session stage.
 The next stage is not implied by the previous stage. Main remains unchanged
 until real-session E2E evidence, independent exit-artifact verification, and
 remote exact-SHA preservation all pass.
-

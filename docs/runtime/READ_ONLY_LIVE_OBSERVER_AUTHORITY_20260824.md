@@ -102,4 +102,3 @@ limited to the governed read-only LaunchAgent mechanism.
 8. Keep `LIVE_OBSERVATION_E2E_READY=false` until every lifecycle gate is
    measured and passed; seal the session immutably after stop, flush, and
    no-respawn proof.
-
