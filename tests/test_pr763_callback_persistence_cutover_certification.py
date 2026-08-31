@@ -639,9 +639,9 @@ def test_scaled_shutdown_durability_drains_historical_scale_backlog(tmp_path, mo
             break
         time.sleep(0.01)
 
-    tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=10.0)
-    depth_result = depth.shutdown_persistence(deadline_seconds=10.0)
-    runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=10.0)
+    tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=5.0)
+    depth_result = depth.shutdown_persistence(deadline_seconds=5.0)
+    runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=5.0)
     final = (tick_store.pending_tick_count(), depth._persist_queue.qsize(), runtime_store._RUNTIME_WRITE_QUEUE.qsize())
     assert tick_store._enqueue_row(tick_row) is False
     assert runtime_store.write_runtime_snapshot(runtime_payload) is False
