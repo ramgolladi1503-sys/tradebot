@@ -291,6 +291,8 @@ def test_cerberus_gate_ignores_unchanged_baseline_marker(tmp_path, monkeypatch):
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-qm", "baseline"], cwd=tmp_path, check=True)
     path.write_text("VALUE = restricted_call()\nNOTE = 'changed-safe-line'\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "safe change"], cwd=tmp_path, check=True)
     monkeypatch.setenv("CERBERUS_BASE_REF", "HEAD~1")
 
     report = run_cerberus_gate(
