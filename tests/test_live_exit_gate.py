@@ -15,4 +15,3 @@ def test_exit_gate_never_infers_e2e_from_shutdown(tmp_path):
     stored = json.loads((tmp_path / "session_exit_gate.json").read_text())
     assert stored["option_surface_ran"] is False
     assert stored["cas_freeze"] is False
-

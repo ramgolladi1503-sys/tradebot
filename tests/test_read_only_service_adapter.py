@@ -7,4 +7,3 @@ def test_service_adapter_has_no_order_methods():
     assert "place_order" not in source
     assert "modify_order" not in source
     assert "cancel_order" not in source
-

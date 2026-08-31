@@ -7,4 +7,3 @@ def test_service_shell_uses_existing_governed_loader_only():
     assert "exec /opt/anaconda3/bin/python" in source
     assert "KITE_API_KEY=" not in source
     assert "KITE_API_SECRET=" not in source
-

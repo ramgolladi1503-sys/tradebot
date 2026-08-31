@@ -8,4 +8,3 @@ def test_option_and_eligibility_boundaries_fail_closed():
     eligibility = evaluate_candidate_eligibility(candidate=candidate, option_surface=surface, regime={})
     assert eligibility["status"] == "advisory_only"
     assert "option_surface_not_ready" in eligibility["blockers"]
-

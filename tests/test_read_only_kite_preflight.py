@@ -9,4 +9,3 @@ def test_preflight_is_metadata_only_and_directly_invokable():
     assert "place_order" not in source
     assert "modify_order" not in source
     assert "cancel_order" not in source
-

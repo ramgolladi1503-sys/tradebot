@@ -18,4 +18,3 @@ def test_runtime_evidence_publishes_current_truth(tmp_path):
     assert stage["current_stage"] == "ADVISORY_READY"
     assert stage["cycle_ok"] is True
     assert all(not payload["live_execution_authorized"] for payload in (heartbeat, feed, stage))
-

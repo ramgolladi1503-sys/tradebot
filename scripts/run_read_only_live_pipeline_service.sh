@@ -7,4 +7,3 @@ cd "$ROOT"
 # prints or persists credential values. Missing binding fails closed.
 source "$ROOT/scripts/live_credentials.sh"
 exec /opt/anaconda3/bin/python "$ROOT/scripts/run_read_only_live_pipeline_service.py"
-

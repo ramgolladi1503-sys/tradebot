@@ -63,4 +63,3 @@ def validate_session_artifacts(*, runtime_root: str | Path, source_sha: str,
         "paper_authorized": False,
         "live_execution_authorized": False,
     }
-

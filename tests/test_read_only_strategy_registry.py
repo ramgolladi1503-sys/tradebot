@@ -22,4 +22,3 @@ def test_registry_no_overwrite(tmp_path):
     with pytest.raises(FileExistsError):
         write_strategy_registry(path, session_id="s1", source_sha="a" * 40)
     assert json.loads(path.read_text())["verdict"] == "PENDING"
-

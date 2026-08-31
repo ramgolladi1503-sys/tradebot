@@ -22,4 +22,3 @@ def test_sidecar_manager_isolated_and_pending(tmp_path):
     assert payload["canonical_feed_owner_count"] == 1
     assert payload["broker_order_calls"] == 0
     assert payload["verdict"] == "PENDING"
-

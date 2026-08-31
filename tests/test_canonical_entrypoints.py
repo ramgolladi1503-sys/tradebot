@@ -22,4 +22,3 @@ def test_independent_validator_entrypoint_is_directly_invokable():
     )
     assert result.returncode == 0
     assert "Validate one session" in result.stdout
-

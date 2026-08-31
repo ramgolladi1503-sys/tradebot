@@ -37,4 +37,3 @@ def evaluate_candidate_eligibility(*, candidate: Mapping[str, Any], option_surfa
         "order_authority": False,
         "broker_write_authority": False,
     }
-

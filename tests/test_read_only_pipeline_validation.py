@@ -22,4 +22,3 @@ def test_validation_blocks_without_e2e(tmp_path):
     assert result["verdict"] == "BLOCKED"
     assert "current_session_e2e_not_proven" in result["failures"]
     assert result["promotion_eligible"] is False
-
