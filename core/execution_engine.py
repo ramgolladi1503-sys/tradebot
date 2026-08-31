@@ -19,6 +19,7 @@ from core.order_reconciliation_daemon import OrderReconciliationDaemon
 from core.orders.execution_plan import ExecutionPlan
 from core.orders.intent_store import get_intent, upsert_intent
 from core.orders.order_intent import OrderIntent
+from core.observation_execution_guard import assert_execution_allowed
 from core.orders.state_machine import OrderState, OrderStateMachine
 from core.pretrade_risk_engine import PreTradeRiskEngine, PreTradeRiskRequest
 from core.reconciliation import restore_runtime_state
@@ -680,6 +681,7 @@ class ExecutionEngine:
         - Persists idempotency key in durable SQLite order state store.
         - Returns existing order state when duplicate is detected.
         """
+        assert_execution_allowed("ExecutionEngine.place_order")
         idempotency_key = self.build_idempotency_key(
             signal_id=signal_id,
             instrument=instrument,
