@@ -178,9 +178,6 @@ def _ensure_current_feed_truth_payload(runtime_payload: dict[str, Any]) -> dict[
     truth through the existing builder instead of emitting an unbound runtime
     artifact and relying on a later cycle to repair it.
     """
-    loaded = load_current_feed_truth()
-    if loaded.get("valid"):
-        return dict(loaded.get("payload") or {})
     try:
         from core.runtime_feed_truth_snapshot import (
             build_feed_truth_snapshot,
