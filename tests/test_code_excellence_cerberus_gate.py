@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import textwrap
+import subprocess
 
 import pytest
 
@@ -279,6 +280,27 @@ def test_cerberus_gate_scopes_to_changed_paths_only(tmp_path):
 
     assert [finding.path for finding in report.findings] == ["tools/scoped_clean.py"]
     assert report.block_count == 0
+
+
+def test_cerberus_gate_ignores_unchanged_baseline_marker(tmp_path, monkeypatch):
+    config = _write_config(tmp_path)
+    path = _write_file(tmp_path, "tools/adapter.py", "VALUE = restricted_call()\n")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "baseline"], cwd=tmp_path, check=True)
+    path.write_text("VALUE = restricted_call()\nNOTE = 'changed-safe-line'\n", encoding="utf-8")
+    monkeypatch.setenv("CERBERUS_BASE_REF", "HEAD~1")
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tools/adapter.py",),
+    )
+
+    assert report.block_count == 0
+    assert report.exit_code == 0
 
 
 def test_cerberus_gate_report_lists_configured_contract(tmp_path):

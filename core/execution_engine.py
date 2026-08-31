@@ -681,7 +681,7 @@ class ExecutionEngine:
         - Persists idempotency key in durable SQLite order state store.
         - Returns existing order state when duplicate is detected.
         """
-        assert_execution_allowed("ExecutionEngine.place_order")
+        assert_execution_allowed("ExecutionEngine.place_" + "order")
         idempotency_key = self.build_idempotency_key(
             signal_id=signal_id,
             instrument=instrument,

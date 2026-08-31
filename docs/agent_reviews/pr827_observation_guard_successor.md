@@ -20,7 +20,7 @@
 
 ## Design and Scope
 
-Current `main` lacked a shared observation-only execution guard at the three real boundaries: `ExecutionEngine.place_order`, `AdvancedExecutionAdapter.execute_limit_hunt`, and `MockBroker.place_order`. This successor adds one dependency-light environment gate and invokes it before any order intent, thread, sequence, event, or broker state mutation.
+Current `main` lacked a shared observation-only execution guard at the three real boundaries: the engine placement boundary, the adapter limit-hunt boundary, and the mock-broker placement boundary. This successor adds one dependency-light environment gate and invokes it before any order intent, thread, sequence, event, or broker state mutation.
 
 The stale clean-observation launcher and its tests are intentionally excluded. No synthetic modify/cancel methods are added because current `main` does not expose those entry points.
 

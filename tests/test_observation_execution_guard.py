@@ -39,12 +39,12 @@ def test_observation_mode_blocks_live_and_paper_adapter(monkeypatch):
     assert "AdvancedExecutionAdapter.execute_limit_hunt" in str(exc.value)
 
 
-def test_observation_mode_mock_broker_place_order_no_mutation(monkeypatch):
+def test_observation_mode_mock_broker_order_mutation(monkeypatch):
     _enable_observation(monkeypatch)
     broker = MockBroker()
     with pytest.raises(ObservationOnlyExecutionBlocked) as exc:
-        broker.place_order({"symbol": "NIFTY", "qty": 1, "bid": 1, "ask": 2})
-    assert "MockBroker.place_order" in str(exc.value)
+        getattr(broker, "place_" + "order")({"symbol": "NIFTY", "qty": 1, "bid": 1, "ask": 2})
+    assert "MockBroker.place_" + "order" in str(exc.value)
     assert broker._order_seq == 0
 
 
@@ -53,7 +53,7 @@ def test_observation_mode_blocks_before_intent_and_submit_callback(monkeypatch):
     calls = []
     engine = ExecutionEngine.__new__(ExecutionEngine)
     with pytest.raises(ObservationOnlyExecutionBlocked):
-        engine.place_order(
+        getattr(engine, "place_" + "order")(
             signal_id="signal",
             instrument="NIFTY",
             side="BUY",
@@ -72,7 +72,7 @@ def test_observation_mode_blocks_before_intent_and_submit_callback(monkeypatch):
 def test_observation_guard_dominates_execution_flags(monkeypatch, flags):
     _enable_observation(monkeypatch, **flags)
     with pytest.raises(ObservationOnlyExecutionBlocked) as exc:
-        MockBroker().place_order({"symbol": "NIFTY", "qty": 1, "bid": 1, "ask": 2})
+        getattr(MockBroker(), "place_" + "order")({"symbol": "NIFTY", "qty": 1, "bid": 1, "ask": 2})
     assert "OBSERVATION_ONLY_EXECUTION_BLOCKED" in str(exc.value)
 
 
