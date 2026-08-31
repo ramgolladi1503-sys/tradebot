@@ -427,6 +427,38 @@ def _write_runtime_snapshot_sync(payload: dict[str, Any]) -> bool:
     return True
 
 
+def _write_runtime_snapshots_batch_sync(payloads: list[dict[str, Any]]) -> bool:
+    """Persist every queued runtime snapshot in one lossless transaction."""
+    if not payloads or any(not isinstance(item, dict) for item in payloads):
+        return False
+    init_feed_runtime_table()
+    rows = []
+    for item in payloads:
+        ts = _coerce_epoch(item.get("ts_epoch")) or float(now_utc_epoch())
+        ws = 1 if item.get("ws_connected") is True else 0 if item.get("ws_connected") is False else None
+        sample = item.get("subscribed_tokens_sample") or []
+        rows.append((ts, ws, int(item.get("subscribed_tokens_count") or 0),
+                     int(item.get("intended_tokens_count") or 0),
+                     json.dumps(sample[:25] if isinstance(sample, list) else [], default=str),
+                     _coerce_epoch(item.get("last_ws_tick_epoch")), _coerce_epoch(item.get("last_depth_epoch")),
+                     str(item.get("source") or "unknown")[:120],
+                     str(item.get("runtime_state") or "").strip().upper()[:64],
+                     str(item.get("last_error") or "")[:1000]))
+    try:
+        with _conn() as conn:
+            conn.executemany("""
+                INSERT INTO feed_runtime (ts_epoch, ws_connected, subscribed_tokens_count,
+                intended_tokens_count, subscribed_tokens_sample, last_ws_tick_epoch,
+                last_depth_epoch, source, runtime_state, last_error)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, rows)
+    except Exception:
+        return False
+    latest = dict(payloads[-1])
+    _write_canonical_runtime_artifacts(latest, ts_epoch=float(rows[-1][0]))
+    return True
+
+
 def _runtime_write_loop() -> None:
     global _RUNTIME_FAILURES, _RUNTIME_DEGRADED, _RUNTIME_PERSISTED
     while not _RUNTIME_STOP.is_set() or not _RUNTIME_WRITE_QUEUE.empty():
@@ -435,7 +467,15 @@ def _runtime_write_loop() -> None:
         except queue.Empty:
             continue
         try:
-            if not _write_runtime_snapshot_sync(payload):
+            batch = [payload]
+            while len(batch) < 256:
+                try:
+                    batch.append(_RUNTIME_WRITE_QUEUE.get_nowait())
+                except queue.Empty:
+                    break
+            write_ok = (_write_runtime_snapshot_sync(batch[0]) if len(batch) == 1
+                        else _write_runtime_snapshots_batch_sync(batch))
+            if not write_ok:
                 with _RUNTIME_LOCK:
                     _RUNTIME_FAILURES += 1
                     _RUNTIME_DEGRADED = True
@@ -445,7 +485,8 @@ def _runtime_write_loop() -> None:
                 with _RUNTIME_LOCK:
                     _RUNTIME_PERSISTED += 1
         finally:
-            _RUNTIME_WRITE_QUEUE.task_done()
+            for _ in batch:
+                _RUNTIME_WRITE_QUEUE.task_done()
 
 
 def _ensure_runtime_worker() -> None:
