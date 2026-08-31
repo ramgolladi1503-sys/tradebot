@@ -74,4 +74,3 @@ def write_strategy_registry(path: str | Path, *, session_id: str, source_sha: st
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     return payload
-

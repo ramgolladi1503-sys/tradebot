@@ -38,4 +38,3 @@ def write_sidecar_health(*, registry_path: str | Path, output_path: str | Path,
     temporary.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     temporary.replace(destination)
     return payload
-
