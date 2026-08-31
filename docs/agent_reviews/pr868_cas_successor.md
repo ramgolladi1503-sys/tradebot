@@ -43,3 +43,14 @@ This PR does not prove live broker connectivity, live execution authorization, p
 ## Human Approval
 
 Human approval is required for merge and any subsequent live observation.
+
+## Evidence Traceability
+
+mode: OFFLINE_REHEARSAL_ONLY
+candidate_id: PR868_CAS_SUCCESSOR
+decision: ADVISORY_ONLY
+reason: CAS contracts are isolated and tested without broker access; live proof remains a separate gate.
+timestamp: 2026-08-31T12:00:00+05:30
+is_order_action: false
+broker_api_called: false
+source: exact candidate commit 20f85aee2c589077d445aa6d418a276af05fec42 plus focused offline test output
