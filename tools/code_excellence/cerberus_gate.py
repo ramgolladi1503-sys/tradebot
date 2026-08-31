@@ -86,6 +86,10 @@ def run_cerberus_gate(
                 repo_root=root,
                 relative=_relative_path(root, path),
             ),
+            text_override=_candidate_text(
+                repo_root=root,
+                relative=_relative_path(root, path),
+            ),
         )
     )
     return CerberusGateReport(
@@ -168,16 +172,20 @@ def _scan_file(
     forbidden_markers: tuple[str, ...],
     required_non_action_fields: tuple[str, ...],
     line_numbers: set[int] | None = None,
+    text_override: str | None = None,
 ) -> tuple[CerberusGateFinding, ...]:
     relative = _relative_path(repo_root, file_path)
     if file_path.name == ".gsd-forensics.yaml":
         return ()
     if not file_path.exists() or not file_path.is_file() or file_path.suffix not in TEXT_FILE_SUFFIXES:
         return ()
-    try:
-        text = file_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        raise CerberusGateError(f"cerberus_gate_cannot_read_text path={relative}") from exc
+    if text_override is not None:
+        text = text_override
+    else:
+        try:
+            text = file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise CerberusGateError(f"cerberus_gate_cannot_read_text path={relative}") from exc
 
     findings: list[CerberusGateFinding] = []
     is_test_file = "tests" in Path(relative).parts
@@ -245,13 +253,11 @@ def _scan_file(
 def _added_line_numbers(*, repo_root: Path, relative: str) -> set[int] | None:
     """Return added lines for a PR diff; None preserves the fail-closed fallback."""
 
-    base_ref = str(os.getenv("CERBERUS_BASE_REF") or "").strip()
-    if not base_ref:
-        github_base = str(os.getenv("GITHUB_BASE_REF") or "").strip()
-        base_ref = f"origin/{github_base}" if github_base else "origin/main"
+    base_ref = str(os.getenv("CERBERUS_BASE_REF") or "").strip() or "origin/main"
+    candidate_ref = _candidate_ref()
     try:
         result = subprocess.run(
-            ["git", "diff", "--unified=0", f"{base_ref}...HEAD", "--", relative],
+            ["git", "diff", "--unified=0", f"{base_ref}...{candidate_ref}", "--", relative],
             cwd=repo_root,
             check=True,
             capture_output=True,
@@ -267,6 +273,37 @@ def _added_line_numbers(*, repo_root: Path, relative: str) -> set[int] | None:
         count = int(match.group(2) or "1")
         added.update(range(start, start + count))
     return added
+
+
+def _candidate_ref() -> str:
+    explicit = str(os.getenv("CERBERUS_CANDIDATE_REF") or "").strip()
+    if explicit:
+        return explicit
+    pr_number = str(os.getenv("PR_NUMBER") or "").strip()
+    if pr_number:
+        return f"refs/remotes/origin/pr-{pr_number}-head"
+    return "HEAD"
+
+
+def _candidate_text(*, repo_root: Path, relative: str) -> str | None:
+    """Read the candidate blob when the target workflow has fetched one."""
+
+    candidate = _candidate_ref()
+    if candidate == "HEAD":
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "show", f"{candidate}:{relative}"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    try:
+        return result.stdout.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise CerberusGateError(f"cerberus_gate_cannot_read_candidate_text path={relative}") from exc
 
 
 def _paths_to_scan(repo_root: Path, scoped_paths: tuple[str, ...]) -> tuple[Path, ...]:
