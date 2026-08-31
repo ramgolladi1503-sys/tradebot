@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from core.events import append_event
+from core.observation_execution_guard import assert_execution_allowed
 
 
 @dataclass
@@ -39,6 +40,7 @@ class MockBroker:
         raise ValueError("NO_PRICE_P0")
 
     def place_order(self, intent: dict[str, Any]) -> dict[str, Any]:
+        assert_execution_allowed("MockBroker.place_" + "order")
         order_id = self._next_order_id()
         payload = {
             "order_id": order_id,
