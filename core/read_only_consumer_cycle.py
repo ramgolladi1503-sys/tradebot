@@ -15,6 +15,7 @@ from core.live_candidate_contract import candidate_from_mapping
 from core.live_ranking_contract import rank_advisory_candidates
 from core.advisory_queue_contract import append_advisory
 from core.read_only_option_eligibility import build_option_surface, evaluate_candidate_eligibility
+from core.cas_v2_consumer_contract import CAS_SPEC_ID, IST, freeze_cas_decision
 
 
 CONSUMERS = (
@@ -113,7 +114,10 @@ def run_consumer_cycle(
         reason=None if valid_candidates or isinstance(ranked_pipeline, Mapping) else "no_validated_strategy_candidates",
         candidate_count=len(valid_candidates),
     )
-    result["consumers"]["cas_v2"] = _state("PENDING", reason="completed_pre_freeze_inputs_not_supplied")
+    result["consumers"]["cas_v2"] = _evaluate_cas(
+        runtime_outputs=runtime_outputs, output_root=root, session_id=session_id,
+        source_sha=source_sha, now=datetime.now(timezone.utc),
+    )
     result["consumers"]["candidate_pool"] = _state(
         "PASS" if valid_candidates or isinstance(ranked_pipeline, Mapping) else "PENDING", candidate_count=len(valid_candidates), rejected_count=rejected,
     )
@@ -178,3 +182,40 @@ def run_consumer_cycle(
     temporary.write_text(json.dumps(result, sort_keys=True, indent=2, default=str) + "\n", encoding="utf-8")
     temporary.replace(destination)
     return result
+
+
+def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
+                  session_id: str, source_sha: str, now: datetime) -> dict[str, Any]:
+    """Freeze only explicit timestamped inputs, as advisory-only evidence."""
+    boundary = datetime(now.year, now.month, now.day, 15, 14, tzinfo=IST)
+    if now.astimezone(IST) < boundary:
+        return _state("PENDING", reason="before_freeze_boundary", freeze_boundary=boundary.isoformat())
+    raw = runtime_outputs.get("cas_completed_inputs")
+    if not isinstance(raw, Mapping) or not raw:
+        return _state("PENDING", reason="completed_pre_freeze_inputs_not_supplied", freeze_boundary=boundary.isoformat())
+    parsed: dict[str, datetime] = {}
+    for name, value in raw.items():
+        try:
+            parsed[str(name)] = datetime.fromisoformat(str(value)).astimezone(IST)
+        except (TypeError, ValueError):
+            return _state("PENDING", reason="cas_input_timestamp_invalid", input=str(name))
+    direction = str(runtime_outputs.get("cas_direction") or "").strip().upper()
+    spec_sha = str(runtime_outputs.get("cas_spec_sha") or "").strip()
+    if not direction or not spec_sha:
+        return _state("PENDING", reason="cas_decision_metadata_missing")
+    try:
+        decision = freeze_cas_decision(completed_inputs=parsed, freeze_timestamp=boundary,
+                                       direction=direction, source_sha=source_sha, spec_sha=spec_sha)
+    except ValueError as exc:
+        return _state("PENDING", reason=str(exc))
+    destination = output_root / "cas_v2_artifact.json"
+    payload = {"schema_version": 1, "cas_spec_id": CAS_SPEC_ID, "session_id": session_id,
+               "source_sha": source_sha, "decision": decision.__dict__,
+               "read_only": True, "execution_status": "advisory_only",
+               "broker_write_authority": False, "order_authority": False,
+               "paper_authorized": False, "live_execution_authorized": False,
+               "broker_order_calls": 0}
+    temporary = destination.with_suffix(destination.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(destination)
+    return _state("PASS", freeze_boundary=boundary.isoformat(), decision=payload["decision"])

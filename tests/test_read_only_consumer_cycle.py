@@ -1,6 +1,8 @@
 import json
 import pytest
-from core.read_only_consumer_cycle import run_consumer_cycle
+from core.read_only_consumer_cycle import run_consumer_cycle, _evaluate_cas
+from core.cas_v2_consumer_contract import IST
+from datetime import datetime
 
 SHA = "a" * 40
 
@@ -31,3 +33,15 @@ def test_stale_advisory_rows_are_not_used(tmp_path):
     assert not (tmp_path / "advisory_queue.jsonl").exists()
     stored = json.loads((tmp_path / "consumer_cycle_latest.json").read_text())
     assert stored["current_cycle_input"]["report_count"] == 1
+
+def test_cas_freezes_explicit_prefreeze_inputs_as_advisory(tmp_path):
+    result = _evaluate_cas(runtime_outputs={"cas_completed_inputs": {"15:13": "2026-08-31T15:13:00+05:30"}, "cas_direction": "UP", "cas_spec_sha": "b" * 40}, output_root=tmp_path, session_id="s", source_sha=SHA, now=datetime(2026, 8, 31, 15, 14, tzinfo=IST))
+    assert result["verdict"] == "PASS"
+    assert result["decision"]["execution_status"] == "advisory_only"
+    assert (tmp_path / "cas_v2_artifact.json").exists()
+
+def test_cas_rejects_future_input_without_writing_artifact(tmp_path):
+    result = _evaluate_cas(runtime_outputs={"cas_completed_inputs": {"15:14": "2026-08-31T15:14:00+05:30"}, "cas_direction": "DOWN", "cas_spec_sha": "b" * 40}, output_root=tmp_path, session_id="s", source_sha=SHA, now=datetime(2026, 8, 31, 15, 14, 1, tzinfo=IST))
+    assert result["verdict"] == "PENDING"
+    assert "after_freeze" in result["reason"]
+    assert not (tmp_path / "cas_v2_artifact.json").exists()
