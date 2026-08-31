@@ -1,5 +1,14 @@
 # Agent Work Contract
 
+mode: OFFLINE_STATIC_REVIEW
+candidate_id: PR870_CERBERUS_DIFF_SCOPE
+decision: FIX_NOW
+reason: Preserve fail-closed boundary review while attributing findings to added candidate lines.
+timestamp: 2026-08-31T22:40:00+0530
+is_order_action: false
+broker_api_called: false
+source: current-main repository and focused unit tests
+
 - source_agent: Codex
 - action: GENERATE_PATCH
 - title: Make Cerberus pull-request scans diff-aware
