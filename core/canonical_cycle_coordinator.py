@@ -8,8 +8,11 @@ execution modules and never creates candidates or orders.
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 import threading
 import time
+import traceback
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -132,6 +135,10 @@ class CanonicalCycleCoordinator:
         return self.output_root / "canonical_cycle_latest.json"
 
     @property
+    def diagnostic_path(self) -> Path:
+        return self.output_root / "canonical_cycle_failure_diagnostic.json"
+
+    @property
     def history_path(self) -> Path:
         return self.output_root / "canonical_cycle_history.jsonl"
 
@@ -183,6 +190,7 @@ class CanonicalCycleCoordinator:
             "execution_status": "advisory_only", "broker_order_calls": 0,
         }
         self._write_current(base)
+        runtime_outputs: Mapping[str, Any] = {}
         try:
             runtime_outputs = produce_and_store_runtime_snapshots(
                 market_snapshot=None, producer="canonical_cycle_coordinator",
@@ -213,6 +221,10 @@ class CanonicalCycleCoordinator:
                 ) if analytical_complete else "ANALYTICAL_PIPELINE_INCOMPLETE",
             })
         except Exception as exc:
+            _write_failure_diagnostic(
+                self.diagnostic_path, request=request, started=started, exc=exc,
+                input_payload=runtime_outputs,
+            )
             base.update({"state": FAILED, "failure_class": type(exc).__name__,
                          "failure_callsite": "canonical_cycle_coordinator.py:run",
                          "failed_stage": "analytical_cycle", "failed_consumer": "canonical_cycle"})
@@ -261,6 +273,45 @@ def _counts(runtime_outputs: Mapping[str, Any], consumer: Mapping[str, Any]) -> 
             "candidates_rejected_count": int(consumer.get("rejected_count", 0) or 0),
             "eligible_count": eligible, "ranked_count": ranked_count, "advisory_count": advisory,
             "consumer_cycle": dict(consumer)}
+
+
+_SECRET_FIELD = re.compile(r"(token|secret|password|credential|api[_-]?key|authorization|cookie|url)", re.I)
+
+
+def _write_failure_diagnostic(path: Path, *, request: CycleRequest, started: datetime,
+                              exc: Exception, input_payload: Mapping[str, Any]) -> None:
+    """Write bounded failure context without changing the fail-closed result."""
+    payload = input_payload if isinstance(input_payload, Mapping) else {}
+    safe_keys = sorted(str(k) for k in payload if not _SECRET_FIELD.search(str(k)))
+    field_types = {k: type(payload[k]).__name__ for k in safe_keys}
+    schema_hash = hashlib.sha256(json.dumps(field_types, sort_keys=True).encode()).hexdigest()
+    message = str(exc)
+    sanitized = _SECRET_FIELD.sub("[REDACTED]", message)
+    diagnostic = {
+        "schema_version": 1, "session_date": request.requested_at[:10],
+        "session_id": request.session_id, "source_sha": request.source_sha,
+        "pid": __import__("os").getpid(), "cycle_id": request.cycle_id,
+        "cycle_start_timestamp": started.isoformat(),
+        "failure_timestamp": datetime.now(timezone.utc).isoformat(),
+        "exception_type": type(exc).__name__, "exception_message": sanitized[:1000],
+        "sanitized_traceback": _SECRET_FIELD.sub("[REDACTED]", traceback.format_exc())[-12000:],
+        "origin_file": getattr(exc.__traceback__, "tb_frame", None).f_code.co_filename if exc.__traceback__ else None,
+        "origin_function": getattr(exc.__traceback__, "tb_frame", None).f_code.co_name if exc.__traceback__ else None,
+        "origin_line": exc.__traceback__.tb_lineno if exc.__traceback__ else None,
+        "stage": "analytical_cycle", "substage": "canonical_cycle",
+        "input_payload_type": type(payload).__name__, "input_top_level_keys": safe_keys,
+        "input_field_types": field_types, "input_shape_summary": {"top_level_count": len(safe_keys)},
+        "offending_field_if_known": None, "offending_value_type_if_known": None,
+        "input_min_timestamp": None, "input_max_timestamp": None,
+        "market_data_latest_timestamp": None, "payload_schema_hash": schema_hash,
+        "payload_content_hash_if_safe": None, "freshness_status": "UNKNOWN",
+        "causality_status": "UNKNOWN", "broker_write_authority": False,
+        "order_authority": False, "broker_order_calls": 0,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(diagnostic, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
 
 
 __all__ = ["CanonicalCycleCoordinator", "CycleRequest", "COMPLETE", "FAILED", "IDLE", "REQUESTED", "SCHEDULED", "RUNNING"]
