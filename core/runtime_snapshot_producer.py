@@ -561,8 +561,8 @@ def _build_and_write_canonical_ranked_snapshot(
         "source": "ranked_opportunity_pipeline_v1",
         "cycle_provenance": {
             "cycle_id": cycle_context.cycle_id if cycle_context else None,
-            "source_sha": str(os.environ.get("TRADEBOT_COMMIT_SHA") or ""),
-            "session_id": str(os.environ.get("RUN_ID") or ""),
+            "source_sha": str((cycle_context.metadata if cycle_context else {}).get("source_sha") or os.environ.get("TRADEBOT_COMMIT_SHA") or ""),
+            "session_id": str((cycle_context.metadata if cycle_context else {}).get("session_id") or os.environ.get("RUN_ID") or ""),
             "session_date": now_ist().date().isoformat(),
         },
     }
@@ -671,7 +671,9 @@ def produce_and_store_runtime_snapshots(
                 metadata={"producer": producer},
             ),
         ),
-        metadata={"producer": producer, "shared_cycle_feed_truth": bool(shared_cycle_feed_truth)},
+        metadata={"producer": producer, "shared_cycle_feed_truth": bool(shared_cycle_feed_truth),
+                  "session_id": str(os.environ.get("RUN_ID") or loop_id or ""),
+                  "source_sha": str(os.environ.get("TRADEBOT_COMMIT_SHA") or "")},
     )
 
     try:
