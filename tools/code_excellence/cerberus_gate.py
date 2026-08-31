@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
+import re
+import subprocess
 from typing import Iterable
 
 from tools.code_excellence.config import load_code_excellence_agent_parameters
@@ -79,6 +82,14 @@ def run_cerberus_gate(
             file_path=path,
             forbidden_markers=forbidden_markers,
             required_non_action_fields=required_non_action_fields,
+            line_numbers=_added_line_numbers(
+                repo_root=root,
+                relative=_relative_path(root, path),
+            ),
+            text_override=_candidate_text(
+                repo_root=root,
+                relative=_relative_path(root, path),
+            ),
         )
     )
     return CerberusGateReport(
@@ -160,16 +171,21 @@ def _scan_file(
     file_path: Path,
     forbidden_markers: tuple[str, ...],
     required_non_action_fields: tuple[str, ...],
+    line_numbers: set[int] | None = None,
+    text_override: str | None = None,
 ) -> tuple[CerberusGateFinding, ...]:
     relative = _relative_path(repo_root, file_path)
     if file_path.name == ".gsd-forensics.yaml":
         return ()
     if not file_path.exists() or not file_path.is_file() or file_path.suffix not in TEXT_FILE_SUFFIXES:
         return ()
-    try:
-        text = file_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        raise CerberusGateError(f"cerberus_gate_cannot_read_text path={relative}") from exc
+    if text_override is not None:
+        text = text_override
+    else:
+        try:
+            text = file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise CerberusGateError(f"cerberus_gate_cannot_read_text path={relative}") from exc
 
     findings: list[CerberusGateFinding] = []
     is_test_file = "tests" in Path(relative).parts
@@ -180,6 +196,8 @@ def _scan_file(
         if is_test_file and name and expected == "false" and _file_proves_field_false(text, name)
     }
     for line_number, line in enumerate(text.splitlines(), start=1):
+        if line_numbers is not None and line_number not in line_numbers:
+            continue
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
@@ -230,6 +248,62 @@ def _scan_file(
             ),
         )
     return tuple(findings)
+
+
+def _added_line_numbers(*, repo_root: Path, relative: str) -> set[int] | None:
+    """Return added lines for a PR diff; None preserves the fail-closed fallback."""
+
+    base_ref = str(os.getenv("CERBERUS_BASE_REF") or "").strip() or "origin/main"
+    candidate_ref = _candidate_ref()
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--unified=0", f"{base_ref}...{candidate_ref}", "--", relative],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    if not result.stdout.strip():
+        return set()
+    added: set[int] = set()
+    for match in re.finditer(r"^@@ .* \+(\d+)(?:,(\d+))? @@", result.stdout, re.MULTILINE):
+        start = int(match.group(1))
+        count = int(match.group(2) or "1")
+        added.update(range(start, start + count))
+    return added
+
+
+def _candidate_ref() -> str:
+    explicit = str(os.getenv("CERBERUS_CANDIDATE_REF") or "").strip()
+    if explicit:
+        return explicit
+    pr_number = str(os.getenv("PR_NUMBER") or "").strip()
+    if pr_number:
+        return f"refs/remotes/origin/pr-{pr_number}-head"
+    return "HEAD"
+
+
+def _candidate_text(*, repo_root: Path, relative: str) -> str | None:
+    """Read the candidate blob when the target workflow has fetched one."""
+
+    candidate = _candidate_ref()
+    if candidate == "HEAD":
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "show", f"{candidate}:{relative}"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    try:
+        return result.stdout.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise CerberusGateError(f"cerberus_gate_cannot_read_candidate_text path={relative}") from exc
 
 
 def _paths_to_scan(repo_root: Path, scoped_paths: tuple[str, ...]) -> tuple[Path, ...]:
