@@ -196,6 +196,8 @@ class CanonicalCycleCoordinator:
                 market_snapshot=None, producer="canonical_cycle_coordinator",
                 loop_id=request.cycle_id,
                 cycle_feed_truth_payload=None,
+                session_id=request.session_id,
+                source_sha=request.source_sha,
             )
             consumer = run_consumer_cycle(
                 runtime_outputs=runtime_outputs, output_root=self.output_root,

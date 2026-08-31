@@ -605,6 +605,8 @@ def produce_and_store_runtime_snapshots(
     loop_id: str | None = None,
     metrics_registry: ObservabilityMetricsRegistry | None = None,
     cycle_feed_truth_payload: Mapping[str, Any] | None = None,
+    session_id: str | None = None,
+    source_sha: str | None = None,
 ) -> dict[str, Any]:
     outputs: dict[str, Any] = {}
     timings: list[dict[str, Any]] = []
@@ -672,8 +674,8 @@ def produce_and_store_runtime_snapshots(
             ),
         ),
         metadata={"producer": producer, "shared_cycle_feed_truth": bool(shared_cycle_feed_truth),
-                  "session_id": str(os.environ.get("RUN_ID") or loop_id or ""),
-                  "source_sha": str(os.environ.get("TRADEBOT_COMMIT_SHA") or "")},
+                  "session_id": str(session_id or os.environ.get("RUN_ID") or ""),
+                  "source_sha": str(source_sha or os.environ.get("TRADEBOT_COMMIT_SHA") or "")},
     )
 
     try:
