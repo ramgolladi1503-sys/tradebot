@@ -23,8 +23,8 @@ for _module_name in tuple(sys.modules):
 
 from core.kite_read_only_observation_runtime import run_observation, safe_environment
 from core.market_event_graph_live_launch_plan import load_launch_plan
+from core.daily_instrument_authority import validate_authority
 
-EXPECTED_MASTER_SHA256 = "828c0c378e4939720c34ee7e727e5ae6f0265441e0e0a1888a386f85ab9c2a93"
 
 
 def main() -> int:
@@ -35,12 +35,13 @@ def main() -> int:
     parser.add_argument("--launch-plan", required=True, type=Path)
     parser.add_argument("--token-path", required=True, type=Path)
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--authority-artifact", required=True, type=Path)
     args = parser.parse_args()
     if not args.token_path.is_file():
         raise SystemExit("KITE_ACCESS_TOKEN_MISSING")
-    digest = hashlib.sha256(args.kite_instruments_file.read_bytes()).hexdigest()
-    if digest != EXPECTED_MASTER_SHA256:
-        raise SystemExit("BLOCKED_BY_KITE_MASTER_HASH")
+    authority = validate_authority(artifact_path=args.authority_artifact, master_path=args.kite_instruments_file, session_date=args.session_date, source_sha=os.environ.get("TRADEBOT_COMMIT_SHA", ""), required_tokens=[])
+    if not authority["ok"]:
+        raise SystemExit(authority["verdict"])
     os.environ["TRADING_BOT_TOKEN_PATH"] = str(args.token_path.resolve())
     plan = load_launch_plan(args.launch_plan)
     env = safe_environment()

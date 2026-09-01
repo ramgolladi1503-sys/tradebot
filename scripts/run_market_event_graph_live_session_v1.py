@@ -26,6 +26,7 @@ from core.market_event_graph_live_launch_plan import (
     write_launch_plan,
 )
 from core.market_event_graph_live_observation_registry import load_observation_registry
+from core.daily_instrument_authority import validate_authority
 from core.session_calendar import is_open
 
 NSE_FNO_2026_HOLIDAYS = frozenset({
@@ -218,6 +219,7 @@ def main() -> int:
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--static-preflight-only", action="store_true")
     parser.add_argument("--launch-preflight-only", action="store_true")
+    parser.add_argument("--authority-artifact", type=Path, default=None)
     args = parser.parse_args()
 
     session_date = _validate_session_date(args.session_date)
@@ -229,12 +231,11 @@ def main() -> int:
     if not master_path.is_file():
         raise SystemExit("BLOCKED_BY_KITE_MASTER_FILE_MISSING")
     master_sha = _sha256(master_path)
-    expected_master_sha = "828c0c378e4939720c34ee7e727e5ae6f0265441e0e0a1888a386f85ab9c2a93"
-    if master_sha != expected_master_sha:
-        raise SystemExit("BLOCKED_BY_KITE_MASTER_HASH")
-    linked_sha = str((registry.contract.get("broker_instrument_master") or {}).get("sha256") or "")
-    if linked_sha != master_sha:
-        raise SystemExit("BLOCKED_BY_CONTRACT_MASTER_MISMATCH")
+    if args.authority_artifact is None:
+        raise SystemExit("MORNING_BLOCKED_INSTRUMENT_AUTHORITY")
+    authority = validate_authority(artifact_path=args.authority_artifact, master_path=master_path, session_date=session_date, source_sha=_commit_sha(), required_tokens=list(registry.all_tokens))
+    if not authority["ok"]:
+        raise SystemExit(authority["verdict"])
     static_preflight = _static_preflight_payload(
         session_date=session_date,
         registry=registry,
@@ -317,6 +318,7 @@ def main() -> int:
             "--kite-instruments-file", str(master_path),
             "--launch-plan", str(launch_plan_path),
             "--token-path", str(token_path),
+            "--authority-artifact", str(args.authority_artifact),
         ], cwd=REPO_ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT)
     return int(proc.returncode)
 
