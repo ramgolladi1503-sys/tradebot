@@ -14,8 +14,8 @@ INDEX_REQUIREMENTS = (
     {"consumer_id": "regime", "identity": "BANKNIFTY", "required_symbols": ("BANKNIFTY", "NIFTY BANK"), "segment": "NSE", "mode": "quote", "reason": "regime/core index input"},
     {"consumer_id": "strategies", "identity": "NIFTY", "required_symbols": ("NIFTY", "NIFTY 50"), "segment": "NSE", "mode": "quote", "reason": "canonical strategy market input"},
     {"consumer_id": "strategies", "identity": "BANKNIFTY", "required_symbols": ("BANKNIFTY", "NIFTY BANK"), "segment": "NSE", "mode": "quote", "reason": "canonical strategy market input"},
-    {"consumer_id": "cas_v2", "identity": "NIFTY", "required_symbols": ("NIFTY", "NIFTY 50"), "segment": "NSE", "mode": "quote", "reason": "CAS_SW_RUNTIME_V2_1514 index input"},
-    {"consumer_id": "cas_v2", "identity": "BANKNIFTY", "required_symbols": ("BANKNIFTY", "NIFTY BANK"), "segment": "NSE", "mode": "quote", "reason": "CAS_SW_RUNTIME_V2_1514 index input"},
+    {"consumer_id": "cas_v2", "identity": "NIFTY", "required_symbols": ("NIFTY", "NIFTY 50"), "segment": "NSE", "mode": "quote", "reason": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1 index input"},
+    {"consumer_id": "cas_v2", "identity": "BANKNIFTY", "required_symbols": ("BANKNIFTY", "NIFTY BANK"), "segment": "NSE", "mode": "quote", "reason": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1 index input"},
 )
 
 

@@ -59,6 +59,7 @@ def build_strategy_registry(*, session_id: str, source_sha: str) -> dict[str, An
         "session_id": session_id,
         "source_sha": source_sha,
         "strategies": entries,
+        "superseded_strategies": [dict(item, execution_status="advisory_only") for item in SUPERSEDED_STRATEGIES],
         "verdict": "PENDING",
         "read_only": True,
         "broker_write_authority": False,
