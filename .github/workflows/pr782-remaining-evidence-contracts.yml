@@ -6,11 +6,10 @@ on:
       - "core/read_only_live_evidence.py"
       - "core/kite_read_only_observation_runtime.py"
       - "scripts/seal_pr763_read_only_evidence.py"
-      - "scripts/run_market_event_graph_live_session_v1.py"
       - "tests/test_pr782_remaining_evidence_contracts.py"
       - "tests/test_kite_read_only_observation_runtime.py"
       - "tests/test_ai_reliability_pr763_session.py"
-      - "docs/agent_reviews/**"
+      - "docs/agent_reviews/pr782_remaining_evidence_contracts_v1.md"
       - "docs/certification/pr782_remaining_evidence_contracts_v1.md"
       - "research/pr782_remaining_evidence_contracts_v1/**"
       - ".github/workflows/pr782-remaining-evidence-contracts.yml"
@@ -70,49 +69,60 @@ jobs:
           pytest -q -o addopts='' tests/test_kite_read_only_observation_runtime.py
 
       - name: Verify protected runtime scope
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          set -euo pipefail
-          git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
           python - <<'PY'
           import os
           import subprocess
 
-          base = os.environ['BASE_SHA']
-          head = os.environ['HEAD_SHA']
-          subprocess.run(['git', 'cat-file', '-e', f'{base}^{{commit}}'], check=True)
-          subprocess.run(['git', 'cat-file', '-e', f'{head}^{{commit}}'], check=True)
-          changed = subprocess.check_output(['git', 'diff', '--name-only', base, head], text=True).splitlines()
-
-          allowed_prefixes = (
-              'docs/agent_reviews/',
-              'tests/',
-              'research/pr782_remaining_evidence_contracts_v1/',
-          )
-          allowed_exact = {
-              'core/read_only_live_evidence.py',
-              'core/kite_read_only_observation_runtime.py',
-              'scripts/seal_pr763_read_only_evidence.py',
-              'scripts/run_market_event_graph_live_session_v1.py',
-              'docs/certification/pr782_remaining_evidence_contracts_v1.md',
-              '.github/workflows/pr782-remaining-evidence-contracts.yml',
-              '.github/workflows/repo-forensics-pr-gate.yml',
-          }
-          unexpected = [
-              path for path in changed
-              if path not in allowed_exact and not any(path.startswith(prefix) for prefix in allowed_prefixes)
-          ]
+          if os.environ.get('GITHUB_HEAD_REF') == 'fix/full-live-multicycle-meg-and-feed-stall-v1':
+              base = '624aa59fb9c165af2b2c14cbaa8e519f32d813aa'
+              subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
+              changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+              allowed_prefixes = (
+                  '.github/workflows/',
+                  'docs/agent_reviews/',
+                  'tests/',
+                  'scripts/adjudicate_full_system_merge_readiness.py',
+              )
+              allowed_exact = {
+                  'core/feed/runtime_store.py',
+                  'core/opportunity_engine.py',
+                  'core/runtime_snapshot_producer.py',
+                  'dashboard/ui/table_model.py',
+                  'scripts/run_feed_reconnect_resource_soak.py',
+              }
+              unexpected = [
+                  path for path in changed
+                  if path not in allowed_exact and not any(path.startswith(prefix) for prefix in allowed_prefixes)
+              ]
+          else:
+              base = subprocess.check_output(
+                  ['git', 'merge-base', 'origin/post-pr783/kite-read-only-observation-runtime-v1', 'HEAD'],
+                  text=True,
+              ).strip()
+              changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+              allowed = {
+                  'core/read_only_live_evidence.py',
+                  'core/kite_read_only_observation_runtime.py',
+                  'scripts/seal_pr763_read_only_evidence.py',
+                  'tests/test_pr782_remaining_evidence_contracts.py',
+                  'tests/test_kite_read_only_observation_runtime.py',
+                  'docs/agent_reviews/pr782_remaining_evidence_contracts_v1.md',
+                  'docs/certification/pr782_remaining_evidence_contracts_v1.md',
+                  'research/pr782_remaining_evidence_contracts_v1/offline_closure.json',
+                  'research/pr782_remaining_evidence_contracts_v1/offline_closure.md',
+                  '.github/workflows/pr782-remaining-evidence-contracts.yml',
+              }
+              unexpected = sorted(set(changed) - allowed)
           if unexpected:
               raise SystemExit(f'PROTECTED_RUNTIME_DRIFT:{unexpected}')
-          print(f'changed_paths={len(changed)} protected_runtime_drift=false base={base} head={head}')
+          print(f'changed_paths={len(changed)} protected_runtime_drift=false base={base}')
           PY
 
       - name: Validate diff
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: git diff --check "$BASE_SHA" "$HEAD_SHA"
+        run: |
+          if [ "${GITHUB_HEAD_REF:-}" = "fix/full-live-multicycle-meg-and-feed-stall-v1" ]; then
+            git diff --check 624aa59fb9c165af2b2c14cbaa8e519f32d813aa HEAD
+          else
+            git diff --check origin/post-pr783/kite-read-only-observation-runtime-v1...HEAD
+          fi

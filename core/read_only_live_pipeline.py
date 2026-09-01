@@ -105,7 +105,7 @@ def prepare_current_session(
     registry_path = runtime_root / "CONSUMERS.json"
     write_consumer_registry(
         registry_path, session_id=session_id, source_sha=source_sha,
-        canonical_strategy_ids=("CAS_SW_RUNTIME_V2_1514",),
+        canonical_strategy_ids=("CAS_MORNING_REVERSAL_SHORT_HORIZON_V1",),
     )
     write_strategy_registry(runtime_root / "STRATEGY_REGISTRY.json", session_id=session_id, source_sha=source_sha)
     write_sidecar_health(

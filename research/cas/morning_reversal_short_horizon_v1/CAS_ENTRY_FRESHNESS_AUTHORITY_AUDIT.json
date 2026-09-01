@@ -1,0 +1,17 @@
+{
+  "schema_version": "CAS_ENTRY_FRESHNESS_AUTHORITY_AUDIT_V1",
+  "source_sha": "ef9b9a6a3207321479010699227c61f53f9ae7f6",
+  "status": "REPOSITORY_FRESHNESS_AUTHORITY_RECOVERED",
+  "source_file": "core/runtime_feed_truth_snapshot.py",
+  "source_lines": "83-88",
+  "source_config": "config/config.py:L370",
+  "config_key": "LTP_SLA_SECONDS",
+  "configured_default_seconds": 2.0,
+  "configured_default_milliseconds": 2000,
+  "scope": "underlying tick freshness in runtime feed truth",
+  "timestamp_semantics": "runtime feed latest tick age",
+  "applicable_to_index_underlying_entry": true,
+  "authority_class": "REPOSITORY_VERIFIED",
+  "empirical_feed_audit_required": false,
+  "reason": "Canonical runtime code explicitly applies LTP_SLA_SECONDS to underlying_tick_fresh."
+}

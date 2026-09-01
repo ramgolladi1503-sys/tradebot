@@ -1,0 +1,10 @@
+{
+  "schema_version": "CAS_MORNING_REVERSAL_COST_SPEC_V1",
+  "status": "NOT_FROZEN",
+  "reason": "The governing short-horizon specification does not contain a complete frozen cost model, and option execution authority is unavailable.",
+  "underlying_signal_cost_model": "UNDEFINED",
+  "option_execution_cost_model": "UNKNOWN",
+  "required_components": ["bid_ask_crossing", "slippage", "brokerage", "exchange_fees", "STT", "GST", "stamp_duty", "other_applicable_charges"],
+  "option_execution_viable": "UNKNOWN",
+  "capture_arming_allowed": false
+}

@@ -1,0 +1,8 @@
+{
+  "schema_version": "CAS_MORNING_REVERSAL_FAILURE_HISTORY_V1",
+  "entries": [
+    {"candidate": "15:11->15:13 continuation", "verdict": "REJECTED_AT_VALIDATION", "classification": "FALSE_POSITIVE_IN_SAMPLE"},
+    {"candidate": "09:15->10:00 all-horizon reversal", "verdict": "FAILED_ALL_HORIZON_STABILITY", "reason": "15:30 holdout below chance; no symbol-specific survivor"},
+    {"candidate": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1", "verdict": "PROSPECTIVE_TEST_REQUIRED", "classification": "MATERIALLY_DISTINCT_SUCCESSOR"}
+  ]
+}

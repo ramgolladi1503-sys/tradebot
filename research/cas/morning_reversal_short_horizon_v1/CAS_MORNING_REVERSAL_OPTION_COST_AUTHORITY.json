@@ -1,0 +1,19 @@
+{
+  "schema_version": "CAS_MORNING_REVERSAL_OPTION_COST_AUTHORITY_V1",
+  "status": "PARTIALLY_VERIFIED",
+  "broker": "Zerodha/Kite",
+  "official_sources": [
+    "https://zerodha.com/charges/",
+    "https://support.zerodha.com/category/account-opening/resident-individual/ri-charges/articles/how-is-the-securities-transaction-tax-stt-calculated",
+    "https://zerodha.com/brokerage-calculator"
+  ],
+  "verified_components": ["brokerage", "STT", "exchange_transaction_charges", "SEBI_charges", "GST", "stamp_duty"],
+  "account_specific_tariff_verified": false,
+  "option_net_execution_model_complete": false,
+  "entry_execution_price": "best_ask_at_entry",
+  "exit_execution_price": "best_bid_at_exit",
+  "additional_slippage_model": 0,
+  "slippage_evidence": "UNPROVEN",
+  "option_execution_viable": "UNKNOWN",
+  "note": "Official published rates are identified, but exact account/tariff applicability and transaction-level option execution evidence are not complete. This does not block underlying signal capture once entry freshness is frozen."
+}

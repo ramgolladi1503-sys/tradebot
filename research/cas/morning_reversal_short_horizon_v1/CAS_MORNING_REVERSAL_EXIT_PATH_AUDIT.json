@@ -1,0 +1,15 @@
+{
+  "schema_version": "CAS_MORNING_REVERSAL_EXIT_PATH_AUDIT_V1",
+  "status": "NOT_RUN",
+  "independent_surface_required": true,
+  "fixed_1520_result": "UNAVAILABLE",
+  "fixed_1525_result": "UNAVAILABLE",
+  "first_hit_exit_tested": false,
+  "best_predeclared_target_stop": null,
+  "net_result_after_costs": "UNAVAILABLE",
+  "mfe_result": "UNAVAILABLE",
+  "mae_result": "UNAVAILABLE",
+  "decay_after_1525_confirmed": false,
+  "cost_model": "NOT_RUN",
+  "option_execution_edge": "UNKNOWN"
+}

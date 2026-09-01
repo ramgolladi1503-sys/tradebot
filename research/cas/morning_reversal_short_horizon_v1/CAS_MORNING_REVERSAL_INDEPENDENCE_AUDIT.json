@@ -1,0 +1,12 @@
+{
+  "schema_version": "CAS_MORNING_REVERSAL_INDEPENDENCE_AUDIT_V1",
+  "source_sha": "ef9b9a6a3207321479010699227c61f53f9ae7f6",
+  "prior_holdout_used_for_confirmation": false,
+  "excluded_confirmatory_sessions": ["2026-08-27", "2026-08-28", "2026-08-31", "2026-09-01"],
+  "independent_historical_surface_available": false,
+  "independent_session_count": 0,
+  "reason": "Available preserved CAS surfaces were used by prior selection/search or are the already-opened holdout; no clean untouched surface was proven.",
+  "new_prospective_surface": "required",
+  "prospective_review_gate": 20,
+  "status": "NEW_HISTORICAL_HOLDOUT_UNAVAILABLE"
+}

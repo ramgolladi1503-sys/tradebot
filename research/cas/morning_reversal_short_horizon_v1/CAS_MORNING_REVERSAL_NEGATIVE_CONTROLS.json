@@ -1,0 +1,8 @@
+{
+  "schema_version": "CAS_MORNING_REVERSAL_NEGATIVE_CONTROLS_V1",
+  "status": "NOT_RUN",
+  "controls": ["sign inversion", "session permutation", "time-shifted morning window", "randomized labels", "one-minute entry perturbation", "simple reversal benchmark"],
+  "reason": "Controls require a clean independent evaluation surface; prior holdout is diagnostic-only and cannot be reused.",
+  "holdout_reused": false,
+  "promotion_allowed": false
+}

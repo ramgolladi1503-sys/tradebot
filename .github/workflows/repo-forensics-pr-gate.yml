@@ -56,7 +56,10 @@ jobs:
       PR818_FROZEN_LIVE_SHA: d7dc45e7c5c76247e7d1b8abd40ec7682fac2f9b
       # Advanced after the governed PR876 shutdown-boundary repair was merged
       # into protected main. The protected path set below remains unchanged.
-      PR818_FROZEN_MAIN_BASELINE: f4eb3b0b1e264970ab27ad7e5b7f2f733a5f40e4
+      # Advanced after the governed PR876 shutdown-boundary repair and PR880
+      # integration were merged into protected main. The protected path set
+      # and fail-closed comparison remain unchanged.
+      PR818_FROZEN_MAIN_BASELINE: 9f1e74c3524b331ebab7f8340ddc056146ac036a
     steps:
       - name: Checkout trusted protected main only
         uses: actions/checkout@v4

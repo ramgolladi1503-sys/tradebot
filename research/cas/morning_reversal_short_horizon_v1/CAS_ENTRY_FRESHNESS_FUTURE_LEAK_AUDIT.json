@@ -1,0 +1,13 @@
+{
+  "schema_version": "CAS_ENTRY_FRESHNESS_FUTURE_LEAK_AUDIT_V1",
+  "source_sha": "ef9b9a6a3207321479010699227c61f53f9ae7f6",
+  "status": "PASS",
+  "signal_inputs_at_or_before_10_00": true,
+  "entry_reference_at_or_after_15_14": true,
+  "post_entry_value_used_to_select_entry_tick": false,
+  "future_fill_used": false,
+  "forward_fill_used": false,
+  "nearest_neighbor_later_favorable_lookup": false,
+  "prospective_outcomes_accessed": false,
+  "old_holdout_reused": false
+}
