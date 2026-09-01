@@ -42,7 +42,10 @@ def independent_verify(master: list[dict[str, Any]], required_tokens: list[int],
             token_counts[token] = token_counts.get(token, 0) + 1
             identities.add((exchange, symbol))
             if token == index_token and symbol in {"NIFTY 50", "NIFTY"} and exchange == "NSE": index_ok = True
-            if int(row["lot_size"]) <= 0 or float(row["tick_size"]) <= 0 or not _expiry(row["expiry"]): errors += 1
+            # Kite index rows legitimately carry zero lot/tick metadata; those
+            # fields are required only for tradable contract rows.
+            if str(row["segment"]).upper() != "INDICES" and (int(row["lot_size"]) <= 0 or float(row["tick_size"]) <= 0): errors += 1
+            if not _expiry(row["expiry"]): errors += 1
             if float(row["strike"]) < 0: errors += 1
         except (TypeError, ValueError):
             errors += 1
