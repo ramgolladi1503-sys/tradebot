@@ -15,7 +15,7 @@ from core.live_candidate_contract import candidate_from_mapping
 from core.live_ranking_contract import rank_advisory_candidates
 from core.advisory_queue_contract import append_advisory
 from core.read_only_option_eligibility import build_option_surface, evaluate_candidate_eligibility
-from core.cas_v2_consumer_contract import CAS_SPEC_ID, IST, freeze_cas_decision
+from core.cas_morning_reversal_advisory import STRATEGY_ID, evaluate
 
 
 CONSUMERS = (
@@ -186,31 +186,22 @@ def run_consumer_cycle(
 
 def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
                   session_id: str, source_sha: str, now: datetime) -> dict[str, Any]:
-    """Freeze only explicit timestamped inputs, as advisory-only evidence."""
-    boundary = datetime(now.year, now.month, now.day, 15, 14, tzinfo=IST)
-    if now.astimezone(IST) < boundary:
-        return _state("PENDING", reason="before_freeze_boundary", freeze_boundary=boundary.isoformat())
-    raw = runtime_outputs.get("cas_completed_inputs")
+    """Evaluate only the canonical short-horizon causal advisory input."""
+    boundary = now.replace(hour=15, minute=14, second=0, microsecond=0)
+    raw = runtime_outputs.get("cas_short_horizon_inputs")
     if not isinstance(raw, Mapping) or not raw:
-        return _state("PENDING", reason="completed_pre_freeze_inputs_not_supplied", freeze_boundary=boundary.isoformat())
-    parsed: dict[str, datetime] = {}
-    for name, value in raw.items():
-        try:
-            parsed[str(name)] = datetime.fromisoformat(str(value)).astimezone(IST)
-        except (TypeError, ValueError):
-            return _state("PENDING", reason="cas_input_timestamp_invalid", input=str(name))
-    direction = str(runtime_outputs.get("cas_direction") or "").strip().upper()
-    spec_sha = str(runtime_outputs.get("cas_spec_sha") or "").strip()
-    if not direction or not spec_sha:
-        return _state("PENDING", reason="cas_decision_metadata_missing")
+        return _state("PENDING", reason="short_horizon_inputs_missing", freeze_boundary=boundary.isoformat())
     try:
-        decision = freeze_cas_decision(completed_inputs=parsed, freeze_timestamp=boundary,
-                                       direction=direction, source_sha=source_sha, spec_sha=spec_sha)
-    except ValueError as exc:
+        decision = evaluate(session_id=session_id, symbol=str(raw["symbol"]),
+                            morning_return=float(raw["morning_return"]),
+                            observation_timestamp=datetime.fromisoformat(str(raw["observation_timestamp"])),
+                            cutoff_timestamp=boundary, received_timestamp=(datetime.fromisoformat(str(raw["received_timestamp"])) if raw.get("received_timestamp") else None),
+                            source_sha=source_sha, signal_input_09_15=raw.get("signal_input_09_15"), signal_input_10_00=raw.get("signal_input_10_00"))
+    except (KeyError, TypeError, ValueError) as exc:
         return _state("PENDING", reason=str(exc))
     destination = output_root / "cas_v2_artifact.json"
-    payload = {"schema_version": 1, "cas_spec_id": CAS_SPEC_ID, "session_id": session_id,
-               "source_sha": source_sha, "decision": decision.__dict__,
+    payload = {"schema_version": 1, "cas_spec_id": STRATEGY_ID, "session_id": session_id,
+               "source_sha": source_sha, "decision": decision,
                "read_only": True, "execution_status": "advisory_only",
                "broker_write_authority": False, "order_authority": False,
                "paper_authorized": False, "live_execution_authorized": False,
