@@ -18,24 +18,24 @@ This is advisory-only. `BROKER_WRITE_AUTHORITY=false`, `ORDER_AUTHORITY=false`,
 `PAPER_AUTHORIZED=false`, and `LIVE_EXECUTION_AUTHORIZED=false`. No broker
 connectivity or order-capable method is invoked.
 
-## Grill Me
+## Grill Me Review
 
 The implementation does not establish an edge, prospective support, execution
 viability, or live verification. The 20-session ledger remains the authority;
 aggregate performance is not exposed before admission of 20 sessions.
 
-## Hermes
+## Hermes Review
 
 The old `CAS_SW_RUNTIME_V2_1514` runtime is retained as historical provenance
 and removed from the active canonical strategy identity. The new evaluator uses
 only the frozen 09:15–10:00 return and a first fresh 15:14 observation.
 
-## GSD
+## GSD Review
 
 One focused integration PR follows the separately merged preservation PR #879.
 No helper PR or scientific-result rewrite is included.
 
-## QA / Safety
+## QA / Safety Review
 
 Focused tests cover positive, negative, exact-zero, pre-cutoff, and >2000 ms
 late observations. Queue identity is session + strategy + symbol + decision
