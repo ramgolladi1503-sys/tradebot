@@ -1,0 +1,1 @@
+session_date,symbol,signal,entry_timestamp,entry_price,exit_15_20,signed_return_15_20_bps,exit_15_25,signed_return_15_25_bps,mfe_bps,mae_bps,time_to_mfe,time_to_mae,source_sha

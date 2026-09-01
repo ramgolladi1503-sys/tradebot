@@ -1,0 +1,21 @@
+{
+  "research_id": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1",
+  "status": "PROSPECTIVE_COLLECTION_ARMED",
+  "historical_original_candidate": "FAILED_ALL_HORIZON_STABILITY",
+  "independent_historical_surface": false,
+  "prospective_test_required": true,
+  "admitted_session_count": 0,
+  "target_admitted_sessions": 20,
+  "aggregate_outcome_analysis_locked": true,
+  "old_holdout_reused": false,
+  "prospective_supported": false,
+  "structural_edge_certified": false,
+  "execution_viable": "UNKNOWN",
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "research_source_sha": "ef9b9a6a3207321479010699227c61f53f9ae7f6",
+  "base_spec_sha256": "a9eda0635fc75190438abeed161447bb8fa30ab5d9dc63d51b57739bf8a4fa80",
+  "operational_amendment_sha256": "399596a9180f7b41f5e404800359040af8e45bd16d5d76a696ee24aabca784ea"
+}
