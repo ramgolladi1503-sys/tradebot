@@ -129,14 +129,28 @@ def test_cycle_without_new_tick_fails_closed(tmp_path):
                                     cycle_cutoff_epoch=100.0)
 
 
-def test_future_tick_fails_closed(tmp_path):
+def test_future_tick_without_eligible_prior_tick_fails_closed(tmp_path):
     root = tmp_path / "future"; root.mkdir()
     import pytest
-    with pytest.raises(ValueError, match="future_selected_tick"):
+    with pytest.raises(ValueError, match="missing_current_cycle_selected_tick"):
         append_meg_cycle_primitives(root, session_id="s1", producer_commit_sha="c1",
                                     cycle_id="cycle-1", accepted=True,
                                     subscription_evidence=_multi_cycle_evidence(1),
                                     cycle_cutoff_epoch=20.0)
+
+
+def test_future_latest_tick_uses_eligible_prior_tick(tmp_path):
+    root = tmp_path / "future_with_prior"; root.mkdir()
+    evidence = _multi_cycle_evidence(1)
+    for item in evidence["token_lifecycle"].values():
+        item["first_post_request_tick_id"] = item["latest_post_request_tick_id"] + "-prior"
+        item["first_post_request_tick_epoch"] = 19.0
+    append_meg_cycle_primitives(root, session_id="s1", producer_commit_sha="c1",
+                                cycle_id="cycle-1", accepted=True,
+                                subscription_evidence=evidence, cycle_cutoff_epoch=20.0)
+    rows = [json.loads(line) for line in (root / "meg_selected_tick_events.jsonl").read_text().splitlines()]
+    assert len(rows) == 51
+    assert {row["selected_tick_receipt_timestamp"] for row in rows} == {19.0}
 
 
 def test_real_observation_persistence_path_seals_and_verifies(tmp_path):

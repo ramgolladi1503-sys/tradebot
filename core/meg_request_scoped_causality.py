@@ -106,15 +106,19 @@ def append_meg_cycle_primitives(root: Path, *, session_id: str, producer_commit_
                       expected_instrument_token=item.get("instrument_token"),
                       expected_symbol=item.get("symbol"))
         request_rows.append(common)
-        tick_id = item.get("latest_post_request_tick_id") or item.get("selected_post_request_tick_id")
-        tick_epoch = item.get("latest_post_request_tick_epoch")
-        if tick_epoch is None:
-            tick_epoch = item.get("first_post_request_tick_epoch")
+        candidates = (
+            (item.get("latest_post_request_tick_id"), item.get("latest_post_request_tick_epoch")),
+            (item.get("selected_post_request_tick_id"), item.get("selected_post_request_tick_epoch")),
+            (item.get("selected_post_request_tick_id"), item.get("first_post_request_tick_epoch")),
+            (item.get("first_post_request_tick_id"), item.get("first_post_request_tick_epoch")),
+        )
+        eligible = [(tick_id, tick_epoch) for tick_id, tick_epoch in candidates
+                    if tick_id and tick_epoch is not None and
+                    (cycle_cutoff_epoch is None or float(tick_epoch) <= float(cycle_cutoff_epoch))]
+        tick_id, tick_epoch = max(eligible, key=lambda pair: float(pair[1])) if eligible else (None, None)
         if accepted:
             if not tick_id or tick_epoch is None:
                 raise ValueError("missing_current_cycle_selected_tick")
-            if cycle_cutoff_epoch is not None and float(tick_epoch) > float(cycle_cutoff_epoch):
-                raise ValueError("future_selected_tick")
             if tick_id in used_tick_ids or any(tick_id == prior_id for _, prior_id, _ in cycle_ticks):
                 raise ValueError("selected_tick_id_reuse")
             cycle_ticks.append((item, str(tick_id), float(tick_epoch)))
