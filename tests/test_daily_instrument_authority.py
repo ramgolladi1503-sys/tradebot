@@ -11,6 +11,10 @@ def valid(): return [row(256265,"NIFTY 50"), row(2,"X")]
 def test_independent_verifier_passes_required_tokens():
     assert independent_verify(valid(), [256265,2])["independent_verifier_status"] == "PASS"
 
+def test_index_row_may_have_non_applicable_zero_lot_and_tick():
+    data = valid(); data[0]["segment"] = "INDICES"; data[0]["lot_size"] = 0; data[0]["tick_size"] = 0
+    assert independent_verify(data, [256265,2])["independent_verifier_status"] == "PASS"
+
 @pytest.mark.parametrize("mutator", [lambda x:x[:-1], lambda x:x+[row(2,"Y")], lambda x:(x.__setitem__(0,{**x[0],"tradingsymbol":"BAD"}) or x), lambda x:(x.__setitem__(1,{**x[1],"lot_size":0}) or x)])
 def test_invalid_or_material_master_fails(mutator):
     data=mutator(valid()); assert independent_verify(data,[256265,2])["independent_verifier_status"] == "FAIL"
