@@ -1,0 +1,23 @@
+{
+  "schema_version": "CAS_MORNING_REVERSAL_EVIDENCE_MANIFEST_V1",
+  "research_source_sha": "ef9b9a6a3207321479010699227c61f53f9ae7f6",
+  "heavy_external_evidence": "Referenced by existing external research artifacts; raw datasets are intentionally not copied into Git.",
+  "artifacts": [
+    {"logical_name":"candidate_contract","repository_path":"CAS_MORNING_REVERSAL_CANDIDATE_CONTRACT.json","sha256":"9d2efc555be2d482ef9926538ed7161a3c6a0e0fe7996b05e9b97c63210ee6f1","size_bytes":1374,"artifact_class":"FROZEN_SPEC"},
+    {"logical_name":"short_horizon_spec","repository_path":"CAS_MORNING_REVERSAL_SHORT_HORIZON_SPEC_V1.json","sha256":"a9eda0635fc75190438abeed161447bb8fa30ab5d9dc63d51b57739bf8a4fa80","size_bytes":1637,"artifact_class":"FROZEN_SPEC"},
+    {"logical_name":"operational_amendment","repository_path":"CAS_MORNING_REVERSAL_SHORT_HORIZON_OPERATIONAL_AMENDMENT_V1.json","sha256":"399596a9180f7b41f5e404800359040af8e45bd16d5d76a696ee24aabca784ea","size_bytes":1359,"artifact_class":"OPERATIONAL_AMENDMENT"},
+    {"logical_name":"prospective_spec_authority","repository_path":"CAS_MORNING_REVERSAL_PROSPECTIVE_SPEC_AUTHORITY.json","sha256":"8b195603d688ee2915dcd5998c83bcf2516831a1f190b5c542d0bc50217d0999","size_bytes":1856,"artifact_class":"AUTHORITY_AUDIT"},
+    {"logical_name":"entry_freshness_authority","repository_path":"CAS_ENTRY_FRESHNESS_AUTHORITY_AUDIT.json","sha256":"9f4f426c0cbe3f1cf2f836cc77696923a1697c341ca754934a2217e50526e62a","size_bytes":775,"artifact_class":"AUTHORITY_AUDIT"},
+    {"logical_name":"entry_timestamp_authority","repository_path":"CAS_ENTRY_TIMESTAMP_AUTHORITY.json","sha256":"36d79a9ffefa58cc1be87ba2a414dbeb164f1c2c66fedeb1214066ed1d547f72","size_bytes":690,"artifact_class":"AUTHORITY_AUDIT"},
+    {"logical_name":"future_leak_audit","repository_path":"CAS_ENTRY_FRESHNESS_FUTURE_LEAK_AUDIT.json","sha256":"d4d0f8e009972dca29787a6d0b073299dbd65ddebcd75f8d4fbc927b0936e499","size_bytes":475,"artifact_class":"AUTHORITY_AUDIT"},
+    {"logical_name":"independence_audit","repository_path":"CAS_MORNING_REVERSAL_INDEPENDENCE_AUDIT.json","sha256":"25091f5e243dab91a83ee2f79c3ba8826cda75b5f8d6d16b04af7d9ea9b2c3ce","size_bytes":640,"artifact_class":"FAILURE_EVIDENCE"},
+    {"logical_name":"short_horizon_results","repository_path":"CAS_MORNING_REVERSAL_SHORT_HORIZON_RESULTS.csv","sha256":"53bec4cb32d2cd6b3b3bf546dec7cef6473d9feedbc44004fc501ab53f3e8f6f","size_bytes":176,"artifact_class":"FAILURE_EVIDENCE"},
+    {"logical_name":"exit_path_audit","repository_path":"CAS_MORNING_REVERSAL_EXIT_PATH_AUDIT.json","sha256":"1225af77ff01c33080f109ce5867e0efab9f862305bc2fbacd37c9a00950721a","size_bytes":488,"artifact_class":"FAILURE_EVIDENCE"},
+    {"logical_name":"negative_controls","repository_path":"CAS_MORNING_REVERSAL_NEGATIVE_CONTROLS.json","sha256":"85eb337d61b05c48f22c339f0f506ada1ea3edb30264f721a670c3df4860619e","size_bytes":446,"artifact_class":"FAILURE_EVIDENCE"},
+    {"logical_name":"prospective_status","repository_path":"CAS_MORNING_REVERSAL_PROSPECTIVE_STATUS.md","sha256":"8800a5eeb1f00afdf04df124f74e05b3530368bd3dfd27cbb15bf43300f75cdc","size_bytes":1427,"artifact_class":"STATUS"},
+    {"logical_name":"prospective_ledger","repository_path":"CAS_MORNING_REVERSAL_PROSPECTIVE_LEDGER.csv","sha256":"c42d0b7c53ca4c94ee674921f368051a59cff5956b2c3a87ddcf8367a7a31947","size_bytes":259,"artifact_class":"PROSPECTIVE_PROTOCOL"},
+    {"logical_name":"cost_spec","repository_path":"CAS_MORNING_REVERSAL_COST_SPEC_V1.json","sha256":"63ffff331be880c14a6d8494c16a43e1a6f357dc444fa5d1786b5d284d789ae6","size_bytes":548,"artifact_class":"PROSPECTIVE_PROTOCOL"},
+    {"logical_name":"option_cost_authority","repository_path":"CAS_MORNING_REVERSAL_OPTION_COST_AUTHORITY.json","sha256":"5d6e925c9bac6ba19ba90e3b302a66bdc610e9a4ebc2b5f16dab485822c17b1c","size_bytes":1048,"artifact_class":"AUTHORITY_AUDIT"},
+    {"logical_name":"short_horizon_report","repository_path":"CAS_MORNING_REVERSAL_SHORT_HORIZON_FINAL_REPORT.md","sha256":"94ceaf0e507d3cac2191ba8a127696fe9cc94a1445d5ac3367322cadb596d2d8","size_bytes":1260,"artifact_class":"FAILURE_EVIDENCE"}
+  ]
+}

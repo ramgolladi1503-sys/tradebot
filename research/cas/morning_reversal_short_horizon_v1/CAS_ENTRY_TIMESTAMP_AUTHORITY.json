@@ -1,0 +1,13 @@
+{
+  "schema_version": "CAS_ENTRY_TIMESTAMP_AUTHORITY_V1",
+  "source_sha": "ef9b9a6a3207321479010699227c61f53f9ae7f6",
+  "entry_timestamp_authority": "exchange_timestamp_when_authoritative; otherwise receive_timestamp only when explicitly present and governed",
+  "decision_cutoff": "15:14:00.000+05:30",
+  "freshness_tolerance_ms": 2000,
+  "freshness_tolerance_authority": "REPOSITORY_VERIFIED:LTP_SLA_SECONDS",
+  "entry_rule": "first authoritative underlying observation with timestamp >= decision_cutoff and 0 <= lag_ms <= 2000",
+  "pre_cutoff_backfill": false,
+  "later_favorable_observation_substitution": false,
+  "timestamp_mixing_without_provenance": false,
+  "status": "VERIFIED"
+}

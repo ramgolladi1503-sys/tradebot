@@ -1,0 +1,40 @@
+{
+  "schema_version": "CAS_MORNING_REVERSAL_CANDIDATE_CONTRACT_V1",
+  "candidate_name": "morning_09:15_10:00_reversal",
+  "source_sha": "ef9b9a6a3207321479010699227c61f53f9ae7f6",
+  "source_authority": "KITE_HISTORICAL_READ_ONLY",
+  "feature": {
+    "window_start": "09:15",
+    "window_end": "10:00",
+    "return_definition": "10000 * (close_10:00 / close_09:15 - 1)",
+    "signal_definition": "opposite sign of the observed index return"
+  },
+  "outcomes": ["15:20", "15:25", "15:30"],
+  "symbols": ["NIFTY", "BANKNIFTY", "SENSEX"],
+  "selection": {
+    "threshold_search": false,
+    "formula_changes_allowed": false,
+    "holdout_opened": false,
+    "holdout_access_authorized": false
+  },
+  "pre_holdout_evidence": {
+    "development_sessions": 12,
+    "validation_sessions": 4,
+    "development_balanced_accuracy": {
+      "15:20": 0.6388888889,
+      "15:25": 0.6388888889,
+      "15:30": 0.5555555556
+    },
+    "validation_balanced_accuracy": {
+      "15:20": 0.75,
+      "15:25": 0.75,
+      "15:30": 0.8333333333
+    }
+  },
+  "required_next_action": "Run an independent holdout evaluation using this frozen contract, then apply negative controls, concentration, determinism, and cost gates.",
+  "promotion_status": "NOT_CERTIFIED",
+  "live_execution_authorized": false,
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false
+}
