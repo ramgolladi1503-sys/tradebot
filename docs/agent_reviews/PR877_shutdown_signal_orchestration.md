@@ -16,19 +16,19 @@
 
 The change does not place orders, alter broker authority, enable CAS, change queue capacity, or mutate SQLite. The unrelated untracked runtime directory was not included.
 
-## Grill Me
+## Grill Me Review
 
 The repair must not be treated as durable-live proof. If persistence drain remains incomplete, the child still raises and no successful session seal may be claimed. A full fresh-session revalidation remains required.
 
-## Hermes
+## Hermes Review
 
 The smallest source-grounded repair is signal orchestration at the parent/child boundary. The existing `ObservationLifecycle.shutdown()` remains the sole drain authority.
 
-## GSD
+## GSD Review
 
 Implemented in commit `696bdedcc`. No strategy, CAS, feed subscription, or database behavior was changed.
 
-## QA/Safety
+## QA / Safety Review
 
 Offline deterministic saturation reproduced explicit queue rejection and bounded incomplete shutdown. Python compilation passed. Two focused orchestrator tests passed. No broker or live process was used.
 
