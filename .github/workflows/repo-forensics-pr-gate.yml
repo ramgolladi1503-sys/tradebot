@@ -54,7 +54,9 @@ jobs:
     timeout-minutes: 10
     env:
       PR818_FROZEN_LIVE_SHA: d7dc45e7c5c76247e7d1b8abd40ec7682fac2f9b
-      PR818_FROZEN_MAIN_BASELINE: 0d2a32290ccbacc76b608ecdae92df9312106198
+      # Advanced after the governed PR876 shutdown-boundary repair was merged
+      # into protected main. The protected path set below remains unchanged.
+      PR818_FROZEN_MAIN_BASELINE: f4eb3b0b1e264970ab27ad7e5b7f2f733a5f40e4
     steps:
       - name: Checkout trusted protected main only
         uses: actions/checkout@v4
