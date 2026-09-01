@@ -18,6 +18,11 @@ This is advisory-only. `BROKER_WRITE_AUTHORITY=false`, `ORDER_AUTHORITY=false`,
 `PAPER_AUTHORIZED=false`, and `LIVE_EXECUTION_AUTHORIZED=false`. No broker
 connectivity or order-capable method is invoked.
 
+Evidence fields: mode=advisory_only; candidate_id=session_id:symbol;
+decision=UP|DOWN|NO_SIGNAL; reason=causal 09:15-10:00 return with fresh 15:14
+reference; timestamp=decision_timestamp; is_order_action=false;
+broker_api_called=false; source=exact-SHA read-only advisory evaluator.
+
 ## Grill Me Review
 
 The implementation does not establish an edge, prospective support, execution
