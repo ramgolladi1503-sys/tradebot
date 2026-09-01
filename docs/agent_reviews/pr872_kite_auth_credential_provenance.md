@@ -42,9 +42,16 @@ Human approval was received for same-app pairing verification and the explicitly
 
 ## Evidence Traceability
 
-mode: OFFLINE_AUTH_REPAIR  
-decision: THIRD_LOGIN_BLOCKED_UNTIL_MERGED_MAIN  
-source: exact candidate commit plus focused auth test output  
-broker_api_called: true for two prior read-only profile/token-exchange attempts; no order methods called  
-is_order_action: false  
+mode: OFFLINE_AUTH_REPAIR
+candidate_id: PR872_KITE_AUTH_CREDENTIAL_PROVENANCE
+decision: THIRD_LOGIN_BLOCKED_UNTIL_MERGED_MAIN
+reason: Credential shadowing was repaired and independently tested; protected-main merge and post-merge verification remain required.
+timestamp: 2026-09-01T09:20:00+05:30
+source: exact candidate commit plus focused auth test output
+broker_api_called: true
+is_order_action: false
+live_order_action: false
+broker_order_action: false
+read_only: true
+allowed_for_live_execution: false
 authority: broker_write=false, order=false, paper=false, live=false
