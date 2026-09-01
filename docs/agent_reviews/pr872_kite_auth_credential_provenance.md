@@ -48,10 +48,12 @@ decision: THIRD_LOGIN_BLOCKED_UNTIL_MERGED_MAIN
 reason: Credential shadowing was repaired and independently tested; protected-main merge and post-merge verification remain required.
 timestamp: 2026-09-01T09:20:00+05:30
 source: exact candidate commit plus focused auth test output
-broker_api_called: true
+broker_api_called: false
 is_order_action: false
 live_order_action: false
 broker_order_action: false
 read_only: true
 allowed_for_live_execution: false
 authority: broker_write=false, order=false, paper=false, live=false
+
+Historical runtime context: two prior governed read-only token-exchange attempts called the broker and failed with checksum rejection; those calls are not part of this offline PR validation and no order methods were invoked.
