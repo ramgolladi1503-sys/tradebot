@@ -18,7 +18,7 @@ No strategy, CAS, feed implementation, broker adapter, order, execution, credent
 
 ## Grill Me Review
 
-The producer does not accept an unknown material change automatically; `--reviewed-pass` is explicit. Artifact tampering, source/date mismatch, raw hash mismatch, missing verifier status, and missing token coverage block. A future change must add a governed prior-session diff policy before broadening automatic acceptance.
+The producer does not accept an unknown material change automatically; `--reviewed-pass` is explicit. Artifact tampering, source/date mismatch, raw hash mismatch, absent verifier output, and absent token coverage block. A future change must add a governed prior-session diff policy before broadening automatic acceptance.
 
 ## Hermes Review
 
