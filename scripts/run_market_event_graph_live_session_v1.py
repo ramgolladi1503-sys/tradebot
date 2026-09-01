@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -310,8 +311,15 @@ def main() -> int:
             "TRADEBOT_FEED_FORENSICS_ROOT": str(capture_dir),
         }
     )
-    with log_path.open("w", encoding="utf-8") as log_file:
-        proc = subprocess.run([
+    child = None
+    def _forward_shutdown(signum, _frame):
+        if child is not None and child.poll() is None:
+            child.send_signal(signum)
+
+    previous_sigterm = signal.signal(signal.SIGTERM, _forward_shutdown)
+    try:
+      with log_path.open("w", encoding="utf-8") as log_file:
+        child = subprocess.Popen([
             sys.executable, "-B", "scripts/run_kite_read_only_observation_v1.py",
             "--session-date", session_date,
             "--output-root", str(capture_dir),
@@ -320,7 +328,9 @@ def main() -> int:
             "--token-path", str(token_path),
             "--authority-artifact", str(args.authority_artifact),
         ], cwd=REPO_ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT)
-    return int(proc.returncode)
+        return int(child.wait())
+    finally:
+        signal.signal(signal.SIGTERM, previous_sigterm)
 
 
 if __name__ == "__main__":

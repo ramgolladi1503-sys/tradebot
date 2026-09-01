@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sys
 import threading
 import time
@@ -349,6 +350,8 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     from core.market_event_graph_live_runtime_bridge import get_live_source_bridge
 
     lifecycle = ObservationLifecycle(kite_depth_ws)
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+    signal.signal(signal.SIGTERM, lambda signum, _frame: lifecycle.request_stop(f"signal_{signum}"))
     lifecycle.start(tokens)
     meg_bridge = get_live_source_bridge()
     scheduler = MegIntervalScheduler()
