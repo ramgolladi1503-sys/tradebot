@@ -29,6 +29,40 @@ CALLBACK_PATH = "/"
 DEFAULT_TIMEOUT_SEC = 180
 
 
+def _governed_credential_path() -> Path:
+    """Return the operator-managed credential file, never a repository file."""
+    return Path(
+        os.getenv(
+            "KITE_CREDENTIALS_PATH",
+            str(Path.home() / ".tradebot" / "credentials" / "kite_app.env"),
+        )
+    ).expanduser().resolve()
+
+
+def _load_governed_credentials() -> dict[str, str]:
+    path = _governed_credential_path()
+    if not path.is_file():
+        raise SystemExit("Governed Kite credential file is missing.")
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"^\s*(?:export\s+)?(KITE_API_KEY|KITE_API_SECRET)\s*=\s*(.*?)\s*$", raw_line)
+        if match:
+            values[match.group(1)] = match.group(2).strip().strip("\"'")
+    if not values.get("KITE_API_KEY") or not values.get("KITE_API_SECRET"):
+        raise SystemExit("Governed Kite credential file is incomplete.")
+    return values
+
+
+def _resolve_governed_credential(name: str) -> str:
+    governed = _load_governed_credentials()[name]
+    ambient = str(os.getenv(name) or "").strip()
+    if ambient and ambient != governed:
+        raise SystemExit(f"{name} conflicts with governed credential source.")
+    if bool(re.search(r"\s", governed)):
+        raise SystemExit(f"{name} contains whitespace; fix governed credential file.")
+    return governed
+
+
 def _looks_placeholder_api_key(value: str) -> bool:
     token = str(value or "").strip().lower()
     if not token:
@@ -124,9 +158,7 @@ def _run_server(host: str, port: int):
 
 
 def _resolve_api_key() -> str:
-    api_key = (
-        os.getenv("KITE_API_KEY") or str(getattr(cfg, "KITE_API_KEY", "") or "")
-    ).strip()
+    api_key = _resolve_governed_credential("KITE_API_KEY")
     if _looks_placeholder_api_key(api_key):
         raise SystemExit(
             "Invalid or missing KITE_API_KEY. Set a real Kite app key in env/.env before login."
@@ -137,14 +169,7 @@ def _resolve_api_key() -> str:
 
 
 def _resolve_api_secret() -> str:
-    api_secret = (
-        os.getenv("KITE_API_SECRET") or str(getattr(cfg, "KITE_API_SECRET", "") or "")
-    ).strip()
-    if not api_secret:
-        raise SystemExit("Missing KITE_API_SECRET in env/.env.")
-    if bool(re.search(r"\s", api_secret)):
-        raise SystemExit("KITE_API_SECRET contains whitespace; fix env/.env value.")
-    return api_secret
+    return _resolve_governed_credential("KITE_API_SECRET")
 
 
 def main():
