@@ -1,5 +1,14 @@
 # PR877 Shutdown Signal Orchestration Review
 
+mode: READ_ONLY
+candidate_id: PR877
+decision: MERGE_ONLY_AFTER_REQUIRED_CHECKS_PASS
+reason: Restore graceful SIGTERM propagation into the existing fail-closed observation shutdown lifecycle without changing execution authority.
+timestamp: 2026-09-01T16:21:00+05:30
+is_order_action: false
+broker_api_called: false
+source: PR877_shutdown_signal_orchestration_review
+
 ## Agent Work Contract
 
 - source_agent: Codex
@@ -26,11 +35,11 @@ The smallest source-grounded repair is signal orchestration at the parent/child 
 
 ## GSD Review
 
-Implemented in commit `696bdedcc`. No strategy, CAS, feed subscription, or database behavior was changed.
+Implemented on the PR877 branch. No strategy, CAS, feed subscription, or database behavior was changed.
 
 ## QA / Safety Review
 
-Offline deterministic saturation reproduced explicit queue rejection and bounded incomplete shutdown. Python compilation passed. Two focused orchestrator tests passed. No broker or live process was used.
+Offline deterministic saturation reproduced explicit queue rejection and bounded incomplete shutdown. Python compilation passed. Focused orchestrator tests passed. No broker or live process was used.
 
 ## Acceptance Proof
 
