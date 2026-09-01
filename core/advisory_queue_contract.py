@@ -40,6 +40,15 @@ def append_advisory(path: str | Path, row: Mapping[str, Any], *, session_id: str
     payload["advisory_sha256"] = digest
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    identity = tuple(payload.get(key) for key in ("session_id", "strategy_id", "symbol", "decision_timestamp"))
+    if destination.exists():
+        for line in destination.read_text(encoding="utf-8").splitlines():
+            try:
+                prior = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if tuple(prior.get(key) for key in ("session_id", "strategy_id", "symbol", "decision_timestamp")) == identity:
+                return str(prior.get("advisory_sha256") or digest)
     with destination.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, sort_keys=True) + "\n")
     return digest

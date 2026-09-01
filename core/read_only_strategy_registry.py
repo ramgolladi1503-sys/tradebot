@@ -15,14 +15,16 @@ from typing import Any, Mapping
 
 CANONICAL_STRATEGIES = (
     {
-        "strategy_id": "CAS_SW_RUNTIME_V2_1514",
-        "enabled": False,
-        "inputs": ("canonical_live_sqlite", "regime_artifact"),
-        "regime_dependencies": ("stable_regime", "completed_inputs_before_freeze"),
+        "strategy_id": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1",
+        "enabled": True,
+        "inputs": ("09:15_10:00_underlying_return", "15:14_fresh_observation"),
+        "regime_dependencies": (),
         "candidate_type": "causal_advisory",
         "mode": "advisory_only",
     },
 )
+
+SUPERSEDED_STRATEGIES = ({"strategy_id": "CAS_SW_RUNTIME_V2_1514", "status": "SUPERSEDED", "enabled": False, "superseded_by": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1"},)
 
 
 def _spec_sha(spec: Mapping[str, Any]) -> str:
