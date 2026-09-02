@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from core.cas_v2_consumer_contract import freeze_cas_decision
+from core.cas_v2_consumer_contract import classify_cas_time_boundary, freeze_cas_decision
 
 
 FREEZE = datetime(2026, 8, 24, 9, 44, tzinfo=timezone.utc)  # 15:14 IST
@@ -34,3 +34,14 @@ def test_flat_and_abstain_have_no_option_side():
             direction=direction, source_sha="a" * 40, spec_sha="b" * 40,
         )
         assert decision.option_side is None
+
+
+def test_cas_1514_boundary_is_exact_and_timezone_invariant():
+    assert classify_cas_time_boundary(datetime(2026, 8, 24, 15, 13, 59, 999000, tzinfo=timezone(timedelta(hours=5, minutes=30))), session_date="2026-08-24") == "pre_cutoff"
+    assert classify_cas_time_boundary(FREEZE, session_date="2026-08-24") == "cutoff"
+    assert classify_cas_time_boundary(datetime(2026, 8, 24, 9, 44, 0, 1000, tzinfo=timezone.utc), session_date="2026-08-24") == "post_cutoff"
+
+
+def test_cas_boundary_rejects_naive_datetime():
+    with pytest.raises(ValueError, match="cas_timezone_required"):
+        classify_cas_time_boundary(datetime(2026, 8, 24, 15, 14), session_date="2026-08-24")
