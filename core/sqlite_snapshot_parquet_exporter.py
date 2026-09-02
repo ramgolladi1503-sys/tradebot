@@ -164,14 +164,21 @@ def run_export_loop(
 
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
+    last_success: float | None = None
+    last_failure: float | None = None
     while not stop:
         started = time.monotonic()
         result = export_once(production_db, output_dir, deadline_seconds=deadline_seconds)
+        now = time.time()
+        if result.status == "HEALTHY":
+            last_success = now
+        else:
+            last_failure = now
         if status_path is not None:
             status_path.parent.mkdir(parents=True, exist_ok=True)
             payload = result.as_dict() | {
-                "LAST_EXPORT_SUCCESS": time.time() if result.status == "HEALTHY" else None,
-                "LAST_EXPORT_FAILURE": time.time() if result.status != "HEALTHY" else None,
+                "LAST_EXPORT_SUCCESS": last_success,
+                "LAST_EXPORT_FAILURE": last_failure,
                 "SNAPSHOT_DURATION_MS": round((time.monotonic() - started) * 1000, 2),
                 "EXPORTER_SHUTDOWN_BOUNDED": True,
             }
