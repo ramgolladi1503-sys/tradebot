@@ -1,10 +1,16 @@
 
-def _pace_loop(poll_interval: float, loop_start_time: float) -> None:
+def _pace_loop(
+    poll_interval: float,
+    loop_start_time: float,
+    *,
+    minimum_sleep_sec: float = 0.0,
+) -> None:
     import time
     elapsed = time.perf_counter() - loop_start_time
-    print('elapsed =', elapsed)
-    print('poll_interval =', poll_interval)
-    sleep_time = max(0.0, poll_interval - elapsed)
+    sleep_time = max(
+        float(minimum_sleep_sec),
+        float(poll_interval) - elapsed,
+    )
     if sleep_time > 0:
         time.sleep(sleep_time)
 
@@ -4823,7 +4829,11 @@ class Orchestrator:
 
             if is_fatal:
                 logger.warning("orchestrator_live_monitoring_feed_fatal_sleep state=%s", recovery_state.name)
-                _pace_loop(max(2.0, self.poll_interval), loop_start_time)
+                _pace_loop(
+                    max(2.0, self.poll_interval),
+                    loop_start_time,
+                    minimum_sleep_sec=1.9,
+                )
                 if run_once:
                     break
                 continue

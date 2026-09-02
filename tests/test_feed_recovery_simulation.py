@@ -274,4 +274,4 @@ def test_orchestrator_hot_loop_prevention_on_fatal_state(monkeypatch, tmp_path):
     
     num_sleeps = len(sleep_calls)
     assert num_sleeps > 0
-    assert sleep_calls[0] >= 1.9  # Accounting for elapsed loop execution time
+    assert sleep_calls[0] >= 1.9
