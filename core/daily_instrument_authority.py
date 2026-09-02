@@ -62,7 +62,13 @@ def produce_authority(*, master_path: Path, output_path: Path, session_date: str
     verification = independent_verify(payload, required_tokens)
     material = "UNKNOWN"
     if verification["independent_verifier_status"] == "PASS":
-        material = "REVIEWED_PASS" if reviewed_pass else "UNKNOWN"
+        previous_is_same_authority = bool(previous) and (
+            previous.get("session_date") == session_date
+            and previous.get("source_sha") == source_sha
+            and previous.get("raw_master_sha256") == sha256_bytes(raw)
+            and previous.get("authority_verdict") == "PASS"
+        )
+        material = "EXPECTED" if previous_is_same_authority else ("REVIEWED_PASS" if reviewed_pass else "UNKNOWN")
     authority = {
         "contract_id": CONTRACT_ID, "session_date": session_date, "timezone": TIMEZONE, "source_sha": source_sha,
         "acquired_at": datetime.now().astimezone().isoformat(), "source": "Kite instruments read-only endpoint",
