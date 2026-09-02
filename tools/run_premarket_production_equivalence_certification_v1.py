@@ -85,6 +85,11 @@ def _run_soak(minutes: float, root: Path) -> dict[str, object]:
                     conn.execute("INSERT INTO depth_snapshots VALUES (?,?,?)", (now, 1, '{}'))
                     conn.commit()
                     writes += 1
+                    # Keep the fixture at a bounded, production-shaped write
+                    # cadence.  A zero-delay loop grows an unbounded database
+                    # and measures full-table export scaling, not WAL
+                    # contention under a live observer's write rate.
+                    time.sleep(0.01)
         except Exception as exc:
             writer_errors.append(type(exc).__name__)
 
