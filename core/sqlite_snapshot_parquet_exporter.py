@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import json
+import signal
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -143,3 +145,39 @@ def export_once(
     finally:
         if snapshot is not None:
             snapshot.unlink(missing_ok=True)
+
+
+def run_export_loop(
+    production_db: Path,
+    output_dir: Path,
+    *,
+    interval_seconds: float,
+    deadline_seconds: float = 10.0,
+    status_path: Path | None = None,
+) -> None:
+    """Run exports until signalled; shutdown never waits on an export."""
+    stop = False
+
+    def request_stop(_signum: int, _frame: Any) -> None:
+        nonlocal stop
+        stop = True
+
+    signal.signal(signal.SIGTERM, request_stop)
+    signal.signal(signal.SIGINT, request_stop)
+    while not stop:
+        started = time.monotonic()
+        result = export_once(production_db, output_dir, deadline_seconds=deadline_seconds)
+        if status_path is not None:
+            status_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = result.as_dict() | {
+                "LAST_EXPORT_SUCCESS": time.time() if result.status == "HEALTHY" else None,
+                "LAST_EXPORT_FAILURE": time.time() if result.status != "HEALTHY" else None,
+                "SNAPSHOT_DURATION_MS": round((time.monotonic() - started) * 1000, 2),
+                "EXPORTER_SHUTDOWN_BOUNDED": True,
+            }
+            temp = status_path.with_name(f".{status_path.name}.tmp")
+            temp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+            os.replace(temp, status_path)
+        stop = stop or interval_seconds <= 0
+        if not stop:
+            time.sleep(max(0.0, float(interval_seconds) - (time.monotonic() - started)))
