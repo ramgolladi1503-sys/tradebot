@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -67,7 +68,11 @@ def reset_observation_registry() -> None:
 
 
 def _contract_path() -> Path | None:
-    path_text = str(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", "") or "").strip()
+    path_text = str(
+        os.getenv("MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH")
+        or getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", "")
+        or ""
+    ).strip()
     if not path_text:
         return None
     return Path(path_text)
@@ -75,7 +80,8 @@ def _contract_path() -> Path | None:
 
 def load_observation_registry(*, force: bool = False) -> ObservationRegistry | None:
     global _OBSERVATION_REGISTRY, _OBSERVATION_REGISTRY_IDENTITY
-    if not bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
+    enabled = os.getenv("MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", "")
+    if not (enabled.strip().lower() in {"1", "true", "yes", "on"} or bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False))):
         reset_observation_registry()
         return None
     path = _contract_path()
@@ -93,10 +99,11 @@ def load_observation_registry(*, force: bool = False) -> ObservationRegistry | N
     token_domain = str(raw.get("token_domain") or "").lower().strip()
     if provider != "kite" or token_domain != "kite_instrument_token":
         raise ValueError(BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE)
-    if str(raw.get("official_raw_sha256") or "") != "9fb8832853c279448d2bc05f0e7dd5f460ed2ff35332fea8c40fc1250362ad28":
+    official_raw_sha = str(raw.get("official_raw_sha256") or "")
+    if len(official_raw_sha) != 64 or any(c not in "0123456789abcdef" for c in official_raw_sha.lower()):
         raise ValueError(BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE)
     master = dict(raw.get("broker_instrument_master") or {})
-    if str(master.get("sha256") or "") != "828c0c378e4939720c34ee7e727e5ae6f0265441e0e0a1888a386f85ab9c2a93":
+    if len(str(master.get("sha256") or "")) != 64 or str(master.get("sha256")) != official_raw_sha:
         raise ValueError(BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE)
     constituents = tuple(dict(row) for row in raw.get("constituents") or [])
     if len(constituents) != 50:

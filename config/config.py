@@ -29,6 +29,40 @@ except Exception:
 logger = logging.getLogger(__name__)
 
 
+def _load_governed_kite_credentials() -> dict[str, str]:
+    """Load Kite app credentials from the operator-managed external source.
+
+    Ambient values are accepted only when identical to the governed source;
+    conflicting values fail closed instead of assembling a mismatched pair.
+    """
+    path = Path(os.getenv("KITE_CREDENTIALS_PATH", str(Path.home() / ".tradebot" / "credentials" / "kite_app.env"))).expanduser().resolve()
+    values: dict[str, str] = {}
+    if path.is_file():
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if line.startswith("export "):
+                line = line[7:].lstrip()
+            if "=" not in line or line.startswith("#"):
+                continue
+            name, value = line.split("=", 1)
+            if name.strip() in {"KITE_API_KEY", "KITE_API_SECRET"}:
+                values[name.strip()] = value.strip().strip("\"'")
+        missing = {name for name in ("KITE_API_KEY", "KITE_API_SECRET") if not values.get(name)}
+        if missing:
+            raise RuntimeError(f"governed_kite_credentials_incomplete:{','.join(sorted(missing))}")
+        for name, governed in values.items():
+            ambient = os.getenv(name, "").strip()
+            if ambient and ambient != governed:
+                raise RuntimeError(f"governed_kite_credential_conflict:{name}")
+        os.environ.pop("KITE_API_KEY", None)
+        os.environ.pop("KITE_API_SECRET", None)
+        return values
+    return {name: os.getenv(name, "").strip() for name in ("KITE_API_KEY", "KITE_API_SECRET")}
+
+
+_GOVERNED_KITE_CREDENTIALS = _load_governed_kite_credentials()
+
+
 def _float_env(name: str, default):
     raw = os.getenv(name)
     if raw is None or str(raw).strip() == "":
@@ -99,8 +133,9 @@ OPTION_SYMBOL_BACKTEST_EXPORT_INSTRUMENTS_PATH = os.getenv("OPTION_SYMBOL_BACKTE
 # -------------------------------
 # Kite / broker API credentials
 # -------------------------------
-KITE_API_KEY = os.getenv("KITE_API_KEY", "")
-KITE_API_SECRET = os.getenv("KITE_API_SECRET", "")
+KITE_API_KEY = _GOVERNED_KITE_CREDENTIALS["KITE_API_KEY"]
+KITE_API_SECRET = _GOVERNED_KITE_CREDENTIALS["KITE_API_SECRET"]
+KITE_CREDENTIAL_SOURCE = os.getenv("KITE_CREDENTIALS_PATH", str(Path.home() / ".tradebot" / "credentials" / "kite_app.env"))
 KITE_ACCESS_TOKEN = ""
 
 # -------------------------------
