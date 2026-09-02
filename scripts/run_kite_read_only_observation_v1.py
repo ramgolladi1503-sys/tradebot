@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import hashlib
+import subprocess
 import sys
 from pathlib import Path
 
@@ -36,6 +37,8 @@ def main() -> int:
     parser.add_argument("--token-path", required=True, type=Path)
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--authority-artifact", required=True, type=Path)
+    parser.add_argument("--parquet-export", action="store_true")
+    parser.add_argument("--parquet-export-interval-seconds", type=float, default=15.0)
     args = parser.parse_args()
     if not args.token_path.is_file():
         raise SystemExit("KITE_ACCESS_TOKEN_MISSING")
@@ -57,12 +60,32 @@ def main() -> int:
         assert_import_boundary()
         get_kite_client(repo_root_path=Path.cwd()).profile()
         return 0
-    return run_observation(
-        launch_plan=plan,
-        output_root=args.output_root,
-        token_path=args.token_path,
-        session_date=args.session_date,
-    )
+    exporter = None
+    try:
+        if args.parquet_export:
+            db_path = args.output_root / "db" / "DEFAULT.sqlite"
+            parquet_dir = args.output_root / "parquet"
+            exporter = subprocess.Popen([
+                sys.executable, str(ROOT / "scripts" / "export_sqlite_snapshot_to_parquet.py"),
+                "--production-db", str(db_path),
+                "--output-dir", str(parquet_dir),
+                "--interval-seconds", str(max(0.1, args.parquet_export_interval_seconds)),
+                "--status-path", str(args.output_root / "parquet_export_status.json"),
+            ])
+        return run_observation(
+            launch_plan=plan,
+            output_root=args.output_root,
+            token_path=args.token_path,
+            session_date=args.session_date,
+        )
+    finally:
+        if exporter is not None and exporter.poll() is None:
+            exporter.terminate()
+            try:
+                exporter.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                exporter.kill()
+                exporter.wait(timeout=5)
 
 
 if __name__ == "__main__":
