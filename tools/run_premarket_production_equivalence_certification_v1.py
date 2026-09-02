@@ -135,6 +135,37 @@ def main() -> int:
     soak = _run_soak(args.soak_minutes, root)
     soak_pass = bool(soak.get("pass"))
     soak_note = str(soak.get("note") or "completed")
+    # Do not promote the limited harness bundle to production equivalence.
+    # These gates require dedicated production-path fixtures/evidence that
+    # this harness does not yet execute; UNKNOWN is represented as false so
+    # the aggregate remains fail-closed.
+    mandatory_gates = {
+        "EXACT_SHA_BINDING_PASS": exact,
+        "CLEAN_WORKTREE_PASS": clean,
+        "RELEVANT_OFFLINE_TESTS_PASS": tests_ok,
+        "PARQUET_EXPORT_PASS": soak_pass,
+        "PARQUET_EXPORT_READS_LIVE_SQLITE": False,
+        "CREDENTIAL_PRECEDENCE_PASS": False,
+        "TOKEN_PROVENANCE_PASS": False,
+        "INSTRUMENT_AUTHORITY_PASS": False,
+        "REGISTRY_AUTHORITY_PASS": False,
+        "SUBSCRIPTION_51_OF_51_PASS": False,
+        "TICK_PERSISTENCE_PASS": False,
+        "DEPTH_PERSISTENCE_PASS": False,
+        "FEED_RUNTIME_PERSISTENCE_PASS": False,
+        "ANALYTICS_CYCLE_ADVANCES": False,
+        "CONSUMER_CYCLE_ADVANCES": False,
+        "CAS_EVALUATOR_REACHED": False,
+        "CAS_EXPECTED_RESULT_PROVEN": False,
+        "CAS_ADVISORY_BRIDGE_PASS": False,
+        "UI_STATUS_REFRESH_PASS": False,
+        "CAS_TIMEZONE_BOUNDARY_PASS": False,
+        "FAILURE_INJECTION_PASS": False,
+        "SHUTDOWN_DRAIN_PASS": False,
+        "FINAL_SESSION_MANIFEST_PASS": False,
+        "SOAK_TEST_PASS": soak_pass,
+        "INDEPENDENT_VERIFIER_PASS": bool(exact and clean),
+    }
 
     session_id = f"offline-cert-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     manifest = output / "SESSION_MANIFEST.json"
@@ -162,7 +193,8 @@ def main() -> int:
     )
     verified = independently_verify_session_manifest(manifest)
     report = {
-        "OFFLINE_PRODUCTION_EQUIVALENCE_PASS": bool(exact and clean and tests_ok and soak_pass),
+        "OFFLINE_PRODUCTION_EQUIVALENCE_PASS": all(mandatory_gates.values()),
+        "MANDATORY_OFFLINE_GATES": mandatory_gates,
         "EXACT_SHA_BINDING_PASS": exact,
         "CLEAN_WORKTREE_PASS": clean,
         "RELEVANT_OFFLINE_TESTS_PASS": tests_ok,
