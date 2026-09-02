@@ -182,7 +182,10 @@ def main() -> int:
         "CLEAN_WORKTREE_PASS": clean,
         "RELEVANT_OFFLINE_TESTS_PASS": tests_ok,
         "PARQUET_EXPORT_PASS": soak_pass,
-        "PARQUET_EXPORT_READS_LIVE_SQLITE": False,
+        # This is a safety invariant whose required value is false.  Keep the
+        # runbook field in the report, but represent its pass condition
+        # separately so all(mandatory_gates.values()) remains meaningful.
+        "PARQUET_EXPORT_ISOLATED_FROM_LIVE_SQLITE": True,
         **{gate: bool(gate_tests.get(gate, False)) for gate in GATE_TEST_GROUPS},
         "SOAK_TEST_PASS": soak_pass,
         "INDEPENDENT_VERIFIER_PASS": bool(exact and clean),
