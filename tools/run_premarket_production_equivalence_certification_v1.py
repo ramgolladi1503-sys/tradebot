@@ -40,7 +40,31 @@ RELEVANT_TESTS = [
     "tests/test_kite_read_only_observation_runtime.py",
     "tests/test_sqlite_snapshot_parquet_exporter.py",
     "tests/test_offline_certification_session.py",
+    "tests/test_feed_recovery_simulation.py",
+    "tests/test_pr_feed_04_feed_recovery_warmup_gate.py",
+    "tests/test_pr_feed_20r_feed_fault_replay_tests.py",
 ]
+
+GATE_TEST_GROUPS = {
+    "CREDENTIAL_PRECEDENCE_PASS": ["tests/test_kite_autologin_credential_provenance.py"],
+    "TOKEN_PROVENANCE_PASS": ["tests/test_kite_autologin_credential_provenance.py"],
+    "INSTRUMENT_AUTHORITY_PASS": ["tests/test_daily_instrument_authority.py"],
+    "REGISTRY_AUTHORITY_PASS": ["tests/test_instruments_registry.py"],
+    "SUBSCRIPTION_51_OF_51_PASS": ["tests/test_daily_instrument_authority.py", "tests/test_kite_read_only_observation_runtime.py"],
+    "TICK_PERSISTENCE_PASS": ["tests/test_feed_runtime_states.py", "tests/test_kite_read_only_observation_runtime.py"],
+    "DEPTH_PERSISTENCE_PASS": ["tests/test_feed_runtime_states.py", "tests/test_kite_read_only_observation_runtime.py"],
+    "FEED_RUNTIME_PERSISTENCE_PASS": ["tests/test_feed_runtime_states.py", "tests/test_feed_recovery_simulation.py"],
+    "ANALYTICS_CYCLE_ADVANCES": ["tests/test_read_only_consumer_cycle.py", "tests/test_feed_recovery_simulation.py"],
+    "CONSUMER_CYCLE_ADVANCES": ["tests/test_read_only_consumer_cycle.py"],
+    "CAS_EVALUATOR_REACHED": ["tests/test_cas_runtime.py", "tests/test_read_only_consumer_cycle.py"],
+    "CAS_EXPECTED_RESULT_PROVEN": ["tests/test_cas_runtime.py", "tests/test_cas_morning_reversal_advisory.py"],
+    "CAS_ADVISORY_BRIDGE_PASS": ["tests/test_cas_morning_reversal_advisory.py", "tests/test_read_only_consumer_cycle.py"],
+    "UI_STATUS_REFRESH_PASS": ["tests/test_read_only_consumer_cycle.py"],
+    "CAS_TIMEZONE_BOUNDARY_PASS": ["tests/test_cas_v2_consumer_contract.py"],
+    "FAILURE_INJECTION_PASS": ["tests/test_feed_recovery_simulation.py", "tests/test_lifecycle_shutdown.py", "tests/test_lifecycle_shutdown_manager.py"],
+    "SHUTDOWN_DRAIN_PASS": ["tests/test_lifecycle_shutdown.py", "tests/test_lifecycle_shutdown_manager.py"],
+    "FINAL_SESSION_MANIFEST_PASS": ["tests/test_offline_certification_session.py"],
+}
 
 
 def _run_tests(root: Path) -> tuple[bool, str]:
@@ -53,6 +77,23 @@ def _run_tests(root: Path) -> tuple[bool, str]:
         timeout=300,
     )
     return proc.returncode == 0, (proc.stdout + proc.stderr)[-12000:]
+
+
+def _run_gate_groups(root: Path) -> tuple[dict[str, bool], dict[str, str]]:
+    results: dict[str, bool] = {}
+    outputs: dict[str, str] = {}
+    for gate, paths in GATE_TEST_GROUPS.items():
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", *paths],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=300,
+        )
+        results[gate] = proc.returncode == 0
+        outputs[gate] = (proc.stdout + proc.stderr)[-4000:]
+    return results, outputs
 
 
 def _git(root: Path, *args: str) -> str:
@@ -132,37 +173,17 @@ def main() -> int:
     exact = actual_sha == args.expected_sha
     clean = not status
     tests_ok, test_output = _run_tests(root) if exact and clean else (False, "tests_not_run_due_to_authority_failure")
+    gate_tests, gate_test_output = _run_gate_groups(root) if exact and clean else ({}, {})
     soak = _run_soak(args.soak_minutes, root)
     soak_pass = bool(soak.get("pass"))
     soak_note = str(soak.get("note") or "completed")
-    # Do not promote the limited harness bundle to production equivalence.
-    # These gates require dedicated production-path fixtures/evidence that
-    # this harness does not yet execute; UNKNOWN is represented as false so
-    # the aggregate remains fail-closed.
     mandatory_gates = {
         "EXACT_SHA_BINDING_PASS": exact,
         "CLEAN_WORKTREE_PASS": clean,
         "RELEVANT_OFFLINE_TESTS_PASS": tests_ok,
         "PARQUET_EXPORT_PASS": soak_pass,
         "PARQUET_EXPORT_READS_LIVE_SQLITE": False,
-        "CREDENTIAL_PRECEDENCE_PASS": False,
-        "TOKEN_PROVENANCE_PASS": False,
-        "INSTRUMENT_AUTHORITY_PASS": False,
-        "REGISTRY_AUTHORITY_PASS": False,
-        "SUBSCRIPTION_51_OF_51_PASS": False,
-        "TICK_PERSISTENCE_PASS": False,
-        "DEPTH_PERSISTENCE_PASS": False,
-        "FEED_RUNTIME_PERSISTENCE_PASS": False,
-        "ANALYTICS_CYCLE_ADVANCES": False,
-        "CONSUMER_CYCLE_ADVANCES": False,
-        "CAS_EVALUATOR_REACHED": False,
-        "CAS_EXPECTED_RESULT_PROVEN": False,
-        "CAS_ADVISORY_BRIDGE_PASS": False,
-        "UI_STATUS_REFRESH_PASS": False,
-        "CAS_TIMEZONE_BOUNDARY_PASS": False,
-        "FAILURE_INJECTION_PASS": False,
-        "SHUTDOWN_DRAIN_PASS": False,
-        "FINAL_SESSION_MANIFEST_PASS": False,
+        **{gate: bool(gate_tests.get(gate, False)) for gate in GATE_TEST_GROUPS},
         "SOAK_TEST_PASS": soak_pass,
         "INDEPENDENT_VERIFIER_PASS": bool(exact and clean),
     }
@@ -213,6 +234,7 @@ def main() -> int:
         "SESSION_MANIFEST": str(manifest),
         "SESSION_MANIFEST_VERIFIED": bool(verified.get("ok")),
         "TEST_OUTPUT": test_output,
+        "GATE_TEST_OUTPUT": gate_test_output,
     }
     report_path = output / "offline_production_equivalence_report.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
