@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+import hashlib
+import json
 
 import pandas as pd
 import pytest
@@ -151,6 +153,198 @@ def test_wfa_partition_plan_applies_purge_and_embargo(tmp_path: Path):
     assert plan["partitions"]["train"]["effective_end"].endswith("09:35:00+05:30")
     assert plan["partitions"]["validation"]["effective_start"].endswith("10:45:00+05:30")
     assert plan["partitions"]["validation"]["effective_end"].endswith("11:40:00+05:30")
+
+
+def test_legacy_wfa_purges_overlapping_training_rows_and_applies_embargo():
+    from core.backtesting.wfa import WalkForwardAnalyzer
+
+    index = pd.date_range("2024-12-31 15:25", periods=8, freq="min", tz="Asia/Kolkata").append(
+        pd.date_range("2025-01-01 09:15", periods=4, freq="min", tz="Asia/Kolkata")
+    )
+    data = pd.DataFrame({"open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0}, index=index)
+    analyzer = WalkForwardAnalyzer(data, train_years=1, test_years=1, label_horizon_minutes=60, embargo_minutes=2)
+    window = analyzer.generate_windows()[0]
+    assert window["train_df"].index.max() + pd.Timedelta(minutes=60) < window["raw_test_start"]
+    assert window["test_df"].index.min() >= window["raw_test_start"] + pd.Timedelta(minutes=2)
+
+
+def test_legacy_wfa_explicit_purge_contract_cannot_be_negative():
+    from core.backtesting.wfa import WalkForwardAnalyzer
+
+    data = pd.DataFrame(
+        {"open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0], "volume": [1.0]},
+        index=pd.DatetimeIndex([pd.Timestamp("2024-01-01", tz="Asia/Kolkata")]),
+    )
+    with pytest.raises(ValueError, match="wfa_boundaries_must_be_nonnegative"):
+        WalkForwardAnalyzer(data, purge_minutes=-1)
+
+
+def test_legacy_wfa_exposes_fold_and_parameter_ledgers():
+    from core.backtesting.wfa import WalkForwardAnalyzer
+
+    index = pd.date_range("2024-01-01", periods=4, freq="D", tz="Asia/Kolkata").append(
+        pd.date_range("2025-01-01", periods=4, freq="D", tz="Asia/Kolkata")
+    ).append(pd.date_range("2026-01-01", periods=4, freq="D", tz="Asia/Kolkata"))
+    data = pd.DataFrame({"open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0}, index=index)
+    analyzer = WalkForwardAnalyzer(data, train_years=1, test_years=1)
+    windows = analyzer.generate_windows()
+    for i, window in enumerate(windows, start=1):
+        analyzer.parameter_freeze_ledger.append({
+            "fold_id": i,
+            "parameter_selection_data_end": str(window["train_df"].index.max()),
+            "parameter_freeze_time": str(window["train_df"].index.max()),
+            "test_start": str(window["test_df"].index.min()),
+        })
+        analyzer.fold_ledger.append({"fold_id": i, "overlap_rows": 0})
+    assert len(analyzer.fold_ledger) == len(windows)
+    assert all(row["overlap_rows"] == 0 for row in analyzer.fold_ledger)
+    assert all(pd.Timestamp(row["parameter_selection_data_end"]) < pd.Timestamp(row["test_start"]) for row in analyzer.parameter_freeze_ledger)
+
+
+def test_legacy_wfa_session_aggregation_and_uncertainty_are_deterministic():
+    from core.backtesting.wfa import WalkForwardAnalyzer
+
+    results = pd.DataFrame({"pl": [100.0, 100.0, -50.0], "session_date": ["A", "A", "B"]})
+    aggregate = WalkForwardAnalyzer._session_aggregate(results)
+    assert aggregate == {
+        "event_count": 3,
+        "session_count": 2,
+        "event_mean": 50.0,
+        "session_equal_mean": 25.0,
+        "positive_fraction": 2 / 3,
+    }
+    first = WalkForwardAnalyzer._session_bootstrap(results, repetitions=20, seed=7)
+    second = WalkForwardAnalyzer._session_bootstrap(results, repetitions=20, seed=7)
+    assert first == second
+    assert first["unit"] == "session"
+    assert first["statistic"] == "session_equal_mean"
+
+
+def test_legacy_wfa_accepts_independent_signal_builder_seam():
+    from core.backtesting.wfa import WalkForwardAnalyzer
+
+    index = pd.date_range("2024-01-01", periods=3, freq="D", tz="Asia/Kolkata").append(
+        pd.date_range("2025-01-01", periods=3, freq="D", tz="Asia/Kolkata")
+    )
+    data = pd.DataFrame({"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1.0}, index=index)
+    calls = []
+
+    def builder(frame, config):
+        calls.append(len(frame))
+        return pd.DataFrame({
+            "signal_side": ["BUY"], "entry_price": [100.0], "target": [100.5],
+            "stop_loss": [99.5], "qty": [1], "lot_size": [1],
+        }, index=[0])
+
+    analyzer = WalkForwardAnalyzer(data, train_years=1, test_years=1, signal_builder=builder)
+    analyzer.run({"horizon": [1]})
+    assert calls == [3, 3]
+
+
+def test_parameter_selection_records_train_only_candidate_provenance():
+    from core.backtesting.wfa import WalkForwardAnalyzer
+
+    index = pd.date_range("2024-01-01", periods=3, freq="D", tz="Asia/Kolkata").append(
+        pd.date_range("2025-01-01", periods=3, freq="D", tz="Asia/Kolkata")
+    )
+    data = pd.DataFrame(
+        {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1.0},
+        index=index,
+    )
+
+    def builder(frame, config):
+        return pd.DataFrame({
+            "signal_side": ["BUY"], "entry_price": [100.0], "target": [200.0],
+            "stop_loss": [50.0], "qty": [1], "lot_size": [1],
+        }, index=[0])
+
+    analyzer = WalkForwardAnalyzer(
+        data, train_years=1, test_years=1, signal_builder=builder,
+        purge_minutes=0, embargo_minutes=0,
+    )
+    analyzer.run({"horizon": [1, 2]})
+    assert len(analyzer.parameter_selection_ledger) == 1
+    row = analyzer.parameter_selection_ledger[0]
+    assert row["selection_source"] == "TRAIN_ONLY"
+    assert len(row["candidate_scores"]) == 2
+    assert row["candidate_ledger_sha256"]
+    assert all(
+        pd.Timestamp(candidate["selection_data_end"]) < pd.Timestamp(row["test_start"])
+        for candidate in row["candidate_scores"]
+    )
+
+
+def test_legacy_wfa_producer_ledgers_fail_closed_under_mutation():
+    from core.backtesting.wfa import (
+        validate_feature_causality_ledger,
+        validate_fold_ledger,
+        validate_parameter_freeze_ledger,
+        validate_parameter_selection_ledger,
+    )
+
+    fold = [{
+        "train_start": "2025-01-01T09:15:00+05:30",
+        "train_end": "2025-01-01T09:17:00+05:30",
+        "test_start": "2025-01-01T09:18:00+05:30",
+        "test_end": "2025-01-01T09:20:00+05:30",
+        "overlap_rows": 0,
+        "purge_interval": "0 days",
+        "embargo_interval": "0 days",
+    }]
+    assert validate_fold_ledger(fold)
+    mutated_fold = [dict(fold[0], overlap_rows=1)]
+    with pytest.raises(ValueError, match="wfa_fold_ledger_overlap"):
+        validate_fold_ledger(mutated_fold)
+
+    feature = [{
+        "feature_name": "test_feature",
+        "feature_source_start_timestamp": "2025-01-01T09:15:00+05:30",
+        "feature_source_end_timestamp": "2025-01-01T09:15:00+05:30",
+        "decision_timestamp": "2025-01-01T09:15:00+05:30",
+        "feature_source_timestamp": "2025-01-01T09:15:00+05:30",
+        "feature_cutoff_ts": "2025-01-01T09:15:00+05:30",
+        "session_id": "2025-01-01",
+        "fold_id": 1,
+        "available_at_decision": True,
+        "feature_builder_sha256": "builder-hash",
+        "feature_builder_id": "builder-v1",
+        "source_partition_sha256": "source-hash",
+        "corpus_freeze_sha256": "corpus-hash",
+        "normalization_fit_scope": "TRAIN_ONLY",
+        "normalization_fit_start": "2024-01-01T09:15:00+05:30",
+        "normalization_fit_end": "2024-12-31T15:29:00+05:30",
+        "normalization_fit_fold_id": 1,
+        "normalization_fit_source_sha256": "source-hash",
+        "fit_uses_test_data": False,
+        "leakage_detected": False,
+    }]
+    assert validate_feature_causality_ledger(feature)
+    with pytest.raises(ValueError, match="wfa_feature_causality_violation"):
+        validate_feature_causality_ledger([dict(feature[0], feature_source_end_timestamp="2025-01-01T09:16:00+05:30")])
+
+    parameter = [{
+        "parameter_selection_data_end": "2025-01-01T09:15:00+05:30",
+        "test_start": "2025-01-01T09:16:00+05:30",
+    }]
+    assert validate_parameter_freeze_ledger(parameter)
+    with pytest.raises(ValueError, match="wfa_parameter_freeze_violation"):
+        validate_parameter_freeze_ledger([dict(parameter[0], parameter_selection_data_end="2025-01-01T09:17:00+05:30")])
+
+    selection = [{
+        "selection_data_end": "2025-01-01T09:17:00+05:30",
+        "test_start": "2025-01-02T09:15:00+05:30",
+        "selected_parameters": {"horizon": 1},
+        "candidate_scores": [{"parameters": {"horizon": 1}, "train_net_pl": 1.0,
+                              "selection_data_end": "2025-01-01T09:17:00+05:30"}],
+        "candidate_ledger_sha256": "",
+        "selection_source": "TRAIN_ONLY",
+    }]
+    selection[0]["candidate_ledger_sha256"] = hashlib.sha256(
+        json.dumps(selection[0]["candidate_scores"], sort_keys=True, default=str).encode()
+    ).hexdigest()
+    assert validate_parameter_selection_ledger(selection)
+    with pytest.raises(ValueError, match="wfa_parameter_selection_test_leakage"):
+        validate_parameter_selection_ledger([dict(selection[0], test_start="2025-01-01T09:17:00+05:30")])
 
 
 def test_wfa_uses_option_backtest_engine_only(monkeypatch, tmp_path: Path):
