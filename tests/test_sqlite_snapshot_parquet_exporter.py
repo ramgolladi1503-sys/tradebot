@@ -59,6 +59,28 @@ def test_wal_writer_continues_while_snapshot_is_exported(tmp_path: Path):
 def test_snapshot_backup_uses_batched_bounded_retry_mode():
     assert exporter.SNAPSHOT_BACKUP_PAGES == 1
     assert exporter.SNAPSHOT_BACKUP_SLEEP_SECONDS == 0.001
+    assert exporter.SNAPSHOT_MAX_ATTEMPTS == 2
+
+
+def test_snapshot_deadline_retries_once_and_publishes(tmp_path: Path, monkeypatch):
+    db = tmp_path / "live.sqlite"
+    out = tmp_path / "parquet"
+    _db(db)
+    original = exporter.create_consistent_snapshot
+    calls = 0
+
+    def flaky(source, destination, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise exporter.SnapshotDeadlineExceeded("transient")
+        return original(source, destination, **kwargs)
+
+    monkeypatch.setattr(exporter, "create_consistent_snapshot", flaky)
+    result = export_once(db, out)
+    assert result.status == "HEALTHY"
+    assert calls == 2
+    assert not list(out.glob(".sqlite-snapshot-*.sqlite"))
 
 
 def test_production_path_guard(tmp_path: Path):

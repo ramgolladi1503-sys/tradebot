@@ -24,6 +24,7 @@ SNAPSHOT_BACKUP_PAGES = 1
 # starve the callback indefinitely under concurrent writes, defeating the
 # deadline and making the exporter itself hang.
 SNAPSHOT_BACKUP_SLEEP_SECONDS = 0.001
+SNAPSHOT_MAX_ATTEMPTS = 2
 
 
 @dataclass(frozen=True)
@@ -144,26 +145,30 @@ def export_once(
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     snapshot = None
-    try:
-        with NamedTemporaryFile(prefix=".sqlite-snapshot-", suffix=".sqlite", dir=output_dir, delete=False) as tmp:
-            snapshot = Path(tmp.name)
-        create_consistent_snapshot(
-            production_db,
-            snapshot,
-            deadline_seconds=deadline_seconds,
-            production_path=production_db,
-        )
-        counts = export_snapshot_to_parquet(
-            snapshot, output_dir, failure_after_snapshot=failure_after_snapshot, production_path=production_db
-        )
-        return ExportResult("HEALTHY", snapshot, counts)
-    except SnapshotDeadlineExceeded as exc:
-        return ExportResult("DEGRADED", snapshot, {}, type(exc).__name__)
-    except Exception as exc:
-        return ExportResult("FAILED", snapshot, {}, type(exc).__name__)
-    finally:
-        if snapshot is not None:
-            snapshot.unlink(missing_ok=True)
+    for attempt in range(SNAPSHOT_MAX_ATTEMPTS):
+        try:
+            with NamedTemporaryFile(prefix=".sqlite-snapshot-", suffix=".sqlite", dir=output_dir, delete=False) as tmp:
+                snapshot = Path(tmp.name)
+            create_consistent_snapshot(
+                production_db,
+                snapshot,
+                deadline_seconds=deadline_seconds,
+                production_path=production_db,
+            )
+            counts = export_snapshot_to_parquet(
+                snapshot, output_dir, failure_after_snapshot=failure_after_snapshot, production_path=production_db
+            )
+            return ExportResult("HEALTHY", snapshot, counts)
+        except SnapshotDeadlineExceeded as exc:
+            if attempt + 1 == SNAPSHOT_MAX_ATTEMPTS:
+                return ExportResult("DEGRADED", snapshot, {}, type(exc).__name__)
+        except Exception as exc:
+            return ExportResult("FAILED", snapshot, {}, type(exc).__name__)
+        finally:
+            if snapshot is not None:
+                snapshot.unlink(missing_ok=True)
+                snapshot = None
+    return ExportResult("DEGRADED", None, {}, SnapshotDeadlineExceeded.__name__)
 
 
 def run_export_loop(
