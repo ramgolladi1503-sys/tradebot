@@ -18,6 +18,10 @@ class SnapshotDeadlineExceeded(TimeoutError):
     pass
 
 
+SNAPSHOT_BACKUP_PAGES = 1024
+SNAPSHOT_BACKUP_SLEEP_SECONDS = 0.0
+
+
 @dataclass(frozen=True)
 class ExportResult:
     status: str
@@ -63,7 +67,15 @@ def create_consistent_snapshot(
             if time.monotonic() > deadline:
                 raise SnapshotDeadlineExceeded("snapshot_deadline_exceeded")
 
-        src.backup(dst, pages=128, progress=progress, sleep=0.01)
+        # Use larger batches and no artificial inter-batch delay.  The source
+        # remains isolated by SQLite's backup API, while avoiding avoidable
+        # deadline overruns when the live WAL is busy.
+        src.backup(
+            dst,
+            pages=SNAPSHOT_BACKUP_PAGES,
+            progress=progress,
+            sleep=SNAPSHOT_BACKUP_SLEEP_SECONDS,
+        )
         dst.commit()
     finally:
         if src is not None:

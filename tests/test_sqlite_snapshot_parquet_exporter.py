@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import core.sqlite_snapshot_parquet_exporter as exporter
 from core.sqlite_snapshot_parquet_exporter import create_consistent_snapshot, export_once
 
 
@@ -53,6 +54,11 @@ def test_wal_writer_continues_while_snapshot_is_exported(tmp_path: Path):
     thread.join(timeout=5)
     assert result.status == "HEALTHY"
     assert not errors
+
+
+def test_snapshot_backup_uses_batched_no_delay_mode():
+    assert exporter.SNAPSHOT_BACKUP_PAGES == 1024
+    assert exporter.SNAPSHOT_BACKUP_SLEEP_SECONDS == 0.0
 
 
 def test_production_path_guard(tmp_path: Path):
