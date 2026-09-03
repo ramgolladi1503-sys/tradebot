@@ -4765,7 +4765,13 @@ def _persist_runtime_snapshot_row(
     sub_counts = _subscribed_tokens_count_by_symbol(_LAST_TOKENS)
     missing_count, missing_counts_by_symbol = _missing_option_tokens_stats()
     session_policy = derive_market_session_policy(segment="NSE_FNO")
-    market_open = bool(session_policy.market_state == "MARKET_OPEN")
+    market_open_clock = bool(is_market_open_ist())
+    if market_open_clock:
+        market_open = True
+        effective_market_state = "MARKET_OPEN"
+    else:
+        market_open = False
+        effective_market_state = session_policy.market_state
     last_db_tick_epoch = _latest_db_tick_epoch()
     last_db_tick_age_sec = None
     if last_db_tick_epoch is not None:
@@ -4784,7 +4790,7 @@ def _persist_runtime_snapshot_row(
                 else "reconnect_blocked"
             ),
         }
-    elif session_policy.market_state == PREMARKET:
+    elif effective_market_state == PREMARKET:
         state_machine = {"state": PREMARKET, "reason": "premarket_observation"}
     elif not market_open:
         state_machine = {"state": "MARKET_CLOSED", "reason": "market_closed"}
@@ -8379,7 +8385,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             sub_counts = _subscribed_tokens_count_by_symbol(_LAST_TOKENS)
             missing_count, missing_counts_by_symbol = _missing_option_tokens_stats()
             session_policy = derive_market_session_policy(segment="NSE_FNO")
-            market_open_now = bool(session_policy.market_state == "MARKET_OPEN")
+            market_open_clock = bool(is_market_open_ist())
+            if market_open_clock:
+                market_open_now = True
+                effective_market_state = "MARKET_OPEN"
+            else:
+                market_open_now = False
+                effective_market_state = session_policy.market_state
             last_ws_tick_epoch = _LAST_WS_TICK_EPOCH if _LAST_WS_TICK_EPOCH > 0 else None
             last_tick_epoch = last_ws_tick_epoch or last_db_tick_epoch
             last_tick_age_sec = max(0.0, float(now_epoch) - float(last_tick_epoch)) if last_tick_epoch is not None else None
@@ -8387,7 +8399,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             last_depth_age_sec = max(0.0, float(now_epoch) - float(last_depth_epoch)) if last_depth_epoch is not None else None
             feed_health_live_tick_grace_sec = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 10.0))
             ws_connected = _ws_connected_state()
-            if session_policy.market_state == PREMARKET:
+            if effective_market_state == PREMARKET:
                 state_machine = {"state": PREMARKET, "reason": "premarket_observation"}
             elif not market_open_now:
                 state_machine = {"state": "MARKET_CLOSED", "reason": "market_closed"}
