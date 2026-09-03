@@ -55,6 +55,13 @@ def test_derive_phase_from_runtime_classifies_safe_states():
     ) == "STOPPED"
     assert derive_phase_from_runtime(
         market_open=False,
+        premarket=True,
+        auth_required=False,
+        stop_requested=False,
+        ws_connected=False,
+    ) == "PREMARKET"
+    assert derive_phase_from_runtime(
+        market_open=False,
         auth_required=False,
         stop_requested=False,
         ws_connected=True,
@@ -98,6 +105,11 @@ def test_connect_request_blocks_auth_stop_and_market_closed_before_connecting():
     assert transition_for_connect_request(stopped).reason == "stop_requested"
     closed = build_lifecycle_state(phase="STARTING", ws_connected=False, market_open=False)
     assert transition_for_connect_request(closed).next_phase == "MARKET_CLOSED"
+    premarket = build_lifecycle_state(phase="PREMARKET", ws_connected=False, market_open=False, premarket=True)
+    premarket_decision = transition_for_connect_request(premarket)
+    assert premarket_decision.reason == "premarket_observation_allowed"
+    assert premarket_decision.should_connect is True
+    assert premarket_decision.to_payload()["is_order_action"] is False
     allowed = build_lifecycle_state(phase="STARTING", ws_connected=False, market_open=True)
     decision = transition_for_connect_request(allowed)
     assert decision.next_phase == "CONNECTING"

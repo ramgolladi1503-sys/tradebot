@@ -27,6 +27,7 @@ from core.market_event_graph_live_launch_plan import (
 )
 from core.market_event_graph_live_observation_registry import load_observation_registry
 from core.daily_instrument_authority import validate_authority
+from core.market_session_state import derive_market_session_policy
 from core.session_calendar import is_open
 
 NSE_FNO_2026_HOLIDAYS = frozenset({
@@ -125,6 +126,7 @@ def _static_preflight_payload(*, session_date: str, registry: Any, master_path: 
     output_unused = not capture_dir.exists() and not any(path.exists() for path in governed_files)
     session_day = validate_nse_session_day(datetime.strptime(session_date, "%Y-%m-%d").date())
     now_ist = datetime.now(tz=ZoneInfo("Asia/Kolkata"))
+    session_policy = derive_market_session_policy(now=now_ist, segment="NSE_FNO")
     return {
         "ok": bool(output_unused),
         "verdict": PASS_STATIC_LIVE_SOURCE_PREFLIGHT if output_unused else "BLOCKED_BY_GOVERNED_OUTPUT_COLLISION",
@@ -132,6 +134,12 @@ def _static_preflight_payload(*, session_date: str, registry: Any, master_path: 
         "session_day_open": bool(session_day["session_day_allowed"]),
         "session_day_allowed": bool(session_day["session_day_allowed"]),
         "intraday_market_open_at_preflight": bool(is_open(now_ist, segment="NSE_FNO")),
+        "market_state_at_preflight": session_policy.market_state,
+        "premarket_observation_allowed": session_policy.market_state == "PREMARKET",
+        "fresh_ticks_required": session_policy.fresh_ticks_required,
+        "persistence_advancement_required": session_policy.persistence_advancement_required,
+        "strategies_active": session_policy.strategies_active,
+        "cas_active": session_policy.cas_active,
         "session_day_verification_source": session_day["official_source"],
         "contract_path": registry.contract_path,
         "contract_sha256": _sha256(Path(registry.contract_path)),
