@@ -135,7 +135,7 @@ class DepthStore:
                     # depth snapshot when SQLite briefly falls behind.  A
                     # nonblocking put converted normal load spikes into
                     # DEPTH_STORE_ERROR and made live depth evidence lossy.
-                    self._persist_queue.put((
+                    self._persist_queue.put_nowait((
                         now_iso, instrument_token,
                         json.dumps({"depth": depth, "imbalance": imbalance}), now_epoch,
                     ))
