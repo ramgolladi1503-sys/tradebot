@@ -44,7 +44,7 @@ jobs:
         run: >-
           PYTHONPATH=. pytest -q -o addopts=''
           -m "not integration and not feed_smoke and not feed_soak and not certification"
-          --durations=25
+          --durations=25 --timeout=300 --timeout-method=thread
 
   health_gate:
     runs-on: ubuntu-latest
