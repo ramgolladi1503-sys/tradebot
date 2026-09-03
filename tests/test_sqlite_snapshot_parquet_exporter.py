@@ -59,7 +59,7 @@ def test_wal_writer_continues_while_snapshot_is_exported(tmp_path: Path):
 def test_snapshot_backup_uses_batched_bounded_retry_mode():
     assert exporter.SNAPSHOT_BACKUP_PAGES == 1
     assert exporter.SNAPSHOT_BACKUP_SLEEP_SECONDS == 0.001
-    assert exporter.SNAPSHOT_MAX_ATTEMPTS == 2
+    assert exporter.SNAPSHOT_MAX_ATTEMPTS == 3
 
 
 def test_snapshot_deadline_retries_once_and_publishes(tmp_path: Path, monkeypatch):

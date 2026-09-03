@@ -24,7 +24,7 @@ SNAPSHOT_BACKUP_PAGES = 1
 # starve the callback indefinitely under concurrent writes, defeating the
 # deadline and making the exporter itself hang.
 SNAPSHOT_BACKUP_SLEEP_SECONDS = 0.001
-SNAPSHOT_MAX_ATTEMPTS = 2
+SNAPSHOT_MAX_ATTEMPTS = 3
 
 
 @dataclass(frozen=True)
