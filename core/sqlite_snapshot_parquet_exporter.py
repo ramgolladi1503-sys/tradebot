@@ -64,7 +64,10 @@ def create_consistent_snapshot(
     deadline = time.monotonic() + max(0.1, float(deadline_seconds))
     src = dst = None
     try:
-        src = sqlite3.connect(str(source), timeout=max(0.1, deadline_seconds))
+        source_uri = f"file:{source}?mode=ro"
+        src = sqlite3.connect(
+            source_uri, uri=True, timeout=max(0.1, deadline_seconds)
+        )
         dst = sqlite3.connect(str(destination), timeout=max(0.1, deadline_seconds))
 
         def progress(_status: int, _remaining: int, _total: int) -> None:
