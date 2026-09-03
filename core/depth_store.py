@@ -131,14 +131,18 @@ class DepthStore:
                         self._record_rejection(reason_code="SHUTDOWN_REJECT", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
                         raise RuntimeError("depth persistence is shut down")
                 try:
-                    # Apply bounded-queue backpressure instead of dropping a
-                    # depth snapshot when SQLite briefly falls behind.  A
-                    # nonblocking put converted normal load spikes into
-                    # DEPTH_STORE_ERROR and made live depth evidence lossy.
-                    self._persist_queue.put_nowait((
+                    # Apply bounded, time-limited backpressure instead of
+                    # dropping a depth snapshot when SQLite briefly falls
+                    # behind.  The timeout preserves fail-closed behavior if
+                    # the persistence worker is genuinely stalled.
+                    put_timeout_sec = max(
+                        0.0,
+                        float(getattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 1.0) or 1.0),
+                    )
+                    self._persist_queue.put((
                         now_iso, instrument_token,
                         json.dumps({"depth": depth, "imbalance": imbalance}), now_epoch,
-                    ))
+                    ), timeout=put_timeout_sec)
                 except queue.Full:
                     with self._persist_lock:
                         self._persist_rejected += 1
