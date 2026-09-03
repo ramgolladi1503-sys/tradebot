@@ -57,6 +57,28 @@ def test_depth_persistence_runs_off_callback_thread_and_drains(monkeypatch):
     assert result["persisted"] == 1
 
 
+def test_depth_persistence_applies_backpressure_without_queue_rejection(monkeypatch):
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 1, raising=False)
+    calls = []
+
+    def _slow_insert(*_args, **_kwargs):
+        time.sleep(0.01)
+        calls.append(1)
+        return True
+
+    monkeypatch.setattr(depth_store_module, "insert_depth_snapshot", _slow_insert)
+    store = DepthStore()
+    for token in range(10):
+        store.update(token, {"buy": [{"quantity": 1}], "sell": [{"quantity": 1}]})
+
+    result = store.shutdown_persistence(deadline_seconds=2.0)
+
+    assert result["complete"] is True
+    assert result["persisted"] == 10
+    assert result["rejected"] == 0
+    assert len(calls) == 10
+
+
 def test_depth_rejection_provenance_records_shutdown_reject(tmp_path, monkeypatch):
     monkeypatch.setattr(depth_store_module, "insert_depth_snapshot", lambda *_args: True)
     store = DepthStore()

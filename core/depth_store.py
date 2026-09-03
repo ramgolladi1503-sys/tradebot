@@ -22,7 +22,11 @@ class DepthStore:
         self.books = defaultdict(dict)
         self._ts_window = deque(maxlen=10000)
         self._last_persist_epoch_by_token = defaultdict(float)
-        self._persist_queue = queue.Queue(maxsize=2048)
+        queue_maxsize = max(
+            1,
+            int(getattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 16384) or 16384),
+        )
+        self._persist_queue = queue.Queue(maxsize=queue_maxsize)
         self._persist_stop = threading.Event()
         self._persist_lock = threading.Lock()
         self._persist_enqueued = 0
@@ -127,7 +131,11 @@ class DepthStore:
                         self._record_rejection(reason_code="SHUTDOWN_REJECT", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
                         raise RuntimeError("depth persistence is shut down")
                 try:
-                    self._persist_queue.put_nowait((
+                    # Apply bounded-queue backpressure instead of dropping a
+                    # depth snapshot when SQLite briefly falls behind.  A
+                    # nonblocking put converted normal load spikes into
+                    # DEPTH_STORE_ERROR and made live depth evidence lossy.
+                    self._persist_queue.put((
                         now_iso, instrument_token,
                         json.dumps({"depth": depth, "imbalance": imbalance}), now_epoch,
                     ))
