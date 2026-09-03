@@ -22,7 +22,11 @@ class DepthStore:
         self.books = defaultdict(dict)
         self._ts_window = deque(maxlen=10000)
         self._last_persist_epoch_by_token = defaultdict(float)
-        self._persist_queue = queue.Queue(maxsize=2048)
+        queue_maxsize = max(
+            1,
+            int(getattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 16384) or 16384),
+        )
+        self._persist_queue = queue.Queue(maxsize=queue_maxsize)
         self._persist_stop = threading.Event()
         self._persist_lock = threading.Lock()
         self._persist_enqueued = 0
@@ -127,10 +131,18 @@ class DepthStore:
                         self._record_rejection(reason_code="SHUTDOWN_REJECT", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
                         raise RuntimeError("depth persistence is shut down")
                 try:
-                    self._persist_queue.put_nowait((
+                    # Apply bounded, time-limited backpressure instead of
+                    # dropping a depth snapshot when SQLite briefly falls
+                    # behind.  The timeout preserves fail-closed behavior if
+                    # the persistence worker is genuinely stalled.
+                    put_timeout_sec = max(
+                        0.0,
+                        float(getattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 1.0) or 1.0),
+                    )
+                    self._persist_queue.put((
                         now_iso, instrument_token,
                         json.dumps({"depth": depth, "imbalance": imbalance}), now_epoch,
-                    ))
+                    ), timeout=put_timeout_sec)
                 except queue.Full:
                     with self._persist_lock:
                         self._persist_rejected += 1

@@ -13,6 +13,19 @@ FREEZE_MINUTE = 14
 IST = timezone(timedelta(hours=5, minutes=30))
 
 
+def classify_cas_time_boundary(timestamp: datetime, *, session_date: str) -> str:
+    """Classify an aware timestamp relative to the 15:14 IST cutoff."""
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise ValueError("cas_timezone_required")
+    boundary = datetime.fromisoformat(f"{session_date}T15:14:00+05:30")
+    instant = timestamp.astimezone(IST)
+    if instant < boundary:
+        return "pre_cutoff"
+    if instant == boundary:
+        return "cutoff"
+    return "post_cutoff"
+
+
 @dataclass(frozen=True)
 class CASDecision:
     direction: str
@@ -43,12 +56,16 @@ def freeze_cas_decision(
     spec_sha: str,
 ) -> CASDecision:
     """Freeze only from completed one-minute inputs available before 15:14."""
+    if freeze_timestamp.tzinfo is None or freeze_timestamp.utcoffset() is None:
+        raise ValueError("cas_timezone_required")
     freeze_timestamp = freeze_timestamp.astimezone(IST)
     if freeze_timestamp.hour != FREEZE_HOUR or freeze_timestamp.minute != FREEZE_MINUTE:
         raise ValueError("cas_freeze_timestamp_not_1514_ist")
     if not completed_inputs:
         raise ValueError("cas_completed_inputs_missing")
     for name, timestamp in completed_inputs.items():
+        if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+            raise ValueError(f"cas_input_timezone_required:{name}")
         if timestamp.astimezone(IST) >= freeze_timestamp:
             raise ValueError(f"cas_input_after_freeze:{name}")
     decision = CASDecision(

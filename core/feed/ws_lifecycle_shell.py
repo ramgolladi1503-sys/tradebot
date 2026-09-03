@@ -19,6 +19,7 @@ class WsLifecycleState:
     subscribed_token_count: int = 0
     intended_token_count: int = 0
     market_open: bool = False
+    premarket: bool = False
     stop_requested: bool = False
     auth_required: bool = False
     reconnect_pending: bool = False
@@ -31,6 +32,7 @@ class WsLifecycleState:
             "subscribed_token_count": int(self.subscribed_token_count),
             "intended_token_count": int(self.intended_token_count),
             "market_open": bool(self.market_open),
+            "premarket": bool(self.premarket),
             "stop_requested": bool(self.stop_requested),
             "auth_required": bool(self.auth_required),
             "reconnect_pending": bool(self.reconnect_pending),
@@ -131,6 +133,7 @@ def build_lifecycle_state(
     subscribed_token_count: Any = 0,
     intended_token_count: Any = 0,
     market_open: bool = False,
+    premarket: bool = False,
     stop_requested: bool = False,
     auth_required: bool = False,
     reconnect_pending: bool = False,
@@ -142,6 +145,7 @@ def build_lifecycle_state(
         subscribed_token_count=positive_count(subscribed_token_count),
         intended_token_count=positive_count(intended_token_count),
         market_open=bool(market_open),
+        premarket=bool(premarket),
         stop_requested=bool(stop_requested),
         auth_required=bool(auth_required),
         reconnect_pending=bool(reconnect_pending),
@@ -152,6 +156,7 @@ def build_lifecycle_state(
 def derive_phase_from_runtime(
     *,
     market_open: bool,
+    premarket: bool = False,
     auth_required: bool,
     stop_requested: bool,
     ws_connected: bool | None,
@@ -163,6 +168,8 @@ def derive_phase_from_runtime(
         return "AUTH_BLOCKED"
     if bool(stop_requested):
         return "STOPPING" if ws_connected else "STOPPED"
+    if bool(premarket):
+        return "PREMARKET"
     if not bool(market_open):
         return "MARKET_CLOSED"
     if bool(reconnect_pending):
@@ -244,10 +251,12 @@ def transition_for_connect_request(state: WsLifecycleState) -> WsLifecycleTransi
         return WsLifecycleTransition("CONNECT_REQUEST", phase, "AUTH_BLOCKED", "BLOCK", "auth_required", should_record_error=True)
     if state.stop_requested:
         return WsLifecycleTransition("CONNECT_REQUEST", phase, "STOPPED", "BLOCK", "stop_requested", should_stop=True)
-    if not state.market_open:
+    if not state.market_open and not state.premarket:
         return WsLifecycleTransition("CONNECT_REQUEST", phase, "MARKET_CLOSED", "BLOCK", "market_closed")
     if state.ws_connected is True:
         return WsLifecycleTransition("CONNECT_REQUEST", phase, phase, "NOOP", "already_connected")
+    if state.premarket:
+        return WsLifecycleTransition("CONNECT_REQUEST", phase, "CONNECTING", "CONNECT", "premarket_observation_allowed", should_connect=True)
     return WsLifecycleTransition("CONNECT_REQUEST", phase, "CONNECTING", "CONNECT", "connect_allowed", should_connect=True)
 
 

@@ -11,7 +11,7 @@ concurrency:
 jobs:
   unit_tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       PYTHONPATH: .
       DATA_ROOT: ${{ github.workspace }}/.runtime
@@ -26,7 +26,7 @@ jobs:
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h /
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -44,7 +44,7 @@ jobs:
         run: >-
           PYTHONPATH=. pytest -q -o addopts=''
           -m "not integration and not feed_smoke and not feed_soak and not certification"
-          --durations=25
+          --durations=25 --timeout=300 --timeout-method=thread
 
   health_gate:
     runs-on: ubuntu-latest
