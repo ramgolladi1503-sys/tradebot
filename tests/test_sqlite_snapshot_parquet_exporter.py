@@ -56,9 +56,9 @@ def test_wal_writer_continues_while_snapshot_is_exported(tmp_path: Path):
     assert not errors
 
 
-def test_snapshot_backup_uses_batched_no_delay_mode():
+def test_snapshot_backup_uses_batched_bounded_retry_mode():
     assert exporter.SNAPSHOT_BACKUP_PAGES == 1024
-    assert exporter.SNAPSHOT_BACKUP_SLEEP_SECONDS == 0.0
+    assert exporter.SNAPSHOT_BACKUP_SLEEP_SECONDS == 0.001
 
 
 def test_production_path_guard(tmp_path: Path):
