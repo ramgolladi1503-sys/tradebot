@@ -4,6 +4,8 @@ mode: REVIEW
 candidate_id: PR-884-successor-release
 decision: review_pending
 reason: successor_release_review
+timestamp: 2026-09-03T21:49:58+0530
+source: exact_candidate_tree_and_offline_evidence_bundle
 is_order_action: false
 broker_api_called: false
 live_order_action: false
