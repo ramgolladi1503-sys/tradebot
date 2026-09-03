@@ -18,7 +18,7 @@ class SnapshotDeadlineExceeded(TimeoutError):
     pass
 
 
-SNAPSHOT_BACKUP_PAGES = 1024
+SNAPSHOT_BACKUP_PAGES = 1
 # A positive retry sleep is required for sqlite3.backup() to return control to
 # its progress callback when the WAL writer briefly holds a lock.  Zero can
 # starve the callback indefinitely under concurrent writes, defeating the
