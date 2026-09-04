@@ -1,8 +1,8 @@
 """Read-only runtime adapter for MARKET_STATE_ENGINE_V1.
 
-The adapter accepts per-index feature snapshots from an authoritative upstream
-producer and atomically publishes one current artifact plus an append-only JSONL
-ledger. It performs no market-data fetching and has no execution authority.
+The adapter consumes authoritative per-index features or the canonical market
+snapshot envelope, publishes one current artifact plus an append-only JSONL
+ledger, and never performs market-data fetching or execution.
 """
 from __future__ import annotations
 
@@ -15,6 +15,49 @@ from core.market_state_engine_v1 import MarketStateDecision, classify_cross_inde
 
 ARTIFACT_NAME = "market_state_engine_v1.json"
 LEDGER_NAME = "market_state_engine_v1.jsonl"
+INDEX_SYMBOLS = ("NIFTY", "BANKNIFTY", "SENSEX")
+
+
+def feature_snapshots_from_market_snapshot(market_snapshot: Mapping[str, Any] | None) -> dict[str, dict[str, Any]]:
+    """Map only explicitly present canonical fields; never synthesize authority."""
+    snapshot = dict(market_snapshot or {})
+    market_open = snapshot.get("market_open")
+    symbols = snapshot.get("symbols") if isinstance(snapshot.get("symbols"), Mapping) else {}
+    out: dict[str, dict[str, Any]] = {}
+    for symbol in INDEX_SYMBOLS:
+        row = symbols.get(symbol) if isinstance(symbols, Mapping) else None
+        row = dict(row or {}) if isinstance(row, Mapping) else {}
+        ohlc = dict(row.get("ohlc") or {}) if isinstance(row.get("ohlc"), Mapping) else {}
+        regime = dict(row.get("regime") or {}) if isinstance(row.get("regime"), Mapping) else {}
+        cross = dict(row.get("cross_asset") or {}) if isinstance(row.get("cross_asset"), Mapping) else {}
+        feed = dict(row.get("feed_health") or {}) if isinstance(row.get("feed_health"), Mapping) else {}
+        quote = dict(row.get("quote_truth") or {}) if isinstance(row.get("quote_truth"), Mapping) else {}
+        features: dict[str, Any] = {
+            "price": row.get("ltp", row.get("spot")),
+            "vwap": row.get("vwap", regime.get("vwap")),
+            "atr": row.get("atr", regime.get("atr")),
+            "quote_age_sec": feed.get("quote_age_sec", feed.get("spot_ltp_age_sec", quote.get("age_sec"))),
+            "feed_authority": feed.get("feed_ok", quote.get("authoritative")),
+            "session_open": market_open,
+            "ema_fast": regime.get("ema_fast"),
+            "ema_slow": regime.get("ema_slow"),
+            "ema_slope_atr": regime.get("ema_slope_atr"),
+            "structure_score": regime.get("structure_score"),
+            "momentum_score": regime.get("momentum_score"),
+            "breadth": regime.get("breadth", regime.get("equal_breadth")),
+            "weighted_breadth": regime.get("weighted_breadth"),
+            "breadth_momentum": regime.get("breadth_momentum"),
+            "open_location_score": regime.get("open_location_score"),
+            "futures_confirmation_score": cross.get("futures_confirmation_score"),
+            "orb_high": regime.get("orb_high"),
+            "orb_low": regime.get("orb_low"),
+            "swing_high": regime.get("swing_high"),
+            "swing_low": regime.get("swing_low"),
+            "support": regime.get("support", ohlc.get("low")),
+            "resistance": regime.get("resistance", ohlc.get("high")),
+        }
+        out[symbol] = {key: value for key, value in features.items() if value is not None}
+    return out
 
 
 def evaluate_live_market_state(
@@ -24,9 +67,8 @@ def evaluate_live_market_state(
 ) -> dict[str, Any]:
     prior = dict(previous_zones or {})
     decisions: dict[str, MarketStateDecision] = {}
-    for symbol in ("NIFTY", "BANKNIFTY", "SENSEX"):
-        snapshot = snapshots.get(symbol)
-        decisions[symbol] = classify_market_state(snapshot, symbol=symbol, previous_zone=prior.get(symbol))
+    for symbol in INDEX_SYMBOLS:
+        decisions[symbol] = classify_market_state(snapshots.get(symbol), symbol=symbol, previous_zone=prior.get(symbol))
     consensus = classify_cross_index_consensus(decisions)
     healthy = all(not decision.blockers for decision in decisions.values())
     return {
@@ -60,7 +102,6 @@ def publish_live_market_state(
     payload = evaluate_live_market_state(snapshots, previous_zones=previous_zones)
     payload["session_id"] = session_id
     payload["source_sha"] = source_sha
-
     root = Path(output_root)
     root.mkdir(parents=True, exist_ok=True)
     artifact = root / ARTIFACT_NAME
@@ -73,6 +114,23 @@ def publish_live_market_state(
     return payload
 
 
+def publish_from_market_snapshot(
+    output_root: str | Path,
+    *,
+    market_snapshot: Mapping[str, Any] | None,
+    session_id: str,
+    source_sha: str,
+    previous_zones: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    return publish_live_market_state(
+        output_root,
+        snapshots=feature_snapshots_from_market_snapshot(market_snapshot),
+        session_id=session_id,
+        source_sha=source_sha,
+        previous_zones=previous_zones,
+    )
+
+
 def previous_zones_from_payload(payload: Mapping[str, Any] | None) -> dict[str, str]:
     out: dict[str, str] = {}
     indices = dict((payload or {}).get("indices") or {})
@@ -83,4 +141,7 @@ def previous_zones_from_payload(payload: Mapping[str, Any] | None) -> dict[str, 
     return out
 
 
-__all__ = ["evaluate_live_market_state", "publish_live_market_state", "previous_zones_from_payload"]
+__all__ = [
+    "evaluate_live_market_state", "feature_snapshots_from_market_snapshot",
+    "publish_from_market_snapshot", "publish_live_market_state", "previous_zones_from_payload",
+]
