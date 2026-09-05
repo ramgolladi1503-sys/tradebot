@@ -2095,6 +2095,22 @@ def _extract_tick_epoch(tick: dict) -> float:
     return float(time.time())
 
 
+def _timestamp_provenance(tick: dict, *, receive_epoch: float) -> dict:
+    for field in ("exchange_timestamp", "last_trade_time", "timestamp"):
+        raw = tick.get(field)
+        if raw is None:
+            continue
+        try:
+            value = float(raw.timestamp()) if hasattr(raw, "timestamp") else float(raw)
+            if value > 1e12:
+                value /= 1000.0
+            if value == value and value not in (float("inf"), float("-inf")):
+                return {"timestamp_authority": "EXCHANGE_TIMESTAMP", "timestamp_source_field": field, "source_timestamp_epoch": value, "receive_timestamp_epoch": float(receive_epoch), "timestamp_fallback_used": False}
+        except (TypeError, ValueError, OverflowError):
+            continue
+    return {"timestamp_authority": "GOVERNED_RECEIVE_TIMESTAMP", "timestamp_source_field": None, "source_timestamp_epoch": None, "receive_timestamp_epoch": float(receive_epoch), "timestamp_fallback_used": True}
+
+
 def _freshness_epoch_for_tick(token: int | None, payload_epoch: float | None, receipt_epoch: float) -> float:
     try:
         use_receipt_time = bool(getattr(cfg, "DEPTH_WS_OPTION_FRESHNESS_USE_RECEIPT_TIME", True))
@@ -6591,6 +6607,12 @@ def _record_observation_callback_truth(
     return packet_detail
 
 
+_NORMALIZED_TICK_SINK = None
+
+def set_normalized_tick_sink(sink=None):
+    global _NORMALIZED_TICK_SINK
+    _NORMALIZED_TICK_SINK = sink
+
 def on_ticks(ws, ticks):
     global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _FEED_ON_TICKS_ROW_SEQ
     _ = ws
@@ -6883,6 +6905,12 @@ def on_ticks(ws, ticks):
             )
             continue
         ts_value = freshness_tick_epoch
+        last_price_float = _safe_float(last_price)
+        timestamp_provenance = _timestamp_provenance(t, receive_epoch=now_epoch)
+        if _NORMALIZED_TICK_SINK is not None:
+            _NORMALIZED_TICK_SINK({"instrument_token": token_int, "underlying_symbol": symbol,
+                "last_price": last_price_float,
+                "timestamp_epoch": ts_value, **timestamp_provenance})
         volume = t.get("volume")
         if volume is None:
             volume = t.get("volume_traded")
@@ -6916,6 +6944,7 @@ def on_ticks(ws, ticks):
                 last_price=last_price_float,
                 volume=volume,
                 oi=oi,
+                **timestamp_provenance,
             )
             if not ok:
                 if audit_source_row_index is not None:
@@ -7365,7 +7394,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 
 
-def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
+def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False, tick_sink=None) -> bool:
     global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
@@ -8911,6 +8940,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             previous_on_message(ws, payload, is_binary)
 
     kws.on_message = on_message_current
+    if tick_sink is not None:
+        set_normalized_tick_sink(tick_sink)
     _register_on_ticks_callback(kws, _generation_is_current, on_ticks)
     watchdog_thread = threading.Thread(target=_watchdog)
     try:

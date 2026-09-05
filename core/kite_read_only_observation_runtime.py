@@ -239,14 +239,19 @@ class ObservationLifecycle:
         self._shutdown_report: dict[str, Any] | None = None
         self.phase = "CLOSED"
 
-    def start(self, tokens: list[int]) -> None:
+    def start(self, tokens: list[int], *, tick_sink=None) -> None:
         if self._shutdown_report is not None:
             raise RuntimeError("READ_ONLY_LIFECYCLE_ALREADY_SHUT_DOWN")
         if not tokens or any(not isinstance(token, int) or token <= 0 for token in tokens):
             raise RuntimeError("READ_ONLY_LIFECYCLE_INVALID_TOKENS")
-        if not self.feed.start_depth_ws(tokens, profile_verified=True, skip_lock=True):
-            raise RuntimeError("READ_ONLY_KITE_FEED_START_FAILED")
+        def lifecycle_owned_tick_sink(tick):
+            if self.accepting and tick_sink is not None:
+                tick_sink(tick)
+
         self.accepting = True
+        if not self.feed.start_depth_ws(tokens, profile_verified=True, skip_lock=True, tick_sink=lifecycle_owned_tick_sink):
+            self.accepting = False
+            raise RuntimeError("READ_ONLY_KITE_FEED_START_FAILED")
         self.phase = "RUNNING"
 
     def request_stop(self, reason: str = "read_only_observation_shutdown") -> None:
@@ -335,6 +340,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     from core.auth import get_kite_client, get_kite_credentials
     from core import kite_depth_ws
     from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
+    from core.canonical_cycle_coordinator import CanonicalCycleCoordinator
     from core.feed_forensics import append_event as append_feed_forensic_event
     assert_import_boundary()
 
@@ -349,7 +355,6 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     from core.market_event_graph_live_runtime_bridge import get_live_source_bridge
 
     lifecycle = ObservationLifecycle(kite_depth_ws)
-    lifecycle.start(tokens)
     meg_bridge = get_live_source_bridge()
     scheduler = MegIntervalScheduler()
     meg_cycle_count = 0
@@ -363,6 +368,27 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     )
     if not producer_commit:
         raise RuntimeError("MEG_PRODUCER_SHA_REQUIRED")
+    canonical_coordinator = CanonicalCycleCoordinator(
+        output_root=output_root,
+        session_id=run_id,
+        source_sha=producer_commit,
+        cadence_seconds=float(os.environ.get("CANONICAL_CYCLE_CADENCE_SECONDS", "60")),
+    )
+    from core.cas_primitive_producer import CASPrimitiveStore
+    authoritative_nifty_tokens = set(int(t) for t in (launch_plan.get("underlying_tokens") or []) if t)
+    if not authoritative_nifty_tokens:
+        authoritative_nifty_tokens = {int(t) for t, symbol in getattr(kite_depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}).items() if str(symbol).upper() == "NIFTY"}
+    cas_token = next(iter(authoritative_nifty_tokens), 0)
+    cas_store = CASPrimitiveStore(output_root / f"cas_short_horizon_primitives_{run_id}.json", session_id=run_id, source_sha=producer_commit, underlying_token=cas_token)
+    cas_targets = {"0915": datetime.fromisoformat(f"{session_date}T09:15:00+05:30").timestamp(), "1000": datetime.fromisoformat(f"{session_date}T10:00:00+05:30").timestamp()}
+    def cas_tick_sink(tick):
+        if not lifecycle.accepting or tick.get("underlying_symbol") != "NIFTY" or int(tick.get("instrument_token") or 0) != cas_token:
+            return
+        for name, target in cas_targets.items():
+            if name not in cas_store.rows and tick.get("timestamp_epoch") is not None and float(tick["timestamp_epoch"]) >= target:
+                cas_store.capture(name, target, tick, capture_timestamp_ist=datetime.now(timezone.utc).isoformat())
+    lifecycle.start(tokens, tick_sink=cas_tick_sink)
+    previous_feed_live = False
     write_json_atomic(output_root / "process_identity.json", {
         "run_id": run_id, "pid": os.getpid(), "producer_sha": producer_commit,
         "session_root": str(output_root.resolve()), "state": "RUNNING",
@@ -377,7 +403,31 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             latest_runtime_outputs = produce_and_store_runtime_snapshots(
                 market_snapshot=None,
                 producer="kite_read_only_observation",
+                loop_id=run_id,
+                session_id=run_id,
+                source_sha=producer_commit,
             )
+            if not isinstance(latest_runtime_outputs, Mapping):
+                latest_runtime_outputs = {}
+            feed_truth = latest_runtime_outputs.get("feed_health_truth_latest")
+            feed_context = feed_truth.get("context") if isinstance(feed_truth, Mapping) else {}
+            feed_state = str((feed_context or {}).get("feed_state") or "").upper()
+            runtime_state = str((feed_context or {}).get("runtime_state") or "").upper()
+            websocket_ok = (feed_truth or {}).get("websocket_ok") if isinstance(feed_truth, Mapping) else None
+            feed_ok = (feed_truth or {}).get("feed_ok") if isinstance(feed_truth, Mapping) else None
+            market_snapshot = latest_runtime_outputs.get("market_snapshot")
+            market_open = bool(market_snapshot.get("market_open", False)) if isinstance(market_snapshot, Mapping) else False
+            feed_live = feed_state == "LIVE" and runtime_state != "STOPPED" and websocket_ok is True and feed_ok is True
+            feed_recovered = feed_live and not previous_feed_live
+            previous_feed_live = feed_live
+            trigger = canonical_coordinator.should_request(
+                market_open=market_open,
+                feed_live=feed_live,
+                feed_recovered=feed_recovered,
+            )
+            if trigger:
+                request = canonical_coordinator.request(trigger, cutoff=datetime.now(timezone.utc))
+                canonical_coordinator.run(request)
             append_feed_forensic_event(
                 "RUNTIME_PERSISTENCE_PROGRESS",
                 snapshot_count=1,

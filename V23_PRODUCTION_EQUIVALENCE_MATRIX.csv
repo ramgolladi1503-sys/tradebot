@@ -1,0 +1,13 @@
+function,production_file,harness_uses_same_function,external_boundary_stub_only
+tick normalization,core/kite_depth_ws.py,partial,true
+tick sink,core/kite_depth_ws.py,true,true
+primitive producer,core/cas_primitive_producer.py,true,true
+primitive store,core/cas_primitive_producer.py,true,true
+primitive verifier,core/cas_primitive_producer.py,true,true
+CAS input builder,core/cas_primitive_producer.py,true,true
+snapshot producer,core/runtime_snapshot_producer.py,true,true
+coordinator,core/canonical_cycle_coordinator.py,true,true
+consumer,core/read_only_consumer_cycle.py,true,true
+CAS evaluator,core/cas_morning_reversal_advisory.py,true,true
+readiness,core/read_only_consumer_cycle.py,true,true
+advisory bridge,core/read_only_consumer_cycle.py,partial,true

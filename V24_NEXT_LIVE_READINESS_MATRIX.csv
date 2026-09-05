@@ -1,0 +1,17 @@
+blocker_id,current_status,severity,next_live_blocker,must_fix_before_preopen,evidence
+candidate_immutable_sha,PASS,P1,true,true,V24 commit and equivalence report
+production_equivalent_cas_validation,PASS,P1,false,true,V23 A-X and V24 committed verification
+feed_restart_storm,PASS,P1,false,true,V23 lifecycle/recovery controls
+tick_stalled,UNKNOWN,P1,true,true,no fresh live session evidence after freeze
+stale_option_ltp,UNKNOWN,P1,true,true,no fresh live session evidence after freeze
+missing_depth,UNKNOWN,P1,true,true,no fresh live session evidence after freeze
+startup_resolution_latency,UNKNOWN,P2,true,false,no fresh live session evidence after freeze
+candidate_funnel_observability,PASS,P1,false,true,V23 cycle-bound funnel artifacts
+risk_halt_provenance,PASS,P1,false,true,V23 readiness and negative control
+runtime_seal_lifecycle,PASS,P1,false,true,V23 shutdown lifecycle controls
+clean_shutdown,PASS,P1,false,true,V23 shutdown callback and lifecycle tests
+release_promotion_path,UNKNOWN,P1,true,true,no push/merge authorized in V24
+preopen_launcher_authority,UNKNOWN,P1,true,true,no next live launch authorized
+credential_auth_readiness,UNKNOWN,P1,true,true,no broker interaction authorized
+same_day_instrument_authority,UNKNOWN,P1,true,true,no live instrument acquisition authorized
+

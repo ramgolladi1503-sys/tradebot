@@ -254,7 +254,12 @@ def init_ticks() -> None:
             volume INTEGER,
             oi INTEGER,
             timestamp_epoch REAL,
-            timestamp_iso TEXT
+            timestamp_iso TEXT,
+            timestamp_authority TEXT,
+            timestamp_source_field TEXT,
+            source_timestamp_epoch REAL,
+            receive_timestamp_epoch REAL,
+            timestamp_fallback_used INTEGER
         )
         """
             )
@@ -264,6 +269,11 @@ def init_ticks() -> None:
                 conn.execute("ALTER TABLE ticks ADD COLUMN timestamp_iso TEXT")
             except Exception:
                 pass
+            for name, declaration in (("timestamp_authority", "TEXT"), ("timestamp_source_field", "TEXT"), ("source_timestamp_epoch", "REAL"), ("receive_timestamp_epoch", "REAL"), ("timestamp_fallback_used", "INTEGER")):
+                try:
+                    conn.execute(f"ALTER TABLE ticks ADD COLUMN {name} {declaration}")
+                except Exception:
+                    pass
             cols = _tick_columns(conn)
             if "timestamp_epoch" not in cols:
                 _log_schema_event("TICK_SCHEMA_INVALID", columns=sorted(cols))
@@ -621,8 +631,8 @@ def _write_rows(
         with _conn() as conn:
             conn.executemany(
                 """
-            INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso)
-            VALUES (?,?,?,?,?,?,?)
+            INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso, timestamp_authority, timestamp_source_field, source_timestamp_epoch, receive_timestamp_epoch, timestamp_fallback_used)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """,
                 rows,
             )
@@ -1010,7 +1020,7 @@ if not aexit_registered:
 
 
 def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kwargs):
-    allowed_aliases = {"ts_epoch", "instrument_token"}
+    allowed_aliases = {"ts_epoch", "instrument_token", "timestamp_authority", "timestamp_source_field", "source_timestamp_epoch", "receive_timestamp_epoch", "timestamp_fallback_used"}
     unexpected = sorted(set(kwargs.keys()) - allowed_aliases)
     if unexpected:
         allowed = "ts, token, last_price, volume, oi, ts_epoch, instrument_token"
@@ -1022,6 +1032,11 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
 
     ts_alias = kwargs.pop("ts_epoch", None)
     token_alias = kwargs.pop("instrument_token", None)
+    timestamp_authority = kwargs.pop("timestamp_authority", None)
+    timestamp_source_field = kwargs.pop("timestamp_source_field", None)
+    source_timestamp_epoch = kwargs.pop("source_timestamp_epoch", None)
+    receive_timestamp_epoch = kwargs.pop("receive_timestamp_epoch", None)
+    timestamp_fallback_used = kwargs.pop("timestamp_fallback_used", None)
 
     if ts_alias is not None:
         if ts is not None and ts != ts_alias:
@@ -1086,7 +1101,7 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
     if not _db_writes_enabled():
         return True
 
-    row = (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso)
+    row = (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso, timestamp_authority, timestamp_source_field, source_timestamp_epoch, receive_timestamp_epoch, timestamp_fallback_used)
     if _async_db_writes_enabled():
         # The reactor only enqueues. SQLite connections and flushes belong to the
         # single persistence worker; waiting for read-after-write here stalls Twisted.

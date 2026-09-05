@@ -16,6 +16,7 @@ from core.live_ranking_contract import rank_advisory_candidates
 from core.advisory_queue_contract import append_advisory
 from core.read_only_option_eligibility import build_option_surface, evaluate_candidate_eligibility
 from core.cas_morning_reversal_advisory import STRATEGY_ID, evaluate
+from core import risk_halt
 
 
 CONSUMERS = (
@@ -29,6 +30,21 @@ def _state(verdict: str, *, reason: str | None = None, **extra: Any) -> dict[str
     if reason:
         payload["reason"] = reason
     return payload
+
+
+def _risk_halt_evidence() -> dict[str, Any]:
+    """Read existing halt state without clearing or changing risk policy."""
+    try:
+        payload = risk_halt.load_halt()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, Mapping):
+        payload = {}
+    return {
+        "risk_halt": bool(payload.get("halted")) if "halted" in payload else None,
+        "risk_halt_reason": payload.get("reason") if payload.get("halted") else None,
+        "risk_halt_timestamp": payload.get("timestamp_ist") if payload.get("halted") else None,
+    }
 
 
 def run_consumer_cycle(
@@ -190,6 +206,14 @@ def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
     boundary = now.replace(hour=15, minute=14, second=0, microsecond=0)
     raw = runtime_outputs.get("cas_short_horizon_inputs")
     if not isinstance(raw, Mapping) or not raw:
+        halt = _risk_halt_evidence()
+        (output_root / "cas_readiness_latest.json").write_text(json.dumps({
+            "schema_version": 1, "strategy_id": STRATEGY_ID, "session_id": session_id,
+            "source_sha": source_sha, "cycle_id": "", "readiness_state": "PENDING",
+            "cas_short_horizon_inputs_present": False, "cas_invoked": False,
+            "execution_status": "advisory_only", "broker_write_authority": False,
+            "order_authority": False, **halt,
+        }, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return _state("PENDING", reason="short_horizon_inputs_missing", freeze_boundary=boundary.isoformat())
     try:
         decision = evaluate(session_id=session_id, symbol=str(raw["symbol"]),
@@ -198,6 +222,18 @@ def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
                             cutoff_timestamp=boundary, received_timestamp=(datetime.fromisoformat(str(raw["received_timestamp"])) if raw.get("received_timestamp") else None),
                             source_sha=source_sha, signal_input_09_15=raw.get("signal_input_09_15"), signal_input_10_00=raw.get("signal_input_10_00"))
     except (KeyError, TypeError, ValueError) as exc:
+        # Preserve the fail-closed decision and emit the same readiness
+        # contract as a missing input.  A malformed input must not erase the
+        # cycle's evidence boundary by aborting before readiness is written.
+        halt = _risk_halt_evidence()
+        (output_root / "cas_readiness_latest.json").write_text(json.dumps({
+            "schema_version": 1, "strategy_id": STRATEGY_ID, "session_id": session_id,
+            "source_sha": source_sha, "cycle_id": str(raw.get("cycle_id") or ""),
+            "readiness_state": "BLOCKED" if halt["risk_halt"] is True else "PENDING",
+            "cas_short_horizon_inputs_present": True, "cas_invoked": False,
+            "cas_rejection_reason": str(exc), "execution_status": "advisory_only",
+            "broker_write_authority": False, "order_authority": False, **halt,
+        }, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return _state("PENDING", reason=str(exc))
     destination = output_root / "cas_v2_artifact.json"
     payload = {"schema_version": 1, "cas_spec_id": STRATEGY_ID, "session_id": session_id,
@@ -206,6 +242,18 @@ def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
                "broker_write_authority": False, "order_authority": False,
                "paper_authorized": False, "live_execution_authorized": False,
                "broker_order_calls": 0}
+    decision = payload["decision"]
+    halt = _risk_halt_evidence()
+    (output_root / "cas_readiness_latest.json").write_text(json.dumps({
+        "schema_version": 1, "strategy_id": STRATEGY_ID, "session_id": session_id,
+        "source_sha": source_sha, "cycle_id": str(raw.get("cycle_id") or ""),
+        "readiness_state": "BLOCKED" if halt["risk_halt"] is True else ("NO_SIGNAL" if decision.get("direction") == "NO_SIGNAL" else "READY"),
+        "morning_return": raw.get("morning_return"), "signal_direction": decision.get("direction"),
+        "primitive_0915_price": raw.get("signal_input_09_15"), "primitive_1000_price": raw.get("signal_input_10_00"),
+        "cas_short_horizon_inputs_present": True, "cas_invoked": True,
+        "execution_status": "advisory_only", "broker_write_authority": False,
+        "order_authority": False, **halt,
+    }, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     temporary.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     temporary.replace(destination)

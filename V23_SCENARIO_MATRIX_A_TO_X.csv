@@ -1,0 +1,25 @@
+scenario_id,pass,production_path_used,expected,actual,first_broken_invariant,failure_class
+A,true,true,valid DOWN,DOWN,NONE,NONE
+B,true,true,valid UP,UP,NONE,NONE
+C,true,true,exact zero NO_SIGNAL,NO_SIGNAL,NONE,NONE
+D,true,true,missing 0915 fail closed,missing 0915 fail closed,NONE,NONE
+E,true,true,missing 1000 fail closed,missing 1000 fail closed,NONE,NONE
+F,true,true,late tick rejected,blocked late tick,NONE,NONE
+G,true,true,ineligible authority rejected,blocked authority,NONE,NONE
+H,true,true,first duplicate immutable,first record retained,NONE,NONE
+I,true,true,late reconnect no recapture,record retained,NONE,NONE
+J,true,true,risk halt blocks readiness,RISK_BLOCKED,NONE,NONE
+K,true,true,unhealthy feed inadmissible,blocked primitive,NONE,NONE
+L,true,true,one recovery request,one recovery request,NONE,NONE
+M,true,true,no recovery storm,no repeated recovery,NONE,NONE
+N,true,true,shutdown rejects late input,accepting false,NONE,NONE
+O,true,true,restart reloads exact primitive,exact record reloaded,NONE,NONE
+P,true,true,wrong source rejected,verifier rejected,NONE,NONE
+Q,true,true,wrong session rejected,verifier rejected,NONE,NONE
+R,true,true,wrong token rejected,verifier rejected,NONE,NONE
+S,true,true,corrupt record rejected,verifier rejected,NONE,NONE
+T,true,true,malformed input fail closed,consumer rejected,NONE,NONE
+U,true,true,preopen arms producer,primitive capture accepted,NONE,NONE
+V,true,true,late start misses 0915,0915 blocked,NONE,NONE
+W,true,true,late start misses both,both blocked,NONE,NONE
+X,true,true,restart preserves 0915 and captures 1000,both records correct,NONE,NONE
