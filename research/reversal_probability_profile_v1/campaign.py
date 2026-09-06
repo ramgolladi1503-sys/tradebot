@@ -327,25 +327,36 @@ def build_candidate_events(features: pd.DataFrame, spec: CandidateSpec, cfg: Cam
             & (f["close"] <= f["resistance"] - cfg.reclaim_margin_atr * f["atr"])
         )
     elif spec.mode == "BREAKOUT":
+        prior_resistance = f.groupby("session", sort=False)["resistance"].shift(1)
+        prior_resistance_density = f.groupby("session", sort=False)["resistance_density"].shift(1)
+        prior_support = f.groupby("session", sort=False)["support"].shift(1)
+        prior_support_density = f.groupby("session", sort=False)["support_density"].shift(1)
         long_mask = (
-            f["resistance"].notna()
-            & (f["resistance_density"] >= spec.min_density)
+            prior_resistance.notna()
+            & (prior_resistance_density >= spec.min_density)
             & (mom >= cfg.approach_momentum_atr)
-            & (f["prev_close"] <= f["resistance"] + cfg.reclaim_margin_atr * f["atr"])
-            & (f["close"] >= f["resistance"] + cfg.breakout_margin_atr * f["atr"])
+            & (f["prev_close"] <= prior_resistance + cfg.reclaim_margin_atr * f["atr"])
+            & (f["close"] >= prior_resistance + cfg.breakout_margin_atr * f["atr"])
         )
         short_mask = (
-            f["support"].notna()
-            & (f["support_density"] >= spec.min_density)
+            prior_support.notna()
+            & (prior_support_density >= spec.min_density)
             & (mom <= -cfg.approach_momentum_atr)
-            & (f["prev_close"] >= f["support"] - cfg.reclaim_margin_atr * f["atr"])
-            & (f["close"] <= f["support"] - cfg.breakout_margin_atr * f["atr"])
+            & (f["prev_close"] >= prior_support - cfg.reclaim_margin_atr * f["atr"])
+            & (f["close"] <= prior_support - cfg.breakout_margin_atr * f["atr"])
         )
     else:
         raise ValueError(f"unknown_candidate_mode:{spec.mode}")
 
     out = f.loc[long_mask | short_mask].copy()
     out["signal"] = np.where(long_mask.loc[out.index], 1, -1)
+    if spec.mode == "BREAKOUT":
+        out["breakout_reference_zone"] = np.where(
+            out["signal"] > 0, prior_resistance.loc[out.index], prior_support.loc[out.index]
+        )
+        out["breakout_reference_density"] = np.where(
+            out["signal"] > 0, prior_resistance_density.loc[out.index], prior_support_density.loc[out.index]
+        )
     out["candidate_id"] = spec.candidate_id
     out["mode"] = spec.mode
     out["min_density"] = spec.min_density
