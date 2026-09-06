@@ -1,6 +1,6 @@
 {
   "campaign_id": "HYP_CROSS_SECTIONAL_DIFFUSION_DIRECTION_V1",
-  "spec_version": "1.1.0",
+  "spec_version": "1.2.0",
   "claim_type": "DERIVED_EXECUTABLE_HYPOTHESIS",
   "external_exact_strategy_claim": false,
   "prediction_target": {
@@ -30,16 +30,33 @@
     "selection_objective": "SESSION_EQUAL_AFTER_COST_MEAN_BPS"
   },
   "wfa": {
-    "train_sessions": 252,
+    "mode": "EXPANDING_TRAIN_NONOVERLAPPING_OOS",
+    "minimum_train_sessions": 126,
     "test_sessions": 63,
     "step_sessions": 63,
     "minimum_oos_folds": 4,
     "event_deoverlap": "HORIZON_CLOCK_MINUTES",
-    "reason": "MULTIPLE_OOS_FOLDS_WITH_2023_PLUS_CONSTITUENT_AUTHORITY"
+    "reason": "FOUR_PRE_HOLDOUT_OOS_FOLDS_WITHIN_EXISTING_297_DEV_PLUS_99_SELECTION_SESSIONS"
+  },
+  "existing_corpus_boundary": {
+    "dev_sessions": 297,
+    "selection_sessions": 99,
+    "holdout_sessions": 100,
+    "pre_holdout_end": "2026-02-26",
+    "holdout_start": "2026-02-27",
+    "holdout_end": "2026-07-28",
+    "v1_2_stage": "PRE_HOLDOUT_ONLY",
+    "holdout_evaluation_allowed_in_v1_2_runner": false
   },
   "controls": {
     "index_only_baseline": "FREQUENCY_MATCHED_5M_NIFTY_MOMENTUM",
     "negative_control": "EXACT_30_MINUTE_LAGGED_CONSTITUENT_FEATURES"
+  },
+  "execution_authority": {
+    "preferred_panel": "NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet",
+    "frozen_roll_rule": "NEAREST_UNEXPIRED_EXPIRY_ON_SESSION_START_V1",
+    "intraday_contract_switching": false,
+    "lookahead_roll_selection": false
   },
   "costs": {
     "roundtrip_cost_bps": "REQUIRED_CLI_INPUT",
@@ -53,7 +70,7 @@
     "historical_index_weights": "USE_WHEN_AUTHORITATIVE; OTHERWISE_EQUAL_WEIGHT_IS_AN_EXPLICIT_FEATURE_CHOICE_NOT_AN_OFFICIAL_WEIGHT_CLAIM",
     "input_sha256_binding": true
   },
-  "terminal_positive_gates": {
+  "pre_holdout_survivor_gates": {
     "min_oos_folds": 4,
     "min_oos_events": 100,
     "min_oos_sessions": 50,
@@ -63,6 +80,7 @@
     "lagged_control_max_fraction_of_main_estimate": 0.5,
     "must_beat_index_only_baseline": true
   },
-  "primary_verdict_positive": "ROBUST_DIRECTIONAL_EDGE_AFTER_COST_PROXY",
-  "primary_verdict_negative": "NO_ROBUST_AFTER_COST_DIRECTIONAL_EDGE"
+  "pre_holdout_positive_verdict": "PRE_HOLDOUT_DIRECTIONAL_SURVIVOR",
+  "pre_holdout_negative_verdict": "NO_ROBUST_AFTER_COST_DIRECTIONAL_EDGE",
+  "certified_edge_claim_allowed_before_holdout": false
 }
