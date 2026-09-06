@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+import json
+
 import numpy as np
 import pandas as pd
 
+import scripts.run_rpp_verified_nifty_v1 as verified_runner
 from research.reversal_probability_profile_v1.campaign import (
     CampaignConfig,
     CandidateSpec,
@@ -126,3 +130,39 @@ def test_shifted_negative_control_moves_clock_and_preserves_signal():
     assert out.iloc[0]["shifted_control_decision_timestamp"] == pd.Timestamp("2026-01-02 10:30", tz="Asia/Kolkata")
     assert out.iloc[0]["shifted_control_entry_timestamp"] == pd.Timestamp("2026-01-02 10:31", tz="Asia/Kolkata")
     assert np.isfinite(out.iloc[0]["shifted_control_net_bps"])
+
+
+def test_verified_runner_requires_exact_sha(tmp_path):
+    data = tmp_path / "nifty.csv"
+    data.write_bytes(b"test-authoritative-bytes")
+    exact_sha = hashlib.sha256(data.read_bytes()).hexdigest()
+    binding = tmp_path / "binding.json"
+    binding.write_text(json.dumps({
+        "accepted_inputs": [{
+            "authority_id": "TEST_AUTHORITY",
+            "preferred_path": str(data),
+            "repo_relative_path": None,
+            "sha256": exact_sha,
+        }]
+    }))
+
+    old_binding, old_root = verified_runner.BINDING, verified_runner.ROOT
+    try:
+        verified_runner.BINDING = binding
+        verified_runner.ROOT = tmp_path
+        resolved, authority = verified_runner.resolve_authoritative_input()
+        assert resolved == data
+        assert authority["authority_id"] == "TEST_AUTHORITY"
+
+        bad = json.loads(binding.read_text())
+        bad["accepted_inputs"][0]["sha256"] = "0" * 64
+        binding.write_text(json.dumps(bad))
+        try:
+            verified_runner.resolve_authoritative_input()
+            raise AssertionError("SHA mismatch must fail closed")
+        except SystemExit as exc:
+            assert "RPP_INPUT_AUTHORITY_FAIL" in str(exc)
+            assert "SHA_MISMATCH" in str(exc)
+    finally:
+        verified_runner.BINDING = old_binding
+        verified_runner.ROOT = old_root
