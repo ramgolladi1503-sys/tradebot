@@ -168,7 +168,7 @@ def test_break_becomes_accepted_only_after_required_closes_beyond_zone():
             "2026-01-02 10:10",
             open=102.4,
             high=103.0,
-            low=102.35,
+            low=102.5,
             close=102.7,
             approach_momentum_atr=0.4,
             resistance=105.0,
