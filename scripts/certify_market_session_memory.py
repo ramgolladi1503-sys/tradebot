@@ -128,6 +128,33 @@ def run_certification(output: Path | None = None) -> dict:
             return {"integrity": sealed["integrity"]["status"], "seal_verified": verified["status"], "manifest_hash": sealed.get("manifest_payload_sha256"), "hash_file_exists": True}
         gates.append(_gate("session_seal_integrity", seal_gate))
 
+        def asof_negative_control_gate():
+            early = day + timedelta(minutes=10)
+            before = store.get_bars("NIFTY", as_of=early, timeframe="1m")
+            later = store.get_bars("NIFTY", as_of=day + timedelta(minutes=30), timeframe="1m")
+            assert len(before) == 10 and len(later) == 30
+            assert all(row["ts_epoch"] < early.timestamp() for row in before)
+            return {"early_rows": len(before), "later_rows": len(later), "future_rows_in_early": 0}
+        gates.append(_gate("asof_future_negative_control", asof_negative_control_gate))
+
+        def feature_immutability_gate():
+            ts = day + timedelta(minutes=10)
+            store.persist_feature_snapshot("NIFTY", as_of=ts, payload={"regime": "TREND"})
+            try:
+                store.persist_feature_snapshot("NIFTY", as_of=ts, payload={"regime": "RANGE"})
+            except SessionMemoryConflict:
+                return {"conflicting_feature_rejected": True}
+            raise AssertionError("feature snapshot mutation was not rejected")
+        gates.append(_gate("immutable_feature_snapshot", feature_immutability_gate))
+
+        def seal_immutability_gate():
+            try:
+                store.seal_session(day.date().isoformat(), symbols=["NIFTY", "BANKNIFTY", "FINNIFTY"])
+            except SessionMemoryConflict:
+                return {"conflicting_seal_rejected": True}
+            raise AssertionError("sealed session was silently rewritten")
+        gates.append(_gate("immutable_session_seal", seal_immutability_gate))
+
         result = {
             "certification": "MARKET_SESSION_MEMORY_V1",
             "status": "PASS" if all(g["status"] == "PASS" for g in gates) else "FAIL",
