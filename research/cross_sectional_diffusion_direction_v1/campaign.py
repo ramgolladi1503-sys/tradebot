@@ -167,10 +167,6 @@ def _session_key(ts: pd.Series) -> pd.Series:
     return ts.dt.tz_convert(IST).dt.date
 
 
-def _within_session_lag(series: pd.Series, session: pd.Series, periods: int) -> pd.Series:
-    return series.groupby(session, sort=False).shift(periods)
-
-
 def _eligible_members(membership: pd.DataFrame, date_value) -> pd.DataFrame:
     target = pd.Timestamp(date_value).normalize()
     start = pd.to_datetime(membership["effective_from"], errors="coerce").dt.normalize()
@@ -205,17 +201,23 @@ def build_feature_frame(
     idx = index.copy().sort_values("timestamp")
     con = constituents.copy().sort_values(["symbol", "timestamp"])
     idx["session"] = _session_key(idx["timestamp"])
-    idx["index_lag_close"] = _within_session_lag(idx["close"], idx["session"], lookback_minutes)
+    lag_delta = pd.Timedelta(minutes=lookback_minutes)
+    idx_lag = idx[["timestamp", "session", "close"]].copy()
+    idx_lag["timestamp"] = idx_lag["timestamp"] + lag_delta
+    idx_lag = idx_lag.rename(columns={"close": "index_lag_close"})
+    idx = idx.merge(idx_lag, on=["timestamp", "session"], how="left")
     idx["index_r"] = np.log(idx["close"] / idx["index_lag_close"])
-    idx["next_open"] = idx.groupby("session", sort=False)["open"].shift(-1)
 
     con["session"] = _session_key(con["timestamp"])
-    con["lag_close"] = con.groupby(["symbol", "session"], sort=False)["close"].shift(lookback_minutes)
+    con_lag = con[["timestamp", "session", "symbol", "close"]].copy()
+    con_lag["timestamp"] = con_lag["timestamp"] + lag_delta
+    con_lag = con_lag.rename(columns={"close": "lag_close"})
+    con = con.merge(con_lag, on=["timestamp", "session", "symbol"], how="left")
     con["ret"] = np.log(con["close"] / con["lag_close"])
     con = con.dropna(subset=["ret"])
 
     rows: list[dict] = []
-    for date_value, idx_day in idx.groupby("session", sort=True):
+    for date_value, _idx_day in idx.groupby("session", sort=True):
         members = _eligible_members(membership, date_value)
         if members.empty:
             continue
@@ -251,7 +253,7 @@ def build_feature_frame(
     feat = pd.DataFrame(rows)
     out = idx.merge(feat, on=["timestamp", "session"], how="inner")
     out["gap"] = out["impulse"] - out["index_r"]
-    out = out.dropna(subset=["index_r", "breadth", "impulse", "gap", "next_open"]).copy()
+    out = out.dropna(subset=["index_r", "breadth", "impulse", "gap"]).copy()
     return out.sort_values("timestamp").reset_index(drop=True)
 
 
@@ -259,13 +261,17 @@ def add_forward_returns(features: pd.DataFrame, execution: pd.DataFrame, horizon
     base = features.copy()
     exe = execution.copy().sort_values("timestamp")
     exe["session"] = _session_key(exe["timestamp"])
-    exe["entry_open"] = exe.groupby("session", sort=False)["open"].shift(-1)
-    result = base.merge(exe[["timestamp", "entry_open", "session"]], on=["timestamp", "session"], how="left")
+    entry = exe[["timestamp", "session", "open"]].copy()
+    entry["timestamp"] = entry["timestamp"] - pd.Timedelta(minutes=1)
+    entry = entry.rename(columns={"open": "entry_open"})
+    result = base.merge(entry, on=["timestamp", "session"], how="left")
     for h in sorted(set(int(x) for x in horizons)):
         if h <= 0:
             raise ValueError("horizon_must_be_positive")
-        exe[f"exit_close_{h}"] = exe.groupby("session", sort=False)["close"].shift(-h)
-        result = result.merge(exe[["timestamp", f"exit_close_{h}"]], on="timestamp", how="left")
+        exit_map = exe[["timestamp", "session", "close"]].copy()
+        exit_map["timestamp"] = exit_map["timestamp"] - pd.Timedelta(minutes=h)
+        exit_map = exit_map.rename(columns={"close": f"exit_close_{h}"})
+        result = result.merge(exit_map, on=["timestamp", "session"], how="left")
         result[f"long_gross_bps_{h}"] = np.log(result[f"exit_close_{h}"] / result["entry_open"]) * 10000.0
     return result
 
@@ -413,8 +419,17 @@ def score_index_only_baseline(
 
 def _lagged_control(frame: pd.DataFrame, lag_minutes: int) -> pd.DataFrame:
     out = frame.copy().sort_values("timestamp")
-    for col in ("breadth", "impulse", "gap"):
-        out[col] = out.groupby("session", sort=False)[col].shift(lag_minutes)
+    source = frame[["timestamp", "session", "breadth", "impulse", "gap"]].copy()
+    source["timestamp"] = source["timestamp"] + pd.Timedelta(minutes=lag_minutes)
+    source = source.rename(columns={
+        "breadth": "_lag_breadth",
+        "impulse": "_lag_impulse",
+        "gap": "_lag_gap",
+    })
+    out = out.merge(source, on=["timestamp", "session"], how="left")
+    out["breadth"] = out.pop("_lag_breadth")
+    out["impulse"] = out.pop("_lag_impulse")
+    out["gap"] = out.pop("_lag_gap")
     return out.dropna(subset=["breadth", "impulse", "gap"]).copy()
 
 
@@ -557,5 +572,4 @@ def assess_terminal_verdict(
 
 
 def summarize_result(result: dict) -> dict:
-    out = {k: v for k, v in result.items() if k not in {"events", "controls", "baselines"}}
-    return out
+    return {k: v for k, v in result.items() if k not in {"events", "controls", "baselines"}}
