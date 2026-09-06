@@ -1,17 +1,18 @@
 {
   "campaign_id": "HYP_CROSS_SECTIONAL_DIFFUSION_DIRECTION_V1",
-  "spec_version": "1.0.0",
+  "spec_version": "1.1.0",
   "claim_type": "DERIVED_EXECUTABLE_HYPOTHESIS",
   "external_exact_strategy_claim": false,
   "prediction_target": {
     "primary_horizon_minutes": 15,
     "secondary_horizon_minutes": 30,
     "direction": true,
-    "entry_rule": "NEXT_MINUTE_OPEN_AFTER_DECISION_CLOSE",
-    "exit_rule": "EXECUTION_SERIES_CLOSE_AT_HORIZON"
+    "entry_rule": "EXACT_NEXT_MINUTE_OPEN_AFTER_DECISION_BAR_CLOSE",
+    "exit_rule": "EXACT_EXECUTION_SERIES_CLOSE_AT_HORIZON"
   },
   "features": {
     "lookback_minutes": 5,
+    "lookback_semantics": "EXACT_CLOCK_TIME_OFFSET_NOT_ROW_SHIFT",
     "breadth": "SUM_i(w_i * SIGN(LOG(C_i_t / C_i_t-5)))",
     "impulse": "SUM_i(w_i * LOG(C_i_t / C_i_t-5))",
     "index_return": "LOG(NIFTY_C_t / NIFTY_C_t-5)",
@@ -29,25 +30,31 @@
     "selection_objective": "SESSION_EQUAL_AFTER_COST_MEAN_BPS"
   },
   "wfa": {
-    "train_years": 3,
-    "test_years": 1,
-    "event_deoverlap": "HORIZON_MINUTES"
+    "train_sessions": 252,
+    "test_sessions": 63,
+    "step_sessions": 63,
+    "minimum_oos_folds": 4,
+    "event_deoverlap": "HORIZON_CLOCK_MINUTES",
+    "reason": "MULTIPLE_OOS_FOLDS_WITH_2023_PLUS_CONSTITUENT_AUTHORITY"
   },
   "controls": {
     "index_only_baseline": "FREQUENCY_MATCHED_5M_NIFTY_MOMENTUM",
-    "negative_control": "30_MINUTE_LAGGED_CONSTITUENT_FEATURES"
+    "negative_control": "EXACT_30_MINUTE_LAGGED_CONSTITUENT_FEATURES"
   },
   "costs": {
     "roundtrip_cost_bps": "REQUIRED_CLI_INPUT",
-    "zero_cost_allowed": false
+    "zero_cost_allowed": false,
+    "claim_boundary": "CANDLE_BASED_AFTER_COST_PROXY_NOT_EXACT_BID_ASK_FILL_CERTIFICATION"
   },
   "authority": {
-    "historical_membership_required_for_certification": true,
-    "current_constituent_survivorship_backfill_allowed_for_certification": false,
-    "tradable_execution_series_required_for_certification": true,
+    "historical_membership_required_for_positive_verdict": true,
+    "current_constituent_survivorship_backfill_allowed": false,
+    "tradable_execution_series_required_for_positive_verdict": true,
+    "historical_index_weights": "USE_WHEN_AUTHORITATIVE; OTHERWISE_EQUAL_WEIGHT_IS_AN_EXPLICIT_FEATURE_CHOICE_NOT_AN_OFFICIAL_WEIGHT_CLAIM",
     "input_sha256_binding": true
   },
   "terminal_positive_gates": {
+    "min_oos_folds": 4,
     "min_oos_events": 100,
     "min_oos_sessions": 50,
     "session_bootstrap_ci_lower_net_bps_gt": 0.0,
@@ -56,6 +63,6 @@
     "lagged_control_max_fraction_of_main_estimate": 0.5,
     "must_beat_index_only_baseline": true
   },
-  "primary_verdict_positive": "CERTIFIED_DIRECTIONAL_EXECUTION_EDGE",
-  "primary_verdict_negative": "NO_CERTIFIED_TRADABLE_EDGE"
+  "primary_verdict_positive": "ROBUST_DIRECTIONAL_EDGE_AFTER_COST_PROXY",
+  "primary_verdict_negative": "NO_ROBUST_AFTER_COST_DIRECTIONAL_EDGE"
 }
