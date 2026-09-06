@@ -319,12 +319,19 @@ class MarketSessionStore:
                     "readiness": {"status": "READY" if not issues else "NOT_READY", "required_coverage_pct": threshold, "issues": issues}}
         text = _json(manifest); digest = _sha(text); out = self.report_root/day; out.mkdir(parents=True, exist_ok=True)
         manifest_path = out/"session_manifest.json"; manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True, default=str)+"\n", encoding="utf-8")
-        bars_path = out/"bars_1m.jsonl"
-        with bars_path.open("w", encoding="utf-8") as handle:
-            for sym in syms:
-                for row in self._load(day, sym):
-                    serial = dict(row); serial["ts"] = serial["ts_ist"]; handle.write(_json(serial)+"\n")
-        hashes = {"session_manifest.json": hashlib.sha256(manifest_path.read_bytes()).hexdigest(), "bars_1m.jsonl": hashlib.sha256(bars_path.read_bytes()).hexdigest(), "manifest_payload_sha256": digest}
+        artifact_paths: dict[str, Path] = {}
+        for timeframe in TIMEFRAMES:
+            artifact_path = out / f"bars_{timeframe}.jsonl"
+            with artifact_path.open("w", encoding="utf-8") as handle:
+                for sym in syms:
+                    for row in self.get_bars(sym, as_of=_close(day) + timedelta(minutes=1), timeframe=timeframe, session_date=day):
+                        serial = dict(row)
+                        if isinstance(serial.get("ts"), datetime):
+                            serial["ts"] = serial["ts"].isoformat()
+                        handle.write(_json(serial) + "\n")
+            artifact_paths[f"bars_{timeframe}.jsonl"] = artifact_path
+        hashes = {"session_manifest.json": hashlib.sha256(manifest_path.read_bytes()).hexdigest(), "manifest_payload_sha256": digest}
+        hashes.update({name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in artifact_paths.items()})
         hashes_path = out/"SHA256SUMS.json"; hashes_path.write_text(json.dumps(hashes, indent=2, sort_keys=True)+"\n", encoding="utf-8")
         with self._lock, self._conn() as conn:
             existing = conn.execute("SELECT manifest_hash FROM market_session_seals WHERE session_date=?", (day,)).fetchone()
@@ -333,7 +340,7 @@ class MarketSessionStore:
                     raise SessionMemoryConflict(f"immutable_seal_conflict:{day}")
             else:
                 conn.execute("INSERT INTO market_session_seals VALUES(?,?,?,?)", (day, manifest["sealed_at_epoch"], text, digest))
-        return {"status": "PASS" if integrity["status"] == "PASS" else "FAIL", "session_date": day, "readiness": manifest["readiness"], "manifest_path": str(manifest_path), "bars_path": str(bars_path), "hashes_path": str(hashes_path), "manifest_payload_sha256": digest, "integrity": integrity}
+        return {"status": "PASS" if integrity["status"] == "PASS" else "FAIL", "session_date": day, "readiness": manifest["readiness"], "manifest_path": str(manifest_path), "artifact_paths": {name: str(path) for name, path in artifact_paths.items()}, "hashes_path": str(hashes_path), "manifest_payload_sha256": digest, "integrity": integrity}
 
     def verify_seal(self, session_date: str) -> dict[str, Any]:
         day = str(session_date)
