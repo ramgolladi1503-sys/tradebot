@@ -23,7 +23,7 @@ class SessionCampaignConfig:
     lookback_minutes: int = 5
     primary_horizon_minutes: int = 15
     secondary_horizon_minutes: int = 30
-    train_sessions: int = 252
+    min_train_sessions: int = 126
     test_sessions: int = 63
     step_sessions: int = 63
     min_oos_folds: int = 4
@@ -45,21 +45,29 @@ class SessionCampaignConfig:
 
 def session_windows(
     frame: pd.DataFrame,
-    train_sessions: int,
+    min_train_sessions: int,
     test_sessions: int,
     step_sessions: int,
 ) -> list[tuple[list[object], list[object]]]:
-    if min(train_sessions, test_sessions, step_sessions) <= 0:
+    """Build expanding-train, non-overlapping OOS session windows.
+
+    Fold 1 trains on the first ``min_train_sessions`` sessions. Each later fold
+    keeps all earlier training history and adds the previous OOS block. OOS test
+    blocks never overlap when ``step_sessions == test_sessions``.
+    """
+    if min(min_train_sessions, test_sessions, step_sessions) <= 0:
         raise ValueError("session_window_sizes_must_be_positive")
     sessions = sorted(pd.Series(frame["session"]).dropna().unique().tolist())
-    final_start = len(sessions) - train_sessions - test_sessions
-    if final_start < 0:
+    if len(sessions) < min_train_sessions + test_sessions:
         return []
+
     windows: list[tuple[list[object], list[object]]] = []
-    for start in range(0, final_start + 1, step_sessions):
-        train = sessions[start : start + train_sessions]
-        test = sessions[start + train_sessions : start + train_sessions + test_sessions]
+    train_end = min_train_sessions
+    while train_end + test_sessions <= len(sessions):
+        train = sessions[:train_end]
+        test = sessions[train_end : train_end + test_sessions]
         windows.append((train, test))
+        train_end += step_sessions
     return windows
 
 
@@ -71,7 +79,7 @@ def run_session_walk_forward(
     cfg: SessionCampaignConfig,
 ) -> dict:
     frame = features_with_returns.copy()
-    windows = session_windows(frame, cfg.train_sessions, cfg.test_sessions, cfg.step_sessions)
+    windows = session_windows(frame, cfg.min_train_sessions, cfg.test_sessions, cfg.step_sessions)
     if not windows:
         return {
             "status": "INSUFFICIENT_SESSIONS",
@@ -87,9 +95,9 @@ def run_session_walk_forward(
     baseline_frames: list[pd.DataFrame] = []
     folds: list[dict] = []
 
-    for fold_id, (train_sessions, test_sessions) in enumerate(windows, start=1):
+    for fold_id, (train_sessions, test_sessions_block) in enumerate(windows, start=1):
         train = frame[frame["session"].isin(train_sessions)].copy()
-        test = frame[frame["session"].isin(test_sessions)].copy()
+        test = frame[frame["session"].isin(test_sessions_block)].copy()
         thresholds, candidates = _choose_train_candidate(train, horizon, cost_bps, cfg)
         baseline_long, baseline_short, train_long_rate, train_short_rate = fit_index_only_baseline(train, thresholds)
 
@@ -127,9 +135,9 @@ def run_session_walk_forward(
                 "train_session_start": str(train_sessions[0]),
                 "train_session_end": str(train_sessions[-1]),
                 "train_session_count": len(train_sessions),
-                "test_session_start": str(test_sessions[0]),
-                "test_session_end": str(test_sessions[-1]),
-                "test_session_count": len(test_sessions),
+                "test_session_start": str(test_sessions_block[0]),
+                "test_session_end": str(test_sessions_block[-1]),
+                "test_session_count": len(test_sessions_block),
                 "thresholds": asdict(thresholds),
                 "train_candidates": candidates,
                 "oos_events": int(len(events)),
@@ -213,4 +221,4 @@ def assess_session_terminal_verdict(
 
     if blockers:
         return "NO_ROBUST_AFTER_COST_DIRECTIONAL_EDGE", blockers
-    return "ROBUST_DIRECTIONAL_EDGE_AFTER_COST_PROXY", []
+    return "PRE_HOLDOUT_DIRECTIONAL_SURVIVOR", []
