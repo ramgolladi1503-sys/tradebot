@@ -23,6 +23,15 @@ def _minute_grid(day: str, n: int = 60):
     return pd.date_range(f"{day} 09:15", periods=n, freq="min", tz="Asia/Kolkata")
 
 
+def _membership(symbols=("A", "B")) -> pd.DataFrame:
+    return pd.DataFrame({
+        "symbol": list(symbols),
+        "effective_from": [pd.Timestamp("2020-01-01").date()] * len(symbols),
+        "effective_to": [pd.NaT] * len(symbols),
+        "weight": [1.0 / len(symbols)] * len(symbols),
+    })
+
+
 def test_feature_builder_uses_historical_membership_and_expected_gap():
     ts = _minute_grid("2024-01-02", 30)
     idx = pd.DataFrame({"timestamp": ts, "open": 100.0, "close": 100.0})
@@ -31,13 +40,7 @@ def test_feature_builder_uses_historical_membership_and_expected_gap():
         price = 100 * np.exp(np.arange(len(ts)) * drift)
         rows.extend({"timestamp": t, "symbol": symbol, "open": p, "close": p} for t, p in zip(ts, price))
     con = pd.DataFrame(rows)
-    membership = pd.DataFrame({
-        "symbol": ["A", "B"],
-        "effective_from": [pd.Timestamp("2020-01-01").date()] * 2,
-        "effective_to": [pd.NaT, pd.NaT],
-        "weight": [0.5, 0.5],
-    })
-    feat = build_feature_frame(idx, con, membership, lookback_minutes=5, min_coverage=1.0)
+    feat = build_feature_frame(idx, con, _membership(), lookback_minutes=5, min_coverage=1.0)
     assert not feat.empty
     assert (feat["eligible_members"] == 2).all()
     assert (feat["observed_members"] == 2).all()
@@ -60,7 +63,7 @@ def test_signal_thresholds_are_train_fitted_and_symmetric():
     assert apply_signal(test, t).tolist() == [1, -1, 0]
 
 
-def test_forward_return_enters_next_open_not_decision_close():
+def test_forward_return_enters_exact_next_open_not_decision_close():
     ts = _minute_grid("2024-01-02", 25)
     base = pd.DataFrame({
         "timestamp": ts[:10],
@@ -73,7 +76,6 @@ def test_forward_return_enters_next_open_not_decision_close():
         "eligible_members": 50,
         "observed_members": 50,
         "weight_authority": "HISTORICAL_WEIGHTED",
-        "next_open": 0.0,
     })
     exe = pd.DataFrame({
         "timestamp": ts,
@@ -85,6 +87,23 @@ def test_forward_return_enters_next_open_not_decision_close():
     assert first["entry_open"] == 101.0
     expected = np.log(exe.iloc[15]["close"] / 101.0) * 10000
     assert abs(first["long_gross_bps_15"] - expected) < 1e-9
+
+
+def test_exact_minute_lookback_does_not_substitute_fifth_observed_row():
+    ts = _minute_grid("2024-01-02", 20)
+    missing = ts[3]
+    kept = ts[ts != missing]
+    idx = pd.DataFrame({"timestamp": kept, "open": 100.0, "close": np.arange(len(kept), dtype=float) + 100.0})
+    rows = []
+    for symbol in ("A", "B"):
+        price = np.arange(len(kept), dtype=float) + 100.0
+        rows.extend({"timestamp": t, "symbol": symbol, "open": p, "close": p} for t, p in zip(kept, price))
+    con = pd.DataFrame(rows)
+    feat = build_feature_frame(idx, con, _membership(), lookback_minutes=5, min_coverage=1.0)
+    target = missing + pd.Timedelta(minutes=5)
+    assert target not in set(feat["timestamp"])
+    later_target = ts[9]
+    assert later_target in set(feat["timestamp"])
 
 
 def test_terminal_verdict_fails_closed_without_authority():
