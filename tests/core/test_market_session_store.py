@@ -104,3 +104,16 @@ def test_seal_is_immutable(tmp_path):
     with pytest.raises(SessionMemoryConflict):
         store.persist_completed_bar("NIFTY", _bar(ts + timedelta(minutes=1), 25001))
         store.seal_session("2026-09-07", ["NIFTY"])
+
+
+def test_integrity_detects_deleted_minute_and_out_of_session_row(tmp_path):
+    db_path = tmp_path / "session.sqlite"
+    store = MarketSessionStore(db_path=db_path, report_root=tmp_path / "reports")
+    start = datetime(2026, 9, 7, 9, 15, tzinfo=IST)
+    for idx in range(3):
+        store.persist_completed_bar("NIFTY", _bar(start + timedelta(minutes=idx), 25000 + idx))
+    with store._conn() as conn:
+        conn.execute("DELETE FROM market_session_bars WHERE session_date=? AND symbol=? AND ts_epoch=?", ("2026-09-07", "NIFTY", (start + timedelta(minutes=1)).timestamp()))
+    report = store.verify_integrity("2026-09-07", ["NIFTY"])
+    assert report["status"] == "FAIL"
+    assert any("minute_gap" in failure for failure in report["failures"])
