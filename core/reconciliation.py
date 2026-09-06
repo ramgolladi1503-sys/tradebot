@@ -109,9 +109,9 @@ def _atomic_append_jsonl(path: Path, payload: dict[str, Any]) -> Path:
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=True, sort_keys=True) + "\n")
+    from core.log_writer import get_jsonl_writer
+    if not get_jsonl_writer(path).write(payload):
+        raise OSError("bounded_reconciliation_write_rejected")
     return path
 
 

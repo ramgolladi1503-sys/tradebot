@@ -1,0 +1,9 @@
+CONTROL,EXPECTED
+oversized_depth_item,reject
+malformed_depth_cardinality,reject
+oversized_tick_provenance,reject
+batch_over_1000_rows,reject
+oversized_jsonl_record,reject
+busy_sqlite_checkpoint,reject
+oversized_cas_atomic_artifact,reject
+mount_loss,no_silent_fallback

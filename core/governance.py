@@ -4,6 +4,7 @@ import hashlib
 from datetime import datetime
 from pathlib import Path
 from config import config as cfg
+from core.log_writer import get_jsonl_writer
 
 
 def _sha256_bytes(b: bytes) -> str:
@@ -65,8 +66,8 @@ def append_immutable_ledger(entry: dict, ledger_path: str = str(logs_dir() / "tr
     entry["prev_hash"] = prev_hash
     payload = json.dumps(entry, sort_keys=True, default=str).encode("utf-8")
     entry["hash"] = _sha256_bytes(payload)
-    with path.open("a") as f:
-        f.write(json.dumps(entry, default=str) + "\n")
+    if not get_jsonl_writer(path).write(entry):
+        raise OSError("bounded_governance_write_rejected")
     return entry["hash"]
 
 

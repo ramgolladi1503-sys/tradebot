@@ -8,6 +8,7 @@ from typing import Any, Dict, Tuple
 from config import config as cfg
 from core.paths import logs_dir
 from core.time_utils import now_utc_epoch, now_ist
+from core.log_writer import get_jsonl_writer
 
 
 AUDIT_LOG = Path(getattr(cfg, "AUDIT_LOG_PATH", str(logs_dir() / "audit_log.jsonl")))
@@ -59,8 +60,8 @@ def append_event(event: Dict[str, Any]) -> str:
     prev = _read_last_hash()
     event["prev_hash"] = prev
     event["event_hash"] = _compute_hash(event)
-    with AUDIT_LOG.open("a") as f:
-        f.write(_canonical_json(event) + "\n")
+    if not get_jsonl_writer(AUDIT_LOG).write(event):
+        raise OSError("bounded_audit_write_rejected")
     return event["event_hash"]
 
 

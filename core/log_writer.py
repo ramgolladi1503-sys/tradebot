@@ -6,6 +6,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import threading
 import time
+import os
 from pathlib import Path
 from typing import Dict
 
@@ -22,13 +23,19 @@ class JsonlWriter:
     - Rate-limit error prints to avoid log storms.
     """
 
-    def __init__(self, path: Path, error_cooldown_sec: float = 60.0) -> None:
+    def __init__(self, path: Path, error_cooldown_sec: float = 60.0,
+                 max_record_bytes: int = 64 * 1024,
+                 max_file_bytes: int = 1024 * 1024,
+                 backup_count: int = 3) -> None:
         self.path = Path(path)
         self._lock = threading.Lock()
         self._fh = None
         self._disable_until = 0.0
         self._last_error_ts = 0.0
         self._error_cooldown_sec = float(error_cooldown_sec)
+        self.max_record_bytes = max(1, int(max_record_bytes))
+        self.max_file_bytes = max(self.max_record_bytes, int(max_file_bytes))
+        self.backup_count = max(0, int(backup_count))
 
     def close(self) -> None:
         with self._lock:
@@ -40,10 +47,19 @@ class JsonlWriter:
             if now < self._disable_until:
                 return False
             try:
+                encoded = (json.dumps(payload, ensure_ascii=True, sort_keys=True,
+                                      separators=(",", ":")) + "\n").encode("utf-8")
+                if len(encoded) > self.max_record_bytes:
+                    self._print_error_once(now, "record_bytes_exceeded")
+                    return False
                 if self._fh is None or getattr(self._fh, "closed", False):
                     self.path.parent.mkdir(parents=True, exist_ok=True)
-                    self._fh = self.path.open("a")
-                self._fh.write(json.dumps(payload) + "\n")
+                    self._fh = self.path.open("ab")
+                current = int(self._fh.tell()) if self._fh is not None else 0
+                if current + len(encoded) > self.max_file_bytes:
+                    self._rotate_noexcept()
+                    self._fh = self.path.open("ab")
+                self._fh.write(encoded)
                 self._fh.flush()
                 return True
             except OSError as exc:
@@ -66,6 +82,24 @@ class JsonlWriter:
             pass
         self._fh = None
 
+    def _rotate_noexcept(self) -> None:
+        self._close_noexcept()
+        try:
+            if self.backup_count <= 0:
+                self.path.unlink(missing_ok=True)
+                return
+            oldest = self.path.with_name(self.path.name + f".{self.backup_count}")
+            oldest.unlink(missing_ok=True)
+            for index in range(self.backup_count - 1, 0, -1):
+                source = self.path.with_name(self.path.name + f".{index}")
+                target = self.path.with_name(self.path.name + f".{index + 1}")
+                if source.exists():
+                    os.replace(source, target)
+            if self.path.exists():
+                os.replace(self.path, self.path.with_name(self.path.name + ".1"))
+        except Exception as exc:
+            self._print_error_once(time.time(), f"rotation_failed:{type(exc).__name__}")
+
     def _print_error_once(self, now: float, msg: str) -> None:
         if (now - self._last_error_ts) >= self._error_cooldown_sec:
             logger.warning("jsonl_log_write_error path=%s err=%s", self.path, msg)
@@ -76,12 +110,12 @@ _WRITERS: Dict[str, JsonlWriter] = {}
 _WRITERS_LOCK = threading.Lock()
 
 
-def get_jsonl_writer(path: Path) -> JsonlWriter:
+def get_jsonl_writer(path: Path, **kwargs) -> JsonlWriter:
     key = str(Path(path))
     with _WRITERS_LOCK:
         writer = _WRITERS.get(key)
         if writer is None:
-            writer = JsonlWriter(Path(path))
+            writer = JsonlWriter(Path(path), **kwargs)
             _WRITERS[key] = writer
         return writer
 

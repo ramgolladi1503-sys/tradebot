@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "required": ["session_id", "source_sha", "candidate_sha", "timestamp", "failover_event_id", "old_storage_root", "old_storage_device", "old_storage_epoch", "new_storage_root", "new_storage_device", "new_storage_epoch", "trigger_reason", "last_known_external_cycle_id", "first_internal_cycle_id", "external_final_write_status", "prospective_admission_state", "advisory_state", "broker_write_calls", "broker_order_calls", "orders_placed", "orders_modified", "orders_cancelled"],
+  "immutable": true,
+  "one_way_failover": true,
+  "broker_write_authority": false,
+  "order_authority": false
+}

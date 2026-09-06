@@ -1,0 +1,9 @@
+path,operation,artifact_scope,atomic_or_bounded,inventory_status
+core/tick_store.py,SQLite WAL tick persistence,session DB,bounded queue and shutdown drain,KNOWN
+core/depth_store.py,SQLite depth persistence plus JSONL rejection log,session DB and evidence,bounded queue and shutdown drain,KNOWN
+core/runtime_snapshot_producer.py,atomic JSON snapshots,runtime evidence,atomic replace,KNOWN
+core/sqlite_snapshot_parquet_exporter.py,SQLite backup and Parquet temp files,analytics exports,deadline and atomic replace,KNOWN
+core/read_only_consumer_cycle.py,consumer/evidence snapshots,runtime evidence,atomic writer,KNOWN
+core/kite_read_only_observation_runtime.py,lifecycle and shutdown artifacts,runtime evidence,governed shutdown,KNOWN
+scripts/run_kite_read_only_observation_v1.py,output root and exporter status,session evidence,atomic status writer,KNOWN
+shutdown reserve,complete-session drain amplification,all persistent stores,not measured,UNKNOWN

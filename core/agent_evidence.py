@@ -16,6 +16,7 @@ import tempfile
 from typing import Any, Mapping
 
 from core.paths import ensure_dir, runtime_dir
+from core.log_writer import get_jsonl_writer
 
 
 AGENT_EVIDENCE_SCHEMA_VERSION = 1
@@ -123,9 +124,8 @@ def write_agent_evidence(
         tmp_path = Path(tmp.name)
     tmp_path.replace(latest_path)
 
-    with journal_path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(payload, sort_keys=True, default=str))
-        fh.write("\n")
+    if not get_jsonl_writer(journal_path).write(payload):
+        raise OSError("bounded_agent_evidence_write_rejected")
 
     return AgentEvidenceWriteResult(
         schema_version=AGENT_EVIDENCE_SCHEMA_VERSION,

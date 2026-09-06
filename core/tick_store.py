@@ -15,6 +15,7 @@ from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.time_utils import compute_age_sec, normalize_epoch_seconds, now_utc_epoch
 from core.persistence_durability import record_degradation
+from core.storage_bounds_v37 import MAX_SQLITE_WAL_BYTES, MAX_TICK_ITEM_BYTES, StorageBoundViolation, persistence_batch_bytes, require_item_size, tick_item_bytes
 
 _tick_window = deque(maxlen=200000)
 _LAST_TICK_EPOCH = None
@@ -163,6 +164,8 @@ def _conn():
             conn.execute("PRAGMA busy_timeout=30000")
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA wal_autocheckpoint=1")
+            conn.execute(f"PRAGMA journal_size_limit={MAX_SQLITE_WAL_BYTES}")
         except Exception:
             pass
         with conn:
@@ -607,6 +610,11 @@ def _write_rows(
     if not rows:
         return True
     try:
+        if len(rows) > _flush_batch_size():
+            raise StorageBoundViolation("PERSISTENCE_BATCH_ROW_COUNT_EXCEEDED")
+        persistence_batch_bytes(rows)
+        for row in rows:
+            require_item_size(tick_item_bytes(row), MAX_TICK_ITEM_BYTES, "TICK")
         if worker_owned and _async_db_writes_enabled() and _REPLAY_PRESSURE_HOOK is not None:
             try:
                 _REPLAY_PRESSURE_HOOK(
@@ -637,6 +645,9 @@ def _write_rows(
                 rows,
             )
             conn.commit()
+            checkpoint = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            if checkpoint and int(checkpoint[0] or 0) != 0:
+                raise StorageBoundViolation("SQLITE_WAL_CHECKPOINT_BUSY")
         _AUDIT_COUNTERS["committed_batches"] += 1
         if worker_owned and _async_db_writes_enabled() and _REPLAY_PRESSURE_POST_COMMIT_HOOK is not None:
             try:
@@ -666,6 +677,14 @@ def _write_rows(
             pass
         _WRITE_FLUSH_COUNT += len(rows)
         return True
+    except StorageBoundViolation as exc:
+        _AUDIT_COUNTERS["worker_failures"] += 1
+        record_degradation("tick", "TICK_STORAGE_BOUND_REJECTED")
+        try:
+            _ERROR_LOGGER.write({"ts_epoch": time.time(), "event": "TICK_STORAGE_BOUND_REJECTED", "row_count": len(rows), "error": str(exc)})
+        except Exception:
+            pass
+        return False
     except Exception as exc:
         _AUDIT_COUNTERS["worker_failures"] += 1
         try:
@@ -804,6 +823,12 @@ def _ensure_flush_thread() -> None:
 
 def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float | None, float, str]) -> bool:
     global _WRITE_ENQUEUE_COUNT, _QUEUE_HIGH_WATER, _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS
+    try:
+        require_item_size(tick_item_bytes(row), MAX_TICK_ITEM_BYTES, "TICK")
+    except StorageBoundViolation:
+        record_degradation("tick", "TICK_STORAGE_BOUND_REJECTED")
+        _AUDIT_COUNTERS["worker_failures"] += 1
+        return False
     with _WRITE_QUEUE_LOCK:
         if not _ACCEPTING_WRITES:
             _AUDIT_COUNTERS["writes_rejected_after_shutdown"] += 1

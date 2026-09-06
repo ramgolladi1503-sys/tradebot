@@ -46,6 +46,7 @@ from core.auth_health import get_kite_auth_health
 from core.feed_restart_guard import feed_restart_guard
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped, trip as trip_feed_breaker
 from core.market_data_monitor import get_feed_health_monitor, record_depth, record_tick
+from core.kite_depth_protocol import KiteDepthProtocolViolation, canonicalize_kite_depth
 from core.market_event_graph_live_observation_registry import (
     BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET,
     load_observation_registry,
@@ -6747,6 +6748,14 @@ def on_ticks(ws, ticks):
         )
         symbol = (observation_identity or {}).get("symbol") or (_TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None)
         underlying_tick = _is_underlying_token(token_int)
+        if isinstance(depth, dict) and depth:
+            try:
+                depth = canonicalize_kite_depth(depth)
+                t["depth"] = depth
+            except KiteDepthProtocolViolation:
+                _log_ws("KITE_DEPTH_PROTOCOL_VIOLATION", {"instrument_token": token_int, "reason": "cardinality_or_field"})
+                depth = None
+                t["depth"] = None
         has_depth = _depth_has_bid_ask(depth)
         tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
         tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None

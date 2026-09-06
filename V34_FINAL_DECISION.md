@@ -1,0 +1,28 @@
+# V34 final decision
+
+The acceptance authority passes, but V34 cannot finalize the successor. The primitive register still contains unresolved authoritative bounds inherited from V32: SQLite transaction/WAL, authoritative JSONL records/events, atomic artifacts, queue/batch bytes, burst, and finalization reserves. V34 explicitly forbids deriving these from averages or arbitrary margins. No storage/low-disk contract or successor commit was created.
+
+```text
+PRE_FINAL_ACCEPTANCE_PASS=true
+PRE_FINAL_AX_PASS=true
+UNRESOLVED_AUTHORITATIVE_PRIMITIVES=sqlite_transaction;sqlite_wal_transient;authoritative_jsonl_record;authoritative_jsonl_events;atomic_authoritative_artifact;atomic_temp;tick_queue_item;depth_queue_item;runtime_queue_item;persistence_batch;finalization_artifact
+MATERIAL_WRITER_ADMISSION_COVERAGE=INCOMPLETE
+WAL_BOUND_DERIVABLE=false
+JSONL_CORE_STREAMS_BOUNDED=false
+ATOMIC_ARTIFACT_BOUNDS_COMPLETE=false
+QUEUE_BYTE_BOUNDS_COMPLETE=false
+MAX_BURST_DERIVABLE=false
+EXTERNAL_FINALIZATION_RESERVE_DERIVABLE=false
+INTERNAL_FINALIZATION_RESERVE_DERIVABLE=false
+STORAGE_CONTRACT_FROZEN=false
+LOW_DISK_CONTRACT_FROZEN=false
+SUCCESSOR_IMPLEMENTATION_VALID=false
+SUCCESSOR_CANDIDATE_COMMITTED=false
+SUCCESSOR_CANDIDATE_SHA=UNCOMMITTED
+V34_STORAGE_WORK_MAY_CONTINUE=false
+READY_BLOCKERS=bounded writer restructuring required before any contract or commit
+LIVE_RUN_AUTHORIZED=false
+BROKER_WRITE_CALLS=0
+BROKER_ORDER_CALLS=0
+ORDERS_PLACED=0
+```

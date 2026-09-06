@@ -9,6 +9,7 @@ from config import config as cfg
 from core.events import write_json_atomic
 from core.freshness_evaluator import FreshnessDecision, evaluate_quote_freshness as _evaluate_quote_freshness, freshness_public_fields
 from core.paths import logs_dir
+from core.log_writer import get_jsonl_writer
 
 logger = logging.getLogger(__name__)
 _MIN_PERSIST_EPOCH = 1577836800.0
@@ -55,8 +56,7 @@ def _update_freshness_latest(decision: FreshnessDecision) -> None:
 def _append_freshness_history(decision: FreshnessDecision) -> None:
     path = freshness_decisions_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(decision.to_dict(), ensure_ascii=True, sort_keys=True) + "\n")
+    get_jsonl_writer(path).write(decision.to_dict())
 
 
 def record_freshness_decision(decision: FreshnessDecision) -> None:

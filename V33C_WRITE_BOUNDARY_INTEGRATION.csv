@@ -1,0 +1,8 @@
+writer,before_write_epoch_check,epoch1_destination,old_external_write_blocked,status
+genesis,YES,emergency root,YES,PASS
+minimal journal,CONTRACT_REQUIRED,emergency root,YES,PASS_CONTRACT
+SQLite epoch,CONTRACT_REQUIRED,new internal DB,YES,PASS_CONTRACT
+CAS/funnel,CONTRACT_REQUIRED,STOP_BY_DEFAULT,YES,PASS_CONTRACT
+Parquet,CONTRACT_REQUIRED,STOP,YES,PASS_CONTRACT
+compatibility mirrors,YES,STOP,YES,PASS
+shutdown/seal,CONTRACT_REQUIRED,emergency root or unavailable,YES,PASS_CONTRACT

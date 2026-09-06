@@ -1,0 +1,24 @@
+id,control,expected,executed
+A,ample free space,PASS,no
+B,one byte above protected reserve,PASS,no
+C,exact protected reserve,BLOCKED,no
+D,one byte below reserve,BLOCKED,no
+E,free-space observation missing,UNKNOWN,no
+F,wrong filesystem,UNKNOWN,no
+G,maximum tick queue drain,BLOCKED,no
+H,maximum depth queue drain,BLOCKED,no
+I,maximum WAL transient,BLOCKED,no
+J,blocked checkpoint,BLOCKED,no
+K,maximum atomic artifact,BLOCKED,no
+L,Parquet fits optional budget,PASS,no
+M,Parquet invades reserve,BLOCKED,no
+N,optional debug suppression,DEGRADE,no
+O,core JSONL pressure,BLOCKED,no
+P,concurrent core burst,BLOCKED,no
+Q,bytes/MiB mutation,REJECT,no
+R,storage-contract hash mismatch,REJECT,no
+S,low-disk-contract hash mismatch,REJECT,no
+T,unknown reserve primitive,UNKNOWN,no
+U,mid-run decline,BLOCKED,no
+V,finalization after halt,REQUIRED,no
+W,restart after clean halt,REQUIRED,no

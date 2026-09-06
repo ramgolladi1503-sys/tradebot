@@ -317,6 +317,8 @@ class ObservationLifecycle:
                 "broker_api_called": False,
                 "broker_write_authority": False,
                 "order_authority": False,
+                "storage_authority_lost": reason.startswith("runtime_storage_authority_lost"),
+                "final_seal": __import__("core.runtime_storage_authority", fromlist=["final_seal_status"]).final_seal_status(storage_lost=reason.startswith("runtime_storage_authority_lost"), drain_complete=complete),
                 "allowed_for_live_execution": False,
                 "allowed_for_paper_execution": False,
             }
@@ -324,6 +326,8 @@ class ObservationLifecycle:
 
 
 def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None = None) -> int:
+    from core.runtime_storage_authority import StorageAuthorityError, establish, revalidate
+    storage_authority = establish(volume=Path("/Volumes/TradeBotData"), runtime_root=output_root)
     env = safe_environment()
     contract = safety_contract(env, child_command=[sys.executable, "-B", "core.kite_read_only_observation_runtime.py"])
     output_root.mkdir(parents=True, exist_ok=True)
@@ -359,6 +363,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     scheduler = MegIntervalScheduler()
     meg_cycle_count = 0
     authority_intervals: set[str] = set()
+    storage_loss_reason: str | None = None
     latest_runtime_outputs: Any = {}
     run_id = str(os.environ.get("RUN_ID") or launch_plan.get("run_id") or f"kite-read-only-{session_date}")
     producer_commit = str(
@@ -397,6 +402,16 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
     try:
         while not lifecycle.should_stop():
+            try:
+                revalidate(storage_authority)
+            except StorageAuthorityError as exc:
+                storage_loss_reason = str(exc)
+                try:
+                    (output_root / "RUNTIME_STORAGE_AUTHORITY_LOST").write_text(storage_loss_reason + "\n", encoding="utf-8")
+                except OSError:
+                    pass
+                lifecycle.request_stop("runtime_storage_authority_lost:" + storage_loss_reason)
+                break
             if (output_root / "STOP_REQUESTED").is_file():
                 lifecycle.request_stop("operator_control_file")
                 break
@@ -477,7 +492,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 break
             time.sleep(0.05 if deadline is not None else 1.0)
     finally:
-        if not (output_root / "authority_snapshot.json").is_file():
+        if storage_loss_reason is None and not (output_root / "authority_snapshot.json").is_file():
             write_authority_snapshot_bundle(
                 extract_candidate_rows(latest_runtime_outputs),
                 ledger_path=output_root / "authority_snapshots.jsonl",
@@ -489,16 +504,21 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 cycle_count=meg_cycle_count,
                 producer_commit=producer_commit,
             )
-        report = lifecycle.shutdown()
-        (output_root / "shutdown_drain.json").write_text(
-            json.dumps(report, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
-        )
+        report = lifecycle.shutdown(reason=("runtime_storage_authority_lost:" + storage_loss_reason) if storage_loss_reason else "read_only_observation_shutdown")
+        try:
+            (output_root / "shutdown_drain.json").write_text(
+                json.dumps(report, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
+            )
+        except OSError:
+            if storage_loss_reason is None:
+                raise
         if not report["shutdown_drain_complete"]:
             raise RuntimeError("READ_ONLY_SHUTDOWN_DRAIN_INCOMPLETE")
-        write_json_atomic(output_root / "process_identity.json", {
-            "run_id": run_id, "pid": os.getpid(), "producer_sha": producer_commit,
-            "session_root": str(output_root.resolve()), "state": "STOPPED",
-            "shutdown_drain_complete": bool(report.get("shutdown_drain_complete")),
-            "read_only": True, "order_authority": False, "broker_write_authority": False,
-        })
+        if storage_loss_reason is None:
+            write_json_atomic(output_root / "process_identity.json", {
+                "run_id": run_id, "pid": os.getpid(), "producer_sha": producer_commit,
+                "session_root": str(output_root.resolve()), "state": "STOPPED",
+                "shutdown_drain_complete": bool(report.get("shutdown_drain_complete")),
+                "read_only": True, "order_authority": False, "broker_write_authority": False,
+            })
     return 0

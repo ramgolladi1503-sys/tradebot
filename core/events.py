@@ -11,6 +11,7 @@ import uuid
 from core.paths import logs_dir
 from core.telemetry_streams import append_execution_stream_event
 from core.time_utils import utc_now
+from core.log_writer import get_jsonl_writer
 
 _SENSITIVE_KEYS = {
     "access_token",
@@ -71,8 +72,7 @@ def append_event(
         "event_id": payload_event_id,
         "payload": stored_payload,
     }
-    with target.open("a", encoding="utf-8", buffering=1) as handle:
-        handle.write(json.dumps(event, ensure_ascii=True, sort_keys=True) + "\n")
+    get_jsonl_writer(target).write(event)
     try:
         append_execution_stream_event(
             {

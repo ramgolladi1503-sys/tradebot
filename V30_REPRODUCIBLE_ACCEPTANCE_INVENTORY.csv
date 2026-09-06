@@ -1,0 +1,3 @@
++TEST_FAMILY_ID,FILES,NODE_IDS_OR_SELECTION,COMMAND,TEST_COUNT,PRIMARY_GATE,OVERLAPS_WITH,INDEPENDENT_EVIDENCE_VALUE,REQUIRED_FOR_SUCCESSOR
+V23_AX_HARNESS,tests/test_v23_production_equivalent_harness.py,exact file selection,pytest -q tests/test_v23_production_equivalent_harness.py,47,A production-path A-X,NONE,production call-graph harness,true
+PROSPECTIVE_COMPANION_GROUP,listed CAS/runtime/future/shutdown/storage files,exact manifest below,pytest -q -o addopts= <manifest>,71,B-O,0,CAS/runtime/future/shutdown/storage evidence,true

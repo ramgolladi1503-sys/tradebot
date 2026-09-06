@@ -58,9 +58,9 @@ def advisory_row_corruption_log_path() -> Path:
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, sort_keys=True, default=str) + "\n")
+    from core.log_writer import get_jsonl_writer
+    if not get_jsonl_writer(path).write(payload):
+        raise OSError("bounded_advisory_corruption_write_rejected")
 
 
 def log_corrupt_advisory_row(row: dict[str, Any], reason: str) -> None:

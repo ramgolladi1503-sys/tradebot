@@ -1,0 +1,7 @@
+ATTEMPT,PRIMITIVE,APPROACH,RESULT,EVIDENCE
+1,depth_queue,protocol canonicalization plus envelope size,PASS,core/storage_bounds_v37.py
+2,tick_queue,canonical row admission,PASS,core/storage_bounds_v37.py
+3,persistence_batch,row count plus logical byte sum,PASS,core/storage_bounds_v37.py
+4,jsonl,shared bounded rotating writer,PASS_FOR_ROUTED_WRITERS,core/log_writer.py
+5,sqlite_wal,autocheckpoint journal limit and truncate checkpoint,PASS_FOR_TICK_STORE,core/tick_store.py
+6,cas_artifacts,atomic publication with 1 MiB cap,PASS,core/read_only_consumer_cycle.py

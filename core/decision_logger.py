@@ -18,6 +18,7 @@ import os
 import copy
 
 from core.persistence_state_compression import should_write_persistent_state, record_written_state
+from core.log_writer import get_jsonl_writer
 
 logger = logging.getLogger(__name__)
 
@@ -317,8 +318,8 @@ def log_decision(event: Dict[str, Any]):
     event["event_hash"] = _compute_event_hash(event)
 
     DECISION_JSONL.parent.mkdir(parents=True, exist_ok=True)
-    with DECISION_JSONL.open("a") as f:
-        f.write(_canonical_json(event) + "\n")
+    if not get_jsonl_writer(DECISION_JSONL).write(event):
+        raise OSError("bounded_decision_write_rejected")
 
     if not should_write_persistent_state(event, "decision_events"):
         return trade_id

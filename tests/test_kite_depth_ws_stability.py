@@ -541,10 +541,10 @@ def test_on_ticks_updates_index_quote_cache_from_underlying_depth(monkeypatch):
             {
                 "instrument_token": 101,
                 "last_price": 101.0,
-                "depth": {
-                    "buy": [{"price": 100.0, "quantity": 10}],
-                    "sell": [{"price": 102.0, "quantity": 12}],
-                },
+                    "depth": {
+                        "buy": [{"price": 100.0 + i, "quantity": 10, "orders": 1} for i in range(5)],
+                        "sell": [{"price": 102.0 + i, "quantity": 12, "orders": 1} for i in range(5)],
+                    },
                 "exchange_timestamp": datetime(2026, 2, 19, 9, 30, tzinfo=timezone.utc),
             }
         ],
@@ -594,10 +594,10 @@ def test_on_ticks_updates_symbol_ltp_and_depth_timestamps(monkeypatch):
                 "instrument_token": 101,
                 "last_price": 25001.0,
                 "exchange_timestamp": depth_ts,
-                "depth": {
-                    "buy": [{"price": 25000.0, "quantity": 12}],
-                    "sell": [{"price": 25002.0, "quantity": 9}],
-                },
+                    "depth": {
+                        "buy": [{"price": 25000.0 + i, "quantity": 12, "orders": 1} for i in range(5)],
+                        "sell": [{"price": 25002.0 + i, "quantity": 9, "orders": 1} for i in range(5)],
+                    },
             }
         ],
     )

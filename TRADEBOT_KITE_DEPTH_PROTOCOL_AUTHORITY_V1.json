@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "broker": "Zerodha Kite Connect",
+  "api_version": "v3",
+  "source_urls": ["https://kite.trade/docs/connect/v3/websocket/", "https://github.com/zerodha/pykiteconnect/blob/master/kiteconnect/ticker.py"],
+  "full_mode_packet_bytes": 184,
+  "depth_region": {"start": 64, "end": 184},
+  "depth_entry_wire_bytes": 12,
+  "depth_levels_per_side": 5,
+  "total_depth_levels": 10,
+  "active_client_package": "kiteconnect",
+  "active_client_version": "5.2.0",
+  "active_parser_sha256": "5b491b554eb31f419ef8bdc93ae26672f1f6fd162eb6acefa83706eb29f6f87d",
+  "canonical_schema": "KiteTop5DepthV1",
+  "fields": ["quantity", "price", "orders"],
+  "violation_behavior": "reject_without_truncation",
+  "live_source": "KITE_CONNECT_V3_WEBSOCKET_FULL",
+  "full_exchange_order_book": false
+}

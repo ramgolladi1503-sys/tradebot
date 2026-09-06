@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "authority": "PROSPECTIVE",
+  "base_candidate_sha": "f44e637f4fea04dd824f47cf4a0202840be3ff1d",
+  "frozen_cas_spec_sha": "6567c832f26976d6a4ff71e2532dd125bf09888324e463750a8817c094b7bb6c",
+  "historical_v24_93_replacement": false,
+  "node_manifest_sha256": "5e4cbc7761aae6d4145ce9e7761f3d4ecf292b1a67160910dc1822d81f75e60f",
+  "commands": [
+    "pytest -q -o addopts= <V30_ACCEPTANCE_NODE_MANIFEST.txt>",
+    "python3 -m compileall -q core scripts"
+  ],
+  "zero_failures": true,
+  "zero_skips": true,
+  "required_validators": [
+    "core.low_disk_safety_gate.validate_contract"
+  ],
+  "gate_coverage": "V30_ACCEPTANCE_GATE_COVERAGE_MATRIX.csv",
+  "safety_counters": {
+    "broker_write_authority": false,
+    "order_authority": false,
+    "orders": 0
+  },
+  "future_leakage_gate": true,
+  "shutdown_gate": true,
+  "storage_gate": "BOUNDED_PROBES_ONLY_NOT_RELEASE_AUTHORITY"
+}

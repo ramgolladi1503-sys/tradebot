@@ -1,0 +1,9 @@
+control,expected_result,observed_or_required,status
+missing expected volume,fail closed,no fallback required,REQUIRED
+runtime root resolves outside volume,fail closed,no fallback required,REQUIRED
+device ID differs from volume,fail closed,no fallback required,REQUIRED
+runtime root not writable,fail closed,no fallback required,REQUIRED
+same-directory temp creation fails,fail closed,no system temp fallback,REQUIRED
+compatibility mirror points to source checkout,block live start,repo_logs_dir risk identified,BLOCKED
+offline tempfile in test,allowed only offline,no live authority,OUT_OF_SCOPE
+explicit external temp file,same device as volume,16777240 equals 16777240,PASS

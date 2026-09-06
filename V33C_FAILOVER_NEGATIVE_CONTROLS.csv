@@ -1,0 +1,29 @@
+control,expected,status,evidence
+A_external_healthy,epoch0,PASS,unit and V33B verifier
+B_external_disappears,epoch1 or shutdown,PASS_SIMULATED,state machine test
+C_device_changes,fail closed,PASS_SIMULATED,authority test
+D_read_only_external,failover trigger,PASS_SIMULATED,temp fault test
+E_statvfs_fails,fail closed,PASS_SIMULATED,statvfs fault test
+F_external_write_fails,failover trigger,PASS_SIMULATED,contract
+G_internal_valid,preflight pass,PASS,emergency test
+H_internal_not_writable,shutdown,PASS_SIMULATED,preflight fault contract
+I_internal_stat_fails,shutdown,PASS_SIMULATED,preflight contract
+J_internal_below_reserve,shutdown,BLOCKED,reserve not bounded by V33
+K_genesis_write_fails,shutdown,PASS,immutable genesis contract
+L_external_sqlite_disappears,do not copy,PASS,NEW_DB_EPOCH contract
+M_new_internal_db_epoch,epoch1,PASS_SIMULATED,state machine test
+N_no_old_external_writes,blocked,PASS_CONTRACT,one-way model
+O_repo_logs_zero,zero,PASS,V33B redirect
+P_no_tmp_core_writes,blocked,PASS,same-device authority
+Q_parquet_stops,stop,PASS,writer matrix
+R_debug_stops,stop,PASS,writer matrix
+S_risk_halt_preserved,preserve,PASS_CONTRACT,writer matrix
+T_advisory_disabled,disabled,PASS,state genesis
+U_admission_false,false,PASS,state genesis
+V_one_way,true,PASS,state machine test
+W_no_auto_failback,true,PASS,policy
+X_clean_shutdown,sealed or unavailable,PASS_CONTRACT,seal status helper
+Y_source_disappears,shutdown-only,RESOLVED_CONSERVATIVE,source analysis
+Z_cross_epoch_reconcile,verifier required,BLOCKED,verifier not yet implemented
+AA_emergency_symlink,reject,PASS,preflight realpath
+AB_emergency_device_change,reject,PASS_SIMULATED,device test

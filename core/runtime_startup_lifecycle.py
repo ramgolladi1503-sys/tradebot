@@ -9,6 +9,7 @@ from typing import Any, Mapping
 from core.events import write_json_atomic
 from core.paths import logs_dir
 from core.runtime_boot_identity import classify_runtime_payload_freshness, stamp_runtime_payload
+from core.log_writer import get_jsonl_writer
 
 LATEST_NAME = "runtime_startup_lifecycle_latest.json"
 EVENTS_NAME = "runtime_startup_lifecycle.jsonl"
@@ -170,8 +171,7 @@ def record_runtime_startup_event(
         writer="runtime_startup_lifecycle.event",
     )
 
-    with events_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(event_payload, sort_keys=True, default=str) + "\n")
+    get_jsonl_writer(events_path).write(event_payload)
 
     previous = _read_json(latest_path)
     events = _current_run_events(previous)

@@ -9,6 +9,7 @@ from typing import Any, Iterable, Mapping
 from config import config as cfg
 from core.paths import desk_logs_dir
 from core.time_utils import now_ist, now_utc_epoch
+from core.log_writer import get_jsonl_writer
 
 
 def _desk_id(desk_id: str | None = None) -> str:
@@ -70,9 +71,8 @@ def compute_candidate_id(payload: Mapping[str, Any]) -> str:
 
 
 def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(dict(payload), ensure_ascii=True, default=_json_default, separators=(",", ":")) + "\n")
+    if not get_jsonl_writer(path).write(dict(payload)):
+        raise OSError("bounded_telemetry_write_rejected")
 
 
 def append_candidate_stream_event(payload: Mapping[str, Any], *, desk_id: str | None = None) -> dict[str, Any]:
@@ -151,4 +151,3 @@ def iter_recent_events(
         out.append(payload)
     out.reverse()
     return out
-

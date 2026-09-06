@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "verdict_semantics": ["PASS", "BLOCKED", "UNKNOWN"],
+  "formula": "required_free_bytes = baseline_bytes + remaining_session_growth_bytes + peak_transient_bytes + shutdown_reserve_bytes",
+  "growth_formula": "remaining_session_growth_bytes = floor(observed_bytes_per_second * remaining_session_seconds)",
+  "observed_bytes": 105265039,
+  "observed_duration_hours": 8.619190410839186,
+  "observed_bytes_per_second": 3392.463470158,
+  "remaining_session_seconds": 22500,
+  "peak_transient_bytes": 120190,
+  "shutdown_reserve_bytes": 106496,
+  "measurement_status": "PARTIAL_SESSION_BASELINE_PLUS_BOUNDED_EXPORT_AND_SHUTDOWN_PROBES",
+  "fail_closed": true,
+  "deletion_allowed": false,
+  "order_authority": false,
+  "broker_write_authority": false
+}
