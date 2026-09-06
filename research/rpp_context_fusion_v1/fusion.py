@@ -32,12 +32,7 @@ GOVERNED_SPECIAL_SESSIONS = {
 
 @dataclass(frozen=True)
 class FusionConfig:
-    """Frozen, non-optimized context filter layered on causal RPP V2 events.
-
-    The filter is deliberately small. It does not search thresholds or event
-    subtypes. RPP supplies location/interaction; independent same-time market
-    context decides whether that interaction is directionally supported.
-    """
+    """Frozen, non-optimized context filter layered on causal RPP V2 events."""
 
     context_lookback_minutes: int = 5
     breadth_abs_min: float = 0.40
@@ -65,8 +60,6 @@ class FusionConfig:
 
     bootstrap_repetitions: int = 2000
     bootstrap_seed: int = 20260906
-
-    # RPP V2 remains structurally frozen. Only the cost proxy is synchronized.
     rpp: RPPV2Config = field(default_factory=RPPV2Config)
 
     def rpp_config(self) -> RPPV2Config:
@@ -95,6 +88,8 @@ def sha256_path(path: str | Path) -> str:
 
 def _read_table(path: str | Path) -> pd.DataFrame:
     p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(p)
     if p.suffix.lower() == ".csv":
         return pd.read_csv(p)
     if p.suffix.lower() in {".parquet", ".pq"}:
@@ -119,8 +114,13 @@ def _truthy(series: pd.Series) -> pd.Series:
     return series.fillna(False).astype(str).str.strip().str.lower().isin({"1", "true", "yes", "y"})
 
 
+def _is_nifty_index_symbol(series: pd.Series) -> pd.Series:
+    s = series.astype(str).str.upper().str.replace("_", " ", regex=False).str.strip()
+    return s.isin({"NIFTY", "NIFTY50", "NIFTY 50"})
+
+
 def load_governed_panel(path: str | Path) -> pd.DataFrame:
-    """Load the physical long panel and fail closed on synthetic/mock/fallback rows."""
+    """Load physical long panel and fail closed on synthetic/mock/fallback rows."""
     raw = _read_table(path).copy()
     lower = {str(c).lower(): c for c in raw.columns}
     ts_col = next((lower[k] for k in ("timestamp", "datetime", "ts") if k in lower), None)
@@ -151,38 +151,42 @@ def load_governed_panel(path: str | Path) -> pd.DataFrame:
     return out.sort_values(["timestamp", "symbol"]).reset_index(drop=True)
 
 
-def _exact_return(group: pd.DataFrame, lookback_minutes: int) -> pd.Series:
-    g = group.sort_values("timestamp")
-    lag_close = g["close"].shift(1)
-    lag_ts = g["timestamp"].shift(1)
-    # The physical campaign is 5-minute. For a different requested lookback,
-    # use an exact self-merge path rather than silently treating minutes as bars.
-    if lookback_minutes != 5:
-        lag = g[["timestamp", "close"]].copy()
-        lag["timestamp"] = lag["timestamp"] + pd.Timedelta(minutes=lookback_minutes)
-        lag = lag.rename(columns={"close": "lag_close"})
-        m = g[["timestamp", "close"]].merge(lag, on="timestamp", how="left")
-        ret = np.log(m["close"] / m["lag_close"])
-        ret.index = g.index
-        return ret
-    exact = (g["timestamp"] - lag_ts) == pd.Timedelta(minutes=5)
-    ret = np.log(g["close"] / lag_close).where(exact)
-    ret.index = g.index
-    return ret
+def _attach_exact_clock_return(
+    frame: pd.DataFrame,
+    lookback_minutes: int,
+    key_columns: list[str],
+    output_column: str,
+) -> pd.DataFrame:
+    """Attach T/T-lookback log return only when the exact prior clock bar exists."""
+    if lookback_minutes <= 0:
+        raise ValueError("lookback_minutes_must_be_positive")
+    base = frame.sort_values([*key_columns, "timestamp"]).copy()
+    lag = base[[*key_columns, "timestamp", "close"]].copy()
+    lag["timestamp"] = lag["timestamp"] + pd.Timedelta(minutes=lookback_minutes)
+    lag = lag.rename(columns={"close": "_lag_close"})
+    merged = base.merge(
+        lag,
+        on=[*key_columns, "timestamp"],
+        how="left",
+        validate="one_to_one",
+    )
+    merged[output_column] = np.log(merged["close"] / merged["_lag_close"])
+    return merged.drop(columns=["_lag_close"])
 
 
 def build_constituent_context(panel: pd.DataFrame, prices: pd.DataFrame, cfg: FusionConfig) -> pd.DataFrame:
     """Build exact-clock, same-session unweighted breadth with no future data."""
     p = panel.copy()
-    nifty_mask = p["symbol"].eq("NIFTY")
-    constituents = p.loc[~nifty_mask].copy()
+    constituents = p.loc[~_is_nifty_index_symbol(p["symbol"])].copy()
     if constituents.empty:
         raise ValueError("no_constituent_rows")
 
-    constituents["ret"] = constituents.groupby(["session", "symbol"], group_keys=False).apply(
-        lambda g: _exact_return(g, cfg.context_lookback_minutes),
-        include_groups=False,
-    ).reset_index(level=[0, 1], drop=True)
+    constituents = _attach_exact_clock_return(
+        constituents,
+        cfg.context_lookback_minutes,
+        ["session", "symbol"],
+        "ret",
+    )
 
     current_count = constituents.groupby("timestamp")["symbol"].nunique().rename("constituent_count")
     valid = constituents.dropna(subset=["ret"]).copy()
@@ -193,25 +197,24 @@ def build_constituent_context(panel: pd.DataFrame, prices: pd.DataFrame, cfg: Fu
         constituent_dispersion_bps=("ret", lambda s: float(np.std(s, ddof=0) * 10000.0)),
     )
     context = current_count.to_frame().join(agg, how="left").reset_index()
+    context["session"] = context["timestamp"].dt.date
     context["exact_return_count"] = context["exact_return_count"].fillna(0).astype(int)
     context["exact_return_coverage"] = context["exact_return_count"] / context["constituent_count"].clip(lower=1)
 
-    # Exact-clock NIFTY momentum is independent directional context. It is not
-    # sourced from the RPP state machine's approach-momentum field.
-    n = prices[["timestamp", "session", "close"]].copy().sort_values("timestamp")
-    n["lag_ts"] = n.groupby("session")["timestamp"].shift(1)
-    n["lag_close"] = n.groupby("session")["close"].shift(1)
-    if cfg.context_lookback_minutes == 5:
-        exact = (n["timestamp"] - n["lag_ts"]) == pd.Timedelta(minutes=5)
-        n["nifty_context_return_bps"] = np.log(n["close"] / n["lag_close"]).where(exact) * 10000.0
-    else:
-        lag = n[["timestamp", "session", "close"]].copy()
-        lag["timestamp"] = lag["timestamp"] + pd.Timedelta(minutes=cfg.context_lookback_minutes)
-        lag = lag.rename(columns={"close": "lag_exact_close"})
-        n = n.merge(lag[["timestamp", "session", "lag_exact_close"]], on=["timestamp", "session"], how="left")
-        n["nifty_context_return_bps"] = np.log(n["close"] / n["lag_exact_close"]) * 10000.0
-
-    context = context.merge(n[["timestamp", "session", "nifty_context_return_bps"]], on="timestamp", how="left")
+    n = prices[["timestamp", "session", "close"]].copy()
+    n = _attach_exact_clock_return(
+        n,
+        cfg.context_lookback_minutes,
+        ["session"],
+        "_nifty_log_return",
+    )
+    n["nifty_context_return_bps"] = n["_nifty_log_return"] * 10000.0
+    context = context.merge(
+        n[["timestamp", "session", "nifty_context_return_bps"]],
+        on=["timestamp", "session"],
+        how="left",
+        validate="one_to_one",
+    )
     return context.sort_values("timestamp").reset_index(drop=True)
 
 
@@ -238,8 +241,7 @@ def enrich_events_with_context(events: pd.DataFrame, context: pd.DataFrame, cfg:
     base = events.merge(context, on=["timestamp", "session"], how="left", validate="many_to_one")
     base["fusion_eligible"] = _alignment_mask(base, cfg)
 
-    # Negative control: use context known 30 minutes earlier. This preserves
-    # causality while deliberately destroying contemporaneous alignment.
+    # Negative control uses only context already known 30 minutes earlier.
     lagged = context.copy()
     lagged["timestamp"] = lagged["timestamp"] + pd.Timedelta(minutes=cfg.lagged_context_minutes)
     rename = {
