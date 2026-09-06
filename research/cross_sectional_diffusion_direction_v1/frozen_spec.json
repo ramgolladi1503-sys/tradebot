@@ -1,0 +1,61 @@
+{
+  "campaign_id": "HYP_CROSS_SECTIONAL_DIFFUSION_DIRECTION_V1",
+  "spec_version": "1.0.0",
+  "claim_type": "DERIVED_EXECUTABLE_HYPOTHESIS",
+  "external_exact_strategy_claim": false,
+  "prediction_target": {
+    "primary_horizon_minutes": 15,
+    "secondary_horizon_minutes": 30,
+    "direction": true,
+    "entry_rule": "NEXT_MINUTE_OPEN_AFTER_DECISION_CLOSE",
+    "exit_rule": "EXECUTION_SERIES_CLOSE_AT_HORIZON"
+  },
+  "features": {
+    "lookback_minutes": 5,
+    "breadth": "SUM_i(w_i * SIGN(LOG(C_i_t / C_i_t-5)))",
+    "impulse": "SUM_i(w_i * LOG(C_i_t / C_i_t-5))",
+    "index_return": "LOG(NIFTY_C_t / NIFTY_C_t-5)",
+    "diffusion_gap": "impulse - index_return",
+    "minimum_constituent_coverage": 0.8
+  },
+  "signal": {
+    "long": "breadth >= train_breadth_long AND impulse > 0 AND diffusion_gap >= train_gap_long",
+    "short": "breadth <= train_breadth_short AND impulse < 0 AND diffusion_gap <= train_gap_short"
+  },
+  "parameter_family": {
+    "breadth_quantiles": [0.8, 0.9],
+    "gap_quantiles": [0.75, 0.9],
+    "selection_scope": "TRAIN_ONLY",
+    "selection_objective": "SESSION_EQUAL_AFTER_COST_MEAN_BPS"
+  },
+  "wfa": {
+    "train_years": 3,
+    "test_years": 1,
+    "event_deoverlap": "HORIZON_MINUTES"
+  },
+  "controls": {
+    "index_only_baseline": "FREQUENCY_MATCHED_5M_NIFTY_MOMENTUM",
+    "negative_control": "30_MINUTE_LAGGED_CONSTITUENT_FEATURES"
+  },
+  "costs": {
+    "roundtrip_cost_bps": "REQUIRED_CLI_INPUT",
+    "zero_cost_allowed": false
+  },
+  "authority": {
+    "historical_membership_required_for_certification": true,
+    "current_constituent_survivorship_backfill_allowed_for_certification": false,
+    "tradable_execution_series_required_for_certification": true,
+    "input_sha256_binding": true
+  },
+  "terminal_positive_gates": {
+    "min_oos_events": 100,
+    "min_oos_sessions": 50,
+    "session_bootstrap_ci_lower_net_bps_gt": 0.0,
+    "min_positive_fold_fraction": 0.6,
+    "max_single_positive_fold_profit_share": 0.5,
+    "lagged_control_max_fraction_of_main_estimate": 0.5,
+    "must_beat_index_only_baseline": true
+  },
+  "primary_verdict_positive": "CERTIFIED_DIRECTIONAL_EXECUTION_EDGE",
+  "primary_verdict_negative": "NO_CERTIFIED_TRADABLE_EDGE"
+}
