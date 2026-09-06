@@ -222,7 +222,13 @@ class MarketSessionStore:
                 "as_of_epoch": float(when.timestamp()), "as_of_ist": when.isoformat(), "payload": compact}
         text = _json(body); digest = _sha(text)
         with self._lock, self._conn() as conn:
-            conn.execute("INSERT INTO market_session_features VALUES(?,?,?,?,?,?) ON CONFLICT(session_date,symbol,as_of_epoch) DO UPDATE SET as_of_ist=excluded.as_of_ist,payload_json=excluded.payload_json,payload_hash=excluded.payload_hash",
+            existing = conn.execute("SELECT payload_hash FROM market_session_features WHERE session_date=? AND symbol=? AND as_of_epoch=?",
+                                    (body["session_date"], sym, body["as_of_epoch"])).fetchone()
+            if existing:
+                if str(existing["payload_hash"]) != digest:
+                    raise SessionMemoryConflict(f"immutable_feature_conflict:{body['session_date']}:{sym}:{body['as_of_ist']}")
+                return {"status": "EXISTS", "payload_hash": digest}
+            conn.execute("INSERT INTO market_session_features VALUES(?,?,?,?,?,?)",
                          (body["session_date"], sym, body["as_of_epoch"], body["as_of_ist"], text, digest))
         return {"status": "OK", "payload_hash": digest}
 
@@ -312,7 +318,12 @@ class MarketSessionStore:
         hashes = {"session_manifest.json": hashlib.sha256(manifest_path.read_bytes()).hexdigest(), "bars_1m.jsonl": hashlib.sha256(bars_path.read_bytes()).hexdigest(), "manifest_payload_sha256": digest}
         hashes_path = out/"SHA256SUMS.json"; hashes_path.write_text(json.dumps(hashes, indent=2, sort_keys=True)+"\n", encoding="utf-8")
         with self._lock, self._conn() as conn:
-            conn.execute("INSERT INTO market_session_seals VALUES(?,?,?,?) ON CONFLICT(session_date) DO UPDATE SET sealed_at_epoch=excluded.sealed_at_epoch,manifest_json=excluded.manifest_json,manifest_hash=excluded.manifest_hash", (day, manifest["sealed_at_epoch"], text, digest))
+            existing = conn.execute("SELECT manifest_hash FROM market_session_seals WHERE session_date=?", (day,)).fetchone()
+            if existing:
+                if str(existing["manifest_hash"]) != digest:
+                    raise SessionMemoryConflict(f"immutable_seal_conflict:{day}")
+            else:
+                conn.execute("INSERT INTO market_session_seals VALUES(?,?,?,?)", (day, manifest["sealed_at_epoch"], text, digest))
         return {"status": "PASS" if integrity["status"] == "PASS" else "FAIL", "session_date": day, "readiness": manifest["readiness"], "manifest_path": str(manifest_path), "bars_path": str(bars_path), "hashes_path": str(hashes_path), "manifest_payload_sha256": digest, "integrity": integrity}
 
     def verify_seal(self, session_date: str) -> dict[str, Any]:
@@ -327,8 +338,7 @@ class MarketSessionStore:
 def _default_store() -> MarketSessionStore | None:
     if not bool(getattr(cfg, "MARKET_SESSION_MEMORY_ENABLE", True)): return None
     if str(os.getenv("MARKET_SESSION_MEMORY_DISABLE", "")).strip().lower() in {"1", "true", "yes"}: return None
-    try: return MarketSessionStore()
-    except Exception: return None
+    return MarketSessionStore()
 
 
 market_session_store = _default_store()

@@ -50,7 +50,7 @@ def _persist(buffer, symbol: str, bar: dict, *, allow_historical_seed: bool = Fa
         result = store.persist_completed_bar(symbol, bar)
         return {"persisted": bool(result.get("persisted")), "status": str(result.get("status") or "UNKNOWN")}
     except Exception as exc:
-        return {"persisted": False, "status": f"PERSIST_FAILED:{type(exc).__name__}:{exc}"}
+        raise RuntimeError(f"session_memory_persist_failed:{type(exc).__name__}:{exc}") from exc
 
 
 def _install_ohlc_contract() -> None:
@@ -108,8 +108,8 @@ def _install_ohlc_contract() -> None:
             for row in local:
                 merged[row.get("ts")] = dict(row)
             return [merged[key] for key in sorted(merged) if key is not None]
-        except Exception:
-            return local
+        except Exception as exc:
+            raise RuntimeError(f"session_memory_read_failed:{type(exc).__name__}:{exc}") from exc
 
     def get_session_bars(self, symbol, *, as_of, timeframe="1m"):
         store = getattr(self, "_session_store", None)

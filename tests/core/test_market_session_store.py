@@ -86,3 +86,21 @@ def test_store_reopens_with_same_durable_history_and_seal_verifies(tmp_path):
     sealed = reopened.seal_session("2026-09-07", ["NIFTY"])
     assert sealed["status"] == "PASS"
     assert reopened.verify_seal("2026-09-07")["status"] == "PASS"
+
+
+def test_feature_snapshot_is_immutable(tmp_path):
+    store = MarketSessionStore(db_path=tmp_path / "session.sqlite", report_root=tmp_path / "reports")
+    ts = datetime(2026, 9, 7, 10, 0, tzinfo=IST)
+    assert store.persist_feature_snapshot("NIFTY", as_of=ts, payload={"regime": "TREND"})["status"] == "OK"
+    with pytest.raises(SessionMemoryConflict):
+        store.persist_feature_snapshot("NIFTY", as_of=ts, payload={"regime": "RANGE"})
+
+
+def test_seal_is_immutable(tmp_path):
+    store = MarketSessionStore(db_path=tmp_path / "session.sqlite", report_root=tmp_path / "reports")
+    ts = datetime(2026, 9, 7, 9, 15, tzinfo=IST)
+    store.persist_completed_bar("NIFTY", _bar(ts, 25000))
+    assert store.seal_session("2026-09-07", ["NIFTY"])["status"] == "PASS"
+    with pytest.raises(SessionMemoryConflict):
+        store.persist_completed_bar("NIFTY", _bar(ts + timedelta(minutes=1), 25001))
+        store.seal_session("2026-09-07", ["NIFTY"])
