@@ -17,6 +17,11 @@ from research.cross_sectional_diffusion_direction_v1.campaign import (
     build_feature_frame,
     fit_thresholds,
 )
+from research.cross_sectional_diffusion_direction_v1.session_wfa import (
+    SessionCampaignConfig,
+    assess_session_terminal_verdict,
+    session_windows,
+)
 
 
 def _minute_grid(day: str, n: int = 60):
@@ -106,9 +111,22 @@ def test_exact_minute_lookback_does_not_substitute_fifth_observed_row():
     assert later_target in set(feat["timestamp"])
 
 
+def test_session_windows_create_multiple_oos_folds_without_calendar_year_dependency():
+    sessions = pd.date_range("2023-01-02", periods=600, freq="B").date
+    frame = pd.DataFrame({
+        "session": sessions,
+        "timestamp": pd.to_datetime([f"{d} 09:20" for d in sessions]).tz_localize("Asia/Kolkata"),
+    })
+    windows = session_windows(frame, 252, 63, 63)
+    assert len(windows) == 5
+    assert len(windows[0][0]) == 252
+    assert len(windows[0][1]) == 63
+    assert set(windows[0][0]).isdisjoint(windows[0][1])
+
+
 def test_terminal_verdict_fails_closed_without_authority():
-    from research.cross_sectional_diffusion_direction_v1.campaign import assess_terminal_verdict
     cfg = CampaignConfig(min_oos_events=1, min_oos_sessions=1, bootstrap_repetitions=10)
+    from research.cross_sectional_diffusion_direction_v1.campaign import assess_terminal_verdict
     result = {
         "status": "COMPLETE",
         "oos_event_count": 10,
@@ -125,3 +143,23 @@ def test_terminal_verdict_fails_closed_without_authority():
     assert verdict == "NO_CERTIFIED_TRADABLE_EDGE"
     assert "HISTORICAL_MEMBERSHIP_NOT_AUTHORITATIVE" in blockers
     assert "EXECUTION_SERIES_NOT_AUTHORITATIVE" in blockers
+
+
+def test_session_verdict_requires_multiple_folds_and_authority():
+    cfg = SessionCampaignConfig(min_oos_folds=4, min_oos_events=1, min_oos_sessions=1, bootstrap_repetitions=10)
+    result = {
+        "status": "COMPLETE",
+        "folds": [{"fold_id": 1}],
+        "oos_event_count": 10,
+        "oos_session_count": 10,
+        "session_bootstrap": {"estimate": 2.0, "ci_lower": 0.5, "ci_upper": 3.0},
+        "lagged_control_bootstrap": {"estimate": 0.1, "ci_lower": -1.0, "ci_upper": 1.0},
+        "index_only_baseline_bootstrap": {"estimate": 0.5, "ci_lower": -0.5, "ci_upper": 1.5},
+        "positive_fold_fraction": 1.0,
+        "max_single_fold_profit_share": 0.4,
+    }
+    verdict, blockers = assess_session_terminal_verdict(
+        result, cfg=cfg, membership_authoritative=True, execution_authoritative=True
+    )
+    assert verdict == "NO_ROBUST_AFTER_COST_DIRECTIONAL_EDGE"
+    assert "INSUFFICIENT_OOS_FOLDS" in blockers
