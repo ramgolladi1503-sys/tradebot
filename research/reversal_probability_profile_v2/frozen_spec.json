@@ -1,0 +1,94 @@
+{
+  "campaign_id": "RPP_NIFTY_ZONE_INTERACTION_V2",
+  "spec_version": "2.0.0",
+  "source_concept": "Reversal Probability Profile [AlgoAlpha]",
+  "source_url": "https://www.tradingview.com/script/ZWLdxZtM-Reversal-Probability-Profile-AlgoAlpha/",
+  "interpretation": {
+    "primary_role": "market_memory_price_location_engine",
+    "relative_density_is_calibrated_probability": false,
+    "forecast_requires_current_price_interaction": true,
+    "same_bar_zone_reselection_allowed": false,
+    "pivot_backdating_allowed": false
+  },
+  "profile": {
+    "pivot_left": 5,
+    "pivot_right": 5,
+    "profile_bins": 64,
+    "smoothing_radius_bins": 2,
+    "min_profile_pivots": 20,
+    "pivot_memory": 120,
+    "lookback_sessions": 3
+  },
+  "interaction": {
+    "atr_window_minutes": 30,
+    "approach_window_minutes": 10,
+    "zone_search_distance_atr": 2.0,
+    "touch_radius_atr": 0.2,
+    "rejection_margin_atr": 0.05,
+    "breakout_margin_atr": 0.1,
+    "acceptance_bars": 2,
+    "reclaim_touch_radius_atr": 0.2,
+    "min_event_density": 0.65,
+    "high_density_diagnostic": 0.8,
+    "states": [
+      "NO_DECISION",
+      "REJECTED",
+      "BROKEN",
+      "ACCEPTED",
+      "RECLAIMED"
+    ],
+    "forecast_states": [
+      "REJECTED",
+      "ACCEPTED",
+      "RECLAIMED"
+    ],
+    "broken_is_forecast_state": false
+  },
+  "direction_mapping": {
+    "support_rejected": "BULLISH",
+    "resistance_rejected": "BEARISH",
+    "resistance_accepted_above": "BULLISH",
+    "support_accepted_below": "BEARISH",
+    "resistance_to_support_reclaimed": "BULLISH",
+    "support_to_resistance_reclaimed": "BEARISH"
+  },
+  "outcome": {
+    "entry": "next_actual_bar_open_same_session",
+    "primary_horizon_minutes": 15,
+    "secondary_horizons_minutes": [20, 30],
+    "round_trip_cost_bps": 5.0,
+    "deoverlap_minutes": 15
+  },
+  "controls": {
+    "same_event_approach_momentum": true,
+    "shifted_time_minutes": 30
+  },
+  "evaluation": {
+    "candidate_or_threshold_search": false,
+    "reserve_tail_sessions": 63,
+    "warmup_sessions": 126,
+    "test_sessions": 63,
+    "step_sessions": 63,
+    "min_oos_folds": 3,
+    "min_oos_events": 90,
+    "min_oos_sessions": 45,
+    "min_positive_fold_fraction": 0.6,
+    "min_hit_rate": 0.52,
+    "min_incremental_bps_vs_momentum": 0.5,
+    "min_incremental_bps_vs_shifted_control": 0.5,
+    "min_shifted_control_events": 45,
+    "max_single_fold_positive_profit_share": 0.65,
+    "bootstrap_repetitions": 2000,
+    "bootstrap_seed": 20260906
+  },
+  "claim_boundary": {
+    "exact_pine_copy_claimed": false,
+    "author_default_parameters_claimed": false,
+    "edge_claimed_before_physical_execution": false,
+    "option_pnl_claimed": false,
+    "strike_selection_authorized": false,
+    "paper_authorized": false,
+    "live_authorized": false,
+    "order_authorized": false
+  }
+}
