@@ -85,6 +85,7 @@ def test_store_reopens_with_same_durable_history_and_seal_verifies(tmp_path):
     assert integrity["status"] == "PASS"
     sealed = reopened.seal_session("2026-09-07", ["NIFTY"])
     assert sealed["status"] == "PASS"
+    assert all((report_root / "2026-09-07" / f"bars_{tf}.jsonl").exists() for tf in ("1m", "5m", "15m", "30m", "60m"))
     assert reopened.verify_seal("2026-09-07")["status"] == "PASS"
 
 
