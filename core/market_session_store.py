@@ -279,10 +279,19 @@ class MarketSessionStore:
             sym = str(r["symbol"]).upper()
             if wanted and sym not in wanted: continue
             counts[sym] += 1
-            if sym in last and float(r["ts_epoch"]) <= last[sym]: failures.append(f"non_monotonic:{sym}:{r['ts_ist']}")
+            epoch = float(r["ts_epoch"])
+            if sym in last:
+                delta = epoch - last[sym]
+                if delta <= 0: failures.append(f"non_monotonic:{sym}:{r['ts_ist']}")
+                elif delta != 60: failures.append(f"minute_gap:{sym}:{r['ts_ist']}:delta={delta:g}")
             last[sym] = float(r["ts_epoch"])
             try:
                 prov = json.loads(r["provenance_json"] or "{}")
+                stamped = _dt(r["ts_ist"])
+                if stamped.date().isoformat() != day:
+                    failures.append(f"session_date_mismatch:{sym}:{r['ts_ist']}")
+                if stamped.time() < SESSION_OPEN or stamped.time() >= SESSION_CLOSE:
+                    failures.append(f"outside_session:{sym}:{r['ts_ist']}")
                 check = _normalize(sym, {"ts": r["ts_ist"], "open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"], "volume": r["volume"], "bar_provenance": prov})
                 if check["row_hash"] != r["row_hash"]: failures.append(f"hash_mismatch:{sym}:{r['ts_ist']}")
             except Exception as exc: failures.append(f"invalid_row:{sym}:{r['ts_ist']}:{type(exc).__name__}")
