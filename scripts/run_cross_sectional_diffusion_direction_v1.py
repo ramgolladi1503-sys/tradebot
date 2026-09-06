@@ -12,15 +12,17 @@ if str(ROOT) not in sys.path:
 
 from research.cross_sectional_diffusion_direction_v1.campaign import (
     CAMPAIGN_ID,
-    CampaignConfig,
     add_forward_returns,
-    assess_terminal_verdict,
     build_feature_frame,
     load_membership,
     load_price_table,
-    run_walk_forward,
     sha256_path,
     summarize_result,
+)
+from research.cross_sectional_diffusion_direction_v1.session_wfa import (
+    SessionCampaignConfig,
+    assess_session_terminal_verdict,
+    run_session_walk_forward,
 )
 
 
@@ -41,11 +43,13 @@ def main() -> int:
     args = parse_args()
     if args.roundtrip_cost_bps <= 0:
         raise SystemExit("roundtrip cost must be > 0 bps")
-    cfg = CampaignConfig()
+
+    cfg = SessionCampaignConfig()
     index = load_price_table(args.index)
     constituents = load_price_table(args.constituents, require_symbol=True)
     membership = load_membership(args.membership)
     execution = load_price_table(args.execution)
+
     features = build_feature_frame(
         index,
         constituents,
@@ -58,10 +62,16 @@ def main() -> int:
         execution,
         (cfg.primary_horizon_minutes, cfg.secondary_horizon_minutes),
     )
+
     results = {}
     for horizon in (cfg.primary_horizon_minutes, cfg.secondary_horizon_minutes):
-        result = run_walk_forward(frame, horizon=horizon, cost_bps=args.roundtrip_cost_bps, cfg=cfg)
-        verdict, blockers = assess_terminal_verdict(
+        result = run_session_walk_forward(
+            frame,
+            horizon=horizon,
+            cost_bps=args.roundtrip_cost_bps,
+            cfg=cfg,
+        )
+        verdict, blockers = assess_session_terminal_verdict(
             result,
             cfg=cfg,
             membership_authoritative=args.membership_authoritative,
@@ -72,10 +82,12 @@ def main() -> int:
             "verdict": verdict,
             "blockers": blockers,
         }
+
     primary = results[str(cfg.primary_horizon_minutes)]
     payload = {
         "campaign_id": CAMPAIGN_ID,
-        "spec_version": "1.0.0",
+        "spec_version": "1.1.0",
+        "evaluation_claim": "AFTER_COST_CANDLE_PROXY_NOT_EXACT_FILL_CERTIFICATION",
         "config_sha256": cfg.digest(),
         "primary_horizon_minutes": cfg.primary_horizon_minutes,
         "secondary_horizon_minutes": cfg.secondary_horizon_minutes,
@@ -92,11 +104,12 @@ def main() -> int:
         "primary_blockers": primary["blockers"],
         "results": results,
     }
+
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
     print(json.dumps(payload, indent=2, sort_keys=True, default=str))
-    return 0 if primary["verdict"] == "CERTIFIED_DIRECTIONAL_EXECUTION_EDGE" else 2
+    return 0 if primary["verdict"] == "ROBUST_DIRECTIONAL_EDGE_AFTER_COST_PROXY" else 2
 
 
 if __name__ == "__main__":
