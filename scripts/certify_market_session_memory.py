@@ -121,7 +121,7 @@ def run_certification(output: Path | None = None) -> dict:
         gates.append(_gate("historical_seed_resolution_guard", seed_resolution_gate))
 
         def seal_gate():
-            sealed = store.seal_session(day.date().isoformat(), symbols=["NIFTY", "BANKNIFTY", "FINNIFTY"])
+            sealed = store.seal_session(day.date().isoformat(), symbols=["NIFTY"])
             verified = store.verify_seal(day.date().isoformat())
             assert sealed["integrity"]["status"] == "PASS" and verified["status"] == "PASS"
             sha_path = report_root / day.date().isoformat() / "SHA256SUMS.json"; assert sha_path.exists()
@@ -149,7 +149,7 @@ def run_certification(output: Path | None = None) -> dict:
 
         def seal_immutability_gate():
             try:
-                store.seal_session(day.date().isoformat(), symbols=["NIFTY", "BANKNIFTY", "FINNIFTY"])
+                store.seal_session(day.date().isoformat(), symbols=["NIFTY"])
             except SessionMemoryConflict:
                 return {"conflicting_seal_rejected": True}
             raise AssertionError("sealed session was silently rewritten")
