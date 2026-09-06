@@ -1,0 +1,72 @@
+name: Autonomous Loop Framework Certification
+
+on:
+  pull_request:
+    paths:
+      - "research/governance/autonomous_loop/**"
+      - "tests/test_autonomous_loop_framework.py"
+      - "tests/test_autonomous_loop_release_policy.py"
+      - "tests/test_autonomous_loop_certification_policy.py"
+      - ".github/workflows/autonomous-loop-framework.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  framework-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install focused dependencies
+        run: python -m pip install --upgrade pip pytest pyyaml
+
+      - name: Verify exact PR head checkout
+        if: github.event_name == 'pull_request'
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}" || {
+            echo "EXACT_HEAD_MISMATCH" >&2
+            exit 1
+          }
+
+      - name: Compile autonomous loop package
+        run: python -m compileall -q research/governance/autonomous_loop
+
+      - name: Run focused and adversarial framework tests
+        run: >-
+          pytest -q -o addopts=''
+          tests/test_autonomous_loop_framework.py
+          tests/test_autonomous_loop_release_policy.py
+          tests/test_autonomous_loop_certification_policy.py
+
+      - name: Enforce execution-isolation scope
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          forbidden = (
+              "kiteconnect",
+              "paper_authorized: true",
+              "live_authorized: true",
+              "order_authority: true",
+              "broker_write_authority: true",
+          )
+          root = Path("research/governance/autonomous_loop")
+          for path in root.rglob("*"):
+              if not path.is_file() or path.suffix not in {".py", ".yaml", ".yml", ".md"}:
+                  continue
+              text = path.read_text(encoding="utf-8").lower()
+              for token in forbidden:
+                  if token in text:
+                      raise SystemExit(f"FORBIDDEN_EXECUTION_AUTHORITY_TOKEN:{path}:{token}")
+          print("execution_isolation=PASS")
+          PY
