@@ -1,0 +1,12 @@
+# V38A runtime-source authority
+
+LIVE_RUNTIME_SOURCE_SHA=73eb9e1d5b964de52924faa26e2fafb36d5d946a
+LIVE_VERIFICATION_PACKAGE_SHA=48e67c87b1467ff986f39f41df68052334cfbfa0
+EXACT_RUNTIME_VERIFICATION_REF=verification/cas-readonly-runtime-v37-73eb9e1-20260906
+EXACT_RUNTIME_REMOTE_SHA=73eb9e1d5b964de52924faa26e2fafb36d5d946a
+EXACT_RUNTIME_REMOTE_SHA_MATCH=true
+
+Runtime execution remains from:
+`/Users/madhuram/.tradebot/releases/73eb9e1d5b964de52924faa26e2fafb36d5d946a`.
+The package branch is evidence authority only and must not be substituted for
+the runtime source.
