@@ -1,0 +1,75 @@
+{
+  "campaign_id": "RPP_CONTEXT_FUSION_V1",
+  "spec_version": "1.0.0",
+  "research_only": true,
+  "parent_mechanism": "RPP_NIFTY_ZONE_INTERACTION_V2",
+  "hypothesis": "A causal RPP-confirmed support/resistance interaction may become more directionally useful when contemporaneous unweighted NIFTY constituent breadth and exact-clock NIFTY momentum independently agree with the RPP interaction direction.",
+  "input": {
+    "path": "research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet",
+    "sha256": "ae9645a83cb555899145e04ebe5a961fd130df25cba88a8fc8fd43b986bbfad0",
+    "official_constituent_weights_claimed": false
+  },
+  "governed_special_sessions_excluded": [
+    "2024-01-20",
+    "2024-03-02",
+    "2024-05-18",
+    "2024-11-01",
+    "2025-02-01"
+  ],
+  "rpp_contract": {
+    "minimum_relative_density": 0.65,
+    "forecast_states": ["REJECTED", "ACCEPTED", "RECLAIMED"],
+    "first_break_is_forecast": false,
+    "same_bar_zone_reselection_allowed": false,
+    "relative_density_is_probability": false
+  },
+  "context_contract": {
+    "lookback_minutes": 5,
+    "constituent_return": "exact same-session T / T-5m log return",
+    "breadth": "unweighted mean sign of valid constituent 5-minute returns",
+    "breadth_abs_min": 0.4,
+    "minimum_constituent_count": 40,
+    "minimum_exact_return_coverage": 0.8,
+    "require_breadth_direction_to_match_rpp": true,
+    "require_exact_5m_nifty_momentum_direction_to_match_rpp": true,
+    "dispersion": "recorded diagnostic only; not a gate",
+    "parameter_grid": false,
+    "event_subtype_selection": false
+  },
+  "threshold_provenance": {
+    "breadth_abs_min": "Inherited from the pre-existing constituent lead-lag proxy freeze (0.40), not chosen from RPP outcomes.",
+    "minimum_constituent_count": "40 = 80% of NIFTY50, aligned with the pre-existing 0.80 constituent-coverage requirement.",
+    "minimum_exact_return_coverage": "Inherited 0.80 coverage standard.",
+    "rpp_minimum_relative_density": "Inherited from the pre-physical RPP V2 freeze.",
+    "context_lookback_minutes": "Exact 5-clock-minute constituent/index return, matching the independently specified constituent-direction campaign rather than the RPP outcome diagnostics."
+  },
+  "evaluation": {
+    "round_trip_cost_proxy_bps": 5.0,
+    "primary_horizon_minutes": 15,
+    "secondary_horizons_minutes": [20, 30],
+    "sealed_tail_sessions": 63,
+    "warmup_sessions": 126,
+    "test_sessions": 63,
+    "step_sessions": 63,
+    "minimum_oos_folds": 3,
+    "minimum_oos_events": 90,
+    "minimum_oos_sessions": 45,
+    "minimum_positive_fold_fraction": 0.6,
+    "minimum_gross_hit_rate": 0.52,
+    "maximum_single_fold_positive_profit_share": 0.65,
+    "minimum_uplift_vs_parent_rpp_bps": 0.5,
+    "lagged_context_negative_control_minutes": 30,
+    "minimum_lagged_control_events": 45,
+    "minimum_uplift_vs_lagged_context_control_bps": 0.5,
+    "session_bootstrap_repetitions": 2000,
+    "session_bootstrap_seed": 20260906
+  },
+  "positive_verdict_requires_all_gates": true,
+  "claim_boundary": {
+    "holdout_evaluated": false,
+    "option_pnl_claimed": false,
+    "live_or_broker_authority": false,
+    "exact_pine_copy_claimed": false,
+    "no_fake_pass": true
+  }
+}
