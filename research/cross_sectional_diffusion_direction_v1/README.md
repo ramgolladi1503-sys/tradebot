@@ -1,173 +1,156 @@
 # Cross-Sectional Diffusion Direction V1
 
-Campaign ID: `HYP_CROSS_SECTIONAL_DIFFUSION_DIRECTION_V1`
+Campaign ID: `HYP_CROSS_SECTIONAL_DIFFUSION_DIRECTION_V1`  
+Frozen spec: **V1.2.0**
 
-## Research question
+## Question
 
-When a large share of the historically correct NIFTY constituents move coherently before the NIFTY has fully repriced, does the NIFTY/futures contract continue in that direction over the next 15 minutes strongly enough to remain positive after an explicit round-trip cost assumption?
+When historically valid NIFTY constituents move coherently and their cross-sectional impulse diverges from the NIFTY's own recent move, does NIFTY continue in that direction over the next **15 minutes** strongly enough to survive an explicit round-trip cost assumption?
 
-This is a **derived executable hypothesis**. It is not claimed to be the exact strategy formula from any paper or website. Literature/source material motivates the information-diffusion mechanism; this repository owns and freezes the implementation choices below.
+The 30-minute horizon is secondary diagnostics only. It cannot rescue a failed 15-minute primary result.
 
-## Primary target
+This is a **derived executable hypothesis**. It is not presented as the exact formula from any paper or website. External work supplies the mechanism; this campaign explicitly owns and freezes the implementation choices.
 
-Primary horizon: **15 minutes**.
+## Causal feature definition
 
-Secondary diagnostic horizon: **30 minutes**. The 30-minute result does not rescue a failed 15-minute primary verdict.
+For constituent `i` at completed minute `t`:
 
-All features use only the decision bar and earlier bars. Execution is mapped to the **exact next-minute open**, not the decision close. Five-minute feature lookbacks and 15/30-minute exits use exact timestamp offsets; a missing bar is not silently replaced by the fifth observed row.
-
-## Features
-
-For constituent `i`:
-
-`r_i,5(t) = ln(C_i(t) / C_i(t-5))`
+`r_i,5(t) = ln(C_i(t) / C_i(t-5m))`
 
 For NIFTY:
 
-`r_N,5(t) = ln(C_N(t) / C_N(t-5))`
+`r_N,5(t) = ln(C_N(t) / C_N(t-5m))`
 
-Using historical index weights when they are authoritative, otherwise using explicitly declared equal weights across the historically valid membership universe:
+Then:
 
-`B_5(t) = sum_i w_i * sign(r_i,5(t))`
+`B_5(t) = sum_i w_i * sign(r_i,5(t))`  — breadth
 
-`I_5(t) = sum_i w_i * r_i,5(t)`
+`I_5(t) = sum_i w_i * r_i,5(t)`  — constituent impulse
 
-`G_5(t) = I_5(t) - r_N,5(t)`
+`G_5(t) = I_5(t) - r_N,5(t)`  — diffusion/lag gap
 
-`B_5` is breadth, `I_5` is constituent impulse, and `G_5` is the diffusion/lag gap.
+All offsets are **exact clock-time offsets**, not row shifts. If `t-5m`, `t+1m`, or the exact horizon bar is absent, another observed row is not substituted.
 
-Equal weighting is a deliberate feature definition when official historical weights are absent. It must never be described as an official index-weight reconstruction.
+Historical official weights are used when authoritative. If official historical weights are absent but historical membership is valid, equal weights are an explicit feature choice and are never described as official NIFTY weights.
 
-## Frozen parameter family
+## Frozen signal family
 
-Only four train-selected threshold combinations are allowed:
+Only four train-selected threshold pairs exist:
 
 - breadth quantile: `0.80` or `0.90`
 - gap quantile: `0.75` or `0.90`
 
-Threshold values are estimated on the training fold only. No threshold may be fitted on the OOS test sessions.
+Long:
 
-Long signal:
+- `breadth >= train breadth-long threshold`
+- `impulse > 0`
+- `gap >= train gap-long threshold`
 
-- breadth >= train long breadth quantile
-- impulse > 0
-- gap >= train long gap quantile
+Short is symmetric.
 
-Short signal:
+Thresholds are fitted on the training prefix only. Signals are de-overlapped by the primary/secondary horizon in clock time.
 
-- breadth <= train short breadth quantile
-- impulse < 0
-- gap <= train short gap quantile
+## Pre-holdout WFA
 
-Signals are de-overlapped by the evaluation horizon in clock time so repeated adjacent minutes do not create artificial sample size.
+The existing REC-MD split is preserved:
 
-## Walk-forward
+- DEV: 297 sessions
+- SELECTION: 99 sessions
+- HOLDOUT: 100 sessions
+- pre-holdout ends: `2026-02-26`
+- HOLDOUT begins: `2026-02-27`
 
-The canonical runner uses rolling trading-session folds rather than calendar-year folds:
+V1.2 does **not** evaluate HOLDOUT.
 
-- 252 completed sessions training
-- 63 completed sessions OOS test
-- 63-session step
-- at least 4 OOS folds required for a positive terminal verdict
+The pre-holdout WFA is:
 
-This structure is intentional. A 3-year-train/1-year-test annual split can yield only one fold when constituent authority begins in 2023, which is not enough to establish regime stability.
+- expanding training window
+- minimum initial training: 126 sessions
+- OOS test block: 63 sessions
+- step: 63 sessions
+- minimum positive-gate OOS folds: 4
 
-Each fold independently selects one of the four frozen parameter combinations using training-only after-cost session-equal mean return, freezes that choice, and evaluates the next 63 sessions.
+This yields four non-overlapping OOS blocks inside the existing DEV+SELECTION population without borrowing the 100-session HOLDOUT.
 
-## Incremental-value baseline
+A positive pre-holdout result is only:
 
-Every selected diffusion signal is compared with a NIFTY-momentum-only baseline. The baseline uses only `r_N,5` and is fitted to approximately the same long/short event frequency observed for the diffusion signal in the training fold.
+`PRE_HOLDOUT_DIRECTIONAL_SURVIVOR`
 
-A constituent signal cannot receive a positive terminal verdict if its OOS session-equal after-cost estimate does not exceed the index-only baseline estimate.
+It is **not** a certified edge and does not authorize paper/live trading.
 
-## Negative control
+## Baseline and falsifier
 
-An exact 30-minute lagged constituent-feature control is evaluated with the same frozen thresholds. If the lagged control retains at least half of the main estimated effect, the campaign fails the negative-control gate.
+### Incremental-value baseline
 
-This is intended to detect broad momentum/regime effects that are not genuinely tied to contemporaneous constituent diffusion.
+The diffusion signal must beat a frequency-matched **NIFTY 5-minute momentum-only** baseline out of sample. If constituents add no incremental information beyond NIFTY's own recent movement, the hypothesis fails.
 
-## Execution and costs
+### Negative control
 
-The signal can be generated from NIFTY + constituents, but the chosen success criterion is after-cost tradability. The runner therefore requires a separate tradable execution series, preferably authoritative NIFTY futures minute OHLC.
+The same signal thresholds are applied to constituent features delayed by an exact 30 minutes. If that stale control retains at least 50% of the main estimated effect, the mechanism fails its falsifier gate.
 
-Entry: execution-series open at exact `t+1 minute`.
+## Execution authority
 
-Exit: execution-series close at exact `t+horizon`.
+Preferred execution source:
 
-Gross signed return is converted to basis points and the user-supplied round-trip cost in bps is deducted from every event. There is deliberately **no zero-cost default**; the CLI requires `--roundtrip-cost-bps > 0`.
+`data/research/nifty_futures_alignment_v1/NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet`
 
-Minute OHLC plus a cost haircut does **not** prove exact historical bid/ask fills, queue position, depth, or market impact. Therefore the strongest positive verdict from this campaign is `ROBUST_DIRECTIONAL_EDGE_AFTER_COST_PROXY`, not an exact execution certification.
+Expected SHA-256:
 
-## Data authority
+`2311981231d3fb847a216c9165ef73c3e7b788ab354d6de493ab1a5edb32e7a9`
 
-A positive verdict requires both:
+The aligned panel already freezes the causal futures roll as:
 
-1. authoritative effective-dated historical NIFTY membership, and
-2. an authoritative tradable execution series.
+`NEAREST_UNEXPIRED_EXPIRY_ON_SESSION_START_V1`
 
-Using today's NIFTY 50 basket across older years is survivorship-biased and is prohibited. The report records whether constituent features use historical official weights or historical-membership equal weights.
+No intraday contract switching and no lookahead roll selection are permitted.
 
-All four input sources are SHA-256 bound in the output report.
+The runner directly reads the panel's `spot_open`, `spot_close`, `futures_open`, `futures_close`, and `alignment_valid` fields. In `--aligned-panel` mode, execution authority is granted only when the entire file SHA-256 exactly matches the frozen authority hash above.
 
-## Terminal positive verdict
+Entry is the exact futures open at `t+1 minute`; exit is the exact futures close at `t+horizon`.
 
-`ROBUST_DIRECTIONAL_EDGE_AFTER_COST_PROXY` is emitted only when the 15-minute primary horizon satisfies all of the following:
+Minute candles plus an explicit cost haircut remain an **after-cost candle proxy**, not proof of historical bid/ask fillability, depth, queue position, or market impact.
+
+## Historical constituent authority
+
+A positive pre-holdout verdict requires effective-dated NIFTY membership. Today's NIFTY 50 basket cannot be backfilled into older dates.
+
+Minimum constituent coverage at each event is `0.80`. No synthetic constituent candles, interpolation, or future fill are allowed.
+
+## Pre-holdout survivor gates
+
+The 15-minute primary result must satisfy every gate:
 
 - historical membership marked authoritative
-- execution series marked authoritative
-- at least 4 rolling OOS folds
-- at least 100 OOS events
-- at least 50 OOS sessions
-- 95% session-bootstrap lower bound of after-cost return > 0
-- at least 60% of OOS folds have positive session-equal after-cost return
-- no single positive fold contributes more than 50% of total positive fold P&L
-- lagged constituent control estimate < 50% of the main estimate
-- main estimate > frequency-matched NIFTY-momentum-only baseline estimate
+- frozen aligned execution panel authoritative, or equivalent fallback execution authority explicitly supplied
+- >= 4 non-overlapping OOS folds
+- >= 100 OOS events
+- >= 50 OOS sessions
+- 95% session-bootstrap lower bound of net return > 0 bps
+- >= 60% of OOS folds positive
+- no single positive fold > 50% of total positive fold P&L
+- 30-minute lagged control estimate < 50% of main estimate
+- main estimate > frequency-matched NIFTY momentum-only baseline
 
-Otherwise the result is `NO_ROBUST_AFTER_COST_DIRECTIONAL_EDGE` with explicit blockers.
+Otherwise:
 
-These gates are research-governance choices, not claims from an external source.
+`NO_ROBUST_AFTER_COST_DIRECTIONAL_EDGE`
 
-## Input schemas
-
-Index/execution files:
-
-- `timestamp` (aliases `datetime`, `date`, `ts` accepted)
-- `open` (if absent, close is used by the generic loader, so such an execution file must **not** be marked authoritative)
-- `close`
-
-Constituent file(s):
-
-- `timestamp`
-- `symbol`
-- `open` optional
-- `close`
-
-Membership file:
-
-- `symbol`
-- `effective_from`
-- `effective_to` optional/open-ended
-- `weight` optional
-
-CSV and Parquet are supported. A directory may be supplied; supported files are concatenated recursively.
-
-## Run
+## Canonical run
 
 ```bash
 python scripts/run_cross_sectional_diffusion_direction_v1.py \
-  --index /path/to/nifty_minute.parquet \
-  --constituents /path/to/constituent_partitions \
-  --membership /path/to/historical_nifty50_membership.csv \
-  --execution /path/to/nifty_futures_minute.parquet \
-  --roundtrip-cost-bps 3.0 \
+  --aligned-panel /Users/madhuram/tradebot/data/research/nifty_futures_alignment_v1/NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet \
+  --constituents /path/to/HISTORICAL_NIFTY50_1M_PANEL_V5.parquet \
+  --membership /path/to/HISTORICAL_NIFTY50_ROSTER_V5.parquet \
+  --roundtrip-cost-bps <PREDECLARED_REALISTIC_COST> \
   --membership-authoritative \
-  --execution-authoritative \
-  --output runtime/research/cross_sectional_diffusion_direction_v1/report.json
+  --output runtime/research/cross_sectional_diffusion_direction_v1/pre_holdout_report.json
 ```
 
-Do not set either authority flag merely to force a pass. They represent evidence claims that must be supported by the corpus/provenance registry.
+Do not set `--membership-authoritative` unless the roster authority artifact supports the exact membership bytes. Do not invent the cost after seeing results.
+
+Fallback `--index` + `--execution` mode exists for another separately authoritative pair, but the frozen aligned panel is preferred.
 
 ## Current status
 
-Implementation-ready / not yet empirically evaluated against the external local market-data corpus from this GitHub environment. No edge is claimed by the existence of this module.
+The campaign implementation is on draft PR #886. It has not been run against the external local `/Volumes/TradeBotData` constituent Parquets from this chat environment, so **no empirical edge is claimed yet**. The remaining empirical action is a local, read-only pre-holdout run against the exact authoritative roster/panel plus the frozen aligned spot/futures panel.
