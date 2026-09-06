@@ -107,21 +107,21 @@ def test_exact_minute_lookback_does_not_substitute_fifth_observed_row():
     feat = build_feature_frame(idx, con, _membership(), lookback_minutes=5, min_coverage=1.0)
     target = missing + pd.Timedelta(minutes=5)
     assert target not in set(feat["timestamp"])
-    later_target = ts[9]
-    assert later_target in set(feat["timestamp"])
+    assert ts[9] in set(feat["timestamp"])
 
 
-def test_session_windows_create_multiple_oos_folds_without_calendar_year_dependency():
-    sessions = pd.date_range("2023-01-02", periods=600, freq="B").date
+def test_expanding_session_windows_produce_four_pre_holdout_folds():
+    sessions = pd.date_range("2024-07-26", periods=396, freq="B").date
     frame = pd.DataFrame({
         "session": sessions,
         "timestamp": pd.to_datetime([f"{d} 09:20" for d in sessions]).tz_localize("Asia/Kolkata"),
     })
-    windows = session_windows(frame, 252, 63, 63)
-    assert len(windows) == 5
-    assert len(windows[0][0]) == 252
-    assert len(windows[0][1]) == 63
-    assert set(windows[0][0]).isdisjoint(windows[0][1])
+    windows = session_windows(frame, 126, 63, 63)
+    assert len(windows) == 4
+    assert [len(train) for train, _ in windows] == [126, 189, 252, 315]
+    assert all(len(test) == 63 for _, test in windows)
+    assert all(set(train).isdisjoint(test) for train, test in windows)
+    assert set(windows[0][1]).isdisjoint(windows[1][1])
 
 
 def test_terminal_verdict_fails_closed_without_authority():
@@ -163,3 +163,23 @@ def test_session_verdict_requires_multiple_folds_and_authority():
     )
     assert verdict == "NO_ROBUST_AFTER_COST_DIRECTIONAL_EDGE"
     assert "INSUFFICIENT_OOS_FOLDS" in blockers
+
+
+def test_all_pre_holdout_gates_emit_survivor_not_certified_edge():
+    cfg = SessionCampaignConfig(min_oos_folds=4, min_oos_events=1, min_oos_sessions=1, bootstrap_repetitions=10)
+    result = {
+        "status": "COMPLETE",
+        "folds": [{"fold_id": i} for i in range(1, 5)],
+        "oos_event_count": 20,
+        "oos_session_count": 20,
+        "session_bootstrap": {"estimate": 2.0, "ci_lower": 0.5, "ci_upper": 3.0},
+        "lagged_control_bootstrap": {"estimate": 0.2, "ci_lower": -0.5, "ci_upper": 0.8},
+        "index_only_baseline_bootstrap": {"estimate": 0.7, "ci_lower": -0.1, "ci_upper": 1.3},
+        "positive_fold_fraction": 0.75,
+        "max_single_fold_profit_share": 0.4,
+    }
+    verdict, blockers = assess_session_terminal_verdict(
+        result, cfg=cfg, membership_authoritative=True, execution_authoritative=True
+    )
+    assert blockers == []
+    assert verdict == "PRE_HOLDOUT_DIRECTIONAL_SURVIVOR"
