@@ -79,6 +79,16 @@ try:
 except Exception:
     pass
 
+# Market Session Memory V1 keeps the existing OHLC buffer as the hot cache while
+# adding durable same-session history, restart recovery, temporal strategy context,
+# feature history, and end-of-day evidence sealing.
+try:
+    from core import market_session_memory_contract as _market_session_memory_contract
+
+    _market_session_memory_contract.install()
+except Exception:
+    pass
+
 # Long-run stability latency contract is isolated from the deleted generic shim
 # and remains installed until the behavior is moved into the scenario runner.
 try:
