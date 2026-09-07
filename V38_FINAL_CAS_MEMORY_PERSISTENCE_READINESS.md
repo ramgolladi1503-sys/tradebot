@@ -6,7 +6,7 @@
 - Successor checkout: `/Volumes/TradeBotData/tradebot-v38b-integration-20260907`
 - Successor branch: `ram/v38-final-cas-memory-successor-20260907`
 - Exact implementation successor SHA: `4905f576867f6e4bb3943e95aa5c08821ab29fc4`
-- Evidence publication commit: `887785c698eed95f40d3f9aee1518004931ae587`
+- Evidence artifact is included in the current clean successor HEAD.
 - Worktree state at publication: clean
 
 ## Integrated scope
