@@ -16,6 +16,7 @@ from research.macd_futures_participation_regime_v1.analysis import (  # noqa: E4
     frozen_hypothesis_result,
     load_table,
     prepare_interaction,
+    signal_state_support,
     source_manifest,
     summarize_interaction,
     write_json,
@@ -70,22 +71,54 @@ def main() -> int:
         state = build_basis_state(aligned)
         signals, assigned = bind_macd_ledgers(assignments, signal_paths, placebo)
 
-        h1_ps = prepare_interaction(signals, assigned, state, "h1_active")
-        h1_ps.to_csv(out / "H1_PER_SIGNAL_PAIRED_DELTAS.csv", index=False)
-        h1 = frozen_hypothesis_result(
-            summarize_interaction(h1_ps),
-            "MACD_FUTURES_PARTICIPATION_REGIME_V1_H1",
-        )
-        write_json(out / "H1_PRIMARY_RESULT.json", h1)
+        # H1 support is determined before any H1 payoff subgroup is read.
+        h1_support = signal_state_support(signals, state, "h1_active")
+        write_json(out / "H1_STATE_SUPPORT.json", h1_support)
 
-        evaluated = [h1]
-        if h1["status"] == "INSUFFICIENT_SUPPORT":
-            h2_ps = prepare_interaction(signals, assigned, state, "h2_active")
-            h2_ps.to_csv(out / "H2_PER_SIGNAL_PAIRED_DELTAS.csv", index=False)
-            h2 = frozen_hypothesis_result(
-                summarize_interaction(h2_ps),
-                "MACD_FUTURES_PARTICIPATION_REGIME_V1_H2",
+        evaluated = []
+        if h1_support["support_gate_pass"]:
+            h1_ps = prepare_interaction(signals, assigned, state, "h1_active")
+            h1_ps.to_csv(out / "H1_PER_SIGNAL_PAIRED_DELTAS.csv", index=False)
+            h1_summary = summarize_interaction(h1_ps)
+            h1_summary["pre_payoff_support"] = h1_support
+            h1_summary["support_gate_pass"] = True
+            h1 = frozen_hypothesis_result(
+                h1_summary,
+                "MACD_FUTURES_PARTICIPATION_REGIME_V1_H1",
             )
+            write_json(out / "H1_PRIMARY_RESULT.json", h1)
+            evaluated.append(h1)
+        else:
+            h1 = {
+                "hypothesis_id": "MACD_FUTURES_PARTICIPATION_REGIME_V1_H1",
+                "status": "INSUFFICIENT_SUPPORT",
+                "pre_payoff_support": h1_support,
+                "outcomes_accessed_for_hypothesis": False,
+            }
+            write_json(out / "H1_PRIMARY_RESULT.json", h1)
+            evaluated.append(h1)
+
+            # H2 was pre-registered before outcomes and is reached only because
+            # H1 failed its support gate. H2 support is also pre-payoff.
+            h2_support = signal_state_support(signals, state, "h2_active")
+            write_json(out / "H2_STATE_SUPPORT.json", h2_support)
+            if h2_support["support_gate_pass"]:
+                h2_ps = prepare_interaction(signals, assigned, state, "h2_active")
+                h2_ps.to_csv(out / "H2_PER_SIGNAL_PAIRED_DELTAS.csv", index=False)
+                h2_summary = summarize_interaction(h2_ps)
+                h2_summary["pre_payoff_support"] = h2_support
+                h2_summary["support_gate_pass"] = True
+                h2 = frozen_hypothesis_result(
+                    h2_summary,
+                    "MACD_FUTURES_PARTICIPATION_REGIME_V1_H2",
+                )
+            else:
+                h2 = {
+                    "hypothesis_id": "MACD_FUTURES_PARTICIPATION_REGIME_V1_H2",
+                    "status": "INSUFFICIENT_SUPPORT",
+                    "pre_payoff_support": h2_support,
+                    "outcomes_accessed_for_hypothesis": False,
+                }
             write_json(out / "H2_PRIMARY_RESULT.json", h2)
             evaluated.append(h2)
 
