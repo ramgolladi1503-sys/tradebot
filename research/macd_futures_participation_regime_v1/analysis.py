@@ -68,8 +68,17 @@ def _ist(series: pd.Series, label: str) -> pd.Series:
 
 
 def build_basis_state(aligned: pd.DataFrame) -> pd.DataFrame:
-    """Reconstruct the already-frozen HYP_B1 literal state causally."""
-    _require(aligned, ["timestamp", "session_date", "spot_close", "futures_close"], "ALIGNED")
+    """Reconstruct the already-frozen HYP_B1 literal state causally.
+
+    HYP_B1 authority used raw_basis=futures_close-spot_close and a 15-row
+    within-session difference on the minute-aligned panel. This function does
+    not inspect any future outcome.
+    """
+    _require(
+        aligned,
+        ["timestamp", "session_date", "spot_close", "futures_close"],
+        "ALIGNED",
+    )
     df = aligned[["timestamp", "session_date", "spot_close", "futures_close"]].copy()
     df["timestamp"] = _ist(df["timestamp"], "ALIGNED")
     df["session_date"] = df["session_date"].astype(str)
@@ -82,8 +91,19 @@ def build_basis_state(aligned: pd.DataFrame) -> pd.DataFrame:
     df["raw_basis"] = df["futures_close"].astype(float) - df["spot_close"].astype(float)
     df["basis_chg_15m"] = df.groupby("session_date", sort=False)["raw_basis"].diff(15)
     df["basis_acceleration_15m"] = df.groupby("session_date", sort=False)["basis_chg_15m"].diff(15)
-    df["h1_active"] = df["basis_chg_15m"] > H1_THRESHOLD_INR
-    df["h2_active"] = (df["basis_chg_15m"] > 0.0) & (df["basis_acceleration_15m"] > 0.0)
+
+    df["h1_active"] = pd.Series(pd.NA, index=df.index, dtype="boolean")
+    h1_known = df["basis_chg_15m"].notna()
+    df.loc[h1_known, "h1_active"] = (
+        df.loc[h1_known, "basis_chg_15m"] > H1_THRESHOLD_INR
+    ).astype(bool)
+
+    df["h2_active"] = pd.Series(pd.NA, index=df.index, dtype="boolean")
+    h2_known = df["basis_chg_15m"].notna() & df["basis_acceleration_15m"].notna()
+    df.loc[h2_known, "h2_active"] = (
+        (df.loc[h2_known, "basis_chg_15m"] > 0.0)
+        & (df.loc[h2_known, "basis_acceleration_15m"] > 0.0)
+    ).astype(bool)
     return df[["timestamp", "session_date", "basis_chg_15m", "basis_acceleration_15m", "h1_active", "h2_active"]]
 
 
@@ -93,7 +113,11 @@ def bind_macd_ledgers(
     placebo_payoffs: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Bind old canonical MACD signal/placebo payoffs without recomputing MACD."""
-    _require(assignments, ["replication_id", "signal_trade_id", "signal_origin", "matched_placebo_origin"], "ASSIGNMENTS")
+    _require(
+        assignments,
+        ["replication_id", "signal_trade_id", "signal_origin", "matched_placebo_origin"],
+        "ASSIGNMENTS",
+    )
     _require(signal_paths, ["trade_id", "entry_timestamp", "net_6bps"], "SIGNAL_PATHS")
     _require(placebo_payoffs, ["replication_id", "origin_timestamp", "net_6bps"], "PLACEBO_PAYOFFS")
 
@@ -123,7 +147,9 @@ def bind_macd_ledgers(
         validate="one_to_one",
     )
     if signals["signal_origin"].isna().any():
-        raise CampaignBlocked(f"SIGNAL_ORIGIN_BIND_MISSING:{int(signals['signal_origin'].isna().sum())}")
+        raise CampaignBlocked(
+            f"SIGNAL_ORIGIN_BIND_MISSING:{int(signals['signal_origin'].isna().sum())}"
+        )
 
     payoff_key = ["replication_id", "origin_timestamp"]
     if p.duplicated(payoff_key).any():
@@ -137,20 +163,61 @@ def bind_macd_ledgers(
         validate="many_to_one",
     )
     if assigned["net_6bps"].isna().any():
-        raise CampaignBlocked(f"PLACEBO_PAYOFF_BIND_MISSING:{int(assigned['net_6bps'].isna().sum())}")
+        raise CampaignBlocked(
+            f"PLACEBO_PAYOFF_BIND_MISSING:{int(assigned['net_6bps'].isna().sum())}"
+        )
 
     return signals, assigned
 
 
-def add_state_exact(origins: pd.DataFrame, state: pd.DataFrame, origin_col: str, state_col: str) -> pd.DataFrame:
-    lookup = state[["timestamp", "session_date", state_col, "basis_chg_15m", "basis_acceleration_15m"]].copy()
-    out = origins.merge(lookup, left_on=origin_col, right_on="timestamp", how="left", validate="many_to_one")
+def add_state_exact(
+    origins: pd.DataFrame,
+    state: pd.DataFrame,
+    origin_col: str,
+    state_col: str,
+) -> pd.DataFrame:
+    lookup = state[
+        ["timestamp", "session_date", state_col, "basis_chg_15m", "basis_acceleration_15m"]
+    ].copy()
+    out = origins.merge(
+        lookup,
+        left_on=origin_col,
+        right_on="timestamp",
+        how="left",
+        validate="many_to_one",
+    )
     missing = out["timestamp"].isna()
     if missing.any():
-        raise CampaignBlocked(f"STATE_TIMESTAMP_NOT_FOUND:{origin_col}:{int(missing.sum())}")
+        raise CampaignBlocked(
+            f"STATE_TIMESTAMP_NOT_FOUND:{origin_col}:{int(missing.sum())}"
+        )
     if out[state_col].isna().any():
-        raise CampaignBlocked(f"STATE_UNAVAILABLE:{origin_col}:{int(out[state_col].isna().sum())}")
+        raise CampaignBlocked(
+            f"STATE_UNAVAILABLE:{origin_col}:{int(out[state_col].isna().sum())}"
+        )
     return out
+
+
+def signal_state_support(
+    signals: pd.DataFrame,
+    state: pd.DataFrame,
+    state_col: str,
+) -> dict:
+    """Count frozen-state signal support before any payoff analysis."""
+    sig = add_state_exact(signals, state, "signal_origin", state_col)
+    active = sig[sig[state_col] == True].copy()  # noqa: E712
+    inactive = sig[sig[state_col] == False].copy()  # noqa: E712
+    active_sessions = int(active["session_date"].nunique())
+    return {
+        "state_col": state_col,
+        "signal_trades_total": int(len(sig)),
+        "active_signal_trades": int(len(active)),
+        "active_signal_sessions": active_sessions,
+        "inactive_signal_trades": int(len(inactive)),
+        "inactive_signal_sessions": int(inactive["session_date"].nunique()),
+        "min_active_signal_sessions": MIN_ACTIVE_SIGNAL_SESSIONS,
+        "support_gate_pass": active_sessions >= MIN_ACTIVE_SIGNAL_SESSIONS,
+    }
 
 
 def prepare_interaction(
@@ -160,12 +227,23 @@ def prepare_interaction(
     state_col: str,
 ) -> pd.DataFrame:
     sig = add_state_exact(signals, state, "signal_origin", state_col)
-    sig = sig.rename(columns={state_col: "signal_state", "session_date": "signal_session_date"})
+    sig = sig.rename(
+        columns={state_col: "signal_state", "session_date": "signal_session_date"}
+    )
 
     ass = add_state_exact(assigned, state, "matched_placebo_origin", state_col)
     ass = ass.rename(columns={state_col: "placebo_state"})
 
-    sig_state = sig[["trade_id", "signal_trade_id", "signal_origin", "signal_state", "signal_session_date", "net_6bps"]].copy()
+    sig_state = sig[
+        [
+            "trade_id",
+            "signal_trade_id",
+            "signal_origin",
+            "signal_state",
+            "signal_session_date",
+            "net_6bps",
+        ]
+    ].copy()
     sig_state = sig_state.rename(columns={"net_6bps": "signal_net_6bps"})
     paired = ass.merge(
         sig_state,
@@ -179,7 +257,13 @@ def prepare_interaction(
 
     per_signal = (
         paired.groupby(
-            ["signal_trade_id", "signal_origin", "signal_session_date", "signal_state", "signal_net_6bps"],
+            [
+                "signal_trade_id",
+                "signal_origin",
+                "signal_session_date",
+                "signal_state",
+                "signal_net_6bps",
+            ],
             as_index=False,
         )
         .agg(
@@ -200,7 +284,9 @@ def _block_bootstrap_ci(
     seed: int = 20260908,
     reps: int = 5000,
 ) -> tuple[float, float]:
-    grouped = values_by_session.groupby("signal_session_date", as_index=False)[value_col].mean()
+    grouped = values_by_session.groupby("signal_session_date", as_index=False)[
+        value_col
+    ].mean()
     x = grouped[value_col].to_numpy(dtype=float)
     if len(x) < 2:
         return (float("nan"), float("nan"))
@@ -216,9 +302,17 @@ def summarize_interaction(per_signal: pd.DataFrame) -> dict:
 
     active_sessions = int(active["signal_session_date"].nunique())
     inactive_sessions = int(inactive["signal_session_date"].nunique())
-    active_delta = float(active["delta_net_6bps"].mean()) if len(active) else float("nan")
-    inactive_delta = float(inactive["delta_net_6bps"].mean()) if len(inactive) else float("nan")
-    ci = _block_bootstrap_ci(active, "delta_net_6bps") if len(active) else (float("nan"), float("nan"))
+    active_delta = (
+        float(active["delta_net_6bps"].mean()) if len(active) else float("nan")
+    )
+    inactive_delta = (
+        float(inactive["delta_net_6bps"].mean()) if len(inactive) else float("nan")
+    )
+    ci = (
+        _block_bootstrap_ci(active, "delta_net_6bps")
+        if len(active)
+        else (float("nan"), float("nan"))
+    )
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -226,25 +320,43 @@ def summarize_interaction(per_signal: pd.DataFrame) -> dict:
         "active_signal_sessions": active_sessions,
         "inactive_signal_trades": int(len(inactive)),
         "inactive_signal_sessions": inactive_sessions,
-        "active_signal_mean_net_6bps": float(active["signal_net_6bps"].mean()) if len(active) else None,
-        "active_placebo_mean_net_6bps": float(active["placebo_mean_net_6bps"].mean()) if len(active) else None,
-        "active_delta_net_6bps": active_delta if np.isfinite(active_delta) else None,
-        "active_delta_block_bootstrap_95ci": [float(ci[0]), float(ci[1])] if np.all(np.isfinite(ci)) else None,
-        "inactive_signal_mean_net_6bps": float(inactive["signal_net_6bps"].mean()) if len(inactive) else None,
-        "inactive_placebo_mean_net_6bps": float(inactive["placebo_mean_net_6bps"].mean()) if len(inactive) else None,
-        "inactive_delta_net_6bps": inactive_delta if np.isfinite(inactive_delta) else None,
-        "interaction_lift_bps": float(active_delta - inactive_delta) if np.isfinite(active_delta) and np.isfinite(inactive_delta) else None,
-        "min_active_signal_sessions": MIN_ACTIVE_SIGNAL_SESSIONS,
-        "support_gate_pass": active_sessions >= MIN_ACTIVE_SIGNAL_SESSIONS,
-        "median_compatible_placebos_per_signal": float(per_signal["compatible_placebo_n"].median()),
-        "min_compatible_placebos_per_signal": int(per_signal["compatible_placebo_n"].min()),
+        "active_signal_mean_net_6bps": (
+            float(active["signal_net_6bps"].mean()) if len(active) else None
+        ),
+        "active_placebo_mean_net_6bps": (
+            float(active["placebo_mean_net_6bps"].mean()) if len(active) else None
+        ),
+        "active_delta_net_6bps": (
+            active_delta if np.isfinite(active_delta) else None
+        ),
+        "active_delta_block_bootstrap_95ci": (
+            [float(ci[0]), float(ci[1])] if np.all(np.isfinite(ci)) else None
+        ),
+        "inactive_signal_mean_net_6bps": (
+            float(inactive["signal_net_6bps"].mean()) if len(inactive) else None
+        ),
+        "inactive_placebo_mean_net_6bps": (
+            float(inactive["placebo_mean_net_6bps"].mean()) if len(inactive) else None
+        ),
+        "inactive_delta_net_6bps": (
+            inactive_delta if np.isfinite(inactive_delta) else None
+        ),
+        "interaction_lift_bps": (
+            float(active_delta - inactive_delta)
+            if np.isfinite(active_delta) and np.isfinite(inactive_delta)
+            else None
+        ),
+        "median_compatible_placebos_per_signal": float(
+            per_signal["compatible_placebo_n"].median()
+        ),
+        "min_compatible_placebos_per_signal": int(
+            per_signal["compatible_placebo_n"].min()
+        ),
     }
 
 
 def frozen_hypothesis_result(summary: dict, hypothesis_id: str) -> dict:
-    if not summary["support_gate_pass"]:
-        status = "INSUFFICIENT_SUPPORT"
-    elif summary["active_delta_net_6bps"] is None:
+    if summary["active_delta_net_6bps"] is None:
         status = "BLOCKED"
     else:
         status = "PRIMARY_ESTIMAND_COMPUTED_REQUIRES_FULL_GATES"
@@ -273,4 +385,6 @@ def source_manifest(paths: SourcePaths) -> dict:
 
 
 def write_json(path: Path, obj: dict) -> None:
-    path.write_text(json.dumps(obj, indent=2, sort_keys=True, allow_nan=False) + "\n")
+    path.write_text(
+        json.dumps(obj, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    )
