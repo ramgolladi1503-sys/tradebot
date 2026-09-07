@@ -8,12 +8,12 @@ import pandas as pd
 from .engine import (
     AlphaTrendMechanismConfig,
     SIGNAL_COLUMNS,
-    add_forward_labels,
     build_features,
     build_negative_controls,
     evaluate_signal,
 )
 from .independence import evaluate_nonoverlap
+from .labels import add_forward_labels
 
 HORIZONS = (5, 10, 15, 20, 30)
 
@@ -55,7 +55,7 @@ def run_development_campaign(
     """Evaluate only the predeclared family on caller-supplied development bars."""
     hs = tuple(sorted({int(h) for h in horizons}))
     if 15 not in hs or 30 not in hs:
-        raise ValueError("development campaign requires 15- and 30-bar horizons")
+        raise ValueError("development campaign requires 15- and 30-minute horizons")
 
     variants: dict[str, object] = {}
     for config_id, cfg in PREDECLARED_CONFIGS.items():
@@ -98,7 +98,7 @@ def run_development_campaign(
         }
 
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "campaign": "ALPHATREND_INSPIRED_MECHANISM_DEV_V1",
         "scope": "DEVELOPMENT_ONLY",
         "proprietary_equivalence_claimed": False,
@@ -106,7 +106,8 @@ def run_development_campaign(
         "holdout_evaluated": False,
         "validation_evaluated": False,
         "parameter_family_predeclared": True,
-        "overlap_adjustment": "GREEDY_SAME_SESSION_NONOVERLAP_BY_HORIZON",
+        "outcome_binding": "EXACT_CLOCK_MINUTES_SAME_SESSION_COMPLETE_PATH_REQUIRED",
+        "overlap_adjustment": "GREEDY_SAME_SESSION_NONOVERLAP_BY_CLOCK_TIME",
         "variants": variants,
     }
 
@@ -124,7 +125,7 @@ def _screen(
     shifted_effective = controls[signal]["shifted_nonoverlap"]
     reasons: list[str] = []
 
-    # Raw events are reported, but screening uses the conservative 30-bar
+    # Raw events are reported, but screening uses the conservative 30-minute
     # non-overlapping sample so dense events inside one trend cannot masquerade
     # as independent evidence.
     effective_30 = candidate_effective["horizons"]["30"]
