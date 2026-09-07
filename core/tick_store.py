@@ -11,6 +11,7 @@ from collections import deque
 from typing import Callable, Any
 from config import config as cfg
 from core.fs_utils import ensure_parent_dir
+from core.sqlite_write_lock import sqlite_transaction_lock
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.time_utils import compute_age_sec, normalize_epoch_seconds, now_utc_epoch
@@ -168,8 +169,9 @@ def _conn():
             conn.execute(f"PRAGMA journal_size_limit={MAX_SQLITE_WAL_BYTES}")
         except Exception:
             pass
-        with conn:
-            yield conn
+        with sqlite_transaction_lock():
+            with conn:
+                yield conn
     finally:
         conn.close()
 
