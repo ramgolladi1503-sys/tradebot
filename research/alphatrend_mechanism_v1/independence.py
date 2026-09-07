@@ -11,12 +11,12 @@ def evaluate_nonoverlap(
     signal_column: str,
     horizons: Iterable[int] = (15, 30),
 ) -> dict[str, object]:
-    """Evaluate a signal using same-session, non-overlapping event windows.
+    """Evaluate a signal using same-session, non-overlapping clock windows.
 
     Raw event counts can badly overstate evidence when several signals occur
-    inside the same 15- or 30-bar outcome window. For each requested horizon,
+    inside the same 15- or 30-minute outcome window. For each requested horizon,
     this function greedily keeps the first valid event in a session and then
-    suppresses later events until the prior outcome window has elapsed.
+    suppresses later events until the prior clock-time outcome window elapsed.
 
     This is deliberately conservative. It is not a substitute for session/block
     bootstrap inference, but it prevents a dense trend episode from being
@@ -36,13 +36,12 @@ def evaluate_nonoverlap(
     if df.duplicated(["session_date", "timestamp"]).any():
         raise ValueError("duplicate timestamp within session")
 
-    df["_bar_position"] = df.groupby("session_date", sort=False).cumcount()
     signal = pd.to_numeric(df[signal_column], errors="coerce").fillna(0).astype(int)
     result: dict[str, object] = {"signal": signal_column, "horizons": {}}
 
     for horizon in tuple(sorted({int(h) for h in horizons})):
         if horizon < 1:
-            raise ValueError("horizons must be positive integers")
+            raise ValueError("horizons must be positive integer minutes")
         return_column = f"fwd_ret_{horizon}_bps"
         if return_column not in df.columns:
             raise KeyError(return_column)
@@ -50,18 +49,19 @@ def evaluate_nonoverlap(
         valid_mask = signal.ne(0) & df[return_column].notna()
         events = df.loc[
             valid_mask,
-            ["timestamp", "session_date", "_bar_position", return_column],
+            ["timestamp", "session_date", return_column],
         ].copy()
         events["_signal"] = signal.loc[valid_mask].to_numpy()
 
         selected_indices: list[int] = []
+        minimum_gap = pd.Timedelta(minutes=horizon)
         for _, session_events in events.groupby("session_date", sort=False):
-            last_kept_position: int | None = None
+            last_kept_time: pd.Timestamp | None = None
             for idx, row in session_events.iterrows():
-                position = int(row["_bar_position"])
-                if last_kept_position is None or position - last_kept_position >= horizon:
+                timestamp = pd.Timestamp(row["timestamp"])
+                if last_kept_time is None or timestamp - last_kept_time >= minimum_gap:
                     selected_indices.append(idx)
-                    last_kept_position = position
+                    last_kept_time = timestamp
 
         selected = events.loc[selected_indices].copy() if selected_indices else events.iloc[0:0].copy()
         directional_return = selected["_signal"] * selected[return_column]
