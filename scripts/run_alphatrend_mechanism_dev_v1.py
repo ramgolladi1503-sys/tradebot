@@ -14,7 +14,7 @@ from research.ml_strategy_discovery.dataset import normalize_bars
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run AlphaTrend-inspired mechanism research on DEVELOPMENT bars only."
+        description="Run AlphaTrend-inspired mechanism research on DEVELOPMENT 1-minute bars only."
     )
     parser.add_argument("--bars", required=True, help="Development-only CSV or parquet OHLCV file")
     parser.add_argument("--instrument", default="NIFTY")
@@ -55,6 +55,11 @@ def main() -> int:
             "BLOCKED: --development-only-attestation is required. "
             "Do not pass a validation or final-holdout file to this runner."
         )
+    if args.bar_interval_minutes != 1:
+        raise SystemExit(
+            "BLOCKED: AlphaTrend mechanism V1 is defined on 1-minute bars. "
+            "Its 15/30-bar outcomes are 15/30 minutes only at 1-minute cadence."
+        )
 
     source = Path(args.bars).expanduser().resolve()
     if not source.exists() or not source.is_file():
@@ -83,6 +88,7 @@ def main() -> int:
         "timestamp_semantics": args.timestamp_semantics,
         "source_timezone": args.source_timezone,
         "bar_interval_minutes": args.bar_interval_minutes,
+        "outcome_semantics": "15_AND_30_MINUTES_FROM_1MIN_BARS",
         "scope_attested": "DEVELOPMENT_ONLY",
         "validation_evaluated": False,
         "holdout_evaluated": False,
