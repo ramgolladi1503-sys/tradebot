@@ -46,8 +46,10 @@ def add_forward_labels(
 
         for horizon in horizons_tuple:
             target_times = time_index + pd.Timedelta(minutes=horizon)
-            future_close = close_by_time.reindex(target_times).to_numpy()
-            g[f"fwd_ret_{horizon}_bps"] = (future_close / g["close"].to_numpy() - 1.0) * 10000.0
+            future_close = pd.Series(
+                close_by_time.reindex(target_times).to_numpy(),
+                index=g.index,
+            )
 
             expected_highs: list[pd.Series] = []
             expected_lows: list[pd.Series] = []
@@ -62,10 +64,14 @@ def add_forward_labels(
 
             high_matrix = pd.concat(expected_highs, axis=1)
             low_matrix = pd.concat(expected_lows, axis=1)
-            # skipna=False is intentional: a missing minute invalidates the
-            # entire path label rather than compressing clock time.
-            future_high = high_matrix.max(axis=1, skipna=False)
-            future_low = low_matrix.min(axis=1, skipna=False)
+            complete_path = high_matrix.notna().all(axis=1) & low_matrix.notna().all(axis=1)
+
+            # A valid endpoint is not enough: every intervening minute must be
+            # present, otherwise the entire horizon is excluded.
+            future_close = future_close.where(complete_path)
+            future_high = high_matrix.max(axis=1, skipna=False).where(complete_path)
+            future_low = low_matrix.min(axis=1, skipna=False).where(complete_path)
+            g[f"fwd_ret_{horizon}_bps"] = (future_close / g["close"] - 1.0) * 10000.0
             g[f"fwd_high_{horizon}_bps"] = (future_high / g["close"] - 1.0) * 10000.0
             g[f"fwd_low_{horizon}_bps"] = (future_low / g["close"] - 1.0) * 10000.0
 
