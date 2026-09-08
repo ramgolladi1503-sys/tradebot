@@ -39,7 +39,12 @@ def download():
     with urllib.request.urlopen(req,timeout=180) as r:XLSX.write_bytes(r.read())
 
 def parse_symbol(s:str):
-    m=re.search(r'NIFTY\d+(\d{5})(CE|PE)$',s)
+    """Extract NIFTY strike + side robustly from legacy/current FYERS symbols.
+
+    NIFTY strikes in this ledger are five digits; expiry encoding before the strike varies.
+    Anchor only on the terminal 5-digit strike immediately before CE/PE.
+    """
+    m=re.search(r'(\d{5})(CE|PE)$',str(s).upper().strip())
     if not m: return np.nan,''
     return int(m.group(1)),m.group(2)
 
@@ -86,6 +91,13 @@ def main():
 
     lab=pd.read_csv(LABELS); lab['entry_dt']=pd.to_datetime(lab.entry_dt); lab['signal_dt']=pd.to_datetime(lab.signal_dt); lab['day']=lab.signal_dt.dt.date
     parsed=lab.SYMBOL.apply(parse_symbol); lab['strike']=[x[0] for x in parsed]; lab['side']=[x[1] for x in parsed]
+    parse_fail=lab['strike'].isna() | ~lab['side'].isin(['CE','PE'])
+    if parse_fail.any():
+        bad=lab.loc[parse_fail,['SYMBOL']].copy()
+        bad.to_csv(OUT/'unparsed_symbols.csv',index=False)
+        print(f'WARNING: dropping {int(parse_fail.sum())} unparsed symbols; see unparsed_symbols.csv')
+    lab=lab.loc[~parse_fail].copy()
+    lab['strike']=lab['strike'].astype(int)
     data_days=set(opt.day.unique()); lab=lab[lab.day.isin(data_days)].copy()
 
     # Data compatibility audit.
@@ -99,7 +111,6 @@ def main():
         chosen=min(strikes,key=lambda x:abs(x-target)); exact_strike=chosen==target
         s=z[z.strike.astype(int)==chosen].copy().sort_values('timestamp')
         series_by_day[d]=(s, chosen, target, side)
-        # compare public option close nearest entry minute to FYERS entry price
         cand=s.iloc[(s.timestamp-r.entry_dt).abs().argsort()[:1]]
         if len(cand):
             pub=float(cand.close.iloc[0]); fy=float(r.PRICE); rel=abs(pub-fy)/fy if fy else np.nan
@@ -110,7 +121,6 @@ def main():
                        'timestamp_delta_min':delta,'signal_dt':r.signal_dt,'entry_dt':r.entry_dt})
     aud=pd.DataFrame(audits); aud.to_csv(OUT/'option_data_compatibility.csv',index=False)
 
-    # Build per-day features, conditioning on observed contract side/nearest strike.
     dayfeat={}
     for d,(s,chosen,target,side) in series_by_day.items():
         x=s[['timestamp','open','high','low','close']].copy().reset_index(drop=True)
@@ -161,7 +171,6 @@ def main():
                   hit=w[trig]
                   if len(hit): pred[d]=hit.timestamp.iloc[0]
                 tr=score(train_obs,pred)
-                # prioritize timing, not simple coverage
                 rank=.35*tr['exact']+.25*tr['within1']+.20*tr['within5']+.10*tr['within10']+.10*tr['coverage']
                 results.append({'trend_metric':tm,'trend_period':tp,'vol_metric':vm,'vol_period':vp,'trend_q':tq,'vol_q':vq,
                                 'trend_threshold':th_t,'vol_threshold':th_v,'mode':mode,'train_rank':rank,**{f'train_{k}':v for k,v in tr.items()}})
@@ -186,7 +195,6 @@ def main():
     fr=pd.DataFrame(frozen); fr.to_csv(OUT/'frozen_test_top100.csv',index=False)
     b=fr.iloc[0]
 
-    # observed timestamp feature fingerprint (diagnostic, no threshold search)
     fingerprints=[]
     for _,r in lab.iterrows():
       if r.day not in dayfeat:continue
