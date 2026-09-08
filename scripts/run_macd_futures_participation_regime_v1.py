@@ -21,6 +21,12 @@ from research.macd_futures_participation_regime_v1.analysis import (  # noqa: E4
     summarize_interaction,
     write_json,
 )
+from research.macd_futures_participation_regime_v1.controls import (  # noqa: E402
+    controls_bundle,
+)
+from research.macd_futures_participation_regime_v1.matching import (  # noqa: E402
+    validate_state_matching_coverage,
+)
 from research.macd_futures_participation_regime_v1.oracle import (  # noqa: E402
     OracleError,
     verify_primary_output,
@@ -78,6 +84,58 @@ def _run_oracle(
     return oracle
 
 
+def _evaluate_supported(
+    *,
+    out: Path,
+    prefix: str,
+    hypothesis_id: str,
+    state_id: str,
+    state_col: str,
+    support: dict,
+    aligned,
+    assignments,
+    signal_paths,
+    placebo,
+    signals,
+    assigned,
+    state,
+) -> dict:
+    per_signal = prepare_interaction(signals, assigned, state, state_col)
+
+    # Matching quality is a gate, not a descriptive afterthought. A signal may
+    # not disappear merely because its same-state placebo pool is inconvenient.
+    matching = validate_state_matching_coverage(per_signal, signals)
+    write_json(out / f"{prefix}_MATCHING_COVERAGE.json", matching)
+
+    per_signal.to_csv(out / f"{prefix}_PER_SIGNAL_PAIRED_DELTAS.csv", index=False)
+    oracle = _run_oracle(
+        out,
+        prefix,
+        state_id,
+        aligned,
+        assignments,
+        signal_paths,
+        placebo,
+        per_signal,
+    )
+
+    summary = summarize_interaction(per_signal)
+    summary["pre_payoff_support"] = support
+    summary["support_gate_pass"] = True
+    result = frozen_hypothesis_result(summary, hypothesis_id)
+    result["matching_coverage"] = matching
+    result["independent_oracle"] = oracle
+
+    controls = controls_bundle(per_signal)
+    write_json(out / f"{prefix}_CORE_NEGATIVE_CONTROLS.json", controls)
+    result["core_negative_controls"] = controls
+
+    result["retrospective_robustness"] = _write_robustness(
+        out, prefix, per_signal
+    )
+    return result
+
+
 def main() -> int:
     args = parse_args()
     out = Path(args.output_root)
@@ -120,23 +178,29 @@ def main() -> int:
         evaluated = []
         robustness_completed = []
         oracle_completed = []
+        controls_completed = []
+        matching_completed = []
+
         if h1_support["support_gate_pass"]:
-            h1_ps = prepare_interaction(signals, assigned, state, "h1_active")
-            h1_ps.to_csv(out / "H1_PER_SIGNAL_PAIRED_DELTAS.csv", index=False)
-            h1_oracle = _run_oracle(
-                out, "H1", "H1", aligned, assignments, signal_paths, placebo, h1_ps
+            h1 = _evaluate_supported(
+                out=out,
+                prefix="H1",
+                hypothesis_id="MACD_FUTURES_PARTICIPATION_REGIME_V1_H1",
+                state_id="H1",
+                state_col="h1_active",
+                support=h1_support,
+                aligned=aligned,
+                assignments=assignments,
+                signal_paths=signal_paths,
+                placebo=placebo,
+                signals=signals,
+                assigned=assigned,
+                state=state,
             )
-            oracle_completed.append("H1")
-            h1_summary = summarize_interaction(h1_ps)
-            h1_summary["pre_payoff_support"] = h1_support
-            h1_summary["support_gate_pass"] = True
-            h1 = frozen_hypothesis_result(
-                h1_summary,
-                "MACD_FUTURES_PARTICIPATION_REGIME_V1_H1",
-            )
-            h1["independent_oracle"] = h1_oracle
-            h1["retrospective_robustness"] = _write_robustness(out, "H1", h1_ps)
             robustness_completed.append("H1")
+            oracle_completed.append("H1")
+            controls_completed.append("H1")
+            matching_completed.append("H1")
             write_json(out / "H1_PRIMARY_RESULT.json", h1)
             evaluated.append(h1)
         else:
@@ -149,25 +213,30 @@ def main() -> int:
             write_json(out / "H1_PRIMARY_RESULT.json", h1)
             evaluated.append(h1)
 
+            # H2 is reached only because H1 failed its frozen pre-payoff support
+            # gate. H1 outcomes remain unopened in this branch of the campaign.
             h2_support = signal_state_support(signals, state, "h2_active")
             write_json(out / "H2_STATE_SUPPORT.json", h2_support)
             if h2_support["support_gate_pass"]:
-                h2_ps = prepare_interaction(signals, assigned, state, "h2_active")
-                h2_ps.to_csv(out / "H2_PER_SIGNAL_PAIRED_DELTAS.csv", index=False)
-                h2_oracle = _run_oracle(
-                    out, "H2", "H2", aligned, assignments, signal_paths, placebo, h2_ps
+                h2 = _evaluate_supported(
+                    out=out,
+                    prefix="H2",
+                    hypothesis_id="MACD_FUTURES_PARTICIPATION_REGIME_V1_H2",
+                    state_id="H2",
+                    state_col="h2_active",
+                    support=h2_support,
+                    aligned=aligned,
+                    assignments=assignments,
+                    signal_paths=signal_paths,
+                    placebo=placebo,
+                    signals=signals,
+                    assigned=assigned,
+                    state=state,
                 )
-                oracle_completed.append("H2")
-                h2_summary = summarize_interaction(h2_ps)
-                h2_summary["pre_payoff_support"] = h2_support
-                h2_summary["support_gate_pass"] = True
-                h2 = frozen_hypothesis_result(
-                    h2_summary,
-                    "MACD_FUTURES_PARTICIPATION_REGIME_V1_H2",
-                )
-                h2["independent_oracle"] = h2_oracle
-                h2["retrospective_robustness"] = _write_robustness(out, "H2", h2_ps)
                 robustness_completed.append("H2")
+                oracle_completed.append("H2")
+                controls_completed.append("H2")
+                matching_completed.append("H2")
             else:
                 h2 = {
                     "hypothesis_id": "MACD_FUTURES_PARTICIPATION_REGIME_V1_H2",
@@ -182,8 +251,10 @@ def main() -> int:
             "campaign": "MACD_FUTURES_PARTICIPATION_REGIME_V1",
             "hypotheses_evaluated": evaluated,
             "retrospective_research_exposed": True,
+            "matching_coverage_completed_for": matching_completed,
             "retrospective_robustness_completed_for": robustness_completed,
             "independent_oracle_completed_for": oracle_completed,
+            "core_negative_controls_completed_for": controls_completed,
             "full_gate_status": "PARTIAL_RETROSPECTIVE_GATES_ONLY",
             "structural_edge_certified": False,
             "execution_viable": "UNKNOWN",
@@ -192,10 +263,8 @@ def main() -> int:
             "broker_calls": 0,
             "orders": 0,
             "next_required_gates": [
-                "session_block_permutation",
+                "basis_state_timing_permutation",
                 "one_and_two_bar_delay",
-                "basis_state_permutation",
-                "condition_removal",
                 "global_multiplicity_FDR",
                 "determinism_rerun",
                 "prospective_independent_evaluation_if_retrospective_supported",
