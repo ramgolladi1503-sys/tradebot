@@ -21,6 +21,10 @@ from research.macd_futures_participation_regime_v1.analysis import (  # noqa: E4
     summarize_interaction,
     write_json,
 )
+from research.macd_futures_participation_regime_v1.oracle import (  # noqa: E402
+    OracleError,
+    verify_primary_output,
+)
 from research.macd_futures_participation_regime_v1.robustness import (  # noqa: E402
     robustness_bundle,
 )
@@ -43,6 +47,35 @@ def _write_robustness(out: Path, prefix: str, per_signal) -> dict:
     folds.to_csv(out / f"{prefix}_FOLD_RESULTS.csv", index=False)
     write_json(out / f"{prefix}_RETROSPECTIVE_ROBUSTNESS.json", robustness)
     return robustness
+
+
+def _run_oracle(
+    out: Path,
+    prefix: str,
+    state_id: str,
+    aligned,
+    assignments,
+    signal_paths,
+    placebo,
+    per_signal,
+) -> dict:
+    try:
+        oracle = verify_primary_output(
+            aligned,
+            assignments,
+            signal_paths,
+            placebo,
+            per_signal,
+            state_id,
+        )
+    except OracleError as exc:
+        raise CampaignBlocked(f"INDEPENDENT_ORACLE_ERROR:{state_id}:{exc}") from exc
+    write_json(out / f"{prefix}_INDEPENDENT_ORACLE.json", oracle)
+    if oracle["verdict"] != "PASS":
+        raise CampaignBlocked(
+            f"INDEPENDENT_ORACLE_FAIL:{state_id}:mismatches={oracle['mismatch_count']}"
+        )
+    return oracle
 
 
 def main() -> int:
@@ -86,9 +119,14 @@ def main() -> int:
 
         evaluated = []
         robustness_completed = []
+        oracle_completed = []
         if h1_support["support_gate_pass"]:
             h1_ps = prepare_interaction(signals, assigned, state, "h1_active")
             h1_ps.to_csv(out / "H1_PER_SIGNAL_PAIRED_DELTAS.csv", index=False)
+            h1_oracle = _run_oracle(
+                out, "H1", "H1", aligned, assignments, signal_paths, placebo, h1_ps
+            )
+            oracle_completed.append("H1")
             h1_summary = summarize_interaction(h1_ps)
             h1_summary["pre_payoff_support"] = h1_support
             h1_summary["support_gate_pass"] = True
@@ -96,6 +134,7 @@ def main() -> int:
                 h1_summary,
                 "MACD_FUTURES_PARTICIPATION_REGIME_V1_H1",
             )
+            h1["independent_oracle"] = h1_oracle
             h1["retrospective_robustness"] = _write_robustness(out, "H1", h1_ps)
             robustness_completed.append("H1")
             write_json(out / "H1_PRIMARY_RESULT.json", h1)
@@ -115,6 +154,10 @@ def main() -> int:
             if h2_support["support_gate_pass"]:
                 h2_ps = prepare_interaction(signals, assigned, state, "h2_active")
                 h2_ps.to_csv(out / "H2_PER_SIGNAL_PAIRED_DELTAS.csv", index=False)
+                h2_oracle = _run_oracle(
+                    out, "H2", "H2", aligned, assignments, signal_paths, placebo, h2_ps
+                )
+                oracle_completed.append("H2")
                 h2_summary = summarize_interaction(h2_ps)
                 h2_summary["pre_payoff_support"] = h2_support
                 h2_summary["support_gate_pass"] = True
@@ -122,6 +165,7 @@ def main() -> int:
                     h2_summary,
                     "MACD_FUTURES_PARTICIPATION_REGIME_V1_H2",
                 )
+                h2["independent_oracle"] = h2_oracle
                 h2["retrospective_robustness"] = _write_robustness(out, "H2", h2_ps)
                 robustness_completed.append("H2")
             else:
@@ -139,6 +183,7 @@ def main() -> int:
             "hypotheses_evaluated": evaluated,
             "retrospective_research_exposed": True,
             "retrospective_robustness_completed_for": robustness_completed,
+            "independent_oracle_completed_for": oracle_completed,
             "full_gate_status": "PARTIAL_RETROSPECTIVE_GATES_ONLY",
             "structural_edge_certified": False,
             "execution_viable": "UNKNOWN",
@@ -152,7 +197,6 @@ def main() -> int:
                 "basis_state_permutation",
                 "condition_removal",
                 "global_multiplicity_FDR",
-                "independent_oracle",
                 "determinism_rerun",
                 "prospective_independent_evaluation_if_retrospective_supported",
                 "execution_cost_authority",
