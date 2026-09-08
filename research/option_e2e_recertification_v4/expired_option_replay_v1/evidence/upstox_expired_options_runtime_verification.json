@@ -1,0 +1,32 @@
+{
+  "allowed_for_live_execution": false,
+  "archive_sha256": "4ece07d0b788d415a79f40c1245030cba361e886473a2e24ac299a1dcbb985d8",
+  "authority_backed_contract_count": 1199,
+  "authority_backed_expiry_count": 82,
+  "authority_backed_session_count": 390,
+  "engine_source_sha256": "69d7c543b5ff072029146b1750f1845934b5e25fae0314cc79563c288e098662",
+  "holdout_outcomes_read": false,
+  "profitability_claim": false,
+  "sample_replay": {
+    "earliest_entry_timestamp": "2024-09-30 10:01:00+05:30",
+    "entry_price": 2946.05,
+    "entry_timestamp": "2024-09-30 10:01:00+05:30",
+    "exit_price": 2920.7,
+    "exit_reason": "time_exit",
+    "exit_timestamp": "2024-09-30 10:31:00+05:30",
+    "expiry": "2024-10-03",
+    "friction_cost": 73.334375,
+    "gross_pnl": -633.7500000000091,
+    "instrument_key": "NSE_FO|58422|03-10-2024",
+    "net_pnl": -707.0843750000091,
+    "option_type": "CE",
+    "partition": "development",
+    "signal_timestamp": "2024-09-30 10:00:00+05:30",
+    "signal_to_entry_seconds": 60.0,
+    "strategy_id": "VERIFY_SYNTHETIC_INTENT_NOT_STRATEGY_EVIDENCE",
+    "strike": 23050.0
+  },
+  "schema_version": "expired_option_archive_runtime_verification_v1",
+  "strategy_edge_claim": false,
+  "verification_scope": "LOADER_AND_REPLAY_MECHANICS_ONLY"
+}
