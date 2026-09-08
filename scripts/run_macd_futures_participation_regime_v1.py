@@ -34,6 +34,9 @@ from research.macd_futures_participation_regime_v1.oracle import (  # noqa: E402
 from research.macd_futures_participation_regime_v1.robustness import (  # noqa: E402
     robustness_bundle,
 )
+from research.macd_futures_participation_regime_v1.timing_control import (  # noqa: E402
+    within_session_circular_state_shift_control,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -130,6 +133,16 @@ def _evaluate_supported(
     write_json(out / f"{prefix}_CORE_NEGATIVE_CONTROLS.json", controls)
     result["core_negative_controls"] = controls
 
+    timing_control = within_session_circular_state_shift_control(
+        signals=signals,
+        assigned=assigned,
+        state=state,
+        state_col=state_col,
+        primary_per_signal=per_signal,
+    )
+    write_json(out / f"{prefix}_BASIS_TIMING_CONTROL.json", timing_control)
+    result["basis_timing_control"] = timing_control
+
     result["retrospective_robustness"] = _write_robustness(
         out, prefix, per_signal
     )
@@ -179,6 +192,7 @@ def main() -> int:
         robustness_completed = []
         oracle_completed = []
         controls_completed = []
+        timing_control_completed = []
         matching_completed = []
 
         if h1_support["support_gate_pass"]:
@@ -200,6 +214,7 @@ def main() -> int:
             robustness_completed.append("H1")
             oracle_completed.append("H1")
             controls_completed.append("H1")
+            timing_control_completed.append("H1")
             matching_completed.append("H1")
             write_json(out / "H1_PRIMARY_RESULT.json", h1)
             evaluated.append(h1)
@@ -236,6 +251,7 @@ def main() -> int:
                 robustness_completed.append("H2")
                 oracle_completed.append("H2")
                 controls_completed.append("H2")
+                timing_control_completed.append("H2")
                 matching_completed.append("H2")
             else:
                 h2 = {
@@ -255,6 +271,7 @@ def main() -> int:
             "retrospective_robustness_completed_for": robustness_completed,
             "independent_oracle_completed_for": oracle_completed,
             "core_negative_controls_completed_for": controls_completed,
+            "basis_timing_control_completed_for": timing_control_completed,
             "full_gate_status": "PARTIAL_RETROSPECTIVE_GATES_ONLY",
             "structural_edge_certified": False,
             "execution_viable": "UNKNOWN",
@@ -263,7 +280,6 @@ def main() -> int:
             "broker_calls": 0,
             "orders": 0,
             "next_required_gates": [
-                "basis_state_timing_permutation",
                 "one_and_two_bar_delay",
                 "global_multiplicity_FDR",
                 "determinism_rerun",
