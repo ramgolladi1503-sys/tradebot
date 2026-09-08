@@ -21,6 +21,9 @@ from research.macd_futures_participation_regime_v1.analysis import (  # noqa: E4
     summarize_interaction,
     write_json,
 )
+from research.macd_futures_participation_regime_v1.robustness import (  # noqa: E402
+    robustness_bundle,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,6 +36,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--placebo-payoffs", required=True)
     p.add_argument("--output-root", required=True)
     return p.parse_args()
+
+
+def _write_robustness(out: Path, prefix: str, per_signal) -> dict:
+    folds, robustness = robustness_bundle(per_signal)
+    folds.to_csv(out / f"{prefix}_FOLD_RESULTS.csv", index=False)
+    write_json(out / f"{prefix}_RETROSPECTIVE_ROBUSTNESS.json", robustness)
+    return robustness
 
 
 def main() -> int:
@@ -71,11 +81,11 @@ def main() -> int:
         state = build_basis_state(aligned)
         signals, assigned = bind_macd_ledgers(assignments, signal_paths, placebo)
 
-        # H1 support is determined before any H1 payoff subgroup is read.
         h1_support = signal_state_support(signals, state, "h1_active")
         write_json(out / "H1_STATE_SUPPORT.json", h1_support)
 
         evaluated = []
+        robustness_completed = []
         if h1_support["support_gate_pass"]:
             h1_ps = prepare_interaction(signals, assigned, state, "h1_active")
             h1_ps.to_csv(out / "H1_PER_SIGNAL_PAIRED_DELTAS.csv", index=False)
@@ -86,6 +96,8 @@ def main() -> int:
                 h1_summary,
                 "MACD_FUTURES_PARTICIPATION_REGIME_V1_H1",
             )
+            h1["retrospective_robustness"] = _write_robustness(out, "H1", h1_ps)
+            robustness_completed.append("H1")
             write_json(out / "H1_PRIMARY_RESULT.json", h1)
             evaluated.append(h1)
         else:
@@ -98,8 +110,6 @@ def main() -> int:
             write_json(out / "H1_PRIMARY_RESULT.json", h1)
             evaluated.append(h1)
 
-            # H2 was pre-registered before outcomes and is reached only because
-            # H1 failed its support gate. H2 support is also pre-payoff.
             h2_support = signal_state_support(signals, state, "h2_active")
             write_json(out / "H2_STATE_SUPPORT.json", h2_support)
             if h2_support["support_gate_pass"]:
@@ -112,6 +122,8 @@ def main() -> int:
                     h2_summary,
                     "MACD_FUTURES_PARTICIPATION_REGIME_V1_H2",
                 )
+                h2["retrospective_robustness"] = _write_robustness(out, "H2", h2_ps)
+                robustness_completed.append("H2")
             else:
                 h2 = {
                     "hypothesis_id": "MACD_FUTURES_PARTICIPATION_REGIME_V1_H2",
@@ -126,7 +138,8 @@ def main() -> int:
             "campaign": "MACD_FUTURES_PARTICIPATION_REGIME_V1",
             "hypotheses_evaluated": evaluated,
             "retrospective_research_exposed": True,
-            "full_gate_status": "NOT_RUN_BY_MINIMAL_PRIMARY_ESTIMAND_RUNNER",
+            "retrospective_robustness_completed_for": robustness_completed,
+            "full_gate_status": "PARTIAL_RETROSPECTIVE_GATES_ONLY",
             "structural_edge_certified": False,
             "execution_viable": "UNKNOWN",
             "broker_write_authority": False,
@@ -134,16 +147,15 @@ def main() -> int:
             "broker_calls": 0,
             "orders": 0,
             "next_required_gates": [
-                "chronological_fold_interaction",
                 "session_block_permutation",
                 "one_and_two_bar_delay",
                 "basis_state_permutation",
                 "condition_removal",
-                "top_five_session_removal",
-                "leave_one_quarter_out",
                 "global_multiplicity_FDR",
                 "independent_oracle",
                 "determinism_rerun",
+                "prospective_independent_evaluation_if_retrospective_supported",
+                "execution_cost_authority",
             ],
         }
         write_json(out / "PRIMARY_STAGE_VERDICT.json", final)
