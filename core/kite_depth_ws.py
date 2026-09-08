@@ -334,6 +334,17 @@ def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str
     )
 
 
+def _active_launch_plan_tokens() -> list[int]:
+    """Return the immutable token union selected by the governed launch plan."""
+    state = _observation_state_payload()
+    if not (
+        bool(state.get("enabled"))
+        and str(state.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+    ):
+        return []
+    return _normalize_positive_tokens(state.get("final_union_tokens") or [])
+
+
 def _ensure_feed_session_id() -> str:
     global _FEED_SESSION_ID
     if not _FEED_SESSION_ID:
@@ -8611,6 +8622,15 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 last_option_prune_refresh_epoch = float(
                     last_option_prune_refresh_state.get("last_refresh_epoch") or 0.0
                 )
+                if should_refresh and _active_launch_plan_tokens():
+                    _log_ws(
+                        "FEED_OPTION_PRUNE_REFRESH_SKIPPED",
+                        {
+                            "reason": "launch_plan_canonical_authority",
+                            "canonical_count": len(_active_launch_plan_tokens()),
+                        },
+                    )
+                    should_refresh = False
                 if should_refresh:
                     refresh_mode = str(refresh_payload.get("refresh_mode") or "delta")
                     refresh_reason = str(refresh_payload.get("reason") or "stale_option_prune_refresh")
@@ -8881,21 +8901,58 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 _emit_snapshot(now_loop)
                 continue
             rebalance_state["last_eval_ts"] = now_reb
-            try:
-                desired_tokens_raw, resolution = build_subscription_tokens(
-                    symbols=list(getattr(cfg, "SYMBOLS", []) or []),
-                    max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)),
-                )
-            except Exception as exc:
-                _log_ws("FEED_REBALANCE_BUILD_ERROR", {"error": str(exc)})
-                _emit_snapshot(now_loop)
-                continue
-
             sticky_tokens = set(int(t) for t in get_sticky_tokens() if t is not None)
-            atm_by_symbol, step_by_symbol, underlying_tokens = _resolution_atm_step_and_underlyings(resolution)
-            desired_tokens = set(int(t) for t in desired_tokens_raw if t is not None)
-            desired_tokens.update(sticky_tokens)
-            desired_tokens.update(underlying_tokens)
+            canonical_plan_tokens = _active_launch_plan_tokens()
+            if canonical_plan_tokens:
+                # A governed live launch plan is the source of truth for this
+                # session.  Rebuilding from the broader constituent registry
+                # here would silently widen the subscription set and make the
+                # feed mirror disagree with the immutable plan.
+                desired_tokens = set(canonical_plan_tokens)
+                resolution = []
+                atm_by_symbol, step_by_symbol, underlying_tokens = {}, {}, set()
+            else:
+                try:
+                    desired_tokens_raw, resolution = build_subscription_tokens(
+                        symbols=list(getattr(cfg, "SYMBOLS", []) or []),
+                        max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)),
+                    )
+                except Exception as exc:
+                    _log_ws("FEED_REBALANCE_BUILD_ERROR", {"error": str(exc)})
+                    _emit_snapshot(now_loop)
+                    continue
+                atm_by_symbol, step_by_symbol, underlying_tokens = _resolution_atm_step_and_underlyings(resolution)
+                desired_tokens = set(int(t) for t in desired_tokens_raw if t is not None)
+            if not canonical_plan_tokens:
+                desired_tokens.update(sticky_tokens)
+                desired_tokens.update(underlying_tokens)
+
+            if canonical_plan_tokens:
+                current_plan_tokens = set(int(t) for t in (_LAST_TOKENS or []) if int(t) > 0)
+                missing_plan_tokens = sorted(desired_tokens - current_plan_tokens)
+                extra_plan_tokens = sorted(current_plan_tokens - desired_tokens)
+                if missing_plan_tokens or extra_plan_tokens:
+                    _log_ws(
+                        "FEED_LAUNCH_PLAN_CANONICAL_RECONCILE",
+                        {
+                            "reason": "launch_plan_canonical_reconcile",
+                            "canonical_count": len(desired_tokens),
+                            "current_count": len(current_plan_tokens),
+                            "subscribe_count": len(missing_plan_tokens),
+                            "unsubscribe_count": len(extra_plan_tokens),
+                            "canonical_plan_sha": str(_observation_state_payload().get("plan_sha") or ""),
+                        },
+                    )
+                    ok_apply = globals()["_apply_subscription_delta"](
+                        kws,
+                        missing_plan_tokens,
+                        extra_plan_tokens,
+                        reason="launch_plan_canonical_reconcile",
+                    )
+                    if ok_apply:
+                        rebalance_state["last_rebalance_ts"] = now_reb
+                    _emit_snapshot(now_loop)
+                    continue
 
             decision = _compute_rebalance_decision(
                 current_tokens=set(int(t) for t in (_LAST_TOKENS or [])),

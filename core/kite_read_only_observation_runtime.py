@@ -331,6 +331,11 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     env = safe_environment()
     contract = safety_contract(env, child_command=[sys.executable, "-B", "core.kite_read_only_observation_runtime.py"])
     output_root.mkdir(parents=True, exist_ok=True)
+    # Bind the governed runtime environment before importing any module that
+    # resolves config-dependent storage paths at import time.  In particular,
+    # core.depth_store imports config.config, whose TRADE_DB_PATH is otherwise
+    # frozen to the process's pre-existing/default runtime root.
+    os.environ.update(env)
     import core.depth_store as depth_store
     depth_store.depth_store.configure_rejection_provenance(
         output_root / "depth_rejections.jsonl",
@@ -338,7 +343,6 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         producer_sha=str(launch_plan.get("commit_sha") or os.environ.get("TRADEBOT_PRODUCER_SHA") or ""),
     )
     (output_root / "startup_safety_contract.json").write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.environ.update(env)
     assert_import_boundary()
 
     from core.auth import get_kite_client, get_kite_credentials
