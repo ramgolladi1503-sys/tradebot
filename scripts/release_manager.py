@@ -31,9 +31,33 @@ def _graph(path: Path) -> DependencyEvidence:
     )
 
 
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def _gate_result(path: Path) -> dict[str, bool]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    return {str(key): bool(value) for key, value in payload.items()}
+    gates = payload.get("gates", payload)
+    results: dict[str, bool] = {}
+    for key, value in gates.items():
+        if isinstance(value, bool):
+            results[str(key)] = value
+            continue
+        if not isinstance(value, dict):
+            results[str(key)] = False
+            continue
+        evidence_path = value.get("evidence_path")
+        evidence_sha256 = value.get("evidence_sha256")
+        evidence_ok = True
+        if evidence_path or evidence_sha256:
+            if not evidence_path or not evidence_sha256:
+                evidence_ok = False
+            else:
+                evidence_ok = _sha256(Path(evidence_path)) == evidence_sha256
+        results[str(key)] = bool(value.get("pass")) and evidence_ok
+    return results
 
 
 def cmd_init(args: argparse.Namespace) -> int:
