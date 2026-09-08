@@ -12,7 +12,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.certified_release_store import ReleaseStore, ReleaseStoreError
-from core.release_certification import validate_certification_result
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -25,6 +24,29 @@ def _git_commit_exists(repo: Path, sha: str) -> bool:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     ).returncode == 0
+
+
+def _valid_promoted_certification(result: dict, current: dict | None) -> tuple[bool, str]:
+    if current is None:
+        return False, "certified_release_uninitialized"
+    if result.get("verdict") != "PASS":
+        return False, "certification_not_pass"
+    if result.get("candidate_sha") != current.get("certified_live_sha"):
+        return False, "certification_candidate_mismatch"
+    if result.get("fallback_sha") != current.get("fallback_live_sha"):
+        return False, "certification_fallback_mismatch"
+    if result.get("base_sha") != current.get("fallback_live_sha"):
+        return False, "certification_base_mismatch"
+    required = result.get("required_gates")
+    passed = result.get("passed_gates")
+    failed = result.get("failed_gates")
+    if not isinstance(required, list) or not required:
+        return False, "certification_required_gates_missing"
+    if not isinstance(passed, list) or set(passed) != set(required):
+        return False, "certification_passed_gates_incomplete"
+    if failed not in ([], ()):
+        return False, "certification_failed_gates_present"
+    return True, "PASS"
 
 
 def verify(root: Path, repo: Path | None = None, certification: Path | None = None) -> dict:
@@ -42,8 +64,9 @@ def verify(root: Path, repo: Path | None = None, certification: Path | None = No
             checks["certified_sha_exists"] = _git_commit_exists(repo, current["certified_live_sha"])
         if certification is not None:
             result = json.loads(certification.read_text(encoding="utf-8"))
-            validate_certification_result(result, current)
-            checks["certification_result_complete"] = result["candidate_sha"] == current["certified_live_sha"]
+            checks["certification_result_complete"], certification_status = _valid_promoted_certification(result, current)
+            if not checks["certification_result_complete"]:
+                raise ReleaseStoreError(certification_status)
         ok = all(checks.values())
         return {
             "independent_release_verifier_pass": ok,

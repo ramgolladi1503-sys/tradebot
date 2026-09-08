@@ -64,4 +64,39 @@ def test_independent_verifier_requires_complete_certification_result(tmp_path):
 
     assert promoted["certified_live_sha"] == candidate
     assert result["independent_release_verifier_pass"] is False
-    assert result["blocker"] == "promotion_base_mismatch"
+    assert result["blocker"] == "certification_passed_gates_incomplete"
+
+
+def test_independent_verifier_accepts_promoted_certification_result(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    base = _commit(repo, "base.py", "x=1\n")
+    candidate = _commit(repo, "candidate.py", "x=2\n")
+    store = ReleaseStore(tmp_path / "state")
+    current = store.record_verified_selection(candidate_sha=base, evidence_sha256="e" * 64, expected_event=None)
+    store.record_verified_selection(
+        candidate_sha=candidate,
+        evidence_sha256="f" * 64,
+        expected_event=current["event_sha256"],
+    )
+    cert_path = tmp_path / "certification.json"
+    cert_path.write_text(
+        json.dumps(
+            {
+                "verdict": "PASS",
+                "candidate_sha": candidate,
+                "base_sha": base,
+                "fallback_sha": base,
+                "required_gates": ["source_identity"],
+                "passed_gates": ["source_identity"],
+                "failed_gates": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = verify(tmp_path / "state", repo=repo, certification=cert_path)
+
+    assert result["independent_release_verifier_pass"] is True
+    assert result["checks"]["certification_result_complete"] is True
