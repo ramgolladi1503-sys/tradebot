@@ -1,0 +1,28 @@
+name: Reddit FYERS causal reconstruction v4
+on:
+  push:
+    branches: [research/reddit-fyers-inverse-v1]
+    paths:
+      - 'research/tools/reddit_fyers_causal_reconstruction_v4.py'
+      - 'research/external/reddit_fyers/public_fyers_labels_v1.csv'
+      - '.github/workflows/reddit-fyers-causal-v4.yml'
+  workflow_dispatch:
+jobs:
+  causal-v4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install pandas numpy
+      - name: Run causal reconstruction
+        run: python research/tools/reddit_fyers_causal_reconstruction_v4.py
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reddit-fyers-causal-v4-evidence
+          path: research/evidence/reddit_fyers_causal_v4/
