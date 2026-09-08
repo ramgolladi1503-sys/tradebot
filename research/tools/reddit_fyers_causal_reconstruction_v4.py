@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Research-only causal reconstruction of the public FYERS strategy.
 
-Key correction vs V1/V2: the public 5-minute NIFTY file is bar-start stamped.
-A FYERS entry at HH:MM:01 after a 5-minute close therefore maps to the public
-bar beginning 5 minutes earlier, i.e. target_bar = entry_dt - 6 minutes.
-
+The public 5-minute NIFTY file is bar-start stamped. A FYERS entry at HH:MM:01
+maps to the public bar beginning 5 minutes earlier: target_bar = entry_dt - 6m.
 No broker calls. No live authority.
 """
 from __future__ import annotations
@@ -49,58 +47,54 @@ def prep():
     return s,lab
 
 def evaluate(s,lab,dx_thr=25.0,atr_thr=10.0):
-    win=s[(s.dt.dt.strftime('%H:%M')>='10:50')&(s.dt.dt.strftime('%H:%M')<='15:00')]
+    # Compute cross BEFORE windowing so a genuine 10:50 crossing can use 10:45 as prior bar.
+    a=s.dx_14>=dx_thr; b=s.atr_20>=atr_thr
+    x=s.copy(); x['trigger']=(a & b & ~a.shift(1,fill_value=False))
+    win=x[(x.dt.dt.strftime('%H:%M')>='10:50')&(x.dt.dt.strftime('%H:%M')<='15:00')]
     groups={d:g.reset_index(drop=True) for d,g in win.groupby('day')}
     pred={}
     for d,g in groups.items():
         if pd.Timestamp(d).weekday()>=5 or pd.Timestamp(d).weekday()==1: continue
-        a=g.dx_14.to_numpy()>=dx_thr; b=g.atr_20.to_numpy()>=atr_thr; state=a&b
-        trig=state & np.r_[False,~a[:-1]]
-        h=np.flatnonzero(trig)
+        h=g.index[g.trigger].to_numpy()
         if len(h):
-            j=int(h[0]); row=g.iloc[j]
+            row=g.iloc[int(h[0])]
             pred[d]={'pred_dt':pd.Timestamp(row['dt']),'lrs7_dir':'CE' if row['lrs_7']>0 else 'PE','di14_dir':'CE' if row['pdi_14']>row['mdi_14'] else 'PE','dx14':row['dx_14'],'atr20':row['atr_20']}
     obs={r.day:r for r in lab.itertuples() if r.target_dt<=s.dt.max()}
     all_days=sorted(d for d in s.day.unique() if d in groups and min(obs)<=d<=max(obs) and pd.Timestamp(d).weekday()<5 and pd.Timestamp(d).weekday()!=1)
     rows=[]
     for d in all_days:
         o=obs.get(d); p=pred.get(d)
-        rows.append({'day':d,'has_trade':o is not None,'has_pred':p is not None,
-                     'obs_dt':o.target_dt if o else pd.NaT,'pred_dt':p['pred_dt'] if p else pd.NaT,
-                     'timing_err_min':abs((p['pred_dt']-o.target_dt).total_seconds()/60) if p and o else np.nan,
-                     'obs_dir':o.direction if o else '', 'lrs7_dir':p['lrs7_dir'] if p else '', 'di14_dir':p['di14_dir'] if p else '',
-                     'dx14':p['dx14'] if p else np.nan,'atr20':p['atr20'] if p else np.nan})
+        rows.append({'day':d,'has_trade':o is not None,'has_pred':p is not None,'obs_dt':o.target_dt if o else pd.NaT,'pred_dt':p['pred_dt'] if p else pd.NaT,'timing_err_min':abs((p['pred_dt']-o.target_dt).total_seconds()/60) if p and o else np.nan,'obs_dir':o.direction if o else '','lrs7_dir':p['lrs7_dir'] if p else '','di14_dir':p['di14_dir'] if p else '','dx14':p['dx14'] if p else np.nan,'atr20':p['atr20'] if p else np.nan})
     return pd.DataFrame(rows)
 
 def metrics(df):
-    obs=df.has_trade; pr=df.has_pred; both=obs&pr
-    err=df.loc[both,'timing_err_min']
-    return {'sessions':len(df),'observed_trade_days':int(obs.sum()),'predicted_days':int(pr.sum()),
-            'tp':int((obs&pr).sum()),'fp':int((~obs&pr).sum()),'fn':int((obs&~pr).sum()),'tn':int((~obs&~pr).sum()),
-            'exact_over_obs':float((err==0).sum()/max(1,obs.sum())),'within5_over_obs':float((err<=5).sum()/max(1,obs.sum())),
-            'lrs7_direction_on_tp':float((df.loc[both,'lrs7_dir']==df.loc[both,'obs_dir']).mean()) if both.any() else 0,
-            'di14_direction_on_tp':float((df.loc[both,'di14_dir']==df.loc[both,'obs_dir']).mean()) if both.any() else 0}
+    obs=df.has_trade; pr=df.has_pred; both=obs&pr; err=df.loc[both,'timing_err_min']
+    return {'sessions':len(df),'observed_trade_days':int(obs.sum()),'predicted_days':int(pr.sum()),'tp':int((obs&pr).sum()),'fp':int((~obs&pr).sum()),'fn':int((obs&~pr).sum()),'tn':int((~obs&~pr).sum()),'exact_over_obs':float((err==0).sum()/max(1,obs.sum())),'within5_over_obs':float((err<=5).sum()/max(1,obs.sum())),'lrs7_direction_on_tp':float((df.loc[both,'lrs7_dir']==df.loc[both,'obs_dir']).mean()) if both.any() else 0,'di14_direction_on_tp':float((df.loc[both,'di14_dir']==df.loc[both,'obs_dir']).mean()) if both.any() else 0}
+
+def threshold_interval(s,lab):
+    tr=lab[lab.target_dt<=TRAIN_END].copy(); idx=s.set_index('dt'); lows=[]; highs=[]; rows=[]
+    for r in tr.itertuples():
+        t=r.target_dt; p=t-pd.Timedelta(minutes=5)
+        if t not in idx.index or p not in idx.index: continue
+        pv=float(idx.loc[p,'dx_14']); cv=float(idx.loc[t,'dx_14']); ok=pv<cv
+        rows.append({'day':r.day,'target_dt':t,'prev_dx14':pv,'target_dx14':cv,'up_cross_possible':ok})
+        if ok: lows.append(pv); highs.append(cv)
+    pd.DataFrame(rows).to_csv(OUT/'dx14_threshold_constraints_train.csv',index=False)
+    return (max(lows),min(highs),len(lows)) if lows else (np.nan,np.nan,0)
 
 def main():
-    s,lab=prep(); df=evaluate(s,lab)
-    train=df[pd.to_datetime(df.day)<=TRAIN_END]; test=df[pd.to_datetime(df.day)>TRAIN_END]
-    df.to_csv(OUT/'alignment.csv',index=False)
-    tm,te=metrics(train),metrics(test)
+    s,lab=prep(); df=evaluate(s,lab); train=df[pd.to_datetime(df.day)<=TRAIN_END]; test=df[pd.to_datetime(df.day)>TRAIN_END]
+    df.to_csv(OUT/'alignment.csv',index=False); tm,te=metrics(train),metrics(test)
+    lo,hi,n=threshold_interval(s,lab)
     controls=[]
     for shift in [-10,-5,5,10]:
         x=test.copy(); x.loc[x.has_trade,'obs_dt']=pd.to_datetime(x.loc[x.has_trade,'obs_dt'])+pd.Timedelta(minutes=shift)
         both=x.has_trade&x.has_pred; err=(pd.to_datetime(x.loc[both,'pred_dt'])-pd.to_datetime(x.loc[both,'obs_dt'])).abs().dt.total_seconds()/60
         controls.append({'label_shift_min':shift,'exact_over_obs':float((err==0).sum()/max(1,x.has_trade.sum()))})
     pd.DataFrame(controls).to_csv(OUT/'negative_controls.csv',index=False)
-    report=['# Reddit/FYERS causal reconstruction V4','',
-            '## Candidate rule','- 5-minute NIFTY bars are treated as bar-start stamped.','- Eligible days: Mon/Wed/Thu/Fri.','- Search window: 10:50 to 15:00 public bar timestamps.','- Timing: first DX(14) cross above 25 while ATR(20) >= 10.','- Direction diagnostic A: sign of Linear Regression Slope(7).','- Direction diagnostic B: +DI(14) vs -DI(14).','',
-            '## Train',*(f'- {k}: {v}' for k,v in tm.items()),'',
-            '## Frozen test',*(f'- {k}: {v}' for k,v in te.items()),'',
-            '## Verdict']
-    if te['exact_over_obs']>=0.90 and te['lrs7_direction_on_tp']>=0.90:
-        report.append('TIMING_MECHANISM_STRONGLY_RECONSTRUCTED')
-    else: report.append('NOT_RECONSTRUCTED')
-    report += ['','This does not yet certify the exact hidden strategy because the test-period no-trade-day specificity and exact direction/strike semantics remain unresolved.']
+    report=['# Reddit/FYERS causal reconstruction V4.1','','## Candidate rule','- 5-minute NIFTY bars are bar-start stamped.','- Eligible days: Mon/Wed/Thu/Fri.','- Search window: 10:50 to 15:00 public bar timestamps.','- Timing: first DX(14) cross above 25 while ATR(20) >= 10.','- Direction diagnostic A: sign of Linear Regression Slope(7).','- Direction diagnostic B: +DI(14) vs -DI(14).','','## DX(14) train set-identification',f'- crossing constraints: {n}',f'- feasible fixed-threshold interval: ({lo}, {hi}]',f'- threshold 25 inside interval: {lo < 25 <= hi}','','## Train',*(f'- {k}: {v}' for k,v in tm.items()),'','## Frozen test',*(f'- {k}: {v}' for k,v in te.items()),'','## Verdict']
+    report.append('TIMING_MECHANISM_STRONGLY_RECONSTRUCTED' if te['exact_over_obs']>=0.90 and te['lrs7_direction_on_tp']>=0.90 else 'NOT_RECONSTRUCTED')
+    report += ['','The remaining false-positive no-trade sessions and residual timing/direction mismatches mean the exact hidden two-indicator strategy is not yet certified.']
     (OUT/'REPORT.md').write_text('\n'.join(report)); print('\n'.join(report))
 
 if __name__=='__main__': main()
