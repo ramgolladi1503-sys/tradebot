@@ -1,0 +1,27 @@
+name: Reddit FYERS option-premium timing v3
+on:
+  push:
+    branches: [research/reddit-fyers-inverse-v1]
+    paths:
+      - 'research/tools/reddit_fyers_option_trigger_v3.py'
+      - 'research/external/reddit_fyers/public_fyers_labels_v1.csv'
+      - '.github/workflows/reddit-fyers-option-v3.yml'
+  workflow_dispatch:
+jobs:
+  option-timing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install pandas numpy openpyxl
+      - name: Run option-premium reconstruction
+        run: python research/tools/reddit_fyers_option_trigger_v3.py
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: reddit-fyers-option-v3-evidence
+          path: research/evidence/reddit_fyers_option_v3/
