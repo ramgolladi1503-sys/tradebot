@@ -8,7 +8,7 @@ bar beginning 5 minutes earlier, i.e. target_bar = entry_dt - 6 minutes.
 No broker calls. No live authority.
 """
 from __future__ import annotations
-import io,re,urllib.request
+import urllib.request
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -17,7 +17,7 @@ ROOT=Path(__file__).resolve().parents[2]
 OUT=ROOT/'research'/'evidence'/'reddit_fyers_causal_v4'; OUT.mkdir(parents=True,exist_ok=True)
 LABELS=ROOT/'research'/'external'/'reddit_fyers'/'public_fyers_labels_v1.csv'
 SPOT=OUT/'NIFTY_50_5minute_public.csv'
-URL='https://raw.githubusercontent.com/Aerysaint/TradingStrategyBacktester/46574eaa9e4b3f758a082b766d68f1e23c5b3fb3/datasets/NIFTY%2050_5minute.csv'
+URL='https://raw.githubusercontent.com/Aerysaint/TradingStrategyBacktester/main/datasets/NIFTY%2050_5minute.csv'
 TRAIN_END=pd.Timestamp('2026-01-30 23:59:59')
 
 def download():
@@ -86,7 +86,6 @@ def main():
     train=df[pd.to_datetime(df.day)<=TRAIN_END]; test=df[pd.to_datetime(df.day)>TRAIN_END]
     df.to_csv(OUT/'alignment.csv',index=False)
     tm,te=metrics(train),metrics(test)
-    # Negative control: score identical predicted timestamps against labels shifted by one and two 5m bars.
     controls=[]
     for shift in [-10,-5,5,10]:
         x=test.copy(); x.loc[x.has_trade,'obs_dt']=pd.to_datetime(x.loc[x.has_trade,'obs_dt'])+pd.Timedelta(minutes=shift)
