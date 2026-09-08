@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.morning_readiness_v1 import FATAL_INVARIANTS, NON_FATAL_INVARIANTS
 from scripts.morning_readiness_matrix import run
