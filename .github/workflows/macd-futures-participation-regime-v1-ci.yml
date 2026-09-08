@@ -1,0 +1,49 @@
+name: MACD Futures Participation Regime V1 CI
+
+on:
+  push:
+    branches:
+      - research/macd-futures-participation-regime-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  research-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install minimal research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy pytest pyarrow
+
+      - name: Compile research modules
+        run: |
+          python -m py_compile \
+            research/macd_futures_participation_regime_v1/analysis.py \
+            research/macd_futures_participation_regime_v1/resolver.py \
+            research/macd_futures_participation_regime_v1/robustness.py \
+            research/macd_futures_participation_regime_v1/oracle.py \
+            scripts/run_macd_futures_participation_regime_v1.py \
+            scripts/run_macd_futures_participation_regime_v1_auto.py
+
+      - name: Run focused unit tests
+        run: |
+          PYTHONPATH=. python -m pytest -q \
+            tests/test_macd_futures_participation_regime_v1.py \
+            tests/test_macd_futures_participation_regime_resolver_v1.py \
+            tests/test_macd_futures_participation_regime_robustness_v1.py \
+            tests/test_macd_futures_participation_regime_oracle_v1.py
+
+      - name: Verify diff hygiene
+        run: git diff --check
