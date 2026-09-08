@@ -1,0 +1,27 @@
+name: Reddit FYERS timing isolation v2
+on:
+  push:
+    branches: [research/reddit-fyers-inverse-v1]
+    paths:
+      - 'research/scripts/reddit_fyers_timing_isolation_v2.py'
+      - 'research/external/reddit_fyers/public_fyers_labels_v1.csv'
+      - '.github/workflows/reddit-fyers-timing-v2.yml'
+  workflow_dispatch:
+jobs:
+  timing-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install pandas numpy
+      - name: Run timing isolation
+        run: python research/scripts/reddit_fyers_timing_isolation_v2.py
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: reddit-fyers-timing-v2-evidence
+          path: research/evidence/reddit_fyers_timing_v2/
