@@ -15,6 +15,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+from core.log_writer import get_jsonl_writer
+
+
+# Live-evidence rows contain a bounded subscription snapshot.  Keep the
+# writer bounded, but do not use the generic 64 KiB operational-log limit for
+# this governed ledger; rejecting a valid snapshot would terminate the
+# read-only observer before it can seal its evidence.
+_LIVE_EVIDENCE_MAX_RECORD_BYTES = 256 * 1024
+_LIVE_EVIDENCE_MAX_FILE_BYTES = 16 * 1024 * 1024
 
 
 def _canonical_json(payload: Mapping[str, Any]) -> bytes:
@@ -36,10 +45,12 @@ def append_jsonl_record(path: Path, payload: Mapping[str, Any], *, hash_field: s
     row = dict(payload)
     row[hash_field] = semantic_sha256(row, exclude=(hash_field,))
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(row, sort_keys=True, separators=(",", ":"), default=str) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
+    if not get_jsonl_writer(
+        path,
+        max_record_bytes=_LIVE_EVIDENCE_MAX_RECORD_BYTES,
+        max_file_bytes=_LIVE_EVIDENCE_MAX_FILE_BYTES,
+    ).write(row):
+        raise OSError("bounded_jsonl_write_rejected")
     return row
 
 

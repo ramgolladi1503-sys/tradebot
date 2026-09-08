@@ -1,0 +1,11 @@
+role,authoritative_path,device_id,filesystem,external_bound,status,notes
+source,/Volumes/TradeBotData/tradebot-live-diskguard-successor-20260905,16777240,apfs,true,PASS,successor checkout
+runtime_root,/Volumes/TradeBotData/tradebot-live-diskguard-successor-20260905/.runtime,16777240,apfs,true,PASS,default DATA_ROOT in this successor
+logs,/Volumes/TradeBotData/tradebot-live-diskguard-successor-20260905/.runtime/logs,16777240,apfs,true,PASS,LOGS_ROOT
+database,/Volumes/TradeBotData/tradebot-live-diskguard-successor-20260905/.runtime/db,16777240,apfs,true,PASS,DB_ROOT and SQLite WAL siblings
+desks,/Volumes/TradeBotData/tradebot-live-diskguard-successor-20260905/.runtime/desks,16777240,apfs,true,PASS,desk runtime data
+reports,/Volumes/TradeBotData/tradebot-live-diskguard-successor-20260905/.runtime/reports,16777240,apfs,true,PASS,REPORTS_ROOT
+locks,/Volumes/TradeBotData/tradebot-live-diskguard-successor-20260905/.runtime/locks,16777240,apfs,true,PASS,LOCKS_ROOT
+temporary_files,/Volumes/TradeBotData/tradebot-live-diskguard-successor-20260905/.runtime,16777240,apfs,true,PASS,only when dir is explicitly supplied
+compatibility_repo_logs,/Users/madhuram/tradebot/logs,unknown,apfs,false,BLOCKED,legacy mirror can spill to internal disk
+offline_temp_default,/var/folders-or-system-temp,unknown,apfs,false,OUT_OF_SCOPE,offline tests only; prohibited for live writers

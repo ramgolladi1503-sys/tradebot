@@ -9,6 +9,7 @@ from config import config as cfg
 from core import risk_halt
 from core.time_utils import is_market_open_ist, now_ist, now_utc_epoch
 from core.trade_store import fetch_open_positions_dict
+from core.log_writer import get_jsonl_writer
 
 
 def auto_clear_risk_halt_if_safe() -> Dict[str, Any]:
@@ -72,7 +73,6 @@ def auto_clear_risk_halt_if_safe() -> Dict[str, Any]:
 
 def _write_guard_log(payload: Dict[str, Any]) -> Dict[str, Any]:
     path = logs_dir() / "session_guard.jsonl"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, sort_keys=True) + "\n")
+    if not get_jsonl_writer(path).write(payload):
+        raise OSError("bounded_session_guard_write_rejected")
     return payload

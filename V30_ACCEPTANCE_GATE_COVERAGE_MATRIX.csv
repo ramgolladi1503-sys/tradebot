@@ -1,0 +1,16 @@
++gate_family,covered_by,coverage_status
+A production-path A-X,tests/test_v23_production_equivalent_harness.py,COMPLETE
+B timestamp provenance,tests/test_timestamp_provenance.py plus V23 harness,COMPLETE
+C primitive capture/store immutability,tests/test_cas_primitive_producer.py plus V23 harness,COMPLETE
+D runtime object continuity,tests/test_v23_production_equivalent_harness.py,COMPLETE
+E coordinator consumer evaluator reachability,tests/test_cas_runtime.py tests/test_cas_coordinator_lifecycle.py plus V23 harness,COMPLETE
+F CAS readiness transitions,tests/test_cas_v2_consumer_contract.py tests/test_cas_morning_reversal_advisory.py,COMPLETE
+G session source cycle identity,tests/test_timestamp_provenance.py tests/test_v23_production_equivalent_harness.py,COMPLETE
+H retrospective admission guard,tests/test_truth_dataset_leakage.py,COMPLETE
+I future leakage,tests/test_edge_99_replay_clock_no_future_leak.py tests/test_truth_dataset_leakage.py,COMPLETE
+J feed health gating recovery,tests/test_nifty_futures_ingestion_validation.py plus V23 harness,COMPLETE
+K shutdown lifecycle,tests/test_lifecycle_shutdown_manager.py tests/test_shutdown_clean.py,COMPLETE
+L safety broker order zero,tests/test_v23_production_equivalent_harness.py tests/test_acceptance_gate.py,COMPLETE
+M schema persistence migration,tests/test_cas_primitive_producer.py tests/test_cas_v2_consumer_contract.py,COMPLETE
+N storage disk controls,tests/test_low_disk_safety_gate.py,COMPLETE
+O independent validators,core/low_disk_safety_gate.py::validate_contract,COMPLETE

@@ -1,0 +1,19 @@
+control,expected,status,evidence
+A_correct_external_mount,pass,PASS,real mount and device probe
+B_mount_absent,fail closed,PASS,unit test
+C_ordinary_directory_mountpoint,fail closed,PASS,unit test/mount-table requirement
+D_wrong_device,fail closed,PASS,device comparison implementation
+E_internal_runtime_root,fail closed,PASS,realpath containment
+F_internal_temp,fail closed,PASS,same-directory temp requirement
+G_cross_device_atomic,fail closed,PASS_SIMULATED,isolated authority-device fault injection
+H_read_only_volume,fail closed,PASS_SIMULATED,isolated temp-write fault injection
+I_statvfs_failure,fail closed,PASS_SIMULATED,isolated statvfs fault injection
+J_mount_loss_after_start,fail closed,PASS_SIMULATED,isolated mount-table fault injection
+K_device_change_after_start,fail closed,PASS_SIMULATED,isolated device fault injection
+L_repo_logs_fallback,fail closed,PASS,REPO_LOG_DIR binding
+M_cwd_logs_fallback,fail closed,PASS,explicit runtime paths
+N_system_temp_core,fail closed,PASS,explicit same-dir probe
+O_parquet_internal_temp,fail closed,PASS,exporter dir binding
+P_optional_symlink_escape,fail closed,PASS,realpath containment
+Q_runtime_symlink_escape,fail closed,PASS,realpath containment
+R_false_seal_after_loss,not PASS,PASS_SIMULATED,final seal status unit control

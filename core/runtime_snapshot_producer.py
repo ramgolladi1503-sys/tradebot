@@ -484,6 +484,8 @@ def _build_and_write_canonical_ranked_snapshot(
     advisory_payload: dict,
     *,
     cycle_context: RuntimeCycleContext | None = None,
+    session_id: str | None = None,
+    source_sha: str | None = None,
 ):
     from core.canonical_ranked_ui_adapter import adapt_candidate_rank_record_to_ui
     reports = []
@@ -557,8 +559,14 @@ def _build_and_write_canonical_ranked_snapshot(
         "top_executable": top_executable,
         "top_advisory": top_advisory,
         "reports": reports,
-        "source": "ranked_opportunity_pipeline_v1"
+        "source": "ranked_opportunity_pipeline_v1",
     }
+    if cycle_context is not None:
+        payload["cycle_provenance"] = {
+            "cycle_id": str(cycle_context.cycle_id),
+            "session_id": str(session_id or ""),
+            "source_sha": str(source_sha or ""),
+        }
     write_ranked_pipeline_snapshot(payload=payload, producer=producer)
 
     # Ranked vs Legacy Comparison Evidence (Point 4)
@@ -588,6 +596,7 @@ def _build_and_write_canonical_ranked_snapshot(
         "verdict": verdict
     }
     write_ranked_vs_legacy_snapshot(payload=comparison_evidence, producer=producer)
+    return payload
 
 
 def produce_and_store_runtime_snapshots(
@@ -597,6 +606,8 @@ def produce_and_store_runtime_snapshots(
     loop_id: str | None = None,
     metrics_registry: ObservabilityMetricsRegistry | None = None,
     cycle_feed_truth_payload: Mapping[str, Any] | None = None,
+    session_id: str | None = None,
+    source_sha: str | None = None,
 ) -> dict[str, Any]:
     outputs: dict[str, Any] = {}
     timings: list[dict[str, Any]] = []
@@ -612,6 +623,29 @@ def produce_and_store_runtime_snapshots(
 
     advisory_payload = _build_advisory_latest_payload()
     outputs["advisory_latest"] = advisory_payload
+    # CAS inputs are admissible only while the canonical feed-runtime
+    # evidence is valid and connected.  Do not bridge captured primitives into
+    # an analytical cycle when the live feed is unhealthy or unverifiable.
+    cas_feed_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
+    cas_feed_payload = cas_feed_runtime.get("payload") if cas_feed_runtime.get("valid") else None
+    cas_feed_healthy = isinstance(cas_feed_payload, dict) and (
+        cas_feed_payload.get("effective_ws_connected") is True
+        or cas_feed_payload.get("ws_connected") is True
+    )
+    # Bridge only already-captured, immutable primitives; never reconstruct here.
+    if session_id and source_sha and cas_feed_healthy:
+        try:
+            from core.cas_primitive_producer import build_cas_input
+            primitive_path = logs_dir() / f"cas_short_horizon_primitives_{session_id}.json"
+            if primitive_path.is_file():
+                stored = json.loads(primitive_path.read_text(encoding="utf-8"))
+                primitives = stored.get("primitives") if isinstance(stored, dict) else None
+                if isinstance(primitives, dict):
+                    cas_input = build_cas_input(primitives, session_id=session_id, source_sha=source_sha, cycle_id=str(loop_id or ""), observation_timestamp=now_ist().isoformat())
+                    if cas_input is not None:
+                        outputs["cas_short_horizon_inputs"] = cas_input
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            pass
 
     t1 = time.perf_counter()
     loaded_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
@@ -657,12 +691,16 @@ def produce_and_store_runtime_snapshots(
     try:
         t2 = time.perf_counter()
         if isinstance(market_payload, dict):
-            _build_and_write_canonical_ranked_snapshot(
+            ranked_payload = _build_and_write_canonical_ranked_snapshot(
                 market_payload,
                 producer,
                 advisory_payload,
                 cycle_context=cycle_context,
+                session_id=session_id,
+                source_sha=source_sha,
             )
+            if isinstance(ranked_payload, dict):
+                outputs["ranked_pipeline_latest"] = ranked_payload
         timings.append({"stage": "ranked_pipeline_snapshot", "elapsed_ms": round((time.perf_counter() - t2) * 1000.0, 3)})
     except Exception as exc:
         logger.error(f"failed_to_build_canonical_ranked_snapshot: {exc}")

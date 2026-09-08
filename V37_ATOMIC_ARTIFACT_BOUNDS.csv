@@ -1,0 +1,4 @@
+ARTIFACT_CLASS,MAX_TEMP_BYTES,MAX_FINAL_BYTES,ATOMICITY_RULE,STATUS
+depth_rejection_provenance,UNKNOWN,UNKNOWN,append JSONL with no governed cap,BLOCKED
+tick_store_error_log,UNKNOWN,UNKNOWN,append JSONL with no governed cap,BLOCKED
+read_only_json_artifacts,UNKNOWN,UNKNOWN,atomic replace but payload maxima not registered,BLOCKED

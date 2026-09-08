@@ -11,10 +11,12 @@ from collections import deque
 from typing import Callable, Any
 from config import config as cfg
 from core.fs_utils import ensure_parent_dir
+from core.sqlite_write_lock import sqlite_transaction_lock
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.time_utils import compute_age_sec, normalize_epoch_seconds, now_utc_epoch
 from core.persistence_durability import record_degradation
+from core.storage_bounds_v37 import MAX_SQLITE_WAL_BYTES, MAX_TICK_ITEM_BYTES, StorageBoundViolation, persistence_batch_bytes, require_item_size, tick_item_bytes
 
 _tick_window = deque(maxlen=200000)
 _LAST_TICK_EPOCH = None
@@ -163,10 +165,13 @@ def _conn():
             conn.execute("PRAGMA busy_timeout=30000")
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA wal_autocheckpoint=1")
+            conn.execute(f"PRAGMA journal_size_limit={MAX_SQLITE_WAL_BYTES}")
         except Exception:
             pass
-        with conn:
-            yield conn
+        with sqlite_transaction_lock():
+            with conn:
+                yield conn
     finally:
         conn.close()
 
@@ -254,7 +259,12 @@ def init_ticks() -> None:
             volume INTEGER,
             oi INTEGER,
             timestamp_epoch REAL,
-            timestamp_iso TEXT
+            timestamp_iso TEXT,
+            timestamp_authority TEXT,
+            timestamp_source_field TEXT,
+            source_timestamp_epoch REAL,
+            receive_timestamp_epoch REAL,
+            timestamp_fallback_used INTEGER
         )
         """
             )
@@ -264,6 +274,11 @@ def init_ticks() -> None:
                 conn.execute("ALTER TABLE ticks ADD COLUMN timestamp_iso TEXT")
             except Exception:
                 pass
+            for name, declaration in (("timestamp_authority", "TEXT"), ("timestamp_source_field", "TEXT"), ("source_timestamp_epoch", "REAL"), ("receive_timestamp_epoch", "REAL"), ("timestamp_fallback_used", "INTEGER")):
+                try:
+                    conn.execute(f"ALTER TABLE ticks ADD COLUMN {name} {declaration}")
+                except Exception:
+                    pass
             cols = _tick_columns(conn)
             if "timestamp_epoch" not in cols:
                 _log_schema_event("TICK_SCHEMA_INVALID", columns=sorted(cols))
@@ -597,6 +612,11 @@ def _write_rows(
     if not rows:
         return True
     try:
+        if len(rows) > _flush_batch_size():
+            raise StorageBoundViolation("PERSISTENCE_BATCH_ROW_COUNT_EXCEEDED")
+        persistence_batch_bytes(rows)
+        for row in rows:
+            require_item_size(tick_item_bytes(row), MAX_TICK_ITEM_BYTES, "TICK")
         if worker_owned and _async_db_writes_enabled() and _REPLAY_PRESSURE_HOOK is not None:
             try:
                 _REPLAY_PRESSURE_HOOK(
@@ -621,12 +641,15 @@ def _write_rows(
         with _conn() as conn:
             conn.executemany(
                 """
-            INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso)
-            VALUES (?,?,?,?,?,?,?)
+            INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso, timestamp_authority, timestamp_source_field, source_timestamp_epoch, receive_timestamp_epoch, timestamp_fallback_used)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """,
                 rows,
             )
             conn.commit()
+            checkpoint = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            if checkpoint and int(checkpoint[0] or 0) != 0:
+                raise StorageBoundViolation("SQLITE_WAL_CHECKPOINT_BUSY")
         _AUDIT_COUNTERS["committed_batches"] += 1
         if worker_owned and _async_db_writes_enabled() and _REPLAY_PRESSURE_POST_COMMIT_HOOK is not None:
             try:
@@ -656,6 +679,14 @@ def _write_rows(
             pass
         _WRITE_FLUSH_COUNT += len(rows)
         return True
+    except StorageBoundViolation as exc:
+        _AUDIT_COUNTERS["worker_failures"] += 1
+        record_degradation("tick", "TICK_STORAGE_BOUND_REJECTED")
+        try:
+            _ERROR_LOGGER.write({"ts_epoch": time.time(), "event": "TICK_STORAGE_BOUND_REJECTED", "row_count": len(rows), "error": str(exc)})
+        except Exception:
+            pass
+        return False
     except Exception as exc:
         _AUDIT_COUNTERS["worker_failures"] += 1
         try:
@@ -794,6 +825,12 @@ def _ensure_flush_thread() -> None:
 
 def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float | None, float, str]) -> bool:
     global _WRITE_ENQUEUE_COUNT, _QUEUE_HIGH_WATER, _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS
+    try:
+        require_item_size(tick_item_bytes(row), MAX_TICK_ITEM_BYTES, "TICK")
+    except StorageBoundViolation:
+        record_degradation("tick", "TICK_STORAGE_BOUND_REJECTED")
+        _AUDIT_COUNTERS["worker_failures"] += 1
+        return False
     with _WRITE_QUEUE_LOCK:
         if not _ACCEPTING_WRITES:
             _AUDIT_COUNTERS["writes_rejected_after_shutdown"] += 1
@@ -1010,7 +1047,7 @@ if not aexit_registered:
 
 
 def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kwargs):
-    allowed_aliases = {"ts_epoch", "instrument_token"}
+    allowed_aliases = {"ts_epoch", "instrument_token", "timestamp_authority", "timestamp_source_field", "source_timestamp_epoch", "receive_timestamp_epoch", "timestamp_fallback_used"}
     unexpected = sorted(set(kwargs.keys()) - allowed_aliases)
     if unexpected:
         allowed = "ts, token, last_price, volume, oi, ts_epoch, instrument_token"
@@ -1022,6 +1059,11 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
 
     ts_alias = kwargs.pop("ts_epoch", None)
     token_alias = kwargs.pop("instrument_token", None)
+    timestamp_authority = kwargs.pop("timestamp_authority", None)
+    timestamp_source_field = kwargs.pop("timestamp_source_field", None)
+    source_timestamp_epoch = kwargs.pop("source_timestamp_epoch", None)
+    receive_timestamp_epoch = kwargs.pop("receive_timestamp_epoch", None)
+    timestamp_fallback_used = kwargs.pop("timestamp_fallback_used", None)
 
     if ts_alias is not None:
         if ts is not None and ts != ts_alias:
@@ -1086,7 +1128,7 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
     if not _db_writes_enabled():
         return True
 
-    row = (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso)
+    row = (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso, timestamp_authority, timestamp_source_field, source_timestamp_epoch, receive_timestamp_epoch, timestamp_fallback_used)
     if _async_db_writes_enabled():
         # The reactor only enqueues. SQLite connections and flushes belong to the
         # single persistence worker; waiting for read-after-write here stalls Twisted.

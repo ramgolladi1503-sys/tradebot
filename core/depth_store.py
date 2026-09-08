@@ -12,6 +12,8 @@ from core.trade_store import insert_depth_snapshot
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.persistence_durability import record_degradation
+from core.kite_depth_protocol import canonicalize_kite_depth
+from core.storage_bounds_v37 import MAX_DEPTH_QUEUE_ITEM_BYTES, StorageBoundViolation, depth_queue_item_bytes, require_item_size
 
 _ERROR_LOG_PATH = logs_dir() / "depth_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
@@ -131,6 +133,17 @@ class DepthStore:
                         self._record_rejection(reason_code="SHUTDOWN_REJECT", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
                         raise RuntimeError("depth persistence is shut down")
                 try:
+                    canonical_depth = canonicalize_kite_depth(depth)
+                    item_bytes = depth_queue_item_bytes(now_iso, instrument_token, canonical_depth, imbalance)
+                except ValueError:
+                    # Legacy callers may provide a compact partial book.  The
+                    # WebSocket protocol owner remains strict; this store
+                    # accepts the legacy shape only when its serialized
+                    # envelope still fits the same byte bound.
+                    canonical_depth = depth
+                    item_bytes = len(json.dumps({"depth": depth, "imbalance": imbalance}, sort_keys=True, separators=(",", ":")).encode("utf-8")) + 110
+                require_item_size(item_bytes, MAX_DEPTH_QUEUE_ITEM_BYTES, "DEPTH_QUEUE")
+                try:
                     # Apply bounded, time-limited backpressure instead of
                     # dropping a depth snapshot when SQLite briefly falls
                     # behind.  The timeout preserves fail-closed behavior if
@@ -141,7 +154,7 @@ class DepthStore:
                     )
                     self._persist_queue.put((
                         now_iso, instrument_token,
-                        json.dumps({"depth": depth, "imbalance": imbalance}), now_epoch,
+                        json.dumps({"depth": canonical_depth, "imbalance": imbalance}, sort_keys=True, separators=(",", ":")), now_epoch,
                     ), timeout=put_timeout_sec)
                 except queue.Full:
                     with self._persist_lock:
@@ -158,6 +171,13 @@ class DepthStore:
                 if abs(imbalance) > getattr(cfg, "IMBALANCE_ALERT", 0.6):
                     from core.telegram_alerts import send_telegram_message
                     send_telegram_message(f"Depth imbalance spike {imbalance:.2f} for token {instrument_token}")
+        except (StorageBoundViolation, ValueError, TypeError) as exc:
+            with self._persist_lock:
+                self._persist_rejected += 1
+                self._persist_degraded = True
+            record_degradation("depth", "DEPTH_BOUND_REJECTED")
+            self._record_rejection(reason_code="BOUND_REJECTED", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
+            logger.warning("depth_persistence_bound_rejected error=%s", type(exc).__name__)
         except Exception as exc:
             if str(exc) not in {"", "depth persistence is shut down"}:
                 self._record_rejection(reason_code="UNKNOWN_REJECTION", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())

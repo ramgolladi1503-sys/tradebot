@@ -1,0 +1,5 @@
+component,method,observed_bytes,measurement_status,evidence
+preserved_runtime_root,2026-08-25 partial session,105265039,MEASURED,/Volumes/TradeBotData/preserved-stalled-runtime-20260825T110749+0530
+runtime_rate,105265039 / 8.619190410839186 hours,3392.463470158 bytes_per_second,MEASURED,feed_startup_lifecycle.jsonl bounds
+sqlite_parquet_export,20000 synthetic ticks,120190,MEASURED_BOUNDED_PROBE,temporary sqlite and parquet output on TradeBotData
+shutdown_reserve,1000 synthetic SQLite ticks then governed persistence drain,106496,MEASURED_BOUNDED_PROBE,COMPLETE_DRAIN worker_join_completed queue_depth_0

@@ -1,0 +1,10 @@
+PRIMITIVE_ID,SOURCE,MAX_SINGLE_BYTES,MAX_BATCH_BYTES,MAX_QUEUE_ITEMS,MAX_QUEUE_BYTES,STATUS,AUTHORITY
+broker_depth,KITE_CONNECT_V3_WEBSOCKET_FULL,618,NA,NA,NA,PASS,V36_DEPTH_BOUND_DECISION.md
+depth_queue,core.depth_store,742,NA,16384,12156928,PASS,core/storage_bounds_v37.py
+tick_queue,core.tick_store,193,193000,10000,1930000,PASS,core/storage_bounds_v37.py
+persistence_batch,core.tick_store,193,193000,1000,193000,PASS,core/storage_bounds_v37.py
+sqlite_transaction,core.tick_store,193,193000,1000,193000,PASS,V37_SQLITE_TRANSACTION_BOUND.md
+sqlite_wal_transient,core.tick_store,NA,65536,NA,65536,PASS,V37_SQLITE_WAL_BOUND.md
+authoritative_jsonl_record,repository JSONL writers,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,BLOCKED,V37_JSONL_BOUND_AUTHORITY.md
+atomic_authoritative_artifact,repository atomic writers,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,BLOCKED,V37_ATOMIC_ARTIFACT_BOUNDS.csv
+parquet_derived,core.sqlite_snapshot_parquet_exporter,UNKNOWN,UNKNOWN,OPTIONAL,UNKNOWN,DEGRADED_OPTIONAL,V37_PARQUET_AUTHORITY.md

@@ -16,6 +16,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from core.log_writer import get_jsonl_writer
 
 PAPER_TRUTH_JOURNAL_SCHEMA_VERSION = 1
 PAPER_TRUTH_JOURNAL_SOURCE = "paper_truth_journal_v1"
@@ -267,9 +268,8 @@ def append_paper_truth_event(
         mode=PAPER_MODE,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(event.to_json())
-        handle.write("\n")
+    if not get_jsonl_writer(path).write(json.loads(event.to_json())):
+        raise OSError("bounded_paper_truth_write_rejected")
     return event
 
 
