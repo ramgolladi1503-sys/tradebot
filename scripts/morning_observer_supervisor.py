@@ -56,6 +56,7 @@ def supervise(command: list[str], *, status_path: Path, poll_seconds: float = 1.
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--status", type=Path, required=True)
+    parser.add_argument("--session-root", type=Path)
     parser.add_argument("command", nargs=argparse.REMAINDER, help="child command after --")
     args = parser.parse_args()
     command = list(args.command)
@@ -63,7 +64,14 @@ def main() -> int:
         command = command[1:]
     if not command:
         parser.error("child command required")
-    return supervise(command, status_path=args.status)
+    code = supervise(command, status_path=args.status)
+    if code != 0 and args.session_root is not None:
+        from core.morning_failure_seal import seal_partial
+        try:
+            seal_partial(session_root=args.session_root, reason=f"observer_exit_{code}")
+        except FileExistsError:
+            pass
+    return code
 
 
 if __name__ == "__main__":

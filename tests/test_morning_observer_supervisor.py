@@ -21,3 +21,9 @@ def test_supervisor_records_failure_without_restart(tmp_path):
     assert code == 7
     assert payload["state"] == "FAILED"
     assert payload["restart_performed"] is False
+
+
+def test_supervisor_seals_failed_session(tmp_path):
+    status = tmp_path / "status.json"
+    code = supervise([sys.executable, "-c", "raise SystemExit(3)"], status_path=status, poll_seconds=0.1)
+    assert code == 3

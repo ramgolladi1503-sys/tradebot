@@ -33,7 +33,7 @@ def observer(args: argparse.Namespace) -> int:
     command = [sys.executable, "scripts/morning_readonly_observer.py", "--launch-plan", str(args.launch_plan), "--session-root", str(args.session_root), "--token-path", str(args.token_path), "--session-date", args.session_date]
     if args.max_runtime_sec is not None:
         command.extend(["--max-runtime-sec", str(args.max_runtime_sec)])
-    supervisor = [sys.executable, "scripts/morning_observer_supervisor.py", "--status", str(args.status), "--", *command]
+    supervisor = [sys.executable, "scripts/morning_observer_supervisor.py", "--status", str(args.status), "--session-root", str(args.session_root), "--", *command]
     return subprocess.call(supervisor)
 
 
