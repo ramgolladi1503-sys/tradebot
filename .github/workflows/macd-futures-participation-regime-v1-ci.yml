@@ -34,6 +34,8 @@ jobs:
             research/macd_futures_participation_regime_v1/resolver.py \
             research/macd_futures_participation_regime_v1/robustness.py \
             research/macd_futures_participation_regime_v1/oracle.py \
+            research/macd_futures_participation_regime_v1/matching.py \
+            research/macd_futures_participation_regime_v1/controls.py \
             scripts/run_macd_futures_participation_regime_v1.py \
             scripts/run_macd_futures_participation_regime_v1_auto.py
 
@@ -43,7 +45,9 @@ jobs:
             tests/test_macd_futures_participation_regime_v1.py \
             tests/test_macd_futures_participation_regime_resolver_v1.py \
             tests/test_macd_futures_participation_regime_robustness_v1.py \
-            tests/test_macd_futures_participation_regime_oracle_v1.py
+            tests/test_macd_futures_participation_regime_oracle_v1.py \
+            tests/test_macd_futures_participation_regime_matching_v1.py \
+            tests/test_macd_futures_participation_regime_controls_v1.py
 
       - name: Verify diff hygiene
         run: git diff --check
