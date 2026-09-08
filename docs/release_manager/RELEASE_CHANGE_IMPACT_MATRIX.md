@@ -1,0 +1,18 @@
+# RELEASE CHANGE IMPACT MATRIX
+
+Status: implementation in progress.
+
+```json
+{
+  "edge_direction": "consumer_to_dependency",
+  "rules": {
+    "BOUNDED_LIVE_IMPACT": "Reachable only from bounded roots in independently verified complete dependency evidence.",
+    "CRITICAL_LIVE_IMPACT": "Reachable from a critical operational root, including transitive dependencies.",
+    "NO_LIVE_IMPACT": "No changed paths, or Markdown proven unreachable in independently verified complete dependency evidence.",
+    "UNKNOWN_IMPACT": "Incomplete dependency evidence, unresolved dynamic references, or unclassified component."
+  },
+  "schema_version": 1,
+  "status": "IMPLEMENTATION_IN_PROGRESS",
+  "unknown_policy": "Require all critical and bounded gates; never promote from classification alone."
+}
+```
