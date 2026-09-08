@@ -15,16 +15,78 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.morning_session_root import SessionRootError, create_session_root
 from core.morning_operator_status import build_status
+from core.certified_release_store import ReleaseStore, ReleaseStoreError
+
+SAFE_GIT_CONFIG = [
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "filter.lfs.process=",
+    "-c",
+    "filter.lfs.clean=",
+    "-c",
+    "filter.lfs.smudge=",
+    "-c",
+    "filter.lfs.required=false",
+]
+
+
+def git_output(*args: str, timeout: float = 15.0) -> str:
+    return subprocess.check_output(["git", *SAFE_GIT_CONFIG, *args], text=True, timeout=timeout).strip()
+
+
+def tracked_tree_clean() -> bool:
+    common = ["git", *SAFE_GIT_CONFIG]
+    unstaged = subprocess.run([*common, "diff", "--quiet"], timeout=20.0)
+    staged = subprocess.run([*common, "diff", "--cached", "--quiet"], timeout=20.0)
+    return unstaged.returncode == 0 and staged.returncode == 0
+
+
+def resolve_release(args: argparse.Namespace) -> str:
+    explicit = getattr(args, "release", None)
+    store_root = getattr(args, "release_store_root", None)
+    if explicit and store_root:
+        raise SessionRootError("release_and_release_store_are_mutually_exclusive")
+    if explicit:
+        return explicit
+    if not store_root:
+        raise SessionRootError("release_authority_missing")
+    try:
+        current = ReleaseStore(store_root).read()
+    except ReleaseStoreError as exc:
+        raise SessionRootError("release_store_invalid") from exc
+    if current is None:
+        raise SessionRootError("release_store_uninitialized")
+    return current["certified_live_sha"]
 
 
 def preflight(args: argparse.Namespace) -> int:
-    actual = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    clean = not subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()
-    result = {"release_sha_actual": actual, "release_sha_match": actual == args.release, "worktree_clean": clean, "preflight_pass": False}
+    result = {"release_sha_actual": "", "release_sha_match": False, "worktree_clean": False, "preflight_pass": False}
     try:
-        if actual != args.release or not clean:
+        release = resolve_release(args)
+        actual = git_output("rev-parse", "HEAD")
+        clean = tracked_tree_clean()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        result["blocker"] = "git_authority_check_failed"
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 2
+    except SessionRootError as exc:
+        result["blocker"] = str(exc)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 2
+    result.update({"release_sha_actual": actual, "worktree_clean": clean})
+    try:
+        result["release_sha_expected"] = release
+        result["release_sha_match"] = actual == release
+        if actual != release or not clean:
             raise SessionRootError("release_authority_or_clean_tree_failed")
-        result["session_root"] = create_session_root(external_root=args.external_root, session_date=args.session_date, release_sha=args.release)
+        result["session_root"] = create_session_root(external_root=args.external_root, session_date=args.session_date, release_sha=release)
         result["preflight_pass"] = True
     except SessionRootError as exc:
         result["blocker"] = str(exc)
@@ -50,8 +112,17 @@ def status(args: argparse.Namespace) -> int:
 
 def live(args: argparse.Namespace) -> int:
     """Run the repository's existing read-only market-data orchestrator."""
-    actual = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    if actual != args.release:
+    try:
+        actual = git_output("rev-parse", "HEAD")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        print(json.dumps({"state": "FAIL_CLOSED", "blocker": "git_authority_check_failed"}))
+        return 2
+    try:
+        release = resolve_release(args)
+    except SessionRootError as exc:
+        print(json.dumps({"state": "FAIL_CLOSED", "blocker": str(exc)}))
+        return 2
+    if actual != release:
         print(json.dumps({"state": "FAIL_CLOSED", "blocker": "release_sha_mismatch"}))
         return 2
     env = dict(__import__("os").environ)
@@ -67,10 +138,10 @@ def live(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(prog="tradebot-morning-readiness")
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("preflight"); p.add_argument("--release", required=True); p.add_argument("--session-date", required=True); p.add_argument("--external-root", type=Path, required=True); p.add_argument("--output", type=Path, required=True); p.set_defaults(handler=preflight)
+    p = sub.add_parser("preflight"); p.add_argument("--release"); p.add_argument("--release-store-root", type=Path); p.add_argument("--session-date", required=True); p.add_argument("--external-root", type=Path, required=True); p.add_argument("--output", type=Path, required=True); p.set_defaults(handler=preflight)
     o = sub.add_parser("observer"); o.add_argument("--launch-plan", type=Path, required=True); o.add_argument("--session-root", type=Path, required=True); o.add_argument("--token-path", type=Path, required=True); o.add_argument("--session-date", required=True); o.add_argument("--status", type=Path, required=True); o.add_argument("--max-runtime-sec", type=float); o.set_defaults(handler=observer)
     s = sub.add_parser("status"); s.add_argument("--status", type=Path, required=True); s.add_argument("--release", default=""); s.set_defaults(handler=status)
-    l = sub.add_parser("live", help="run the existing governed read-only market-data orchestrator"); l.add_argument("--release", required=True); l.add_argument("--session-date", required=True); l.add_argument("--output-root", type=Path, required=True); l.add_argument("--token-path", type=Path, required=True); l.add_argument("--authority-artifact", type=Path, required=True); l.add_argument("--kite-instruments-file", type=Path); l.add_argument("--preflight-only", action="store_true"); l.set_defaults(handler=live)
+    l = sub.add_parser("live", help="run the existing governed read-only market-data orchestrator"); l.add_argument("--release"); l.add_argument("--release-store-root", type=Path); l.add_argument("--session-date", required=True); l.add_argument("--output-root", type=Path, required=True); l.add_argument("--token-path", type=Path, required=True); l.add_argument("--authority-artifact", type=Path, required=True); l.add_argument("--kite-instruments-file", type=Path); l.add_argument("--preflight-only", action="store_true"); l.set_defaults(handler=live)
     return int(args_handler(parser.parse_args()))
 
 

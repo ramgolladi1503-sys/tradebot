@@ -1,0 +1,45 @@
+{
+  "bounded_roots": [
+    "scripts/morning_readiness_cli.py",
+    "scripts/morning_preflight.py"
+  ],
+  "complete": false,
+  "critical_roots": [
+    "main.py",
+    "run_live.sh",
+    "scripts/run_market_event_graph_live_session_v1.py",
+    "scripts/morning_readonly_observer.py",
+    "core/runtime_safety_boot_guard.py",
+    "core/feed",
+    "core/kite",
+    "core/broker",
+    "core/order",
+    "core/risk",
+    "core/execution"
+  ],
+  "edges": {
+    "main.py": [
+      "core/runtime_safety_boot_guard.py"
+    ],
+    "run_live.sh": [
+      "main.py"
+    ],
+    "scripts/morning_readiness_cli.py": [
+      "core/morning_session_root.py",
+      "core/morning_operator_status.py"
+    ],
+    "scripts/morning_readonly_observer.py": [
+      "core/morning_session_root.py"
+    ],
+    "scripts/run_market_event_graph_live_session_v1.py": [
+      "core/feed",
+      "core/kite",
+      "core/broker",
+      "core/risk"
+    ]
+  },
+  "schema_version": 1,
+  "unresolved": [
+    "dynamic imports, shell launchers, broker adapters, and package directories require independent graph extraction before lower-impact certification can be trusted"
+  ]
+}
