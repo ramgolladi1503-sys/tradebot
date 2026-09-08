@@ -59,7 +59,7 @@ def evaluate(s,lab,dx_thr=25.0,atr_thr=10.0):
         h=np.flatnonzero(trig)
         if len(h):
             j=int(h[0]); row=g.iloc[j]
-            pred[d]={'pred_dt':pd.Timestamp(row.dt),'lrs7_dir':'CE' if row.lrs_7>0 else 'PE','di14_dir':'CE' if row.pdi_14>row.mdi_14 else 'PE','dx14':row.dx_14,'atr20':row.atr_20}
+            pred[d]={'pred_dt':pd.Timestamp(row['dt']),'lrs7_dir':'CE' if row['lrs_7']>0 else 'PE','di14_dir':'CE' if row['pdi_14']>row['mdi_14'] else 'PE','dx14':row['dx_14'],'atr20':row['atr_20']}
     obs={r.day:r for r in lab.itertuples() if r.target_dt<=s.dt.max()}
     all_days=sorted(d for d in s.day.unique() if d in groups and min(obs)<=d<=max(obs) and pd.Timestamp(d).weekday()<5 and pd.Timestamp(d).weekday()!=1)
     rows=[]
