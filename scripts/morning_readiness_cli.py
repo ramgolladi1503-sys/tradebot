@@ -8,6 +8,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Direct script execution places ``scripts/`` ahead of the repository root.
+# Bind imports to this checkout so the governed launcher has the same behavior
+# as module/test execution.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from core.morning_session_root import SessionRootError, create_session_root
 from core.morning_operator_status import build_status
 
