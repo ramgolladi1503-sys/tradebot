@@ -1,0 +1,27 @@
+name: Reddit FYERS volatility relative v6
+on:
+  push:
+    branches: [research/reddit-fyers-inverse-v1]
+    paths:
+      - 'research/tools/reddit_fyers_volatility_relative_v6.py'
+      - '.github/workflows/reddit-fyers-volatility-v6.yml'
+  workflow_dispatch:
+jobs:
+  volatility-v6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install pandas numpy
+      - name: Run V6 relative-volatility reconstruction
+        run: python research/tools/reddit_fyers_volatility_relative_v6.py
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reddit-fyers-volatility-v6-evidence
+          path: research/evidence/reddit_fyers_volatility_v6/
