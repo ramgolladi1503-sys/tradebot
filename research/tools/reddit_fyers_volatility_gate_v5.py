@@ -100,7 +100,7 @@ def core_predictions(s: pd.DataFrame) -> dict:
             cur = g0.iloc[j]
             prev = g0.iloc[j - 1]
             if pd.notna(cur.dx14) and pd.notna(prev.dx14) and prev.dx14 < DX_THR <= cur.dx14:
-                pred[d] = pd.Timestamp(cur.dt)
+                pred[d] = pd.Timestamp(cur["dt"])
                 break
     return pred
 
@@ -142,11 +142,7 @@ def monotone_state_separation(s: pd.DataFrame, sess: pd.DataFrame, metrics: list
         if len(tv) != len(train_dt) or len(fv) != len(fp_dt):
             continue
         tmin, tmax = float(tv.min()), float(tv.max())
-        # Any lower-bound gate v >= T preserving every train target must have T <= train_min.
-        # Its strongest possible FP rejection occurs at T=train_min.
         lower_elim = int((fv < tmin).sum())
-        # Any upper-bound gate v <= T preserving every train target must have T >= train_max.
-        # Its strongest possible FP rejection occurs at T=train_max.
         upper_elim = int((fv > tmax).sum())
         out.append({
             "metric": m,
@@ -232,18 +228,14 @@ def april6_delay_compatibility(s: pd.DataFrame, sess: pd.DataFrame, metrics: lis
             continue
         before = vals[:-1]
         cur = vals[-1]
-        # To make first v>=T pass occur exactly at target: max(before) < T <= cur.
         lower_delay_possible = bool(np.max(before) < cur)
         lower_lo = float(np.max(before)) if lower_delay_possible else np.nan
         lower_hi = float(cur) if lower_delay_possible else np.nan
-        # Preserve all train targets too => T <= min(train values).
         lower_joint = bool(lower_delay_possible and lower_lo < min(lower_hi, float(tv.min())))
 
-        # To make first v<=T pass occur exactly at target: cur <= T < min(before).
         upper_delay_possible = bool(cur < np.min(before))
         upper_lo = float(cur) if upper_delay_possible else np.nan
         upper_hi = float(np.min(before)) if upper_delay_possible else np.nan
-        # Preserve all train targets too => T >= max(train values).
         upper_joint = bool(upper_delay_possible and max(upper_lo, float(tv.max())) < upper_hi)
         out.append({
             "metric": m,
