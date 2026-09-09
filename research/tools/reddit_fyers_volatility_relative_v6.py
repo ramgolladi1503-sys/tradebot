@@ -59,7 +59,8 @@ def predict_candidate(s,metric,base_kind,k,mode):
         g=g0.reset_index(drop=True); arm=dx_arm(g)
         if arm is None: continue
         for j in range(arm,len(g)):
-            if g.iloc[j].dt.strftime('%H:%M')>'15:00': break
+            cur_dt=pd.Timestamp(g.iloc[j]['dt'])
+            if cur_dt.strftime('%H:%M')>'15:00': break
             v=float(g.iloc[j][metric]); b=float(g.iloc[j][base])
             if not (np.isfinite(v) and np.isfinite(b)): continue
             rel=v-b
@@ -72,7 +73,7 @@ def predict_candidate(s,metric,base_kind,k,mode):
                 prel=pv-pb
                 ok=(prel<0<=rel) if mode=='cross_above' else (prel>0>=rel)
             if ok:
-                pred[d]=pd.Timestamp(g.iloc[j]['dt']); break
+                pred[d]=cur_dt; break
     return pred
 
 
