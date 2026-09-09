@@ -1,0 +1,33 @@
+name: Reddit FYERS volatility gate v5
+
+on:
+  push:
+    branches:
+      - research/reddit-fyers-inverse-v1
+    paths:
+      - 'research/tools/reddit_fyers_volatility_gate_v5.py'
+      - '.github/workflows/reddit-fyers-volatility-v5.yml'
+      - 'research/external/reddit_fyers/public_fyers_labels_v1.csv'
+  workflow_dispatch:
+
+jobs:
+  volatility-v5:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install pandas numpy
+      - name: Run V5 volatility gate falsification
+        run: python research/tools/reddit_fyers_volatility_gate_v5.py
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reddit-fyers-volatility-v5-evidence
+          path: research/evidence/reddit_fyers_volatility_v5/
+          if-no-files-found: warn
