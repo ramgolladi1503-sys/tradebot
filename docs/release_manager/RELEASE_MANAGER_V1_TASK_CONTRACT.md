@@ -52,3 +52,30 @@ Release Manager mutation artifact: /Volumes/TradeBotData/release-manager-v1/late
 Fail-closed next-session sample artifact: /Volumes/TradeBotData/release-manager-v1/latest/next_session_blocked_sample.json, with next_session_status=BLOCKED because the sample store was uninitialized and no authority artifact was supplied.
 
 No operational release store was initialized from the frozen evidence, no operational manifest was promoted, and no broker connectivity was used.
+
+## Integration checkpoint
+
+Controlled integration worktree: /Volumes/TradeBotData/worktrees/mros-release-manager-main-integration-20260909.
+
+Integration branch: ram/mros-release-manager-main-integration-20260909.
+
+Integration candidate SHA: bf9afb6bd7d55f0ed84a5e2201956492f41a240a.
+
+Integration sequence:
+
+1. origin/main a68632fcb5cb0f8e3035c1d4f0ab7a4849e66596 merged with frozen Morning Readiness be002d824ff33adf1a3fe176144d61163c3f86c6.
+2. Release Manager candidate 80d826c829fc96b957620ddeac99a15fa89b069d merged on top.
+3. Resulting integration candidate bf9afb6bd7d55f0ed84a5e2201956492f41a240a was certified in a sample external release store.
+
+Integration evidence:
+
+- Targeted offline suite: 46 passed in 55.57s.
+- Materialized whole-tree compile: /Volumes/TradeBotData/release-manager-v1/latest/whole_tree_compile_integration_bf9afb6b.json, with whole_tree_compile_pass=true, compile_pass_count=3167, compile_failure_count=0.
+- Release Manager mutation campaign: /Volumes/TradeBotData/release-manager-v1/latest/release_manager_mutation_campaign_bf9afb6b.json, with release_manager_mutations_detected=7/7.
+- Evidence-bound gate manifest: /Volumes/TradeBotData/release-manager-v1/latest/candidate_gate_results_bf9afb6b.json.
+- Candidate certification: /Volumes/TradeBotData/release-manager-v1/latest/candidate_certification_bf9afb6b.json, with verdict=PASS and fallback_sha=be002d824ff33adf1a3fe176144d61163c3f86c6.
+- Sample promotion: /Volumes/TradeBotData/release-manager-v1/latest/integration_sample_promotion_bf9afb6b.json.
+- Independent release verification: /Volumes/TradeBotData/release-manager-v1/latest/independent_release_verification_bf9afb6b.json, with independent_release_verifier_pass=true.
+- Next-session readiness sample: /Volumes/TradeBotData/release-manager-v1/latest/next_session_ready_sample_bf9afb6b.json, with next_session_status=READY.
+
+This checkpoint certifies the release-manager integration candidate in an external sample store only. It does not mutate the operational live release pointer, does not push to remote main, and does not authorize live execution.
