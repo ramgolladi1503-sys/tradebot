@@ -78,3 +78,20 @@ def test_promotion_requires_fallback_to_current_certified_release(tmp_path):
     else:
         raise AssertionError("invalid fallback promoted")
     assert store.read()["certified_live_sha"] == "a" * 40
+
+
+def test_certification_blocks_dirty_candidate_tree(tmp_path):
+    import subprocess
+    repo = tmp_path / "repo"; repo.mkdir(); subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / "x.py").write_text("x=1\n"); subprocess.run(["git", "-C", str(repo), "add", "x.py"], check=True); subprocess.run(["git", "-C", str(repo), "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-q", "-m", "x"], check=True)
+    base = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+    (repo / "x.py").write_text("x=2\n"); subprocess.run(["git", "-C", str(repo), "add", "x.py"], check=True); subprocess.run(["git", "-C", str(repo), "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-q", "-m", "y"], check=True)
+    candidate = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+    (repo / "untracked.txt").write_text("dirty\n")
+    store = ReleaseStore(tmp_path / "state")
+    store.record_verified_selection(candidate_sha=base, evidence_sha256="e" * 64, expected_event=None)
+
+    result = certify(repo, candidate, store, evidence_graph(), gate_runner=lambda _: True)
+
+    assert result["verdict"] == "BLOCKED"
+    assert result["blocker"] == "candidate_tree_dirty"

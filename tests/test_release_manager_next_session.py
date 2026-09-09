@@ -27,7 +27,7 @@ def test_next_session_preparation_accepts_passing_authority(tmp_path):
     )
     authority = tmp_path / "authority.json"
     authority.write_text(
-        json.dumps({"authority_verdict": "PASS", "independent_verifier_status": "PASS"}),
+        json.dumps({"authority_verdict": "PASS", "independent_verifier_status": "PASS", "session_date": "2026-09-09"}),
         encoding="utf-8",
     )
 

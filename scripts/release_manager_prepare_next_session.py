@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.certified_release_store import ReleaseStore, ReleaseStoreError
 
 
-def _authority_ok(path: Path | None) -> tuple[bool, str]:
+def _authority_ok(path: Path | None, session_date: str) -> tuple[bool, str]:
     if path is None:
         return False, "authority_artifact_missing"
     try:
@@ -22,6 +22,8 @@ def _authority_ok(path: Path | None) -> tuple[bool, str]:
         return False, "authority_artifact_unreadable"
     if payload.get("authority_verdict") != "PASS" or payload.get("independent_verifier_status") != "PASS":
         return False, "authority_artifact_not_pass"
+    if payload.get("session_date") != session_date:
+        return False, "authority_session_stale"
     return True, "PASS"
 
 
@@ -33,7 +35,7 @@ def prepare(state_root: Path, session_date: str, output: Path, authority_artifac
         blocker = "release_store_invalid:" + str(exc)
     else:
         blocker = ""
-    authority_pass, authority_status = _authority_ok(authority_artifact)
+    authority_pass, authority_status = _authority_ok(authority_artifact, session_date)
     blockers = []
     if current is None:
         blockers.append(blocker or "release_store_uninitialized")

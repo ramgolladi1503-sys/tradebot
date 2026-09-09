@@ -17,12 +17,24 @@ def _git(repo: Path, *args: str) -> str:
     return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
 
 
+def _tree_clean(repo: Path) -> bool:
+    unstaged = subprocess.run(["git", "-C", str(repo), "diff", "--quiet"])
+    staged = subprocess.run(["git", "-C", str(repo), "diff", "--cached", "--quiet"])
+    untracked = subprocess.check_output(
+        ["git", "-C", str(repo), "ls-files", "--others", "--exclude-standard"],
+        text=True,
+    ).strip()
+    return unstaged.returncode == 0 and staged.returncode == 0 and not untracked
+
+
 def certify(repo: Path, candidate: str, store: ReleaseStore, graph: DependencyEvidence,
             gate_runner: Callable[[str], bool] | None = None) -> dict:
     if len(candidate) != 40 or any(c not in "0123456789abcdef" for c in candidate):
         return {"candidate_sha": candidate, "verdict": "BLOCKED", "blocker": "invalid_exact_sha"}
     try:
         _git(repo, "cat-file", "-e", candidate + "^{commit}")
+        if not _tree_clean(repo):
+            return {"candidate_sha": candidate, "verdict": "BLOCKED", "blocker": "candidate_tree_dirty"}
         current = store.read()
         if current is None:
             return {"candidate_sha": candidate, "verdict": "BLOCKED", "blocker": "certified_release_uninitialized"}
@@ -71,6 +83,8 @@ def validate_certification_result(result: dict, current: dict | None) -> None:
         raise ReleaseStoreError("promotion_requires_no_failed_gates")
     if len(required) != len(set(required)) or len(passed) != len(set(passed)):
         raise ReleaseStoreError("promotion_rejects_duplicate_gates")
+    if "release_verifier" not in required or "release_verifier" not in passed:
+        raise ReleaseStoreError("promotion_requires_independent_verifier_gate")
 
 
 def promote(result: dict, store: ReleaseStore, evidence: bytes) -> dict:

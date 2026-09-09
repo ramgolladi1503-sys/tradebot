@@ -55,7 +55,10 @@ def _gate_result(path: Path) -> dict[str, bool]:
             if not evidence_path or not evidence_sha256:
                 evidence_ok = False
             else:
-                evidence_ok = _sha256(Path(evidence_path)) == evidence_sha256
+                try:
+                    evidence_ok = _sha256(Path(evidence_path)) == evidence_sha256
+                except OSError:
+                    evidence_ok = False
         results[str(key)] = bool(value.get("pass")) and evidence_ok
     return results
 
@@ -102,7 +105,13 @@ def cmd_promote(args: argparse.Namespace) -> int:
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
-    payload = verify(args.state_root, repo=args.repo, certification=args.certification)
+    payload = verify(
+        args.state_root,
+        repo=args.repo,
+        certification=args.certification,
+        dependency_graph=args.dependency_graph,
+        gates=args.gates,
+    )
     if args.output:
         _write_json(args.output, payload)
     print(json.dumps(payload, indent=2, sort_keys=True))
@@ -139,6 +148,8 @@ def main() -> int:
     ver.add_argument("--state-root", type=Path, required=True)
     ver.add_argument("--repo", type=Path)
     ver.add_argument("--certification", type=Path)
+    ver.add_argument("--dependency-graph", type=Path)
+    ver.add_argument("--gates", type=Path)
     ver.add_argument("--output", type=Path)
     ver.set_defaults(handler=cmd_verify)
 
