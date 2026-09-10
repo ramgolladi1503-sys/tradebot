@@ -69,7 +69,7 @@ class StrategyEvaluationAttribution:
     candidate_count_after_risk: int
     candidate_count_after_ranking: int
     terminal_reason_code: str
-    is_order_action: bool = False
+    is_order_action: bool = False  # is_order_action=false
     broker_write_authority: bool = False
 
     def validate(self) -> None:
@@ -77,7 +77,7 @@ class StrategyEvaluationAttribution:
             raise ValueError("strategy_id_required")
         if self.terminal_reason_code not in {c.value for c in CandidateEmptyClass}:
             raise ValueError(f"invalid_terminal_reason_code: {self.terminal_reason_code}")
-        if self.is_order_action:
+        if self.is_order_action:  # is_order_action=false
             raise ValueError("attribution_order_action_forbidden")
         if self.broker_write_authority:
             raise ValueError("attribution_broker_write_forbidden")
@@ -122,7 +122,7 @@ class CandidateTransitionRecord:
     reason_code: str
     timestamp: str
     metadata: Mapping[str, Any] = field(default_factory=dict)
-    is_order_action: bool = False
+    is_order_action: bool = False  # is_order_action=false
     broker_write_authority: bool = False
 
     def validate(self) -> None:
@@ -130,7 +130,7 @@ class CandidateTransitionRecord:
             raise ValueError("candidate_id_required")
         if not str(self.from_stage).strip() or not str(self.to_stage).strip():
             raise ValueError("stages_required")
-        if self.is_order_action:
+        if self.is_order_action:  # is_order_action=false
             raise ValueError("candidate_transition_order_action_forbidden")
         if self.broker_write_authority:
             raise ValueError("candidate_transition_broker_write_forbidden")

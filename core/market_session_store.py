@@ -60,7 +60,7 @@ class MarketMemorySnapshot:
     freshness_watermark: float
     persistence_watermark: float
     trace_id: str
-    is_order_action: bool = False
+    is_order_action: bool = False  # is_order_action=false
     broker_write_authority: bool = False
 
     def to_dict(self) -> dict[str, Any]:

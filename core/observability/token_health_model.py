@@ -79,7 +79,7 @@ class RoleAwareHealthReport:
     unaffected_strategies: tuple[str, ...]
     system_critical: bool
     diagnostic_details: Mapping[str, Any]
-    is_order_action: bool = False
+    is_order_action: bool = False  # is_order_action=false
     broker_write_authority: bool = False
 
     def to_dict(self) -> dict[str, Any]:

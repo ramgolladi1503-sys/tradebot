@@ -68,14 +68,9 @@ def run_mutation_campaign() -> dict[str, Any]:
         # Skipped WEBSOCKET_CONNECTION
         create_stage_record(trace_id=t1, stage_id="s3", component=PipelineCheckpoint.SUBSCRIPTION_REQUEST.value),
     ]
-    detected1 = False
-    try:
-        # Check if gap is detected in required checkpoint sequence
-        components = [r.component for r in seq1]
-        if PipelineCheckpoint.WEBSOCKET_CONNECTION.value not in components:
-            detected1 = True
-    except Exception:
-        detected1 = True
+    # Check if gap is detected in required checkpoint sequence
+    components = [r.component for r in seq1]
+    detected1 = PipelineCheckpoint.WEBSOCKET_CONNECTION.value not in components
     record_mutation("drop_websocket_stage_event", detected1, "WebSocket connection checkpoint absent in trace sequence")
 
     # Mutation 2: Skip router invocation
@@ -101,16 +96,10 @@ def run_mutation_campaign() -> dict[str, Any]:
 
     # Mutation 3: Strategy result not inserted into candidate pool
     # Strategy generated 2 candidates, but candidate_count_after_filters reported 0 with no filter attribution
-    detected3 = False
-    try:
-        # Emitting candidate but pool ledger has no record of it
-        ledger3 = CandidateLifecycleLedger()
-        history3 = ledger3.get_candidate_history("cand_unregistered")
-        if len(history3) == 0:
-            # Detected that candidate is missing from ledger
-            detected3 = True
-    except Exception:
-        detected3 = True
+    # Emitting candidate but pool ledger has no record of it
+    ledger3 = CandidateLifecycleLedger()
+    history3 = ledger3.get_candidate_history("cand_unregistered")
+    detected3 = len(history3) == 0
     record_mutation("strategy_result_not_inserted_into_candidate_pool", detected3, "Candidate missing from lifecycle ledger")
 
     # Mutation 4: Candidate dropped before ranking without record (silent disappearance)
@@ -129,21 +118,15 @@ def run_mutation_campaign() -> dict[str, Any]:
 
     # Mutation 5: Filter reason omitted
     # Candidate status is FILTERED but reason is empty -> validation fails
-    detected5 = False
-    try:
-        ledger5 = CandidateLifecycleLedger()
-        rec5 = ledger5.record_transition(
-            candidate_id="cand_bad_filter",
-            from_stage=CandidateLifecycleStage.CREATED,
-            to_stage=CandidateLifecycleStage.LIQUIDITY_CHECK,
-            status="FILTERED",
-            reason_code="",  # Omitted!
-        )
-        # Check if empty reason code is caught
-        if not rec5.reason_code.strip():
-            detected5 = True
-    except Exception:
-        detected5 = True
+    ledger5 = CandidateLifecycleLedger()
+    rec5 = ledger5.record_transition(
+        candidate_id="cand_bad_filter",
+        from_stage=CandidateLifecycleStage.CREATED,
+        to_stage=CandidateLifecycleStage.LIQUIDITY_CHECK,
+        status="FILTERED",
+        reason_code="",  # Omitted!
+    )
+    detected5 = not rec5.reason_code.strip()
     record_mutation("filter_reason_omitted", detected5, "Empty filter reason code detected")
 
     # Mutation 6: Candidate_id lost / empty

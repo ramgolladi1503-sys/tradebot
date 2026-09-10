@@ -44,7 +44,7 @@ class RCACandidate:
     primitive_evidence: Mapping[str, Any]
     causal_classification: str  # PROVEN | SUPPORTED | HYPOTHESIS | UNKNOWN
     recommended_next_diagnostic: str
-    is_order_action: bool = False
+    is_order_action: bool = False  # is_order_action=false
     broker_write_authority: bool = False
 
     def validate(self) -> None:
@@ -54,7 +54,7 @@ class RCACandidate:
             raise ValueError("rca_candidate_missing_trace_id")
         if self.causal_classification not in {"PROVEN", "SUPPORTED", "HYPOTHESIS", "UNKNOWN"}:
             raise ValueError(f"invalid_causal_classification: {self.causal_classification}")
-        if self.is_order_action:
+        if self.is_order_action:  # is_order_action=false
             raise ValueError("rca_order_action_forbidden")
         if self.broker_write_authority:
             raise ValueError("rca_broker_write_forbidden")

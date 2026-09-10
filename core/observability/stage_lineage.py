@@ -249,7 +249,7 @@ class StageRecord:
     event_timestamp: str
     receive_timestamp: str
     emitted_timestamp: str
-    is_order_action: bool = False
+    is_order_action: bool = False  # is_order_action=false
     broker_write_authority: bool = False
 
     def validate(self) -> None:
@@ -261,7 +261,7 @@ class StageRecord:
             raise ValueError("stage_record_missing_component")
         if self.status not in {s.value for s in StageStatus}:
             raise ValueError(f"stage_record_invalid_status: {self.status}")
-        if self.is_order_action:
+        if self.is_order_action:  # is_order_action=false
             raise ValueError("stage_record_order_action_forbidden")
         if self.broker_write_authority:
             raise ValueError("stage_record_broker_write_forbidden")

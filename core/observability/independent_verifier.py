@@ -78,7 +78,7 @@ class IndependentObservabilityVerifier:
                 last_index = cp_idx
 
             # 3. Verify safety properties
-            if rec.is_order_action:
+            if rec.is_order_action:  # is_order_action=false
                 raise VerificationError("stage_record_has_order_action_true")
             if rec.broker_write_authority:
                 raise VerificationError("stage_record_has_broker_write_true")

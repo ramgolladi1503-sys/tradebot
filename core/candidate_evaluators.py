@@ -64,7 +64,7 @@ class CandidateEmission:
     trace_id: str
     features: Mapping[str, float]
     metadata: Mapping[str, Any] = field(default_factory=dict)
-    is_order_action: bool = False
+    is_order_action: bool = False  # is_order_action=false
     broker_write_authority: bool = False
 
     def to_dict(self) -> dict[str, Any]:
