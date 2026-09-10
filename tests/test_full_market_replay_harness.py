@@ -24,6 +24,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
+import pytest
 import pyarrow.parquet as pq
 
 from core.observability import (
@@ -58,6 +59,7 @@ logger = logging.getLogger(__name__)
 
 HISTORICAL_DATASET_PATH = "/Volumes/TradeBotData/wfa_pr882_scoped_20260902T/research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/ce-pe-option-certification-v1/source_snapshot_v1/candidates/runtime__strategy_validation__resolved_option_ticks_20260702.parquet"
 TOKEN_INDEX_PATH = "/Volumes/TradeBotData/worktrees/live-pipeline-observability-certification-20260910/runtime/strategy_validation/stress_replay_resolved_option_token_index.json"
+REPLAY_DATA_AVAILABLE = os.path.exists(HISTORICAL_DATASET_PATH) and os.path.exists(TOKEN_INDEX_PATH)
 
 
 def load_token_identity_map() -> tuple[dict[int, dict[str, Any]], dict[str, Any]]:
@@ -98,7 +100,10 @@ class FullMarketReplayRunner:
         evidence_output_dir: pathlib.Path | None = None,
     ) -> None:
         self.dataset_path = dataset_path
-        self.evidence_dir = evidence_output_dir or pathlib.Path("/Volumes/TradeBotData/runtime/replay_evidence")
+        default_evidence = pathlib.Path(os.getenv("DATA_ROOT") or ".runtime") / "replay_evidence"
+        if not evidence_output_dir and os.path.exists("/Volumes/TradeBotData"):
+            default_evidence = pathlib.Path("/Volumes/TradeBotData/runtime/replay_evidence")
+        self.evidence_dir = evidence_output_dir or default_evidence
         self.evidence_dir.mkdir(parents=True, exist_ok=True)
         self.meta_map, self.token_summary = load_token_identity_map()
         self.bridge = ProductionObservabilityBridge()
@@ -530,6 +535,7 @@ class FullMarketReplayRunner:
         }
 
 
+@pytest.mark.skipif(not REPLAY_DATA_AVAILABLE, reason="Historical dataset not found on filesystem")
 def test_baseline_full_market_replay():
     """Verify full-market baseline replay: 0 lost traces, 0 trace mutations, 0 silent drops."""
     runner = FullMarketReplayRunner()
@@ -554,6 +560,7 @@ def test_baseline_full_market_replay():
     assert result["PRODUCTION_EQUIVALENCE_PASS"] is True
 
 
+@pytest.mark.skipif(not REPLAY_DATA_AVAILABLE, reason="Historical dataset not found on filesystem")
 def test_controlled_fault_injection_campaign():
     """Verify all 8 fault injection cases (Fault A - H) are detected with 0 missed."""
     runner = FullMarketReplayRunner()
@@ -565,6 +572,7 @@ def test_controlled_fault_injection_campaign():
         assert case["detected"] is True, f"Failed detection on {case['fault']}: {case['detail']}"
 
 
+@pytest.mark.skipif(not REPLAY_DATA_AVAILABLE, reason="Historical dataset not found on filesystem")
 def test_load_and_queue_backpressure_campaign():
     """Verify load campaign across 1x, 2x, 5x, 10x, and burst speeds."""
     runner = FullMarketReplayRunner()
