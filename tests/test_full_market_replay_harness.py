@@ -604,4 +604,3 @@ def test_sidecar_out_of_process_sync(tmp_path: pathlib.Path):
     loaded = sidecar.sync_from_stream_file(stream_file)
     assert loaded == 10
     assert len(sidecar.pulse_ring._traces) == 10
-

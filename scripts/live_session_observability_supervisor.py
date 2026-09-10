@@ -56,7 +56,7 @@ def main():
 
     pulse_ring = DiagnosticPulseRing(max_traces=5000, max_events=50000)
     sidecar = SidecarReporter(pulse_ring=pulse_ring, output_dir=REPORTS_DIR)
-    
+
     interval_sec = 2.0
     report_window_sec = 15 * 60  # 15 minutes
     last_report_ts = time.time()
@@ -142,10 +142,10 @@ def main():
         if is_15min_due or is_closing:
             last_report_ts = now_ts
             ts_slug = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            
+
             nifty_ltp = resolved_tokens[0].get("ltp") if resolved_tokens else "N/A"
             atm_strike = resolved_tokens[0].get("atm") if resolved_tokens else "N/A"
-            
+
             # Health snapshot
             report_payload = {
                 "timestamp": ts_slug,
@@ -165,13 +165,13 @@ def main():
                 "orders_placed": 0,
                 "overall_health_verdict": "HEALTHY" if (running and ws_conn and critical_fresh) else ("CLOSED" if is_closing else "DEGRADED"),
             }
-            
+
             # Persist 15-minute report
             json_file = REPORTS_DIR / f"LIVE_HEALTH_REPORT_{ts_slug}.json"
             md_file = REPORTS_DIR / f"LIVE_HEALTH_REPORT_{ts_slug}.md"
             with open(json_file, "w", encoding="utf-8") as f:
                 json.dump(report_payload, f, indent=2)
-                
+
             md_content = f"""# 15-Minute Observability Diagnostic Report
 - **Timestamp**: `{ts_slug}` (UTC)
 - **PID Monitored**: `{TARGET_PID}`
