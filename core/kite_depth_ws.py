@@ -46,6 +46,7 @@ from core.auth_health import get_kite_auth_health
 from core.feed_restart_guard import feed_restart_guard
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped, trip as trip_feed_breaker
 from core.market_data_monitor import get_feed_health_monitor, record_depth, record_tick
+from core.kite_depth_protocol import KiteDepthProtocolViolation, canonicalize_kite_depth
 from core.market_event_graph_live_observation_registry import (
     BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET,
     load_observation_registry,
@@ -331,6 +332,17 @@ def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str
         configured_budget=plan.get("configured_budget"),
         plan_sha=str(plan.get("launch_plan_sha256") or ""),
     )
+
+
+def _active_launch_plan_tokens() -> list[int]:
+    """Return the immutable token union selected by the governed launch plan."""
+    state = _observation_state_payload()
+    if not (
+        bool(state.get("enabled"))
+        and str(state.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+    ):
+        return []
+    return _normalize_positive_tokens(state.get("final_union_tokens") or [])
 
 
 def _ensure_feed_session_id() -> str:
@@ -2093,6 +2105,22 @@ def _extract_tick_epoch(tick: dict) -> float:
         except Exception:
             pass
     return float(time.time())
+
+
+def _timestamp_provenance(tick: dict, *, receive_epoch: float) -> dict:
+    for field in ("exchange_timestamp", "last_trade_time", "timestamp"):
+        raw = tick.get(field)
+        if raw is None:
+            continue
+        try:
+            value = float(raw.timestamp()) if hasattr(raw, "timestamp") else float(raw)
+            if value > 1e12:
+                value /= 1000.0
+            if value == value and value not in (float("inf"), float("-inf")):
+                return {"timestamp_authority": "EXCHANGE_TIMESTAMP", "timestamp_source_field": field, "source_timestamp_epoch": value, "receive_timestamp_epoch": float(receive_epoch), "timestamp_fallback_used": False}
+        except (TypeError, ValueError, OverflowError):
+            continue
+    return {"timestamp_authority": "GOVERNED_RECEIVE_TIMESTAMP", "timestamp_source_field": None, "source_timestamp_epoch": None, "receive_timestamp_epoch": float(receive_epoch), "timestamp_fallback_used": True}
 
 
 def _freshness_epoch_for_tick(token: int | None, payload_epoch: float | None, receipt_epoch: float) -> float:
@@ -6591,6 +6619,12 @@ def _record_observation_callback_truth(
     return packet_detail
 
 
+_NORMALIZED_TICK_SINK = None
+
+def set_normalized_tick_sink(sink=None):
+    global _NORMALIZED_TICK_SINK
+    _NORMALIZED_TICK_SINK = sink
+
 def on_ticks(ws, ticks):
     global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _FEED_ON_TICKS_ROW_SEQ
     _ = ws
@@ -6725,6 +6759,14 @@ def on_ticks(ws, ticks):
         )
         symbol = (observation_identity or {}).get("symbol") or (_TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None)
         underlying_tick = _is_underlying_token(token_int)
+        if isinstance(depth, dict) and depth:
+            try:
+                depth = canonicalize_kite_depth(depth)
+                t["depth"] = depth
+            except KiteDepthProtocolViolation:
+                _log_ws("KITE_DEPTH_PROTOCOL_VIOLATION", {"instrument_token": token_int, "reason": "cardinality_or_field"})
+                depth = None
+                t["depth"] = None
         has_depth = _depth_has_bid_ask(depth)
         tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
         tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None
@@ -6883,6 +6925,12 @@ def on_ticks(ws, ticks):
             )
             continue
         ts_value = freshness_tick_epoch
+        last_price_float = _safe_float(last_price)
+        timestamp_provenance = _timestamp_provenance(t, receive_epoch=now_epoch)
+        if _NORMALIZED_TICK_SINK is not None:
+            _NORMALIZED_TICK_SINK({"instrument_token": token_int, "underlying_symbol": symbol,
+                "last_price": last_price_float,
+                "timestamp_epoch": ts_value, **timestamp_provenance})
         volume = t.get("volume")
         if volume is None:
             volume = t.get("volume_traded")
@@ -6916,6 +6964,7 @@ def on_ticks(ws, ticks):
                 last_price=last_price_float,
                 volume=volume,
                 oi=oi,
+                **timestamp_provenance,
             )
             if not ok:
                 if audit_source_row_index is not None:
@@ -7365,7 +7414,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 
 
-def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
+def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False, tick_sink=None) -> bool:
     global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
@@ -8573,6 +8622,15 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 last_option_prune_refresh_epoch = float(
                     last_option_prune_refresh_state.get("last_refresh_epoch") or 0.0
                 )
+                if should_refresh and _active_launch_plan_tokens():
+                    _log_ws(
+                        "FEED_OPTION_PRUNE_REFRESH_SKIPPED",
+                        {
+                            "reason": "launch_plan_canonical_authority",
+                            "canonical_count": len(_active_launch_plan_tokens()),
+                        },
+                    )
+                    should_refresh = False
                 if should_refresh:
                     refresh_mode = str(refresh_payload.get("refresh_mode") or "delta")
                     refresh_reason = str(refresh_payload.get("reason") or "stale_option_prune_refresh")
@@ -8843,21 +8901,58 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 _emit_snapshot(now_loop)
                 continue
             rebalance_state["last_eval_ts"] = now_reb
-            try:
-                desired_tokens_raw, resolution = build_subscription_tokens(
-                    symbols=list(getattr(cfg, "SYMBOLS", []) or []),
-                    max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)),
-                )
-            except Exception as exc:
-                _log_ws("FEED_REBALANCE_BUILD_ERROR", {"error": str(exc)})
-                _emit_snapshot(now_loop)
-                continue
-
             sticky_tokens = set(int(t) for t in get_sticky_tokens() if t is not None)
-            atm_by_symbol, step_by_symbol, underlying_tokens = _resolution_atm_step_and_underlyings(resolution)
-            desired_tokens = set(int(t) for t in desired_tokens_raw if t is not None)
-            desired_tokens.update(sticky_tokens)
-            desired_tokens.update(underlying_tokens)
+            canonical_plan_tokens = _active_launch_plan_tokens()
+            if canonical_plan_tokens:
+                # A governed live launch plan is the source of truth for this
+                # session.  Rebuilding from the broader constituent registry
+                # here would silently widen the subscription set and make the
+                # feed mirror disagree with the immutable plan.
+                desired_tokens = set(canonical_plan_tokens)
+                resolution = []
+                atm_by_symbol, step_by_symbol, underlying_tokens = {}, {}, set()
+            else:
+                try:
+                    desired_tokens_raw, resolution = build_subscription_tokens(
+                        symbols=list(getattr(cfg, "SYMBOLS", []) or []),
+                        max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)),
+                    )
+                except Exception as exc:
+                    _log_ws("FEED_REBALANCE_BUILD_ERROR", {"error": str(exc)})
+                    _emit_snapshot(now_loop)
+                    continue
+                atm_by_symbol, step_by_symbol, underlying_tokens = _resolution_atm_step_and_underlyings(resolution)
+                desired_tokens = set(int(t) for t in desired_tokens_raw if t is not None)
+            if not canonical_plan_tokens:
+                desired_tokens.update(sticky_tokens)
+                desired_tokens.update(underlying_tokens)
+
+            if canonical_plan_tokens:
+                current_plan_tokens = set(int(t) for t in (_LAST_TOKENS or []) if int(t) > 0)
+                missing_plan_tokens = sorted(desired_tokens - current_plan_tokens)
+                extra_plan_tokens = sorted(current_plan_tokens - desired_tokens)
+                if missing_plan_tokens or extra_plan_tokens:
+                    _log_ws(
+                        "FEED_LAUNCH_PLAN_CANONICAL_RECONCILE",
+                        {
+                            "reason": "launch_plan_canonical_reconcile",
+                            "canonical_count": len(desired_tokens),
+                            "current_count": len(current_plan_tokens),
+                            "subscribe_count": len(missing_plan_tokens),
+                            "unsubscribe_count": len(extra_plan_tokens),
+                            "canonical_plan_sha": str(_observation_state_payload().get("plan_sha") or ""),
+                        },
+                    )
+                    ok_apply = globals()["_apply_subscription_delta"](
+                        kws,
+                        missing_plan_tokens,
+                        extra_plan_tokens,
+                        reason="launch_plan_canonical_reconcile",
+                    )
+                    if ok_apply:
+                        rebalance_state["last_rebalance_ts"] = now_reb
+                    _emit_snapshot(now_loop)
+                    continue
 
             decision = _compute_rebalance_decision(
                 current_tokens=set(int(t) for t in (_LAST_TOKENS or [])),
@@ -8911,6 +9006,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             previous_on_message(ws, payload, is_binary)
 
     kws.on_message = on_message_current
+    if tick_sink is not None:
+        set_normalized_tick_sink(tick_sink)
     _register_on_ticks_callback(kws, _generation_is_current, on_ticks)
     watchdog_thread = threading.Thread(target=_watchdog)
     try:

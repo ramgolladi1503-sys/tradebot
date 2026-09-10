@@ -1,0 +1,6 @@
+mirror_id,production_callsite,default_path,resolved_live_path,authority_class,live_path_reachable,write_frequency,downstream_readers,required_runtime,required_verification,status
+M01,core/runtime_live_workload_evidence.py,repo_logs_dir()/runtime_live_workload.json,/runtime_root/logs/runtime_live_workload.json,COMPATIBILITY,true,per lifecycle,postclose readers,false,true,REDIRECTED
+M02,core/runtime_candidate_flow_trace.py,repo_logs_dir()/candidate_flow_trace.json,/runtime_root/logs/candidate_flow_trace.json,COMPATIBILITY,true,per lifecycle,diagnostic readers,false,true,REDIRECTED
+M03,core/runtime_feed_truth_snapshot.py,repo_logs_dir()/feed_truth_snapshot.json,/runtime_root/logs/feed_truth_snapshot.json,COMPATIBILITY,true,per lifecycle,feed readers,false,true,REDIRECTED
+M04,core/runtime_candidate_starvation_trace.py,repo_logs_dir()/candidate_starvation_trace.json,/runtime_root/logs/candidate_starvation_trace.json,DIAGNOSTIC,true,per cycle,analysis readers,false,true,REDIRECTED
+M05,core/runtime_snapshot_store.py,repo_logs_dir()/top_opportunities_latest.json,/runtime_root/logs/top_opportunities_latest.json,COMPATIBILITY,true,per cycle,analytics readers,false,false,REDIRECTED

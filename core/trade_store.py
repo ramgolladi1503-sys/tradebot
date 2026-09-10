@@ -10,6 +10,7 @@ from config import config as cfg
 from pathlib import Path
 from core.incidents import trigger_db_write_fail
 from core.fs_utils import ensure_parent_dir
+from core.sqlite_write_lock import sqlite_transaction_lock
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +31,15 @@ def _conn() -> Iterator[sqlite3.Connection]:
     except Exception:
         pass
     try:
-        if bool(getattr(cfg, "TRADE_DB_ENABLE_WAL", True)):
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute(f"PRAGMA synchronous={str(getattr(cfg, 'TRADE_DB_SYNCHRONOUS', 'NORMAL') or 'NORMAL')}")
-    except Exception:
-        pass
-    try:
-        with conn:
-            yield conn
+        with sqlite_transaction_lock():
+            try:
+                if bool(getattr(cfg, "TRADE_DB_ENABLE_WAL", True)):
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    conn.execute(f"PRAGMA synchronous={str(getattr(cfg, 'TRADE_DB_SYNCHRONOUS', 'NORMAL') or 'NORMAL')}")
+            except Exception:
+                pass
+            with conn:
+                yield conn
     finally:
         conn.close()
 

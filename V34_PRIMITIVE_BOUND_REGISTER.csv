@@ -1,0 +1,13 @@
+PRIMITIVE_ID,AUTHORITATIVE,CURRENTLY_BOUNDED,BOUND_SOURCE,BOUND_VALUE,UNIT,BOUND_ENFORCED_BY_CODE,BOUND_TESTED,IF_UNBOUNDED_ACTION
+sqlite_transaction,true,false,V32 source inventory,UNKNOWN,bytes,false,false,RESTRUCTURE
+sqlite_wal_transient,true,false,V32 SQLite WAL authority,UNKNOWN,bytes,false,false,RESTRUCTURE
+authoritative_jsonl_record,true,false,V32 JSONL authority,UNKNOWN,bytes,false,false,RESTRUCTURE
+authoritative_jsonl_events,true,false,V32 JSONL authority,UNKNOWN,events,false,false,RESTRUCTURE
+atomic_authoritative_artifact,true,false,V32 atomic bounds,UNKNOWN,bytes,false,false,RESTRUCTURE
+atomic_temp,true,false,V32 atomic bounds,UNKNOWN,bytes,false,false,RESTRUCTURE
+tick_queue_item,true,false,V32 writer derivation,UNKNOWN,bytes,false,false,RESTRUCTURE
+depth_queue_item,true,false,V32 writer derivation,UNKNOWN,bytes,false,false,RESTRUCTURE
+runtime_queue_item,true,false,V32 writer derivation,UNKNOWN,bytes,false,false,RESTRUCTURE
+persistence_batch,true,false,V32 writer derivation,UNKNOWN,bytes,false,false,RESTRUCTURE
+finalization_artifact,true,false,V32 finalization reserve,UNKNOWN,bytes,false,false,RESTRUCTURE
+epoch1_genesis,true,true,V33C schema,SCHEMA_BOUNDED,record,true,true,RECOVER

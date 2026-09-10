@@ -1,0 +1,16 @@
+id,control,expected,verified
+A,sufficient free space,PASS,not_independently_run
+B,exactly at threshold,PASS,not_independently_run
+C,one byte below threshold,BLOCKED,not_independently_run
+D,missing free-space observation,UNKNOWN,not_independently_run
+E,wrong filesystem,UNKNOWN,not_independently_run
+F,runtime root changes filesystem,UNKNOWN,not_independently_run
+G,WAL spike consumes reserve,BLOCKED,not_independently_run
+H,Parquet temp amplification consumes reserve,BLOCKED,not_independently_run
+I,shutdown reserve only remains,BLOCKED,not_independently_run
+J,free space falls mid-session,BLOCKED,not_independently_run
+K,free space recovers,PASS,not_independently_run
+L,validator calculation mutation,REJECT,not_independently_run
+M,bytes/MiB units mutation,REJECT,not_independently_run
+N,threshold spec hash mismatch,REJECT,not_independently_run
+O,unknown measurement input,REJECT,not_independently_run

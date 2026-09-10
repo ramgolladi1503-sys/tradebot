@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any, Mapping
+from core.log_writer import get_jsonl_writer
 
 
 REQUIRED_FIELDS = frozenset({"candidate_id", "strategy_id", "timestamp", "source_sha", "spec_sha", "execution_status"})
@@ -49,6 +50,6 @@ def append_advisory(path: str | Path, row: Mapping[str, Any], *, session_id: str
                 continue
             if tuple(prior.get(key) for key in ("session_id", "strategy_id", "symbol", "decision_timestamp")) == identity:
                 return str(prior.get("advisory_sha256") or digest)
-    with destination.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, sort_keys=True) + "\n")
+    if not get_jsonl_writer(destination).write(payload):
+        raise OSError("bounded_advisory_write_rejected")
     return digest

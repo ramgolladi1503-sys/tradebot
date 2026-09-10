@@ -39,19 +39,39 @@ def main() -> int:
     parser.add_argument("--authority-artifact", required=True, type=Path)
     parser.add_argument("--parquet-export", action="store_true")
     parser.add_argument("--parquet-export-interval-seconds", type=float, default=15.0)
+    parser.add_argument("--disk-budget-contract", type=Path)
     args = parser.parse_args()
     if not args.token_path.is_file():
         raise SystemExit("KITE_ACCESS_TOKEN_MISSING")
+    from core.runtime_storage_authority import StorageAuthorityError, establish, bind_environment
+    try:
+        storage = establish(volume=Path("/Volumes/TradeBotData"), runtime_root=args.output_root)
+    except StorageAuthorityError as exc:
+        raise SystemExit(str(exc))
+    bind_environment(storage)
     authority = validate_authority(artifact_path=args.authority_artifact, master_path=args.kite_instruments_file, session_date=args.session_date, source_sha=os.environ.get("TRADEBOT_COMMIT_SHA", ""), required_tokens=[])
     if not authority["ok"]:
         raise SystemExit(authority["verdict"])
+    if args.disk_budget_contract is not None:
+        from core.low_disk_safety_gate import derive_budget, evaluate, write_decision
+        contract = json.loads(args.disk_budget_contract.read_text(encoding="utf-8"))
+        budget = derive_budget(
+            baseline_bytes=int(contract["observed_bytes"]),
+            observed_bytes_per_second=float(contract["observed_bytes_per_second"]),
+            remaining_session_seconds=int(contract["remaining_session_seconds"]),
+            peak_transient_bytes=int(contract["peak_transient_bytes"]),
+            shutdown_reserve_bytes=int(contract["shutdown_reserve_bytes"]),
+        )
+        decision = evaluate(args.output_root, budget)
+        write_decision(args.output_root / "disk_budget_decision.json", decision)
+        if decision.verdict != "PASS":
+            raise SystemExit(f"DISK_BUDGET_{decision.verdict}")
     os.environ["TRADING_BOT_TOKEN_PATH"] = str(args.token_path.resolve())
     plan = load_launch_plan(args.launch_plan)
     env = safe_environment()
     os.environ.update(env)
     from core.kite_read_only_observation_runtime import assert_import_boundary, safety_contract
     contract = safety_contract(env, child_command=["read-only-observation"], child_pid=None)
-    args.output_root.mkdir(parents=True, exist_ok=True)
     (args.output_root / "startup_safety_contract.json").write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if args.validate_only:
         from core.auth import get_kite_client

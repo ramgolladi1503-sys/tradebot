@@ -1,0 +1,1 @@
+{"schema_version":1,"core_fail_closed":true,"depth_queue_max_bytes":12156928,"tick_queue_max_bytes":1930000,"tick_batch_max_bytes":193000,"sqlite_wal_max_bytes":65536,"jsonl_record_max_bytes":65536,"jsonl_file_max_bytes":1048576,"jsonl_backup_count":3,"parquet_optional":true,"silent_fallback":false}

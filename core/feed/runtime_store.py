@@ -26,6 +26,7 @@ from core.feed.artifact_loader import load_current_feed_truth
 from core.paths import repo_root, trade_db_path
 from core.time_utils import now_utc_epoch
 from core.persistence_durability import record_degradation
+from core.sqlite_write_lock import sqlite_transaction_lock
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,9 @@ def _conn():
             conn.execute("PRAGMA synchronous=NORMAL")
         except Exception:
             pass
-        with conn:
-            yield conn
+        with sqlite_transaction_lock():
+            with conn:
+                yield conn
     finally:
         conn.close()
 
@@ -481,10 +483,12 @@ def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
     return True
 
 
-def shutdown_runtime_persistence(deadline_seconds: float = 2.0) -> dict:
+def shutdown_runtime_persistence(deadline_seconds: float | None = None) -> dict:
     global _RUNTIME_SHUTDOWN
     with _RUNTIME_LOCK:
         _RUNTIME_SHUTDOWN = True
+    if deadline_seconds is None:
+        deadline_seconds = getattr(cfg, "RUNTIME_PERSISTENCE_SHUTDOWN_DEADLINE_SEC", 10.0)
     deadline = time.monotonic() + max(0.0, float(deadline_seconds))
     while _RUNTIME_WRITE_QUEUE.unfinished_tasks and time.monotonic() < deadline:
         time.sleep(0.01)

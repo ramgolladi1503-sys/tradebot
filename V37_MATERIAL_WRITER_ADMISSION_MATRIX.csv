@@ -1,0 +1,10 @@
+WRITER,PATH,CLASS,BOUND_AUTHORITY,FAILURE_MODE,STATUS
+tick_store,core/tick_store.py,CORE_DURABILITY,storage_bounds_v37.py+SQLite WAL contract,stop/reject,PASS
+depth_store,core/depth_store.py,CORE_DURABILITY,storage_bounds_v37.py,reject item,BOUNDED
+freshness_history,core/freshness.py,CORE_GOVERNANCE_EVIDENCE,JsonlWriter,rotate bounded,PASS
+startup_lifecycle,core/runtime_startup_lifecycle.py,CORE_GOVERNANCE_EVIDENCE,JsonlWriter,rotate bounded,PASS
+execution_entry_trace,core/execution_entry_trace.py,CORE_GOVERNANCE_EVIDENCE,JsonlWriter,rotate bounded,PASS
+CAS_primitive_store,core/read_only_consumer_cycle.py,CORE_GOVERNANCE_EVIDENCE,atomic artifact contract,stop on pressure,UNVERIFIED
+runtime_snapshots,core/events.py,CORE_GOVERNANCE_EVIDENCE,atomic writer contract,stop on pressure,UNVERIFIED
+Parquet_export,core/sqlite_snapshot_parquet_exporter.py,OPTIONAL_DERIVED_OUTPUT,optional exporter,skip on pressure,OPTIONAL
+debug_error_logs,multiple direct append writers,OPTIONAL_DEBUG,NONE,may drop,NOT_CORE

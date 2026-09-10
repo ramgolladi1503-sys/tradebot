@@ -10,6 +10,7 @@ from typing import Any
 
 from core.events import write_json_atomic
 from core.paths import logs_dir
+from core.log_writer import get_jsonl_writer
 
 logger = logging.getLogger(__name__)
 
@@ -116,10 +117,8 @@ def append_execution_audit_event(
     latest_target = latest_path or execution_audit_latest_path()
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("a", encoding="utf-8", buffering=1) as handle:
-            handle.write(json.dumps(event, ensure_ascii=True, sort_keys=True) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
+        if not get_jsonl_writer(target).write(event):
+            raise OSError("bounded_execution_audit_write_rejected")
         write_json_atomic(latest_target, event)
     except Exception as exc:
         logger.warning(

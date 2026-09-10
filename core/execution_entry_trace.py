@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from core.paths import logs_dir
+from core.log_writer import get_jsonl_writer
 
 try:
     from config import config as cfg
@@ -76,5 +77,4 @@ def append_execution_entry_trace(
         record["extra"] = dict(extra)
     path = _trace_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, sort_keys=True, default=str) + "\n")
+    get_jsonl_writer(path).write(record)

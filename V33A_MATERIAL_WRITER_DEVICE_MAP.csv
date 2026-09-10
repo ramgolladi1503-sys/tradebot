@@ -1,0 +1,13 @@
+writer_class,representative_path_or_api,live_scope,device_id,external_bound,status,reason
+SQLite database,DATA_ROOT/db/DEFAULT.sqlite,live,16777240,true,PASS,configured DB_ROOT
+SQLite WAL,DATA_ROOT/db/DEFAULT.sqlite-wal,live,16777240,true,PASS,sibling of database; runtime root bound
+SQLite SHM,DATA_ROOT/db/DEFAULT.sqlite-shm,live,16777240,true,PASS,sibling of database; runtime root bound
+JSONL core streams,DATA_ROOT/logs/**/*.jsonl,live,16777240,true,PATH_PASS,location external; size bounds remain V32 blocker
+JSON artifacts,DATA_ROOT/**/*.json,live,16777240,true,PATH_PASS,location external; maxima remain unproven
+Parquet exporter temp,output_dir/.table.*.parquet,live_or_postclose,16777240,true,PATH_PASS,NamedTemporaryFile uses output_dir
+SQLite snapshot temp,output_dir/.sqlite-snapshot-*.sqlite,postclose,16777240,true,PATH_PASS,NamedTemporaryFile uses output_dir
+Tick/depth store,DATA_ROOT runtime store paths,live,16777240,true,PATH_PASS,requires explicit DATA_ROOT
+CAS/funnel artifacts,DATA_ROOT/logs and DATA_ROOT runtime,live,16777240,true,PATH_PASS,requires explicit runtime root
+Risk/seal artifacts,DATA_ROOT/logs and DATA_ROOT runtime,live_or_postclose,16777240,true,PATH_PASS,requires explicit runtime root
+Compatibility evidence mirrors,repo_logs_dir()/logs,live_or_postclose,unknown,false,BLOCKED,internal repository path remains possible
+Offline tempfile scripts,tempfile default,offline,false,false,OUT_OF_SCOPE,not live writer and must not be used as live authority
