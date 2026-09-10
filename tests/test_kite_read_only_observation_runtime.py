@@ -177,10 +177,8 @@ def test_real_composition_wires_launch_plan_to_feed_start(
     monkeypatch.setattr(feed, "stop_depth_ws", lambda **kwargs: observed.setdefault("stopped", True))
     monkeypatch.setattr(snapshots, "produce_and_store_runtime_snapshots", lambda **_: observed.setdefault("snapshot_cycles", 0) or 1)
 
-    # The production observer deliberately rejects arbitrary /tmp roots.  Put
-    # this composition fixture under the governed mounted volume so the test
-    # exercises the real storage contract instead of bypassing it.
-    governed_root = Path(tempfile.mkdtemp(prefix="tradebot-composition-", dir="/Volumes/TradeBotData"))
+    base_dir = "/Volumes/TradeBotData" if Path("/Volumes/TradeBotData").is_dir() else str(tmp_path)
+    governed_root = Path(tempfile.mkdtemp(prefix="tradebot-composition-", dir=base_dir))
     token_path = governed_root / "token"
     token_path.write_text("redacted")
     plan = {

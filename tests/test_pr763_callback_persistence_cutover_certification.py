@@ -170,7 +170,7 @@ def test_worker_authorities_do_not_use_cross_thread_sqlite_shortcut():
 
 
 def _tick_row(seq):
-    return (f"2026-08-03T10:00:0{seq}Z", seq, 1.0, 1.0, 1.0, float(seq), "test")
+    return (f"2026-08-03T10:00:0{seq}Z", seq, 1.0, 1.0, 1.0, float(seq), "test", "KITE_TICK", "test", float(seq), float(seq), False)
 
 
 def test_tick_queue_saturation_is_bounded_and_fail_closed(monkeypatch):
@@ -555,7 +555,10 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
         {"instrument_token": 256265, "last_price": 25000.0, "exchange_timestamp": tick_epoch,
          "ohlc": {"open": 24990.0, "high": 25010.0, "low": 24980.0, "close": 24995.0}},
         {"instrument_token": 738561, "last_price": 1420.0, "exchange_timestamp": tick_epoch + 0.001,
-         "depth": {"buy": [{"price": 1419.5, "quantity": 10}], "sell": [{"price": 1420.5, "quantity": 8}]},
+         "depth": {
+             "buy": [{"price": 1419.5 - i * 0.5, "quantity": 10 + i, "orders": 1} for i in range(5)],
+             "sell": [{"price": 1420.5 + i * 0.5, "quantity": 8 + i, "orders": 1} for i in range(5)],
+         },
          "ohlc": {"open": 1410.0, "high": 1430.0, "low": 1400.0, "close": 1415.0}},
     ]
     started = time.monotonic_ns()

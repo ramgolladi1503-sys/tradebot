@@ -27,14 +27,20 @@ class StorageAuthority:
 
 def assert_same_device(authority: StorageAuthority, *paths: Path) -> None:
     """Reject material paths whose resolved parent is not on the authority device."""
+    vol_resolved = authority.volume.resolve(strict=False)
     for raw in paths:
         path = Path(raw).expanduser()
-        probe = path if path.exists() else path.parent
         try:
-            resolved = probe.resolve(strict=True)
-            if os.path.commonpath((str(authority.volume), str(resolved))) != str(authority.volume):
+            resolved = path.resolve(strict=False)
+            try:
+                if os.path.commonpath((str(vol_resolved), str(resolved))) != str(vol_resolved):
+                    raise StorageAuthorityError("RUNTIME_STORAGE_AUTHORITY_LOST:path_escape")
+            except ValueError:
                 raise StorageAuthorityError("RUNTIME_STORAGE_AUTHORITY_LOST:path_escape")
-            if resolved.stat().st_dev != authority.device_id:
+            probe = path
+            while not probe.exists() and probe != probe.parent:
+                probe = probe.parent
+            if probe.stat().st_dev != authority.device_id:
                 raise StorageAuthorityError("RUNTIME_STORAGE_AUTHORITY_LOST:material_device_mismatch")
         except StorageAuthorityError:
             raise

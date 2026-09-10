@@ -39,7 +39,10 @@ def compile_check(repo: Path) -> dict:
     repo = repo.resolve()
     sha = _git(repo, "rev-parse", "HEAD")
     tracked = _git(repo, "ls-files", "*.py").splitlines()
-    sparse = _git(repo, "sparse-checkout", "list").splitlines()
+    try:
+        sparse = _git(repo, "sparse-checkout", "list").splitlines()
+    except subprocess.CalledProcessError:
+        sparse = []
     materialized = [path for path in tracked if (repo / path).exists()]
     excluded = [path for path in tracked if not (repo / path).exists()]
     result = {
