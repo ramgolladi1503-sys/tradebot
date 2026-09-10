@@ -61,12 +61,35 @@ class SidecarReporter:
         self.report_interval_minutes = max(1, int(report_interval_minutes))
         self.output_dir = Path(output_dir) if output_dir else (runtime_dir() / "observability_reports")
         self.last_report_ts: datetime | None = None
+        self.telemetry_stream_path: Path | None = (
+            Path(output_dir) / "telemetry_stream.jsonl" if output_dir else None
+        )
 
         # Hard safety boundaries
         self.broker_write_authority: bool = False
         self.order_authority: bool = False
         self.paper_authorized: bool = False
         self.live_authorized: bool = False
+
+    def sync_from_stream_file(self, stream_path: Path | str) -> int:
+        """Consume out-of-process append-only JSONL telemetry stream into reporter memory."""
+        path = Path(stream_path)
+        if not path.exists():
+            return 0
+        events_loaded = 0
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line_str = line.strip()
+                if not line_str:
+                    continue
+                try:
+                    payload = json.loads(line_str)
+                    record = StageRecord(**payload)
+                    self.pulse_ring.record_stage(record)
+                    events_loaded += 1
+                except Exception:
+                    continue
+        return events_loaded
 
     def generate_health_snapshot(
         self,
