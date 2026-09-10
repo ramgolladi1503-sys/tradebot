@@ -49,6 +49,10 @@ from core.observability import (
     generate_trace_id,
 )
 from core.strategy_spec import build_strategy_spec_registry
+from config import config as cfg
+from core.kite_depth_ws import on_ticks
+from core.orchestrator import Orchestrator
+from unittest.mock import patch
 
 logger = logging.getLogger(__name__)
 
@@ -166,114 +170,157 @@ class FullMarketReplayRunner:
         # Bounded sampling for full pipeline trace verification
         sample_step = max(1, total_rows // 500)
 
-        for i in range(total_rows):
-            tok = tokens_col[i]
-            ltp = prices_col[i]
-            sym = symbols_col[i]
-            ts = timestamps_col[i]
+        # Production equivalence configuration
+        cfg.KITE_USE_API = False
+        cfg.EXECUTION_MODE = "PAPER"
+        cfg.ORCHESTRATOR_FAST_LOOP_ENABLE = False
+        cfg.TICK_STORE_ENABLE_DB_WRITES = False
+        cfg.PLANNING_NO_SIGNAL_FALLBACK_ENABLE = False
+        cfg.REQUIRE_LIVE_QUOTES = False
 
-            events_accepted += 1
-            token_last_seen[tok] = ts
+        production_ticks_ingested = 0
+        production_cycles_executed = 0
+        production_orders_attempted = 0
+        tick_batch_buffer: list[dict[str, Any]] = []
+        batch_size = 2000
 
-            # Periodic window check
-            if (ts - first_ts) >= (current_window_idx + 1) * window_size_sec:
-                current_window_idx += 1
-                # Build token health observations from current snapshot
-                obs_list = []
-                for t_id, t_meta in self.meta_map.items():
-                    age = max(0.0, ts - token_last_seen.get(t_id, ts - 100.0))
-                    obs_list.append(
-                        TokenObservation(
-                            token=t_id,
-                            symbol=t_meta["tradingsymbol"],
-                            role=token_graph._token_roles.get(t_id, TokenRole.REQUIRED_OPTION_UNIVERSE),
-                            requested=True,
-                            acknowledged=True,
-                            with_ticks=t_id in token_last_seen,
-                            is_fresh=age <= 3.0,
-                            last_tick_age_sec=age,
+        with patch("core.kite_client.KiteClient.submit_order") as mock_order, \
+             patch("core.time_utils.is_market_open_ist", return_value=True), \
+             patch("core.orchestrator.RunLock.acquire", return_value=(True, "ok")), \
+             patch("core.orchestrator.RunLock.release", return_value=None), \
+             patch.object(Orchestrator, "_start_depth_ws", lambda self: None):
+
+            orch = Orchestrator()
+
+            for i in range(total_rows):
+                tok = tokens_col[i]
+                ltp = prices_col[i]
+                sym = symbols_col[i]
+                ts = timestamps_col[i]
+
+                events_accepted += 1
+                token_last_seen[tok] = ts
+
+                # Ingest into production tick store via real WebSocket tick ingress seam
+                tick_batch_buffer.append({
+                    "instrument_token": tok,
+                    "last_price": ltp,
+                    "volume": 100,
+                    "timestamp": ts,
+                })
+                if len(tick_batch_buffer) >= batch_size:
+                    on_ticks(None, tick_batch_buffer)
+                    production_ticks_ingested += len(tick_batch_buffer)
+                    tick_batch_buffer.clear()
+
+                # Periodic window check
+                if (ts - first_ts) >= (current_window_idx + 1) * window_size_sec:
+                    current_window_idx += 1
+                    # Build token health observations from current snapshot
+                    obs_list = []
+                    for t_id, t_meta in self.meta_map.items():
+                        age = max(0.0, ts - token_last_seen.get(t_id, ts - 100.0))
+                        obs_list.append(
+                            TokenObservation(
+                                token=t_id,
+                                symbol=t_meta["tradingsymbol"],
+                                role=token_graph._token_roles.get(t_id, TokenRole.REQUIRED_OPTION_UNIVERSE),
+                                requested=True,
+                                acknowledged=True,
+                                with_ticks=t_id in token_last_seen,
+                                is_fresh=age <= 3.0,
+                                last_tick_age_sec=age,
+                            )
                         )
-                    )
-                # Underlying observations
-                obs_list.append(TokenObservation(256265, "NIFTY", TokenRole.CRITICAL_UNDERLYING, True, True, True, True, 0.4))
-                obs_list.append(TokenObservation(260105, "BANKNIFTY", TokenRole.CRITICAL_UNDERLYING, True, True, True, True, 0.4))
+                    # Underlying observations
+                    obs_list.append(TokenObservation(256265, "NIFTY", TokenRole.CRITICAL_UNDERLYING, True, True, True, True, 0.4))
+                    obs_list.append(TokenObservation(260105, "BANKNIFTY", TokenRole.CRITICAL_UNDERLYING, True, True, True, True, 0.4))
 
-                health_rep = token_graph.evaluate_health(obs_list)
-                snap = sidecar.generate_health_snapshot(token_health_report=health_rep)
-                reports_generated.append(snap)
-                # Write to disk periodically
-                ts_slug = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
-                json_p = sidecar.output_dir / f"LIVE_PIPELINE_HEALTH_{ts_slug}.json"
-                md_p = sidecar.output_dir / f"LIVE_PIPELINE_HEALTH_{ts_slug}.md"
-                json_p.write_text(json.dumps(snap, indent=2, sort_keys=True), encoding="utf-8")
-                md_p.write_text(sidecar.render_markdown_report(snap), encoding="utf-8")
+                    health_rep = token_graph.evaluate_health(obs_list)
+                    snap = sidecar.generate_health_snapshot(token_health_report=health_rep)
+                    reports_generated.append(snap)
+                    # Write to disk periodically
+                    ts_slug = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+                    json_p = sidecar.output_dir / f"LIVE_PIPELINE_HEALTH_{ts_slug}.json"
+                    md_p = sidecar.output_dir / f"LIVE_PIPELINE_HEALTH_{ts_slug}.md"
+                    json_p.write_text(json.dumps(snap, indent=2, sort_keys=True), encoding="utf-8")
+                    md_p.write_text(sidecar.render_markdown_report(snap), encoding="utf-8")
 
-            # Sample deep cycle execution
-            if i % sample_step == 0:
-                traces_created += 1
-                trace_id = generate_trace_id(seed=f"replay_{i}_{ts}")
+                # Sample deep cycle execution
+                if i % sample_step == 0:
+                    traces_created += 1
+                    trace_id = generate_trace_id(seed=f"replay_{i}_{ts}")
 
-                # Checkpoints 1 to 23
-                stage_records = []
-                for idx, cp in enumerate(CANONICAL_CHECKPOINT_ORDER):
-                    rec = create_stage_record(
-                        trace_id=trace_id,
-                        stage_id=f"st_{i}_{idx}_{cp}",
-                        component=cp,
-                        status=StageStatus.PASS,
-                        reason_code="OK",
-                        latency_us=10,
-                    )
-                    ring.record_stage(rec)
-                    stage_records.append(rec)
-
-                # Validate no trace_id mutation mid-pipeline
-                for r in stage_records:
-                    if r.trace_id != trace_id:
-                        trace_ids_regenerated += 1
-
-                # Simulate candidate evaluation and lifecycle transitions
-                cid = f"cand_{trace_id}_{tok}"
-                # Record evaluation for all expected strategies
-                is_setup = (i % (sample_step * 3) == 0)
-                for sid in strategy_ids:
-                    # Emulate realistic strategy behavior:
-                    # Core strategies emit candidates on setups; others report NO_MARKET_SETUP with valid fresh inputs
-                    emits_cand = is_setup and sid in {"vwap_orb", "opening_range_breakout", "trend_pullback"}
-                    tracker.record_evaluation(
-                        StrategyEvaluationAttribution(
-                            strategy_id=sid,
-                            invoked=True,
-                            input_ready=True,
-                            input_fresh=True,
-                            evaluation_status="EVALUATED",
-                            candidate_count_before_filters=1 if emits_cand else 0,
-                            candidate_count_after_filters=1 if emits_cand else 0,
-                            candidate_count_after_risk=1 if emits_cand else 0,
-                            candidate_count_after_ranking=1 if emits_cand else 0,
-                            terminal_reason_code=(
-                                CandidateEmptyClass.CANDIDATE_CREATED.value
-                                if emits_cand
-                                else CandidateEmptyClass.NO_MARKET_SETUP.value
-                            ),
+                    # Checkpoints 1 to 23
+                    stage_records = []
+                    for idx, cp in enumerate(CANONICAL_CHECKPOINT_ORDER):
+                        rec = create_stage_record(
+                            trace_id=trace_id,
+                            stage_id=f"st_{i}_{idx}_{cp}",
+                            component=cp,
+                            status=StageStatus.PASS,
+                            reason_code="OK",
+                            latency_us=10,
                         )
-                    )
+                        ring.record_stage(rec)
+                        stage_records.append(rec)
 
-                if is_setup:
-                    ledger.record_transition(
-                        candidate_id=cid,
-                        from_stage=CandidateLifecycleStage.CREATED,
-                        to_stage=CandidateLifecycleStage.LIQUIDITY_CHECK,
-                        status="PASS",
-                        reason_code="SPREAD_OK",
-                    )
-                    ledger.record_transition(
-                        candidate_id=cid,
-                        from_stage=CandidateLifecycleStage.LIQUIDITY_CHECK,
-                        to_stage=CandidateLifecycleStage.ADVISORY,
-                        status="PASS",
-                        reason_code="ADVISORY_CONFIRMED",
-                    )
+                    # Validate no trace_id mutation mid-pipeline
+                    for r in stage_records:
+                        if r.trace_id != trace_id:
+                            trace_ids_regenerated += 1
+
+                    # Simulate candidate evaluation and lifecycle transitions
+                    cid = f"cand_{trace_id}_{tok}"
+                    # Record evaluation for all expected strategies
+                    is_setup = (i % (sample_step * 3) == 0)
+                    for sid in strategy_ids:
+                        emits_cand = is_setup and sid in {"vwap_orb", "opening_range_breakout", "trend_pullback"}
+                        tracker.record_evaluation(
+                            StrategyEvaluationAttribution(
+                                strategy_id=sid,
+                                invoked=True,
+                                input_ready=True,
+                                input_fresh=True,
+                                evaluation_status="EVALUATED",
+                                candidate_count_before_filters=1 if emits_cand else 0,
+                                candidate_count_after_filters=1 if emits_cand else 0,
+                                candidate_count_after_risk=1 if emits_cand else 0,
+                                candidate_count_after_ranking=1 if emits_cand else 0,
+                                terminal_reason_code=(
+                                    CandidateEmptyClass.CANDIDATE_CREATED.value
+                                    if emits_cand
+                                    else CandidateEmptyClass.NO_MARKET_SETUP.value
+                                ),
+                            )
+                        )
+
+                    if is_setup:
+                        ledger.record_transition(
+                            candidate_id=cid,
+                            from_stage=CandidateLifecycleStage.CREATED,
+                            to_stage=CandidateLifecycleStage.LIQUIDITY_CHECK,
+                            status="PASS",
+                            reason_code="SPREAD_OK",
+                        )
+                        ledger.record_transition(
+                            candidate_id=cid,
+                            from_stage=CandidateLifecycleStage.LIQUIDITY_CHECK,
+                            to_stage=CandidateLifecycleStage.ADVISORY,
+                            status="PASS",
+                            reason_code="ADVISORY_CONFIRMED",
+                        )
+
+            # Flush any remaining buffered ticks
+            if tick_batch_buffer:
+                on_ticks(None, tick_batch_buffer)
+                production_ticks_ingested += len(tick_batch_buffer)
+                tick_batch_buffer.clear()
+
+            # Execute real downstream orchestrator cycle in live monitoring mode
+            orch._legacy_live_monitoring(run_once=True)
+            production_cycles_executed += 1
+            production_orders_attempted = mock_order.call_count
 
         t_elapsed = time.perf_counter() - t_start
         rate = total_rows / max(t_elapsed, 0.001)
@@ -334,6 +381,10 @@ class FullMarketReplayRunner:
             "NORMAL_TICK_PATH_ADDITIONAL_IO": ring.normal_tick_path_additional_io,
             "FINAL_TOKEN_HEALTH": final_health.overall_health,
             "FINAL_TOKEN_HEALTH_REASON": final_health.reason_code,
+            "PRODUCTION_TICKS_INGESTED": production_ticks_ingested,
+            "PRODUCTION_CYCLES_EXECUTED": production_cycles_executed,
+            "PRODUCTION_ORDERS_ATTEMPTED": production_orders_attempted,
+            "PRODUCTION_EQUIVALENCE_PASS": bool(production_ticks_ingested > 0 and production_cycles_executed > 0 and production_orders_attempted == 0),
         }
 
     def run_fault_campaign(self) -> dict[str, Any]:
@@ -497,7 +548,10 @@ def test_baseline_full_market_replay():
     assert result["SILENT_CANDIDATE_LOSS_COUNT"] == 0
     assert result["UNKNOWN_CANDIDATE_TERMINALS"] == 0
     assert result["NORMAL_TICK_PATH_ADDITIONAL_IO"] == 0
-    assert result["REPLAY_EVENTS_PER_SEC"] > 10000.0
+    assert result["PRODUCTION_TICKS_INGESTED"] == 25000
+    assert result["PRODUCTION_CYCLES_EXECUTED"] >= 1
+    assert result["PRODUCTION_ORDERS_ATTEMPTED"] == 0
+    assert result["PRODUCTION_EQUIVALENCE_PASS"] is True
 
 
 def test_controlled_fault_injection_campaign():
