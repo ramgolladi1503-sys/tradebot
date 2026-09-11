@@ -423,6 +423,7 @@ def test_pressure_profile_preserves_checksums_with_and_without_delay(monkeypatch
         trace_path=tmp_path / "baseline_trace.jsonl",
         selected_persistence_mode="async_queue",
         pressure_controller=None,
+        shutdown_deadline_seconds=5.0,
     )
     monkeypatch.setattr(replay.tick_store.cfg, "TRADE_DB_PATH", str(pressured_db_path), raising=False)
     monkeypatch.setattr(replay.cfg, "TRADE_DB_PATH", str(pressured_db_path), raising=False)
@@ -441,6 +442,7 @@ def test_pressure_profile_preserves_checksums_with_and_without_delay(monkeypatch
         trace_path=tmp_path / "pressured_trace.jsonl",
         selected_persistence_mode="async_queue",
         pressure_controller=controller,
+        shutdown_deadline_seconds=5.0,
     )
 
     assert baseline["checksums"] == pressured["checksums"]
