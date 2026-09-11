@@ -250,6 +250,26 @@ from core.orchestrator_pro_shadow import (
     run_pro_shadow_pipeline_worker_entry as _run_pro_shadow_pipeline_worker_entry,
     sanitize_pro_shadow_rows as _sanitize_pro_shadow_rows,
 )
+from core.candidate_evaluators import (
+    evaluate_c1 as _evaluate_c1,
+    evaluate_c2 as _evaluate_c2,
+    C1ReasonCode as _C1ReasonCode,
+    C2ReasonCode as _C2ReasonCode,
+    CandidateEmission as _CandidateEmission,
+    EvaluatorResult as _EvaluatorResult,
+)
+from core.market_session_store import (
+    MarketMemorySnapshot as _MarketMemorySnapshot,
+    market_session_store as _global_market_session_store,
+)
+from core.observability.candidate_attribution import (
+    CandidateEmptyClass as _CandidateEmptyClass,
+    CandidateLifecycleStage as _CandidateLifecycleStage,
+)
+from core.observability.production_bridge import (
+    get_production_candidate_ledger as _get_production_candidate_ledger,
+    get_production_strategy_tracker as _get_production_strategy_tracker,
+)
 from core.orchestrator_truth import (
     build_snapshot_numbers as _build_snapshot_numbers,
     canonical_feed_truth_state_payload as _canonical_feed_truth_state_payload,
@@ -320,6 +340,94 @@ def _log_freshness_debug(message: str, *args) -> None:
 def _log_advisory_debug(message: str, *args) -> None:
     if _env_debug_enabled("TRADEBOT_DEBUG_ADVISORY"):
         logger.debug(message, *args)
+
+
+def _evaluate_c1_c2_for_symbol(
+    market_data: dict[str, Any],
+    sym: str,
+    trace_id: str,
+    ts_str: str,
+) -> tuple[list[_EvaluatorResult], list[_CandidateEmission]]:
+    """
+    Pre-gate causal evaluation of frozen candidates C1 and C2.
+    Evaluates independently of admission gatekeepers (e.g. REGIME_UNSTABLE).
+    Preserves: is_order_action=False, broker_api_called=False, broker_write_authority=False.
+    """
+    sym_norm = str(sym or "").strip().upper()
+    if sym_norm not in {"NIFTY", "BANKNIFTY"}:
+        return [], []
+
+    # 1. Obtain market memory snapshot
+    mem: _MarketMemorySnapshot | None = None
+    try:
+        mem = _global_market_session_store.get_market_memory(
+            as_of_timestamp=ts_str,
+            trace_id=trace_id,
+        )
+    except Exception:
+        mem = None
+
+    if mem is None or mem.rolling_1m_bars_count <= 0:
+        # Synthesize causal snapshot from market_data
+        try:
+            curr_price = float(market_data.get("spot", market_data.get("ltp", market_data.get("close", 0.0))) or 0.0)
+            open_price = float(market_data.get("session_open", market_data.get("open", curr_price)) or curr_price)
+            high_price = max(open_price, curr_price, float(market_data.get("high", curr_price) or curr_price))
+            low_price = min(open_price, curr_price, float(market_data.get("low", curr_price) or curr_price))
+            r15m = float(market_data.get("rolling_15m_return_bps", market_data.get("return_15m_bps", 0.0)) or 0.0)
+            dist_open = float(market_data.get("distance_from_session_open_bps", market_data.get("distance_from_open_bps", 0.0)) or 0.0)
+            bars_count = int(market_data.get("ohlc_bars_count", market_data.get("bars_count", 30)) or 30)
+            freshness = 1.0 if not bool(market_data.get("is_stale", False)) else 0.0
+
+            mem = _MarketMemorySnapshot(
+                as_of_timestamp=ts_str,
+                symbol=sym_norm,
+                current_price=curr_price,
+                session_open=open_price,
+                session_high=high_price,
+                session_low=low_price,
+                session_close=curr_price,
+                bar_index=max(0, bars_count - 1),
+                rolling_1m_bars_count=bars_count,
+                derived_5m_bars_count=bars_count // 5,
+                derived_15m_bars_count=bars_count // 15,
+                rolling_15m_return_bps=r15m,
+                distance_from_session_open_bps=dist_open,
+                rolling_15m_range_bps=10.0,
+                realized_vol_15m=5.0,
+                freshness_watermark=freshness,
+                persistence_watermark=1.0,
+                trace_id=trace_id,
+            )
+        except Exception:
+            mem = None
+
+    if mem is None:
+        return [], []
+
+    eval_results: list[_EvaluatorResult] = []
+    qualified_candidates: list[_CandidateEmission] = []
+
+    # Evaluate C1
+    try:
+        r_c1 = _evaluate_c1(mem, as_of_timestamp=ts_str, trace_id=trace_id)
+        eval_results.append(r_c1)
+        if r_c1.qualified and r_c1.candidate is not None:
+            qualified_candidates.append(r_c1.candidate)
+    except Exception as exc:
+        logger.debug("c1_pre_eval_exc symbol=%s err=%s", sym_norm, exc)
+
+    # Evaluate C2
+    try:
+        r_c2 = _evaluate_c2(mem, as_of_timestamp=ts_str, trace_id=trace_id)
+        eval_results.append(r_c2)
+        if r_c2.qualified and r_c2.candidate is not None:
+            qualified_candidates.append(r_c2.candidate)
+    except Exception as exc:
+        logger.debug("c2_pre_eval_exc symbol=%s err=%s", sym_norm, exc)
+
+    return eval_results, qualified_candidates
+
 
 
 def resolve_global_halt_reason(circuit_breaker) -> str | None:
@@ -5288,6 +5396,12 @@ class Orchestrator:
                         )
                         continue
                     # Phase C: Build trade suggestion
+                    c1_c2_results, c1_c2_qualified = _evaluate_c1_c2_for_symbol(
+                        market_data=market_data,
+                        sym=sym,
+                        trace_id=cycle_trace_id,
+                        ts_str=now_ist().strftime("%Y-%m-%d %H:%M:%S%z"),
+                    )
                     debug_flag = getattr(cfg, "DEBUG_TRADE_REASONS", False) or getattr(cfg, "DEBUG_TRADE_MODE", False)
                     gate = self._strategy_gate_for_symbol(market_snapshot)
                     phase1_raw_input_count = len(
@@ -5420,6 +5534,78 @@ class Orchestrator:
                             gate_reasons=gate.reasons,
                             debug_flag=debug_flag,
                         )
+                        # Decoupled candidate reporting: Record pre-gate candidates before gatekeeper skips builder
+                        try:
+                            _prod_ledger = _get_production_candidate_ledger()
+                            _prod_strat_tracker = _get_production_strategy_tracker()
+                            primary_block_reason = (list(gate.reasons or []) or ["gatekeeper_blocked"])[0]
+
+                            for eval_res in (c1_c2_results or []):
+                                if eval_res.attribution:
+                                    _prod_strat_tracker.record_evaluation(eval_res.attribution)
+
+                            for cand in (c1_c2_qualified or []):
+                                _prod_ledger.record_transition(
+                                    candidate_id=cand.candidate_id,
+                                    from_stage=_CandidateLifecycleStage.CREATED,
+                                    to_stage=_CandidateLifecycleStage.REGIME_CHECK,
+                                    status="FILTERED",
+                                    reason_code=str(primary_block_reason),
+                                    metadata={"trace_id": getattr(cand, "trace_id", cycle_trace_id), "gate_reasons": list(gate.reasons or [])},
+                                )
+                        except Exception as trace_exc:
+                            logger.debug("pre_gate_ledger_record_exc symbol=%s err=%s", sym, trace_exc)
+
+                        try:
+                            regime_diag_for_starv = regime_diag if regime_diag else _regime_unstable_diagnostic_payload(market_data, gate.reasons)
+                            quote_health_row_gate = market_data.get("quote_health") if isinstance(market_data.get("quote_health"), dict) else {}
+                            feed_health_row_gate = market_data.get("feed_health") if isinstance(market_data.get("feed_health"), dict) else {}
+                            gate_raw_count = len(c1_c2_qualified or [])
+                            cycle_candidate_starvation_snapshots.append(
+                                {
+                                    "symbol": sym,
+                                    "regime": regime_diag_for_starv if regime_diag_for_starv else {
+                                        "primary_regime": market_data.get("primary_regime") or market_data.get("regime"),
+                                        "regime_entropy": market_data.get("regime_entropy"),
+                                        "regime_entropy_normalized": market_data.get("regime_entropy_normalized"),
+                                        "regime_entropy_max": market_data.get("regime_entropy_threshold"),
+                                        "regime_prob_max": market_data.get("regime_prob_max") or market_data.get("regime_probs_max"),
+                                        "regime_prob_min": market_data.get("regime_prob_min") or float(getattr(cfg, "REGIME_PROB_MIN", 0.45)),
+                                        "regime_unstable_streak": market_data.get("regime_unstable_streak") or 0,
+                                        "regime_unstable_block_after": market_data.get("regime_unstable_block_after") or 0,
+                                        "regime_unstable_debounced": bool(market_data.get("regime_unstable_debounced", False)),
+                                        "unstable_reasons": list(market_data.get("unstable_reasons") or []),
+                                        "regime_unstable": bool(list(market_data.get("unstable_reasons") or [])),
+                                        "feed_health": feed_health_row_gate,
+                                        "quote_health": quote_health_row_gate,
+                                    },
+                                    "raw_candidate_count": gate_raw_count,
+                                    "post_scan_survivor_count": gate_raw_count,
+                                    "post_soft_reject_count": gate_raw_count,
+                                    "post_real_filter_count": 0,
+                                    "post_executable_filter_count": 0,
+                                    "reject_reason": "gatekeeper_blocked",
+                                    "reject_gate_reasons": list(gate.reasons or []),
+                                    "scan_reject_counts": {"gatekeeper_blocked": 1},
+                                    "blocker_counts": dict(cycle_blockers),
+                                    "top_blockers": [
+                                        {"reason": reason, "count": int(count)}
+                                        for reason, count in sorted(
+                                            ((str(k), int(v or 0)) for k, v in dict(cycle_blockers or {}).items() if str(k).strip()),
+                                            key=lambda item: (-int(item[1]), str(item[0])),
+                                        )[:10]
+                                    ],
+                                    "feed_runtime_state": feed_runtime_payload.get("runtime_state") if isinstance(feed_runtime_payload, dict) else None,
+                                    "ws_connected": feed_runtime_payload.get("ws_connected") if isinstance(feed_runtime_payload, dict) else None,
+                                    "option_feed_block_reason": feed_runtime_payload.get("option_feed_block_reason") if isinstance(feed_runtime_payload, dict) else None,
+                                    "quote_health_state": quote_health_row_gate.get("state"),
+                                    "quote_health_stale_reasons": list(quote_health_row_gate.get("stale_reasons") or []),
+                                    "ltp_age_sec": quote_health_row_gate.get("ltp_age_sec"),
+                                }
+                            )
+                        except Exception as starv_gate_exc:
+                            logger.debug("pre_gate_starvation_snapshot_exc symbol=%s err=%s", sym, starv_gate_exc)
+
                         self._log_cycle_symbol_summary(
                             symbol=sym,
                             snapshot_ok=bool(market_snapshot),
@@ -5614,7 +5800,7 @@ class Orchestrator:
                             },
                         )
                     scan_summary = dict(getattr(self.trade_builder, "_last_scan_summary", {}) or {})
-                    raw_candidate_count = int(scan_summary.get("total_candidates") or 0)
+                    raw_candidate_count = int(scan_summary.get("total_candidates") or 0) + len(c1_c2_qualified or [])
                     cycle_candidate_pool_count += raw_candidate_count
                     cycle_scored_candidate_count += int(scan_summary.get("accepted") or 0)
                     decision_build_ms += (time.perf_counter() - decision_stage_start) * 1000.0
