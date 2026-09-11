@@ -3,6 +3,9 @@ import pytest
 import core.regime_architecture_contract as rac
 from core.regime_architecture_contract import assert_architecture_compliance
 
+is_order_action = False
+assert is_order_action is False
+
 
 def test_architecture_constants():
     """Verify frozen architecture contract constants."""

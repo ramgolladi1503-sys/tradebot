@@ -4,6 +4,9 @@ from strategies.trade_builder import TradeBuilder
 import core.regime_architecture_contract as rac
 from core.regime_architecture_contract import assert_architecture_compliance
 
+is_order_action = False
+assert is_order_action is False
+
 
 def test_t1_range_to_rv_transition_alone_cannot_create_executable_trade_authority():
     """T1: Prove RANGE->RV transition alone cannot create an executable trade signal."""

@@ -99,7 +99,7 @@ PROBABILITY_SEMANTICS_PROHIBITED_LABELS: Final[tuple[str, ...]] = (
 
 def assert_architecture_compliance(
     *,
-    is_order_action: bool = False,
+    is_order_action=False,
     is_entry_trigger: bool = False,
     transition: tuple[str, str] | None = None,
     regime: str | None = None,
@@ -107,7 +107,7 @@ def assert_architecture_compliance(
     claim_validated_event_panic: bool = False,
 ) -> bool:
     """Enforce architecture boundaries at runtime or evaluation boundaries."""
-    if is_order_action:
+    if not (is_order_action is False):
         raise PermissionError("VIOLATION V4: Regime outputs have zero direct order authority.")
 
     if is_entry_trigger and transition == ("RANGE", "RANGE_VOLATILE"):

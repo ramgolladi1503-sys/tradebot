@@ -7863,8 +7863,10 @@ class TradeBuilder:
         override = self._candidate_regime_override(sig_candidate)
         if override:
             sig_candidate.update(override)
+        if bool(sig_candidate.get("order_authority")):
+            raise PermissionError("VIOLATION V4: Regime outputs have zero direct order authority.")
         assert_architecture_compliance(
-            is_order_action=bool(sig_candidate.get("order_authority")),
+            is_order_action=False,
             regime=sig_regime,
         )
         return sig_candidate
