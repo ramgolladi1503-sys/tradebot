@@ -12,6 +12,7 @@ from core.ai_reliability_agent.pr763_session import (
 )
 from core.read_only_live_evidence import (
     MegIntervalScheduler,
+    append_jsonl_record,
     persist_meg_cycle,
     write_authority_snapshot_bundle,
 )
@@ -140,6 +141,25 @@ def test_meg_success_survives_later_duplicate_cycle(tmp_path: Path):
     assert second["cumulative_session_export_count"] == 1
     assert len(export_path.read_text(encoding="utf-8").splitlines()) == 1
     assert len(traversal_path.read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_live_evidence_accepts_bounded_subscription_snapshot(tmp_path: Path):
+    path = tmp_path / "meg_traversal_events.jsonl"
+    row = append_jsonl_record(
+        path,
+        {
+            "evidence_kind": "MEG_TRAVERSAL_EVENT",
+            "subscription_evidence": {"tokens": ["TOKEN"] * 12_000},
+            "read_only": True,
+            "is_order_action": False,
+            "broker_write_authority": False,
+            "order_authority": False,
+        },
+        hash_field="event_sha256",
+    )
+    assert row["event_sha256"]
+    assert path.stat().st_size > 64 * 1024
+    assert path.stat().st_size <= 256 * 1024
 
 
 def test_meg_scheduler_bounds_retries_and_marks_terminal():

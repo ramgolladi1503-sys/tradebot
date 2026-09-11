@@ -215,6 +215,7 @@ def test_runtime_snapshot_producer_writes_expected_structure(tmp_path, monkeypat
     )
 
     assert outputs["market_snapshot"]["source"] == "engine"
+    assert outputs["ranked_pipeline_latest"]["source"] == "ranked_opportunity_pipeline_v1"
     advisory_wrapper = json.loads((runtime_root / "advisory_latest.json").read_text(encoding="utf-8"))
     assert advisory_wrapper["producer"] == "unit_test"
     assert advisory_wrapper["payload"]["row_count"] == 1

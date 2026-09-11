@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from core.paths import runtime_dir
+from core.log_writer import get_jsonl_writer
 
 
 def _as_mapping(value: Any) -> dict[str, Any]:
@@ -439,9 +440,11 @@ def write_candidate_lineage_ledger(
         summary_target = Path(summary_path).expanduser()
     lineage_target.parent.mkdir(parents=True, exist_ok=True)
     summary_target.parent.mkdir(parents=True, exist_ok=True)
-    with lineage_target.open("a", encoding="utf-8") as fh:
-        for row in rows:
-            fh.write(json.dumps(row, sort_keys=True, default=str) + "\n")
-    with summary_target.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(summary, sort_keys=True, default=str) + "\n")
+    lineage_writer = get_jsonl_writer(lineage_target)
+    summary_writer = get_jsonl_writer(summary_target)
+    for row in rows:
+        if not lineage_writer.write(row):
+            raise OSError("bounded_lineage_write_rejected")
+    if not summary_writer.write(summary):
+        raise OSError("bounded_lineage_summary_write_rejected")
     return lineage_target, summary_target, summary, rows

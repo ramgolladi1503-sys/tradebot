@@ -1,0 +1,4 @@
+QUEUE,MAX_ITEMS,MAX_ITEM_BYTES,MAX_QUEUE_BYTES,ADMISSION,STATUS
+depth_persist_queue,16384,742,12156928,pre-enqueue canonical/serialized byte check,PASS
+tick_write_queue,10000,193,1930000,pre-enqueue canonical row byte check,PASS
+persistence_batch,1000,193,193000,pre-transaction row count and sum byte check,PASS

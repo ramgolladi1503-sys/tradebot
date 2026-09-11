@@ -1,0 +1,9 @@
+component,classification,required_control,authority_status
+SQLite WAL,UNKNOWN,checkpoint and peak bound,NOT_ESTABLISHED
+tick persistence,BOUNDED_BY_QUEUE,queue and session bound,PARTIAL
+depth persistence,BOUNDED_BY_QUEUE,queue and session bound,PARTIAL
+JSONL operational logs,UNKNOWN,rotation and retention,NOT_ESTABLISHED
+runtime snapshots,BOUNDED_BY_SESSION_DURATION,session scoping and rate bound,PARTIAL
+Parquet temp/output,UNKNOWN,temp cap and retention,NOT_ESTABLISHED
+CAS primitive/readiness artifacts,BOUNDED_BY_SESSION_DURATION,session scoping,PARTIAL
+funnel/risk/seal artifacts,UNKNOWN,rotation and finalization cap,NOT_ESTABLISHED

@@ -1,6 +1,7 @@
 import json
 import pytest
 from core.read_only_consumer_cycle import run_consumer_cycle, _evaluate_cas
+from core.cas_primitive_producer import CASPrimitiveStore, build_cas_input
 from datetime import datetime, timezone
 
 SHA = "a" * 40
@@ -44,3 +45,19 @@ def test_cas_rejects_stale_entry_without_writing_artifact(tmp_path):
     assert result["verdict"] == "PENDING"
     assert "late" in result["reason"]
     assert not (tmp_path / "cas_v2_artifact.json").exists()
+
+def test_real_producer_input_reaches_real_cas_evaluator(tmp_path):
+    store = CASPrimitiveStore(tmp_path / "primitives.json", session_id="s", source_sha=SHA, underlying_token=1)
+    def tick(price, epoch):
+        return {"underlying_symbol": "NIFTY", "last_price": price, "timestamp_epoch": epoch,
+                "timestamp_authority": "EXCHANGE_TIMESTAMP", "timestamp_source_field": "exchange_timestamp",
+                "source_timestamp_epoch": epoch, "receive_timestamp_epoch": epoch + 1,
+                "timestamp_fallback_used": False}
+    a = store.capture("0915", 100, tick(100, 100.5), capture_timestamp_ist="2026-08-31T15:14:00+00:00")
+    b = store.capture("1000", 200, tick(110, 200.5), capture_timestamp_ist="2026-08-31T15:14:00+00:00")
+    cas_input = build_cas_input(store.rows, session_id="s", source_sha=SHA, cycle_id="s:1:x")
+    result = _evaluate_cas(runtime_outputs={"cas_short_horizon_inputs": cas_input}, output_root=tmp_path,
+                           session_id="s", source_sha=SHA, now=datetime(2026, 8, 31, 15, 14, tzinfo=timezone.utc))
+    assert result["verdict"] == "PASS"
+    assert result["decision"]["direction"] == "DOWN"
+    assert json.loads((tmp_path / "cas_readiness_latest.json").read_text())["cycle_id"] == "s:1:x"

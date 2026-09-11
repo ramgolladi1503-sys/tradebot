@@ -1,5 +1,7 @@
 import json
 import sys
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -175,7 +177,18 @@ def test_real_composition_wires_launch_plan_to_feed_start(
     monkeypatch.setattr(feed, "stop_depth_ws", lambda **kwargs: observed.setdefault("stopped", True))
     monkeypatch.setattr(snapshots, "produce_and_store_runtime_snapshots", lambda **_: observed.setdefault("snapshot_cycles", 0) or 1)
 
-    token_path = tmp_path / "token"
+    import core.runtime_storage_authority as rsa
+
+    base_dir = "/Volumes/TradeBotData" if Path("/Volumes/TradeBotData").is_dir() else str(tmp_path)
+    governed_root = Path(tempfile.mkdtemp(prefix="tradebot-composition-", dir=base_dir))
+    fake_authority = rsa.StorageAuthority(
+        volume=governed_root,
+        runtime_root=governed_root / "out",
+        device_id=governed_root.stat().st_dev,
+    )
+    monkeypatch.setattr(rsa, "establish", lambda **_: fake_authority)
+    monkeypatch.setattr(rsa, "revalidate", lambda *_: None)
+    token_path = governed_root / "token"
     token_path.write_text("redacted")
     plan = {
         "final_union_tokens": [256265, 6401],
@@ -183,10 +196,25 @@ def test_real_composition_wires_launch_plan_to_feed_start(
         "commit_sha": "1" * 40,
     }
     from core.kite_read_only_observation_runtime import run_observation
-    assert run_observation(launch_plan=plan, output_root=tmp_path / "out", token_path=token_path, session_date="2026-08-04", max_runtime_sec=0.06) == 0
+    assert run_observation(launch_plan=plan, output_root=governed_root / "out", token_path=token_path, session_date="2026-08-04", max_runtime_sec=0.06) == 0
     assert observed["tokens"] == [256265, 6401]
     assert observed["kwargs"]["profile_verified"] is True
     assert observed["stopped"] is True
+
+
+def test_active_launch_plan_tokens_are_canonical_and_not_widened(monkeypatch):
+    import core.kite_depth_ws as feed
+
+    monkeypatch.setattr(
+        feed,
+        "_OBSERVATION_PLAN_STATE",
+        {
+            "enabled": True,
+            "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
+            "final_union_tokens": [6401, 256265, 6401, -1],
+        },
+    )
+    assert feed._active_launch_plan_tokens() == [6401, 256265]
 
 
 def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tmp_path):

@@ -1,0 +1,63 @@
+{
+  "gates": {
+    "BOUNDED_LIVE_IMPACT": [
+      "decision_isolation",
+      "decision_mutations",
+      "decision_tests",
+      "degraded_mode",
+      "diff_check",
+      "release_verifier",
+      "source_identity",
+      "whole_tree_compile"
+    ],
+    "CRITICAL_LIVE_IMPACT": [
+      "cas_memory",
+      "critical_mutations",
+      "decision_isolation",
+      "decision_mutations",
+      "decision_tests",
+      "degraded_mode",
+      "diff_check",
+      "evidence_integrity",
+      "feed_subscription",
+      "instrument_authority",
+      "morning_readiness",
+      "option_mirror",
+      "persistence",
+      "release_verifier",
+      "security_authority",
+      "shutdown_seal",
+      "source_identity",
+      "whole_tree_compile"
+    ],
+    "NO_LIVE_IMPACT": [
+      "diff_check",
+      "release_verifier",
+      "source_identity",
+      "whole_tree_compile"
+    ],
+    "UNKNOWN_IMPACT": [
+      "cas_memory",
+      "critical_mutations",
+      "decision_isolation",
+      "decision_mutations",
+      "decision_tests",
+      "degraded_mode",
+      "diff_check",
+      "evidence_integrity",
+      "feed_subscription",
+      "instrument_authority",
+      "morning_readiness",
+      "option_mirror",
+      "persistence",
+      "release_verifier",
+      "security_authority",
+      "shutdown_seal",
+      "source_identity",
+      "whole_tree_compile"
+    ]
+  },
+  "limitation": "Gate identifiers are contracts, not proof that executable gate adapters are implemented. Component-specific critical pruning is not yet implemented.",
+  "schema_version": 1,
+  "status": "IMPLEMENTATION_IN_PROGRESS"
+}

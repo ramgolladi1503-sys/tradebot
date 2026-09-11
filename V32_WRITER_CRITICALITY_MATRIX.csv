@@ -1,0 +1,12 @@
+COMPONENT,CLASS,MUST_SURVIVE_DISK_PRESSURE,MAY_STOP_BEFORE_SESSION_END,MAY_DROP_NEW_OUTPUT,EVIDENCE_IMPACT
+SQLite DB,CORE_DURABILITY,true,false,false,loss breaks persisted truth
+WAL/SHM,CORE_DURABILITY,true,false,false,required for SQLite durability
+tick persistence,CORE_DURABILITY,true,false,false,core tick evidence
+depth persistence,CORE_DURABILITY,true,false,false,core depth evidence
+authoritative JSONL,CORE_GOVERNANCE_EVIDENCE,true,false,false,required event lineage
+runtime snapshots,CORE_GOVERNANCE_EVIDENCE,true,false,false,readiness and state truth
+CAS primitive store,CORE_GOVERNANCE_EVIDENCE,true,false,false,CAS timing truth
+risk-halt evidence,CORE_GOVERNANCE_EVIDENCE,true,false,false,safety provenance
+runtime seal/post-close,CORE_GOVERNANCE_EVIDENCE,true,false,false,final verification
+Parquet export,OPTIONAL_DERIVED_OUTPUT,false,true,true,derived output only
+debug/error-only logs,OPTIONAL_DEBUG,false,true,true,diagnostic degradation allowed

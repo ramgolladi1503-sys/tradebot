@@ -1,0 +1,13 @@
+COMPONENT,NORMAL_STORAGE,EMERGENCY_INTERNAL_ALLOWED,FAILOVER_MODE,CORE_REQUIRED,MAX_FAILOVER_BYTES,EVIDENCE_IMPACT
+storage epoch/genesis,external root, true,CONTINUE,true,BOUNDED_BY_SCHEMA,records transition
+risk halt,external logs,true,CONTINUE,true,UNKNOWN,advisory remains conservative
+session/source/cycle identity,external runtime,true,CONTINUE,true,BOUNDED_BY_SCHEMA,preserves lineage
+CAS primitive truth,external runtime,false,STOP,true,UNKNOWN,prospective admission invalidated
+CAS readiness/funnel truth,external logs,false,STOP,true,UNKNOWN,no new admission
+SQLite active database,external SQLite,false,STOP,true,NA,NEW_DB_EPOCH only
+minimal emergency journal,external logs,true,CONTINUE,true,BOUNDED_BY_SCHEMA,genesis and lifecycle only
+Parquet export,external output,false,STOP,false,NA,optional export stops
+optional diagnostics,external logs,false,STOP,false,NA,optional diagnostics stop
+large snapshots,external runtime,false,STOP,false,NA,optional snapshots stop
+compatibility mirrors,external logs,false,STOP,false,NA,no repository spill
+shutdown/seal,external runtime, true,CONTINUE,true,BOUNDED_BY_SCHEMA,never false-PASS
