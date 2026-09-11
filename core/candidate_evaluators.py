@@ -30,6 +30,12 @@ from core.observability.candidate_attribution import (
     CandidateEmptyClass,
     StrategyEvaluationAttribution,
 )
+from core.strategy_family_contract import (
+    STRATEGY_REGISTRY,
+    StrategyFamily,
+    StrategySubfamily,
+    resolve_strategy_family,
+)
 
 
 class C1ReasonCode(str, enum.Enum):
@@ -63,6 +69,8 @@ class CandidateEmission:
     stop_rule: str
     trace_id: str
     features: Mapping[str, float]
+    strategy_family: str = "TREND"
+    strategy_subfamily: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
     is_order_action: bool = False  # is_order_action=false
     broker_write_authority: bool = False
@@ -71,6 +79,8 @@ class CandidateEmission:
         data = asdict(self)
         data["features"] = dict(self.features)
         data["metadata"] = dict(self.metadata)
+        data["strategy_family"] = str(self.strategy_family)
+        data["strategy_subfamily"] = str(self.strategy_subfamily) if self.strategy_subfamily else None
         data["is_order_action"] = False
         data["broker_write_authority"] = False
         return data
@@ -243,6 +253,8 @@ def evaluate_c1(
         cand = CandidateEmission(
             candidate_id="ENTRY_C_INTRADAY_15M_IMPULSE_50BPS_X_STOP_40BPS_CLOSE",
             strategy_id="C1_INTRADAY_15M_IMPULSE",
+            strategy_family=StrategyFamily.TREND.value,
+            strategy_subfamily=StrategySubfamily.MOMENTUM_IMPULSE.value,
             symbol=memory.symbol,
             signal_timestamp=ts_str,
             entry_boundary="Open[t+1] on NIFTY Futures",
@@ -457,6 +469,8 @@ def evaluate_c2(
         cand = CandidateEmission(
             candidate_id="ENTRY_E3_OVERNIGHT_TREND_1512_SIGNAL_1514_ENTRY_OPEN_EXIT",
             strategy_id="C2_OVERNIGHT_TREND",
+            strategy_family=StrategyFamily.TREND.value,
+            strategy_subfamily=StrategySubfamily.OVERNIGHT_TREND.value,
             symbol=memory.symbol,
             signal_timestamp=ts_str,
             entry_boundary="15:14:00 IST open on NIFTY Futures",

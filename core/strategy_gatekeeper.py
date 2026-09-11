@@ -1,7 +1,8 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from config import config as cfg
 from core.market_context import derive_market_context
+from core.strategy_family_contract import StrategyFamily
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,16 @@ class GateResult:
     family: str | None
     reasons: list
     facts: dict | None = None
+    allowed_strategy_families: frozenset[str] = field(default_factory=frozenset)
+
+    def __post_init__(self) -> None:
+        if not self.allowed_strategy_families:
+            if self.allowed and self.family:
+                canon = StrategyFamily.from_str(self.family)
+                val = canon.value if canon else str(self.family).upper()
+                self.allowed_strategy_families = frozenset({val})
+            else:
+                self.allowed_strategy_families = frozenset()
 
 
 class StrategyGatekeeper:
