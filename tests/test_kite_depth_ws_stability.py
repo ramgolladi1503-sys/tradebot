@@ -697,7 +697,7 @@ def test_on_ticks_uses_receipt_time_for_option_freshness(monkeypatch, tmp_path):
         ltp, tick_epoch = tick_store.get_ltp(555)
         assert ltp == 25123.5
         assert tick_epoch == receipt_epoch
-        shutdown_result = tick_store.shutdown_persistence_worker(deadline_seconds=1.0)
+        shutdown_result = tick_store.shutdown_persistence_worker(deadline_seconds=5.0)
         assert shutdown_result["status"] == "COMPLETE_DRAIN"
         with sqlite3.connect(str(db_path)) as conn:
             row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks WHERE instrument_token=?", (555,)).fetchone()

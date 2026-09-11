@@ -177,8 +177,17 @@ def test_real_composition_wires_launch_plan_to_feed_start(
     monkeypatch.setattr(feed, "stop_depth_ws", lambda **kwargs: observed.setdefault("stopped", True))
     monkeypatch.setattr(snapshots, "produce_and_store_runtime_snapshots", lambda **_: observed.setdefault("snapshot_cycles", 0) or 1)
 
+    import core.runtime_storage_authority as rsa
+
     base_dir = "/Volumes/TradeBotData" if Path("/Volumes/TradeBotData").is_dir() else str(tmp_path)
     governed_root = Path(tempfile.mkdtemp(prefix="tradebot-composition-", dir=base_dir))
+    fake_authority = rsa.StorageAuthority(
+        volume=governed_root,
+        runtime_root=governed_root / "out",
+        device_id=governed_root.stat().st_dev,
+    )
+    monkeypatch.setattr(rsa, "establish", lambda **_: fake_authority)
+    monkeypatch.setattr(rsa, "revalidate", lambda *_: None)
     token_path = governed_root / "token"
     token_path.write_text("redacted")
     plan = {
