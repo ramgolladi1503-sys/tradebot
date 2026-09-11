@@ -66,6 +66,7 @@ from core.threshold_audit import (
 from core.heartbeat_status import derive_cycle_semantics, top_blockers_from_counts
 from core.time_utils import compute_age_sec, is_market_open_ist, now_ist, now_utc_epoch
 from core.regime import RegimeClassifier, normalize_regime
+from core.regime_architecture_contract import assert_architecture_compliance
 from ml.continuous_regime import extract_continuous_regime, calculate_dynamic_multiplier
 from core.execution.alpha_decay import monitor_alpha_decay, AlphaDecayState
 from core.kite_client import kite_client
