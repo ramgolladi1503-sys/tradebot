@@ -70,10 +70,10 @@ def test_strategy_router_selects_by_regime(monkeypatch):
     assert range_sig["reason"] == "range_route"
     assert range_sig["regime_day"] == "RANGE"
 
+    # Under Regime Architecture Contract V1, EVENT is DATA_BLOCKED / not historically validated
+    # and has zero allowed strategy families in TradeBuilder
     event_sig = builder._signal_for_symbol({**md_base, "regime": "EVENT"})
-    assert event_sig is not None
-    assert event_sig["reason"] == "event_route"
-    assert event_sig["regime_day"] == "EVENT"
+    assert event_sig is None
 
 
 def test_risk_engine_event_regime_is_stricter(monkeypatch):
