@@ -290,6 +290,9 @@ def _wrap_trade_builder_build_with_status(build_fn):
     return _wrapped
 
 class TradeBuilder:
+    RANGE_TO_RANGE_VOLATILE_EXECUTION_TRIGGER = False
+    RANGE_TO_RV_TRANSITION_CAN_TRIGGER_ENTRY = False
+
     def __init__(self, predictor=None, execution=None, strategy_tracker=None):
         self._ml_disabled = (
             os.getenv("DISABLE_ML", "false").lower() == "true"
@@ -7557,15 +7560,24 @@ class TradeBuilder:
         except Exception:
             return entry_price, None, entry_price
 
+    def _candidate_regime_override(self, candidate: dict) -> dict:
+        return {}
+
     def allowed_strategy_families(self, regime: str) -> list[str]:
+        raw_upper = str(regime or "").strip().upper()
+        if raw_upper == "PANIC":
+            # Architecture Contract: PANIC is DATA_BLOCKED / NOT HISTORICALLY VALIDATED
+            return []
+        if raw_upper == "EVENT":
+            # Architecture Contract: EVENT is DATA_BLOCKED / NOT HISTORICALLY VALIDATED
+            return []
         regime_norm = normalize_regime(regime)
         if regime_norm == "TREND":
             return ["TREND"]
         if regime_norm == "RANGE":
             return ["MEAN_REVERT"]
         if regime_norm == "EVENT":
-            if getattr(cfg, "REGIME_EVENT_ROUTE_ALLOW", True) and getattr(cfg, "EVENT_ALLOW_DEFINED_RISK", True):
-                return ["DEFINED_RISK"]
+            # Architecture Contract: EVENT is DATA_BLOCKED / NOT HISTORICALLY VALIDATED
             return []
         return []
 
@@ -7710,9 +7722,10 @@ class TradeBuilder:
 
                 trend_p = float(regime_probs.get("TREND", 0.0))
                 range_p = max(float(regime_probs.get("RANGE", 0.0)), float(regime_probs.get("RANGE_VOLATILE", 0.0)))
-                event_p = float(regime_probs.get("EVENT", 0.0))
-                panic_p = float(regime_probs.get("PANIC", 0.0))
-                if event_p >= getattr(cfg, "REGIME_PROB_EVENT", 0.4):
+                # Block unvalidated EVENT and PANIC from production routing (DATA_BLOCKED under architecture contract)
+                event_p = 0.0
+                panic_p = 0.0
+                if False and event_p >= getattr(cfg, "REGIME_PROB_EVENT", 0.4):
                     sig = event_breakout_signal(
                         market_data.get("ltp", 0),
                         market_data.get("atr", 0),
@@ -7721,7 +7734,7 @@ class TradeBuilder:
                     if sig:
                         sig.score = float(sig.score) * max(event_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))
                         return {"direction": sig.direction, "reason": sig.reason, "score": sig.score, "regime_day": "EVENT"}
-                if panic_p >= getattr(cfg, "REGIME_PROB_PANIC", 0.4):
+                if False and panic_p >= getattr(cfg, "REGIME_PROB_PANIC", 0.4):
                     sig = ensemble_signal(market_data)
                     if sig:
                         sig.score = float(sig.score) * max(panic_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))
@@ -7748,16 +7761,8 @@ class TradeBuilder:
                 day_type = "UNKNOWN"
 
             if force_family == "DEFINED_RISK":
-                if not (getattr(cfg, "REGIME_EVENT_ROUTE_ALLOW", True) and getattr(cfg, "EVENT_ALLOW_DEFINED_RISK", True)):
-                    return None
-                sig = event_breakout_signal(
-                    market_data.get("ltp", 0),
-                    market_data.get("atr", 0),
-                    market_data.get("ltp_change_window", 0),
-                )
-                if not sig:
-                    return None
-                return {"direction": sig.direction, "reason": sig.reason, "score": sig.score, "regime_day": "EVENT"}
+                # Architecture Contract: EVENT is DATA_BLOCKED / NOT HISTORICALLY VALIDATED
+                return None
             if force_family == "TREND":
                 sig = ensemble_signal(market_data)
             elif force_family == "MEAN_REVERT":
@@ -7853,7 +7858,16 @@ class TradeBuilder:
                 score,
                 reason,
             )
-        return {"direction": direction, "reason": reason, "score": score, "regime_day": sig_regime}
+        # Architecture Contract: Verify candidate signal cannot claim order authority
+        sig_candidate = {"direction": direction, "reason": reason, "score": score, "regime_day": sig_regime, "order_authority": False}
+        override = self._candidate_regime_override(sig_candidate)
+        if override:
+            sig_candidate.update(override)
+        assert_architecture_compliance(
+            is_order_action=bool(sig_candidate.get("order_authority")),
+            regime=sig_regime,
+        )
+        return sig_candidate
 
     def _opt_risk_levels(self, entry_price, bid, ask, base_atr, stop_mult=1.0, target_mult=1.5, regime=None, day_type=None, timestamp=None):
         """
@@ -11489,7 +11503,7 @@ class TradeBuilder:
             )
         regime_raw = market_data.get("regime") or market_data.get("primary_regime") or market_data.get("regime_day")
         regime = normalize_regime(regime_raw)
-        allowed_regimes = getattr(cfg, "ZERO_TO_HERO_ALLOWED_REGIMES", ["TREND", "EVENT"])
+        allowed_regimes = getattr(cfg, "ZERO_TO_HERO_ALLOWED_REGIMES", ["TREND"])
         if isinstance(allowed_regimes, str):
             allowed_regimes = [s.strip().upper() for s in allowed_regimes.split(",") if s.strip()]
         allowed_regimes = {str(r).strip().upper() for r in (allowed_regimes or [])}
