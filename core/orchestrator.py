@@ -262,6 +262,7 @@ from core.market_session_store import (
     MarketMemorySnapshot as _MarketMemorySnapshot,
     market_session_store as _global_market_session_store,
 )
+from core.observability import generate_trace_id as _generate_trace_id
 from core.observability.candidate_attribution import (
     CandidateEmptyClass as _CandidateEmptyClass,
     CandidateLifecycleStage as _CandidateLifecycleStage,
@@ -5268,6 +5269,7 @@ class Orchestrator:
                             continue
                     self._sync_trades()
                     sym = market_data.get("symbol")
+                    cycle_trace_id = str(market_data.get("trace_id") or _generate_trace_id(seed=f"{sym}_{self._gate_status_cycle_id}"))
                     if sym and sym.upper() in getattr(cfg, "HALT_SYMBOLS", []):
                         try:
                             event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=["halt_symbol"])
