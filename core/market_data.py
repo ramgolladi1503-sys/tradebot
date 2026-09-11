@@ -2736,6 +2736,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 _DAYTYPE_LOCK.pop(symbol, None)
                 _DAYTYPE_LAST.pop(symbol, None)
                 _DAYTYPE_LAST_DAY[symbol] = today_local
+                _REGIME_TRANSITIONS.pop(symbol, None)
+                _REGIME_LAST_PRIMARY.pop(symbol, None)
         except Exception:
             pass
         orb_high = ltp
@@ -3364,6 +3366,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             )
 
         atr_pct = (atr / ltp) if ltp else 0
+        vwap_slope_atr = (float(vwap_slope) / max(float(atr), 1e-4)) if (atr and vwap_slope) else 0.0
+        ltp_acceleration_atr = (float(ltp_acceleration) / max(float(atr), 1e-4)) if (atr and ltp_acceleration) else 0.0
 
         # regime transition rate (per hour)
         try:
@@ -3371,20 +3375,28 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             if trans is None:
                 trans = deque(maxlen=2000)
                 _REGIME_TRANSITIONS[symbol] = trans
+            now = time.time()
+            window = 3600
+            trans = deque([t for t in trans if now - t <= window], maxlen=2000)
+            _REGIME_TRANSITIONS[symbol] = trans
+            regime_transition_rate = len(trans) / (window / 3600.0)
         except Exception:
             trans = None
+            regime_transition_rate = 0.0
 
         features = {
             "adx": adx_14,
             "vwap_slope": vwap_slope,
+            "vwap_slope_atr": vwap_slope_atr,
             "vol_z": vol_z,
             "atr_pct": atr_pct,
             "iv_mean": iv_mean,
             "ltp_acceleration": ltp_acceleration,
+            "ltp_acceleration_atr": ltp_acceleration_atr,
             "option_chain_skew": option_chain_skew,
             "oi_delta": oi_delta,
             "depth_imbalance": depth_imbalance,
-            "regime_transition_rate": 0.0,
+            "regime_transition_rate": regime_transition_rate,
             "shock_score": shock.get("shock_score"),
             "uncertainty_index": shock.get("uncertainty_index"),
             "macro_direction_bias": shock.get("macro_direction_bias"),
@@ -3814,12 +3826,14 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             "minutes_since_open": minutes_since_open,
             "atr": atr,
             "vwap_slope": vwap_slope,
+            "vwap_slope_atr": vwap_slope_atr,
             "rsi_mom": rsi_mom,
             "vol_z": vol_z,
             "adx_14": adx_14,
             "atr_pct": atr_pct,
             "iv_mean": iv_mean,
             "ltp_acceleration": ltp_acceleration,
+            "ltp_acceleration_atr": ltp_acceleration_atr,
             "option_chain_skew": option_chain_skew,
             "oi_delta": oi_delta,
             "depth_imbalance": depth_imbalance,

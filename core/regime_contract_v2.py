@@ -289,7 +289,7 @@ def normalized_heuristic_scores(
     adx_strength = clamp((adx - 15.0) / 20.0, 0.0, 1.0)
     range_strength = 1.0 - adx_strength
     volatility_strength = clamp((vol_z + 0.5) / 2.5, 0.0, 1.0)
-    atr_strength = clamp((atr_pct - 0.002) / 0.010, 0.0, 1.0)
+    atr_strength = clamp((atr_pct - 0.0002) / 0.0004, 0.0, 1.0)
     iv_strength = clamp((iv_mean - 0.12) / 0.40, 0.0, 1.0)
     shock_strength = clamp(shock_score, 0.0, 1.0)
     uncertainty_strength = clamp(uncertainty, 0.0, 1.0)

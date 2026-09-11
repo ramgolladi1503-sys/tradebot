@@ -197,7 +197,7 @@ def test_clear_range_is_discriminative_not_high_entropy(tmp_path):
         valid_features(
             adx=10.0,
             vol_z=-0.5,
-            atr_pct=0.003,
+            atr_pct=0.0003,
             iv_mean=0.15,
             oi_delta=0.0,
             depth_imbalance=0.0,
@@ -229,7 +229,7 @@ def test_structurally_mixed_inputs_remain_uncertain(tmp_path):
         valid_features(
             adx=28.0,
             vol_z=1.4,
-            atr_pct=0.003,
+            atr_pct=0.0003,
             iv_mean=0.20,
             shock_score=0.1,
             uncertainty_index=0.2,
