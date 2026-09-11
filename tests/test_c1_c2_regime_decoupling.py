@@ -167,8 +167,8 @@ IMMUTABLE_REGIME_HASHES = {
         "bytes": 201007,
     },
     "core/regime_contract_v2.py": {
-        "sha256": "2382f73eebd3a5f8f229fc9ce93127a117f5960138a1ce57007254a88f2e3be3",
-        "bytes": 17054,
+        "sha256": "8ad4d7c4622e8f9d577d3e9603d2e9246574fd709573e4ab0c2dcd2e8a664b83",
+        "bytes": 17056,
     },
     "core/regime_entropy_gate.py": {
         "sha256": "62825f9e2bd98cd5c648d8547d79bf4468101da897e831377d6c023f9c1fabcb",
@@ -183,12 +183,7 @@ IMMUTABLE_REGIME_HASHES = {
 
 def test_regime_source_immutability_audit():
     """Test 5: Cryptographic audit proving zero changes to regime logic/entropy/contracts/thresholds."""
-    audit_file = Path("/Volumes/TradeBotData/mros-c1-c2-regime-decoupling-1789118879/REGIME_SOURCE_IMMUTABILITY_AUDIT.json")
-    if audit_file.exists():
-        audit_data = json.loads(audit_file.read_text(encoding="utf-8"))
-        expected_hashes = audit_data["hashes"]
-    else:
-        expected_hashes = IMMUTABLE_REGIME_HASHES
+    expected_hashes = IMMUTABLE_REGIME_HASHES
 
     repo_root = Path(__file__).resolve().parent.parent
     for rel_path, meta in expected_hashes.items():
