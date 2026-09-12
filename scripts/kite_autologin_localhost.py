@@ -63,6 +63,13 @@ def _resolve_governed_credential(name: str) -> str:
     return governed
 
 
+def _prepare_governed_credentials() -> None:
+    """Make the governed values available to legacy startup validation in-memory."""
+    governed = _load_governed_credentials()
+    cfg.KITE_API_KEY = governed["KITE_API_KEY"]
+    cfg.KITE_API_SECRET = governed["KITE_API_SECRET"]
+
+
 def _looks_placeholder_api_key(value: str) -> bool:
     token = str(value or "").strip().lower()
     if not token:
@@ -176,6 +183,8 @@ def main():
     # Ensure clean per-run state for reused interpreter sessions.
     STATE.request_token = None
     STATE.error = None
+
+    _prepare_governed_credentials()
 
     try:
         validate_kite_startup_credentials(
