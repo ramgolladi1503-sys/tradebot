@@ -1,0 +1,147 @@
+{
+  "spec_id": "C1_INTRADAY_15M_IMPULSE_OBSERVATION_V1",
+  "candidate_id": "ENTRY_C_INTRADAY_15M_IMPULSE_50BPS_X_STOP_40BPS_CLOSE",
+  "strategy_id": "C1_INTRADAY_15M_IMPULSE",
+  "base_repository": "ramgolladi1503-sys/tradebot",
+  "base_branch": "main",
+  "base_sha": "42aba05bd6597bb97d62d49d80b755e906b958d7",
+  "source_code_authority": "core/candidate_evaluators.py",
+  "status": {
+    "implementation_present": true,
+    "historical_signal_evidence": "SUPPORTED",
+    "historical_regime_robustness": "SUPPORTIVE",
+    "negative_controls": "SUPPORTIVE",
+    "selection_aware_validation": "INCOMPLETE",
+    "out_of_sample_supported": false,
+    "prospective_supported": false,
+    "execution_viability": "UNKNOWN",
+    "structural_edge_certified": false
+  },
+  "signal": {
+    "instrument": "NIFTY_50_SPOT_INDEX",
+    "bar_interval": "1m",
+    "lookback_bars": 15,
+    "return_type": "SIMPLE_RETURN",
+    "formula": "(close[t] / close[t-15] - 1.0) * 10000",
+    "threshold_bps": 50.0,
+    "operator": ">",
+    "window_ist": {
+      "start": "09:30:00",
+      "end": "14:45:00"
+    },
+    "direction": "BULLISH_ONLY"
+  },
+  "memory": {
+    "freshness_required": true,
+    "history_required": true,
+    "retrospective_reconstruction_admissible_as_prospective": false,
+    "reason_codes": [
+      "C1_OUT_OF_WINDOW",
+      "C1_MEMORY_NOT_READY",
+      "C1_STALE_MEMORY",
+      "C1_IMPULSE_BELOW_THRESHOLD",
+      "C1_QUALIFIED"
+    ]
+  },
+  "execution_reference": {
+    "instrument": "NIFTY_FUTURES",
+    "entry": "Open[t+1]",
+    "stop_bps": 40.0,
+    "stop_formula": "entry_price * (1.0 - 0.0040)",
+    "session_exit_ist": "15:10:00",
+    "overnight": false,
+    "max_concurrent_positions": 1,
+    "broker_fill_claim_allowed": false
+  },
+  "observation": {
+    "mode": "READ_ONLY_PROSPECTIVE",
+    "required_pipeline_checkpoints": [
+      "BROKER_AUTH",
+      "MARKET_FEED",
+      "WEBSOCKET",
+      "RAW_TICK_QUOTE",
+      "PERSISTENCE",
+      "BAR_MEMORY",
+      "1M_AGGREGATION",
+      "15M_ROLLING_FEATURE",
+      "C1_EVALUATOR",
+      "CANDIDATE_EMISSION_OR_NO_SIGNAL",
+      "RISK_RANKING_OBSERVABILITY",
+      "PROSPECTIVE_LEDGER"
+    ],
+    "required_checkpoint_status_values": [
+      "PASS",
+      "FAIL",
+      "UNKNOWN",
+      "DEGRADED"
+    ],
+    "required_event_fields": [
+      "session_id",
+      "trace_id",
+      "source_sha",
+      "candidate_id",
+      "strategy_id",
+      "evaluation_timestamp_ist",
+      "memory_as_of_timestamp",
+      "memory_freshness_watermark",
+      "rolling_1m_bars_count",
+      "rolling_15m_return_bps",
+      "threshold_bps",
+      "operator",
+      "window_state",
+      "decision",
+      "reason_code",
+      "qualified",
+      "signal_timestamp",
+      "entry_reference_timestamp",
+      "entry_reference_price",
+      "stop_reference_price",
+      "planned_exit_boundary",
+      "created_at_ist",
+      "record_sha256"
+    ]
+  },
+  "prospective_admission": {
+    "pre_outcome_record_required": true,
+    "immutable_trace_required": true,
+    "source_sha_required": true,
+    "strategy_identity_required": true,
+    "entry_reference_must_be_causal": true,
+    "post_close_reconstruction_admissible": false,
+    "historical_api_backfill_admissible": false,
+    "parameter_mutation_allowed": false
+  },
+  "safety": {
+    "broker_write_authority": false,
+    "order_authority": false,
+    "paper_authorized": false,
+    "live_authorized": false,
+    "orders_placed": 0,
+    "orders_modified": 0,
+    "orders_cancelled": 0
+  },
+  "current_cost_warning": {
+    "nse_futures_stt_sell_rate_effective_2026_04_01": "0.05%",
+    "old_0_02pct_assumption_valid_for_current_2026_analysis": false,
+    "source_urls": [
+      "https://www.nseindia.com/static/products-services/equity-derivatives-securities-transaction-tax",
+      "https://nsearchives.nseindia.com/content/circulars/FATAX73524.pdf"
+    ],
+    "real_spread": "UNKNOWN",
+    "real_slippage": "UNKNOWN",
+    "market_impact": "UNKNOWN",
+    "fill_quality": "UNKNOWN"
+  },
+  "promotion_gate": {
+    "required": [
+      "IMPLEMENTATION_VALID",
+      "HISTORICAL_EDGE_SUPPORTED",
+      "SELECTION_AWARE_VALIDATION_SUPPORTED",
+      "OUT_OF_SAMPLE_OR_PROSPECTIVE_SUPPORTED",
+      "EXECUTION_VIABLE",
+      "REGIME_AND_PARAMETER_ROBUSTNESS_SUPPORTED",
+      "INDEPENDENT_VERIFICATION_SUPPORTED"
+    ],
+    "structural_edge_certified": false
+  }
+}
