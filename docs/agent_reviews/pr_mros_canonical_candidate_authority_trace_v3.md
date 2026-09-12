@@ -1,4 +1,15 @@
-# Agent Review: Canonical Candidate Authority Trace V3
+mode: paper_review
+timestamp: 2026-09-12T09:45:00+05:30
+candidate_id: pr_mros_canonical_candidate_authority_trace_v3
+decision: approve_mros_canonical_candidate_authority_trace
+reason: enforces_canonical_strategy_authority_and_purges_superseded_candidate_contamination
+is_order_action: false
+broker_api_called: false
+live_order_action: false
+broker_order_action: false
+source: docs/agent_reviews/pr_mros_canonical_candidate_authority_trace_v3.md
+
+# PR — Canonical Candidate Authority Trace V3
 
 ## Agent Work Contract
 

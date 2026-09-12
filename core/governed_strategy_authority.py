@@ -169,18 +169,18 @@ def resolve_strategy_authority(strategy_id: Optional[str]) -> StrategyGovernance
     """
     if not strategy_id:
         return StrategyGovernanceStatus.UNAPPROVED
-    
+
     clean_id = str(strategy_id).strip()
     entry = GOVERNED_STRATEGY_CATALOG.get(clean_id)
     if entry:
         return entry["status"]
-    
+
     # Check case-insensitive / partial match
     clean_id_lower = clean_id.lower()
     for cat_id, data in GOVERNED_STRATEGY_CATALOG.items():
         if cat_id.lower() == clean_id_lower:
             return data["status"]
-            
+
     return StrategyGovernanceStatus.UNAPPROVED
 
 
