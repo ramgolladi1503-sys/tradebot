@@ -185,38 +185,18 @@ def test_production_catalog_integrity():
             validate_execution_candidate({"strategy_id": strat_id})
 
 
-def test_temporary_test_strategy_authority_isolation():
+def test_no_test_authority_in_production():
     """
-    Proves that temporary_test_strategy_authority allows TEST only within its context,
-    reverts state immediately upon exit, and does not mutate production catalog.
+    Proves that core.governed_strategy_authority contains NO test authority elevation mechanism
+    and exports no test context managers or override containers.
     """
-    from core.governed_strategy_authority import (
-        temporary_test_strategy_authority,
-        resolve_strategy_authority,
-        is_strategy_governed_eligible,
-        validate_execution_candidate,
-        StrategyGovernanceStatus,
-    )
+    import core.governed_strategy_authority as gsa
+    assert not hasattr(gsa, "temporary_test_strategy_authority")
+    assert not hasattr(gsa, "_TEST_STRATEGY_AUTHORITY_OVERRIDE")
+    assert "temporary_test_strategy_authority" not in getattr(gsa, "__all__", [])
 
-    # Pre-condition: TEST is unapproved
-    assert resolve_strategy_authority("TEST") == StrategyGovernanceStatus.UNAPPROVED
-    assert is_strategy_governed_eligible("TEST") is False
+    # TEST is permanently UNAPPROVED in production
+    assert gsa.resolve_strategy_authority("TEST") == gsa.StrategyGovernanceStatus.UNAPPROVED
+    assert gsa.is_strategy_governed_eligible("TEST") is False
     with pytest.raises(PermissionError):
-        validate_execution_candidate({"strategy_id": "TEST"})
-
-    # Inside context: TEST is temporarily allowed
-    with temporary_test_strategy_authority({"TEST"}):
-        assert resolve_strategy_authority("TEST") == StrategyGovernanceStatus.ACTIVE_APPROVED
-        assert is_strategy_governed_eligible("TEST") is True
-        assert validate_execution_candidate({"strategy_id": "TEST"}) is True
-
-        # Other unauthorized strategies remain blocked even inside context
-        assert resolve_strategy_authority("EVENT") == StrategyGovernanceStatus.UNAPPROVED
-        with pytest.raises(PermissionError):
-            validate_execution_candidate({"strategy_id": "EVENT"})
-
-    # Post-condition: TEST is strictly unapproved again
-    assert resolve_strategy_authority("TEST") == StrategyGovernanceStatus.UNAPPROVED
-    assert is_strategy_governed_eligible("TEST") is False
-    with pytest.raises(PermissionError):
-        validate_execution_candidate({"strategy_id": "TEST"})
+        gsa.validate_execution_candidate({"strategy_id": "TEST"})

@@ -30,6 +30,7 @@ class CandidateOutcomeContract:
     cost_model: Optional[str] = None
     probability_target_before_stop: Optional[float] = None
     calibration_source: Optional[str] = None
+    trace_id: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -53,4 +54,5 @@ class CandidateOutcomeContract:
             "cost_model": self.cost_model,
             "probability_target_before_stop": self.probability_target_before_stop,
             "calibration_source": self.calibration_source,
+            "trace_id": self.trace_id,
         }

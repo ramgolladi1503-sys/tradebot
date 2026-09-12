@@ -133,6 +133,7 @@ class OpportunityScoreRecord:
     outcome_contract: Optional[CandidateOutcomeContract] = None
     feed_risk_reasons: tuple[str, ...] = ()
     feed_risk_precomputed: bool = False
+    trace_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -151,6 +152,7 @@ class OpportunityScoreRecord:
             "warnings": list(self.warnings),
             "feed_risk_reasons": list(self.feed_risk_reasons),
             "feed_risk_precomputed": self.feed_risk_precomputed,
+            "trace_id": self.trace_id,
             "breakdown": self.breakdown.to_dict(),
             "outcome_contract": self.outcome_contract.to_dict() if self.outcome_contract else None,
         }
