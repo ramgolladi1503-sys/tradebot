@@ -265,6 +265,7 @@ from core.candidate_evaluators import (
 from core.strategy_family_contract import (
     StrategyFamily as _StrategyFamily,
     check_strategy_family_compatibility as _check_strategy_family_compatibility,
+    admit_candidate_to_pool as _admit_candidate_to_pool,
 )
 from core.market_session_store import (
     MarketMemorySnapshot as _MarketMemorySnapshot,
@@ -5863,40 +5864,31 @@ class Orchestrator:
                                             "allowed_families": [getattr(f, "value", str(f)) for f in compat.allowed_families],
                                         },
                                     )
-                                    # Candidate Pool Handoff
-                                    c_dict = {
-                                        "candidate_id": cand.candidate_id,
-                                        "trade_id": cand.candidate_id,
-                                        "symbol": cand.symbol,
-                                        "strategy": cand.strategy_id,
-                                        "strategy_family": getattr(cand, "strategy_family", "TREND"),
-                                        "strategy_subfamily": getattr(cand, "strategy_subfamily", None),
-                                        "candidate_origin": "c1_c2_pre_gate",
-                                        "candidate_status": "advisory_only",
-                                        "permission": "ADVISORY_ONLY",
-                                        "final_action": "ADVISORY_ONLY",
-                                        "execution_status": "advisory_only",
-                                        "execution_entry_status": "advisory_only",
-                                        "features": dict(getattr(cand, "features", {}) or {}),
-                                        "metadata": dict(getattr(cand, "metadata", {}) or {}),
-                                        "is_order_action": False,
-                                        "broker_write_authority": False,
-                                        "trace_id": cand_trace_id,
-                                        "signal_timestamp": cand.signal_timestamp,
-                                        "entry_boundary": cand.entry_boundary,
-                                        "exit_boundary": cand.exit_boundary,
-                                        "stop_rule": cand.stop_rule,
-                                    }
+                                    # Canonical Candidate Pool Admission Handoff
                                     if ranked_candidates is None:
                                         ranked_candidates = []
-                                    ranked_candidates.append(c_dict)
-                                    logger.info(
-                                        "CANDIDATE_POOL_HANDOFF candidate_id=%s strategy=%s family=%s symbol=%s",
-                                        cand.candidate_id,
-                                        cand.strategy_id,
-                                        cand_family,
-                                        cand.symbol,
+                                    admitted = _admit_candidate_to_pool(
+                                        ranked_candidates,
+                                        cand,
+                                        compatibility_result=compat,
+                                        trace_id=cand_trace_id,
                                     )
+                                    if admitted:
+                                        logger.info(
+                                            "CANDIDATE_POOL_HANDOFF candidate_id=%s strategy=%s family=%s symbol=%s",
+                                            cand.candidate_id,
+                                            cand.strategy_id,
+                                            cand_family,
+                                            cand.symbol,
+                                        )
+                                    else:
+                                        logger.warning(
+                                            "CANDIDATE_POOL_HANDOFF_REJECTED candidate_id=%s strategy=%s family=%s symbol=%s",
+                                            cand.candidate_id,
+                                            cand.strategy_id,
+                                            cand_family,
+                                            cand.symbol,
+                                        )
                         except Exception as handoff_err:
                             logger.warning("c1_c2_handoff_failed symbol=%s err=%s", sym, handoff_err)
 

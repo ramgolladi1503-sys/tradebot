@@ -15,8 +15,8 @@ Guarantees:
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass, field
-from typing import Any, Final, FrozenSet, Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Final, FrozenSet, Iterable
 
 
 class StrategyFamily(str, enum.Enum):
@@ -276,3 +276,79 @@ def resolve_strategy_family(strategy_id: str) -> StrategyFamily:
     if defn is not None:
         return defn.strategy_family
     return StrategyFamily.NO_TRADE
+
+
+def admit_candidate_to_pool(
+    candidate_pool: list[dict[str, Any]],
+    candidate: Any,
+    *,
+    compatibility_result: FamilyCompatibilityResult,
+    trace_id: str | None = None,
+) -> bool:
+    """Canonical production candidate pool admission API.
+
+    Enforces:
+    1. Candidate must be compatible (compatibility_result.compatible == True).
+    2. Zero order authority invariants (is_order_action=False, broker_write_authority=False).
+    3. Deduplication: Rejects candidate if candidate_id or trade_id already exists in candidate_pool.
+    4. Exact immutable identity preservation (candidate_id, strategy_id, strategy_family, trace_id).
+    5. Returns True if admitted and appended to pool, False otherwise (fail-closed).
+    """
+    if not compatibility_result.compatible:
+        return False
+
+    candidate_id = getattr(candidate, "candidate_id", None)
+    if not candidate_id and isinstance(candidate, dict):
+        candidate_id = candidate.get("candidate_id") or candidate.get("trade_id")
+
+    if not candidate_id:
+        return False
+
+    cand_id_str = str(candidate_id).strip()
+
+    # Deduplication check: cannot admit duplicate candidate_id or trade_id
+    for existing in candidate_pool:
+        if not isinstance(existing, dict):
+            continue
+        existing_id = str(existing.get("candidate_id") or existing.get("trade_id") or "").strip()
+        if existing_id and existing_id == cand_id_str:
+            return False
+
+    resolved_family = compatibility_result.candidate_family
+    cand_family_str = (
+        resolved_family.value
+        if isinstance(resolved_family, StrategyFamily)
+        else str(getattr(candidate, "strategy_family", "TREND"))
+    )
+
+    resolved_trace_id = trace_id or getattr(candidate, "trace_id", None)
+    if not resolved_trace_id and isinstance(candidate, dict):
+        resolved_trace_id = candidate.get("trace_id")
+
+    admitted_dict: dict[str, Any] = {
+        "candidate_id": cand_id_str,
+        "trade_id": cand_id_str,
+        "symbol": getattr(candidate, "symbol", None) or (candidate.get("symbol") if isinstance(candidate, dict) else ""),
+        "strategy": getattr(candidate, "strategy_id", None) or (candidate.get("strategy") if isinstance(candidate, dict) else ""),
+        "strategy_family": cand_family_str,
+        "strategy_subfamily": getattr(candidate, "strategy_subfamily", None) or (candidate.get("strategy_subfamily") if isinstance(candidate, dict) else None),
+        "candidate_origin": "c1_c2_pre_gate",
+        "candidate_status": "advisory_only",
+        "permission": "ADVISORY_ONLY",
+        "final_action": "ADVISORY_ONLY",
+        "execution_status": "advisory_only",
+        "execution_entry_status": "advisory_only",
+        "features": dict(getattr(candidate, "features", {}) or (candidate.get("features", {}) if isinstance(candidate, dict) else {})),
+        "metadata": dict(getattr(candidate, "metadata", {}) or (candidate.get("metadata", {}) if isinstance(candidate, dict) else {})),
+        "is_order_action": False,
+        "broker_write_authority": False,
+        "trace_id": str(resolved_trace_id or ""),
+        "signal_timestamp": getattr(candidate, "signal_timestamp", None) or (candidate.get("signal_timestamp") if isinstance(candidate, dict) else None),
+        "entry_boundary": getattr(candidate, "entry_boundary", None) or (candidate.get("entry_boundary") if isinstance(candidate, dict) else None),
+        "exit_boundary": getattr(candidate, "exit_boundary", None) or (candidate.get("exit_boundary") if isinstance(candidate, dict) else None),
+        "stop_rule": getattr(candidate, "stop_rule", None) or (candidate.get("stop_rule") if isinstance(candidate, dict) else None),
+    }
+
+    candidate_pool.append(admitted_dict)
+    return True
+

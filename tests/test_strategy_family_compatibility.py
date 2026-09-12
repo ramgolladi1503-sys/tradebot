@@ -44,7 +44,6 @@ from core.observability import (
 )
 from core.strategy_family_contract import (
     STRATEGY_REGISTRY,
-    FamilyCompatibilityResult,
     StrategyDefinition,
     StrategyFamily,
     StrategySubfamily,
@@ -198,6 +197,73 @@ def test_nc10_trend_candidate_vs_no_trade_regime():
     assert res.reason_code == "FAMILY_MISMATCH"
 
 
+def test_nc11_duplicate_candidate_admission_rejected():
+    """NC11: Candidate with duplicate candidate_id rejected by admit_candidate_to_pool."""
+    from core.strategy_family_contract import admit_candidate_to_pool
+    pool: list[dict] = []
+    cand = CandidateEmission(
+        candidate_id="DUP_TEST_ID",
+        strategy_id="C1_INTRADAY_15M_IMPULSE",
+        symbol="NIFTY",
+        signal_timestamp="2026-09-11 10:00:00+05:30",
+        entry_boundary="NEXT_BAR_OPEN",
+        exit_boundary="SESSION_CLOSE",
+        stop_rule="40BPS_FIXED",
+        trace_id="trace_dup",
+        features={"rolling_15m_return_bps": 55.0},
+        strategy_family="TREND",
+        strategy_subfamily="MOMENTUM_IMPULSE",
+    )
+    compat = check_strategy_family_compatibility(cand.strategy_family, ["TREND"])
+    assert admit_candidate_to_pool(pool, cand, compatibility_result=compat) is True
+    # Duplicate insertion fails
+    assert admit_candidate_to_pool(pool, cand, compatibility_result=compat) is False
+    assert len(pool) == 1
+
+
+def test_nc12_incompatible_or_unadmitted_candidate_never_reaches_advisory():
+    """NC12: Incompatible candidate cannot enter pool, cannot be ranked, cannot reach advisory."""
+    from unittest.mock import patch
+    from core.strategy_family_contract import admit_candidate_to_pool
+    from core.engine_phase2_adapter import run_engine_phase2
+    from core.orchestrator import _build_top_opportunities_payload
+
+    cand = CandidateEmission(
+        candidate_id="INCOMPAT_ADVISORY_TEST",
+        strategy_id="C1_INTRADAY_15M_IMPULSE",
+        symbol="NIFTY",
+        signal_timestamp="2026-09-11 10:00:00+05:30",
+        entry_boundary="NEXT_BAR_OPEN",
+        exit_boundary="SESSION_CLOSE",
+        stop_rule="40BPS_FIXED",
+        trace_id="trace_incompat",
+        features={"rolling_15m_return_bps": 55.0},
+        strategy_family="TREND",
+        strategy_subfamily="MOMENTUM_IMPULSE",
+    )
+    pool: list[dict] = []
+    # Gate allows only MEAN_REVERT
+    compat = check_strategy_family_compatibility(cand.strategy_family, ["MEAN_REVERT"])
+    assert compat.compatible is False
+    assert admit_candidate_to_pool(pool, cand, compatibility_result=compat) is False
+    assert len(pool) == 0
+
+    mock_feed = {
+        "valid": True,
+        "payload": {
+            "feed_ok": True,
+            "last_tick_age_sec": 0.5,
+            "last_depth_age_sec": 1.0,
+        },
+    }
+    with patch("core.engine_phase2_adapter.load_current_feed_runtime", return_value=mock_feed):
+        res = run_engine_phase2(pool, top_n=5)
+        assert len(res.get("ranked", [])) == 0
+        payload = _build_top_opportunities_payload(candidates=pool, advisory_top_n=5)
+        assert len(payload.get("top_advisory_opportunities", [])) == 0
+
+
+
 # =============================================================================
 # 3. Non-Mutation & C1/C2 Compatibility Assertions
 # =============================================================================
@@ -231,7 +297,34 @@ def test_candidate_family_non_mutation_invariant():
 
 def test_c1_compatible_under_trend_regime():
     """C1 (TREND) under TREND regime -> FAMILY_COMPATIBLE."""
-    res = check_strategy_family_compatibility("TREND", {"TREND", "BREAKOUT"})
+
+    mem = MarketMemorySnapshot(
+        as_of_timestamp="2026-09-11 10:00:00+05:30",
+        symbol="NIFTY",
+        current_price=23300.0,
+        session_open=23240.0,
+        session_high=23350.0,
+        session_low=23200.0,
+        session_close=23300.0,
+        bar_index=45,
+        rolling_1m_bars_count=45,
+        derived_5m_bars_count=9,
+        derived_15m_bars_count=3,
+        rolling_15m_return_bps=55.0,
+        distance_from_session_open_bps=25.8,
+        rolling_15m_range_bps=12.0,
+        realized_vol_15m=3.0,
+        freshness_watermark=1.0,
+        persistence_watermark=1.0,
+        trace_id="c1_test_trace",
+    )
+    res_c1 = evaluate_c1(mem, as_of_timestamp="2026-09-11 10:00:00+05:30", trace_id="c1_test_trace")
+    assert res_c1.qualified is True
+    assert res_c1.candidate is not None
+    assert res_c1.candidate.strategy_family == StrategyFamily.TREND.value
+    assert res_c1.candidate.strategy_subfamily == StrategySubfamily.MOMENTUM_IMPULSE.value
+
+    res = check_strategy_family_compatibility(res_c1.candidate.strategy_family, {"TREND", "BREAKOUT"})
     assert res.compatible is True
     assert res.candidate_family == StrategyFamily.TREND
     assert res.reason_code == "FAMILY_COMPATIBLE"
@@ -239,10 +332,38 @@ def test_c1_compatible_under_trend_regime():
 
 def test_c2_compatible_under_trend_regime():
     """C2 (TREND) under TREND regime -> FAMILY_COMPATIBLE."""
-    res = check_strategy_family_compatibility(StrategyFamily.TREND, {"TREND"})
+
+    mem = MarketMemorySnapshot(
+        as_of_timestamp="2026-09-11 15:12:00+05:30",
+        symbol="NIFTY",
+        current_price=23419.0,
+        session_open=23240.65,
+        session_high=23430.0,
+        session_low=23220.0,
+        session_close=23419.0,
+        bar_index=357,
+        rolling_1m_bars_count=357,
+        derived_5m_bars_count=71,
+        derived_15m_bars_count=23,
+        rolling_15m_return_bps=12.5,
+        distance_from_session_open_bps=76.74,
+        rolling_15m_range_bps=15.0,
+        realized_vol_15m=4.5,
+        freshness_watermark=1.0,
+        persistence_watermark=1.0,
+        trace_id="c2_test_trace",
+    )
+    res_c2 = evaluate_c2(mem, as_of_timestamp="2026-09-11 15:12:00+05:30", trace_id="c2_test_trace")
+    assert res_c2.qualified is True
+    assert res_c2.candidate is not None
+    assert res_c2.candidate.strategy_family == StrategyFamily.TREND.value
+    assert res_c2.candidate.strategy_subfamily == StrategySubfamily.OVERNIGHT_TREND.value
+
+    res = check_strategy_family_compatibility(res_c2.candidate.strategy_family, {"TREND"})
     assert res.compatible is True
     assert res.candidate_family == StrategyFamily.TREND
     assert res.reason_code == "FAMILY_COMPATIBLE"
+
 
 
 def test_c2_incompatible_under_range_regime():
@@ -326,6 +447,38 @@ def test_zero_execution_authority_invariants():
         assert defn.paper_authorized is False
         assert defn.live_authorized is False
 
+    # resolve_strategy_family fails closed to NO_TRADE for unknown strategy
+    assert resolve_strategy_family("UNKNOWN_STRATEGY_XYZ") == StrategyFamily.NO_TRADE
+
+    # StrategyDefinition fails closed if order authority flags are asserted
+    with pytest.raises(ValueError, match="strategy_definition_order_action_forbidden"):
+        StrategyDefinition(
+            strategy_id="UNSAFE_ORDER",
+            strategy_family=StrategyFamily.TREND,
+            is_order_action=True,
+        )
+
+    with pytest.raises(ValueError, match="strategy_definition_broker_write_forbidden"):
+        StrategyDefinition(
+            strategy_id="UNSAFE_BROKER",
+            strategy_family=StrategyFamily.TREND,
+            broker_write_authority=True,
+        )
+
+    # GateResult default allowed_strategy_families when allowed=False or family=None
+    from core.strategy_gatekeeper import GateResult
+    gr_blocked = GateResult(allowed=False, family="TREND", reasons=["test_block"])
+    assert gr_blocked.allowed_strategy_families == frozenset()
+    gr_none = GateResult(allowed=True, family=None, reasons=[])
+    assert gr_none.allowed_strategy_families == frozenset()
+
+    # Orchestrator candidate_visibility_bucket guarantees
+    from core.orchestrator_truth import candidate_visibility_bucket
+    cand_adv = {"candidate_status": "advisory_only", "execution_status": "advisory_only", "permission": "ADVISORY_ONLY"}
+    assert candidate_visibility_bucket(cand_adv) == "advisory"
+    assert candidate_visibility_bucket(cand_adv) != "visible"
+
+
 
 def test_orchestrator_c1_c2_handoff_integration():
     """Verify orchestrator admission & filtering integration for C1/C2 under TREND vs RANGE."""
@@ -406,9 +559,8 @@ def test_20260911_replay_c2_at_1512_filtered_by_family_mismatch():
     - Lifecycle ledger records transition: CREATED -> REGIME_CHECK / FILTERED / FAMILY_MISMATCH.
     - Candidate is NOT falsely admitted into the candidate pool.
     """
-    from core.candidate_evaluators import evaluate_c2, C2ReasonCode
+    from core.candidate_evaluators import C2ReasonCode
     from core.strategy_gatekeeper import GateResult
-    from core.market_session_store import MarketMemorySnapshot
 
     session_open = 23240.65
     spot_1512 = 23419.0
@@ -474,3 +626,122 @@ def test_20260911_replay_c2_at_1512_filtered_by_family_mismatch():
     assert records[0].status == "FILTERED"
     assert records[0].reason_code == "FAMILY_MISMATCH"
     assert records[0].metadata["regime"] == "RANGE"
+
+
+def test_admit_candidate_to_pool_contract():
+    """Verify admit_candidate_to_pool enforces compatibility, deduplication, and zero order authority."""
+    from core.strategy_family_contract import admit_candidate_to_pool
+    from core.candidate_evaluators import CandidateEmission
+
+    pool: list[dict] = []
+    c1 = CandidateEmission(
+        candidate_id="ENTRY_C1_POOL_TEST",
+        strategy_id="C1_INTRADAY_15M_IMPULSE",
+        symbol="NIFTY",
+        signal_timestamp="2026-09-11 10:00:00+05:30",
+        entry_boundary="NEXT_BAR_OPEN",
+        exit_boundary="SESSION_CLOSE",
+        stop_rule="40BPS_FIXED",
+        trace_id="trace_test_pool_c1",
+        features={"rolling_15m_return_bps": 55.0},
+        strategy_family="TREND",
+        strategy_subfamily="MOMENTUM_IMPULSE",
+    )
+
+    # 1. Reject incompatible candidate
+    compat_incompat = check_strategy_family_compatibility(c1.strategy_family, ["MEAN_REVERT"])
+    assert compat_incompat.compatible is False
+    admitted = admit_candidate_to_pool(pool, c1, compatibility_result=compat_incompat)
+    assert admitted is False
+    assert len(pool) == 0
+
+    # 2. Admit compatible candidate
+    compat_ok = check_strategy_family_compatibility(c1.strategy_family, ["TREND"])
+    assert compat_ok.compatible is True
+    admitted = admit_candidate_to_pool(pool, c1, compatibility_result=compat_ok)
+    assert admitted is True
+    assert len(pool) == 1
+    admitted_item = pool[0]
+    assert admitted_item["candidate_id"] == "ENTRY_C1_POOL_TEST"
+    assert admitted_item["strategy_family"] == "TREND"
+    assert admitted_item["is_order_action"] is False
+    assert admitted_item["broker_write_authority"] is False
+    assert admitted_item["permission"] == "ADVISORY_ONLY"
+    assert admitted_item["final_action"] == "ADVISORY_ONLY"
+
+    # 3. Reject duplicate candidate
+    admitted_dup = admit_candidate_to_pool(pool, c1, compatibility_result=compat_ok)
+    assert admitted_dup is False
+    assert len(pool) == 1
+
+
+def test_ranking_and_advisory_handoff_contract():
+    """Verify unadmitted candidate cannot be ranked, and admitted candidate reaches advisory."""
+    from unittest.mock import patch
+    from core.strategy_family_contract import admit_candidate_to_pool
+    from core.candidate_evaluators import CandidateEmission
+    from core.engine_phase2_adapter import run_engine_phase2
+    from core.orchestrator import _build_top_opportunities_payload
+
+    c1 = CandidateEmission(
+        candidate_id="C1_RANK_TEST",
+        strategy_id="C1_INTRADAY_15M_IMPULSE",
+        symbol="NIFTY",
+        signal_timestamp="2026-09-11 10:00:00+05:30",
+        entry_boundary="NEXT_BAR_OPEN",
+        exit_boundary="SESSION_CLOSE",
+        stop_rule="40BPS_FIXED",
+        trace_id="trace_test_c1",
+        features={"rolling_15m_return_bps": 55.0},
+        strategy_family="TREND",
+        strategy_subfamily="MOMENTUM_IMPULSE",
+    )
+    c2 = CandidateEmission(
+        candidate_id="C2_ADVISORY_TEST",
+        strategy_id="C2_OVERNIGHT_TREND",
+        symbol="NIFTY",
+        signal_timestamp="2026-09-11 15:12:00+05:30",
+        entry_boundary="EXACT_1514_OPEN",
+        exit_boundary="NEXT_SESSION_OPEN",
+        stop_rule="SESSION_OPEN_STOP",
+        trace_id="trace_test_c2",
+        features={"distance_from_session_open_bps": 64.0},
+        strategy_family="TREND",
+        strategy_subfamily="OVERNIGHT_TREND",
+    )
+
+    # Empty pool: neither candidate admitted
+    unadmitted_pool: list[dict] = []
+    mock_feed = {
+        "valid": True,
+        "payload": {
+            "feed_ok": True,
+            "last_tick_age_sec": 0.5,
+            "last_depth_age_sec": 1.0,
+        },
+    }
+
+    with patch("core.engine_phase2_adapter.load_current_feed_runtime", return_value=mock_feed):
+        res_empty = run_engine_phase2(unadmitted_pool, top_n=5)
+        assert len(res_empty.get("ranked", [])) == 0
+        top_empty = _build_top_opportunities_payload(candidates=unadmitted_pool, advisory_top_n=5)
+        assert len(top_empty.get("top_advisory_opportunities", [])) == 0
+
+        # Admitted pool: C1 and C2 admitted under TREND
+        admitted_pool: list[dict] = []
+        compat1 = check_strategy_family_compatibility(c1.strategy_family, ["TREND"])
+        compat2 = check_strategy_family_compatibility(c2.strategy_family, ["TREND"])
+        assert admit_candidate_to_pool(admitted_pool, c1, compatibility_result=compat1) is True
+        assert admit_candidate_to_pool(admitted_pool, c2, compatibility_result=compat2) is True
+
+        res_admitted = run_engine_phase2(admitted_pool, top_n=5)
+        ranked_ids = [r["trade_id"] for r in res_admitted.get("ranked", [])]
+        assert "C1_RANK_TEST" in ranked_ids or "C2_ADVISORY_TEST" in ranked_ids
+
+        top_admitted = _build_top_opportunities_payload(candidates=admitted_pool, advisory_top_n=5)
+        adv_ids = [r["trade_id"] for r in top_admitted.get("top_advisory_opportunities", [])]
+        assert len(adv_ids) > 0
+        # Preserves canonical family identity
+        for adv_row in top_admitted.get("top_advisory_opportunities", []):
+            assert adv_row.get("strategy_family") == "TREND"
+
