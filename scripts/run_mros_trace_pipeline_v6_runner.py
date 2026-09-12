@@ -356,7 +356,7 @@ def run_pipeline_v6(evidence_dir: Path) -> None:
                 freshness_watermark=100.0,
                 persistence_watermark=100.0,
                 trace_id=production_trace_id,
-                
+
                 is_order_action=False,
                 broker_write_authority=False,
             )
