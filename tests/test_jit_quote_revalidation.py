@@ -90,7 +90,7 @@ def test_jit_quote_revalidation_blocks_stale_quote(
         capital_at_risk=1000.0,
         expected_slippage=1.0,
         confidence=0.9,
-        strategy="TEST",
+        strategy="C1",
     )
     object.__setattr__(trade, "contract_resolved", True)
 
@@ -205,7 +205,7 @@ def test_jit_quote_revalidation_allows_fresh_quote(
         capital_at_risk=1000.0,
         expected_slippage=1.0,
         confidence=0.9,
-        strategy="TEST",
+        strategy="C1",
     )
     object.__setattr__(trade, "contract_resolved", True)
 

@@ -420,6 +420,7 @@ class Trade:
     trade_lifecycle_reason: str | None = None
     trade_lifecycle_ts: str | None = None
     trade_lifecycle_history: list[dict] = field(default_factory=list)
+    trace_id: str | None = None
 
     def __post_init__(self):
         source_flags = dict(self.source_flags or {})
@@ -845,6 +846,8 @@ class Trade:
                 object.__setattr__(self, "trade_lifecycle_history", lifecycle_snapshot.get("trade_lifecycle_history") or [])
         except Exception:
             pass
+        if self.trace_id is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "trace_id", self.source_flags.get("trace_id"))
         if self.stop_distance is not None:
             return
         try:

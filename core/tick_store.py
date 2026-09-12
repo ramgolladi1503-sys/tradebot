@@ -797,12 +797,9 @@ def _flush_loop() -> None:
                     pass
             finally:
                 _FLUSH_LOCK.release()
-    if _FLUSH_LOCK.acquire(blocking=False):
-        try:
-                while _flush_pending_ticks() > 0:
-                    pass
-        finally:
-            _FLUSH_LOCK.release()
+    with _FLUSH_LOCK:
+        while _flush_pending_ticks(worker_owned=True) > 0:
+            pass
     _FLUSH_THREAD_TERMINATED = True
 
 

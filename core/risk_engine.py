@@ -135,9 +135,19 @@ class RiskDecision:
     reason_code: str
     reason: str
     context: dict[str, Any] = field(default_factory=dict)
+    trace_id: str = ""
 
     def as_tuple(self):
         return bool(self.allowed), str(self.reason)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "allowed": bool(self.allowed),
+            "reason_code": str(self.reason_code),
+            "reason": str(self.reason),
+            "context": dict(self.context or {}),
+            "trace_id": str(self.trace_id),
+        }
 
 
 @dataclass(frozen=True)
@@ -707,6 +717,12 @@ class RiskEngine:
             trade=trade,
             exposure_state=exposure_state,
         )
+        trade_trace = ""
+        if trade is not None:
+            if isinstance(trade, dict):
+                trade_trace = str(trade.get("trace_id") or "")
+            else:
+                trade_trace = str(getattr(trade, "trace_id", "") or "")
         decision = RiskDecision(
             allowed=bool(allowed),
             reason_code=self._reason_code(str(reason)),
@@ -716,6 +732,7 @@ class RiskEngine:
                 "has_trade": bool(trade is not None),
                 "has_exposure_state": bool(isinstance(exposure_state, dict)),
             },
+            trace_id=trade_trace,
         )
         self.last_decision = decision
         return decision

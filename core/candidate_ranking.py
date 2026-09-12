@@ -116,6 +116,7 @@ class CandidateRankRecord:
     sort_key: tuple[Any, ...]
     candidate_id: str = ""
     lineage_id: str = ""
+    trace_id: str = ""
     outcome_contract: Optional[CandidateOutcomeContract] = None
 
     @property
@@ -134,6 +135,7 @@ class CandidateRankRecord:
             "rank": self.rank,
             "candidate_id": getattr(self, "candidate_id", self.strategy_id),
             "lineage_id": getattr(self, "lineage_id", getattr(self, "candidate_id", self.strategy_id)),
+            "trace_id": getattr(self, "trace_id", ""),
             "strategy_id": self.strategy_id,
             "symbol": self.symbol,
             "direction": self.direction,
@@ -295,11 +297,13 @@ def _rank_record(
 
     candidate_id = getattr(record, "candidate_id", None) or getattr(record.outcome_contract, "candidate_id", None) or f"{record.symbol}-{record.strategy_id}-{record.movement_type}-{record.direction}-{generated_epoch}"
     lineage_id = getattr(record, "lineage_id", None) or getattr(record.outcome_contract, "lineage_id", None) or candidate_id
+    trace_id = getattr(record, "trace_id", None) or getattr(record.outcome_contract, "trace_id", "") or ""
 
     return CandidateRankRecord(
         rank=rank,
         candidate_id=str(candidate_id),
         lineage_id=str(lineage_id),
+        trace_id=str(trace_id),
         strategy_id=record.strategy_id,
         symbol=record.symbol,
         direction=record.direction,
