@@ -501,6 +501,9 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
         last_source_ts = None
         max_scheduler_drift_ns = 0
         callback_batches: list[dict] = []
+        if not synchronous:
+            tick_store.set_replay_pressure_immediate_flush_enabled(False)
+            tick_store.set_replay_pressure_read_flush_enabled(False)
         if pressure_controller is not None and pressure_controller.enabled:
             tick_store.set_replay_pressure_hook(lambda context: pressure_controller.maybe_pause_before_commit(context))
             tick_store.set_replay_pressure_post_commit_hook(lambda context: pressure_controller.record_post_commit(context))

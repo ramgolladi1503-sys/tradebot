@@ -85,7 +85,7 @@ def _resolve_db_epochs(db_path: Path) -> tuple[Optional[float], Optional[float],
             ticks_table_auto_created = _ensure_ticks_schema(conn)
             ticks_table_exists = _table_exists(conn, "ticks")
         if ticks_table_exists:
-            tick_epoch = _coerce_epoch(get_max_tick_epoch(conn))
+            tick_epoch = _query_max_epoch(conn, "ticks")
         if _table_exists(conn, "depth_snapshots"):
             depth_epoch = _query_max_epoch(conn, "depth_snapshots")
     finally:
