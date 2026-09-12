@@ -102,6 +102,7 @@ class RiskDecision:
     warnings: tuple[str, ...]
     reasons: tuple[str, ...]
     metadata: dict[str, Any]
+    trace_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -109,6 +110,7 @@ class RiskDecision:
         payload["warnings"] = list(self.warnings)
         payload["reasons"] = list(self.reasons)
         payload["metadata"] = dict(self.metadata)
+        payload["trace_id"] = self.trace_id
         return payload
 
 
@@ -260,6 +262,7 @@ def build_risk_decision(
             "sizing_model": "max_trade_notional_capped_by_contract_limit",
             "requires_paper_intent_ready": True,
         },
+        trace_id=str(intent.get("trace_id")) if intent and intent.get("trace_id") else None,
     )
 
 
