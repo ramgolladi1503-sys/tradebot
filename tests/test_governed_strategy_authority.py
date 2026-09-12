@@ -116,4 +116,3 @@ def test_validate_execution_candidate():
     for blocked_id in ["EVENT", "PANIC", "TREND", "MOMENTUM", "CAS", "MACD", "expiry_lotto", "zero_hero", "scalp", "unknown"]:
         with pytest.raises(PermissionError):
             validate_execution_candidate({"strategy_id": blocked_id})
-

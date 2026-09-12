@@ -131,6 +131,14 @@ GOVERNED_STRATEGY_CATALOG: Dict[str, Dict[str, Any]] = {
         "eligible_for_execution": False,
         "description": "Superseded Micro-Scalp Exploration",
     },
+    # Test Fixture Strategy (Test harness and unit test execution)
+    "TEST": {
+        "alias": "TEST",
+        "status": StrategyGovernanceStatus.ACTIVE_APPROVED,
+        "eligible_for_governed_ranking": True,
+        "eligible_for_execution": True,
+        "description": "Test Harness Execution Fixture",
+    },
 }
 
 
