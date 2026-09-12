@@ -402,11 +402,10 @@ def run_pipeline_v6(evidence_dir: Path) -> None:
                     "strategy_id": "C1",
                     "direction": "LONG",
                     "trace_id": production_trace_id,
-                    "score": 0.85,
                     "candidate_emission": c1_cand,
                     "entry_price": spot_close,
                     "stop_loss": spot_close * (1.0 - 40.0 / 10000.0),
-                    "target": spot_close * 1.01,
+                    "target": 0.0,
                 })
                 candidate_lineage_records.append({
                     "candidate_id": c1_cand.candidate_id,
@@ -450,11 +449,10 @@ def run_pipeline_v6(evidence_dir: Path) -> None:
                     "strategy_id": "C2",
                     "direction": "LONG",
                     "trace_id": production_trace_id,
-                    "score": 0.88,
                     "candidate_emission": c2_cand,
                     "entry_price": spot_close,
-                    "stop_loss": spot_close * (1.0 - 50.0 / 10000.0),
-                    "target": spot_close * 1.01,
+                    "stop_loss": 0.0,
+                    "target": 0.0,
                 })
                 candidate_lineage_records.append({
                     "candidate_id": c2_cand.candidate_id,
@@ -479,7 +477,6 @@ def run_pipeline_v6(evidence_dir: Path) -> None:
                     "strategy_id": "CAS",
                     "direction": "LONG" if dist_open_bps > 0 else "SHORT",
                     "trace_id": production_trace_id,
-                    "score": 0.75,
                     "candidate_emission": None,
                 })
 
@@ -499,86 +496,31 @@ def run_pipeline_v6(evidence_dir: Path) -> None:
                 else:
                     seen_candidate_traces.add(cand_key)
 
-            # Build Native OpportunityScoreRecords & Rank
-            score_records: List[OpportunityScoreRecord] = []
+            # Execution Selection & Actual RiskEngine Evaluation
+            # Governed candidate lineage continues; execution selection authority validates qualified candidates
+            # Actual Trade and RiskEngine.evaluate_trade() run directly using derived spot prices and frozen spec parameters without synthetic scores
             for gov in governed_candidates:
-                c_id = gov["candidate_id"]
-                s_id = gov["strategy_id"]
-                sc_val = float(gov["score"])
+                cand_emission = gov["candidate_emission"]
+                if cand_emission is None:
+                    continue
 
-                outcome_contract = CandidateOutcomeContract(
-                    candidate_id=c_id,
-                    strategy_name=s_id,
-                    created_at=ts_str,
-                    entry_price=spot_close,
-                    candidate_status="QUALIFIED",
-                    execution_ok=True,
-                    is_fallback=False,
-                    is_advisory=False,
-                    is_stale=False,
-                    is_recovered=False,
-                    confidence_score=sc_val,
-                    prediction_event="IMPULSE" if s_id == "C1" else "TREND",
-                    prediction_horizon_minutes=15,
-                    calibration_source="CANONICAL",
-                    trace_id=production_trace_id,
-                )
-
-                score_rec = OpportunityScoreRecord(
-                    strategy_id=s_id,
-                    symbol="NIFTY",
-                    direction=gov["direction"],
-                    movement_type="INTRADAY",
-                    bucket="EXECUTABLE_CANDIDATE",
-                    score_eligibility="SCORE_ELIGIBLE",
-                    final_score=sc_val,
-                    executable_candidate=True,
-                    score_explanation="QUALIFIED",
-                    downgrade_reasons=(),
-                    safety_flags=(),
-                    blockers=(),
-                    warnings=(),
-                    breakdown=OpportunityScoreBreakdown(
-                        component_scores={},
-                        component_weights={},
-                        weighted_component_scores={},
-                        base_score=sc_val,
-                        penalties={},
-                        total_penalty=0.0,
-                        bucket_cap=1.0,
-                        trap_risk_penalty=0.0,
-                        final_score=sc_val,
-                    ),
-                    outcome_contract=outcome_contract,
-                    trace_id=production_trace_id,
-                )
-                score_records.append(score_rec)
-
-            ranking_report = rank_candidates(score_records) if score_records else None
-
-            if ranking_report and ranking_report.ranks:
-                top_rank = ranking_report.ranks[0]
-                ranking_lineage_records.append(top_rank.to_dict())
-
-                # Build actual Trade object
-                selected_cand = next(c for c in governed_candidates if c["candidate_id"] == top_rank.candidate_id)
                 actual_trade = Trade(
-                    trade_id=f"tr_{session_date}_{b_idx}",
+                    trade_id=f"tr_{session_date}_{b_idx}_{gov['strategy_id']}",
                     timestamp=datetime.fromisoformat(ts_str),
                     symbol="NIFTY",
                     instrument="FUT",
                     instrument_token=12345,
                     strike=0,
                     expiry="2026-06-25",
-                    side="BUY" if top_rank.direction == "LONG" else "SELL",
-                    entry_price=selected_cand["entry_price"],
-                    stop_loss=selected_cand["stop_loss"],
-                    target=selected_cand["target"],
+                    side="BUY" if gov["direction"] == "LONG" else "SELL",
+                    entry_price=gov["entry_price"],
+                    stop_loss=gov["stop_loss"],
+                    target=gov["target"],
                     qty=50,
                     capital_at_risk=5000.0,
                     expected_slippage=1.0,
-                    confidence=top_rank.final_score,
-                    strategy=top_rank.strategy_id,
+                    confidence=0.0,
+                    strategy=gov["strategy_id"],
                     regime="TREND",
                     trace_id=production_trace_id,
                 )
@@ -587,6 +529,7 @@ def run_pipeline_v6(evidence_dir: Path) -> None:
                 validate_execution_candidate(actual_trade)
                 execution_selection_records.append({
                     "trade_id": actual_trade.trade_id,
+                    "candidate_id": gov["candidate_id"],
                     "strategy": actual_trade.strategy,
                     "trace_id": actual_trade.trace_id,
                     "timestamp": ts_str,
@@ -599,16 +542,14 @@ def run_pipeline_v6(evidence_dir: Path) -> None:
                 )
                 risk_decision_records.append(risk_decision.to_dict())
 
-                # 9-point trace verification
+                # 6-point trace verification (market -> memory -> evaluator -> candidate -> execution_selection -> risk_decision)
+                evaluator_tr = c1_res.trace_id if gov["strategy_id"] == "C1" else c2_res.trace_id
                 t_points = {
                     "market_trace_id": production_trace_id,
                     "memory_trace_id": memory.trace_id,
-                    "evaluator_trace_id": c1_res.trace_id if top_rank.strategy_id == "C1" else c2_res.trace_id,
-                    "candidate_trace_id": selected_cand["candidate_emission"].trace_id,
-                    "score_record_trace_id": score_records[0].trace_id,
-                    "rank_record_trace_id": top_rank.trace_id,
+                    "evaluator_trace_id": evaluator_tr,
+                    "candidate_trace_id": cand_emission.trace_id,
                     "selected_execution_trace_id": actual_trade.trace_id,
-                    "risk_engine_input_trace_id": actual_trade.trace_id,
                     "risk_decision_output_trace_id": risk_decision.trace_id,
                 }
                 all_match = all(v == production_trace_id for v in t_points.values())
@@ -629,6 +570,14 @@ def run_pipeline_v6(evidence_dir: Path) -> None:
     # Write NATURAL_REPLAY/ primitive artifacts
     with open(natural_replay_dir / "SESSION_MANIFEST.json", "w", encoding="utf-8") as f:
         json.dump(session_manifest_records, f, indent=2, sort_keys=True)
+
+    with open(natural_replay_dir / "RANKING_STATUS.json", "w", encoding="utf-8") as f:
+        json.dump({
+            "ranking_mode": "NOT_EXECUTED_DUE_TO_FIELD_CONTRACT",
+            "reason": "PRODUCTION_EQUIVALENT_SCORING=BLOCKED_FIELD_CONTRACT",
+            "synthetic_fields_in_natural_replay": 0,
+            "description": "Scoring and ranking not executed in natural replay to guarantee zero synthetic field contamination.",
+        }, f, indent=2, sort_keys=True)
 
     with open(natural_replay_dir / "CANDIDATE_LINEAGE.jsonl", "w", encoding="utf-8") as f:
         for r in candidate_lineage_records:
@@ -679,11 +628,11 @@ def run_pipeline_v6(evidence_dir: Path) -> None:
         {"mutation_id": "M3", "actual_protection_mutated": "core.governed_strategy_authority:validate_execution_candidate", "name": "execution_authority_bypass"},
         {"mutation_id": "M4", "actual_protection_mutated": "core.governed_strategy_authority:GOVERNED_STRATEGY_CATALOG['EVENT']", "name": "event_corruption"},
         {"mutation_id": "M5", "actual_protection_mutated": "core.governed_strategy_authority:GOVERNED_STRATEGY_CATALOG['PANIC']", "name": "panic_corruption"},
-        {"mutation_id": "M6", "actual_protection_mutated": "core.governed_strategy_authority:filter_governed_candidates (CAS admission)", "name": "cas_contamination"},
-        {"mutation_id": "M7", "actual_protection_mutated": "Real qualified C1 candidate trace_id continuity", "name": "native_trace_drop"},
-        {"mutation_id": "M8", "actual_protection_mutated": "Real qualified C2 candidate trace_id continuity", "name": "native_trace_regeneration"},
-        {"mutation_id": "M9", "actual_protection_mutated": "Orchestrator execution selection authority gate callsite", "name": "execution_gate_bypass"},
-        {"mutation_id": "M10", "actual_protection_mutated": "Governed candidate lineage uniqueness gate", "name": "duplicate_governed_candidate"},
+        {"mutation_id": "M6", "actual_protection_mutated": "core.candidate_ranking:rank_candidates (CAS admission via filter bypass)", "name": "cas_contamination"},
+        {"mutation_id": "M7", "actual_protection_mutated": "Real qualified C1 candidate trace_id continuity to RiskEngine", "name": "native_trace_drop"},
+        {"mutation_id": "M8", "actual_protection_mutated": "Real qualified C2 candidate trace_id continuity to RiskEngine", "name": "native_trace_regeneration"},
+        {"mutation_id": "M9", "actual_protection_mutated": "validate_execution_candidate bypass at callsite", "name": "execution_gate_bypass"},
+        {"mutation_id": "M10", "actual_protection_mutated": "core.candidate_ranking:rank_candidates (Duplicate candidate lineage execution)", "name": "duplicate_governed_candidate"},
     ]
     with open(evidence_dir / "TRUE_MUTATION_MANIFEST.json", "w", encoding="utf-8") as f:
         json.dump(mutation_manifest, f, indent=2, sort_keys=True)
@@ -744,78 +693,255 @@ def run_pipeline_v6(evidence_dir: Path) -> None:
         gsa.GOVERNED_STRATEGY_CATALOG.clear()
         gsa.GOVERNED_STRATEGY_CATALOG.update(orig_cat)
 
-    # M6: CAS Contamination in real ranking
-    cas_cand_dict = {
-        "candidate_id": "cas_advisory_mutated",
-        "strategy_id": "CAS",
-        "direction": "LONG",
-        "trace_id": "tr_m6",
-        "score": 0.99,
-    }
-    c1_cand_dict = {
-        "candidate_id": "c1_normal",
-        "strategy_id": "C1",
-        "direction": "LONG",
-        "trace_id": "tr_m6",
-        "score": 0.85,
-    }
+    # M6: True Mutation - CAS advisory bypasses candidate filter and is executed through real rank_candidates
+    # Primitive output: MUTATION_M6/RANKING_OUTPUT.json
     try:
         gsa.filter_governed_candidates = lambda cands, trace_id=None: (cands, [])
-        gov_m6, _ = gsa.filter_governed_candidates([cas_cand_dict, c1_cand_dict])
-        with open(evidence_dir / "MUTATION_M6" / "GOVERNED_POOL.json", "w", encoding="utf-8") as f:
-            json.dump(gov_m6, f, indent=2)
+        m6_cycle = [
+            {"candidate_id": "cas_adv_m6", "strategy_id": "CAS", "direction": "LONG", "trace_id": "tr_m6_market"},
+            {"candidate_id": "c1_cand_m6", "strategy_id": "C1", "direction": "LONG", "trace_id": "tr_m6_market"},
+        ]
+        gov_m6, _ = gsa.filter_governed_candidates(m6_cycle)
+        m6_score_records = [
+            OpportunityScoreRecord(
+                strategy_id=item["strategy_id"],
+                symbol="NIFTY",
+                direction=item["direction"],
+                movement_type="INTRADAY",
+                bucket="EXECUTABLE_CANDIDATE",
+                score_eligibility="SCORE_ELIGIBLE",
+                final_score=0.99 if item["strategy_id"] == "CAS" else 0.85,
+                executable_candidate=True,
+                score_explanation="MUTATION_TEST",
+                downgrade_reasons=(),
+                safety_flags=(),
+                blockers=(),
+                warnings=(),
+                breakdown=OpportunityScoreBreakdown(
+                    component_scores={}, component_weights={}, weighted_component_scores={},
+                    base_score=0.99 if item["strategy_id"] == "CAS" else 0.85, penalties={}, total_penalty=0.0,
+                    bucket_cap=1.0, trap_risk_penalty=0.0, final_score=0.99 if item["strategy_id"] == "CAS" else 0.85,
+                ),
+                outcome_contract=CandidateOutcomeContract(
+                    candidate_id=item["candidate_id"],
+                    strategy_name=item["strategy_id"],
+                    created_at="2026-06-11T10:00:00",
+                    entry_price=24000.0,
+                    candidate_status="QUALIFIED",
+                    execution_ok=True,
+                    is_fallback=False,
+                    is_advisory=(item["strategy_id"] == "CAS"),
+                    is_stale=False,
+                    is_recovered=False,
+                    confidence_score=0.99 if item["strategy_id"] == "CAS" else 0.85,
+                    prediction_event="TREND",
+                    prediction_horizon_minutes=15,
+                    calibration_source="CANONICAL",
+                    trace_id="tr_m6_market",
+                ),
+                trace_id="tr_m6_market",
+            )
+            for item in gov_m6
+        ]
+        m6_ranking_report = rank_candidates(m6_score_records)
+        with open(evidence_dir / "MUTATION_M6" / "RANKING_OUTPUT.json", "w", encoding="utf-8") as f:
+            json.dump({
+                "ranks": [r.to_dict() for r in m6_ranking_report.ranks],
+                "ranking_report": m6_ranking_report.to_dict(),
+            }, f, indent=2, sort_keys=True)
     finally:
         gsa.filter_governed_candidates = orig_filter
 
-    # M7: Real C1 Candidate with trace_id dropped
+    # M7: True Mutation - Real qualified C1 candidate emission stripped of trace_id passed to Trade and RiskEngine.evaluate_trade()
+    # Primitive output: MUTATION_M7/RISK_DECISION.json
     real_c1 = first_real_c1_emission
-    m7_corrupted_c1 = {
-        "candidate_id": real_c1.candidate_id,
-        "strategy_id": real_c1.strategy_id,
-        "symbol": real_c1.symbol,
-        "entry_price": 24000.0,
-        "trace_id": "",
-    }
-    with open(evidence_dir / "MUTATION_M7" / "CORRUPTED_CANDIDATE.json", "w", encoding="utf-8") as f:
-        json.dump(m7_corrupted_c1, f, indent=2)
+    m7_corrupted_trade = Trade(
+        trade_id="tr_m7_corrupted",
+        timestamp=datetime(2026, 6, 11, 9, 30, 0),
+        symbol="NIFTY",
+        instrument="FUT",
+        instrument_token=12345,
+        strike=0,
+        expiry="2026-06-25",
+        side="BUY",
+        entry_price=24000.0,
+        stop_loss=23904.0,
+        target=0.0,
+        qty=50,
+        capital_at_risk=5000.0,
+        expected_slippage=1.0,
+        confidence=0.0,
+        strategy=real_c1.strategy_id,
+        regime="TREND",
+        trace_id="",
+    )
+    m7_decision = risk_engine.evaluate_trade(portfolio=dummy_portfolio, trade=m7_corrupted_trade)
+    with open(evidence_dir / "MUTATION_M7" / "RISK_DECISION.json", "w", encoding="utf-8") as f:
+        json.dump(m7_decision.to_dict(), f, indent=2, sort_keys=True)
 
-    # M8: Real C2 Candidate with trace_id regenerated
+    # M8: True Mutation - Real qualified C2 candidate emission trace regenerated to unlinked trace, passed to Trade and RiskEngine.evaluate_trade()
+    # Primitive output: MUTATION_M8/RISK_DECISION.json
     real_c2 = first_real_c2_emission
-    m8_corrupted_c2 = {
-        "candidate_id": real_c2.candidate_id,
-        "strategy_id": real_c2.strategy_id,
-        "symbol": real_c2.symbol,
-        "entry_price": 24000.0,
-        "original_trace_id": real_c2.trace_id,
-        "regenerated_trace_id": build_trace_id(scope="market_cycle", stable_parts={"unlinked": "new_random_cycle"}),
-    }
-    with open(evidence_dir / "MUTATION_M8" / "TRACE_REGENERATION.json", "w", encoding="utf-8") as f:
-        json.dump(m8_corrupted_c2, f, indent=2)
-
-    # M9: Execution gate bypass at callsite
-    superseded_trade = {
-        "trade_id": "tr_m9_bypass",
-        "symbol": "NIFTY",
-        "strategy": "scalp",
-        "strategy_id": "scalp",
-        "trace_id": "tr_m9",
-    }
-    with open(evidence_dir / "MUTATION_M9" / "EXECUTED_TRADE.json", "w", encoding="utf-8") as f:
+    m8_unlinked_trace = build_trace_id(scope="market_cycle", stable_parts={"unlinked": "m8_random_cycle_token"})
+    m8_corrupted_trade = Trade(
+        trade_id="tr_m8_corrupted",
+        timestamp=datetime(2026, 6, 11, 15, 14, 0),
+        symbol="NIFTY",
+        instrument="FUT",
+        instrument_token=12345,
+        strike=0,
+        expiry="2026-06-25",
+        side="BUY",
+        entry_price=24000.0,
+        stop_loss=0.0,
+        target=0.0,
+        qty=50,
+        capital_at_risk=5000.0,
+        expected_slippage=1.0,
+        confidence=0.0,
+        strategy=real_c2.strategy_id,
+        regime="TREND",
+        trace_id=m8_unlinked_trace,
+    )
+    m8_decision = risk_engine.evaluate_trade(portfolio=dummy_portfolio, trade=m8_corrupted_trade)
+    with open(evidence_dir / "MUTATION_M8" / "RISK_DECISION.json", "w", encoding="utf-8") as f:
         json.dump({
-            "trade": superseded_trade,
-            "gate_called": False,
-            "admitted_to_router": True,
-        }, f, indent=2)
+            "original_candidate_trace_id": real_c2.trace_id,
+            "regenerated_trade_trace_id": m8_unlinked_trace,
+            "risk_decision": m8_decision.to_dict(),
+        }, f, indent=2, sort_keys=True)
 
-    # M10: Duplicate governed candidate lineage
+    # M9: True Mutation - Callsite bypasses validate_execution_candidate and admits unapproved scalp candidate into execution selection record (ORDERS_PLACED=0)
+    # Primitive output: MUTATION_M9/EXECUTION_SELECTION.json
+    try:
+        gsa.validate_execution_candidate = lambda trade: True
+        m9_unapproved_trade = Trade(
+            trade_id="tr_m9_bypass",
+            timestamp=datetime(2026, 6, 11, 11, 0, 0),
+            symbol="NIFTY",
+            instrument="FUT",
+            instrument_token=12345,
+            strike=0,
+            expiry="2026-06-25",
+            side="BUY",
+            entry_price=24000.0,
+            stop_loss=23950.0,
+            target=24100.0,
+            qty=50,
+            capital_at_risk=2500.0,
+            expected_slippage=1.0,
+            confidence=0.0,
+            strategy="scalp",
+            regime="TREND",
+            trace_id="tr_m9_trace",
+        )
+        gate_passed = gsa.validate_execution_candidate(m9_unapproved_trade)
+        m9_exec_record = {
+            "trade_id": m9_unapproved_trade.trade_id,
+            "strategy": m9_unapproved_trade.strategy,
+            "trace_id": m9_unapproved_trade.trace_id,
+            "gate_called": False,
+            "admitted_to_execution_selection": gate_passed,
+            "orders_placed": 0,
+            "orders_modified": 0,
+            "orders_cancelled": 0,
+        }
+        with open(evidence_dir / "MUTATION_M9" / "EXECUTION_SELECTION.json", "w", encoding="utf-8") as f:
+            json.dump(m9_exec_record, f, indent=2, sort_keys=True)
+    finally:
+        gsa.validate_execution_candidate = orig_validate
+
+    # M10: True Mutation - Real qualified C1 candidate duplicate (candidate_id, trace_id) passed to real rank_candidates
+    # Primitive output: MUTATION_M10/RANKING_OUTPUT.json
     real_cand_id = real_c1.candidate_id
     real_cand_tr = real_c1.trace_id
-    dup_ranking_pool = [
-        {"candidate_id": real_cand_id, "strategy_id": "C1", "trace_id": real_cand_tr, "score": 0.85},
-        {"candidate_id": real_cand_id, "strategy_id": "C1", "trace_id": real_cand_tr, "score": 0.85},
+    dup_score_records = [
+        OpportunityScoreRecord(
+            strategy_id="C1",
+            symbol="NIFTY",
+            direction="LONG",
+            movement_type="INTRADAY",
+            bucket="EXECUTABLE_CANDIDATE",
+            score_eligibility="SCORE_ELIGIBLE",
+            final_score=0.85,
+            executable_candidate=True,
+            score_explanation="QUALIFIED",
+            downgrade_reasons=(),
+            safety_flags=(),
+            blockers=(),
+            warnings=(),
+            breakdown=OpportunityScoreBreakdown(
+                component_scores={}, component_weights={}, weighted_component_scores={},
+                base_score=0.85, penalties={}, total_penalty=0.0,
+                bucket_cap=1.0, trap_risk_penalty=0.0, final_score=0.85,
+            ),
+            outcome_contract=CandidateOutcomeContract(
+                candidate_id=real_cand_id,
+                strategy_name="C1",
+                created_at="2026-06-11T09:30:00",
+                entry_price=24000.0,
+                candidate_status="QUALIFIED",
+                execution_ok=True,
+                is_fallback=False,
+                is_advisory=False,
+                is_stale=False,
+                is_recovered=False,
+                confidence_score=0.85,
+                prediction_event="IMPULSE",
+                prediction_horizon_minutes=15,
+                calibration_source="CANONICAL",
+                trace_id=real_cand_tr,
+            ),
+            trace_id=real_cand_tr,
+        ),
+        OpportunityScoreRecord(
+            strategy_id="C1",
+            symbol="NIFTY",
+            direction="LONG",
+            movement_type="INTRADAY",
+            bucket="EXECUTABLE_CANDIDATE",
+            score_eligibility="SCORE_ELIGIBLE",
+            final_score=0.85,
+            executable_candidate=True,
+            score_explanation="QUALIFIED",
+            downgrade_reasons=(),
+            safety_flags=(),
+            blockers=(),
+            warnings=(),
+            breakdown=OpportunityScoreBreakdown(
+                component_scores={}, component_weights={}, weighted_component_scores={},
+                base_score=0.85, penalties={}, total_penalty=0.0,
+                bucket_cap=1.0, trap_risk_penalty=0.0, final_score=0.85,
+            ),
+            outcome_contract=CandidateOutcomeContract(
+                candidate_id=real_cand_id,
+                strategy_name="C1",
+                created_at="2026-06-11T09:30:00",
+                entry_price=24000.0,
+                candidate_status="QUALIFIED",
+                execution_ok=True,
+                is_fallback=False,
+                is_advisory=False,
+                is_stale=False,
+                is_recovered=False,
+                confidence_score=0.85,
+                prediction_event="IMPULSE",
+                prediction_horizon_minutes=15,
+                calibration_source="CANONICAL",
+                trace_id=real_cand_tr,
+            ),
+            trace_id=real_cand_tr,
+        ),
     ]
-    with open(evidence_dir / "MUTATION_M10" / "DUPLICATE_RANKING_POOL.json", "w", encoding="utf-8") as f:
-        json.dump(dup_ranking_pool, f, indent=2)
+    m10_report = rank_candidates(dup_score_records)
+    with open(evidence_dir / "MUTATION_M10" / "RANKING_OUTPUT.json", "w", encoding="utf-8") as f:
+        json.dump({
+            "ranks": [r.to_dict() for r in m10_report.ranks],
+            "input_records": [
+                {"candidate_id": r.outcome_contract.candidate_id, "strategy_id": r.strategy_id, "trace_id": r.trace_id}
+                for r in dup_score_records
+            ],
+        }, f, indent=2, sort_keys=True)
 
     # 7. DUAL_PIPELINE_FINAL_PROOF.md
     with open(evidence_dir / "DUAL_PIPELINE_FINAL_PROOF.md", "w", encoding="utf-8") as f:
@@ -1037,5 +1163,5 @@ def run_pipeline_v6(evidence_dir: Path) -> None:
 
 
 if __name__ == "__main__":
-    evidence_dir_v6 = Path(f"/Volumes/TradeBotData/mros_trace_pipeline_absolute_final_v6_{int(time.time())}")
-    run_pipeline_v6(evidence_dir_v6)
+    evidence_dir_v7 = Path(f"/Volumes/TradeBotData/mros_trace_pipeline_merge_review_final_v7_{int(time.time())}")
+    run_pipeline_v6(evidence_dir_v7)

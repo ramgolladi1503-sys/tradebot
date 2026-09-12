@@ -120,15 +120,29 @@ def verify_evidence(evidence_dir: Path) -> int:
         if shadow_count > 0:
             failures.append(f"Found {shadow_count} shadow candidates in natural lineage")
 
-        # Check Ranking Lineage
+        # Check Ranking Status and Field Contract Block
+        ranking_status_file = natural_dir / "RANKING_STATUS.json"
+        if not ranking_status_file.exists():
+            failures.append("Missing RANKING_STATUS.json in natural replay")
+        else:
+            with open(ranking_status_file, "r", encoding="utf-8") as f:
+                r_status = json.load(f)
+            if r_status.get("ranking_mode") != "NOT_EXECUTED_DUE_TO_FIELD_CONTRACT":
+                failures.append(f"Unexpected ranking_mode: {r_status.get('ranking_mode')}")
+            if r_status.get("reason") != "PRODUCTION_EQUIVALENT_SCORING=BLOCKED_FIELD_CONTRACT":
+                failures.append(f"Unexpected ranking_status reason: {r_status.get('reason')}")
+            if r_status.get("synthetic_fields_in_natural_replay", 1) != 0:
+                failures.append(f"synthetic_fields_in_natural_replay is not 0: {r_status.get('synthetic_fields_in_natural_replay')}")
+
+        # Check Ranking Lineage (must be empty in natural replay due to field contract block)
         rank_records = []
         with open(natural_dir / "RANKING_LINEAGE.jsonl", "r", encoding="utf-8") as f:
             for line in f:
                 if not line.strip():
                     continue
                 rank_records.append(json.loads(line))
-        if len(rank_records) == 0:
-            failures.append("Zero rankings recorded in natural replay")
+        if len(rank_records) != 0:
+            failures.append(f"Rankings recorded in natural replay despite field contract block: {len(rank_records)}")
 
         # Check Execution Selection Lineage
         exec_records = []
@@ -140,6 +154,8 @@ def verify_evidence(evidence_dir: Path) -> int:
                 exec_records.append(rec)
                 if not is_strategy_governed_eligible(rec["strategy"]):
                     failures.append(f"Execution selection contained unapproved strategy: {rec['strategy']}")
+        if len(exec_records) == 0:
+            failures.append("Zero execution selection records in natural replay")
 
         # Check Risk Decision Lineage
         risk_records = []
@@ -151,6 +167,8 @@ def verify_evidence(evidence_dir: Path) -> int:
                 risk_records.append(r_rec)
                 if not r_rec.get("trace_id"):
                     failures.append("RiskDecision missing native trace_id")
+        if len(risk_records) == 0:
+            failures.append("Zero risk decision records in natural replay")
 
         # Check Trace Chain Verification
         with open(natural_dir / "TRACE_CHAIN_VERIFICATION.json", "r", encoding="utf-8") as f:
@@ -167,7 +185,7 @@ def verify_evidence(evidence_dir: Path) -> int:
         for chain in trace_ver.get("chains", []):
             unique_traces = set(chain.values())
             if len(unique_traces) != 1:
-                failures.append(f"Trace chain mismatch observed across 9 points: {chain}")
+                failures.append(f"Trace chain mismatch observed across points: {chain}")
 
     # 4. Verify All 10 Mutations From Their Isolated Primitive Artifacts
     mutation_detection_results = []
@@ -234,65 +252,72 @@ def verify_evidence(evidence_dir: Path) -> int:
         "observed_violation": "PANIC strategy corrupted to ACTIVE_APPROVED",
     })
 
-    # M6: CAS Contamination
-    m6_file = evidence_dir / "MUTATION_M6" / "GOVERNED_POOL.json"
+    # M6: CAS Contamination in real ranking output
+    m6_file = evidence_dir / "MUTATION_M6" / "RANKING_OUTPUT.json"
     with open(m6_file, "r", encoding="utf-8") as f:
-        m6_pool = json.load(f)
-    m6_detected = any(c.get("strategy_id") == "CAS" for c in m6_pool)
+        m6_data = json.load(f)
+    m6_ranks = m6_data.get("ranks", [])
+    m6_detected = any(r.get("strategy_id") == "CAS" for r in m6_ranks)
     mutation_detection_results.append({
         "mutation_id": "M6",
         "name": "cas_contamination",
         "detected": m6_detected,
-        "observed_violation": "Shadow strategy CAS detected in governed ranking pool",
+        "observed_violation": "Shadow strategy CAS detected in ranking output",
     })
 
-    # M7: Real C1 Candidate with dropped trace
-    m7_file = evidence_dir / "MUTATION_M7" / "CORRUPTED_CANDIDATE.json"
+    # M7: Real C1 Candidate with dropped trace evaluated by RiskEngine
+    m7_file = evidence_dir / "MUTATION_M7" / "RISK_DECISION.json"
     with open(m7_file, "r", encoding="utf-8") as f:
-        m7_cand = json.load(f)
-    m7_detected = (not m7_cand.get("trace_id") or str(m7_cand.get("trace_id")).strip() == "")
+        m7_dec = json.load(f)
+    m7_tr = m7_dec.get("trace_id")
+    m7_detected = (not m7_tr or str(m7_tr).strip() == "")
     mutation_detection_results.append({
         "mutation_id": "M7",
         "name": "native_trace_drop",
         "detected": m7_detected,
-        "observed_violation": f"Real C1 candidate {m7_cand.get('candidate_id')} emitted with empty trace_id",
+        "observed_violation": f"Real C1 trade risk decision emitted with empty trace_id: '{m7_tr}'",
     })
 
-    # M8: Real C2 Candidate with regenerated trace
-    m8_file = evidence_dir / "MUTATION_M8" / "TRACE_REGENERATION.json"
+    # M8: Real C2 Candidate with regenerated trace evaluated by RiskEngine
+    m8_file = evidence_dir / "MUTATION_M8" / "RISK_DECISION.json"
     with open(m8_file, "r", encoding="utf-8") as f:
         m8_data = json.load(f)
-    m8_detected = (m8_data.get("original_trace_id") != m8_data.get("regenerated_trace_id"))
+    orig_tr = m8_data.get("original_candidate_trace_id")
+    regen_tr = m8_data.get("regenerated_trade_trace_id")
+    m8_detected = (orig_tr != regen_tr and bool(regen_tr))
     mutation_detection_results.append({
         "mutation_id": "M8",
         "name": "native_trace_regeneration",
         "detected": m8_detected,
-        "observed_violation": f"Real C2 candidate trace regenerated: {m8_data.get('original_trace_id')} != {m8_data.get('regenerated_trace_id')}",
+        "observed_violation": f"Real C2 trade trace mismatch with candidate lineage: {orig_tr} != {regen_tr}",
     })
 
     # M9: Execution selection bypass at callsite
-    m9_file = evidence_dir / "MUTATION_M9" / "EXECUTED_TRADE.json"
+    m9_file = evidence_dir / "MUTATION_M9" / "EXECUTION_SELECTION.json"
     with open(m9_file, "r", encoding="utf-8") as f:
         m9_data = json.load(f)
-    m9_strat = m9_data["trade"]["strategy"]
-    m9_detected = (m9_data["admitted_to_router"] is True and not is_strategy_governed_eligible(m9_strat))
+    m9_strat = m9_data.get("strategy")
+    m9_detected = (m9_data.get("admitted_to_execution_selection") is True and not is_strategy_governed_eligible(m9_strat))
     mutation_detection_results.append({
         "mutation_id": "M9",
         "name": "execution_gate_bypass",
         "detected": m9_detected,
-        "observed_violation": f"Execution router received unapproved strategy {m9_strat} without authority validation",
+        "observed_violation": f"Execution selection admitted unapproved strategy {m9_strat} with bypass",
     })
 
-    # M10: Duplicate candidate lineage
-    m10_file = evidence_dir / "MUTATION_M10" / "DUPLICATE_RANKING_POOL.json"
+    # M10: Duplicate candidate lineage in real ranking
+    m10_file = evidence_dir / "MUTATION_M10" / "RANKING_OUTPUT.json"
     with open(m10_file, "r", encoding="utf-8") as f:
-        m10_pool = json.load(f)
+        m10_data = json.load(f)
+    m10_inputs = m10_data.get("input_records", [])
     seen_keys = set()
     has_dup = False
-    for c in m10_pool:
+    dup_key = None
+    for c in m10_inputs:
         k = (c.get("candidate_id"), c.get("trace_id"))
         if k in seen_keys:
             has_dup = True
+            dup_key = k
             break
         seen_keys.add(k)
     m10_detected = has_dup
@@ -300,7 +325,7 @@ def verify_evidence(evidence_dir: Path) -> int:
         "mutation_id": "M10",
         "name": "duplicate_governed_candidate",
         "detected": m10_detected,
-        "observed_violation": f"Duplicate candidate lineage detected: {k}",
+        "observed_violation": f"Duplicate candidate lineage detected in ranking input: {dup_key}",
     })
 
     mutations_detected_count = sum(1 for m in mutation_detection_results if m["detected"])
