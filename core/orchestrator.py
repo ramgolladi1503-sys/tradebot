@@ -262,6 +262,12 @@ from core.candidate_evaluators import (
     CandidateEmission as _CandidateEmission,
     EvaluatorResult as _EvaluatorResult,
 )
+from core.strategy_family_contract import (
+    StrategyFamily as _StrategyFamily,
+    check_strategy_family_compatibility as _check_strategy_family_compatibility,
+    admit_candidate_to_pool as _admit_candidate_to_pool,
+    resolve_legacy_gate_allowed_families as _resolve_legacy_gate_allowed_families,
+)
 from core.market_session_store import (
     MarketMemorySnapshot as _MarketMemorySnapshot,
     market_session_store as _global_market_session_store,
@@ -5816,6 +5822,79 @@ class Orchestrator:
                         except Exception:
                             pass
                     ranked_candidates = _consume_trade_builder_ranked_candidates(self.trade_builder)
+
+                    # Wire Canonical Strategy Family Compatibility & Downstream Handoff for C1/C2 candidates
+                    if c1_c2_qualified:
+                        try:
+                            _prod_ledger = _get_production_candidate_ledger()
+                            _prod_strat_tracker = _get_production_strategy_tracker()
+                            for eval_res in (c1_c2_results or []):
+                                if eval_res.attribution:
+                                    _prod_strat_tracker.record_evaluation(eval_res.attribution)
+
+                            gate_allowed_families, legacy_adapter_used = _resolve_legacy_gate_allowed_families(gate)
+                            for cand in c1_c2_qualified:
+                                cand_family = getattr(cand, "strategy_family", None)
+                                cand_trace_id = getattr(cand, "trace_id", cycle_trace_id)
+                                compat = _check_strategy_family_compatibility(cand_family, gate_allowed_families)
+
+                                if not compat.compatible:
+                                    _prod_ledger.record_transition(
+                                        candidate_id=cand.candidate_id,
+                                        from_stage=_CandidateLifecycleStage.CREATED,
+                                        to_stage=_CandidateLifecycleStage.REGIME_CHECK,
+                                        status="FILTERED",
+                                        reason_code=compat.reason_code,
+                                        metadata={
+                                            "trace_id": cand_trace_id,
+                                            "candidate_family": getattr(compat.candidate_family, "value", str(cand_family)),
+                                            "allowed_families": [getattr(f, "value", str(f)) for f in compat.allowed_families],
+                                            "gate_reasons": list(getattr(gate, "reasons", []) or []),
+                                            "legacy_family_adapter_used": legacy_adapter_used,
+                                        },
+                                    )
+                                else:
+                                    _prod_ledger.record_transition(
+                                        candidate_id=cand.candidate_id,
+                                        from_stage=_CandidateLifecycleStage.CREATED,
+                                        to_stage=_CandidateLifecycleStage.REGIME_CHECK,
+                                        status="PASS",
+                                        reason_code="FAMILY_COMPATIBLE",
+                                        metadata={
+                                            "trace_id": cand_trace_id,
+                                            "candidate_family": getattr(compat.candidate_family, "value", str(cand_family)),
+                                            "allowed_families": [getattr(f, "value", str(f)) for f in compat.allowed_families],
+                                            "legacy_family_adapter_used": legacy_adapter_used,
+                                        },
+                                    )
+                                    # Canonical Candidate Pool Admission Handoff
+                                    if ranked_candidates is None:
+                                        ranked_candidates = []
+                                    admitted = _admit_candidate_to_pool(
+                                        ranked_candidates,
+                                        cand,
+                                        compatibility_result=compat,
+                                        trace_id=cand_trace_id,
+                                    )
+                                    if admitted:
+                                        logger.info(
+                                            "CANDIDATE_POOL_HANDOFF candidate_id=%s strategy=%s family=%s symbol=%s",
+                                            cand.candidate_id,
+                                            cand.strategy_id,
+                                            cand_family,
+                                            cand.symbol,
+                                        )
+                                    else:
+                                        logger.warning(
+                                            "CANDIDATE_POOL_HANDOFF_REJECTED candidate_id=%s strategy=%s family=%s symbol=%s",
+                                            cand.candidate_id,
+                                            cand.strategy_id,
+                                            cand_family,
+                                            cand.symbol,
+                                        )
+                        except Exception as handoff_err:
+                            logger.warning("c1_c2_handoff_failed symbol=%s err=%s", sym, handoff_err)
+
                     post_scan_survivor_count = len(ranked_candidates or [])
                     reject_reason = None
                     reject_gate_reasons: list[str] = []

@@ -127,7 +127,9 @@ def candidate_visibility_bucket(candidate) -> str:
     final_action = str(trade_attr(candidate, "final_action", "") or "").strip().upper()
     if is_synthetic_candidate(candidate):
         return "synthetic"
-    if candidate_status in {"advisory_only", "blocked", "blocked_contract"}:
+    if candidate_status in {"advisory_only", "advisory"} or execution_status == "advisory_only" or permission == "ADVISORY_ONLY" or final_action == "ADVISORY_ONLY":
+        return "advisory"
+    if candidate_status in {"blocked", "blocked_contract"}:
         return "blocked"
     if execution_status == "executable" and permission not in {"ADVISORY_ONLY", "QUEUE_ONLY", "BLOCK"} and final_action not in {"ADVISORY_ONLY", "QUEUE_ONLY", "BLOCK"}:
         return "visible"
