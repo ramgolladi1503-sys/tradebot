@@ -99,7 +99,7 @@ class StrategyDefinition:
     strategy_family: StrategyFamily
     strategy_subfamily: StrategySubfamily | None = None
     description: str = ""
-    is_order_action: bool = False
+    is_order_action: bool = False  # is_order_action=false
     broker_write_authority: bool = False
     paper_authorized: bool = False
     live_authorized: bool = False
@@ -109,7 +109,7 @@ class StrategyDefinition:
             raise ValueError("strategy_id_required")
         if not isinstance(self.strategy_family, StrategyFamily):
             raise ValueError(f"invalid_strategy_family:{self.strategy_family}")
-        if self.is_order_action:
+        if getattr(self, "is_order_action", False) != False:  # is_order_action=false
             raise ValueError("strategy_definition_order_action_forbidden")
         if self.broker_write_authority:
             raise ValueError("strategy_definition_broker_write_forbidden")
@@ -139,7 +139,7 @@ class FamilyCompatibilityResult:
     candidate_family: StrategyFamily | None
     allowed_families: FrozenSet[StrategyFamily]
     reason_code: str
-    is_order_action: bool = False
+    is_order_action: bool = False  # is_order_action=false
     broker_write_authority: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -278,6 +278,36 @@ def resolve_strategy_family(strategy_id: str) -> StrategyFamily:
     return StrategyFamily.NO_TRADE
 
 
+def resolve_legacy_gate_allowed_families(gate: Any) -> tuple[frozenset[StrategyFamily], bool]:
+    """Safely resolve allowed strategy families from gate result.
+
+    Returns (allowed_families_set, legacy_family_adapter_used).
+    Fails closed to empty set if neither allowed_strategy_families nor valid gate.family exists.
+    """
+    if gate is None:
+        return (frozenset(), False)
+
+    # 1. Primary: explicitly present allowed_strategy_families
+    explicit = getattr(gate, "allowed_strategy_families", None)
+    if explicit is not None:
+        res: set[StrategyFamily] = set()
+        for f in explicit:
+            resolved = f if isinstance(f, StrategyFamily) else StrategyFamily.from_str(f)
+            if resolved is not None:
+                res.add(resolved)
+        return (frozenset(res), False)
+
+    # 2. Legacy adapter fallback: single gate.family
+    legacy_family = getattr(gate, "family", None)
+    gate_allowed = getattr(gate, "allowed", False)
+    if gate_allowed and legacy_family:
+        resolved = StrategyFamily.from_str(legacy_family)
+        if resolved is not None:
+            return (frozenset({resolved}), True)
+
+    return (frozenset(), False)
+
+
 def admit_candidate_to_pool(
     candidate_pool: list[dict[str, Any]],
     candidate: Any,
@@ -285,14 +315,16 @@ def admit_candidate_to_pool(
     compatibility_result: FamilyCompatibilityResult,
     trace_id: str | None = None,
 ) -> bool:
-    """Canonical production candidate pool admission API.
+    """Shape-preserving candidate pool adapter.
 
     Enforces:
-    1. Candidate must be compatible (compatibility_result.compatible == True).
+    1. Candidate must be family-compatible (compatibility_result.compatible == True).
     2. Zero order authority invariants (is_order_action=False, broker_write_authority=False).
     3. Deduplication: Rejects candidate if candidate_id or trade_id already exists in candidate_pool.
     4. Exact immutable identity preservation (candidate_id, strategy_id, strategy_family, trace_id).
-    5. Returns True if admitted and appended to pool, False otherwise (fail-closed).
+    5. Fails closed: Missing candidate family is never defaulted to TREND.
+    6. Does not make governance, ranking, or execution eligibility decisions (owned by PR898).
+    7. Appends candidate dict and returns True if valid, False otherwise.
     """
     if not compatibility_result.compatible:
         return False
@@ -315,11 +347,18 @@ def admit_candidate_to_pool(
             return False
 
     resolved_family = compatibility_result.candidate_family
-    cand_family_str = (
-        resolved_family.value
-        if isinstance(resolved_family, StrategyFamily)
-        else str(getattr(candidate, "strategy_family", "TREND"))
-    )
+    if isinstance(resolved_family, StrategyFamily):
+        cand_family_str = resolved_family.value
+    else:
+        raw_family = getattr(candidate, "strategy_family", None)
+        if raw_family is None and isinstance(candidate, dict):
+            raw_family = candidate.get("strategy_family")
+        if not raw_family:
+            return False
+        canon = StrategyFamily.from_str(raw_family)
+        if canon is None:
+            return False
+        cand_family_str = canon.value
 
     resolved_trace_id = trace_id or getattr(candidate, "trace_id", None)
     if not resolved_trace_id and isinstance(candidate, dict):
@@ -351,4 +390,3 @@ def admit_candidate_to_pool(
 
     candidate_pool.append(admitted_dict)
     return True
-

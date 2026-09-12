@@ -266,6 +266,7 @@ from core.strategy_family_contract import (
     StrategyFamily as _StrategyFamily,
     check_strategy_family_compatibility as _check_strategy_family_compatibility,
     admit_candidate_to_pool as _admit_candidate_to_pool,
+    resolve_legacy_gate_allowed_families as _resolve_legacy_gate_allowed_families,
 )
 from core.market_session_store import (
     MarketMemorySnapshot as _MarketMemorySnapshot,
@@ -5831,9 +5832,9 @@ class Orchestrator:
                                 if eval_res.attribution:
                                     _prod_strat_tracker.record_evaluation(eval_res.attribution)
 
-                            gate_allowed_families = getattr(gate, "allowed_strategy_families", frozenset({getattr(gate, "family", "")}))
+                            gate_allowed_families, legacy_adapter_used = _resolve_legacy_gate_allowed_families(gate)
                             for cand in c1_c2_qualified:
-                                cand_family = getattr(cand, "strategy_family", "TREND")
+                                cand_family = getattr(cand, "strategy_family", None)
                                 cand_trace_id = getattr(cand, "trace_id", cycle_trace_id)
                                 compat = _check_strategy_family_compatibility(cand_family, gate_allowed_families)
 
@@ -5849,6 +5850,7 @@ class Orchestrator:
                                             "candidate_family": getattr(compat.candidate_family, "value", str(cand_family)),
                                             "allowed_families": [getattr(f, "value", str(f)) for f in compat.allowed_families],
                                             "gate_reasons": list(getattr(gate, "reasons", []) or []),
+                                            "legacy_family_adapter_used": legacy_adapter_used,
                                         },
                                     )
                                 else:
@@ -5862,6 +5864,7 @@ class Orchestrator:
                                             "trace_id": cand_trace_id,
                                             "candidate_family": getattr(compat.candidate_family, "value", str(cand_family)),
                                             "allowed_families": [getattr(f, "value", str(f)) for f in compat.allowed_families],
+                                            "legacy_family_adapter_used": legacy_adapter_used,
                                         },
                                     )
                                     # Canonical Candidate Pool Admission Handoff

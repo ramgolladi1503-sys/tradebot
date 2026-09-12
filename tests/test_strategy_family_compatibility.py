@@ -745,3 +745,234 @@ def test_ranking_and_advisory_handoff_contract():
         for adv_row in top_admitted.get("top_advisory_opportunities", []):
             assert adv_row.get("strategy_family") == "TREND"
 
+
+# =============================================================================
+# PR #898 Governed Strategy Authority Integration & Anti-Duplication
+# =============================================================================
+
+def test_pr898_integration_case_a_compatible_and_governed_approved():
+    """Case A: C2 family=TREND, allowed={TREND}, governance=ACTIVE_APPROVED.
+    -> Compatible -> Handoff to PR898 governed path -> Admitted & strategy ID remains C2.
+    """
+    from core.strategy_family_contract import admit_candidate_to_pool
+    from core.governed_strategy_authority import (
+        filter_governed_candidates,
+        resolve_strategy_authority,
+        StrategyGovernanceStatus,
+    )
+    from core.candidate_evaluators import CandidateEmission
+
+    c2 = CandidateEmission(
+        candidate_id="C2_CASE_A",
+        strategy_id="C2_OVERNIGHT_TREND",
+        symbol="NIFTY",
+        signal_timestamp="2026-09-11 15:12:00+05:30",
+        entry_boundary="EXACT_1514_OPEN",
+        exit_boundary="NEXT_SESSION_OPEN",
+        stop_rule="SESSION_OPEN_STOP",
+        trace_id="trace_case_a",
+        features={"distance_from_session_open_bps": 64.0},
+        strategy_family="TREND",
+        strategy_subfamily="OVERNIGHT_TREND",
+    )
+
+    # 1. Family compatibility check
+    compat = check_strategy_family_compatibility(c2.strategy_family, ["TREND"])
+    assert compat.compatible is True
+    assert compat.reason_code == "FAMILY_COMPATIBLE"
+
+    # 2. Shape-preserving handoff to pool
+    pool: list[dict] = []
+    assert admit_candidate_to_pool(pool, c2, compatibility_result=compat) is True
+    assert len(pool) == 1
+    admitted = pool[0]
+    assert admitted["strategy"] == "C2_OVERNIGHT_TREND"
+    assert admitted["strategy_family"] == "TREND"
+
+    # 3. PR898 Governance authority filter
+    assert resolve_strategy_authority(admitted["strategy"]) == StrategyGovernanceStatus.ACTIVE_APPROVED
+    governed, rejected = filter_governed_candidates(pool, trace_id="trace_case_a")
+    assert len(governed) == 1
+    assert len(rejected) == 0
+    assert governed[0]["strategy"] == "C2_OVERNIGHT_TREND"
+
+
+def test_pr898_integration_case_b_family_mismatch_blocks_handoff():
+    """Case B: C2 family=TREND, allowed={MEAN_REVERT}.
+    -> FAMILY_MISMATCH -> No handoff to PR898.
+    """
+    from core.strategy_family_contract import admit_candidate_to_pool
+    from core.candidate_evaluators import CandidateEmission
+
+    c2 = CandidateEmission(
+        candidate_id="C2_CASE_B",
+        strategy_id="C2_OVERNIGHT_TREND",
+        symbol="NIFTY",
+        signal_timestamp="2026-09-11 15:12:00+05:30",
+        entry_boundary="EXACT_1514_OPEN",
+        exit_boundary="NEXT_SESSION_OPEN",
+        stop_rule="SESSION_OPEN_STOP",
+        trace_id="trace_case_b",
+        features={"distance_from_session_open_bps": 64.0},
+        strategy_family="TREND",
+        strategy_subfamily="OVERNIGHT_TREND",
+    )
+
+    compat = check_strategy_family_compatibility(c2.strategy_family, ["MEAN_REVERT"])
+    assert compat.compatible is False
+    assert compat.reason_code == "FAMILY_MISMATCH"
+
+    pool: list[dict] = []
+    assert admit_candidate_to_pool(pool, c2, compatibility_result=compat) is False
+    assert len(pool) == 0
+
+
+def test_pr898_integration_case_c_compatible_family_unapproved_strategy_blocked_by_pr898():
+    """Case C: Candidate family=TREND, strategy_id=UNKNOWN_STRAT.
+    -> Family is compatible under TREND regime.
+    -> PR898 Governance Authority MUST still block it from governed ranking/execution!
+    """
+    from core.strategy_family_contract import admit_candidate_to_pool
+    from core.governed_strategy_authority import (
+        filter_governed_candidates,
+        resolve_strategy_authority,
+        StrategyGovernanceStatus,
+    )
+    from core.candidate_evaluators import CandidateEmission
+
+    rogue = CandidateEmission(
+        candidate_id="ROGUE_STRAT_CASE_C",
+        strategy_id="UNAPPROVED_ROGUE_MODEL_V99",
+        symbol="NIFTY",
+        signal_timestamp="2026-09-11 10:00:00+05:30",
+        entry_boundary="NEXT_BAR_OPEN",
+        exit_boundary="SESSION_CLOSE",
+        stop_rule="40BPS_FIXED",
+        trace_id="trace_case_c",
+        features={},
+        strategy_family="TREND",
+    )
+
+    # 1. Family compatibility passes
+    compat = check_strategy_family_compatibility(rogue.strategy_family, ["TREND"])
+    assert compat.compatible is True
+
+    # 2. Shape-preserving handoff to candidate list
+    candidates: list[dict] = []
+    assert admit_candidate_to_pool(candidates, rogue, compatibility_result=compat) is True
+
+    # 3. PR898 Governance MUST block it: family compatibility != strategy approval!
+    assert resolve_strategy_authority(candidates[0]["strategy"]) == StrategyGovernanceStatus.UNAPPROVED
+    governed, rejected = filter_governed_candidates(candidates, trace_id="trace_case_c")
+    assert len(governed) == 0
+    assert len(rejected) == 1
+    assert rejected[0]["strategy_id"] == "UNAPPROVED_ROGUE_MODEL_V99"
+
+
+def test_pr898_integration_case_d_missing_family_fails_closed():
+    """Case D: strategy_id=C2, candidate family is None/empty.
+    -> FAMILY_MISSING -> No handoff to PR898.
+    """
+    from core.strategy_family_contract import admit_candidate_to_pool
+
+    cand_missing = {
+        "candidate_id": "C2_CASE_D",
+        "strategy_id": "C2_OVERNIGHT_TREND",
+        "symbol": "NIFTY",
+        "strategy_family": None,
+    }
+
+    compat = check_strategy_family_compatibility(cand_missing["strategy_family"], ["TREND"])
+    assert compat.compatible is False
+    assert compat.reason_code == "FAMILY_MISSING"
+
+    pool: list[dict] = []
+    assert admit_candidate_to_pool(pool, cand_missing, compatibility_result=compat) is False
+    assert len(pool) == 0
+
+
+def test_architecture_anti_duplication_contract():
+    """Verify PR #899 does NOT introduce duplicate governance, ranking, or execution authorities."""
+    import core.strategy_family_contract as sfc
+
+    # 1. PR #899 must not define a governance status enum
+    assert not hasattr(sfc, "StrategyGovernanceStatus")
+    # 2. PR #899 must not define a governed catalog
+    assert not hasattr(sfc, "GOVERNED_STRATEGY_CATALOG")
+    # 3. PR #899 must not define ranking authority functions
+    assert not hasattr(sfc, "rank_governed_candidates")
+    assert not hasattr(sfc, "filter_governed_candidates")
+    # 4. PR #899 must not define execution validation functions
+    assert not hasattr(sfc, "validate_execution_candidate")
+
+
+def test_legacy_gate_family_adapter_contract():
+    """Verify resolve_legacy_gate_allowed_families explicitly flags legacy adapter usage."""
+    from core.strategy_family_contract import resolve_legacy_gate_allowed_families
+
+    # 1. Gate with explicit allowed_strategy_families
+    class ModernGate:
+        allowed = True
+        allowed_strategy_families = frozenset({"TREND"})
+        family = "TREND"
+
+    fams, legacy_used = resolve_legacy_gate_allowed_families(ModernGate())
+    assert fams == frozenset({StrategyFamily.TREND})
+    assert legacy_used is False
+
+    # 2. Legacy gate with only family string
+    class LegacyGate:
+        allowed = True
+        family = "RANGE"
+
+    fams_leg, legacy_used_leg = resolve_legacy_gate_allowed_families(LegacyGate())
+    assert fams_leg == frozenset({StrategyFamily.MEAN_REVERT})
+    assert legacy_used_leg is True
+
+    # 3. Blocked gate
+    class BlockedGate:
+        allowed = False
+        family = "TREND"
+
+    fams_blk, legacy_used_blk = resolve_legacy_gate_allowed_families(BlockedGate())
+    assert fams_blk == frozenset()
+    assert legacy_used_blk is False
+
+
+def test_event_alias_cannot_auto_admit_unapproved_strategy():
+    """Verify candidate strategy_family='EVENT' cannot become an approved production strategy."""
+    from core.strategy_family_contract import admit_candidate_to_pool
+    from core.governed_strategy_authority import (
+        filter_governed_candidates,
+        resolve_strategy_authority,
+        StrategyGovernanceStatus,
+    )
+    from core.candidate_evaluators import CandidateEmission
+
+    # Candidate specifies strategy_family='EVENT' (which normalizes to DEFINED_RISK)
+    event_cand = CandidateEmission(
+        candidate_id="EVENT_CAND_TEST",
+        strategy_id="EVENT",
+        symbol="NIFTY",
+        signal_timestamp="2026-09-11 10:00:00+05:30",
+        entry_boundary="NEXT_BAR_OPEN",
+        exit_boundary="SESSION_CLOSE",
+        stop_rule="DEFINED_RISK",
+        trace_id="trace_event",
+        features={},
+        strategy_family="EVENT",
+    )
+
+    compat = check_strategy_family_compatibility(event_cand.strategy_family, ["DEFINED_RISK"])
+    assert compat.compatible is True
+    assert compat.candidate_family == StrategyFamily.DEFINED_RISK
+
+    pool: list[dict] = []
+    assert admit_candidate_to_pool(pool, event_cand, compatibility_result=compat) is True
+
+    # But in PR898 Governance, EVENT is strictly UNAPPROVED
+    assert resolve_strategy_authority("EVENT") == StrategyGovernanceStatus.UNAPPROVED
+    governed, rejected = filter_governed_candidates(pool, trace_id="trace_event")
+    assert len(governed) == 0
+    assert len(rejected) == 1
+    assert "UNAPPROVED" in rejected[0]["reason"]

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import enum
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, time as dtime
+from datetime import time as dtime
 from typing import Any, Mapping
 
 from core.market_session_store import MarketMemorySnapshot
@@ -31,10 +31,8 @@ from core.observability.candidate_attribution import (
     StrategyEvaluationAttribution,
 )
 from core.strategy_family_contract import (
-    STRATEGY_REGISTRY,
     StrategyFamily,
     StrategySubfamily,
-    resolve_strategy_family,
 )
 
 
@@ -69,7 +67,7 @@ class CandidateEmission:
     stop_rule: str
     trace_id: str
     features: Mapping[str, float]
-    strategy_family: str = "TREND"
+    strategy_family: str
     strategy_subfamily: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
     is_order_action: bool = False  # is_order_action=false

@@ -125,3 +125,70 @@ def test_property_admit_candidate_to_pool_invariants(cand_id, symbol, family):
     admitted_incompat = admit_candidate_to_pool(pool_empty, cand, compatibility_result=compat_false)
     assert admitted_incompat is False
     assert len(pool_empty) == 0
+
+
+# -----------------------------------------------------------------------------
+# Property 5: Compatibility and pool handoff never mutate candidate identity
+# -----------------------------------------------------------------------------
+@given(
+    strat_id=st.sampled_from(["C1_INTRADAY_15M_IMPULSE", "C2_OVERNIGHT_TREND", "CUSTOM_MODEL_X"]),
+    family=st.sampled_from(list(StrategyFamily)),
+    trace=st.text(min_size=1, max_size=20),
+)
+def test_property_identity_immutability(strat_id: str, family: StrategyFamily, trace: str):
+    cand = CandidateEmission(
+        candidate_id=f"CAND_{strat_id}",
+        strategy_id=strat_id,
+        symbol="NIFTY",
+        signal_timestamp="2026-09-11 10:00:00+05:30",
+        entry_boundary="NEXT_BAR_OPEN",
+        exit_boundary="SESSION_CLOSE",
+        stop_rule="FIXED_STOP",
+        trace_id=trace,
+        features={},
+        strategy_family=family.value,
+    )
+    compat = check_strategy_family_compatibility(cand.strategy_family, [family])
+    pool: list[dict] = []
+    admit_candidate_to_pool(pool, cand, compatibility_result=compat, trace_id=trace)
+
+    assert len(pool) == 1
+    # Identity is strictly preserved, never mutated
+    assert pool[0]["strategy"] == strat_id
+    assert pool[0]["strategy_family"] == family.value
+    assert pool[0]["trace_id"] == trace
+
+
+# -----------------------------------------------------------------------------
+# Property 6: Compatible family NEVER grants approval for unapproved strategies
+# -----------------------------------------------------------------------------
+@given(
+    unapproved_strat=st.text(min_size=1, max_size=30).filter(
+        lambda s: s.strip() not in {"C1_INTRADAY_15M_IMPULSE", "C1", "C2_OVERNIGHT_TREND", "C2"}
+    ),
+    family=st.sampled_from(list(StrategyFamily)),
+)
+def test_property_compatible_family_never_bypasses_pr898_governance(unapproved_strat: str, family: StrategyFamily):
+    from core.governed_strategy_authority import filter_governed_candidates
+
+    cand = CandidateEmission(
+        candidate_id=f"CAND_{unapproved_strat}",
+        strategy_id=unapproved_strat,
+        symbol="NIFTY",
+        signal_timestamp="2026-09-11 10:00:00+05:30",
+        entry_boundary="NEXT_BAR_OPEN",
+        exit_boundary="SESSION_CLOSE",
+        stop_rule="FIXED_STOP",
+        trace_id="trace_prop",
+        features={},
+        strategy_family=family.value,
+    )
+    compat = check_strategy_family_compatibility(cand.strategy_family, [family])
+    pool: list[dict] = []
+    admitted = admit_candidate_to_pool(pool, cand, compatibility_result=compat)
+    assert admitted is True
+
+    # PR898 governed filter MUST block unapproved strategies despite family compatibility
+    governed, rejected = filter_governed_candidates(pool, trace_id="trace_prop")
+    assert len(governed) == 0
+    assert len(rejected) == 1
