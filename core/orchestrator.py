@@ -205,7 +205,10 @@ from core.decision_dag import (
     build_market_snapshot,
     evaluate_decision,
 )
-from core.governed_strategy_authority import filter_governed_candidates
+from core.governed_strategy_authority import (
+    filter_governed_candidates,
+    validate_execution_candidate,
+)
 from core.decision_telemetry_health import append_decision_write_error
 from core.decision_side_effects import handle_post_decision_side_effects
 from core.market_context import derive_market_context
@@ -6106,7 +6109,11 @@ class Orchestrator:
                             )
                     cycle_ranked_candidates_before_append = len(cycle_ranked_candidates)
                     if ranked_candidates:
-                        cycle_ranked_candidates.extend(ranked_candidates)
+                        governed_for_append, _ = filter_governed_candidates(
+                            ranked_candidates,
+                            trace_id=getattr(self, "_gate_status_cycle_id", None),
+                        )
+                        cycle_ranked_candidates.extend(governed_for_append)
                     cycle_ranked_candidates_after_append = len(cycle_ranked_candidates)
                     try:
                         record_phase1_observation(build_phase1_observation(
@@ -6370,6 +6377,20 @@ class Orchestrator:
                                 update_execution(trade_id_for_update, {"veto_reasons": ["halt_strategy"]})
                         except Exception:
                             pass
+                        continue
+                    # Governed Candidate Authority Gate: enforce execution selection cannot bypass authority
+                    try:
+                        validate_execution_candidate(trade)
+                    except PermissionError as auth_err:
+                        cycle_candidates_blocked += 1
+                        cycle_blockers["governed_strategy_authority_blocked"] += 1
+                        logger.warning(
+                            "execution_candidate_authority_rejected symbol=%s trade_id=%s strategy=%s err=%s",
+                            sym,
+                            _trade_attr(trade, "trade_id"),
+                            _trade_attr(trade, "strategy"),
+                            auth_err,
+                        )
                         continue
                     # Optional cross-asset staleness: downsize but do not block.
                     try:

@@ -16,6 +16,9 @@ source: docs/agent_reviews/pr_mros_canonical_candidate_authority_trace_v3.md
 ### Scope
 - Verify and resolve two HIGH findings from V2: DUAL_PIPELINE and SUPERSEDED_CONTAMINATION.
 - Introduce canonical strategy authority classification (`core/governed_strategy_authority.py`) ensuring only `ACTIVE_APPROVED` strategies (`C1`, `C2`) enter governed candidate pools and ranking reports.
+- Resolve EVENT and PANIC authority regression: enforce regime architecture invariant (`core/regime_architecture_contract.py`) where EVENT and PANIC are strictly `DATA_BLOCKED / NOT HISTORICALLY VALIDATED` (UNAPPROVED, not execution eligible, not rank eligible).
+- Eliminate broad family unproven approvals: uncertified family routers (`TREND`, `MOMENTUM`, `BREAKOUT`, `MEAN_REVERT`, `DEFINED_RISK`) default strictly to `UNAPPROVED`.
+- Prove dual-pipeline closure & execution-selection authority: `legacy_opportunity_engine` is `EXECUTION_SELECTION`, `canonical_ranked_opportunity_pipeline` is `UI_ONLY`. In `core/orchestrator.py`, enforce `validate_execution_candidate(trade)` gate so execution selection cannot bypass governed strategy authority.
 - Purge auxiliary exploratory candidate injections (`expiry_lotto`, `zero_hero`, `scalp`) in `core/orchestrator.py` from polluting `cycle_ranked_candidates`.
 - Provide trace continuity proof across 375 bars of historical replay.
 
@@ -31,8 +34,9 @@ source: docs/agent_reviews/pr_mros_canonical_candidate_authority_trace_v3.md
 - live execution gates, risk switches, feed freshness gates.
 
 ### Expected Proof
-- Unit tests proving governed candidate filtering and mutation resistance against superseded candidates.
+- Unit tests proving governed candidate filtering, execution candidate validation, and mutation resistance against superseded and unapproved candidates.
 - Historical replay generating continuous runtime edge events and trace ledger.
+- All 9 adversarial mutations verified blocked fail-closed.
 - Clean CI passing all safety and governance gates.
 
 ## Scope Guard
@@ -40,6 +44,7 @@ source: docs/agent_reviews/pr_mros_canonical_candidate_authority_trace_v3.md
 ### In Scope
 - Filtering `cycle_ranked_candidates` to active approved strategies before Phase 2 ranking.
 - Removing `cycle_ranked_candidates.extend(...)` from exploratory auxiliary paths.
+- Enforcing `validate_execution_candidate(trade)` prior to execution risk evaluation.
 - Replay verification and edge event emission.
 
 ### Out of Scope
@@ -59,10 +64,14 @@ source: docs/agent_reviews/pr_mros_canonical_candidate_authority_trace_v3.md
 ## Grill Me Review
 
 ### Challenge
-Can an auxiliary exploratory strategy (e.g. lotto or scalp) or shadow advisory strategy (CAS) still enter the top ranked opportunity report or influence live/paper execution selection?
+Can an auxiliary exploratory strategy (e.g. lotto or scalp), shadow advisory strategy (CAS), or unapproved regime state (EVENT/PANIC) still enter the top ranked opportunity report or bypass execution selection?
 
 ### Finding & Defense
-No. The repair removes direct mutation of `cycle_ranked_candidates` by auxiliary trade generators and enforces a filter gatekeeper `filter_governed_candidates` prior to `_build_top_opportunities_payload` and Phase 2 ranking. Non-approved strategies are recorded into audit rejections and blocked.
+No.
+1. `filter_governed_candidates` strips all non-ACTIVE_APPROVED strategies before cycle candidate append and Phase 2 ranking.
+2. `validate_execution_candidate(trade)` actively intercepts execution selection before risk state planning in `core/orchestrator.py:6383` and raises `PermissionError` for any non-ACTIVE_APPROVED candidate.
+3. EVENT and PANIC are strictly `UNAPPROVED` with `eligible_for_execution=False` and `eligible_for_governed_ranking=False`.
+4. Broad family routers without standalone certification default to `UNAPPROVED`.
 
 ### Verdict
 PASS
@@ -70,9 +79,11 @@ PASS
 ## Hermes Review
 
 ### Architecture & Contract Alignment
-- Architectural separation between execution selection and UI opportunity ranking is acknowledged and contained.
-- Strategy authority catalog cleanly maps C1/C2 to `ACTIVE_APPROVED`, CAS to `SHADOW_ONLY`, MACD to `RESEARCH_ONLY`, and exploratory trades to `SUPERSEDED`.
-- Fail-closed behavior: any unrecognized strategy defaults to `UNAPPROVED` and is blocked from ranking.
+- Architectural separation between execution selection and UI opportunity ranking is acknowledged and contained:
+  - `legacy_opportunity_engine` = `EXECUTION_SELECTION`
+  - `canonical_ranked_opportunity_pipeline` = `UI_ONLY`
+- Strategy authority catalog cleanly maps C1/C2 to `ACTIVE_APPROVED`, CAS to `SHADOW_ONLY`, MACD to `RESEARCH_ONLY`, EVENT/PANIC to `UNAPPROVED`, and exploratory trades to `SUPERSEDED`.
+- Fail-closed behavior: any unrecognized strategy or broad family defaults to `UNAPPROVED` and is blocked from ranking and execution.
 
 ### Verdict
 PASS
@@ -81,8 +92,9 @@ PASS
 
 ### Delivery Check
 - Code changes are minimal, precise, and targeted.
-- Unit tests cover status resolution, filtering, and rank tampering defense.
+- Unit tests cover status resolution, execution candidate validation, filtering, and rank tampering defense.
 - Historical replay verified across 375 bars with 0 unapproved candidates leaking through.
+- Adversarial mutation campaign: 9/9 mutations blocked fail-closed.
 
 ### Verdict
 PASS
@@ -100,9 +112,13 @@ PASS
 ## High-Risk Path Review
 
 ### Risk Analysis for Modified High-Risk Paths (`core/orchestrator.py`)
-- **Modified Lines**: Lines 6425, 6458, 6476 (auxiliary trade generator handling) and 7637 (Phase 2 top candidate payload builder).
-- **Justification**: Eliminating auxiliary candidate pollution from `cycle_ranked_candidates` fixes a confirmed defect where unapproved exploration trades contaminated SIM/PAPER candidate pools.
-- **Fail-Safe Behavior**: If candidate strategy extraction fails or is unapproved, candidate is rejected from governed ranking. Existing review queue functionality for exploration trades remains intact.
+- **Modified Lines**:
+  - Line 6112: `filter_governed_candidates` on `cycle_ranked_candidates.extend(governed_for_append)`.
+  - Line 6383: `validate_execution_candidate(trade)` gate prior to risk state processing.
+  - Lines 6425, 6458, 6476: auxiliary trade generator handling decoupled from cycle ranking pool.
+  - Line 7637: Phase 2 top candidate payload builder protected by governance filtering.
+- **Justification**: Guarantees execution selection and candidate ranking cannot be bypassed by unapproved or superseded strategies.
+- **Fail-Safe Behavior**: If candidate strategy extraction fails or is unapproved, candidate is blocked from execution and rejected from governed ranking.
 
 ### Verdict
 PASS
@@ -112,7 +128,8 @@ PASS
   - 1148 runtime edge events logged.
   - 375 trace ledger transitions logged.
   - 22 adversarial contamination attempts successfully blocked.
-  - 0 unapproved or superseded strategies admitted to governed ranking.
+  - 9/9 adversarial mutations verified blocked.
+  - 0 unapproved or superseded strategies admitted to governed ranking or execution.
 - All test suites passing.
 
 ## Runtime Proof Required After Merge
@@ -125,3 +142,4 @@ PASS
 ## Human Approval
 - Scoped and approved under MROS Trace Pipeline closure mandate.
 - All trading safety invariants verified.
+

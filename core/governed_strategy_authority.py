@@ -64,48 +64,20 @@ GOVERNED_STRATEGY_CATALOG: Dict[str, Dict[str, Any]] = {
         "eligible_for_execution": True,
         "description": "Nifty Overnight Trend (Alias)",
     },
-    # Production Engine Tradable Families (Base Tradable Strategies)
-    "TREND": {
-        "alias": "TREND",
-        "status": StrategyGovernanceStatus.ACTIVE_APPROVED,
-        "eligible_for_governed_ranking": True,
-        "eligible_for_execution": True,
-        "description": "Core Trend Strategy Family",
-    },
-    "MOMENTUM": {
-        "alias": "MOMENTUM",
-        "status": StrategyGovernanceStatus.ACTIVE_APPROVED,
-        "eligible_for_governed_ranking": True,
-        "eligible_for_execution": True,
-        "description": "Core Momentum Strategy Family",
-    },
-    "BREAKOUT": {
-        "alias": "BREAKOUT",
-        "status": StrategyGovernanceStatus.ACTIVE_APPROVED,
-        "eligible_for_governed_ranking": True,
-        "eligible_for_execution": True,
-        "description": "Core Breakout Strategy Family",
-    },
-    "MEAN_REVERT": {
-        "alias": "MEAN_REVERT",
-        "status": StrategyGovernanceStatus.ACTIVE_APPROVED,
-        "eligible_for_governed_ranking": True,
-        "eligible_for_execution": True,
-        "description": "Core Mean Reversion Strategy Family",
-    },
-    "DEFINED_RISK": {
-        "alias": "DEFINED_RISK",
-        "status": StrategyGovernanceStatus.ACTIVE_APPROVED,
-        "eligible_for_governed_ranking": True,
-        "eligible_for_execution": True,
-        "description": "Core Defined Risk Strategy Family",
-    },
+    # Regime Observational State (EVENT & PANIC - strictly DATA_BLOCKED / NOT HISTORICALLY VALIDATED)
     "EVENT": {
         "alias": "EVENT",
-        "status": StrategyGovernanceStatus.ACTIVE_APPROVED,
-        "eligible_for_governed_ranking": True,
-        "eligible_for_execution": True,
-        "description": "Core Event Strategy Family",
+        "status": StrategyGovernanceStatus.UNAPPROVED,
+        "eligible_for_governed_ranking": False,
+        "eligible_for_execution": False,
+        "description": "EVENT Regime State (DATA_BLOCKED / NOT HISTORICALLY VALIDATED - diagnostic only)",
+    },
+    "PANIC": {
+        "alias": "PANIC",
+        "status": StrategyGovernanceStatus.UNAPPROVED,
+        "eligible_for_governed_ranking": False,
+        "eligible_for_execution": False,
+        "description": "PANIC Regime State (DATA_BLOCKED / NOT HISTORICALLY VALIDATED - diagnostic only)",
     },
     # Shadow-Only Strategies (CAS)
     "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1": {
@@ -245,3 +217,28 @@ def filter_governed_candidates(
             rejected.append(rejection)
 
     return governed, rejected
+
+
+def validate_execution_candidate(candidate: Any) -> bool:
+    """
+    Validates whether a candidate or trade selected for execution is ACTIVE_APPROVED.
+    Raises PermissionError if the candidate is not ACTIVE_APPROVED.
+    """
+    strat_id = extract_candidate_strategy_id(candidate)
+    status = resolve_strategy_authority(strat_id)
+    if status != StrategyGovernanceStatus.ACTIVE_APPROVED:
+        raise PermissionError(
+            f"VIOLATION: Execution selection rejected. Strategy {strat_id} with status {status.value} is not ACTIVE_APPROVED."
+        )
+    return True
+
+
+__all__ = [
+    "GOVERNED_STRATEGY_CATALOG",
+    "StrategyGovernanceStatus",
+    "extract_candidate_strategy_id",
+    "filter_governed_candidates",
+    "is_strategy_governed_eligible",
+    "resolve_strategy_authority",
+    "validate_execution_candidate",
+]
