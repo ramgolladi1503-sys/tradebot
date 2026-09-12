@@ -7,8 +7,9 @@ and ranking in SIM, PAPER, or LIVE modes.
 Superseded, Shadow-only, Research-only, and unknown strategies are strictly blocked
 from governed ranking outputs.
 """
+from contextlib import contextmanager
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 class StrategyGovernanceStatus(str, Enum):
@@ -131,15 +132,26 @@ GOVERNED_STRATEGY_CATALOG: Dict[str, Dict[str, Any]] = {
         "eligible_for_execution": False,
         "description": "Superseded Micro-Scalp Exploration",
     },
-    # Test Fixture Strategy (Test harness and unit test execution)
-    "TEST": {
-        "alias": "TEST",
-        "status": StrategyGovernanceStatus.ACTIVE_APPROVED,
-        "eligible_for_governed_ranking": True,
-        "eligible_for_execution": True,
-        "description": "Test Harness Execution Fixture",
-    },
 }
+
+# Test-only authority override container (isolated to test contexts, NEVER populated in production)
+_TEST_STRATEGY_AUTHORITY_OVERRIDE: Set[str] = set()
+
+
+@contextmanager
+def temporary_test_strategy_authority(strategy_ids: Set[str]):
+    """
+    Test-only context manager that temporarily authorizes fixture strategies.
+    Restores state immediately upon exit. Never accessible in normal production runtime.
+    """
+    normalized = {str(sid).strip().upper() for sid in strategy_ids}
+    original = set(_TEST_STRATEGY_AUTHORITY_OVERRIDE)
+    _TEST_STRATEGY_AUTHORITY_OVERRIDE.update(normalized)
+    try:
+        yield
+    finally:
+        _TEST_STRATEGY_AUTHORITY_OVERRIDE.clear()
+        _TEST_STRATEGY_AUTHORITY_OVERRIDE.update(original)
 
 
 def resolve_strategy_authority(strategy_id: Optional[str]) -> StrategyGovernanceStatus:
@@ -151,6 +163,11 @@ def resolve_strategy_authority(strategy_id: Optional[str]) -> StrategyGovernance
         return StrategyGovernanceStatus.UNAPPROVED
 
     clean_id = str(strategy_id).strip()
+
+    # Check test-only override first (active ONLY during explicit test context managers)
+    if _TEST_STRATEGY_AUTHORITY_OVERRIDE and clean_id.upper() in _TEST_STRATEGY_AUTHORITY_OVERRIDE:
+        return StrategyGovernanceStatus.ACTIVE_APPROVED
+
     entry = GOVERNED_STRATEGY_CATALOG.get(clean_id)
     if entry:
         return entry["status"]
@@ -248,5 +265,6 @@ __all__ = [
     "filter_governed_candidates",
     "is_strategy_governed_eligible",
     "resolve_strategy_authority",
+    "temporary_test_strategy_authority",
     "validate_execution_candidate",
 ]

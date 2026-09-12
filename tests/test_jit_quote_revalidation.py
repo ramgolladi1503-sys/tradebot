@@ -5,6 +5,7 @@ from unittest.mock import patch, MagicMock
 from config import config as cfg
 from core.orchestrator import Orchestrator
 from core.trade_schema import Trade
+from core.governed_strategy_authority import temporary_test_strategy_authority
 import core.market_data
 import core.tick_store
 
@@ -134,8 +135,9 @@ def test_jit_quote_revalidation_blocks_stale_quote(
     # fatality is independently covered by feed-state tests; suppress that
     # unrelated outer-loop short-circuit while retaining canonical feed truth
     # and all downstream JIT logic.
-    with patch("core.recovery_state_machine.is_fatal_state", return_value=False), patch("core.orchestrator.time.sleep"), patch("core.orchestrator._pace_loop"), patch("core.orchestrator.write_pipeline_funnel"), patch("core.orchestrator.audit_append"), patch("core.orchestrator.write_candidate_handoff_root_cause_latest"), patch("core.orchestrator.write_live_indicator_readiness_latest"), patch("core.orchestrator.write_notrade_reason_truth_latest"), patch("core.orchestrator.write_ranking_quality_latest"), patch("core.orchestrator.write_live_workload_latest"), patch("core.orchestrator.write_candidate_flow_trace_latest"), patch("core.orchestrator.write_strategy_no_qualified_reasons_latest"), patch("core.orchestrator.write_candidate_lineage_ledger"), patch("core.orchestrator.write_top_opportunities_snapshots"), patch("core.orchestrator.write_runtime_health_snapshot"):
-        orchestrator._legacy_live_monitoring(run_once=True)
+    with temporary_test_strategy_authority({"TEST"}):
+        with patch("core.recovery_state_machine.is_fatal_state", return_value=False), patch("core.orchestrator.time.sleep"), patch("core.orchestrator._pace_loop"), patch("core.orchestrator.write_pipeline_funnel"), patch("core.orchestrator.audit_append"), patch("core.orchestrator.write_candidate_handoff_root_cause_latest"), patch("core.orchestrator.write_live_indicator_readiness_latest"), patch("core.orchestrator.write_notrade_reason_truth_latest"), patch("core.orchestrator.write_ranking_quality_latest"), patch("core.orchestrator.write_live_workload_latest"), patch("core.orchestrator.write_candidate_flow_trace_latest"), patch("core.orchestrator.write_strategy_no_qualified_reasons_latest"), patch("core.orchestrator.write_candidate_lineage_ledger"), patch("core.orchestrator.write_top_opportunities_snapshots"), patch("core.orchestrator.write_runtime_health_snapshot"):
+            orchestrator._legacy_live_monitoring(run_once=True)
 
     mock_update_exec.assert_any_call(
         "test_stale_quote",
@@ -245,8 +247,9 @@ def test_jit_quote_revalidation_allows_fresh_quote(
     mock_get_token.return_value = 123
     mock_get_last_tick.return_value = {"ts_epoch": time.time() - 1.0}
 
-    with patch("core.recovery_state_machine.is_fatal_state", return_value=False), patch("core.orchestrator.time.sleep"), patch("core.orchestrator._pace_loop"), patch("core.orchestrator.write_pipeline_funnel"), patch("core.orchestrator.audit_append"), patch("core.orchestrator.write_candidate_handoff_root_cause_latest"), patch("core.orchestrator.write_live_indicator_readiness_latest"), patch("core.orchestrator.write_notrade_reason_truth_latest"), patch("core.orchestrator.write_ranking_quality_latest"), patch("core.orchestrator.write_live_workload_latest"), patch("core.orchestrator.write_candidate_flow_trace_latest"), patch("core.orchestrator.write_strategy_no_qualified_reasons_latest"), patch("core.orchestrator.write_candidate_lineage_ledger"), patch("core.orchestrator.write_top_opportunities_snapshots"), patch("core.orchestrator.write_runtime_health_snapshot"):
-        orchestrator._legacy_live_monitoring(run_once=True)
+    with temporary_test_strategy_authority({"TEST"}):
+        with patch("core.recovery_state_machine.is_fatal_state", return_value=False), patch("core.orchestrator.time.sleep"), patch("core.orchestrator._pace_loop"), patch("core.orchestrator.write_pipeline_funnel"), patch("core.orchestrator.audit_append"), patch("core.orchestrator.write_candidate_handoff_root_cause_latest"), patch("core.orchestrator.write_live_indicator_readiness_latest"), patch("core.orchestrator.write_notrade_reason_truth_latest"), patch("core.orchestrator.write_ranking_quality_latest"), patch("core.orchestrator.write_live_workload_latest"), patch("core.orchestrator.write_candidate_flow_trace_latest"), patch("core.orchestrator.write_strategy_no_qualified_reasons_latest"), patch("core.orchestrator.write_candidate_lineage_ledger"), patch("core.orchestrator.write_top_opportunities_snapshots"), patch("core.orchestrator.write_runtime_health_snapshot"):
+            orchestrator._legacy_live_monitoring(run_once=True)
 
     from unittest.mock import ANY
     mock_update_exec.assert_any_call(

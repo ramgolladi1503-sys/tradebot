@@ -116,3 +116,107 @@ def test_validate_execution_candidate():
     for blocked_id in ["EVENT", "PANIC", "TREND", "MOMENTUM", "CAS", "MACD", "expiry_lotto", "zero_hero", "scalp", "unknown"]:
         with pytest.raises(PermissionError):
             validate_execution_candidate({"strategy_id": blocked_id})
+
+
+def test_production_catalog_integrity():
+    """
+    Explicit Production-Catalog Integrity Test (Section 4).
+    Verifies that ONLY C1 and C2 canonical IDs and aliases are ACTIVE_APPROVED in production.
+    TEST, EVENT, PANIC, broad families, shadow, research, and superseded strategies
+    must NEVER acquire production governed authority.
+    """
+    from core.governed_strategy_authority import (
+        GOVERNED_STRATEGY_CATALOG,
+        StrategyGovernanceStatus,
+        resolve_strategy_authority,
+        is_strategy_governed_eligible,
+        validate_execution_candidate,
+    )
+
+    # 1. Enumerate all ACTIVE_APPROVED strategies in the catalog
+    active_approved_entries = {
+        strat_id: data
+        for strat_id, data in GOVERNED_STRATEGY_CATALOG.items()
+        if data["status"] == StrategyGovernanceStatus.ACTIVE_APPROVED
+    }
+
+    # Expected canonical IDs and aliases for C1 and C2
+    expected_c1_c2_entries = {
+        "ENTRY_C_INTRADAY_15M_IMPULSE_50BPS_X_STOP_40BPS_CLOSE",
+        "C1_INTRADAY_15M_IMPULSE",
+        "C1",
+        "ENTRY_E3_OVERNIGHT_TREND_1512_SIGNAL_1514_ENTRY_OPEN_EXIT",
+        "C2_OVERNIGHT_TREND",
+        "C2",
+    }
+
+    assert set(active_approved_entries.keys()) == expected_c1_c2_entries, (
+        f"VIOLATION: Production catalog contains unexpected ACTIVE_APPROVED strategies: "
+        f"{set(active_approved_entries.keys()) - expected_c1_c2_entries}"
+    )
+
+    # 2. Strict negative checks on unauthorized strategies
+    negative_checks = [
+        "TEST",
+        "EVENT",
+        "PANIC",
+        "TREND",
+        "MOMENTUM",
+        "BREAKOUT",
+        "MEAN_REVERT",
+        "DEFINED_RISK",
+        "CAS",
+        "MACD",
+        "expiry_lotto",
+        "zero_hero",
+        "scalp",
+        "unknown",
+        "rogue_trader",
+    ]
+
+    for strat_id in negative_checks:
+        assert resolve_strategy_authority(strat_id) != StrategyGovernanceStatus.ACTIVE_APPROVED, (
+            f"Strategy {strat_id} must NOT be ACTIVE_APPROVED in production catalog"
+        )
+        assert is_strategy_governed_eligible(strat_id) is False, (
+            f"Strategy {strat_id} must NOT be governed eligible"
+        )
+        with pytest.raises(PermissionError):
+            validate_execution_candidate({"strategy_id": strat_id})
+
+
+def test_temporary_test_strategy_authority_isolation():
+    """
+    Proves that temporary_test_strategy_authority allows TEST only within its context,
+    reverts state immediately upon exit, and does not mutate production catalog.
+    """
+    from core.governed_strategy_authority import (
+        temporary_test_strategy_authority,
+        resolve_strategy_authority,
+        is_strategy_governed_eligible,
+        validate_execution_candidate,
+        StrategyGovernanceStatus,
+    )
+
+    # Pre-condition: TEST is unapproved
+    assert resolve_strategy_authority("TEST") == StrategyGovernanceStatus.UNAPPROVED
+    assert is_strategy_governed_eligible("TEST") is False
+    with pytest.raises(PermissionError):
+        validate_execution_candidate({"strategy_id": "TEST"})
+
+    # Inside context: TEST is temporarily allowed
+    with temporary_test_strategy_authority({"TEST"}):
+        assert resolve_strategy_authority("TEST") == StrategyGovernanceStatus.ACTIVE_APPROVED
+        assert is_strategy_governed_eligible("TEST") is True
+        assert validate_execution_candidate({"strategy_id": "TEST"}) is True
+
+        # Other unauthorized strategies remain blocked even inside context
+        assert resolve_strategy_authority("EVENT") == StrategyGovernanceStatus.UNAPPROVED
+        with pytest.raises(PermissionError):
+            validate_execution_candidate({"strategy_id": "EVENT"})
+
+    # Post-condition: TEST is strictly unapproved again
+    assert resolve_strategy_authority("TEST") == StrategyGovernanceStatus.UNAPPROVED
+    assert is_strategy_governed_eligible("TEST") is False
+    with pytest.raises(PermissionError):
+        validate_execution_candidate({"strategy_id": "TEST"})
