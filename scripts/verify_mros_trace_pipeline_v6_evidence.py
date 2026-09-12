@@ -120,6 +120,34 @@ def verify_evidence(evidence_dir: Path) -> int:
         if shadow_count > 0:
             failures.append(f"Found {shadow_count} shadow candidates in natural lineage")
 
+        # Check Placeholder Field Audit
+        placeholder_audit_file = natural_dir / "PLACEHOLDER_FIELD_AUDIT.json"
+        if not placeholder_audit_file.exists():
+            failures.append("Missing PLACEHOLDER_FIELD_AUDIT.json in natural replay")
+        else:
+            with open(placeholder_audit_file, "r", encoding="utf-8") as f:
+                p_audit = json.load(f)
+            if p_audit.get("SYNTHETIC_SCORING_FIELDS_IN_NATURAL_REPLAY", -1) != 0:
+                failures.append(f"SYNTHETIC_SCORING_FIELDS_IN_NATURAL_REPLAY is not 0: {p_audit.get('SYNTHETIC_SCORING_FIELDS_IN_NATURAL_REPLAY')}")
+            if p_audit.get("TRACE_RISK_HARNESS_PLACEHOLDER_FIELDS_PRESENT") is not True:
+                failures.append("TRACE_RISK_HARNESS_PLACEHOLDER_FIELDS_PRESENT is not True")
+
+        # Check Natural Replay Counts
+        replay_counts_file = natural_dir / "NATURAL_REPLAY_COUNTS.json"
+        if not replay_counts_file.exists():
+            failures.append("Missing NATURAL_REPLAY_COUNTS.json in natural replay")
+        else:
+            with open(replay_counts_file, "r", encoding="utf-8") as f:
+                r_counts = json.load(f)
+            if r_counts.get("total_candidates_evaluated") != 16:
+                failures.append(f"Replay total candidates evaluated != 16: {r_counts.get('total_candidates_evaluated')}")
+            if r_counts.get("admitted_candidates") != 6:
+                failures.append(f"Replay admitted candidates != 6: {r_counts.get('admitted_candidates')}")
+            if r_counts.get("shadow_rejected_candidates") != 10:
+                failures.append(f"Replay shadow rejected candidates != 10: {r_counts.get('shadow_rejected_candidates')}")
+            if r_counts.get("reconciliation_with_session_manifest") != "MATCH":
+                failures.append(f"Reconciliation != MATCH: {r_counts.get('reconciliation_with_session_manifest')}")
+
         # Check Ranking Status and Field Contract Block
         ranking_status_file = natural_dir / "RANKING_STATUS.json"
         if not ranking_status_file.exists():
@@ -294,15 +322,33 @@ def verify_evidence(evidence_dir: Path) -> int:
 
     # M9: Execution selection bypass at callsite
     m9_file = evidence_dir / "MUTATION_M9" / "EXECUTION_SELECTION.json"
+    m9_proof_file = evidence_dir / "MUTATION_M9" / "M9_ACTUAL_CALLSITE_PROOF.json"
     with open(m9_file, "r", encoding="utf-8") as f:
         m9_data = json.load(f)
+    m9_proof = {}
+    if m9_proof_file.exists():
+        with open(m9_proof_file, "r", encoding="utf-8") as f:
+            m9_proof = json.load(f)
+
     m9_strat = m9_data.get("strategy")
-    m9_detected = (m9_data.get("admitted_to_execution_selection") is True and not is_strategy_governed_eligible(m9_strat))
+    m9_orders = m9_data.get("orders_placed", -1) + m9_data.get("orders_modified", -1) + m9_data.get("orders_cancelled", -1)
+    m9_callsite_ok = (
+        m9_proof.get("callsite_file") == "core/orchestrator.py"
+        and m9_proof.get("callsite_line") == 6383
+        and m9_proof.get("boundary_crossing_proven") is True
+        and m9_proof.get("mutated_execution", {}).get("orders_placed") == 0
+    )
+    m9_detected = (
+        m9_data.get("admitted_to_execution_selection") is True
+        and not is_strategy_governed_eligible(m9_strat)
+        and m9_orders == 0
+        and m9_callsite_ok
+    )
     mutation_detection_results.append({
         "mutation_id": "M9",
         "name": "execution_gate_bypass",
         "detected": m9_detected,
-        "observed_violation": f"Execution selection admitted unapproved strategy {m9_strat} with bypass",
+        "observed_violation": f"Execution selection admitted unapproved strategy {m9_strat} at callsite core/orchestrator.py:6383, crossed boundary to risk evaluation with orders_placed=0",
     })
 
     # M10: Duplicate candidate lineage in real ranking
