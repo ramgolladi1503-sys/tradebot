@@ -205,6 +205,7 @@ from core.decision_dag import (
     build_market_snapshot,
     evaluate_decision,
 )
+from core.governed_strategy_authority import filter_governed_candidates
 from core.decision_telemetry_health import append_decision_write_error
 from core.decision_side_effects import handle_post_decision_side_effects
 from core.market_context import derive_market_context
@@ -6422,7 +6423,7 @@ class Orchestrator:
                                     market_data,
                                     debug_reasons=debug_flag,
                                 )
-                                cycle_ranked_candidates.extend(_consume_trade_builder_ranked_candidates(self.trade_builder))
+                                # Auxiliary lotto candidates remain queue-only; do NOT pollute cycle_ranked_candidates
                                 if lotto_trades:
                                     for lotto_trade in lotto_trades:
                                         queued, _ = _queue_review_candidate(
@@ -6455,7 +6456,7 @@ class Orchestrator:
                                     market_data,
                                     debug_reasons=debug_flag
                                 )
-                                cycle_ranked_candidates.extend(_consume_trade_builder_ranked_candidates(self.trade_builder))
+                                # Auxiliary zero_hero candidates remain queue-only; do NOT pollute cycle_ranked_candidates
                                 if zero_trade:
                                     queued, _ = _queue_review_candidate(
                                         zero_trade,
@@ -6473,7 +6474,7 @@ class Orchestrator:
                                     market_data,
                                     debug_reasons=debug_flag
                                 )
-                                cycle_ranked_candidates.extend(_consume_trade_builder_ranked_candidates(self.trade_builder))
+                                # Auxiliary scalp candidates remain queue-only; do NOT pollute cycle_ranked_candidates
                                 if scalp_trade:
                                     queued, _ = _queue_review_candidate(
                                         scalp_trade,
@@ -7633,8 +7634,12 @@ class Orchestrator:
                     feature_timing["GAP_feed_truth_copy_ms"] = _perf_ms(t_truth)
 
                     t_top = time.perf_counter()
+                    governed_cycle_candidates, governed_rejections = filter_governed_candidates(
+                        cycle_ranked_candidates,
+                        trace_id=getattr(self, "_gate_status_cycle_id", None),
+                    )
                     top_payload = _build_top_opportunities_payload(
-                        candidates=list(cycle_ranked_candidates),
+                        candidates=list(governed_cycle_candidates),
                         executable_top_n=int(getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)),
                         advisory_top_n=int(getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)),
                         active_trade=self._phase2_active_trade if isinstance(self._phase2_active_trade, dict) else None,
@@ -7650,7 +7655,7 @@ class Orchestrator:
                         root_cause_payload = build_candidate_handoff_root_cause_payload(
                             cycle_ts_epoch=float(time.time()),
                             strategy_generated_count=int(cycle_candidate_pool_count),
-                            phase2_raw_candidates=[cand for cand in list(cycle_ranked_candidates or []) if isinstance(cand, dict)],
+                            phase2_raw_candidates=[cand for cand in list(governed_cycle_candidates or []) if isinstance(cand, dict)],
                             phase2_ranked_count=int(top_payload.get("phase2_ranked_count") or 0),
                         )
                         write_candidate_handoff_root_cause_latest(payload=root_cause_payload)
