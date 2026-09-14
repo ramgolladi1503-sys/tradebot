@@ -38,7 +38,7 @@ SKIP_PATTERNS = (
     r"unittest\.skip",
     r"@skip\b",
 )
-
+ADVERSARIAL_TEST_TOKENS = ("attack", "adversarial", "mutation", "safety", "negative")
 DANGEROUS_CALLS = {"eval", "exec", "compile", "__import__"}
 
 
@@ -64,12 +64,25 @@ def changed_diff(base_ref: str, candidate_ref: str, path: str) -> str:
     return _git("diff", "--unified=0", f"{merge_base}..{candidate_ref}", "--", path)
 
 
+def _added_lines(diff: str) -> list[str]:
+    return [line[1:] for line in diff.splitlines() if line.startswith("+") and not line.startswith("+++")]
+
+
+def _removed_lines(diff: str) -> list[str]:
+    return [line[1:] for line in diff.splitlines() if line.startswith("-") and not line.startswith("---")]
+
+
 def _is_code(path: str) -> bool:
     return path.endswith(".py") and path.startswith(PRODUCTION_PREFIXES)
 
 
 def _is_test(path: str) -> bool:
     return path.endswith(".py") and path.startswith(TEST_PREFIXES)
+
+
+def _is_adversarial_test(path: str) -> bool:
+    name = Path(path).name.lower()
+    return _is_test(path) and any(token in name for token in ADVERSARIAL_TEST_TOKENS)
 
 
 def _high_risk(path: str) -> bool:
@@ -94,26 +107,15 @@ def _syntax_attack(candidate_ref: str, paths: list[str], errors: list[str]) -> N
             errors.append(f"SYNTAX_ATTACK_FAIL:{path}:{exc.msg}")
 
 
-def _dangerous_api_attack(candidate_ref: str, paths: list[str], errors: list[str]) -> None:
+def _dangerous_api_attack(base_ref: str, candidate_ref: str, paths: list[str], errors: list[str]) -> None:
+    call_pattern = re.compile(r"\b(eval|exec|compile|__import__)\s*\(")
     for path in paths:
         if not _is_code(path):
             continue
-        text = _read_candidate(candidate_ref, path)
-        if text is None:
-            continue
-        try:
-            tree = ast.parse(text, filename=path)
-        except SyntaxError:
-            continue
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                name = None
-                if isinstance(node.func, ast.Name):
-                    name = node.func.id
-                elif isinstance(node.func, ast.Attribute):
-                    name = node.func.attr
-                if name in DANGEROUS_CALLS:
-                    errors.append(f"DANGEROUS_API_ADDED_OR_PRESENT:{path}:{name}:line={getattr(node, 'lineno', '?')}")
+        for line in _added_lines(changed_diff(base_ref, candidate_ref, path)):
+            match = call_pattern.search(line)
+            if match and match.group(1) in DANGEROUS_CALLS:
+                errors.append(f"DANGEROUS_API_ADDED:{path}:{match.group(1)}:{line.strip()}")
 
 
 def _test_weakening_attack(base_ref: str, candidate_ref: str, paths: list[str], errors: list[str]) -> None:
@@ -121,8 +123,8 @@ def _test_weakening_attack(base_ref: str, candidate_ref: str, paths: list[str], 
         if not _is_test(path):
             continue
         diff = changed_diff(base_ref, candidate_ref, path)
-        added = [line[1:] for line in diff.splitlines() if line.startswith("+") and not line.startswith("+++")]
-        removed = [line[1:] for line in diff.splitlines() if line.startswith("-") and not line.startswith("---")]
+        added = _added_lines(diff)
+        removed = _removed_lines(diff)
         for line in added:
             if any(re.search(pattern, line) for pattern in SKIP_PATTERNS):
                 errors.append(f"TEST_WEAKENING_SKIP_ADDED:{path}:{line.strip()}")
@@ -137,15 +139,13 @@ def _test_weakening_attack(base_ref: str, candidate_ref: str, paths: list[str], 
 def _coverage_shape_attack(paths: list[str], errors: list[str]) -> None:
     production = [p for p in paths if _is_code(p)]
     tests = [p for p in paths if _is_test(p)]
+    adversarial = [p for p in tests if _is_adversarial_test(p)]
     if production and not tests:
         errors.append("PRODUCTION_CHANGE_WITHOUT_TEST_CHANGE")
-    if any(_high_risk(p) for p in production):
-        adversarial = [
-            p for p in tests
-            if any(token in Path(p).name.lower() for token in ("attack", "adversarial", "mutation", "safety", "negative"))
-        ]
-        if not adversarial:
-            errors.append("HIGH_RISK_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
+    if production and not adversarial:
+        errors.append("PRODUCTION_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
+    if any(_high_risk(p) for p in production) and len(adversarial) < 1:
+        errors.append("HIGH_RISK_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
 
 
 def _governance_self_protection(paths: list[str], branch: str, errors: list[str]) -> None:
@@ -168,7 +168,7 @@ def execute(base_ref: str, candidate_ref: str, branch: str, run_tests: bool) -> 
     errors: list[str] = []
 
     _syntax_attack(candidate_ref, paths, errors)
-    _dangerous_api_attack(candidate_ref, paths, errors)
+    _dangerous_api_attack(base_ref, candidate_ref, paths, errors)
     _test_weakening_attack(base_ref, candidate_ref, paths, errors)
     _coverage_shape_attack(paths, errors)
     _governance_self_protection(paths, branch, errors)
@@ -182,6 +182,7 @@ def execute(base_ref: str, candidate_ref: str, branch: str, run_tests: bool) -> 
     print(f"branch={branch}")
     print(f"changed_files={len(paths)}")
     print(f"high_risk_changed={any(_high_risk(p) for p in paths)}")
+    print(f"adversarial_tests={sum(1 for p in paths if _is_adversarial_test(p))}")
     for path in paths:
         print(f"changed:{path}")
 
