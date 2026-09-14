@@ -4,7 +4,7 @@ This package is deliberately read-only with respect to trading runtime state. It
 no broker, order, strategy, live-runtime, or credential imports.
 """
 
-from .lineage import LineageAudit, audit_experiment_lineage, certify_research_from_registry
+from .lineage import LineageAudit, audit_experiment_lineage, certify_research_from_registry, lineage_digest
 from .policy import CertificationInput, CertificationVerdict, certify_research
 from .statistics import (
     benjamini_hochberg,
@@ -18,18 +18,9 @@ from .statistics import (
 )
 
 __all__ = [
-    "CertificationInput",
-    "CertificationVerdict",
-    "LineageAudit",
-    "audit_experiment_lineage",
-    "certify_research",
-    "certify_research_from_registry",
-    "sample_sharpe",
-    "probabilistic_sharpe_ratio",
-    "minimum_track_record_length",
-    "effective_rank",
-    "deflated_sharpe_ratio",
-    "bonferroni_rejections",
-    "benjamini_hochberg",
-    "cscv_probability_of_backtest_overfitting",
+    "CertificationInput", "CertificationVerdict", "LineageAudit",
+    "audit_experiment_lineage", "lineage_digest", "certify_research",
+    "certify_research_from_registry", "sample_sharpe", "probabilistic_sharpe_ratio",
+    "minimum_track_record_length", "effective_rank", "deflated_sharpe_ratio",
+    "bonferroni_rejections", "benjamini_hochberg", "cscv_probability_of_backtest_overfitting",
 ]
