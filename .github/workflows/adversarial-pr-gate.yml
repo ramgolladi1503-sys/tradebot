@@ -77,6 +77,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      issues: read
       statuses: write
     steps:
       - name: Checkout trusted protected main policy only
@@ -98,6 +99,58 @@ jobs:
           test "$(git rev-parse refs/remotes/origin/adversarial-base)" = "$BASE_SHA"
           git fetch --no-tags --prune origin +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
           test "$(git rev-parse refs/remotes/origin/pr-${PR_NUMBER}-head)" = "$HEAD_SHA"
+
+      - name: Require OWNER exact-SHA approval for gate recertification branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          case "$HEAD_REF" in
+            governance/adversarial-gate-recertification-*) ;;
+            *) exit 0 ;;
+          esac
+          EXPECTED="/authorize-adversarial-gate-recertification $HEAD_SHA"
+          export EXPECTED
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+
+          repo = os.environ["REPOSITORY"]
+          pr = os.environ["PR_NUMBER"]
+          token = os.environ["GH_TOKEN"]
+          expected = os.environ["EXPECTED"]
+          page = 1
+          while True:
+              url = f"https://api.github.com/repos/{repo}/issues/{pr}/comments?per_page=100&page={page}"
+              req = urllib.request.Request(
+                  url,
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              with urllib.request.urlopen(req) as response:
+                  comments = json.load(response)
+              for comment in comments:
+                  if (
+                      comment.get("author_association") == "OWNER"
+                      and comment.get("body", "").strip() == expected
+                  ):
+                      print("OWNER_EXACT_SHA_RECERTIFICATION_AUTHORIZED")
+                      sys.exit(0)
+              if len(comments) < 100:
+                  break
+              page += 1
+          print("OWNER_EXACT_SHA_RECERTIFICATION_AUTHORIZATION_MISSING", file=sys.stderr)
+          sys.exit(1)
+          PY
 
       - name: Evaluate trusted-base adversarial policy
         id: trusted_policy
@@ -123,9 +176,10 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           POLICY_OUTCOME: ${{ steps.trusted_policy.outcome }}
+          JOB_STATUS: ${{ job.status }}
         run: |
           set -euo pipefail
-          if [[ "$POLICY_OUTCOME" == "success" ]]; then
+          if [[ "$POLICY_OUTCOME" == "success" && "$JOB_STATUS" != "failure" ]]; then
             state=success
             description='Protected-main adversarial policy passed exact PR head'
           else
