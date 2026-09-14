@@ -15,13 +15,15 @@ jobs:
     if: github.event_name == 'pull_request'
     name: adversarial-pr-candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
     env:
       PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
       EXECUTION_MODE: PAPER
       KITE_USE_API: "false"
+      PYTHONHASHSEED: "0"
     steps:
       - name: Checkout exact PR head
         uses: actions/checkout@v4
@@ -45,11 +47,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
-      - name: Install bounded gate dependencies
+      - name: Install repository test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest hypothesis numpy
+          pip install -r requirements.txt
+          pip install 'pandas<3.0' hypothesis
 
       - name: Execute adversarial gate against exact candidate
         env:
