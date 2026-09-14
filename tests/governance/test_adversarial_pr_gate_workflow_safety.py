@@ -35,12 +35,14 @@ def test_attack_workflow_gives_candidate_no_write_permissions():
     assert "contents: write" not in candidate
 
 
-def test_candidate_static_inspection_precedes_any_dependency_install():
+def test_pinned_python_precedes_static_inspection_and_dependency_install():
     candidate = _candidate_job(_workflow_text())
+    setup_pos = candidate.index("Set up trusted Python runtime")
     inspect_pos = candidate.index("Static adversarial inspection before dependency installation")
-    setup_pos = candidate.index("Set up Python")
     install_pos = candidate.index("Install trusted-base test dependencies")
-    assert inspect_pos < setup_pos < install_pos
+    test_pos = candidate.index("Execute changed tests under adversarial gate")
+    assert setup_pos < inspect_pos < install_pos < test_pos
+    assert 'python-version: "3.12"' in candidate
 
 
 def test_candidate_installs_only_base_requirements_not_candidate_requirements():
