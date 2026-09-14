@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Mapping, Sequence
+from typing import Mapping
 
 
 PASS = "PASS"
@@ -54,6 +54,10 @@ def _finite_probability(value: float | None) -> bool:
     return value is not None and math.isfinite(value) and 0.0 <= value <= 1.0
 
 
+def _valid_threshold(value: float) -> bool:
+    return math.isfinite(value) and 0.0 <= value <= 1.0
+
+
 def certify_research(
     evidence: CertificationInput,
     *,
@@ -68,6 +72,8 @@ def certify_research(
     `CERTIFIED_RESEARCH` means the supplied offline evidence passed these gates.
     It never authorizes paper/live execution or broker actions.
     """
+    if not all(_valid_threshold(v) for v in (max_pbo, min_psr, min_dsr, min_power)):
+        return _blocked("INVALID_POLICY_THRESHOLD")
     if not evidence.hypothesis_id.strip():
         return _blocked("MISSING_HYPOTHESIS_ID")
     if evidence.registered_experiments < 1 or evidence.declared_experiments < 1:
@@ -78,45 +84,49 @@ def certify_research(
         return _blocked("SEARCH_HISTORY_INCOMPLETE")
     if not evidence.inference_model_valid:
         return _blocked("INFERENCE_MODEL_INVALID")
+    if evidence.actual_track_record < 0:
+        return _blocked("INVALID_TRACK_RECORD")
 
     gates: dict[str, str] = {}
     reasons: list[str] = []
 
-    def gate(name: str, passed: bool, reason: str) -> None:
+    def hard_gate(name: str, passed: bool, reason: str) -> None:
         gates[name] = PASS if passed else FAIL
         if not passed:
             reasons.append(reason)
 
-    gate("parameter_stability", evidence.parameter_stability_pass, "PARAMETER_FRAGILE")
-    gate("wfa", evidence.wfa_pass, "WFA_FAIL")
+    hard_gate("parameter_stability", evidence.parameter_stability_pass, "PARAMETER_FRAGILE")
+    hard_gate("wfa", evidence.wfa_pass, "WFA_FAIL")
 
     if not _finite_probability(evidence.pbo):
         gates["pbo"] = BLOCKED
         reasons.append("PBO_MISSING_OR_INVALID")
     else:
-        gate("pbo", evidence.pbo <= max_pbo, "PBO_HIGH")
+        hard_gate("pbo", evidence.pbo <= max_pbo, "PBO_HIGH")
 
     if not _finite_probability(evidence.psr):
         gates["psr"] = BLOCKED
         reasons.append("PSR_MISSING_OR_INVALID")
     else:
-        gate("psr", evidence.psr >= min_psr, "PSR_FAIL")
+        hard_gate("psr", evidence.psr >= min_psr, "PSR_FAIL")
 
     if not _finite_probability(evidence.dsr):
         gates["dsr"] = BLOCKED
         reasons.append("DSR_MISSING_OR_INVALID")
     else:
-        gate("dsr", evidence.dsr >= min_dsr, "DSR_FAIL")
+        hard_gate("dsr", evidence.dsr >= min_dsr, "DSR_FAIL")
 
     if evidence.minimum_track_record is None or not math.isfinite(float(evidence.minimum_track_record)):
         gates["track_record"] = INCONCLUSIVE
         reasons.append("UNDERPOWERED")
+    elif float(evidence.minimum_track_record) < 0:
+        gates["track_record"] = BLOCKED
+        reasons.append("INVALID_MINIMUM_TRACK_RECORD")
+    elif evidence.actual_track_record < int(math.ceil(float(evidence.minimum_track_record))):
+        gates["track_record"] = INCONCLUSIVE
+        reasons.append("UNDERPOWERED")
     else:
-        gate(
-            "track_record",
-            evidence.actual_track_record >= int(math.ceil(float(evidence.minimum_track_record))),
-            "UNDERPOWERED",
-        )
+        gates["track_record"] = PASS
 
     if not _finite_probability(evidence.power):
         gates["power"] = BLOCKED
@@ -127,22 +137,22 @@ def certify_research(
     else:
         gates["power"] = PASS
 
-    gate("cost_robustness", evidence.cost_robust_pass, "COST_ROBUSTNESS_FAIL")
-    gate("holdout", evidence.holdout_status == "PASS", "HOLDOUT_NOT_PASS")
+    hard_gate("cost_robustness", evidence.cost_robust_pass, "COST_ROBUSTNESS_FAIL")
+    hard_gate("holdout", evidence.holdout_status == "PASS", "HOLDOUT_NOT_PASS")
 
     if require_prospective:
-        gate("prospective", evidence.prospective_status == "PASS", "PROSPECTIVE_NOT_CONFIRMED")
+        hard_gate("prospective", evidence.prospective_status == "PASS", "PROSPECTIVE_NOT_CONFIRMED")
     else:
         gates["prospective"] = PASS if evidence.prospective_status == "PASS" else INCONCLUSIVE
 
     for name, passed in sorted(evidence.additional_gates.items()):
-        gate(f"additional:{name}", bool(passed), f"ADDITIONAL_GATE_FAIL:{name}")
+        hard_gate(f"additional:{name}", bool(passed), f"ADDITIONAL_GATE_FAIL:{name}")
 
     if any(value == BLOCKED for value in gates.values()):
         status = BLOCKED
     elif any(value == FAIL for value in gates.values()):
         status = FAIL
-    elif any(value == INCONCLUSIVE for value in gates.values() if value != gates.get("prospective")):
+    elif any(value == INCONCLUSIVE for key, value in gates.items() if key != "prospective"):
         status = INCONCLUSIVE
     else:
         status = "CERTIFIED_RESEARCH"
