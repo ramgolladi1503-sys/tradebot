@@ -20,9 +20,20 @@ HIGH_RISK_PREFIXES = (
     "core/kite",
     "core/runtime",
     "strategies/",
+    ".github/workflows/",
 )
 
-PRODUCTION_PREFIXES = ("core/", "strategies/", "scripts/", "tools/")
+PYTHON_PRODUCTION_PREFIXES = ("config/", "core/", "strategies/", "scripts/", "tools/")
+ATTACK_REQUIRED_PREFIXES = (
+    "config/",
+    "core/",
+    "strategies/",
+    "scripts/",
+    "tools/",
+    ".github/workflows/",
+    ".github/actions/",
+)
+ATTACK_REQUIRED_EXACT = ("main.py", "requirements.txt", "pyproject.toml", "Dockerfile")
 TEST_PREFIXES = ("tests/",)
 GATE_PROTECTED_PATHS = (
     ".github/workflows/adversarial-pr-gate.yml",
@@ -89,7 +100,15 @@ def _removed_lines(diff: str) -> list[str]:
 
 
 def _is_code(path: str) -> bool:
-    return path.endswith(".py") and path.startswith(PRODUCTION_PREFIXES)
+    return path.endswith(".py") and (
+        path == "main.py" or any(path.startswith(prefix) for prefix in PYTHON_PRODUCTION_PREFIXES)
+    )
+
+
+def _requires_attack(path: str) -> bool:
+    if _is_test(path) or path.startswith("docs/"):
+        return False
+    return path in ATTACK_REQUIRED_EXACT or any(path.startswith(prefix) for prefix in ATTACK_REQUIRED_PREFIXES)
 
 
 def _is_test(path: str) -> bool:
@@ -124,14 +143,20 @@ def _syntax_attack(candidate_ref: str, paths: list[str], errors: list[str]) -> N
 
 
 def _dangerous_api_attack(base_ref: str, candidate_ref: str, paths: list[str], errors: list[str]) -> None:
-    call_pattern = re.compile(r"\b(eval|exec|compile|__import__)\s*\(")
+    direct_call = re.compile(r"\b(eval|exec|compile|__import__)\s*\(")
+    indirect_lookup = re.compile(
+        r"\b(getattr|__getattribute__)\s*\([^\n]*?[\"'](eval|exec|compile|__import__)[\"']"
+    )
     for path in paths:
         if not _is_code(path):
             continue
         for line in _added_lines(changed_diff(base_ref, candidate_ref, path)):
-            match = call_pattern.search(line)
-            if match and match.group(1) in DANGEROUS_CALLS:
-                errors.append(f"DANGEROUS_API_ADDED:{path}:{match.group(1)}:{line.strip()}")
+            direct = direct_call.search(line)
+            indirect = indirect_lookup.search(line)
+            if direct and direct.group(1) in DANGEROUS_CALLS:
+                errors.append(f"DANGEROUS_API_ADDED:{path}:{direct.group(1)}:{line.strip()}")
+            if indirect and indirect.group(2) in DANGEROUS_CALLS:
+                errors.append(f"DANGEROUS_API_INDIRECT_LOOKUP_ADDED:{path}:{indirect.group(2)}:{line.strip()}")
 
 
 def _test_weakening_attack(base_ref: str, candidate_ref: str, paths: list[str], errors: list[str]) -> None:
@@ -153,24 +178,42 @@ def _test_weakening_attack(base_ref: str, candidate_ref: str, paths: list[str], 
 
 
 def _coverage_shape_attack(paths: list[str], errors: list[str]) -> None:
-    production = [p for p in paths if _is_code(p)]
+    attacked_surface = [p for p in paths if _requires_attack(p)]
     tests = [p for p in paths if _is_test(p)]
     adversarial = [p for p in tests if _is_adversarial_test(p)]
-    if production and not tests:
-        errors.append("PRODUCTION_CHANGE_WITHOUT_TEST_CHANGE")
-    if production and not adversarial:
-        errors.append("PRODUCTION_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
-    if any(_high_risk(p) for p in production) and not adversarial:
+    if attacked_surface and not tests:
+        errors.append("ATTACK_REQUIRED_CHANGE_WITHOUT_TEST_CHANGE")
+    if attacked_surface and not adversarial:
+        errors.append("ATTACK_REQUIRED_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
+    if any(_high_risk(p) for p in attacked_surface) and not adversarial:
         errors.append("HIGH_RISK_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
 
 
+def _substantive_assertion_count(function: ast.AST) -> int:
+    count = 0
+    for node in ast.walk(function):
+        if isinstance(node, ast.Assert):
+            test = node.test
+            if isinstance(test, ast.Constant):
+                continue
+            if isinstance(test, ast.Compare) and len(test.ops) == 1 and len(test.comparators) == 1:
+                if ast.dump(test.left, include_attributes=False) == ast.dump(test.comparators[0], include_attributes=False):
+                    continue
+            count += 1
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if isinstance(node.func.value, ast.Name) and node.func.value.id == "pytest" and node.func.attr == "raises":
+                count += 1
+    return count
+
+
 def _adversarial_test_quality_attack(candidate_ref: str, paths: list[str], errors: list[str]) -> None:
-    production = [p for p in paths if _is_code(p)]
-    if not production:
+    attacked_surface = [p for p in paths if _requires_attack(p)]
+    if not attacked_surface:
         return
-    high_risk = any(_high_risk(p) for p in production)
+    high_risk = any(_high_risk(p) for p in attacked_surface)
     adv_paths = [p for p in paths if _is_adversarial_test(p)]
     total_tests = 0
+    substantive_tests = 0
     total_assertions = 0
     negative_named_tests = 0
 
@@ -191,26 +234,41 @@ def _adversarial_test_quality_attack(candidate_ref: str, paths: list[str], error
         negative_named_tests += sum(
             1 for node in test_functions if any(token in node.name.lower() for token in NEGATIVE_SEMANTIC_TOKENS)
         )
-        total_assertions += sum(1 for node in ast.walk(tree) if isinstance(node, ast.Assert))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                if isinstance(node.func.value, ast.Name) and node.func.value.id == "pytest" and node.func.attr == "raises":
-                    total_assertions += 1
+        for node in test_functions:
+            assertions = _substantive_assertion_count(node)
+            total_assertions += assertions
+            if assertions > 0:
+                substantive_tests += 1
 
     min_tests = 2 if high_risk else 1
     min_assertions = 2 if high_risk else 1
+    min_substantive_tests = 2 if high_risk else 1
     if total_tests < min_tests:
         errors.append(f"ADVERSARIAL_TEST_TOO_SHALLOW:test_functions={total_tests}:required={min_tests}")
+    if substantive_tests < min_substantive_tests:
+        errors.append(
+            f"ADVERSARIAL_TEST_SUBSTANTIVE_CASE_FLOOR_FAIL:substantive_tests={substantive_tests}:required={min_substantive_tests}"
+        )
     if total_assertions < min_assertions:
         errors.append(f"ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL:assertions={total_assertions}:required={min_assertions}")
     if negative_named_tests < 1:
         errors.append("ADVERSARIAL_TEST_HAS_NO_NEGATIVE_SEMANTIC_CASE")
 
 
-def _governance_self_protection(paths: list[str], branch: str, errors: list[str]) -> None:
+def _base_contains_gate(base_ref: str) -> bool:
+    proc = _run(["git", "cat-file", "-e", f"{base_ref}:scripts/run_adversarial_pr_gate.py"], check=False)
+    return proc.returncode == 0
+
+
+def _governance_self_protection(base_ref: str, paths: list[str], branch: str, errors: list[str]) -> None:
     touched = [p for p in paths if p in GATE_PROTECTED_PATHS]
-    if touched and branch != BOOTSTRAP_BRANCH:
-        errors.append("ADVERSARIAL_GATE_SELF_MODIFICATION_REQUIRES_DEDICATED_RECERTIFICATION:" + ",".join(touched))
+    if not touched:
+        return
+    bootstrap_allowed = branch == BOOTSTRAP_BRANCH and not _base_contains_gate(base_ref)
+    if not bootstrap_allowed:
+        errors.append(
+            "ADVERSARIAL_GATE_SELF_MODIFICATION_BLOCKED_REQUIRES_TRUSTED_RECERTIFICATION:" + ",".join(touched)
+        )
 
 
 def _run_changed_tests(paths: list[str], errors: list[str]) -> None:
@@ -231,7 +289,7 @@ def execute(base_ref: str, candidate_ref: str, branch: str, run_tests: bool) -> 
     _test_weakening_attack(base_ref, candidate_ref, paths, errors)
     _coverage_shape_attack(paths, errors)
     _adversarial_test_quality_attack(candidate_ref, paths, errors)
-    _governance_self_protection(paths, branch, errors)
+    _governance_self_protection(base_ref, paths, branch, errors)
 
     if run_tests:
         _run_changed_tests(paths, errors)
@@ -242,6 +300,7 @@ def execute(base_ref: str, candidate_ref: str, branch: str, run_tests: bool) -> 
     print(f"branch={branch}")
     print(f"changed_files={len(paths)}")
     print(f"high_risk_changed={any(_high_risk(p) for p in paths)}")
+    print(f"attack_required_changed={sum(1 for p in paths if _requires_attack(p))}")
     print(f"adversarial_tests={sum(1 for p in paths if _is_adversarial_test(p))}")
     for path in paths:
         print(f"changed:{path}")
