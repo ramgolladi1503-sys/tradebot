@@ -88,10 +88,7 @@ def probabilistic_sharpe_ratio(
         kurtosis=kurtosis,
         autocorrelation=autocorrelation,
     )
-    z = (
-        _require_finite("observed_sharpe", observed_sharpe)
-        - _require_finite("benchmark_sharpe", benchmark_sharpe)
-    ) / math.sqrt(variance)
+    z = (_require_finite("observed_sharpe", observed_sharpe) - _require_finite("benchmark_sharpe", benchmark_sharpe)) / math.sqrt(variance)
     return float(_normal_cdf(z))
 
 
@@ -110,6 +107,8 @@ def minimum_track_record_length(
     if observed <= benchmark:
         return math.inf
 
+    # Variance scales as 1/T, so compute the one-observation coefficient
+    # analytically rather than calling sharpe_ratio_variance with T=1.
     rho = _require_finite("autocorrelation", autocorrelation)
     if not -1.0 < rho < 1.0:
         raise ValueError("autocorrelation_must_be_inside_unit_interval")
@@ -235,12 +234,14 @@ def expected_maximum_sharpe_ratio(
     if k <= 1.0 + 1e-12 or variance == 0.0:
         return benchmark
 
-    p1 = 1.0 - 1.0 / k
-    p2 = 1.0 - 1.0 / (k * math.e)
-    expected_standard_max = (
-        (1.0 - _EULER_GAMMA) * _normal_ppf(p1)
-        + _EULER_GAMMA * _normal_ppf(p2)
-    )
+    # The Bailey/Lopez de Prado extreme-value approximation is defined for an
+    # integer number of trials. Effective rank can be fractional, so use the
+    # conservative ceiling for the search penalty rather than treating a
+    # fractional K as if it were a valid order statistic.
+    search_trials = int(math.ceil(k - 1e-12))
+    p1 = 1.0 - 1.0 / search_trials
+    p2 = 1.0 - 1.0 / (search_trials * math.e)
+    expected_standard_max = (1.0 - _EULER_GAMMA) * _normal_ppf(p1) + _EULER_GAMMA * _normal_ppf(p2)
     return float(benchmark + math.sqrt(variance) * expected_standard_max)
 
 
