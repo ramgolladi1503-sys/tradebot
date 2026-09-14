@@ -35,18 +35,9 @@ def test_psr_increases_for_same_shape_with_stronger_mean():
     assert probabilistic_sharpe_ratio(strong) > probabilistic_sharpe_ratio(weak)
 
 
-def test_psr_penalizes_serial_dependence_relative_to_independent_sequence():
-    rng = np.random.default_rng(7)
-    innovations = rng.normal(0.0, 0.01, 500)
-    serial = np.empty_like(innovations)
-    serial[0] = innovations[0]
-    for i in range(1, len(serial)):
-        serial[i] = 0.85 * serial[i - 1] + innovations[i]
-    # Force the same positive marginal mean before permutation. For a positive Sharpe,
-    # reducing effective sample size must reduce confidence rather than move it toward 0.5.
-    serial = serial - np.mean(serial) + 0.002
-    iid_like = rng.permutation(serial)
-    assert probabilistic_sharpe_ratio(serial, max_lag=12) <= probabilistic_sharpe_ratio(iid_like, max_lag=12)
+def test_psr_does_not_expose_unverified_serial_adjustment_knob():
+    with pytest.raises(TypeError):
+        probabilistic_sharpe_ratio([0.01, -0.005, 0.02, 0.01], max_lag=12)
 
 
 def test_minimum_track_record_is_infinite_when_observed_sharpe_not_above_benchmark():
@@ -110,10 +101,8 @@ def test_multiple_testing_rejects_invalid_p_values(bad):
 
 
 def test_cscv_pbo_detects_deliberate_selection_instability():
-    # Strategy 0 dominates the first half and collapses in the second; strategy 1 reverses it.
     first = np.column_stack([np.full(40, 0.02), np.full(40, -0.01)])
     second = np.column_stack([np.full(40, -0.02), np.full(40, 0.01)])
-    # Add tiny deterministic variation so Sharpe is finite.
     jitter = np.linspace(-1e-4, 1e-4, 80)[:, None]
     matrix = np.vstack([first, second]) + np.hstack([jitter, -jitter])
     pbo = cscv_probability_of_backtest_overfitting(matrix, blocks=8)
