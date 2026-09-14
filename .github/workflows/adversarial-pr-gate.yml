@@ -120,8 +120,7 @@ jobs:
             state=failure
             description='Protected-main adversarial policy failed exact PR head'
           fi
-          payload="$(python -c 'import json,os; print(json.dumps({"state":os.environ["STATE"],"context":"adversarial-pr-trusted-head","description":os.environ["DESCRIPTION"]}))' \
-            STATE="$state" DESCRIPTION="$description")"
+          payload="$(STATE="$state" DESCRIPTION="$description" python -c 'import json,os; print(json.dumps({"state":os.environ["STATE"],"context":"adversarial-pr-trusted-head","description":os.environ["DESCRIPTION"]}))')"
           curl --fail-with-body --silent --show-error \
             -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
