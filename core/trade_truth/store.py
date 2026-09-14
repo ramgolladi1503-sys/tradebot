@@ -73,7 +73,7 @@ class TruthStore:
 
     def write_record(self, record: TradeTruthRecord) -> bool:
         """Write a TradeTruthRecord append-only to durable store.
-        
+
         Verifies schema version, immutability flags, and integrity hash before persisting.
         """
         payload = record.to_dict()

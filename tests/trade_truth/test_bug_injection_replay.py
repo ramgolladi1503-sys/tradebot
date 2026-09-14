@@ -59,7 +59,7 @@ def test_bug_injection_risk_mutation_detected():
 
 def test_bug_injection_feature_and_regime_causal_boundary():
     """Verify that replay starts from frozen analytical features/regime.
-    
+
     Because replay consumes frozen features and regime rather than re-computing them
     from raw bar history, it classifies strictly as Level B: DECISION_TAIL_REPLAY,
     not Level C (FULL_CAUSAL_DECISION_REPLAY).

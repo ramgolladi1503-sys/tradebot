@@ -326,4 +326,3 @@ def compare_replay_against_expected(
         "stage_mismatches": mismatches,
         "future_leak_detected": actual.future_leak_detected,
     }
-

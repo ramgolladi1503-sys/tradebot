@@ -7,7 +7,7 @@
     {
       "gate": "CODE_SHA_FROZEN",
       "passed": true,
-      "detail": "Frozen SHA: 72a81f18e1e7d135f1da7b3063489c3ce524798d"
+      "detail": "Frozen SHA: be91c4d3d5ecf20d57db7b96fe7330bba265ddb5"
     },
     {
       "gate": "CONFIG_FROZEN",
@@ -37,7 +37,7 @@
     {
       "gate": "DISK_CAPACITY_SUFFICIENT",
       "passed": true,
-      "detail": "1364.88 GB free on /Volumes/TradeBotData"
+      "detail": "1364.80 GB free on /Volumes/TradeBotData"
     },
     {
       "gate": "CLOCK_TIMEZONE_VERIFIED",

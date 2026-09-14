@@ -1,6 +1,6 @@
 # Trade Truth — Actual Production Call Graph
 
-**Lineage Boundary**: Canonical merged `main` (`c94ac255de62feb16cb2643c81c80c5fc3e1cc66`)  
+**Lineage Boundary**: Canonical merged `main` (`c94ac255de62feb16cb2643c81c80c5fc3e1cc66`)
 **Scope**: 14 Verified Production Callables Across Market, Memory, Features, Regime, Strategy, Family, Pool, Governance, Ranking, Trade, Risk, and Truth Layers.
 
 ---

@@ -97,7 +97,7 @@ def default_decision_evaluator(
         )
         cand_fam_str = candidate.get("strategy_family")
         cand_fam = StrategyFamily.from_str(cand_fam_str) if cand_fam_str else None
-        
+
         allowed_fams_raw = analytical.get("allowed_strategy_families")
         if allowed_fams_raw:
             allowed_fams = frozenset([

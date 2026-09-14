@@ -82,12 +82,12 @@ def replay_historical_trace(
     """Replay one historical trace using genuine production components."""
     trace_id = str(trace.get("trace_id") or "UNKNOWN_TRACE")
     ts_str = str(trace.get("timestamp") or "")
-    
+
     # 1. Memory / Input reconstruction
     r15m = trace.get("rolling_15m_return_bps")
     if r15m is None:
         r15m = trace.get("r15m_bps")
-    
+
     r15m_val = float(r15m) if (r15m is not None and str(r15m) != "nan" and r15m == r15m) else 0.0
     bar_index = int(trace.get("bar_index") or 0)
     spot_close = float(trace.get("spot_close") or 24000.0)
@@ -138,7 +138,7 @@ def replay_historical_trace(
         candidate_family=StrategyFamily.TREND,
         allowed_strategy_families=[StrategyFamily.TREND],
     )
-    
+
     # 4. Governed authority (real production is_strategy_governed_eligible)
     gov_eligible = is_strategy_governed_eligible("C1")
 
@@ -161,7 +161,7 @@ def replay_historical_trace(
     exp_c1_qual = trace.get("c1_qualified")
     if exp_c1_qual is None:
         exp_c1_qual = trace.get("qualified")
-    
+
     exp_c1_reason = trace.get("c1_reason")
     if exp_c1_reason is None:
         exp_c1_reason = trace.get("reason_code")

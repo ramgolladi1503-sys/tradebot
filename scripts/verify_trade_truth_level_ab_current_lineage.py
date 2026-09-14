@@ -58,7 +58,7 @@ def evaluate_level_a(data: dict) -> tuple[bool, str, list[str]]:
             failures.append(f"MISSING_PROP:{prop}")
         elif not props[prop].get("pass"):
             failures.append(f"FAILED_PROP:{prop}")
-    
+
     if failures:
         return False, "LEVEL_A_VERIFICATION_FAILED", failures
     return True, "CURRENT_LEVEL_A_REVALIDATED", []
@@ -72,7 +72,7 @@ def evaluate_level_b(data: dict) -> tuple[bool, str, list[str]]:
             failures.append(f"MISSING_CASE:{case_key}")
         elif not cases[case_key].get("pass"):
             failures.append(f"FAILED_CASE:{case_key}")
-    
+
     if failures:
         return False, "LEVEL_B_VERIFICATION_FAILED", failures
     return True, "CURRENT_LEVEL_B_REVALIDATED", []

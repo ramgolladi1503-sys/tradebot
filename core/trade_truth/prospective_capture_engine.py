@@ -533,4 +533,3 @@ class ProspectiveCaptureEngine:
             "stage_status_map": stage_status_map,
             "terminal_trace_status": terminal_status,
         }
-

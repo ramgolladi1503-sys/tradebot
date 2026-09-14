@@ -1,6 +1,6 @@
 {
   "verification_authority": "INDEPENDENT_PROSPECTIVE_FULL_LEVEL_C_VERIFIER_V6",
-  "verifier_implementation_sha": "4452517e8f58d3fd029206e1e2b2b7de43688c40",
+  "verifier_implementation_sha": "be91c4d3d5ecf20d57db7b96fe7330bba265ddb5",
   "expected_evidence_sha": null,
   "overall_verification_status": "PASS",
   "gates": {

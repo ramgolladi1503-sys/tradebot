@@ -165,7 +165,7 @@ def build_trade_truth_record(
     ]
     ranking_reasons = tuple([str(r).strip() for r in (dec.get("ranking_reasons") or []) if str(r).strip()])
     blockers = tuple([str(b).strip() for b in (dec.get("blockers") or []) if str(b).strip()])
-    
+
     decision = DecisionTruth(
         candidate_generated=bool(dec.get("candidate_generated", True)),
         candidate_score=_norm_float(dec.get("candidate_score") or cand.get("rank_score")),
@@ -207,7 +207,7 @@ def build_trade_truth_record(
         or decision.governance_decision == "BLOCKED"
         or exc.get("is_counterfactual", False)
     )
-    
+
     intended_action = _norm_str(exc.get("intended_action") or cand.get("direction") or "NO_TRADE").upper()
     executable_state = _norm_str(exc.get("executable_market_state"))
     theoretical_price = None

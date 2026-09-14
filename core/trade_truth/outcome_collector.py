@@ -42,7 +42,7 @@ def compute_horizons_mfe_mae(
     """Compute MFE and MAE across forward horizons for a trade decision."""
     h_map = dict(horizons_sec or DEFAULT_HORIZON_SECONDS)
     sorted_series = sorted(price_series, key=lambda p: p.timestamp_epoch)
-    
+
     # Filter forward prices occurring after decision
     forward = [p for p in sorted_series if p.timestamp_epoch >= decision_epoch]
     if not forward:
