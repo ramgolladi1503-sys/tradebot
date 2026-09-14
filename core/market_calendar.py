@@ -6,7 +6,22 @@ from core.time_utils import is_market_open_ist, now_ist
 try:
     import holidays
 
-    IN_HOLIDAYS = holidays.India(years=now_ist().date().year)
+    _curr_year = now_ist().date().year
+    _years = list(range(_curr_year - 2, _curr_year + 3))
+    IN_HOLIDAYS = holidays.India(years=_years)
+    # Append canonical NSE exchange holidays not covered by standard gazetted list
+    for _dt_str, _hname in (
+        ("2024-01-22", "Special Holiday"),
+        ("2024-05-20", "General Election"),
+        ("2026-09-14", "Ganesh Chaturthi"),
+        ("2026-10-02", "Mahatma Gandhi Jayanti"),
+        ("2026-10-20", "Dussehra"),
+        ("2026-11-09", "Diwali Balipratipada"),
+    ):
+        try:
+            IN_HOLIDAYS.append({_dt_str: _hname})
+        except Exception:
+            pass
 except Exception:
     IN_HOLIDAYS = set()
 

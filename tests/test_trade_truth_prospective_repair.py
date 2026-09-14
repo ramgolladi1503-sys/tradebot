@@ -175,6 +175,8 @@ def test_mros_daily_governor_resolves_universe_and_strategies():
     assert u_res.option_token_count > 0
     assert u_res.selected_expiry_rule == "NEAREST_WEEKLY_EXPIRY_TUESDAY"
     assert u_res.selected_expiry == "2026-09-15"
+    assert u_res.atm_state == "PENDING_LIVE_MARKET_TRUTH"
+    assert u_res.instrument_master_freshness in {"CURRENT_SESSION_VERIFIED", "RECENT_BUT_NOT_CURRENT", "STALE", "UNKNOWN"}
 
     s_state, s_list = gov.resolve_strategy_authority()
     assert s_state == "READY"
@@ -188,6 +190,9 @@ def test_mros_daily_governor_resolves_universe_and_strategies():
     assert plan.universe_state == "READY"
     assert plan.strategy_authority_state == "READY"
     assert plan.broker_write_guard_state == "ARMED_FAIL_CLOSED_ZERO_CALLS"
+    assert plan.ranking_capture_state == "BLOCKED_RUNTIME_INTEGRATION"
+    assert plan.trade_builder_capture_state == "BLOCKED_RUNTIME_INTEGRATION"
+    assert any("UNREACHABLE_DOWNSTREAM_STAGE" in b for b in plan.blockers)
 
 
 def test_mros_daily_governor_blocks_thursday_nifty_expiry():

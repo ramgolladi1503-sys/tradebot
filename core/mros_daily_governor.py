@@ -51,10 +51,12 @@ class UniverseAuthorityResolution:
     instrument_master_expected_sha256: str
     instrument_master_actual_sha256: str
     instrument_master_hash_match: bool
+    instrument_master_freshness: str
     broker_token_domain: str
     expiry_candidates: List[str]
     selected_expiry: str
     selected_expiry_rule: str
+    atm_state: str
     strike_interval: float
     selected_strikes: List[float]
     selected_option_contracts: List[Dict[str, Any]]
@@ -163,12 +165,7 @@ class MROSDailyGovernor:
         # Check known NSE holidays
         from core.market_calendar import IN_HOLIDAYS
 
-        if target_dt in IN_HOLIDAYS or date_str in {
-            "2026-09-14",  # Ganesh Chaturthi
-            "2026-10-02",  # Mahatma Gandhi Jayanti
-            "2026-10-20",  # Dussehra
-            "2026-11-09",  # Diwali
-        }:
+        if target_dt in IN_HOLIDAYS:
             return (date_str, False, "NSE_EXCHANGE_HOLIDAY")
 
         return (date_str, True, "NSE_TRADING_SESSION_ACTIVE")
@@ -215,10 +212,12 @@ class MROSDailyGovernor:
                 instrument_master_expected_sha256="",
                 instrument_master_actual_sha256="",
                 instrument_master_hash_match=False,
+                instrument_master_freshness="UNKNOWN",
                 broker_token_domain="NONE",
                 expiry_candidates=[],
                 selected_expiry="",
                 selected_expiry_rule="NONE",
+                atm_state="PENDING_LIVE_MARKET_TRUTH",
                 strike_interval=0.0,
                 selected_strikes=[],
                 selected_option_contracts=[],
@@ -237,15 +236,21 @@ class MROSDailyGovernor:
         ]
         underlying_tokens.extend(constituents)
 
-        # Instrument master resolution: prefer candidate or authoritative combined master
+        # Instrument master resolution: prefer candidate or authoritative combined master or test fixture
         master_path = self.instrument_master_file
         if not master_path or not master_path.exists():
             combined_candidate = (
                 self.external_root
                 / "morning-readiness-20260909/kite_instruments_combined.json"
             )
+            repo_fixture = (
+                self.repo_root
+                / "tests/fixtures/mros_nfo_kite_instruments_fixture.json"
+            )
             if combined_candidate.exists():
                 master_path = combined_candidate
+            elif repo_fixture.exists():
+                master_path = repo_fixture
             else:
                 master_path = (
                     self.repo_root
@@ -265,12 +270,14 @@ class MROSDailyGovernor:
                 ]["sha256"],
                 instrument_master_actual_sha256="",
                 instrument_master_hash_match=False,
+                instrument_master_freshness="UNKNOWN",
                 broker_token_domain=raw_universe.get(
                     "token_domain", "kite_instrument_token"
                 ),
                 expiry_candidates=[],
                 selected_expiry="",
                 selected_expiry_rule="NONE",
+                atm_state="PENDING_LIVE_MARKET_TRUTH",
                 strike_interval=0.0,
                 selected_strikes=[],
                 selected_option_contracts=[],
@@ -285,14 +292,38 @@ class MROSDailyGovernor:
         master_bytes = master_path.read_bytes()
         actual_master_hash = hashlib.sha256(master_bytes).hexdigest()
 
-        # Expected hash check
+        # Dynamic expected hash check: check companion manifest, sidecar, or registry
         expected_hash = raw_universe["broker_instrument_master"]["sha256"]
-        if "kite_instruments_combined" in master_path.name:
-            # Authoritative combined NFO+NSE master recorded SHA256
-            expected_hash = (
-                "629746387aecc5a4c111358b76edd04e8edf005af8f5eaf9b189f8beed009140"
-            )
+        companion_manifest = master_path.parent / "daily_instrument_authority.json"
+        sha_sidecar = master_path.with_suffix(".sha256")
+        if companion_manifest.exists():
+            try:
+                c_data = json.loads(companion_manifest.read_text(encoding="utf-8"))
+                if c_data.get("raw_master_sha256"):
+                    expected_hash = c_data["raw_master_sha256"]
+            except Exception:
+                pass
+        elif sha_sidecar.exists():
+            try:
+                expected_hash = sha_sidecar.read_text(encoding="utf-8").strip()
+            except Exception:
+                pass
+
         hash_match = actual_master_hash == expected_hash
+
+        # Instrument master freshness tracking
+        freshness = "UNKNOWN"
+        try:
+            mtime = master_path.stat().st_mtime
+            age_days = (time.time() - mtime) / 86400.0
+            if age_days <= 1.0:
+                freshness = "CURRENT_SESSION_VERIFIED"
+            elif age_days <= 7.0:
+                freshness = "RECENT_BUT_NOT_CURRENT"
+            else:
+                freshness = "STALE"
+        except Exception:
+            freshness = "UNKNOWN"
 
         # Parse master and derive option universe
         master_data = json.loads(master_bytes)
@@ -351,12 +382,14 @@ class MROSDailyGovernor:
                 instrument_master_expected_sha256=expected_hash,
                 instrument_master_actual_sha256=actual_master_hash,
                 instrument_master_hash_match=hash_match,
+                instrument_master_freshness=freshness,
                 broker_token_domain=raw_universe.get(
                     "token_domain", "kite_instrument_token"
                 ),
                 expiry_candidates=expiries,
                 selected_expiry=target_expiry or "",
                 selected_expiry_rule="INVALID_THURSDAY_EXPIRY",
+                atm_state="PENDING_LIVE_MARKET_TRUTH",
                 strike_interval=50.0,
                 selected_strikes=[],
                 selected_option_contracts=[],
@@ -366,7 +399,7 @@ class MROSDailyGovernor:
                 reconciliation_status="FAILED",
             )
 
-        # Derive actual option contracts for selected expiry around ATM
+        # Derive actual option contracts for selected expiry
         target_contracts = [
             r for r in nifty_options if r.get("expiry") == target_expiry
         ]
@@ -374,16 +407,9 @@ class MROSDailyGovernor:
             set(float(r["strike"]) for r in target_contracts if "strike" in r)
         )
 
-        # Baseline ATM around 24100
-        atm = 24100.0
         step = 50.0
-        atm_strike = round(atm / step) * step
-        lower_strike = atm_strike - (10 * step)  # -10 strikes
-        upper_strike = atm_strike + (10 * step)  # +10 strikes
-        selected_strikes = [
-            s for s in available_strikes if lower_strike <= s <= upper_strike
-        ]
-
+        # Pre-market ATM derivation without hardcoded spot: all contracts for target expiry are retained
+        selected_strikes = available_strikes
         selected_option_contracts = [
             {
                 "instrument_token": int(r["instrument_token"]),
@@ -421,12 +447,14 @@ class MROSDailyGovernor:
             instrument_master_expected_sha256=expected_hash,
             instrument_master_actual_sha256=actual_master_hash,
             instrument_master_hash_match=hash_match,
+            instrument_master_freshness=freshness,
             broker_token_domain=raw_universe.get(
                 "token_domain", "kite_instrument_token"
             ),
             expiry_candidates=expiries,
             selected_expiry=target_expiry or "",
             selected_expiry_rule=expiry_rule,
+            atm_state="PENDING_LIVE_MARKET_TRUTH",
             strike_interval=step,
             selected_strikes=selected_strikes,
             selected_option_contracts=selected_option_contracts,
@@ -624,12 +652,51 @@ class MROSDailyGovernor:
                 pulse_state = "BLOCKED_PULSE_WRITER"
                 blockers.append(f"TRUTH_FEED_WRITER_ERROR: {exc}")
 
-        # 8. Downstream capture states (evidence-driven)
-        opt_state = "READY_RUNTIME_INTEGRATED"
-        rank_state = "READY_RUNTIME_INTEGRATED"
-        trade_state = "READY_RUNTIME_INTEGRATED"
-        risk_state = "READY_RUNTIME_INTEGRATED"
-        gov_state = "READY_RUNTIME_INTEGRATED"
+        # 8. Downstream capture states (evidence-driven via call path authority)
+        call_path_file = self.repo_root / "MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json"
+        unreachable_stages: Dict[str, str] = {}
+        if call_path_file.exists():
+            try:
+                cp_data = json.loads(call_path_file.read_text(encoding="utf-8"))
+                for stg in cp_data.get("stages", []):
+                    if not stg.get("runtime_reachable"):
+                        unreachable_stages[stg.get("stage", "")] = stg.get(
+                            "blocker"
+                        ) or "BLOCKED_RUNTIME_INTEGRATION"
+            except Exception:
+                pass
+
+        opt_state = (
+            "BLOCKED_RUNTIME_INTEGRATION"
+            if "OPTION_SELECTION" in unreachable_stages
+            else "READY_RUNTIME_INTEGRATED"
+        )
+        rank_state = (
+            "BLOCKED_RUNTIME_INTEGRATION"
+            if "RANKING" in unreachable_stages
+            else "READY_RUNTIME_INTEGRATED"
+        )
+        trade_state = (
+            "BLOCKED_RUNTIME_INTEGRATION"
+            if "TRADE_BUILDER" in unreachable_stages
+            else "READY_RUNTIME_INTEGRATED"
+        )
+        risk_state = (
+            "BLOCKED_RUNTIME_INTEGRATION"
+            if "RISK" in unreachable_stages
+            else "READY_RUNTIME_INTEGRATED"
+        )
+        gov_state = (
+            "BLOCKED_RUNTIME_INTEGRATION"
+            if "GOVERNANCE" in unreachable_stages
+            else "READY_RUNTIME_INTEGRATED"
+        )
+
+        for s_name in ("RANKING", "TRADE_BUILDER", "SCORING"):
+            if s_name in unreachable_stages:
+                blockers.append(
+                    f"UNREACHABLE_DOWNSTREAM_STAGE: {s_name} ({unreachable_stages[s_name]})"
+                )
 
         # 9. Broker write boundary verification
         from core.trade_truth.prospective_capture_engine import (

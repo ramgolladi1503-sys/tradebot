@@ -115,6 +115,17 @@ def get_current_git_lineage() -> Tuple[str, str]:
     try:
         sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
         branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+        if not branch:
+            branch = (
+                os.environ.get("GITHUB_HEAD_REF")
+                or os.environ.get("GITHUB_REF_NAME")
+                or ""
+            )
+        if not branch:
+            abbrev = subprocess.check_output(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True
+            ).strip()
+            branch = abbrev if abbrev != "HEAD" else "DETACHED_HEAD"
         return sha, branch
     except Exception:
         return "UNKNOWN_SHA", "UNKNOWN_BRANCH"
