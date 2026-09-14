@@ -58,17 +58,32 @@ def test_trusted_policy_uses_protected_main_and_never_checks_out_candidate():
     assert "ref: main" in trusted
     assert "persist-credentials: false" in trusted
     assert "statuses: write" in trusted
+    assert "issues: read" in trusted
     assert "ref: ${{ github.event.pull_request.head.sha }}" not in trusted
     assert "git checkout" not in trusted
     assert "git switch" not in trusted
 
 
-def test_trusted_policy_publishes_exact_head_verdict_context():
+def test_gate_recertification_requires_owner_exact_sha_comment():
+    trusted = _trusted_job(_workflow_text())
+    assert "Require OWNER exact-SHA approval for gate recertification branches" in trusted
+    assert 'comment.get("author_association") == "OWNER"' in trusted
+    assert 'comment.get("body", "").strip() == expected' in trusted
+    assert 'EXPECTED="/authorize-adversarial-gate-recertification $HEAD_SHA"' in trusted
+    assert "per_page=100&page={page}" in trusted
+    assert "OWNER_EXACT_SHA_RECERTIFICATION_AUTHORIZATION_MISSING" in trusted
+    assert "MEMBER" not in trusted
+    assert "COLLABORATOR" not in trusted
+
+
+def test_trusted_policy_publishes_exact_head_verdict_context_and_failure():
     trusted = _trusted_job(_workflow_text())
     assert 'HEAD_SHA: ${{ github.event.pull_request.head.sha }}' in trusted
     assert '"context":"adversarial-pr-trusted-head"' in trusted
     assert '"https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA"' in trusted
     assert "if: always()" in trusted
+    assert 'JOB_STATUS: ${{ job.status }}' in trusted
+    assert '"$POLICY_OUTCOME" == "success" && "$JOB_STATUS" != "failure"' in trusted
     assert "steps.trusted_policy.outcome != 'success'" in trusted
 
 
@@ -84,6 +99,7 @@ def test_workflow_defaults_to_no_permissions_and_scopes_write_to_trusted_job():
     pre_jobs = text.split("jobs:", 1)[0]
     assert "permissions: {}" in pre_jobs
     assert text.count("statuses: write") == 1
+    assert text.count("issues: read") == 1
 
 
 def test_workflow_rechecks_when_pr_metadata_or_base_target_is_edited():
