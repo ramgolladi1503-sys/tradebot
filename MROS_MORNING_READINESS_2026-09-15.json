@@ -1,8 +1,8 @@
 {
   "session_date": "2026-09-15",
-  "candidate_sha": "72a81f18e1e7d135f1da7b3063489c3ce524798d",
+  "candidate_sha": "2a9ad8cdc11f51fabeeaba2c844cd5b2b5002aea",
   "certified_release_sha": "",
-  "worktree_clean": false,
+  "worktree_clean": true,
   "session_root": "/Volumes/TradeBotData/morning-sessions/2026-09-15-20260915T012302-bb6300b9",
   "storage_free_bytes": 1465562779648,
   "auth_state": "AUTH_TOKEN_MISSING",
@@ -22,7 +22,6 @@
   "broker_write_guard_state": "ARMED_FAIL_CLOSED_ZERO_CALLS",
   "final_state": "BLOCKED_RELEASE",
   "blockers": [
-    "DIRTY_WORKTREE",
     "RELEASE_STORE_ABSENT: /Volumes/TradeBotData/release_store not found",
     "KITE_ACCESS_TOKEN_MISSING"
   ]
