@@ -47,11 +47,13 @@ GATE_PROTECTED_PATHS = (
     "scripts/run_adversarial_pr_gate.py",
     "scripts/validate_agent_review_evidence.py",
     "tests/governance/test_adversarial_pr_gate.py",
+    "tests/governance/test_adversarial_pr_gate_workflow_safety.py",
 )
 BOOTSTRAP_ALLOWED_PATHS = {
     ".github/workflows/adversarial-pr-gate.yml",
     "scripts/run_adversarial_pr_gate.py",
     "tests/governance/test_adversarial_pr_gate.py",
+    "tests/governance/test_adversarial_pr_gate_workflow_safety.py",
 }
 BOOTSTRAP_BRANCH = "governance/adversarial-pr-gate-v1"
 
@@ -129,8 +131,7 @@ def _removed_lines(diff: str) -> list[str]:
 
 
 def _is_test(path: str) -> bool:
-    name = Path(path).name
-    return path.startswith(TEST_PREFIXES) or name.startswith("test_") or name.endswith("_test.py")
+    return path.endswith(".py") and path.startswith(TEST_PREFIXES)
 
 
 def _is_code(path: str) -> bool:
