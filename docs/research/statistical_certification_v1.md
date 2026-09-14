@@ -14,42 +14,44 @@ allowed_for_live_execution=false
 append=false
 ```
 
-`CERTIFIED_RESEARCH` is not authorization to trade. It means only that the supplied research evidence passed the configured offline gates.
+`CERTIFIED_RESEARCH` is not authorization to trade. It means only that the supplied research evidence passed the locked v1 offline gates.
 
-## Why this exists
+## Validation questions
 
-A positive backtest or positive WFA is not sufficient evidence of an edge. Strategy research is exposed to temporal overfit, repeated-search selection bias, parameter fragility, small-sample uncertainty, false discoveries, unrealistic costs, and holdout contamination.
+The stack keeps separate questions separate:
 
-The validation stack therefore keeps distinct questions separate:
-
-1. **Experiment lineage** — was the search history retained rather than winner-only reporting?
-2. **Parameter stability** — is the result a stable region rather than a numerical peak?
-3. **WFA** — does repeated chronological train/validate behavior generalize through time?
-4. **CSCV/PBO** — how often does the in-sample winner rank poorly out of sample?
-5. **PSR / MinTRL / power** — is the observed Sharpe statistically distinguishable with enough evidence?
-6. **DSR / FWER-style selection correction** — is the selected winner still impressive after accounting for the search that produced it?
-7. **FDR control** — when accepting multiple discoveries, control the expected false-discovery proportion rather than treating each p-value independently.
-8. **Cost robustness** — does the strategy survive the governed execution-cost model?
-9. **Inference-model validity** — do distributional/serial-dependence assumptions permit the claimed inference?
-10. **Locked holdout** — does a frozen candidate survive one-shot untouched chronological data?
-11. **Prospective confirmation** — optional for historical research certification; required when the governing campaign says so.
+1. Was the full search history retained rather than winner-only reporting?
+2. Is the result a stable parameter region rather than a numerical peak?
+3. Does repeated chronological WFA generalize through time?
+4. Under CSCV, how often does the IS winner rank below the OOS median?
+5. Is Sharpe evidence statistically distinguishable under the implemented inference assumptions?
+6. Is the sample long/powered enough to decide at all?
+7. Does DSR survive the search that produced the winner?
+8. If multiple discoveries are accepted, is FWER/FDR handled explicitly?
+9. Does the edge survive the governed execution-cost model?
+10. Are the inference assumptions defensible for these returns?
+11. Did a frozen candidate survive the untouched holdout without repair?
+12. Does prospective evidence confirm the historical result when required?
+13. Can the experiment lineage be proven unchanged since it was frozen?
+14. Can any caller weaken certification thresholds at runtime?
+15. Can malformed Python values (`True`, truthy strings, NaN/Inf) bypass a gate?
 
 ## Implemented primitives
 
 `core/research_validation/statistics.py` provides:
 
 - per-period sample Sharpe;
-- probabilistic Sharpe ratio with skew/kurtosis adjustment and conservative serial-dependence effective sample size;
+- published non-normal PSR formula using sample length, skewness, and kurtosis;
 - minimum track-record length approximation;
 - entropy/eigenvalue effective rank for correlated trial families;
-- deflated Sharpe ratio against an expected searched maximum;
+- Bailey–López de Prado DSR using the published searched-maximum threshold form;
 - Bonferroni FWER decisions;
 - Benjamini-Hochberg FDR decisions;
-- CSCV probability of backtest overfitting.
+- CSCV/PBO across **all** `S choose S/2` symmetric train/test combinations.
 
-`core/research_validation/policy.py` provides a fail-closed evidence gate. Missing/invalid evidence cannot certify. Low power and insufficient track record are `INCONCLUSIVE`, not falsely converted into evidence against the hypothesis.
+The v1 implementation intentionally does **not** invent a serial-correlation adjustment inside PSR/DSR. If serial dependence, volatility clustering, or tail behavior invalidates the implemented asymptotics, `inference_model_valid` must be false and certification is blocked until a separately verified estimator is available.
 
-## Required experiment accounting
+## Search-accounting and lineage authority
 
 All meaningful strategy searches must retain rejected trials in the existing research registry. Effective trial count is a statistical correction for correlated variants; it is not permission to omit raw experiments.
 
@@ -69,22 +71,19 @@ result / rejection state
 statistical evidence references
 ```
 
-If declared search count and registered search count disagree, certification is blocked with `SEARCH_HISTORY_INCOMPLETE`.
+Certification derives the registered experiment count from the registry rather than trusting a caller-supplied count. A declared-vs-registered mismatch blocks with `SEARCH_HISTORY_INCOMPLETE`.
 
-## Gate interpretation
+Because the existing frozen dataclasses contain nested mutable lists/dicts, v1 also computes a canonical SHA-256 digest over the complete experiment lineage. Registry-bound certification requires the previously frozen digest. Missing or changed lineage blocks with `LINEAGE_DIGEST_REQUIRED` / `LINEAGE_DIGEST_MISMATCH`.
 
-Hard failures include parameter fragility, WFA failure, excessive PBO, PSR/DSR below policy, cost-robustness failure, failed holdout, and any explicitly required additional gate.
+## Locked certification policy
 
-Evidence deficiencies produce either:
+The v1 policy is identified as:
 
-- `BLOCKED` when evidence is missing, malformed, hidden, or inference assumptions are invalid; or
-- `INCONCLUSIVE` when the evidence is valid but underpowered/too short.
+```text
+RESEARCH_CERT_V1
+```
 
-This distinction is deliberate. A small sample is not proof that a strategy fails.
-
-## Default policy thresholds
-
-The v1 code ships with explicit defaults rather than pretending there is one universal economic truth:
+and locks:
 
 ```text
 max_pbo = 0.20
@@ -93,39 +92,64 @@ min_dsr = 0.95
 min_power = 0.80
 ```
 
-These are policy defaults, not strategy thresholds. Future changes must be separately justified and tested; they must not be silently tuned to rescue a candidate.
+A caller cannot pass weaker thresholds to rescue a candidate. Any override blocks with `POLICY_THRESHOLD_OVERRIDE_FORBIDDEN`. A future policy revision must use a new reviewed policy version rather than silently changing v1.
 
-## Adversarial test plan
+## Gate interpretation
 
-The tests attack:
+Hard failures include parameter fragility, WFA failure, excessive PBO, PSR/DSR below policy, cost-robustness failure, failed holdout, and required additional-gate failures.
 
-- NaN/Inf propagation;
-- zero-variance returns;
-- tiny samples;
+Evidence deficiencies produce either:
+
+- `BLOCKED` when evidence is missing, malformed, hidden, tampered, or inference assumptions are invalid; or
+- `INCONCLUSIVE` when valid evidence exists but is underpowered/too short.
+
+A small sample is not evidence that a strategy fails.
+
+## Source-conformance repairs found by hostile review
+
+The hostile review found and corrected two material mathematical deviations before merge:
+
+1. The initial DSR implementation added the mean trial Sharpe to the selection threshold. The published threshold uses the cross-trial Sharpe standard deviation multiplied by the expected maximum standardized-normal term; the extra mean shift was removed.
+2. The initial CSCV implementation evaluated only one member of each complementary train/test pair. Published CSCV uses every `S choose S/2` combination; v1 now enumerates all combinations and asserts the expected count.
+
+These are pinned by source-conformance regression tests so they cannot silently return.
+
+## Adversarial coverage
+
+Tests and the mutation campaign attack:
+
+- NaN/Inf propagation and zero variance;
+- boolean-as-number and truthy-string coercion;
+- invalid policy-threshold overrides;
+- invalid holdout/prospective enums;
+- tiny/underpowered samples;
 - non-square/asymmetric/non-PSD correlation matrices;
 - hidden/mismatched experiment counts;
-- invalid probabilities and thresholds;
-- low power and insufficient track record;
-- serial dependence confidence inflation;
+- nested lineage mutation after freeze;
+- provenance gaps and non-monotonic version history;
+- invalid p-values / alpha / q;
+- invalid effective-trial counts;
 - search-size inflation in DSR;
+- incomplete CSCV enumeration;
+- undefined strategy statistics inside CSCV;
 - known FWER/FDR decision examples;
-- CSCV selection instability;
-- property-level BH monotonicity and effective-rank identity behavior;
-- accidental execution authority in a positive certification verdict.
+- accidental execution authority in a positive research verdict.
 
 No test may weaken a gate to pass CI.
 
 ## Known boundaries
 
-This PR intentionally does **not** claim to implement every 2026 heavy-tail/GARCH inference result. The policy exposes `inference_model_valid`; campaigns with volatility clustering or tail regimes outside the implemented asymptotics must fail closed until an appropriate governed estimator is supplied.
+This PR does **not** claim to implement the complete 2026 GARCH/heavy-tail/generalized Sharpe framework. Those methods require a separate source-conformance implementation and validation campaign. Until then, campaigns whose returns violate the v1 inference assumptions must remain blocked.
 
-Likewise, PBO is only meaningful when the strategy-return matrix represents the actual candidate family and chronological sample used in the search. A fabricated subset gives fabricated confidence.
+PBO is only meaningful when the return matrix contains the actual candidate family and chronological sample used in the search. Hiding trials biases relative ranks and invalidates the claim.
 
 ## Acceptance proof required before merge
 
 1. Focused research-validation tests pass.
-2. Existing repository CI/regression gates do not regress.
-3. No broker/order/live/risk/strategy imports are introduced by `core/research_validation`.
-4. PR diff contains only research-validation code, tests, and documentation.
-5. Exact head SHA is recorded after CI.
-6. Failed CI must be investigated, not bypassed.
+2. Source-conformance tests pass.
+3. Mutation campaign detects every required mutation.
+4. Existing repository CI/regression gates do not regress.
+5. No broker/order/live/risk/strategy imports are introduced.
+6. PR diff remains limited to research-validation code, tests, tools, and documentation.
+7. Exact head SHA is recorded after CI.
+8. Failed CI is investigated, never bypassed.
