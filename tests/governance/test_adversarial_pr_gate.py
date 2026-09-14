@@ -118,6 +118,42 @@ def test_assertion_removal_without_replacement_is_detected(monkeypatch):
     assert any(e.startswith("TEST_WEAKENING_ASSERTION_LOSS") for e in errors)
 
 
+def test_adversarial_file_with_pass_only_is_rejected(monkeypatch):
+    monkeypatch.setattr(gate, "_read_candidate", lambda ref, path: "def test_attack_rejects_bad_input():\n    pass\n")
+    errors = []
+    gate._adversarial_test_quality_attack(
+        "candidate",
+        ["core/foo.py", "tests/test_foo_adversarial.py"],
+        errors,
+    )
+    assert any(e.startswith("ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL") for e in errors)
+
+
+def test_high_risk_change_requires_multiple_adversarial_checks(monkeypatch):
+    source = "def test_attack_rejects_bad_input():\n    assert value is False\n"
+    monkeypatch.setattr(gate, "_read_candidate", lambda ref, path: source)
+    errors = []
+    gate._adversarial_test_quality_attack(
+        "candidate",
+        ["core/risk_guard.py", "tests/test_risk_guard_adversarial.py"],
+        errors,
+    )
+    assert any(e.startswith("ADVERSARIAL_TEST_TOO_SHALLOW") for e in errors)
+    assert any(e.startswith("ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL") for e in errors)
+
+
+def test_substantive_low_risk_adversarial_case_passes_quality_floor(monkeypatch):
+    source = "def test_attack_rejects_bad_input():\n    result = False\n    assert result is False\n"
+    monkeypatch.setattr(gate, "_read_candidate", lambda ref, path: source)
+    errors = []
+    gate._adversarial_test_quality_attack(
+        "candidate",
+        ["core/analytics/foo.py", "tests/test_foo_adversarial.py"],
+        errors,
+    )
+    assert errors == []
+
+
 def test_docs_only_change_does_not_require_test_change():
     errors = []
     gate._coverage_shape_attack(["docs/guide.md"], errors)
