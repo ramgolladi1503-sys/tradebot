@@ -1,0 +1,191 @@
+{
+  "mutations_attempted": 20,
+  "mutations_detected": 20,
+  "mutations_missed": 0,
+  "mutations_not_applicable": 0,
+  "invalid_mutations": 0,
+  "baseline_verify_before_mutations": "PASS",
+  "baseline_verify_after_restoration": "PASS",
+  "results": [
+    {
+      "mutation_id": "V5_01_PREFLIGHT_ALL_PASSED_FALSE",
+      "primitive": "preflight.all_mandatory_gates_passed",
+      "expected_gate": "PREFLIGHT_MANDATORY_GATES_REAL",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_02_DEFAULT_PASS_COUNT_NONZERO",
+      "primitive": "preflight.default_pass_count",
+      "expected_gate": "PREFLIGHT_MANDATORY_GATES_REAL",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_03_REAL_CHECK_COUNT_MISMATCH",
+      "primitive": "preflight.real_check_count",
+      "expected_gate": "PREFLIGHT_MANDATORY_GATES_REAL",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_04_DECISION_PAYLOAD_TAMPER",
+      "primitive": "captures[0].final_decision.action",
+      "expected_gate": "STAGE_HASHES_PAYLOAD_VALID",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_05_STAGE_PAYLOAD_TAMPER_MEMORY",
+      "primitive": "captures[0].memory_capture.current_price",
+      "expected_gate": "STAGE_HASHES_PAYLOAD_VALID",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_06_STORED_CANONICAL_CONFIG_HASH_TAMPER",
+      "primitive": "captures[0].code_lineage.config_hash",
+      "expected_gate": "CONFIG_LINEAGE_MATCHED",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_07_GIT_SHA_TAMPER",
+      "primitive": "captures[0].code_lineage.git_sha",
+      "expected_gate": "SHA_LINEAGE_MATCHED",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_08_SYNTHETIC_RISK_FIXTURE_RELABELED_LIVE",
+      "primitive": "captures[0].risk_state_evaluation.risk_input_snapshot.is_live_ready",
+      "expected_gate": "RISK_SOURCE_CLASSIFICATION_VALID",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_09_BROKER_WRITE_COUNT_POSITIVE",
+      "primitive": "replay.broker_write_calls",
+      "expected_gate": "BROKER_WRITE_SURFACE_ZERO_CALLS",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_10_FUTURE_TIMESTAMP_INJECTION",
+      "primitive": "replay.results[0].future_leak_detected",
+      "expected_gate": "FUTURE_LEAK_ZERO",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_11_REPLAY_PARITY_BREAK",
+      "primitive": "replay.results[0].parity",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_12_LEDGER_TRUNCATION",
+      "primitive": "ledger_lines.count",
+      "expected_gate": "TRACE_LEDGER_PARITY_MATCHED",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_13_RECORD_HASH_TAMPER",
+      "primitive": "captures[0].truth_record.record_hash",
+      "expected_gate": "TRUTH_RECORD_HASH_VALID",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_14_CHAIN_HASH_TAMPER",
+      "primitive": "captures[0].truth_record.chain_hash",
+      "expected_gate": "CHAIN_CONTINUITY_VALID",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_15_RAW_SOURCE_HASH_TAMPER",
+      "primitive": "captures[0].raw_market_capture.source_sha256",
+      "expected_gate": "RAW_SOURCE_LINEAGE_MATCHED",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_16_STAGE_HASHES_TAMPER_WITHOUT_DECISION_HASH",
+      "primitive": "captures[0].stage_hashes.risk",
+      "expected_gate": "DECISION_HASH_VALID",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_17_FEATURE_PAYLOAD_TAMPER",
+      "primitive": "captures[0].feature_capture.features[0].feature_value",
+      "expected_gate": "STAGE_HASHES_PAYLOAD_VALID",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_18_GOVERNANCE_PAYLOAD_TAMPER",
+      "primitive": "captures[0].governance_validation.governance_verdict",
+      "expected_gate": "STAGE_HASHES_PAYLOAD_VALID",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_19_STRATEGY_CATALOG_HASH_TAMPER",
+      "primitive": "captures[0].code_lineage.strategy_catalog_hash",
+      "expected_gate": "CONFIG_LINEAGE_MATCHED",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    },
+    {
+      "mutation_id": "V5_20_SYNTHETIC_QUOTE_INJECTION",
+      "primitive": "captures[0].option_selection.quote_executable_truth.ask",
+      "expected_gate": "NO_SYNTHETIC_QUOTES",
+      "gate_passed_after_mutation": false,
+      "detected": true,
+      "verifier_exit_code": 1,
+      "methodologically_valid": true
+    }
+  ]
+}

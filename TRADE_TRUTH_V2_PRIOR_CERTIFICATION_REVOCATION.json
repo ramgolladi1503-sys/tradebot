@@ -1,0 +1,27 @@
+{
+  "schema_version": 2,
+  "revocation_timestamp": "2026-09-13T04:17:30Z",
+  "revocation_authority": "ANTIGRAVITY_GOVERNED_EXECUTION_AUTHORITY",
+  "status": "PRIOR_CERTIFICATIONS_REVOKED",
+  "revoked_candidates": {
+    "84f05ec4bfac79edcf281806fbf5c5cdb5414a86": {
+      "status": "REVOKED",
+      "reasons": [
+        "Hardcoded PASS gate evaluation dictionary",
+        "Self-referential real-data test proving only self-equality",
+        "Parallel toy feature calculation rather than invoking production MarketSessionStore/features",
+        "Parallel naive regime heuristics rather than production RegimeProbModel/RegimeEntropyGate",
+        "Bypassed PR#898 governed strategy authority and PR#899 strategy-family compatibility"
+      ]
+    },
+    "d501ac0d36b71a06bf2f00aacd87f19dcb67bc06": {
+      "status": "REVOKED",
+      "reasons": [
+        "Stacked on pre-PR#899 main (25678d60937f8847a22d49e2a3a0b56cc3cbd463) prior to PR #899 merge (c94ac255de62feb16cb2643c81c80c5fc3e1cc66)",
+        "Dynamic import of PR #899 module across worktrees rather than integrated canonical tree",
+        "Copied/surrogate business logic in causal replay layer rather than calling production components"
+      ]
+    }
+  },
+  "disposition": "QUARANTINED_AS_FAILED_EVIDENCE_ZERO_CONSUMPTION_BY_LATER_GATES"
+}

@@ -1,0 +1,39 @@
+{
+  "total_discovered_methods": 3,
+  "reachable_from_observer_count": 0,
+  "reachable_from_replay_count": 0,
+  "guarded_entrypoints_count": 3,
+  "guard_coverage_pct": 100.0,
+  "entrypoints": [
+    {
+      "module": "core.execution_engine",
+      "class": "ExecutionEngine",
+      "method": "place_order",
+      "reachable_from_observer": false,
+      "reachable_from_replay": false,
+      "guarded": true,
+      "guard_tested": true,
+      "guard_mechanism": "arm_broker_write_guards / SecurityViolationError"
+    },
+    {
+      "module": "core.broker.mock_broker",
+      "class": "MockBroker",
+      "method": "place_order",
+      "reachable_from_observer": false,
+      "reachable_from_replay": false,
+      "guarded": true,
+      "guard_tested": true,
+      "guard_mechanism": "arm_broker_write_guards / SecurityViolationError"
+    },
+    {
+      "module": "core.kite_client",
+      "class": "KiteClient",
+      "method": "submit_order",
+      "reachable_from_observer": false,
+      "reachable_from_replay": false,
+      "guarded": true,
+      "guard_tested": true,
+      "guard_mechanism": "arm_broker_write_guards / SecurityViolationError"
+    }
+  ]
+}

@@ -1,0 +1,185 @@
+{
+  "candidate_sha": "9dae2c3d61735208021ed1d2e1759f52f9c70157",
+  "total_mutations_attempted": 22,
+  "total_mutations_detected": 22,
+  "total_mutations_missed": 0,
+  "mutation_campaign_passed": true,
+  "mutations": {
+    "M01_decision_ts_pre_session": {
+      "classification": "INPUT_PERTURBATION",
+      "baseline_status": "PARTIAL_PARITY",
+      "mutated_status": "DIVERGED",
+      "first_divergence_stage": "WARMUP_OR_CLOSED_BAR_GATE",
+      "detected": true,
+      "mechanism": "bar_count_used dropped to 0"
+    },
+    "M02_warmup_insufficient_input": {
+      "classification": "INPUT_PERTURBATION",
+      "baseline_status": "PARTIAL_PARITY",
+      "mutated_status": "BLOCKED_DATA",
+      "first_divergence_stage": "WARMUP_GATE",
+      "detected": true,
+      "mechanism": "warmup_status=WARMUP_INSUFFICIENT fails closed to BLOCKED_DATA"
+    },
+    "M03_raw_bar_price_shock": {
+      "classification": "INPUT_PERTURBATION",
+      "baseline_status": "PARTIAL_PARITY",
+      "mutated_status": "DIVERGED",
+      "first_divergence_stage": "C1_STRATEGY_EVALUATION",
+      "detected": true,
+      "mechanism": "C1 impulse qualified changed from False to True"
+    },
+    "M04_evaluator_threshold_override": {
+      "classification": "SOURCE_MUTATION",
+      "baseline_status": "PARTIAL_PARITY",
+      "mutated_status": "DIVERGED",
+      "first_divergence_stage": "C1_STRATEGY_EVALUATION",
+      "detected": true,
+      "mechanism": "evaluate_c1 mutated to force qualified -> divergence against expected output"
+    },
+    "M05_downstream_leak_in_bundle": {
+      "classification": "INPUT_PERTURBATION",
+      "baseline_status": "PASS",
+      "mutated_status": "REJECTED_BY_SCHEMA",
+      "first_divergence_stage": "LEVEL_C_INPUT_VALIDATION",
+      "detected": true,
+      "mechanism": "LEVEL_C_INPUT_CONTRACT_VIOLATION: prohibited downstream fields found in replay input: ['rolling_15m_return_bps']"
+    },
+    "M06_unapproved_strategy_authority": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "baseline_status": "REJECTED_FAMILY",
+      "mutated_status": "REJECTED_GOVERNANCE",
+      "first_divergence_stage": "GOVERNED_STRATEGY_AUTHORITY",
+      "detected": true,
+      "mechanism": "governed authority blocked unapproved strategy: ('GOVERNANCE_UNAPPROVED:UNAPPROVED_ARBITRARY_STRAT',)"
+    },
+    "M07_strategy_family_mismatch": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "baseline_status": "REJECTED_FAMILY",
+      "mutated_status": "REJECTED_FAMILY",
+      "first_divergence_stage": "STRATEGY_FAMILY_GATE",
+      "detected": true,
+      "mechanism": "family compatibility failed: FAMILY_MISMATCH"
+    },
+    "M08_risk_daily_loss_breach": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "baseline_status": "REJECTED_FAMILY",
+      "mutated_status": "REJECTED_RISK",
+      "first_divergence_stage": "RISK_ENGINE_EVALUATION",
+      "detected": true,
+      "mechanism": "risk rejected: Daily loss limit hit"
+    },
+    "M09_duplicate_pool_admission": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "baseline_status": "ADMITTED",
+      "mutated_status": "REJECTED_DUPLICATE",
+      "first_divergence_stage": "POOL_ADMISSION",
+      "detected": true,
+      "mechanism": "admit_candidate_to_pool rejected duplicate candidate_id"
+    },
+    "M10_execution_governance_unauthorized": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "baseline_status": "ALLOWED",
+      "mutated_status": "PERMISSION_ERROR",
+      "first_divergence_stage": "EXECUTION_GOVERNANCE_GATE",
+      "detected": true,
+      "mechanism": "VIOLATION: Execution selection rejected. Strategy UNAUTHORIZED_EXECUTION_ATTEMPT with status UNAPPROVED is not ACTIVE_APPROVED."
+    },
+    "M11_candidate_ranking_score_inversion": {
+      "classification": "SOURCE_MUTATION",
+      "baseline_status": "winner=C2",
+      "mutated_status": "winner=C1",
+      "first_divergence_stage": "OPPORTUNITY_RANKING",
+      "detected": true,
+      "mechanism": "winner switched from C2 to C1"
+    },
+    "M12_truth_chain_sequence_drop": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "baseline_status": "CHAIN_VALID",
+      "mutated_status": "CHAIN_BROKEN",
+      "first_divergence_stage": "TRUTH_STORE_VERIFY_CHAIN",
+      "detected": true,
+      "mechanism": "TRUTH_CHAIN_BROKEN: expected sequence 1, got 2"
+    },
+    "M13_truth_record_hash_tamper": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "baseline_status": "HASH_VALID",
+      "mutated_status": "HASH_CORRUPT",
+      "first_divergence_stage": "TRUTH_STORE_INTEGRITY_CHECK",
+      "detected": true,
+      "mechanism": "TRUTH_CORRUPT: record hash tampered at seq 1"
+    },
+    "M14_strategy_family_none": {
+      "classification": "INPUT_PERTURBATION",
+      "baseline_status": "COMPATIBLE",
+      "mutated_status": "FAMILY_MISSING",
+      "first_divergence_stage": "STRATEGY_FAMILY_CONTRACT",
+      "detected": true,
+      "mechanism": "None family failed closed with FAMILY_MISSING"
+    },
+    "M15_strategy_family_unknown": {
+      "classification": "INPUT_PERTURBATION",
+      "baseline_status": "COMPATIBLE",
+      "mutated_status": "FAMILY_UNKNOWN",
+      "first_divergence_stage": "STRATEGY_FAMILY_CONTRACT",
+      "detected": true,
+      "mechanism": "Unknown family string failed closed with FAMILY_UNKNOWN"
+    },
+    "M16_trade_identity_missing_expiry": {
+      "classification": "INPUT_PERTURBATION",
+      "baseline_status": "VALID",
+      "mutated_status": "INVALID",
+      "first_divergence_stage": "TRADE_IDENTITY_VALIDATOR",
+      "detected": true,
+      "mechanism": "missing_expiry"
+    },
+    "M17_session_store_bar_order_mutation": {
+      "classification": "SOURCE_MUTATION",
+      "baseline_status": "BARS_ORDERED",
+      "mutated_status": "BAR_SEQUENCE_REJECTED",
+      "first_divergence_stage": "SESSION_STORE_BAR_INGESTION",
+      "detected": true,
+      "mechanism": "non_monotonic_bar_index: 0 <= 1"
+    },
+    "M18_risk_open_risk_limit_breach": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "baseline_status": "ALLOW_TRADE",
+      "mutated_status": "BLOCK_TRADE",
+      "first_divergence_stage": "RISK_ENGINE_LIMITS",
+      "detected": true,
+      "mechanism": "Open risk limit hit"
+    },
+    "M19_c2_strategy_signal_override": {
+      "classification": "SOURCE_MUTATION",
+      "baseline_status": "c2_qual=False",
+      "mutated_status": "c2_qual=True",
+      "first_divergence_stage": "C2_STRATEGY_EVALUATION",
+      "detected": true,
+      "mechanism": "evaluate_c2 mutated to force qualification alters actual replay outputs and hashes"
+    },
+    "M20_instrument_identity_mismatch": {
+      "classification": "INPUT_PERTURBATION",
+      "baseline_status": "NIFTY|2026-09-15|23200|CE",
+      "mutated_status": "BANKNIFTY|2026-09-15|23200|CE",
+      "first_divergence_stage": "INSTRUMENT_IDENTIFICATION",
+      "detected": true,
+      "mechanism": "Underlying instrument mutation correctly segregates identity"
+    },
+    "M21_truth_duplicate_sequence_number": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "baseline_status": "CHAIN_VALID",
+      "mutated_status": "CHAIN_BROKEN",
+      "first_divergence_stage": "TRUTH_STORE_SEQUENCE_CHECK",
+      "detected": true,
+      "mechanism": "TRUTH_CHAIN_BROKEN: expected sequence 2, got 1"
+    },
+    "M22_expected_output_divergence_detector": {
+      "classification": "SOURCE_MUTATION",
+      "baseline_status": "PARTIAL_PARITY",
+      "mutated_status": "DIVERGED",
+      "first_divergence_stage": "REPLAY_COMPARISON_STAGE",
+      "detected": true,
+      "mechanism": "compare_replay_to_expected catches discrepancy between replay actual and corrupted expected output"
+    }
+  }
+}

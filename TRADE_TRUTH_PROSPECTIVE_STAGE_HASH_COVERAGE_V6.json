@@ -1,0 +1,86 @@
+{
+  "coverage_version": "V6_STAGE_HASH_COVERAGE",
+  "total_stages": 13,
+  "stages": {
+    "market": {
+      "status": "CAPTURED",
+      "payload_source": "captures[i].raw_market_capture",
+      "recomputation_supported": true,
+      "recomputation_method": "sha256_obj({\"event_count\": raw.event_count_used, \"first_event_ts\": raw.first_event_ts, \"last_event_ts\": raw.last_event_ts})"
+    },
+    "bars": {
+      "status": "CAPTURED",
+      "payload_source": "RawTickSessionStore reconstructed bars from raw stitched parquet",
+      "recomputation_supported": true,
+      "recomputation_method": "sha256_obj([{\"ts\": b.timestamp, \"o\": b.open, \"h\": b.high, \"l\": b.low, \"c\": b.close} for b in store._bars_1m])"
+    },
+    "memory": {
+      "status": "CAPTURED",
+      "payload_source": "captures[i].memory_capture",
+      "recomputation_supported": true,
+      "recomputation_method": "sha256_obj of 10 canonical memory fields"
+    },
+    "features": {
+      "status": "CAPTURED",
+      "payload_source": "captures[i].feature_capture.features",
+      "recomputation_supported": true,
+      "recomputation_method": "sha256_obj(features_list)"
+    },
+    "regime": {
+      "status": "REGIME_STAGE_NOT_APPLICABLE",
+      "payload_source": "captures[i].regime_capture",
+      "recomputation_supported": true,
+      "recomputation_method": "sha256_obj({\"status\": \"REGIME_STAGE_NOT_APPLICABLE\", \"families\": [\"TREND\", \"MEAN_REVERT\", \"DEFINED_RISK\"]})"
+    },
+    "strategy": {
+      "status": "CAPTURED",
+      "payload_source": "captures[i].strategy_evaluations.evaluations",
+      "recomputation_supported": true,
+      "recomputation_method": "sha256_obj(evaluations_list)"
+    },
+    "candidate_pool": {
+      "status": "CAPTURED",
+      "payload_source": "captures[i].candidate_pool.candidates",
+      "recomputation_supported": true,
+      "recomputation_method": "sha256_obj(candidates_list)"
+    },
+    "option_selection": {
+      "status": "SELECTION_STAGE_NOT_REACHED",
+      "payload_source": "captures[i].option_selection",
+      "recomputation_supported": true,
+      "recomputation_method": "enforce \"0\"*64 hash and null payload when NOT_REACHED"
+    },
+    "ranking": {
+      "status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "payload_source": "captures[i].ranking",
+      "recomputation_supported": true,
+      "recomputation_method": "enforce \"0\"*64 hash and BLOCKED_BY_PRODUCTION_DEPENDENCY status"
+    },
+    "trade_construction": {
+      "status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "payload_source": "captures[i].trade_construction",
+      "recomputation_supported": true,
+      "recomputation_method": "enforce \"0\"*64 hash and BLOCKED_BY_PRODUCTION_DEPENDENCY status"
+    },
+    "risk": {
+      "status": "CAPTURED",
+      "payload_source": "captures[i].risk_state_evaluation",
+      "recomputation_supported": true,
+      "recomputation_method": "RiskEngine().evaluate_trade(portfolio, trade=None) -> sha256_obj({\"snap\": snap, \"decision\": dec.as_tuple()})"
+    },
+    "governance": {
+      "status": "CAPTURED",
+      "payload_source": "captures[i].governance_validation",
+      "recomputation_supported": true,
+      "recomputation_method": "sha256_obj({\"verdict\": gov.verdict, \"reasons\": gov.reasons})"
+    },
+    "decision": {
+      "status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "payload_source": "captures[i].final_decision",
+      "recomputation_supported": true,
+      "recomputation_method": "sha256_obj({\"action\": dec.action, \"reasons\": dec.reason_codes})"
+    }
+  },
+  "stage_hash_deep_recomputed_count": 13,
+  "stage_hash_not_deep_recomputed_count": 0
+}

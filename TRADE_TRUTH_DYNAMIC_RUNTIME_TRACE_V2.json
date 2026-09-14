@@ -1,0 +1,48 @@
+{
+  "dynamic_runtime_trace_instrumented": true,
+  "trace_id": "trace_5314f736c2236759",
+  "total_calls": 5,
+  "instrumentation_type": "PRODUCTION_CALL_SPY_HOOKS",
+  "calls": [
+    {
+      "sequence": 1,
+      "module": "core.market_session_store",
+      "function": "get_market_memory",
+      "timestamp": 1789257959.203727,
+      "input_hash": "596f0489546c7e8a57818e3f8d20dc8c95296a7fdf667d58c05ffdc4b926ff89",
+      "output_hash": "0f42e8b71ee1893e679305227725e774fa4a0b52ca58c06ce09dce3aa52112ea"
+    },
+    {
+      "sequence": 2,
+      "module": "core.candidate_evaluators",
+      "function": "evaluate_c1",
+      "timestamp": 1789257959.203827,
+      "input_hash": "0de4ca6979c47aa20a20e95871d888efe60266dbe6b2f377216d107ffd0cd9a6",
+      "output_hash": "6f6ff1b315cfdb25cb0ecb51a58803a546e5f0bcb37acad630e37e35944f702d"
+    },
+    {
+      "sequence": 3,
+      "module": "core.candidate_evaluators",
+      "function": "evaluate_c2",
+      "timestamp": 1789257959.2038558,
+      "input_hash": "0de4ca6979c47aa20a20e95871d888efe60266dbe6b2f377216d107ffd0cd9a6",
+      "output_hash": "43e0b332a3117836aa25fb9f9f13af1db8e051647fa61a20d24af9d1b456da23"
+    },
+    {
+      "sequence": 4,
+      "module": "core.strategy_family_contract",
+      "function": "check_strategy_family_compatibility",
+      "timestamp": 1789257959.2039192,
+      "input_hash": "b997311c428e042f3ac6d035cebba816eda62a9c1cdfdd0d0540db6d776fbf71",
+      "output_hash": "894df301a28857f184735001806460ebcee3125e5e8c75418d971fa2b51dbadd"
+    },
+    {
+      "sequence": 5,
+      "module": "core.trade_truth.integrated_decision_tail",
+      "function": "execute_integrated_decision_tail",
+      "timestamp": 1789257959.203933,
+      "input_hash": "f8b8726fef209799bcd7b2bb6e23c3cdd174643f6b111769fd50eeac00eaa6ad",
+      "output_hash": "f7f6eaa3fb80575dbe981f00e195c9f4ea8ef72cb59ba67f2f270a8149f545fb"
+    }
+  ]
+}

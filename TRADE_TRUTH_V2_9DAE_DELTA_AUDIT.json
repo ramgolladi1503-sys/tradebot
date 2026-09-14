@@ -1,0 +1,36 @@
+{
+  "base_sha": "10a62cbaf0c6fbded7114552e8c466bda24a854c",
+  "candidate_sha": "9dae2c3d61735208021ed1d2e1759f52f9c70157",
+  "scope_valid": true,
+  "delta_summary": "Enforces physical raw-tick timestamp measurement without lookahead assignment, structural expected output separation, and strict non-leaking closed-bar causal replay.",
+  "changed_files": [
+    {
+      "path": "core/trade_truth/raw_tick_causal_replay.py",
+      "purpose": "Decouples actual replay from expected comparisons, counts raw ticks per bar, records max_raw_tick_ts_used and max_bar_ts_used physically, and evaluates strategies causally on closed bars ending <= decision timestamp.",
+      "claim_affected": "FUTURE_LEAK_AUDIT, EXPECTED_OUTPUT_SEPARATION, PHYSICAL_PROVENANCE",
+      "test_evidence_affected": "TRADE_TRUTH_V2_FUTURE_LEAK_AUDIT.json, test_raw_tick_expected_separation.py",
+      "safe_to_reuse_prior_evidence": false
+    },
+    {
+      "path": "scripts/run_level_c_causal_replay.py",
+      "purpose": "Invokes run_raw_tick_replay independently and compares via compare_replay_to_expected; checks strict physical condition (max_raw_tick_ts_used <= decision_ts and max_bar_ts_used <= decision_ts).",
+      "claim_affected": "DETERMINISM_EVIDENCE, FUTURE_LEAK_AUDIT, TRACE_RESULTS",
+      "test_evidence_affected": "TRADE_TRUTH_LEVEL_C_TRACE_RESULTS.jsonl, TRADE_TRUTH_V2_DETERMINISM_EVIDENCE.json, TRADE_TRUTH_V2_FUTURE_LEAK_AUDIT.json",
+      "safe_to_reuse_prior_evidence": false
+    },
+    {
+      "path": "TRADE_TRUTH_LEVEL_C_TRACE_RESULTS.jsonl",
+      "purpose": "Records 370 trace executions containing primitive physical measurement fields (raw_tick_count_used, bar_count_used, max_bar_ts_used, max_raw_tick_ts_used <= decision_epoch).",
+      "claim_affected": "TRACE_COUNT_RECONCILIATION, HONEST_PARITY_CLASSIFICATION",
+      "test_evidence_affected": "scripts/verify_trade_truth_level_c_evidence.py",
+      "safe_to_reuse_prior_evidence": false
+    },
+    {
+      "path": "TRADE_TRUTH_V2_10A62_COMPONENT_CLAIM_CORRECTION.json",
+      "purpose": "Formal registry distinguishing production component reachability from historical replay scope.",
+      "claim_affected": "COMPONENT_CLAIMS, BLOCKERS",
+      "test_evidence_affected": "Level C certification claims",
+      "safe_to_reuse_prior_evidence": true
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "schema_version": 2,
+  "stages": {
+    "market_ingestion": {
+      "module": "core.market_snapshot_builder",
+      "callable": "build_market_snapshot",
+      "file_path": "/Users/madhuram/tradebot/core/market_snapshot_builder.py",
+      "description": "Constructs canonical market snapshot from ticks/health"
+    },
+    "canonical_snapshot": {
+      "module": "core.market_snapshot_schema",
+      "callable": "validate_market_snapshot",
+      "file_path": "/Users/madhuram/tradebot/core/market_snapshot_schema.py",
+      "description": "Validates canonical snapshot schema version and symbols"
+    },
+    "session_memory": {
+      "module": "core.market_session_store",
+      "callable": "MarketSessionStore",
+      "file_path": "/Users/madhuram/tradebot/core/market_session_store.py",
+      "description": "Manages in-memory rolling 1m/15m session bar state, VWAP, session open"
+    },
+    "regime_entropy_gate": {
+      "module": "core.regime_entropy_gate",
+      "callable": "evaluate_regime_entropy_gate",
+      "file_path": "/Users/madhuram/tradebot/core/regime_entropy_gate.py",
+      "description": "Evaluates regime probability distribution and entropy gate"
+    },
+    "strategy_evaluation_c1": {
+      "module": "core.candidate_evaluators",
+      "callable": "evaluate_c1",
+      "file_path": "/Users/madhuram/tradebot/core/candidate_evaluators.py",
+      "description": "Evaluates C1 intraday 15m momentum impulse"
+    },
+    "strategy_evaluation_c2": {
+      "module": "core.candidate_evaluators",
+      "callable": "evaluate_c2",
+      "file_path": "/Users/madhuram/tradebot/core/candidate_evaluators.py",
+      "description": "Evaluates C2 overnight trend"
+    },
+    "strategy_family_contract": {
+      "module": "core.strategy_family_contract",
+      "callable": "check_strategy_family_compatibility",
+      "file_path": "/Users/madhuram/tradebot/core/strategy_family_contract.py",
+      "description": "Enforces StrategyFamily pre-admission compatibility against regime"
+    },
+    "candidate_pool_admission": {
+      "module": "core.strategy_family_contract",
+      "callable": "admit_candidate_to_pool",
+      "file_path": "/Users/madhuram/tradebot/core/strategy_family_contract.py",
+      "description": "Shape-preserving candidate pool admission with deduplication"
+    },
+    "governed_strategy_authority": {
+      "module": "core.governed_strategy_authority",
+      "callable": "filter_governed_candidates",
+      "file_path": "/Users/madhuram/tradebot/core/governed_strategy_authority.py",
+      "description": "PR #898 canonical authority filtering: ACTIVE_APPROVED vs SUPERSEDED"
+    },
+    "ranking_orchestrator": {
+      "module": "core.ranking_orchestrator",
+      "callable": "build_ranked_opportunity_report",
+      "file_path": "/Users/madhuram/tradebot/core/ranking_orchestrator.py",
+      "description": "End-to-end read-only ranking pipeline orchestrator"
+    },
+    "trade_construction": {
+      "module": "core.trade_ticket",
+      "callable": "TradeTicket",
+      "file_path": "/Users/madhuram/tradebot/core/trade_ticket.py",
+      "description": "Constructs production TradeTicket contract"
+    },
+    "risk_engine": {
+      "module": "core.risk_engine",
+      "callable": "RiskEngine",
+      "file_path": "/Users/madhuram/tradebot/core/risk_engine.py",
+      "description": "Evaluates account limits, kill switches, and market bounds"
+    },
+    "governance_execution_validation": {
+      "module": "core.governed_strategy_authority",
+      "callable": "validate_execution_candidate",
+      "file_path": "/Users/madhuram/tradebot/core/governed_strategy_authority.py",
+      "description": "Final execution boundary gate check before order action"
+    },
+    "trade_truth_capture": {
+      "module": "core.trade_truth.record_builder",
+      "callable": "build_trade_truth_record",
+      "file_path": "/Users/madhuram/tradebot/core/trade_truth/record_builder.py",
+      "description": "Builds canonical TradeTruthRecord with cryptographic chain hashing"
+    }
+  }
+}

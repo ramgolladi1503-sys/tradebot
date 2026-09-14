@@ -1,0 +1,45 @@
+{
+  "status": "CURRENT_LEVEL_B_REVALIDATED",
+  "verified_by": "scripts/verify_trade_truth_level_ab_current_lineage.py",
+  "failures": [],
+  "total_cases_checked": 9,
+  "passed_cases_count": 9,
+  "cases": {
+    "compatible_approved_candidate": {
+      "pass": true,
+      "final_verdict": "ALLOWED"
+    },
+    "family_mismatch": {
+      "pass": true,
+      "reason_code": "FAMILY_MISMATCH"
+    },
+    "family_missing": {
+      "pass": true,
+      "reason_code": "FAMILY_MISSING"
+    },
+    "unapproved_strategy": {
+      "pass": true,
+      "final_verdict": "REJECTED_GOVERNANCE"
+    },
+    "duplicate_candidate": {
+      "pass": true,
+      "final_verdict": "REJECTED_POOL"
+    },
+    "ranking_winner": {
+      "pass": true,
+      "winner": "C1"
+    },
+    "risk_rejection": {
+      "pass": true,
+      "risk_reason": "Daily loss limit hit"
+    },
+    "governance_execution_rejection": {
+      "pass": true,
+      "verdict": "REJECTED_GOVERNANCE"
+    },
+    "no_trade": {
+      "pass": true,
+      "final_verdict": "REJECTED_FAMILY"
+    }
+  }
+}

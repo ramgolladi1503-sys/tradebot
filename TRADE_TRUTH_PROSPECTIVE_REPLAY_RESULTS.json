@@ -1,0 +1,48 @@
+{
+  "all_replay_parity": true,
+  "traces_replayed": 5,
+  "traces_diverged": 0,
+  "broker_write_calls": 0,
+  "results": [
+    {
+      "trace_id": "trace_p01",
+      "parity": true,
+      "decision_match": true,
+      "stage_hash_mismatches_count": 0,
+      "stage_mismatches": [],
+      "future_leak_detected": false
+    },
+    {
+      "trace_id": "trace_p02",
+      "parity": true,
+      "decision_match": true,
+      "stage_hash_mismatches_count": 0,
+      "stage_mismatches": [],
+      "future_leak_detected": false
+    },
+    {
+      "trace_id": "trace_p03",
+      "parity": true,
+      "decision_match": true,
+      "stage_hash_mismatches_count": 0,
+      "stage_mismatches": [],
+      "future_leak_detected": false
+    },
+    {
+      "trace_id": "trace_p04",
+      "parity": true,
+      "decision_match": true,
+      "stage_hash_mismatches_count": 0,
+      "stage_mismatches": [],
+      "future_leak_detected": false
+    },
+    {
+      "trace_id": "trace_p05",
+      "parity": true,
+      "decision_match": true,
+      "stage_hash_mismatches_count": 0,
+      "stage_mismatches": [],
+      "future_leak_detected": false
+    }
+  ]
+}

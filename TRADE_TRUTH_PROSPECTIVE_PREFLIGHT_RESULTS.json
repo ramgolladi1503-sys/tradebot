@@ -1,0 +1,73 @@
+{
+  "preflight_status": "FAIL",
+  "all_mandatory_gates_passed": false,
+  "real_check_count": 13,
+  "default_pass_count": 0,
+  "gates": [
+    {
+      "gate": "CODE_SHA_FROZEN",
+      "passed": true,
+      "detail": "Frozen SHA: c94ac255de62feb16cb2643c81c80c5fc3e1cc66"
+    },
+    {
+      "gate": "CONFIG_FROZEN",
+      "passed": true,
+      "detail": "Config directory exists and hashed"
+    },
+    {
+      "gate": "MODELS_FROZEN",
+      "passed": true,
+      "detail": "NOT_APPLICABLE_WITH_PROOF: C1 and C2 use rule-based mathematical predicates (rolling_15m_return_bps)"
+    },
+    {
+      "gate": "INSTRUMENT_MASTER_FROZEN",
+      "passed": false,
+      "detail": "INSTRUMENT_MASTER_STATUS=BLOCKED_BY_MISSING_AUTHORITATIVE_SNAPSHOT: parquet contains embedded contract strings but no authoritative snapshot proving lot size and expiry metadata"
+    },
+    {
+      "gate": "TRUTH_SCHEMA_FROZEN",
+      "passed": true,
+      "detail": "All 4 JSON schemas exist and valid"
+    },
+    {
+      "gate": "STORAGE_WRITABLE",
+      "passed": true,
+      "detail": "Workspace storage writable"
+    },
+    {
+      "gate": "DISK_CAPACITY_SUFFICIENT",
+      "passed": true,
+      "detail": "1364.52 GB free on /Volumes/TradeBotData"
+    },
+    {
+      "gate": "CLOCK_TIMEZONE_VERIFIED",
+      "passed": false,
+      "detail": "CLOCK_SYNC_STATUS=UNKNOWN: OS/NTP sync not proven; local datetime read alone does not prove synchronization"
+    },
+    {
+      "gate": "RAW_FEED_READER_AVAILABLE",
+      "passed": false,
+      "detail": "OFFLINE_RAW_READER=PROVEN; LIVE_RAW_FEED_ADAPTER=BLOCKED_BY_MARKET_CLOSED: Historical parquet reader available for offline engineering only, live websocket feed unverified"
+    },
+    {
+      "gate": "BROKER_WRITE_GUARDS_ARMED",
+      "passed": true,
+      "detail": "All 6 discovered broker write entrypoints armed with security spies"
+    },
+    {
+      "gate": "ORDER_AUTHORITY_FALSE",
+      "passed": true,
+      "detail": "Verified order_authority_false is False in observer config"
+    },
+    {
+      "gate": "PAPER_FALSE",
+      "passed": true,
+      "detail": "Verified paper_false is False in observer config"
+    },
+    {
+      "gate": "LIVE_FALSE",
+      "passed": true,
+      "detail": "Verified live_false is False in observer config"
+    }
+  ]
+}

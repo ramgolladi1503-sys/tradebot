@@ -1,0 +1,11 @@
+{
+  "independent_verification_authority": "SECOND_PASS_OFFLINE_VERIFIER_V5",
+  "baseline_verify_exit_code": 0,
+  "baseline_verify_status": "PASS",
+  "gates_passed_count": 15,
+  "total_gates_evaluated": 15,
+  "all_gates_passed": true,
+  "target_sha": "77d8417bb308b2ad026d62dc0fc26530a8625075",
+  "traces_evaluated": 5,
+  "independent_verdict": "VERIFIER_HARDENING_PASS"
+}

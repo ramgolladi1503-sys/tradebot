@@ -1,0 +1,12 @@
+{
+  "status": "INVALIDATED_FOR_CAUSAL_TRACE_EVIDENCE",
+  "target_artifact": "TRADE_TRUTH_PROSPECTIVE_RUNTIME_CHECKPOINT_TRACE_V5.jsonl",
+  "reclassification": "COMPONENT_TIMING_MICROBENCHMARK",
+  "reason": [
+    "FUTURE_MEMORY_AS_OF: invoked get_market_memory(as_of_timestamp=\"2026-09-10T15:29:00+05:30\") for decision cycles at 09:22:00 to 09:26:00 IST",
+    "DECISION_STRING_EPOCH_DATE_MISMATCH: stored numeric epochs corresponded to 2026-09-11 09:22-09:26 IST instead of 2026-09-10",
+    "HARDCODED_FAMILY_ALLOWED_SET: directly passed hard-coded allowed families to strategy family compatibility rather than reading dynamic runtime governance state",
+    "SYNTHETIC_RISK_FIXTURE: executed RiskEngine evaluation using synthetic \u20b910,00,000 offline fixture rather than authentic live broker portfolio state"
+  ],
+  "causal_level_c_support_authorized": false
+}

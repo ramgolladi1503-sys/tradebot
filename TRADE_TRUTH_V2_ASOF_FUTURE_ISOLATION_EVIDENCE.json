@@ -1,0 +1,113 @@
+{
+  "test_name": "FULL_DAY_PRELOAD_ISOLATION_AUDIT",
+  "session_date": "2026-09-10",
+  "timestamps_tested": [
+    {
+      "timestamp": "2026-09-10 09:15:00+05:30",
+      "trace_id": "trace_9ca9a1f03030dbd0",
+      "store_a_hash": "GENESIS",
+      "store_b_hash": "GENESIS",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 09:22:00+05:30",
+      "trace_id": "trace_adc552dd5924ac59",
+      "store_a_hash": "f658a131fd8da6afd0c06ec819220fc2d0136db6d59a67ef1544f26d67fcee69",
+      "store_b_hash": "f658a131fd8da6afd0c06ec819220fc2d0136db6d59a67ef1544f26d67fcee69",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 09:29:00+05:30",
+      "trace_id": "trace_ef0a87cdd3c0b493",
+      "store_a_hash": "48ce08fca3ec1b6328cd8722a8933d764593e05b2f8f7406c02122b0f4b9186c",
+      "store_b_hash": "48ce08fca3ec1b6328cd8722a8933d764593e05b2f8f7406c02122b0f4b9186c",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 09:36:00+05:30",
+      "trace_id": "trace_5314f736c2236759",
+      "store_a_hash": "326df81659b0cea7fa9e36ad98330f9e74af9d4ae3fd585ef9c0d9c0552dc42a",
+      "store_b_hash": "326df81659b0cea7fa9e36ad98330f9e74af9d4ae3fd585ef9c0d9c0552dc42a",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 09:43:00+05:30",
+      "trace_id": "trace_2cb8037a384f8191",
+      "store_a_hash": "a8714bed6da9e66ff1b6ea0ec5f34cd55ec469a27381a0e70165477c1df8952d",
+      "store_b_hash": "a8714bed6da9e66ff1b6ea0ec5f34cd55ec469a27381a0e70165477c1df8952d",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 09:50:00+05:30",
+      "trace_id": "trace_5529aa08e5d03a09",
+      "store_a_hash": "47d4ad0132c647c64b3979cc801055f738e14b928e06c4fbd457f13fe6bce077",
+      "store_b_hash": "47d4ad0132c647c64b3979cc801055f738e14b928e06c4fbd457f13fe6bce077",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 09:57:00+05:30",
+      "trace_id": "trace_26ce00cd1e5d2f94",
+      "store_a_hash": "7bb22968c7d0228309dfdfa1b480e531b3a0a75b9188ae03cc866fe4e6f8686f",
+      "store_b_hash": "7bb22968c7d0228309dfdfa1b480e531b3a0a75b9188ae03cc866fe4e6f8686f",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 10:04:00+05:30",
+      "trace_id": "trace_cdcdefe87da44ad8",
+      "store_a_hash": "62f06cafbf2414553d482731d9780e4b3de9e0b262b86cdd54786d951fd1134d",
+      "store_b_hash": "62f06cafbf2414553d482731d9780e4b3de9e0b262b86cdd54786d951fd1134d",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 10:11:00+05:30",
+      "trace_id": "trace_e1874c87f1b57488",
+      "store_a_hash": "1320e9488b7c2d1a895d66dd2ac39a627c1a4b591fb551a4fa83ed5778f0529c",
+      "store_b_hash": "1320e9488b7c2d1a895d66dd2ac39a627c1a4b591fb551a4fa83ed5778f0529c",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 10:18:00+05:30",
+      "trace_id": "trace_ee9b48691c6acad2",
+      "store_a_hash": "106ac307350c93fd377ea9cc1ccb828069c27c86ceed8ec183513c230f7635e3",
+      "store_b_hash": "106ac307350c93fd377ea9cc1ccb828069c27c86ceed8ec183513c230f7635e3",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 10:25:00+05:30",
+      "trace_id": "trace_bdf07dfe63584c90",
+      "store_a_hash": "b83d188258c064f6648caced4a8b1457d18af5fe85004bfc13b52f30edab2227",
+      "store_b_hash": "b83d188258c064f6648caced4a8b1457d18af5fe85004bfc13b52f30edab2227",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 10:32:00+05:30",
+      "trace_id": "trace_d0fbf44bc20d87a3",
+      "store_a_hash": "2b503dfd90589614622a1e37b7fc54f2251483f21887869d105098840c7dc24b",
+      "store_b_hash": "2b503dfd90589614622a1e37b7fc54f2251483f21887869d105098840c7dc24b",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 10:39:00+05:30",
+      "trace_id": "trace_a0c023e5949ee3b8",
+      "store_a_hash": "db50cf108bcc99f3fde64dfd34fc373f19e9520846b01619c3df249952796f0a",
+      "store_b_hash": "db50cf108bcc99f3fde64dfd34fc373f19e9520846b01619c3df249952796f0a",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 10:46:00+05:30",
+      "trace_id": "trace_9c1d8dbcaa542f73",
+      "store_a_hash": "666940b9da274452954f0d1240e84e36bbb9a387188a32292756cb3d66aaddf2",
+      "store_b_hash": "666940b9da274452954f0d1240e84e36bbb9a387188a32292756cb3d66aaddf2",
+      "identical": true
+    },
+    {
+      "timestamp": "2026-09-10 10:53:00+05:30",
+      "trace_id": "trace_f880b6d8f233fd63",
+      "store_a_hash": "6f3ea97491175643bd8919527fe72a7a1d7208392dc06612977235b23749e6aa",
+      "store_b_hash": "6f3ea97491175643bd8919527fe72a7a1d7208392dc06612977235b23749e6aa",
+      "identical": true
+    }
+  ],
+  "all_equal": true,
+  "AS_OF_FUTURE_ISOLATION": "PASS"
+}

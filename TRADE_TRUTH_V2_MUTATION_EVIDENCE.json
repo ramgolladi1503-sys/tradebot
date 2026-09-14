@@ -1,0 +1,118 @@
+{
+  "total_mutations_attempted": 22,
+  "total_mutations_detected": 22,
+  "total_mutations_missed": 0,
+  "mutation_campaign_passed": true,
+  "mutations": {
+    "M01_raw_price_tamper": {
+      "classification": "INPUT_PERTURBATION",
+      "detected": true,
+      "mechanism": "raw_memory_reconstruction_sensitive"
+    },
+    "M02_bid_tamper": {
+      "classification": "INPUT_PERTURBATION",
+      "detected": true,
+      "mechanism": "quote_validation_pipeline"
+    },
+    "M03_ask_tamper": {
+      "classification": "INPUT_PERTURBATION",
+      "detected": true,
+      "mechanism": "quote_validation_pipeline"
+    },
+    "M04_depth_empty": {
+      "classification": "INPUT_PERTURBATION",
+      "detected": true,
+      "mechanism": "market_truth_depth_audit"
+    },
+    "M05_event_order_reverse": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "detected": true,
+      "mechanism": "TRUTH_CHAIN_BROKEN: expected sequence 1, got 2"
+    },
+    "M06_bar_construction_return_zero": {
+      "classification": "SOURCE_MUTATION",
+      "detected": true,
+      "mechanism": "evaluator_drops_qualification"
+    },
+    "M07_feature_return_inversion": {
+      "classification": "INPUT_PERTURBATION",
+      "detected": true,
+      "mechanism": "negative_impulse_rejected"
+    },
+    "M08_regime_override_no_trade": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "detected": true,
+      "mechanism": "FAMILY_MISMATCH"
+    },
+    "M09_strategy_evaluator_threshold_tamper": {
+      "classification": "SOURCE_MUTATION",
+      "detected": true,
+      "mechanism": "threshold_evaluated_at_canonical_50bps"
+    },
+    "M10_family_missing": {
+      "classification": "INPUT_PERTURBATION",
+      "detected": true,
+      "mechanism": "family_missing_fail_closed"
+    },
+    "M11_family_mismatch": {
+      "classification": "INPUT_PERTURBATION",
+      "detected": true,
+      "mechanism": "family_mismatch_fail_closed"
+    },
+    "M12_family_bypass": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "detected": true,
+      "mechanism": "FAMILY_UNKNOWN"
+    },
+    "M13_governed_authority_bypass": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "detected": true,
+      "mechanism": "governed_authority_blocks_unapproved"
+    },
+    "M14_duplicate_candidate_admission": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "detected": true,
+      "mechanism": "duplicate_candidate_rejected_from_pool"
+    },
+    "M15_ranking_inversion": {
+      "classification": "SOURCE_MUTATION",
+      "detected": true,
+      "mechanism": "ranker_determines_correct_winner"
+    },
+    "M16_trace_drop": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "detected": true,
+      "mechanism": "TRUTH_CHAIN_BROKEN: expected sequence 1, got 2"
+    },
+    "M17_trace_regeneration_duplicate": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "detected": true,
+      "mechanism": "TRUTH_CHAIN_BROKEN: expected sequence 2, got 1"
+    },
+    "M18_trade_construction_missing_fields": {
+      "classification": "INPUT_PERTURBATION",
+      "detected": true,
+      "mechanism": "missing_expiry"
+    },
+    "M19_risk_limit_breach": {
+      "classification": "INPUT_PERTURBATION",
+      "detected": true,
+      "mechanism": "Daily loss limit hit"
+    },
+    "M20_governance_validator_bypass": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "detected": true,
+      "mechanism": "VIOLATION: Execution selection rejected. Strategy UNAPPROVED_ROGUE with status UNAPPROVED is not ACTIVE_APPROVED."
+    },
+    "M21_record_hash_tamper": {
+      "classification": "RUNTIME_BYPASS_MUTATION",
+      "detected": true,
+      "mechanism": "TRUTH_CORRUPT: record hash tampered at seq 1"
+    },
+    "M22_instrument_mapping_token_mismatch": {
+      "classification": "SOURCE_MUTATION",
+      "detected": true,
+      "mechanism": "distinct_instrument_identities"
+    }
+  }
+}
