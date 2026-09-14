@@ -10,27 +10,13 @@ import sys
 from pathlib import Path
 
 HIGH_RISK_PREFIXES = (
-    "main.py",
-    "config/",
-    "core/auth.py",
-    "core/broker",
-    "core/order",
-    "core/execution",
-    "core/risk",
-    "core/feed",
-    "core/kite",
-    "core/runtime",
-    "strategies/",
-    ".github/workflows/",
+    "main.py", "config/", "core/auth.py", "core/broker", "core/order",
+    "core/execution", "core/risk", "core/feed", "core/kite", "core/runtime",
+    "strategies/", ".github/workflows/", "scripts/run_adversarial_pr_gate.py",
 )
 ATTACK_REQUIRED_PREFIXES = ("config/", ".github/workflows/", ".github/actions/")
 ATTACK_REQUIRED_EXACT = (
-    "requirements.txt",
-    "pyproject.toml",
-    "pytest.ini",
-    "setup.cfg",
-    "tox.ini",
-    "Dockerfile",
+    "requirements.txt", "pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini", "Dockerfile",
 )
 TEST_PREFIXES = ("tests/",)
 GATE_PROTECTED_PATHS = (
@@ -52,6 +38,9 @@ BOOTSTRAP_ALLOWED_PATHS = {
     "tests/governance/test_adversarial_pr_gate_workflow_safety.py",
 }
 BOOTSTRAP_BRANCH = "governance/adversarial-pr-gate-v1"
+RECERTIFICATION_BRANCH_PREFIX = "governance/adversarial-gate-recertification-"
+RECERTIFICATION_DIR = "docs/adversarial_gate_recertifications"
+
 SKIP_PATTERNS = (
     r"pytest\.skip\(", r"pytest\.xfail\(", r"pytest\.mark\.skip",
     r"pytest\.mark\.xfail", r"unittest\.skip", r"@skip\b",
@@ -245,7 +234,6 @@ def _adversarial_test_quality_attack(candidate_ref: str, paths: list[str], error
     adv_paths = [p for p in paths if _is_adversarial_test(p)]
     total_tests = substantive_tests = total_assertions = negative_named_tests = 0
     imported_modules: set[str] = set()
-
     for path in adv_paths:
         text = _read_candidate(candidate_ref, path)
         if text is None:
@@ -263,7 +251,6 @@ def _adversarial_test_quality_attack(candidate_ref: str, paths: list[str], error
             assertions = _substantive_assertion_count(node)
             total_assertions += assertions
             substantive_tests += int(assertions > 0)
-
     required = _required_attack_case_count(attacked, high_risk)
     if total_tests < required:
         errors.append(f"ADVERSARIAL_TEST_TOO_SHALLOW:test_functions={total_tests}:required={required}")
@@ -273,7 +260,6 @@ def _adversarial_test_quality_attack(candidate_ref: str, paths: list[str], error
         errors.append(f"ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL:assertions={total_assertions}:required={required}")
     if negative_named_tests < required:
         errors.append(f"ADVERSARIAL_NEGATIVE_CASE_FLOOR_FAIL:negative_named_tests={negative_named_tests}:required={required}")
-
     for surface in attacked:
         if not (_high_risk(surface) and _is_code(surface)):
             continue
@@ -286,7 +272,27 @@ def _base_contains_gate(base_ref: str) -> bool:
     return _run(["git", "cat-file", "-e", f"{base_ref}:scripts/run_adversarial_pr_gate.py"], check=False).returncode == 0
 
 
-def _governance_self_protection(base_ref: str, paths: list[str], branch: str, errors: list[str]) -> None:
+def _trusted_recertification_authorized(base_ref: str, candidate_ref: str) -> bool:
+    candidate_sha = _git("rev-parse", candidate_ref)
+    manifest = f"{RECERTIFICATION_DIR}/{candidate_sha}.md"
+    proc = _run(["git", "show", f"{base_ref}:{manifest}"], check=False)
+    if proc.returncode != 0:
+        return False
+    text = proc.stdout.lower()
+    return (
+        f"candidate_sha: {candidate_sha}" in text
+        and "authorized: true" in text
+        and "scope: adversarial-gate-recertification" in text
+    )
+
+
+def _governance_self_protection(
+    base_ref: str,
+    paths: list[str],
+    branch: str,
+    errors: list[str],
+    candidate_ref: str = "HEAD",
+) -> None:
     touched = [p for p in paths if p in GATE_PROTECTED_PATHS]
     if not touched:
         return
@@ -295,6 +301,8 @@ def _governance_self_protection(base_ref: str, paths: list[str], branch: str, er
         if not forbidden:
             return
         errors.append("BOOTSTRAP_SCOPE_VIOLATION:" + ",".join(forbidden))
+        return
+    if branch.startswith(RECERTIFICATION_BRANCH_PREFIX) and _trusted_recertification_authorized(base_ref, candidate_ref):
         return
     errors.append("ADVERSARIAL_GATE_SELF_MODIFICATION_BLOCKED_REQUIRES_TRUSTED_RECERTIFICATION:" + ",".join(touched))
 
@@ -314,10 +322,9 @@ def execute(base_ref: str, candidate_ref: str, branch: str, run_tests: bool) -> 
     _pytest_config_suppression_attack(base_ref, candidate_ref, paths, errors)
     _coverage_shape_attack(paths, errors)
     _adversarial_test_quality_attack(candidate_ref, paths, errors)
-    _governance_self_protection(base_ref, paths, branch, errors)
+    _governance_self_protection(base_ref, paths, branch, errors, candidate_ref)
     if run_tests:
         _run_changed_tests(paths, errors)
-
     print("ADVERSARIAL_PR_GATE")
     print(f"base_ref={base_ref}")
     print(f"candidate_ref={candidate_ref}")
