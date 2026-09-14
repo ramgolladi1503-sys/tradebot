@@ -90,6 +90,11 @@ EFFECTIVE_TRIALS=73.4
 many independent dimensions that correlated search represents. A low effective-trial count is never
 permission to delete or hide failed experiments.
 
+For the integer extreme-value approximation used by the V1 DSR search penalty, a fractional effective
+rank is conservatively rounded upward to the next integer. The original fractional effective-rank value
+must still be reported unchanged; the ceiling is only an implementation detail of the maximum-Sharpe
+order-statistic approximation.
+
 If the candidate-return history needed to estimate effective trials is missing, the correct state is
 `EFFECTIVE_TRIAL_COUNT_MISSING`, not an invented count.
 
