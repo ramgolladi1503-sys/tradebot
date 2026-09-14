@@ -33,7 +33,15 @@ ATTACK_REQUIRED_PREFIXES = (
     ".github/workflows/",
     ".github/actions/",
 )
-ATTACK_REQUIRED_EXACT = ("main.py", "requirements.txt", "pyproject.toml", "Dockerfile")
+ATTACK_REQUIRED_EXACT = (
+    "main.py",
+    "requirements.txt",
+    "pyproject.toml",
+    "pytest.ini",
+    "setup.cfg",
+    "tox.ini",
+    "Dockerfile",
+)
 TEST_PREFIXES = ("tests/",)
 GATE_PROTECTED_PATHS = (
     ".github/workflows/adversarial-pr-gate.yml",
@@ -44,10 +52,26 @@ BOOTSTRAP_BRANCH = "governance/adversarial-pr-gate-v1"
 
 SKIP_PATTERNS = (
     r"pytest\.skip\(",
+    r"pytest\.xfail\(",
     r"pytest\.mark\.skip",
     r"pytest\.mark\.xfail",
     r"unittest\.skip",
     r"@skip\b",
+)
+TRIVIAL_ASSERT_PATTERNS = (
+    r"^\s*assert\s+(True|1|1\.0)\s*(#.*)?$",
+    r"^\s*assert\s+(['\"]).*\2\s*(#.*)?$",
+)
+BROAD_RAISES_PATTERN = re.compile(r"pytest\.raises\(\s*(Exception|BaseException)\b")
+PYTEST_SUPPRESSION_PATTERNS = (
+    r"--ignore(?:=|\s)",
+    r"--ignore-glob(?:=|\s)",
+    r"--deselect(?:=|\s)",
+    r"--continue-on-collection-errors\b",
+    r"\btestpaths\s*=",
+    r"\bpython_files\s*=",
+    r"\bpython_functions\s*=",
+    r"\bpython_classes\s*=",
 )
 ADVERSARIAL_TEST_TOKENS = ("attack", "adversarial", "mutation", "safety", "negative")
 NEGATIVE_SEMANTIC_TOKENS = (
@@ -99,6 +123,10 @@ def _removed_lines(diff: str) -> list[str]:
     return [line[1:] for line in diff.splitlines() if line.startswith("-") and not line.startswith("---")]
 
 
+def _is_test(path: str) -> bool:
+    return path.endswith(".py") and path.startswith(TEST_PREFIXES)
+
+
 def _is_code(path: str) -> bool:
     return path.endswith(".py") and (
         path == "main.py" or any(path.startswith(prefix) for prefix in PYTHON_PRODUCTION_PREFIXES)
@@ -109,10 +137,6 @@ def _requires_attack(path: str) -> bool:
     if _is_test(path) or path.startswith("docs/"):
         return False
     return path in ATTACK_REQUIRED_EXACT or any(path.startswith(prefix) for prefix in ATTACK_REQUIRED_PREFIXES)
-
-
-def _is_test(path: str) -> bool:
-    return path.endswith(".py") and path.startswith(TEST_PREFIXES)
 
 
 def _is_adversarial_test(path: str) -> bool:
@@ -168,13 +192,27 @@ def _test_weakening_attack(base_ref: str, candidate_ref: str, paths: list[str], 
         removed = _removed_lines(diff)
         for line in added:
             if any(re.search(pattern, line) for pattern in SKIP_PATTERNS):
-                errors.append(f"TEST_WEAKENING_SKIP_ADDED:{path}:{line.strip()}")
+                errors.append(f"TEST_WEAKENING_SKIP_OR_XFAIL_ADDED:{path}:{line.strip()}")
+            if any(re.search(pattern, line) for pattern in TRIVIAL_ASSERT_PATTERNS):
+                errors.append(f"TEST_WEAKENING_TRIVIAL_ASSERT_ADDED:{path}:{line.strip()}")
+            if BROAD_RAISES_PATTERN.search(line):
+                errors.append(f"TEST_WEAKENING_BROAD_EXCEPTION_ASSERTION:{path}:{line.strip()}")
         removed_asserts = sum(1 for line in removed if re.search(r"\bassert\b|pytest\.raises|assert_", line))
         added_asserts = sum(1 for line in added if re.search(r"\bassert\b|pytest\.raises|assert_", line))
         if removed_asserts > added_asserts:
             errors.append(
                 f"TEST_WEAKENING_ASSERTION_LOSS:{path}:removed={removed_asserts}:added={added_asserts}"
             )
+
+
+def _pytest_config_suppression_attack(base_ref: str, candidate_ref: str, paths: list[str], errors: list[str]) -> None:
+    config_paths = {"pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini"}
+    for path in paths:
+        if path not in config_paths:
+            continue
+        for line in _added_lines(changed_diff(base_ref, candidate_ref, path)):
+            if any(re.search(pattern, line) for pattern in PYTEST_SUPPRESSION_PATTERNS):
+                errors.append(f"PYTEST_COLLECTION_OR_SUPPRESSION_CHANGE_REQUIRES_EXPLICIT_RECERTIFICATION:{path}:{line.strip()}")
 
 
 def _coverage_shape_attack(paths: list[str], errors: list[str]) -> None:
@@ -202,6 +240,8 @@ def _substantive_assertion_count(function: ast.AST) -> int:
             count += 1
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             if isinstance(node.func.value, ast.Name) and node.func.value.id == "pytest" and node.func.attr == "raises":
+                if node.args and isinstance(node.args[0], ast.Name) and node.args[0].id in {"Exception", "BaseException"}:
+                    continue
                 count += 1
     return count
 
@@ -287,6 +327,7 @@ def execute(base_ref: str, candidate_ref: str, branch: str, run_tests: bool) -> 
     _syntax_attack(candidate_ref, paths, errors)
     _dangerous_api_attack(base_ref, candidate_ref, paths, errors)
     _test_weakening_attack(base_ref, candidate_ref, paths, errors)
+    _pytest_config_suppression_attack(base_ref, candidate_ref, paths, errors)
     _coverage_shape_attack(paths, errors)
     _adversarial_test_quality_attack(candidate_ref, paths, errors)
     _governance_self_protection(base_ref, paths, branch, errors)
