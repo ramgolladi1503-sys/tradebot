@@ -1,12 +1,7 @@
 {
-  "universe_policy_source": "runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json",
-  "constituent_source": "NSE_OFFICIAL_NIFTY50_IND_CSV",
-  "instrument_master_source": "runtime/reference/market_event_graph/kite_instruments/kite_nse_instruments_828c0c378e493972.json",
-  "instrument_master_hash": "828c0c378e4939720c34ee7e727e5ae6f0265441e0e0a1888a386f85ab9c2a93",
-  "broker_token_domain": "kite_instrument_token",
-  "expiry_resolution_rule": "NEAREST_WEEKLY_EXPIRY_THURSDAY",
-  "strike_window_rule": "+/- 10 STRIKES AROUND ATM",
-  "option_inclusion_rule": "LIQUID_OI_FILTERED_STRIKES",
+  "session_date": "2026-09-15",
+  "is_exchange_session": true,
+  "calendar_authority": "NSE_TRADING_SESSION_ACTIVE",
   "underlying_tokens": [
     256265,
     6401,
@@ -60,9 +55,399 @@
     2952193,
     969473
   ],
-  "option_token_count": 40,
-  "reconciliation_status": "READY",
+  "constituent_count": 50,
+  "instrument_master_path": "/Volumes/TradeBotData/morning-readiness-20260909/kite_instruments_combined.json",
+  "instrument_master_expected_sha256": "629746387aecc5a4c111358b76edd04e8edf005af8f5eaf9b189f8beed009140",
+  "instrument_master_actual_sha256": "629746387aecc5a4c111358b76edd04e8edf005af8f5eaf9b189f8beed009140",
+  "instrument_master_hash_match": true,
+  "broker_token_domain": "kite_instrument_token",
+  "expiry_candidates": [
+    "2026-09-08",
+    "2026-09-15",
+    "2026-09-22",
+    "2026-09-29",
+    "2026-10-06",
+    "2026-10-27",
+    "2026-11-23",
+    "2026-12-29",
+    "2027-03-30",
+    "2027-06-29",
+    "2027-12-28",
+    "2028-06-27",
+    "2028-12-26",
+    "2029-06-26",
+    "2029-12-24",
+    "2030-06-25",
+    "2030-12-31",
+    "2031-06-24"
+  ],
+  "selected_expiry": "2026-09-15",
+  "selected_expiry_rule": "NEAREST_WEEKLY_EXPIRY_TUESDAY",
+  "strike_interval": 50.0,
+  "selected_strikes": [
+    23600.0,
+    23650.0,
+    23700.0,
+    23750.0,
+    23800.0,
+    23850.0,
+    23900.0,
+    23950.0,
+    24000.0,
+    24050.0,
+    24100.0,
+    24150.0,
+    24200.0,
+    24250.0,
+    24300.0,
+    24350.0,
+    24400.0,
+    24450.0,
+    24500.0,
+    24550.0,
+    24600.0
+  ],
+  "selected_option_contracts": [
+    {
+      "instrument_token": 12111106,
+      "tradingsymbol": "NIFTY2691523800CE",
+      "strike": 23800.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12111362,
+      "tradingsymbol": "NIFTY2691523800PE",
+      "strike": 23800.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12110594,
+      "tradingsymbol": "NIFTY2691523750CE",
+      "strike": 23750.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12110850,
+      "tradingsymbol": "NIFTY2691523750PE",
+      "strike": 23750.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12111618,
+      "tradingsymbol": "NIFTY2691523850CE",
+      "strike": 23850.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12111874,
+      "tradingsymbol": "NIFTY2691523850PE",
+      "strike": 23850.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12110082,
+      "tradingsymbol": "NIFTY2691523700CE",
+      "strike": 23700.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12110338,
+      "tradingsymbol": "NIFTY2691523700PE",
+      "strike": 23700.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12112642,
+      "tradingsymbol": "NIFTY2691523900CE",
+      "strike": 23900.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12112898,
+      "tradingsymbol": "NIFTY2691523900PE",
+      "strike": 23900.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12109570,
+      "tradingsymbol": "NIFTY2691523650CE",
+      "strike": 23650.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12109826,
+      "tradingsymbol": "NIFTY2691523650PE",
+      "strike": 23650.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12113154,
+      "tradingsymbol": "NIFTY2691523950CE",
+      "strike": 23950.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12113410,
+      "tradingsymbol": "NIFTY2691523950PE",
+      "strike": 23950.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12109058,
+      "tradingsymbol": "NIFTY2691523600CE",
+      "strike": 23600.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12109314,
+      "tradingsymbol": "NIFTY2691523600PE",
+      "strike": 23600.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12113666,
+      "tradingsymbol": "NIFTY2691524000CE",
+      "strike": 24000.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12113922,
+      "tradingsymbol": "NIFTY2691524000PE",
+      "strike": 24000.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12114178,
+      "tradingsymbol": "NIFTY2691524050CE",
+      "strike": 24050.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12114434,
+      "tradingsymbol": "NIFTY2691524050PE",
+      "strike": 24050.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12114690,
+      "tradingsymbol": "NIFTY2691524100CE",
+      "strike": 24100.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12114946,
+      "tradingsymbol": "NIFTY2691524100PE",
+      "strike": 24100.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12115202,
+      "tradingsymbol": "NIFTY2691524150CE",
+      "strike": 24150.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12115458,
+      "tradingsymbol": "NIFTY2691524150PE",
+      "strike": 24150.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12115970,
+      "tradingsymbol": "NIFTY2691524200PE",
+      "strike": 24200.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12120322,
+      "tradingsymbol": "NIFTY2691524600CE",
+      "strike": 24600.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12120578,
+      "tradingsymbol": "NIFTY2691524600PE",
+      "strike": 24600.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12119298,
+      "tradingsymbol": "NIFTY2691524550CE",
+      "strike": 24550.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12119810,
+      "tradingsymbol": "NIFTY2691524550PE",
+      "strike": 24550.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12118786,
+      "tradingsymbol": "NIFTY2691524500CE",
+      "strike": 24500.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12119042,
+      "tradingsymbol": "NIFTY2691524500PE",
+      "strike": 24500.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12118274,
+      "tradingsymbol": "NIFTY2691524450CE",
+      "strike": 24450.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12118530,
+      "tradingsymbol": "NIFTY2691524450PE",
+      "strike": 24450.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12117762,
+      "tradingsymbol": "NIFTY2691524400CE",
+      "strike": 24400.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12118018,
+      "tradingsymbol": "NIFTY2691524400PE",
+      "strike": 24400.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12117250,
+      "tradingsymbol": "NIFTY2691524350CE",
+      "strike": 24350.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12117506,
+      "tradingsymbol": "NIFTY2691524350PE",
+      "strike": 24350.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12116738,
+      "tradingsymbol": "NIFTY2691524300CE",
+      "strike": 24300.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12116994,
+      "tradingsymbol": "NIFTY2691524300PE",
+      "strike": 24300.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12116226,
+      "tradingsymbol": "NIFTY2691524250CE",
+      "strike": 24250.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12116482,
+      "tradingsymbol": "NIFTY2691524250PE",
+      "strike": 24250.0,
+      "instrument_type": "PE",
+      "expiry": "2026-09-15"
+    },
+    {
+      "instrument_token": 12115714,
+      "tradingsymbol": "NIFTY2691524200CE",
+      "strike": 24200.0,
+      "instrument_type": "CE",
+      "expiry": "2026-09-15"
+    }
+  ],
+  "selected_option_tokens": [
+    12111106,
+    12111362,
+    12110594,
+    12110850,
+    12111618,
+    12111874,
+    12110082,
+    12110338,
+    12112642,
+    12112898,
+    12109570,
+    12109826,
+    12113154,
+    12113410,
+    12109058,
+    12109314,
+    12113666,
+    12113922,
+    12114178,
+    12114434,
+    12114690,
+    12114946,
+    12115202,
+    12115458,
+    12115970,
+    12120322,
+    12120578,
+    12119298,
+    12119810,
+    12118786,
+    12119042,
+    12118274,
+    12118530,
+    12117762,
+    12118018,
+    12117250,
+    12117506,
+    12116738,
+    12116994,
+    12116226,
+    12116482,
+    12115714
+  ],
+  "option_token_count": 42,
   "unresolved_symbols": [],
-  "asof_session_date": "2026-09-15",
-  "generated_at": "2026-09-15T00:33:18.376794+05:30"
+  "reconciliation_status": "READY"
 }

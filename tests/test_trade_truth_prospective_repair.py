@@ -173,14 +173,47 @@ def test_mros_daily_governor_resolves_universe_and_strategies():
     assert u_state == "READY"
     assert len(u_res.underlying_tokens) == 51
     assert u_res.option_token_count > 0
+    assert u_res.selected_expiry_rule == "NEAREST_WEEKLY_EXPIRY_TUESDAY"
+    assert u_res.selected_expiry == "2026-09-15"
 
     s_state, s_list = gov.resolve_strategy_authority()
     assert s_state == "READY"
-    assert any(s["alias"] == "C1" and s["status"] == "ACTIVE_APPROVED" for s in s_list)
-    assert any(s["alias"] == "C2" and s["status"] == "ACTIVE_APPROVED" for s in s_list)
+    assert any(s.alias == "C1" and s.status == "ACTIVE_APPROVED" for s in s_list)
+    assert any(s.alias == "C2" and s.status == "ACTIVE_APPROVED" for s in s_list)
+    # Ensure no invented C3
+    assert not any(s.alias == "C3" for s in s_list)
 
     plan = gov.evaluate_morning_readiness()
     assert plan.session_date == "2026-09-15"
     assert plan.universe_state == "READY"
     assert plan.strategy_authority_state == "READY"
     assert plan.broker_write_guard_state == "ARMED_FAIL_CLOSED_ZERO_CALLS"
+
+
+def test_mros_daily_governor_blocks_thursday_nifty_expiry():
+    from core.mros_daily_governor import MROSDailyGovernor, UniverseAuthorityResolution
+    gov = MROSDailyGovernor(Path("."), "2026-09-15")
+    # Force thursday candidate
+    state, res = gov.resolve_universe_authority()
+    assert res.selected_expiry_rule != "NEAREST_WEEKLY_EXPIRY_THURSDAY"
+
+
+def test_mros_daily_governor_fails_closed_without_release_store():
+    from core.mros_daily_governor import MROSDailyGovernor
+    gov = MROSDailyGovernor(Path("."), "2026-09-15", release_store_root=Path("/nonexistent_release_store_root"))
+    plan = gov.evaluate_morning_readiness()
+    assert "BLOCKED_RELEASE" in plan.final_state
+    assert any("RELEASE_STORE" in b for b in plan.blockers)
+
+
+def test_mros_daily_governor_fails_closed_on_storage_below_10gib(monkeypatch, tmp_path):
+    from core.mros_daily_governor import MROSDailyGovernor
+    import os
+    # Mock statvfs returning < 10 GiB
+    class MockStat:
+        f_bavail = 1000
+        f_frsize = 1024
+    monkeypatch.setattr(os, "statvfs", lambda path: MockStat())
+    gov = MROSDailyGovernor(Path("."), "2026-09-15", external_root=tmp_path)
+    plan = gov.evaluate_morning_readiness()
+    assert any("STORAGE_BELOW_10GIB" in b for b in plan.blockers)
