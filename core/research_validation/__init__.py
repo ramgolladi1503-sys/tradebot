@@ -4,6 +4,7 @@ This package is deliberately read-only with respect to trading runtime state. It
 no broker, order, strategy, live-runtime, or credential imports.
 """
 
+from .lineage import LineageAudit, audit_experiment_lineage, certify_research_from_registry
 from .policy import CertificationInput, CertificationVerdict, certify_research
 from .statistics import (
     benjamini_hochberg,
@@ -19,7 +20,10 @@ from .statistics import (
 __all__ = [
     "CertificationInput",
     "CertificationVerdict",
+    "LineageAudit",
+    "audit_experiment_lineage",
     "certify_research",
+    "certify_research_from_registry",
     "sample_sharpe",
     "probabilistic_sharpe_ratio",
     "minimum_track_record_length",
