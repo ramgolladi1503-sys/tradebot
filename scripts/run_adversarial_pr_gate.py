@@ -23,12 +23,7 @@ HIGH_RISK_PREFIXES = (
     "strategies/",
     ".github/workflows/",
 )
-
-ATTACK_REQUIRED_PREFIXES = (
-    "config/",
-    ".github/workflows/",
-    ".github/actions/",
-)
+ATTACK_REQUIRED_PREFIXES = ("config/", ".github/workflows/", ".github/actions/")
 ATTACK_REQUIRED_EXACT = (
     "requirements.txt",
     "pyproject.toml",
@@ -57,14 +52,9 @@ BOOTSTRAP_ALLOWED_PATHS = {
     "tests/governance/test_adversarial_pr_gate_workflow_safety.py",
 }
 BOOTSTRAP_BRANCH = "governance/adversarial-pr-gate-v1"
-
 SKIP_PATTERNS = (
-    r"pytest\.skip\(",
-    r"pytest\.xfail\(",
-    r"pytest\.mark\.skip",
-    r"pytest\.mark\.xfail",
-    r"unittest\.skip",
-    r"@skip\b",
+    r"pytest\.skip\(", r"pytest\.xfail\(", r"pytest\.mark\.skip",
+    r"pytest\.mark\.xfail", r"unittest\.skip", r"@skip\b",
 )
 TRIVIAL_ASSERT_PATTERNS = (
     r"^\s*assert\s+(True|1|1\.0)\s*(#.*)?$",
@@ -72,31 +62,14 @@ TRIVIAL_ASSERT_PATTERNS = (
 )
 BROAD_RAISES_PATTERN = re.compile(r"pytest\.raises\(\s*(Exception|BaseException)\b")
 PYTEST_SUPPRESSION_PATTERNS = (
-    r"--ignore(?:=|\s)",
-    r"--ignore-glob(?:=|\s)",
-    r"--deselect(?:=|\s)",
-    r"--continue-on-collection-errors\b",
-    r"\btestpaths\s*=",
-    r"\bpython_files\s*=",
-    r"\bpython_functions\s*=",
-    r"\bpython_classes\s*=",
+    r"--ignore(?:=|\s)", r"--ignore-glob(?:=|\s)", r"--deselect(?:=|\s)",
+    r"--continue-on-collection-errors\b", r"\btestpaths\s*=", r"\bpython_files\s*=",
+    r"\bpython_functions\s*=", r"\bpython_classes\s*=",
 )
 ADVERSARIAL_TEST_TOKENS = ("attack", "adversarial", "mutation", "safety", "negative")
 NEGATIVE_SEMANTIC_TOKENS = (
-    "fail",
-    "reject",
-    "block",
-    "invalid",
-    "missing",
-    "tamper",
-    "unsafe",
-    "forbid",
-    "deny",
-    "error",
-    "boundary",
-    "negative",
-    "attack",
-    "mutation",
+    "fail", "reject", "block", "invalid", "missing", "tamper", "unsafe", "forbid",
+    "deny", "error", "boundary", "negative", "attack", "mutation",
 )
 DANGEROUS_CALLS = {"eval", "exec", "compile", "__import__"}
 
@@ -142,14 +115,11 @@ def _is_code(path: str) -> bool:
 def _requires_attack(path: str) -> bool:
     if _is_test(path) or path.startswith("docs/"):
         return False
-    if _is_code(path):
-        return True
-    return path in ATTACK_REQUIRED_EXACT or any(path.startswith(prefix) for prefix in ATTACK_REQUIRED_PREFIXES)
+    return _is_code(path) or path in ATTACK_REQUIRED_EXACT or any(path.startswith(p) for p in ATTACK_REQUIRED_PREFIXES)
 
 
 def _is_adversarial_test(path: str) -> bool:
-    name = Path(path).name.lower()
-    return _is_test(path) and any(token in name for token in ADVERSARIAL_TEST_TOKENS)
+    return _is_test(path) and any(token in Path(path).name.lower() for token in ADVERSARIAL_TEST_TOKENS)
 
 
 def _high_risk(path: str) -> bool:
@@ -176,15 +146,12 @@ def _syntax_attack(candidate_ref: str, paths: list[str], errors: list[str]) -> N
 
 def _dangerous_api_attack(base_ref: str, candidate_ref: str, paths: list[str], errors: list[str]) -> None:
     direct_call = re.compile(r"\b(eval|exec|compile|__import__)\s*\(")
-    indirect_lookup = re.compile(
-        r"\b(getattr|__getattribute__)\s*\([^\n]*?[\"'](eval|exec|compile|__import__)[\"']"
-    )
+    indirect_lookup = re.compile(r"\b(getattr|__getattribute__)\s*\([^\n]*?[\"'](eval|exec|compile|__import__)[\"']")
     for path in paths:
         if not _is_code(path):
             continue
         for line in _added_lines(changed_diff(base_ref, candidate_ref, path)):
-            direct = direct_call.search(line)
-            indirect = indirect_lookup.search(line)
+            direct, indirect = direct_call.search(line), indirect_lookup.search(line)
             if direct and direct.group(1) in DANGEROUS_CALLS:
                 errors.append(f"DANGEROUS_API_ADDED:{path}:{direct.group(1)}:{line.strip()}")
             if indirect and indirect.group(2) in DANGEROUS_CALLS:
@@ -196,8 +163,7 @@ def _test_weakening_attack(base_ref: str, candidate_ref: str, paths: list[str], 
         if not _is_test(path):
             continue
         diff = changed_diff(base_ref, candidate_ref, path)
-        added = _added_lines(diff)
-        removed = _removed_lines(diff)
+        added, removed = _added_lines(diff), _removed_lines(diff)
         for line in added:
             if any(re.search(pattern, line) for pattern in SKIP_PATTERNS):
                 errors.append(f"TEST_WEAKENING_SKIP_OR_XFAIL_ADDED:{path}:{line.strip()}")
@@ -208,30 +174,27 @@ def _test_weakening_attack(base_ref: str, candidate_ref: str, paths: list[str], 
         removed_asserts = sum(1 for line in removed if re.search(r"\bassert\b|pytest\.raises|assert_", line))
         added_asserts = sum(1 for line in added if re.search(r"\bassert\b|pytest\.raises|assert_", line))
         if removed_asserts > added_asserts:
-            errors.append(
-                f"TEST_WEAKENING_ASSERTION_LOSS:{path}:removed={removed_asserts}:added={added_asserts}"
-            )
+            errors.append(f"TEST_WEAKENING_ASSERTION_LOSS:{path}:removed={removed_asserts}:added={added_asserts}")
 
 
 def _pytest_config_suppression_attack(base_ref: str, candidate_ref: str, paths: list[str], errors: list[str]) -> None:
     config_paths = {"pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini"}
     for path in paths:
-        if path not in config_paths:
-            continue
-        for line in _added_lines(changed_diff(base_ref, candidate_ref, path)):
-            if any(re.search(pattern, line) for pattern in PYTEST_SUPPRESSION_PATTERNS):
-                errors.append(f"PYTEST_COLLECTION_OR_SUPPRESSION_CHANGE_REQUIRES_EXPLICIT_RECERTIFICATION:{path}:{line.strip()}")
+        if path in config_paths:
+            for line in _added_lines(changed_diff(base_ref, candidate_ref, path)):
+                if any(re.search(pattern, line) for pattern in PYTEST_SUPPRESSION_PATTERNS):
+                    errors.append(f"PYTEST_COLLECTION_OR_SUPPRESSION_CHANGE_REQUIRES_EXPLICIT_RECERTIFICATION:{path}:{line.strip()}")
 
 
 def _coverage_shape_attack(paths: list[str], errors: list[str]) -> None:
-    attacked_surface = [p for p in paths if _requires_attack(p)]
+    attacked = [p for p in paths if _requires_attack(p)]
     tests = [p for p in paths if _is_test(p)]
     adversarial = [p for p in tests if _is_adversarial_test(p)]
-    if attacked_surface and not tests:
+    if attacked and not tests:
         errors.append("ATTACK_REQUIRED_CHANGE_WITHOUT_TEST_CHANGE")
-    if attacked_surface and not adversarial:
+    if attacked and not adversarial:
         errors.append("ATTACK_REQUIRED_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
-    if any(_high_risk(p) for p in attacked_surface) and not adversarial:
+    if any(_high_risk(p) for p in attacked) and not adversarial:
         errors.append("HIGH_RISK_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
 
 
@@ -265,6 +228,7 @@ def _imported_modules(tree: ast.AST) -> set[str]:
             modules.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             modules.add(node.module)
+            modules.update(f"{node.module}.{alias.name}" for alias in node.names if alias.name != "*")
     return modules
 
 
@@ -274,71 +238,52 @@ def _required_attack_case_count(attacked_surface: list[str], high_risk: bool) ->
 
 
 def _adversarial_test_quality_attack(candidate_ref: str, paths: list[str], errors: list[str]) -> None:
-    attacked_surface = [p for p in paths if _requires_attack(p)]
-    if not attacked_surface:
+    attacked = [p for p in paths if _requires_attack(p)]
+    if not attacked:
         return
-    high_risk = any(_high_risk(p) for p in attacked_surface)
+    high_risk = any(_high_risk(p) for p in attacked)
     adv_paths = [p for p in paths if _is_adversarial_test(p)]
-    total_tests = 0
-    substantive_tests = 0
-    total_assertions = 0
-    negative_named_tests = 0
+    total_tests = substantive_tests = total_assertions = negative_named_tests = 0
     imported_modules: set[str] = set()
-    adversarial_filenames: list[str] = []
 
     for path in adv_paths:
         text = _read_candidate(candidate_ref, path)
         if text is None:
             errors.append(f"ADVERSARIAL_TEST_UNREADABLE:{path}")
             continue
-        adversarial_filenames.append(Path(path).name.lower())
         try:
             tree = ast.parse(text, filename=path)
         except SyntaxError:
             continue
         imported_modules.update(_imported_modules(tree))
-        test_functions = [
-            node for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_")
-        ]
-        total_tests += len(test_functions)
-        negative_named_tests += sum(
-            1 for node in test_functions if any(token in node.name.lower() for token in NEGATIVE_SEMANTIC_TOKENS)
-        )
-        for node in test_functions:
+        functions = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith("test_")]
+        total_tests += len(functions)
+        negative_named_tests += sum(1 for n in functions if any(t in n.name.lower() for t in NEGATIVE_SEMANTIC_TOKENS))
+        for node in functions:
             assertions = _substantive_assertion_count(node)
             total_assertions += assertions
-            if assertions > 0:
-                substantive_tests += 1
+            substantive_tests += int(assertions > 0)
 
-    required_cases = _required_attack_case_count(attacked_surface, high_risk)
-    if total_tests < required_cases:
-        errors.append(f"ADVERSARIAL_TEST_TOO_SHALLOW:test_functions={total_tests}:required={required_cases}")
-    if substantive_tests < required_cases:
-        errors.append(
-            f"ADVERSARIAL_TEST_SUBSTANTIVE_CASE_FLOOR_FAIL:substantive_tests={substantive_tests}:required={required_cases}"
-        )
-    if total_assertions < required_cases:
-        errors.append(f"ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL:assertions={total_assertions}:required={required_cases}")
-    if negative_named_tests < required_cases:
-        errors.append(
-            f"ADVERSARIAL_NEGATIVE_CASE_FLOOR_FAIL:negative_named_tests={negative_named_tests}:required={required_cases}"
-        )
+    required = _required_attack_case_count(attacked, high_risk)
+    if total_tests < required:
+        errors.append(f"ADVERSARIAL_TEST_TOO_SHALLOW:test_functions={total_tests}:required={required}")
+    if substantive_tests < required:
+        errors.append(f"ADVERSARIAL_TEST_SUBSTANTIVE_CASE_FLOOR_FAIL:substantive_tests={substantive_tests}:required={required}")
+    if total_assertions < required:
+        errors.append(f"ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL:assertions={total_assertions}:required={required}")
+    if negative_named_tests < required:
+        errors.append(f"ADVERSARIAL_NEGATIVE_CASE_FLOOR_FAIL:negative_named_tests={negative_named_tests}:required={required}")
 
-    for surface in attacked_surface:
+    for surface in attacked:
         if not (_high_risk(surface) and _is_code(surface)):
             continue
         module = _module_name_for_path(surface)
-        stem = Path(surface).stem.lower()
-        imported = module in imported_modules or any(name.startswith(module + ".") for name in imported_modules)
-        filename_link = any(stem in filename for filename in adversarial_filenames)
-        if not imported and not filename_link:
-            errors.append(f"HIGH_RISK_SURFACE_UNREFERENCED_BY_ADVERSARIAL_TEST:{surface}")
+        if module not in imported_modules and not any(name.startswith(module + ".") for name in imported_modules):
+            errors.append(f"HIGH_RISK_SURFACE_UNIMPORTED_BY_ADVERSARIAL_TEST:{surface}")
 
 
 def _base_contains_gate(base_ref: str) -> bool:
-    proc = _run(["git", "cat-file", "-e", f"{base_ref}:scripts/run_adversarial_pr_gate.py"], check=False)
-    return proc.returncode == 0
+    return _run(["git", "cat-file", "-e", f"{base_ref}:scripts/run_adversarial_pr_gate.py"], check=False).returncode == 0
 
 
 def _governance_self_protection(base_ref: str, paths: list[str], branch: str, errors: list[str]) -> None:
@@ -346,29 +291,23 @@ def _governance_self_protection(base_ref: str, paths: list[str], branch: str, er
     if not touched:
         return
     if branch == BOOTSTRAP_BRANCH and not _base_contains_gate(base_ref):
-        forbidden_bootstrap = [p for p in touched if p not in BOOTSTRAP_ALLOWED_PATHS]
-        if not forbidden_bootstrap:
+        forbidden = [p for p in touched if p not in BOOTSTRAP_ALLOWED_PATHS]
+        if not forbidden:
             return
-        errors.append("BOOTSTRAP_SCOPE_VIOLATION:" + ",".join(forbidden_bootstrap))
+        errors.append("BOOTSTRAP_SCOPE_VIOLATION:" + ",".join(forbidden))
         return
-    errors.append(
-        "ADVERSARIAL_GATE_SELF_MODIFICATION_BLOCKED_REQUIRES_TRUSTED_RECERTIFICATION:" + ",".join(touched)
-    )
+    errors.append("ADVERSARIAL_GATE_SELF_MODIFICATION_BLOCKED_REQUIRES_TRUSTED_RECERTIFICATION:" + ",".join(touched))
 
 
 def _run_changed_tests(paths: list[str], errors: list[str]) -> None:
     tests = [p for p in paths if _is_test(p) and Path(p).exists()]
-    if not tests:
-        return
-    proc = subprocess.run([sys.executable, "-m", "pytest", "-q", *tests], check=False)
-    if proc.returncode != 0:
-        errors.append(f"CHANGED_TESTS_FAILED:exit={proc.returncode}")
+    if tests and subprocess.run([sys.executable, "-m", "pytest", "-q", *tests], check=False).returncode != 0:
+        errors.append("CHANGED_TESTS_FAILED")
 
 
 def execute(base_ref: str, candidate_ref: str, branch: str, run_tests: bool) -> int:
     paths = changed_files(base_ref, candidate_ref)
     errors: list[str] = []
-
     _syntax_attack(candidate_ref, paths, errors)
     _dangerous_api_attack(base_ref, candidate_ref, paths, errors)
     _test_weakening_attack(base_ref, candidate_ref, paths, errors)
@@ -376,7 +315,6 @@ def execute(base_ref: str, candidate_ref: str, branch: str, run_tests: bool) -> 
     _coverage_shape_attack(paths, errors)
     _adversarial_test_quality_attack(candidate_ref, paths, errors)
     _governance_self_protection(base_ref, paths, branch, errors)
-
     if run_tests:
         _run_changed_tests(paths, errors)
 
@@ -390,13 +328,11 @@ def execute(base_ref: str, candidate_ref: str, branch: str, run_tests: bool) -> 
     print(f"adversarial_tests={sum(1 for p in paths if _is_adversarial_test(p))}")
     for path in paths:
         print(f"changed:{path}")
-
     if errors:
         print("VERDICT=FAIL", file=sys.stderr)
         for error in errors:
             print(f"ATTACK_FAILURE:{error}", file=sys.stderr)
         return 1
-
     print("VERDICT=PASS")
     return 0
 
