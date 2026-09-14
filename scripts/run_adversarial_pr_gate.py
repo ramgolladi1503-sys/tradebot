@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 HIGH_RISK_PREFIXES = (
@@ -111,13 +112,21 @@ def _is_adversarial_test(path: str) -> bool:
     return _is_test(path) and any(token in Path(path).name.lower() for token in ADVERSARIAL_TEST_TOKENS)
 
 
+def _is_mutation_test(path: str) -> bool:
+    return _is_test(path) and "mutation" in Path(path).name.lower()
+
+
 def _high_risk(path: str) -> bool:
     return any(path == prefix.rstrip("/") or path.startswith(prefix) for prefix in HIGH_RISK_PREFIXES)
 
 
-def _read_candidate(candidate_ref: str, path: str) -> str | None:
-    proc = _run(["git", "show", f"{candidate_ref}:{path}"], check=False)
+def _read_ref(ref: str, path: str) -> str | None:
+    proc = _run(["git", "show", f"{ref}:{path}"], check=False)
     return proc.stdout if proc.returncode == 0 else None
+
+
+def _read_candidate(candidate_ref: str, path: str) -> str | None:
+    return _read_ref(candidate_ref, path)
 
 
 def _syntax_attack(candidate_ref: str, paths: list[str], errors: list[str]) -> None:
@@ -133,18 +142,46 @@ def _syntax_attack(candidate_ref: str, paths: list[str], errors: list[str]) -> N
             errors.append(f"SYNTAX_ATTACK_FAIL:{path}:{exc.msg}")
 
 
+def _dangerous_ast_refs(text: str, path: str) -> Counter[str]:
+    tree = ast.parse(text, filename=path)
+    refs: Counter[str] = Counter()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in DANGEROUS_CALLS:
+            refs[f"name:{node.id}"] += 1
+        elif isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load) and node.attr in DANGEROUS_CALLS:
+            refs[f"attribute:{node.attr}"] += 1
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"getattr", "__getattribute__"}:
+            if len(node.args) >= 2 and isinstance(node.args[1], ast.Constant) and node.args[1].value in DANGEROUS_CALLS:
+                refs[f"dynamic_lookup:{node.args[1].value}"] += 1
+    return refs
+
+
 def _dangerous_api_attack(base_ref: str, candidate_ref: str, paths: list[str], errors: list[str]) -> None:
+    # Line checks provide readable evidence; AST deltas catch aliases and multiline syntax.
     direct_call = re.compile(r"\b(eval|exec|compile|__import__)\s*\(")
     indirect_lookup = re.compile(r"\b(getattr|__getattribute__)\s*\([^\n]*?[\"'](eval|exec|compile|__import__)[\"']")
     for path in paths:
         if not _is_code(path):
             continue
-        for line in _added_lines(changed_diff(base_ref, candidate_ref, path)):
+        diff = changed_diff(base_ref, candidate_ref, path)
+        for line in _added_lines(diff):
             direct, indirect = direct_call.search(line), indirect_lookup.search(line)
-            if direct and direct.group(1) in DANGEROUS_CALLS:
+            if direct:
                 errors.append(f"DANGEROUS_API_ADDED:{path}:{direct.group(1)}:{line.strip()}")
-            if indirect and indirect.group(2) in DANGEROUS_CALLS:
+            if indirect:
                 errors.append(f"DANGEROUS_API_INDIRECT_LOOKUP_ADDED:{path}:{indirect.group(2)}:{line.strip()}")
+
+        candidate_text = _read_candidate(candidate_ref, path)
+        if candidate_text is None:
+            continue
+        base_text = _read_ref(base_ref, path) or ""
+        try:
+            candidate_refs = _dangerous_ast_refs(candidate_text, path)
+            base_refs = _dangerous_ast_refs(base_text, path) if base_text.strip() else Counter()
+        except SyntaxError:
+            continue
+        for fingerprint, count in (candidate_refs - base_refs).items():
+            errors.append(f"DANGEROUS_API_AST_DELTA:{path}:{fingerprint}:added={count}")
 
 
 def _test_weakening_attack(base_ref: str, candidate_ref: str, paths: list[str], errors: list[str]) -> None:
@@ -179,30 +216,98 @@ def _coverage_shape_attack(paths: list[str], errors: list[str]) -> None:
     attacked = [p for p in paths if _requires_attack(p)]
     tests = [p for p in paths if _is_test(p)]
     adversarial = [p for p in tests if _is_adversarial_test(p)]
+    high_risk = any(_high_risk(p) for p in attacked)
     if attacked and not tests:
         errors.append("ATTACK_REQUIRED_CHANGE_WITHOUT_TEST_CHANGE")
     if attacked and not adversarial:
         errors.append("ATTACK_REQUIRED_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
-    if any(_high_risk(p) for p in attacked) and not adversarial:
+    if high_risk and not adversarial:
         errors.append("HIGH_RISK_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
+    if high_risk and not any(_is_mutation_test(p) for p in tests):
+        errors.append("HIGH_RISK_CHANGE_WITHOUT_MUTATION_TEST_FILE")
+
+
+def _assert_is_substantive(node: ast.Assert) -> bool:
+    test = node.test
+    if isinstance(test, ast.Constant):
+        return False
+    if isinstance(test, ast.Compare) and len(test.ops) == 1 and len(test.comparators) == 1:
+        if ast.dump(test.left, include_attributes=False) == ast.dump(test.comparators[0], include_attributes=False):
+            return False
+    return True
+
+
+def _specific_pytest_raises(call: ast.AST) -> bool:
+    if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Attribute):
+        return False
+    if not (isinstance(call.func.value, ast.Name) and call.func.value.id == "pytest" and call.func.attr == "raises"):
+        return False
+    if call.args and isinstance(call.args[0], ast.Name) and call.args[0].id in {"Exception", "BaseException"}:
+        return False
+    return True
+
+
+def _block_assertion_count(statements: list[ast.stmt]) -> tuple[int, bool]:
+    count = 0
+    for stmt in statements:
+        stmt_count, terminates = _statement_assertion_count(stmt)
+        count += stmt_count
+        if terminates:
+            return count, True
+    return count, False
+
+
+def _statement_assertion_count(stmt: ast.stmt) -> tuple[int, bool]:
+    if isinstance(stmt, ast.Assert):
+        return int(_assert_is_substantive(stmt)), False
+    if isinstance(stmt, (ast.Return, ast.Raise)):
+        return 0, True
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return 0, False
+    if isinstance(stmt, (ast.With, ast.AsyncWith)):
+        context_count = sum(int(_specific_pytest_raises(item.context_expr)) for item in stmt.items)
+        body_count, terminates = _block_assertion_count(stmt.body)
+        return context_count + body_count, terminates
+    if isinstance(stmt, ast.If):
+        if isinstance(stmt.test, ast.Constant):
+            chosen = stmt.body if bool(stmt.test.value) else stmt.orelse
+            return _block_assertion_count(chosen)
+        left_count, left_term = _block_assertion_count(stmt.body)
+        right_count, right_term = _block_assertion_count(stmt.orelse)
+        return left_count + right_count, bool(stmt.orelse) and left_term and right_term
+    if isinstance(stmt, (ast.For, ast.AsyncFor)):
+        body_count, _ = _block_assertion_count(stmt.body)
+        else_count, _ = _block_assertion_count(stmt.orelse)
+        return body_count + else_count, False
+    if isinstance(stmt, ast.While):
+        if isinstance(stmt.test, ast.Constant) and not bool(stmt.test.value):
+            return _block_assertion_count(stmt.orelse)
+        body_count, _ = _block_assertion_count(stmt.body)
+        else_count, _ = _block_assertion_count(stmt.orelse)
+        return body_count + else_count, False
+    if isinstance(stmt, ast.Try):
+        count, _ = _block_assertion_count(stmt.body)
+        for handler in stmt.handlers:
+            value, _ = _block_assertion_count(handler.body)
+            count += value
+        for block in (stmt.orelse, stmt.finalbody):
+            value, _ = _block_assertion_count(block)
+            count += value
+        return count, False
+    if isinstance(stmt, ast.Match):
+        count = 0
+        for case in stmt.cases:
+            value, _ = _block_assertion_count(case.body)
+            count += value
+        return count, False
+    if isinstance(stmt, ast.Expr) and _specific_pytest_raises(stmt.value):
+        return 1, False
+    return 0, False
 
 
 def _substantive_assertion_count(function: ast.AST) -> int:
-    count = 0
-    for node in ast.walk(function):
-        if isinstance(node, ast.Assert):
-            test = node.test
-            if isinstance(test, ast.Constant):
-                continue
-            if isinstance(test, ast.Compare) and len(test.ops) == 1 and len(test.comparators) == 1:
-                if ast.dump(test.left, include_attributes=False) == ast.dump(test.comparators[0], include_attributes=False):
-                    continue
-            count += 1
-        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            if isinstance(node.func.value, ast.Name) and node.func.value.id == "pytest" and node.func.attr == "raises":
-                if node.args and isinstance(node.args[0], ast.Name) and node.args[0].id in {"Exception", "BaseException"}:
-                    continue
-                count += 1
+    body = getattr(function, "body", [])
+    count, _ = _block_assertion_count(body)
     return count
 
 
@@ -244,7 +349,7 @@ def _adversarial_test_quality_attack(candidate_ref: str, paths: list[str], error
         except SyntaxError:
             continue
         imported_modules.update(_imported_modules(tree))
-        functions = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith("test_")]
+        functions = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith("test_")]
         total_tests += len(functions)
         negative_named_tests += sum(1 for n in functions if any(t in n.name.lower() for t in NEGATIVE_SEMANTIC_TOKENS))
         for node in functions:
