@@ -39,6 +39,22 @@ SKIP_PATTERNS = (
     r"@skip\b",
 )
 ADVERSARIAL_TEST_TOKENS = ("attack", "adversarial", "mutation", "safety", "negative")
+NEGATIVE_SEMANTIC_TOKENS = (
+    "fail",
+    "reject",
+    "block",
+    "invalid",
+    "missing",
+    "tamper",
+    "unsafe",
+    "forbid",
+    "deny",
+    "error",
+    "boundary",
+    "negative",
+    "attack",
+    "mutation",
+)
 DANGEROUS_CALLS = {"eval", "exec", "compile", "__import__"}
 
 
@@ -144,8 +160,51 @@ def _coverage_shape_attack(paths: list[str], errors: list[str]) -> None:
         errors.append("PRODUCTION_CHANGE_WITHOUT_TEST_CHANGE")
     if production and not adversarial:
         errors.append("PRODUCTION_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
-    if any(_high_risk(p) for p in production) and len(adversarial) < 1:
+    if any(_high_risk(p) for p in production) and not adversarial:
         errors.append("HIGH_RISK_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE")
+
+
+def _adversarial_test_quality_attack(candidate_ref: str, paths: list[str], errors: list[str]) -> None:
+    production = [p for p in paths if _is_code(p)]
+    if not production:
+        return
+    high_risk = any(_high_risk(p) for p in production)
+    adv_paths = [p for p in paths if _is_adversarial_test(p)]
+    total_tests = 0
+    total_assertions = 0
+    negative_named_tests = 0
+
+    for path in adv_paths:
+        text = _read_candidate(candidate_ref, path)
+        if text is None:
+            errors.append(f"ADVERSARIAL_TEST_UNREADABLE:{path}")
+            continue
+        try:
+            tree = ast.parse(text, filename=path)
+        except SyntaxError:
+            continue
+        test_functions = [
+            node for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_")
+        ]
+        total_tests += len(test_functions)
+        negative_named_tests += sum(
+            1 for node in test_functions if any(token in node.name.lower() for token in NEGATIVE_SEMANTIC_TOKENS)
+        )
+        total_assertions += sum(1 for node in ast.walk(tree) if isinstance(node, ast.Assert))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if isinstance(node.func.value, ast.Name) and node.func.value.id == "pytest" and node.func.attr == "raises":
+                    total_assertions += 1
+
+    min_tests = 2 if high_risk else 1
+    min_assertions = 2 if high_risk else 1
+    if total_tests < min_tests:
+        errors.append(f"ADVERSARIAL_TEST_TOO_SHALLOW:test_functions={total_tests}:required={min_tests}")
+    if total_assertions < min_assertions:
+        errors.append(f"ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL:assertions={total_assertions}:required={min_assertions}")
+    if negative_named_tests < 1:
+        errors.append("ADVERSARIAL_TEST_HAS_NO_NEGATIVE_SEMANTIC_CASE")
 
 
 def _governance_self_protection(paths: list[str], branch: str, errors: list[str]) -> None:
@@ -171,6 +230,7 @@ def execute(base_ref: str, candidate_ref: str, branch: str, run_tests: bool) -> 
     _dangerous_api_attack(base_ref, candidate_ref, paths, errors)
     _test_weakening_attack(base_ref, candidate_ref, paths, errors)
     _coverage_shape_attack(paths, errors)
+    _adversarial_test_quality_attack(candidate_ref, paths, errors)
     _governance_self_protection(paths, branch, errors)
 
     if run_tests:
