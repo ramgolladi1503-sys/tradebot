@@ -152,6 +152,24 @@ jobs:
           sys.exit(1)
           PY
 
+      - name: Protect all workflow and custom-action changes
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          drift="$(git diff --name-only refs/remotes/origin/adversarial-base refs/remotes/origin/pr-${{ github.event.pull_request.number }}-head -- .github/workflows .github/actions)"
+          if [[ -z "$drift" ]]; then
+            exit 0
+          fi
+          case "$HEAD_REF" in
+            governance/adversarial-gate-recertification-*) ;;
+            *)
+              echo 'WORKFLOW_OR_ACTION_CHANGE_REQUIRES_OWNER_RECERTIFICATION' >&2
+              printf '%s\n' "$drift" >&2
+              exit 1
+              ;;
+          esac
+
       - name: Evaluate trusted-base adversarial policy
         id: trusted_policy
         continue-on-error: true
