@@ -1,0 +1,78 @@
+name: Adversarial PR Gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-adversarial-execution:
+    if: github.event_name == 'pull_request'
+    name: adversarial-pr-candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - name: Checkout exact PR candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest hypothesis numpy
+
+      - name: Fetch base
+        run: git fetch --no-tags --prune origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Execute adversarial gate against candidate
+        env:
+          ADVERSARIAL_BASE_REF: origin/main
+          ADVERSARIAL_CANDIDATE_REF: HEAD
+          ADVERSARIAL_BRANCH: ${{ github.head_ref }}
+        run: python scripts/run_adversarial_pr_gate.py --base-ref "$ADVERSARIAL_BASE_REF" --candidate-ref "$ADVERSARIAL_CANDIDATE_REF" --branch "$ADVERSARIAL_BRANCH" --run-tests
+
+  trusted-adversarial-policy:
+    if: github.event_name == 'pull_request_target'
+    name: adversarial-pr-trusted-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted protected main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch exact candidate without executing it
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --prune origin +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
+          test "$(git rev-parse refs/remotes/origin/pr-${PR_NUMBER}-head)" = "$HEAD_SHA"
+
+      - name: Run trusted-base adversarial policy inspection
+        env:
+          ADVERSARIAL_BASE_REF: origin/main
+          ADVERSARIAL_CANDIDATE_REF: refs/remotes/origin/pr-${{ github.event.pull_request.number }}-head
+          ADVERSARIAL_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: python scripts/run_adversarial_pr_gate.py --base-ref "$ADVERSARIAL_BASE_REF" --candidate-ref "$ADVERSARIAL_CANDIDATE_REF" --branch "$ADVERSARIAL_BRANCH"
