@@ -238,8 +238,8 @@
       "mutation_id": "T15_BROKER_WRITE_COUNT_POSITIVE",
       "primitive": "replay.broker_write_calls",
       "expected_gate": "BROKER_WRITE_SURFACE_ZERO_CALLS",
-      "pristine_file_sha256": "9ca8f04c76cf3b4591ffd2a9060c693da0de99f30bbcf83a5b7aab9c14778061",
-      "mutated_file_sha256": "1fd42c5833ec503e527e451b845051e5814a5d6ab853ecc8b075547948f31757",
+      "pristine_file_sha256": "0a68a23889ff0ff1fac5b1125876b1c77153730347ddec51b5177630cd76ade9",
+      "mutated_file_sha256": "9eabac0e55a25af4b707eb52616893bd16bb54b79516c76eb86873186a43f9b2",
       "primitive_before": "0",
       "primitive_after": "3",
       "primitive_changed": true,
@@ -247,7 +247,7 @@
       "verifier_exit_code": 1,
       "gate_passed_after_mutation": false,
       "detected": true,
-      "restored_file_sha256": "9ca8f04c76cf3b4591ffd2a9060c693da0de99f30bbcf83a5b7aab9c14778061",
+      "restored_file_sha256": "0a68a23889ff0ff1fac5b1125876b1c77153730347ddec51b5177630cd76ade9",
       "restoration_exact": true
     },
     {

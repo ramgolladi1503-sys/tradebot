@@ -1,0 +1,27 @@
+{
+  "session_date": "2026-09-15",
+  "candidate_sha": "8b9d642840fcee8c94b4f65c0166196d3ca650c5",
+  "certified_release_sha": "8b9d642840fcee8c94b4f65c0166196d3ca650c5",
+  "worktree_clean": false,
+  "session_root": "/Volumes/TradeBotData/sessions/2026-09-15",
+  "storage_free_bytes": 1439251959808,
+  "auth_state": "BLOCKED_AUTH_TOKEN_MISSING",
+  "universe_state": "READY",
+  "instrument_master_state": "READY",
+  "subscription_plan_state": "READY",
+  "truth_feed_state": "READY",
+  "checkpoint_pulse_state": "READY",
+  "persistence_state": "READY",
+  "market_memory_state": "READY",
+  "strategy_authority_state": "READY",
+  "option_selection_capture_state": "READY_RUNTIME_HOOKED",
+  "ranking_capture_state": "READY_RUNTIME_HOOKED",
+  "trade_builder_capture_state": "READY_RUNTIME_HOOKED",
+  "portfolio_risk_capture_state": "READY_RUNTIME_HOOKED",
+  "governance_capture_state": "READY_RUNTIME_HOOKED",
+  "broker_write_guard_state": "ARMED_FAIL_CLOSED_ZERO_CALLS",
+  "final_state": "BLOCKED_BEFORE_MERGE",
+  "blockers": [
+    "KITE_ACCESS_TOKEN_MISSING"
+  ]
+}

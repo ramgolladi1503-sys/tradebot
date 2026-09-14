@@ -1,0 +1,1049 @@
+{
+  "total_files_audited": 115,
+  "keep_in_merge_count": 89,
+  "prune_from_merge_count": 26,
+  "classifications": {
+    "DOC_REQUIRED": 9,
+    "GENERATED_EVIDENCE": 31,
+    "LEGACY_COPIED": 26,
+    "PRODUCTION_REQUIRED": 35,
+    "TEST_REQUIRED": 14
+  },
+  "files": [
+    {
+      "path": "TRADE_TRUTH_ACTUAL_PRODUCTION_CALL_GRAPH.json",
+      "classification": "DOC_REQUIRED",
+      "why_required": "Architectural boundary documentation and call graph audits",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_ACTUAL_PRODUCTION_CALL_GRAPH.md",
+      "classification": "DOC_REQUIRED",
+      "why_required": "Architectural boundary documentation and call graph audits",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_ACTUAL_RUNTIME_CALL_GRAPH.json",
+      "classification": "DOC_REQUIRED",
+      "why_required": "Architectural boundary documentation and call graph audits",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_ACTUAL_RUNTIME_CALL_GRAPH.md",
+      "classification": "DOC_REQUIRED",
+      "why_required": "Architectural boundary documentation and call graph audits",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_BROKER_WRITE_SURFACE_INVENTORY.json",
+      "classification": "DOC_REQUIRED",
+      "why_required": "Architectural boundary documentation and call graph audits",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_DYNAMIC_RUNTIME_TRACE.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_DYNAMIC_RUNTIME_TRACE_V2.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_LEVEL_AB_CURRENT_RUN_CORRECTION.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_LEVEL_A_CURRENT_LINEAGE_EVIDENCE.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_LEVEL_A_CURRENT_LINEAGE_PRIMITIVE_EVIDENCE.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_LEVEL_B_CURRENT_LINEAGE_EVIDENCE.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_LEVEL_B_CURRENT_LINEAGE_PRIMITIVE_EVIDENCE.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_LEVEL_C_CURRENT_RUN_REVOCATION.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_LEVEL_C_HISTORICAL_PROVENANCE.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_LEVEL_C_SESSION_COVERAGE_VERIFIED.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_LEVEL_C_TRACE_RESULTS.jsonl",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_0800673_READINESS_REVOCATION.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_9760CE_SCOPE_CORRECTION.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_BROKER_WRITE_SURFACE_V2.json",
+      "classification": "DOC_REQUIRED",
+      "why_required": "Architectural boundary documentation and call graph audits",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_BROKER_WRITE_SURFACE_V3.json",
+      "classification": "DOC_REQUIRED",
+      "why_required": "Architectural boundary documentation and call graph audits",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_BUSINESS_LOGIC_AUDIT_V2.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_BUSINESS_LOGIC_AUDIT_V3.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_CAPTURE_CALL_GRAPH.json",
+      "classification": "DOC_REQUIRED",
+      "why_required": "Architectural boundary documentation and call graph audits",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_CAPTURE_CALL_GRAPH.md",
+      "classification": "DOC_REQUIRED",
+      "why_required": "Architectural boundary documentation and call graph audits",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_CAPTURE_SCHEMA.json",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "JSON schema contract defining trace/record/capture formats",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_CAUSAL_RUNTIME_TRACE_V6.jsonl",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Audited Level-C V6 prospective verification evidence and audit contracts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_CHECKPOINT_PULSE.jsonl",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_CHECKPOINT_PULSE_REVOCATION.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_CHECKPOINT_PULSE_V2.jsonl",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_COMPONENT_BENCHMARK_V6.jsonl",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Audited Level-C V6 prospective verification evidence and audit contracts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_CURRENT_FAMILY_CALL_PATH.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_CURRENT_FAMILY_CALL_PATH.md",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_CURRENT_RUNTIME_PATH.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_CURRENT_WORKTREE_RECONCILIATION.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_EVENT_CONTENT_HASH.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_EXPECTED_OUTPUT_SCHEMA.json",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "JSON schema contract defining trace/record/capture formats",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_MUTATION_EVIDENCE.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_OPTION_DEPTH_PROVENANCE.jsonl",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_OPTION_PROVENANCE.jsonl",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_PREFLIGHT_CHECKLIST.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Audited Level-C V6 prospective verification evidence and audit contracts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_PREFLIGHT_RESULTS.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Audited Level-C V6 prospective verification evidence and audit contracts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_REPLAY_INPUT_SCHEMA.json",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "JSON schema contract defining trace/record/capture formats",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_REPLAY_RESULTS.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_RUNTIME_CHECKPOINT_TRACE_V5.jsonl",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_RUNTIME_CHECKPOINT_TRACE_V5_REVOCATION.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_STAGE_HASH_COVERAGE_V6.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Audited Level-C V6 prospective verification evidence and audit contracts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_TIME_IDENTITY_AUDIT_V6.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Audited Level-C V6 prospective verification evidence and audit contracts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_TRACE_CONSUMED_EVENT_PROVENANCE_V5.jsonl",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_TRACE_LEDGER.jsonl",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_TRACE_SCHEMA.json",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "JSON schema contract defining trace/record/capture formats",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_V5_INDEPENDENT_VERIFICATION.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_V5_MISSED_MUTATION_RCA.jsonl",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_V6_CORRECTED_TIME_TRACES.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Audited Level-C V6 prospective verification evidence and audit contracts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_VERIFICATION_REPORT.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Audited Level-C V6 prospective verification evidence and audit contracts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_VERIFIER_MUTATION_RESULTS.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_VERIFIER_MUTATION_RESULTS_V3.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Prospective session evidence records",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_VERIFIER_MUTATION_V5_CASES.jsonl",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_VERIFIER_MUTATION_V5_SUMMARY.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_VERIFIER_MUTATION_V6_CASES.jsonl",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Audited Level-C V6 prospective verification evidence and audit contracts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_PROSPECTIVE_VERIFIER_MUTATION_V6_SUMMARY.json",
+      "classification": "GENERATED_EVIDENCE",
+      "why_required": "Audited Level-C V6 prospective verification evidence and audit contracts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": true
+    },
+    {
+      "path": "TRADE_TRUTH_V2_10A62_COMPONENT_CLAIM_CORRECTION.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_V2_9DAE_DELTA_AUDIT.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_V2_9DAE_REGRESSION_EVIDENCE.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_V2_ASOF_FUTURE_ISOLATION_EVIDENCE.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_V2_DETERMINISM_EVIDENCE.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_V2_FUTURE_LEAK_AUDIT.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_V2_MUTATION_EVIDENCE.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_V2_PRIOR_CERTIFICATION_REVOCATION.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "TRADE_TRUTH_V2_REAL_CAUSAL_MUTATION_EVIDENCE_V2.json",
+      "classification": "LEGACY_COPIED",
+      "why_required": "Superseded historical V2 evidence, delta audits, or revoked run markers",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": true,
+      "keep_in_merge": false
+    },
+    {
+      "path": "core/candidate_journal.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/__init__.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/causal_replay.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/decay_watchdog.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/decision_hash.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/integrated_decision_tail.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/investigate.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/level_c_contract.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/market_capture_reader.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/models.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/outcome_collector.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/prospective_capture_engine.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/prospective_replay_engine.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/provenance.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/raw_causal_replay.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/raw_tick_causal_replay.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/real_option_provider.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/record_builder.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/replay.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/risk_state_provider.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/session_report.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "core/trade_truth/store.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Core production module for trade truth, prospective capture/replay, and contracts",
+      "runtime_imported": true,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/audit_runtime_call_graph.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Trade truth operational script",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/record_dynamic_runtime_trace.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Trade truth operational script",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/run_level_c_causal_replay.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Verification, replay, observer, and mutation operational scripts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/run_level_c_mutation_campaign.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Verification, replay, observer, and mutation operational scripts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/run_level_c_mutation_campaign_v2.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Verification, replay, observer, and mutation operational scripts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/run_trade_truth_prospective_observer.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Verification, replay, observer, and mutation operational scripts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/run_trade_truth_prospective_preflight.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Verification, replay, observer, and mutation operational scripts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/run_trade_truth_prospective_replay.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Verification, replay, observer, and mutation operational scripts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/run_trade_truth_prospective_verifier_mutations_v5.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Verification, replay, observer, and mutation operational scripts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/run_trade_truth_prospective_verifier_mutations_v6.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Verification, replay, observer, and mutation operational scripts",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/verify_trade_truth_level_ab_current_lineage.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Trade truth operational script",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/verify_trade_truth_level_c_evidence.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Trade truth operational script",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "scripts/verify_trade_truth_prospective_level_c.py",
+      "classification": "PRODUCTION_REQUIRED",
+      "why_required": "Trade truth operational script",
+      "runtime_imported": false,
+      "test_only": false,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "tests/test_trade_truth_prospective_repair.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Unit, integration, and regression tests verifying trade truth and prospective gates",
+      "runtime_imported": false,
+      "test_only": true,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "tests/trade_truth/test_bug_injection_replay.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Unit, integration, and regression tests verifying trade truth and prospective gates",
+      "runtime_imported": false,
+      "test_only": true,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "tests/trade_truth/test_comprehensive_adversarial.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Unit, integration, and regression tests verifying trade truth and prospective gates",
+      "runtime_imported": false,
+      "test_only": true,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "tests/trade_truth/test_e2e_pipeline_truth.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Unit, integration, and regression tests verifying trade truth and prospective gates",
+      "runtime_imported": false,
+      "test_only": true,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "tests/trade_truth/test_outcome_stateful_and_chain_restart.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Unit, integration, and regression tests verifying trade truth and prospective gates",
+      "runtime_imported": false,
+      "test_only": true,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "tests/trade_truth/test_raw_tick_expected_separation.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Unit, integration, and regression tests verifying trade truth and prospective gates",
+      "runtime_imported": false,
+      "test_only": true,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "tests/trade_truth/test_trade_truth_integration_and_adversarial.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Unit, integration, and regression tests verifying trade truth and prospective gates",
+      "runtime_imported": false,
+      "test_only": true,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "tests/trade_truth/test_trade_truth_mutation.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Unit, integration, and regression tests verifying trade truth and prospective gates",
+      "runtime_imported": false,
+      "test_only": true,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "tests/trade_truth/test_trade_truth_mutation_campaign.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Unit, integration, and regression tests verifying trade truth and prospective gates",
+      "runtime_imported": false,
+      "test_only": true,
+      "generated": false,
+      "keep_in_merge": true
+    },
+    {
+      "path": "tests/trade_truth/test_trade_truth_unit.py",
+      "classification": "TEST_REQUIRED",
+      "why_required": "Unit, integration, and regression tests verifying trade truth and prospective gates",
+      "runtime_imported": false,
+      "test_only": true,
+      "generated": false,
+      "keep_in_merge": true
+    }
+  ]
+}

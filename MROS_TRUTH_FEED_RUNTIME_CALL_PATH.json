@@ -1,0 +1,229 @@
+{
+  "contract_id": "MROS_TRUTH_FEED_RUNTIME_CALL_PATH_V1",
+  "total_stages": 20,
+  "all_runtime_reachable": true,
+  "all_capture_hooked": true,
+  "all_trace_id_propagated": true,
+  "stages": [
+    {
+      "stage": "MARKET_FEED",
+      "module": "core.kite_read_only_observation_runtime",
+      "function": "run_observation",
+      "caller": "scripts.run_kite_read_only_observation_v1.main",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Stop observation if websocket stream disconnects",
+      "proof": "Verified in core/kite_read_only_observation_runtime.py:100"
+    },
+    {
+      "stage": "WEBSOCKET",
+      "module": "core.kite_depth_ws",
+      "function": "KiteDepthWS.on_ticks",
+      "caller": "core.kite_read_only_observation_runtime.run_observation",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Reconnect counter recorded; drop on buffer full",
+      "proof": "Verified in core/kite_depth_ws.py"
+    },
+    {
+      "stage": "INGESTION",
+      "module": "core.market_event_graph_live_source",
+      "function": "build_live_captured_metadata_row",
+      "caller": "core.market_event_graph_live_runtime_bridge",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Discards malformed packet",
+      "proof": "Verified in core/market_event_graph_live_source.py"
+    },
+    {
+      "stage": "NORMALIZATION",
+      "module": "core.trade_truth.raw_tick_causal_replay",
+      "function": "RawTickSessionStore._build_1m_bars",
+      "caller": "core.market_session_store.MarketSessionStore.on_bar",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Rejects ticks outside market session hours",
+      "proof": "Verified in core/trade_truth/raw_tick_causal_replay.py:105"
+    },
+    {
+      "stage": "MARKET_MEMORY",
+      "module": "core.market_session_store",
+      "function": "MarketSessionStore.get_market_memory",
+      "caller": "core.trade_truth.prospective_capture_engine.ProspectiveCaptureEngine.capture_decision_trace",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Returns empty snapshot with is_order_action=False",
+      "proof": "Verified in core/market_session_store.py:280"
+    },
+    {
+      "stage": "FEATURE_ENGINE",
+      "module": "core.market_session_store",
+      "function": "MarketMemorySnapshot feature attributes",
+      "caller": "core.trade_truth.prospective_capture_engine",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Zeroes out NaN features; no lookahead",
+      "proof": "Verified in core/trade_truth/prospective_capture_engine.py:232"
+    },
+    {
+      "stage": "REGIME",
+      "module": "core.market_context",
+      "function": "classify_strategy_regime_mode",
+      "caller": "core.market_context.derive_market_context",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Decoupled pre-gate (C1/C2 decoupled from regime pre-gate per L5401)",
+      "proof": "Verified in core/trade_truth/prospective_capture_engine.py:246"
+    },
+    {
+      "stage": "STRATEGY",
+      "module": "core.candidate_evaluators",
+      "function": "evaluate_c1, evaluate_c2",
+      "caller": "core.trade_truth.prospective_capture_engine.ProspectiveCaptureEngine.capture_decision_trace",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "EvaluatorResult.qualified=False on any gate miss",
+      "proof": "Verified in core/candidate_evaluators.py:120"
+    },
+    {
+      "stage": "CANDIDATE_GENERATION",
+      "module": "core.candidate_evaluators",
+      "function": "CandidateEmission constructor",
+      "caller": "core.candidate_evaluators.evaluate_c1",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "candidate is None if not qualified",
+      "proof": "Verified in core/candidate_evaluators.py:210"
+    },
+    {
+      "stage": "FAMILY_COMPATIBILITY",
+      "module": "core.strategy_family_contract",
+      "function": "check_strategy_family_compatibility",
+      "caller": "core.trade_truth.prospective_capture_engine.capture_decision_trace",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Returns compatible=False, blocks candidate pool entry",
+      "proof": "Verified in core/strategy_family_contract.py:300"
+    },
+    {
+      "stage": "CANDIDATE_ADMISSION",
+      "module": "core.strategy_family_contract",
+      "function": "admit_candidate_to_pool",
+      "caller": "core.trade_truth.prospective_capture_engine.capture_decision_trace",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Returns False if schema or mandatory field missing",
+      "proof": "Verified in core/strategy_family_contract.py:340"
+    },
+    {
+      "stage": "OPTION_SELECTION",
+      "module": "core.trade_truth.real_option_provider",
+      "function": "RealOptionQuoteProvider.select_option",
+      "caller": "core.trade_truth.prospective_capture_engine.capture_decision_trace",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "SELECTION_STAGE_NOT_REACHED if no admitted candidate; quote None",
+      "proof": "Verified in core/trade_truth/real_option_provider.py:60"
+    },
+    {
+      "stage": "CANDIDATE_POOL",
+      "module": "core.candidate_journal",
+      "function": "CandidateJournal.record_candidate",
+      "caller": "core.trade_truth.prospective_capture_engine",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Immutable audit append; no state corruption",
+      "proof": "Verified in core/candidate_journal.py:30"
+    },
+    {
+      "stage": "SCORING",
+      "module": "core.opportunity_scoring",
+      "function": "OpportunityScoreRecord",
+      "caller": "core.trade_truth.prospective_capture_engine",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "BLOCKED_BY_PRODUCTION_DEPENDENCY recorded when unreached",
+      "proof": "Verified in core/trade_truth/prospective_capture_engine.py:359"
+    },
+    {
+      "stage": "RANKING",
+      "module": "core.candidate_ranking",
+      "function": "rank_candidates",
+      "caller": "core.trade_truth.prospective_capture_engine",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "BLOCKED_BY_PRODUCTION_DEPENDENCY recorded when unreached",
+      "proof": "Verified in core/trade_truth/prospective_capture_engine.py:360"
+    },
+    {
+      "stage": "TRADE_BUILDER",
+      "module": "core.trade_ticket",
+      "function": "TradeTicket",
+      "caller": "core.trade_truth.prospective_capture_engine",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "trade_object=None, BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "proof": "Verified in core/trade_truth/prospective_capture_engine.py:369"
+    },
+    {
+      "stage": "RISK",
+      "module": "core.risk_engine",
+      "function": "RiskEngine.evaluate_trade",
+      "caller": "core.trade_truth.prospective_capture_engine.capture_decision_trace",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Fails closed to BLOCKED if trade is None or limit exceeded",
+      "proof": "Verified in core/risk_engine.py:110"
+    },
+    {
+      "stage": "GOVERNANCE",
+      "module": "core.governed_strategy_authority",
+      "function": "validate_execution_candidate",
+      "caller": "core.trade_truth.prospective_capture_engine.capture_decision_trace",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "GOVERNED_BLOCKED if candidate is not ACTIVE_APPROVED",
+      "proof": "Verified in core/governed_strategy_authority.py:125"
+    },
+    {
+      "stage": "ADVISORY_DECISION",
+      "module": "core.trade_truth.decision_hash",
+      "function": "compute_deterministic_hash",
+      "caller": "core.trade_truth.prospective_capture_engine.capture_decision_trace",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "action=NO_TRADE or BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "proof": "Verified in core/trade_truth/prospective_capture_engine.py:447"
+    },
+    {
+      "stage": "EXECUTION_BOUNDARY",
+      "module": "core.trade_truth.prospective_capture_engine",
+      "function": "arm_broker_write_guards",
+      "caller": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook._arm_broker_guards",
+      "runtime_reachable": true,
+      "capture_hook": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
+      "trace_id_propagated": true,
+      "fail_closed_behavior": "Raises SECURITY BREACH if any place_order or submit_order called",
+      "proof": "Verified in core/trade_truth/prospective_capture_engine.py:75"
+    }
+  ]
+}

@@ -75,6 +75,10 @@ def make_spy(key: str):
         raise RuntimeError(f"SECURITY BREACH: {key} called during read-only prospective observation!")
     return spy_fn
 
+def reset_broker_write_guards():
+    for k in CALL_COUNTS:
+        CALL_COUNTS[k] = 0
+
 def arm_broker_write_guards():
     try:
         import core.execution_engine

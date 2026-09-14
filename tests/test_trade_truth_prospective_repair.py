@@ -46,12 +46,15 @@ def test_live_risk_provider_fails_closed_when_unconnected():
 
 
 def test_broker_write_guards_active():
+    from core.trade_truth.prospective_capture_engine import reset_broker_write_guards
+    reset_broker_write_guards()
     arm_broker_write_guards()
     assert sum(CALL_COUNTS.values()) == 0
     from core.execution_engine import ExecutionEngine
     with pytest.raises(RuntimeError, match="SECURITY BREACH"):
         ee = ExecutionEngine()
         ee.place_order(None)
+    reset_broker_write_guards()
 
 
 def test_no_synthetic_depth_or_quantities():
@@ -151,3 +154,33 @@ def test_causal_runtime_trace_vs_component_benchmark_separation():
         assert row["supports_level_c_causality"] is False
         assert "bench_" in row["benchmark_id"]
 
+
+
+def test_offline_records_not_counted_as_prospective_live():
+    rep_p = Path("TRADE_TRUTH_PROSPECTIVE_VERIFICATION_REPORT.json")
+    assert rep_p.exists()
+    rep = json.loads(rep_p.read_text())
+    assert rep.get("prospective_live_decisions") == 0
+    assert rep.get("prospective_full_parity") == 0
+    assert rep.get("offline_replay_decisions", 0) > 0
+    assert rep.get("offline_replay_full_parity", 0) > 0
+
+
+def test_mros_daily_governor_resolves_universe_and_strategies():
+    from core.mros_daily_governor import MROSDailyGovernor
+    gov = MROSDailyGovernor(Path("."), "2026-09-15")
+    u_state, u_res = gov.resolve_universe_authority()
+    assert u_state == "READY"
+    assert len(u_res.underlying_tokens) == 51
+    assert u_res.option_token_count > 0
+
+    s_state, s_list = gov.resolve_strategy_authority()
+    assert s_state == "READY"
+    assert any(s["alias"] == "C1" and s["status"] == "ACTIVE_APPROVED" for s in s_list)
+    assert any(s["alias"] == "C2" and s["status"] == "ACTIVE_APPROVED" for s in s_list)
+
+    plan = gov.evaluate_morning_readiness()
+    assert plan.session_date == "2026-09-15"
+    assert plan.universe_state == "READY"
+    assert plan.strategy_authority_state == "READY"
+    assert plan.broker_write_guard_state == "ARMED_FAIL_CLOSED_ZERO_CALLS"

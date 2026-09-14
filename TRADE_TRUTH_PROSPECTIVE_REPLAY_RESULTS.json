@@ -44,5 +44,11 @@
       "stage_mismatches": [],
       "future_leak_detected": false
     }
-  ]
+  ],
+  "evaluation_mode": "OFFLINE_FROZEN_BASELINE_REPLAY",
+  "classification": "OFFLINE_HISTORICAL_REPLAY",
+  "offline_replay_decisions": 5,
+  "offline_replay_full_parity": 5,
+  "prospective_live_decisions": 0,
+  "prospective_full_parity": 0
 }

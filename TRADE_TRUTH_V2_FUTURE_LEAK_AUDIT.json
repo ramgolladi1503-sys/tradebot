@@ -1,6 +1,0 @@
-{
-  "total_traces_checked": 54,
-  "future_leak_count": 0,
-  "future_leak_audit_passed": true,
-  "leaks": []
-}

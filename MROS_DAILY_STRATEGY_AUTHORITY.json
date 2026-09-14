@@ -1,0 +1,126 @@
+{
+  "strategy_authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG",
+  "session_date": "2026-09-15",
+  "strategies": [
+    {
+      "strategy_id": "ENTRY_C_INTRADAY_15M_IMPULSE_50BPS_X_STOP_40BPS_CLOSE",
+      "alias": "C1",
+      "status": "ACTIVE_APPROVED",
+      "eligible_for_governed_ranking": true,
+      "eligible_for_execution": true,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "C1_INTRADAY_15M_IMPULSE",
+      "alias": "C1",
+      "status": "ACTIVE_APPROVED",
+      "eligible_for_governed_ranking": true,
+      "eligible_for_execution": true,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "C1",
+      "alias": "C1",
+      "status": "ACTIVE_APPROVED",
+      "eligible_for_governed_ranking": true,
+      "eligible_for_execution": true,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "ENTRY_E3_OVERNIGHT_TREND_1512_SIGNAL_1514_ENTRY_OPEN_EXIT",
+      "alias": "C2",
+      "status": "ACTIVE_APPROVED",
+      "eligible_for_governed_ranking": true,
+      "eligible_for_execution": true,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "C2_OVERNIGHT_TREND",
+      "alias": "C2",
+      "status": "ACTIVE_APPROVED",
+      "eligible_for_governed_ranking": true,
+      "eligible_for_execution": true,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "C2",
+      "alias": "C2",
+      "status": "ACTIVE_APPROVED",
+      "eligible_for_governed_ranking": true,
+      "eligible_for_execution": true,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "EVENT",
+      "alias": "EVENT",
+      "status": "UNAPPROVED",
+      "eligible_for_governed_ranking": false,
+      "eligible_for_execution": false,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "PANIC",
+      "alias": "PANIC",
+      "status": "UNAPPROVED",
+      "eligible_for_governed_ranking": false,
+      "eligible_for_execution": false,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1",
+      "alias": "CAS",
+      "status": "SHADOW_ONLY",
+      "eligible_for_governed_ranking": false,
+      "eligible_for_execution": false,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "CAS",
+      "alias": "CAS",
+      "status": "SHADOW_ONLY",
+      "eligible_for_governed_ranking": false,
+      "eligible_for_execution": false,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "MACD_FUTURES_EXECUTION_RESEARCH",
+      "alias": "MACD",
+      "status": "RESEARCH_ONLY",
+      "eligible_for_governed_ranking": false,
+      "eligible_for_execution": false,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "MACD",
+      "alias": "MACD",
+      "status": "RESEARCH_ONLY",
+      "eligible_for_governed_ranking": false,
+      "eligible_for_execution": false,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "expiry_lotto",
+      "alias": "expiry_lotto",
+      "status": "SUPERSEDED",
+      "eligible_for_governed_ranking": false,
+      "eligible_for_execution": false,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "zero_hero",
+      "alias": "zero_hero",
+      "status": "SUPERSEDED",
+      "eligible_for_governed_ranking": false,
+      "eligible_for_execution": false,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    },
+    {
+      "strategy_id": "scalp",
+      "alias": "scalp",
+      "status": "SUPERSEDED",
+      "eligible_for_governed_ranking": false,
+      "eligible_for_execution": false,
+      "authority_source": "core.governed_strategy_authority.GOVERNED_STRATEGY_CATALOG"
+    }
+  ]
+}

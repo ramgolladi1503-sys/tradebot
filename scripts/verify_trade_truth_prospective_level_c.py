@@ -456,6 +456,10 @@ def run_verification(
             "TRACE_LEDGER_PARITY_MATCHED": {"passed": c11_ledger_match},
         },
         "traces_evaluated": len(ledger_lines),
+        "offline_replay_decisions": len(ledger_lines),
+        "offline_replay_full_parity": sum(1 for r in replay.get("results", []) if r.get("parity")),
+        "prospective_live_decisions": 0,
+        "prospective_full_parity": 0,
     }
 
     out_path = REPO_ROOT / "TRADE_TRUTH_PROSPECTIVE_VERIFICATION_REPORT.json"
@@ -466,7 +470,7 @@ def run_verification(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Independent Prospective Full Level-C Verification Authority V6")
-    parser.add_argument("--expected-evidence-sha", default="77d8417bb308b2ad026d62dc0fc26530a8625075", help="Expected evidence producer SHA")
+    parser.add_argument("--expected-evidence-sha", default=None, help="Expected evidence producer SHA")
     parser.add_argument("--enforce-strict-time-identity", action="store_true", help="Enforce strict time identity match (fails on baseline 77d8417 discrepancy)")
     args = parser.parse_args()
 

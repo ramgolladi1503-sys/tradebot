@@ -1,6 +1,6 @@
 {
   "verification_authority": "INDEPENDENT_PROSPECTIVE_FULL_LEVEL_C_VERIFIER_V6",
-  "verifier_implementation_sha": "c94ac255de62feb16cb2643c81c80c5fc3e1cc66",
+  "verifier_implementation_sha": "8b9d642840fcee8c94b4f65c0166196d3ca650c5",
   "expected_evidence_sha": "9760ce3e3eb5b86bf65953a227fbf866dd158841",
   "overall_verification_status": "PASS",
   "gates": {
@@ -64,5 +64,9 @@
       "passed": true
     }
   },
-  "traces_evaluated": 5
+  "traces_evaluated": 5,
+  "offline_replay_decisions": 5,
+  "offline_replay_full_parity": 5,
+  "prospective_live_decisions": 0,
+  "prospective_full_parity": 0
 }
