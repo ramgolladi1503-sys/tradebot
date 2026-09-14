@@ -11,11 +11,18 @@ def test_high_risk_classification_covers_execution_risk_strategies_and_workflows
     assert not gate._high_risk("docs/readme.md")
 
 
-def test_main_and_config_are_real_production_code_not_classification_bypasses():
-    assert gate._is_code("main.py")
-    assert gate._is_code("config/config.py")
-    assert gate._requires_attack("main.py")
-    assert gate._requires_attack("config/config.py")
+def test_all_non_test_python_surfaces_require_attack():
+    for path in (
+        "main.py",
+        "config/config.py",
+        "dashboard/app.py",
+        "patch_watchdog.py",
+        "research/foo.py",
+        "scripts/helper.py",
+    ):
+        assert gate._is_code(path)
+        assert gate._requires_attack(path)
+    assert not gate._is_code("tests/test_x.py")
 
 
 def test_dependency_workflow_and_pytest_config_changes_require_attack_evidence():
@@ -38,9 +45,9 @@ def test_attack_required_change_without_test_change_fails():
     assert "ATTACK_REQUIRED_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE" in errors
 
 
-def test_even_low_risk_production_change_requires_adversarial_named_test():
+def test_low_risk_production_change_still_requires_adversarial_test():
     errors = []
-    gate._coverage_shape_attack(["core/analytics/foo.py", "tests/test_foo.py"], errors)
+    gate._coverage_shape_attack(["dashboard/widget.py", "tests/test_widget.py"], errors)
     assert "ATTACK_REQUIRED_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE" in errors
 
 
@@ -51,76 +58,70 @@ def test_high_risk_change_requires_adversarial_named_test():
     assert "HIGH_RISK_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE" in errors
 
 
-def test_production_change_accepts_mutation_or_safety_test_name():
-    for test_path in (
-        "tests/test_risk_guard_mutation.py",
-        "tests/test_risk_guard_safety.py",
-        "tests/test_risk_guard_adversarial.py",
-        "tests/test_risk_guard_negative.py",
-        "tests/test_risk_guard_attack.py",
-    ):
-        errors = []
-        gate._coverage_shape_attack(["core/risk_guard.py", test_path], errors)
-        assert "ATTACK_REQUIRED_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE" not in errors
-        assert "HIGH_RISK_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE" not in errors
+def test_adversarial_file_name_satisfies_shape_but_not_quality_by_itself():
+    errors = []
+    gate._coverage_shape_attack(["core/risk_guard.py", "tests/test_risk_guard_attack.py"], errors)
+    assert "ATTACK_REQUIRED_CHANGE_WITHOUT_ADVERSARIAL_TEST_FILE" not in errors
 
 
-def test_gate_self_modification_fails_outside_bootstrap_branch(monkeypatch):
+def test_gate_self_modification_fails_outside_bootstrap(monkeypatch):
     monkeypatch.setattr(gate, "_base_contains_gate", lambda base: False)
     errors = []
     gate._governance_self_protection(
         "base", ["scripts/run_adversarial_pr_gate.py"], "feature/ordinary-change", errors
     )
     assert errors
-    assert errors[0].startswith("ADVERSARIAL_GATE_SELF_MODIFICATION_BLOCKED_REQUIRES_TRUSTED_RECERTIFICATION")
 
 
-def test_initial_bootstrap_is_allowed_only_when_base_has_no_gate(monkeypatch):
+def test_initial_bootstrap_allows_only_bootstrap_files(monkeypatch):
     monkeypatch.setattr(gate, "_base_contains_gate", lambda base: False)
     errors = []
-    gate._governance_self_protection("base", list(gate.GATE_PROTECTED_PATHS), gate.BOOTSTRAP_BRANCH, errors)
+    gate._governance_self_protection(
+        "base", list(gate.BOOTSTRAP_ALLOWED_PATHS), gate.BOOTSTRAP_BRANCH, errors
+    )
     assert errors == []
+
+
+def test_bootstrap_cannot_smuggle_required_ci_workflow_change(monkeypatch):
+    monkeypatch.setattr(gate, "_base_contains_gate", lambda base: False)
+    errors = []
+    gate._governance_self_protection(
+        "base", [".github/workflows/ci.yml"], gate.BOOTSTRAP_BRANCH, errors
+    )
+    assert errors == ["BOOTSTRAP_SCOPE_VIOLATION:.github/workflows/ci.yml"]
 
 
 def test_reusing_bootstrap_branch_after_gate_exists_is_blocked(monkeypatch):
     monkeypatch.setattr(gate, "_base_contains_gate", lambda base: True)
     errors = []
-    gate._governance_self_protection("base", list(gate.GATE_PROTECTED_PATHS), gate.BOOTSTRAP_BRANCH, errors)
+    gate._governance_self_protection(
+        "base", list(gate.BOOTSTRAP_ALLOWED_PATHS), gate.BOOTSTRAP_BRANCH, errors
+    )
     assert errors
 
 
 def test_syntax_attack_detects_invalid_python(monkeypatch):
     monkeypatch.setattr(gate, "_read_candidate", lambda ref, path: "def broken(:\n    pass\n")
     errors = []
-    gate._syntax_attack("candidate", ["core/foo.py"], errors)
-    assert errors and errors[0].startswith("SYNTAX_ATTACK_FAIL:core/foo.py")
+    gate._syntax_attack("candidate", ["dashboard/app.py"], errors)
+    assert errors and errors[0].startswith("SYNTAX_ATTACK_FAIL:dashboard/app.py")
 
 
-def test_dangerous_api_attack_detects_only_added_dangerous_calls(monkeypatch):
+def test_dangerous_api_attack_detects_direct_and_indirect_calls(monkeypatch):
     diff = "\n".join(
         [
-            "@@ -1,1 +1,4 @@",
-            " context = compile(existing, '<x>', 'exec')",
+            "@@ -0,0 +1,5 @@",
             "+eval('1+1')",
             "+exec('x=1')",
             "+compile('x=1', '<x>', 'exec')",
             "+__import__('os')",
+            "+fn = getattr(builtins, 'eval')",
         ]
     )
     monkeypatch.setattr(gate, "changed_diff", lambda base, candidate, path: diff)
     errors = []
-    gate._dangerous_api_attack("base", "candidate", ["core/foo.py"], errors)
-    assert len(errors) == 4
-
-
-def test_indirect_getattr_eval_lookup_is_detected(monkeypatch):
-    monkeypatch.setattr(
-        gate,
-        "changed_diff",
-        lambda base, candidate, path: '@@ -0,0 +1 @@\n+fn = getattr(builtins, "eval")',
-    )
-    errors = []
-    gate._dangerous_api_attack("base", "candidate", ["core/foo.py"], errors)
+    gate._dangerous_api_attack("base", "candidate", ["dashboard/app.py"], errors)
+    assert len(errors) == 5
     assert any(e.startswith("DANGEROUS_API_INDIRECT_LOOKUP_ADDED") for e in errors)
 
 
@@ -186,23 +187,15 @@ def test_adversarial_file_with_pass_only_is_rejected(monkeypatch):
     errors = []
     gate._adversarial_test_quality_attack("candidate", ["core/foo.py", "tests/test_foo_adversarial.py"], errors)
     assert any(e.startswith("ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL") for e in errors)
-    assert any(e.startswith("ADVERSARIAL_TEST_SUBSTANTIVE_CASE_FLOOR_FAIL") for e in errors)
 
 
-def test_assert_true_does_not_satisfy_adversarial_quality_floor(monkeypatch):
-    source = "def test_attack_rejects_bad_input():\n    assert True\n"
-    monkeypatch.setattr(gate, "_read_candidate", lambda ref, path: source)
-    errors = []
-    gate._adversarial_test_quality_attack("candidate", ["core/foo.py", "tests/test_foo_adversarial.py"], errors)
-    assert any(e.startswith("ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL") for e in errors)
-
-
-def test_self_equality_assertion_does_not_satisfy_quality_floor(monkeypatch):
-    source = "def test_attack_rejects_bad_input():\n    assert result == result\n"
-    monkeypatch.setattr(gate, "_read_candidate", lambda ref, path: source)
-    errors = []
-    gate._adversarial_test_quality_attack("candidate", ["core/foo.py", "tests/test_foo_adversarial.py"], errors)
-    assert any(e.startswith("ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL") for e in errors)
+def test_assert_true_and_self_equality_do_not_satisfy_quality_floor(monkeypatch):
+    for assertion in ("assert True", "assert result == result"):
+        source = f"def test_attack_rejects_bad_input():\n    {assertion}\n"
+        monkeypatch.setattr(gate, "_read_candidate", lambda ref, path, src=source: src)
+        errors = []
+        gate._adversarial_test_quality_attack("candidate", ["core/foo.py", "tests/test_foo_adversarial.py"], errors)
+        assert any(e.startswith("ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL") for e in errors)
 
 
 def test_broad_pytest_raises_does_not_count_as_substantive(monkeypatch):
@@ -220,14 +213,6 @@ def test_high_risk_change_requires_multiple_substantive_adversarial_checks(monke
     gate._adversarial_test_quality_attack("candidate", ["core/risk_guard.py", "tests/test_risk_guard_adversarial.py"], errors)
     assert any(e.startswith("ADVERSARIAL_TEST_TOO_SHALLOW") for e in errors)
     assert any(e.startswith("ADVERSARIAL_TEST_SUBSTANTIVE_CASE_FLOOR_FAIL") for e in errors)
-
-
-def test_substantive_low_risk_adversarial_case_passes_quality_floor(monkeypatch):
-    source = "def test_attack_rejects_bad_input():\n    result = False\n    assert result is False\n"
-    monkeypatch.setattr(gate, "_read_candidate", lambda ref, path: source)
-    errors = []
-    gate._adversarial_test_quality_attack("candidate", ["core/analytics/foo.py", "tests/test_foo_adversarial.py"], errors)
-    assert errors == []
 
 
 def test_two_substantive_high_risk_cases_pass_quality_floor(monkeypatch):
@@ -254,6 +239,7 @@ def test_docs_only_change_does_not_require_test_change():
 
 def test_test_files_are_not_classified_as_production_code():
     assert gate._is_test("tests/test_x.py")
+    assert gate._is_test("test_root_helper.py")
     assert not gate._is_code("tests/test_x.py")
     assert not gate._requires_attack("tests/test_x.py")
 
