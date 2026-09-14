@@ -43,19 +43,27 @@ jobs:
           git update-ref refs/remotes/origin/adversarial-base "$BASE_SHA"
           test "$(git rev-parse refs/remotes/origin/adversarial-base)" = "$BASE_SHA"
 
+      - name: Static adversarial inspection before dependency installation
+        env:
+          ADVERSARIAL_BASE_REF: refs/remotes/origin/adversarial-base
+          ADVERSARIAL_CANDIDATE_REF: ${{ github.event.pull_request.head.sha }}
+          ADVERSARIAL_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: python scripts/run_adversarial_pr_gate.py --base-ref "$ADVERSARIAL_BASE_REF" --candidate-ref "$ADVERSARIAL_CANDIDATE_REF" --branch "$ADVERSARIAL_BRANCH"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
 
-      - name: Install repository test dependencies
+      - name: Install trusted-base test dependencies
         run: |
+          set -euo pipefail
+          git show refs/remotes/origin/adversarial-base:requirements.txt > /tmp/adversarial-base-requirements.txt
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r /tmp/adversarial-base-requirements.txt
           pip install 'pandas<3.0' hypothesis
 
-      - name: Execute adversarial gate against exact candidate
+      - name: Execute changed tests under adversarial gate
         env:
           ADVERSARIAL_BASE_REF: refs/remotes/origin/adversarial-base
           ADVERSARIAL_CANDIDATE_REF: ${{ github.event.pull_request.head.sha }}
