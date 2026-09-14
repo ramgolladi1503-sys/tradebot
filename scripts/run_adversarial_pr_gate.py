@@ -23,18 +23,12 @@ HIGH_RISK_PREFIXES = (
     ".github/workflows/",
 )
 
-PYTHON_PRODUCTION_PREFIXES = ("config/", "core/", "strategies/", "scripts/", "tools/")
 ATTACK_REQUIRED_PREFIXES = (
     "config/",
-    "core/",
-    "strategies/",
-    "scripts/",
-    "tools/",
     ".github/workflows/",
     ".github/actions/",
 )
 ATTACK_REQUIRED_EXACT = (
-    "main.py",
     "requirements.txt",
     "pyproject.toml",
     "pytest.ini",
@@ -45,9 +39,20 @@ ATTACK_REQUIRED_EXACT = (
 TEST_PREFIXES = ("tests/",)
 GATE_PROTECTED_PATHS = (
     ".github/workflows/adversarial-pr-gate.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/agent-review-gate.yml",
+    ".github/workflows/repo-forensics-pr-gate.yml",
+    ".github/workflows/frozen-head-candidate-safety-tests.yml",
+    ".github/workflows/codeql.yml",
     "scripts/run_adversarial_pr_gate.py",
+    "scripts/validate_agent_review_evidence.py",
     "tests/governance/test_adversarial_pr_gate.py",
 )
+BOOTSTRAP_ALLOWED_PATHS = {
+    ".github/workflows/adversarial-pr-gate.yml",
+    "scripts/run_adversarial_pr_gate.py",
+    "tests/governance/test_adversarial_pr_gate.py",
+}
 BOOTSTRAP_BRANCH = "governance/adversarial-pr-gate-v1"
 
 SKIP_PATTERNS = (
@@ -124,18 +129,19 @@ def _removed_lines(diff: str) -> list[str]:
 
 
 def _is_test(path: str) -> bool:
-    return path.endswith(".py") and path.startswith(TEST_PREFIXES)
+    name = Path(path).name
+    return path.startswith(TEST_PREFIXES) or name.startswith("test_") or name.endswith("_test.py")
 
 
 def _is_code(path: str) -> bool:
-    return path.endswith(".py") and (
-        path == "main.py" or any(path.startswith(prefix) for prefix in PYTHON_PRODUCTION_PREFIXES)
-    )
+    return path.endswith(".py") and not _is_test(path) and not path.startswith("docs/")
 
 
 def _requires_attack(path: str) -> bool:
     if _is_test(path) or path.startswith("docs/"):
         return False
+    if _is_code(path):
+        return True
     return path in ATTACK_REQUIRED_EXACT or any(path.startswith(prefix) for prefix in ATTACK_REQUIRED_PREFIXES)
 
 
@@ -304,11 +310,15 @@ def _governance_self_protection(base_ref: str, paths: list[str], branch: str, er
     touched = [p for p in paths if p in GATE_PROTECTED_PATHS]
     if not touched:
         return
-    bootstrap_allowed = branch == BOOTSTRAP_BRANCH and not _base_contains_gate(base_ref)
-    if not bootstrap_allowed:
-        errors.append(
-            "ADVERSARIAL_GATE_SELF_MODIFICATION_BLOCKED_REQUIRES_TRUSTED_RECERTIFICATION:" + ",".join(touched)
-        )
+    if branch == BOOTSTRAP_BRANCH and not _base_contains_gate(base_ref):
+        forbidden_bootstrap = [p for p in touched if p not in BOOTSTRAP_ALLOWED_PATHS]
+        if not forbidden_bootstrap:
+            return
+        errors.append("BOOTSTRAP_SCOPE_VIOLATION:" + ",".join(forbidden_bootstrap))
+        return
+    errors.append(
+        "ADVERSARIAL_GATE_SELF_MODIFICATION_BLOCKED_REQUIRES_TRUSTED_RECERTIFICATION:" + ",".join(touched)
+    )
 
 
 def _run_changed_tests(paths: list[str], errors: list[str]) -> None:
