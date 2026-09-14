@@ -14,12 +14,9 @@ _EPS = 1e-12
 
 def _finite_1d(values: Iterable[float], *, min_size: int = 2) -> np.ndarray:
     arr = np.asarray(list(values), dtype=float)
-    if arr.ndim != 1:
-        raise ValueError("expected a one-dimensional series")
-    if arr.size < min_size:
-        raise ValueError(f"at least {min_size} observations are required")
-    if not np.isfinite(arr).all():
-        raise ValueError("all observations must be finite")
+    if arr.ndim != 1: raise ValueError("expected a one-dimensional series")
+    if arr.size < min_size: raise ValueError(f"at least {min_size} observations are required")
+    if not np.isfinite(arr).all(): raise ValueError("all observations must be finite")
     return arr
 
 
@@ -30,45 +27,30 @@ def _finite_scalar(value: float, name: str) -> float:
 
 
 def sample_sharpe(returns: Iterable[float]) -> float:
-    x = _finite_1d(returns)
-    sd = float(np.std(x, ddof=1))
-    if sd <= _EPS:
-        raise ValueError("Sharpe ratio is undefined for zero-variance returns")
+    x = _finite_1d(returns); sd = float(np.std(x, ddof=1))
+    if sd <= _EPS: raise ValueError("Sharpe ratio is undefined for zero-variance returns")
     return float(np.mean(x) / sd)
 
 
 def _skew_kurtosis(x: np.ndarray) -> tuple[float, float]:
-    centered = x - np.mean(x)
-    m2 = float(np.mean(centered**2))
-    if m2 <= _EPS:
-        raise ValueError("moments are undefined for zero-variance returns")
-    m3 = float(np.mean(centered**3)); m4 = float(np.mean(centered**4))
-    return m3 / (m2 ** 1.5), m4 / (m2 * m2)
+    centered = x - np.mean(x); m2 = float(np.mean(centered**2))
+    if m2 <= _EPS: raise ValueError("moments are undefined for zero-variance returns")
+    return float(np.mean(centered**3)) / (m2 ** 1.5), float(np.mean(centered**4)) / (m2 * m2)
 
 
-def _effective_sample_size(x: np.ndarray, max_lag: int | None = None) -> float:
-    n = x.size
-    if max_lag is not None and (type(max_lag) is not int or max_lag < 0):
-        raise ValueError("max_lag must be a non-negative integer")
-    if n < 3: return float(n)
-    if max_lag is None: max_lag = max(1, min(n - 1, int(round(n ** (1 / 3)))))
-    centered = x - np.mean(x); denom = float(np.dot(centered, centered))
-    if denom <= _EPS: return float(n)
-    inflation = 1.0
-    for lag in range(1, min(max_lag, n - 1) + 1):
-        rho = float(np.dot(centered[:-lag], centered[lag:]) / denom)
-        inflation += 2.0 * (1.0 - lag / (max_lag + 1.0)) * rho
-    inflation = max(inflation, 1.0 / n)
-    return float(min(n, max(2.0, n / inflation)))
+def probabilistic_sharpe_ratio(returns: Iterable[float], *, benchmark_sharpe: float = 0.0) -> float:
+    """Published non-normal PSR formula using T observations and first four moments.
 
-
-def probabilistic_sharpe_ratio(returns: Iterable[float], *, benchmark_sharpe: float = 0.0, max_lag: int | None = None) -> float:
+    Serial-dependence/GARCH/heavy-tail generalizations are intentionally not approximated
+    here. Callers must fail the policy's inference-model gate when this estimator's
+    assumptions are not defensible.
+    """
     benchmark = _finite_scalar(benchmark_sharpe, "benchmark_sharpe")
     x = _finite_1d(returns, min_size=3); sr = sample_sharpe(x); skew, kurt = _skew_kurtosis(x)
-    n_eff = _effective_sample_size(x, max_lag=max_lag)
     variance_term = 1.0 - skew * sr + ((kurt - 1.0) / 4.0) * sr * sr
     if variance_term <= 0.0 or not math.isfinite(variance_term): raise ValueError("estimated Sharpe variance is non-positive or non-finite")
-    return float(_NORMAL.cdf((sr - benchmark) / math.sqrt(variance_term / max(n_eff - 1.0, 1.0))))
+    z = (sr - benchmark) * math.sqrt(x.size - 1.0) / math.sqrt(variance_term)
+    return float(_NORMAL.cdf(z))
 
 
 def minimum_track_record_length(returns: Iterable[float], *, benchmark_sharpe: float = 0.0, confidence: float = 0.95) -> int:
@@ -100,8 +82,8 @@ def _expected_max_standard_normal(n_eff: float) -> float:
     return (1.0 - _EULER_GAMMA) * _NORMAL.inv_cdf(p1) + _EULER_GAMMA * _NORMAL.inv_cdf(p2)
 
 
-def deflated_sharpe_ratio(selected_returns: Iterable[float], trial_sharpes: Iterable[float], *, effective_trials: float | None = None, max_lag: int | None = None) -> float:
-    """Bailey-Lopez de Prado DSR using SR0=sqrt(Var(trial SRs))*E[max Z]."""
+def deflated_sharpe_ratio(selected_returns: Iterable[float], trial_sharpes: Iterable[float], *, effective_trials: float | None = None) -> float:
+    """Bailey-Lopez de Prado DSR: PSR against SR0=sqrt(Var(trial SR))*E[max Z]."""
     trials = _finite_1d(trial_sharpes, min_size=2)
     if effective_trials is None: effective_trials = float(trials.size)
     effective_trials = _finite_scalar(effective_trials, "effective_trials")
@@ -109,7 +91,7 @@ def deflated_sharpe_ratio(selected_returns: Iterable[float], trial_sharpes: Iter
     trial_sd = float(np.std(trials, ddof=1))
     if trial_sd <= _EPS: raise ValueError("trial Sharpe distribution must have non-zero variance")
     benchmark = trial_sd * _expected_max_standard_normal(effective_trials)
-    return probabilistic_sharpe_ratio(selected_returns, benchmark_sharpe=benchmark, max_lag=max_lag)
+    return probabilistic_sharpe_ratio(selected_returns, benchmark_sharpe=benchmark)
 
 
 def bonferroni_rejections(p_values: Iterable[float], *, alpha: float = 0.05) -> list[bool]:
@@ -145,13 +127,11 @@ def _column_sharpes(matrix: np.ndarray) -> np.ndarray:
 
 
 def _average_rank_ascending(values: np.ndarray, selected_index: int) -> float:
-    selected = values[selected_index]
-    less = int(np.sum(values < selected)); equal = int(np.sum(values == selected))
+    selected = values[selected_index]; less = int(np.sum(values < selected)); equal = int(np.sum(values == selected))
     return less + (equal + 1.0) / 2.0
 
 
 def cscv_probability_of_backtest_overfitting(strategy_returns: Sequence[Sequence[float]], *, blocks: int = 8) -> float:
-    """Published CSCV/PBO structure: evaluate every S choose S/2 symmetric combination."""
     matrix = np.asarray(strategy_returns, dtype=float)
     if matrix.ndim != 2 or matrix.shape[0] < 4 or matrix.shape[1] < 2: raise ValueError("strategy_returns must be a 2D matrix with >=4 rows and >=2 strategies")
     if not np.isfinite(matrix).all(): raise ValueError("strategy_returns must be finite")
@@ -164,8 +144,7 @@ def cscv_probability_of_backtest_overfitting(strategy_returns: Sequence[Sequence
         train_idx = np.concatenate([index_blocks[i] for i in train_blocks]); test_idx = np.concatenate([index_blocks[i] for i in test_blocks])
         train_scores = _column_sharpes(matrix[train_idx, :]); test_scores = _column_sharpes(matrix[test_idx, :])
         if not np.isfinite(train_scores).all() or not np.isfinite(test_scores).all(): raise ValueError("all strategy performance statistics must be defined in every CSCV split")
-        winner = int(np.argmax(train_scores)); rank = _average_rank_ascending(test_scores, winner)
-        omega = rank / (matrix.shape[1] + 1.0)
+        winner = int(np.argmax(train_scores)); rank = _average_rank_ascending(test_scores, winner); omega = rank / (matrix.shape[1] + 1.0)
         if omega <= 0.5: lower_half_count += 1
         comparisons += 1
     if comparisons != math.comb(blocks, half): raise RuntimeError("incomplete CSCV combination enumeration")
