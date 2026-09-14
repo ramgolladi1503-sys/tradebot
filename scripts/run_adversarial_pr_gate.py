@@ -273,17 +273,18 @@ def _base_contains_gate(base_ref: str) -> bool:
 
 
 def _trusted_recertification_authorized(base_ref: str, candidate_ref: str) -> bool:
-    candidate_sha = _git("rev-parse", candidate_ref)
+    candidate_sha = _git("rev-parse", candidate_ref).lower()
     manifest = f"{RECERTIFICATION_DIR}/{candidate_sha}.md"
     proc = _run(["git", "show", f"{base_ref}:{manifest}"], check=False)
     if proc.returncode != 0:
         return False
-    text = proc.stdout.lower()
-    return (
-        f"candidate_sha: {candidate_sha}" in text
-        and "authorized: true" in text
-        and "scope: adversarial-gate-recertification" in text
-    )
+    lines = {line.strip().lower() for line in proc.stdout.splitlines() if line.strip()}
+    required = {
+        f"candidate_sha: {candidate_sha}",
+        "authorized: true",
+        "scope: adversarial-gate-recertification",
+    }
+    return required.issubset(lines)
 
 
 def _governance_self_protection(
