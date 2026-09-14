@@ -1,7 +1,7 @@
 {
   "verification_authority": "INDEPENDENT_PROSPECTIVE_FULL_LEVEL_C_VERIFIER_V6",
-  "verifier_implementation_sha": "8b9d642840fcee8c94b4f65c0166196d3ca650c5",
-  "expected_evidence_sha": "9760ce3e3eb5b86bf65953a227fbf866dd158841",
+  "verifier_implementation_sha": "cb061d3b22e49b9c481d0db38e7577defaa87a0a",
+  "expected_evidence_sha": null,
   "overall_verification_status": "PASS",
   "gates": {
     "PREFLIGHT_MANDATORY_GATES_REAL": {

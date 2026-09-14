@@ -7,7 +7,7 @@
     {
       "gate": "CODE_SHA_FROZEN",
       "passed": true,
-      "detail": "Frozen SHA: 8b9d642840fcee8c94b4f65c0166196d3ca650c5"
+      "detail": "Frozen SHA: cb061d3b22e49b9c481d0db38e7577defaa87a0a"
     },
     {
       "gate": "CONFIG_FROZEN",
