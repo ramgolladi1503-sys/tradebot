@@ -1,4 +1,3 @@
-from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from core.research_registry.research_models import (
@@ -88,13 +87,19 @@ def test_duplicate_experiment_id_blocks():
     assert "DUPLICATE_EXPERIMENT_ID" in audit.reasons
 
 
-def test_duplicate_version_id_across_experiments_blocks():
+def test_duplicate_version_id_within_experiment_blocks():
+    versions = [_version("V1"), _version("V1", created=datetime(2026, 1, 2, tzinfo=timezone.utc))]
+    audit = audit_experiment_lineage([_experiment(versions=versions)], hypothesis_id="H1")
+    assert audit.passed is False
+    assert "DUPLICATE_VERSION_ID" in audit.reasons
+
+
+def test_same_local_version_id_in_distinct_experiments_is_allowed():
     audit = audit_experiment_lineage(
         [_experiment("E1"), _experiment("E2")],
         hypothesis_id="H1",
     )
-    assert audit.passed is False
-    assert "DUPLICATE_VERSION_ID" in audit.reasons
+    assert audit.passed is True
 
 
 def test_experiment_without_version_blocks():
