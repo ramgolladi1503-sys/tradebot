@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Iterable
 
+from core.research_registry.experiment_validator import ExperimentValidator
 from core.research_registry.research_models import ResearchExperiment
 
 from .policy import CertificationInput, CertificationVerdict, certify_research
@@ -29,7 +30,6 @@ def audit_experiment_lineage(
         reasons.append("MISSING_EXPERIMENT_HISTORY")
 
     experiment_ids: set[str] = set()
-    version_ids: set[str] = set()
     for experiment in rows:
         if not experiment.experiment_id.strip():
             reasons.append("MISSING_EXPERIMENT_ID")
@@ -44,21 +44,23 @@ def audit_experiment_lineage(
             continue
 
         previous_timestamp = None
+        previous_version = None
+        local_version_ids: set[str] = set()
         for version in experiment.versions:
             if not version.version_id.strip():
                 reasons.append("MISSING_VERSION_ID")
-            elif version.version_id in version_ids:
+            elif version.version_id in local_version_ids:
                 reasons.append("DUPLICATE_VERSION_ID")
-            version_ids.add(version.version_id)
+            local_version_ids.add(version.version_id)
 
             if previous_timestamp is not None and version.created_timestamp < previous_timestamp:
                 reasons.append("NON_MONOTONIC_VERSION_HISTORY")
             previous_timestamp = version.created_timestamp
 
-            if not version.branch.strip():
-                reasons.append("MISSING_BRANCH_PROVENANCE")
-            if not version.commit.strip():
-                reasons.append("MISSING_COMMIT_PROVENANCE")
+            for error in ExperimentValidator.validate_version(version, previous_version):
+                reasons.append(f"INVALID_VERSION:{error}")
+            previous_version = version
+
             if not version.reason.strip():
                 reasons.append("MISSING_EXPERIMENT_REASON")
             universe = version.market_universe
