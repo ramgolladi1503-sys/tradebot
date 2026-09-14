@@ -19,6 +19,7 @@ def test_attack_depth_scales_with_number_of_changed_surfaces(monkeypatch):
     assert gate._required_attack_case_count(changed[:-1], high_risk=False) == 3
     assert any(e.startswith("ADVERSARIAL_TEST_TOO_SHALLOW") for e in errors)
     assert any(e.startswith("ADVERSARIAL_TEST_SUBSTANTIVE_CASE_FLOOR_FAIL") for e in errors)
+    assert any(e.startswith("ADVERSARIAL_NEGATIVE_CASE_FLOOR_FAIL") for e in errors)
 
 
 def test_high_risk_generic_attack_does_not_count_as_surface_coverage(monkeypatch):
@@ -40,10 +41,53 @@ def test_high_risk_generic_attack_does_not_count_as_surface_coverage(monkeypatch
         ["core/risk_guard.py", "tests/test_generic_attack.py"],
         errors,
     )
-    assert "HIGH_RISK_SURFACE_UNREFERENCED_BY_ADVERSARIAL_TEST:core/risk_guard.py" in errors
+    assert "HIGH_RISK_SURFACE_UNIMPORTED_BY_ADVERSARIAL_TEST:core/risk_guard.py" in errors
 
 
-def test_high_risk_imported_module_is_linked_to_adversarial_evidence(monkeypatch):
+def test_high_risk_filename_only_is_not_enough_without_import(monkeypatch):
+    source = "\n".join(
+        [
+            "def test_attack_rejects_bad_input():",
+            "    assert rejected is True",
+            "",
+            "def test_boundary_blocks_missing_authority():",
+            "    assert allowed is False",
+        ]
+    )
+    monkeypatch.setattr(gate, "_read_candidate", lambda ref, path: source)
+    errors = []
+    gate._adversarial_test_quality_attack(
+        "candidate",
+        ["core/risk_guard.py", "tests/test_risk_guard_attack.py"],
+        errors,
+    )
+    assert "HIGH_RISK_SURFACE_UNIMPORTED_BY_ADVERSARIAL_TEST:core/risk_guard.py" in errors
+
+
+def test_from_parent_import_builds_exact_high_risk_module_link(monkeypatch):
+    source = "\n".join(
+        [
+            "from core import risk_guard",
+            "",
+            "def test_attack_rejects_bad_input():",
+            "    assert rejected is True",
+            "",
+            "def test_boundary_blocks_missing_authority():",
+            "    assert allowed is False",
+        ]
+    )
+    monkeypatch.setattr(gate, "_read_candidate", lambda ref, path: source)
+    errors = []
+    gate._adversarial_test_quality_attack(
+        "candidate",
+        ["core/risk_guard.py", "tests/test_generic_attack.py"],
+        errors,
+    )
+    assert not any(e.startswith("HIGH_RISK_SURFACE_UNIMPORTED") for e in errors)
+    assert errors == []
+
+
+def test_direct_high_risk_import_is_linked_to_adversarial_evidence(monkeypatch):
     source = "\n".join(
         [
             "import core.risk_guard",
@@ -62,26 +106,4 @@ def test_high_risk_imported_module_is_linked_to_adversarial_evidence(monkeypatch
         ["core/risk_guard.py", "tests/test_generic_attack.py"],
         errors,
     )
-    assert not any(e.startswith("HIGH_RISK_SURFACE_UNREFERENCED") for e in errors)
-    assert errors == []
-
-
-def test_high_risk_test_filename_can_link_surface_without_import(monkeypatch):
-    source = "\n".join(
-        [
-            "def test_attack_rejects_bad_input():",
-            "    assert rejected is True",
-            "",
-            "def test_boundary_blocks_missing_authority():",
-            "    assert allowed is False",
-        ]
-    )
-    monkeypatch.setattr(gate, "_read_candidate", lambda ref, path: source)
-    errors = []
-    gate._adversarial_test_quality_attack(
-        "candidate",
-        ["core/risk_guard.py", "tests/test_risk_guard_attack.py"],
-        errors,
-    )
-    assert not any(e.startswith("HIGH_RISK_SURFACE_UNREFERENCED") for e in errors)
     assert errors == []
