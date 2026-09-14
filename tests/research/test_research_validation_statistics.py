@@ -37,13 +37,15 @@ def test_psr_increases_for_same_shape_with_stronger_mean():
 
 def test_psr_penalizes_serial_dependence_relative_to_independent_sequence():
     rng = np.random.default_rng(7)
-    innovations = rng.normal(0.001, 0.01, 500)
+    innovations = rng.normal(0.0, 0.01, 500)
     serial = np.empty_like(innovations)
     serial[0] = innovations[0]
     for i in range(1, len(serial)):
         serial[i] = 0.85 * serial[i - 1] + innovations[i]
+    # Force the same positive marginal mean before permutation. For a positive Sharpe,
+    # reducing effective sample size must reduce confidence rather than move it toward 0.5.
+    serial = serial - np.mean(serial) + 0.002
     iid_like = rng.permutation(serial)
-    # Same marginal observations, different ordering. Serial dependence must not improve confidence.
     assert probabilistic_sharpe_ratio(serial, max_lag=12) <= probabilistic_sharpe_ratio(iid_like, max_lag=12)
 
 
