@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import math
 import os
 import re
 import subprocess
@@ -253,6 +254,25 @@ def _substantive_assertion_count(function: ast.AST) -> int:
     return count
 
 
+def _module_name_for_path(path: str) -> str:
+    return path[:-3].replace("/", ".") if path.endswith(".py") else ""
+
+
+def _imported_modules(tree: ast.AST) -> set[str]:
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.add(node.module)
+    return modules
+
+
+def _required_attack_case_count(attacked_surface: list[str], high_risk: bool) -> int:
+    scaled = max(1, math.ceil(len(attacked_surface) / 4))
+    return min(10, max(2 if high_risk else 1, scaled))
+
+
 def _adversarial_test_quality_attack(candidate_ref: str, paths: list[str], errors: list[str]) -> None:
     attacked_surface = [p for p in paths if _requires_attack(p)]
     if not attacked_surface:
@@ -263,16 +283,20 @@ def _adversarial_test_quality_attack(candidate_ref: str, paths: list[str], error
     substantive_tests = 0
     total_assertions = 0
     negative_named_tests = 0
+    imported_modules: set[str] = set()
+    adversarial_filenames: list[str] = []
 
     for path in adv_paths:
         text = _read_candidate(candidate_ref, path)
         if text is None:
             errors.append(f"ADVERSARIAL_TEST_UNREADABLE:{path}")
             continue
+        adversarial_filenames.append(Path(path).name.lower())
         try:
             tree = ast.parse(text, filename=path)
         except SyntaxError:
             continue
+        imported_modules.update(_imported_modules(tree))
         test_functions = [
             node for node in ast.walk(tree)
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_")
@@ -287,19 +311,29 @@ def _adversarial_test_quality_attack(candidate_ref: str, paths: list[str], error
             if assertions > 0:
                 substantive_tests += 1
 
-    min_tests = 2 if high_risk else 1
-    min_assertions = 2 if high_risk else 1
-    min_substantive_tests = 2 if high_risk else 1
-    if total_tests < min_tests:
-        errors.append(f"ADVERSARIAL_TEST_TOO_SHALLOW:test_functions={total_tests}:required={min_tests}")
-    if substantive_tests < min_substantive_tests:
+    required_cases = _required_attack_case_count(attacked_surface, high_risk)
+    if total_tests < required_cases:
+        errors.append(f"ADVERSARIAL_TEST_TOO_SHALLOW:test_functions={total_tests}:required={required_cases}")
+    if substantive_tests < required_cases:
         errors.append(
-            f"ADVERSARIAL_TEST_SUBSTANTIVE_CASE_FLOOR_FAIL:substantive_tests={substantive_tests}:required={min_substantive_tests}"
+            f"ADVERSARIAL_TEST_SUBSTANTIVE_CASE_FLOOR_FAIL:substantive_tests={substantive_tests}:required={required_cases}"
         )
-    if total_assertions < min_assertions:
-        errors.append(f"ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL:assertions={total_assertions}:required={min_assertions}")
-    if negative_named_tests < 1:
-        errors.append("ADVERSARIAL_TEST_HAS_NO_NEGATIVE_SEMANTIC_CASE")
+    if total_assertions < required_cases:
+        errors.append(f"ADVERSARIAL_TEST_ASSERTION_FLOOR_FAIL:assertions={total_assertions}:required={required_cases}")
+    if negative_named_tests < required_cases:
+        errors.append(
+            f"ADVERSARIAL_NEGATIVE_CASE_FLOOR_FAIL:negative_named_tests={negative_named_tests}:required={required_cases}"
+        )
+
+    for surface in attacked_surface:
+        if not (_high_risk(surface) and _is_code(surface)):
+            continue
+        module = _module_name_for_path(surface)
+        stem = Path(surface).stem.lower()
+        imported = module in imported_modules or any(name.startswith(module + ".") for name in imported_modules)
+        filename_link = any(stem in filename for filename in adversarial_filenames)
+        if not imported and not filename_link:
+            errors.append(f"HIGH_RISK_SURFACE_UNREFERENCED_BY_ADVERSARIAL_TEST:{surface}")
 
 
 def _base_contains_gate(base_ref: str) -> bool:
