@@ -1,0 +1,34 @@
+name: cas-regulatory-guardrails
+
+on:
+  pull_request:
+    paths:
+      - "core/closing_auction_regulatory_policy.py"
+      - "tests/test_closing_auction_regulatory_policy.py"
+      - "docs/agent_reviews/CAS_REGULATORY_GUARDRAILS_20260915.md"
+      - ".github/workflows/cas-regulatory-guardrails.yml"
+  push:
+    branches:
+      - "feat/cas-regulatory-guardrails-20260915"
+    paths:
+      - "core/closing_auction_regulatory_policy.py"
+      - "tests/test_closing_auction_regulatory_policy.py"
+      - ".github/workflows/cas-regulatory-guardrails.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cas-regulatory-guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install targeted test dependencies
+        run: python -m pip install --upgrade pip pytest
+      - name: Compile policy and tests
+        run: python -m py_compile core/closing_auction_regulatory_policy.py tests/test_closing_auction_regulatory_policy.py
+      - name: Run adversarial regulatory guardrail tests
+        run: python -m pytest -q tests/test_closing_auction_regulatory_policy.py
