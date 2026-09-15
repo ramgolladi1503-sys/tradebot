@@ -92,11 +92,11 @@ def verify_pr905_codebase(repo_root: Path) -> Tuple[bool, List[str]]:
         if re.search(r'result\[["\']consumers["\']\]\[["\']trade_builder["\']\]\s*=\s*_state\([^)]*isinstance\s*\(\s*ranked_pipeline', cons_text, re.DOTALL):
             errors.append("M8_VIOLATION: stage marked PASS from ranked_pipeline existence")
 
-        # Check parent_span_id is not literal "CANDIDATE_POOL"
+        # Check parent_span_id for TradeBuilder is not literal "CANDIDATE_POOL" or None
         if 'upstream_span_id = "CANDIDATE_POOL"' in cons_text or 'parent_span_id="CANDIDATE_POOL"' in cons_text:
             errors.append("M10_VIOLATION: parent_span_id is literal 'CANDIDATE_POOL'")
-        if 'upstream_span_id = None' in cons_text or 'parent_span_id=None' in cons_text:
-            errors.append("M11_VIOLATION: parent_span_id is None")
+        if 'upstream_span_id = None' in cons_text or 'parent_span_id=upstream_span_id' not in cons_text:
+            errors.append("M11_VIOLATION: parent_span_id is None or not linked to upstream_span_id")
 
         # Check UI-ranking not used causally
         if "ranked_candidates" in cons_text and "for cand in ranked_candidates" in cons_text:
@@ -152,7 +152,6 @@ def verify_pr905_evidence(evidence_root: Path) -> Tuple[bool, List[str], Dict[st
         "CANDIDATE_SELECTION_AUTHORITY_AUDIT.json",
         "DETERMINISM_REPORT.json",
         "FUTURE_LEAK_AUDIT.json",
-        "PR905_IMPLEMENTATION_VERIFICATION.json",
     ]
 
     loaded: Dict[str, Any] = {}

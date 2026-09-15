@@ -62,6 +62,7 @@ ALL_STAGES: tuple[str, ...] = (
 
 @dataclass
 class CheckpointSpan:
+    span_id: str
     stage_name: str
     trace_id: str
     parent_span_id: Optional[str]
@@ -98,6 +99,7 @@ class TruthFeedRuntimeHook:
         self.pulse_path = self.truth_root / "CHECKPOINT_PULSE.jsonl"
         self.store = truth_store or TruthStore(self.truth_root / f"truth_feed_{session_date}.jsonl")
         self.spans: List[CheckpointSpan] = []
+        self._stage_counts: Dict[str, int] = {}
         self._arm_broker_guards()
 
     def _arm_broker_guards(self) -> None:
@@ -119,9 +121,14 @@ class TruthFeedRuntimeHook:
         exception: Optional[str] = None,
         data_freshness_sec: Optional[float] = None,
         source_timestamp: Optional[float] = None,
+        span_id: Optional[str] = None,
     ) -> CheckpointSpan:
         latency_ms = max(0.0, (exited_at - entered_at) * 1000.0)
+        self._stage_counts[stage_name] = self._stage_counts.get(stage_name, 0) + 1
+        ordinal = self._stage_counts[stage_name]
+        assigned_span_id = span_id or f"{self.session_id}:{trace_id}:{stage_name}:{ordinal}"
         span = CheckpointSpan(
+            span_id=assigned_span_id,
             stage_name=stage_name,
             trace_id=trace_id,
             parent_span_id=parent_span_id,

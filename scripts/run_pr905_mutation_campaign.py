@@ -176,8 +176,8 @@ def run_mutation_campaign(evidence_dir: Path) -> dict[str, Any]:
             "name": "UI-ranked row made causal input",
             "target": consumer_file,
             "mutate": lambda text: text.replace(
-                "for cand in tb_candidates:",
-                "for cand in ranked_candidates: # for cand in tb_candidates:"
+                "for c in valid_candidates:",
+                "ranked_candidates = list(valid_candidates)\n    for cand in ranked_candidates: # for c in valid_candidates:"
             ),
         },
         {

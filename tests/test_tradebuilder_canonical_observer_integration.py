@@ -41,6 +41,29 @@ def _ranked_pipeline_fixture(
     }
 
 
+def _market_snapshot_fixture(
+    symbols: list[str] | None = None,
+    prices: dict[str, float] | None = None,
+    timestamp: str = "2026-09-15T09:19:59Z",
+) -> dict[str, Any]:
+    symbols = symbols or ["NIFTY"]
+    prices = prices or {"NIFTY": 24500.0}
+    symbols_payload = {}
+    for s in symbols:
+        px = prices.get(s, 24500.0)
+        symbols_payload[s] = {
+            "spot": px,
+            "ltp": px,
+            "timestamp": timestamp,
+            "regime": {"primary_regime": "TRENDING"},
+        }
+    return {
+        "generated_at": timestamp,
+        "market_open": True,
+        "symbols": symbols_payload,
+    }
+
+
 def test_tradebuilder_invoked_in_canonical_observer(tmp_path: Path):
     return test_tradebuilder_invoked_with_candidates_in_canonical_observer(tmp_path)
 
@@ -68,13 +91,17 @@ def test_tradebuilder_invoked_with_candidates_in_canonical_observer(tmp_path: Pa
         "entry": 24500.0,
     }
     pipeline = _ranked_pipeline_fixture(cycle_id=cycle_id, candidates=[candidate])
+    market_snap = _market_snapshot_fixture(symbols=["NIFTY"], prices={"NIFTY": 24500.0})
 
     result = run_consumer_cycle(
-        runtime_outputs={"ranked_pipeline_latest": pipeline},
+        runtime_outputs={
+            "ranked_pipeline_latest": pipeline,
+            "market_snapshot": market_snap,
+        },
         output_root=tmp_path,
         session_id=session_id,
         source_sha=SHA,
-        cycle_context={"cycle_id": cycle_id, "symbol": "NIFTY", "spot_ltp": 24500.0},
+        cycle_context={"cycle_id": cycle_id, "causal_data_cutoff": "2026-09-15T09:20:00Z"},
     )
 
     # 1. TradeBuilder consumer state recorded in result
@@ -86,13 +113,24 @@ def test_tradebuilder_invoked_with_candidates_in_canonical_observer(tmp_path: Pa
     pulse_file = tmp_path / "truth_feed" / "CHECKPOINT_PULSE.jsonl"
     assert pulse_file.exists()
     pulse_lines = [json.loads(line) for line in pulse_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    # CANDIDATE_POOL checkpoint must be emitted
+    cp_spans = [span for span in pulse_lines if span["stage_name"] == "CANDIDATE_POOL"]
+    assert len(cp_spans) >= 1
+    cp_span = cp_spans[0]
+    assert cp_span["status"] == "PASS"
+    assert cp_span["span_id"]
+    assert cp_span["trace_id"] == cycle_id
+
+    # TRADE_BUILDER checkpoint must have parent_span_id equal to cp_span["span_id"]
     tb_spans = [span for span in pulse_lines if span["stage_name"] == "TRADE_BUILDER"]
     assert len(tb_spans) >= 1
-    assert tb_spans[0]["status"] == "PASS"
-    assert tb_spans[0]["parent_span_id"] == f"{cycle_id}:CANDIDATE_POOL"
-    assert tb_spans[0]["parent_span_id"] != "CANDIDATE_POOL"
-    assert tb_spans[0]["reason_code"] == "CANONICAL_RUNTIME_OBSERVED"
-    assert tb_spans[0]["trace_id"] == cycle_id
+    tb_span = tb_spans[0]
+    assert tb_span["status"] == "PASS"
+    assert tb_span["parent_span_id"] == cp_span["span_id"]
+    assert tb_span["parent_span_id"] != "CANDIDATE_POOL"
+    assert tb_span["reason_code"] == "CANONICAL_RUNTIME_OBSERVED"
+    assert tb_span["trace_id"] == cycle_id
 
     # 3. Strictly zero broker write calls
     assert sum(CALL_COUNTS.values()) == 0
@@ -108,9 +146,13 @@ def test_tradebuilder_empty_pool_skips_without_synthetic_defaults(tmp_path: Path
     cycle_id = "session_test:1:cycle_001_empty"
     session_id = "session_test"
     pipeline = _ranked_pipeline_fixture(cycle_id=cycle_id, candidates=[])
+    market_snap = _market_snapshot_fixture()
 
     result = run_consumer_cycle(
-        runtime_outputs={"ranked_pipeline_latest": pipeline},
+        runtime_outputs={
+            "ranked_pipeline_latest": pipeline,
+            "market_snapshot": market_snap,
+        },
         output_root=tmp_path,
         session_id=session_id,
         source_sha=SHA,
@@ -128,10 +170,15 @@ def test_tradebuilder_empty_pool_skips_without_synthetic_defaults(tmp_path: Path
     pulse_file = tmp_path / "truth_feed" / "CHECKPOINT_PULSE.jsonl"
     assert pulse_file.exists()
     pulse_lines = [json.loads(line) for line in pulse_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    cp_spans = [span for span in pulse_lines if span["stage_name"] == "CANDIDATE_POOL"]
+    assert len(cp_spans) >= 1
+    cp_span = cp_spans[0]
+
     tb_spans = [span for span in pulse_lines if span["stage_name"] == "TRADE_BUILDER"]
     assert len(tb_spans) >= 1
     assert tb_spans[0]["status"] == "SKIPPED_NOT_APPLICABLE"
-    assert tb_spans[0]["parent_span_id"] == f"{cycle_id}:CANDIDATE_POOL"
+    assert tb_spans[0]["parent_span_id"] == cp_span["span_id"]
     assert tb_spans[0]["parent_span_id"] != "CANDIDATE_POOL"
     assert tb_spans[0]["reason_code"] == "NO_ACTIVE_SYMBOLS_OR_CANDIDATES"
 
@@ -150,14 +197,28 @@ def test_single_candidate_selection_authority_preserved():
 
 def test_consumer_cycle_latest_contains_trade_builder_state(tmp_path: Path):
     cycle_id = "session_test:1:cycle_002"
-    pipeline = _ranked_pipeline_fixture(cycle_id=cycle_id)
+    candidate = {
+        "candidate_id": "c_bn",
+        "strategy_id": "s_bn",
+        "spec_sha": SHA,
+        "underlying": "BANKNIFTY",
+        "data_cutoff": "2026-09-15T09:19:59Z",
+        "execution_status": "advisory_only",
+        "ltp": 52000.0,
+        "entry": 52000.0,
+    }
+    pipeline = _ranked_pipeline_fixture(cycle_id=cycle_id, candidates=[candidate])
+    market_snap = _market_snapshot_fixture(symbols=["BANKNIFTY"], prices={"BANKNIFTY": 52000.0})
 
     run_consumer_cycle(
-        runtime_outputs={"ranked_pipeline_latest": pipeline},
+        runtime_outputs={
+            "ranked_pipeline_latest": pipeline,
+            "market_snapshot": market_snap,
+        },
         output_root=tmp_path,
         session_id="session_test",
         source_sha=SHA,
-        cycle_context={"cycle_id": cycle_id, "symbol": "BANKNIFTY"},
+        cycle_context={"cycle_id": cycle_id},
     )
 
     stored = json.loads((tmp_path / "consumer_cycle_latest.json").read_text(encoding="utf-8"))
