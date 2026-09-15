@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline Release Manager V1 command surface."""
+"""Offline release manager; input files are primitives, never PASS authority."""
 from __future__ import annotations
 
 import argparse
@@ -22,139 +22,60 @@ def _write_json(path: Path, payload: dict) -> None:
 
 def _graph(path: Path) -> DependencyEvidence:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    return DependencyEvidence(
-        edges={key: frozenset(value) for key, value in payload["edges"].items()},
-        critical_roots=frozenset(payload["critical_roots"]),
-        bounded_roots=frozenset(payload["bounded_roots"]),
-        complete=bool(payload["complete"]),
-        unresolved=frozenset(payload.get("unresolved", [])),
-    )
+    return DependencyEvidence(edges={key: frozenset(value) for key, value in payload["edges"].items()},
+                              critical_roots=frozenset(payload["critical_roots"]),
+                              bounded_roots=frozenset(payload["bounded_roots"]), complete=bool(payload["complete"]),
+                              unresolved=frozenset(payload.get("unresolved", [])))
 
 
-def _sha256(path: Path) -> str:
-    import hashlib
-
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _gate_result(path: Path) -> dict[str, bool]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    gates = payload.get("gates", payload)
-    results: dict[str, bool] = {}
-    for key, value in gates.items():
-        if isinstance(value, bool):
-            results[str(key)] = value
-            continue
-        if not isinstance(value, dict):
-            results[str(key)] = False
-            continue
-        evidence_path = value.get("evidence_path")
-        evidence_sha256 = value.get("evidence_sha256")
-        evidence_ok = True
-        if evidence_path or evidence_sha256:
-            if not evidence_path or not evidence_sha256:
-                evidence_ok = False
-            else:
-                try:
-                    evidence_ok = _sha256(Path(evidence_path)) == evidence_sha256
-                except OSError:
-                    evidence_ok = False
-        results[str(key)] = bool(value.get("pass")) and evidence_ok
-    return results
+def _manifest(path: Path) -> dict[str, object]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict) or "gates" in value or any(not isinstance(key, str) for key in value):
+        raise ReleaseStoreError("primitive_manifest_invalid")
+    return value
 
 
 def cmd_init(args: argparse.Namespace) -> int:
     store = ReleaseStore(args.state_root)
     if store.read() is not None:
         raise ReleaseStoreError("release_store_already_initialized")
-    event = store.record_verified_selection(
-        candidate_sha=args.certified_sha,
-        evidence_sha256=args.evidence_sha256,
-        expected_event=None,
-    )
+    event = store.record_verified_selection(candidate_sha=args.certified_sha, evidence_sha256=args.evidence_sha256, expected_event=None)
     payload = {"promotion_status": "CERTIFIED", **event}
-    if args.output:
-        _write_json(args.output, payload)
-    print(json.dumps(payload, indent=2, sort_keys=True))
-    return 0
+    if args.output: _write_json(args.output, payload)
+    print(json.dumps(payload, indent=2, sort_keys=True)); return 0
 
 
 def cmd_certify(args: argparse.Namespace) -> int:
-    gates = _gate_result(args.gates)
-    result = certify(
-        args.repo,
-        args.candidate,
-        ReleaseStore(args.state_root),
-        _graph(args.dependency_graph),
-        gate_runner=lambda gate: gates.get(gate, False),
-    )
-    if args.output:
-        _write_json(args.output, result)
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result["verdict"] == "PASS" else 2
+    result = certify(args.repo, args.candidate, ReleaseStore(args.state_root), _graph(args.dependency_graph),
+                     primitive_root=args.primitive_root, primitive_manifest=_manifest(args.primitive_manifest))
+    if args.output: _write_json(args.output, result)
+    print(json.dumps(result, indent=2, sort_keys=True)); return 0 if result["verdict"] == "PASS" else 2
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    payload = verify(args.state_root, repo=args.repo, certification=args.certification,
+                     dependency_graph=args.dependency_graph, primitive_root=args.primitive_root,
+                     primitive_manifest=args.primitive_manifest)
+    if args.output: _write_json(args.output, payload)
+    print(json.dumps(payload, indent=2, sort_keys=True)); return 0 if payload["independent_release_verifier_pass"] else 2
 
 
 def cmd_promote(args: argparse.Namespace) -> int:
     result = json.loads(args.certification.read_text(encoding="utf-8"))
-    evidence = args.certification.read_bytes()
-    payload = promote(result, ReleaseStore(args.state_root), evidence)
-    if args.output:
-        _write_json(args.output, payload)
-    print(json.dumps(payload, indent=2, sort_keys=True))
-    return 0
-
-
-def cmd_verify(args: argparse.Namespace) -> int:
-    payload = verify(
-        args.state_root,
-        repo=args.repo,
-        certification=args.certification,
-        dependency_graph=args.dependency_graph,
-        gates=args.gates,
-    )
-    if args.output:
-        _write_json(args.output, payload)
-    print(json.dumps(payload, indent=2, sort_keys=True))
-    return 0 if payload["independent_release_verifier_pass"] else 2
+    attestation = json.loads(args.attestation.read_text(encoding="utf-8"))
+    payload = promote(result, ReleaseStore(args.state_root), attestation)
+    if args.output: _write_json(args.output, payload)
+    print(json.dumps(payload, indent=2, sort_keys=True)); return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="tradebot-release-manager")
     sub = parser.add_subparsers(dest="command", required=True)
-
-    init = sub.add_parser("init")
-    init.add_argument("--state-root", type=Path, required=True)
-    init.add_argument("--certified-sha", required=True)
-    init.add_argument("--evidence-sha256", required=True)
-    init.add_argument("--output", type=Path)
-    init.set_defaults(handler=cmd_init)
-
-    cert = sub.add_parser("certify")
-    cert.add_argument("--repo", type=Path, required=True)
-    cert.add_argument("--state-root", type=Path, required=True)
-    cert.add_argument("--candidate", required=True)
-    cert.add_argument("--dependency-graph", type=Path, required=True)
-    cert.add_argument("--gates", type=Path, required=True)
-    cert.add_argument("--output", type=Path)
-    cert.set_defaults(handler=cmd_certify)
-
-    prom = sub.add_parser("promote")
-    prom.add_argument("--state-root", type=Path, required=True)
-    prom.add_argument("--certification", type=Path, required=True)
-    prom.add_argument("--output", type=Path)
-    prom.set_defaults(handler=cmd_promote)
-
-    ver = sub.add_parser("verify")
-    ver.add_argument("--state-root", type=Path, required=True)
-    ver.add_argument("--repo", type=Path)
-    ver.add_argument("--certification", type=Path)
-    ver.add_argument("--dependency-graph", type=Path)
-    ver.add_argument("--gates", type=Path)
-    ver.add_argument("--output", type=Path)
-    ver.set_defaults(handler=cmd_verify)
-
-    args = parser.parse_args()
-    return int(args.handler(args))
+    init = sub.add_parser("init"); init.add_argument("--state-root", type=Path, required=True); init.add_argument("--certified-sha", required=True); init.add_argument("--evidence-sha256", required=True); init.add_argument("--output", type=Path); init.set_defaults(handler=cmd_init)
+    cert = sub.add_parser("certify"); cert.add_argument("--repo", type=Path, required=True); cert.add_argument("--state-root", type=Path, required=True); cert.add_argument("--candidate", required=True); cert.add_argument("--dependency-graph", type=Path, required=True); cert.add_argument("--primitive-root", type=Path, required=True); cert.add_argument("--primitive-manifest", type=Path, required=True); cert.add_argument("--output", type=Path); cert.set_defaults(handler=cmd_certify)
+    ver = sub.add_parser("verify"); ver.add_argument("--state-root", type=Path, required=True); ver.add_argument("--repo", type=Path, required=True); ver.add_argument("--certification", type=Path, required=True); ver.add_argument("--dependency-graph", type=Path, required=True); ver.add_argument("--primitive-root", type=Path, required=True); ver.add_argument("--primitive-manifest", type=Path, required=True); ver.add_argument("--output", type=Path); ver.set_defaults(handler=cmd_verify)
+    prom = sub.add_parser("promote"); prom.add_argument("--state-root", type=Path, required=True); prom.add_argument("--certification", type=Path, required=True); prom.add_argument("--attestation", type=Path, required=True); prom.add_argument("--output", type=Path); prom.set_defaults(handler=cmd_promote)
+    args = parser.parse_args(); return int(args.handler(args))
 
 
 if __name__ == "__main__":
