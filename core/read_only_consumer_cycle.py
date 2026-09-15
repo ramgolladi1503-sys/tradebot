@@ -292,6 +292,13 @@ def run_consumer_cycle(
         tb_status = "SKIPPED_NOT_APPLICABLE"
         tb_reason_code = "NO_ACTIVE_SYMBOLS_OR_CANDIDATES"
 
+    normalized_traces = []
+    for tr in tb_traces:
+        tr_dict = tr.to_dict() if hasattr(tr, "to_dict") else dict(tr) if isinstance(tr, Mapping) else vars(tr) if hasattr(tr, "__dict__") else {}
+        # Remove non-deterministic volatile wall-clock timestamp and run_id per Section 10
+        norm_dict = {k: v for k, v in tr_dict.items() if k not in {"ts", "run_id"}}
+        normalized_traces.append(norm_dict)
+
     tb_output_hash = compute_deterministic_hash({
         "trades": [
             t["native_trade"].to_dict() if hasattr(t["native_trade"], "to_dict")
@@ -299,7 +306,7 @@ def run_consumer_cycle(
             else str(t["native_trade"])
             for t in tb_trades
         ],
-        "traces": tb_traces,
+        "traces": normalized_traces,
         "result_status": tb_result_status,
         "reject_reasons": reject_reasons,
         "cycle_id": cycle_id,
