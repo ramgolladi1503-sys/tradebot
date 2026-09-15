@@ -9,6 +9,29 @@ import core.market_data
 import core.tick_store
 
 
+JIT_CYCLE_ID = "jit_quote_revalidation:cycle_001"
+JIT_SESSION_ID = "jit_quote_revalidation"
+JIT_SOURCE_SHA = "a" * 40
+
+
+def _market_data(*, ltp: float = 100.0) -> dict:
+    """Canonical runtime fixture with legitimate lineage for the JIT-only tests."""
+    return {
+        "symbol": "NIFTY",
+        "market_open": True,
+        "ltp": ltp,
+        "quote_age_sec": 0.5,
+        "timestamp_epoch": time.time(),
+        "latest_option_tick_age_sec": 0.5,
+        "ws_connected": True,
+        "cycle_id": JIT_CYCLE_ID,
+        "session_id": JIT_SESSION_ID,
+        "source_sha": JIT_SOURCE_SHA,
+        "primary_regime": "TREND_BULL",
+        "regime": {"primary_regime": "TREND_BULL"},
+    }
+
+
 @pytest.fixture
 def orchestrator():
     orch = Orchestrator()
@@ -94,16 +117,16 @@ def test_jit_quote_revalidation_blocks_stale_quote(
     )
     object.__setattr__(trade, "contract_resolved", True)
 
-    mock_fetch_live.return_value = [{"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True}]
+    mock_fetch_live.return_value = [_market_data()]
     mock_read_json.return_value = {"feed_runtime_state": "HEALTHY", "canonical_feed_truth": {"state": "HEALTHY", "reason_code": "OK"}, "feed_ok": True, "feed_fresh": True}
     mock_indicator_report.return_value = {"feed_runtime_state": "HEALTHY", "canonical_feed_truth": {"state": "HEALTHY", "reason_code": "OK"}}
 
-    orchestrator._build_cycle_market_data = MagicMock(return_value=[{"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True}])
+    orchestrator._build_cycle_market_data = MagicMock(return_value=[_market_data()])
     orchestrator.trade_builder.evaluate_cycle_candidates = MagicMock(return_value=[trade])
     orchestrator.trade_builder.build_with_trace = MagicMock(return_value=(trade, {}))
     orchestrator.trade_builder._last_ranked_candidates = [trade]
     orchestrator._validate_market_snapshot = MagicMock(return_value=(True, False))
-    orchestrator._immutable_cycle_snapshot = MagicMock(return_value={"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True})
+    orchestrator._immutable_cycle_snapshot = MagicMock(return_value=_market_data())
 
     mock_gate = MagicMock()
     mock_gate.allowed = True
@@ -209,16 +232,16 @@ def test_jit_quote_revalidation_allows_fresh_quote(
     )
     object.__setattr__(trade, "contract_resolved", True)
 
-    mock_fetch_live.return_value = [{"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True}]
+    mock_fetch_live.return_value = [_market_data()]
     mock_read_json.return_value = {"feed_runtime_state": "HEALTHY", "canonical_feed_truth": {"state": "HEALTHY", "reason_code": "OK"}, "feed_ok": True, "feed_fresh": True}
     mock_indicator_report.return_value = {"feed_runtime_state": "HEALTHY", "canonical_feed_truth": {"state": "HEALTHY", "reason_code": "OK"}}
 
-    orchestrator._build_cycle_market_data = MagicMock(return_value=[{"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True}])
+    orchestrator._build_cycle_market_data = MagicMock(return_value=[_market_data()])
     orchestrator.trade_builder.evaluate_cycle_candidates = MagicMock(return_value=[trade])
     orchestrator.trade_builder.build_with_trace = MagicMock(return_value=(trade, {}))
     orchestrator.trade_builder._last_ranked_candidates = [trade]
     orchestrator._validate_market_snapshot = MagicMock(return_value=(True, False))
-    orchestrator._immutable_cycle_snapshot = MagicMock(return_value={"symbol": "NIFTY", "market_open": True, "ltp": 100.0, "quote_age_sec": 0.5, "timestamp_epoch": time.time(), "latest_option_tick_age_sec": 0.5, "ws_connected": True})
+    orchestrator._immutable_cycle_snapshot = MagicMock(return_value=_market_data())
 
     mock_gate = MagicMock()
     mock_gate.allowed = True

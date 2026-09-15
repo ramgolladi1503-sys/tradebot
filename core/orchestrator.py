@@ -30,6 +30,7 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 from dataclasses import fields, replace
 from strategies.trade_builder import TradeBuilder
+from core.trade_truth.trade_builder_input_contract import build_canonical_tradebuilder_input
 from core.market_data import fetch_live_market_data, ensure_startup_warmup_bootstrap, refresh_index_quote_from_rest
 from core.risk_engine import RiskEngine
 from core.execution_guard import ExecutionGuard
@@ -5742,9 +5743,41 @@ class Orchestrator:
                         allow_builder_baseline,
                         getattr(gate, "family", None),
                     )
+                    # Real lineage resolution without synthetic defaults
+                    real_cycle_id = str(getattr(self, "_gate_status_cycle_id", "") or market_data.get("cycle_id") or "").strip()
+                    real_session_id = str(getattr(self, "session_id", "") or market_data.get("session_id") or "").strip()
+                    real_source_sha = str(os.environ.get("TRADEBOT_COMMIT_SHA") or market_data.get("source_sha") or "").strip()
+                    if not real_cycle_id or not real_session_id or not real_source_sha:
+                        cycle_candidates_blocked += 1
+                        lineage_block_reason = "BLOCKED_DATA:MISSING_RUNTIME_LINEAGE"
+                        cycle_blockers[lineage_block_reason] += 1
+                        logger.warning(
+                            "orchestrator_tradebuilder_lineage_blocked symbol=%s cycle_id=%s session_id=%s source_sha=%s",
+                            sym, bool(real_cycle_id), bool(real_session_id), bool(real_source_sha),
+                        )
+                        continue
+
+                    try:
+                        builder_input = build_canonical_tradebuilder_input(
+                            market_data,
+                            cycle_id=real_cycle_id,
+                            session_id=real_session_id,
+                            source_sha=real_source_sha,
+                            read_only=not bool(getattr(cfg, "EXECUTION_ENABLED", False)),
+                        )
+                    except ValueError as input_contract_exc:
+                        cycle_candidates_blocked += 1
+                        contract_block_reason = f"BLOCKED_DATA:{input_contract_exc}"
+                        cycle_blockers["trade_builder_input_contract_failed"] += 1
+                        logger.warning("orchestrator_tradebuilder_input_contract_rejected symbol=%s exc=%s", sym, input_contract_exc)
+                        continue
+                    except Exception:
+                        # Unexpected implementation/runtime defect must not be swallowed
+                        raise
+
                     try:
                         trade, decision_trace = self.trade_builder.build_with_trace(
-                            market_data,
+                            builder_input,
                             quick_mode=False,
                             debug_reasons=debug_flag,
                             force_family=gate.family,

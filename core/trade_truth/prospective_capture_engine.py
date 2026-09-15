@@ -69,31 +69,69 @@ CALL_COUNTS = {
     "core.kite_client.KiteClient.submit_order": 0,
 }
 
+_ORIGINAL_GUARDED_METHODS: Dict[str, Tuple[Any, str, Any, bool]] = {}
+
 def make_spy(key: str):
     def spy_fn(*args, **kwargs):
         CALL_COUNTS[key] += 1
         raise RuntimeError(f"SECURITY BREACH: {key} called during read-only prospective observation!")
     return spy_fn
 
+def _install_broker_write_guard(owner: Any, attribute: str, key: str) -> None:
+    if key not in _ORIGINAL_GUARDED_METHODS:
+        existed = hasattr(owner, attribute)
+        original = getattr(owner, attribute, None)
+        _ORIGINAL_GUARDED_METHODS[key] = (owner, attribute, original, existed)
+    setattr(owner, attribute, make_spy(key))
+
+
 def reset_broker_write_guards():
+    """Reset counters and restore boundaries replaced by ``arm_broker_write_guards``.
+
+    Observation remains fail-closed while guards are armed. Restoration is
+    explicit so deterministic tests and repeated offline runs do not leak a
+    process-global spy into unrelated mock-broker scenarios.
+    """
     for k in CALL_COUNTS:
         CALL_COUNTS[k] = 0
+    for owner, attribute, original, existed in _ORIGINAL_GUARDED_METHODS.values():
+        if existed:
+            setattr(owner, attribute, original)
+        elif hasattr(owner, attribute):
+            delattr(owner, attribute)
+    _ORIGINAL_GUARDED_METHODS.clear()
 
 def arm_broker_write_guards():
     try:
         import core.execution_engine
-        core.execution_engine.ExecutionEngine.place_order = make_spy("core.execution_engine.ExecutionEngine.place_order")
+        _install_broker_write_guard(
+            core.execution_engine.ExecutionEngine,
+            "place_order",
+            "core.execution_engine.ExecutionEngine.place_order",
+        )
     except Exception:
         pass
     try:
         import core.broker.mock_broker
-        core.broker.mock_broker.MockBroker.place_order = make_spy("core.broker.mock_broker.MockBroker.place_order")
-        core.broker.mock_broker.MockBroker.cancel_order = make_spy("core.broker.mock_broker.MockBroker.cancel_order")
+        _install_broker_write_guard(
+            core.broker.mock_broker.MockBroker,
+            "place_order",
+            "core.broker.mock_broker.MockBroker.place_order",
+        )
+        _install_broker_write_guard(
+            core.broker.mock_broker.MockBroker,
+            "cancel_order",
+            "core.broker.mock_broker.MockBroker.cancel_order",
+        )
     except Exception:
         pass
     try:
         import core.kite_client
-        core.kite_client.KiteClient.submit_order = make_spy("core.kite_client.KiteClient.submit_order")
+        _install_broker_write_guard(
+            core.kite_client.KiteClient,
+            "submit_order",
+            "core.kite_client.KiteClient.submit_order",
+        )
     except Exception:
         pass
 

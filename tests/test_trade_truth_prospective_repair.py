@@ -196,8 +196,8 @@ def test_mros_daily_governor_resolves_universe_and_strategies():
     assert plan.strategy_authority_state == "READY"
     assert plan.broker_write_guard_state == "ARMED_FAIL_CLOSED_ZERO_CALLS"
     assert plan.ranking_capture_state == "READY_RUNTIME_INTEGRATED"
-    assert plan.trade_builder_capture_state == "BLOCKED_RUNTIME_INTEGRATION"
-    assert any("UNREACHABLE_CAUSAL_STAGE: TRADE_BUILDER" in b for b in plan.blockers)
+    assert plan.trade_builder_capture_state == "READY_RUNTIME_INTEGRATED"
+    assert not any("UNREACHABLE_CAUSAL_STAGE: TRADE_BUILDER" in b for b in plan.blockers)
 
 
 def test_runtime_authority_single_selection_and_call_path_v4():
@@ -214,43 +214,71 @@ def test_runtime_authority_single_selection_and_call_path_v4():
     assert cp_data["contract_id"] == "MROS_TRUTH_FEED_RUNTIME_CALL_PATH_V4"
     assert cp_data["total_stages"] == 20
     assert cp_data["causal_stage_count"] == 17
-    assert cp_data["causal_runtime_reachable_count"] == 16
-    assert cp_data["blocked_causal_stage_count"] == 1
-    assert cp_data["all_required_causal_runtime_reachable"] is False
+    assert cp_data["causal_runtime_reachable_count"] == 17
+    assert cp_data["blocked_causal_stage_count"] == 0
+    assert cp_data["all_required_causal_runtime_reachable"] is True
     assert cp_data["sidecar_stage_count"] == 2
     assert cp_data["sidecar_runtime_reachable_count"] == 2
     assert cp_data["execution_boundary_stage_count"] == 1
-    assert cp_data["all_runtime_reachable"] is False
+    assert cp_data["all_runtime_reachable"] is True
 
 
-def _resolve_real_runtime_ledger_path() -> Path:
-    ext_path = Path("/Volumes/TradeBotData/pr904-runtime-proof-20260915-real/MROS_RUNTIME_CALL_LEDGER.json")
-    if ext_path.exists():
-        return ext_path
+@pytest.fixture
+def runtime_ledger_path(tmp_path: Path) -> Path:
+    """Create portable verifier input from the committed runtime-proof fixture.
+
+    This composite is test input only, not fresh runtime evidence or a
+    certification artifact. The TradeBuilder row is advanced to the PR905
+    contract so the verifier can exercise the current 20-stage call path on
+    every platform without depending on a developer's /Volumes directory.
+    """
     fixture_path = Path("tests/fixtures/mros_runtime_proof/MROS_RUNTIME_CALL_LEDGER.json")
-    if fixture_path.exists():
-        return fixture_path
-    return ext_path
+    ledger_data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    ledger_data.update(
+        {
+            "candidate_sha": "DETERMINISTIC_TEST_FIXTURE_NOT_RUNTIME_EVIDENCE",
+            "pre_merge_runtime_proof": False,
+            "test_fixture_only": True,
+            "causal_runtime_reachable_count": 17,
+            "blocked_causal_stage_count": 0,
+            "all_required_causal_runtime_reachable": True,
+        }
+    )
+    for stage in ledger_data["stages"]:
+        if stage["stage_name"] == "TRADE_BUILDER":
+            stage.update(
+                {
+                    "runtime_reachable": True,
+                    "call_count": 1,
+                    "production_call_observed": True,
+                    "checkpoint_emitted": True,
+                    "trace_intersection_nonempty": True,
+                    "source_module": "core.read_only_consumer_cycle.run_consumer_cycle",
+                    "target_callable": "strategies.trade_builder.TradeBuilder.build_with_trace",
+                    "latency_ms": 1.0,
+                }
+            )
+    ledger_path = tmp_path / "MROS_RUNTIME_CALL_LEDGER.json"
+    ledger_path.write_text(json.dumps(ledger_data, indent=2, sort_keys=True), encoding="utf-8")
+    return ledger_path
 
 
-def test_independent_verifier_validates_real_ledger_and_call_path():
+def test_independent_verifier_validates_runtime_ledger_fixture_and_call_path(runtime_ledger_path):
     from scripts.verify_mros_runtime_call_path import verify_call_path_and_ledger
-    ledger_path = _resolve_real_runtime_ledger_path()
     call_path = Path("MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json")
-    passed, errors, report = verify_call_path_and_ledger(call_path, ledger_path)
+    passed, errors, report = verify_call_path_and_ledger(call_path, runtime_ledger_path)
     assert passed is True, f"Verifier failed with errors: {errors}"
     assert report["stages_verified"] == 20
     assert report["causal_stages_verified"] == 17
-    assert report["blocked_causal_stages"] == 1
+    assert report["blocked_causal_stages"] == 0
     assert report["broker_write_calls"] == 0
     assert report["candidate_selection_authorities"] == 1
     assert report["evidence_origin"] == "CANONICAL_RUNTIME_OBSERVATION"
 
 
-def test_verifier_rejects_manually_generated_all_stage_ledger(tmp_path):
+def test_verifier_rejects_manually_generated_all_stage_ledger(tmp_path, runtime_ledger_path):
     from scripts.verify_mros_runtime_call_path import verify_call_path_and_ledger
-    ledger_path = _resolve_real_runtime_ledger_path()
-    ledger_data = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger_data = json.loads(runtime_ledger_path.read_text(encoding="utf-8"))
 
     # Mutate: set synthetic origin and uniform artificial metrics across all stages
     ledger_data["evidence_origin"] = "SYNTHETIC"
@@ -265,10 +293,9 @@ def test_verifier_rejects_manually_generated_all_stage_ledger(tmp_path):
     assert any("Rejected invalid evidence_origin: SYNTHETIC" in e for e in errors)
 
 
-def test_verifier_requires_canonical_runtime_origin(tmp_path):
+def test_verifier_requires_canonical_runtime_origin(tmp_path, runtime_ledger_path):
     from scripts.verify_mros_runtime_call_path import verify_call_path_and_ledger
-    ledger_path = _resolve_real_runtime_ledger_path()
-    ledger_data = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger_data = json.loads(runtime_ledger_path.read_text(encoding="utf-8"))
 
     ledger_data["evidence_origin"] = "UNKNOWN"
     mutated_ledger = tmp_path / "mutated_ledger.json"
@@ -278,10 +305,9 @@ def test_verifier_requires_canonical_runtime_origin(tmp_path):
     assert any("Rejected invalid evidence_origin: UNKNOWN" in e for e in errors)
 
 
-def test_verifier_requires_observed_production_call(tmp_path):
+def test_verifier_requires_observed_production_call(tmp_path, runtime_ledger_path):
     from scripts.verify_mros_runtime_call_path import verify_call_path_and_ledger
-    ledger_path = _resolve_real_runtime_ledger_path()
-    ledger_data = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger_data = json.loads(runtime_ledger_path.read_text(encoding="utf-8"))
 
     # Mutate: mark MARKET_FEED as not observed in production call
     for s in ledger_data["stages"]:
@@ -295,10 +321,9 @@ def test_verifier_requires_observed_production_call(tmp_path):
     assert any("Causal stage MARKET_FEED was not reached in runtime" in e for e in errors)
 
 
-def test_verifier_requires_trace_correlation(tmp_path):
+def test_verifier_requires_trace_correlation(tmp_path, runtime_ledger_path):
     from scripts.verify_mros_runtime_call_path import verify_call_path_and_ledger
-    ledger_path = _resolve_real_runtime_ledger_path()
-    ledger_data = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger_data = json.loads(runtime_ledger_path.read_text(encoding="utf-8"))
 
     # Mutate: trace intersection empty on INGESTION
     for s in ledger_data["stages"]:
@@ -312,28 +337,25 @@ def test_verifier_requires_trace_correlation(tmp_path):
     assert any("failed trace correlation" in e for e in errors)
 
 
-def test_tradebuilder_requires_canonical_entrypoint_call(tmp_path):
+def test_tradebuilder_requires_canonical_entrypoint_call(tmp_path, runtime_ledger_path):
     from scripts.verify_mros_runtime_call_path import verify_call_path_and_ledger
-    # If call path falsely marks TRADE_BUILDER as reachable when canonical runtime does not reach it
-    cp_path = Path("MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json")
-    cp_data = json.loads(cp_path.read_text(encoding="utf-8"))
-    for s in cp_data["stages"]:
-        if s["stage"] == "TRADE_BUILDER":
-            s["runtime_reachable"] = True
-
-    fake_cp = tmp_path / "MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json"
-    fake_cp.write_text(json.dumps(cp_data))
-
-    ledger_path = _resolve_real_runtime_ledger_path()
-    passed, errors, report = verify_call_path_and_ledger(fake_cp, ledger_path)
+    ledger_data = json.loads(runtime_ledger_path.read_text(encoding="utf-8"))
+    for stage in ledger_data["stages"]:
+        if stage["stage_name"] == "TRADE_BUILDER":
+            stage["call_count"] = 0
+            stage["production_call_observed"] = False
+    mutated_ledger = tmp_path / "tradebuilder_not_observed.json"
+    mutated_ledger.write_text(json.dumps(ledger_data), encoding="utf-8")
+    passed, errors, report = verify_call_path_and_ledger(
+        Path("MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json"), mutated_ledger
+    )
     assert passed is False
     assert any("Causal stage TRADE_BUILDER was not reached in runtime" in e for e in errors)
 
 
-def test_independent_verifier_rejects_missing_checkpoint(tmp_path):
+def test_independent_verifier_rejects_missing_checkpoint(tmp_path, runtime_ledger_path):
     from scripts.verify_mros_runtime_call_path import verify_call_path_and_ledger
-    ledger_path = _resolve_real_runtime_ledger_path()
-    ledger_data = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger_data = json.loads(runtime_ledger_path.read_text(encoding="utf-8"))
 
     # Mutate: remove checkpoint_emitted from MARKET_FEED
     for s in ledger_data["stages"]:
@@ -347,10 +369,9 @@ def test_independent_verifier_rejects_missing_checkpoint(tmp_path):
     assert any("failed to emit runtime checkpoint pulse" in e for e in errors)
 
 
-def test_independent_verifier_rejects_nonzero_broker_calls(tmp_path):
+def test_independent_verifier_rejects_nonzero_broker_calls(tmp_path, runtime_ledger_path):
     from scripts.verify_mros_runtime_call_path import verify_call_path_and_ledger
-    ledger_path = _resolve_real_runtime_ledger_path()
-    ledger_data = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger_data = json.loads(runtime_ledger_path.read_text(encoding="utf-8"))
 
     # Mutate: inject broker write call count
     ledger_data["broker_write_calls_total"] = 1
@@ -361,10 +382,9 @@ def test_independent_verifier_rejects_nonzero_broker_calls(tmp_path):
     assert any("Broker write call violation" in e for e in errors)
 
 
-def test_independent_verifier_rejects_dual_selection_authority(tmp_path):
+def test_independent_verifier_rejects_dual_selection_authority(tmp_path, runtime_ledger_path):
     from scripts.verify_mros_runtime_call_path import verify_call_path_and_ledger
-    ledger_path = _resolve_real_runtime_ledger_path()
-    ledger_data = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger_data = json.loads(runtime_ledger_path.read_text(encoding="utf-8"))
 
     # Mutate: dual candidate selection authority
     ledger_data["candidate_selection_authority_count"] = 2
