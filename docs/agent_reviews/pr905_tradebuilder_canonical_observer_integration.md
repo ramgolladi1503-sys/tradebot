@@ -23,11 +23,11 @@
 - PR: #905
 - Branch: fix/tradebuilder-canonical-observer-integration-v1
 - Scope:
-  - Integrate existing \`strategies.trade_builder.TradeBuilder\` into canonical read-only consumer cycle \`core.read_only_consumer_cycle.run_consumer_cycle\`.
-  - Enforce strictly advisory read-only guarantees on any constructed trade (\`execution_allowed=False\`, \`read_only=True\`, \`execution_status="advisory_only"\`, \`orders_placed=0\`, \`broker_write_authority=False\`).
-  - Emit correlated checkpoint spans (\`TRADE_BUILDER\`) to \`truth_feed/CHECKPOINT_PULSE.jsonl\`.
-  - Update \`MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json\` to reflect 17/17 reachable causal stages (\`blocked_causal_stage_count=0\`, \`all_required_causal_runtime_reachable=true\`).
-  - Update \`tests/test_trade_truth_prospective_repair.py\` and add \`tests/test_tradebuilder_canonical_observer_integration.py\`.
+  - Integrate existing `strategies.trade_builder.TradeBuilder` into canonical read-only consumer cycle `core.read_only_consumer_cycle.run_consumer_cycle`.
+  - Enforce strictly advisory read-only guarantees on any constructed trade (`execution_allowed=False`, `read_only=True`, `advisory_mode=True`, `orders_placed=0`, `broker_write_authority=False`).
+  - Emit correlated checkpoint spans (`TRADE_BUILDER`) to `truth_feed/CHECKPOINT_PULSE.jsonl`.
+  - Update `MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json` to reflect 17/17 reachable causal stages (`blocked_causal_stage_count=0`, `all_required_causal_runtime_reachable=true`).
+  - Update `tests/test_trade_truth_prospective_repair.py` and add `tests/test_tradebuilder_canonical_observer_integration.py`.
 - Allowed files:
   - MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json
   - core/read_only_consumer_cycle.py
