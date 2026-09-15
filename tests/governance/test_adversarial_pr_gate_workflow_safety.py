@@ -64,6 +64,17 @@ def test_trusted_policy_uses_protected_main_and_never_checks_out_candidate():
     assert "git switch" not in trusted
 
 
+def test_trusted_policy_refuses_success_when_main_ruleset_is_not_strict_or_missing_context():
+    trusted = _trusted_job(_workflow_text())
+    assert "Verify adversarial status is mandatory and base-fresh on main" in trusted
+    assert 'required_context = "adversarial-pr-trusted-head"' in trusted
+    assert 'params.get("strict_required_status_checks_policy") is True' in trusted
+    assert 'required_context in contexts' in trusted
+    assert "ADVERSARIAL_RULESET_ENFORCEMENT_MISSING" in trusted
+    assert "/rulesets?per_page=100" in trusted
+    assert "/rulesets/{summary['id']}" in trusted
+
+
 def test_gate_recertification_requires_owner_exact_sha_comment():
     trusted = _trusted_job(_workflow_text())
     assert "Require OWNER exact-SHA approval for gate recertification branches" in trusted
