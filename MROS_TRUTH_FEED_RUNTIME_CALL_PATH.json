@@ -256,17 +256,17 @@
       "causal_to_advisory_decision": false
     },
     {
-      "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
+      "entrypoint": "core.canonical_cycle_coordinator.CanonicalCycleCoordinator.run",
       "stage": "TRADE_BUILDER",
       "actual_caller": "core.read_only_consumer_cycle.run_consumer_cycle",
       "actual_callee": "strategies.trade_builder.TradeBuilder.build_with_trace",
       "source_file": "core/read_only_consumer_cycle.py",
       "source_line_or_symbol": "TradeBuilder.build_with_trace",
       "trace_hook_location": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
-      "dynamic_test_name": "tests/test_tradebuilder_canonical_observer_integration.py::test_tradebuilder_invoked_in_canonical_observer",
+      "dynamic_test_name": "tests/test_pr905_primitive_proof.py::test_pr905_primitive_proof_and_independent_verifier",
       "runtime_reachable": true,
       "capture_hooked": true,
-      "proof_type": "CANONICAL_RUNTIME_OBSERVED",
+      "proof_type": "CANONICAL_COORDINATOR_REPLAY",
       "blocker": null,
       "stage_classification": "CAUSAL",
       "causal_to_advisory_decision": true
