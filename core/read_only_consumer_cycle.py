@@ -22,7 +22,10 @@ from core.storage_bounds_v37 import MAX_ATOMIC_ARTIFACT_BYTES, StorageBoundViola
 import time
 from core.trade_truth.decision_hash import compute_deterministic_hash
 from core.trade_truth.truth_feed_runtime_hook import CheckpointSpan, TruthFeedRuntimeHook
-from core.trade_truth.trade_builder_input_contract import build_canonical_tradebuilder_input
+from core.trade_truth.trade_builder_input_contract import (
+    build_canonical_tradebuilder_input,
+    parse_iso_or_epoch_seconds,
+)
 from strategies.trade_builder import TradeBuilder
 
 
@@ -110,7 +113,7 @@ def run_consumer_cycle(
     for row in rows:
         try:
             cand_dict = candidate_from_mapping(row).to_dict()
-            # Preserve causal pricing/context attributes from the raw candidate row
+            # Preserve non-causal candidate fields for downstream audit/UI only.
             for key in ("entry", "ltp", "close", "spot_ltp", "symbol"):
                 if key in row and key not in cand_dict:
                     cand_dict[key] = row[key]
@@ -156,7 +159,7 @@ def run_consumer_cycle(
         runtime_outputs=runtime_outputs, output_root=root, session_id=session_id,
         source_sha=source_sha, now=datetime.now(timezone.utc),
     )
-    # Emit CANDIDATE_POOL checkpoint via TruthFeedRuntimeHook
+    # Emit CANDIDATE_POOL checkpoint via TruthFeedRuntimeHook.
     hook = TruthFeedRuntimeHook(
         session_root=root,
         session_date=str(provenance.get("session_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")),
@@ -211,17 +214,20 @@ def run_consumer_cycle(
         reason=None if ((not valid_candidates and isinstance(ranked_pipeline, Mapping)) or (valid_candidates and option_ready_count == len(valid_candidates))) else "current_option_surface_evidence_missing",
         candidate_count=len(valid_candidates), ready_count=option_ready_count,
     )
-    # Invoke TradeBuilder in canonical observer runtime
-    # Candidate envelope for read-only tracking
+
+    # Invoke TradeBuilder in the canonical observer runtime. Candidate rows may
+    # choose the symbol only; executable market truth must come from the current
+    # canonical market snapshot.
     tb_trades: list[dict[str, Any]] = []
     tb_traces: list[dict[str, Any]] = []
     trade_builder = TradeBuilder()
 
-    # Determine symbols/candidates to evaluate for TradeBuilder
-    # Candidate rows choose only which symbol is evaluated
     market_snapshot = runtime_outputs.get("market_snapshot")
-    snapshot_symbols = market_snapshot.get("symbols") if isinstance(market_snapshot, Mapping) and isinstance(market_snapshot.get("symbols"), Mapping) else {}
-    snapshot_gen_at = str(market_snapshot.get("generated_at") or "") if isinstance(market_snapshot, Mapping) else ""
+    snapshot_symbols = (
+        market_snapshot.get("symbols")
+        if isinstance(market_snapshot, Mapping) and isinstance(market_snapshot.get("symbols"), Mapping)
+        else {}
+    )
 
     tb_symbols: list[str] = []
     for c in valid_candidates:
@@ -229,7 +235,6 @@ def run_consumer_cycle(
         if sym and sym not in tb_symbols:
             tb_symbols.append(sym)
 
-    # Real upstream parent span ID for TradeBuilder is the span_id of the emitted candidate pool checkpoint
     upstream_span_id = candidate_pool_span.span_id
 
     tb_t0 = time.time()
@@ -239,40 +244,63 @@ def run_consumer_cycle(
     reject_reasons: list[str] = []
     tb_blocked_data = False
 
-    causal_cutoff_str = str(context.get("causal_data_cutoff") or "")
+    causal_cutoff_str = str(context.get("causal_data_cutoff") or "").strip()
+    causal_cutoff_sec = parse_iso_or_epoch_seconds(causal_cutoff_str)
 
     for sym in tb_symbols:
-        # TradeBuilder price/session/feed/regime truth comes from runtime_outputs["market_snapshot"]
         sym_snapshot = snapshot_symbols.get(sym) if isinstance(snapshot_symbols, Mapping) else None
         if not isinstance(sym_snapshot, Mapping):
-            # Authoritative market snapshot absent for symbol: fail closed
             tb_blocked_data = True
             reject_reasons.append(f"MARKET_SNAPSHOT_MISSING_FOR_SYMBOL:{sym}")
             continue
 
-        spot_px = float(sym_snapshot.get("spot") or sym_snapshot.get("ltp") or 0.0)
+        try:
+            spot_px = float(sym_snapshot.get("spot") or sym_snapshot.get("ltp"))
+        except (TypeError, ValueError):
+            spot_px = 0.0
         if spot_px <= 0.0:
             tb_blocked_data = True
             reject_reasons.append(f"MARKET_SNAPSHOT_PRICE_INVALID:{sym}")
             continue
 
-        # Causal event timestamp comes from snapshot generated_at or quote timestamp
-        event_ts = sym_snapshot.get("timestamp") or sym_snapshot.get("quote_timestamp") or snapshot_gen_at or causal_cutoff_str
+        snapshot_regime = sym_snapshot.get("regime") if isinstance(sym_snapshot.get("regime"), Mapping) else None
+        if not isinstance(snapshot_regime, Mapping) or not snapshot_regime or not any(
+            value is not None for value in snapshot_regime.values()
+        ):
+            tb_blocked_data = True
+            reject_reasons.append(f"MARKET_SNAPSHOT_REGIME_MISSING:{sym}")
+            continue
 
-        # Enforce causal cutoff against actual event timestamp
-        if causal_cutoff_str and event_ts:
-            try:
-                from core.trade_truth.trade_builder_input_contract import parse_iso_or_epoch_seconds
-                e_sec = parse_iso_or_epoch_seconds(event_ts)
-                c_sec = parse_iso_or_epoch_seconds(causal_cutoff_str)
-                if e_sec is not None and c_sec is not None and e_sec > c_sec:
-                    tb_blocked_data = True
-                    reject_reasons.append(f"FUTURE_EVENT_TIMESTAMP_LEAK:{sym}:{event_ts}>{causal_cutoff_str}")
-                    continue
-            except Exception:
-                pass
+        quote_truth = sym_snapshot.get("quote_truth") if isinstance(sym_snapshot.get("quote_truth"), Mapping) else {}
+        event_ts = quote_truth.get("last_tick_ts")
+        if event_ts in (None, "", "None"):
+            # Backward-compatible authoritative fields are accepted only when
+            # explicitly carried on the symbol snapshot. Snapshot generation
+            # time and the causal cutoff are never substitutes for market time.
+            event_ts = sym_snapshot.get("timestamp") or sym_snapshot.get("quote_timestamp")
+        if event_ts in (None, "", "None"):
+            tb_blocked_data = True
+            reject_reasons.append(f"EVENT_TIMESTAMP_MISSING:{sym}")
+            continue
 
-        snapshot_regime = sym_snapshot.get("regime") if isinstance(sym_snapshot.get("regime"), Mapping) else regime
+        event_sec = parse_iso_or_epoch_seconds(event_ts)
+        if event_sec is None:
+            tb_blocked_data = True
+            reject_reasons.append(f"EVENT_TIMESTAMP_INVALID:{sym}:{event_ts}")
+            continue
+        if causal_cutoff_sec is None:
+            tb_blocked_data = True
+            reject_reasons.append(f"CAUSAL_DATA_CUTOFF_INVALID:{causal_cutoff_str}")
+            continue
+        if event_sec > causal_cutoff_sec:
+            tb_blocked_data = True
+            reject_reasons.append(f"FUTURE_EVENT_TIMESTAMP_LEAK:{sym}:{event_ts}>{causal_cutoff_str}")
+            continue
+
+        snapshot_feed_truth = {
+            "feed_health": dict(sym_snapshot.get("feed_health") or {}),
+            "quote_truth": dict(quote_truth),
+        }
         try:
             market_data = build_canonical_tradebuilder_input(
                 symbol=sym,
@@ -281,9 +309,9 @@ def run_consumer_cycle(
                 cycle_id=cycle_id,
                 session_id=session_id,
                 source_sha=source_sha,
-                market_open=context.get("market_open") if "market_open" in context else None,
+                market_open=(market_snapshot.get("market_open") if isinstance(market_snapshot, Mapping) else None),
                 execution_mode=context.get("execution_mode") if "execution_mode" in context else None,
-                feed_truth=context.get("feed_truth") if isinstance(context.get("feed_truth"), Mapping) else None,
+                feed_truth=snapshot_feed_truth,
                 event_timestamp=event_ts,
             )
         except ValueError as exc:
@@ -293,7 +321,6 @@ def run_consumer_cycle(
 
         tb_input_payloads.append(market_data)
         tb_invocation_attempted = True
-        tb_runtime_reached = True
 
         trade, trace = trade_builder.build_with_trace(
             market_data,
@@ -301,8 +328,8 @@ def run_consumer_cycle(
             allow_fallbacks=False,
             allow_baseline=False,
         )
+        tb_runtime_reached = True
         if trade is not None:
-            # Native trade preserved as-is inside an advisory read-only envelope
             tb_trades.append({
                 "native_trade": trade,
                 "symbol": sym,
@@ -345,7 +372,6 @@ def run_consumer_cycle(
     normalized_traces = []
     for tr in tb_traces:
         tr_dict = tr.to_dict() if hasattr(tr, "to_dict") else dict(tr) if isinstance(tr, Mapping) else vars(tr) if hasattr(tr, "__dict__") else {}
-        # Remove non-deterministic volatile wall-clock timestamp and run_id per Section 10
         norm_dict = {k: v for k, v in tr_dict.items() if k not in {"ts", "run_id"}}
         normalized_traces.append(norm_dict)
 
@@ -377,13 +403,24 @@ def run_consumer_cycle(
         exception=None,
     )
 
+    if tb_status == "PASS":
+        tradebuilder_consumer_verdict = "PASS"
+    elif tb_status == "BLOCKED":
+        tradebuilder_consumer_verdict = "BLOCKED"
+    else:
+        tradebuilder_consumer_verdict = "PENDING"
+
     result["consumers"]["trade_builder"] = _state(
-        "PASS" if (tb_status in ("PASS", "SKIPPED_NOT_APPLICABLE")) else "PENDING",
+        tradebuilder_consumer_verdict,
         reason=None if tb_status == "PASS" else tb_reason_code,
         built_trade_count=len(tb_trades),
         trace_count=len(tb_traces),
         result_status=tb_result_status,
         runtime_reached=tb_runtime_reached,
+        invocation_attempted=tb_invocation_attempted,
+        parent_span_id=upstream_span_id,
+        input_hash=tb_input_hash,
+        output_hash=tb_output_hash,
     )
 
     eligibility_rows = [
@@ -455,9 +492,6 @@ def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
                             cutoff_timestamp=boundary, received_timestamp=(datetime.fromisoformat(str(raw["received_timestamp"])) if raw.get("received_timestamp") else None),
                             source_sha=source_sha, signal_input_09_15=raw.get("signal_input_09_15"), signal_input_10_00=raw.get("signal_input_10_00"))
     except (KeyError, TypeError, ValueError) as exc:
-        # Preserve the fail-closed decision and emit the same readiness
-        # contract as a missing input.  A malformed input must not erase the
-        # cycle's evidence boundary by aborting before readiness is written.
         halt = _risk_halt_evidence()
         _write_bounded_json(output_root / "cas_readiness_latest.json", {
             "schema_version": 1, "strategy_id": STRATEGY_ID, "session_id": session_id,
