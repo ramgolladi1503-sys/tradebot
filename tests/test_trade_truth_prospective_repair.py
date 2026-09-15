@@ -190,9 +190,28 @@ def test_mros_daily_governor_resolves_universe_and_strategies():
     assert plan.universe_state == "READY"
     assert plan.strategy_authority_state == "READY"
     assert plan.broker_write_guard_state == "ARMED_FAIL_CLOSED_ZERO_CALLS"
-    assert plan.ranking_capture_state == "BLOCKED_RUNTIME_INTEGRATION"
-    assert plan.trade_builder_capture_state == "BLOCKED_RUNTIME_INTEGRATION"
-    assert any("UNREACHABLE_DOWNSTREAM_STAGE" in b for b in plan.blockers)
+    assert plan.ranking_capture_state == "READY_RUNTIME_INTEGRATED"
+    assert plan.trade_builder_capture_state == "READY_RUNTIME_INTEGRATED"
+    assert not any("UNREACHABLE_DOWNSTREAM_STAGE" in b for b in plan.blockers)
+
+
+def test_runtime_authority_single_selection_and_call_path_v3():
+    from core.runtime_authority_contract import build_runtime_authority_map, AuthorityKind
+    stages = build_runtime_authority_map()
+    selection_stages = [s for s in stages if s.authority == AuthorityKind.CANDIDATE_SELECTION]
+    assert len(selection_stages) == 1, "Exactly one candidate selection authority allowed"
+    assert selection_stages[0].owner_module == "core.opportunity_engine"
+    assert selection_stages[0].callable_name == "select_best_opportunity"
+
+    cp_file = Path("MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json")
+    assert cp_file.exists()
+    cp_data = json.loads(cp_file.read_text(encoding="utf-8"))
+    assert cp_data["contract_id"] == "MROS_TRUTH_FEED_RUNTIME_CALL_PATH_V3"
+    assert cp_data["total_stages"] == 20
+    assert cp_data["reachable_stage_count"] == 20
+    assert cp_data["blocked_stage_count"] == 0
+    assert cp_data["all_runtime_reachable"] is True
+
 
 
 def test_mros_daily_governor_blocks_thursday_nifty_expiry():
