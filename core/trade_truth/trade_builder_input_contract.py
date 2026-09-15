@@ -9,8 +9,55 @@ Guarantees:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Mapping
+
 from core.trade_truth.decision_hash import compute_deterministic_hash
+
+
+def parse_iso_or_epoch_seconds(value: Any) -> float | None:
+    """Parse an authoritative event timestamp into UTC epoch seconds.
+
+    Returns ``None`` for missing, malformed, non-finite, or timezone-naive
+    timestamps. Epoch milliseconds are normalized to seconds. The caller must
+    decide whether ``None`` means BLOCKED/UNKNOWN; it must never be converted
+    to a causal PASS.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if parsed != parsed or parsed in (float("inf"), float("-inf")):
+            return None
+        if abs(parsed) >= 1_000_000_000_000:
+            parsed /= 1000.0
+        return parsed
+
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        numeric = float(text)
+    except ValueError:
+        numeric = None
+    if numeric is not None:
+        if numeric != numeric or numeric in (float("inf"), float("-inf")):
+            return None
+        if abs(numeric) >= 1_000_000_000_000:
+            numeric /= 1000.0
+        return numeric
+
+    try:
+        normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+        dt = datetime.fromisoformat(normalized)
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        return None
+    return dt.astimezone(timezone.utc).timestamp()
 
 
 def build_canonical_tradebuilder_input(
@@ -71,7 +118,6 @@ def build_canonical_tradebuilder_input(
     if not sha:
         raise ValueError("TRADEBUILDER_INPUT_MISSING_SOURCE_SHA")
 
-    # Start with base_data if provided to preserve all authoritative production fields
     payload: dict[str, Any] = dict(base_data)
     payload.update({
         "symbol": sym,
