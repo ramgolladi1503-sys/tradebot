@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Offline mutation campaign for Release Manager V1 governance failures."""
+"""Adversarial primitive mutations for the release trust boundary (read-only)."""
 from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timezone
 import subprocess
 import sys
 import tempfile
@@ -11,338 +12,70 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core.certified_release_store import ReleaseStore, ReleaseStoreError
-from core.release_certification import certify, promote
-from core.release_change_impact import DependencyEvidence, classify
-from scripts.release_manager_prepare_next_session import prepare
+from core.certified_release_store import ReleaseStore
+from core.release_certification import EVALUATOR_VERSION, certify, digest
+from core.release_change_impact import DependencyEvidence
 from scripts.verify_release_manager import verify
 
 
-def _run(command: list[str]) -> str:
-    return subprocess.check_output(command, text=True).strip()
+def _commit(repo: Path, text: str) -> str:
+    (repo / "x.md").write_text(text); subprocess.run(["git", "-C", str(repo), "add", "x.md"], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", text], check=True)
+    return subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
 
 
-def _commit(repo: Path, name: str, text: str) -> str:
-    path = repo / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    subprocess.run(["git", "-C", str(repo), "add", name], check=True)
-    subprocess.run(["git", "-C", str(repo), "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-q", "-m", name], check=True)
-    return _run(["git", "-C", str(repo), "rev-parse", "HEAD"])
+def _context(root: Path):
+    repo = root / "repo"; repo.mkdir(parents=True); subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    base, candidate = _commit(repo, "base"), _commit(repo, "candidate")
+    store = ReleaseStore(root / "state"); store.record_verified_selection(candidate_sha=base, evidence_sha256="e" * 64, expected_event=None)
+    graph = DependencyEvidence(edges={"x.md": frozenset()}, critical_roots=frozenset(), bounded_roots=frozenset(), complete=True)
+    graph_path = root / "graph.json"; graph_path.write_text(json.dumps({"edges": {"x.md": []}, "critical_roots": [], "bounded_roots": [], "complete": True}))
+    primitive_root = root / "primitives"; primitive_root.mkdir(); manifest = {}
+    for gate in ["diff_check", "release_verifier", "source_identity", "whole_tree_compile"]:
+        observed = {"commit_exists": True} if gate == "source_identity" else {"command": f"governed:{gate}", "exit_code": 0}
+        path = primitive_root / f"{gate}.json"; path.write_text(json.dumps({"gate": gate, "candidate_sha": candidate, "source_sha": candidate, "evaluator": gate, "evaluator_version": EVALUATOR_VERSION, "captured_at": datetime.now(timezone.utc).isoformat(), "observed": observed})); manifest[gate] = path.name
+    manifest_path = root / "manifest.json"; manifest_path.write_text(json.dumps(manifest))
+    cert = certify(repo, candidate, store, graph, primitive_root, manifest); cert_path = root / "cert.json"; cert_path.write_text(json.dumps(cert))
+    return repo, base, candidate, store, graph, graph_path, primitive_root, manifest, manifest_path, cert, cert_path
 
 
-def _repo(root: Path) -> tuple[Path, str, str]:
-    repo = root / "repo"
-    repo.mkdir(parents=True)
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    base = _commit(repo, "core/live.py", "SAFE=True\n")
-    candidate = _commit(repo, "core/live.py", "SAFE=False\n")
-    return repo, base, candidate
-
-
-def _store(root: Path, sha: str) -> ReleaseStore:
-    store = ReleaseStore(root / "state")
-    store.record_verified_selection(candidate_sha=sha, evidence_sha256="e" * 64, expected_event=None)
-    return store
-
-
-def _case(mutation_id: str, name: str, detected: bool, detail: object, primitive: str, expected: str) -> dict:
-    return {
-        "mutation_id": mutation_id,
-        "name": name,
-        "description": name,
-        "test_or_harness": "scripts/release_manager_mutation_campaign.py",
-        "primitive_mutation_applied": primitive,
-        "expected_failure_control_behavior": expected,
-        "actual_behavior": detail,
-        "detected": bool(detected),
-        "evidence_path": "self",
-        "detail": detail,
-    }
+def _case(mid: str, detected: bool) -> dict:
+    return {"mutation_id": mid, "detected": bool(detected), "test_or_harness": "scripts/release_manager_mutation_campaign.py", "read_only": True}
 
 
 def run_campaign() -> dict:
-    cases: list[dict] = []
-    with tempfile.TemporaryDirectory(prefix="release-manager-mutations-") as tmp:
-        root = Path(tmp)
-        repo, base, candidate = _repo(root)
-        graph = DependencyEvidence(
-            edges={"main.py": frozenset({"core/live.py"})},
-            critical_roots=frozenset({"main.py"}),
-            bounded_roots=frozenset(),
-            complete=True,
-        )
-        full_gates = classify(["core/live.py"], graph)["required_gates"]
-
-        store = _store(root / "main_ahead", base)
-        current_before = store.read()["certified_live_sha"]
-        result = certify(repo, candidate, store, graph, gate_runner=lambda _: False)
-        current_after = store.read()["certified_live_sha"]
-        cases.append(_case(
-            "M01",
-            "main_ahead_of_certified_release_does_not_promote",
-            result["verdict"] == "FAIL" and current_before == current_after == base,
-            {"verdict": result["verdict"], "current": current_after},
-            "created second commit while release store still points to base",
-            "candidate remains unpromoted and certified pointer stays at base",
-        ))
-
-        verification = verify(_store(root / "nonexistent_sha", "f" * 40).root, repo=repo)
-        cases.append(_case(
-            "M02",
-            "manifest_points_to_nonexistent_sha",
-            not verification["independent_release_verifier_pass"],
-            verification["checks"],
-            "release store initialized to syntactically valid SHA absent from repo",
-            "independent verifier rejects missing commit",
-        ))
-
-        store = _store(root / "missing_gate", base)
-        result = certify(repo, candidate, store, graph, gate_runner=lambda gate: gate != "whole_tree_compile")
-        cases.append(_case(
-            "M04",
-            "candidate_certification_missing_required_gate",
-            result["verdict"] != "PASS",
-            result["verdict"],
-            "gate runner returns false for whole_tree_compile",
-            "certification verdict is not PASS",
-        ))
-
-        underclassified = {"verdict": "PASS", "candidate_sha": candidate, "base_sha": base, "fallback_sha": base,
-                           "change_impact": "NO_LIVE_IMPACT", "required_gates": ["source_identity", "release_verifier"],
-                           "passed_gates": ["source_identity", "release_verifier"], "failed_gates": []}
-        store = _store(root / "underclassified", base)
-        current = store.record_verified_selection(candidate_sha=candidate, evidence_sha256="f" * 64,
-                                                  expected_event=store.read()["event_sha256"])
-        cert_path = root / "underclassified.json"
-        cert_path.write_text(json.dumps(underclassified), encoding="utf-8")
-        graph_path = root / "graph.json"
-        graph_path.write_text(json.dumps({
-            "edges": {"main.py": ["core/live.py"]},
-            "critical_roots": ["main.py"],
-            "bounded_roots": [],
-            "complete": True,
-            "unresolved": [],
-        }), encoding="utf-8")
-        verification = verify(root / "underclassified" / "state", repo=repo, certification=cert_path,
-                              dependency_graph=graph_path)
-        cases.append(_case(
-            "M05",
-            "impact_classifier_underclassifies_critical_live_change",
-            not verification["independent_release_verifier_pass"],
-            verification.get("blocker"),
-            "certification result claims NO_LIVE_IMPACT for core/live.py reachable from main.py",
-            "independent verifier rejects impact or fallback mismatch",
-        ))
-
-        store = _store(root / "promotion_before_certification", base)
-        try:
-            promote({"verdict": "PASS", "candidate_sha": candidate}, store, b"evidence")
-            detected = False
-            detail = "accepted"
-        except ReleaseStoreError as exc:
-            detected = True
-            detail = str(exc)
-        cases.append(_case(
-            "M12",
-            "promotion_attempted_before_complete_certification",
-            detected,
-            detail,
-            "promote called with PASS shell lacking base/fallback/gate fields",
-            "promotion raises ReleaseStoreError",
-        ))
-
-        store = _store(root / "invalid_fallback", base)
-        result = certify(repo, candidate, store, graph, gate_runner=lambda _: True)
-        result["fallback_sha"] = "c" * 40
-        try:
-            promote(result, store, b"evidence")
-            detected = False
-            detail = "accepted"
-        except ReleaseStoreError as exc:
-            detected = True
-            detail = str(exc)
-        cases.append(_case(
-            "M07",
-            "invalid_fallback_release",
-            detected,
-            detail,
-            "certification fallback_sha changed away from current certified release",
-            "promotion rejects fallback mismatch",
-        ))
-
-        store = _store(root / "uncertified_sha", "a" * 40)
-        verification = verify(root / "uncertified_sha" / "state", repo=repo)
-        cases.append(_case(
-            "M03",
-            "manifest_points_to_uncertified_sha",
-            not verification["independent_release_verifier_pass"],
-            verification["checks"],
-            "release store points to SHA with no certification evidence in repo",
-            "independent verifier rejects absent commit",
-        ))
-
-        incomplete = DependencyEvidence(edges={}, critical_roots=frozenset(), bounded_roots=frozenset(), complete=False)
-        impact = classify(["core/live.py"], incomplete)
-        cases.append(_case(
-            "M06",
-            "unknown_impact_requires_critical_gates",
-            "critical_mutations" in impact["required_gates"],
-            impact["impact"],
-            "incomplete dependency evidence classifies core/live.py",
-            "UNKNOWN_IMPACT requires critical mutation gate",
-        ))
-
-        stale_authority = root / "stale_authority.json"
-        stale_authority.write_text(json.dumps({"authority_verdict": "PASS", "independent_verifier_status": "PASS",
-                                               "session_date": "2026-09-08"}), encoding="utf-8")
-        store = _store(root / "stale_fallback_authority", base)
-        prep = prepare(root / "stale_fallback_authority" / "state", "2026-09-09",
-                       root / "stale_fallback_authority" / "next.json", authority_artifact=stale_authority)
-        cases.append(_case(
-            "M08",
-            "fallback_session_authority_stale",
-            prep["next_session_status"] == "BLOCKED" and "authority_session_stale" in prep["blockers"],
-            prep["blockers"],
-            "authority artifact session_date is previous day",
-            "next-session preparation blocks stale authority",
-        ))
-
-        dirty_repo, dirty_base, dirty_candidate = _repo(root / "dirty")
-        (dirty_repo / "dirty.txt").write_text("uncommitted\n", encoding="utf-8")
-        result = certify(dirty_repo, dirty_candidate, _store(root / "dirty_store", dirty_base), graph, gate_runner=lambda _: True)
-        cases.append(_case(
-            "M09",
-            "candidate_tree_dirty",
-            result["verdict"] == "BLOCKED" and result.get("blocker") == "candidate_tree_dirty",
-            result,
-            "uncommitted file created before certify",
-            "certification blocks dirty tree",
-        ))
-
-        missing_evidence = root / "missing_evidence_gates.json"
-        missing_evidence.write_text(json.dumps({"gates": {"source_identity": {"pass": True,
-            "evidence_path": str(root / "absent.json"), "evidence_sha256": "0" * 64}}}), encoding="utf-8")
-        from scripts.release_manager import _gate_result
-        gates = _gate_result(missing_evidence)
-        cases.append(_case(
-            "M10",
-            "certification_evidence_missing",
-            gates["source_identity"] is False,
-            gates,
-            "gate manifest references missing evidence path",
-            "gate parser marks gate false",
-        ))
-
-        store = _store(root / "missing_verifier_gate", base)
-        shell = {"verdict": "PASS", "candidate_sha": candidate, "base_sha": base, "fallback_sha": base,
-                 "required_gates": [g for g in full_gates if g != "release_verifier"],
-                 "passed_gates": [g for g in full_gates if g != "release_verifier"], "failed_gates": []}
-        try:
-            promote(shell, store, b"evidence")
-            detected = False
-            detail = "accepted"
-        except ReleaseStoreError as exc:
-            detected = True
-            detail = str(exc)
-        cases.append(_case(
-            "M11",
-            "independent_verifier_missing",
-            detected and detail == "promotion_requires_independent_verifier_gate",
-            detail,
-            "promotion result omits release_verifier from required and passed gates",
-            "promotion rejects missing independent verifier gate",
-        ))
-
-        try:
-            classify(["../core/live.py"], graph)
-            detected = False
-            detail = "accepted"
-        except ValueError as exc:
-            detected = True
-            detail = str(exc)
-        cases.append(_case(
-            "M14",
-            "merge_conflict_live_path_requires_impact_escalation",
-            "critical_mutations" in classify(["core/live.py"], graph)["required_gates"],
-            classify(["core/live.py"], graph)["impact"],
-            "live dependency core/live.py is changed",
-            "impact classifier escalates to critical gates",
-        ))
-
-        store = _store(root / "history_overwrite", base)
-        event_id = store.read()["event_sha256"]
-        try:
-            (root / "history_overwrite" / "state" / "history" / f"{event_id}.json").write_text("tampered\n", encoding="utf-8")
-            verify(root / "history_overwrite" / "state", repo=repo)
-            detected = not verify(root / "history_overwrite" / "state", repo=repo)["independent_release_verifier_pass"]
-        except OSError:
-            detected = True
-        cases.append(_case(
-            "M13",
-            "history_tamper_detected",
-            detected,
-            "history_integrity_failed",
-            "committed history event overwritten with non-JSON text",
-            "independent verifier rejects corrupted history",
-        ))
-
-        stale_authority = root / "stale_dated_authority.json"
-        stale_authority.write_text(json.dumps({"authority_verdict": "PASS", "independent_verifier_status": "PASS",
-                                               "session_date": "2026-09-08"}), encoding="utf-8")
-        store = _store(root / "stale_dated_authority", base)
-        prep = prepare(root / "stale_dated_authority" / "state", "2026-09-09",
-                       root / "stale_dated_authority" / "next.json", authority_artifact=stale_authority)
-        cases.append(_case(
-            "M15",
-            "dated_session_authority_stale",
-            prep["next_session_status"] == "BLOCKED" and "authority_session_stale" in prep["blockers"],
-            prep["blockers"],
-            "dated authority artifact session_date is previous day",
-            "next-session preparation blocks stale dated authority",
-        ))
-
-        cases.append(_case(
-            "EXTRA01",
-            "invalid_changed_path_rejected",
-            detected,
-            detail,
-            "changed path contains parent traversal",
-            "classifier raises invalid_changed_path",
-        ))
-
-    detected_count = sum(1 for case in cases if case["detected"])
-    return {
-        "campaign": "release_manager_v1_mutation_campaign",
-        "detected": detected_count,
-        "total": len(cases),
-        "release_manager_mutations_detected": f"{detected_count}/{len(cases)}",
-        "mandatory_mutation_classes_detected": f"{sum(1 for case in cases if case['mutation_id'].startswith('M') and case['detected'])}/15",
-        "pass": detected_count == len(cases),
-        "read_only": True,
-        "broker_api_called": False,
-        "broker_write_authority": False,
-        "order_authority": False,
-        "paper_authorized": False,
-        "live_authorized": False,
-        "orders_placed": 0,
-        "orders_modified": 0,
-        "orders_cancelled": 0,
-        "cases": cases,
-    }
+    cases = []
+    with tempfile.TemporaryDirectory(prefix="release-trust-mutations-") as temp:
+        root = Path(temp)
+        # Each mutation alters an actual primitive, certificate, graph, or journal.
+        c = _context(root / "m01")
+        try: certify(c[0], c[2], c[3], c[4], gate_runner=lambda _: True); detected = False
+        except TypeError: detected = True
+        cases.append(_case("M01", detected))
+        c = _context(root / "m02"); p = c[6] / "diff_check.json"; x = json.loads(p.read_text()); x["pass"] = True; p.write_text(json.dumps(x)); cases.append(_case("M02", certify(c[0], c[2], c[3], c[4], c[6], c[7])["verdict"] == "BLOCKED"))
+        c = _context(root / "m03"); c[7]["whole_tree_compile"] = c[7]["diff_check"]; cases.append(_case("M03", certify(c[0], c[2], c[3], c[4], c[6], c[7])["verdict"] == "BLOCKED"))
+        c = _context(root / "m04"); (c[6] / "diff_check.json").write_text("{}"); cases.append(_case("M04", not verify(c[3].root, repo=c[0], certification=c[10], dependency_graph=c[5], primitive_root=c[6], primitive_manifest=c[8])["independent_release_verifier_pass"]))
+        c = _context(root / "m05"); p = c[6] / "source_identity.json"; x = json.loads(p.read_text()); x["candidate_sha"] = "a" * 40; p.write_text(json.dumps(x)); cases.append(_case("M05", certify(c[0], c[2], c[3], c[4], c[6], c[7])["verdict"] == "BLOCKED"))
+        c = _context(root / "m06"); cases.append(_case("M06", certify(c[0], c[1], c[3], c[4], c[6], c[7]).get("blocker") == "candidate_not_checked_out"))
+        c = _context(root / "m07"); (c[6] / "whole_tree_compile.json").unlink(); cases.append(_case("M07", certify(c[0], c[2], c[3], c[4], c[6], c[7])["verdict"] == "BLOCKED"))
+        c = _context(root / "m08"); p = c[6] / "diff_check.json"; x = json.loads(p.read_text()); x["evaluator"] = "unknown"; p.write_text(json.dumps(x)); cases.append(_case("M08", certify(c[0], c[2], c[3], c[4], c[6], c[7])["verdict"] == "BLOCKED"))
+        c = _context(root / "m09"); p = c[6] / "release_verifier.json"; x = json.loads(p.read_text()); x["observed"]["command"] = "forged:release_verifier"; p.write_text(json.dumps(x)); cases.append(_case("M09", certify(c[0], c[2], c[3], c[4], c[6], c[7])["verdict"] != "PASS"))
+        c = _context(root / "m10"); c[5].write_text(json.dumps({"edges": {}, "critical_roots": [], "bounded_roots": [], "complete": False})); cases.append(_case("M10", not verify(c[3].root, repo=c[0], certification=c[10], dependency_graph=c[5], primitive_root=c[6], primitive_manifest=c[8])["independent_release_verifier_pass"]))
+        c = _context(root / "m11"); x = json.loads(c[10].read_text()); x["candidate_sha"] = "a" * 40; c[10].write_text(json.dumps(x)); cases.append(_case("M11", not verify(c[3].root, repo=c[0], certification=c[10], dependency_graph=c[5], primitive_root=c[6], primitive_manifest=c[8])["independent_release_verifier_pass"]))
+        c = _context(root / "m12"); (c[3].root / "current.json").write_text(json.dumps({"event_sha256": "0" * 64})); cases.append(_case("M12", not verify(c[3].root, repo=c[0], certification=c[10], dependency_graph=c[5], primitive_root=c[6], primitive_manifest=c[8])["independent_release_verifier_pass"]))
+        c = _context(root / "m13"); c[7].pop("diff_check"); cases.append(_case("M13", certify(c[0], c[2], c[3], c[4], c[6], c[7])["verdict"] == "BLOCKED"))
+        c = _context(root / "m14"); x = json.loads(c[10].read_text()); x["required_gates"].append("diff_check"); x["certification_sha256"] = digest({k: v for k, v in x.items() if k != "certification_sha256"}); c[10].write_text(json.dumps(x)); cases.append(_case("M14", not verify(c[3].root, repo=c[0], certification=c[10], dependency_graph=c[5], primitive_root=c[6], primitive_manifest=c[8])["independent_release_verifier_pass"]))
+        c = _context(root / "m15"); p = c[6] / "diff_check.json"; x = json.loads(p.read_text()); x["observed"]["exit_code"] = 1; p.write_text(json.dumps(x)); cases.append(_case("M15", not verify(c[3].root, repo=c[0], certification=c[10], dependency_graph=c[5], primitive_root=c[6], primitive_manifest=c[8])["independent_release_verifier_pass"]))
+    detected = sum(item["detected"] for item in cases)
+    return {"campaign": "release_manager_v2_mutation_campaign", "cases": cases, "total": len(cases), "detected": detected, "pass": detected == len(cases), "release_manager_mutations_detected": f"{detected}/{len(cases)}", "mandatory_mutation_classes_detected": f"{detected}/15", "read_only": True, "broker_api_called": False, "broker_write_authority": False, "order_authority": False, "paper_authorized": False, "live_authorized": False, "orders_placed": 0, "orders_modified": 0, "orders_cancelled": 0}
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--output", type=Path)
-    args = parser.parse_args()
-    result = run_campaign()
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result["pass"] else 2
+    parser = argparse.ArgumentParser(); parser.add_argument("--output", type=Path)
+    args = parser.parse_args(); result = run_campaign()
+    serialized = json.dumps(result, indent=2, sort_keys=True) + "\n"
+    if args.output: args.output.parent.mkdir(parents=True, exist_ok=True); args.output.write_text(serialized, encoding="utf-8")
+    print(serialized, end=""); return 0 if result["pass"] else 2
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__ == "__main__": raise SystemExit(main())

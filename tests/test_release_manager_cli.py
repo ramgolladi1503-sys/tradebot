@@ -1,49 +1,17 @@
 import json
 
-from scripts.release_manager import _gate_result
+import pytest
+
+from core.certified_release_store import ReleaseStoreError
+from scripts.release_manager import _manifest
 
 
-def test_gate_result_accepts_evidence_backed_gate(tmp_path):
-    evidence = tmp_path / "evidence.json"
-    evidence.write_text("{}\n", encoding="utf-8")
-    import hashlib
-
-    gates = tmp_path / "gates.json"
-    gates.write_text(
-        json.dumps(
-            {
-                "gates": {
-                    "source_identity": {
-                        "pass": True,
-                        "evidence_path": str(evidence),
-                        "evidence_sha256": hashlib.sha256(evidence.read_bytes()).hexdigest(),
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    assert _gate_result(gates) == {"source_identity": True}
+def test_primitive_manifest_rejects_legacy_caller_pass_json(tmp_path):
+    path = tmp_path / "gates.json"; path.write_text(json.dumps({"gates": {"source_identity": {"pass": True}}}))
+    with pytest.raises(ReleaseStoreError, match="primitive_manifest_invalid"):
+        _manifest(path)
 
 
-def test_gate_result_rejects_evidence_hash_mismatch(tmp_path):
-    evidence = tmp_path / "evidence.json"
-    evidence.write_text("{}\n", encoding="utf-8")
-    gates = tmp_path / "gates.json"
-    gates.write_text(
-        json.dumps(
-            {
-                "gates": {
-                    "source_identity": {
-                        "pass": True,
-                        "evidence_path": str(evidence),
-                        "evidence_sha256": "0" * 64,
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    assert _gate_result(gates) == {"source_identity": False}
+def test_primitive_manifest_keeps_only_gate_to_primitive_mapping(tmp_path):
+    path = tmp_path / "manifest.json"; path.write_text(json.dumps({"source_identity": "source.json"}))
+    assert _manifest(path) == {"source_identity": "source.json"}
