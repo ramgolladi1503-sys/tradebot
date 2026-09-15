@@ -98,7 +98,7 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
 def _selection_authority_primitives() -> list[dict[str, str]]:
     return [
         {
-            "stage": s.stage_name,
+            "stage": s.stage,
             "owner_module": s.owner_module,
             "callable_name": s.callable_name,
             "authority": s.authority.value if hasattr(s.authority, "value") else str(s.authority),
