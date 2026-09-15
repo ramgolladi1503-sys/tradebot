@@ -41,6 +41,10 @@ def _ranked_pipeline_fixture(
     }
 
 
+def test_tradebuilder_invoked_in_canonical_observer(tmp_path: Path):
+    return test_tradebuilder_invoked_with_candidates_in_canonical_observer(tmp_path)
+
+
 def test_tradebuilder_invoked_with_candidates_in_canonical_observer(tmp_path: Path):
     reset_broker_write_guards()
     arm_broker_write_guards()
