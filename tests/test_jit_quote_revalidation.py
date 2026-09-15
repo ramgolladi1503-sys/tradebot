@@ -27,6 +27,7 @@ def _market_data(*, ltp: float = 100.0) -> dict:
         "cycle_id": JIT_CYCLE_ID,
         "session_id": JIT_SESSION_ID,
         "source_sha": JIT_SOURCE_SHA,
+        "primary_regime": "TREND_BULL",
         "regime": {"primary_regime": "TREND_BULL"},
     }
 

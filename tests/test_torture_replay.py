@@ -2,13 +2,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from core.torture_test import TortureTestRunner
+from core.trade_truth.prospective_capture_engine import reset_broker_write_guards
 
 CI_SAFE_LATENCY_THRESHOLD_MS = 750.0
 
 
+@pytest.fixture(autouse=True)
+def _isolate_broker_write_guards():
+    """Keep offline torture scenarios independent from process-global guard spies."""
+    reset_broker_write_guards()
+    yield
+    reset_broker_write_guards()
+
+
 def _assert_common(summary: dict):
-    assert summary["status"] == "PASS"
+    assert summary["status"] == "PASS", summary
     assert int(summary["metrics"]["exception_count"]) == 0
     assert int(summary["metrics"]["event_count"]) > 0
     assert int(summary["metrics"]["partial_trade_creation_count"]) == 0
