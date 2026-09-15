@@ -109,7 +109,12 @@ def run_consumer_cycle(
     rejected = 0
     for row in rows:
         try:
-            valid_candidates.append(candidate_from_mapping(row).to_dict())
+            cand_dict = candidate_from_mapping(row).to_dict()
+            # Preserve causal pricing/context attributes from the raw candidate row
+            for key in ("entry", "ltp", "close", "spot_ltp", "symbol"):
+                if key in row and key not in cand_dict:
+                    cand_dict[key] = row[key]
+            valid_candidates.append(cand_dict)
         except (TypeError, ValueError, KeyError):
             rejected += 1
 
