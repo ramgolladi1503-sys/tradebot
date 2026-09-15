@@ -203,13 +203,19 @@ def generate_proof(output_dir: Path | None = None) -> Path:
                     spot=24500.0,
                     ltp=24500.0,
                     regime={"primary_regime": "TRENDING"},
+                    quote_truth={
+                        "symbol": "NIFTY",
+                        "ltp": 24500.0,
+                        "last_tick_ts": quote_event_ts,
+                        "is_fresh": True,
+                        "source": "PR905_FROZEN_REPLAY_FIXTURE",
+                    },
                 )
             },
             warnings=[],
             compute_ms=1.0,
             loop_id=session_id,
         )
-        market_snapshot["symbols"]["NIFTY"]["quote_timestamp"] = quote_event_ts
         producer.read_market_snapshot = lambda _: copy.deepcopy(market_snapshot)
 
         cutoff_dt = datetime.fromisoformat(cutoff_iso)
@@ -396,7 +402,7 @@ def generate_proof(output_dir: Path | None = None) -> Path:
 
     authorities = [
         {
-            "stage": s.stage_name,
+            "stage": s.stage,
             "owner_module": s.owner_module,
             "callable_name": s.callable_name,
             "authority": s.authority.value if hasattr(s.authority, "value") else str(s.authority),
