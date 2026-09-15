@@ -229,6 +229,8 @@ def test_high_risk_requires_multiple_substantive_negative_cases(monkeypatch):
 def test_two_substantive_high_risk_negative_cases_clear_quality_floor(monkeypatch):
     source = "\n".join(
         [
+            "import core.risk_guard",
+            "",
             "def test_attack_rejects_bad_input():",
             "    assert rejected is True",
             "",
