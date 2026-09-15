@@ -12,14 +12,11 @@ from core.trade_truth.prospective_capture_engine import (
     CALL_COUNTS,
     arm_broker_write_guards,
     reset_broker_write_guards,
+    get_current_git_lineage,
 )
 from core.runtime_authority_contract import build_runtime_authority_map, AuthorityKind
-import subprocess
 
-try:
-    SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-except Exception:
-    SHA = "87190fd9119327456ec38d0390500a5a2ff70d60"
+SHA, _ = get_current_git_lineage()
 
 
 def _ranked_pipeline_fixture(
