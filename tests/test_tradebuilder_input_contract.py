@@ -7,6 +7,7 @@ import pytest
 from core.trade_truth.trade_builder_input_contract import (
     build_canonical_tradebuilder_input,
     hash_tradebuilder_input,
+    parse_iso_or_epoch_seconds,
 )
 
 
@@ -120,4 +121,26 @@ def test_build_canonical_tradebuilder_input_from_market_data_dict():
     assert out["custom_prod_field"] == "production_preserved"
     assert out["option_chain"] == [{"strike": 52000, "call_oi": 1000}]
     assert out.get("feed_truth") is None or "feed_health" in out
-    assert out.get("read_only") is not True  # Production write capability not forcibly overwritten when read_only=False
+    assert out.get("read_only") is not True
+
+
+def test_parse_iso_or_epoch_seconds_normalizes_equivalent_offsets():
+    utc = parse_iso_or_epoch_seconds("2026-09-15T09:19:59Z")
+    offset = parse_iso_or_epoch_seconds("2026-09-15T14:49:59+05:30")
+    assert utc is not None
+    assert offset is not None
+    assert utc == offset
+
+
+def test_parse_iso_or_epoch_seconds_normalizes_milliseconds():
+    seconds = parse_iso_or_epoch_seconds(1_789_460_399.0)
+    milliseconds = parse_iso_or_epoch_seconds(1_789_460_399_000)
+    assert seconds == milliseconds
+
+
+@pytest.mark.parametrize(
+    "value",
+    [None, "", "not-a-time", "2026-09-15T09:19:59", float("nan"), float("inf")],
+)
+def test_parse_iso_or_epoch_seconds_rejects_missing_invalid_or_timezone_naive(value):
+    assert parse_iso_or_epoch_seconds(value) is None
