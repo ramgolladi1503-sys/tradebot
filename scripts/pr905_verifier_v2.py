@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import argparse
 import copy
+import io
 import json
 import re
 import subprocess
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -443,13 +445,15 @@ def verify_pr905_evidence(evidence_root: Path, repo_root: Path = REPO_ROOT) -> t
     if run1_calls:
         frozen_input = copy.deepcopy(run1_calls[0].get("input"))
         tb_a = TradeBuilder()
-        trade_a, trace_a = tb_a.build_with_trace(
-            copy.deepcopy(frozen_input), quick_mode=False, allow_fallbacks=False, allow_baseline=False
-        )
         tb_b = TradeBuilder()
-        trade_b, trace_b = tb_b.build_with_trace(
-            copy.deepcopy(frozen_input), quick_mode=False, allow_fallbacks=False, allow_baseline=False
-        )
+        with redirect_stdout(io.StringIO()):
+            trade_a, trace_a = tb_a.build_with_trace(
+                copy.deepcopy(frozen_input), quick_mode=False, allow_fallbacks=False, allow_baseline=False
+            )
+        with redirect_stdout(io.StringIO()):
+            trade_b, trace_b = tb_b.build_with_trace(
+                copy.deepcopy(frozen_input), quick_mode=False, allow_fallbacks=False, allow_baseline=False
+            )
         independent_deterministic = (
             _normalize_trade(trade_a) == _normalize_trade(trade_b)
             and _normalize_trace(trace_a) == _normalize_trace(trace_b)
