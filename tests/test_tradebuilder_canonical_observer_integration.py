@@ -41,20 +41,36 @@ def _ranked_pipeline_fixture(
     }
 
 
-def test_tradebuilder_invoked_in_canonical_observer(tmp_path: Path):
+def test_tradebuilder_invoked_with_candidates_in_canonical_observer(tmp_path: Path):
     reset_broker_write_guards()
     arm_broker_write_guards()
 
     cycle_id = "session_test:1:cycle_001"
     session_id = "session_test"
-    pipeline = _ranked_pipeline_fixture(cycle_id=cycle_id)
+    candidate = {
+        "candidate_id": "c1",
+        "strategy_id": "s1",
+        "spec_sha": SHA,
+        "timestamp": "2026-09-15T09:20:00Z",
+        "underlying": "NIFTY",
+        "direction": "UP",
+        "candidate_type": "INTRADAY",
+        "confidence_raw": 0.85,
+        "regime": "TRENDING",
+        "reason": "breakout",
+        "data_cutoff": "2026-09-15T09:19:59Z",
+        "execution_status": "advisory_only",
+        "ltp": 24500.0,
+        "entry": 24500.0,
+    }
+    pipeline = _ranked_pipeline_fixture(cycle_id=cycle_id, candidates=[candidate])
 
     result = run_consumer_cycle(
         runtime_outputs={"ranked_pipeline_latest": pipeline},
         output_root=tmp_path,
         session_id=session_id,
         source_sha=SHA,
-        cycle_context={"cycle_id": cycle_id, "symbol": "NIFTY"},
+        cycle_context={"cycle_id": cycle_id, "symbol": "NIFTY", "spot_ltp": 24500.0},
     )
 
     # 1. TradeBuilder consumer state recorded in result
@@ -69,6 +85,7 @@ def test_tradebuilder_invoked_in_canonical_observer(tmp_path: Path):
     tb_spans = [span for span in pulse_lines if span["stage_name"] == "TRADE_BUILDER"]
     assert len(tb_spans) >= 1
     assert tb_spans[0]["status"] == "PASS"
+    assert tb_spans[0]["parent_span_id"] == "CANDIDATE_POOL"
     assert tb_spans[0]["reason_code"] == "CANONICAL_RUNTIME_OBSERVED"
     assert tb_spans[0]["trace_id"] == cycle_id
 
@@ -76,6 +93,43 @@ def test_tradebuilder_invoked_in_canonical_observer(tmp_path: Path):
     assert sum(CALL_COUNTS.values()) == 0
     assert result["broker_order_calls"] == 0
 
+    reset_broker_write_guards()
+
+
+def test_tradebuilder_empty_pool_skips_without_synthetic_defaults(tmp_path: Path):
+    reset_broker_write_guards()
+    arm_broker_write_guards()
+
+    cycle_id = "session_test:1:cycle_001_empty"
+    session_id = "session_test"
+    pipeline = _ranked_pipeline_fixture(cycle_id=cycle_id, candidates=[])
+
+    result = run_consumer_cycle(
+        runtime_outputs={"ranked_pipeline_latest": pipeline},
+        output_root=tmp_path,
+        session_id=session_id,
+        source_sha=SHA,
+        cycle_context={"cycle_id": cycle_id},  # No synthetic symbol or price
+    )
+
+    # TradeBuilder consumer state handles empty candidates truthfully
+    assert "trade_builder" in result["consumers"]
+    tb_state = result["consumers"]["trade_builder"]
+    assert tb_state["verdict"] == "PASS"
+    assert tb_state["reason"] == "NO_ACTIVE_SYMBOLS_OR_CANDIDATES"
+    assert tb_state["built_trade_count"] == 0
+
+    # Pulse recorded as SKIPPED_NOT_APPLICABLE
+    pulse_file = tmp_path / "truth_feed" / "CHECKPOINT_PULSE.jsonl"
+    assert pulse_file.exists()
+    pulse_lines = [json.loads(line) for line in pulse_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+    tb_spans = [span for span in pulse_lines if span["stage_name"] == "TRADE_BUILDER"]
+    assert len(tb_spans) >= 1
+    assert tb_spans[0]["status"] == "SKIPPED_NOT_APPLICABLE"
+    assert tb_spans[0]["parent_span_id"] == "CANDIDATE_POOL"
+    assert tb_spans[0]["reason_code"] == "NO_ACTIVE_SYMBOLS_OR_CANDIDATES"
+
+    assert sum(CALL_COUNTS.values()) == 0
     reset_broker_write_guards()
 
 

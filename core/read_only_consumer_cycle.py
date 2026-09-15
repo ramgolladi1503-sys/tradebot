@@ -21,13 +21,14 @@ from core import risk_halt
 from core.storage_bounds_v37 import MAX_ATOMIC_ARTIFACT_BYTES, StorageBoundViolation
 import time
 from core.trade_truth.decision_hash import compute_deterministic_hash
-from core.trade_truth.truth_feed_runtime_hook import CheckpointSpan
+from core.trade_truth.truth_feed_runtime_hook import CheckpointSpan, TruthFeedRuntimeHook
+from core.trade_truth.trade_builder_input_contract import build_canonical_tradebuilder_input
 from strategies.trade_builder import TradeBuilder
 
 
 CONSUMERS = (
     "regime", "strategies", "cas_v2", "candidate_pool", "option_surface",
-    "eligibility", "ranking", "advisory_queue", "trade_builder", "ui", "monitoring", "evidence",
+    "trade_builder", "eligibility", "ranking", "advisory_queue", "ui", "monitoring", "evidence",
 )
 
 
@@ -168,6 +169,135 @@ def run_consumer_cycle(
         reason=None if ((not valid_candidates and isinstance(ranked_pipeline, Mapping)) or (valid_candidates and option_ready_count == len(valid_candidates))) else "current_option_surface_evidence_missing",
         candidate_count=len(valid_candidates), ready_count=option_ready_count,
     )
+    # Invoke TradeBuilder in canonical observer runtime
+    tb_t0 = time.time()
+    tb_trades: list[Any] = []
+    tb_traces: list[dict[str, Any]] = []
+    trade_builder = TradeBuilder()
+
+    # Determine symbols/candidates to evaluate for TradeBuilder
+    # Strictly fail-closed without synthetic fallback ("NIFTY" or 0.0)
+    tb_candidates: list[dict[str, Any]] = []
+    for c in valid_candidates:
+        sym = str(c.get("underlying") or c.get("symbol") or "").strip()
+        try:
+            entry_px = float(c.get("entry") or c.get("ltp") or 0.0)
+        except (TypeError, ValueError):
+            entry_px = 0.0
+        if sym and entry_px > 0.0:
+            tb_candidates.append(c)
+
+    # Check if cycle context provides an authoritative symbol and spot price
+    if not tb_candidates:
+        ctx_sym = str(context.get("symbol") or "").strip().upper()
+        ctx_px = 0.0
+        for px_key in ("spot_ltp", "ltp", "close", "entry"):
+            try:
+                val = float(context.get(px_key) or 0.0)
+                if val > 0.0:
+                    ctx_px = val
+                    break
+            except (TypeError, ValueError):
+                continue
+        if ctx_sym and ctx_px > 0.0:
+            tb_candidates.append({
+                "symbol": ctx_sym,
+                "underlying": ctx_sym,
+                "ltp": ctx_px,
+                "entry": ctx_px,
+                "candidate_id": f"{ctx_sym}_CTX",
+            })
+
+    tb_input_payloads: list[dict[str, Any]] = []
+    for cand in tb_candidates:
+        sym = str(cand.get("underlying") or cand.get("symbol") or "").strip()
+        px = float(cand.get("entry") or cand.get("ltp") or 0.0)
+        try:
+            market_data = build_canonical_tradebuilder_input(
+                symbol=sym,
+                ltp=px,
+                regime=regime,
+                cycle_id=cycle_id,
+                session_id=session_id,
+                source_sha=source_sha,
+                market_open=context.get("market_open") if "market_open" in context else None,
+                execution_mode=context.get("execution_mode") if "execution_mode" in context else None,
+                feed_truth=context.get("feed_truth") if isinstance(context.get("feed_truth"), Mapping) else None,
+            )
+        except ValueError:
+            continue
+
+        tb_input_payloads.append(market_data)
+        trade, trace = trade_builder.build_with_trace(
+            market_data,
+            quick_mode=False,
+            allow_fallbacks=False,
+            allow_baseline=False,
+        )
+        if trade is not None:
+            # Enforce read-only guarantees on any constructed trade
+            if isinstance(trade, dict):
+                trade["read_only"] = True
+                trade["execution_status"] = "advisory_only"
+                trade["execution_allowed"] = False
+                trade["orders_placed"] = 0
+                trade["broker_write_authority"] = False
+            else:
+                try:
+                    object.__setattr__(trade, "execution_allowed", False)
+                    object.__setattr__(trade, "execution_status", "advisory_only")
+                    object.__setattr__(trade, "read_only", True)
+                except Exception:
+                    pass
+            tb_trades.append(trade)
+        if trace:
+            tb_traces.append(trace)
+
+    tb_t1 = time.time()
+    tb_input_hash = compute_deterministic_hash({
+        "cycle_id": cycle_id,
+        "session_id": session_id,
+        "source_sha": source_sha,
+        "items": tb_input_payloads,
+    })
+    tb_output_hash = compute_deterministic_hash({
+        "trade_count": len(tb_trades),
+        "trace_count": len(tb_traces),
+        "cycle_id": cycle_id,
+    })
+
+    hook = TruthFeedRuntimeHook(
+        session_root=root,
+        session_date=str(provenance.get("session_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+        session_id=session_id,
+    )
+    if tb_candidates:
+        tb_status = "PASS" if (tb_trades or tb_traces or isinstance(ranked_pipeline, Mapping)) else "REJECTED"
+        tb_reason_code = "CANONICAL_RUNTIME_OBSERVED"
+    else:
+        tb_status = "SKIPPED_NOT_APPLICABLE"
+        tb_reason_code = "NO_ACTIVE_SYMBOLS_OR_CANDIDATES"
+
+    hook.record_checkpoint(
+        stage_name="TRADE_BUILDER",
+        trace_id=cycle_id,
+        parent_span_id="CANDIDATE_POOL",
+        entered_at=tb_t0,
+        exited_at=tb_t1,
+        input_hash=tb_input_hash,
+        output_hash=tb_output_hash,
+        status=tb_status,
+        reason_code=tb_reason_code,
+        exception=None,
+    )
+
+    result["consumers"]["trade_builder"] = _state(
+        "PASS" if (tb_status in ("PASS", "SKIPPED_NOT_APPLICABLE")) else "PENDING",
+        reason=None if tb_status == "PASS" else tb_reason_code,
+        built_trade_count=len(tb_trades),
+        trace_count=len(tb_traces),
+    )
+
     eligibility_rows = [
         evaluate_candidate_eligibility(candidate=candidate, option_surface=surface, regime=regime)
         for candidate, surface in zip(valid_candidates, surfaces)
@@ -206,109 +336,6 @@ def run_consumer_cycle(
     result["consumers"]["advisory_queue"] = _state(
         "PASS" if appended or (not ranked and isinstance(ranked_pipeline, Mapping)) else "PENDING", reason=None if appended or (not ranked and isinstance(ranked_pipeline, Mapping)) else "no_advisory_rows_appended",
         appended_count=appended,
-    )
-
-    # Invoke TradeBuilder in canonical observer runtime
-    tb_t0 = time.time()
-    tb_trades: list[Any] = []
-    tb_traces: list[dict[str, Any]] = []
-    trade_builder = TradeBuilder()
-
-    # Determine symbols/candidates to evaluate for TradeBuilder
-    tb_eval_items: list[tuple[str, float]] = []
-    if ranked:
-        for r in ranked:
-            sym = str(r.get("underlying") or r.get("symbol") or "").strip()
-            entry_px = float(r.get("entry") or r.get("ltp") or 0.0)
-            if sym and (sym, entry_px) not in tb_eval_items:
-                tb_eval_items.append((sym, entry_px))
-    elif valid_candidates:
-        for c in valid_candidates:
-            sym = str(c.get("underlying") or c.get("symbol") or "").strip()
-            entry_px = float(c.get("entry") or c.get("ltp") or 0.0)
-            if sym and (sym, entry_px) not in tb_eval_items:
-                tb_eval_items.append((sym, entry_px))
-    else:
-        # Evaluate cycle underlying if present in context or default to NIFTY
-        sym = str(context.get("symbol") or "NIFTY").strip()
-        tb_eval_items.append((sym, 0.0))
-
-    for sym, px in tb_eval_items:
-        market_data = {
-            "symbol": sym,
-            "ltp": px,
-            "regime": regime,
-            "market_open": True,
-            "execution_mode": "SIM",
-            "session_id": session_id,
-            "source_sha": source_sha,
-            "run_id": cycle_id,
-        }
-        trade, trace = trade_builder.build_with_trace(
-            market_data,
-            quick_mode=False,
-            allow_fallbacks=False,
-            allow_baseline=False,
-        )
-        if trade is not None:
-            # Enforce read-only guarantees on any constructed trade
-            if isinstance(trade, dict):
-                trade["read_only"] = True
-                trade["execution_status"] = "advisory_only"
-                trade["execution_allowed"] = False
-                trade["orders_placed"] = 0
-                trade["broker_write_authority"] = False
-            else:
-                try:
-                    object.__setattr__(trade, "execution_allowed", False)
-                    object.__setattr__(trade, "execution_status", "advisory_only")
-                    object.__setattr__(trade, "read_only", True)
-                except Exception:
-                    pass
-            tb_trades.append(trade)
-        if trace:
-            tb_traces.append(trace)
-
-    tb_t1 = time.time()
-    tb_input_payload = {
-        "cycle_id": cycle_id,
-        "session_id": session_id,
-        "source_sha": source_sha,
-        "items": tb_eval_items,
-    }
-    tb_input_hash = compute_deterministic_hash(tb_input_payload)
-    tb_output_payload = {
-        "trade_count": len(tb_trades),
-        "trace_count": len(tb_traces),
-        "cycle_id": cycle_id,
-    }
-    tb_output_hash = compute_deterministic_hash(tb_output_payload)
-
-    # Emit checkpoint pulse to truth_feed/CHECKPOINT_PULSE.jsonl
-    pulse_dir = root / "truth_feed"
-    pulse_dir.mkdir(parents=True, exist_ok=True)
-    pulse_file = pulse_dir / "CHECKPOINT_PULSE.jsonl"
-    tb_span = CheckpointSpan(
-        stage_name="TRADE_BUILDER",
-        trace_id=cycle_id,
-        parent_span_id=None,
-        entered_at=tb_t0,
-        exited_at=tb_t1,
-        input_hash=tb_input_hash,
-        output_hash=tb_output_hash,
-        status="PASS" if (tb_trades or tb_traces or isinstance(ranked_pipeline, Mapping)) else "REJECTED",
-        reason_code="CANONICAL_RUNTIME_OBSERVED",
-        exception=None,
-        latency_ms=max(0.0, (tb_t1 - tb_t0) * 1000.0),
-    )
-    with pulse_file.open("a", encoding="utf-8") as pf:
-        pf.write(json.dumps(tb_span.to_dict(), sort_keys=True) + "\n")
-
-    result["consumers"]["trade_builder"] = _state(
-        "PASS" if (tb_trades or tb_traces or isinstance(ranked_pipeline, Mapping)) else "PENDING",
-        reason=None,
-        built_trade_count=len(tb_trades),
-        trace_count=len(tb_traces),
     )
 
     for name in ("ui", "monitoring", "evidence"):
