@@ -28,6 +28,7 @@ def build_canonical_tradebuilder_input(
     option_chain: list[dict[str, Any]] | None = None,
     extra_market_data: Mapping[str, Any] | None = None,
     read_only: bool = True,
+    event_timestamp: str | float | None = None,
 ) -> dict[str, Any]:
     """Validate and build authoritative market_data dictionary for TradeBuilder.
 
@@ -104,6 +105,10 @@ def build_canonical_tradebuilder_input(
     raw_opt_chain = option_chain if option_chain is not None else base_data.get("option_chain")
     if raw_opt_chain is not None and isinstance(raw_opt_chain, (list, tuple)):
         payload["option_chain"] = list(raw_opt_chain)
+
+    raw_ts = event_timestamp if event_timestamp is not None else base_data.get("event_timestamp", base_data.get("timestamp"))
+    if raw_ts is not None:
+        payload["event_timestamp"] = raw_ts
 
     if extra_market_data and isinstance(extra_market_data, Mapping):
         for k, v in extra_market_data.items():

@@ -241,6 +241,7 @@ def run_consumer_cycle(
                 market_open=context.get("market_open") if "market_open" in context else None,
                 execution_mode=context.get("execution_mode") if "execution_mode" in context else None,
                 feed_truth=context.get("feed_truth") if isinstance(context.get("feed_truth"), Mapping) else None,
+                event_timestamp=cand.get("timestamp") or cand.get("data_cutoff") or context.get("causal_data_cutoff"),
             )
         except ValueError:
             continue
