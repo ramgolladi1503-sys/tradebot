@@ -1,6 +1,14 @@
 {
-  "contract_id": "MROS_TRUTH_FEED_RUNTIME_CALL_PATH_V3",
+  "contract_id": "MROS_TRUTH_FEED_RUNTIME_CALL_PATH_V4",
   "total_stages": 20,
+  "causal_stage_count": 17,
+  "causal_runtime_reachable_count": 17,
+  "blocked_causal_stage_count": 0,
+  "all_required_causal_runtime_reachable": true,
+  "sidecar_stage_count": 2,
+  "sidecar_runtime_reachable_count": 2,
+  "ui_only_stage_count": 2,
+  "execution_boundary_stage_count": 1,
   "all_runtime_reachable": true,
   "all_capture_hooked": true,
   "all_trace_id_propagated": true,
@@ -19,7 +27,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -33,7 +43,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -47,7 +59,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -61,7 +75,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -75,7 +91,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -89,7 +107,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -103,7 +123,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -117,7 +139,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -131,7 +155,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -145,7 +171,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -159,7 +187,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -173,7 +203,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -187,7 +219,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -201,7 +235,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "CANONICAL_UI_ONLY_AUDIT_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "OBSERVABILITY_SIDECAR",
+      "causal_to_advisory_decision": false
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -215,7 +251,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "CANONICAL_UI_ONLY_AUDIT_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "OBSERVABILITY_SIDECAR",
+      "causal_to_advisory_decision": false
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -229,7 +267,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "CANONICAL_CONSTRUCTION_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -243,7 +283,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -257,7 +299,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -271,7 +315,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -285,7 +331,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "EXECUTION_BOUNDARY",
+      "causal_to_advisory_decision": false
     }
   ]
 }

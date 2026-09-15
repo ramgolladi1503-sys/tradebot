@@ -23,11 +23,15 @@
 - PR: #904
 - Branch: fix/mros-scoring-ranking-trade-builder-repair
 - Scope:
-  - Upgrade MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json to V3.
-  - Correct callers/callees for SCORING, RANKING, and TRADE_BUILDER to point to canonical runtime authorities (core.ranking_orchestrator, core.opportunity_scoring, core.candidate_ranking, strategies.trade_builder.TradeBuilder).
-  - Update tests/test_trade_truth_prospective_repair.py to assert single candidate selection authority (CANDIDATE_SELECTION_AUTHORITY_COUNT == 1), 20 reachable call path stages, and zero unreached downstream blockers.
+  - Upgrade `MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json` to V4 with explicit stage classifications (17 `CAUSAL`, 2 `OBSERVABILITY_SIDECAR`, 1 `EXECUTION_BOUNDARY`).
+  - Correct callers/callees for SCORING, RANKING, and TRADE_BUILDER to point to canonical runtime authorities (`core.ranking_orchestrator`, `core.opportunity_scoring`, `core.candidate_ranking`, `strategies.trade_builder.TradeBuilder`).
+  - Add independent verifier `scripts/verify_mros_runtime_call_path.py` and pre-merge proof ledger `/Volumes/TradeBotData/pr904-runtime-proof-20260915/MROS_RUNTIME_CALL_LEDGER.json`.
+  - Update `core/mros_daily_governor.py` to evaluate causal reachability without false-blocking on sidecars.
+  - Update `tests/test_trade_truth_prospective_repair.py` to eliminate fake self-certified boolean assertions and add dynamic verifier and mutation tests.
 - Allowed files:
   - MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json
+  - scripts/verify_mros_runtime_call_path.py
+  - core/mros_daily_governor.py
   - tests/test_trade_truth_prospective_repair.py
   - docs/agent_reviews/pr904_mros_truth_feed_runtime_call_path_repair.md
 - Forbidden files:
@@ -40,14 +44,15 @@
 - Forbidden behaviors:
   - No broker write calls or order actions.
   - No live trading authority enabled.
-  - No alternative or competing candidate selection engine (select_best_opportunity remains sole authority).
+  - No alternative or competing candidate selection engine (`select_best_opportunity` remains sole authority).
   - No modification to historical frozen evidence captures.
 - Acceptance tests:
-  - 19/19 tests in tests/test_trade_truth_prospective_repair.py pass.
+  - 25/25 tests in tests/test_trade_truth_prospective_repair.py pass.
+  - scripts/verify_mros_runtime_call_path.py passes on dynamic proof ledger.
   - validate_agent_review_evidence.py passes.
   - CE gates (Minerva, Cerberus, Evidence) pass.
-- Runtime proof required:
-  - MROSDailyGovernor morning readiness check evaluates without UNREACHABLE_DOWNSTREAM_STAGE blockers.
+- Pre-merge runtime proof required:
+  - Dynamic execution proof ledger generated at `/Volumes/TradeBotData/pr904-runtime-proof-20260915/MROS_RUNTIME_CALL_LEDGER.json` with `PRE_MERGE_RUNTIME_PROOF_REQUIRED=true`.
 
 ## Scope Guard
 
@@ -99,9 +104,11 @@ Verdict: PASS
 
 Execution summary:
 
-- Upgraded `MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json` to V3.
-- Updated `tests/test_trade_truth_prospective_repair.py` with `test_runtime_authority_single_selection_and_call_path_v3`.
-- Added required agent review evidence documentation.
+- Upgraded `MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json` to V4 with stage classifications (17 CAUSAL, 2 OBSERVABILITY_SIDECAR, 1 EXECUTION_BOUNDARY).
+- Created independent runtime verifier `scripts/verify_mros_runtime_call_path.py`.
+- Updated `core/mros_daily_governor.py` to evaluate causal reachability without false-blocking on sidecars.
+- Updated `tests/test_trade_truth_prospective_repair.py` replacing self-certified boolean assertions with instrumented dynamic counters and negative mutation tests.
+- Generated dynamic pre-merge runtime proof ledger at `/Volumes/TradeBotData/pr904-runtime-proof-20260915/MROS_RUNTIME_CALL_LEDGER.json`.
 
 ## QA / Safety Review
 
@@ -116,6 +123,7 @@ Safety properties verified:
 - `ORDERS_PLACED=0`
 - `ORDERS_MODIFIED=0`
 - `ORDERS_CANCELLED=0`
+- `observed_broker_writes=0`
 
 ## Acceptance Proof
 
@@ -123,22 +131,24 @@ Commands executed:
 
 ```bash
 python3 -m pytest -q tests/test_trade_truth_prospective_repair.py
+python3 scripts/verify_mros_runtime_call_path.py
 python3 scripts/validate_agent_review_evidence.py --base-ref origin/main --candidate-ref HEAD
 PYTHONPATH=. python3 scripts/run_unified_ce_gates.py --repo . --config .gsd-forensics.yaml --changed-paths-file docs/code_excellence/reports/changed_paths.txt
 ```
 
 Results:
 
-- 19/19 tests in `tests/test_trade_truth_prospective_repair.py` passed.
+- 25/25 tests in `tests/test_trade_truth_prospective_repair.py` passed.
+- `scripts/verify_mros_runtime_call_path.py` verified 20 stages, 17 causal stages, 1 candidate selection authority, 0 broker writes.
 - `validate_agent_review_evidence.py` passed.
 - Unified CE gates passed.
 
-## Runtime Proof Required After Merge
+## Pre-Merge Runtime Proof Artifact
 
-Required after merge:
-
-1. Run `python scripts/morning_readiness_cli.py governor --session-date 2026-09-15` to verify morning readiness passes downstream stage validation.
-2. Verify read-only observation runtime proceeds without downstream unreachable stage warnings.
+- Ledger path: `/Volumes/TradeBotData/pr904-runtime-proof-20260915/MROS_RUNTIME_CALL_LEDGER.json`
+- Independent verifier: `scripts/verify_mros_runtime_call_path.py`
+- Pre-merge runtime proof status: `PRE_MERGE_RUNTIME_PROOF_REQUIRED=true` (SATISFIED)
+- Verification result: 20 stages verified, 17 causal stages, 1 candidate selection authority, 0 broker writes.
 
 ## What This PR Does Not Prove
 

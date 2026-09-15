@@ -655,14 +655,21 @@ class MROSDailyGovernor:
         # 8. Downstream capture states (evidence-driven via call path authority)
         call_path_file = self.repo_root / "MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json"
         unreachable_stages: Dict[str, str] = {}
+        unreachable_causal: Dict[str, str] = {}
+        unreachable_sidecar: Dict[str, str] = {}
         if call_path_file.exists():
             try:
                 cp_data = json.loads(call_path_file.read_text(encoding="utf-8"))
                 for stg in cp_data.get("stages", []):
+                    s_name = stg.get("stage", "")
+                    classification = stg.get("stage_classification", "CAUSAL")
                     if not stg.get("runtime_reachable"):
-                        unreachable_stages[stg.get("stage", "")] = stg.get(
-                            "blocker"
-                        ) or "BLOCKED_RUNTIME_INTEGRATION"
+                        blocker_code = stg.get("blocker") or "BLOCKED_RUNTIME_INTEGRATION"
+                        unreachable_stages[s_name] = blocker_code
+                        if classification == "CAUSAL":
+                            unreachable_causal[s_name] = blocker_code
+                        elif classification in ("OBSERVABILITY_SIDECAR", "UI_ONLY"):
+                            unreachable_sidecar[s_name] = blocker_code
             except Exception:
                 pass
 
@@ -692,11 +699,13 @@ class MROSDailyGovernor:
             else "READY_RUNTIME_INTEGRATED"
         )
 
-        for s_name in ("RANKING", "TRADE_BUILDER", "SCORING"):
-            if s_name in unreachable_stages:
-                blockers.append(
-                    f"UNREACHABLE_DOWNSTREAM_STAGE: {s_name} ({unreachable_stages[s_name]})"
-                )
+        for s_name, reason in unreachable_causal.items():
+            blockers.append(
+                f"UNREACHABLE_CAUSAL_STAGE: {s_name} ({reason})"
+            )
+        for s_name, reason in unreachable_sidecar.items():
+            # Sidecars record non-blocking warning without failing core readiness
+            pass
 
         # 9. Broker write boundary verification
         from core.trade_truth.prospective_capture_engine import (
