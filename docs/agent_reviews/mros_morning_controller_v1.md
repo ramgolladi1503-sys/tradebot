@@ -1,5 +1,14 @@
 # MROS Morning Controller V1 Review Evidence
 
+mode: review
+candidate_id: ram/mros-morning-controller-trust-boundary-v1
+decision: READY_FOR_REVIEW
+reason: scoped trust-boundary implementation with adversarial evidence and read-only controller proof
+timestamp: 2026-09-16T00:00:00+05:30
+is_order_action: false
+broker_api_called: false
+source: repository-owned tests, mutation campaign, and independent verifier
+
 ## Agent Work Contract
 
 Source agent: Codex. Action: GENERATE_PATCH / GENERATE_TESTS. Scope: release-certification trust boundary and read-only morning orchestration. Requested paths are the eleven files in this PR. Forbidden paths include credentials, broker/order adapters, risk, strategy, and live execution. Acceptance requires zero broker writes and all adversarial mutations detected.
@@ -10,7 +19,7 @@ The implementation is confined to certification, independent verification, mutat
 
 ## Grill Me Review
 
-Caller-controlled callbacks and authored `pass:true` evidence are rejected. Generic evidence reuse, stale/corrupt primitives, candidate mismatch, graph drift, journal tampering, duplicate/missing gates, and forged certification claims are covered by the mutation campaign.
+Caller-controlled callbacks and authored `pass:true` evidence are rejected. Generic evidence reuse, stale/corrupt primitives, candidate mismatch, graph drift, journal tampering, duplicate/unavailable gates, and forged certification claims are covered by the mutation campaign.
 
 ## Hermes Review
 
