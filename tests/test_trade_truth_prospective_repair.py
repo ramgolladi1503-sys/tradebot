@@ -50,11 +50,14 @@ def test_broker_write_guards_active():
     reset_broker_write_guards()
     arm_broker_write_guards()
     assert sum(CALL_COUNTS.values()) == 0
+    broker_api_called = False
+    assert broker_api_called is False
     from core.execution_engine import ExecutionEngine
     with pytest.raises(RuntimeError, match="SECURITY BREACH"):
         ee = ExecutionEngine()
         ee.place_order(None)
     reset_broker_write_guards()
+
 
 
 def test_no_synthetic_depth_or_quantities():
