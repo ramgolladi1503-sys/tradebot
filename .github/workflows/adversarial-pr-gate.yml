@@ -100,6 +100,77 @@ jobs:
           git fetch --no-tags --prune origin +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
           test "$(git rev-parse refs/remotes/origin/pr-${PR_NUMBER}-head)" = "$HEAD_SHA"
 
+      - name: Verify adversarial status is mandatory and base-fresh on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+
+          repo = os.environ["REPOSITORY"]
+          token = os.environ["GH_TOKEN"]
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+
+          def get_json(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req) as response:
+                  return json.load(response)
+
+          summaries = get_json(f"https://api.github.com/repos/{repo}/rulesets?per_page=100")
+          active = []
+          for summary in summaries:
+              if summary.get("enforcement") != "active" or summary.get("target") != "branch":
+                  continue
+              detail = get_json(f"https://api.github.com/repos/{repo}/rulesets/{summary['id']}")
+              active.append(detail)
+
+          required_context = "adversarial-pr-trusted-head"
+          matched = False
+          diagnostics = []
+          for ruleset in active:
+              conditions = ruleset.get("conditions", {}).get("ref_name", {})
+              includes = set(conditions.get("include", []))
+              if "~DEFAULT_BRANCH" not in includes and "refs/heads/main" not in includes:
+                  continue
+              for rule in ruleset.get("rules", []):
+                  if rule.get("type") != "required_status_checks":
+                      continue
+                  params = rule.get("parameters", {})
+                  contexts = {
+                      item.get("context")
+                      for item in params.get("required_status_checks", [])
+                      if isinstance(item, dict)
+                  }
+                  strict = params.get("strict_required_status_checks_policy") is True
+                  diagnostics.append(
+                      {
+                          "ruleset": ruleset.get("name"),
+                          "strict": strict,
+                          "contexts": sorted(c for c in contexts if c),
+                      }
+                  )
+                  if strict and required_context in contexts:
+                      matched = True
+
+          print(json.dumps({"rulesets": diagnostics}, sort_keys=True))
+          if not matched:
+              print(
+                  "ADVERSARIAL_RULESET_ENFORCEMENT_MISSING: require adversarial-pr-trusted-head and strict_required_status_checks_policy=true",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          print("ADVERSARIAL_RULESET_ENFORCEMENT_VERIFIED")
+          PY
+
       - name: Require OWNER exact-SHA approval for gate recertification branches
         env:
           GH_TOKEN: ${{ github.token }}
