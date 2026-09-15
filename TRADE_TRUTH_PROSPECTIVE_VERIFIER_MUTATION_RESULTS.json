@@ -1,0 +1,68 @@
+{
+  "verifier_mutations_attempted": 10,
+  "verifier_mutations_detected": 10,
+  "verifier_mutations_missed": 0,
+  "all_verifier_mutations_detected": true,
+  "cases": [
+    {
+      "mutation_id": "V01_corrupt_git_sha",
+      "target_file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "detected": true,
+      "rejection_verified": true
+    },
+    {
+      "mutation_id": "V02_corrupt_preflight_default_pass",
+      "target_file": "TRADE_TRUTH_PROSPECTIVE_PREFLIGHT_RESULTS.json",
+      "detected": true,
+      "rejection_verified": true
+    },
+    {
+      "mutation_id": "V03_corrupt_broker_write_calls",
+      "target_file": "TRADE_TRUTH_PROSPECTIVE_REPLAY_RESULTS.json",
+      "detected": true,
+      "rejection_verified": true
+    },
+    {
+      "mutation_id": "V04_corrupt_replay_parity",
+      "target_file": "TRADE_TRUTH_PROSPECTIVE_REPLAY_RESULTS.json",
+      "detected": true,
+      "rejection_verified": true
+    },
+    {
+      "mutation_id": "V05_corrupt_future_leak",
+      "target_file": "TRADE_TRUTH_PROSPECTIVE_REPLAY_RESULTS.json",
+      "detected": true,
+      "rejection_verified": true
+    },
+    {
+      "mutation_id": "V06_corrupt_trace_ledger_status",
+      "target_file": "TRADE_TRUTH_PROSPECTIVE_TRACE_LEDGER.jsonl",
+      "detected": true,
+      "rejection_verified": true
+    },
+    {
+      "mutation_id": "V07_corrupt_synthetic_quote_injected",
+      "target_file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "detected": true,
+      "rejection_verified": true
+    },
+    {
+      "mutation_id": "V08_corrupt_preflight_gate_failed",
+      "target_file": "TRADE_TRUTH_PROSPECTIVE_PREFLIGHT_RESULTS.json",
+      "detected": true,
+      "rejection_verified": true
+    },
+    {
+      "mutation_id": "V09_corrupt_trace_sequence_drop",
+      "target_file": "TRADE_TRUTH_PROSPECTIVE_TRACE_LEDGER.jsonl",
+      "detected": true,
+      "rejection_verified": true
+    },
+    {
+      "mutation_id": "V10_corrupt_stage_hash_mismatch",
+      "target_file": "TRADE_TRUTH_PROSPECTIVE_REPLAY_RESULTS.json",
+      "detected": true,
+      "rejection_verified": true
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "revocation_timestamp": "2026-09-13T04:35:40Z",
+  "reason": "Prior Level-A and Level-B evidence contained unproven manual boolean assertions and synthetic evaluator bypass instead of actual production components and primitive test executions.",
+  "level_a_previous_status": "REVOKED_PENDING_REAL_VERIFICATION",
+  "level_b_previous_status": "REVOKED_PENDING_REAL_VERIFICATION",
+  "current_lineage_main_sha": "c94ac255de62feb16cb2643c81c80c5fc3e1cc66",
+  "pr899_merged": true,
+  "pr899_merge_sha": "c94ac255de62feb16cb2643c81c80c5fc3e1cc66",
+  "branch": "feature/trade-truth-v2-real-pipeline",
+  "gate_p_ab_correction_recorded": "PASS"
+}

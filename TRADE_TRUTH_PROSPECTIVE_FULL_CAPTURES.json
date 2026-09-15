@@ -1,0 +1,1157 @@
+[
+  {
+    "trace_id": "trace_p01",
+    "parent_trace_id": null,
+    "session_id": "session_20260910_prospective_dryrun",
+    "session_date": "2026-09-10",
+    "decision_ts_epoch": 1789098720.0,
+    "decision_ts_str": "2026-09-10 09:22:00",
+    "code_lineage": {
+      "git_sha": "9760ce3e3eb5b86bf65953a227fbf866dd158841",
+      "branch": "feature/trade-truth-prospective-capture-v1",
+      "config_hash": "4b1a70ce24c718c2659fa0d3e02230f4831099b0c285943d16ed4284b4df70a1",
+      "model_hashes": {},
+      "strategy_catalog_hash": "d63b36f1dc216b108f31835387317e4460e65fd4ce0531ae213485e297f87300",
+      "schema_version": "2.0.0",
+      "truth_layer_version": "2.0.0"
+    },
+    "raw_market_capture": {
+      "source_file": "/Volumes/TradeBotData/live market capture/2026-09-10/upstox_full_ticks_20260910_stitched.parquet",
+      "source_sha256": "e45c1647de4928d31962018e36d30f42a8abf46b009b8f386c1774ef65c50fa6",
+      "event_count_used": 90771,
+      "first_event_ts": 1789011959.989845,
+      "last_event_ts": 1789034399.873431,
+      "events_hash": "bad0180f54cd85182dfc06982c3c7dfa72bd3396dcf28512f95b6b5d4692b965"
+    },
+    "bar_capture": {
+      "symbol": "NIFTY",
+      "timeframe": "1m",
+      "bars_count": 375,
+      "first_bar_start_ts": "2026-09-10T09:15:00+05:30",
+      "last_bar_end_ts": "2026-09-10T15:29:00+05:30",
+      "bars_hash": "2adbfcff2f6df940217ff99b3f09d741e90ae79d569f29325ecf084f70b475d0"
+    },
+    "memory_capture": {
+      "as_of_timestamp": "2026-09-10T15:29:00+05:30",
+      "current_price": 23477.8,
+      "session_open": 23448.45,
+      "session_high": 23489.7,
+      "session_low": 23380.65,
+      "rolling_1m_bars_count": 375,
+      "rolling_15m_return_bps": 37.79489854378386,
+      "distance_from_session_open_bps": 12.516818808918519,
+      "rolling_15m_range_bps": 37.76369013730087,
+      "realized_vol_15m": 9.750253564055942,
+      "memory_hash": "4e250962ed561f739d29126f5f5acc8652022bf1b295e8227837d96bf9eee008"
+    },
+    "feature_capture": {
+      "features": [
+        {
+          "feature_name": "rolling_15m_return_bps",
+          "feature_value": 37.79489854378386,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "distance_from_session_open_bps",
+          "feature_value": 12.516818808918519,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "rolling_15m_range_bps",
+          "feature_value": 37.76369013730087,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "realized_vol_15m",
+          "feature_value": 9.750253564055942,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        }
+      ],
+      "features_hash": "33d46815aef0875eb537401207a3afd6ea351fba9edff7e632ab9e7189718eae"
+    },
+    "regime_capture": {
+      "regime_status": "REGIME_STAGE_NOT_APPLICABLE",
+      "regime_state": "REGIME_DECOUPLED_PRE_GATE",
+      "probabilities": null,
+      "entropy": null,
+      "allowed_strategy_families": [
+        "TREND",
+        "MEAN_REVERT",
+        "DEFINED_RISK"
+      ],
+      "reason_codes": [
+        "C1_C2_DECOUPLED_PRE_GATE_ORCHESTRATOR_L5401"
+      ],
+      "regime_hash": "2c1ef0a7968e9d9529cfcd46cfa5f396a45af7fb86e3d423d90007592ad94374"
+    },
+    "strategy_evaluations": {
+      "evaluations": [
+        {
+          "strategy_id": "C1",
+          "strategy_family": "TREND",
+          "qualified": false,
+          "candidate_emitted": false,
+          "reason_code": "C1_OUT_OF_WINDOW",
+          "score": null,
+          "strategy_hash": "f25e406214f3c45993a0d953531dc7449d9d62b6a8c422a02954be1b3ff18aff"
+        },
+        {
+          "strategy_id": "C2",
+          "strategy_family": "TREND",
+          "qualified": false,
+          "candidate_emitted": false,
+          "reason_code": "C2_PRE_SIGNAL",
+          "score": null,
+          "strategy_hash": "ef170c0b540e315be9a9bfd3a6deecf72236327f78211f99a4a9970294a40bd3"
+        }
+      ],
+      "strategy_eval_hash": "f73fbda37fb444ed33768ef519093566729a501d7af1dd18a6340fd071ca953a"
+    },
+    "candidate_pool": {
+      "candidates": [],
+      "pool_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "option_selection": {
+      "selection_status": "SELECTION_STAGE_NOT_REACHED",
+      "selected_instrument": null,
+      "quote_executable_truth": null,
+      "selection_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "rejection_reason": "NO_ADMITTED_CANDIDATE"
+    },
+    "ranking": {
+      "ranking_status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "ranked_candidates": [],
+      "top_candidate_id": null,
+      "ranking_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "block_reason": "LOCAL_SCORE_CONSTRUCTION_REVOKED_REQUIRES_PRODUCTION_SCORER"
+    },
+    "trade_construction": {
+      "construction_status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "trade_object": null,
+      "trade_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "block_reason": "LOCAL_TICKET_CONSTRUCTION_REVOKED_REQUIRES_PRODUCTION_BUILDER"
+    },
+    "risk_state_evaluation": {
+      "risk_input_snapshot": {
+        "risk_state_source": "SYNTHETIC_OFFLINE_FIXTURE",
+        "risk_state_timestamp": 1789098720.0,
+        "capital": 1000000.0,
+        "equity_high": 1000000.0,
+        "daily_pnl": 0.0,
+        "daily_pnl_pct": 0.0,
+        "open_risk": 0.0,
+        "open_risk_pct": 0.0,
+        "trades_today": 0,
+        "kill_switch_state": false,
+        "risk_limits": {
+          "max_daily_loss_pct": 0.02,
+          "max_trades": 5
+        },
+        "risk_state_hash": "0391c37b7e067a9e3a1bd3ff21e4ecc1e248858c25de4b6eb537cca89b7eddef",
+        "is_live_ready": false,
+        "block_reason": null
+      },
+      "risk_verdict": "ALLOWED",
+      "risk_reasons": [
+        "OK"
+      ],
+      "risk_evaluation_hash": "d01b6534f144b0f5baac70a3f0027955a1a0a63058ecae3f69575d4dc43bc12f"
+    },
+    "governance_validation": {
+      "governance_verdict": "GOVERNED_BLOCKED",
+      "governance_reasons": [
+        "NO_ADMITTED_CANDIDATES"
+      ],
+      "governance_hash": "c8800a447f1280c9ef2f6bab3d594a78b52cd4e88c25d06e0c3697f5b214613f"
+    },
+    "final_decision": {
+      "action": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "reason_codes": [
+        "PRODUCTION_FINAL_DECISION_CAPTURE_BLOCKED_BY_DEPENDENCY"
+      ],
+      "decision_hash": "626eb2f49ff8dff1fdd5f30c862cf7e5f8bb0723223e644d70a040ef1a4294de"
+    },
+    "stage_hashes": {
+      "market": "bad0180f54cd85182dfc06982c3c7dfa72bd3396dcf28512f95b6b5d4692b965",
+      "bars": "2adbfcff2f6df940217ff99b3f09d741e90ae79d569f29325ecf084f70b475d0",
+      "memory": "4e250962ed561f739d29126f5f5acc8652022bf1b295e8227837d96bf9eee008",
+      "features": "33d46815aef0875eb537401207a3afd6ea351fba9edff7e632ab9e7189718eae",
+      "regime": "2c1ef0a7968e9d9529cfcd46cfa5f396a45af7fb86e3d423d90007592ad94374",
+      "strategy": "f73fbda37fb444ed33768ef519093566729a501d7af1dd18a6340fd071ca953a",
+      "candidate_pool": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "option_selection": "0000000000000000000000000000000000000000000000000000000000000000",
+      "ranking": "0000000000000000000000000000000000000000000000000000000000000000",
+      "trade_construction": "0000000000000000000000000000000000000000000000000000000000000000",
+      "risk": "d01b6534f144b0f5baac70a3f0027955a1a0a63058ecae3f69575d4dc43bc12f",
+      "governance": "c8800a447f1280c9ef2f6bab3d594a78b52cd4e88c25d06e0c3697f5b214613f",
+      "decision": "64ff7c92f6fe92e6a015e3cd5131944e5a83db27d48a96a2f74956b278732fda"
+    },
+    "future_leak_audit": {
+      "decision_ts": 1789098720.0,
+      "max_raw_event_ts": 1789034399.873431,
+      "max_bar_end_ts": 1789034400.0,
+      "max_feature_input_ts": 1789034400.0,
+      "max_regime_input_ts": 1789034400.0,
+      "max_quote_ts": 0.0,
+      "future_leak_detected": false
+    },
+    "truth_record": {
+      "record_hash": "d937b069ace28efb2c2ccdbcfa3011b66b7a0e889eb8743aa52f5a769ba3b6ef",
+      "chain_hash": "9bec995d10e13482eb997ae1e9ac7bf5646d88116049c8f3f25ede97f2aec115",
+      "sequence_num": 1,
+      "read_only": true,
+      "broker_api_called": false,
+      "broker_write_calls_observed": 0,
+      "is_order_action": false
+    },
+    "stage_status_map": {
+      "market": "CAPTURED",
+      "bars": "CAPTURED",
+      "memory": "CAPTURED",
+      "features": "CAPTURED",
+      "regime": "NOT_APPLICABLE_WITH_PROOF",
+      "strategy": "CAPTURED",
+      "candidate_pool": "CAPTURED",
+      "option_selection": "NOT_REACHED",
+      "scoring": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "ranking": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "trade_construction": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "risk": "CAPTURED",
+      "governance": "CAPTURED",
+      "decision": "BLOCKED_BY_PRODUCTION_DEPENDENCY"
+    },
+    "terminal_trace_status": "CAPTURE_PARTIAL"
+  },
+  {
+    "trace_id": "trace_p02",
+    "parent_trace_id": null,
+    "session_id": "session_20260910_prospective_dryrun",
+    "session_date": "2026-09-10",
+    "decision_ts_epoch": 1789098780.0,
+    "decision_ts_str": "2026-09-10 09:23:00",
+    "code_lineage": {
+      "git_sha": "9760ce3e3eb5b86bf65953a227fbf866dd158841",
+      "branch": "feature/trade-truth-prospective-capture-v1",
+      "config_hash": "4b1a70ce24c718c2659fa0d3e02230f4831099b0c285943d16ed4284b4df70a1",
+      "model_hashes": {},
+      "strategy_catalog_hash": "d63b36f1dc216b108f31835387317e4460e65fd4ce0531ae213485e297f87300",
+      "schema_version": "2.0.0",
+      "truth_layer_version": "2.0.0"
+    },
+    "raw_market_capture": {
+      "source_file": "/Volumes/TradeBotData/live market capture/2026-09-10/upstox_full_ticks_20260910_stitched.parquet",
+      "source_sha256": "e45c1647de4928d31962018e36d30f42a8abf46b009b8f386c1774ef65c50fa6",
+      "event_count_used": 90771,
+      "first_event_ts": 1789011959.989845,
+      "last_event_ts": 1789034399.873431,
+      "events_hash": "bad0180f54cd85182dfc06982c3c7dfa72bd3396dcf28512f95b6b5d4692b965"
+    },
+    "bar_capture": {
+      "symbol": "NIFTY",
+      "timeframe": "1m",
+      "bars_count": 375,
+      "first_bar_start_ts": "2026-09-10T09:15:00+05:30",
+      "last_bar_end_ts": "2026-09-10T15:29:00+05:30",
+      "bars_hash": "2adbfcff2f6df940217ff99b3f09d741e90ae79d569f29325ecf084f70b475d0"
+    },
+    "memory_capture": {
+      "as_of_timestamp": "2026-09-10T15:29:00+05:30",
+      "current_price": 23477.8,
+      "session_open": 23448.45,
+      "session_high": 23489.7,
+      "session_low": 23380.65,
+      "rolling_1m_bars_count": 375,
+      "rolling_15m_return_bps": 37.79489854378386,
+      "distance_from_session_open_bps": 12.516818808918519,
+      "rolling_15m_range_bps": 37.76369013730087,
+      "realized_vol_15m": 9.750253564055942,
+      "memory_hash": "4e250962ed561f739d29126f5f5acc8652022bf1b295e8227837d96bf9eee008"
+    },
+    "feature_capture": {
+      "features": [
+        {
+          "feature_name": "rolling_15m_return_bps",
+          "feature_value": 37.79489854378386,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "distance_from_session_open_bps",
+          "feature_value": 12.516818808918519,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "rolling_15m_range_bps",
+          "feature_value": 37.76369013730087,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "realized_vol_15m",
+          "feature_value": 9.750253564055942,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        }
+      ],
+      "features_hash": "33d46815aef0875eb537401207a3afd6ea351fba9edff7e632ab9e7189718eae"
+    },
+    "regime_capture": {
+      "regime_status": "REGIME_STAGE_NOT_APPLICABLE",
+      "regime_state": "REGIME_DECOUPLED_PRE_GATE",
+      "probabilities": null,
+      "entropy": null,
+      "allowed_strategy_families": [
+        "TREND",
+        "MEAN_REVERT",
+        "DEFINED_RISK"
+      ],
+      "reason_codes": [
+        "C1_C2_DECOUPLED_PRE_GATE_ORCHESTRATOR_L5401"
+      ],
+      "regime_hash": "2c1ef0a7968e9d9529cfcd46cfa5f396a45af7fb86e3d423d90007592ad94374"
+    },
+    "strategy_evaluations": {
+      "evaluations": [
+        {
+          "strategy_id": "C1",
+          "strategy_family": "TREND",
+          "qualified": false,
+          "candidate_emitted": false,
+          "reason_code": "C1_OUT_OF_WINDOW",
+          "score": null,
+          "strategy_hash": "f25e406214f3c45993a0d953531dc7449d9d62b6a8c422a02954be1b3ff18aff"
+        },
+        {
+          "strategy_id": "C2",
+          "strategy_family": "TREND",
+          "qualified": false,
+          "candidate_emitted": false,
+          "reason_code": "C2_PRE_SIGNAL",
+          "score": null,
+          "strategy_hash": "ef170c0b540e315be9a9bfd3a6deecf72236327f78211f99a4a9970294a40bd3"
+        }
+      ],
+      "strategy_eval_hash": "f73fbda37fb444ed33768ef519093566729a501d7af1dd18a6340fd071ca953a"
+    },
+    "candidate_pool": {
+      "candidates": [],
+      "pool_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "option_selection": {
+      "selection_status": "SELECTION_STAGE_NOT_REACHED",
+      "selected_instrument": null,
+      "quote_executable_truth": null,
+      "selection_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "rejection_reason": "NO_ADMITTED_CANDIDATE"
+    },
+    "ranking": {
+      "ranking_status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "ranked_candidates": [],
+      "top_candidate_id": null,
+      "ranking_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "block_reason": "LOCAL_SCORE_CONSTRUCTION_REVOKED_REQUIRES_PRODUCTION_SCORER"
+    },
+    "trade_construction": {
+      "construction_status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "trade_object": null,
+      "trade_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "block_reason": "LOCAL_TICKET_CONSTRUCTION_REVOKED_REQUIRES_PRODUCTION_BUILDER"
+    },
+    "risk_state_evaluation": {
+      "risk_input_snapshot": {
+        "risk_state_source": "SYNTHETIC_OFFLINE_FIXTURE",
+        "risk_state_timestamp": 1789098780.0,
+        "capital": 1000000.0,
+        "equity_high": 1000000.0,
+        "daily_pnl": 0.0,
+        "daily_pnl_pct": 0.0,
+        "open_risk": 0.0,
+        "open_risk_pct": 0.0,
+        "trades_today": 0,
+        "kill_switch_state": false,
+        "risk_limits": {
+          "max_daily_loss_pct": 0.02,
+          "max_trades": 5
+        },
+        "risk_state_hash": "0391c37b7e067a9e3a1bd3ff21e4ecc1e248858c25de4b6eb537cca89b7eddef",
+        "is_live_ready": false,
+        "block_reason": null
+      },
+      "risk_verdict": "ALLOWED",
+      "risk_reasons": [
+        "OK"
+      ],
+      "risk_evaluation_hash": "37963ed9ebfff0e8a5137e0ca9e63241acb83f047575e486a1964ee2110b42b4"
+    },
+    "governance_validation": {
+      "governance_verdict": "GOVERNED_BLOCKED",
+      "governance_reasons": [
+        "NO_ADMITTED_CANDIDATES"
+      ],
+      "governance_hash": "c8800a447f1280c9ef2f6bab3d594a78b52cd4e88c25d06e0c3697f5b214613f"
+    },
+    "final_decision": {
+      "action": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "reason_codes": [
+        "PRODUCTION_FINAL_DECISION_CAPTURE_BLOCKED_BY_DEPENDENCY"
+      ],
+      "decision_hash": "aa7966281b449d1fc698d5b96067135accb467bbd05e14e21200f325aa540227"
+    },
+    "stage_hashes": {
+      "market": "bad0180f54cd85182dfc06982c3c7dfa72bd3396dcf28512f95b6b5d4692b965",
+      "bars": "2adbfcff2f6df940217ff99b3f09d741e90ae79d569f29325ecf084f70b475d0",
+      "memory": "4e250962ed561f739d29126f5f5acc8652022bf1b295e8227837d96bf9eee008",
+      "features": "33d46815aef0875eb537401207a3afd6ea351fba9edff7e632ab9e7189718eae",
+      "regime": "2c1ef0a7968e9d9529cfcd46cfa5f396a45af7fb86e3d423d90007592ad94374",
+      "strategy": "f73fbda37fb444ed33768ef519093566729a501d7af1dd18a6340fd071ca953a",
+      "candidate_pool": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "option_selection": "0000000000000000000000000000000000000000000000000000000000000000",
+      "ranking": "0000000000000000000000000000000000000000000000000000000000000000",
+      "trade_construction": "0000000000000000000000000000000000000000000000000000000000000000",
+      "risk": "37963ed9ebfff0e8a5137e0ca9e63241acb83f047575e486a1964ee2110b42b4",
+      "governance": "c8800a447f1280c9ef2f6bab3d594a78b52cd4e88c25d06e0c3697f5b214613f",
+      "decision": "64ff7c92f6fe92e6a015e3cd5131944e5a83db27d48a96a2f74956b278732fda"
+    },
+    "future_leak_audit": {
+      "decision_ts": 1789098780.0,
+      "max_raw_event_ts": 1789034399.873431,
+      "max_bar_end_ts": 1789034400.0,
+      "max_feature_input_ts": 1789034400.0,
+      "max_regime_input_ts": 1789034400.0,
+      "max_quote_ts": 0.0,
+      "future_leak_detected": false
+    },
+    "truth_record": {
+      "record_hash": "4c02907566e6c3f673b44201eb160e8f4b6c2f866e92146e08e34d490cff77a6",
+      "chain_hash": "9f7f604d0396a260c2d2b8d17216d2b529a94d453936e18473f48369ebf7378c",
+      "sequence_num": 2,
+      "read_only": true,
+      "broker_api_called": false,
+      "broker_write_calls_observed": 0,
+      "is_order_action": false
+    },
+    "stage_status_map": {
+      "market": "CAPTURED",
+      "bars": "CAPTURED",
+      "memory": "CAPTURED",
+      "features": "CAPTURED",
+      "regime": "NOT_APPLICABLE_WITH_PROOF",
+      "strategy": "CAPTURED",
+      "candidate_pool": "CAPTURED",
+      "option_selection": "NOT_REACHED",
+      "scoring": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "ranking": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "trade_construction": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "risk": "CAPTURED",
+      "governance": "CAPTURED",
+      "decision": "BLOCKED_BY_PRODUCTION_DEPENDENCY"
+    },
+    "terminal_trace_status": "CAPTURE_PARTIAL"
+  },
+  {
+    "trace_id": "trace_p03",
+    "parent_trace_id": null,
+    "session_id": "session_20260910_prospective_dryrun",
+    "session_date": "2026-09-10",
+    "decision_ts_epoch": 1789098840.0,
+    "decision_ts_str": "2026-09-10 09:24:00",
+    "code_lineage": {
+      "git_sha": "9760ce3e3eb5b86bf65953a227fbf866dd158841",
+      "branch": "feature/trade-truth-prospective-capture-v1",
+      "config_hash": "4b1a70ce24c718c2659fa0d3e02230f4831099b0c285943d16ed4284b4df70a1",
+      "model_hashes": {},
+      "strategy_catalog_hash": "d63b36f1dc216b108f31835387317e4460e65fd4ce0531ae213485e297f87300",
+      "schema_version": "2.0.0",
+      "truth_layer_version": "2.0.0"
+    },
+    "raw_market_capture": {
+      "source_file": "/Volumes/TradeBotData/live market capture/2026-09-10/upstox_full_ticks_20260910_stitched.parquet",
+      "source_sha256": "e45c1647de4928d31962018e36d30f42a8abf46b009b8f386c1774ef65c50fa6",
+      "event_count_used": 90771,
+      "first_event_ts": 1789011959.989845,
+      "last_event_ts": 1789034399.873431,
+      "events_hash": "bad0180f54cd85182dfc06982c3c7dfa72bd3396dcf28512f95b6b5d4692b965"
+    },
+    "bar_capture": {
+      "symbol": "NIFTY",
+      "timeframe": "1m",
+      "bars_count": 375,
+      "first_bar_start_ts": "2026-09-10T09:15:00+05:30",
+      "last_bar_end_ts": "2026-09-10T15:29:00+05:30",
+      "bars_hash": "2adbfcff2f6df940217ff99b3f09d741e90ae79d569f29325ecf084f70b475d0"
+    },
+    "memory_capture": {
+      "as_of_timestamp": "2026-09-10T15:29:00+05:30",
+      "current_price": 23477.8,
+      "session_open": 23448.45,
+      "session_high": 23489.7,
+      "session_low": 23380.65,
+      "rolling_1m_bars_count": 375,
+      "rolling_15m_return_bps": 37.79489854378386,
+      "distance_from_session_open_bps": 12.516818808918519,
+      "rolling_15m_range_bps": 37.76369013730087,
+      "realized_vol_15m": 9.750253564055942,
+      "memory_hash": "4e250962ed561f739d29126f5f5acc8652022bf1b295e8227837d96bf9eee008"
+    },
+    "feature_capture": {
+      "features": [
+        {
+          "feature_name": "rolling_15m_return_bps",
+          "feature_value": 37.79489854378386,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "distance_from_session_open_bps",
+          "feature_value": 12.516818808918519,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "rolling_15m_range_bps",
+          "feature_value": 37.76369013730087,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "realized_vol_15m",
+          "feature_value": 9.750253564055942,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        }
+      ],
+      "features_hash": "33d46815aef0875eb537401207a3afd6ea351fba9edff7e632ab9e7189718eae"
+    },
+    "regime_capture": {
+      "regime_status": "REGIME_STAGE_NOT_APPLICABLE",
+      "regime_state": "REGIME_DECOUPLED_PRE_GATE",
+      "probabilities": null,
+      "entropy": null,
+      "allowed_strategy_families": [
+        "TREND",
+        "MEAN_REVERT",
+        "DEFINED_RISK"
+      ],
+      "reason_codes": [
+        "C1_C2_DECOUPLED_PRE_GATE_ORCHESTRATOR_L5401"
+      ],
+      "regime_hash": "2c1ef0a7968e9d9529cfcd46cfa5f396a45af7fb86e3d423d90007592ad94374"
+    },
+    "strategy_evaluations": {
+      "evaluations": [
+        {
+          "strategy_id": "C1",
+          "strategy_family": "TREND",
+          "qualified": false,
+          "candidate_emitted": false,
+          "reason_code": "C1_OUT_OF_WINDOW",
+          "score": null,
+          "strategy_hash": "f25e406214f3c45993a0d953531dc7449d9d62b6a8c422a02954be1b3ff18aff"
+        },
+        {
+          "strategy_id": "C2",
+          "strategy_family": "TREND",
+          "qualified": false,
+          "candidate_emitted": false,
+          "reason_code": "C2_PRE_SIGNAL",
+          "score": null,
+          "strategy_hash": "ef170c0b540e315be9a9bfd3a6deecf72236327f78211f99a4a9970294a40bd3"
+        }
+      ],
+      "strategy_eval_hash": "f73fbda37fb444ed33768ef519093566729a501d7af1dd18a6340fd071ca953a"
+    },
+    "candidate_pool": {
+      "candidates": [],
+      "pool_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "option_selection": {
+      "selection_status": "SELECTION_STAGE_NOT_REACHED",
+      "selected_instrument": null,
+      "quote_executable_truth": null,
+      "selection_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "rejection_reason": "NO_ADMITTED_CANDIDATE"
+    },
+    "ranking": {
+      "ranking_status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "ranked_candidates": [],
+      "top_candidate_id": null,
+      "ranking_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "block_reason": "LOCAL_SCORE_CONSTRUCTION_REVOKED_REQUIRES_PRODUCTION_SCORER"
+    },
+    "trade_construction": {
+      "construction_status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "trade_object": null,
+      "trade_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "block_reason": "LOCAL_TICKET_CONSTRUCTION_REVOKED_REQUIRES_PRODUCTION_BUILDER"
+    },
+    "risk_state_evaluation": {
+      "risk_input_snapshot": {
+        "risk_state_source": "SYNTHETIC_OFFLINE_FIXTURE",
+        "risk_state_timestamp": 1789098840.0,
+        "capital": 1000000.0,
+        "equity_high": 1000000.0,
+        "daily_pnl": 0.0,
+        "daily_pnl_pct": 0.0,
+        "open_risk": 0.0,
+        "open_risk_pct": 0.0,
+        "trades_today": 0,
+        "kill_switch_state": false,
+        "risk_limits": {
+          "max_daily_loss_pct": 0.02,
+          "max_trades": 5
+        },
+        "risk_state_hash": "0391c37b7e067a9e3a1bd3ff21e4ecc1e248858c25de4b6eb537cca89b7eddef",
+        "is_live_ready": false,
+        "block_reason": null
+      },
+      "risk_verdict": "ALLOWED",
+      "risk_reasons": [
+        "OK"
+      ],
+      "risk_evaluation_hash": "9858ecb7fd57c76770d2be5dde1315303e8642dd8968110edd48fe1028b15434"
+    },
+    "governance_validation": {
+      "governance_verdict": "GOVERNED_BLOCKED",
+      "governance_reasons": [
+        "NO_ADMITTED_CANDIDATES"
+      ],
+      "governance_hash": "c8800a447f1280c9ef2f6bab3d594a78b52cd4e88c25d06e0c3697f5b214613f"
+    },
+    "final_decision": {
+      "action": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "reason_codes": [
+        "PRODUCTION_FINAL_DECISION_CAPTURE_BLOCKED_BY_DEPENDENCY"
+      ],
+      "decision_hash": "98b2be390325bee26bc049b77b5d57c1761fc483e21d26f9ca3b1f58102089f9"
+    },
+    "stage_hashes": {
+      "market": "bad0180f54cd85182dfc06982c3c7dfa72bd3396dcf28512f95b6b5d4692b965",
+      "bars": "2adbfcff2f6df940217ff99b3f09d741e90ae79d569f29325ecf084f70b475d0",
+      "memory": "4e250962ed561f739d29126f5f5acc8652022bf1b295e8227837d96bf9eee008",
+      "features": "33d46815aef0875eb537401207a3afd6ea351fba9edff7e632ab9e7189718eae",
+      "regime": "2c1ef0a7968e9d9529cfcd46cfa5f396a45af7fb86e3d423d90007592ad94374",
+      "strategy": "f73fbda37fb444ed33768ef519093566729a501d7af1dd18a6340fd071ca953a",
+      "candidate_pool": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "option_selection": "0000000000000000000000000000000000000000000000000000000000000000",
+      "ranking": "0000000000000000000000000000000000000000000000000000000000000000",
+      "trade_construction": "0000000000000000000000000000000000000000000000000000000000000000",
+      "risk": "9858ecb7fd57c76770d2be5dde1315303e8642dd8968110edd48fe1028b15434",
+      "governance": "c8800a447f1280c9ef2f6bab3d594a78b52cd4e88c25d06e0c3697f5b214613f",
+      "decision": "64ff7c92f6fe92e6a015e3cd5131944e5a83db27d48a96a2f74956b278732fda"
+    },
+    "future_leak_audit": {
+      "decision_ts": 1789098840.0,
+      "max_raw_event_ts": 1789034399.873431,
+      "max_bar_end_ts": 1789034400.0,
+      "max_feature_input_ts": 1789034400.0,
+      "max_regime_input_ts": 1789034400.0,
+      "max_quote_ts": 0.0,
+      "future_leak_detected": false
+    },
+    "truth_record": {
+      "record_hash": "970e5fc2533a0e1e87165e493d5496af47fa07a59cc75fa53266045b7dd7448a",
+      "chain_hash": "cd94d22c5ea2a62e8458779d3d50b4722ed715d9dfa7b0222a32a4ebcfddf3c5",
+      "sequence_num": 3,
+      "read_only": true,
+      "broker_api_called": false,
+      "broker_write_calls_observed": 0,
+      "is_order_action": false
+    },
+    "stage_status_map": {
+      "market": "CAPTURED",
+      "bars": "CAPTURED",
+      "memory": "CAPTURED",
+      "features": "CAPTURED",
+      "regime": "NOT_APPLICABLE_WITH_PROOF",
+      "strategy": "CAPTURED",
+      "candidate_pool": "CAPTURED",
+      "option_selection": "NOT_REACHED",
+      "scoring": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "ranking": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "trade_construction": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "risk": "CAPTURED",
+      "governance": "CAPTURED",
+      "decision": "BLOCKED_BY_PRODUCTION_DEPENDENCY"
+    },
+    "terminal_trace_status": "CAPTURE_PARTIAL"
+  },
+  {
+    "trace_id": "trace_p04",
+    "parent_trace_id": null,
+    "session_id": "session_20260910_prospective_dryrun",
+    "session_date": "2026-09-10",
+    "decision_ts_epoch": 1789098900.0,
+    "decision_ts_str": "2026-09-10 09:25:00",
+    "code_lineage": {
+      "git_sha": "9760ce3e3eb5b86bf65953a227fbf866dd158841",
+      "branch": "feature/trade-truth-prospective-capture-v1",
+      "config_hash": "4b1a70ce24c718c2659fa0d3e02230f4831099b0c285943d16ed4284b4df70a1",
+      "model_hashes": {},
+      "strategy_catalog_hash": "d63b36f1dc216b108f31835387317e4460e65fd4ce0531ae213485e297f87300",
+      "schema_version": "2.0.0",
+      "truth_layer_version": "2.0.0"
+    },
+    "raw_market_capture": {
+      "source_file": "/Volumes/TradeBotData/live market capture/2026-09-10/upstox_full_ticks_20260910_stitched.parquet",
+      "source_sha256": "e45c1647de4928d31962018e36d30f42a8abf46b009b8f386c1774ef65c50fa6",
+      "event_count_used": 90771,
+      "first_event_ts": 1789011959.989845,
+      "last_event_ts": 1789034399.873431,
+      "events_hash": "bad0180f54cd85182dfc06982c3c7dfa72bd3396dcf28512f95b6b5d4692b965"
+    },
+    "bar_capture": {
+      "symbol": "NIFTY",
+      "timeframe": "1m",
+      "bars_count": 375,
+      "first_bar_start_ts": "2026-09-10T09:15:00+05:30",
+      "last_bar_end_ts": "2026-09-10T15:29:00+05:30",
+      "bars_hash": "2adbfcff2f6df940217ff99b3f09d741e90ae79d569f29325ecf084f70b475d0"
+    },
+    "memory_capture": {
+      "as_of_timestamp": "2026-09-10T15:29:00+05:30",
+      "current_price": 23477.8,
+      "session_open": 23448.45,
+      "session_high": 23489.7,
+      "session_low": 23380.65,
+      "rolling_1m_bars_count": 375,
+      "rolling_15m_return_bps": 37.79489854378386,
+      "distance_from_session_open_bps": 12.516818808918519,
+      "rolling_15m_range_bps": 37.76369013730087,
+      "realized_vol_15m": 9.750253564055942,
+      "memory_hash": "4e250962ed561f739d29126f5f5acc8652022bf1b295e8227837d96bf9eee008"
+    },
+    "feature_capture": {
+      "features": [
+        {
+          "feature_name": "rolling_15m_return_bps",
+          "feature_value": 37.79489854378386,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "distance_from_session_open_bps",
+          "feature_value": 12.516818808918519,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "rolling_15m_range_bps",
+          "feature_value": 37.76369013730087,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "realized_vol_15m",
+          "feature_value": 9.750253564055942,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        }
+      ],
+      "features_hash": "33d46815aef0875eb537401207a3afd6ea351fba9edff7e632ab9e7189718eae"
+    },
+    "regime_capture": {
+      "regime_status": "REGIME_STAGE_NOT_APPLICABLE",
+      "regime_state": "REGIME_DECOUPLED_PRE_GATE",
+      "probabilities": null,
+      "entropy": null,
+      "allowed_strategy_families": [
+        "TREND",
+        "MEAN_REVERT",
+        "DEFINED_RISK"
+      ],
+      "reason_codes": [
+        "C1_C2_DECOUPLED_PRE_GATE_ORCHESTRATOR_L5401"
+      ],
+      "regime_hash": "2c1ef0a7968e9d9529cfcd46cfa5f396a45af7fb86e3d423d90007592ad94374"
+    },
+    "strategy_evaluations": {
+      "evaluations": [
+        {
+          "strategy_id": "C1",
+          "strategy_family": "TREND",
+          "qualified": false,
+          "candidate_emitted": false,
+          "reason_code": "C1_OUT_OF_WINDOW",
+          "score": null,
+          "strategy_hash": "f25e406214f3c45993a0d953531dc7449d9d62b6a8c422a02954be1b3ff18aff"
+        },
+        {
+          "strategy_id": "C2",
+          "strategy_family": "TREND",
+          "qualified": false,
+          "candidate_emitted": false,
+          "reason_code": "C2_PRE_SIGNAL",
+          "score": null,
+          "strategy_hash": "ef170c0b540e315be9a9bfd3a6deecf72236327f78211f99a4a9970294a40bd3"
+        }
+      ],
+      "strategy_eval_hash": "f73fbda37fb444ed33768ef519093566729a501d7af1dd18a6340fd071ca953a"
+    },
+    "candidate_pool": {
+      "candidates": [],
+      "pool_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "option_selection": {
+      "selection_status": "SELECTION_STAGE_NOT_REACHED",
+      "selected_instrument": null,
+      "quote_executable_truth": null,
+      "selection_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "rejection_reason": "NO_ADMITTED_CANDIDATE"
+    },
+    "ranking": {
+      "ranking_status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "ranked_candidates": [],
+      "top_candidate_id": null,
+      "ranking_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "block_reason": "LOCAL_SCORE_CONSTRUCTION_REVOKED_REQUIRES_PRODUCTION_SCORER"
+    },
+    "trade_construction": {
+      "construction_status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "trade_object": null,
+      "trade_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "block_reason": "LOCAL_TICKET_CONSTRUCTION_REVOKED_REQUIRES_PRODUCTION_BUILDER"
+    },
+    "risk_state_evaluation": {
+      "risk_input_snapshot": {
+        "risk_state_source": "SYNTHETIC_OFFLINE_FIXTURE",
+        "risk_state_timestamp": 1789098900.0,
+        "capital": 1000000.0,
+        "equity_high": 1000000.0,
+        "daily_pnl": 0.0,
+        "daily_pnl_pct": 0.0,
+        "open_risk": 0.0,
+        "open_risk_pct": 0.0,
+        "trades_today": 0,
+        "kill_switch_state": false,
+        "risk_limits": {
+          "max_daily_loss_pct": 0.02,
+          "max_trades": 5
+        },
+        "risk_state_hash": "0391c37b7e067a9e3a1bd3ff21e4ecc1e248858c25de4b6eb537cca89b7eddef",
+        "is_live_ready": false,
+        "block_reason": null
+      },
+      "risk_verdict": "ALLOWED",
+      "risk_reasons": [
+        "OK"
+      ],
+      "risk_evaluation_hash": "9eed8c79117491f5e899558d32c583adf8be98d1b964537f14306c243657d2b0"
+    },
+    "governance_validation": {
+      "governance_verdict": "GOVERNED_BLOCKED",
+      "governance_reasons": [
+        "NO_ADMITTED_CANDIDATES"
+      ],
+      "governance_hash": "c8800a447f1280c9ef2f6bab3d594a78b52cd4e88c25d06e0c3697f5b214613f"
+    },
+    "final_decision": {
+      "action": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "reason_codes": [
+        "PRODUCTION_FINAL_DECISION_CAPTURE_BLOCKED_BY_DEPENDENCY"
+      ],
+      "decision_hash": "6e34b16493d8c1448b99f61c1d48384ffa3a4953f5d53f26b79913bf251b603f"
+    },
+    "stage_hashes": {
+      "market": "bad0180f54cd85182dfc06982c3c7dfa72bd3396dcf28512f95b6b5d4692b965",
+      "bars": "2adbfcff2f6df940217ff99b3f09d741e90ae79d569f29325ecf084f70b475d0",
+      "memory": "4e250962ed561f739d29126f5f5acc8652022bf1b295e8227837d96bf9eee008",
+      "features": "33d46815aef0875eb537401207a3afd6ea351fba9edff7e632ab9e7189718eae",
+      "regime": "2c1ef0a7968e9d9529cfcd46cfa5f396a45af7fb86e3d423d90007592ad94374",
+      "strategy": "f73fbda37fb444ed33768ef519093566729a501d7af1dd18a6340fd071ca953a",
+      "candidate_pool": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "option_selection": "0000000000000000000000000000000000000000000000000000000000000000",
+      "ranking": "0000000000000000000000000000000000000000000000000000000000000000",
+      "trade_construction": "0000000000000000000000000000000000000000000000000000000000000000",
+      "risk": "9eed8c79117491f5e899558d32c583adf8be98d1b964537f14306c243657d2b0",
+      "governance": "c8800a447f1280c9ef2f6bab3d594a78b52cd4e88c25d06e0c3697f5b214613f",
+      "decision": "64ff7c92f6fe92e6a015e3cd5131944e5a83db27d48a96a2f74956b278732fda"
+    },
+    "future_leak_audit": {
+      "decision_ts": 1789098900.0,
+      "max_raw_event_ts": 1789034399.873431,
+      "max_bar_end_ts": 1789034400.0,
+      "max_feature_input_ts": 1789034400.0,
+      "max_regime_input_ts": 1789034400.0,
+      "max_quote_ts": 0.0,
+      "future_leak_detected": false
+    },
+    "truth_record": {
+      "record_hash": "8c937f106b56248bb2ff73aff27def3c12a99f8fc4f1b8b9d1edf293d015b8c2",
+      "chain_hash": "962f9c1f51c67527564e472c6bd92ecbc0c773c11e63f4180f0895a317a6495d",
+      "sequence_num": 4,
+      "read_only": true,
+      "broker_api_called": false,
+      "broker_write_calls_observed": 0,
+      "is_order_action": false
+    },
+    "stage_status_map": {
+      "market": "CAPTURED",
+      "bars": "CAPTURED",
+      "memory": "CAPTURED",
+      "features": "CAPTURED",
+      "regime": "NOT_APPLICABLE_WITH_PROOF",
+      "strategy": "CAPTURED",
+      "candidate_pool": "CAPTURED",
+      "option_selection": "NOT_REACHED",
+      "scoring": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "ranking": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "trade_construction": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "risk": "CAPTURED",
+      "governance": "CAPTURED",
+      "decision": "BLOCKED_BY_PRODUCTION_DEPENDENCY"
+    },
+    "terminal_trace_status": "CAPTURE_PARTIAL"
+  },
+  {
+    "trace_id": "trace_p05",
+    "parent_trace_id": null,
+    "session_id": "session_20260910_prospective_dryrun",
+    "session_date": "2026-09-10",
+    "decision_ts_epoch": 1789098960.0,
+    "decision_ts_str": "2026-09-10 09:26:00",
+    "code_lineage": {
+      "git_sha": "9760ce3e3eb5b86bf65953a227fbf866dd158841",
+      "branch": "feature/trade-truth-prospective-capture-v1",
+      "config_hash": "4b1a70ce24c718c2659fa0d3e02230f4831099b0c285943d16ed4284b4df70a1",
+      "model_hashes": {},
+      "strategy_catalog_hash": "d63b36f1dc216b108f31835387317e4460e65fd4ce0531ae213485e297f87300",
+      "schema_version": "2.0.0",
+      "truth_layer_version": "2.0.0"
+    },
+    "raw_market_capture": {
+      "source_file": "/Volumes/TradeBotData/live market capture/2026-09-10/upstox_full_ticks_20260910_stitched.parquet",
+      "source_sha256": "e45c1647de4928d31962018e36d30f42a8abf46b009b8f386c1774ef65c50fa6",
+      "event_count_used": 90771,
+      "first_event_ts": 1789011959.989845,
+      "last_event_ts": 1789034399.873431,
+      "events_hash": "bad0180f54cd85182dfc06982c3c7dfa72bd3396dcf28512f95b6b5d4692b965"
+    },
+    "bar_capture": {
+      "symbol": "NIFTY",
+      "timeframe": "1m",
+      "bars_count": 375,
+      "first_bar_start_ts": "2026-09-10T09:15:00+05:30",
+      "last_bar_end_ts": "2026-09-10T15:29:00+05:30",
+      "bars_hash": "2adbfcff2f6df940217ff99b3f09d741e90ae79d569f29325ecf084f70b475d0"
+    },
+    "memory_capture": {
+      "as_of_timestamp": "2026-09-10T15:29:00+05:30",
+      "current_price": 23477.8,
+      "session_open": 23448.45,
+      "session_high": 23489.7,
+      "session_low": 23380.65,
+      "rolling_1m_bars_count": 375,
+      "rolling_15m_return_bps": 37.79489854378386,
+      "distance_from_session_open_bps": 12.516818808918519,
+      "rolling_15m_range_bps": 37.76369013730087,
+      "realized_vol_15m": 9.750253564055942,
+      "memory_hash": "4e250962ed561f739d29126f5f5acc8652022bf1b295e8227837d96bf9eee008"
+    },
+    "feature_capture": {
+      "features": [
+        {
+          "feature_name": "rolling_15m_return_bps",
+          "feature_value": 37.79489854378386,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "distance_from_session_open_bps",
+          "feature_value": 12.516818808918519,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "rolling_15m_range_bps",
+          "feature_value": 37.76369013730087,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        },
+        {
+          "feature_name": "realized_vol_15m",
+          "feature_value": 9.750253564055942,
+          "feature_timestamp": "2026-09-10T15:29:00+05:30",
+          "feature_module": "core.market_session_store",
+          "feature_version": "v1"
+        }
+      ],
+      "features_hash": "33d46815aef0875eb537401207a3afd6ea351fba9edff7e632ab9e7189718eae"
+    },
+    "regime_capture": {
+      "regime_status": "REGIME_STAGE_NOT_APPLICABLE",
+      "regime_state": "REGIME_DECOUPLED_PRE_GATE",
+      "probabilities": null,
+      "entropy": null,
+      "allowed_strategy_families": [
+        "TREND",
+        "MEAN_REVERT",
+        "DEFINED_RISK"
+      ],
+      "reason_codes": [
+        "C1_C2_DECOUPLED_PRE_GATE_ORCHESTRATOR_L5401"
+      ],
+      "regime_hash": "2c1ef0a7968e9d9529cfcd46cfa5f396a45af7fb86e3d423d90007592ad94374"
+    },
+    "strategy_evaluations": {
+      "evaluations": [
+        {
+          "strategy_id": "C1",
+          "strategy_family": "TREND",
+          "qualified": false,
+          "candidate_emitted": false,
+          "reason_code": "C1_OUT_OF_WINDOW",
+          "score": null,
+          "strategy_hash": "f25e406214f3c45993a0d953531dc7449d9d62b6a8c422a02954be1b3ff18aff"
+        },
+        {
+          "strategy_id": "C2",
+          "strategy_family": "TREND",
+          "qualified": false,
+          "candidate_emitted": false,
+          "reason_code": "C2_PRE_SIGNAL",
+          "score": null,
+          "strategy_hash": "ef170c0b540e315be9a9bfd3a6deecf72236327f78211f99a4a9970294a40bd3"
+        }
+      ],
+      "strategy_eval_hash": "f73fbda37fb444ed33768ef519093566729a501d7af1dd18a6340fd071ca953a"
+    },
+    "candidate_pool": {
+      "candidates": [],
+      "pool_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "option_selection": {
+      "selection_status": "SELECTION_STAGE_NOT_REACHED",
+      "selected_instrument": null,
+      "quote_executable_truth": null,
+      "selection_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "rejection_reason": "NO_ADMITTED_CANDIDATE"
+    },
+    "ranking": {
+      "ranking_status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "ranked_candidates": [],
+      "top_candidate_id": null,
+      "ranking_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "block_reason": "LOCAL_SCORE_CONSTRUCTION_REVOKED_REQUIRES_PRODUCTION_SCORER"
+    },
+    "trade_construction": {
+      "construction_status": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "trade_object": null,
+      "trade_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "block_reason": "LOCAL_TICKET_CONSTRUCTION_REVOKED_REQUIRES_PRODUCTION_BUILDER"
+    },
+    "risk_state_evaluation": {
+      "risk_input_snapshot": {
+        "risk_state_source": "SYNTHETIC_OFFLINE_FIXTURE",
+        "risk_state_timestamp": 1789098960.0,
+        "capital": 1000000.0,
+        "equity_high": 1000000.0,
+        "daily_pnl": 0.0,
+        "daily_pnl_pct": 0.0,
+        "open_risk": 0.0,
+        "open_risk_pct": 0.0,
+        "trades_today": 0,
+        "kill_switch_state": false,
+        "risk_limits": {
+          "max_daily_loss_pct": 0.02,
+          "max_trades": 5
+        },
+        "risk_state_hash": "0391c37b7e067a9e3a1bd3ff21e4ecc1e248858c25de4b6eb537cca89b7eddef",
+        "is_live_ready": false,
+        "block_reason": null
+      },
+      "risk_verdict": "ALLOWED",
+      "risk_reasons": [
+        "OK"
+      ],
+      "risk_evaluation_hash": "1f5db35139b7dddc5bb488f35a123075a580e76f14aea0cb2c2f1d31f34bb395"
+    },
+    "governance_validation": {
+      "governance_verdict": "GOVERNED_BLOCKED",
+      "governance_reasons": [
+        "NO_ADMITTED_CANDIDATES"
+      ],
+      "governance_hash": "c8800a447f1280c9ef2f6bab3d594a78b52cd4e88c25d06e0c3697f5b214613f"
+    },
+    "final_decision": {
+      "action": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "reason_codes": [
+        "PRODUCTION_FINAL_DECISION_CAPTURE_BLOCKED_BY_DEPENDENCY"
+      ],
+      "decision_hash": "9f07e6d85cb3272f9a2afd08269716b4072616cd937443641ab1bad95e08a5a2"
+    },
+    "stage_hashes": {
+      "market": "bad0180f54cd85182dfc06982c3c7dfa72bd3396dcf28512f95b6b5d4692b965",
+      "bars": "2adbfcff2f6df940217ff99b3f09d741e90ae79d569f29325ecf084f70b475d0",
+      "memory": "4e250962ed561f739d29126f5f5acc8652022bf1b295e8227837d96bf9eee008",
+      "features": "33d46815aef0875eb537401207a3afd6ea351fba9edff7e632ab9e7189718eae",
+      "regime": "2c1ef0a7968e9d9529cfcd46cfa5f396a45af7fb86e3d423d90007592ad94374",
+      "strategy": "f73fbda37fb444ed33768ef519093566729a501d7af1dd18a6340fd071ca953a",
+      "candidate_pool": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "option_selection": "0000000000000000000000000000000000000000000000000000000000000000",
+      "ranking": "0000000000000000000000000000000000000000000000000000000000000000",
+      "trade_construction": "0000000000000000000000000000000000000000000000000000000000000000",
+      "risk": "1f5db35139b7dddc5bb488f35a123075a580e76f14aea0cb2c2f1d31f34bb395",
+      "governance": "c8800a447f1280c9ef2f6bab3d594a78b52cd4e88c25d06e0c3697f5b214613f",
+      "decision": "64ff7c92f6fe92e6a015e3cd5131944e5a83db27d48a96a2f74956b278732fda"
+    },
+    "future_leak_audit": {
+      "decision_ts": 1789098960.0,
+      "max_raw_event_ts": 1789034399.873431,
+      "max_bar_end_ts": 1789034400.0,
+      "max_feature_input_ts": 1789034400.0,
+      "max_regime_input_ts": 1789034400.0,
+      "max_quote_ts": 0.0,
+      "future_leak_detected": false
+    },
+    "truth_record": {
+      "record_hash": "2a054a961db8caa3ee5960c386ce97888e7b5669c6978a6410b2a291a8b97ee9",
+      "chain_hash": "28b57ff364545bb0a4abfe563cfcbeba639972476b299e7ebaa91088d4af0f17",
+      "sequence_num": 5,
+      "read_only": true,
+      "broker_api_called": false,
+      "broker_write_calls_observed": 0,
+      "is_order_action": false
+    },
+    "stage_status_map": {
+      "market": "CAPTURED",
+      "bars": "CAPTURED",
+      "memory": "CAPTURED",
+      "features": "CAPTURED",
+      "regime": "NOT_APPLICABLE_WITH_PROOF",
+      "strategy": "CAPTURED",
+      "candidate_pool": "CAPTURED",
+      "option_selection": "NOT_REACHED",
+      "scoring": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "ranking": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "trade_construction": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+      "risk": "CAPTURED",
+      "governance": "CAPTURED",
+      "decision": "BLOCKED_BY_PRODUCTION_DEPENDENCY"
+    },
+    "terminal_trace_status": "CAPTURE_PARTIAL"
+  }
+]

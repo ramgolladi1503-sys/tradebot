@@ -1,0 +1,43 @@
+{
+  "inventory_version": "1.0.0",
+  "description": "Comprehensive inventory of all broker/order execution write entrypoints to be armed with guards.",
+  "total_monitored_entrypoints": 6,
+  "entrypoints": [
+    {
+      "module": "core.execution_engine",
+      "class": "ExecutionEngine",
+      "method": "place_order",
+      "action": "ORDER_PLACEMENT"
+    },
+    {
+      "module": "core.execution_engine",
+      "class": "ExecutionEngine",
+      "method": "place_order_from_plan",
+      "action": "PLAN_ORDER_PLACEMENT"
+    },
+    {
+      "module": "core.broker.mock_broker",
+      "class": "MockBroker",
+      "method": "place_order",
+      "action": "MOCK_ORDER_PLACEMENT"
+    },
+    {
+      "module": "core.broker.mock_broker",
+      "class": "MockBroker",
+      "method": "cancel_order",
+      "action": "MOCK_ORDER_CANCELLATION"
+    },
+    {
+      "module": "core.broker_interface",
+      "protocol": "BrokerAdapter",
+      "method": "place_order",
+      "action": "PROTOCOL_BROKER_ORDER_PLACEMENT"
+    },
+    {
+      "module": "core.kite_client",
+      "class": "KiteClient",
+      "method": "submit_order",
+      "action": "KITE_ORDER_SUBMISSION"
+    }
+  ]
+}

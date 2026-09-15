@@ -135,6 +135,25 @@ def live(args: argparse.Namespace) -> int:
     return subprocess.call(command, env=env)
 
 
+def governor(args: argparse.Namespace) -> int:
+    """Run routine MROS morning governor resolution."""
+    from core.mros_daily_governor import MROSDailyGovernor
+    gov = MROSDailyGovernor(
+        repo_root=Path(__file__).resolve().parents[1],
+        session_date=args.session_date,
+        external_root=args.external_root,
+        release_store_root=args.release_store_root,
+        instrument_master_file=args.kite_instruments_file,
+    )
+    plan = gov.evaluate_morning_readiness()
+    payload = plan.to_dict()
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if plan.final_state == "READY_FOR_GOVERNED_READ_ONLY_SESSION" else 2
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="tradebot-morning-readiness")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -142,6 +161,7 @@ def main() -> int:
     o = sub.add_parser("observer"); o.add_argument("--launch-plan", type=Path, required=True); o.add_argument("--session-root", type=Path, required=True); o.add_argument("--token-path", type=Path, required=True); o.add_argument("--session-date", required=True); o.add_argument("--status", type=Path, required=True); o.add_argument("--max-runtime-sec", type=float); o.set_defaults(handler=observer)
     s = sub.add_parser("status"); s.add_argument("--status", type=Path, required=True); s.add_argument("--release", default=""); s.set_defaults(handler=status)
     l = sub.add_parser("live", help="run the existing governed read-only market-data orchestrator"); l.add_argument("--release"); l.add_argument("--release-store-root", type=Path); l.add_argument("--session-date", required=True); l.add_argument("--output-root", type=Path, required=True); l.add_argument("--token-path", type=Path, required=True); l.add_argument("--authority-artifact", type=Path, required=True); l.add_argument("--kite-instruments-file", type=Path); l.add_argument("--preflight-only", action="store_true"); l.set_defaults(handler=live)
+    g = sub.add_parser("governor", help="run routine daily MROS morning governor resolution"); g.add_argument("--session-date", default=None); g.add_argument("--external-root", type=Path, default=Path("/Volumes/TradeBotData")); g.add_argument("--release-store-root", type=Path, default=None); g.add_argument("--kite-instruments-file", type=Path, default=None); g.add_argument("--output", type=Path, default=None); g.set_defaults(handler=governor)
     return int(args_handler(parser.parse_args()))
 
 

@@ -1,0 +1,54 @@
+{
+  "all_replay_parity": true,
+  "traces_replayed": 5,
+  "traces_diverged": 0,
+  "broker_write_calls": 0,
+  "results": [
+    {
+      "trace_id": "trace_p01",
+      "parity": true,
+      "decision_match": true,
+      "stage_hash_mismatches_count": 0,
+      "stage_mismatches": [],
+      "future_leak_detected": false
+    },
+    {
+      "trace_id": "trace_p02",
+      "parity": true,
+      "decision_match": true,
+      "stage_hash_mismatches_count": 0,
+      "stage_mismatches": [],
+      "future_leak_detected": false
+    },
+    {
+      "trace_id": "trace_p03",
+      "parity": true,
+      "decision_match": true,
+      "stage_hash_mismatches_count": 0,
+      "stage_mismatches": [],
+      "future_leak_detected": false
+    },
+    {
+      "trace_id": "trace_p04",
+      "parity": true,
+      "decision_match": true,
+      "stage_hash_mismatches_count": 0,
+      "stage_mismatches": [],
+      "future_leak_detected": false
+    },
+    {
+      "trace_id": "trace_p05",
+      "parity": true,
+      "decision_match": true,
+      "stage_hash_mismatches_count": 0,
+      "stage_mismatches": [],
+      "future_leak_detected": false
+    }
+  ],
+  "evaluation_mode": "OFFLINE_FROZEN_BASELINE_REPLAY",
+  "classification": "OFFLINE_HISTORICAL_REPLAY",
+  "offline_replay_decisions": 5,
+  "offline_replay_full_parity": 5,
+  "prospective_live_decisions": 0,
+  "prospective_full_parity": 0
+}

@@ -1,0 +1,57 @@
+{
+  "preflight_version": "1.0.0",
+  "mandatory_gates": [
+    {
+      "gate": "CODE_SHA_FROZEN",
+      "description": "Code SHA is identified and immutable"
+    },
+    {
+      "gate": "CONFIG_FROZEN",
+      "description": "Configuration dictionary is hashed and frozen"
+    },
+    {
+      "gate": "MODELS_FROZEN",
+      "description": "Model artifacts and catalogs are hashed and frozen"
+    },
+    {
+      "gate": "INSTRUMENT_MASTER_FROZEN",
+      "description": "Option contract and token master is hashed"
+    },
+    {
+      "gate": "TRUTH_SCHEMA_FROZEN",
+      "description": "Prospective capture and trace schemas exist and validate"
+    },
+    {
+      "gate": "STORAGE_WRITABLE",
+      "description": "Data and evidence directories exist and are writable"
+    },
+    {
+      "gate": "DISK_CAPACITY_SUFFICIENT",
+      "description": "At least 5GB free disk space available for session capture"
+    },
+    {
+      "gate": "CLOCK_TIMEZONE_VERIFIED",
+      "description": "System clock is synced with UTC/IST time sources"
+    },
+    {
+      "gate": "RAW_FEED_READER_AVAILABLE",
+      "description": "WebSocket or raw tick capture sink is operational"
+    },
+    {
+      "gate": "BROKER_WRITE_GUARDS_ARMED",
+      "description": "All broker and execution write methods monkeypatched with exploding spies"
+    },
+    {
+      "gate": "ORDER_AUTHORITY_FALSE",
+      "description": "order_authority == False verified in runtime config"
+    },
+    {
+      "gate": "PAPER_FALSE",
+      "description": "paper_authorized == False verified in runtime config"
+    },
+    {
+      "gate": "LIVE_FALSE",
+      "description": "live_authorized == False verified in runtime config"
+    }
+  ]
+}

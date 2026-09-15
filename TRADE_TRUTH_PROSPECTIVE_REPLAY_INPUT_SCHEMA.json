@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TradeTruthProspectiveReplayInputSchema",
+  "description": "Strict causal-only input bundle schema for Full Level-C prospective replay.",
+  "type": "object",
+  "required": [
+    "trace_id",
+    "session_id",
+    "session_date",
+    "decision_ts_epoch",
+    "decision_ts_str",
+    "raw_market_events_source",
+    "instrument_master_source",
+    "code_lineage",
+    "historical_risk_state_snapshot"
+  ],
+  "properties": {
+    "trace_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "session_date": {
+      "type": "string"
+    },
+    "decision_ts_epoch": {
+      "type": "number"
+    },
+    "decision_ts_str": {
+      "type": "string"
+    },
+    "raw_market_events_source": {
+      "type": "object",
+      "required": [
+        "source_path",
+        "source_sha256"
+      ],
+      "properties": {
+        "source_path": {
+          "type": "string"
+        },
+        "source_sha256": {
+          "type": "string"
+        }
+      }
+    },
+    "instrument_master_source": {
+      "type": "object",
+      "required": [
+        "master_path",
+        "master_sha256"
+      ],
+      "properties": {
+        "master_path": {
+          "type": "string"
+        },
+        "master_sha256": {
+          "type": "string"
+        }
+      }
+    },
+    "code_lineage": {
+      "type": "object",
+      "required": [
+        "git_sha",
+        "config_hash",
+        "strategy_catalog_hash"
+      ],
+      "properties": {
+        "git_sha": {
+          "type": "string"
+        },
+        "config_hash": {
+          "type": "string"
+        },
+        "strategy_catalog_hash": {
+          "type": "string"
+        }
+      }
+    },
+    "historical_risk_state_snapshot": {
+      "type": "object",
+      "required": [
+        "capital",
+        "equity_high",
+        "daily_pnl",
+        "daily_pnl_pct",
+        "open_risk",
+        "open_risk_pct",
+        "trades_today",
+        "kill_switch_active"
+      ],
+      "properties": {
+        "capital": {
+          "type": "number"
+        },
+        "equity_high": {
+          "type": "number"
+        },
+        "daily_pnl": {
+          "type": "number"
+        },
+        "daily_pnl_pct": {
+          "type": "number"
+        },
+        "open_risk": {
+          "type": "number"
+        },
+        "open_risk_pct": {
+          "type": "number"
+        },
+        "trades_today": {
+          "type": "integer"
+        },
+        "kill_switch_active": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

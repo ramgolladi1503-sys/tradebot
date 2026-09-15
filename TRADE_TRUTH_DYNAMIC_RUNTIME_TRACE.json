@@ -1,0 +1,84 @@
+{
+  "dynamic_runtime_trace_complete": true,
+  "total_calls": 13,
+  "trace_sequence": [
+    {
+      "step": "CALL_001",
+      "module": "core.trade_truth.market_capture_reader",
+      "callee": "iter_market_capture_ticks",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_002",
+      "module": "core.market_session_store",
+      "callee": "MarketSessionStore.add_bar",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_003",
+      "module": "core.market_session_store",
+      "callee": "MarketSessionStore.get_market_memory",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_004",
+      "module": "core.candidate_evaluators",
+      "callee": "evaluate_c1",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_005",
+      "module": "core.candidate_evaluators",
+      "callee": "evaluate_c2",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_006",
+      "module": "core.strategy_family_contract",
+      "callee": "check_strategy_family_compatibility",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_007",
+      "module": "core.strategy_family_contract",
+      "callee": "admit_candidate_to_pool",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_008",
+      "module": "core.governed_strategy_authority",
+      "callee": "is_strategy_governed_eligible",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_009",
+      "module": "core.candidate_ranking",
+      "callee": "rank_candidates",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_010",
+      "module": "core.trade_schema",
+      "callee": "validate_trade_identity",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_011",
+      "module": "core.risk_engine",
+      "callee": "RiskEngine.allow_trade",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_012",
+      "module": "core.governed_strategy_authority",
+      "callee": "validate_execution_candidate",
+      "status": "CALLED"
+    },
+    {
+      "step": "CALL_013",
+      "module": "core.trade_truth.record_builder",
+      "callee": "build_trade_truth_record",
+      "status": "CALLED"
+    }
+  ]
+}

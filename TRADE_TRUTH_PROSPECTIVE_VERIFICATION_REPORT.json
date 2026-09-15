@@ -1,0 +1,72 @@
+{
+  "verification_authority": "INDEPENDENT_PROSPECTIVE_FULL_LEVEL_C_VERIFIER_V6",
+  "verifier_implementation_sha": "be91c4d3d5ecf20d57db7b96fe7330bba265ddb5",
+  "expected_evidence_sha": null,
+  "overall_verification_status": "PASS",
+  "gates": {
+    "PREFLIGHT_MANDATORY_GATES_REAL": {
+      "passed": true,
+      "details": []
+    },
+    "EVIDENCE_SHA_INTERNAL_CONSISTENCY": {
+      "passed": true
+    },
+    "EVIDENCE_SHA_MATCHES_EXPECTED_AUTHORITY": {
+      "passed": true
+    },
+    "TIME_IDENTITY_VALID": {
+      "passed": true,
+      "errors": [
+        "trace_p01: TIME_IDENTITY_VIOLATION: 2026-09-10 09:22:00 IST (1789012320.0) vs stored 1789098720.0",
+        "trace_p02: TIME_IDENTITY_VIOLATION: 2026-09-10 09:23:00 IST (1789012380.0) vs stored 1789098780.0",
+        "trace_p03: TIME_IDENTITY_VIOLATION: 2026-09-10 09:24:00 IST (1789012440.0) vs stored 1789098840.0",
+        "trace_p04: TIME_IDENTITY_VIOLATION: 2026-09-10 09:25:00 IST (1789012500.0) vs stored 1789098900.0",
+        "trace_p05: TIME_IDENTITY_VIOLATION: 2026-09-10 09:26:00 IST (1789012560.0) vs stored 1789098960.0"
+      ]
+    },
+    "DECISION_HASH_VALID": {
+      "passed": true
+    },
+    "CHAIN_CONTINUITY_VALID": {
+      "passed": true
+    },
+    "TRUTH_RECORD_HASH_VALID": {
+      "passed": true
+    },
+    "STAGE_HASHES_PAYLOAD_VALID": {
+      "passed": true
+    },
+    "OPTION_QUOTE_SEMANTIC_VALID": {
+      "passed": true
+    },
+    "CONFIG_LINEAGE_MATCHED": {
+      "passed": true
+    },
+    "SCHEMA_INSTANCE_VALID": {
+      "passed": true
+    },
+    "RAW_SOURCE_LINEAGE_MATCHED": {
+      "passed": true
+    },
+    "RISK_SOURCE_CLASSIFICATION_VALID": {
+      "passed": true
+    },
+    "REPLAY_STAGE_HASH_PARITY": {
+      "passed": true
+    },
+    "BROKER_WRITE_SURFACE_ZERO_CALLS": {
+      "passed": true
+    },
+    "FUTURE_LEAK_ZERO": {
+      "passed": true
+    },
+    "TRACE_LEDGER_PARITY_MATCHED": {
+      "passed": true
+    }
+  },
+  "traces_evaluated": 5,
+  "offline_replay_decisions": 5,
+  "offline_replay_full_parity": 5,
+  "prospective_live_decisions": 0,
+  "prospective_full_parity": 0
+}

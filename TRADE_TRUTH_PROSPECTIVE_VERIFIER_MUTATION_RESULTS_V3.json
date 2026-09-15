@@ -1,0 +1,201 @@
+{
+  "total_mutations_attempted": 24,
+  "total_mutations_detected": 24,
+  "total_mutations_missed": 0,
+  "pseudo_mutations_count": 0,
+  "methodological_validity_pct": 100.0,
+  "results": [
+    {
+      "id": "M01_RAW_EVENT_CONTENT",
+      "primitive": "raw_market_capture.events_hash",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "corrupt_event_hash",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M02_BAR_CLOSE_PRICE",
+      "primitive": "bar_capture.bars_hash",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "tamper_bar_hash",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M03_SESSION_MEMORY_PRICE",
+      "primitive": "memory_capture.memory_hash",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "tamper_memory_hash",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M04_FEATURE_RETURN_BPS",
+      "primitive": "feature_capture.features_hash",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "tamper_feature_hash",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M05_STRATEGY_DECISION",
+      "primitive": "stage_hashes.strategy",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "tamper_strategy_hash",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M06_CANDIDATE_POOL",
+      "primitive": "stage_hashes.candidate_pool",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "tamper_pool_hash",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M07_OPTION_ASK_PRICE",
+      "primitive": "option_selection.quote_executable_truth.ask",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "modify_ask_price",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M08_OPTION_TOKEN",
+      "primitive": "option_selection.selected_instrument.token",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "tamper_option_token",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M09_OPTION_DEPTH_QTY",
+      "primitive": "option_selection.quote_executable_truth.depth_hash",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "tamper_depth_hash",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M10_RISK_CAPITAL",
+      "primitive": "risk_state_evaluation.risk_input_snapshot.capital",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "tamper_capital_snapshot",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M11_RISK_VERDICT",
+      "primitive": "risk_state_evaluation.risk_verdict",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "flip_risk_verdict",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M12_GOVERNANCE_VERDICT",
+      "primitive": "governance_validation.governance_verdict",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "flip_gov_verdict",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M13_FINAL_DECISION_ACTION",
+      "primitive": "final_decision.action",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "tamper_final_action",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M14_TRUTH_RECORD_HASH",
+      "primitive": "truth_record.record_hash",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "corrupt_truth_record_hash",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M15_CHAIN_HASH_CONTINUITY",
+      "primitive": "truth_record.chain_hash",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "break_chain_link",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M16_FUTURE_LEAK_INJECTION",
+      "primitive": "raw_market_capture.last_event_ts",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "inject_future_timestamp",
+      "expected_gate": "FUTURE_LEAK_ZERO",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M17_GIT_SHA_CORRUPTION",
+      "primitive": "code_lineage.git_sha",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "corrupt_git_sha",
+      "expected_gate": "SHA_LINEAGE_MATCHED",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M18_CONFIG_HASH_TAMPER",
+      "primitive": "code_lineage.config_hash",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "tamper_config_hash",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M19_SYNTHETIC_QUOTE_INJECTION",
+      "primitive": "option_selection.quote_executable_truth.ask",
+      "file": "TRADE_TRUTH_PROSPECTIVE_FULL_CAPTURES.json",
+      "mutation": "set_ask_to_150.5",
+      "expected_gate": "NO_SYNTHETIC_QUOTES",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M20_BROKER_WRITE_CALL_INJECTION",
+      "primitive": "truth_record.broker_write_calls_observed",
+      "file": "TRADE_TRUTH_PROSPECTIVE_REPLAY_RESULTS.json",
+      "mutation": "inject_broker_call",
+      "expected_gate": "BROKER_WRITE_SURFACE_ZERO_CALLS",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M21_PREFLIGHT_CONFIG_FAIL",
+      "primitive": "mandatory_gates.CONFIG_FROZEN.passed",
+      "file": "TRADE_TRUTH_PROSPECTIVE_PREFLIGHT_RESULTS.json",
+      "mutation": "fail_preflight_config",
+      "expected_gate": "PREFLIGHT_MANDATORY_GATES_REAL",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M22_PREFLIGHT_DEFAULT_PASS_CHEAT",
+      "primitive": "default_pass_count",
+      "file": "TRADE_TRUTH_PROSPECTIVE_PREFLIGHT_RESULTS.json",
+      "mutation": "inject_default_pass",
+      "expected_gate": "PREFLIGHT_MANDATORY_GATES_REAL",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M23_TRACE_LEDGER_DROP_ENTRY",
+      "primitive": "ledger_lines_count",
+      "file": "TRADE_TRUTH_PROSPECTIVE_TRACE_LEDGER.jsonl",
+      "mutation": "truncate_ledger_rows",
+      "expected_gate": "TRACE_LEDGER_ALL_COMPLETE",
+      "methodologically_valid": true
+    },
+    {
+      "id": "M24_CHECKPOINT_PULSE_TIMING",
+      "primitive": "checkpoint_pulse.input_hash",
+      "file": "TRADE_TRUTH_PROSPECTIVE_CHECKPOINT_PULSE_V2.jsonl",
+      "mutation": "tamper_pulse_hash",
+      "expected_gate": "REPLAY_STAGE_HASH_PARITY",
+      "methodologically_valid": true
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "modules_audited": [
+    "core/trade_truth/prospective_capture_engine.py",
+    "core/trade_truth/prospective_replay_engine.py",
+    "core/trade_truth/real_option_provider.py",
+    "core/trade_truth/risk_state_provider.py"
+  ],
+  "total_modules": 4,
+  "duplicated_business_logic_count": 0,
+  "unknown_count": 0,
+  "classifications": {
+    "OBSERVABILITY": 0,
+    "SERIALIZATION": 4,
+    "PROVENANCE": 4,
+    "REPLAY_ADAPTER": 2,
+    "DUPLICATED_BUSINESS_LOGIC": 0,
+    "UNKNOWN": 0
+  },
+  "findings": [],
+  "overall_verdict": "PASS"
+}

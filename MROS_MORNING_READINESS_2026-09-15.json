@@ -1,0 +1,28 @@
+{
+  "session_date": "2026-09-15",
+  "candidate_sha": "2a9ad8cdc11f51fabeeaba2c844cd5b2b5002aea",
+  "certified_release_sha": "",
+  "worktree_clean": true,
+  "session_root": "/Volumes/TradeBotData/morning-sessions/2026-09-15-20260915T012302-bb6300b9",
+  "storage_free_bytes": 1465562779648,
+  "auth_state": "AUTH_TOKEN_MISSING",
+  "universe_state": "READY",
+  "instrument_master_state": "READY",
+  "subscription_plan_state": "READY",
+  "truth_feed_state": "READY",
+  "checkpoint_pulse_state": "READY",
+  "persistence_state": "READY",
+  "market_memory_state": "READY",
+  "strategy_authority_state": "READY",
+  "option_selection_capture_state": "READY_RUNTIME_INTEGRATED",
+  "ranking_capture_state": "READY_RUNTIME_INTEGRATED",
+  "trade_builder_capture_state": "READY_RUNTIME_INTEGRATED",
+  "portfolio_risk_capture_state": "READY_RUNTIME_INTEGRATED",
+  "governance_capture_state": "READY_RUNTIME_INTEGRATED",
+  "broker_write_guard_state": "ARMED_FAIL_CLOSED_ZERO_CALLS",
+  "final_state": "BLOCKED_RELEASE",
+  "blockers": [
+    "RELEASE_STORE_ABSENT: /Volumes/TradeBotData/release_store not found",
+    "KITE_ACCESS_TOKEN_MISSING"
+  ]
+}

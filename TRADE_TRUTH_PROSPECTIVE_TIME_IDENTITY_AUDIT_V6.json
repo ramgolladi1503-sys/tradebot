@@ -1,0 +1,70 @@
+{
+  "audit_version": "V6_TIME_IDENTITY",
+  "total_traces_audited": 5,
+  "time_identity_mismatch_count": 5,
+  "session_identity_mismatch_count": 5,
+  "prior_future_leak_zero_claim_status": "INVALIDATED",
+  "prior_runtime_checkpoint_causality_status": "INVALIDATED",
+  "traces": [
+    {
+      "trace_id": "trace_p01",
+      "decision_ts_str": "2026-09-10 09:22:00",
+      "decision_ts_epoch_stored": 1789098720.0,
+      "decision_ts_epoch_recomputed_from_str_IST": 1789012320.0,
+      "decision_ts_epoch_match": false,
+      "epoch_discrepancy_seconds": 86400.0,
+      "source_session_date": "2026-09-10",
+      "decision_session_date_from_str": "2026-09-10",
+      "decision_session_date_from_epoch_IST": "2026-09-11",
+      "session_identity_match": false
+    },
+    {
+      "trace_id": "trace_p02",
+      "decision_ts_str": "2026-09-10 09:23:00",
+      "decision_ts_epoch_stored": 1789098780.0,
+      "decision_ts_epoch_recomputed_from_str_IST": 1789012380.0,
+      "decision_ts_epoch_match": false,
+      "epoch_discrepancy_seconds": 86400.0,
+      "source_session_date": "2026-09-10",
+      "decision_session_date_from_str": "2026-09-10",
+      "decision_session_date_from_epoch_IST": "2026-09-11",
+      "session_identity_match": false
+    },
+    {
+      "trace_id": "trace_p03",
+      "decision_ts_str": "2026-09-10 09:24:00",
+      "decision_ts_epoch_stored": 1789098840.0,
+      "decision_ts_epoch_recomputed_from_str_IST": 1789012440.0,
+      "decision_ts_epoch_match": false,
+      "epoch_discrepancy_seconds": 86400.0,
+      "source_session_date": "2026-09-10",
+      "decision_session_date_from_str": "2026-09-10",
+      "decision_session_date_from_epoch_IST": "2026-09-11",
+      "session_identity_match": false
+    },
+    {
+      "trace_id": "trace_p04",
+      "decision_ts_str": "2026-09-10 09:25:00",
+      "decision_ts_epoch_stored": 1789098900.0,
+      "decision_ts_epoch_recomputed_from_str_IST": 1789012500.0,
+      "decision_ts_epoch_match": false,
+      "epoch_discrepancy_seconds": 86400.0,
+      "source_session_date": "2026-09-10",
+      "decision_session_date_from_str": "2026-09-10",
+      "decision_session_date_from_epoch_IST": "2026-09-11",
+      "session_identity_match": false
+    },
+    {
+      "trace_id": "trace_p05",
+      "decision_ts_str": "2026-09-10 09:26:00",
+      "decision_ts_epoch_stored": 1789098960.0,
+      "decision_ts_epoch_recomputed_from_str_IST": 1789012560.0,
+      "decision_ts_epoch_match": false,
+      "epoch_discrepancy_seconds": 86400.0,
+      "source_session_date": "2026-09-10",
+      "decision_session_date_from_str": "2026-09-10",
+      "decision_session_date_from_epoch_IST": "2026-09-11",
+      "session_identity_match": false
+    }
+  ]
+}

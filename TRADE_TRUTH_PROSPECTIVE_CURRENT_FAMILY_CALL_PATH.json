@@ -1,0 +1,24 @@
+{
+  "candidate_sha": "9760ce3e3eb5b86bf65953a227fbf866dd158841",
+  "evaluators_module": "core/candidate_evaluators.py",
+  "caller": "core.orchestrator._evaluate_c1_c2_for_symbol",
+  "callsite": "core/orchestrator.py:5411",
+  "regime_decoupled": true,
+  "regime_decoupling_proof": "core/orchestrator.py:5411-5570 (c1_c2 evaluated prior to self._strategy_gate_for_symbol)",
+  "strategy_families": {
+    "C1": {
+      "family": "TREND",
+      "subfamily": "MOMENTUM_IMPULSE"
+    },
+    "C2": {
+      "family": "TREND",
+      "subfamily": "OVERNIGHT_TREND"
+    }
+  },
+  "downstream_stages_status": {
+    "opportunity_scoring": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+    "trade_builder": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+    "final_decision": "BLOCKED_BY_PRODUCTION_DEPENDENCY",
+    "live_read_only_risk_provider": "BLOCKED_BY_PRODUCTION_DEPENDENCY"
+  }
+}

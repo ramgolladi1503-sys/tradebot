@@ -1,0 +1,224 @@
+{
+  "title": "Prospective Full Level-C Capture Call Graph",
+  "version": "1.0.0",
+  "stages": [
+    {
+      "stage_index": 1,
+      "stage_name": "RAW_MARKET_CAPTURE",
+      "module": "core.market_session_store.RawTickSessionStore",
+      "inputs": [
+        "raw tick websocket stream / stitched tick parquet"
+      ],
+      "outputs": [
+        "as-of tick slice <= decision_ts"
+      ],
+      "invariants": [
+        "max_raw_tick_ts <= decision_ts",
+        "zero forward looking ticks"
+      ]
+    },
+    {
+      "stage_index": 2,
+      "stage_name": "BAR_CAPTURE",
+      "module": "core.market_session_store.RawTickSessionStore._build_1m_bars_from_ticks",
+      "inputs": [
+        "as-of tick slice"
+      ],
+      "outputs": [
+        "completed 1-minute OHLCV bars"
+      ],
+      "invariants": [
+        "bar_end_ts <= decision_ts",
+        "zero incomplete/forming bars used"
+      ]
+    },
+    {
+      "stage_index": 3,
+      "stage_name": "MEMORY_CAPTURE",
+      "module": "core.market_session_store.MarketSessionStore.get_market_memory",
+      "inputs": [
+        "completed 1m bars",
+        "symbol",
+        "trace_id",
+        "as_of_timestamp"
+      ],
+      "outputs": [
+        "MarketMemorySnapshot"
+      ],
+      "invariants": [
+        "rolling_1m_bars_count >= 1",
+        "memory_hash computed deterministically"
+      ]
+    },
+    {
+      "stage_index": 4,
+      "stage_name": "FEATURE_CAPTURE",
+      "module": "core.opportunity_scoring / feature computation modules",
+      "inputs": [
+        "MarketMemorySnapshot"
+      ],
+      "outputs": [
+        "features list (return_bps, dist_open, vol, range)"
+      ],
+      "invariants": [
+        "exact causal feature provenance captured"
+      ]
+    },
+    {
+      "stage_index": 5,
+      "stage_name": "REGIME_CAPTURE",
+      "module": "core.regime_architecture_contract",
+      "inputs": [
+        "MarketMemorySnapshot / feature slice"
+      ],
+      "outputs": [
+        "regime_status",
+        "regime_state",
+        "allowed_strategy_families"
+      ],
+      "invariants": [
+        "if decoupled: REGIME_STAGE_NOT_APPLICABLE with explicit call-path proof"
+      ]
+    },
+    {
+      "stage_index": 6,
+      "stage_name": "STRATEGY_EVALUATION",
+      "module": "core.candidate_evaluators.evaluate_c1 / evaluate_c2",
+      "inputs": [
+        "MarketMemorySnapshot",
+        "as_of_timestamp",
+        "trace_id"
+      ],
+      "outputs": [
+        "EvaluatorResult (qualified, reason_code, candidate)"
+      ],
+      "invariants": [
+        "evaluate ALL active strategies; capture both qualified and blocked"
+      ]
+    },
+    {
+      "stage_index": 7,
+      "stage_name": "CANDIDATE_POOL",
+      "module": "core.strategy_family_contract.check_strategy_family_compatibility, admit_candidate_to_pool",
+      "inputs": [
+        "emitted CandidateEmission objects"
+      ],
+      "outputs": [
+        "admitted candidate pool"
+      ],
+      "invariants": [
+        "capture full pre-ranking candidate pool; record rejection reasons"
+      ]
+    },
+    {
+      "stage_index": 8,
+      "stage_name": "OPTION_SELECTION",
+      "module": "core.option_token_resolver / market_data",
+      "inputs": [
+        "underlying spot",
+        "direction",
+        "option chain quotes"
+      ],
+      "outputs": [
+        "selected instrument",
+        "executable quote truth (ask for buy)"
+      ],
+      "invariants": [
+        "never substitute LTP for executable ASK"
+      ]
+    },
+    {
+      "stage_index": 9,
+      "stage_name": "RANKING",
+      "module": "core.candidate_ranking.rank_candidates",
+      "inputs": [
+        "admitted candidate pool",
+        "opportunity scores"
+      ],
+      "outputs": [
+        "ranked candidate list",
+        "top candidate id"
+      ],
+      "invariants": [
+        "RANKING_INPUT_SET_HASH and RANKING_OUTPUT_HASH recorded"
+      ]
+    },
+    {
+      "stage_index": 10,
+      "stage_name": "TRADE_CONSTRUCTION",
+      "module": "core.trade_builder",
+      "inputs": [
+        "top ranked candidate",
+        "selected instrument",
+        "risk parameters"
+      ],
+      "outputs": [
+        "trade intent object or NOT_REACHED"
+      ],
+      "invariants": [
+        "if no candidate: TRADE_CONSTRUCTION=NOT_REACHED"
+      ]
+    },
+    {
+      "stage_index": 11,
+      "stage_name": "RISK_STATE_EVALUATION",
+      "module": "core.risk_engine.RiskEngine",
+      "inputs": [
+        "read-only portfolio risk snapshot (capital, equity, daily_pnl, open_risk, trades_today)"
+      ],
+      "outputs": [
+        "risk verdict (ALLOWED/BLOCKED)",
+        "risk reason codes"
+      ],
+      "invariants": [
+        "exact read-only portfolio state captured at evaluation time"
+      ]
+    },
+    {
+      "stage_index": 12,
+      "stage_name": "GOVERNANCE_VALIDATION",
+      "module": "core.governed_strategy_authority.validate_execution_candidate",
+      "inputs": [
+        "candidate/trade intent",
+        "risk verdict",
+        "governance policy"
+      ],
+      "outputs": [
+        "governance verdict (GOVERNED_ALLOWED/GOVERNED_BLOCKED)"
+      ],
+      "invariants": [
+        "broker_write_authority == False"
+      ]
+    },
+    {
+      "stage_index": 13,
+      "stage_name": "FINAL_DECISION",
+      "module": "core.trade_truth.integrated_decision_tail",
+      "inputs": [
+        "governance verdict",
+        "risk verdict",
+        "trade intent"
+      ],
+      "outputs": [
+        "terminal decision action (ENTRY, NO_TRADE, BLOCKED, SKIPPED, ERROR)"
+      ],
+      "invariants": [
+        "NO_TRADE is a first-class fully reproducible decision"
+      ]
+    },
+    {
+      "stage_index": 14,
+      "stage_name": "TRUTH_RECORD_STORE",
+      "module": "core.trade_truth.record_builder",
+      "inputs": [
+        "all stage outputs and hashes"
+      ],
+      "outputs": [
+        "immutable append-only Trade Truth record with SHA-256 chain hash"
+      ],
+      "invariants": [
+        "read_only=True, broker_api_called=False, is_order_action=False"
+      ]
+    }
+  ]
+}

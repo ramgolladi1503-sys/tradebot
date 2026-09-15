@@ -1,0 +1,9 @@
+{
+  "target_file": "core/trade_truth/prospective_capture_engine.py",
+  "ast_parsed": true,
+  "findings_count": 0,
+  "duplicated_business_logic_count": 0,
+  "unknown_count": 0,
+  "findings": [],
+  "overall_verdict": "PASS"
+}

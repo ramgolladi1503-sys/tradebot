@@ -1,0 +1,72 @@
+{
+  "determinism_runs": 3,
+  "determinism_pass": true,
+  "mutations_attempted": 8,
+  "mutations_detected": 8,
+  "mutations_missed": 0,
+  "all_mutations_detected": true,
+  "mutation_cases": [
+    {
+      "mutation_id": "M01_decision_ts_shift",
+      "target_stage": "bars",
+      "detected": true,
+      "mismatched_stages": [
+        "features"
+      ]
+    },
+    {
+      "mutation_id": "M02_risk_kill_switch_active",
+      "target_stage": "risk",
+      "detected": true,
+      "mismatched_stages": [
+        "risk"
+      ]
+    },
+    {
+      "mutation_id": "M03_risk_daily_loss_breached",
+      "target_stage": "risk",
+      "detected": true,
+      "mismatched_stages": [
+        "risk"
+      ]
+    },
+    {
+      "mutation_id": "M04_risk_capital_halved",
+      "target_stage": "risk",
+      "detected": true,
+      "mismatched_stages": [
+        "risk"
+      ]
+    },
+    {
+      "mutation_id": "M05_corrupt_expected_truth",
+      "target_stage": "decision",
+      "detected": true,
+      "mechanism": "Physical isolation proven: corrupted expected output rejected without altering replayed stage hashes"
+    },
+    {
+      "mutation_id": "M06_decision_ts_pre_session",
+      "target_stage": "bars",
+      "detected": true,
+      "mismatched_stages": [
+        "features"
+      ]
+    },
+    {
+      "mutation_id": "M07_future_ts_clamp_test",
+      "target_stage": "bars",
+      "detected": true,
+      "mismatched_stages": [
+        "features"
+      ]
+    },
+    {
+      "mutation_id": "M08_zero_capital_risk_breach",
+      "target_stage": "risk",
+      "detected": true,
+      "mismatched_stages": [
+        "risk"
+      ]
+    }
+  ]
+}

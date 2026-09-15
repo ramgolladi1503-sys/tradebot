@@ -1,0 +1,8 @@
+{
+  "source_path": "/Volumes/TradeBotData/live market capture/2026-09-10/upstox_full_ticks_20260910_stitched.parquet",
+  "source_file_sha256": "e45c1647de4928d31962018e36d30f42a8abf46b009b8f386c1774ef65c50fa6",
+  "consumed_rows": 5000,
+  "first_consumed_ts": 1789010887.407291,
+  "last_consumed_ts": 1789011481.1940181,
+  "consumed_event_content_sha256": "439dcac8163d81e90e83ae1f98ee02a51a7eeee9927189d4fd64e2effce1fb00"
+}

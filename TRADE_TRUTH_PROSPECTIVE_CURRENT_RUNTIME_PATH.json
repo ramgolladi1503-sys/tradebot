@@ -1,0 +1,73 @@
+{
+  "candidate_evaluator_caller": {
+    "file": "core/orchestrator.py",
+    "lines": "5410-5416",
+    "function": "_evaluate_c1_c2_for_symbol"
+  },
+  "C1_family_source": {
+    "file": "core/candidate_evaluators.py",
+    "lines": "108-115",
+    "family": "ORB_BREAKOUT"
+  },
+  "C1_subfamily_source": {
+    "file": "core/candidate_evaluators.py",
+    "lines": "108-115",
+    "subfamily": "OPENING_RANGE_BREAKOUT"
+  },
+  "C2_family_source": {
+    "file": "core/candidate_evaluators.py",
+    "lines": "138-145",
+    "family": "EMA_PULLBACK"
+  },
+  "C2_subfamily_source": {
+    "file": "core/candidate_evaluators.py",
+    "lines": "138-145",
+    "subfamily": "TREND_PULLBACK"
+  },
+  "runtime_regime_or_gate_source": {
+    "file": "core/orchestrator.py",
+    "lines": "5418",
+    "call": "self._strategy_gate_for_symbol(market_snapshot)"
+  },
+  "allowed_family_set_source": {
+    "file": "core/orchestrator.py",
+    "lines": "5835",
+    "call": "_resolve_legacy_gate_allowed_families(gate)"
+  },
+  "family_compatibility_call": {
+    "file": "core/orchestrator.py",
+    "lines": "5839-5841",
+    "call": "_check_strategy_family_compatibility(cand_family, gate_allowed_families)"
+  },
+  "pool_admission_call": {
+    "file": "core/orchestrator.py",
+    "lines": "6189-6196",
+    "call": "filter_governed_candidates(ranked_candidates, ...); cycle_ranked_candidates.extend(...)"
+  },
+  "governed_authority_call": {
+    "file": "core/orchestrator.py",
+    "lines": "6461-6473",
+    "call": "validate_execution_candidate(trade)"
+  },
+  "production_scoring_ranking": {
+    "file": "strategies/trade_builder.py",
+    "lines": "100-250",
+    "call": "TradeBuilder._score_candidates & rank_candidates"
+  },
+  "production_trade_builder": {
+    "file": "core/orchestrator.py",
+    "lines": "5746-5753",
+    "call": "self.trade_builder.build_with_trace(market_data, ...)"
+  },
+  "production_risk": {
+    "file": "core/orchestrator.py",
+    "lines": "6911-6920",
+    "call": "self.risk_engine.evaluate_trade(self.portfolio, trade=trade, exposure_state=exposure_snapshot)"
+  },
+  "production_final_decision": {
+    "file": "core/orchestrator.py",
+    "lines": "7417-7428",
+    "call": "self.execution_router.execute(...) or terminal veto/block in orchestrator cycle"
+  },
+  "architectural_notes": "C1 and C2 candidate evaluation occurs in Phase C pre-gate. Gatekeeper and family compatibility gates then filter candidates before admission and trade building. No hardcoded family lists are permissible in truth layer."
+}

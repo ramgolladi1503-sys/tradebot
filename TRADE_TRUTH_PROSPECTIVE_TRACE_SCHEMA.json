@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TradeTruthProspectiveTraceSchema",
+  "description": "Summary schema for prospective trace ledger entries.",
+  "type": "object",
+  "required": [
+    "trace_id",
+    "session_id",
+    "decision_ts_epoch",
+    "terminal_trace_status",
+    "stages_captured_count",
+    "total_stages_required",
+    "all_stages_complete",
+    "future_leak_detected",
+    "decision_action",
+    "stage_hashes",
+    "record_hash"
+  ],
+  "properties": {
+    "trace_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "decision_ts_epoch": {
+      "type": "number"
+    },
+    "terminal_trace_status": {
+      "type": "string",
+      "enum": [
+        "CAPTURE_COMPLETE",
+        "CAPTURE_PARTIAL",
+        "BLOCKED_DATA",
+        "BLOCKED_STATE",
+        "TRACE_ERROR"
+      ]
+    },
+    "stages_captured_count": {
+      "type": "integer"
+    },
+    "total_stages_required": {
+      "type": "integer"
+    },
+    "all_stages_complete": {
+      "type": "boolean"
+    },
+    "future_leak_detected": {
+      "type": "boolean"
+    },
+    "decision_action": {
+      "type": "string"
+    },
+    "stage_hashes": {
+      "type": "object"
+    },
+    "record_hash": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "total_discovered_methods": 5,
+  "concrete_write_entrypoints_count": 3,
+  "abstract_protocol_count": 2,
+  "entrypoints": [
+    {
+      "file": "core/broker/mock_broker.py",
+      "class": "MockBroker",
+      "method": "place_order",
+      "lineno": 42,
+      "classification": "CONCRETE_WRITE_ENTRYPOINT"
+    },
+    {
+      "file": "core/broker_interface.py",
+      "class": "BrokerAdapter",
+      "method": "place_order",
+      "lineno": 44,
+      "classification": "ABSTRACT/PROTOCOL"
+    },
+    {
+      "file": "core/broker_interface.py",
+      "class": "BrokerAdapter",
+      "method": "cancel_order",
+      "lineno": 45,
+      "classification": "ABSTRACT/PROTOCOL"
+    },
+    {
+      "file": "core/execution_engine.py",
+      "class": "ExecutionEngine",
+      "method": "place_order",
+      "lineno": 665,
+      "classification": "CONCRETE_WRITE_ENTRYPOINT"
+    },
+    {
+      "file": "core/kite_client.py",
+      "class": "KiteClient",
+      "method": "submit_order",
+      "lineno": 397,
+      "classification": "CONCRETE_WRITE_ENTRYPOINT"
+    }
+  ]
+}

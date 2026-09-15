@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TradeTruthProspectiveExpectedOutputSchema",
+  "description": "Physically isolated expected truth output schema for comparison against replay.",
+  "type": "object",
+  "required": [
+    "trace_id",
+    "stage_hashes",
+    "final_decision",
+    "record_hash"
+  ],
+  "properties": {
+    "trace_id": {
+      "type": "string"
+    },
+    "stage_hashes": {
+      "type": "object",
+      "required": [
+        "market",
+        "bars",
+        "memory",
+        "features",
+        "regime",
+        "strategy",
+        "candidate_pool",
+        "ranking",
+        "risk",
+        "governance",
+        "decision"
+      ],
+      "properties": {
+        "market": {
+          "type": "string"
+        },
+        "bars": {
+          "type": "string"
+        },
+        "memory": {
+          "type": "string"
+        },
+        "features": {
+          "type": "string"
+        },
+        "regime": {
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "candidate_pool": {
+          "type": "string"
+        },
+        "option_selection": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ranking": {
+          "type": "string"
+        },
+        "trade_construction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "risk": {
+          "type": "string"
+        },
+        "governance": {
+          "type": "string"
+        },
+        "decision": {
+          "type": "string"
+        }
+      }
+    },
+    "final_decision": {
+      "type": "object",
+      "required": [
+        "action",
+        "reason_codes",
+        "decision_hash"
+      ],
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "reason_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "decision_hash": {
+          "type": "string"
+        }
+      }
+    },
+    "record_hash": {
+      "type": "string"
+    }
+  }
+}

@@ -383,6 +383,28 @@ def write_candidate_journal_row(
     path: str | Path | None = None,
 ) -> tuple[dict[str, Any], bool]:
     row = build_candidate_journal_row(payload, journal_event=journal_event, created_at=created_at)
+    try:
+        from core.trade_truth.record_builder import build_trade_truth_record
+        from core.trade_truth.store import TruthStore
+
+        trace_id = str(row.get("trace_id") or row.get("candidate_id") or "UNKNOWN_TRACE")
+        session_id = str(row.get("session_id") or row.get("run_id") or "UNKNOWN_SESSION")
+        truth_record = build_trade_truth_record(
+            trace_id=trace_id,
+            session_id=session_id,
+            candidate=row,
+            market_snapshot=row,
+            analytical_context=row,
+            decision_context=row,
+            execution_context=row,
+            outcome_context=row,
+        )
+        row["live_decision_hash"] = truth_record.live_decision_hash
+        row["truth_record_hash"] = truth_record.record_hash
+        TruthStore().write_record(truth_record)
+    except Exception as truth_exc:
+        logger.debug("trade_truth_capture_skipped err=%s", truth_exc)
+
     target = Path(path).expanduser() if path is not None else candidate_journal_path()
     try:
         writer = get_jsonl_writer(target)
