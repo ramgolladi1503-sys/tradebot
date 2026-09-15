@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, time
 from typing import Any
 
-from core.time_utils import IST_TZ
+from core.time_utils import IST_TZ, now_ist
 
 NORMAL_LATE_SESSION = "NORMAL_LATE_SESSION"
 CAS_REFERENCE_TRANSITION = "CAS_REFERENCE_TRANSITION"
@@ -64,7 +64,7 @@ def regulatory_overlay(*, as_of: date | None = None) -> RegulatoryOverlay:
     effective circular must be represented by a new, separately reviewed policy version.
     """
 
-    observed = as_of or date.today()
+    observed = as_of or now_ist().date()
     proposals: tuple[str, ...] = ()
     if observed >= SEBI_CONSULTATION_DATE:
         proposals = (
