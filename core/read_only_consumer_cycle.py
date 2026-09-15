@@ -170,8 +170,8 @@ def run_consumer_cycle(
         candidate_count=len(valid_candidates), ready_count=option_ready_count,
     )
     # Invoke TradeBuilder in canonical observer runtime
-    tb_t0 = time.time()
-    tb_trades: list[Any] = []
+    # Candidate envelope for read-only tracking
+    tb_trades: list[dict[str, Any]] = []
     tb_traces: list[dict[str, Any]] = []
     trade_builder = TradeBuilder()
 
@@ -208,7 +208,20 @@ def run_consumer_cycle(
                 "candidate_id": f"{ctx_sym}_CTX",
             })
 
+    # Real upstream parent span ID for TradeBuilder from candidate pool checkpoint
+    hook = TruthFeedRuntimeHook(
+        session_root=root,
+        session_date=str(provenance.get("session_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+        session_id=session_id,
+    )
+    upstream_span_id = f"{cycle_id}:CANDIDATE_POOL"
+
+    tb_t0 = time.time()
     tb_input_payloads: list[dict[str, Any]] = []
+    tb_invocation_attempted = False
+    tb_runtime_reached = False
+    reject_reasons: list[str] = []
+
     for cand in tb_candidates:
         sym = str(cand.get("underlying") or cand.get("symbol") or "").strip()
         px = float(cand.get("entry") or cand.get("ltp") or 0.0)
@@ -228,6 +241,9 @@ def run_consumer_cycle(
             continue
 
         tb_input_payloads.append(market_data)
+        tb_invocation_attempted = True
+        tb_runtime_reached = True
+
         trade, trace = trade_builder.build_with_trace(
             market_data,
             quick_mode=False,
@@ -235,21 +251,17 @@ def run_consumer_cycle(
             allow_baseline=False,
         )
         if trade is not None:
-            # Enforce read-only guarantees on any constructed trade
-            if isinstance(trade, dict):
-                trade["read_only"] = True
-                trade["execution_status"] = "advisory_only"
-                trade["execution_allowed"] = False
-                trade["orders_placed"] = 0
-                trade["broker_write_authority"] = False
-            else:
-                try:
-                    object.__setattr__(trade, "execution_allowed", False)
-                    object.__setattr__(trade, "execution_status", "advisory_only")
-                    object.__setattr__(trade, "read_only", True)
-                except Exception:
-                    pass
-            tb_trades.append(trade)
+            # Native trade preserved as-is inside an advisory read-only envelope
+            tb_trades.append({
+                "native_trade": trade,
+                "symbol": sym,
+                "cycle_id": cycle_id,
+                "read_only_envelope": True,
+            })
+        else:
+            reason = getattr(trade_builder, "_reject_reason", None) or "REJECTED_BY_TRADE_BUILDER"
+            reject_reasons.append(str(reason))
+
         if trace:
             tb_traces.append(trace)
 
@@ -260,28 +272,40 @@ def run_consumer_cycle(
         "source_sha": source_sha,
         "items": tb_input_payloads,
     })
-    tb_output_hash = compute_deterministic_hash({
-        "trade_count": len(tb_trades),
-        "trace_count": len(tb_traces),
-        "cycle_id": cycle_id,
-    })
 
-    hook = TruthFeedRuntimeHook(
-        session_root=root,
-        session_date=str(provenance.get("session_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")),
-        session_id=session_id,
-    )
-    if tb_candidates:
-        tb_status = "PASS" if (tb_trades or tb_traces or isinstance(ranked_pipeline, Mapping)) else "REJECTED"
-        tb_reason_code = "CANONICAL_RUNTIME_OBSERVED"
+    if tb_runtime_reached:
+        if tb_trades:
+            tb_result_status = "TRADE_CONSTRUCTED"
+            tb_status = "PASS"
+            tb_reason_code = "CANONICAL_RUNTIME_OBSERVED"
+        else:
+            tb_result_status = "NO_TRADE"
+            tb_status = "PASS"
+            tb_reason_code = "CANONICAL_RUNTIME_OBSERVED"
     else:
+        tb_result_status = "NOT_REACHED"
         tb_status = "SKIPPED_NOT_APPLICABLE"
         tb_reason_code = "NO_ACTIVE_SYMBOLS_OR_CANDIDATES"
+
+    tb_output_hash = compute_deterministic_hash({
+        "trades": [
+            t["native_trade"].to_dict() if hasattr(t["native_trade"], "to_dict")
+            else dict(t["native_trade"]) if isinstance(t["native_trade"], Mapping)
+            else str(t["native_trade"])
+            for t in tb_trades
+        ],
+        "traces": tb_traces,
+        "result_status": tb_result_status,
+        "reject_reasons": reject_reasons,
+        "cycle_id": cycle_id,
+        "session_id": session_id,
+        "source_sha": source_sha,
+    })
 
     hook.record_checkpoint(
         stage_name="TRADE_BUILDER",
         trace_id=cycle_id,
-        parent_span_id="CANDIDATE_POOL",
+        parent_span_id=upstream_span_id,
         entered_at=tb_t0,
         exited_at=tb_t1,
         input_hash=tb_input_hash,
@@ -296,6 +320,8 @@ def run_consumer_cycle(
         reason=None if tb_status == "PASS" else tb_reason_code,
         built_trade_count=len(tb_trades),
         trace_count=len(tb_traces),
+        result_status=tb_result_status,
+        runtime_reached=tb_runtime_reached,
     )
 
     eligibility_rows = [

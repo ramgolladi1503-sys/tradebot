@@ -85,7 +85,8 @@ def test_tradebuilder_invoked_with_candidates_in_canonical_observer(tmp_path: Pa
     tb_spans = [span for span in pulse_lines if span["stage_name"] == "TRADE_BUILDER"]
     assert len(tb_spans) >= 1
     assert tb_spans[0]["status"] == "PASS"
-    assert tb_spans[0]["parent_span_id"] == "CANDIDATE_POOL"
+    assert tb_spans[0]["parent_span_id"] == f"{cycle_id}:CANDIDATE_POOL"
+    assert tb_spans[0]["parent_span_id"] != "CANDIDATE_POOL"
     assert tb_spans[0]["reason_code"] == "CANONICAL_RUNTIME_OBSERVED"
     assert tb_spans[0]["trace_id"] == cycle_id
 
@@ -126,7 +127,8 @@ def test_tradebuilder_empty_pool_skips_without_synthetic_defaults(tmp_path: Path
     tb_spans = [span for span in pulse_lines if span["stage_name"] == "TRADE_BUILDER"]
     assert len(tb_spans) >= 1
     assert tb_spans[0]["status"] == "SKIPPED_NOT_APPLICABLE"
-    assert tb_spans[0]["parent_span_id"] == "CANDIDATE_POOL"
+    assert tb_spans[0]["parent_span_id"] == f"{cycle_id}:CANDIDATE_POOL"
+    assert tb_spans[0]["parent_span_id"] != "CANDIDATE_POOL"
     assert tb_spans[0]["reason_code"] == "NO_ACTIVE_SYMBOLS_OR_CANDIDATES"
 
     assert sum(CALL_COUNTS.values()) == 0

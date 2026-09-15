@@ -30,6 +30,7 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 from dataclasses import fields, replace
 from strategies.trade_builder import TradeBuilder
+from core.trade_truth.trade_builder_input_contract import build_canonical_tradebuilder_input
 from core.market_data import fetch_live_market_data, ensure_startup_warmup_bootstrap, refresh_index_quote_from_rest
 from core.risk_engine import RiskEngine
 from core.execution_guard import ExecutionGuard
@@ -5743,8 +5744,19 @@ class Orchestrator:
                         getattr(gate, "family", None),
                     )
                     try:
-                        trade, decision_trace = self.trade_builder.build_with_trace(
+                        builder_input = build_canonical_tradebuilder_input(
                             market_data,
+                            cycle_id=str(getattr(self, "_gate_status_cycle_id", "") or market_data.get("cycle_id") or "live_cycle"),
+                            session_id=str(getattr(self, "session_id", "") or market_data.get("session_id") or getattr(cfg, "DESK_ID", "DEFAULT")),
+                            source_sha=str(os.environ.get("TRADEBOT_COMMIT_SHA") or market_data.get("source_sha") or "production_live"),
+                            read_only=not bool(getattr(cfg, "EXECUTION_ENABLED", False)),
+                        )
+                    except Exception as input_contract_exc:
+                        logger.debug("orchestrator_tradebuilder_canonical_input_bypass exc=%s", input_contract_exc)
+                        builder_input = market_data
+                    try:
+                        trade, decision_trace = self.trade_builder.build_with_trace(
+                            builder_input,
                             quick_mode=False,
                             debug_reasons=debug_flag,
                             force_family=gate.family,

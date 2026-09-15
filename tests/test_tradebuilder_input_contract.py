@@ -90,3 +90,34 @@ def test_hash_tradebuilder_input_deterministic():
     h2 = hash_tradebuilder_input(payload2)
     assert h1 == h2
     assert len(h1) == 64
+
+
+def test_build_canonical_tradebuilder_input_from_market_data_dict():
+    prod_market_data = {
+        "symbol": "BANKNIFTY",
+        "ltp": 52000.0,
+        "close": 52000.0,
+        "regime": {"primary_regime": "TRENDING"},
+        "feed_health": {"is_fresh": True},
+        "quote_health": {"ok": True},
+        "market_open": True,
+        "execution_mode": "LIVE",
+        "option_chain": [{"strike": 52000, "call_oi": 1000}],
+        "custom_prod_field": "production_preserved",
+    }
+    out = build_canonical_tradebuilder_input(
+        prod_market_data,
+        cycle_id="c_prod_01",
+        session_id="s_prod_01",
+        source_sha="b" * 40,
+        read_only=False,
+    )
+    assert out["symbol"] == "BANKNIFTY"
+    assert out["ltp"] == 52000.0
+    assert out["cycle_id"] == "c_prod_01"
+    assert out["session_id"] == "s_prod_01"
+    assert out["source_sha"] == "b" * 40
+    assert out["custom_prod_field"] == "production_preserved"
+    assert out["option_chain"] == [{"strike": 52000, "call_oi": 1000}]
+    assert out.get("feed_truth") is None or "feed_health" in out
+    assert out.get("read_only") is not True  # Production write capability not forcibly overwritten when read_only=False
