@@ -76,7 +76,7 @@ def run_mutation_campaign(evidence_root: Path) -> dict[str, Any]:
             "name": "candidate entry becomes TradeBuilder market price",
             "path": consumer,
             "apply": lambda text: text.replace(
-                'spot_px = float(sym_snapshot.get("spot") or sym_snapshot.get("ltp") or 0.0)',
+                'spot_px = float(sym_snapshot.get("spot") or sym_snapshot.get("ltp"))',
                 'spot_px = float(valid_candidates[0].get("entry") or 0.0)',
                 1,
             ),
