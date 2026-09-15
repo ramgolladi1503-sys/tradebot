@@ -1,0 +1,171 @@
+{
+  "base_authority_sha": "93934d7c040b338b840eabd72e575644eaa3fbc0",
+  "campaign_budget": {
+    "catalog_expansion_after_outcome_access_allowed": false,
+    "default_max_mechanism_families": 12,
+    "default_max_primary_cells_total": 96,
+    "default_max_primary_horizons_per_hypothesis": 2,
+    "default_max_primary_hypotheses_per_family": 4,
+    "failed_signal_inversion_as_new_strategy_allowed": false,
+    "gate_weakening_after_outcomes_allowed": false,
+    "post_failure_filter_addition_allowed": false,
+    "re_discovery_during_evaluation_allowed": false,
+    "target_independent_survivors": 3,
+    "target_is_not_a_mandate": true
+  },
+  "change_control": {
+    "in_place_semantic_mutation_allowed": false,
+    "requires_adversarial_review": true,
+    "requires_contract_hash_update": true,
+    "requires_dedicated_governance_pr": true,
+    "requires_explicit_rationale": true,
+    "requires_version_bump_for_semantic_change": true,
+    "strategy_pr_may_modify_truth_layer": false
+  },
+  "contract_id": "TRADEBOT_RESEARCH_TRUTH_LAYER_V1",
+  "discovery_protocol": {
+    "catalog_freeze_before_outcome_access_required": true,
+    "catalog_order_frozen_after_freeze": true,
+    "catalog_sha256_required": true,
+    "discovery_inputs_allowed": [
+      "LITERATURE_AND_RESEARCH_DOCTRINE",
+      "AVAILABLE_FIELD_NAMES_AND_DATA_AUTHORITY",
+      "DATA_COVERAGE_AND_TIMESTAMP_SEMANTICS",
+      "MARKET_STRUCTURE_AND_EXCHANGE_RULES",
+      "KNOWN_CLOSED_OR_QUARANTINED_FAMILY_IDENTITIES",
+      "NON_OUTCOME_DESCRIPTIVE_DATA_QUALITY_DIAGNOSTICS"
+    ],
+    "discovery_inputs_forbidden": [
+      "FORWARD_RETURN_RESULTS",
+      "VALIDATION_RESULTS",
+      "LOCKED_CONFIRMATION_RESULTS",
+      "STRATEGY_PNL",
+      "SHARPE_OR_WIN_RATE_RESULTS",
+      "BEST_THRESHOLD_OR_BEST_HORIZON_RESULTS",
+      "FAILED_FAMILY_NEAR_MISS_RESULTS_USED_TO_CREATE_REPLACEMENT_FAMILY"
+    ],
+    "duplicate_mechanism_screen_required": true,
+    "mechanism_discovery_allowed": true,
+    "mechanism_rationale_required": true,
+    "outcome_blind_discovery_required": true,
+    "prior_closed_family_screen_required": true
+  },
+  "family_protocol": [
+    "MECHANISM",
+    "PRE_REGISTERED_HYPOTHESES",
+    "FORMATION",
+    "VALIDATION",
+    "WITHIN_FAMILY_MULTIPLICITY",
+    "GLOBAL_SEARCH_ACCOUNTING",
+    "EFFECT_SIZE",
+    "INCREMENTAL_BASELINE",
+    "CHRONOLOGICAL_STABILITY",
+    "ACTUAL_DELAY",
+    "NEGATIVE_CONTROLS",
+    "CANDIDATE_FREEZE",
+    "LOCKED_CONFIRMATION",
+    "PORTFOLIO_INDEPENDENCE",
+    "OPTION_TRANSLATION",
+    "PROSPECTIVE_REGISTRY"
+  ],
+  "global_search_accounting": {
+    "append_only_global_experiment_ledger_required": true,
+    "campaign_version_reset_does_not_reset_search_pressure": true,
+    "failed_and_blocked_trials_remain_visible": true,
+    "global_fdr_or_equivalent_search_adjustment_required": true,
+    "pbo_dsr_or_search_adjusted_inference_required_when_applicable": true,
+    "trial_count_persists_across_campaign_versions": true
+  },
+  "historical_data_authority": {
+    "default_mode": "OHLCV_ONLY",
+    "historical_bid_ask_authority": false,
+    "historical_depth_authority": false,
+    "historical_execution_grade": false,
+    "historical_option_candles_label": "HISTORICAL_OPTION_CANDLE_RESEARCH_ONLY",
+    "synthetic_bid_ask_allowed": false,
+    "synthetic_depth_allowed": false
+  },
+  "prior_family_custody": {
+    "CONSTITUENT_BREADTH_DIFFUSION": "CLOSED_NO_ROBUST_EDGE",
+    "FUTURES_SPOT_OHLCV_PROPAGATION_V1": "QUARANTINED_HARNESS_DEFECT_REEVAL_ONLY_IF_PRE_REGISTERED_IN_FUTURE_CAMPAIGN",
+    "NIFTY_TUESDAY_0DTE_OHLCV_STRUCTURE_V1": "QUARANTINED_HARNESS_DEFECT_REEVAL_DEFERRED",
+    "OPTION_IMPLIED_VS_REALIZED": "CLOSED_NO_DEFENDABLE_PHENOMENON"
+  },
+  "purpose": "Permanent anti-drift research authority: freeze the scientific process, not a fixed strategy catalog.",
+  "safety": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "broker_write_authority": false,
+    "buy_only": true,
+    "is_order_action": false,
+    "manual_approval_required": true,
+    "max_hold_minutes": 30,
+    "order_authority": false,
+    "orders_cancelled": 0,
+    "orders_modified": 0,
+    "orders_placed": 0,
+    "paper_orders": 0,
+    "read_only_market_research": true
+  },
+  "schema_version": 1,
+  "status": "DRAFT_GOVERNANCE_PROPOSAL",
+  "stop_rules": {
+    "continue_after_single_family_failure": true,
+    "exhaustion": "FROZEN_CAMPAIGN_CATALOG_EXHAUSTED",
+    "global_blocker": [
+      "COMMON_KERNEL_CANNOT_BE_CERTIFIED",
+      "AUTHORITATIVE_SHARED_DATA_CORRUPTED_OR_UNUSABLE",
+      "PROTECTED_EVIDENCE_IRREPARABLY_CONTAMINATED",
+      "OUTCOME_BLIND_DISCOVERY_BOUNDARY_CANNOT_BE_PROVEN",
+      "CONTINUATION_REQUIRES_FABRICATION_OR_UNSAFE_MUTATION_OR_ORDER_AUTHORITY"
+    ],
+    "stop_after_catalog_exhaustion_even_if_target_not_reached": true,
+    "success": "THREE_INDEPENDENT_CONFIRMED_MECHANISM_CLUSTERS"
+  },
+  "truth_layer": {
+    "common_kernel_required": true,
+    "forbidden_harness_behaviors": [
+      "HARDCODED_NEGATIVE_CONTROL_PASS",
+      "HARDCODED_DELAY_RATIO",
+      "HARDCODED_CONCENTRATION_METRIC",
+      "WRONG_PVALUE_FOR_MULTIPLICITY",
+      "INCOMPARABLE_INCREMENTAL_LIFT_METRICS",
+      "HOLDOUT_READ_BEFORE_FREEZE",
+      "OUTCOME_COLUMNS_IN_FEATURES",
+      "BASE_SHA_MASQUERADING_AS_EXECUTED_CODE_SHA",
+      "MECHANISM_DISCOVERY_AFTER_OUTCOME_ACCESS",
+      "CATALOG_MUTATION_AFTER_FREEZE",
+      "SEARCH_PRESSURE_RESET_BETWEEN_CAMPAIGNS"
+    ],
+    "literature_principles": [
+      "KAUFMAN_ROBUSTNESS_AND_PARAMETER_PLATEAUS",
+      "CHAN_STATISTICAL_BEHAVIOR_BEFORE_STRATEGY",
+      "HARRIS_INFORMATION_PROPAGATION_AND_MARKET_STRUCTURE",
+      "SINCLAIR_SEPARATE_SIGNAL_FROM_OPTION_EXECUTION",
+      "ARONSON_FALSIFIABLE_HYPOTHESES_AND_OBJECTIVE_TESTS",
+      "PARDO_CHRONOLOGICAL_WALK_FORWARD",
+      "LOPEZ_DE_PRADO_BAILEY_SELECTION_BIAS_PBO_AND_HOLDOUT_PROTECTION",
+      "CARVER_SIMPLE_INDEPENDENT_FORECASTS",
+      "ILMANEN_REGIME_DEPENDENCE",
+      "FWER_FDR_SEARCH_ACCOUNTING"
+    ],
+    "required_gates": [
+      "OUTCOME_BLIND_MECHANISM_DISCOVERY",
+      "CATALOG_PRE_REGISTRATION_AND_HASH",
+      "TIMESTAMP_SEMANTICS",
+      "CAUSAL_FEATURES",
+      "CHRONOLOGICAL_PARTITION",
+      "PROTECTED_CONFIRMATION",
+      "BASELINE_VS_CANDIDATE_SAME_METRIC",
+      "MULTIPLICITY",
+      "GLOBAL_SEARCH_ACCOUNTING",
+      "EFFECT_SIZE",
+      "CHRONOLOGICAL_STABILITY",
+      "SESSION_AND_FOLD_CONCENTRATION",
+      "ACTUAL_5M_DELAY",
+      "NEGATIVE_CONTROLS",
+      "CODE_AND_DATA_PROVENANCE",
+      "GLOBAL_TRIAL_LEDGER"
+    ]
+  }
+}
