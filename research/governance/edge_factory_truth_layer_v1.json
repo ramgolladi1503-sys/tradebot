@@ -1,14 +1,15 @@
 {
   "base_authority_sha": "93934d7c040b338b840eabd72e575644eaa3fbc0",
   "campaign_budget": {
+    "catalog_expansion_after_outcome_access_allowed": false,
+    "default_max_mechanism_families": 12,
+    "default_max_primary_cells_total": 96,
+    "default_max_primary_horizons_per_hypothesis": 2,
+    "default_max_primary_hypotheses_per_family": 4,
     "failed_signal_inversion_as_new_strategy_allowed": false,
-    "family_9_allowed": false,
     "gate_weakening_after_outcomes_allowed": false,
-    "max_primary_cells_total": 64,
-    "max_primary_families": 8,
-    "max_primary_tests_per_family": 8,
-    "new_family_after_outcomes_allowed": false,
     "post_failure_filter_addition_allowed": false,
+    "re_discovery_during_evaluation_allowed": false,
     "target_independent_survivors": 3,
     "target_is_not_a_mandate": true
   },
@@ -22,22 +23,40 @@
     "strategy_pr_may_modify_truth_layer": false
   },
   "contract_id": "TRADEBOT_RESEARCH_TRUTH_LAYER_V1",
-  "family_catalog": [
-    "F1_OPENING_GAP_INVENTORY_RESPONSE",
-    "F2_OPENING_PRICE_DISCOVERY_AND_RANGE_TRANSITION",
-    "F3_VOLATILITY_STATE_TRANSITION",
-    "F4_PATH_EFFICIENCY_TREND_VS_EXHAUSTION",
-    "F5_INTRADAY_EXTREME_DISPLACEMENT_RESPONSE",
-    "F6_CROSS_INDEX_INFORMATION_PROPAGATION",
-    "F7_SCHEDULED_EVENT_RESPONSE",
-    "F8_FUTURES_SPOT_PROPAGATION_REEVALUATION"
-  ],
+  "discovery_protocol": {
+    "catalog_freeze_before_outcome_access_required": true,
+    "catalog_order_frozen_after_freeze": true,
+    "catalog_sha256_required": true,
+    "discovery_inputs_allowed": [
+      "LITERATURE_AND_RESEARCH_DOCTRINE",
+      "AVAILABLE_FIELD_NAMES_AND_DATA_AUTHORITY",
+      "DATA_COVERAGE_AND_TIMESTAMP_SEMANTICS",
+      "MARKET_STRUCTURE_AND_EXCHANGE_RULES",
+      "KNOWN_CLOSED_OR_QUARANTINED_FAMILY_IDENTITIES",
+      "NON_OUTCOME_DESCRIPTIVE_DATA_QUALITY_DIAGNOSTICS"
+    ],
+    "discovery_inputs_forbidden": [
+      "FORWARD_RETURN_RESULTS",
+      "VALIDATION_RESULTS",
+      "LOCKED_CONFIRMATION_RESULTS",
+      "STRATEGY_PNL",
+      "SHARPE_OR_WIN_RATE_RESULTS",
+      "BEST_THRESHOLD_OR_BEST_HORIZON_RESULTS",
+      "FAILED_FAMILY_NEAR_MISS_RESULTS_USED_TO_CREATE_REPLACEMENT_FAMILY"
+    ],
+    "duplicate_mechanism_screen_required": true,
+    "mechanism_discovery_allowed": true,
+    "mechanism_rationale_required": true,
+    "outcome_blind_discovery_required": true,
+    "prior_closed_family_screen_required": true
+  },
   "family_protocol": [
     "MECHANISM",
-    "FROZEN_HYPOTHESES",
+    "PRE_REGISTERED_HYPOTHESES",
     "FORMATION",
     "VALIDATION",
     "WITHIN_FAMILY_MULTIPLICITY",
+    "GLOBAL_SEARCH_ACCOUNTING",
     "EFFECT_SIZE",
     "INCREMENTAL_BASELINE",
     "CHRONOLOGICAL_STABILITY",
@@ -49,6 +68,14 @@
     "OPTION_TRANSLATION",
     "PROSPECTIVE_REGISTRY"
   ],
+  "global_search_accounting": {
+    "append_only_global_experiment_ledger_required": true,
+    "campaign_version_reset_does_not_reset_search_pressure": true,
+    "failed_and_blocked_trials_remain_visible": true,
+    "global_fdr_or_equivalent_search_adjustment_required": true,
+    "pbo_dsr_or_search_adjusted_inference_required_when_applicable": true,
+    "trial_count_persists_across_campaign_versions": true
+  },
   "historical_data_authority": {
     "default_mode": "OHLCV_ONLY",
     "historical_bid_ask_authority": false,
@@ -60,11 +87,11 @@
   },
   "prior_family_custody": {
     "CONSTITUENT_BREADTH_DIFFUSION": "CLOSED_NO_ROBUST_EDGE",
-    "FUTURES_SPOT_OHLCV_PROPAGATION_V1": "QUARANTINED_HARNESS_DEFECT_SINGLE_CLEAN_REEVAL_ALLOWED",
+    "FUTURES_SPOT_OHLCV_PROPAGATION_V1": "QUARANTINED_HARNESS_DEFECT_REEVAL_ONLY_IF_PRE_REGISTERED_IN_FUTURE_CAMPAIGN",
     "NIFTY_TUESDAY_0DTE_OHLCV_STRUCTURE_V1": "QUARANTINED_HARNESS_DEFECT_REEVAL_DEFERRED",
     "OPTION_IMPLIED_VS_REALIZED": "CLOSED_NO_DEFENDABLE_PHENOMENON"
   },
-  "purpose": "Permanent anti-drift research authority for bounded TradeBot strategy discovery campaigns.",
+  "purpose": "Permanent anti-drift research authority: freeze the scientific process, not a fixed strategy catalog.",
   "safety": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
@@ -84,11 +111,12 @@
   "status": "DRAFT_GOVERNANCE_PROPOSAL",
   "stop_rules": {
     "continue_after_single_family_failure": true,
-    "exhaustion": "ALL_EIGHT_FAMILIES_EXECUTED_BLOCKED_RETIRED_OR_CONFIRMED",
+    "exhaustion": "FROZEN_CAMPAIGN_CATALOG_EXHAUSTED",
     "global_blocker": [
       "COMMON_KERNEL_CANNOT_BE_CERTIFIED",
       "AUTHORITATIVE_SHARED_DATA_CORRUPTED_OR_UNUSABLE",
       "PROTECTED_EVIDENCE_IRREPARABLY_CONTAMINATED",
+      "OUTCOME_BLIND_DISCOVERY_BOUNDARY_CANNOT_BE_PROVEN",
       "CONTINUATION_REQUIRES_FABRICATION_OR_UNSAFE_MUTATION_OR_ORDER_AUTHORITY"
     ],
     "stop_after_catalog_exhaustion_even_if_target_not_reached": true,
@@ -104,7 +132,10 @@
       "INCOMPARABLE_INCREMENTAL_LIFT_METRICS",
       "HOLDOUT_READ_BEFORE_FREEZE",
       "OUTCOME_COLUMNS_IN_FEATURES",
-      "BASE_SHA_MASQUERADING_AS_EXECUTED_CODE_SHA"
+      "BASE_SHA_MASQUERADING_AS_EXECUTED_CODE_SHA",
+      "MECHANISM_DISCOVERY_AFTER_OUTCOME_ACCESS",
+      "CATALOG_MUTATION_AFTER_FREEZE",
+      "SEARCH_PRESSURE_RESET_BETWEEN_CAMPAIGNS"
     ],
     "literature_principles": [
       "KAUFMAN_ROBUSTNESS_AND_PARAMETER_PLATEAUS",
@@ -119,12 +150,15 @@
       "FWER_FDR_SEARCH_ACCOUNTING"
     ],
     "required_gates": [
+      "OUTCOME_BLIND_MECHANISM_DISCOVERY",
+      "CATALOG_PRE_REGISTRATION_AND_HASH",
       "TIMESTAMP_SEMANTICS",
       "CAUSAL_FEATURES",
       "CHRONOLOGICAL_PARTITION",
       "PROTECTED_CONFIRMATION",
       "BASELINE_VS_CANDIDATE_SAME_METRIC",
       "MULTIPLICITY",
+      "GLOBAL_SEARCH_ACCOUNTING",
       "EFFECT_SIZE",
       "CHRONOLOGICAL_STABILITY",
       "SESSION_AND_FOLD_CONCENTRATION",
