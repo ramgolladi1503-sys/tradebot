@@ -95,6 +95,19 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _selection_authority_primitives() -> list[dict[str, str]]:
+    return [
+        {
+            "stage": s.stage_name,
+            "owner_module": s.owner_module,
+            "callable_name": s.callable_name,
+            "authority": s.authority.value if hasattr(s.authority, "value") else str(s.authority),
+        }
+        for s in build_runtime_authority_map()
+        if s.authority == AuthorityKind.CANDIDATE_SELECTION
+    ]
+
+
 def verify_pr905_codebase(repo_root: Path) -> tuple[bool, list[str]]:
     errors: list[str] = []
 
@@ -127,15 +140,20 @@ def verify_pr905_codebase(repo_root: Path) -> tuple[bool, list[str]]:
     if 'parent_span_id=upstream_span_id' not in consumer:
         errors.append("CODE:TRADEBUILDER_PARENT_NOT_BOUND_TO_EMITTED_SPAN")
 
-    if "ltp=spot_px" not in consumer:
-        errors.append("CODE:TRADEBUILDER_NOT_USING_MARKET_SNAPSHOT_PRICE")
     builder_region_match = re.search(
-        r"# Determine symbols/candidates to evaluate for TradeBuilder(.*?)eligibility_rows =",
+        r"# Invoke TradeBuilder in the canonical observer runtime\.(.*?)\n\s*eligibility_rows =",
         consumer,
         re.DOTALL,
     )
-    builder_region = builder_region_match.group(1) if builder_region_match else consumer
-    if re.search(r"spot_px\s*=\s*float\([^)]*(?:entry|valid_candidates.*ltp)", builder_region):
+    if not builder_region_match:
+        errors.append("CODE:TRADEBUILDER_CAUSAL_REGION_NOT_IDENTIFIABLE")
+        builder_region = ""
+    else:
+        builder_region = builder_region_match.group(1)
+
+    if "ltp=spot_px" not in builder_region:
+        errors.append("CODE:TRADEBUILDER_NOT_USING_MARKET_SNAPSHOT_PRICE")
+    if re.search(r"spot_px\s*=\s*float\([^\n]*(?:entry|valid_candidates)", builder_region):
         errors.append("CODE:CANDIDATE_PRICE_USED_AS_MARKET_TRUTH")
     if "ranked_candidates" in builder_region or re.search(r"for\s+\w+\s+in\s+ranked\b", builder_region):
         errors.append("CODE:UI_RANKING_USED_CAUSALLY")
@@ -156,26 +174,39 @@ def verify_pr905_codebase(repo_root: Path) -> tuple[bool, list[str]]:
         re.DOTALL,
     ):
         errors.append("CODE:TIMESTAMP_PARSE_FAILURE_SWALLOWED")
-    if "EVENT_TIMESTAMP_MISSING" not in builder_region and "EVENT_TIMESTAMP_INVALID" not in builder_region:
+    if "EVENT_TIMESTAMP_MISSING" not in builder_region:
         errors.append("CODE:MISSING_TIMESTAMP_NOT_EXPLICITLY_BLOCKED")
+    if "EVENT_TIMESTAMP_INVALID" not in builder_region:
+        errors.append("CODE:INVALID_TIMESTAMP_NOT_EXPLICITLY_BLOCKED")
+    if "CAUSAL_DATA_CUTOFF_INVALID" not in builder_region:
+        errors.append("CODE:INVALID_CAUSAL_CUTOFF_NOT_EXPLICITLY_BLOCKED")
+    if 'quote_truth.get("last_tick_ts")' not in builder_region:
+        errors.append("CODE:CANONICAL_QUOTE_TIMESTAMP_NOT_USED")
+    if 'market_snapshot.get("market_open")' not in builder_region:
+        errors.append("CODE:MARKET_OPEN_NOT_SOURCED_FROM_MARKET_SNAPSHOT")
+    if '"quote_truth": dict(quote_truth)' not in builder_region:
+        errors.append("CODE:QUOTE_TRUTH_NOT_PROPAGATED_TO_TRADEBUILDER")
 
     if 'trade["read_only"] = True' in consumer or 'market_data["read_only"] = True' in consumer:
         errors.append("CODE:POST_HOC_READ_ONLY_REWRITE_PRESENT")
     if "ExecutionRouter" in consumer or "place_order(" in consumer:
         errors.append("CODE:EXECUTION_PATH_PRESENT_IN_OBSERVER")
-    if re.search(
-        r'result\["consumers"\]\["trade_builder"\].*?isinstance\s*\(\s*ranked_pipeline',
+
+    tb_state_match = re.search(
+        r'result\["consumers"\]\["trade_builder"\]\s*=\s*_state\((.*?)\n\s*\)\n\n\s*eligibility_rows',
         consumer,
         re.DOTALL,
-    ):
+    )
+    if not tb_state_match:
+        errors.append("CODE:TRADEBUILDER_CONSUMER_STATE_NOT_IDENTIFIABLE")
+    elif "ranked_pipeline" in tb_state_match.group(1):
         errors.append("CODE:TRADEBUILDER_TAUTOLOGICAL_PASS_PRESENT")
 
     hook = (repo_root / "core" / "trade_truth" / "truth_feed_runtime_hook.py").read_text(encoding="utf-8")
     if not re.search(r"class CheckpointSpan:.*?\n\s+span_id:\s*str", hook, re.DOTALL):
         errors.append("CODE:CHECKPOINT_SPAN_ID_MISSING")
 
-    stages = build_runtime_authority_map()
-    selection = [s for s in stages if s.authority == AuthorityKind.CANDIDATE_SELECTION]
+    selection = [s for s in build_runtime_authority_map() if s.authority == AuthorityKind.CANDIDATE_SELECTION]
     if len(selection) != 1:
         errors.append(f"CODE:CANDIDATE_SELECTION_AUTHORITY_COUNT:{len(selection)}")
     elif (
@@ -222,6 +253,7 @@ def verify_pr905_evidence(evidence_root: Path, repo_root: Path = REPO_ROOT) -> t
     lineage_art = _load_json(evidence_root / "TRACE_LINEAGE.json")
     broker = _load_json(evidence_root / "BROKER_WRITE_AUDIT.json")
     authority_art = _load_json(evidence_root / "CANDIDATE_SELECTION_AUTHORITY_AUDIT.json")
+    determinism_art = _load_json(evidence_root / "DETERMINISM_REPORT.json")
     future_art = _load_json(evidence_root / "FUTURE_LEAK_AUDIT.json")
     ledger = _load_json(evidence_root / "CANONICAL_RUNTIME_CALL_LEDGER.json")
 
@@ -233,6 +265,7 @@ def verify_pr905_evidence(evidence_root: Path, repo_root: Path = REPO_ROOT) -> t
         ("lineage", lineage_art),
         ("broker", broker),
         ("authority", authority_art),
+        ("determinism", determinism_art),
         ("future", future_art),
         ("ledger", ledger),
     ]:
@@ -245,8 +278,11 @@ def verify_pr905_evidence(evidence_root: Path, repo_root: Path = REPO_ROOT) -> t
         errors.append("EVIDENCE:LIVE_VERIFIED_MUST_BE_FALSE")
     if ledger.get("full_20_stage_runtime_observation") != "NOT_CLAIMED":
         errors.append("EVIDENCE:FULL_20_STAGE_CLAIM_NOT_ALLOWED")
+    if ledger.get("entrypoint") != "core.canonical_cycle_coordinator.CanonicalCycleCoordinator.run":
+        errors.append("EVIDENCE:CANONICAL_COORDINATOR_ENTRYPOINT_NOT_PROVEN")
 
     run1_cycle = str(captured.get("run1_cycle_id") or "")
+    run2_cycle = str(captured.get("run2_cycle_id") or "")
     session_id = str(captured.get("session_id") or "")
     cutoff = captured.get("causal_data_cutoff")
     calls = list(captured.get("calls") or [])
@@ -307,6 +343,9 @@ def verify_pr905_evidence(evidence_root: Path, repo_root: Path = REPO_ROOT) -> t
                         errors.append(f"EVIDENCE:NONCANONICAL_MARKET_PRICE:{item.get('ltp')}")
                 except (TypeError, ValueError):
                     errors.append("EVIDENCE:CAPTURED_LTP_INVALID")
+                feed_truth = item.get("feed_truth")
+                if not isinstance(feed_truth, dict) or not isinstance(feed_truth.get("quote_truth"), dict):
+                    errors.append("EVIDENCE:CAPTURED_QUOTE_TRUTH_MISSING")
 
             tb_state = dict(captured.get("run1_consumer_tradebuilder_state") or {})
             trades = [c.get("trade") for c in run1_calls if c.get("trade") is not None]
@@ -332,6 +371,14 @@ def verify_pr905_evidence(evidence_root: Path, repo_root: Path = REPO_ROOT) -> t
                 errors.append("EVIDENCE:OUTPUT_ARTIFACT_TRADES_NOT_EXACT_CAPTURE")
             if output_art.get("captured_traces") != traces:
                 errors.append("EVIDENCE:OUTPUT_ARTIFACT_TRACES_NOT_EXACT_CAPTURE")
+            if output_art.get("captured_reject_reasons") != reject_reasons:
+                errors.append("EVIDENCE:OUTPUT_ARTIFACT_REJECT_REASONS_NOT_EXACT_CAPTURE")
+
+    run2_tb_spans = [s for s in pulse2 if s.get("stage_name") == "TRADE_BUILDER"]
+    if len(run2_tb_spans) != 1:
+        errors.append(f"EVIDENCE:RUN2_TRADEBUILDER_SPAN_COUNT:{len(run2_tb_spans)}")
+    elif run2_tb_spans[0].get("trace_id") != run2_cycle:
+        errors.append("EVIDENCE:RUN2_TRACE_ID_NOT_CORRELATED")
 
     expected_ledger_stages = [
         {
@@ -386,22 +433,32 @@ def verify_pr905_evidence(evidence_root: Path, repo_root: Path = REPO_ROOT) -> t
     if broker.get("orders_placed") != placed or broker.get("orders_cancelled") != cancelled or broker.get("orders_modified") != modified:
         errors.append("EVIDENCE:ORDER_COUNTERS_NOT_DERIVED_FROM_CALL_COUNTS")
 
-    selection = [s for s in build_runtime_authority_map() if s.authority == AuthorityKind.CANDIDATE_SELECTION]
-    report["derived"]["candidate_selection_authority_count"] = len(selection)
-    if len(selection) != 1:
-        errors.append(f"EVIDENCE:CANDIDATE_SELECTION_AUTHORITY_COUNT:{len(selection)}")
-    artifact_authorities = list(authority_art.get("authorities") or [])
-    if len(artifact_authorities) != len(selection):
-        errors.append("EVIDENCE:AUTHORITY_ARTIFACT_COUNT_MISMATCH")
+    selection_primitives = _selection_authority_primitives()
+    report["derived"]["candidate_selection_authority_count"] = len(selection_primitives)
+    if len(selection_primitives) != 1:
+        errors.append(f"EVIDENCE:CANDIDATE_SELECTION_AUTHORITY_COUNT:{len(selection_primitives)}")
+    if authority_art.get("authorities") != selection_primitives:
+        errors.append("EVIDENCE:AUTHORITY_ARTIFACT_NOT_DERIVED_FROM_RUNTIME_CONTRACT")
 
     if run1_calls:
         frozen_input = copy.deepcopy(run1_calls[0].get("input"))
         tb_a = TradeBuilder()
-        ta, tra = tb_a.build_with_trace(copy.deepcopy(frozen_input), quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+        trade_a, trace_a = tb_a.build_with_trace(
+            copy.deepcopy(frozen_input), quick_mode=False, allow_fallbacks=False, allow_baseline=False
+        )
         tb_b = TradeBuilder()
-        tb, trb = tb_b.build_with_trace(copy.deepcopy(frozen_input), quick_mode=False, allow_fallbacks=False, allow_baseline=False)
-        if _normalize_trade(ta) != _normalize_trade(tb) or _normalize_trace(tra) != _normalize_trace(trb):
+        trade_b, trace_b = tb_b.build_with_trace(
+            copy.deepcopy(frozen_input), quick_mode=False, allow_fallbacks=False, allow_baseline=False
+        )
+        independent_deterministic = (
+            _normalize_trade(trade_a) == _normalize_trade(trade_b)
+            and _normalize_trace(trace_a) == _normalize_trace(trace_b)
+        )
+        report["derived"]["deterministic_replay"] = independent_deterministic
+        if not independent_deterministic:
             errors.append("EVIDENCE:INDEPENDENT_DETERMINISM_REPLAY_FAILED")
+        if determinism_art.get("run1_input") != frozen_input:
+            errors.append("EVIDENCE:DETERMINISM_ARTIFACT_NOT_BOUND_TO_CAPTURED_INPUT")
 
     report["status"] = "PASS" if not errors else "FAIL"
     return not errors, errors, report
