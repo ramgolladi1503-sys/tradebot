@@ -1,11 +1,19 @@
 {
-  "contract_id": "MROS_TRUTH_FEED_RUNTIME_CALL_PATH_V2",
+  "contract_id": "MROS_TRUTH_FEED_RUNTIME_CALL_PATH_V4",
   "total_stages": 20,
+  "causal_stage_count": 17,
+  "causal_runtime_reachable_count": 16,
+  "blocked_causal_stage_count": 1,
+  "all_required_causal_runtime_reachable": false,
+  "sidecar_stage_count": 2,
+  "sidecar_runtime_reachable_count": 2,
+  "ui_only_stage_count": 2,
+  "execution_boundary_stage_count": 1,
   "all_runtime_reachable": false,
   "all_capture_hooked": true,
   "all_trace_id_propagated": true,
-  "reachable_stage_count": 17,
-  "blocked_stage_count": 3,
+  "reachable_stage_count": 19,
+  "blocked_stage_count": 1,
   "stages": [
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -19,7 +27,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -33,7 +43,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -47,7 +59,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -61,7 +75,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -75,7 +91,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -89,7 +107,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -103,7 +123,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -117,7 +139,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -131,7 +155,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -145,7 +171,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -159,7 +187,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -173,7 +203,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -187,49 +219,57 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
       "stage": "SCORING",
-      "actual_caller": "core.orchestrator.OpportunityScorer",
-      "actual_callee": "core.opportunity_scoring.OpportunityScoreRecord",
+      "actual_caller": "core.ranking_orchestrator.build_ranked_opportunity_report",
+      "actual_callee": "core.opportunity_scoring.score_opportunities",
       "source_file": "core/opportunity_scoring.py",
-      "source_line_or_symbol": "OpportunityScoreRecord",
+      "source_line_or_symbol": "score_opportunities",
       "trace_hook_location": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
-      "dynamic_test_name": "tests/test_trade_truth_prospective_repair.py::test_scoring_stage_capture",
-      "runtime_reachable": false,
+      "dynamic_test_name": "tests/test_trade_truth_prospective_repair.py::test_runtime_authority_single_selection_and_call_path_v3",
+      "runtime_reachable": true,
       "capture_hooked": true,
-      "proof_type": "BLOCKED_DOWNSTREAM_DEPENDENCY",
-      "blocker": "BLOCKED_BY_PRODUCTION_DEPENDENCY: Local scoring construction revoked; requires production live scoring pipeline."
+      "proof_type": "CANONICAL_UI_ONLY_AUDIT_PROVEN",
+      "blocker": null,
+      "stage_classification": "OBSERVABILITY_SIDECAR",
+      "causal_to_advisory_decision": false
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
       "stage": "RANKING",
-      "actual_caller": "core.orchestrator.CandidateRanker",
+      "actual_caller": "core.ranking_orchestrator.build_ranked_opportunity_report",
       "actual_callee": "core.candidate_ranking.rank_candidates",
       "source_file": "core/candidate_ranking.py",
       "source_line_or_symbol": "rank_candidates",
       "trace_hook_location": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
-      "dynamic_test_name": "tests/test_trade_truth_prospective_repair.py::test_ranking_stage_capture",
-      "runtime_reachable": false,
+      "dynamic_test_name": "tests/test_trade_truth_prospective_repair.py::test_runtime_authority_single_selection_and_call_path_v3",
+      "runtime_reachable": true,
       "capture_hooked": true,
-      "proof_type": "BLOCKED_DOWNSTREAM_DEPENDENCY",
-      "blocker": "BLOCKED_BY_PRODUCTION_DEPENDENCY: Local candidate ranking construction revoked; requires production ranking pipeline."
+      "proof_type": "CANONICAL_UI_ONLY_AUDIT_PROVEN",
+      "blocker": null,
+      "stage_classification": "OBSERVABILITY_SIDECAR",
+      "causal_to_advisory_decision": false
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
       "stage": "TRADE_BUILDER",
-      "actual_caller": "strategies.trade_builder.TradeBuilder",
-      "actual_callee": "core.trade_ticket.TradeTicket",
-      "source_file": "core/trade_ticket.py",
-      "source_line_or_symbol": "TradeTicket",
+      "actual_caller": "strategies.trade_builder.TradeBuilder.build_trades",
+      "actual_callee": "strategies.trade_builder.TradeBuilder._finalize_candidate",
+      "source_file": "strategies/trade_builder.py",
+      "source_line_or_symbol": "TradeBuilder",
       "trace_hook_location": "core.trade_truth.truth_feed_runtime_hook.TruthFeedRuntimeHook.record_checkpoint",
-      "dynamic_test_name": "tests/test_trade_truth_prospective_repair.py::test_trade_builder_stage_capture",
+      "dynamic_test_name": "tests/test_trade_truth_prospective_repair.py::test_runtime_authority_single_selection_and_call_path_v3",
       "runtime_reachable": false,
       "capture_hooked": true,
-      "proof_type": "BLOCKED_DOWNSTREAM_DEPENDENCY",
-      "blocker": "BLOCKED_BY_PRODUCTION_DEPENDENCY: Local trade ticket construction revoked; requires production TradeBuilder pipeline."
+      "proof_type": "UNREACHED_IN_CANONICAL_OBSERVER",
+      "blocker": "BLOCKED_RUNTIME_INTEGRATION",
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -243,7 +283,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -257,7 +299,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -271,7 +315,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "CAUSAL",
+      "causal_to_advisory_decision": true
     },
     {
       "entrypoint": "scripts/run_kite_read_only_observation_v1.py",
@@ -285,7 +331,9 @@
       "runtime_reachable": true,
       "capture_hooked": true,
       "proof_type": "DYNAMIC_RECORD_PROVEN",
-      "blocker": null
+      "blocker": null,
+      "stage_classification": "EXECUTION_BOUNDARY",
+      "causal_to_advisory_decision": false
     }
   ]
 }

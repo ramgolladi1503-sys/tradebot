@@ -1,4 +1,5 @@
-dashboard/ui/table_model.py
-docs/agent_reviews/DASHBOARD_EXECUTION_TRUTH_VISIBILITY_V1.md
-docs/code_excellence/reports/changed_paths.txt
-tests/test_dashboard_execution_truth_visibility.py
+MROS_TRUTH_FEED_RUNTIME_CALL_PATH.json
+core/mros_daily_governor.py
+docs/agent_reviews/pr904_mros_truth_feed_runtime_call_path_repair.md
+tests/test_trade_truth_prospective_repair.py
+scripts/verify_mros_runtime_call_path.py
