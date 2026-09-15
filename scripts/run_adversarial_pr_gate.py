@@ -48,7 +48,7 @@ SKIP_PATTERNS = (
 )
 TRIVIAL_ASSERT_PATTERNS = (
     r"^\s*assert\s+(True|1|1\.0)\s*(#.*)?$",
-    r"^\s*assert\s+(['\"]).*\2\s*(#.*)?$",
+    r"^\s*assert\s+(['\"]).*\1\s*(#.*)?$",
 )
 BROAD_RAISES_PATTERN = re.compile(r"pytest\.raises\(\s*(Exception|BaseException)\b")
 PYTEST_SUPPRESSION_PATTERNS = (
