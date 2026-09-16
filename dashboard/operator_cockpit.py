@@ -5,8 +5,8 @@ import pandas as pd
 import streamlit as st
 
 from config import config as cfg
-from dashboard.loaders import load_events, load_feed_state, load_health_gate_report, load_reconciliation, load_risk_state
-from dashboard.metrics_runtime import build_dashboard_metrics
+from dashboard.loaders import load_feed_state, load_health_gate_report, load_risk_state
+from dashboard.metrics_runtime import load_runtime_metrics
 from dashboard.operator_truth import load_index_series, load_market_state, load_strategy_monitor, load_top_opportunities, pipeline_pulse
 from dashboard.upstox_option_chain_reader import load_upstox_option_chain_snapshot
 
@@ -71,7 +71,7 @@ def main() -> None:
     health = load_health_gate_report(desk_id)
     risk = load_risk_state(desk_id)
     upstox = load_upstox_option_chain_snapshot()
-    metrics = build_dashboard_metrics(desk_id=desk_id)
+    metrics = load_runtime_metrics(desk_id=desk_id)
     market_state = load_market_state()
     series = load_index_series(desk_id=desk_id)
 
@@ -79,7 +79,6 @@ def main() -> None:
     top_l.title("TradeBot")
     top_l.caption("Operator Cockpit · truth surfaces only")
     top_r.caption(datetime.now().astimezone().strftime("%H:%M:%S %Z"))
-
     statuses = [("KITE", _status(feed)), ("SYSTEM", _status(health)), ("RISK", _status(risk)), ("UPSTOX", upstox.status.upper())]
     st.caption("   ·   ".join(f"{_pill(s)} {n} {s}" for n, s in statuses))
 
@@ -108,10 +107,7 @@ def main() -> None:
     with left:
         st.subheader("Candidate Funnel")
         funnel = summary.get("latest_pipeline_funnel") or {}
-        funnel_rows = [
-            {"stage": "Candidates", "count": summary.get("candidate_pool_latest", 0)},
-            {"stage": "Ranked", "count": summary.get("ranked_candidate_count", 0)},
-        ]
+        funnel_rows = [{"stage": "Candidates", "count": summary.get("candidate_pool_latest", 0)}, {"stage": "Ranked", "count": summary.get("ranked_candidate_count", 0)}]
         for key in ("generated", "rejected", "eligible", "scored", "advisory"):
             if key in funnel:
                 funnel_rows.append({"stage": key.title(), "count": funnel.get(key)})
@@ -160,7 +156,6 @@ def main() -> None:
 
     with st.expander("Upstox Option Chain", expanded=False):
         _render_upstox_chain(upstox)
-
     with st.expander("Engineering Diagnostics", expanded=False):
         st.caption("Legacy engineering surfaces are intentionally demoted from the operator view.")
         st.json({"metric_notes": metrics.get("notes") or [], "metric_sources": metrics.get("source_status") or {}, "market_state_source": market_state.get("_path")})
