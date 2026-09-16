@@ -272,7 +272,7 @@ class GovernedMorningOrchestrator:
             from scripts.kite_autologin_localhost import _resolve_api_key
             api_key = _resolve_api_key()
             return kite_client.login_url(api_key=api_key)
-        except Exception:
+        except (Exception, SystemExit):
             return None
 
     def step_wait_human_auth(self, *, poll_interval: float = 0.5, timeout_override: float | None = None) -> bool:
