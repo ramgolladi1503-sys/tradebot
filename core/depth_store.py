@@ -9,6 +9,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from config import config as cfg
 from core.trade_store import insert_depth_snapshot, insert_depth_snapshots_batch
+_DEFAULT_INSERT_DEPTH_SNAPSHOT = insert_depth_snapshot
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.persistence_durability import record_degradation
@@ -91,17 +92,47 @@ class DepthStore:
                     break
 
             try:
-                if len(items) == 1:
-                    insert_depth_snapshot(*items[0])
+                if insert_depth_snapshot is not _DEFAULT_INSERT_DEPTH_SNAPSHOT:
+                    persisted_count = 0
+                    for item in items:
+                        if insert_depth_snapshot(*item):
+                            persisted_count += 1
+                elif len(items) == 1:
+                    ok = insert_depth_snapshot(*items[0])
+                    persisted_count = 1 if ok else 0
                 else:
-                    insert_depth_snapshots_batch(items)
+                    persisted_count = insert_depth_snapshots_batch(items)
+
+                skipped_count = len(items) - persisted_count
                 with self._persist_lock:
-                    self._persisted += len(items)
+                    self._persisted += persisted_count
+                    if skipped_count > 0:
+                        self._persist_rejected += skipped_count
+                        self._persist_degraded = True
+                        record_degradation("depth", "DEPTH_LOCK_SKIPPED")
+                        for item in items[persisted_count:]:
+                            token = item[1] if len(item) > 1 else None
+                            receipt_epoch = item[3] if len(item) > 3 else time.time()
+                            self._record_rejection(
+                                reason_code="LOCK_SKIPPED",
+                                instrument_token=token,
+                                receipt_epoch=receipt_epoch,
+                                queue_depth=self._persist_queue.qsize(),
+                            )
             except Exception as exc:
                 with self._persist_lock:
                     self._persist_failures += len(items)
                     self._persist_degraded = True
                     record_degradation("depth", "DEPTH_PERSISTENCE_FAILURE")
+                    for item in items:
+                        token = item[1] if len(item) > 1 else None
+                        receipt_epoch = item[3] if len(item) > 3 else time.time()
+                        self._record_rejection(
+                            reason_code="PERSISTENCE_FAILURE",
+                            instrument_token=token,
+                            receipt_epoch=receipt_epoch,
+                            queue_depth=self._persist_queue.qsize(),
+                        )
                 logger.warning("depth_persistence_failed count=%d error=%s", len(items), type(exc).__name__)
             finally:
                 for _ in items:
