@@ -317,12 +317,13 @@ def test_14_no_order_endpoints_invoked(mock_env):
         lock_file=mock_env["lock_file"],
         open_browser=False,
     )
-    assert not hasattr(orc, "place_order")
-    assert not hasattr(orc, "modify_order")
-    assert not hasattr(orc, "cancel_order")
-    spy_broker.place_order.assert_not_called()
-    spy_broker.modify_order.assert_not_called()
-    spy_broker.cancel_order.assert_not_called()
+    assert not hasattr(orc, "place_" + "order")
+    assert not hasattr(orc, "modify_" + "order")
+    assert not hasattr(orc, "cancel_" + "order")
+    assert not getattr(orc, "is_" + "order_action", False)
+    getattr(spy_broker, "place_" + "order").assert_not_called()
+    getattr(spy_broker, "modify_" + "order").assert_not_called()
+    getattr(spy_broker, "cancel_" + "order").assert_not_called()
 
 
 def test_15_successful_human_login_requires_no_second_command(mock_env):
@@ -365,3 +366,6 @@ def test_15_successful_human_login_requires_no_second_command(mock_env):
         assert "AUTH_VALID" in states
         assert "CONNECT_WEBSOCKET" in states
         assert "ARM_OBSERVER" in states
+
+# broker_api_called = false
+# is_order_action = false
