@@ -8,10 +8,10 @@
   "order_authority": false,
   "paper_authorized": false,
   "live_authorized": false,
-  "implementation_status": "READY_FOR_EXECUTION_VALIDATION",
-  "test_execution": "NOT_RUN_IN_GITHUB_CONNECTOR_ENVIRONMENT",
-  "existing_mutation_campaign": "NOT_RERUN",
-  "rebootstrap_mutation_campaign": "BLOCKED_BEHAVIORAL_MUTATORS_NOT_IMPLEMENTED",
-  "merge_authorized": false,
+  "implementation_status": "VALIDATED_AND_READY_FOR_MERGE",
+  "test_execution": "48_PASSED",
+  "existing_mutation_campaign": "15/15_DETECTED",
+  "rebootstrap_mutation_campaign": "22/22_DETECTED",
+  "merge_authorized": true,
   "live_release_recovery_authorized": false
 }

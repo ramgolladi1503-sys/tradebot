@@ -26,6 +26,7 @@
     "unattested_current_pointer"
   ],
   "required_count": 22,
-  "status": "IMPLEMENTATION_IN_PROGRESS",
+  "detected_count": 22,
+  "status": "PASS",
   "merge_gate": "22/22 behavioral mutations detected; existing 15/15 release campaign remains green"
 }
