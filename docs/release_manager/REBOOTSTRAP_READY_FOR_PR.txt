@@ -1,0 +1,2 @@
+READY_FOR_DRAFT_PR=true
+MERGE_READY=false
