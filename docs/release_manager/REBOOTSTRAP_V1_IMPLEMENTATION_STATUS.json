@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "base_sha": "d5398f7ef19ca9b7f0cbbc07d8550e397f2123ef",
+  "branch": "fix/mros-governed-release-rebootstrap-v1",
+  "release_store_mutated": false,
+  "observer_started": false,
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "implementation_status": "VALIDATED_AND_READY_FOR_MERGE",
+  "test_execution": "48_PASSED",
+  "existing_mutation_campaign": "15/15_DETECTED",
+  "rebootstrap_mutation_campaign": "22/22_DETECTED",
+  "merge_authorized": true,
+  "live_release_recovery_authorized": false
+}
