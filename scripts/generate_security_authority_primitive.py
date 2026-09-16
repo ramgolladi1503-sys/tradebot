@@ -20,21 +20,13 @@ class BrokerSpy:
     def __init__(self):
         self.broker_write_calls = 0
         self.order_actions = 0
+        for prefix in ("place", "modify", "cancel", "exit"):
+            setattr(self, f"{prefix}_order", self._fail_on_call)
 
-    def place_order(self, *args, **kwargs):
+    def _fail_on_call(self, *args, **kwargs):
         self.order_actions += 1
         self.broker_write_calls += 1
-        raise RuntimeError("FORBIDDEN: place_order called in read-only security authority harness")
-
-    def modify_order(self, *args, **kwargs):
-        self.order_actions += 1
-        self.broker_write_calls += 1
-        raise RuntimeError("FORBIDDEN: modify_order called in read-only security authority harness")
-
-    def cancel_order(self, *args, **kwargs):
-        self.order_actions += 1
-        self.broker_write_calls += 1
-        raise RuntimeError("FORBIDDEN: cancel_order called in read-only security authority harness")
+        raise RuntimeError("FORBIDDEN: order action called in read-only security authority harness")
 
 
 def evaluate_security_authority(repo: Path, candidate: str) -> tuple[bool, dict[str, Any], str]:
@@ -60,10 +52,10 @@ def evaluate_security_authority(repo: Path, candidate: str) -> tuple[bool, dict[
 
     observer_src = observer_file.read_text(encoding="utf-8")
     # Verify observer never imports ExecutionRouter or live order execution modules
+    restricted_markers = tuple(f"{p}_order" for p in ("place", "modify", "cancel", "exit"))
     observer_isolated = (
         "ExecutionRouter" not in observer_src
-        and "place_order" not in observer_src
-        and "cancel_order" not in observer_src
+        and not any(marker in observer_src for marker in restricted_markers)
     )
     logs.append(f"Observer execution isolation verified (no ExecutionRouter / broker write calls): {observer_isolated}")
 
@@ -128,6 +120,8 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    stdout_file = args.output.with_suffix(".stdout")
+    stdout_file.write_text(raw_stdout, encoding="utf-8")
     print(f"Wrote genuine security_authority primitive to {args.output}")
     return 0
 

@@ -22,10 +22,12 @@ Production release state remains governed. Changes are strictly confined to rele
 The review verifies that:
 1. Gate semantic names in core/release_change_impact.py are bound to immutable generator identities, execution commands, and factual observation schemas in core/release_gate_registry.py.
 2. Generic exit-code-zero placeholder primitives ({"command": "governed:<gate>", "exit_code": 0}) are explicitly detected and rejected fail-closed.
-3. option_mirror generator tests deterministic offline option-mirror readiness transitions and non-fatal degradation to MorningState.LIVE_DEGRADED on stale/unavailable mirror.
-4. evidence_integrity generator verifies AQ-11..AQ-20 integrity: manifest schema, path safety (zero path traversal, zero symlink escape), artifact existence, sha256 matching, and zero primitive reuse across gates.
-5. security_authority generator verifies singular selection authority, singular execution authority, observer execution isolation, and measures zero broker writes via dynamic test spies (measurement_method="spy_counter_verified").
-6. Symlink check in core/release_certification.py runs before path.resolve() to prevent symlink bypass.
+3. Boundary 1 Trust Closure: Each primitive generator writes a companion `.stdout` execution artifact alongside each JSON primitive. `core/release_certification.py` independently verifies the existence and SHA256 of the raw stdout execution artifact, failing closed with `raw_execution_output_unverified` if missing or tampered.
+4. Boundary 2 Downgrade Closure: Legacy `release_gate_registry_v1` evaluator is strictly quarantined in `core/release_certification.py` with `v1_evaluator_version_quarantined`. All release certifications require `release_gate_registry_v2`.
+5. option_mirror generator tests deterministic offline option-mirror readiness transitions and non-fatal degradation to MorningState.LIVE_DEGRADED on stale/unavailable mirror.
+6. evidence_integrity generator verifies AQ-11..AQ-20 integrity: manifest schema, path safety (zero path traversal, zero symlink escape), artifact existence, sha256 matching, and zero primitive reuse across gates.
+7. security_authority generator verifies singular selection authority, singular execution authority, observer execution isolation, and measures zero broker writes via dynamic test spies (measurement_method="spy_counter_verified").
+8. Symlink check in core/release_certification.py runs before path.resolve() to prevent symlink bypass.
 
 ## Hermes Review
 
@@ -46,22 +48,23 @@ Changes are strictly confined to the release governance, generator registry, and
 - scripts/generate_release_primitives.py
 - scripts/generate_security_authority_primitive.py
 - scripts/release_generator_mutation_campaign.py
+- tests/test_release_certification.py
 - tests/test_release_primitive_generators.py
 - docs/agent_reviews/mros_release_primitive_generators.md
 
 ## QA / Safety Review
 
-Focused test suites verify 34/34 passing tests and 20/20 adversarial mutations detected:
-- tests/test_release_primitive_generators.py (9 passed)
-- tests/test_release_certification.py (6 passed)
+Focused test suites verify 37 passing tests and 22/22 adversarial mutations detected:
+- tests/test_release_primitive_generators.py (10 passed)
+- tests/test_release_certification.py (8 passed)
 - tests/test_release_rebootstrap.py (12 passed)
 - tests/test_release_rebootstrap_attacks.py (5 passed)
 - tests/test_release_rebootstrap_campaign.py (2 passed)
-- scripts/release_generator_mutation_campaign.py (20/20 attacks detected)
+- scripts/release_generator_mutation_campaign.py (22/22 attacks detected)
 
 ## Acceptance Proof
 
-Acceptance requires passing unit tests, whole-tree syntax compilation, 20-attack mutation campaign detection, and zero execution leaks.
+Acceptance requires passing unit tests, whole-tree syntax compilation, 22-attack mutation campaign detection, unified CE gates (Cerberus/Minerva/Evidence 0 blocks), and zero execution leaks.
 
 ## Runtime Proof Required After Merge
 

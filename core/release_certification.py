@@ -75,13 +75,24 @@ def _primitive(root: Path, gate: str, candidate: str, manifest: Mapping[str, obj
     if payload.get("candidate_sha") != candidate or payload.get("source_sha") != candidate:
         raise ReleaseStoreError("gate_primitive_candidate_mismatch")
     version = payload.get("evaluator_version")
-    if payload.get("evaluator") != gate or version not in (EVALUATOR_VERSION, EVALUATOR_VERSION_V2):
+    if version == EVALUATOR_VERSION:
+        raise ReleaseStoreError("v1_evaluator_version_quarantined")
+    if payload.get("evaluator") != gate or version != EVALUATOR_VERSION_V2:
         raise ReleaseStoreError("gate_primitive_evaluator_mismatch")
     observed = payload.get("observed")
     if not isinstance(observed, dict) or "pass" in payload or "result" in payload or "status" in payload:
         raise ReleaseStoreError("gate_primitive_contains_authored_result")
-    if version == EVALUATOR_VERSION_V2 and is_generic_exit_code_zero_placeholder(observed) and gate != "source_identity":
+    if is_generic_exit_code_zero_placeholder(observed) and gate != "source_identity":
         raise ReleaseStoreError("generic_exit_code_zero_placeholder_rejected")
+    stdout_path = path.with_suffix(".stdout")
+    if not stdout_path.exists():
+        raise ReleaseStoreError("raw_execution_output_unverified")
+    expected_stdout_hash = observed.get("raw_stdout_sha256")
+    if not expected_stdout_hash or not isinstance(expected_stdout_hash, str):
+        raise ReleaseStoreError("raw_execution_output_unverified")
+    actual_stdout_hash = hashlib.sha256(stdout_path.read_bytes()).hexdigest()
+    if actual_stdout_hash != expected_stdout_hash:
+        raise ReleaseStoreError("raw_execution_output_unverified")
     captured_at = payload.get("captured_at")
     try:
         captured = datetime.fromisoformat(str(captured_at).replace("Z", "+00:00"))
@@ -96,17 +107,10 @@ def _primitive(root: Path, gate: str, candidate: str, manifest: Mapping[str, obj
 def _predicate(gate: str, payload: Mapping[str, Any], repo: Path, candidate: str) -> bool:
     """Repository-owned evaluation contract. No supplied boolean is consulted."""
     observed = payload["observed"]
-    version = payload.get("evaluator_version", EVALUATOR_VERSION)
+    version = payload.get("evaluator_version")
     if version == EVALUATOR_VERSION_V2:
         return validate_gate_predicate_v2(gate, observed, repo, candidate)
-    if gate == "source_identity":
-        return observed == {"commit_exists": True} and _git(repo, "rev-parse", candidate) == candidate
-    # Each non-identity gate needs a gate-specific immutable command primitive.
-    # A generic artifact cannot satisfy this contract, because both the gate and
-    # command identity must match the repository-owned evaluator registry.
-    command = observed.get("command")
-    exit_code = observed.get("exit_code")
-    return isinstance(command, str) and command == f"governed:{gate}" and exit_code == 0 and len(observed) == 2
+    return False
 
 
 def certify(repo: Path, candidate: str, store: ReleaseStore, graph: DependencyEvidence,

@@ -111,3 +111,34 @@ def test_security_authority_constant_forgery_rejected():
 def test_generic_exit_code_zero_placeholder_detected():
     placeholder = {"command": "governed:persistence", "exit_code": 0}
     assert is_generic_exit_code_zero_placeholder(placeholder) is True
+
+
+def test_generator_writes_companion_stdout(tmp_path):
+    import subprocess
+    candidate = "d6ee1defd23d1f6c2396cb971f1eeee634277872"
+
+    # 1. Option mirror
+    out_opt = tmp_path / "option_mirror.json"
+    subprocess.run(["python3", "scripts/generate_option_mirror_primitive.py", "--candidate", candidate, "--output", str(out_opt)], check=True)
+    assert out_opt.exists()
+    assert out_opt.with_suffix(".stdout").exists()
+    payload = json.loads(out_opt.read_text(encoding="utf-8"))
+    assert hashlib.sha256(out_opt.with_suffix(".stdout").read_bytes()).hexdigest() == payload["observed"]["raw_stdout_sha256"]
+
+    # 2. Security authority
+    out_sec = tmp_path / "security_authority.json"
+    subprocess.run(["python3", "scripts/generate_security_authority_primitive.py", "--candidate", candidate, "--output", str(out_sec)], check=True)
+    assert out_sec.exists()
+    assert out_sec.with_suffix(".stdout").exists()
+    payload = json.loads(out_sec.read_text(encoding="utf-8"))
+    assert hashlib.sha256(out_sec.with_suffix(".stdout").read_bytes()).hexdigest() == payload["observed"]["raw_stdout_sha256"]
+
+    # 3. Evidence integrity
+    manifest = tmp_path / "primitive_manifest.json"
+    manifest.write_text(json.dumps({"option_mirror": "option_mirror.json", "security_authority": "security_authority.json"}), encoding="utf-8")
+    out_evi = tmp_path / "evidence_integrity.json"
+    subprocess.run(["python3", "scripts/generate_evidence_integrity_primitive.py", "--candidate", candidate, "--primitive-root", str(tmp_path), "--output", str(out_evi)], check=True)
+    assert out_evi.exists()
+    assert out_evi.with_suffix(".stdout").exists()
+    payload = json.loads(out_evi.read_text(encoding="utf-8"))
+    assert hashlib.sha256(out_evi.with_suffix(".stdout").read_bytes()).hexdigest() == payload["observed"]["raw_stdout_sha256"]

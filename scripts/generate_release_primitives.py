@@ -293,6 +293,7 @@ def generate_all_primitives(candidate: str, base: str, repo: Path, output_dir: P
         }
         p_path = output_dir / f"{gate}.json"
         p_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        (output_dir / f"{gate}.stdout").write_text(raw_stdout, encoding="utf-8")
         manifest[gate] = f"{gate}.json"
 
     # Now write provisional manifest so evidence_integrity can evaluate all files
@@ -314,6 +315,7 @@ def generate_all_primitives(candidate: str, base: str, repo: Path, output_dir: P
     }
     int_path = output_dir / "evidence_integrity.json"
     int_path.write_text(json.dumps(payload_int, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (output_dir / "evidence_integrity.stdout").write_text(raw_int, encoding="utf-8")
 
     # Re-write manifest with all 18 gates
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

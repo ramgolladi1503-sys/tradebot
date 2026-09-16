@@ -45,14 +45,17 @@ def _setup_context(root: Path):
     manifest = {}
 
     for gate in ["diff_check", "release_verifier", "source_identity", "whole_tree_compile"]:
+        raw_stdout = f"raw_output_for_{gate}\n"
+        stdout_hash = hashlib.sha256(raw_stdout.encode("utf-8")).hexdigest()
+        (primitive_root / f"{gate}.stdout").write_text(raw_stdout, encoding="utf-8")
         if gate == "source_identity":
-            observed = {"commit_exists": True, "head_sha": candidate}
+            observed = {"command": f"git cat-file -e {candidate}^{{commit}}", "exit_code": 0, "commit_exists": True, "head_sha": candidate, "raw_stdout_sha256": stdout_hash}
         elif gate == "diff_check":
-            observed = {"command": "git diff --check", "exit_code": 0, "raw_stdout_sha256": "0" * 64, "whitespace_clean": True}
+            observed = {"command": "git diff --check", "exit_code": 0, "raw_stdout_sha256": stdout_hash, "whitespace_clean": True}
         elif gate == "whole_tree_compile":
-            observed = {"command": "python3 -m compileall", "exit_code": 0, "raw_stdout_sha256": "0" * 64, "compiled_modules_count": 10}
+            observed = {"command": "python3 -m compileall", "exit_code": 0, "raw_stdout_sha256": stdout_hash, "compiled_modules_count": 10}
         elif gate == "release_verifier":
-            observed = {"command": "pytest tests/test_release_certification.py", "exit_code": 0, "raw_stdout_sha256": "0" * 64, "verifier_pass": True}
+            observed = {"command": "pytest tests/test_release_certification.py", "exit_code": 0, "raw_stdout_sha256": stdout_hash, "verifier_pass": True}
 
         payload = {
             "gate": gate,
@@ -143,7 +146,7 @@ def run_campaign() -> dict:
         x["observed"].pop("raw_stdout_sha256", None)
         p.write_text(json.dumps(x))
         res = certify(c[0], c[2], c[3], c[4], c[5], c[6])
-        detected = (res["verdict"] == "BLOCKED" or "diff_check" in res.get("failed_gates", []))
+        detected = (res["verdict"] == "BLOCKED" and ("raw_execution_output_unverified" in res.get("blocker", "") or "placeholder" in res.get("blocker", "")))
         cases.append({"attack": "missing_raw_output", "detected": detected})
 
         # 8. altered_raw_output
@@ -153,7 +156,7 @@ def run_campaign() -> dict:
         x["observed"]["raw_stdout_sha256"] = "invalid_not_hex64"
         p.write_text(json.dumps(x))
         res = certify(c[0], c[2], c[3], c[4], c[5], c[6])
-        detected = (res["verdict"] == "FAIL" and "diff_check" in res.get("failed_gates", []))
+        detected = (res["verdict"] == "BLOCKED" and "raw_execution_output_unverified" in res.get("blocker", ""))
         cases.append({"attack": "altered_raw_output", "detected": detected})
 
         # 9. primitive_hash_changed
@@ -278,9 +281,26 @@ def run_campaign() -> dict:
         detected = not validate_gate_predicate_v2("option_mirror", fake_mirror_obs, Path("."), "0" * 40)
         cases.append({"attack": "option_mirror_fake_ready", "detected": detected})
 
+        # 21. missing_companion_stdout
+        c = _setup_context(root / "a21")
+        (c[5] / "diff_check.stdout").unlink()
+        res = certify(c[0], c[2], c[3], c[4], c[5], c[6])
+        detected = (res["verdict"] == "BLOCKED" and "raw_execution_output_unverified" in res.get("blocker", ""))
+        cases.append({"attack": "missing_companion_stdout", "detected": detected})
+
+        # 22. v1_evaluator_version_downgrade
+        c = _setup_context(root / "a22")
+        p = c[5] / "diff_check.json"
+        x = json.loads(p.read_text())
+        x["evaluator_version"] = "release_gate_registry_v1"
+        p.write_text(json.dumps(x))
+        res = certify(c[0], c[2], c[3], c[4], c[5], c[6])
+        detected = (res["verdict"] == "BLOCKED" and "v1_evaluator_version_quarantined" in res.get("blocker", ""))
+        cases.append({"attack": "v1_evaluator_version_downgrade", "detected": detected})
+
     total = len(cases)
     detected_count = sum(1 for c in cases if c["detected"])
-    all_passed = (detected_count == total == 20)
+    all_passed = (detected_count == total and total >= 20)
 
     return {
         "campaign": "release_generator_adversarial_mutation_campaign",

@@ -158,6 +158,8 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    stdout_file = args.output.with_suffix(".stdout")
+    stdout_file.write_text(raw_stdout, encoding="utf-8")
     print(f"Wrote genuine evidence_integrity primitive to {args.output}")
     return 0
 
