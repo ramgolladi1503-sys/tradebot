@@ -17,6 +17,7 @@ from typing import Any, Mapping
 
 from .certified_release_store import ReleaseStore, ReleaseStoreError
 from .release_change_impact import DependencyEvidence, classify
+from .release_gate_registry import EVALUATOR_VERSION_V2, is_generic_exit_code_zero_placeholder, validate_gate_predicate_v2
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 EVALUATOR_VERSION = "release_gate_registry_v1"
@@ -52,12 +53,15 @@ def _safe_path(root: Path, value: object) -> Path:
     resolved_root, resolved = root.resolve(), path.resolve()
     if resolved_root != resolved and resolved_root not in resolved.parents:
         raise ReleaseStoreError("gate_primitive_path_escapes_root")
-    if resolved.is_symlink() or not resolved.is_file():
+    if path.is_symlink() or resolved.is_symlink() or not resolved.is_file():
         raise ReleaseStoreError("gate_primitive_missing")
     return resolved
 
 
 def _primitive(root: Path, gate: str, candidate: str, manifest: Mapping[str, object], repo: Path) -> dict[str, Any]:
+    raw_paths = list(manifest.values())
+    if raw_paths.count(manifest.get(gate)) > 1:
+        raise ReleaseStoreError("same_primitive_reused_for_multiple_gates")
     path = _safe_path(root, manifest.get(gate))
     raw = path.read_bytes()
     try:
@@ -70,11 +74,25 @@ def _primitive(root: Path, gate: str, candidate: str, manifest: Mapping[str, obj
         raise ReleaseStoreError("gate_primitive_gate_mismatch")
     if payload.get("candidate_sha") != candidate or payload.get("source_sha") != candidate:
         raise ReleaseStoreError("gate_primitive_candidate_mismatch")
-    if payload.get("evaluator") != gate or payload.get("evaluator_version") != EVALUATOR_VERSION:
+    version = payload.get("evaluator_version")
+    if version == EVALUATOR_VERSION:
+        raise ReleaseStoreError("v1_evaluator_version_quarantined")
+    if payload.get("evaluator") != gate or version != EVALUATOR_VERSION_V2:
         raise ReleaseStoreError("gate_primitive_evaluator_mismatch")
     observed = payload.get("observed")
     if not isinstance(observed, dict) or "pass" in payload or "result" in payload or "status" in payload:
         raise ReleaseStoreError("gate_primitive_contains_authored_result")
+    if is_generic_exit_code_zero_placeholder(observed) and gate != "source_identity":
+        raise ReleaseStoreError("generic_exit_code_zero_placeholder_rejected")
+    stdout_path = path.with_suffix(".stdout")
+    if not stdout_path.exists():
+        raise ReleaseStoreError("raw_execution_output_unverified")
+    expected_stdout_hash = observed.get("raw_stdout_sha256")
+    if not expected_stdout_hash or not isinstance(expected_stdout_hash, str):
+        raise ReleaseStoreError("raw_execution_output_unverified")
+    actual_stdout_hash = hashlib.sha256(stdout_path.read_bytes()).hexdigest()
+    if actual_stdout_hash != expected_stdout_hash:
+        raise ReleaseStoreError("raw_execution_output_unverified")
     captured_at = payload.get("captured_at")
     try:
         captured = datetime.fromisoformat(str(captured_at).replace("Z", "+00:00"))
@@ -89,14 +107,10 @@ def _primitive(root: Path, gate: str, candidate: str, manifest: Mapping[str, obj
 def _predicate(gate: str, payload: Mapping[str, Any], repo: Path, candidate: str) -> bool:
     """Repository-owned evaluation contract. No supplied boolean is consulted."""
     observed = payload["observed"]
-    if gate == "source_identity":
-        return observed == {"commit_exists": True} and _git(repo, "rev-parse", candidate) == candidate
-    # Each non-identity gate needs a gate-specific immutable command primitive.
-    # A generic artifact cannot satisfy this contract, because both the gate and
-    # command identity must match the repository-owned evaluator registry.
-    command = observed.get("command")
-    exit_code = observed.get("exit_code")
-    return isinstance(command, str) and command == f"governed:{gate}" and exit_code == 0 and len(observed) == 2
+    version = payload.get("evaluator_version")
+    if version == EVALUATOR_VERSION_V2:
+        return validate_gate_predicate_v2(gate, observed, repo, candidate)
+    return False
 
 
 def certify(repo: Path, candidate: str, store: ReleaseStore, graph: DependencyEvidence,
@@ -128,11 +142,15 @@ def certify(repo: Path, candidate: str, store: ReleaseStore, graph: DependencyEv
         for gate in gates:
             primitive = _primitive(Path(primitive_root), gate, candidate, primitive_manifest, repo)
             passed = _predicate(gate, primitive["payload"], repo, candidate)
-            evaluations.append({"gate": gate, "evaluator": gate, "evaluator_version": EVALUATOR_VERSION,
+            version = primitive["payload"].get("evaluator_version", EVALUATOR_VERSION)
+            evaluations.append({"gate": gate, "evaluator": gate, "evaluator_version": version,
                                 "primitive_path": primitive["path"], "primitive_sha256": primitive["sha256"],
                                 "observed": primitive["payload"]["observed"],
                                 "status": "PASS" if passed else "FAIL", "recomputed_result": "PASS" if passed else "FAIL",
                                 "evaluated_at": datetime.now(timezone.utc).isoformat()})
+        hashes = [entry["primitive_sha256"] for entry in evaluations]
+        if len(hashes) != len(set(hashes)):
+            return {"candidate_sha": candidate, "base_sha": base, "required_gates": gates, "verdict": "BLOCKED", "blocker": "primitive_reused_across_gates"}
         passed = [entry["gate"] for entry in evaluations if entry["recomputed_result"] == "PASS"]
         failed = [entry["gate"] for entry in evaluations if entry["recomputed_result"] != "PASS"]
         result: dict[str, Any] = {"schema_version": 2, "candidate_sha": candidate, "base_sha": base,

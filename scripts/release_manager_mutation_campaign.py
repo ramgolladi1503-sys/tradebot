@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import datetime, timezone
 import subprocess
@@ -13,8 +14,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.certified_release_store import ReleaseStore
-from core.release_certification import EVALUATOR_VERSION, certify, digest
+from core.release_certification import certify, digest
 from core.release_change_impact import DependencyEvidence
+from core.release_gate_registry import EVALUATOR_VERSION_V2
 from scripts.verify_release_manager import verify
 
 
@@ -32,8 +34,24 @@ def _context(root: Path):
     graph_path = root / "graph.json"; graph_path.write_text(json.dumps({"edges": {"x.md": []}, "critical_roots": [], "bounded_roots": [], "complete": True}))
     primitive_root = root / "primitives"; primitive_root.mkdir(); manifest = {}
     for gate in ["diff_check", "release_verifier", "source_identity", "whole_tree_compile"]:
-        observed = {"commit_exists": True} if gate == "source_identity" else {"command": f"governed:{gate}", "exit_code": 0}
-        path = primitive_root / f"{gate}.json"; path.write_text(json.dumps({"gate": gate, "candidate_sha": candidate, "source_sha": candidate, "evaluator": gate, "evaluator_version": EVALUATOR_VERSION, "captured_at": datetime.now(timezone.utc).isoformat(), "observed": observed})); manifest[gate] = path.name
+        raw_stdout = f"raw_output_for_{gate}\n"
+        stdout_hash = hashlib.sha256(raw_stdout.encode("utf-8")).hexdigest()
+        (primitive_root / f"{gate}.stdout").write_text(raw_stdout, encoding="utf-8")
+        if gate == "source_identity":
+            observed = {"command": f"git cat-file -e {candidate}^{{commit}}", "exit_code": 0, "commit_exists": True, "head_sha": candidate, "raw_stdout_sha256": stdout_hash}
+        elif gate == "diff_check":
+            observed = {"command": "git diff --check", "exit_code": 0, "raw_stdout_sha256": stdout_hash, "whitespace_clean": True}
+        elif gate == "whole_tree_compile":
+            observed = {"command": "python3 -m compileall", "exit_code": 0, "raw_stdout_sha256": stdout_hash, "compiled_modules_count": 10}
+        elif gate == "release_verifier":
+            observed = {"command": "pytest tests/test_release_certification.py", "exit_code": 0, "raw_stdout_sha256": stdout_hash, "verifier_pass": True}
+        path = primitive_root / f"{gate}.json"
+        path.write_text(json.dumps({
+            "gate": gate, "candidate_sha": candidate, "source_sha": candidate,
+            "evaluator": gate, "evaluator_version": EVALUATOR_VERSION_V2,
+            "captured_at": datetime.now(timezone.utc).isoformat(), "observed": observed
+        }))
+        manifest[gate] = path.name
     manifest_path = root / "manifest.json"; manifest_path.write_text(json.dumps(manifest))
     cert = certify(repo, candidate, store, graph, primitive_root, manifest); cert_path = root / "cert.json"; cert_path.write_text(json.dumps(cert))
     return repo, base, candidate, store, graph, graph_path, primitive_root, manifest, manifest_path, cert, cert_path
