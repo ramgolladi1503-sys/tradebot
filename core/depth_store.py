@@ -8,7 +8,7 @@ import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
 from config import config as cfg
-from core.trade_store import insert_depth_snapshot
+from core.trade_store import insert_depth_snapshot, insert_depth_snapshots_batch
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.persistence_durability import record_degradation
@@ -75,23 +75,37 @@ class DepthStore:
             logger.error("depth_rejection_provenance_write_failed error=%s", type(exc).__name__)
 
     def _persist_loop(self):
+        batch_size = max(1, int(getattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 50) or 50))
         while not self._persist_stop.is_set() or not self._persist_queue.empty():
+            items = []
             try:
-                item = self._persist_queue.get(timeout=0.1)
+                first = self._persist_queue.get(timeout=0.1)
+                items.append(first)
             except queue.Empty:
                 continue
+
+            while len(items) < batch_size:
+                try:
+                    items.append(self._persist_queue.get_nowait())
+                except queue.Empty:
+                    break
+
             try:
-                insert_depth_snapshot(*item)
+                if len(items) == 1:
+                    insert_depth_snapshot(*items[0])
+                else:
+                    insert_depth_snapshots_batch(items)
                 with self._persist_lock:
-                    self._persisted += 1
+                    self._persisted += len(items)
             except Exception as exc:
                 with self._persist_lock:
-                    self._persist_failures += 1
+                    self._persist_failures += len(items)
                     self._persist_degraded = True
                     record_degradation("depth", "DEPTH_PERSISTENCE_FAILURE")
-                logger.warning("depth_persistence_failed error=%s", type(exc).__name__)
+                logger.warning("depth_persistence_failed count=%d error=%s", len(items), type(exc).__name__)
             finally:
-                self._persist_queue.task_done()
+                for _ in items:
+                    self._persist_queue.task_done()
 
     def _should_persist_snapshot(self, instrument_token, now_epoch: float) -> bool:
         min_interval_sec = max(

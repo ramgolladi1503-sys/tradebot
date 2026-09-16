@@ -26,7 +26,6 @@ from core.trade_truth.trade_builder_input_contract import (
     build_canonical_tradebuilder_input,
     parse_iso_or_epoch_seconds,
 )
-from strategies.trade_builder import TradeBuilder
 
 
 CONSUMERS = (
@@ -220,6 +219,7 @@ def run_consumer_cycle(
     # canonical market snapshot.
     tb_trades: list[dict[str, Any]] = []
     tb_traces: list[dict[str, Any]] = []
+    from strategies.trade_builder import TradeBuilder
     trade_builder = TradeBuilder()
 
     market_snapshot = runtime_outputs.get("market_snapshot")

@@ -78,7 +78,10 @@ def locks_dir() -> Path:
 
 
 def db_dir() -> Path:
-    return _cfg_path("DB_ROOT") or (runtime_dir() / "db")
+    override = os.getenv("DB_ROOT")
+    if override:
+        return Path(override).expanduser().resolve()
+    return _cfg_path("DB_ROOT") or DB_ROOT
 
 
 def desk_logs_dir(desk_id: str) -> Path:

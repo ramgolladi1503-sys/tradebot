@@ -15,12 +15,21 @@ def _resolve_data_root() -> Path:
     return (_repo_root() / ".runtime").resolve()
 
 
+def _resolve_db_root() -> Path:
+    raw = str(os.getenv("DB_ROOT", "")).strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    # Default: active runtime SQLite DB remains on stable local internal storage
+    # to protect against external volume disconnections/unmounts.
+    return (_repo_root() / ".runtime" / "db").resolve()
+
+
 DATA_ROOT: Path = _resolve_data_root()
 DESKS_ROOT: Path = DATA_ROOT / "desks"
 LOGS_ROOT: Path = DATA_ROOT / "logs"
 REPORTS_ROOT: Path = DATA_ROOT / "reports"
 LOCKS_ROOT: Path = DATA_ROOT / "locks"
-DB_ROOT: Path = DATA_ROOT / "db"
+DB_ROOT: Path = _resolve_db_root()
 
 
 def desk_data_root(desk_id: str) -> Path:

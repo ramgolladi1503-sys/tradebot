@@ -83,7 +83,8 @@ def main() -> int:
     exporter = None
     try:
         if args.parquet_export:
-            db_path = args.output_root / "db" / "DEFAULT.sqlite"
+            from core.paths import db_dir
+            db_path = db_dir() / "DEFAULT.sqlite"
             parquet_dir = args.output_root / "parquet"
             exporter = subprocess.Popen([
                 sys.executable, str(ROOT / "scripts" / "export_sqlite_snapshot_to_parquet.py"),

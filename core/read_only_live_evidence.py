@@ -22,8 +22,8 @@ from core.log_writer import get_jsonl_writer
 # writer bounded, but do not use the generic 64 KiB operational-log limit for
 # this governed ledger; rejecting a valid snapshot would terminate the
 # read-only observer before it can seal its evidence.
-_LIVE_EVIDENCE_MAX_RECORD_BYTES = 256 * 1024
-_LIVE_EVIDENCE_MAX_FILE_BYTES = 16 * 1024 * 1024
+_LIVE_EVIDENCE_MAX_RECORD_BYTES = 2 * 1024 * 1024
+_LIVE_EVIDENCE_MAX_FILE_BYTES = 64 * 1024 * 1024
 
 
 def _canonical_json(payload: Mapping[str, Any]) -> bytes:
