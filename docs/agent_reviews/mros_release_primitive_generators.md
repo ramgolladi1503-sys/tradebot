@@ -1,34 +1,76 @@
-# Agent Review: MROS Release Primitive Generators & Registry
+# MROS Release Primitive Generators & Gate Registry Review Evidence
 
-## Purpose
-Resolve the release-governance blocker identified post-PR #910: missing genuine repository-owned primitive generators for `option_mirror`, `evidence_integrity`, and `security_authority`, and eliminate the forgeability of the generic exit-code-zero placeholder primitive.
+mode: review
+candidate_id: fix/mros-release-primitive-generators-v1
+decision: VALIDATION_IN_PROGRESS
+reason: implement genuine repository-owned primitive generators for option_mirror, evidence_integrity, and security_authority
+timestamp: 2026-09-16T18:50:00+00:00
+is_order_action: false
+broker_api_called: false
+source: repository-owned generator scripts, gate registry, and 20-attack mutation campaign
 
-## Design Approach
-1. **Repository-Owned Gate Registry (`core/release_gate_registry.py`)**:
-   - Explicitly defines immutable contracts for all 18 gates required under `UNKNOWN_IMPACT`.
-   - Binds gate semantic identity to generator identity, exact command prefix, required factual observation keys, and recomputation predicate.
-   - Detects and rejects generic placeholder primitives (`{"command": "governed:<gate>", "exit_code": 0}`) and unmeasured constants.
-2. **`option_mirror` Generator (`scripts/generate_option_mirror_primitive.py`)**:
-   - Tests deterministic offline option-mirror readiness transitions and non-fatal degradation fallback to `MorningState.LIVE_DEGRADED` on stale/unavailable mirror.
-   - Proves missing mirror fails closed. Captures raw output and SHA256 digest.
-3. **`evidence_integrity` Generator (`scripts/generate_evidence_integrity_primitive.py`)**:
-   - Implements AQ-11..AQ-20 compliance: checks manifest schema, verifies path safety (zero path traversal, zero symlink escape), asserts all referenced artifacts exist, verifies SHA256 hashes, disallows primitive reuse across gates, and computes a reproducible bundle digest.
-4. **`security_authority` Generator (`scripts/generate_security_authority_primitive.py`)**:
-   - Implements AQ-01..AQ-10 compliance: verifies singular candidate selection authority in `ReleaseStore.record_verified_selection`, singular execution authority, and observer execution isolation (zero `ExecutionRouter` calls).
-   - Uses an active dynamic test spy to measure `broker_write_calls_measured = 0` and `order_actions_measured = 0` with `measurement_method = "spy_counter_verified"`. Rejects unmeasured constant forgery.
-5. **Master Generator CLI (`scripts/generate_release_primitives.py`)**:
-   - Runs all 18 genuine gate checks offline and produces a complete, authentic primitive evidence root.
-6. **Hardened Certifier (`core/release_certification.py`)**:
-   - Checks symlinks before resolution (`path.is_symlink()`).
-   - Verifies primitive authenticity and rejects placeholder primitives, duplicate primitive paths, and duplicate primitive file digests.
-7. **20-Attack Adversarial Mutation Campaign (`scripts/release_generator_mutation_campaign.py`)**:
-   - Proves detection of all 20 mandatory attack classes.
+## Agent Work Contract
 
-## Non-Claims
-- `broker_write_authority = false`
-- `order_authority = false`
-- `paper_authorized = false`
-- `live_authorized = false`
-- No orders placed, modified, or cancelled.
-- No live observer launched.
-- No strategy thresholds or live trading parameters modified.
+Scope is strictly limited to resolving the release-governance blocker identified post-PR #910: implementing genuine repository-owned primitive generators for option_mirror, evidence_integrity, and security_authority, eliminating generic placeholder primitives, adding path.is_symlink() pre-resolution checks, and validating all 20 adversarial mutation attacks. Strategy thresholds, alpha logic, ranking, risk gates, broker APIs, and live order execution are strictly forbidden.
+
+## Scope Guard
+
+Production release state remains governed. Changes are strictly confined to release certification, gate generator registry, standalone primitive generators, and focused test suites.
+
+## Grill Me Review
+
+The review verifies that:
+1. Gate semantic names in core/release_change_impact.py are bound to immutable generator identities, execution commands, and factual observation schemas in core/release_gate_registry.py.
+2. Generic exit-code-zero placeholder primitives ({"command": "governed:<gate>", "exit_code": 0}) are explicitly detected and rejected fail-closed.
+3. option_mirror generator tests deterministic offline option-mirror readiness transitions and non-fatal degradation to MorningState.LIVE_DEGRADED on stale/unavailable mirror.
+4. evidence_integrity generator verifies AQ-11..AQ-20 integrity: manifest schema, path safety (zero path traversal, zero symlink escape), artifact existence, sha256 matching, and zero primitive reuse across gates.
+5. security_authority generator verifies singular selection authority, singular execution authority, observer execution isolation, and measures zero broker writes via dynamic test spies (measurement_method="spy_counter_verified").
+6. Symlink check in core/release_certification.py runs before path.resolve() to prevent symlink bypass.
+
+## Hermes Review
+
+Authority boundaries remain singular and immutable:
+- candidate_selection_authority_count = 1
+- ExecutionRouter_CALL_COUNT = 0
+- broker_write_calls_total = 0
+- orders_placed = 0, orders_modified = 0, orders_cancelled = 0
+- read_only = true, broker_write_authority = false, order_authority = false
+
+## GSD Review
+
+Changes are strictly confined to the release governance, generator registry, and test files:
+- core/release_certification.py
+- core/release_gate_registry.py
+- scripts/generate_evidence_integrity_primitive.py
+- scripts/generate_option_mirror_primitive.py
+- scripts/generate_release_primitives.py
+- scripts/generate_security_authority_primitive.py
+- scripts/release_generator_mutation_campaign.py
+- tests/test_release_primitive_generators.py
+- docs/agent_reviews/mros_release_primitive_generators.md
+
+## QA / Safety Review
+
+Focused test suites verify 34/34 passing tests and 20/20 adversarial mutations detected:
+- tests/test_release_primitive_generators.py (9 passed)
+- tests/test_release_certification.py (6 passed)
+- tests/test_release_rebootstrap.py (12 passed)
+- tests/test_release_rebootstrap_attacks.py (5 passed)
+- tests/test_release_rebootstrap_campaign.py (2 passed)
+- scripts/release_generator_mutation_campaign.py (20/20 attacks detected)
+
+## Acceptance Proof
+
+Acceptance requires passing unit tests, whole-tree syntax compilation, 20-attack mutation campaign detection, and zero execution leaks.
+
+## Runtime Proof Required After Merge
+
+Post-merge verification requires generating genuine primitives for all 18 gates for the exact merge commit SHA using scripts/generate_release_primitives.py, certifying via release manager, and verifying independent attestation before promotion.
+
+## What This PR Does Not Prove
+
+This PR does not claim execution viability, does not claim structural economic edge, does not authorize live or paper execution, and does not start any live observer.
+
+## Human Approval
+
+Human review and merge approval on GitHub is required before production promotion.
