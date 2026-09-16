@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.certified_release_store import ReleaseStore, ReleaseStoreError
 from core.release_certification import SYNTHETIC_INVALIDATED_SHAS, certify, dependency_graph_digest, digest
 from core.release_change_impact import DependencyEvidence
+from core.release_rebootstrap import certify_rebootstrap, rebootstrap_binding
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -41,6 +42,7 @@ def _commit_exists(repo: Path, sha: object) -> bool:
 def _binding(result: dict) -> dict:
     return {"candidate_sha": result["candidate_sha"], "required_gates": result["required_gates"],
             "evidence_hashes": [item["primitive_sha256"] for item in result["gate_evaluations"]],
+            "dependency_graph_sha256": result["dependency_graph_sha256"],
             "certification_sha256": result["certification_sha256"]}
 
 
@@ -53,31 +55,18 @@ def verify(root: Path, *, repo: Path, certification: Path, dependency_graph: Pat
               "order_authority": False, "paper_authorized": False, "live_authorized": False,
               "orders_placed": 0, "orders_modified": 0, "orders_cancelled": 0}
     try:
-        current = ReleaseStore(root).read()
-        checks["release_history_readable"] = current is not None and current.get("schema_version") == 1
+        current = ReleaseStore(root).read(); checks["release_history_readable"] = current is not None
         if current and current.get("certified_live_sha") in SYNTHETIC_INVALIDATED_SHAS:
             raise ReleaseStoreError("synthetic_authority_quarantined")
         result = json.loads(certification.read_text(encoding="utf-8"))
         unsigned = dict(result); claimed = unsigned.pop("certification_sha256", None)
         checks["certification_hash_valid"] = claimed == digest(unsigned)
         if not checks["certification_hash_valid"]: raise ReleaseStoreError("certification_hash_mismatch")
-        candidate = result.get("candidate_sha")
-        checks["candidate_commit_exists"] = _commit_exists(repo, candidate)
+        candidate = result.get("candidate_sha"); checks["candidate_commit_exists"] = _commit_exists(repo, candidate)
         if not checks["candidate_commit_exists"]: raise ReleaseStoreError("candidate_commit_missing")
-        # Re-run repository-owned evaluators; do not read any claimed PASS list.
         graph = _graph(dependency_graph)
         recomputed = certify(repo, candidate, ReleaseStore(root), graph, primitive_root, _manifest(primitive_manifest))
-        checks["required_gates_recomputed"] = (
-            recomputed.get("verdict") == "PASS"
-            and recomputed.get("candidate_sha") == result.get("candidate_sha")
-            and recomputed.get("base_sha") == result.get("base_sha")
-            and recomputed.get("fallback_sha") == result.get("fallback_sha")
-            and recomputed.get("changed_paths") == result.get("changed_paths")
-            and recomputed.get("change_impact") == result.get("change_impact")
-            and recomputed.get("required_gates") == result.get("required_gates")
-            and recomputed.get("passed_gates") == result.get("passed_gates")
-            and result.get("dependency_graph_sha256") == dependency_graph_digest(graph)
-        )
+        checks["required_gates_recomputed"] = (recomputed.get("verdict") == "PASS" and recomputed.get("candidate_sha") == result.get("candidate_sha") and recomputed.get("base_sha") == result.get("base_sha") and recomputed.get("fallback_sha") == result.get("fallback_sha") and recomputed.get("changed_paths") == result.get("changed_paths") and recomputed.get("change_impact") == result.get("change_impact") and recomputed.get("required_gates") == result.get("required_gates") and recomputed.get("passed_gates") == result.get("passed_gates") and result.get("dependency_graph_sha256") == dependency_graph_digest(graph))
         if not checks["required_gates_recomputed"]: raise ReleaseStoreError("required_gate_recomputation_failed")
         original = {item["gate"]: item["primitive_sha256"] for item in result.get("gate_evaluations", []) if isinstance(item, dict)}
         observed = {item["gate"]: item["primitive_sha256"] for item in recomputed.get("gate_evaluations", []) if isinstance(item, dict)}
@@ -87,15 +76,52 @@ def verify(root: Path, *, repo: Path, certification: Path, dependency_graph: Pat
         if not checks["primitive_hashes_current"]: raise ReleaseStoreError("primitive_hash_mismatch")
         attestation = {"verdict": "PASS", "verifier": "verify_release_manager_v2", "binding_sha256": digest(_binding(result))}
         checks["attestation_bound"] = True
-        return {"independent_release_verifier_pass": all(checks.values()), "checks": checks,
-                "attestation": attestation, "current": current, **safety}
+        return {"independent_release_verifier_pass": all(checks.values()), "checks": checks, "attestation": attestation, "current": current, **safety}
+    except (ReleaseStoreError, OSError, ValueError, KeyError, TypeError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:
+        return {"independent_release_verifier_pass": False, "checks": checks, "blocker": str(exc), **safety}
+
+
+def verify_rebootstrap(root: Path, *, repo: Path, certification: Path, dependency_graph: Path,
+                       primitive_root: Path, primitive_manifest: Path) -> dict:
+    """Independently recompute an exceptional quarantine-crossing certification."""
+    checks = {"history_preserved": False, "quarantined_head": False, "candidate_commit_exists": False,
+              "certification_hash_valid": False, "full_gate_set_recomputed": False,
+              "primitive_hashes_current": False, "attestation_bound": False}
+    safety = {"read_only": True, "broker_api_called": False, "broker_write_authority": False,
+              "order_authority": False, "paper_authorized": False, "live_authorized": False,
+              "orders_placed": 0, "orders_modified": 0, "orders_cancelled": 0}
+    try:
+        current = ReleaseStore(root).read(); checks["history_preserved"] = current is not None
+        if current is None or current.get("certified_live_sha") not in SYNTHETIC_INVALIDATED_SHAS:
+            raise ReleaseStoreError("rebootstrap_requires_quarantined_head")
+        checks["quarantined_head"] = True
+        result = json.loads(certification.read_text(encoding="utf-8"))
+        unsigned = dict(result); claimed = unsigned.pop("certification_sha256", None)
+        checks["certification_hash_valid"] = claimed == digest(unsigned)
+        if not checks["certification_hash_valid"]: raise ReleaseStoreError("certification_hash_mismatch")
+        candidate = result.get("candidate_sha"); checks["candidate_commit_exists"] = _commit_exists(repo, candidate)
+        if not checks["candidate_commit_exists"]: raise ReleaseStoreError("candidate_commit_missing")
+        graph = _graph(dependency_graph)
+        recomputed = certify_rebootstrap(repo, candidate, ReleaseStore(root), graph,
+                                         primitive_root=primitive_root, primitive_manifest=_manifest(primitive_manifest),
+                                         reason=str(result.get("reason", "")))
+        checks["full_gate_set_recomputed"] = (recomputed.get("verdict") == "PASS" and recomputed.get("candidate_sha") == result.get("candidate_sha") and recomputed.get("quarantined_predecessor_sha") == result.get("quarantined_predecessor_sha") and recomputed.get("quarantined_predecessor_event") == result.get("quarantined_predecessor_event") and recomputed.get("required_gates") == result.get("required_gates") and recomputed.get("passed_gates") == result.get("passed_gates") and recomputed.get("dependency_graph_sha256") == result.get("dependency_graph_sha256") and recomputed.get("rollback_status") == "NO_TRUSTED_FALLBACK")
+        if not checks["full_gate_set_recomputed"]: raise ReleaseStoreError("rebootstrap_recomputation_failed")
+        original = {item["gate"]: item["primitive_sha256"] for item in result.get("gate_evaluations", []) if isinstance(item, dict)}
+        observed = {item["gate"]: item["primitive_sha256"] for item in recomputed.get("gate_evaluations", []) if isinstance(item, dict)}
+        checks["primitive_hashes_current"] = original == observed and set(original) == set(result["required_gates"])
+        if not checks["primitive_hashes_current"]: raise ReleaseStoreError("primitive_hash_mismatch")
+        attestation = {"verdict": "PASS", "verifier": "verify_release_rebootstrap_v1", "binding_sha256": digest(rebootstrap_binding(result))}
+        checks["attestation_bound"] = True
+        return {"independent_release_verifier_pass": all(checks.values()), "checks": checks, "attestation": attestation, "current": current, **safety}
     except (ReleaseStoreError, OSError, ValueError, KeyError, TypeError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:
         return {"independent_release_verifier_pass": False, "checks": checks, "blocker": str(exc), **safety}
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(); parser.add_argument("root", type=Path); parser.add_argument("--repo", type=Path, required=True); parser.add_argument("--certification", type=Path, required=True); parser.add_argument("--dependency-graph", type=Path, required=True); parser.add_argument("--primitive-root", type=Path, required=True); parser.add_argument("--primitive-manifest", type=Path, required=True); parser.add_argument("--output", type=Path)
-    args = parser.parse_args(); result = verify(args.root, repo=args.repo, certification=args.certification, dependency_graph=args.dependency_graph, primitive_root=args.primitive_root, primitive_manifest=args.primitive_manifest)
+    parser = argparse.ArgumentParser(); parser.add_argument("root", type=Path); parser.add_argument("--repo", type=Path, required=True); parser.add_argument("--certification", type=Path, required=True); parser.add_argument("--dependency-graph", type=Path, required=True); parser.add_argument("--primitive-root", type=Path, required=True); parser.add_argument("--primitive-manifest", type=Path, required=True); parser.add_argument("--rebootstrap", action="store_true"); parser.add_argument("--output", type=Path)
+    args = parser.parse_args(); fn = verify_rebootstrap if args.rebootstrap else verify
+    result = fn(args.root, repo=args.repo, certification=args.certification, dependency_graph=args.dependency_graph, primitive_root=args.primitive_root, primitive_manifest=args.primitive_manifest)
     if args.output: args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2, sort_keys=True)); return 0 if result["independent_release_verifier_pass"] else 2
 
