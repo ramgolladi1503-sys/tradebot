@@ -97,11 +97,23 @@ def establish(*, volume: Path, runtime_root: Path) -> StorageAuthority:
     return StorageAuthority(volume_real, runtime_root.resolve(), int(volume_stat.st_dev))
 
 
-def bind_environment(authority: StorageAuthority) -> None:
-    """Bind dynamic path resolution to one externally-authorized runtime root."""
+def bind_environment(authority: StorageAuthority, *, local_db_root: Path | None = None) -> None:
+    """Bind dynamic path resolution to one externally-authorized runtime root,
+
+    while pinning the active runtime SQLite database to stable local internal storage.
+    """
     root = str(authority.runtime_root)
+    if local_db_root is None:
+        env_db = str(os.getenv("DB_ROOT", "")).strip()
+        if env_db:
+            local_db_root = Path(env_db).expanduser()
+        else:
+            local_db_root = Path(__file__).resolve().parents[1] / ".runtime" / "db"
+    resolved_db = local_db_root.resolve()
+    resolved_db.mkdir(parents=True, exist_ok=True)
     os.environ.update({
         "DATA_ROOT": root,
+        "DB_ROOT": str(resolved_db),
         "LOG_DIR": str(authority.runtime_root / "logs"),
         "REPO_LOG_DIR": str(authority.runtime_root / "logs"),
     })

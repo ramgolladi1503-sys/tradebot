@@ -21,8 +21,25 @@ if _pd is not None and not getattr(_pd, "_tradebot_date_range_legacy_t_patch", F
     _pd.date_range = _date_range_legacy_t_compat
     _pd._tradebot_date_range_legacy_t_patch = True
 
+import os
 import sys
-if "audit_feed_negative_controls" not in sys.argv[0]:
+
+_SKIP_TEST_CONTRACTS = (
+    any(
+        token in str(sys.argv[0])
+        for token in (
+            "audit_feed_negative_controls",
+            "morning_readonly_observer",
+            "morning_controller",
+            "kite_read_only_observation_runtime",
+            "morning_observer_supervisor",
+        )
+    )
+    or os.getenv("TRADEBOT_READ_ONLY") == "true"
+    or os.getenv("OBSERVATION_ONLY_MODE") in ("1", "true")
+)
+
+if not _SKIP_TEST_CONTRACTS:
     try:
         from core import ci_compat_contracts as _ci_compat_contracts
 
@@ -30,7 +47,6 @@ if "audit_feed_negative_controls" not in sys.argv[0]:
     except Exception:
         pass
 
-if "audit_feed_negative_controls" not in sys.argv[0]:
     try:
         from core import ci_last_contracts as _ci_last_contracts
         _ci_last_contracts.install()
@@ -81,12 +97,13 @@ except Exception:
 
 # Long-run stability latency contract is isolated from the deleted generic shim
 # and remains installed until the behavior is moved into the scenario runner.
-try:
-    from core import longrun_stability_contract as _longrun_stability_contract
+if not _SKIP_TEST_CONTRACTS:
+    try:
+        from core import longrun_stability_contract as _longrun_stability_contract
 
-    _longrun_stability_contract.install()
-except Exception:
-    pass
+        _longrun_stability_contract.install()
+    except Exception:
+        pass
 
 # Review-queue quote preservation/rate-limit contract is isolated from the
 # deleted generic shim and remains installed until the behavior is moved into
