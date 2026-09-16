@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from config import config as cfg
-from core.paths import data_root, desk_logs_dir, logs_dir, trade_db_path
+from core.paths import data_root, trade_db_path
+from dashboard.metrics_runtime import resolve_runtime_metric_paths
 
 INDEX_SYMBOLS = ("NIFTY", "BANKNIFTY", "SENSEX")
 
@@ -28,7 +27,7 @@ def _jsonl(path: Path, limit: int = 5000) -> list[dict[str, Any]]:
         lines = path.read_text(encoding="utf-8").splitlines()[-limit:]
     except OSError:
         return []
-    out = []
+    out: list[dict[str, Any]] = []
     for line in lines:
         try:
             row = json.loads(line)
@@ -106,9 +105,21 @@ def load_index_series(*, desk_id: str, lookback_sec: int = 7200, max_points: int
     return result
 
 
+def load_top_opportunities(*, desk_id: str) -> list[dict[str, Any]]:
+    path = resolve_runtime_metric_paths(desk_id=desk_id)["top_opportunities"]
+    payload = _json(path)
+    rows: list[dict[str, Any]] = []
+    for key in ("top_executable_opportunities", "top_advisory_opportunities"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            rows.extend(row for row in value if isinstance(row, dict))
+    return rows
+
+
 def load_strategy_monitor(*, desk_id: str) -> list[dict[str, Any]]:
-    candidates = _jsonl(desk_logs_dir(desk_id) / "candidates.jsonl")
-    lifecycle = _jsonl(logs_dir() / "trade_lifecycle.jsonl")
+    paths = resolve_runtime_metric_paths(desk_id=desk_id)
+    candidates = _jsonl(paths["candidates_stream"])
+    lifecycle = _jsonl(paths["trade_lifecycle"])
     activity: dict[str, dict[str, Any]] = {}
     for row in candidates:
         strategy = str(row.get("strategy") or row.get("strategy_id") or "").strip()
