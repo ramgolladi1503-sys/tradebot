@@ -23,6 +23,7 @@ def main() -> int:
     parser.add_argument("--token-path", type=Path, help="Explicit access token path")
     parser.add_argument("--auth-timeout-seconds", type=float, default=600.0, help="Timeout in seconds to wait for human login")
     parser.add_argument("--expected-sha", help="Expected certified release commit SHA")
+    parser.add_argument("--release-store", type=Path, help="Explicit ReleaseStore directory path")
     parser.add_argument("--no-browser", action="store_true", help="Do not automatically open browser on login required")
     parser.add_argument("--dry-run", action="store_true", help="Perform pre-session checks and arming without spawning observer process")
     args = parser.parse_args()
@@ -35,6 +36,7 @@ def main() -> int:
         auth_timeout_seconds=args.auth_timeout_seconds,
         expected_release_sha=args.expected_sha,
         storage_volume=args.state_root,
+        release_store_path=args.release_store,
         open_browser=not args.no_browser,
         dry_run=args.dry_run,
     )

@@ -85,6 +85,7 @@ class GovernedMorningOrchestrator:
         auth_timeout_seconds: float = 600.0,
         expected_release_sha: str | None = None,
         storage_volume: Path = Path("/Volumes/TradeBotData"),
+        release_store_path: Path | None = None,
         lock_file: Path | None = None,
         open_browser: bool = True,
         dry_run: bool = False,
@@ -97,6 +98,7 @@ class GovernedMorningOrchestrator:
         self.auth_timeout_seconds = float(auth_timeout_seconds)
         self.expected_release_sha = expected_release_sha
         self.storage_volume = Path(storage_volume).resolve()
+        self.release_store_path = Path(release_store_path).resolve() if release_store_path else (self.storage_volume / "release_store")
         self.lock_file = Path(lock_file).resolve() if lock_file else (self.repo_root / ".runtime" / ".governed_morning_launcher.lock")
         self.open_browser = open_browser
         self.dry_run = dry_run
@@ -191,10 +193,43 @@ class GovernedMorningOrchestrator:
             self.transition(LauncherState.BLOCKED, "worktree_dirty")
             return False
 
-        if self.expected_release_sha and head_sha != self.expected_release_sha:
-            self.emit("RELEASE", "FAIL", f"SHA mismatch expected {self.expected_release_sha[:8]} != {head_sha[:8]}")
-            self.transition(LauncherState.BLOCKED, "release_sha_mismatch")
+        from core.certified_release_store import ReleaseStore, ReleaseStoreError
+        try:
+            store = ReleaseStore(self.release_store_path)
+            record = store.read()
+            if not record or not isinstance(record, dict):
+                self.emit("RELEASE", "FAIL", "ReleaseStore record missing or empty")
+                self.transition(LauncherState.BLOCKED, "release_store_empty")
+                return False
+            certified_sha = str(record.get("certified_live_sha") or "").strip()
+            if not certified_sha:
+                self.emit("RELEASE", "FAIL", "ReleaseStore certified_live_sha missing")
+                self.transition(LauncherState.BLOCKED, "release_store_certified_sha_missing")
+                return False
+        except (ReleaseStoreError, Exception) as exc:
+            self.emit("RELEASE", "FAIL", f"ReleaseStore read failed: {exc}")
+            self.transition(LauncherState.BLOCKED, f"release_store_error:{exc}")
             return False
+
+        if head_sha != certified_sha:
+            self.emit(
+                "RELEASE",
+                "FAIL",
+                f"Running SHA mismatch: running {head_sha[:8]} != certified {certified_sha[:8]}",
+            )
+            self.transition(LauncherState.BLOCKED, "release_sha_mismatch_certified_store")
+            return False
+
+        if self.expected_release_sha:
+            expected = str(self.expected_release_sha).strip()
+            if expected != certified_sha or head_sha != expected:
+                self.emit(
+                    "RELEASE",
+                    "FAIL",
+                    f"CLI expected SHA mismatch: expected {expected[:8]} != certified {certified_sha[:8]}",
+                )
+                self.transition(LauncherState.BLOCKED, "release_sha_mismatch_expected")
+                return False
 
         self.emit("RELEASE", "PASS", f"SHA {head_sha[:8]}")
         self.transition(LauncherState.VERIFY_STORAGE)
