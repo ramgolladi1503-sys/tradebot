@@ -96,13 +96,13 @@ def _render_market_panel(symbol: str, series: list[dict], state: dict) -> None:
 
     zone_color = _status_color(zone)
 
-    # HTML Header
+    # Clean, high-density Header Hierarchy
     html_header = f"""
     <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
-        <span style="font-size: 1.05rem; font-weight: 700; letter-spacing: 0.05em;">{symbol}</span>
-        <span style="font-size: 1.15rem; font-weight: 700; font-family: monospace;">{last_price_str}</span>
-        <span style="font-size: 0.85rem; font-weight: 600; color: {pct_color};">{pct_change_str}</span>
-        <span style="font-size: 0.75rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: {zone_color}22; color: {zone_color}; border: 1px solid {zone_color}66;">{zone}</span>
+        <span style="font-size: 1.05rem; font-weight: 800; letter-spacing: 0.05em; color: #eceff1;">{symbol}</span>
+        <span style="font-size: 1.15rem; font-weight: 700; font-family: monospace; color: #ffffff;">{last_price_str}</span>
+        <span style="font-size: 0.82rem; font-weight: 600; color: {pct_color};">{pct_change_str}</span>
+        <span style="font-size: 0.72rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: {zone_color}22; color: {zone_color}; border: 1px solid {zone_color}66;">{zone}</span>
     </div>
     """
     st.markdown(html_header, unsafe_allow_html=True)
@@ -118,7 +118,7 @@ def _render_market_panel(symbol: str, series: list[dict], state: dict) -> None:
         base = alt.Chart(df_chart).encode(
             x=alt.X("time:T", axis=alt.Axis(format="%H:%M", title=None, labels=True, ticks=False, domain=False, grid=False, labelFontSize=9, labelColor="#78909c")),
             y=alt.Y("price:Q", axis=alt.Axis(title=None, format=",.1f", orient="right", labelFontSize=9, labelColor="#78909c", grid=True, gridColor="#37474f33"), scale=y_scale)
-        ).properties(height=130)
+        ).properties(height=120)
 
         line = base.mark_line(strokeWidth=1.8, color="#00e5ff" if pct_color == "#26a69a" else "#ff5252")
         chart_layers = [line]
@@ -148,9 +148,9 @@ def _render_market_panel(symbol: str, series: list[dict], state: dict) -> None:
     block_info = f" · <span style='color:#ef5350;'>Blocked: {', '.join(map(str, blockers[:2]))}</span>" if blockers else ""
 
     st.markdown(
-        f"""<div style="font-size: 0.75rem; color: #78909c; display: flex; justify-content: space-between;">
-            <span>Trend: <b>{trend_str}</b> · Reversal: <b>{rev_str}</b>{block_info}</span>
-            <span>KITE · FRESH</span>
+        f"""<div style="font-size: 0.75rem; color: #90a4ae; display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 3px;">
+            <span>Trend: <b style="color:#26a69a;">{trend_str}</b> · Rev: <b style="color:#ef5350;">{rev_str}</b>{block_info}</span>
+            <span style="color: #546e7a;">KITE · FRESH</span>
         </div>""",
         unsafe_allow_html=True
     )
@@ -430,13 +430,30 @@ def main() -> None:
     with st.expander("Upstox Option Chain Snapshot", expanded=False):
         _render_upstox_chain(upstox)
 
-    with st.expander("Engineering Diagnostics & Metric Origins", expanded=False):
-        st.caption("Detailed diagnostics for internal inspection.")
-        st.json({
-            "metric_notes": metrics.get("notes") or [],
-            "metric_sources": metrics.get("source_status") or {},
-            "market_state_source": market_state.get("_path")
-        })
+    with st.expander("Engineering Diagnostics & Telemetry Integrity", expanded=False):
+        st.markdown("<div class='section-header'>Runtime Source Telemetry Summary</div>", unsafe_allow_html=True)
+        sources_dict = metrics.get("source_status") or {}
+        diag_rows = []
+        for src_name, src_info in sorted(sources_dict.items()):
+            if isinstance(src_info, dict):
+                diag_rows.append({
+                    "Source": src_name,
+                    "State": "FOUND" if src_info.get("exists") else "MISSING",
+                    "Currentness": "EXPLICIT_CURRENT" if src_info.get("current") else "UNPROVEN",
+                    "Count": src_info.get("row_count", "—"),
+                    "Path": Path(str(src_info.get("path") or "")).name or "—"
+                })
+        if diag_rows:
+            st.dataframe(diag_rows, use_container_width=True, hide_index=True)
+        else:
+            st.caption("No registered runtime source streams.")
+
+        with st.expander("Raw Metric Notes & Complete Filesystem Paths", expanded=False):
+            st.json({
+                "metric_notes": metrics.get("notes") or [],
+                "metric_sources": metrics.get("source_status") or {},
+                "market_state_source": market_state.get("_path")
+            })
 
 
 if __name__ == "__main__":
