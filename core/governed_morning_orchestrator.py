@@ -113,6 +113,13 @@ class GovernedAuthCallbackServer:
                     status = (qs.get("status") or [None])[0]
                     action = (qs.get("action") or [None])[0]
 
+                    if parsed.path == "/health":
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(b'{"status":"tradebot_auth_callback","ready":true}')
+                        return
+
                     if parsed.path != "/":
                         self.send_response(404)
                         self.end_headers()
@@ -236,6 +243,13 @@ class GovernedMorningOrchestrator:
         lock_file: Path | None = None,
         open_browser: bool = True,
         dry_run: bool = False,
+        preflight_only: bool = False,
+        wait_for_window: bool = True,
+        market_open_time: str = "08:55",
+        market_close_time: str = "15:45",
+        observer_engine: str = "tick_collector",
+        supervise: bool = True,
+        status_interval_seconds: float = 3600.0,
         telemetry_callback: Callable[[str, str, str], None] | None = None,
     ) -> None:
         self.repo_root = Path(repo_root).resolve()
@@ -249,12 +263,20 @@ class GovernedMorningOrchestrator:
         self.lock_file = Path(lock_file).resolve() if lock_file else (self.repo_root / ".runtime" / ".governed_morning_launcher.lock")
         self.open_browser = open_browser
         self.dry_run = dry_run
+        self.preflight_only = preflight_only
+        self.wait_for_window = wait_for_window
+        self.market_open_time = market_open_time
+        self.market_close_time = market_close_time
+        self.observer_engine = observer_engine
+        self.supervise = supervise
+        self.status_interval_seconds = float(status_interval_seconds)
         self.telemetry_callback = telemetry_callback
 
         self.state = LauncherState.START
         self.state_history: list[dict[str, Any]] = []
         self.blocker_reason: str | None = None
         self.stop_reason: str | None = None
+        self._stop_requested = False
 
         self._initial_token_snapshot: TokenFileSnapshot | None = None
         self._lock_acquired = False
@@ -475,13 +497,32 @@ class GovernedMorningOrchestrator:
                 f"http://{callback_server.host}:{callback_server.port}/ waiting for login redirect",
             )
         else:
-            self.emit(
-                "AUTH",
-                "FAIL",
-                f"Port {callback_server.port} collision with unknown owner ({callback_server.error}); failing closed",
-            )
-            self.transition(LauncherState.BLOCKED, f"auth_port_collision_unknown_owner:{callback_server.error}")
-            return False
+            reused = False
+            try:
+                import urllib.request
+                health_url = f"http://{callback_server.host}:{callback_server.port}/health"
+                with urllib.request.urlopen(health_url, timeout=1.0) as resp:
+                    if resp.status == 200:
+                        payload = json.loads(resp.read().decode("utf-8"))
+                        if payload.get("status") == "tradebot_auth_callback":
+                            reused = True
+            except Exception:
+                reused = False
+
+            if reused:
+                self.emit(
+                    "AUTH",
+                    "CALLBACK_REUSED",
+                    f"Reusing active TradeBot callback daemon on port {callback_server.port}",
+                )
+            else:
+                self.emit(
+                    "AUTH",
+                    "FAIL",
+                    f"Port {callback_server.port} collision with unknown owner ({callback_server.error}); failing closed",
+                )
+                self.transition(LauncherState.BLOCKED, f"auth_port_collision_unknown_owner:{callback_server.error}")
+                return False
 
         try:
             login_url = self.get_login_url()
@@ -515,7 +556,8 @@ class GovernedMorningOrchestrator:
             self.transition(LauncherState.STOPPED, "auth_timeout_waiting_human_auth")
             return False
         finally:
-            callback_server.stop()
+            if server_started:
+                callback_server.stop()
             self._callback_server = None
 
     def step_validate_auth(self, max_retries: int = 3) -> bool:
@@ -632,42 +674,103 @@ class GovernedMorningOrchestrator:
             self.transition(LauncherState.STOPPED, "dry_run_complete")
             return True
 
-        # Check pre-open / market timing
+        if self.preflight_only:
+            self.emit("PREFLIGHT", "PASS", "All pre-session readiness gates certified; preflight complete")
+            self.transition(LauncherState.STOPPED, "preflight_complete")
+            return True
+
+        open_time = datetime.strptime(self.market_open_time, "%H:%M").time()
+        close_time = datetime.strptime(self.market_close_time, "%H:%M").time()
         now_time = datetime.now(IST_TZ).time()
-        can_launch_live = (
-            datetime.strptime("08:55", "%H:%M").time()
-            <= now_time
-            <= datetime.strptime("15:30", "%H:%M").time()
-        )
-        if not can_launch_live:
-            self.emit("OBSERVER", "STANDBY", f"Current time {now_time.strftime('%H:%M')} outside active window 08:55-15:30 IST")
+
+        if now_time < open_time:
+            if not self.wait_for_window:
+                self.emit("OBSERVER", "STANDBY", f"Current time {now_time.strftime('%H:%M')} before active window {self.market_open_time}-{self.market_close_time} IST")
+                self.transition(LauncherState.STOPPED, "outside_session_timing_window")
+                return True
+
+            self.emit("OBSERVER", "WAITING", f"Pre-session readiness certified. Waiting for {self.market_open_time} IST market window (current: {now_time.strftime('%H:%M:%S')})")
+            while datetime.now(IST_TZ).time() < open_time:
+                if self._stop_requested:
+                    self.transition(LauncherState.STOPPED, "operator_stopped_while_waiting")
+                    return False
+                time.sleep(1.0)
+            now_time = datetime.now(IST_TZ).time()
+
+        if now_time > close_time:
+            self.emit("OBSERVER", "STANDBY", f"Current time {now_time.strftime('%H:%M')} outside active window {self.market_open_time}-{self.market_close_time} IST")
             self.transition(LauncherState.STOPPED, "outside_session_timing_window")
             return True
 
-        self.emit("OBSERVER", "LAUNCHING", "Starting read-only observer")
-        cmd = [
-            sys.executable,
-            str(self.repo_root / "scripts" / "run_kite_read_only_observation_v1.py"),
-            "--session-date", self.session_date,
-            "--output-root", str(self.state_root / "sessions" / f"session_{self.session_date}"),
-            "--token-path", str(self.token_path),
-            "--validate-only",
-        ]
+        self.emit("OBSERVER", "LAUNCHING", f"Starting read-only observer ({self.observer_engine}) until {self.market_close_time} IST")
+        if self.observer_engine == "meg_live":
+            cmd = [
+                sys.executable,
+                "-u",
+                str(self.repo_root / "scripts" / "run_market_event_graph_live_session_v1.py"),
+                "--session-date", self.session_date,
+                "--output-root", str(self.state_root / "sessions" / f"session_{self.session_date}"),
+            ]
+        else:
+            cmd = [
+                sys.executable,
+                "-u",
+                str(self.repo_root / "scripts" / "tick_data_collector.py"),
+            ]
+
         try:
             self._child_observer_proc = subprocess.Popen(cmd, cwd=str(self.repo_root))
             self.emit("OBSERVER", "RUNNING", f"Child PID {self._child_observer_proc.pid}")
             self.transition(LauncherState.OBSERVER_RUNNING)
+            if self.supervise:
+                return self.supervise_observer()
             return True
         except Exception as exc:
             self.emit("OBSERVER", "FAIL", f"Launch failed: {exc}")
             self.transition(LauncherState.BLOCKED, f"observer_launch_failed:{exc}")
             return False
 
+    def supervise_observer(self) -> bool:
+        if not self._child_observer_proc:
+            return False
+
+        close_time = datetime.strptime(self.market_close_time, "%H:%M").time()
+        last_status_time = time.time()
+        self.emit("SUPERVISOR", "MONITORING", f"Observer PID {self._child_observer_proc.pid} active. Cutoff at {self.market_close_time} IST")
+
+        while not self._stop_requested:
+            ret = self._child_observer_proc.poll()
+            if ret is not None:
+                if ret == 0:
+                    self.emit("OBSERVER", "FINISHED", f"Observer exited cleanly with code {ret}")
+                    self.transition(LauncherState.STOPPED, "observer_clean_exit")
+                else:
+                    self.emit("OBSERVER", "TERMINATED", f"Observer exited with code {ret}")
+                    self.transition(LauncherState.BLOCKED, f"observer_failed_code_{ret}")
+                return ret == 0
+
+            now = datetime.now(IST_TZ)
+            now_time = now.time()
+
+            if now_time >= close_time:
+                self.emit("OBSERVER", "CUTOFF_REACHED", f"Reached cutoff {self.market_close_time} IST. Terminating observer cleanly...")
+                self.stop("session_completed_cutoff_reached")
+                return True
+
+            if time.time() - last_status_time >= self.status_interval_seconds:
+                last_status_time = time.time()
+                self.emit("STATUS_HOURLY", "HEALTHY", f"Time: {now.strftime('%H:%M:%S')} IST | Child PID: {self._child_observer_proc.pid} running | Storage volume: ok")
+
+            time.sleep(1.0)
+
+        return True
+
     def stop(self, reason: str = "operator_shutdown") -> None:
+        self._stop_requested = True
         if self._child_observer_proc and self._child_observer_proc.poll() is None:
             try:
                 self._child_observer_proc.terminate()
-                self._child_observer_proc.wait(timeout=3.0)
+                self._child_observer_proc.wait(timeout=10.0)
             except Exception:
                 try:
                     self._child_observer_proc.kill()

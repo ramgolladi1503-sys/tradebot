@@ -43,7 +43,7 @@ PREMARKET_SCRIPTS = [
 
 # Background scripts that are spawned and detached
 BACKGROUND_SCRIPTS = [
-    "scripts/tick_data_collector.py",
+    # Governed invariant: tick collection is owned by run_governed_morning_observer_v1.py
     "scripts/capture_upstox_market_daily.py",
 ]
 

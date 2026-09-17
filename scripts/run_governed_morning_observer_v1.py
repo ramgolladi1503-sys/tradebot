@@ -26,6 +26,11 @@ def main() -> int:
     parser.add_argument("--release-store", type=Path, help="Explicit ReleaseStore directory path")
     parser.add_argument("--no-browser", action="store_true", help="Do not automatically open browser on login required")
     parser.add_argument("--dry-run", action="store_true", help="Perform pre-session checks and arming without spawning observer process")
+    parser.add_argument("--preflight-only", action="store_true", help="Perform pre-session checks and exit immediately without waiting or spawning observer")
+    parser.add_argument("--no-wait", action="store_true", help="Do not wait for market open window if launched early")
+    parser.add_argument("--no-supervise", action="store_true", help="Do not supervise observer process (spawn and exit)")
+    parser.add_argument("--cutoff-time", default="15:45", help="Session cutoff time in HH:MM (default: 15:45)")
+    parser.add_argument("--observer-engine", default="tick_collector", choices=["tick_collector", "meg_live"], help="Observer engine to launch (default: tick_collector)")
     args = parser.parse_args()
 
     orchestrator = GovernedMorningOrchestrator(
@@ -39,6 +44,11 @@ def main() -> int:
         release_store_path=args.release_store,
         open_browser=not args.no_browser,
         dry_run=args.dry_run,
+        preflight_only=args.preflight_only,
+        wait_for_window=not args.no_wait,
+        market_close_time=args.cutoff_time,
+        observer_engine=args.observer_engine,
+        supervise=not args.no_supervise,
     )
 
     def handle_signal(sig, frame):

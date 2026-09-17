@@ -1,12 +1,14 @@
 """Deterministic tests for GovernedMorningOrchestrator and human login auto-continuation."""
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import os
 import threading
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 import pytest
 
 from core.governed_morning_orchestrator import (
@@ -815,5 +817,206 @@ def test_31_callback_server_atomic_token_write(mock_env):
     finally:
         srv.stop()
 
+
+def test_32_preflight_only_passes_and_exits_cleanly(mock_env):
+    """32. Preflight-only mode: certifies readiness and exits cleanly without spawning observer."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        preflight_only=True,
+    )
+    with patch("subprocess.Popen") as mock_popen:
+        ok = orc.step_arm_observer()
+        assert ok is True
+        assert orc.state == LauncherState.STOPPED
+        assert orc.stop_reason == "preflight_complete"
+        mock_popen.assert_not_called()
+
+
+def test_33_outside_window_no_wait_exits_standby(mock_env):
+    """33. Outside window without wait: exits cleanly in STANDBY state."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        wait_for_window=False,
+        market_open_time="08:55",
+        market_close_time="15:45",
+    )
+    # Mock time at 08:45 IST
+    mock_dt = datetime(2026, 9, 18, 8, 45, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    with patch("core.governed_morning_orchestrator.datetime") as mock_datetime:
+        mock_datetime.now.return_value = mock_dt
+        mock_datetime.strptime = datetime.strptime
+        ok = orc.step_arm_observer()
+        assert ok is True
+        assert orc.state == LauncherState.STOPPED
+        assert orc.stop_reason == "outside_session_timing_window"
+
+
+def test_34_wait_for_window_advances_to_market_open(mock_env):
+    """34. Waiting for window: sleeps until market open, then proceeds to spawn observer."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        wait_for_window=True,
+        market_open_time="08:55",
+        market_close_time="15:45",
+        supervise=False,
+    )
+    t1 = datetime(2026, 9, 18, 8, 54, 59, tzinfo=ZoneInfo("Asia/Kolkata")) # before open
+    t2 = datetime(2026, 9, 18, 8, 55, 1, tzinfo=ZoneInfo("Asia/Kolkata"))  # after open
+
+    now_calls = 0
+    def mock_now(tz=None):
+        nonlocal now_calls
+        now_calls += 1
+        return t1 if now_calls <= 4 else t2
+
+    mock_proc = MagicMock()
+    mock_proc.pid = 43210
+
+    with patch("core.governed_morning_orchestrator.datetime") as mock_datetime, \
+         patch("time.sleep") as mock_sleep, \
+         patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
+        mock_datetime.now = mock_now
+        mock_datetime.strptime = datetime.strptime
+        ok = orc.step_arm_observer()
+        assert ok is True
+        assert orc.state == LauncherState.OBSERVER_RUNNING
+        mock_sleep.assert_called()
+        mock_popen.assert_called_once()
+
+
+def test_35_1545_cutoff_supervision_and_clean_termination(mock_env):
+    """35. Supervision: reaches 15:45 cutoff, cleanly terminates child observer process."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        market_close_time="15:45",
+        supervise=True,
+    )
+    mock_proc = MagicMock()
+    mock_proc.pid = 54321
+    mock_proc.poll.return_value = None  # Child is still running
+    orc._child_observer_proc = mock_proc
+
+    cutoff_dt = datetime(2026, 9, 18, 15, 45, 1, tzinfo=ZoneInfo("Asia/Kolkata"))
+    with patch("core.governed_morning_orchestrator.datetime") as mock_datetime, \
+         patch("time.sleep"):
+        mock_datetime.now.return_value = cutoff_dt
+        mock_datetime.strptime = datetime.strptime
+        ok = orc.supervise_observer()
+        assert ok is True
+        assert orc.state == LauncherState.STOPPED
+        assert orc.stop_reason == "session_completed_cutoff_reached"
+        mock_proc.terminate.assert_called_once()
+
+
+def test_36_callback_server_health_check_and_reuse(mock_env):
+    """36. Callback server: /health endpoint confirms identity and allows safe reuse without collision blocker."""
+    import urllib.request
+    token_path = mock_env["token_path"]
+    existing_daemon = GovernedAuthCallbackServer(
+        token_path=token_path,
+        repo_root=mock_env["repo_root"],
+        port=8769,
+    )
+    assert existing_daemon.start() is True
+
+    try:
+        # Check health endpoint directly
+        health_url = "http://127.0.0.1:8769/health"
+        with urllib.request.urlopen(health_url, timeout=2.0) as resp:
+            assert resp.status == 200
+            data = json.loads(resp.read().decode("utf-8"))
+            assert data.get("status") == "tradebot_auth_callback"
+            assert data.get("ready") is True
+
+        orc = GovernedMorningOrchestrator(
+            repo_root=mock_env["repo_root"],
+            state_root=mock_env["state_root"],
+            token_path=token_path,
+            lock_file=mock_env["lock_file"],
+            open_browser=False,
+        )
+
+        # Simulate human token written via the existing daemon
+        def simulate_token_arrival():
+            time.sleep(0.2)
+            token_path.write_text("DAEMON_REUSED_TOKEN_888")
+
+        threading.Thread(target=simulate_token_arrival, daemon=True).start()
+
+        # Patch GovernedAuthCallbackServer in step_wait_human_auth to use port 8769
+        with patch("core.governed_morning_orchestrator.GovernedAuthCallbackServer",
+                   lambda *a, **kw: GovernedAuthCallbackServer(*a, port=8769, **kw)), \
+             patch.object(orc, "get_login_url", return_value="https://kite.zerodha.com/mock"):
+            ok = orc.step_wait_human_auth(poll_interval=0.05, timeout_override=3.0)
+            assert ok is True
+            assert orc.state == LauncherState.DETECT_FRESH_TOKEN
+            assert token_path.read_text().strip() == "DAEMON_REUSED_TOKEN_888"
+            # Existing daemon must still be running (not killed by the orchestrator)
+            assert existing_daemon.bound is True
+    finally:
+        existing_daemon.stop()
+
+
+def test_37_hourly_status_telemetry(mock_env):
+    """37. Hourly telemetry emits status reports at configured interval."""
+    telemetry_events = []
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        market_close_time="15:45",
+        status_interval_seconds=0.05, # Fast interval for test
+        telemetry_callback=lambda step, status, detail: telemetry_events.append((step, status)),
+    )
+    mock_proc = MagicMock()
+    mock_proc.pid = 67890
+    orc._child_observer_proc = mock_proc
+
+    call_count = 0
+    def mock_poll():
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 3:
+            return 0 # Child exits cleanly after 3 iterations
+        return None
+
+    mock_proc.poll = mock_poll
+
+    clock = 1000.0
+    def mock_time():
+        nonlocal clock
+        clock += 1.0
+        return clock
+
+    mid_dt = datetime(2026, 9, 18, 10, 0, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    with patch("core.governed_morning_orchestrator.datetime") as mock_datetime, \
+         patch("time.time", side_effect=mock_time), \
+         patch("time.sleep"):
+        mock_datetime.now.return_value = mid_dt
+        mock_datetime.strptime = datetime.strptime
+        ok = orc.supervise_observer()
+        assert ok is True
+        assert any(step == "STATUS_HOURLY" for step, _ in telemetry_events)
+
+
 # broker_api_called = false
 # is_order_action = false
+
