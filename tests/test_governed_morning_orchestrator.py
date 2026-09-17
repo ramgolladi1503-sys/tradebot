@@ -623,7 +623,7 @@ def test_26_callback_server_captures_request_token_and_writes_token_file(mock_en
     srv = GovernedAuthCallbackServer(
         token_path=token_path,
         repo_root=mock_env["repo_root"],
-        port=8766,
+        port=8786,
     )
     started = srv.start()
     assert started is True
@@ -634,7 +634,7 @@ def test_26_callback_server_captures_request_token_and_writes_token_file(mock_en
         with patch("core.kite_client.kite_client", mock_kite), \
              patch("scripts.kite_autologin_localhost._resolve_api_key", return_value="TEST_KEY"), \
              patch("scripts.kite_autologin_localhost._resolve_api_secret", return_value="TEST_SECRET"):
-            url = f"http://127.0.0.1:8766/?action=login&status=success&request_token=test_req_tok_123"
+            url = f"http://127.0.0.1:8786/?action=login&status=success&request_token=test_req_tok_123"
             with urllib.request.urlopen(url, timeout=3.0) as resp:
                 body = resp.read().decode("utf-8")
                 assert resp.status == 200
@@ -1017,6 +1017,135 @@ def test_37_hourly_status_telemetry(mock_env):
         assert any(step == "STATUS_HOURLY" for step, _ in telemetry_events)
 
 
+def test_38_collector_healthy_mros_dead_fails_mros_health(mock_env):
+    """38. Collector health must NEVER make MROS health PASS."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        market_close_time="15:45",
+        status_interval_seconds=1.0,
+    )
+    col_proc = MagicMock()
+    col_proc.pid = 11111
+    col_proc.poll.return_value = None  # Collector is running and healthy
+
+    mros_proc = MagicMock()
+    mros_proc.pid = 22222
+    mros_proc.poll.return_value = 1  # MROS observer has crashed
+
+    orc._child_collector_proc = col_proc
+    orc._child_mros_proc = mros_proc
+
+    with patch("time.sleep"):
+        ok = orc.supervise_observer()
+
+    assert ok is False
+    assert orc.collector_health == "HEALTHY"
+    assert orc.mros_health == "FAILED_CODE_1"
+    assert orc.state == LauncherState.BLOCKED
+    assert orc.blocker_reason == "mros_observer_failed_code_1"
+
+
+def test_39_mros_healthy_collector_dead_fails_closed(mock_env):
+    """39. Collector crash fails closed even if MROS process is active."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        market_close_time="15:45",
+        status_interval_seconds=1.0,
+    )
+    col_proc = MagicMock()
+    col_proc.pid = 11111
+    col_proc.poll.return_value = 2  # Collector crashed
+
+    mros_proc = MagicMock()
+    mros_proc.pid = 22222
+    mros_proc.poll.return_value = None  # MROS running
+
+    orc._child_collector_proc = col_proc
+    orc._child_mros_proc = mros_proc
+
+    with patch("time.sleep"):
+        ok = orc.supervise_observer()
+
+    assert ok is False
+    assert orc.collector_health == "FAILED_CODE_2"
+    assert orc.state == LauncherState.BLOCKED
+    assert orc.blocker_reason == "collector_failed_code_2"
+
+
+def test_40_scheduler_utc_cron_matches_0845_ist():
+    """40. Prove UTC cron '15 3 * * 1-5' maps to 08:45 AM Asia/Kolkata."""
+    from datetime import timezone, timedelta
+    from zoneinfo import ZoneInfo
+
+    ist = ZoneInfo("Asia/Kolkata")
+    # 03:15 UTC
+    utc_dt = datetime(2026, 9, 18, 3, 15, 0, tzinfo=timezone.utc)
+    ist_dt = utc_dt.astimezone(ist)
+
+    assert ist_dt.hour == 8
+    assert ist_dt.minute == 45
+    assert ist_dt.strftime("%H:%M") == "08:45"
+    assert ist_dt.weekday() < 5  # Monday-Friday
+
+
+def test_41_callback_server_attacks_rejected(mock_env):
+    """41. Callback attacks: spoofed health nonce, oversized query URI, invalid token regex."""
+    import urllib.request
+    import urllib.error
+
+    srv = GovernedAuthCallbackServer(
+        token_path=mock_env["token_path"],
+        repo_root=mock_env["repo_root"],
+        port=8771,
+    )
+    assert srv.start() is True
+
+    try:
+        # A. Oversized URL -> 414 URI Too Long
+        oversized = "http://127.0.0.1:8771/?" + ("x" * 2100)
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(oversized, timeout=2.0)
+        assert exc.value.code == 414
+
+        # B. Invalid token regex (special chars / out of length bounds)
+        bad_token_url = "http://127.0.0.1:8771/?action=login&status=success&request_token=bad<script>evil</script>"
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(bad_token_url, timeout=2.0)
+        assert exc.value.code == 400
+
+        # C. Spoofed health check (wrong nonce in local contract)
+        orc = GovernedMorningOrchestrator(
+            repo_root=mock_env["repo_root"],
+            state_root=mock_env["state_root"],
+            token_path=mock_env["token_path"],
+            lock_file=mock_env["lock_file"],
+            open_browser=False,
+        )
+        # Overwrite local contract with wrong nonce
+        contract_file = mock_env["repo_root"] / ".runtime" / ".callback_server_8771.json"
+        contract_file.write_text(json.dumps({"pid": os.getpid(), "nonce": "WRONG_SPOOFED_NONCE"}))
+
+        # Attempt to reuse daemon on port 8771
+        with patch("core.governed_morning_orchestrator.GovernedAuthCallbackServer",
+                   lambda *a, **kw: GovernedAuthCallbackServer(*a, port=8771, **kw)):
+            reused = orc.step_wait_human_auth(poll_interval=0.01, timeout_override=0.1)
+            # Must fail closed due to nonce mismatch
+            assert reused is False
+            assert orc.state == LauncherState.BLOCKED
+            assert "auth_port_collision_unknown_owner" in str(orc.blocker_reason)
+    finally:
+        srv.stop()
+
+
 # broker_api_called = false
 # is_order_action = false
+
 

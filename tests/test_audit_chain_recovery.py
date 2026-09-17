@@ -85,3 +85,74 @@ def test_forensic_rollover_missing_file_raises(tmp_path):
     missing = tmp_path / "missing_audit_log.jsonl"
     with pytest.raises(FileNotFoundError):
         perform_audit_chain_rollover(audit_log_path=missing)
+
+
+def test_provenance_verification_catches_archive_mutation(tmp_path):
+    """Adversarial test: mutating the archived audit log invalidates provenance verification."""
+    from core.audit_chain_recovery import verify_recovery_provenance
+    import os, stat
+    
+    log_dir = tmp_path / "desks" / "DEFAULT"
+    log_dir.mkdir(parents=True)
+    corrupt_log = log_dir / "audit_log.jsonl"
+    corrupt_log.write_text('{"event":"TEST","prev_hash":"bad_hash"}\n')
+
+    res = perform_audit_chain_rollover(audit_log_path=corrupt_log, reason="test_mutation")
+    arch_path = Path(res["archive_path"])
+    
+    # Pre-condition: provenance is verified
+    prov = verify_recovery_provenance(corrupt_log)
+    assert prov["ok"] is True
+    assert prov["verdict"] == "PROVENANCE_VERIFIED"
+
+    # Attack: tamper with the archive bytes
+    os.chmod(arch_path, stat.S_IRUSR | stat.S_IWUSR)
+    arch_path.write_text('{"event":"TAMPERED"}\n')
+
+    # Provenance verification must fail closed
+    attack_prov = verify_recovery_provenance(corrupt_log)
+    assert attack_prov["ok"] is False
+    assert "archive_sha_mismatch" in attack_prov["reason"]
+
+
+def test_provenance_verification_catches_manifest_mutation(tmp_path):
+    """Adversarial test: tampering with manifest invalidates provenance verification."""
+    from core.audit_chain_recovery import verify_recovery_provenance
+    import os, stat
+
+    log_dir = tmp_path / "desks" / "DEFAULT"
+    log_dir.mkdir(parents=True)
+    corrupt_log = log_dir / "audit_log.jsonl"
+    corrupt_log.write_text('{"event":"TEST","prev_hash":"bad_hash"}\n')
+
+    res = perform_audit_chain_rollover(audit_log_path=corrupt_log, reason="test_manifest_mutation")
+    man_path = Path(res["manifest_path"])
+
+    # Attack: tamper with manifest
+    os.chmod(man_path, stat.S_IRUSR | stat.S_IWUSR)
+    man_data = json.loads(man_path.read_text())
+    man_data["total_records"] = 99999
+    man_path.write_text(json.dumps(man_data))
+
+    attack_prov = verify_recovery_provenance(corrupt_log)
+    assert attack_prov["ok"] is False
+    assert "manifest_sha_mismatch" in attack_prov["reason"]
+
+
+def test_provenance_verification_catches_deleted_archive(tmp_path):
+    """Adversarial test: deleting archive invalidates provenance verification."""
+    from core.audit_chain_recovery import verify_recovery_provenance
+
+    log_dir = tmp_path / "desks" / "DEFAULT"
+    log_dir.mkdir(parents=True)
+    corrupt_log = log_dir / "audit_log.jsonl"
+    corrupt_log.write_text('{"event":"TEST","prev_hash":"bad_hash"}\n')
+
+    res = perform_audit_chain_rollover(audit_log_path=corrupt_log, reason="test_deleted_archive")
+    arch_path = Path(res["archive_path"])
+    arch_path.unlink()
+
+    attack_prov = verify_recovery_provenance(corrupt_log)
+    assert attack_prov["ok"] is False
+    assert attack_prov["reason"] == "archive_file_missing"
+
