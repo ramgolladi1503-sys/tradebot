@@ -6,6 +6,10 @@ This document defines the permanent research truth layer for TradeBot strategy d
 
 > **Freeze the scientific process, not a permanent list of strategies.**
 
+The canonical portfolio objective served by this process is:
+
+`docs/research_governance/STRATEGY_PORTFOLIO_OBJECTIVE_V1.md`
+
 The machine-readable authority is:
 
 `research/governance/edge_factory_truth_layer_v1.json`
@@ -15,12 +19,13 @@ The machine-readable authority is:
 The following separation is mandatory:
 
 - **Truth layer:** durable methodology derived from robustness, falsification, walk-forward, false-discovery, holdout, market-structure and execution-separation principles.
+- **Portfolio objective:** durable statement of what the research program is trying to accumulate: independently defensible intraday strategies, with no fixed frequency, hold-duration, daily-trade or final-count quota.
 - **Discovery phase:** outcome-blind generation of plausible mechanism families from literature, available data authority, market structure and known prior-family identity.
 - **Campaign catalog:** a finite set of discovered mechanisms and pre-registered hypotheses, frozen and hashed before forward outcomes are accessible.
 - **Strategy:** disposable. Most are expected to fail.
-- **Survivor:** rare. Must satisfy every applicable truth-layer gate.
+- **Survivor:** must satisfy every applicable truth-layer gate and portfolio-independence assessment.
 
-A strategy result may never redefine the truth layer that judged it.
+A strategy result may never redefine the truth layer or portfolio objective that judged it.
 
 ## 2. Literature-derived doctrine
 
@@ -78,6 +83,8 @@ max primary cells total = 96
 
 The campaign may discover fewer mechanisms if fewer are scientifically justified.
 
+These are **per-campaign search-budget controls**, not a final portfolio-size target.
+
 Before testing begins, materialize a catalog artifact containing at minimum:
 
 ```text
@@ -91,7 +98,7 @@ primary_hypotheses
 primary_horizons
 baseline_definition
 expected_failure_interpretation
-known_prior-family overlap
+known_prior-family_overlap
 ```
 
 Then:
@@ -147,10 +154,11 @@ Every campaign family must use the same certified kernel for:
 - global search accounting;
 - session-block bootstrap;
 - fold/session concentration;
-- actual +5m/+10m delay recomputation;
+- actual +5m/+10m delay recomputation where relevant;
 - negative controls;
 - code/data/partition provenance;
-- append-only experiment ledgers.
+- append-only experiment ledgers;
+- portfolio-independence and overlap assessment.
 
 A family may implement its own mechanism/feature logic, but may not independently reinvent these truth gates.
 
@@ -172,7 +180,10 @@ The following are contract violations:
 - silently deleting failed or blocked trials;
 - adding filters/indicators after a primary failure;
 - inverting a failed strategy and calling it a fresh uncounted idea;
-- weakening gates because too few strategies survived.
+- weakening gates because too few strategies survived;
+- preferring or rejecting a strategy merely because it is rare or frequent;
+- inventing strategies to fill no-trade days;
+- imposing a universal short hold such as 5–15 or <=30 minutes without strategy-specific mechanism rationale.
 
 A critical truth-layer defect invalidates the affected certification path until repaired and re-certified.
 
@@ -195,46 +206,72 @@ Every frozen family follows:
 
 A failed family is retired and the frozen campaign advances. Failure does not authorize inversion, filtering, threshold hunting or discovery of a replacement family.
 
-## 11. Survivor target and stop rules
+## 11. Portfolio accumulation and stop rules
 
-The desired portfolio target remains:
+There is **no fixed required final number of strategies**.
+
+There is **no requirement that a strategy trade every day**, trade a fixed number of sessions per year, be rare, be frequent, or hold for a fixed number of minutes.
+
+The final portfolio size is discovered from evidence.
+
+Each campaign stops when its frozen catalog is exhausted or a real global blocker is reached.
+
+A valid campaign result may contain:
 
 ```text
-3 independent confirmed mechanism clusters
+0 survivors
+1 survivor
+multiple survivors
 ```
 
-This is a target, never a mandate.
+Any survivor must undergo portfolio-independence assessment before being counted as a distinct portfolio strategy.
 
-### Success
+A later outcome-blind campaign may continue searching for other mechanisms, but prior search pressure remains in the global ledger.
 
-Stop when three independent confirmed mechanism clusters survive and portfolio-independence analysis, option-candle translation where possible, and prospective registries are complete.
+The research program must not continue merely because too many no-trade days remain.
 
-### Exhaustion
+The objective is **coverage of defendable opportunities**, not coverage of every trading day.
 
-If the **frozen campaign catalog** is exhausted with fewer than three survivors, stop and report the exact count honestly.
+## 12. Strategy frequency and holding-period policy
 
-A later V2 campaign may perform a new outcome-blind discovery phase, but prior search pressure remains in the global ledger.
+Strategy frequency is descriptive, not a selection target.
 
-### Global blocker
+A strategy may be frequent, moderate, or rare if effective sample size and evidence are sufficient.
 
-Stop if the common kernel cannot be certified, shared authoritative data is unusable, protected evidence is irreparably contaminated, the outcome-blind discovery boundary cannot be proven, or continuation requires fabrication/unsafe mutation/order authority.
+Minimum support must be predeclared from power, data quality and historical coverage rather than a universal sessions-per-year rule.
 
-## 12. Change control
+The strategy horizon is:
 
-V1 may not be semantically edited in place by ordinary strategy/research PRs.
+```text
+intraday only
+```
 
-A semantic methodology change requires:
+not:
 
-1. a new truth-layer version;
+```text
+<=30 minutes
+```
+
+Each strategy may have its own causal, pre-registered entry and exit logic. Overnight positions are forbidden.
+
+## 13. Change control
+
+V1 may not be semantically edited in place by ordinary strategy/research PRs after governance freeze.
+
+A semantic methodology or portfolio-objective change requires:
+
+1. a new truth-layer/objective version when V1 is already frozen;
 2. a dedicated governance PR;
 3. explicit methodology/data-authority rationale unrelated to strategy performance;
 4. adversarial review;
 5. updated contract hash/tests;
 6. preservation of V1 history and prior search accounting.
 
-A future agent cannot argue that V1 was "too strict" merely because few strategies survived.
+While this proposal remains a draft and unmerged, contradictions discovered during governance review must be corrected in the draft before freeze.
 
-## 13. Safety boundary
+A future agent cannot argue that V1 was "too strict" merely because few strategies survived or too many days produce no trade.
+
+## 14. Safety boundary
 
 This truth layer is research-only and never authorizes execution.
 
@@ -249,6 +286,9 @@ orders_modified=0
 orders_cancelled=0
 allowed_for_live_execution=false
 manual_approval_required=true
+buy_only=true
+intraday_only=true
+overnight_positions_allowed=false
 ```
 
 A research survivor is evidence, not broker authority.
