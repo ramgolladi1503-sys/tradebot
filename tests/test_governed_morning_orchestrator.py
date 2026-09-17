@@ -704,13 +704,15 @@ def test_28_step_wait_human_auth_full_callback_flow(mock_env):
     mock_kite = MagicMock()
     mock_kite.generate_session.return_value = {"access_token": "AUTOCONTINUED_KITE_TOKEN_777"}
 
+    sim_errors = []
     def simulate_browser_login():
         time.sleep(0.3)
         try:
             url = "http://127.0.0.1:8765/?action=login&status=success&request_token=auto_req_tok"
-            urllib.request.urlopen(url, timeout=3.0)
-        except Exception:
-            pass
+            with urllib.request.urlopen(url, timeout=3.0) as resp:
+                assert resp.status == 200
+        except urllib.error.URLError as exc:
+            sim_errors.append(exc)
 
     t = threading.Thread(target=simulate_browser_login, daemon=True)
     t.start()
