@@ -1,15 +1,18 @@
 """Deterministic tests for GovernedMorningOrchestrator and human login auto-continuation."""
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import os
 import threading
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 import pytest
 
 from core.governed_morning_orchestrator import (
+    GovernedAuthCallbackServer,
     GovernedMorningOrchestrator,
     LauncherState,
     snapshot_token_file,
@@ -595,6 +598,550 @@ def test_24_git_failure_fails_closed(mock_env, tmp_path):
         assert ok is False
         assert orc.state == LauncherState.BLOCKED
         assert "git_error" in str(orc.blocker_reason)
+
+
+def test_25_callback_server_starts_and_stops_cleanly(mock_env):
+    """25. Callback server: starts, binds port, and stops cleanly releasing socket."""
+    srv = GovernedAuthCallbackServer(
+        token_path=mock_env["token_path"],
+        repo_root=mock_env["repo_root"],
+        port=8766,  # Use dedicated non-standard test port
+    )
+    started = srv.start()
+    assert started is True
+    assert srv.bound is True
+    assert srv.server is not None
+    srv.stop()
+    assert srv.bound is False
+    assert srv.server is None
+
+
+def test_26_callback_server_captures_request_token_and_writes_token_file(mock_env):
+    """26. Callback server: intercepts redirect, exchanges token, writes token file."""
+    import urllib.request
+    token_path = mock_env["token_path"]
+    srv = GovernedAuthCallbackServer(
+        token_path=token_path,
+        repo_root=mock_env["repo_root"],
+        port=8786,
+    )
+    started = srv.start()
+    assert started is True
+
+    try:
+        mock_kite = MagicMock()
+        mock_kite.generate_session.return_value = {"access_token": "EXCHANGED_TEST_TOKEN_999"}
+        with patch("core.kite_client.kite_client", mock_kite), \
+             patch("scripts.kite_autologin_localhost._resolve_api_key", return_value="TEST_KEY"), \
+             patch("scripts.kite_autologin_localhost._resolve_api_secret", return_value="TEST_SECRET"):
+            url = f"http://127.0.0.1:8786/?action=login&status=success&request_token=test_req_tok_123"
+            with urllib.request.urlopen(url, timeout=3.0) as resp:
+                body = resp.read().decode("utf-8")
+                assert resp.status == 200
+                assert "Authentication Successful" in body
+
+        # Wait briefly for thread to flush
+        time.sleep(0.1)
+        assert token_path.exists()
+        assert token_path.read_text().strip() == "EXCHANGED_TEST_TOKEN_999"
+        assert srv.token_received is True
+    finally:
+        srv.stop()
+
+
+def test_27_callback_server_port_in_use_fails_closed(mock_env):
+    """27. Callback server: port already bound by unknown owner fails closed."""
+    import socket
+    # Bind port 8766 externally
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", 8766))
+    sock.listen(1)
+
+    try:
+        srv = GovernedAuthCallbackServer(
+            token_path=mock_env["token_path"],
+            repo_root=mock_env["repo_root"],
+            port=8766,
+        )
+        started = srv.start()
+        assert started is False
+        assert srv.bound is False
+        assert "bind_failed" in str(srv.error)
+
+        # Test that step_wait_human_auth fails closed when port cannot be bound
+        orc = GovernedMorningOrchestrator(
+            repo_root=mock_env["repo_root"],
+            state_root=mock_env["state_root"],
+            token_path=mock_env["token_path"],
+            lock_file=mock_env["lock_file"],
+            open_browser=False,
+        )
+        with patch("core.governed_morning_orchestrator.GovernedAuthCallbackServer", return_value=srv):
+            ok = orc.step_wait_human_auth(poll_interval=0.1, timeout_override=1.0)
+            assert ok is False
+            assert orc.state == LauncherState.BLOCKED
+            assert "auth_port_collision_unknown_owner" in str(orc.blocker_reason)
+    finally:
+        sock.close()
+
+
+def test_28_step_wait_human_auth_full_callback_flow(mock_env):
+    """28. step_wait_human_auth: auto-captures browser redirect, detects token, and exits WAITING."""
+    import urllib.request
+    token_path = mock_env["token_path"]
+    if token_path.exists():
+        token_path.unlink()
+
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=token_path,
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+
+    mock_kite = MagicMock()
+    mock_kite.generate_session.return_value = {"access_token": "AUTOCONTINUED_KITE_TOKEN_777"}
+
+    sim_errors = []
+    def simulate_browser_login():
+        time.sleep(0.3)
+        try:
+            url = "http://127.0.0.1:8765/?action=login&status=success&request_token=auto_req_tok"
+            with urllib.request.urlopen(url, timeout=3.0) as resp:
+                assert resp.status == 200
+        except urllib.error.URLError as exc:
+            sim_errors.append(exc)
+
+    t = threading.Thread(target=simulate_browser_login, daemon=True)
+    t.start()
+
+    with patch("core.kite_client.kite_client", mock_kite), \
+         patch("scripts.kite_autologin_localhost._resolve_api_key", return_value="TEST_KEY"), \
+         patch("scripts.kite_autologin_localhost._resolve_api_secret", return_value="TEST_SECRET"), \
+         patch.object(orc, "get_login_url", return_value="https://kite.zerodha.com/mock"):
+        ok = orc.step_wait_human_auth(poll_interval=0.1, timeout_override=4.0)
+
+    assert ok is True
+    assert orc.state == LauncherState.DETECT_FRESH_TOKEN
+    assert token_path.exists()
+    assert token_path.read_text().strip() == "AUTOCONTINUED_KITE_TOKEN_777"
+    # Verify callback server was stopped and port freed
+    assert orc._callback_server is None
+
+
+def test_29_credential_resolution_reconciles_conflicting_ambient_env(monkeypatch):
+    """29. Credential resolution: ambient environment conflicts reject ambient shadowing."""
+    import pytest
+    from scripts.kite_autologin_localhost import _resolve_governed_credential
+
+    mock_creds = {
+        "KITE_API_KEY": "governed_key_12345",
+        "KITE_API_SECRET": "governed_secret_67890",
+    }
+    monkeypatch.setattr("scripts.kite_autologin_localhost._load_governed_credentials", lambda: mock_creds)
+    monkeypatch.setenv("KITE_API_KEY", "stale_ambient_key")
+    monkeypatch.setenv("KITE_API_SECRET", "stale_ambient_secret")
+
+    with pytest.raises(SystemExit, match="conflicts with governed credential source"):
+        _resolve_governed_credential("KITE_API_KEY")
+
+
+def test_30_callback_server_rejects_invalid_status_or_action(mock_env):
+    """30. Callback server: rejects callbacks without expected success status and login action."""
+    import urllib.request
+    import urllib.error
+    token_path = mock_env["token_path"]
+    srv = GovernedAuthCallbackServer(
+        token_path=token_path,
+        repo_root=mock_env["repo_root"],
+        port=8767,
+    )
+    assert srv.start() is True
+
+    try:
+        mock_kite = MagicMock()
+        with patch("core.kite_client.kite_client", mock_kite):
+            # A. Rejected status=cancelled
+            url_bad_status = "http://127.0.0.1:8767/?action=login&status=cancelled&request_token=fake_tok"
+            with pytest.raises(urllib.error.HTTPError) as exc_info:
+                urllib.request.urlopen(url_bad_status, timeout=3.0)
+            assert exc_info.value.code == 400
+            assert "invalid_callback_semantics" in str(srv.error)
+
+            # B. Rejected action=logout
+            url_bad_action = "http://127.0.0.1:8767/?action=logout&status=success&request_token=fake_tok"
+            with pytest.raises(urllib.error.HTTPError) as exc_info:
+                urllib.request.urlopen(url_bad_action, timeout=3.0)
+            assert exc_info.value.code == 400
+
+            # C. Missing request_token
+            url_missing_tok = "http://127.0.0.1:8767/?action=login&status=success"
+            with pytest.raises(urllib.error.HTTPError) as exc_info:
+                urllib.request.urlopen(url_missing_tok, timeout=3.0)
+            assert exc_info.value.code == 400
+            assert "missing_request_token" in str(srv.error)
+
+            mock_kite.generate_session.assert_not_called()
+            assert not token_path.exists()
+    finally:
+        srv.stop()
+
+
+def test_31_callback_server_atomic_token_write(mock_env):
+    """31. Callback server: writes token atomically and sets permissions."""
+    import urllib.request
+    token_path = mock_env["token_path"]
+    srv = GovernedAuthCallbackServer(
+        token_path=token_path,
+        repo_root=mock_env["repo_root"],
+        port=8768,
+    )
+    assert srv.start() is True
+
+    try:
+        mock_kite = MagicMock()
+        mock_kite.generate_session.return_value = {"access_token": "ATOMIC_TOKEN_TEST_456"}
+        with patch("core.kite_client.kite_client", mock_kite), \
+             patch("scripts.kite_autologin_localhost._resolve_api_key", return_value="TEST_KEY"), \
+             patch("scripts.kite_autologin_localhost._resolve_api_secret", return_value="TEST_SECRET"):
+            url = "http://127.0.0.1:8768/?action=login&status=success&request_token=valid_tok"
+            with urllib.request.urlopen(url, timeout=3.0) as resp:
+                assert resp.status == 200
+        time.sleep(0.1)
+        assert token_path.is_file()
+        assert token_path.read_text().strip() == "ATOMIC_TOKEN_TEST_456"
+    finally:
+        srv.stop()
+
+
+def test_32_preflight_only_passes_and_exits_cleanly(mock_env):
+    """32. Preflight-only mode: certifies readiness and exits cleanly without spawning observer."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        preflight_only=True,
+    )
+    with patch("subprocess.Popen") as mock_popen:
+        ok = orc.step_arm_observer()
+        assert ok is True
+        assert orc.state == LauncherState.STOPPED
+        assert orc.stop_reason == "preflight_complete"
+        mock_popen.assert_not_called()
+
+
+def test_33_outside_window_no_wait_exits_standby(mock_env):
+    """33. Outside window without wait: exits cleanly in STANDBY state."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        wait_for_window=False,
+        market_open_time="08:55",
+        market_close_time="15:45",
+    )
+    # Mock time at 08:45 IST
+    mock_dt = datetime(2026, 9, 18, 8, 45, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    with patch("core.governed_morning_orchestrator.datetime") as mock_datetime:
+        mock_datetime.now.return_value = mock_dt
+        mock_datetime.strptime = datetime.strptime
+        ok = orc.step_arm_observer()
+        assert ok is True
+        assert orc.state == LauncherState.STOPPED
+        assert orc.stop_reason == "outside_session_timing_window"
+
+
+def test_34_wait_for_window_advances_to_market_open(mock_env):
+    """34. Waiting for window: sleeps until market open, then proceeds to spawn observer."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        wait_for_window=True,
+        market_open_time="08:55",
+        market_close_time="15:45",
+        supervise=False,
+    )
+    t1 = datetime(2026, 9, 18, 8, 54, 59, tzinfo=ZoneInfo("Asia/Kolkata")) # before open
+    t2 = datetime(2026, 9, 18, 8, 55, 1, tzinfo=ZoneInfo("Asia/Kolkata"))  # after open
+
+    now_calls = 0
+    def mock_now(tz=None):
+        nonlocal now_calls
+        now_calls += 1
+        return t1 if now_calls <= 4 else t2
+
+    mock_proc = MagicMock()
+    mock_proc.pid = 43210
+
+    with patch("core.governed_morning_orchestrator.datetime") as mock_datetime, \
+         patch("time.sleep") as mock_sleep, \
+         patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
+        mock_datetime.now = mock_now
+        mock_datetime.strptime = datetime.strptime
+        ok = orc.step_arm_observer()
+        assert ok is True
+        assert orc.state == LauncherState.OBSERVER_RUNNING
+        mock_sleep.assert_called()
+        mock_popen.assert_called_once()
+
+
+def test_35_1545_cutoff_supervision_and_clean_termination(mock_env):
+    """35. Supervision: reaches 15:45 cutoff, cleanly terminates child observer process."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        market_close_time="15:45",
+        supervise=True,
+    )
+    mock_proc = MagicMock()
+    mock_proc.pid = 54321
+    mock_proc.poll.return_value = None  # Child is still running
+    orc._child_observer_proc = mock_proc
+
+    cutoff_dt = datetime(2026, 9, 18, 15, 45, 1, tzinfo=ZoneInfo("Asia/Kolkata"))
+    with patch("core.governed_morning_orchestrator.datetime") as mock_datetime, \
+         patch("time.sleep"):
+        mock_datetime.now.return_value = cutoff_dt
+        mock_datetime.strptime = datetime.strptime
+        ok = orc.supervise_observer()
+        assert ok is True
+        assert orc.state == LauncherState.STOPPED
+        assert orc.stop_reason == "session_completed_cutoff_reached"
+        mock_proc.terminate.assert_called_once()
+
+
+def test_36_callback_server_health_check_and_reuse(mock_env):
+    """36. Callback server: /health endpoint confirms identity and allows safe reuse without collision blocker."""
+    import urllib.request
+    token_path = mock_env["token_path"]
+    existing_daemon = GovernedAuthCallbackServer(
+        token_path=token_path,
+        repo_root=mock_env["repo_root"],
+        port=8769,
+    )
+    assert existing_daemon.start() is True
+
+    try:
+        # Check health endpoint directly
+        health_url = "http://127.0.0.1:8769/health"
+        with urllib.request.urlopen(health_url, timeout=2.0) as resp:
+            assert resp.status == 200
+            data = json.loads(resp.read().decode("utf-8"))
+            assert data.get("status") == "tradebot_auth_callback"
+            assert data.get("ready") is True
+
+        orc = GovernedMorningOrchestrator(
+            repo_root=mock_env["repo_root"],
+            state_root=mock_env["state_root"],
+            token_path=token_path,
+            lock_file=mock_env["lock_file"],
+            open_browser=False,
+        )
+
+        # Simulate human token written via the existing daemon
+        def simulate_token_arrival():
+            time.sleep(0.2)
+            token_path.write_text("DAEMON_REUSED_TOKEN_888")
+
+        threading.Thread(target=simulate_token_arrival, daemon=True).start()
+
+        # Patch GovernedAuthCallbackServer in step_wait_human_auth to use port 8769
+        with patch("core.governed_morning_orchestrator.GovernedAuthCallbackServer",
+                   lambda *a, **kw: GovernedAuthCallbackServer(*a, port=8769, **kw)), \
+             patch.object(orc, "get_login_url", return_value="https://kite.zerodha.com/mock"):
+            ok = orc.step_wait_human_auth(poll_interval=0.05, timeout_override=3.0)
+            assert ok is True
+            assert orc.state == LauncherState.DETECT_FRESH_TOKEN
+            assert token_path.read_text().strip() == "DAEMON_REUSED_TOKEN_888"
+            # Existing daemon must still be running (not killed by the orchestrator)
+            assert existing_daemon.bound is True
+    finally:
+        existing_daemon.stop()
+
+
+def test_37_hourly_status_telemetry(mock_env):
+    """37. Hourly telemetry emits status reports at configured interval."""
+    telemetry_events = []
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        market_close_time="15:45",
+        status_interval_seconds=0.05, # Fast interval for test
+        telemetry_callback=lambda step, status, detail: telemetry_events.append((step, status)),
+    )
+    mock_proc = MagicMock()
+    mock_proc.pid = 67890
+    orc._child_observer_proc = mock_proc
+
+    call_count = 0
+    def mock_poll():
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 3:
+            return 0 # Child exits cleanly after 3 iterations
+        return None
+
+    mock_proc.poll = mock_poll
+
+    clock = 1000.0
+    def mock_time():
+        nonlocal clock
+        clock += 1.0
+        return clock
+
+    mid_dt = datetime(2026, 9, 18, 10, 0, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    with patch("core.governed_morning_orchestrator.datetime") as mock_datetime, \
+         patch("time.time", side_effect=mock_time), \
+         patch("time.sleep"):
+        mock_datetime.now.return_value = mid_dt
+        mock_datetime.strptime = datetime.strptime
+        ok = orc.supervise_observer()
+        assert ok is True
+        assert any(step == "STATUS_HOURLY" for step, _ in telemetry_events)
+
+
+def test_38_collector_healthy_mros_dead_fails_mros_health(mock_env):
+    """38. Collector health must NEVER make MROS health PASS."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        market_close_time="15:45",
+        status_interval_seconds=1.0,
+    )
+    col_proc = MagicMock()
+    col_proc.pid = 11111
+    col_proc.poll.return_value = None  # Collector is running and healthy
+
+    mros_proc = MagicMock()
+    mros_proc.pid = 22222
+    mros_proc.poll.return_value = 1  # MROS observer has crashed
+
+    orc._child_collector_proc = col_proc
+    orc._child_mros_proc = mros_proc
+
+    with patch("time.sleep"):
+        ok = orc.supervise_observer()
+
+    assert ok is False
+    assert orc.collector_health == "HEALTHY"
+    assert orc.mros_health == "FAILED_CODE_1"
+    assert orc.state == LauncherState.BLOCKED
+    assert orc.blocker_reason == "mros_observer_failed_code_1"
+
+
+def test_39_mros_healthy_collector_dead_fails_closed(mock_env):
+    """39. Collector crash fails closed even if MROS process is active."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        market_close_time="15:45",
+        status_interval_seconds=1.0,
+    )
+    col_proc = MagicMock()
+    col_proc.pid = 11111
+    col_proc.poll.return_value = 2  # Collector crashed
+
+    mros_proc = MagicMock()
+    mros_proc.pid = 22222
+    mros_proc.poll.return_value = None  # MROS running
+
+    orc._child_collector_proc = col_proc
+    orc._child_mros_proc = mros_proc
+
+    with patch("time.sleep"):
+        ok = orc.supervise_observer()
+
+    assert ok is False
+    assert orc.collector_health == "FAILED_CODE_2"
+    assert orc.state == LauncherState.BLOCKED
+    assert orc.blocker_reason == "collector_failed_code_2"
+
+
+def test_40_scheduler_utc_cron_matches_0845_ist():
+    """40. Prove UTC cron '15 3 * * 1-5' maps to 08:45 AM Asia/Kolkata."""
+    from datetime import timezone, timedelta
+    from zoneinfo import ZoneInfo
+
+    ist = ZoneInfo("Asia/Kolkata")
+    # 03:15 UTC
+    utc_dt = datetime(2026, 9, 18, 3, 15, 0, tzinfo=timezone.utc)
+    ist_dt = utc_dt.astimezone(ist)
+
+    assert ist_dt.hour == 8
+    assert ist_dt.minute == 45
+    assert ist_dt.strftime("%H:%M") == "08:45"
+    assert ist_dt.weekday() < 5  # Monday-Friday
+
+
+def test_41_callback_server_attacks_rejected(mock_env):
+    """41. Callback attacks: spoofed health nonce, oversized query URI, invalid token regex."""
+    import urllib.request
+    import urllib.error
+
+    srv = GovernedAuthCallbackServer(
+        token_path=mock_env["token_path"],
+        repo_root=mock_env["repo_root"],
+        port=8771,
+    )
+    assert srv.start() is True
+
+    try:
+        # A. Oversized URL -> 414 URI Too Long
+        oversized = "http://127.0.0.1:8771/?" + ("x" * 2100)
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(oversized, timeout=2.0)
+        assert exc.value.code == 414
+
+        # B. Invalid token regex (special chars / out of length bounds)
+        bad_token_url = "http://127.0.0.1:8771/?action=login&status=success&request_token=bad<script>evil</script>"
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(bad_token_url, timeout=2.0)
+        assert exc.value.code == 400
+
+        # C. Spoofed health check (wrong nonce in local contract)
+        orc = GovernedMorningOrchestrator(
+            repo_root=mock_env["repo_root"],
+            state_root=mock_env["state_root"],
+            token_path=mock_env["token_path"],
+            lock_file=mock_env["lock_file"],
+            open_browser=False,
+        )
+        # Overwrite local contract with wrong nonce
+        contract_file = mock_env["repo_root"] / ".runtime" / ".callback_server_8771.json"
+        contract_file.write_text(json.dumps({"pid": os.getpid(), "nonce": "WRONG_SPOOFED_NONCE"}))
+
+        # Attempt to reuse daemon on port 8771
+        with patch("core.governed_morning_orchestrator.GovernedAuthCallbackServer",
+                   lambda *a, **kw: GovernedAuthCallbackServer(*a, port=8771, **kw)):
+            reused = orc.step_wait_human_auth(poll_interval=0.01, timeout_override=0.1)
+            # Must fail closed due to nonce mismatch
+            assert reused is False
+            assert orc.state == LauncherState.BLOCKED
+            assert "auth_port_collision_unknown_owner" in str(orc.blocker_reason)
+    finally:
+        srv.stop()
+
 
 # broker_api_called = false
 # is_order_action = false

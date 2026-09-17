@@ -230,19 +230,28 @@ def main():
             logger.error(f"Error flushing parquet: {e}")
 
     kws = KiteTicker(API_KEY, ACCESS_TOKEN)
-    stop_time = datetime_time(15, 35)
+    stop_time = datetime_time(15, 45)
 
     def on_ticks(ws, ticks):
         now = datetime.now()
         if now.time() >= stop_time:
-            logger.info("Market close reached. Shutting down tick collector.")
+            logger.info("Observation cutoff (15:45 IST) reached. Shutting down tick collector.")
             flush_buffer()
             try:
                 writer.close()
-                ws.close()
-            except:
+            except Exception:
                 pass
-            sys.exit(0)
+            try:
+                ws.close()
+            except Exception:
+                pass
+            try:
+                from twisted.internet import reactor
+                if reactor.running:
+                    reactor.callFromThread(reactor.stop)
+            except Exception:
+                pass
+            os._exit(0)
 
         for t in ticks:
             try:
@@ -288,10 +297,19 @@ def main():
         flush_buffer()
         try:
             writer.close()
-            kws.close()
-        except:
+        except Exception:
             pass
-        sys.exit(0)
+        try:
+            kws.close()
+        except Exception:
+            pass
+        try:
+            from twisted.internet import reactor
+            if reactor.running:
+                reactor.callFromThread(reactor.stop)
+        except Exception:
+            pass
+        os._exit(0)
 
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGTERM, handle_sigint)

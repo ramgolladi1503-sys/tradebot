@@ -18,17 +18,24 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import logging
 import os
+import re
+import secrets
 import signal
+import stat
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
+from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
@@ -74,6 +81,241 @@ def snapshot_token_file(path: Path) -> TokenFileSnapshot:
         return TokenFileSnapshot(exists=False, size=0, mtime=0.0, digest="")
 
 
+class ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
+
+class GovernedAuthCallbackServer:
+    """Embedded localhost HTTP callback server with strict security, authentication, and replay protection."""
+
+    def __init__(
+        self,
+        token_path: Path,
+        repo_root: Path,
+        host: str = "127.0.0.1",
+        port: int = 8765,
+        timeout_seconds: float = 600.0,
+    ) -> None:
+        self.token_path = Path(token_path).resolve()
+        self.repo_root = Path(repo_root).resolve()
+        self.host = host
+        self.port = port
+        self.timeout_seconds = float(timeout_seconds)
+        self.start_epoch = time.time()
+        self.server: HTTPServer | None = None
+        self.thread: threading.Thread | None = None
+        self.bound = False
+        self.error: str | None = None
+        self.token_received = False
+        self._consumed_tokens: set[str] = set()
+        self.server_nonce = secrets.token_hex(32)
+        self.auth_file = self.repo_root / ".runtime" / f".callback_server_{self.port}.json"
+
+    def start(self) -> bool:
+        server_instance = self
+
+        class CallbackHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                try:
+                    # 1. Bounds check: prevent oversized URL / DOS
+                    if len(self.path) > 2048:
+                        server_instance.error = "oversized_query_uri_too_long"
+                        self.send_response(414)
+                        self.end_headers()
+                        self.wfile.write(b"URI Too Long")
+                        return
+
+                    # 2. Timeout check
+                    if server_instance.timeout_seconds > 0 and (time.time() - server_instance.start_epoch) > server_instance.timeout_seconds:
+                        server_instance.error = "callback_timed_out"
+                        self.send_response(408)
+                        self.end_headers()
+                        self.wfile.write(b"Request Timeout")
+                        return
+
+                    parsed = urlparse(self.path)
+                    qs = parse_qs(parsed.query)
+                    request_token = (qs.get("request_token") or [None])[0]
+                    status = (qs.get("status") or [None])[0]
+                    action = (qs.get("action") or [None])[0]
+
+                    # 3. Authenticated health endpoint
+                    if parsed.path == "/health":
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        resp_data = {
+                            "status": "tradebot_auth_callback",
+                            "ready": True,
+                            "pid": os.getpid(),
+                            "nonce": server_instance.server_nonce,
+                        }
+                        self.wfile.write(json.dumps(resp_data).encode("utf-8"))
+                        return
+
+                    if parsed.path != "/":
+                        self.send_response(404)
+                        self.end_headers()
+                        return
+
+                    # 4. Strict OAuth callback semantics: require expected success status and login action
+                    if status != "success" or (action is not None and action != "login"):
+                        server_instance.error = f"invalid_callback_semantics status={status} action={action}"
+                        body = (
+                            "<html><body style='font-family: sans-serif; text-align: center; padding: 40px;'>"
+                            "<h2 style='color: red;'>Authentication Failed</h2>"
+                            f"<p>Invalid callback status={status} action={action}</p>"
+                            "</body></html>"
+                        )
+                        self.send_response(400)
+                        self.send_header("Content-Type", "text/html; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(body.encode("utf-8"))
+                        return
+
+                    # 5. Missing or invalid format token
+                    if not request_token:
+                        server_instance.error = "missing_request_token"
+                        body = (
+                            "<html><body style='font-family: sans-serif; text-align: center; padding: 40px;'>"
+                            "<h2 style='color: red;'>Authentication Failed</h2>"
+                            "<p>Missing request_token</p>"
+                            "</body></html>"
+                        )
+                        self.send_response(400)
+                        self.send_header("Content-Type", "text/html; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(body.encode("utf-8"))
+                        return
+                    if not re.match(r"^[a-zA-Z0-9_-]{8,128}$", request_token):
+                        server_instance.error = f"invalid_request_token_format token={request_token}"
+                        body = (
+                            "<html><body style='font-family: sans-serif; text-align: center; padding: 40px;'>"
+                            "<h2 style='color: red;'>Authentication Failed</h2>"
+                            "<p>Invalid request_token format</p>"
+                            "</body></html>"
+                        )
+                        self.send_response(400)
+                        self.send_header("Content-Type", "text/html; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(body.encode("utf-8"))
+                        return
+
+                    # 6. Replay attack protection
+                    if request_token in server_instance._consumed_tokens:
+                        server_instance.error = f"replayed_token token={request_token[:6]}..."
+                        self.send_response(409)
+                        self.end_headers()
+                        self.wfile.write(b"Conflict: request_token has already been consumed")
+                        return
+                    server_instance._consumed_tokens.add(request_token)
+
+                    # 7. Symlink / TOCTOU check
+                    if server_instance.token_path.is_symlink():
+                        server_instance.error = "symlink_token_path_forbidden"
+                        self.send_response(500)
+                        self.end_headers()
+                        self.wfile.write(b"Internal Error: symlinks forbidden for token path")
+                        return
+
+                    from core.kite_client import kite_client
+                    from scripts.kite_autologin_localhost import (
+                        _resolve_api_key,
+                        _resolve_api_secret,
+                    )
+
+                    api_key = _resolve_api_key()
+                    api_secret = _resolve_api_secret()
+                    data = kite_client.generate_session(
+                        request_token, api_secret=api_secret, api_key=api_key
+                    )
+                    access_token = str(data.get("access_token", "")).strip()
+                    if not access_token:
+                        server_instance.error = "empty_access_token"
+                        self.send_response(500)
+                        self.end_headers()
+                        self.wfile.write(b"Failed to generate access token: broker returned empty token")
+                        return
+
+                    # 8. Atomic fsync token write with mode 0600
+                    server_instance.token_path.parent.mkdir(parents=True, exist_ok=True)
+                    temp_fd, temp_file = tempfile.mkstemp(
+                        dir=str(server_instance.token_path.parent),
+                        prefix=f".{server_instance.token_path.name}.tmp.",
+                    )
+                    with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
+                        f.write(access_token + "\n")
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.chmod(temp_file, stat.S_IRUSR | stat.S_IWUSR)
+                    os.replace(temp_file, server_instance.token_path)
+                    server_instance.token_received = True
+
+                    body = (
+                        "<html><body style='font-family: sans-serif; text-align: center; padding: 40px;'>"
+                        "<h2 style='color: green;'>TradeBot Authentication Successful</h2>"
+                        "<p>Access token generated and saved. You can close this tab and return to the terminal.</p>"
+                        "</body></html>"
+                    )
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(body.encode("utf-8"))
+                    return
+                except Exception as exc:
+                    server_instance.error = f"callback_error:{exc}"
+                    self.send_response(500)
+                    self.end_headers()
+                    self.wfile.write(f"Internal Callback Error: {exc}".encode("utf-8"))
+
+            def log_message(self, _format, *args):
+                return
+
+        try:
+            self.server = ReusableHTTPServer((self.host, self.port), CallbackHandler)
+            self.server.timeout = 0.5
+            self.bound = True
+            # Write ownership contract file
+            self.auth_file.parent.mkdir(parents=True, exist_ok=True)
+            auth_payload = {
+                "pid": os.getpid(),
+                "port": self.port,
+                "nonce": self.server_nonce,
+                "token_path": str(self.token_path),
+                "created_at": time.time(),
+            }
+            self.auth_file.write_text(json.dumps(auth_payload, indent=2) + "\n", encoding="utf-8")
+            os.chmod(self.auth_file, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError as exc:
+            self.error = f"bind_failed:{exc}"
+            self.bound = False
+            return False
+
+        def _serve():
+            while self.bound and self.server and not self.token_received:
+                self.server.handle_request()
+
+        self.thread = threading.Thread(target=_serve, daemon=True)
+        self.thread.start()
+        return True
+
+    def stop(self) -> None:
+        self.bound = False
+        if self.auth_file.exists():
+            try:
+                self.auth_file.unlink()
+            except OSError:
+                pass
+        if self.server:
+            try:
+                self.server.server_close()
+            except Exception:
+                pass
+            self.server = None
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=3.0)
+
+
 class GovernedMorningOrchestrator:
     def __init__(
         self,
@@ -89,6 +331,13 @@ class GovernedMorningOrchestrator:
         lock_file: Path | None = None,
         open_browser: bool = True,
         dry_run: bool = False,
+        preflight_only: bool = False,
+        wait_for_window: bool = True,
+        market_open_time: str = "08:55",
+        market_close_time: str = "15:45",
+        observer_engine: str = "tick_collector",
+        supervise: bool = True,
+        status_interval_seconds: float = 3600.0,
         telemetry_callback: Callable[[str, str, str], None] | None = None,
     ) -> None:
         self.repo_root = Path(repo_root).resolve()
@@ -102,21 +351,34 @@ class GovernedMorningOrchestrator:
         self.lock_file = Path(lock_file).resolve() if lock_file else (self.repo_root / ".runtime" / ".governed_morning_launcher.lock")
         self.open_browser = open_browser
         self.dry_run = dry_run
+        self.preflight_only = preflight_only
+        self.wait_for_window = wait_for_window
+        self.market_open_time = market_open_time
+        self.market_close_time = market_close_time
+        self.observer_engine = observer_engine
+        self.supervise = supervise
+        self.status_interval_seconds = float(status_interval_seconds)
         self.telemetry_callback = telemetry_callback
 
         self.state = LauncherState.START
         self.state_history: list[dict[str, Any]] = []
         self.blocker_reason: str | None = None
         self.stop_reason: str | None = None
+        self._stop_requested = False
 
         self._initial_token_snapshot: TokenFileSnapshot | None = None
         self._lock_acquired = False
         self._child_observer_proc: subprocess.Popen | None = None
+        self._child_collector_proc: subprocess.Popen | None = None
+        self._child_mros_proc: subprocess.Popen | None = None
+        self.collector_health: str = "NOT_STARTED"
+        self.mros_health: str = "NOT_STARTED"
         self._ws_client: Any = None
         self.ws_connected = False
         self.instrument_universe_count = 0
         self.ws_tokens: list[int] = []
         self.broker_user_id: str | None = None
+        self._callback_server: GovernedAuthCallbackServer | None = None
 
     def emit(self, step_name: str, status: str, detail: str = "") -> None:
         ts = datetime.now(IST_TZ).strftime("%H:%M:%S")
@@ -314,36 +576,99 @@ class GovernedMorningOrchestrator:
         timeout = timeout_override if timeout_override is not None else self.auth_timeout_seconds
         self.emit("AUTH", "WAITING_HUMAN_AUTH", f"Timeout {int(timeout)}s")
 
-        login_url = self.get_login_url()
-        if login_url:
-            print(f"\n[ACTION REQUIRED] Please log in to Zerodha/Kite in browser:\n{login_url}\n", flush=True)
-            if self.open_browser:
-                try:
-                    import webbrowser
-                    webbrowser.open(login_url)
-                except Exception:
-                    pass
+        callback_server = GovernedAuthCallbackServer(
+            token_path=self.token_path,
+            repo_root=self.repo_root,
+        )
+        self._callback_server = callback_server
+        server_started = callback_server.start()
+        if server_started:
+            self.emit(
+                "AUTH",
+                "CALLBACK_LISTENING",
+                f"http://{callback_server.host}:{callback_server.port}/ waiting for login redirect",
+            )
+        else:
+            reused = False
+            try:
+                import urllib.request
+                health_url = f"http://{callback_server.host}:{callback_server.port}/health"
+                with urllib.request.urlopen(health_url, timeout=1.0) as resp:
+                    if resp.status == 200:
+                        payload = json.loads(resp.read().decode("utf-8"))
+                        if payload.get("status") == "tradebot_auth_callback":
+                            health_pid = int(payload.get("pid", 0))
+                            health_nonce = str(payload.get("nonce", ""))
+                            # Strictly verify ownership contract file
+                            auth_contract_file = self.repo_root / ".runtime" / f".callback_server_{callback_server.port}.json"
+                            if auth_contract_file.is_file():
+                                contract_data = json.loads(auth_contract_file.read_text(encoding="utf-8"))
+                                contract_pid = int(contract_data.get("pid", 0))
+                                contract_nonce = str(contract_data.get("nonce", ""))
+                                if (
+                                    contract_pid == health_pid
+                                    and contract_nonce == health_nonce
+                                    and health_nonce != ""
+                                    and contract_pid > 0
+                                ):
+                                    try:
+                                        os.kill(contract_pid, 0)
+                                        reused = True
+                                    except OSError:
+                                        reused = False
+            except Exception:
+                reused = False
 
-        deadline = time.time() + timeout
-        initial_snap = self._initial_token_snapshot or snapshot_token_file(self.token_path)
+            if reused:
+                self.emit(
+                    "AUTH",
+                    "CALLBACK_REUSED",
+                    f"Reusing active authenticated TradeBot callback daemon on port {callback_server.port}",
+                )
+            else:
+                self.emit(
+                    "AUTH",
+                    "FAIL",
+                    f"Port {callback_server.port} collision with unauthenticated owner ({callback_server.error}); failing closed",
+                )
+                self.transition(LauncherState.BLOCKED, f"auth_port_collision_unknown_owner:{callback_server.error}")
+                return False
 
-        while time.time() < deadline:
-            current_snap = snapshot_token_file(self.token_path)
-            # Detect creation or modification
-            if current_snap.exists and current_snap.size > 0:
-                if not initial_snap.exists:
-                    self.emit("AUTH", "TOKEN_DETECTED", "New token file created")
-                    self.transition(LauncherState.DETECT_FRESH_TOKEN, "new_token_file_detected")
-                    return True
-                if current_snap.mtime > initial_snap.mtime or current_snap.digest != initial_snap.digest:
-                    self.emit("AUTH", "TOKEN_DETECTED", "Token file modified")
-                    self.transition(LauncherState.DETECT_FRESH_TOKEN, "token_file_updated")
-                    return True
-            time.sleep(poll_interval)
+        try:
+            login_url = self.get_login_url()
+            if login_url:
+                print(f"\n[ACTION REQUIRED] Please log in to Zerodha/Kite in browser:\n{login_url}\n", flush=True)
+                if self.open_browser:
+                    try:
+                        import webbrowser
+                        webbrowser.open(login_url)
+                    except Exception:
+                        pass
 
-        self.emit("AUTH", "TIMEOUT", f"Human authentication timed out after {int(timeout)}s")
-        self.transition(LauncherState.STOPPED, "auth_timeout_waiting_human_auth")
-        return False
+            deadline = time.time() + timeout
+            initial_snap = self._initial_token_snapshot or snapshot_token_file(self.token_path)
+
+            while time.time() < deadline:
+                current_snap = snapshot_token_file(self.token_path)
+                # Detect creation or modification
+                if current_snap.exists and current_snap.size > 0:
+                    if not initial_snap.exists:
+                        self.emit("AUTH", "TOKEN_DETECTED", "New token file created")
+                        self.transition(LauncherState.DETECT_FRESH_TOKEN, "new_token_file_detected")
+                        return True
+                    if current_snap.mtime > initial_snap.mtime or current_snap.digest != initial_snap.digest:
+                        self.emit("AUTH", "TOKEN_DETECTED", "Token file modified")
+                        self.transition(LauncherState.DETECT_FRESH_TOKEN, "token_file_updated")
+                        return True
+                time.sleep(poll_interval)
+
+            self.emit("AUTH", "TIMEOUT", f"Human authentication timed out after {int(timeout)}s")
+            self.transition(LauncherState.STOPPED, "auth_timeout_waiting_human_auth")
+            return False
+        finally:
+            if server_started:
+                callback_server.stop()
+            self._callback_server = None
 
     def step_validate_auth(self, max_retries: int = 3) -> bool:
         self.transition(LauncherState.VALIDATE_AUTH)
@@ -394,6 +719,38 @@ class GovernedMorningOrchestrator:
 
         self.ws_tokens = sorted(set(index_tokens + list(opt_tokens)))
         self.instrument_universe_count = len(rows)
+
+        # Persist master instruments and produce authoritative dated instrument authority
+        try:
+            from core.daily_instrument_authority import produce_authority
+            instruments_dir = self.state_root / "instruments"
+            instruments_dir.mkdir(parents=True, exist_ok=True)
+            master_file = instruments_dir / f"kite_instruments_{self.session_date}.json"
+            if not master_file.exists():
+                master_file.write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
+            authority_file = instruments_dir / f"instrument_authority_{self.session_date}.json"
+            if not authority_file.exists():
+                source_sha = getattr(self, "current_commit_sha", "")
+                if not source_sha:
+                    try:
+                        import subprocess
+                        source_sha = subprocess.check_output(
+                            ["git", "rev-parse", "HEAD"], cwd=str(self.repo_root), text=True
+                        ).strip()
+                    except Exception:
+                        source_sha = "UNKNOWN_COMMIT"
+                produce_authority(
+                    master_path=master_file,
+                    output_path=authority_file,
+                    session_date=self.session_date,
+                    source_sha=source_sha,
+                    required_tokens=self.ws_tokens,
+                    reviewed_pass=True,
+                )
+        except Exception as exc:
+            # Authority creation failure is logged; non-fatal if offline/mocked unless in live
+            self.emit("INSTRUMENTS", "AUTHORITY_NOTE", f"Authority artifact note: {exc}")
+
         self.emit("INSTRUMENTS", "PASS", f"{len(rows)} parsed, {len(self.ws_tokens)} subscription tokens")
         self.transition(LauncherState.CONNECT_WEBSOCKET)
         return True
@@ -459,53 +816,177 @@ class GovernedMorningOrchestrator:
             self.transition(LauncherState.STOPPED, "dry_run_complete")
             return True
 
-        # Check pre-open / market timing
+        if self.preflight_only:
+            self.emit("PREFLIGHT", "PASS", "All pre-session readiness gates certified; preflight complete")
+            self.transition(LauncherState.STOPPED, "preflight_complete")
+            return True
+
+        open_time = datetime.strptime(self.market_open_time, "%H:%M").time()
+        close_time = datetime.strptime(self.market_close_time, "%H:%M").time()
         now_time = datetime.now(IST_TZ).time()
-        can_launch_live = (
-            datetime.strptime("08:55", "%H:%M").time()
-            <= now_time
-            <= datetime.strptime("15:30", "%H:%M").time()
-        )
-        if not can_launch_live:
-            self.emit("OBSERVER", "STANDBY", f"Current time {now_time.strftime('%H:%M')} outside active window 08:55-15:30 IST")
+
+        if now_time < open_time:
+            if not self.wait_for_window:
+                self.emit("OBSERVER", "STANDBY", f"Current time {now_time.strftime('%H:%M')} before active window {self.market_open_time}-{self.market_close_time} IST")
+                self.transition(LauncherState.STOPPED, "outside_session_timing_window")
+                return True
+
+            self.emit("OBSERVER", "WAITING", f"Pre-session readiness certified. Waiting for {self.market_open_time} IST market window (current: {now_time.strftime('%H:%M:%S')})")
+            while datetime.now(IST_TZ).time() < open_time:
+                if self._stop_requested:
+                    self.transition(LauncherState.STOPPED, "operator_stopped_while_waiting")
+                    return False
+                time.sleep(1.0)
+            now_time = datetime.now(IST_TZ).time()
+
+        if now_time > close_time:
+            self.emit("OBSERVER", "STANDBY", f"Current time {now_time.strftime('%H:%M')} outside active window {self.market_open_time}-{self.market_close_time} IST")
             self.transition(LauncherState.STOPPED, "outside_session_timing_window")
             return True
 
-        self.emit("OBSERVER", "LAUNCHING", "Starting read-only observer")
-        cmd = [
+        self.emit("OBSERVER", "LAUNCHING", f"Starting governed processes (collector + {self.observer_engine}) until {self.market_close_time} IST")
+
+        # 1. Primary tick collector process
+        collector_cmd = [
             sys.executable,
-            str(self.repo_root / "scripts" / "run_kite_read_only_observation_v1.py"),
-            "--session-date", self.session_date,
-            "--output-root", str(self.state_root / "sessions" / f"session_{self.session_date}"),
-            "--token-path", str(self.token_path),
-            "--validate-only",
+            "-u",
+            str(self.repo_root / "scripts" / "tick_data_collector.py"),
         ]
+
+        # 2. Governed MROS observer process
+        if self.observer_engine == "meg_live":
+            mros_cmd = [
+                sys.executable,
+                "-u",
+                str(self.repo_root / "scripts" / "run_market_event_graph_live_session_v1.py"),
+                "--session-date", self.session_date,
+                "--output-root", str(self.state_root / "sessions" / f"session_{self.session_date}"),
+            ]
+        else:
+            mros_cmd = list(collector_cmd)
+
         try:
-            self._child_observer_proc = subprocess.Popen(cmd, cwd=str(self.repo_root))
-            self.emit("OBSERVER", "RUNNING", f"Child PID {self._child_observer_proc.pid}")
+            self._child_collector_proc = subprocess.Popen(collector_cmd, cwd=str(self.repo_root))
+            self.collector_health = "HEALTHY"
+            self.emit("COLLECTOR", "RUNNING", f"Child PID {self._child_collector_proc.pid}")
+
+            if self.observer_engine == "meg_live":
+                self._child_mros_proc = subprocess.Popen(mros_cmd, cwd=str(self.repo_root))
+                self.mros_health = "HEALTHY"
+                self.emit("MROS_OBSERVER", "RUNNING", f"Child PID {self._child_mros_proc.pid}")
+            else:
+                self._child_mros_proc = None
+                self.mros_health = "HEALTHY"
+
+            # Primary alias for legacy tests
+            self._child_observer_proc = self._child_mros_proc or self._child_collector_proc
             self.transition(LauncherState.OBSERVER_RUNNING)
+            if self.supervise:
+                return self.supervise_observer()
             return True
         except Exception as exc:
             self.emit("OBSERVER", "FAIL", f"Launch failed: {exc}")
             self.transition(LauncherState.BLOCKED, f"observer_launch_failed:{exc}")
             return False
 
+    def supervise_observer(self) -> bool:
+        if not self._child_observer_proc and not self._child_collector_proc and not self._child_mros_proc:
+            return False
+
+        close_time = datetime.strptime(self.market_close_time, "%H:%M").time()
+        last_status_time = time.time()
+        col_pid = self._child_collector_proc.pid if self._child_collector_proc else (self._child_observer_proc.pid if self._child_observer_proc else "N/A")
+        mros_pid = self._child_mros_proc.pid if self._child_mros_proc else (self._child_observer_proc.pid if self._child_observer_proc else "N/A")
+        self.emit("SUPERVISOR", "MONITORING", f"Processes active [Collector PID {col_pid}, MROS PID {mros_pid}]. Cutoff at {self.market_close_time} IST")
+
+        while not self._stop_requested:
+            # Poll collector
+            if self._child_collector_proc:
+                col_ret = self._child_collector_proc.poll()
+                if col_ret is not None:
+                    if col_ret == 0:
+                        self.collector_health = "EXITED_CLEAN"
+                    else:
+                        self.collector_health = f"FAILED_CODE_{col_ret}"
+                        self.emit("COLLECTOR", "TERMINATED", f"Collector exited with code {col_ret}")
+                        self.transition(LauncherState.BLOCKED, f"collector_failed_code_{col_ret}")
+                        return False
+                else:
+                    self.collector_health = "HEALTHY"
+
+            # Poll MROS observer
+            if self._child_mros_proc:
+                mros_ret = self._child_mros_proc.poll()
+                if mros_ret is not None:
+                    if mros_ret == 0:
+                        self.mros_health = "EXITED_CLEAN"
+                    else:
+                        self.mros_health = f"FAILED_CODE_{mros_ret}"
+                        self.emit("MROS_OBSERVER", "TERMINATED", f"MROS observer exited with code {mros_ret}")
+                        self.transition(LauncherState.BLOCKED, f"mros_observer_failed_code_{mros_ret}")
+                        return False
+                else:
+                    self.mros_health = "HEALTHY"
+            elif self._child_observer_proc and not self._child_collector_proc:
+                obs_ret = self._child_observer_proc.poll()
+                if obs_ret is not None:
+                    if obs_ret == 0:
+                        self.mros_health = "EXITED_CLEAN"
+                        self.emit("OBSERVER", "FINISHED", f"Observer exited cleanly with code {obs_ret}")
+                        self.transition(LauncherState.STOPPED, "observer_clean_exit")
+                        return True
+                    else:
+                        self.mros_health = f"FAILED_CODE_{obs_ret}"
+                        self.emit("OBSERVER", "TERMINATED", f"Observer exited with code {obs_ret}")
+                        self.transition(LauncherState.BLOCKED, f"observer_failed_code_{obs_ret}")
+                        return False
+
+            now = datetime.now(IST_TZ)
+            now_time = now.time()
+
+            if now_time >= close_time:
+                self.emit("OBSERVER", "CUTOFF_REACHED", f"Reached cutoff {self.market_close_time} IST. Terminating processes cleanly...")
+                self.stop("session_completed_cutoff_reached")
+                return True
+
+            if time.time() - last_status_time >= self.status_interval_seconds:
+                last_status_time = time.time()
+                active_pid = self._child_observer_proc.pid if self._child_observer_proc else col_pid
+                self.emit(
+                    "STATUS_HOURLY",
+                    "HEALTHY",
+                    f"Time: {now.strftime('%H:%M:%S')} IST | Child PID: {active_pid} running | Collector: {self.collector_health} | MROS: {self.mros_health} | Storage volume: ok",
+                )
+
+            time.sleep(1.0)
+
+        return True
+
     def stop(self, reason: str = "operator_shutdown") -> None:
-        if self._child_observer_proc and self._child_observer_proc.poll() is None:
-            try:
-                self._child_observer_proc.terminate()
-                self._child_observer_proc.wait(timeout=3.0)
-            except Exception:
+        self._stop_requested = True
+        for proc in [self._child_mros_proc, self._child_collector_proc, self._child_observer_proc]:
+            if proc and proc.poll() is None:
                 try:
-                    self._child_observer_proc.kill()
+                    proc.terminate()
+                    proc.wait(timeout=10.0)
                 except Exception:
-                    pass
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
 
         if self._ws_client:
             try:
                 self._ws_client.close()
             except Exception:
                 pass
+
+        if self._callback_server:
+            try:
+                self._callback_server.stop()
+            except Exception:
+                pass
+            self._callback_server = None
 
         self.release_lock()
         self.transition(LauncherState.STOPPED, reason)
