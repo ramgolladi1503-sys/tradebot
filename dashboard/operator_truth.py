@@ -109,7 +109,12 @@ def load_top_opportunities(*, desk_id: str) -> list[dict[str, Any]]:
     path = resolve_runtime_metric_paths(desk_id=desk_id)["top_opportunities"]
     payload = _json(path)
     rows: list[dict[str, Any]] = []
-    for key in ("top_executable_opportunities", "top_advisory_opportunities"):
+    for key in (
+        "executable_opportunities",
+        "advisory_opportunities",
+        "top_executable_opportunities",
+        "top_advisory_opportunities",
+    ):
         value = payload.get(key)
         if isinstance(value, list):
             rows.extend(row for row in value if isinstance(row, dict))
@@ -144,15 +149,24 @@ def pipeline_pulse(*, feed_status: str, risk_status: str, market_state: dict[str
     surfaced = int(summary.get("advisory_conversion_denominator") or 0)
     def state(ok: bool, unknown: bool = False) -> str:
         return "UNKNOWN" if unknown else ("LIVE" if ok else "BLOCKED")
+    def source_current(name: str) -> bool:
+        """Only promote a stage when the source explicitly proves currentness.
+
+        A readable artifact is evidence of neither a current session nor a
+        fresh producer; metrics v1 records existence only, so it must remain
+        UNKNOWN rather than appear LIVE.
+        """
+        source = sources.get(name)
+        return isinstance(source, dict) and source.get("current") is True
     feed_good = str(feed_status).lower() in {"ok", "live", "fresh", "healthy", "pass"}
     risk_good = str(risk_status).lower() in {"ok", "live", "fresh", "healthy", "pass", "safe"}
     return [
         {"stage": "KITE FEED", "state": state(feed_good), "detail": str(feed_status).upper()},
-        {"stage": "NORMALIZE", "state": state(False, not bool(sources)), "detail": "runtime evidence" if sources else "no authoritative artifact"},
+        {"stage": "NORMALIZE", "state": state(False, True), "detail": "currentness evidence unavailable" if sources else "no authoritative artifact"},
         {"stage": "MARKET STATE", "state": state(bool(market_state)), "detail": str(market_state.get("verdict") or "MISSING")},
-        {"stage": "STRATEGIES", "state": state(bool(sources.get("candidates_stream", {}).get("exists") or sources.get("trade_lifecycle", {}).get("exists"))), "detail": "runtime streams"},
-        {"stage": "CANDIDATES", "state": state(bool(sources.get("candidates_stream", {}).get("exists") or funnel)), "detail": str(summary.get("candidate_pool_latest", 0))},
-        {"stage": "RANK", "state": state(bool(sources.get("trade_lifecycle", {}).get("exists") or funnel)), "detail": str(summary.get("ranked_candidate_count", 0))},
+        {"stage": "STRATEGIES", "state": state(source_current("candidates_stream") or source_current("trade_lifecycle"), bool(sources)), "detail": "current runtime streams" if sources else "no authoritative artifact"},
+        {"stage": "CANDIDATES", "state": state(source_current("candidates_stream"), bool(sources)), "detail": str(summary.get("candidate_pool_latest", 0))},
+        {"stage": "RANK", "state": state(source_current("trade_lifecycle"), bool(sources)), "detail": str(summary.get("ranked_candidate_count", 0))},
         {"stage": "RISK", "state": state(risk_good), "detail": str(risk_status).upper()},
-        {"stage": "ADVISORY", "state": state(bool(sources.get("suggestions", {}).get("exists") or sources.get("top_opportunities", {}).get("exists"))), "detail": str(surfaced)},
+        {"stage": "ADVISORY", "state": state(source_current("suggestions") or source_current("top_opportunities"), bool(sources)), "detail": str(surfaced)},
     ]
