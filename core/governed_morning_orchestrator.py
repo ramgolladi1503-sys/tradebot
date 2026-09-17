@@ -18,17 +18,20 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import logging
 import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
+from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
@@ -74,6 +77,129 @@ def snapshot_token_file(path: Path) -> TokenFileSnapshot:
         return TokenFileSnapshot(exists=False, size=0, mtime=0.0, digest="")
 
 
+class ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
+
+class GovernedAuthCallbackServer:
+    """Embedded localhost HTTP callback server that intercepts Zerodha OAuth redirect and saves access token."""
+
+    def __init__(
+        self,
+        token_path: Path,
+        repo_root: Path,
+        host: str = "127.0.0.1",
+        port: int = 8765,
+    ) -> None:
+        self.token_path = Path(token_path).resolve()
+        self.repo_root = Path(repo_root).resolve()
+        self.host = host
+        self.port = port
+        self.server: HTTPServer | None = None
+        self.thread: threading.Thread | None = None
+        self.bound = False
+        self.error: str | None = None
+        self.token_received = False
+
+    def start(self) -> bool:
+        server_instance = self
+
+        class CallbackHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                try:
+                    parsed = urlparse(self.path)
+                    qs = parse_qs(parsed.query)
+                    request_token = (qs.get("request_token") or [None])[0]
+                    status = (qs.get("status") or [None])[0]
+                    action = (qs.get("action") or [None])[0]
+
+                    if parsed.path != "/":
+                        self.send_response(404)
+                        self.end_headers()
+                        return
+
+                    if request_token:
+                        from core.kite_client import kite_client
+                        from scripts.kite_autologin_localhost import (
+                            _resolve_api_key,
+                            _resolve_api_secret,
+                        )
+
+                        api_key = _resolve_api_key()
+                        api_secret = _resolve_api_secret()
+                        data = kite_client.generate_session(
+                            request_token, api_secret=api_secret, api_key=api_key
+                        )
+                        access_token = str(data.get("access_token", "")).strip()
+                        if not access_token:
+                            server_instance.error = "empty_access_token"
+                            self.send_response(500)
+                            self.end_headers()
+                            self.wfile.write(b"Failed to generate access token")
+                            return
+
+                        server_instance.token_path.parent.mkdir(parents=True, exist_ok=True)
+                        server_instance.token_path.write_text(access_token + "\n", encoding="utf-8")
+                        server_instance.token_received = True
+
+                        body = (
+                            "<html><body style='font-family: sans-serif; text-align: center; padding: 40px;'>"
+                            "<h2 style='color: green;'>TradeBot Authentication Successful</h2>"
+                            "<p>Access token generated and saved. You can close this tab and return to the terminal.</p>"
+                            "</body></html>"
+                        )
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/html; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(body.encode("utf-8"))
+                        return
+
+                    server_instance.error = f"missing_request_token status={status} action={action}"
+                    body = (
+                        "<html><body style='font-family: sans-serif; text-align: center; padding: 40px;'>"
+                        "<h2 style='color: red;'>Authentication Failed</h2>"
+                        f"<p>status={status} action={action}</p>"
+                        "</body></html>"
+                    )
+                    self.send_response(400)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(body.encode("utf-8"))
+                except Exception as exc:
+                    server_instance.error = f"callback_error:{exc}"
+                    self.send_response(500)
+                    self.end_headers()
+
+            def log_message(self, _format, *args):
+                return
+
+        try:
+            self.server = ReusableHTTPServer((self.host, self.port), CallbackHandler)
+            self.server.timeout = 0.5
+            self.bound = True
+        except OSError as exc:
+            self.error = f"bind_failed:{exc}"
+            self.bound = False
+            return False
+
+        def _serve():
+            while self.bound and self.server and not self.token_received:
+                self.server.handle_request()
+
+        self.thread = threading.Thread(target=_serve, daemon=True)
+        self.thread.start()
+        return True
+
+    def stop(self) -> None:
+        self.bound = False
+        if self.server:
+            try:
+                self.server.server_close()
+            except Exception:
+                pass
+            self.server = None
+
+
 class GovernedMorningOrchestrator:
     def __init__(
         self,
@@ -117,6 +243,7 @@ class GovernedMorningOrchestrator:
         self.instrument_universe_count = 0
         self.ws_tokens: list[int] = []
         self.broker_user_id: str | None = None
+        self._callback_server: GovernedAuthCallbackServer | None = None
 
     def emit(self, step_name: str, status: str, detail: str = "") -> None:
         ts = datetime.now(IST_TZ).strftime("%H:%M:%S")
@@ -314,36 +441,59 @@ class GovernedMorningOrchestrator:
         timeout = timeout_override if timeout_override is not None else self.auth_timeout_seconds
         self.emit("AUTH", "WAITING_HUMAN_AUTH", f"Timeout {int(timeout)}s")
 
-        login_url = self.get_login_url()
-        if login_url:
-            print(f"\n[ACTION REQUIRED] Please log in to Zerodha/Kite in browser:\n{login_url}\n", flush=True)
-            if self.open_browser:
-                try:
-                    import webbrowser
-                    webbrowser.open(login_url)
-                except Exception:
-                    pass
+        callback_server = GovernedAuthCallbackServer(
+            token_path=self.token_path,
+            repo_root=self.repo_root,
+        )
+        self._callback_server = callback_server
+        server_started = callback_server.start()
+        if server_started:
+            self.emit(
+                "AUTH",
+                "CALLBACK_LISTENING",
+                f"http://{callback_server.host}:{callback_server.port}/ waiting for login redirect",
+            )
+        else:
+            self.emit(
+                "AUTH",
+                "CALLBACK_STANDBY",
+                f"Port {callback_server.port} unavailable ({callback_server.error}); waiting for external token",
+            )
 
-        deadline = time.time() + timeout
-        initial_snap = self._initial_token_snapshot or snapshot_token_file(self.token_path)
+        try:
+            login_url = self.get_login_url()
+            if login_url:
+                print(f"\n[ACTION REQUIRED] Please log in to Zerodha/Kite in browser:\n{login_url}\n", flush=True)
+                if self.open_browser:
+                    try:
+                        import webbrowser
+                        webbrowser.open(login_url)
+                    except Exception:
+                        pass
 
-        while time.time() < deadline:
-            current_snap = snapshot_token_file(self.token_path)
-            # Detect creation or modification
-            if current_snap.exists and current_snap.size > 0:
-                if not initial_snap.exists:
-                    self.emit("AUTH", "TOKEN_DETECTED", "New token file created")
-                    self.transition(LauncherState.DETECT_FRESH_TOKEN, "new_token_file_detected")
-                    return True
-                if current_snap.mtime > initial_snap.mtime or current_snap.digest != initial_snap.digest:
-                    self.emit("AUTH", "TOKEN_DETECTED", "Token file modified")
-                    self.transition(LauncherState.DETECT_FRESH_TOKEN, "token_file_updated")
-                    return True
-            time.sleep(poll_interval)
+            deadline = time.time() + timeout
+            initial_snap = self._initial_token_snapshot or snapshot_token_file(self.token_path)
 
-        self.emit("AUTH", "TIMEOUT", f"Human authentication timed out after {int(timeout)}s")
-        self.transition(LauncherState.STOPPED, "auth_timeout_waiting_human_auth")
-        return False
+            while time.time() < deadline:
+                current_snap = snapshot_token_file(self.token_path)
+                # Detect creation or modification
+                if current_snap.exists and current_snap.size > 0:
+                    if not initial_snap.exists:
+                        self.emit("AUTH", "TOKEN_DETECTED", "New token file created")
+                        self.transition(LauncherState.DETECT_FRESH_TOKEN, "new_token_file_detected")
+                        return True
+                    if current_snap.mtime > initial_snap.mtime or current_snap.digest != initial_snap.digest:
+                        self.emit("AUTH", "TOKEN_DETECTED", "Token file modified")
+                        self.transition(LauncherState.DETECT_FRESH_TOKEN, "token_file_updated")
+                        return True
+                time.sleep(poll_interval)
+
+            self.emit("AUTH", "TIMEOUT", f"Human authentication timed out after {int(timeout)}s")
+            self.transition(LauncherState.STOPPED, "auth_timeout_waiting_human_auth")
+            return False
+        finally:
+            callback_server.stop()
+            self._callback_server = None
 
     def step_validate_auth(self, max_retries: int = 3) -> bool:
         self.transition(LauncherState.VALIDATE_AUTH)
@@ -506,6 +656,13 @@ class GovernedMorningOrchestrator:
                 self._ws_client.close()
             except Exception:
                 pass
+
+        if self._callback_server:
+            try:
+                self._callback_server.stop()
+            except Exception:
+                pass
+            self._callback_server = None
 
         self.release_lock()
         self.transition(LauncherState.STOPPED, reason)

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.governed_morning_orchestrator import (
+    GovernedAuthCallbackServer,
     GovernedMorningOrchestrator,
     LauncherState,
     snapshot_token_file,
@@ -595,6 +596,142 @@ def test_24_git_failure_fails_closed(mock_env, tmp_path):
         assert ok is False
         assert orc.state == LauncherState.BLOCKED
         assert "git_error" in str(orc.blocker_reason)
+
+
+def test_25_callback_server_starts_and_stops_cleanly(mock_env):
+    """25. Callback server: starts, binds port, and stops cleanly releasing socket."""
+    srv = GovernedAuthCallbackServer(
+        token_path=mock_env["token_path"],
+        repo_root=mock_env["repo_root"],
+        port=8766,  # Use dedicated non-standard test port
+    )
+    started = srv.start()
+    assert started is True
+    assert srv.bound is True
+    assert srv.server is not None
+    srv.stop()
+    assert srv.bound is False
+    assert srv.server is None
+
+
+def test_26_callback_server_captures_request_token_and_writes_token_file(mock_env):
+    """26. Callback server: intercepts redirect, exchanges token, writes token file."""
+    import urllib.request
+    token_path = mock_env["token_path"]
+    srv = GovernedAuthCallbackServer(
+        token_path=token_path,
+        repo_root=mock_env["repo_root"],
+        port=8766,
+    )
+    started = srv.start()
+    assert started is True
+
+    try:
+        mock_kite = MagicMock()
+        mock_kite.generate_session.return_value = {"access_token": "EXCHANGED_TEST_TOKEN_999"}
+        with patch("core.kite_client.kite_client", mock_kite), \
+             patch("scripts.kite_autologin_localhost._resolve_api_key", return_value="TEST_KEY"), \
+             patch("scripts.kite_autologin_localhost._resolve_api_secret", return_value="TEST_SECRET"):
+            url = f"http://127.0.0.1:8766/?action=login&status=success&request_token=test_req_tok_123"
+            with urllib.request.urlopen(url, timeout=3.0) as resp:
+                body = resp.read().decode("utf-8")
+                assert resp.status == 200
+                assert "Authentication Successful" in body
+
+        # Wait briefly for thread to flush
+        time.sleep(0.1)
+        assert token_path.exists()
+        assert token_path.read_text().strip() == "EXCHANGED_TEST_TOKEN_999"
+        assert srv.token_received is True
+    finally:
+        srv.stop()
+
+
+def test_27_callback_server_port_in_use_fallback(mock_env):
+    """27. Callback server: port already bound falls back to polling gracefully."""
+    import socket
+    # Bind port 8766 externally
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", 8766))
+    sock.listen(1)
+
+    try:
+        srv = GovernedAuthCallbackServer(
+            token_path=mock_env["token_path"],
+            repo_root=mock_env["repo_root"],
+            port=8766,
+        )
+        started = srv.start()
+        assert started is False
+        assert srv.bound is False
+        assert "bind_failed" in str(srv.error)
+    finally:
+        sock.close()
+
+
+def test_28_step_wait_human_auth_full_callback_flow(mock_env):
+    """28. step_wait_human_auth: auto-captures browser redirect, detects token, and exits WAITING."""
+    import urllib.request
+    token_path = mock_env["token_path"]
+    if token_path.exists():
+        token_path.unlink()
+
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=token_path,
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+
+    mock_kite = MagicMock()
+    mock_kite.generate_session.return_value = {"access_token": "AUTOCONTINUED_KITE_TOKEN_777"}
+
+    def simulate_browser_login():
+        time.sleep(0.3)
+        try:
+            url = "http://127.0.0.1:8765/?action=login&status=success&request_token=auto_req_tok"
+            urllib.request.urlopen(url, timeout=3.0)
+        except Exception:
+            pass
+
+    t = threading.Thread(target=simulate_browser_login, daemon=True)
+    t.start()
+
+    with patch("core.kite_client.kite_client", mock_kite), \
+         patch("scripts.kite_autologin_localhost._resolve_api_key", return_value="TEST_KEY"), \
+         patch("scripts.kite_autologin_localhost._resolve_api_secret", return_value="TEST_SECRET"), \
+         patch.object(orc, "get_login_url", return_value="https://kite.zerodha.com/mock"):
+        ok = orc.step_wait_human_auth(poll_interval=0.1, timeout_override=4.0)
+
+    assert ok is True
+    assert orc.state == LauncherState.DETECT_FRESH_TOKEN
+    assert token_path.exists()
+    assert token_path.read_text().strip() == "AUTOCONTINUED_KITE_TOKEN_777"
+    # Verify callback server was stopped and port freed
+    assert orc._callback_server is None
+
+
+def test_29_credential_resolution_reconciles_conflicting_ambient_env(monkeypatch):
+    """29. Credential resolution: ambient environment conflicts reconcile to governed source."""
+    from scripts.kite_autologin_localhost import _resolve_governed_credential
+
+    mock_creds = {
+        "KITE_API_KEY": "governed_key_12345",
+        "KITE_API_SECRET": "governed_secret_67890",
+    }
+    monkeypatch.setattr("scripts.kite_autologin_localhost._load_governed_credentials", lambda: mock_creds)
+    monkeypatch.setenv("KITE_API_KEY", "stale_ambient_key")
+    monkeypatch.setenv("KITE_API_SECRET", "stale_ambient_secret")
+
+    resolved_key = _resolve_governed_credential("KITE_API_KEY")
+    assert resolved_key == "governed_key_12345"
+    assert os.environ["KITE_API_KEY"] == "governed_key_12345"
+
+    resolved_secret = _resolve_governed_credential("KITE_API_SECRET")
+    assert resolved_secret == "governed_secret_67890"
+    assert os.environ["KITE_API_SECRET"] == "governed_secret_67890"
 
 # broker_api_called = false
 # is_order_action = false
