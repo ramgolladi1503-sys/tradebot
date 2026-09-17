@@ -10,8 +10,9 @@
     "gate_weakening_after_outcomes_allowed": false,
     "post_failure_filter_addition_allowed": false,
     "re_discovery_during_evaluation_allowed": false,
-    "target_independent_survivors": 3,
-    "target_is_not_a_mandate": true
+    "portfolio_size_is_discovered_not_predeclared": true,
+    "strategy_frequency_is_descriptive_not_a_selection_target": true,
+    "daily_trade_generation_is_not_a_success_requirement": true
   },
   "change_control": {
     "in_place_semantic_mutation_allowed": false,
@@ -85,13 +86,43 @@
     "synthetic_bid_ask_allowed": false,
     "synthetic_depth_allowed": false
   },
+  "portfolio_objective": {
+    "canonical_document": "docs/research_governance/STRATEGY_PORTFOLIO_OBJECTIVE_V1.md",
+    "strategy_frequency_policy": "FREQUENT_MODERATE_OR_RARE_ALL_ALLOWED",
+    "rare_strategy_allowed_if_evidence_sufficient": true,
+    "frequent_strategy_allowed_if_evidence_sufficient": true,
+    "minimum_support_must_be_predeclared_from_power_and_data_quality": true,
+    "fixed_minimum_sessions_per_year": null,
+    "fixed_target_strategy_count": null,
+    "portfolio_size_is_discovered_from_survivors": true,
+    "daily_trade_requirement": false,
+    "no_trade_is_valid_runtime_outcome": true,
+    "unique_session_coverage_required": true,
+    "signal_overlap_matrix_required": true,
+    "return_correlation_required": true,
+    "mechanism_overlap_screen_required": true,
+    "coverage_pressure_may_not_create_new_strategies": true,
+    "same_mechanism_variants_must_not_be_counted_as_independent_without_evidence": true,
+    "live_certified_strategy_eligibility_evaluation": true,
+    "multiple_simultaneous_candidates_allowed": true,
+    "portfolio_risk_arbitration_required": true,
+    "manual_approval_required": true,
+    "portfolio_success_dimensions": [
+      "ROBUSTNESS",
+      "NET_EXPECTANCY",
+      "MECHANISM_INDEPENDENCE",
+      "UNIQUE_OPPORTUNITY_COVERAGE",
+      "REGIME_DIVERSITY",
+      "EXECUTION_VIABILITY"
+    ]
+  },
   "prior_family_custody": {
     "CONSTITUENT_BREADTH_DIFFUSION": "CLOSED_NO_ROBUST_EDGE",
     "FUTURES_SPOT_OHLCV_PROPAGATION_V1": "QUARANTINED_HARNESS_DEFECT_REEVAL_ONLY_IF_PRE_REGISTERED_IN_FUTURE_CAMPAIGN",
     "NIFTY_TUESDAY_0DTE_OHLCV_STRUCTURE_V1": "QUARANTINED_HARNESS_DEFECT_REEVAL_DEFERRED",
     "OPTION_IMPLIED_VS_REALIZED": "CLOSED_NO_DEFENDABLE_PHENOMENON"
   },
-  "purpose": "Permanent anti-drift research authority: freeze the scientific process, not a fixed strategy catalog.",
+  "purpose": "Permanent anti-drift research authority: freeze the scientific process and the portfolio objective, not a fixed strategy catalog.",
   "safety": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
@@ -99,7 +130,11 @@
     "buy_only": true,
     "is_order_action": false,
     "manual_approval_required": true,
-    "max_hold_minutes": 30,
+    "intraday_only": true,
+    "fixed_max_hold_minutes": null,
+    "overnight_positions_allowed": false,
+    "entry_and_exit_time_may_vary_by_strategy": true,
+    "exit_logic_must_be_causal_and_pre_registered": true,
     "order_authority": false,
     "orders_cancelled": 0,
     "orders_modified": 0,
@@ -119,8 +154,10 @@
       "OUTCOME_BLIND_DISCOVERY_BOUNDARY_CANNOT_BE_PROVEN",
       "CONTINUATION_REQUIRES_FABRICATION_OR_UNSAFE_MUTATION_OR_ORDER_AUTHORITY"
     ],
-    "stop_after_catalog_exhaustion_even_if_target_not_reached": true,
-    "success": "THREE_INDEPENDENT_CONFIRMED_MECHANISM_CLUSTERS"
+    "stop_after_catalog_exhaustion": true,
+    "success": "CAMPAIGN_COMPLETED_WITH_HONEST_SURVIVOR_COUNT_AND_PORTFOLIO_INDEPENDENCE_ASSESSMENT",
+    "zero_survivors_is_valid_campaign_result": true,
+    "future_campaign_may_continue_under_same_global_search_accounting": true
   },
   "truth_layer": {
     "common_kernel_required": true,
@@ -135,7 +172,10 @@
       "BASE_SHA_MASQUERADING_AS_EXECUTED_CODE_SHA",
       "MECHANISM_DISCOVERY_AFTER_OUTCOME_ACCESS",
       "CATALOG_MUTATION_AFTER_FREEZE",
-      "SEARCH_PRESSURE_RESET_BETWEEN_CAMPAIGNS"
+      "SEARCH_PRESSURE_RESET_BETWEEN_CAMPAIGNS",
+      "FREQUENCY_FILTER_USED_AS_ALPHA_JUSTIFICATION",
+      "COVERAGE_PRESSURE_USED_TO_INVENT_STRATEGY",
+      "FIXED_SHORT_HOLD_ASSUMED_WITHOUT_STRATEGY_RATIONALE"
     ],
     "literature_principles": [
       "KAUFMAN_ROBUSTNESS_AND_PARAMETER_PLATEAUS",
@@ -165,7 +205,8 @@
       "ACTUAL_5M_DELAY",
       "NEGATIVE_CONTROLS",
       "CODE_AND_DATA_PROVENANCE",
-      "GLOBAL_TRIAL_LEDGER"
+      "GLOBAL_TRIAL_LEDGER",
+      "PORTFOLIO_INDEPENDENCE_AND_OVERLAP"
     ]
   }
 }
