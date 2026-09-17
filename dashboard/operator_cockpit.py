@@ -324,23 +324,19 @@ def main() -> None:
         stage_detail = str(item.get("detail") or "")
         s_color = _status_color(stage_state)
 
-        card = f"""
-        <div style="flex: 1; min-width: 0; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 6px; padding: 6px 8px; text-align: center;">
-            <div style="font-size: 0.68rem; font-weight: 700; color: #90a4ae; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{stage_name}</div>
-            <div style="font-size: 0.92rem; font-weight: 800; color: {s_color}; margin: 2px 0;">{stage_state}</div>
-            <div style="font-size: 0.68rem; color: #b0bec5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{stage_detail}">{stage_detail}</div>
-        </div>
-        """
+        card = (
+            f'<div style="flex: 1; min-width: 0; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 6px; padding: 6px 8px; text-align: center;">'
+            f'<div style="font-size: 0.68rem; font-weight: 700; color: #90a4ae; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{stage_name}</div>'
+            f'<div style="font-size: 0.92rem; font-weight: 800; color: {s_color}; margin: 2px 0;">{stage_state}</div>'
+            f'<div style="font-size: 0.68rem; color: #b0bec5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{stage_detail}">{stage_detail}</div>'
+            f'</div>'
+        )
         cards_html.append(card)
         if i < len(pulse) - 1:
             arrow = '<div style="display: flex; align-items: center; justify-content: center; color: rgba(255, 255, 255, 0.25); font-size: 0.75rem; padding: 0 2px;">➔</div>'
             cards_html.append(arrow)
 
-    pulse_container_html = f"""
-    <div style="display: flex; align-items: stretch; justify-content: space-between; gap: 4px; margin: 4px 0 8px 0;">
-        {''.join(cards_html)}
-    </div>
-    """
+    pulse_container_html = f"<div style='display: flex; align-items: stretch; justify-content: space-between; gap: 4px; margin: 4px 0 8px 0;'>{''.join(cards_html)}</div>"
     st.markdown(pulse_container_html, unsafe_allow_html=True)
 
     st.divider()
@@ -448,12 +444,12 @@ def main() -> None:
         else:
             st.caption("No registered runtime source streams.")
 
-        with st.expander("Raw Metric Notes & Complete Filesystem Paths", expanded=False):
-            st.json({
-                "metric_notes": metrics.get("notes") or [],
-                "metric_sources": metrics.get("source_status") or {},
-                "market_state_source": market_state.get("_path")
-            })
+        st.caption("Raw Metric Notes & Complete Filesystem Paths:")
+        st.json({
+            "metric_notes": metrics.get("notes") or [],
+            "metric_sources": metrics.get("source_status") or {},
+            "market_state_source": market_state.get("_path")
+        })
 
 
 if __name__ == "__main__":
