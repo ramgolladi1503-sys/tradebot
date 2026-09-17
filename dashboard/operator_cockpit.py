@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 import pandas as pd
 import streamlit as st
 
@@ -78,6 +79,8 @@ def main() -> None:
     top_l, top_r = st.columns([4, 1])
     top_l.title("TradeBot")
     top_l.caption("Operator Cockpit · truth surfaces only")
+    if os.getenv("OPERATOR_COCKPIT_OFFLINE_FIXTURE", "").strip().lower() == "true":
+        st.warning("OFFLINE FIXTURE VALIDATION — synthetic evidence only; not live market truth.")
     top_r.caption(datetime.now().astimezone().strftime("%H:%M:%S %Z"))
     statuses = [("KITE", _status(feed)), ("SYSTEM", _status(health)), ("RISK", _status(risk)), ("UPSTOX", upstox.status.upper())]
     st.caption("   ·   ".join(f"{_pill(s)} {n} {s}" for n, s in statuses))
