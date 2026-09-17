@@ -1149,5 +1149,3 @@ def test_41_callback_server_attacks_rejected(mock_env):
 
 # broker_api_called = false
 # is_order_action = false
-
-

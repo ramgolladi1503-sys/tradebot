@@ -117,7 +117,7 @@ def test_accelerated_end_to_end_morning_dress_rehearsal(tmp_path):
          patch("core.governed_morning_orchestrator.datetime") as mock_dt, \
          patch("time.time", side_effect=mock_time), \
          patch("time.sleep", side_effect=mock_sleep):
-        
+
         mock_dt.now = mock_now
         mock_dt.strptime = datetime.strptime
 

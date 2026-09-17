@@ -91,7 +91,7 @@ def test_provenance_verification_catches_archive_mutation(tmp_path):
     """Adversarial test: mutating the archived audit log invalidates provenance verification."""
     from core.audit_chain_recovery import verify_recovery_provenance
     import os, stat
-    
+
     log_dir = tmp_path / "desks" / "DEFAULT"
     log_dir.mkdir(parents=True)
     corrupt_log = log_dir / "audit_log.jsonl"
@@ -99,7 +99,7 @@ def test_provenance_verification_catches_archive_mutation(tmp_path):
 
     res = perform_audit_chain_rollover(audit_log_path=corrupt_log, reason="test_mutation")
     arch_path = Path(res["archive_path"])
-    
+
     # Pre-condition: provenance is verified
     prov = verify_recovery_provenance(corrupt_log)
     assert prov["ok"] is True
@@ -155,4 +155,3 @@ def test_provenance_verification_catches_deleted_archive(tmp_path):
     attack_prov = verify_recovery_provenance(corrupt_log)
     assert attack_prov["ok"] is False
     assert attack_prov["reason"] == "archive_file_missing"
-

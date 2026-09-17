@@ -845,14 +845,14 @@ class GovernedMorningOrchestrator:
             return True
 
         self.emit("OBSERVER", "LAUNCHING", f"Starting governed processes (collector + {self.observer_engine}) until {self.market_close_time} IST")
-        
+
         # 1. Primary tick collector process
         collector_cmd = [
             sys.executable,
             "-u",
             str(self.repo_root / "scripts" / "tick_data_collector.py"),
         ]
-        
+
         # 2. Governed MROS observer process
         if self.observer_engine == "meg_live":
             mros_cmd = [
