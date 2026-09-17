@@ -49,23 +49,23 @@ def stitch_ticks():
     print("[*] Concatenating and sorting ticks...")
     df_all = pd.concat(dfs, ignore_index=True)
     df_all = df_all.sort_values("ts").reset_index(drop=True)
-    
+
     initial_rows = len(df_all)
     df_all = df_all.drop_duplicates(subset=["ts", "token"]).reset_index(drop=True)
     final_rows = len(df_all)
 
     out_file = DATA_DIR / f"upstox_full_ticks_{DATE_COMPACT}_stitched.parquet"
     print(f"[*] Writing stitched dataset to {out_file} ({final_rows:,} rows)...")
-    
+
     table = pa.Table.from_pandas(df_all)
     pq.write_table(table, out_file, compression="snappy")
-    
+
     file_size_mb = out_file.stat().st_size / (1024 * 1024)
     print(f"[✓] Stitched master saved successfully: {file_size_mb:.2f} MB")
-    
+
     t_start = datetime.fromtimestamp(df_all["ts"].min())
     t_end = datetime.fromtimestamp(df_all["ts"].max())
-    
+
     summary = {
         "date": DATE_STR,
         "total_chunks": len(chunk_files),
@@ -77,10 +77,10 @@ def stitch_ticks():
         "file_path": str(out_file),
         "file_size_mb": round(file_size_mb, 2)
     }
-    
+
     with open(DATA_DIR / f"stitching_summary_{DATE_COMPACT}.json", "w") as f:
         json.dump(summary, f, indent=2)
-        
+
     return summary
 
 def fetch_1m_historical_candles():
@@ -91,7 +91,7 @@ def fetch_1m_historical_candles():
         "SENSEX": "BSE_INDEX|SENSEX",
         "INDIA VIX": "NSE_INDEX|India VIX"
     }
-    
+
     all_candles = []
     for name, key in indices.items():
         url_key = urllib.parse.quote(key)

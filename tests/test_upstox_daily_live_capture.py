@@ -22,7 +22,7 @@ def test_format_depth_valid_quotes():
     }
     res_str = format_depth(market_level)
     parsed = json.loads(res_str)
-    
+
     assert parsed["bids"][0]["price"] == 23500.5
     assert parsed["bids"][0]["quantity"] == 150
     assert parsed["bids"][0]["orders"] == 3
@@ -42,7 +42,7 @@ def test_format_depth_empty_quotes():
 
 def test_get_options_subscriptions_resolution():
     today_ms = int(datetime.now().timestamp() * 1000)
-    
+
     mock_data = [
         {"name": "NIFTY", "instrument_type": "CE", "strike_price": 24000.0, "expiry": today_ms, "instrument_key": "NSE_FO|101", "trading_symbol": "NIFTY 24000 CE"},
         {"name": "NIFTY", "instrument_type": "PE", "strike_price": 24000.0, "expiry": today_ms, "instrument_key": "NSE_FO|102", "trading_symbol": "NIFTY 24000 PE"},
@@ -53,9 +53,9 @@ def test_get_options_subscriptions_resolution():
     ]
     df_inst = pd.DataFrame(mock_data)
     prices = {"NIFTY": 24010.0, "BANKNIFTY": 50020.0, "SENSEX": 78040.0}
-    
+
     subs = get_options_subscriptions(df_inst, prices)
-    
+
     assert subs.get("NSE_INDEX|Nifty 50") == "NIFTY 50"
     assert subs.get("NSE_INDEX|Nifty Bank") == "NIFTY BANK"
     assert subs.get("BSE_INDEX|SENSEX") == "SENSEX"
@@ -70,7 +70,7 @@ def test_get_options_subscriptions_resolution():
 def test_execute_post_market_stitching_creates_master(tmp_path):
     chunks_dir = tmp_path / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
-    
+
     schema = pa.schema([
         ("ts", pa.float64()),
         ("token", pa.string()),
@@ -82,7 +82,7 @@ def test_execute_post_market_stitching_creates_master(tmp_path):
         ("oi", pa.float64()),
         ("depth", pa.string())
     ])
-    
+
     chunk1_data = {
         "ts": [1789500000.0, 1789500001.0],
         "token": ["NSE_INDEX|Nifty 50", "NSE_FO|101"],
@@ -105,28 +105,28 @@ def test_execute_post_market_stitching_creates_master(tmp_path):
         "oi": [10000.0, 0.0],
         "depth": ["{}", "{}"]
     }
-    
+
     pq.write_table(pa.Table.from_pandas(pd.DataFrame(chunk1_data), schema=schema), chunks_dir / "chunk_1.parquet")
     pq.write_table(pa.Table.from_pandas(pd.DataFrame(chunk2_data), schema=schema), chunks_dir / "chunk_2.parquet")
-    
+
     date_str = "2026-09-17"
     date_compact = "20260917"
-    
+
     execute_post_market_stitching(date_str, date_compact, tmp_path)
-    
+
     stitched_file = tmp_path / f"upstox_full_ticks_{date_compact}_stitched.parquet"
     summary_file = tmp_path / f"stitching_summary_{date_compact}.json"
-    
+
     assert stitched_file.is_file() == True
     assert summary_file.is_file() == True
-    
+
     df_stitched = pd.read_parquet(stitched_file)
     assert int(df_stitched.shape[0]) == 3
     assert int(df_stitched.isnull().sum().sum()) == 0
     assert tuple(df_stitched.columns) == ("ts", "token", "symbol", "ltp", "bid", "ask", "vol", "oi", "depth")
     assert float(df_stitched["ltp"].iloc[0]) == 24000.0
     assert str(df_stitched["token"].iloc[0]) == "NSE_INDEX|Nifty 50"
-    
+
     with open(summary_file) as f:
         summary_report = json.load(f)
         assert summary_report["total_chunks"] == 2

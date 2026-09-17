@@ -78,7 +78,7 @@ def fetch_instruments() -> pd.DataFrame:
     instruments = []
     import ssl
     ssl_contexts = [None, ssl._create_unverified_context()]
-    
+
     for url in urls:
         req = urllib.request.Request(url, headers={"Accept-Encoding": "gzip", "User-Agent": "Mozilla/5.0"})
         for ctx in ssl_contexts:
@@ -191,7 +191,7 @@ def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Pa
     logger.info("=== STARTING AUTOMATIC POST-MARKET STITCHING ===")
     chunks_dir = data_dir / "chunks"
     chunk_files = sorted(glob.glob(str(chunks_dir / "*.parquet")))
-    
+
     if not chunk_files:
         logger.warning(f"No chunk files found in {chunks_dir} to stitch.")
         return
@@ -209,7 +209,7 @@ def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Pa
         initial_count = len(df_all)
         df_all = df_all.drop_duplicates(subset=["ts", "token"]).reset_index(drop=True)
         final_count = len(df_all)
-        
+
         out_file = data_dir / f"upstox_full_ticks_{date_compact}_stitched.parquet"
         table = pa.Table.from_pandas(df_all)
         pq.write_table(table, out_file, compression="snappy")
