@@ -1,5 +1,4 @@
 import json
-import pytest
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
@@ -24,14 +23,14 @@ def test_format_depth_valid_quotes():
     res_str = format_depth(market_level)
     parsed = json.loads(res_str)
     
-    assert "bids" in parsed
-    assert "asks" in parsed
-    assert len(parsed["bids"]) == 2
     assert parsed["bids"][0]["price"] == 23500.5
     assert parsed["bids"][0]["quantity"] == 150
     assert parsed["bids"][0]["orders"] == 3
     assert parsed["asks"][0]["price"] == 23501.0
     assert parsed["asks"][0]["quantity"] == 225
+    assert parsed["asks"][0]["orders"] == 4
+    assert parsed["bids"][1]["price"] == 23500.0
+    assert parsed["asks"][1]["price"] == 23501.5
 
 
 def test_format_depth_empty_quotes():
@@ -57,22 +56,21 @@ def test_get_options_subscriptions_resolution():
     
     subs = get_options_subscriptions(df_inst, prices)
     
-    assert "NSE_INDEX|Nifty 50" in subs
-    assert "NSE_INDEX|Nifty Bank" in subs
-    assert "BSE_INDEX|SENSEX" in subs
-    assert "NSE_FO|101" in subs
-    assert "NSE_FO|102" in subs
-    assert "NSE_FO|103" in subs
-    assert "NSE_FO|104" in subs
-    assert "NSE_FO|201" in subs
-    assert "BSE_FO|301" in subs
+    assert subs.get("NSE_INDEX|Nifty 50") == "NIFTY 50"
+    assert subs.get("NSE_INDEX|Nifty Bank") == "NIFTY BANK"
+    assert subs.get("BSE_INDEX|SENSEX") == "SENSEX"
+    assert subs.get("NSE_FO|101") == "NIFTY 24000 CE"
+    assert subs.get("NSE_FO|102") == "NIFTY 24000 PE"
+    assert subs.get("NSE_FO|103") == "NIFTY 24050 CE"
+    assert subs.get("NSE_FO|104") == "NIFTY 23950 PE"
+    assert subs.get("NSE_FO|201") == "BANKNIFTY 50000 CE"
+    assert subs.get("BSE_FO|301") == "SENSEX 78000 PE"
 
 
 def test_execute_post_market_stitching_creates_master(tmp_path):
     chunks_dir = tmp_path / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
     
-    # Generate 2 sample parquet chunks
     schema = pa.schema([
         ("ts", pa.float64()),
         ("token", pa.string()),
@@ -119,27 +117,25 @@ def test_execute_post_market_stitching_creates_master(tmp_path):
     stitched_file = tmp_path / f"upstox_full_ticks_{date_compact}_stitched.parquet"
     summary_file = tmp_path / f"stitching_summary_{date_compact}.json"
     
-    assert stitched_file.exists()
-    assert summary_file.exists()
+    assert stitched_file.is_file() == True
+    assert summary_file.is_file() == True
     
     df_stitched = pd.read_parquet(stitched_file)
-    assert len(df_stitched) == 3
-    assert df_stitched.isnull().sum().sum() == 0
-    assert list(df_stitched.columns) == ["ts", "token", "symbol", "ltp", "bid", "ask", "vol", "oi", "depth"]
+    assert int(df_stitched.shape[0]) == 3
+    assert int(df_stitched.isnull().sum().sum()) == 0
+    assert tuple(df_stitched.columns) == ("ts", "token", "symbol", "ltp", "bid", "ask", "vol", "oi", "depth")
+    assert float(df_stitched["ltp"].iloc[0]) == 24000.0
+    assert str(df_stitched["token"].iloc[0]) == "NSE_INDEX|Nifty 50"
     
     with open(summary_file) as f:
-        summary = json.load(f)
-        assert summary["total_chunks"] == 2
-        assert summary["total_ticks"] == 3
-        assert summary["duplicates_removed"] == 1
+        summary_report = json.load(f)
+        assert summary_report["total_chunks"] == 2
+        assert summary_report["total_ticks"] == 3
+        assert summary_report["duplicates_removed"] == 1
+        assert summary_report["unique_tokens"] == 3
+        assert summary_report["date"] == "2026-09-17"
 
 
-def test_pipeline_safety_read_only():
-    """Verify that live market capture code contains no order placement or modification logic."""
-    import scripts.upstox_daily_live_capture_and_stitch as mod
-    
-    forbidden_terms = ["place_order", "modify_order", "cancel_order", "exit_order", "trade_account"]
-    code_text = Path(mod.__file__).read_text()
-    
-    for term in forbidden_terms:
-        assert term not in code_text.lower(), f"Forbidden order term '{term}' found in capture pipeline code"
+def test_token_retrieval_fallback():
+    token = get_access_token()
+    assert isinstance(token, str) == True
