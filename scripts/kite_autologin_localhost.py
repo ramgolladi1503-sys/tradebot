@@ -57,10 +57,7 @@ def _resolve_governed_credential(name: str) -> str:
     governed = _load_governed_credentials()[name]
     ambient = str(os.getenv(name) or "").strip()
     if ambient and ambient != governed:
-        # Reconcile ambient environment with the governed source of truth
-        os.environ[name] = governed
-    elif not ambient:
-        os.environ[name] = governed
+        raise SystemExit(f"{name} conflicts with governed credential source.")
     if bool(re.search(r"\s", governed)):
         raise SystemExit(f"{name} contains whitespace; fix governed credential file.")
     return governed
@@ -180,11 +177,6 @@ def main():
     STATE.request_token = None
     STATE.error = None
 
-    api_key = _resolve_api_key()
-    api_secret = _resolve_api_secret()
-    setattr(cfg, "KITE_API_KEY", api_key)
-    setattr(cfg, "KITE_API_SECRET", api_secret)
-
     try:
         validate_kite_startup_credentials(
             repo_root_path=ROOT,
@@ -194,6 +186,9 @@ def main():
         )
     except RuntimeError as exc:
         raise SystemExit(str(exc))
+
+    api_key = _resolve_api_key()
+    api_secret = _resolve_api_secret()
     api_key_has_whitespace = bool(re.search(r"\s", api_key))
 
     print(

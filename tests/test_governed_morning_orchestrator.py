@@ -732,7 +732,8 @@ def test_28_step_wait_human_auth_full_callback_flow(mock_env):
 
 
 def test_29_credential_resolution_reconciles_conflicting_ambient_env(monkeypatch):
-    """29. Credential resolution: ambient environment conflicts reconcile to governed source."""
+    """29. Credential resolution: ambient environment conflicts reject ambient shadowing."""
+    import pytest
     from scripts.kite_autologin_localhost import _resolve_governed_credential
 
     mock_creds = {
@@ -743,13 +744,8 @@ def test_29_credential_resolution_reconciles_conflicting_ambient_env(monkeypatch
     monkeypatch.setenv("KITE_API_KEY", "stale_ambient_key")
     monkeypatch.setenv("KITE_API_SECRET", "stale_ambient_secret")
 
-    resolved_key = _resolve_governed_credential("KITE_API_KEY")
-    assert resolved_key == "governed_key_12345"
-    assert os.environ["KITE_API_KEY"] == "governed_key_12345"
-
-    resolved_secret = _resolve_governed_credential("KITE_API_SECRET")
-    assert resolved_secret == "governed_secret_67890"
-    assert os.environ["KITE_API_SECRET"] == "governed_secret_67890"
+    with pytest.raises(SystemExit, match="conflicts with governed credential source"):
+        _resolve_governed_credential("KITE_API_KEY")
 
 
 def test_30_callback_server_rejects_invalid_status_or_action(mock_env):
