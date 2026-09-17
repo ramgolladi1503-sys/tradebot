@@ -118,53 +118,74 @@ class GovernedAuthCallbackServer:
                         self.end_headers()
                         return
 
-                    if request_token:
-                        from core.kite_client import kite_client
-                        from scripts.kite_autologin_localhost import (
-                            _resolve_api_key,
-                            _resolve_api_secret,
-                        )
-
-                        api_key = _resolve_api_key()
-                        api_secret = _resolve_api_secret()
-                        data = kite_client.generate_session(
-                            request_token, api_secret=api_secret, api_key=api_key
-                        )
-                        access_token = str(data.get("access_token", "")).strip()
-                        if not access_token:
-                            server_instance.error = "empty_access_token"
-                            self.send_response(500)
-                            self.end_headers()
-                            self.wfile.write(b"Failed to generate access token")
-                            return
-
-                        server_instance.token_path.parent.mkdir(parents=True, exist_ok=True)
-                        server_instance.token_path.write_text(access_token + "\n", encoding="utf-8")
-                        server_instance.token_received = True
-
+                    # Strict OAuth callback semantics: require expected success status and login action
+                    if status != "success" or (action is not None and action != "login"):
+                        server_instance.error = f"invalid_callback_semantics status={status} action={action}"
                         body = (
                             "<html><body style='font-family: sans-serif; text-align: center; padding: 40px;'>"
-                            "<h2 style='color: green;'>TradeBot Authentication Successful</h2>"
-                            "<p>Access token generated and saved. You can close this tab and return to the terminal.</p>"
+                            "<h2 style='color: red;'>Authentication Failed</h2>"
+                            f"<p>Invalid callback status={status} action={action}</p>"
                             "</body></html>"
                         )
-                        self.send_response(200)
+                        self.send_response(400)
                         self.send_header("Content-Type", "text/html; charset=utf-8")
                         self.end_headers()
                         self.wfile.write(body.encode("utf-8"))
                         return
 
-                    server_instance.error = f"missing_request_token status={status} action={action}"
+                    if not request_token:
+                        server_instance.error = f"missing_request_token status={status} action={action}"
+                        body = (
+                            "<html><body style='font-family: sans-serif; text-align: center; padding: 40px;'>"
+                            "<h2 style='color: red;'>Authentication Failed</h2>"
+                            "<p>Missing request_token</p>"
+                            "</body></html>"
+                        )
+                        self.send_response(400)
+                        self.send_header("Content-Type", "text/html; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(body.encode("utf-8"))
+                        return
+
+                    from core.kite_client import kite_client
+                    from scripts.kite_autologin_localhost import (
+                        _resolve_api_key,
+                        _resolve_api_secret,
+                    )
+
+                    api_key = _resolve_api_key()
+                    api_secret = _resolve_api_secret()
+                    data = kite_client.generate_session(
+                        request_token, api_secret=api_secret, api_key=api_key
+                    )
+                    access_token = str(data.get("access_token", "")).strip()
+                    if not access_token:
+                        server_instance.error = "empty_access_token"
+                        self.send_response(500)
+                        self.end_headers()
+                        self.wfile.write(b"Failed to generate access token")
+                        return
+
+                    # Atomic token write: write to temp file and replace
+                    server_instance.token_path.parent.mkdir(parents=True, exist_ok=True)
+                    tmp_token_path = server_instance.token_path.with_name(
+                        f".{server_instance.token_path.name}.tmp.{os.getpid()}"
+                    )
+                    tmp_token_path.write_text(access_token + "\n", encoding="utf-8")
+                    os.replace(tmp_token_path, server_instance.token_path)
+                    server_instance.token_received = True
+
                     body = (
                         "<html><body style='font-family: sans-serif; text-align: center; padding: 40px;'>"
-                        "<h2 style='color: red;'>Authentication Failed</h2>"
-                        f"<p>status={status} action={action}</p>"
+                        "<h2 style='color: green;'>TradeBot Authentication Successful</h2>"
+                        "<p>Access token generated and saved. You can close this tab and return to the terminal.</p>"
                         "</body></html>"
                     )
-                    self.send_response(400)
+                    self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.end_headers()
                     self.wfile.write(body.encode("utf-8"))
+                    return
                 except Exception as exc:
                     server_instance.error = f"callback_error:{exc}"
                     self.send_response(500)
@@ -456,9 +477,11 @@ class GovernedMorningOrchestrator:
         else:
             self.emit(
                 "AUTH",
-                "CALLBACK_STANDBY",
-                f"Port {callback_server.port} unavailable ({callback_server.error}); waiting for external token",
+                "FAIL",
+                f"Port {callback_server.port} collision with unknown owner ({callback_server.error}); failing closed",
             )
+            self.transition(LauncherState.BLOCKED, f"auth_port_collision_unknown_owner:{callback_server.error}")
+            return False
 
         try:
             login_url = self.get_login_url()

@@ -647,8 +647,8 @@ def test_26_callback_server_captures_request_token_and_writes_token_file(mock_en
         srv.stop()
 
 
-def test_27_callback_server_port_in_use_fallback(mock_env):
-    """27. Callback server: port already bound falls back to polling gracefully."""
+def test_27_callback_server_port_in_use_fails_closed(mock_env):
+    """27. Callback server: port already bound by unknown owner fails closed."""
     import socket
     # Bind port 8766 externally
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -666,6 +666,20 @@ def test_27_callback_server_port_in_use_fallback(mock_env):
         assert started is False
         assert srv.bound is False
         assert "bind_failed" in str(srv.error)
+
+        # Test that step_wait_human_auth fails closed when port cannot be bound
+        orc = GovernedMorningOrchestrator(
+            repo_root=mock_env["repo_root"],
+            state_root=mock_env["state_root"],
+            token_path=mock_env["token_path"],
+            lock_file=mock_env["lock_file"],
+            open_browser=False,
+        )
+        with patch("core.governed_morning_orchestrator.GovernedAuthCallbackServer", return_value=srv):
+            ok = orc.step_wait_human_auth(poll_interval=0.1, timeout_override=1.0)
+            assert ok is False
+            assert orc.state == LauncherState.BLOCKED
+            assert "auth_port_collision_unknown_owner" in str(orc.blocker_reason)
     finally:
         sock.close()
 
@@ -732,6 +746,74 @@ def test_29_credential_resolution_reconciles_conflicting_ambient_env(monkeypatch
     resolved_secret = _resolve_governed_credential("KITE_API_SECRET")
     assert resolved_secret == "governed_secret_67890"
     assert os.environ["KITE_API_SECRET"] == "governed_secret_67890"
+
+
+def test_30_callback_server_rejects_invalid_status_or_action(mock_env):
+    """30. Callback server: rejects callbacks without expected success status and login action."""
+    import urllib.request
+    import urllib.error
+    token_path = mock_env["token_path"]
+    srv = GovernedAuthCallbackServer(
+        token_path=token_path,
+        repo_root=mock_env["repo_root"],
+        port=8767,
+    )
+    assert srv.start() is True
+
+    try:
+        mock_kite = MagicMock()
+        with patch("core.kite_client.kite_client", mock_kite):
+            # A. Rejected status=cancelled
+            url_bad_status = "http://127.0.0.1:8767/?action=login&status=cancelled&request_token=fake_tok"
+            with pytest.raises(urllib.error.HTTPError) as exc_info:
+                urllib.request.urlopen(url_bad_status, timeout=3.0)
+            assert exc_info.value.code == 400
+            assert "invalid_callback_semantics" in str(srv.error)
+
+            # B. Rejected action=logout
+            url_bad_action = "http://127.0.0.1:8767/?action=logout&status=success&request_token=fake_tok"
+            with pytest.raises(urllib.error.HTTPError) as exc_info:
+                urllib.request.urlopen(url_bad_action, timeout=3.0)
+            assert exc_info.value.code == 400
+
+            # C. Missing request_token
+            url_missing_tok = "http://127.0.0.1:8767/?action=login&status=success"
+            with pytest.raises(urllib.error.HTTPError) as exc_info:
+                urllib.request.urlopen(url_missing_tok, timeout=3.0)
+            assert exc_info.value.code == 400
+            assert "missing_request_token" in str(srv.error)
+
+            mock_kite.generate_session.assert_not_called()
+            assert not token_path.exists()
+    finally:
+        srv.stop()
+
+
+def test_31_callback_server_atomic_token_write(mock_env):
+    """31. Callback server: writes token atomically and sets permissions."""
+    import urllib.request
+    token_path = mock_env["token_path"]
+    srv = GovernedAuthCallbackServer(
+        token_path=token_path,
+        repo_root=mock_env["repo_root"],
+        port=8768,
+    )
+    assert srv.start() is True
+
+    try:
+        mock_kite = MagicMock()
+        mock_kite.generate_session.return_value = {"access_token": "ATOMIC_TOKEN_TEST_456"}
+        with patch("core.kite_client.kite_client", mock_kite), \
+             patch("scripts.kite_autologin_localhost._resolve_api_key", return_value="TEST_KEY"), \
+             patch("scripts.kite_autologin_localhost._resolve_api_secret", return_value="TEST_SECRET"):
+            url = "http://127.0.0.1:8768/?action=login&status=success&request_token=valid_tok"
+            with urllib.request.urlopen(url, timeout=3.0) as resp:
+                assert resp.status == 200
+        time.sleep(0.1)
+        assert token_path.is_file()
+        assert token_path.read_text().strip() == "ATOMIC_TOKEN_TEST_456"
+    finally:
+        srv.stop()
 
 # broker_api_called = false
 # is_order_action = false
