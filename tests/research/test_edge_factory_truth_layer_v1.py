@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = ROOT / "research" / "governance" / "edge_factory_truth_layer_v1.json"
-EXPECTED_V1_SHA256 = "c2a4751a34b76b6113003c32c54e6900f34c6c6be9fd20a0b6821290023fc693"
+EXPECTED_V1_SHA256 = "55b9cde7cd5327ee3f5b60fe1a60cb6a093eac4071b5ead1d126c828a013d18a"
 
 REQUIRED_GATES = {
     "OUTCOME_BLIND_MECHANISM_DISCOVERY",
@@ -26,6 +26,7 @@ REQUIRED_GATES = {
     "NEGATIVE_CONTROLS",
     "CODE_AND_DATA_PROVENANCE",
     "GLOBAL_TRIAL_LEDGER",
+    "PORTFOLIO_INDEPENDENCE_AND_OVERLAP",
 }
 
 FORBIDDEN_HARNESS_BEHAVIORS = {
@@ -40,6 +41,9 @@ FORBIDDEN_HARNESS_BEHAVIORS = {
     "MECHANISM_DISCOVERY_AFTER_OUTCOME_ACCESS",
     "CATALOG_MUTATION_AFTER_FREEZE",
     "SEARCH_PRESSURE_RESET_BETWEEN_CAMPAIGNS",
+    "FREQUENCY_FILTER_USED_AS_ALPHA_JUSTIFICATION",
+    "COVERAGE_PRESSURE_USED_TO_INVENT_STRATEGY",
+    "FIXED_SHORT_HOLD_ASSUMED_WITHOUT_STRATEGY_RATIONALE",
 }
 
 
@@ -55,12 +59,12 @@ def test_truth_layer_v1_is_hash_pinned() -> None:
     assert hashlib.sha256(_raw()).hexdigest() == EXPECTED_V1_SHA256
 
 
-def test_truth_layer_freezes_process_not_strategy_catalog() -> None:
+def test_truth_layer_freezes_process_and_portfolio_objective_not_strategy_catalog() -> None:
     c = _contract()
     assert c["contract_id"] == "TRADEBOT_RESEARCH_TRUTH_LAYER_V1"
     assert c["schema_version"] == 1
     assert "family_catalog" not in c
-    assert c["purpose"] == "Permanent anti-drift research authority: freeze the scientific process, not a fixed strategy catalog."
+    assert c["purpose"] == "Permanent anti-drift research authority: freeze the scientific process and the portfolio objective, not a fixed strategy catalog."
 
 
 def test_discovery_is_autonomous_but_outcome_blind_and_preregistered() -> None:
@@ -86,19 +90,40 @@ def test_discovery_is_autonomous_but_outcome_blind_and_preregistered() -> None:
     } <= forbidden
 
 
-def test_campaign_budget_is_finite_without_predefining_mechanisms() -> None:
+def test_campaign_budget_is_finite_without_fixing_portfolio_size_or_frequency() -> None:
     b = _contract()["campaign_budget"]
     assert b["default_max_mechanism_families"] == 12
     assert b["default_max_primary_hypotheses_per_family"] == 4
     assert b["default_max_primary_horizons_per_hypothesis"] == 2
     assert b["default_max_primary_cells_total"] == 96
-    assert b["target_independent_survivors"] == 3
-    assert b["target_is_not_a_mandate"] is True
+    assert b["portfolio_size_is_discovered_not_predeclared"] is True
+    assert b["strategy_frequency_is_descriptive_not_a_selection_target"] is True
+    assert b["daily_trade_generation_is_not_a_success_requirement"] is True
     assert b["catalog_expansion_after_outcome_access_allowed"] is False
     assert b["re_discovery_during_evaluation_allowed"] is False
     assert b["gate_weakening_after_outcomes_allowed"] is False
     assert b["post_failure_filter_addition_allowed"] is False
     assert b["failed_signal_inversion_as_new_strategy_allowed"] is False
+
+
+def test_portfolio_objective_matches_canonical_user_goal() -> None:
+    p = _contract()["portfolio_objective"]
+    assert p["strategy_frequency_policy"] == "FREQUENT_MODERATE_OR_RARE_ALL_ALLOWED"
+    assert p["rare_strategy_allowed_if_evidence_sufficient"] is True
+    assert p["frequent_strategy_allowed_if_evidence_sufficient"] is True
+    assert p["fixed_minimum_sessions_per_year"] is None
+    assert p["fixed_target_strategy_count"] is None
+    assert p["portfolio_size_is_discovered_from_survivors"] is True
+    assert p["daily_trade_requirement"] is False
+    assert p["no_trade_is_valid_runtime_outcome"] is True
+    assert p["unique_session_coverage_required"] is True
+    assert p["signal_overlap_matrix_required"] is True
+    assert p["mechanism_overlap_screen_required"] is True
+    assert p["coverage_pressure_may_not_create_new_strategies"] is True
+    assert p["live_certified_strategy_eligibility_evaluation"] is True
+    assert p["multiple_simultaneous_candidates_allowed"] is True
+    assert p["portfolio_risk_arbitration_required"] is True
+    assert p["manual_approval_required"] is True
 
 
 def test_search_pressure_never_resets_between_campaigns() -> None:
@@ -129,7 +154,7 @@ def test_historical_authority_fails_closed_without_microstructure() -> None:
     assert d["historical_option_candles_label"] == "HISTORICAL_OPTION_CANDLE_RESEARCH_ONLY"
 
 
-def test_safety_contract_never_creates_execution_authority() -> None:
+def test_safety_contract_is_intraday_only_without_universal_short_hold() -> None:
     s = _contract()["safety"]
     assert s["read_only_market_research"] is True
     assert s["is_order_action"] is False
@@ -143,15 +168,21 @@ def test_safety_contract_never_creates_execution_authority() -> None:
     assert s["allowed_for_live_execution"] is False
     assert s["manual_approval_required"] is True
     assert s["buy_only"] is True
-    assert s["max_hold_minutes"] == 30
+    assert s["intraday_only"] is True
+    assert s["fixed_max_hold_minutes"] is None
+    assert s["overnight_positions_allowed"] is False
+    assert s["entry_and_exit_time_may_vary_by_strategy"] is True
+    assert s["exit_logic_must_be_causal_and_pre_registered"] is True
 
 
-def test_stop_rules_are_catalog_success_exhaustion_or_real_blocker() -> None:
+def test_stop_rules_are_catalog_exhaustion_and_honest_survivor_accounting() -> None:
     r = _contract()["stop_rules"]
-    assert r["success"] == "THREE_INDEPENDENT_CONFIRMED_MECHANISM_CLUSTERS"
+    assert r["success"] == "CAMPAIGN_COMPLETED_WITH_HONEST_SURVIVOR_COUNT_AND_PORTFOLIO_INDEPENDENCE_ASSESSMENT"
     assert r["exhaustion"] == "FROZEN_CAMPAIGN_CATALOG_EXHAUSTED"
     assert r["continue_after_single_family_failure"] is True
-    assert r["stop_after_catalog_exhaustion_even_if_target_not_reached"] is True
+    assert r["stop_after_catalog_exhaustion"] is True
+    assert r["zero_survivors_is_valid_campaign_result"] is True
+    assert r["future_campaign_may_continue_under_same_global_search_accounting"] is True
     assert "OUTCOME_BLIND_DISCOVERY_BOUNDARY_CANNOT_BE_PROVEN" in r["global_blocker"]
 
 
