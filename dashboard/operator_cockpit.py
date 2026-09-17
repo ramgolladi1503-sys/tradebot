@@ -150,7 +150,7 @@ def _render_market_panel(symbol: str, series: list[dict], state: dict) -> None:
     st.markdown(
         f"""<div style="font-size: 0.75rem; color: #90a4ae; display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 3px;">
             <span>Trend: <b style="color:#26a69a;">{trend_str}</b> · Rev: <b style="color:#ef5350;">{rev_str}</b>{block_info}</span>
-            <span style="color: #546e7a;">KITE · FRESH</span>
+            <span style="color: {'#26a69a' if series else '#78909c'};">KITE · {'SERIES ACTIVE' if series else 'SERIES UNAVAILABLE'}</span>
         </div>""",
         unsafe_allow_html=True
     )
@@ -361,16 +361,23 @@ def main() -> None:
     with mid_l:
         st.markdown("<div class='section-header'>Candidate Funnel</div>", unsafe_allow_html=True)
         funnel = summary.get("latest_pipeline_funnel") or {}
+        sources = metrics.get("source_status") or {}
         f_cols = st.columns(4)
-        c_pool = summary.get("candidate_pool_latest", 0)
-        c_rank = summary.get("ranked_candidate_count", 0)
-        c_gen = funnel.get("generated", c_pool)
-        c_adv = summary.get("advisory_conversion_denominator", funnel.get("advisory", 0))
 
-        with f_cols[0]: st.metric("Evaluated", c_gen)
-        with f_cols[1]: st.metric("Candidates", c_pool)
-        with f_cols[2]: st.metric("Ranked", c_rank)
-        with f_cols[3]: st.metric("Advisory", c_adv)
+        has_cand_source = bool(sources.get("candidates_stream", {}).get("exists"))
+        has_rank_source = bool(sources.get("trade_lifecycle", {}).get("exists"))
+        has_adv_source = bool(sources.get("suggestions", {}).get("exists") or sources.get("top_opportunities", {}).get("exists"))
+        has_funnel_source = bool(sources.get("pipeline_funnel", {}).get("exists"))
+
+        c_pool = summary.get("candidate_pool_latest") if has_cand_source else "—"
+        c_rank = summary.get("ranked_candidate_count") if has_rank_source else "—"
+        c_gen = funnel.get("generated") if (has_funnel_source and "generated" in funnel) else (c_pool if has_cand_source else "—")
+        c_adv = summary.get("advisory_conversion_denominator") if has_adv_source else (funnel.get("advisory") if has_funnel_source else "—")
+
+        with f_cols[0]: st.metric("Evaluated", c_gen if c_gen is not None else "—")
+        with f_cols[1]: st.metric("Candidates", c_pool if c_pool is not None else "—")
+        with f_cols[2]: st.metric("Ranked", c_rank if c_rank is not None else "—")
+        with f_cols[3]: st.metric("Advisory", c_adv if c_adv is not None else "—")
 
         rejection = metrics.get("rejection_reason_distribution") or []
         if rejection:
