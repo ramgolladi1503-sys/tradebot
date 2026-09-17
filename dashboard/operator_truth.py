@@ -90,10 +90,15 @@ def load_index_series(*, desk_id: str, lookback_sec: int = 7200, max_points: int
     now = datetime.now(timezone.utc).timestamp()
     try:
         conn = sqlite3.connect(f"file:{db.resolve()}?mode=ro", uri=True, timeout=0.5)
+        # Find maximum available tick timestamp to support historical/offline fixtures
+        row_max = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks WHERE timestamp_epoch IS NOT NULL").fetchone()
+        anchor_ts = float(row_max[0]) if (row_max and row_max[0] is not None) else now
+        if anchor_ts > now:
+            anchor_ts = now
         for symbol, token in tokens.items():
             rows = conn.execute(
                 "SELECT timestamp_epoch,last_price FROM ticks WHERE instrument_token=? AND timestamp_epoch>=? AND timestamp_epoch<=? AND last_price IS NOT NULL ORDER BY timestamp_epoch ASC",
-                (token, now - float(lookback_sec), now),
+                (token, anchor_ts - float(lookback_sec), anchor_ts),
             ).fetchall()
             if len(rows) > max_points:
                 stride = max(1, len(rows) // max_points)
