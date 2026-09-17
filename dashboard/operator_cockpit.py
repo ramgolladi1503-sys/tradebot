@@ -349,7 +349,7 @@ def main() -> None:
     else:
         st.markdown(
             """<div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 4px; padding: 6px 12px; font-size: 0.80rem; color: #90a4ae;">
-                <b style="color: #eceff1;">NO QUALIFYING OPPORTUNITY</b> · Pipeline active · Strategies evaluated · Zero candidates meet current gate thresholds
+                <b style="color: #eceff1;">NO QUALIFYING OPPORTUNITY</b> · Zero surfaced advisory opportunities recorded in telemetry artifact
             </div>""",
             unsafe_allow_html=True
         )
