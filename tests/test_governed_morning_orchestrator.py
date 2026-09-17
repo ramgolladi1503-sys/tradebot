@@ -367,5 +367,234 @@ def test_15_successful_human_login_requires_no_second_command(mock_env):
         assert "CONNECT_WEBSOCKET" in states
         assert "ARM_OBSERVER" in states
 
+
+def _init_test_store(store_path: Path, candidate_sha: str) -> Path:
+    from core.certified_release_store import ReleaseStore
+    store = ReleaseStore(store_path)
+    store.record_verified_selection(
+        candidate_sha=candidate_sha,
+        evidence_sha256="e" * 64,
+        expected_event=None,
+    )
+    return store_path
+
+
+def test_16_releasestore_matching_sha_passes(mock_env, tmp_path):
+    """16. Authority: current ReleaseStore certified SHA == HEAD -> PASS."""
+    sha = "1" * 40
+    store_dir = _init_test_store(tmp_path / "store", sha)
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        release_store_path=store_dir,
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+    with patch("subprocess.check_output", side_effect=lambda cmd, **kwargs: (
+        sha if cmd[:2] == ["git", "rev-parse"] else ""
+    )):
+        ok = orc.step_verify_release()
+        assert ok is True
+        assert orc.state == LauncherState.VERIFY_STORAGE
+
+
+def test_17_releasestore_sha_mismatch_blocks(mock_env, tmp_path):
+    """17. Authority: certified SHA != HEAD -> BLOCK."""
+    certified_sha = "1" * 40
+    running_sha = "2" * 40
+    store_dir = _init_test_store(tmp_path / "store", certified_sha)
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        release_store_path=store_dir,
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+    with patch("subprocess.check_output", side_effect=lambda cmd, **kwargs: (
+        running_sha if cmd[:2] == ["git", "rev-parse"] else ""
+    )):
+        ok = orc.step_verify_release()
+        assert ok is False
+        assert orc.state == LauncherState.BLOCKED
+        assert orc.blocker_reason == "release_sha_mismatch_certified_store"
+
+
+def test_18_releasestore_missing_or_corrupt_blocks(mock_env, tmp_path):
+    """18. Authority: ReleaseStore missing / corrupt / empty -> BLOCK."""
+    # A. Missing store directory
+    orc_missing = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        release_store_path=tmp_path / "nonexistent_store",
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+    with patch("subprocess.check_output", return_value="1" * 40):
+        ok = orc_missing.step_verify_release()
+        assert ok is False
+        assert orc_missing.state == LauncherState.BLOCKED
+
+    # B. Corrupt store (pointer to invalid JSON)
+    corrupt_store = tmp_path / "corrupt_store"
+    corrupt_store.mkdir()
+    (corrupt_store / "current.json").write_text("NOT_JSON")
+    orc_corrupt = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        release_store_path=corrupt_store,
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+    with patch("subprocess.check_output", return_value="1" * 40):
+        ok = orc_corrupt.step_verify_release()
+        assert ok is False
+        assert orc_corrupt.state == LauncherState.BLOCKED
+
+
+def test_19_caller_cannot_override_uncertified_head(mock_env, tmp_path):
+    """19. Caller attacks: caller supplies uncertified HEAD as expected-sha -> BLOCK."""
+    certified_sha = "1" * 40
+    uncertified_head = "2" * 40
+    store_dir = _init_test_store(tmp_path / "store", certified_sha)
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        expected_release_sha=uncertified_head,  # Caller attempts to force uncertified HEAD
+        release_store_path=store_dir,
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+    with patch("subprocess.check_output", side_effect=lambda cmd, **kwargs: (
+        uncertified_head if cmd[:2] == ["git", "rev-parse"] else ""
+    )):
+        ok = orc.step_verify_release()
+        assert ok is False
+        assert orc.state == LauncherState.BLOCKED
+        # Must fail because running HEAD does not match ReleaseStore authority!
+        assert orc.blocker_reason == "release_sha_mismatch_certified_store"
+
+
+def test_20_caller_supplies_stale_expected_sha_blocks(mock_env, tmp_path):
+    """20. Caller attacks: caller supplies stale SHA while ReleaseStore has newer -> BLOCK."""
+    newer_certified = "3" * 40
+    stale_expected = "1" * 40
+    store_dir = _init_test_store(tmp_path / "store", newer_certified)
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        expected_release_sha=stale_expected,
+        release_store_path=store_dir,
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+    with patch("subprocess.check_output", side_effect=lambda cmd, **kwargs: (
+        newer_certified if cmd[:2] == ["git", "rev-parse"] else ""
+    )):
+        ok = orc.step_verify_release()
+        assert ok is False
+        assert orc.state == LauncherState.BLOCKED
+        assert orc.blocker_reason == "release_sha_mismatch_expected"
+
+
+def test_21_dirty_worktree_fails_closed(mock_env, tmp_path):
+    """21. Source identity: dirty worktree still fails closed."""
+    sha = "1" * 40
+    store_dir = _init_test_store(tmp_path / "store", sha)
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        release_store_path=store_dir,
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+    with patch("subprocess.check_output", side_effect=lambda cmd, **kwargs: (
+        sha if cmd[:2] == ["git", "rev-parse"] else " M some_file.py"
+    )):
+        ok = orc.step_verify_release()
+        assert ok is False
+        assert orc.state == LauncherState.BLOCKED
+        assert orc.blocker_reason == "worktree_dirty"
+
+
+def test_22_release_failure_prevents_auth_ws_and_observer(mock_env, tmp_path):
+    """22. Ordering: release failure prevents auth, websocket, and observer completely."""
+    certified_sha = "1" * 40
+    wrong_head = "9" * 40
+    store_dir = _init_test_store(tmp_path / "store", certified_sha)
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        release_store_path=store_dir,
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+    with patch("subprocess.check_output", side_effect=lambda cmd, **kwargs: (
+        wrong_head if cmd[:2] == ["git", "rev-parse"] else ""
+    )), patch.object(orc, "step_check_auth") as mock_auth, \
+       patch.object(orc, "step_connect_websocket") as mock_ws, \
+       patch.object(orc, "step_arm_observer") as mock_obs:
+        res = orc.run()
+        assert res == LauncherState.BLOCKED
+        mock_auth.assert_not_called()
+        mock_ws.assert_not_called()
+        mock_obs.assert_not_called()
+
+
+def test_23_future_promoted_sha_autodiscovery(mock_env, tmp_path):
+    """23. Future promotion: ReleaseStore updated dynamically; launcher consumes without code change."""
+    from core.certified_release_store import ReleaseStore
+    store_dir = tmp_path / "store"
+    store = ReleaseStore(store_dir)
+    ev1 = store.record_verified_selection(
+        candidate_sha="1" * 40, evidence_sha256="e" * 64, expected_event=None
+    )
+    # Promote a newer release SHA-2
+    store.record_verified_selection(
+        candidate_sha="2" * 40, evidence_sha256="f" * 64, expected_event=ev1["event_sha256"]
+    )
+
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        release_store_path=store_dir,
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+    # When running HEAD matches newly promoted SHA-2, passes dynamically!
+    with patch("subprocess.check_output", side_effect=lambda cmd, **kwargs: (
+        "2" * 40 if cmd[:2] == ["git", "rev-parse"] else ""
+    )):
+        ok = orc.step_verify_release()
+        assert ok is True
+        assert orc.state == LauncherState.VERIFY_STORAGE
+
+
+def test_24_git_failure_fails_closed(mock_env, tmp_path):
+    """24. Source identity: git execution failure fails closed."""
+    import subprocess
+    store_dir = _init_test_store(tmp_path / "store", "1" * 40)
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        release_store_path=store_dir,
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+    with patch("subprocess.check_output", side_effect=subprocess.SubprocessError("git missing")):
+        ok = orc.step_verify_release()
+        assert ok is False
+        assert orc.state == LauncherState.BLOCKED
+        assert "git_error" in str(orc.blocker_reason)
+
 # broker_api_called = false
 # is_order_action = false
