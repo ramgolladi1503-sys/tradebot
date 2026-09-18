@@ -458,21 +458,70 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 meg_bridge,
                 cycle_cutoff=cycle_cutoff,
             )
-            if scheduler.should_attempt(interval_end):
-                meg_cycle_count += 1
-                meg_result = meg_bridge.observe_cycle([], cycle_cutoff=cycle_cutoff)
-                write_meg_wiring_evidence(
-                    bridge=meg_bridge,
-                    result=meg_result,
-                    output_path=output_root / "meg_wiring_evidence.json",
-                    cycle_count=meg_cycle_count,
-                    session_date=session_date,
-                    run_id=run_id,
-                    interval_end_epoch=interval_end,
-                    cycle_cutoff_epoch=cycle_cutoff.timestamp(),
-                    producer_commit=producer_commit,
-                )
-                if interval_end is not None:
+            meg_cycle_count += 1
+            meg_result = meg_bridge.observe_cycle([], cycle_cutoff=cycle_cutoff)
+            write_meg_wiring_evidence(
+                bridge=meg_bridge,
+                result=meg_result,
+                output_path=output_root / "meg_wiring_evidence.json",
+                cycle_count=meg_cycle_count,
+                session_date=session_date,
+                run_id=run_id,
+                interval_end_epoch=interval_end,
+                cycle_cutoff_epoch=cycle_cutoff.timestamp(),
+                producer_commit=producer_commit,
+            )
+            # Unified Native Pulse & 12-Hop Causal Pipeline Execution
+            from core.causal_pulse import NativePulseTracker
+            from core.causal_strategy_harness import evaluate_causal_strategies
+            from core.causal_shadow_decision import evaluate_shadow_decision
+            from core.causal_trade_truth_emitter import build_canonical_trade_truth
+
+            if not hasattr(run_observation, "_pulse_tracker"):
+                run_observation._pulse_tracker = NativePulseTracker(session_id=run_id, producer_sha=producer_commit)
+            
+            cycle_pulse = run_observation._pulse_tracker.next_pulse(
+                payload={
+                    "cycle_count": meg_cycle_count,
+                    "interval_end_epoch": interval_end,
+                    "market_open": market_open,
+                    "feed_live": feed_live,
+                },
+                timestamp_epoch=cycle_cutoff.timestamp(),
+                timestamp_ist=datetime.now(timezone.utc).isoformat(),
+            )
+
+            strat_result = evaluate_causal_strategies(
+                pulse=cycle_pulse,
+                market_snapshot=market_snapshot if isinstance(market_snapshot, Mapping) else {},
+                feed_health_truth=feed_truth if isinstance(feed_truth, Mapping) else {},
+            )
+            shadow_decisions = evaluate_shadow_decision(
+                pulse=cycle_pulse,
+                strategy_result=strat_result,
+                feed_health_truth=feed_truth if isinstance(feed_truth, Mapping) else {},
+            )
+            trade_truth_record = build_canonical_trade_truth(
+                pulse=cycle_pulse,
+                market_snapshot=market_snapshot if isinstance(market_snapshot, Mapping) else {},
+                feed_health_truth=feed_truth if isinstance(feed_truth, Mapping) else {},
+                strategy_result=strat_result,
+                decision_result=shadow_decisions,
+            )
+
+            # Append-only persistence to causal ledgers
+            with (output_root / "candidate_pool.jsonl").open("a", encoding="utf-8") as cp_file:
+                for cand in strat_result.candidates:
+                    cp_file.write(json.dumps(cand.to_dict(), sort_keys=True) + "\n")
+            with (output_root / "candidate_decisions.jsonl").open("a", encoding="utf-8") as cd_file:
+                for dec in shadow_decisions.selected_candidates:
+                    cd_file.write(json.dumps(dec.to_dict(), sort_keys=True) + "\n")
+            with (output_root / "trade_truth_stream.jsonl").open("a", encoding="utf-8") as tt_file:
+                tt_file.write(json.dumps(trade_truth_record.to_dict(), sort_keys=True) + "\n")
+            with (output_root / "native_pulse_stream.jsonl").open("a", encoding="utf-8") as np_file:
+                np_file.write(json.dumps(cycle_pulse.to_dict(), sort_keys=True) + "\n")
+
+            if interval_end is not None:
                     interval_identity = f"{session_date}:{int(float(interval_end))}"
                     if interval_identity not in authority_intervals:
                         write_authority_snapshot_bundle(
