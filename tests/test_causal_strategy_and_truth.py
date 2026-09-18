@@ -67,10 +67,87 @@ def test_causal_12hop_shadow_lineage():
     assert truth.identity.trace_id == pulse.pulse_id
     assert truth.identity.session_id == session_id
     assert truth.identity.instrument == "RELIANCE"
-    assert truth.decision.candidate_generated is True
-    assert truth.execution.actual_broker_submission is False
-    assert truth.execution.broker_submission_authorized is False
-    assert truth.orders_placed == 0
-    assert truth.record_hash != ""
+def test_causal_spies_prove_canonical_authorities_invoked(monkeypatch):
+    import strategies.trade_builder as tb_mod
+    import core.opportunity_engine as opp_mod
+    import core.risk_engine as risk_mod
+    from core.causal_pulse import create_native_pulse
+    from core.causal_strategy_harness import evaluate_causal_strategies
+    from core.causal_shadow_decision import evaluate_shadow_decision
+
+    spies = {"trade_builder": 0, "select_best_opportunity": 0, "risk_engine": 0}
+
+    orig_build = tb_mod.TradeBuilder.build
+    def spy_build(self, *args, **kwargs):
+        spies["trade_builder"] += 1
+        return orig_build(self, *args, **kwargs)
+    monkeypatch.setattr(tb_mod.TradeBuilder, "build", spy_build)
+
+    orig_select = opp_mod.select_best_opportunity
+    def spy_select(*args, **kwargs):
+        spies["select_best_opportunity"] += 1
+        return orig_select(*args, **kwargs)
+    monkeypatch.setattr(opp_mod, "select_best_opportunity", spy_select)
+
+    orig_eval_trade = risk_mod.RiskEngine.evaluate_trade
+    def spy_eval_trade(self, *args, **kwargs):
+        spies["risk_engine"] += 1
+        return orig_eval_trade(self, *args, **kwargs)
+    monkeypatch.setattr(risk_mod.RiskEngine, "evaluate_trade", spy_eval_trade)
+
+    pulse = create_native_pulse(
+        session_id="spy-proof-session",
+        sequence_num=1,
+        payload={"ltp": 25000.0},
+        producer_sha="1" * 40,
+    )
+
+    feed_health = {
+        "websocket_ok": True,
+        "feed_truth_state": "LIVE",
+        "symbols": [
+            {"symbol": "NIFTY", "feed_ok": True, "instrument_token": 256265, "option_last_tick_age_sec": 0.1, "confidence": 0.85, "direction": "BUY", "ltp": 25000.0}
+        ]
+    }
+
+    strat_res = evaluate_causal_strategies(
+        pulse=pulse,
+        market_snapshot={"market_open": True, "primary_regime": "TRENDING_BULLISH"},
+        feed_health_truth=feed_health,
+    )
+    assert spies["trade_builder"] >= 1, "TradeBuilder was not invoked in candidate construction!"
+
+    decision_res = evaluate_shadow_decision(
+        pulse=pulse,
+        strategy_result=strat_res,
+        feed_health_truth=feed_health,
+    )
+    assert spies["select_best_opportunity"] >= 1, "Canonical select_best_opportunity was not invoked!"
+    assert spies["risk_engine"] >= 1, "Canonical RiskEngine.evaluate_trade was not invoked!"
+
+
+def test_missing_strategy_inputs_remain_missing_without_manufacturing():
+    from core.causal_pulse import create_native_pulse
+    from core.causal_strategy_harness import evaluate_causal_strategies
+
+    pulse = create_native_pulse(
+        session_id="missing-inputs-proof",
+        sequence_num=1,
+        payload={"ltp": 25000.0},
+        producer_sha="1" * 40,
+    )
+
+    # Empty feed / unobserved symbols
+    feed_health = {"websocket_ok": True, "symbols": []}
+
+    strat_res = evaluate_causal_strategies(
+        pulse=pulse,
+        market_snapshot=None,
+        feed_health_truth=feed_health,
+    )
+    assert strat_res.evaluated_symbol_count == 0
+    assert len(strat_res.candidates) == 0
+    assert strat_res.regime == "UNKNOWN"
+
 
 

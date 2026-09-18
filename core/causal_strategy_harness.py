@@ -128,11 +128,22 @@ def evaluate_causal_strategies(
                 })
             continue
 
-        # 2. Canonical Signal Engine Evaluation
+        # 2. Canonical Signal Engine & TradeBuilder Candidate Construction (Hops 7 & 8)
         signal_res = evaluate_signal(snapshot=sym_info, signal_payload=sym_info)
         
         # If signal qualifies naturally from canonical logic:
         if signal_res.confidence is not None and signal_res.confidence >= 0.70 and signal_res.direction in ("BUY", "SELL"):
+            from strategies.trade_builder import TradeBuilder
+            builder = TradeBuilder()
+            builder_input = {
+                "symbol": symbol,
+                "ltp": sym_info.get("ltp") or 100.0,
+                "regime": regime,
+                "option_chain": sym_info.get("option_chain") or [],
+            }
+            # Attempt canonical TradeBuilder construction
+            built_trade = builder.build(builder_input) if hasattr(builder, "build") else None
+
             cand_body = {
                 "pulse_id": pulse.pulse_id,
                 "symbol": symbol,
@@ -143,19 +154,19 @@ def evaluate_causal_strategies(
             cand = CausalCandidate(
                 candidate_id=f"cand_{pulse.sequence_num}_{token}",
                 pulse_id=pulse.pulse_id,
-                strategy_id=registered_strategy_ids[0] if registered_strategy_ids else "CANONICAL_ADVISORY",
+                strategy_id=str(getattr(built_trade, "strategy", None) or registered_strategy_ids[0] if registered_strategy_ids else "CANONICAL_ADVISORY"),
                 symbol=symbol,
                 instrument_token=token,
                 direction=signal_res.direction,
-                entry_price=sym_info.get("ltp"),
-                stop_loss=sym_info.get("stop_loss"),
-                target_price=sym_info.get("target_price"),
+                entry_price=float(getattr(built_trade, "entry_price", sym_info.get("ltp") or 0.0)),
+                stop_loss=float(getattr(built_trade, "stop_loss", sym_info.get("stop_loss") or 0.0)),
+                target_price=float(getattr(built_trade, "target", sym_info.get("target_price") or 0.0)),
                 regime=regime,
                 confidence=float(signal_res.confidence),
                 timestamp_epoch=pulse.timestamp_epoch,
                 timestamp_ist=pulse.timestamp_ist,
                 payload_sha256=cand_hash,
-                metadata={"features": signal_res.features},
+                metadata={"features": signal_res.features, "trade_object": getattr(built_trade, "trade_id", None)},
             )
             candidates.append(cand)
         else:

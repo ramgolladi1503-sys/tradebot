@@ -71,8 +71,9 @@ def evaluate_shadow_decision(
         )
 
     # 1. Canonical Candidate Selection Call (Hop 9)
+    import core.opportunity_engine as opp_engine
     candidate_dicts = [c.to_dict() for c in strategy_result.candidates]
-    best_candidate, ranked_candidates = select_best_opportunity(
+    best_candidate, ranked_candidates = opp_engine.select_best_opportunity(
         candidate_dicts,
         scope="build:causal_observation",
     )
