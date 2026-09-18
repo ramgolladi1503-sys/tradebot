@@ -56,6 +56,10 @@ def evaluate_evidence_integrity(
             logs.append(f"Invalid path string for gate {gate}: {rel_path}")
             return False, {"manifest_schema_valid": False}, "\n".join(logs)
 
+        # Skip self-referential checking for evidence_integrity itself (it evaluates the other 17 gates)
+        if gate == "evidence_integrity":
+            continue
+
         # Path safety check
         target = Path(rel_path)
         if target.is_absolute() or ".." in target.parts:
@@ -85,12 +89,11 @@ def evaluate_evidence_integrity(
         digest = hashlib.sha256(raw).hexdigest()
         artifact_hashes[gate] = digest
 
-        # Disallow exact duplicate payloads across gates (unless gate is evidence_integrity referencing self)
-        if gate != "evidence_integrity":
-            if digest in seen_hashes:
-                logs.append(f"Identical primitive payload reused across gates: {gate}")
-                return False, {"zero_primitive_reuse": False}, "\n".join(logs)
-            seen_hashes.add(digest)
+        # Disallow exact duplicate payloads across gates
+        if digest in seen_hashes:
+            logs.append(f"Identical primitive payload reused across gates: {gate}")
+            return False, {"zero_primitive_reuse": False}, "\n".join(logs)
+        seen_hashes.add(digest)
 
         bundle_entries.append(f"{gate}:{digest}")
         logs.append(f"Verified artifact for {gate}: {digest[:16]}...")

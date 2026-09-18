@@ -1,0 +1,21 @@
+{
+  "AUTHORITATIVE_RELEASE_DEPENDENCY_GENERATOR_EXISTS": false,
+  "DEPENDENCY_EVIDENCE_CONTRACT_EXISTS": true,
+  "RELEASE_CERTIFIER_CONSUMER_EXISTS": true,
+  "RELEASE_CHANGE_IMPACT_CONSUMER_EXISTS": true,
+  "audit_target": "cae620bea88c1caba79fe68cb3f296ab597f4056",
+  "details": {
+    "consumer_locations": [
+      "core/release_change_impact.py (classify)",
+      "core/release_certification.py (certify)",
+      "core/release_rebootstrap.py (certify_rebootstrap)",
+      "scripts/verify_release_manager.py (_graph, verify, verify_rebootstrap)"
+    ],
+    "contract_location": "core/release_change_impact.py (DependencyEvidence)",
+    "domain_specific_non_release_analyzers": [
+      "core/strategy_truth/dependency_analyzer.py (strategy contract audit only)",
+      "core/research_registry/dependency_graph.py (hypothesis/experiment DAG only)"
+    ],
+    "finding": "Exact merged SHA cae620bea88c1caba79fe68cb3f296ab597f4056 lacks a committed repository-owned dependency evidence generator module and CLI for release certification."
+  }
+}

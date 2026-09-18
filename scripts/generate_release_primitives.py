@@ -111,12 +111,12 @@ def run_gate(gate: str, repo: Path, candidate: str, base: str, primitive_root: P
         return evidence, raw_stdout
 
     if gate == "degraded_mode":
-        cmd = ["pytest", "-v", "tests/test_depth_persistence_batching.py", "-k", "degraded"]
+        cmd = ["pytest", "-v", "tests/test_depth_persistence_batching.py"]
         res = subprocess.run(cmd, cwd=str(repo), capture_output=True, text=True)
         raw_stdout = (res.stdout or "") + (res.stderr or "")
         raw_hash = hashlib.sha256(raw_stdout.encode("utf-8")).hexdigest()
         evidence = {
-            "command": "pytest tests/test_depth_persistence_batching.py -k degraded",
+            "command": "pytest tests/test_depth_persistence_batching.py",
             "exit_code": res.returncode,
             "raw_stdout_sha256": raw_hash,
             "degraded_mode_verified": res.returncode == 0,
