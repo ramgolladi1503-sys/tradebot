@@ -15,6 +15,9 @@ if str(ROOT) not in sys.path:
 from core.governed_morning_orchestrator import GovernedMorningOrchestrator, LauncherState
 
 
+DEFAULT_PRODUCTION_MODE = "dual"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Governed morning observer launcher")
     parser.add_argument("--session-date", help="Session date in YYYY-MM-DD")
@@ -30,7 +33,7 @@ def main() -> int:
     parser.add_argument("--no-wait", action="store_true", help="Do not wait for market open window if launched early")
     parser.add_argument("--no-supervise", action="store_true", help="Do not supervise observer process (spawn and exit)")
     parser.add_argument("--cutoff-time", default="15:45", help="Session cutoff time in HH:MM (default: 15:45)")
-    parser.add_argument("--observer-engine", default="tick_collector", choices=["tick_collector", "meg_live"], help="Observer engine to launch (default: tick_collector)")
+    parser.add_argument("--observer-engine", default=DEFAULT_PRODUCTION_MODE, choices=["dual", "tick_collector", "meg_live"], help=f"Observer engine to launch (default: {DEFAULT_PRODUCTION_MODE})")
     args = parser.parse_args()
 
     orchestrator = GovernedMorningOrchestrator(

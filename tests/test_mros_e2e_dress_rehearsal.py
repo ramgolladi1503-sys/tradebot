@@ -64,9 +64,7 @@ def test_accelerated_end_to_end_morning_dress_rehearsal(tmp_path):
         lock_file=lock_file,
         open_browser=False,
         market_open_time="08:55",
-        market_close_time="15:45",
-        observer_engine="meg_live",
-        supervise=True,
+        observer_engine="dual",
         status_interval_seconds=0.05,
         telemetry_callback=log_telemetry,
     )

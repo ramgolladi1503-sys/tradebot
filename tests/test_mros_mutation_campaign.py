@@ -108,8 +108,7 @@ def run_mros_mutation_campaign(tmp_path: Path) -> dict[str, object]:
         state_root=tmp_path,
         token_path=tmp_path / "token.txt",
         lock_file=tmp_path / "lock5.txt",
-        open_browser=False,
-        observer_engine="meg_live",
+        observer_engine="dual",
         supervise=False,
     )
     with patch("subprocess.Popen") as mock_popen, \
