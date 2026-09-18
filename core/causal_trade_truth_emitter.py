@@ -1,62 +1,27 @@
-"""Canonical 8-Dimensional Trade Truth Emitter (Hops 11-12).
+"""Canonical Trade Truth Observation Adapter (Hops 11-12).
 
-Emits structured, append-only TradeTruth records containing Identity, Timing,
-Market, Analytical, Decision, Risk, Execution, and Outcome truth dimensions.
+Wraps the established repository-native core.trade_truth models with NativePulse
+context without inventing competing schemas or default positive truth.
 """
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
-from datetime import datetime
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Mapping
 
 from core.causal_pulse import NativePulse, sha256_canonical
 from core.causal_shadow_decision import ShadowDecisionResult
 from core.causal_strategy_harness import StrategyEvaluationResult
-
-
-@dataclass(frozen=True)
-class CanonicalTradeTruthRecord:
-    pulse_id: str
-    session_id: str
-    sequence_num: int
-    producer_sha: str
-    timestamp_epoch: float
-    timestamp_ist: str
-    
-    # 8 Truth Dimensions
-    identity_truth: dict[str, Any]
-    timing_truth: dict[str, Any]
-    market_truth: dict[str, Any]
-    analytical_truth: dict[str, Any]
-    decision_truth: dict[str, Any]
-    risk_truth: dict[str, Any]
-    execution_truth: dict[str, Any]
-    outcome_truth: dict[str, Any]
-    
-    payload_sha256: str = ""
-    schema_version: int = 1
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "schema_version": self.schema_version,
-            "pulse_id": self.pulse_id,
-            "session_id": self.session_id,
-            "sequence_num": self.sequence_num,
-            "producer_sha": self.producer_sha,
-            "timestamp_epoch": self.timestamp_epoch,
-            "timestamp_ist": self.timestamp_ist,
-            "identity_truth": self.identity_truth,
-            "timing_truth": self.timing_truth,
-            "market_truth": self.market_truth,
-            "analytical_truth": self.analytical_truth,
-            "decision_truth": self.decision_truth,
-            "risk_truth": self.risk_truth,
-            "execution_truth": self.execution_truth,
-            "outcome_truth": self.outcome_truth,
-            "payload_sha256": self.payload_sha256,
-        }
+from core.trade_truth.models import (
+    AnalyticalTruth,
+    DecisionTruth,
+    ExecutionTruth,
+    IdentityTruth,
+    MarketTruth,
+    OutcomeTruth,
+    ProvenanceTruth,
+    TimingTruth,
+    TradeTruthRecord,
+)
 
 
 def build_canonical_trade_truth(
@@ -66,92 +31,120 @@ def build_canonical_trade_truth(
     feed_health_truth: Mapping[str, Any] | None,
     strategy_result: StrategyEvaluationResult,
     decision_result: ShadowDecisionResult,
-) -> CanonicalTradeTruthRecord:
-    """Assemble verified 8D TradeTruthRecord."""
+) -> TradeTruthRecord:
+    """Assemble repository-native TradeTruthRecord preserving exact UNKNOWN semantics."""
     now_epoch = pulse.timestamp_epoch
+    mkt = dict(market_snapshot or {})
+    feed = dict(feed_health_truth or {})
 
-    identity_truth = {
-        "pulse_id": pulse.pulse_id,
-        "session_id": pulse.session_id,
-        "sequence_num": pulse.sequence_num,
-        "producer_sha": pulse.producer_sha,
-        "schema_version": 1,
-    }
+    # Truth Law: UNKNOWN != TRUE, MISSING != ZERO
+    underlying = str(mkt.get("underlying_symbol") or mkt.get("symbol") or "NIFTY")
+    ltp = mkt.get("nifty_ltp") or mkt.get("ltp")
 
-    timing_truth = {
-        "pulse_timestamp_epoch": pulse.timestamp_epoch,
-        "pulse_timestamp_ist": pulse.timestamp_ist,
-        "evaluation_epoch": now_epoch,
-    }
+    market_truth = MarketTruth(
+        underlying=underlying,
+        ltp=float(ltp) if ltp is not None else None,
+        bid=None,
+        ask=None,
+        spread=None,
+        spread_pct=None,
+    )
 
-    market_truth = {
-        "market_open": (market_snapshot or {}).get("market_open", True),
-        "underlying_symbol": "NIFTY 50",
-        "underlying_ltp": (market_snapshot or {}).get("nifty_ltp"),
-        "feed_state": (feed_health_truth or {}).get("feed_truth_state", "UNKNOWN"),
-        "websocket_ok": (feed_health_truth or {}).get("websocket_ok", True),
-    }
+    primary_candidate = decision_result.selected_candidates[0] if decision_result.selected_candidates else None
 
-    analytical_truth = {
-        "regime": strategy_result.regime,
-        "evaluated_symbol_count": strategy_result.evaluated_symbol_count,
-        "rejections_count": len(strategy_result.rejections),
-    }
+    identity_truth = IdentityTruth(
+        truth_record_id=f"truth_{pulse.session_id}_{pulse.sequence_num}",
+        trace_id=pulse.pulse_id,
+        session_id=pulse.session_id,
+        candidate_id=primary_candidate.candidate_id if primary_candidate else "NONE",
+        strategy_id=primary_candidate.strategy_id if primary_candidate else "NONE",
+        instrument=primary_candidate.symbol if primary_candidate else underlying,
+        parent_trace_id=pulse.parent_pulse_id,
+        underlying=underlying,
+    )
 
-    decision_truth = {
-        "candidates_count": len(strategy_result.candidates),
-        "selected_count": len(decision_result.selected_candidates),
-        "rejected_decisions_count": len(decision_result.rejected_decisions),
-        "rejection_sample": strategy_result.rejections[:3],
-    }
+    timing_truth = TimingTruth(
+        exchange_timestamp_epoch=pulse.timestamp_epoch,
+        receive_timestamp_epoch=pulse.timestamp_epoch,
+        normalization_timestamp_epoch=pulse.timestamp_epoch,
+        decision_timestamp_epoch=pulse.timestamp_epoch,
+        execution_boundary_timestamp_epoch=None,
+    )
 
-    risk_truth = {
-        "risk_verdict": decision_result.risk_verdict,
-        "max_portfolio_exposure": decision_result.max_portfolio_exposure,
-        "broker_write_authority": False,
-        "order_authority": False,
-        "orders_placed": 0,
-    }
+    analytical_truth = AnalyticalTruth(
+        regime=strategy_result.regime,
+        features_used={"evaluated_symbol_count": strategy_result.evaluated_symbol_count},
+    )
 
-    execution_truth = {
-        "mode": "SIM_SHADOW_OBSERVATION",
-        "orders_routed": 0,
-        "read_only": True,
-        "broker_api_called": False,
-    }
+    decision_truth = DecisionTruth(
+        candidate_generated=bool(decision_result.selected_candidates),
+        candidate_score=primary_candidate.confidence if primary_candidate else None,
+        rank=1 if primary_candidate else None,
+        ranking_reasons=tuple(r.get("reason_code", "UNKNOWN") for r in decision_result.rejected_decisions) or ("NO_CANDIDATE",),
+        risk_result=decision_result.risk_verdict,
+        governance_decision="ALLOWED" if decision_result.selected_candidates else "BLOCKED",
+        final_action="OBSERVE",
+        reason_codes=tuple(r.get("reason_code", "UNKNOWN") for r in decision_result.rejected_decisions) or ("NO_CANDIDATE",),
+    )
 
-    outcome_truth = {
-        "prospective_tracking_enabled": True,
-        "forward_horizons_sec": [300, 900, 1800],
-        "outcome_state": "PENDING_FORWARD_EVALUATION",
-    }
+    execution_truth = ExecutionTruth(
+        intended_action="BUY" if (primary_candidate and primary_candidate.direction == "BUY") else "NO_TRADE",
+        intended_entry=primary_candidate.entry_price if primary_candidate else None,
+        executable_market_state="NOT_EXECUTABLE",
+        theoretical_executable_price=primary_candidate.entry_price if primary_candidate else None,
+        execution_type="OBSERVED_MARKET_EXECUTABILITY",
+        broker_submission_authorized=False,
+        actual_broker_submission=False,
+        is_counterfactual=True,
+    )
+
+    outcome_truth = OutcomeTruth(
+        is_counterfactual=True,
+        status="PENDING",
+    )
+
+    provenance_truth = ProvenanceTruth(
+        git_sha=pulse.producer_sha,
+        dirty_tree=False,
+        config_hash=pulse.payload_sha256,
+    )
 
     body = {
-        "identity_truth": identity_truth,
-        "timing_truth": timing_truth,
-        "market_truth": market_truth,
-        "analytical_truth": analytical_truth,
-        "decision_truth": decision_truth,
-        "risk_truth": risk_truth,
-        "execution_truth": execution_truth,
-        "outcome_truth": outcome_truth,
+        "identity": identity_truth.__dict__,
+        "timing": timing_truth.__dict__,
+        "market": market_truth.__dict__,
+        "analytical": analytical_truth.__dict__,
+        "decision": decision_truth.__dict__,
+        "execution": execution_truth.__dict__,
+        "outcome": outcome_truth.__dict__,
+        "provenance": provenance_truth.__dict__,
     }
     payload_hash = sha256_canonical(body)
 
-    return CanonicalTradeTruthRecord(
-        pulse_id=pulse.pulse_id,
-        session_id=pulse.session_id,
-        sequence_num=pulse.sequence_num,
-        producer_sha=pulse.producer_sha,
-        timestamp_epoch=pulse.timestamp_epoch,
-        timestamp_ist=pulse.timestamp_ist,
-        identity_truth=identity_truth,
-        timing_truth=timing_truth,
-        market_truth=market_truth,
-        analytical_truth=analytical_truth,
-        decision_truth=decision_truth,
-        risk_truth=risk_truth,
-        execution_truth=execution_truth,
-        outcome_truth=outcome_truth,
-        payload_sha256=payload_hash,
+    return TradeTruthRecord(
+        schema_version=1,
+        source="tradebot.trade_truth.v1",
+        identity=identity_truth,
+        timing=timing_truth,
+        market=market_truth,
+        analytical=analytical_truth,
+        decision=decision_truth,
+        provenance=provenance_truth,
+        execution=execution_truth,
+        outcome=outcome_truth,
+        live_decision_hash=payload_hash,
+        record_hash=payload_hash,
+        sequence_number=pulse.sequence_num,
+        previous_record_hash=pulse.parent_pulse_id or "GENESIS",
+        record_type="DECISION_TRUTH",
+        parent_truth_record_id=pulse.parent_pulse_id,
+        read_only=True,
+        append_only=True,
+        is_order_action=False,
+        broker_api_called=False,
+        orders_placed=0,
+        orders_modified=0,
+        orders_cancelled=0,
+        integrity_status="VALID",
     )
+

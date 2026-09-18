@@ -1,17 +1,16 @@
-"""Causal Feature & Strategy Evaluation Harness for TradeBot (Hops 5-8).
+"""Causal Strategy Observation Adapter (Hops 5-8).
 
-Consumes verified NativePulse events and normalized market data to evaluate
-registered strategies and generate candidate pool entries with explicit attribution.
-Strictly read-only / simulation mode; zero broker order actions.
+Wraps canonical strategy registry and signal evaluation primitives into immutable
+NativePulse trace envelopes without duplicating strategy logic or inventing fake setups.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Mapping
 
 from core.causal_pulse import NativePulse, sha256_canonical
+from core.read_only_strategy_registry import CANONICAL_STRATEGIES
+from core.signal_engine import evaluate as evaluate_signal
 
 
 @dataclass(frozen=True)
@@ -22,9 +21,9 @@ class CausalCandidate:
     symbol: str
     instrument_token: int
     direction: str
-    entry_price: float
-    stop_loss: float
-    target_price: float
+    entry_price: float | None
+    stop_loss: float | None
+    target_price: float | None
     regime: str
     confidence: float
     timestamp_epoch: float
@@ -33,6 +32,7 @@ class CausalCandidate:
     metadata: dict[str, Any] = field(default_factory=dict)
     is_order_action: bool = False
     broker_api_called: bool = False
+    read_only: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -51,8 +51,9 @@ class CausalCandidate:
             "timestamp_ist": self.timestamp_ist,
             "payload_sha256": self.payload_sha256,
             "metadata": dict(self.metadata),
-            "is_order_action": self.is_order_action,
-            "broker_api_called": self.broker_api_called,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "read_only": True,
         }
 
 
@@ -85,16 +86,24 @@ def evaluate_causal_strategies(
     pulse: NativePulse,
     market_snapshot: Mapping[str, Any] | None,
     feed_health_truth: Mapping[str, Any] | None,
+    cas_primitive_store: Any | None = None,
 ) -> StrategyEvaluationResult:
-    """Evaluate frozen strategies against incoming pulse and normalized feed."""
+    """Evaluate frozen canonical strategies against incoming pulse and normalized feed."""
     candidates: list[CausalCandidate] = []
     rejections: list[dict[str, Any]] = []
 
     symbols_evaluated = 0
     symbols_data = (feed_health_truth or {}).get("symbols", []) if isinstance(feed_health_truth, Mapping) else []
     
-    # Simple, deterministic causal regime detection
-    regime = "NORMAL_VOLATILITY"
+    # Extract canonical regime from feed health / market snapshot context
+    regime = "UNKNOWN"
+    if isinstance(market_snapshot, Mapping):
+        regime = str(market_snapshot.get("primary_regime") or market_snapshot.get("regime") or "UNKNOWN")
+    if regime == "UNKNOWN" and isinstance(feed_health_truth, Mapping):
+        regime = str((feed_health_truth.get("context") or {}).get("primary_regime") or "UNKNOWN")
+
+    # Canonical Strategy Registry Reference
+    registered_strategy_ids = [s["strategy_id"] for s in CANONICAL_STRATEGIES if s.get("enabled")]
 
     for sym_info in symbols_data:
         if not isinstance(sym_info, Mapping):
@@ -106,26 +115,57 @@ def evaluate_causal_strategies(
 
         feed_ok = bool(sym_info.get("feed_ok", False))
         token = int(sym_info.get("instrument_token", 0) or 0)
-        age_sec = float(sym_info.get("option_last_tick_age_sec") or 0.0)
+        age_sec = sym_info.get("option_last_tick_age_sec")
 
-        # 1. Freshness Gate Check (Hop 5/6)
-        if not feed_ok or age_sec > 2.5:
-            rejections.append({
-                "symbol": symbol,
-                "strategy_id": "ORB_BREAKOUT_V1",
-                "reason_code": "REJECT_FEED_DEGRADED_OR_STALE",
-                "detail": f"age_sec={age_sec:.2f} feed_ok={feed_ok}",
-            })
+        # 1. Canonical Freshness & Feed Gate
+        if not feed_ok or (age_sec is not None and float(age_sec) > 2.5):
+            for strat_id in registered_strategy_ids:
+                rejections.append({
+                    "symbol": symbol,
+                    "strategy_id": strat_id,
+                    "reason_code": "REJECT_FEED_DEGRADED_OR_STALE",
+                    "detail": f"age_sec={age_sec} feed_ok={feed_ok}",
+                })
             continue
 
-        # In shadow observation mode: if feed is fresh, generate simulated candidate or explicit no-setup
-        # For demonstration of prospective causal funnel:
-        rejections.append({
-            "symbol": symbol,
-            "strategy_id": "ORB_BREAKOUT_V1",
-            "reason_code": "NO_CANDIDATE_RANGE_UNBROKEN",
-            "detail": "current price within opening 15m range bounds",
-        })
+        # 2. Canonical Signal Engine Evaluation
+        signal_res = evaluate_signal(snapshot=sym_info, signal_payload=sym_info)
+        
+        # If signal qualifies naturally from canonical logic:
+        if signal_res.confidence is not None and signal_res.confidence >= 0.70 and signal_res.direction in ("BUY", "SELL"):
+            cand_body = {
+                "pulse_id": pulse.pulse_id,
+                "symbol": symbol,
+                "direction": signal_res.direction,
+                "confidence": signal_res.confidence,
+            }
+            cand_hash = sha256_canonical(cand_body)
+            cand = CausalCandidate(
+                candidate_id=f"cand_{pulse.sequence_num}_{token}",
+                pulse_id=pulse.pulse_id,
+                strategy_id=registered_strategy_ids[0] if registered_strategy_ids else "CANONICAL_ADVISORY",
+                symbol=symbol,
+                instrument_token=token,
+                direction=signal_res.direction,
+                entry_price=sym_info.get("ltp"),
+                stop_loss=sym_info.get("stop_loss"),
+                target_price=sym_info.get("target_price"),
+                regime=regime,
+                confidence=float(signal_res.confidence),
+                timestamp_epoch=pulse.timestamp_epoch,
+                timestamp_ist=pulse.timestamp_ist,
+                payload_sha256=cand_hash,
+                metadata={"features": signal_res.features},
+            )
+            candidates.append(cand)
+        else:
+            for strat_id in registered_strategy_ids:
+                rejections.append({
+                    "symbol": symbol,
+                    "strategy_id": strat_id,
+                    "reason_code": "NO_QUALIFIED_SIGNAL",
+                    "detail": f"confidence={signal_res.confidence} direction={signal_res.direction}",
+                })
 
     return StrategyEvaluationResult(
         pulse_id=pulse.pulse_id,

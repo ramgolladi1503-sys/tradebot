@@ -1,16 +1,17 @@
-"""Shadow Selection Authority & Risk Gatekeeper (Hops 9-10).
+"""Shadow Selection Authority & Risk Gatekeeper Adapter (Hops 9-10).
 
-Ranks strategy candidates and enforces fail-closed risk controls in pure shadow
-mode with zero broker execution authority.
+Wraps the canonical opportunity selection engine (select_best_opportunity) and
+production RiskEngine in pure read-only observation mode with zero order authority.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Mapping
 
 from core.causal_pulse import NativePulse
 from core.causal_strategy_harness import CausalCandidate, StrategyEvaluationResult
+from core.opportunity_engine import select_best_opportunity
+from core.risk_engine import RiskEngine
 
 
 @dataclass(frozen=True)
@@ -19,12 +20,15 @@ class ShadowDecisionResult:
     selected_candidates: list[CausalCandidate]
     rejected_decisions: list[dict[str, Any]]
     risk_verdict: str
-    max_portfolio_exposure: float
     timestamp_epoch: float
     read_only: bool = True
     order_authority: bool = False
     broker_write_authority: bool = False
     orders_placed: int = 0
+    orders_modified: int = 0
+    orders_cancelled: int = 0
+    actual_execution: bool = False
+    execution_status: str = "NOT_EXECUTED_OBSERVATION_ONLY"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -34,12 +38,15 @@ class ShadowDecisionResult:
             "rejected_count": len(self.rejected_decisions),
             "rejected_decisions": self.rejected_decisions,
             "risk_verdict": self.risk_verdict,
-            "max_portfolio_exposure": self.max_portfolio_exposure,
             "timestamp_epoch": self.timestamp_epoch,
-            "read_only": self.read_only,
-            "order_authority": self.order_authority,
-            "broker_write_authority": self.broker_write_authority,
-            "orders_placed": self.orders_placed,
+            "read_only": True,
+            "order_authority": False,
+            "broker_write_authority": False,
+            "orders_placed": 0,
+            "orders_modified": 0,
+            "orders_cancelled": 0,
+            "actual_execution": False,
+            "execution_status": "NOT_EXECUTED_OBSERVATION_ONLY",
         }
 
 
@@ -48,41 +55,69 @@ def evaluate_shadow_decision(
     pulse: NativePulse,
     strategy_result: StrategyEvaluationResult,
     feed_health_truth: Mapping[str, Any] | None,
-    max_concurrent_exposure: float = 200000.0,
+    portfolio_state: Mapping[str, Any] | None = None,
 ) -> ShadowDecisionResult:
     """Apply selection ranking & risk gatekeeping in shadow observation mode."""
     selected: list[CausalCandidate] = []
     rejected: list[dict[str, Any]] = []
 
-    # 1. Selection Authority Ranking
-    sorted_candidates = sorted(
-        strategy_result.candidates,
-        key=lambda c: float(c.confidence),
-        reverse=True,
+    if not strategy_result.candidates:
+        return ShadowDecisionResult(
+            pulse_id=pulse.pulse_id,
+            selected_candidates=[],
+            rejected_decisions=[],
+            risk_verdict="NOT_APPLICABLE_NO_CANDIDATES",
+            timestamp_epoch=pulse.timestamp_epoch,
+        )
+
+    # 1. Canonical Candidate Selection Call (Hop 9)
+    candidate_dicts = [c.to_dict() for c in strategy_result.candidates]
+    best_candidate, ranked_candidates = select_best_opportunity(
+        candidate_dicts,
+        scope="build:causal_observation",
     )
 
-    current_exposure = 0.0
-    for candidate in sorted_candidates:
-        estimated_cost = candidate.entry_price * 15.0  # approximate single lot
-        if current_exposure + estimated_cost > max_concurrent_exposure:
-            rejected.append({
-                "candidate_id": candidate.candidate_id,
-                "symbol": candidate.symbol,
-                "reason_code": "REJECT_RISK_PORTFOLIO_EXPOSURE_LIMIT",
-                "detail": f"exceeds max exposure cap {max_concurrent_exposure}",
-            })
+    # 2. Canonical RiskEngine Evaluation (Hop 10)
+    risk_engine = RiskEngine()
+    portfolio = dict(portfolio_state or {
+        "capital": 1000000.0,
+        "equity_high": 1000000.0,
+        "daily_profit": 0.0,
+        "daily_loss": 0.0,
+        "open_risk_pct": 0.0,
+        "symbol_profit": {},
+        "trades_today": 0,
+    })
+    risk_decision = risk_engine.evaluate_trade(
+        portfolio=portfolio,
+        regime=strategy_result.regime,
+        trade=best_candidate,
+    )
+
+    for cand_dict in ranked_candidates:
+        cand_id = cand_dict.get("candidate_id")
+        orig_cand = next((c for c in strategy_result.candidates if c.candidate_id == cand_id), None)
+        if not orig_cand:
             continue
 
-        selected.append(candidate)
-        current_exposure += estimated_cost
+        if best_candidate and cand_id == best_candidate.get("candidate_id") and risk_decision.allowed:
+            selected.append(orig_cand)
+        else:
+            reason = risk_decision.reason if (best_candidate and cand_id == best_candidate.get("candidate_id")) else "opportunity_rank_suboptimal"
+            rejected.append({
+                "candidate_id": cand_id,
+                "symbol": orig_cand.symbol,
+                "reason_code": str(risk_decision.reason_code) if (best_candidate and cand_id == best_candidate.get("candidate_id")) else "REJECT_RANK_NOT_SELECTED",
+                "detail": str(reason),
+            })
 
-    risk_verdict = "PASS_SHADOW" if (feed_health_truth or {}).get("websocket_ok") is True else "DEGRADED_SHADOW"
+    risk_verdict = "PASS_SHADOW" if risk_decision.allowed else "BLOCKED_BY_RISK_ENGINE"
 
     return ShadowDecisionResult(
         pulse_id=pulse.pulse_id,
         selected_candidates=selected,
         rejected_decisions=rejected,
         risk_verdict=risk_verdict,
-        max_portfolio_exposure=max_concurrent_exposure,
         timestamp_epoch=pulse.timestamp_epoch,
     )
+
