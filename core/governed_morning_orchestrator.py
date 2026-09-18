@@ -335,7 +335,7 @@ class GovernedMorningOrchestrator:
         wait_for_window: bool = True,
         market_open_time: str = "08:55",
         market_close_time: str = "15:45",
-        observer_engine: str = "tick_collector",
+        observer_engine: str = "dual",
         supervise: bool = True,
         status_interval_seconds: float = 3600.0,
         telemetry_callback: Callable[[str, str, str], None] | None = None,
@@ -722,12 +722,19 @@ class GovernedMorningOrchestrator:
 
         # Persist master instruments and produce authoritative dated instrument authority
         try:
+            from datetime import date as dt_date
             from core.daily_instrument_authority import produce_authority
             instruments_dir = self.state_root / "instruments"
             instruments_dir.mkdir(parents=True, exist_ok=True)
             master_file = instruments_dir / f"kite_instruments_{self.session_date}.json"
             if not master_file.exists():
-                master_file.write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
+                def _serialize_instrument_row(row: dict[str, Any]) -> dict[str, Any]:
+                    r = dict(row)
+                    if "expiry" in r and isinstance(r["expiry"], (dt_date, datetime)):
+                        r["expiry"] = r["expiry"].isoformat()
+                    return r
+                clean_rows = [_serialize_instrument_row(r) for r in rows]
+                master_file.write_text(json.dumps(clean_rows, indent=2) + "\n", encoding="utf-8")
             authority_file = instruments_dir / f"instrument_authority_{self.session_date}.json"
             if not authority_file.exists():
                 source_sha = getattr(self, "current_commit_sha", "")
@@ -846,6 +853,9 @@ class GovernedMorningOrchestrator:
 
         self.emit("OBSERVER", "LAUNCHING", f"Starting governed processes (collector + {self.observer_engine}) until {self.market_close_time} IST")
 
+        spawn_collector = self.observer_engine in {"dual", "tick_collector"}
+        spawn_mros = self.observer_engine in {"dual", "meg_live"}
+
         # 1. Primary tick collector process
         collector_cmd = [
             sys.executable,
@@ -854,29 +864,36 @@ class GovernedMorningOrchestrator:
         ]
 
         # 2. Governed MROS observer process
-        if self.observer_engine == "meg_live":
-            mros_cmd = [
-                sys.executable,
-                "-u",
-                str(self.repo_root / "scripts" / "run_market_event_graph_live_session_v1.py"),
-                "--session-date", self.session_date,
-                "--output-root", str(self.state_root / "sessions" / f"session_{self.session_date}"),
-            ]
-        else:
-            mros_cmd = list(collector_cmd)
+        master_file = self.state_root / "instruments" / f"kite_instruments_{self.session_date}.json"
+        authority_file = self.state_root / "instruments" / f"instrument_authority_{self.session_date}.json"
+        mros_cmd = [
+            sys.executable,
+            "-u",
+            str(self.repo_root / "scripts" / "run_market_event_graph_live_session_v1.py"),
+            "--session-date", self.session_date,
+            "--output-root", str(self.state_root / "sessions" / f"session_{self.session_date}"),
+        ]
+        if master_file.exists():
+            mros_cmd.extend(["--kite-instruments-file", str(master_file)])
+        if authority_file.exists():
+            mros_cmd.extend(["--authority-artifact", str(authority_file)])
 
         try:
-            self._child_collector_proc = subprocess.Popen(collector_cmd, cwd=str(self.repo_root))
-            self.collector_health = "HEALTHY"
-            self.emit("COLLECTOR", "RUNNING", f"Child PID {self._child_collector_proc.pid}")
+            if spawn_collector:
+                self._child_collector_proc = subprocess.Popen(collector_cmd, cwd=str(self.repo_root))
+                self.collector_health = "HEALTHY"
+                self.emit("COLLECTOR", "RUNNING", f"Child PID {self._child_collector_proc.pid}")
+            else:
+                self._child_collector_proc = None
+                self.collector_health = "NOT_STARTED"
 
-            if self.observer_engine == "meg_live":
+            if spawn_mros:
                 self._child_mros_proc = subprocess.Popen(mros_cmd, cwd=str(self.repo_root))
                 self.mros_health = "HEALTHY"
                 self.emit("MROS_OBSERVER", "RUNNING", f"Child PID {self._child_mros_proc.pid}")
             else:
                 self._child_mros_proc = None
-                self.mros_health = "HEALTHY"
+                self.mros_health = "NOT_STARTED"
 
             # Primary alias for legacy tests
             self._child_observer_proc = self._child_mros_proc or self._child_collector_proc

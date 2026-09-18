@@ -891,7 +891,9 @@ def test_34_wait_for_window_advances_to_market_open(mock_env):
         assert ok is True
         assert orc.state == LauncherState.OBSERVER_RUNNING
         mock_sleep.assert_called()
-        mock_popen.assert_called_once()
+        assert mock_popen.call_count == 2
+        assert orc._child_collector_proc is not None
+        assert orc._child_mros_proc is not None
 
 
 def test_35_1545_cutoff_supervision_and_clean_termination(mock_env):
@@ -1143,5 +1145,118 @@ def test_41_callback_server_attacks_rejected(mock_env):
         srv.stop()
 
 
+def test_42_zero_argument_cli_defaults_to_dual_production_mode():
+    """42. Zero-argument CLI MUST default to 'dual' production mode."""
+    import subprocess
+    import sys
+
+    repo_root = Path(__file__).resolve().parents[1]
+    res = subprocess.run(
+        [sys.executable, str(repo_root / "scripts" / "run_governed_morning_observer_v1.py"), "--help"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "default: dual" in res.stdout
+    assert "--observer-engine {dual,tick_collector,meg_live}" in res.stdout
+
+
+def test_43_step_refresh_instruments_persists_authority_with_date_objects(mock_env):
+    """43. step_refresh_instruments must serialize datetime.date objects without error."""
+    from datetime import date as dt_date
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+    )
+    sample_rows = [
+        {
+            "exchange": "NSE",
+            "instrument_token": 256265,
+            "tradingsymbol": "NIFTY 50",
+            "segment": "INDICES",
+            "instrument_type": "EQ",
+            "expiry": None,
+            "lot_size": 0,
+            "tick_size": 0,
+            "strike": 0,
+        },
+        {
+            "exchange": "NFO",
+            "instrument_token": 260105,
+            "tradingsymbol": "NIFTY26SEP22000CE",
+            "segment": "NFO-OPT",
+            "instrument_type": "CE",
+            "expiry": dt_date(2026, 9, 26),
+            "lot_size": 50,
+            "tick_size": 0.05,
+            "strike": 22000.0,
+        },
+    ]
+
+    with patch("core.auth.get_kite_client"), \
+         patch("core.read_only_instrument_authority.fetch_current_instruments", return_value=sample_rows), \
+         patch("core.daily_instrument_authority.independent_verify", return_value={"status": "PASS"}), \
+         patch("core.instruments.build_option_registry", return_value={"available_expiries": ["2026-09-26"], "instruments": sample_rows}), \
+         patch("core.instruments.select_expiry", return_value="2026-09-26"):
+        ok = orc.step_refresh_instruments()
+        assert ok is True
+        master_file = mock_env["state_root"] / "instruments" / f"kite_instruments_{orc.session_date}.json"
+        assert master_file.exists()
+        loaded = json.loads(master_file.read_text(encoding="utf-8"))
+        assert len(loaded) == 2
+        assert loaded[1]["expiry"] == "2026-09-26"
+
+
+def test_44_dual_mode_spawns_both_with_proper_authority_and_master_args(mock_env):
+    """44. Dual mode spawns both collector and MROS with --kite-instruments-file and --authority-artifact."""
+    orc = GovernedMorningOrchestrator(
+        repo_root=mock_env["repo_root"],
+        state_root=mock_env["state_root"],
+        token_path=mock_env["token_path"],
+        lock_file=mock_env["lock_file"],
+        open_browser=False,
+        observer_engine="dual",
+        supervise=False,
+        wait_for_window=False,
+    )
+    # Create fake master and authority files
+    instruments_dir = mock_env["state_root"] / "instruments"
+    instruments_dir.mkdir(parents=True, exist_ok=True)
+    master_file = instruments_dir / f"kite_instruments_{orc.session_date}.json"
+    authority_file = instruments_dir / f"instrument_authority_{orc.session_date}.json"
+    master_file.write_text("[]")
+    authority_file.write_text("{}")
+
+    mock_proc_col = MagicMock()
+    mock_proc_col.pid = 10001
+    mock_proc_mros = MagicMock()
+    mock_proc_mros.pid = 10002
+
+    spawn_calls = []
+    def fake_popen(cmd, **kwargs):
+        spawn_calls.append(cmd)
+        if "tick_data_collector.py" in str(cmd):
+            return mock_proc_col
+        return mock_proc_mros
+
+    with patch("core.governed_morning_orchestrator.datetime") as mock_datetime, \
+         patch("subprocess.Popen", side_effect=fake_popen):
+        mock_datetime.now.return_value = datetime(2026, 9, 18, 9, 30, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+        mock_datetime.strptime = datetime.strptime
+        ok = orc.step_arm_observer()
+        assert ok is True
+        assert len(spawn_calls) == 2
+        assert any("tick_data_collector.py" in str(c) for c in spawn_calls)
+        mros_cmd = next(c for c in spawn_calls if "run_market_event_graph_live_session_v1.py" in str(c))
+        assert "--kite-instruments-file" in mros_cmd
+        assert str(master_file) in mros_cmd
+        assert "--authority-artifact" in mros_cmd
+        assert str(authority_file) in mros_cmd
+
+
 # broker_api_called = false
 # is_order_action = false
+
