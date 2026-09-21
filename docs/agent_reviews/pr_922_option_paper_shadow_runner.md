@@ -41,6 +41,17 @@ Add option shadow paper runner, late-day option refresh helper, and authoritativ
 - Deterministic test coverage for statutory schedule, late-day strike refresh, and shadow simulator.
 - Zero mock-away of trading safety boundaries.
 
+### Evidence Contract Fields
+
+mode: PAPER
+candidate_id: DAY_TO_NIGHT_MOMENTUM_V2_A_OPTION
+decision: VERIFY_OPTION_PAPER_SHADOW
+reason: Authoritative contract-level option shadow runner and statutory cost model verification.
+timestamp: 2026-09-21T18:30:00Z
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/pr_922_option_paper_shadow_runner.md
+
 ## Scope Guard
 
 ### In Scope
