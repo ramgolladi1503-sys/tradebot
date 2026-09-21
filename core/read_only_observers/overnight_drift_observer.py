@@ -120,11 +120,13 @@ class TamperEvidentObservationEntry:
     spread_pts: Optional[float]
     frozen_arrival_price: Optional[float]
     market_buy_arrival_estimate: Optional[float]
-    passive_limit_tracked_price: Optional[float]
     next_session_open: Optional[float]
     gross_pnl_pts: Optional[float]
     deterministic_cost_pts: float
     net_pnl_pts: Optional[float]
+    midpoint_theoretical_pnl_pts: Optional[float]
+    best_ask_crossing_pnl_pts: Optional[float]
+    deterministic_cost_adjusted_pnl_pts: Optional[float]
     feed_healthy: bool
     validation_notes: str
 
@@ -241,21 +243,65 @@ class TamperEvidentLedgerManager:
     def recover_crash_consistency(self, sub_ledger: str) -> None:
         """
         Detects if process died between ledger append and head anchor update.
-        Re-synchronizes head anchor if ledger contains verified, fully fsynced records.
+        Before auto-healing an anchor, enforces complete chain verification from genesis
+        through the proposed new head, requiring the expected predecessor at the old anchor's
+        position to match the old anchored hash.
         """
         seq, last_hash = self.get_latest_entry_info(sub_ledger)
         anchor_path = self._get_head_anchor_path(sub_ledger)
+        ledger_path = self._get_ledger_path(sub_ledger)
 
-        if seq > 0 and (not os.path.exists(anchor_path)):
-            self._sync_head_anchor_atomically(sub_ledger, seq, last_hash)
+        if seq == 0:
             return
 
+        # 1. Independently verify entire chain from genesis to head
+        prev_hash = "GENESIS_OVERNIGHT_DRIFT_0000000000000000000000000000000000000000"
+        expected_seq = 1
+        hashes_by_seq = {}
+
+        if not os.path.exists(ledger_path):
+            return
+
+        with open(ledger_path, "r") as f:
+            for line_idx, line in enumerate(f):
+                if not line.strip():
+                    continue
+                entry = json.loads(line.strip())
+                if entry["sequence_number"] != expected_seq:
+                    raise ValueError(f"CRASH_RECOVERY_ABORTED: Sequence broken at line {line_idx+1}")
+                if entry["previous_record_hash"] != prev_hash:
+                    raise ValueError(f"CRASH_RECOVERY_ABORTED: Previous hash mismatch at line {line_idx+1}")
+
+                computed = compute_canonical_record_hash(prev_hash, entry)
+                if computed != entry["record_hash"]:
+                    raise ValueError(f"CRASH_RECOVERY_ABORTED: Tampered record payload at line {line_idx+1}")
+
+                prev_hash = entry["record_hash"]
+                hashes_by_seq[expected_seq] = entry["record_hash"]
+                expected_seq += 1
+
+        actual_records = expected_seq - 1
+        if actual_records != seq or prev_hash != last_hash:
+            raise ValueError("CRASH_RECOVERY_ABORTED: Chain tail mismatch during recovery scan")
+
+        # 2. If anchor exists and was lagging, verify that old anchor's hash matches the exact entry at that sequence
         if os.path.exists(anchor_path):
             with open(anchor_path, "r") as af:
                 anchor_data = json.load(af)
-            if anchor_data["total_records"] < seq:
-                # Ledger progressed ahead of anchor before crash -> recover
+            old_seq = anchor_data["total_records"]
+            old_hash = anchor_data["latest_record_hash"]
+
+            if old_seq < seq:
+                # Predecessor verification: old anchored point must match chain entry exactly
+                if old_seq > 0 and hashes_by_seq.get(old_seq) != old_hash:
+                    raise ValueError(
+                        f"CRASH_RECOVERY_ABORTED: Predecessor hash mismatch at seq {old_seq}: "
+                        f"{hashes_by_seq.get(old_seq)} != {old_hash}"
+                    )
                 self._sync_head_anchor_atomically(sub_ledger, seq, last_hash)
+        else:
+            # Anchor missing entirely but chain verified from genesis -> advance anchor
+            self._sync_head_anchor_atomically(sub_ledger, seq, last_hash)
 
     def append_observation(
         self,
@@ -341,11 +387,19 @@ class TamperEvidentLedgerManager:
 
             gross_pnl = None
             net_pnl = None
+            midpoint_theoretical_pnl = None
+            best_ask_crossing_pnl = None
+            det_cost_adjusted_pnl = None
             det_cost = candidate_spec.deterministic_friction_pts
-            if frozen_arrival_price is not None and next_session_open is not None and feed_healthy:
-                if frozen_arrival_price > 0 and next_session_open > 0:
-                    gross_pnl = round(next_session_open - frozen_arrival_price, 2)
+
+            if next_session_open is not None and feed_healthy and next_session_open > 0:
+                if midpoint is not None and midpoint > 0:
+                    midpoint_theoretical_pnl = round(next_session_open - midpoint, 2)
+                    gross_pnl = midpoint_theoretical_pnl  # Benchmark standard
                     net_pnl = round(gross_pnl - det_cost, 2)
+                if market_buy_estimate is not None and market_buy_estimate > 0:
+                    best_ask_crossing_pnl = round(next_session_open - market_buy_estimate, 2)
+                    det_cost_adjusted_pnl = round(best_ask_crossing_pnl - det_cost, 2)
 
             seq, prev_hash = self.get_latest_entry_info(sub_ledger)
             new_seq = seq + 1
@@ -375,11 +429,13 @@ class TamperEvidentLedgerManager:
                 "spread_pts": spread_pts,
                 "frozen_arrival_price": frozen_arrival_price,
                 "market_buy_arrival_estimate": market_buy_estimate,
-                "passive_limit_tracked_price": best_bid if feed_healthy else None,
                 "next_session_open": next_session_open,
                 "gross_pnl_pts": gross_pnl,
                 "deterministic_cost_pts": det_cost,
                 "net_pnl_pts": net_pnl,
+                "midpoint_theoretical_pnl_pts": midpoint_theoretical_pnl,
+                "best_ask_crossing_pnl_pts": best_ask_crossing_pnl,
+                "deterministic_cost_adjusted_pnl_pts": det_cost_adjusted_pnl,
                 "feed_healthy": feed_healthy,
                 "validation_notes": notes,
             }

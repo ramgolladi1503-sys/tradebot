@@ -442,6 +442,7 @@ def test_atomic_crash_recovery(tmp_path):
     mgr = TamperEvidentLedgerManager(ledger_dir=str(tmp_path))
     s1_spec = load_and_validate_frozen_spec(CANDIDATE_S1_ID)
 
+    # 1. Write first record (seq 1)
     mgr.append_observation(
         sub_ledger="S1_ONLY",
         target_state=ObserverLifecycleState.MACRO_STATE_FROZEN,
@@ -455,15 +456,153 @@ def test_atomic_crash_recovery(tmp_path):
         qualified=False,
     )
 
-    # Simulate crash before anchor was updated: delete anchor file
-    anchor_file = tmp_path / "s1_only_head_anchor.json"
-    os.remove(anchor_file)
+    # 2. Append second record directly to ledger (simulating crash before anchor updated)
+    # The anchor is at seq 1, ledger is at seq 2
+    mgr.append_observation(
+        sub_ledger="S1_ONLY",
+        target_state=ObserverLifecycleState.SIGNAL_SEALED_1520,
+        candidate_spec=s1_spec,
+        schedule_sha256=s1_spec.schedule_sha256,
+        session_date="2026-09-22",
+        decision_ts="15:20:00",
+        macro_uptrend=True,
+        day_gain_pct=0.55,
+        is_monday=False,
+        qualified=True,
+    )
 
-    # Recovery contract triggers on next manager call
+    # Simulate anchor lagging at seq 1
+    anchor_file = tmp_path / "s1_only_head_anchor.json"
+    ledger_file = tmp_path / "s1_only_ledger.jsonl"
+    with open(ledger_file, "r") as f:
+        lines = [json.loads(line.strip()) for line in f if line.strip()]
+
+    lagging_anchor = {
+        "sub_ledger": "S1_ONLY",
+        "total_records": 1,
+        "latest_sequence": 1,
+        "latest_record_hash": lines[0]["record_hash"],
+        "anchor_updated_at": "2026-09-22T09:00:00+00:00",
+    }
+    with open(anchor_file, "w") as f:
+        json.dump(lagging_anchor, f)
+
+    # Predecessor verification succeeds and advances anchor
     mgr.recover_crash_consistency("S1_ONLY")
     is_valid, msg = mgr.verify_ledger_integrity("S1_ONLY")
     assert is_valid
     assert msg == "CHAIN_AND_ANCHOR_VERIFIED_PERFECT"
+
+    # Now tamper with the predecessor record in the ledger
+    lines[0]["validation_notes"] = "TAMPERED_PREDECESSOR"
+    with open(ledger_file, "w") as f:
+        for row in lines:
+            f.write(json.dumps(row) + "\n")
+
+    # Reset anchor to old hash
+    with open(anchor_file, "w") as f:
+        json.dump(lagging_anchor, f)
+
+    # Recovery must fail-closed due to predecessor hash mismatch / payload tampering
+    with pytest.raises(ValueError, match="CRASH_RECOVERY_ABORTED"):
+        mgr.recover_crash_consistency("S1_ONLY")
+
+
+def test_separated_pnl_metrics_reported(tmp_path):
+    mgr = TamperEvidentLedgerManager(ledger_dir=str(tmp_path))
+    s1_spec = load_and_validate_frozen_spec(CANDIDATE_S1_ID)
+
+    # State graph: PRE_SESSION -> MACRO_STATE_FROZEN -> SIGNAL_SEALED_1520 -> QUALIFIED -> ARRIVAL_CAPTURED_1521 -> OVERNIGHT_PENDING -> NEXT_SESSION_OPEN_CAPTURED
+    mgr.append_observation(
+        sub_ledger="S1_ONLY",
+        target_state=ObserverLifecycleState.MACRO_STATE_FROZEN,
+        candidate_spec=s1_spec,
+        schedule_sha256=s1_spec.schedule_sha256,
+        session_date="2026-09-22",
+        decision_ts="09:00:00",
+        macro_uptrend=True,
+        day_gain_pct=0.0,
+        is_monday=False,
+        qualified=False,
+    )
+    mgr.append_observation(
+        sub_ledger="S1_ONLY",
+        target_state=ObserverLifecycleState.SIGNAL_SEALED_1520,
+        candidate_spec=s1_spec,
+        schedule_sha256=s1_spec.schedule_sha256,
+        session_date="2026-09-22",
+        decision_ts="15:20:00",
+        macro_uptrend=True,
+        day_gain_pct=0.55,
+        is_monday=False,
+        qualified=True,
+    )
+    mgr.append_observation(
+        sub_ledger="S1_ONLY",
+        target_state=ObserverLifecycleState.QUALIFIED,
+        candidate_spec=s1_spec,
+        schedule_sha256=s1_spec.schedule_sha256,
+        session_date="2026-09-22",
+        decision_ts="15:20:01",
+        macro_uptrend=True,
+        day_gain_pct=0.55,
+        is_monday=False,
+        qualified=True,
+    )
+    mgr.append_observation(
+        sub_ledger="S1_ONLY",
+        target_state=ObserverLifecycleState.ARRIVAL_CAPTURED_1521,
+        candidate_spec=s1_spec,
+        schedule_sha256=s1_spec.schedule_sha256,
+        session_date="2026-09-22",
+        decision_ts="15:21:00",
+        macro_uptrend=True,
+        day_gain_pct=0.55,
+        is_monday=False,
+        qualified=True,
+        quote_source_ts="2026-09-22T15:21:00.000+05:30",
+        quote_receipt_ts="2026-09-22T15:21:00.050+05:30",
+        best_bid=25000.0,
+        best_ask=25002.0,  # Midpoint = 25001.0, Ask = 25002.0
+    )
+    mgr.append_observation(
+        sub_ledger="S1_ONLY",
+        target_state=ObserverLifecycleState.OVERNIGHT_PENDING,
+        candidate_spec=s1_spec,
+        schedule_sha256=s1_spec.schedule_sha256,
+        session_date="2026-09-22",
+        decision_ts="15:21:05",
+        macro_uptrend=True,
+        day_gain_pct=0.55,
+        is_monday=False,
+        qualified=True,
+    )
+    entry = mgr.append_observation(
+        sub_ledger="S1_ONLY",
+        target_state=ObserverLifecycleState.NEXT_SESSION_OPEN_CAPTURED,
+        candidate_spec=s1_spec,
+        schedule_sha256=s1_spec.schedule_sha256,
+        session_date="2026-09-22",
+        decision_ts="09:15:00",
+        macro_uptrend=True,
+        day_gain_pct=0.55,
+        is_monday=False,
+        qualified=True,
+        quote_source_ts="2026-09-22T15:21:00.000+05:30",
+        quote_receipt_ts="2026-09-22T15:21:00.050+05:30",
+        best_bid=25000.0,
+        best_ask=25002.0,
+        next_session_open=25020.0,
+    )
+
+    # Verify separated PnL metrics
+    # Midpoint theoretical = 25020 - 25001 = +19.0 pts
+    assert entry.midpoint_theoretical_pnl_pts == 19.0
+    # Best ask crossing = 25020 - 25002 = +18.0 pts
+    assert entry.best_ask_crossing_pnl_pts == 18.0
+    # Deterministic cost adjusted = 18.0 - 14.30 = +3.70 pts
+    assert entry.deterministic_cost_adjusted_pnl_pts == round(18.0 - s1_spec.deterministic_friction_pts, 2)
+    assert entry.net_pnl_pts == round(19.0 - s1_spec.deterministic_friction_pts, 2)
 
 
 # ---------------------------------------------------------------------------
