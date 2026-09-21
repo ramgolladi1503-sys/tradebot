@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-INDEPENDENT CANONICAL SCHEDULE REGENERATION AND HASH VERIFIER
-=============================================================
-Strictly independent verification script:
-1. Loads canonical 18-year 1m parquet: NIFTY50_1m_2009_2026_v3_research_ready.parquet
-2. Evaluates Option B timestamp rules strictly from authoritative FROZEN_SPEC.json
-3. Reconstructs exact trade schedules
-4. Computes SHA256 digests
-5. Verifies against CANDIDATE_S1_SCHEDULE_SHA256 and CANDIDATE_S4_SCHEDULE_SHA256
+INDEPENDENT PRIMITIVE REIMPLEMENTATION & SCHEDULE VERIFIER
+==========================================================
+Role: INDEPENDENT_PRIMITIVE_REIMPLEMENTATION
+Directly parses the canonical 18-year dataset using isolated, unshared code,
+reconstructs the Option B historical trade schedules for S1 and S4,
+and asserts exact cryptographic equality against both the authoritative
+FROZEN_SPEC digests and immutable schedule SHA-256 hashes.
 """
 
 import sys
@@ -18,14 +17,32 @@ import pandas as pd
 import numpy as np
 
 PARQUET_PATH = "/Volumes/TradeBotData/strategy_research_canonical/acquisitions/nifty50/20260908_master_1m_2009_2026_v3/canonical/NIFTY50_1m_2009_2026_v3_research_ready.parquet"
-EXPECTED_S1_HASH = "48dc743eb7e91d92467e5f207a18640e1563b00b42b79b6d13a7bdd255ca68df"
-EXPECTED_S4_HASH = "43650186de669a9cba9993f0b6cdd58540639681021cc0971cbd61258b005692"
 
-def verify_schedules():
+# Immutable External Anchors
+EXPECTED_S1_SPEC_DIGEST = "3d3770a74c598ae6ac8dc5096ef748bd8bb9b73f1c3969a371b40ac88225b553"
+EXPECTED_S1_SCHEDULE_HASH = "48dc743eb7e91d92467e5f207a18640e1563b00b42b79b6d13a7bdd255ca68df"
+
+EXPECTED_S4_SPEC_DIGEST = "079587dc8960c7e863a87f63ddd4c98cec0780c797a220e747f028fad182973d"
+EXPECTED_S4_SCHEDULE_HASH = "43650186de669a9cba9993f0b6cdd58540639681021cc0971cbd61258b005692"
+
+
+def verify_independent_primitive_reimplementation():
     print("=========================================================================")
-    print("INDEPENDENT RECONSTRUCTION OF HISTORICAL TRADE SCHEDULES (OPTION B)")
+    print("INDEPENDENT PRIMITIVE REIMPLEMENTATION: S1 & S4 SCHEDULE AUDIT")
     print("=========================================================================")
-    
+
+    # 1. Verify Frozen Spec JSONs match immutable digests
+    for cid, exp_digest in [("S1_MOMENTUM_OVERNIGHT_V1", EXPECTED_S1_SPEC_DIGEST),
+                            ("S4_MONDAY_OVERNIGHT_V1", EXPECTED_S4_SPEC_DIGEST)]:
+        spec_path = f"docs/research/candidates/{cid}/FROZEN_SPEC.json"
+        with open(spec_path, "r") as f:
+            spec = json.load(f)
+        digest = hashlib.sha256(json.dumps(spec, sort_keys=True).encode("utf-8")).hexdigest()
+        assert digest == exp_digest, f"CRITICAL: Spec digest mismatch for {cid}: {digest} != {exp_digest}"
+        print(f"[{cid}] Authoritative Spec Digest Verified: {digest}")
+
+    # 2. Independent Corpus Parsing & Option B Schedule Construction
+    print("\nReading canonical 18-year 1m parquet...")
     table = pq.read_table(PARQUET_PATH, columns=["timestamp", "open", "high", "low", "close", "source"])
     df = table.to_pandas()
     df["timestamp"] = pd.to_datetime(df["timestamp"])
@@ -47,6 +64,7 @@ def verify_schedules():
     daily["day_open"] = first_bars["open"]
     daily["day_close"] = last_bars["close"]
 
+    # Causal Macro Trend: Close[t-1] > SMA200[t-1]
     daily["prev_close"] = daily["day_close"].shift(1)
     daily["sma200"] = daily["day_close"].rolling(200).mean()
     daily["prev_sma200"] = daily["sma200"].shift(1)
@@ -89,16 +107,16 @@ def verify_schedules():
     h1 = hashlib.sha256(df_s1[["date", "entry_B", "next_day_open", "overnight_ret"]].to_csv(index=False).encode("utf-8")).hexdigest()
     h4 = hashlib.sha256(df_s4[["date", "entry_B", "next_day_open", "overnight_ret"]].to_csv(index=False).encode("utf-8")).hexdigest()
 
-    print(f"S1 Reconstructed Hash : {h1}")
-    print(f"S1 Expected Hash      : {EXPECTED_S1_HASH}")
-    assert h1 == EXPECTED_S1_HASH, f"S1 Hash Mismatch: {h1} != {EXPECTED_S1_HASH}"
-    print("-> S1 SCHEDULE REGENERATION: VERIFIED MATCH!\n")
+    print(f"\nS1 Reconstructed Hash : {h1}")
+    print(f"S1 Expected Hash      : {EXPECTED_S1_SCHEDULE_HASH}")
+    assert h1 == EXPECTED_S1_SCHEDULE_HASH, f"S1 Hash Mismatch: {h1} != {EXPECTED_S1_SCHEDULE_HASH}"
+    print("-> S1 SCHEDULE RECONSTRUCTION: CRYPTOGRAPHIC MATCH CONFIRMED!")
 
-    print(f"S4 Reconstructed Hash : {h4}")
-    print(f"S4 Expected Hash      : {EXPECTED_S4_HASH}")
-    assert h4 == EXPECTED_S4_HASH, f"S4 Hash Mismatch: {h4} != {EXPECTED_S4_HASH}"
-    print("-> S4 SCHEDULE REGENERATION: VERIFIED MATCH!\n")
-    print("ALL SCHEDULES INDEPENDENTLY REGENERATED AND VALIDATED AGAINST IMMUTABLE SPEC.")
+    print(f"\nS4 Reconstructed Hash : {h4}")
+    print(f"S4 Expected Hash      : {EXPECTED_S4_SCHEDULE_HASH}")
+    assert h4 == EXPECTED_S4_SCHEDULE_HASH, f"S4 Hash Mismatch: {h4} != {EXPECTED_S4_SCHEDULE_HASH}"
+    print("-> S4 SCHEDULE RECONSTRUCTION: CRYPTOGRAPHIC MATCH CONFIRMED!")
+    print("\nINDEPENDENT PRIMITIVE REIMPLEMENTATION: ALL CHECKS PASSED.")
 
 if __name__ == "__main__":
-    verify_schedules()
+    verify_independent_primitive_reimplementation()
