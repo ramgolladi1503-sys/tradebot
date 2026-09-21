@@ -187,4 +187,3 @@ def test_refresh_late_day_option_subscriptions():
     # Existing morning subscriptions must remain intact
     assert "NSE_FO|101" in subscriptions
     assert "NSE_FO|102" in subscriptions
-

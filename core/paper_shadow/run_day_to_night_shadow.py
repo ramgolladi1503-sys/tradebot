@@ -46,20 +46,20 @@ class PaperShadowExecutionRecord:
     contract_key: str
     expiry: str
     lot_size: int
-    
+
     # Timing & Causality
     signal_bar_complete_timestamp: str
     signal_calculation_timestamp: str
     entry_quote_timestamp: str
     exit_quote_timestamp: str
     timing_causality_valid: bool
-    
+
     # Signal State
     day_open: float
     signal_close: float
     r_day: float
     side: str
-    
+
     # Prices & Spreads
     model_reference_entry: float
     model_reference_exit: float
@@ -68,18 +68,18 @@ class PaperShadowExecutionRecord:
     entry_ltp: float
     entry_shadow_fill: float
     observed_entry_spread: float
-    
+
     exit_bid: float
     exit_ask: float
     exit_ltp: float
     exit_shadow_fill: float
     observed_exit_spread: float
     observed_total_spread_pts: float
-    
+
     # PnL Metrics
     reference_gross_pnl_pts: float
     shadow_gross_pnl_pts: float
-    
+
     # Deterministic Fee Breakdown (in INR and converted to points using actual lot size)
     stt_rate_applied: float
     fee_inr_brokerage: float
@@ -90,11 +90,11 @@ class PaperShadowExecutionRecord:
     fee_inr_gst: float
     total_fee_inr: float
     deterministic_fee_pts: float
-    
+
     # Net PnL & Drag
     shadow_net_pnl_pts: float
     execution_drag_pts: float
-    
+
     # Safety Guards (AGENTS.md non-negotiables)
     broker_write_authority: bool
     order_authority: bool

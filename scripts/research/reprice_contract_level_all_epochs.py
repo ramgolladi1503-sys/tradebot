@@ -116,12 +116,12 @@ def evaluate_recalculated_epoch(trades_df: pd.DataFrame, n_sessions: int, label:
     gross_exp = trades_df["gross_pts"].mean()
     gross_sum = trades_df["gross_pts"].sum()
     gross_pf = trades_df[trades_df["gross_pts"]>0]["gross_pts"].sum() / abs(trades_df[trades_df["gross_pts"]<=0]["gross_pts"].sum())
-    
+
     avg_fee_pts = trades_df["fee_pts"].mean()
     avg_fee_inr = trades_df["fee_inr"].mean()
     net_exp = trades_df["net_pts"].mean()
     net_sum = trades_df["net_pts"].sum()
-    
+
     net_wins = trades_df[trades_df["net_pts"]>0]["net_pts"].sum()
     net_loss = abs(trades_df[trades_df["net_pts"]<=0]["net_pts"].sum())
     net_pf = net_wins / net_loss if net_loss > 0 else np.nan
