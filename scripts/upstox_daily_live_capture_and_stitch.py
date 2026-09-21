@@ -432,6 +432,7 @@ def main():
     start_streamer()
     last_flush_time = time.time()
     market_close_time = dt_time(15, 41)  # Collect CAS data through 15:40 PM, stop stream and stitch at 15:41 IST
+    late_day_refresh_done = False
 
     while running:
         now = datetime.now()
@@ -441,6 +442,27 @@ def main():
         if now.time() >= market_close_time:
             logger.info("Market close & CAS complete (15:41 IST). Ending streaming session...")
             break
+
+        # Dynamic late-day option refresh at 15:23:00 - 15:24:00 IST
+        # Subscribes ATM and ATM +/- 100 strikes around current spot to ensure 15:26 depth availability
+        if not late_day_refresh_done and dt_time(15, 23) <= now.time() <= dt_time(15, 24):
+            latest_spot = 0.0
+            with buffer_lock:
+                for t in reversed(tick_buffer):
+                    if t.get("token") == "NSE_INDEX|Nifty 50":
+                        latest_spot = float(t.get("ltp", 0.0))
+                        break
+            if not latest_spot:
+                latest_spot = underlying_prices.get("NIFTY", 0.0)
+
+            if latest_spot > 0:
+                try:
+                    from core.upstox_capture.late_day_option_refresh import refresh_late_day_option_subscriptions
+                    added = refresh_late_day_option_subscriptions(streamer, subscriptions, df_inst, latest_spot)
+                    logger.info(f"[Late-Day Refresh Triggered] Added {added} strikes around spot {latest_spot:.1f}")
+                    late_day_refresh_done = True
+                except Exception as e:
+                    logger.error(f"[Late-Day Refresh Error] {e}")
 
         if now_ts - last_flush_time >= 60:
             flush_buffer()

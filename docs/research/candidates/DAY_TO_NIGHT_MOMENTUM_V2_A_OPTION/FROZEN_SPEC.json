@@ -1,0 +1,21 @@
+{
+  "candidate_id": "DAY_TO_NIGHT_MOMENTUM_V2_A_OPTION",
+  "candidate_version": "1.0.0",
+  "signal_source": "NIFTY_FUTURES_ONLY",
+  "signal_formula": "Rday = FUTURES_Close_15:25 - FUTURES_Open_09:15",
+  "signal_threshold_pts": 50.0,
+  "spot_atm_strike_rule": "NIFTY_50_SPOT_CLOSE_15:25",
+  "strike_grid_pts": 50.0,
+  "strike_tie_rule": "EXACT_MIDPOINT_ROUNDS_UP",
+  "expiry_selection_rule": "MINIMUM_EXPIRY_STRICTLY_GREATER_THAN_NEXT_SESSION_EXIT_09:16",
+  "entry_timing_rule": "FIRST_VALID_QUOTE_STRICTLY_AFTER_SIGNAL_CALCULATION_TIMESTAMP",
+  "exit_timing_rule": "FIRST_VALID_QUOTE_STRICTLY_AFTER_NEXT_SESSION_09:16:00",
+  "depth_validation_rule": "BID_GT_ZERO_AND_ASK_GT_ZERO_AND_ASK_GTE_BID_AND_FINITE_NOT_NAN",
+  "lot_size_source": "AUTHORITATIVE_INSTRUMENT_MASTER_OR_CONTRACT_METADATA",
+  "vehicle_translation": "LONG_ATM_CALL_ON_BULLISH_LONG_ATM_PUT_ON_BEARISH",
+  "order_execution_mode": "CONSERVATIVE_CROSSING_BUY_ASK_SELL_BID",
+  "statutory_fee_schedule": "INDIAN_DERIVATIVES_COST_MODEL_2026_SCHEDULE",
+  "stt_policy": "0.15_PERCENT_ON_SELL_PREMIUM",
+  "exchange_fee_policy": "0.035_PERCENT_ON_PREMIUM_TURNOVER_FA73061",
+  "read_only_governance": "AGENTS_MD_STRICT_FAIL_CLOSED"
+}

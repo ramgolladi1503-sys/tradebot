@@ -44,6 +44,10 @@ ALLOWLIST_EXACT: dict[str, set[int]] = {
     "scripts/run_mean_reversion_deepdive.py": {163},
     "core/eod_no_trade_evidence.py": {69},
     "scripts/discover_simple_orb_phase_evidence.py": {6},
+    "core/paper_shadow/run_day_to_night_shadow.py": {284},
+    "core/paper_shadow/run_day_to_night_option_shadow.py": {219, 220, 549},
+    "scripts/research/reprice_contract_level_all_epochs.py": {23, 24, 27},
+    "scripts/research/audit_option_depth_feasibility.py": {22},
 }
 
 
