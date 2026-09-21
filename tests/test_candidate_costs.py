@@ -4,8 +4,8 @@ from core.candidate_audits.cost_model import IndianDerivativesCostModel
 def test_cost_model_option_buy_profit():
     model = IndianDerivativesCostModel()
     
-    # Buy at 100, sell at 110. Lot size 50.
-    cost = model.calculate_cost(entry_price=100.0, exit_price=110.0, lot_size=50, instrument="INDEX_OPTION_BUY", is_long=True)
+    # Buy at 100, sell at 110. Lot size 50. Historical pre-Oct 2024 statutory rates.
+    cost = model.calculate_cost(entry_price=100.0, exit_price=110.0, lot_size=50, instrument="INDEX_OPTION_BUY", is_long=True, trade_date="2024-08-15")
     
     # STT should be on sell side premium: 110 * 50 * 0.000625 = 3.4375
     assert abs(cost.stt - 3.4375) < 0.01
@@ -25,8 +25,8 @@ def test_cost_model_option_buy_profit():
 def test_cost_model_option_buy_loss():
     model = IndianDerivativesCostModel()
     
-    # Buy at 100, sell at 95. Lot size 50.
-    cost = model.calculate_cost(entry_price=100.0, exit_price=95.0, lot_size=50, instrument="INDEX_OPTION_BUY", is_long=True)
+    # Buy at 100, sell at 95. Lot size 50. Historical pre-Oct 2024 statutory rates.
+    cost = model.calculate_cost(entry_price=100.0, exit_price=95.0, lot_size=50, instrument="INDEX_OPTION_BUY", is_long=True, trade_date="2024-08-15")
     
     # STT on sell side premium: 95 * 50 * 0.000625 = 2.96875
     assert abs(cost.stt - 2.96875) < 0.01
@@ -34,8 +34,8 @@ def test_cost_model_option_buy_loss():
 def test_cost_model_future_buy():
     model = IndianDerivativesCostModel()
     
-    # Buy at 20000, sell at 20050. Lot size 50.
-    cost = model.calculate_cost(entry_price=20000.0, exit_price=20050.0, lot_size=50, instrument="INDEX_FUTURE", is_long=True)
+    # Buy at 20000, sell at 20050. Lot size 50. Historical pre-Oct 2024 statutory rates.
+    cost = model.calculate_cost(entry_price=20000.0, exit_price=20050.0, lot_size=50, instrument="INDEX_FUTURE", is_long=True, trade_date="2024-08-15")
     
     # STT on sell side notional: 20050 * 50 * 0.000125 = 125.3125
     assert abs(cost.stt - 125.3125) < 0.01
