@@ -12,7 +12,7 @@ from typing import Any, Iterable, Mapping
 REQUIRED_SYMBOLS = ("NIFTY", "BANKNIFTY")
 
 
-def fetch_current_instruments(client: Any, *, exchanges: Iterable[str] = ("NSE", "NFO", "BFO")) -> list[dict[str, Any]]:
+def fetch_current_instruments(client: Any, *, exchanges: Iterable[str] = ("NSE", "NFO", "BFO", "BSE")) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for exchange in exchanges:
         fetched = client.instruments(exchange)

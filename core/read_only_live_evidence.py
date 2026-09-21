@@ -225,7 +225,7 @@ class MegIntervalScheduler:
         self.attempts[interval] = int(self.attempts.get(interval, 0)) + 1
         self.last_attempt_monotonic[interval] = time.monotonic() if now_monotonic is None else float(now_monotonic)
         normalized = str(reason or "").strip().upper()
-        if exported or normalized == "DUPLICATE_INTERVAL":
+        if exported or normalized in {"DUPLICATE_INTERVAL", "IDLE_UNCHANGED_INTERVAL"}:
             self.terminal.add(interval)
         elif normalized not in self.retryable_reasons:
             self.terminal.add(interval)
@@ -290,7 +290,7 @@ def persist_meg_cycle(
         "attempted": bool(getattr(result, "attempted", False)),
         "exported": exported,
         "rejected": not exported,
-        "duplicate": reason.upper() == "DUPLICATE_INTERVAL",
+        "duplicate": reason.upper() in {"DUPLICATE_INTERVAL", "IDLE_UNCHANGED_INTERVAL"},
         "reason_code": reason,
         "accepted_constituent_count": accepted,
         "market_event_graph_traversal": exported,

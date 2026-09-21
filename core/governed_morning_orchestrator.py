@@ -695,7 +695,7 @@ class GovernedMorningOrchestrator:
 
         try:
             client = get_kite_client(repo_root_path=self.repo_root)
-            rows = fetch_current_instruments(client, exchanges=("NSE", "NFO", "BFO"))
+            rows = fetch_current_instruments(client, exchanges=("NSE", "NFO", "BFO", "BSE"))
         except Exception as exc:
             self.emit("INSTRUMENTS", "FAIL", f"Failed fetching instruments: {exc}")
             self.transition(LauncherState.BLOCKED, f"instrument_fetch_failed:{exc}")
@@ -888,7 +888,15 @@ class GovernedMorningOrchestrator:
                 self.collector_health = "NOT_STARTED"
 
             if spawn_mros:
-                self._child_mros_proc = subprocess.Popen(mros_cmd, cwd=str(self.repo_root))
+                child_env = dict(os.environ)
+                default_universe = self.repo_root / "runtime" / "reference" / "market_event_graph" / "nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json"
+                universe_path = os.environ.get("MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH") or str(default_universe)
+                child_env.update({
+                    "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE": "true",
+                    "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH": universe_path,
+                    "FEED_FORENSICS_ENABLED": "true",
+                })
+                self._child_mros_proc = subprocess.Popen(mros_cmd, cwd=str(self.repo_root), env=child_env)
                 self.mros_health = "HEALTHY"
                 self.emit("MROS_OBSERVER", "RUNNING", f"Child PID {self._child_mros_proc.pid}")
             else:
