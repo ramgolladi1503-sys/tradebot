@@ -37,7 +37,7 @@ def test_depth_accounting_invariant_enqueued_equals_persisted_plus_queued_plus_r
     assert accounting["accounting_invariant_ok"] is True
     assert accounting["unaccounted_remainder"] == 0
     assert accounting["enqueued"] == (
-        accounting["persisted"] + accounting["queue_depth"] + accounting["rejected"]
+        accounting["persisted"] + accounting["in_flight"] + accounting["queue_depth"] + accounting["rejected"]
     )
 
     # Allow persistence loop to drain and shut down
