@@ -129,9 +129,9 @@ def test_import_boundary_has_no_broker_or_execution_modules(clean_observer_impor
 def test_broker_write_firewall_records_and_rejects(tmp_path):
     firewall = BrokerWriteFirewall(tmp_path / "safety.jsonl")
     with pytest.raises(RuntimeError, match="SAFETY_BLOCKER_BROKER_WRITE_ATTEMPT"):
-        firewall.reject("place_order")
+        firewall.reject("submit_fill")
     row = json.loads((tmp_path / "safety.jsonl").read_text().strip())
-    assert row["method"] == "place_order"
+    assert row["method"] == "submit_fill"
 
 
 def test_safe_environment_disables_paper_and_live_execution():
@@ -311,3 +311,171 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     semantics = discover_live_semantics(tmp_path)
     assert semantics.passed is True, semantics.evidence
     feed.stop_depth_ws(reason="packet_proof_complete")
+
+
+def test_run_observation_dispatches_native_pulse_to_shadow_registry(
+    monkeypatch,
+    tmp_path,
+    clean_observer_import_boundary,
+):
+    import core.auth as auth
+    import core.kite_depth_ws as feed
+    import core.runtime_snapshot_producer as snapshots
+    import core.runtime_storage_authority as rsa
+    import core.paper_shadow.strategy_shadow_adapter as shadow_mod
+
+    observed = {"shadow_pulses": 0, "shutdowns": 0}
+
+    class FakeRegistry:
+        def __init__(self, **kwargs):
+            observed["registry_kwargs"] = kwargs
+            self.adapters = {"INTRADAY_OPENING_DRIVE_V1": object()}
+            self.disabled_strategies = {}
+        def on_pulse(self, pulse, market_snapshot, feed_health_truth):
+            observed["shadow_pulses"] += 1
+            observed["shadow_pulse_id"] = pulse.pulse_id
+            observed["shadow_market_snapshot"] = market_snapshot
+            observed["shadow_feed_truth"] = feed_health_truth
+            return []
+        def on_session_shutdown(self):
+            observed["shutdowns"] += 1
+            return {"read_only": True}
+
+    monkeypatch.setattr(shadow_mod, "StrategyShadowAdapterRegistry", FakeRegistry)
+    monkeypatch.setattr(
+        shadow_mod,
+        "load_canonical_t1_prerequisites",
+        lambda **_: {
+            "opening_drive_prev_contract_key": "NIFTY26SEPFUT",
+            "opening_drive_prev_close_1529": 23440.7,
+            "opening_drive_target_expiry": "2026-09-29",
+            "overnight_prev_daily_close": 23414.3,
+            "overnight_prev_sma200": 24473.368,
+        },
+    )
+    monkeypatch.setattr(auth, "get_kite_credentials", lambda **_: ("api-key", "token"))
+    monkeypatch.setattr(auth, "get_kite_client", lambda **_: type("Profile", (), {"profile": lambda self: {"user_id": "redacted"}})())
+    monkeypatch.setattr(feed, "activate_market_event_graph_launch_plan", lambda plan: {"ok": True})
+    monkeypatch.setattr(feed, "start_depth_ws", lambda tokens, **kwargs: True)
+    monkeypatch.setattr(feed, "stop_depth_ws", lambda **kwargs: None)
+
+    snap = {
+        "feed_health_truth_latest": {
+            "feed_ok": True,
+            "websocket_ok": True,
+            "context": {"feed_state": "LIVE", "runtime_state": "RUNNING", "session_id": "shadow-runtime-test"},
+            "symbols": [],
+        },
+        "market_snapshot": {"market_open": True},
+    }
+    monkeypatch.setattr(snapshots, "produce_and_store_runtime_snapshots", lambda **_: snap)
+
+    governed_root = Path(tempfile.mkdtemp(prefix="tradebot-shadow-runtime-", dir=str(tmp_path)))
+    fake_authority = rsa.StorageAuthority(
+        volume=governed_root,
+        runtime_root=governed_root / "out",
+        device_id=governed_root.stat().st_dev,
+    )
+    monkeypatch.setattr(rsa, "establish", lambda **_: fake_authority)
+    monkeypatch.setattr(rsa, "revalidate", lambda *_: None)
+
+    token_path = governed_root / "token"
+    token_path.write_text("redacted")
+    plan = {
+        "final_union_tokens": [256265],
+        "observation_tokens": [256265],
+        "underlying_tokens": [256265],
+        "commit_sha": "2" * 40,
+    }
+
+    from core.kite_read_only_observation_runtime import run_observation
+    assert run_observation(
+        launch_plan=plan,
+        output_root=governed_root / "out",
+        token_path=token_path,
+        session_date="2026-09-22",
+        max_runtime_sec=0.06,
+    ) == 0
+
+    assert observed["shadow_pulses"] >= 1
+    assert observed["shutdowns"] == 1
+    assert observed["registry_kwargs"]["source_sha"] == "2" * 40
+    identity = json.loads((governed_root / "out" / "process_identity.json").read_text())
+    assert identity["read_only"] is True
+    assert identity["order_authority"] is False
+    assert identity["broker_write_authority"] is False
+    assert identity["shadow_strategy_ids"] == ["INTRADAY_OPENING_DRIVE_V1"]
+
+
+def test_shadow_registry_shutdown_failure_is_propagated(
+    monkeypatch,
+    tmp_path,
+    clean_observer_import_boundary,
+):
+    import core.auth as auth
+    import core.kite_depth_ws as feed
+    import core.runtime_snapshot_producer as snapshots
+    import core.runtime_storage_authority as rsa
+    import core.paper_shadow.strategy_shadow_adapter as shadow_mod
+
+    class FailingRegistry:
+        adapters = {}
+        disabled_strategies = {}
+        def __init__(self, **kwargs):
+            pass
+        def on_pulse(self, **kwargs):
+            return []
+        def on_session_shutdown(self):
+            raise RuntimeError("synthetic_shadow_seal_failure")
+
+    monkeypatch.setattr(shadow_mod, "StrategyShadowAdapterRegistry", FailingRegistry)
+    monkeypatch.setattr(
+        shadow_mod,
+        "load_canonical_t1_prerequisites",
+        lambda **_: {
+            "opening_drive_prev_contract_key": None,
+            "opening_drive_prev_close_1529": None,
+            "opening_drive_target_expiry": None,
+            "overnight_prev_daily_close": None,
+            "overnight_prev_sma200": None,
+        },
+    )
+    monkeypatch.setattr(auth, "get_kite_credentials", lambda **_: ("api-key", "token"))
+    monkeypatch.setattr(auth, "get_kite_client", lambda **_: type("Profile", (), {"profile": lambda self: {"user_id": "redacted"}})())
+    monkeypatch.setattr(feed, "activate_market_event_graph_launch_plan", lambda plan: {"ok": True})
+    monkeypatch.setattr(feed, "start_depth_ws", lambda tokens, **kwargs: True)
+    monkeypatch.setattr(feed, "stop_depth_ws", lambda **kwargs: None)
+    monkeypatch.setattr(
+        snapshots,
+        "produce_and_store_runtime_snapshots",
+        lambda **_: {
+            "feed_health_truth_latest": {"feed_ok": False, "websocket_ok": False, "context": {}, "symbols": []},
+            "market_snapshot": {"market_open": False},
+        },
+    )
+
+    governed_root = Path(tempfile.mkdtemp(prefix="tradebot-shadow-seal-", dir=str(tmp_path)))
+    fake_authority = rsa.StorageAuthority(
+        volume=governed_root,
+        runtime_root=governed_root / "out",
+        device_id=governed_root.stat().st_dev,
+    )
+    monkeypatch.setattr(rsa, "establish", lambda **_: fake_authority)
+    monkeypatch.setattr(rsa, "revalidate", lambda *_: None)
+    token_path = governed_root / "token"
+    token_path.write_text("redacted")
+    plan = {"final_union_tokens": [256265], "commit_sha": "3" * 40}
+
+    from core.kite_read_only_observation_runtime import run_observation
+    with pytest.raises(RuntimeError, match="synthetic_shadow_seal_failure"):
+        run_observation(
+            launch_plan=plan,
+            output_root=governed_root / "out",
+            token_path=token_path,
+            session_date="2026-09-22",
+            max_runtime_sec=0.01,
+        )
+
+    marker = governed_root / "out" / "STRATEGY_SHADOW_EVIDENCE_SEAL_FAIL"
+    assert marker.is_file()
+    assert "synthetic_shadow_seal_failure" in marker.read_text()
