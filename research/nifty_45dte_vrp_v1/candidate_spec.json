@@ -1,0 +1,183 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "NIFTY_45DTE_VRP_V1",
+      "class": "variance_risk_premium_short_vol",
+      "compatibility": "RESEARCH_ONLY",
+      "entry": {
+        "admissible_dte_window": [
+          42,
+          48
+        ],
+        "delta_tolerance": 0.03,
+        "entry_rule": "For each monthly expiry, take the first eligible trading day where DTE is within 42-48; do not optimize entry date/time.",
+        "entry_snapshot_ist": "15:00",
+        "expiry_cycle": "MONTHLY",
+        "overlap_policy": "one position per expiry; no duplicate entries for same expiry",
+        "short_call_abs_delta_target": 0.16,
+        "short_put_abs_delta_target": 0.16,
+        "strike_tie_break": "nearest absolute delta; if tied choose lower absolute delta; if still tied choose tighter contemporaneous spread",
+        "target_dte_calendar_days": 45,
+        "underlying": "NIFTY"
+      },
+      "exit": {
+        "marking": "executable-side bid/ask when available; otherwise candidate cannot pass cost certification",
+        "primary_profit_target_fraction_initial_credit": 0.5,
+        "primary_stop": "NONE_BEFORE_21DTE",
+        "primary_time_exit_dte": 21,
+        "robustness_variant_stop_loss_multiple_initial_credit": 2.0
+      },
+      "null": "After realistic transaction costs and tail-risk accounting, the strategy has non-positive expectancy or its apparent edge is explained by a small number of volatility regimes.",
+      "primary_hypothesis": "A mechanically selected NIFTY approximately-45-DTE 16-delta short strangle earns positive net expectancy after realistic execution costs and tail losses because implied variance exceeds subsequently realized variance often enough to compensate negative convexity.",
+      "required_outputs": [
+        "trade_ledger",
+        "gross_and_net_expectancy",
+        "drawdown",
+        "tail_loss_concentration",
+        "year_and_quarter_stability",
+        "regime_matrix",
+        "friction_elasticity_1x_2x_3x",
+        "IV_minus_forward_realized_variance_attribution",
+        "profit_target_vs_time_exit_attribution"
+      ],
+      "robustness_grid": {
+        "delta_targets": [
+          0.1,
+          0.16,
+          0.2,
+          0.25
+        ],
+        "dte_windows": [
+          [
+            28,
+            32
+          ],
+          [
+            42,
+            48
+          ],
+          [
+            56,
+            64
+          ]
+        ],
+        "multiple_testing_control": "report full grid and apply family-wise correction; do not replace primary with best cell",
+        "profit_targets": [
+          0.35,
+          0.5,
+          0.75
+        ],
+        "purpose": "robustness only; primary hypothesis remains 45DTE/16delta/50%/21DTE",
+        "time_exits_dte": [
+          14,
+          21,
+          28
+        ]
+      }
+    },
+    {
+      "candidate_id": "NIFTY_45DTE_VRP_TRANSLATOR_BUYONLY_V1",
+      "class": "buy_only_context_gate",
+      "compatibility": "TRADEBOT_RESEARCH_COMPATIBLE",
+      "features": {
+        "iv45_source": "interpolated ATM/near-ATM implied volatility from real monthly NIFTY option quotes with 35-55 DTE",
+        "rv20": "annualized realized volatility from prior 20 completed NIFTY sessions only",
+        "term_slope_optional_robustness": "iv45 - iv_near; not part of primary gate",
+        "vrp_proxy": "iv45^2 - rv20^2",
+        "vrp_zscore": "expanding-window z-score using prior observations only, minimum 60 observations"
+      },
+      "null": "The 45-DTE volatility state adds no incremental value to the frozen BUY-only baseline after costs and regime controls.",
+      "primary_endpoints": [
+        "incremental net expectancy versus identical frozen baseline",
+        "change in max drawdown",
+        "change in left-tail 5th percentile trade return",
+        "coverage retained",
+        "year/quarter/regime stability"
+      ],
+      "primary_gate": {
+        "baseline": "frozen HTF_RANGE_EXPANSION trade ledger or another exact-SHA BUY-only baseline",
+        "direction": "do not alter CE/PE direction; context gate only",
+        "optimization": "none on primary gate threshold",
+        "rule": "admit baseline entry when vrp_zscore <= 0"
+      },
+      "primary_hypothesis": "The ex-ante NIFTY 45-DTE volatility state contains information about the cost/quality of buying shorter-dated directional options; a preregistered VRP state gate can improve net expectancy or downside-adjusted expectancy of an existing BUY-only signal without using future volatility."
+    }
+  ],
+  "created_date": "2026-08-24",
+  "current_repo_capability_assessment": {
+    "allowed_now": [
+      "freeze candidate specification",
+      "validate source provenance",
+      "build fail-closed data auditor",
+      "prepare evaluator",
+      "run synthetic unit tests for code correctness only"
+    ],
+    "not_allowed_now": [
+      "claim positive edge",
+      "promote to paper",
+      "touch holdout",
+      "authorize broker/order execution"
+    ],
+    "reasons": [
+      "core/historical_option_chain_realish.py is explicitly synthetic and infers next weekly expiry; it is unsuitable for 45-DTE certification.",
+      "core/historical_option_chain_dataset.py can load real datasets but does not itself prove that the repository contains the required multi-expiry 45-DTE bid/ask/delta history.",
+      "existing option-e2e inventory contains durable data-blocked verdicts for missing real option LTP/spread truth in replay paths."
+    ],
+    "status": "BLOCKED_FOR_EXACT_OUTCOME_EVALUATION"
+  },
+  "data_contract": {
+    "continuous_expiry_identity_required": true,
+    "coverage_requirement": "must include multiple monthly expiries and permit 45DTE entry through 21DTE management",
+    "minimum_fields_primary_short_vol": [
+      "timestamp",
+      "symbol",
+      "expiry",
+      "strike",
+      "type",
+      "bid",
+      "ask",
+      "delta"
+    ],
+    "real_quotes_required": true,
+    "regime_years_target": [
+      2024,
+      2025,
+      2026
+    ],
+    "strongly_preferred_fields": [
+      "ltp",
+      "iv",
+      "underlying_spot",
+      "volume",
+      "oi"
+    ],
+    "synthetic_or_realish_quotes_rejected_for_edge_claims": true,
+    "timestamp_timezone": "Asia/Kolkata or explicitly convertible with provenance"
+  },
+  "governance": {
+    "broker_api_allowed": false,
+    "broker_write_authority": false,
+    "holdout_access": false,
+    "live_authorized": false,
+    "order_authority": false,
+    "paper_authorized": false,
+    "production_compatible": false,
+    "reason": "Direct candidate is option selling and conflicts with TradeBot BUY_ONLY policy.",
+    "research_only": true,
+    "synthetic_data_can_certify": false
+  },
+  "research_authority_base_sha": "e8240c67e01f1abd7a59b1d1c2033f7e675cf81f",
+  "schema_version": "nifty_45dte_vrp_candidate_spec_v1",
+  "source": {
+    "exact_video_transcript_recovered": false,
+    "rule_provenance": [
+      "Video title proves a NIFTY 45-DTE strategy backtest but the accessible page did not expose transcript/rule text.",
+      "Canonical 45-DTE Tasty-style public references support 16-delta short strikes and management at/around 21 DTE.",
+      "50% profit-taking is treated as canonical-family convention, not as a verbatim video rule."
+    ],
+    "source_exactness": "PARTIALLY_RECOVERED",
+    "title": "I Backtested the Famous 45 DTE Strategy on NIFTY | The Long & The Short Ep. 48",
+    "type": "youtube",
+    "url": "https://youtu.be/z9nviVN6pa8"
+  }
+}
