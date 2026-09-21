@@ -398,10 +398,36 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 cas_store.capture(name, target, tick, capture_timestamp_ist=datetime.now(timezone.utc).isoformat())
     lifecycle.start(tokens, tick_sink=cas_tick_sink)
     previous_feed_live = False
+
+    # Governed strategy-shadow registry: consumes the existing native pulse only.
+    # No second feed, no broker/order authority, and all prerequisites fail closed.
+    from core.paper_shadow.strategy_shadow_adapter import (
+        StrategyShadowAdapterRegistry,
+        load_canonical_t1_prerequisites,
+    )
+    t1_prereqs = load_canonical_t1_prerequisites(
+        session_date=session_date,
+        launch_plan=launch_plan,
+        data_dir=Path("runtime/preflight"),
+    )
+    shadow_evidence_root = output_root / "strategy_shadow"
+    shadow_registry = StrategyShadowAdapterRegistry(
+        session_id=run_id,
+        source_sha=producer_commit,
+        evidence_root=shadow_evidence_root,
+        opening_drive_prev_contract_key=t1_prereqs["opening_drive_prev_contract_key"],
+        opening_drive_prev_close_1529=t1_prereqs["opening_drive_prev_close_1529"],
+        opening_drive_target_expiry=t1_prereqs["opening_drive_target_expiry"],
+        overnight_prev_daily_close=t1_prereqs["overnight_prev_daily_close"],
+        overnight_prev_sma200=t1_prereqs["overnight_prev_sma200"],
+    )
+
     write_json_atomic(output_root / "process_identity.json", {
         "run_id": run_id, "pid": os.getpid(), "producer_sha": producer_commit,
         "session_root": str(output_root.resolve()), "state": "RUNNING",
         "read_only": True, "order_authority": False, "broker_write_authority": False,
+        "shadow_strategy_ids": list(shadow_registry.adapters.keys()),
+        "shadow_disabled_strategies": dict(shadow_registry.disabled_strategies),
     })
     deadline = time.monotonic() + max_runtime_sec if max_runtime_sec is not None else None
     try:
@@ -491,6 +517,15 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 timestamp_ist=datetime.now(timezone.utc).isoformat(),
             )
 
+            # Parallel read-only strategy-shadow observation branch.
+            # This branch is evidence-only and cannot route into candidate selection,
+            # TradeBuilder, risk, broker, paper execution, or order management.
+            shadow_registry.on_pulse(
+                pulse=cycle_pulse,
+                market_snapshot=market_snapshot if isinstance(market_snapshot, Mapping) else {},
+                feed_health_truth=feed_truth if isinstance(feed_truth, Mapping) else {},
+            )
+
             strat_result = evaluate_causal_strategies(
                 pulse=cycle_pulse,
                 market_snapshot=market_snapshot if isinstance(market_snapshot, Mapping) else {},
@@ -545,6 +580,17 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 break
             time.sleep(0.05 if deadline is not None else 1.0)
     finally:
+        # Seal strategy-shadow evidence before runtime shutdown. Evidence-seal failure
+        # is a governed failure and must not be silently swallowed.
+        try:
+            shadow_registry.on_session_shutdown()
+        except Exception as exc:
+            (output_root / "STRATEGY_SHADOW_EVIDENCE_SEAL_FAIL").write_text(
+                f"SHUTDOWN_SEAL_FAIL: {type(exc).__name__}: {exc}\n",
+                encoding="utf-8",
+            )
+            raise
+
         if storage_loss_reason is None and not (output_root / "authority_snapshot.json").is_file():
             write_authority_snapshot_bundle(
                 extract_candidate_rows(latest_runtime_outputs),
@@ -573,5 +619,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 "session_root": str(output_root.resolve()), "state": "STOPPED",
                 "shutdown_drain_complete": bool(report.get("shutdown_drain_complete")),
                 "read_only": True, "order_authority": False, "broker_write_authority": False,
+                "shadow_strategy_ids": list(shadow_registry.adapters.keys()),
+                "shadow_disabled_strategies": dict(shadow_registry.disabled_strategies),
             })
     return 0
