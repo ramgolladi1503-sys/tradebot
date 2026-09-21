@@ -36,55 +36,55 @@ def run_repaired_audit(df, dates):
     close_col = "close" if "close" in df.columns else "futures_close"
     open_col = "open" if "open" in df.columns else "futures_open"
     key_col = "selected_futures_contract_key"
-    
+
     roll_boundaries_purged = 0
-    
+
     for i in range(1, len(dates)):
         prev_d = dates[i-1]
         curr_d = dates[i]
-        
+
         prev_sub = df[df["date"] == prev_d]
         curr_sub = df[df["date"] == curr_d]
-        
+
         # Invariant 1: Exact 15:29:00 regular-session bar
         b_prev_1529 = prev_sub[prev_sub["time"] == "15:29:00"]
         if b_prev_1529.empty:
             continue
-            
+
         # Invariant 2: Overnight Contract Continuity
         prev_key = str(b_prev_1529.iloc[0][key_col]) if key_col in b_prev_1529.columns else "NIFTY_SEP_26"
-        
+
         b_0915 = curr_sub[curr_sub["time"] == "09:15:00"]
         b_0920 = curr_sub[curr_sub["time"] == "09:20:00"]
         b_0921 = curr_sub[curr_sub["time"] == "09:21:00"]
         b_1100 = curr_sub[curr_sub["time"] == "11:00:00"]
-        
+
         if b_0915.empty or b_0920.empty or b_0921.empty or b_1100.empty:
             continue
-            
+
         curr_key = str(b_0915.iloc[0][key_col]) if key_col in b_0915.columns else "NIFTY_SEP_26"
-        
+
         # Enforce contract continuity: fail closed on contract mismatch / roll
         if prev_key != curr_key:
             roll_boundaries_purged += 1
             continue
-            
+
         prev_close = float(b_prev_1529.iloc[0][close_col])
         today_open = float(b_0915.iloc[0][open_col])
         drive_close_0920 = float(b_0920.iloc[0][close_col])
-        
+
         gap = today_open - prev_close
         drive_5m = drive_close_0920 - today_open
-        
+
         is_bull = (gap > 30.0 and drive_5m > 20.0)
         is_bear = (gap < -30.0 and drive_5m < -20.0)
         is_opp_bull = (gap > 30.0 and drive_5m < -20.0)
         is_opp_bear = (gap < -30.0 and drive_5m > 20.0)
-        
+
         # Semantics: Entry is 09:21 close (known at 09:22:00); Exit is 11:00 close (known at 11:01:00)
         entry_0922 = float(b_0921.iloc[0][close_col])
         exit_1101 = float(b_1100.iloc[0][close_col])
-        
+
         records.append({
             "date": curr_d,
             "prev_key": prev_key,
@@ -98,7 +98,7 @@ def run_repaired_audit(df, dates):
             "entry_0922": entry_0922,
             "exit_1101": exit_1101
         })
-        
+
     return pd.DataFrame(records), roll_boundaries_purged
 
 dates1 = sorted(df1["date"].unique())
@@ -126,10 +126,10 @@ for name, cdf in cohorts:
     bulls = cdf[cdf["is_bull"]]
     bears = cdf[cdf["is_bear"]]
     n_trades = len(bulls) + len(bears)
-    
+
     if n_trades == 0:
         continue
-        
+
     pts = []
     for _, r in bulls.iterrows():
         pts.append(r["exit_1101"] - r["entry_0922"])
@@ -139,7 +139,7 @@ for name, cdf in cohorts:
     win = arr[arr > 0].sum()
     loss = abs(arr[arr < 0].sum())
     pf = win / loss if loss > 0 else float("inf")
-    
+
     # Opposite Control
     opp_bulls = cdf[cdf["is_opp_bull"]]
     opp_bears = cdf[cdf["is_opp_bear"]]
@@ -150,7 +150,7 @@ for name, cdf in cohorts:
         pts_opp.append(r["entry_0922"] - r["exit_1101"])
     arr_opp = np.array(pts_opp)
     opp_mean = arr_opp.mean() if len(arr_opp) > 0 else 0.0
-    
+
     print(f"\n--- {name} ---")
     print(f"  Valid Trades (N): {n_trades} (Long: {len(bulls)}, Short: {len(bears)})")
     print(f"  Gross Expectancy: {arr.mean():+.2f} pts/trade")
@@ -158,4 +158,3 @@ for name, cdf in cohorts:
     print(f"  Profit Factor:    {pf:.2f}")
     print(f"  Total Gross Pts:  {arr.sum():+.1f} pts")
     print(f"  Opposite Control: N={len(arr_opp)}, Mean = {opp_mean:+.2f} pts")
-
