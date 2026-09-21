@@ -1,8 +1,8 @@
 # Stage 1 Remediation & Institutional Verification Walkthrough
 
-**Target Worktree**: `/Volumes/TradeBotData/worktrees/mros-dynamic-releasestore-binding-v1`  
-**Branch**: `fix/stage1-remediation-depth-bridge-orchestrator`  
-**Candidate Commit SHA**: [`2aec7ef9f895e0de96e8bfe94c9e7314d843547b`](file:///Volumes/TradeBotData/worktrees/mros-dynamic-releasestore-binding-v1)  
+**Target Worktree**: `/Volumes/TradeBotData/worktrees/mros-dynamic-releasestore-binding-v1`
+**Branch**: `fix/stage1-remediation-depth-bridge-orchestrator`
+**Candidate Commit SHA**: [`2aec7ef9f895e0de96e8bfe94c9e7314d843547b`](file:///Volumes/TradeBotData/worktrees/mros-dynamic-releasestore-binding-v1)
 **Safety Mandate**: `read_only=true`, `is_order_action=false`, `broker_api_called=false`, `allowed_for_live_execution=false`
 
 ---
@@ -113,4 +113,3 @@ ORDERS_MODIFIED == 0
 ORDERS_CANCELLED == 0
 BROKER_WRITE_CALLS == 0
 ```
-
