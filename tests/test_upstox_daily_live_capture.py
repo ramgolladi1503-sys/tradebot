@@ -139,3 +139,52 @@ def test_execute_post_market_stitching_creates_master(tmp_path):
 def test_token_retrieval_fallback():
     token = get_access_token()
     assert isinstance(token, str) == True
+
+
+def test_refresh_late_day_option_subscriptions():
+    from core.upstox_capture.late_day_option_refresh import refresh_late_day_option_subscriptions
+
+    class MockStreamer:
+        def __init__(self):
+            self.subscribed_keys = []
+
+        def subscribe(self, keys, mode="full"):
+            self.subscribed_keys.extend(keys)
+
+    today_ms = int(datetime.now().timestamp() * 1000)
+    mock_data = [
+        # Existing morning subscriptions around 23500
+        {"name": "NIFTY", "instrument_type": "CE", "strike_price": 23500.0, "expiry": today_ms, "instrument_key": "NSE_FO|101", "trading_symbol": "NIFTY 23500 CE"},
+        {"name": "NIFTY", "instrument_type": "PE", "strike_price": 23500.0, "expiry": today_ms, "instrument_key": "NSE_FO|102", "trading_symbol": "NIFTY 23500 PE"},
+        # New strikes around 23200 (after 300 pt drop)
+        {"name": "NIFTY", "instrument_type": "CE", "strike_price": 23200.0, "expiry": today_ms, "instrument_key": "NSE_FO|201", "trading_symbol": "NIFTY 23200 CE"},
+        {"name": "NIFTY", "instrument_type": "PE", "strike_price": 23200.0, "expiry": today_ms, "instrument_key": "NSE_FO|202", "trading_symbol": "NIFTY 23200 PE"},
+        {"name": "NIFTY", "instrument_type": "CE", "strike_price": 23150.0, "expiry": today_ms, "instrument_key": "NSE_FO|203", "trading_symbol": "NIFTY 23150 CE"},
+        {"name": "NIFTY", "instrument_type": "PE", "strike_price": 23150.0, "expiry": today_ms, "instrument_key": "NSE_FO|204", "trading_symbol": "NIFTY 23150 PE"},
+    ]
+    df_inst = pd.DataFrame(mock_data)
+    streamer = MockStreamer()
+    subscriptions = {
+        "NSE_FO|101": "NIFTY 23500 CE",
+        "NSE_FO|102": "NIFTY 23500 PE",
+    }
+
+    # Spot price drops to 23172.0 (ATM 23150 or 23200)
+    new_count = refresh_late_day_option_subscriptions(
+        streamer=streamer,
+        subscriptions=subscriptions,
+        df_inst=df_inst,
+        current_spot_price=23172.0
+    )
+
+    # Must subscribe 23200 and 23150 strikes which were missing
+    assert new_count == 4
+    assert "NSE_FO|201" in subscriptions
+    assert "NSE_FO|202" in subscriptions
+    assert "NSE_FO|203" in subscriptions
+    assert "NSE_FO|204" in subscriptions
+    assert len(streamer.subscribed_keys) == 4
+    # Existing morning subscriptions must remain intact
+    assert "NSE_FO|101" in subscriptions
+    assert "NSE_FO|102" in subscriptions
+
