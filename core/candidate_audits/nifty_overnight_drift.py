@@ -4,19 +4,18 @@ Nifty Overnight Drift Candidate Evaluator:
 - S1_MOMENTUM_OVERNIGHT_V1
 - S4_MONDAY_OVERNIGHT_V1
 
-Runtime Authority: FROZEN_SPEC.json
+Dual-Domain Cryptographic Authority Architecture:
+Domain 1: FROZEN_SPEC.json
+Domain 2: Immutable In-Code Registry Digests + FROZEN_SPEC.sha256 file
+All three must cryptographically agree. A modification to both JSON and .sha256
+is rejected immediately by the immutable registry digest check.
+
 Strictly non-trading, read-only analytics adhering to AGENTS.md:
 - read_only = True
 - broker_write_authority = False
 - orders_placed = 0
 - paper_authorized = False
 - live_authorized = False
-
-Invariants:
-1. Economic Family: Overnight Equity Risk Transfer in Bull Regimes.
-2. Macro Trend Gate: Strictly historical Close[t-1] > SMA200[t-1] (fails closed on NaN or missing data).
-3. Runtime Authority is loaded dynamically and validated against FROZEN_SPEC.json.
-4. Schedule hashes cryptographically locked to Option B canonical baseline.
 """
 
 from __future__ import annotations
@@ -32,11 +31,27 @@ import numpy as np
 
 IST_TZ = timezone(timedelta(hours=5, minutes=30))
 
+# Immutable External Anchors (Domain 2)
+IMMUTABLE_REGISTRY: Dict[str, Dict[str, str]] = {
+    "S1_MOMENTUM_OVERNIGHT_V1": {
+        "spec_digest": "3d3770a74c598ae6ac8dc5096ef748bd8bb9b73f1c3969a371b40ac88225b553",
+        "schedule_sha256": "48dc743eb7e91d92467e5f207a18640e1563b00b42b79b6d13a7bdd255ca68df",
+    },
+    "S4_MONDAY_OVERNIGHT_V1": {
+        "spec_digest": "079587dc8960c7e863a87f63ddd4c98cec0780c797a220e747f028fad182973d",
+        "schedule_sha256": "43650186de669a9cba9993f0b6cdd58540639681021cc0971cbd61258b005692",
+    },
+}
+
+
 CANDIDATE_S1_ID = "S1_MOMENTUM_OVERNIGHT_V1"
+CANDIDATE_S1_SPEC_DIGEST = "3d3770a74c598ae6ac8dc5096ef748bd8bb9b73f1c3969a371b40ac88225b553"
 CANDIDATE_S1_SCHEDULE_SHA256 = "48dc743eb7e91d92467e5f207a18640e1563b00b42b79b6d13a7bdd255ca68df"
 
 CANDIDATE_S4_ID = "S4_MONDAY_OVERNIGHT_V1"
+CANDIDATE_S4_SPEC_DIGEST = "079587dc8960c7e863a87f63ddd4c98cec0780c797a220e747f028fad182973d"
 CANDIDATE_S4_SCHEDULE_SHA256 = "43650186de669a9cba9993f0b6cdd58540639681021cc0971cbd61258b005692"
+
 
 
 @dataclass(frozen=True)
@@ -45,6 +60,7 @@ class FrozenCandidateSpec:
     candidate_version: str
     candidate_status: str
     spec_digest: str
+    schedule_sha256: str
     macro_rule: str
     sma_indicator: str
     cutoff_wall_clock_ist: str
@@ -59,9 +75,18 @@ class FrozenCandidateSpec:
 def load_and_validate_frozen_spec(candidate_id: str, base_dir: str = "docs/research/candidates") -> FrozenCandidateSpec:
     """
     Loads candidate specification from its authoritative FROZEN_SPEC.json.
-    Verifies that the file content matches FROZEN_SPEC.sha256 digest.
-    Fails closed if the specification file is tampered with, missing, or invalid.
+    Verifies against:
+    1. Computed SHA256 of JSON
+    2. FROZEN_SPEC.sha256 file
+    3. IMMUTABLE_REGISTRY anchor
+    All three must agree. Fails closed on any discrepancy.
     """
+    if candidate_id not in IMMUTABLE_REGISTRY:
+        raise ValueError(f"CRITICAL: Unknown candidate ID '{candidate_id}' not present in IMMUTABLE_REGISTRY!")
+
+    expected_spec_digest = IMMUTABLE_REGISTRY[candidate_id]["spec_digest"]
+    expected_schedule_hash = IMMUTABLE_REGISTRY[candidate_id]["schedule_sha256"]
+
     spec_file = os.path.join(base_dir, candidate_id, "FROZEN_SPEC.json")
     digest_file = os.path.join(base_dir, candidate_id, "FROZEN_SPEC.sha256")
 
@@ -71,21 +96,27 @@ def load_and_validate_frozen_spec(candidate_id: str, base_dir: str = "docs/resea
     with open(spec_file, "r") as f:
         spec_dict = json.load(f)
 
-    # Verify digest
+    # 1. Computed hash of JSON content
     serialized = json.dumps(spec_dict, sort_keys=True)
     computed_digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
+    # 2. File checksum
     with open(digest_file, "r") as f:
-        stored_digest = f.read().strip().split()[0]
+        stored_file_digest = f.read().strip().split()[0]
 
-    if computed_digest != stored_digest:
-        raise ValueError(f"CRITICAL: Cryptographic spec digest mismatch for {candidate_id}! Computed: {computed_digest}, Stored: {stored_digest}")
+    if computed_digest != stored_file_digest:
+        raise ValueError(f"CRITICAL: Cryptographic spec file digest mismatch for {candidate_id}! Computed: {computed_digest}, File: {stored_file_digest}")
+
+    # 3. External Immutable Anchor Verification (prevents dual-file tampering attack)
+    if computed_digest != expected_spec_digest:
+        raise ValueError(f"CRITICAL: Dual-file tampering detected for {candidate_id}! Computed: {computed_digest}, Immutable Registry: {expected_spec_digest}")
 
     return FrozenCandidateSpec(
         candidate_id=spec_dict["candidate_id"],
         candidate_version=spec_dict["candidate_version"],
         candidate_status=spec_dict["candidate_status"],
         spec_digest=computed_digest,
+        schedule_sha256=expected_schedule_hash,
         macro_rule=spec_dict["macro_trend_filter"]["rule"],
         sma_indicator=spec_dict["macro_trend_filter"]["indicator"],
         cutoff_wall_clock_ist=spec_dict["signal_evaluation"]["cutoff_wall_clock_ist"],

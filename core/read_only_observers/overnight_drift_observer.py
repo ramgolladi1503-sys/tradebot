@@ -13,33 +13,36 @@ Strictly read-only prospective state machine adhering to AGENTS.md:
 - allowed_for_live_execution = False
 - append_only_ledger = True
 - tamper_evident_hash_chain = True
+- process_file_locking = True
+- external_head_anchor = True
 
-Prospective State Machine:
+State Machine Lifecycle & Transition Graph:
   PRE_SESSION
      ↓
   MACRO_STATE_FROZEN
      ↓
   SIGNAL_SEALED_1520
      ↓
-  QUALIFIED / NOT_QUALIFIED
+  QUALIFIED (or NOT_QUALIFIED / OBSERVATION_INVALID)
      ↓
-  ARRIVAL_CAPTURED_1521
+  ARRIVAL_CAPTURED_1521 (or OBSERVATION_INVALID)
      ↓
   OVERNIGHT_PENDING
      ↓
-  NEXT_SESSION_OPEN_CAPTURED
+  NEXT_SESSION_OPEN_CAPTURED (or OBSERVATION_INVALID)
      ↓
   OBSERVATION_FINALIZED
 """
 
 from __future__ import annotations
 import os
+import fcntl
 import json
 import hashlib
 from enum import Enum
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 from core.candidate_audits.nifty_overnight_drift import (
     CANDIDATE_S1_ID,
@@ -66,7 +69,44 @@ class ObserverLifecycleState(str, Enum):
     OVERNIGHT_PENDING = "OVERNIGHT_PENDING"
     NEXT_SESSION_OPEN_CAPTURED = "NEXT_SESSION_OPEN_CAPTURED"
     OBSERVATION_FINALIZED = "OBSERVATION_FINALIZED"
-    OBSERVATION_INVALID_DATA_MISSING = "OBSERVATION_INVALID_DATA_MISSING"
+    OBSERVATION_INVALID = "OBSERVATION_INVALID"
+
+
+# Allowed state transition graph
+ALLOWED_TRANSITIONS: Dict[ObserverLifecycleState, List[ObserverLifecycleState]] = {
+    ObserverLifecycleState.PRE_SESSION: [
+        ObserverLifecycleState.MACRO_STATE_FROZEN,
+        ObserverLifecycleState.OBSERVATION_INVALID,
+    ],
+    ObserverLifecycleState.MACRO_STATE_FROZEN: [
+        ObserverLifecycleState.SIGNAL_SEALED_1520,
+        ObserverLifecycleState.OBSERVATION_INVALID,
+    ],
+    ObserverLifecycleState.SIGNAL_SEALED_1520: [
+        ObserverLifecycleState.QUALIFIED,
+        ObserverLifecycleState.NOT_QUALIFIED,
+        ObserverLifecycleState.OBSERVATION_INVALID,
+    ],
+    ObserverLifecycleState.QUALIFIED: [
+        ObserverLifecycleState.ARRIVAL_CAPTURED_1521,
+        ObserverLifecycleState.OBSERVATION_INVALID,
+    ],
+    ObserverLifecycleState.ARRIVAL_CAPTURED_1521: [
+        ObserverLifecycleState.OVERNIGHT_PENDING,
+        ObserverLifecycleState.OBSERVATION_INVALID,
+    ],
+    ObserverLifecycleState.OVERNIGHT_PENDING: [
+        ObserverLifecycleState.NEXT_SESSION_OPEN_CAPTURED,
+        ObserverLifecycleState.OBSERVATION_INVALID,
+    ],
+    ObserverLifecycleState.NEXT_SESSION_OPEN_CAPTURED: [
+        ObserverLifecycleState.OBSERVATION_FINALIZED,
+        ObserverLifecycleState.OBSERVATION_INVALID,
+    ],
+    ObserverLifecycleState.NOT_QUALIFIED: [],
+    ObserverLifecycleState.OBSERVATION_FINALIZED: [],
+    ObserverLifecycleState.OBSERVATION_INVALID: [],
+}
 
 
 @dataclass(frozen=True)
@@ -103,19 +143,38 @@ class TamperEvidentObservationEntry:
     validation_notes: str
 
 
-def compute_record_hash(previous_hash: str, record_payload: Dict[str, Any]) -> str:
-    """Computes tamper-evident SHA256 hash over previous hash and canonical record payload."""
-    serialized = json.dumps(record_payload, sort_keys=True)
+def compute_canonical_record_hash(previous_hash: str, entry_dict_without_hash: Dict[str, Any]) -> str:
+    """
+    Computes cryptographic SHA-256 over ALL fields in the record plus previous hash.
+    Zero unhashed fields.
+    """
+    payload_to_hash = dict(entry_dict_without_hash)
+    if "record_hash" in payload_to_hash:
+        del payload_to_hash["record_hash"]
+
+    serialized = json.dumps(payload_to_hash, sort_keys=True)
     raw = f"{previous_hash}|{serialized}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 class TamperEvidentLedgerManager:
-    """Manages hash-chained, append-only JSONL files for prospective observations."""
+    """
+    Manages process-locked, hash-chained, append-only JSONL files
+    with external head-anchor verification (detecting tail truncation).
+    """
 
     def __init__(self, ledger_dir: str = OBSERVER_DIR):
         self.ledger_dir = ledger_dir
         os.makedirs(self.ledger_dir, exist_ok=True)
+        # Session state tracker: {session_key: current_lifecycle_state}
+        self.session_states: Dict[str, ObserverLifecycleState] = {}
+
+    def _get_lock_file(self, sub_ledger: str):
+        lock_path = os.path.join(self.ledger_dir, f".{sub_ledger.lower()}.lock")
+        return open(lock_path, "w")
+
+    def _get_head_anchor_path(self, sub_ledger: str) -> str:
+        return os.path.join(self.ledger_dir, f"{sub_ledger.lower()}_head_anchor.json")
 
     def get_latest_entry_info(self, sub_ledger: str) -> Tuple[int, str]:
         """Returns (sequence_number, record_hash) of the latest entry or (0, 'GENESIS_HASH')."""
@@ -135,10 +194,20 @@ class TamperEvidentLedgerManager:
         data = json.loads(last_line)
         return int(data["sequence_number"]), str(data["record_hash"])
 
+    def validate_transition(self, session_key: str, target_state: ObserverLifecycleState) -> None:
+        """Enforces the strict lifecycle transition graph. Fails closed on invalid transitions."""
+        current_state = self.session_states.get(session_key, ObserverLifecycleState.PRE_SESSION)
+
+        allowed = ALLOWED_TRANSITIONS.get(current_state, [])
+        if target_state not in allowed:
+            raise ValueError(f"ILLEGAL_STATE_TRANSITION: Cannot transition session '{session_key}' from {current_state} to {target_state}!")
+
+        self.session_states[session_key] = target_state
+
     def append_observation(
         self,
         sub_ledger: str,
-        lifecycle_state: ObserverLifecycleState,
+        target_state: ObserverLifecycleState,
         candidate_spec: FrozenCandidateSpec,
         schedule_sha256: str,
         session_date: str,
@@ -156,162 +225,171 @@ class TamperEvidentLedgerManager:
         validation_notes: str = "",
     ) -> TamperEvidentObservationEntry:
         """
-        Executes strict fail-closed observation processing and persists to hash-chained ledger.
+        Process-locked, state-validated append to immutable hash-chained ledger.
         """
-        seq, prev_hash = self.get_latest_entry_info(sub_ledger)
-        new_seq = seq + 1
+        lock_fd = self._get_lock_file(sub_ledger)
+        try:
+            # Acquire exclusive process lock
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
 
-        # Evaluate quote freshness & feed health
-        feed_healthy = True
-        notes = validation_notes
-        if quote_freshness_ms is not None:
-            if quote_freshness_ms > MAX_ALLOWED_QUOTE_AGE_MS:
-                feed_healthy = False
-                notes += f" [STALE_QUOTE: {quote_freshness_ms}ms > {MAX_ALLOWED_QUOTE_AGE_MS}ms]"
+            session_key = f"{sub_ledger}|{candidate_spec.candidate_id}|{session_date}"
+            effective_state = target_state
 
-        if best_bid is not None and best_ask is not None:
-            if best_bid <= 0 or best_ask <= 0 or best_ask < best_bid:
-                feed_healthy = False
-                notes += " [INVALID_SPREAD: bid/ask inversion or non-positive]"
+            # Quote Fail-Closed Contract: For ARRIVAL_CAPTURED_1521, all quote fields are mandatory
+            feed_healthy = True
+            notes = validation_notes
+            if target_state == ObserverLifecycleState.ARRIVAL_CAPTURED_1521:
+                if quote_freshness_ms is None:
+                    feed_healthy = False
+                    notes += " [QUOTE_FAIL_CLOSED: quote_freshness_ms missing]"
+                elif quote_freshness_ms > MAX_ALLOWED_QUOTE_AGE_MS:
+                    feed_healthy = False
+                    notes += f" [QUOTE_FAIL_CLOSED: stale quote {quote_freshness_ms}ms > {MAX_ALLOWED_QUOTE_AGE_MS}ms]"
 
-        midpoint = None
-        spread_pts = None
-        market_buy_estimate = None
-        if best_bid is not None and best_ask is not None and feed_healthy:
-            midpoint = round((best_bid + best_ask) / 2.0, 2)
-            spread_pts = round(best_ask - best_bid, 2)
-            market_buy_estimate = best_ask
+                if best_bid is None or best_ask is None or arrival_price is None or arrival_ts is None:
+                    feed_healthy = False
+                    notes += " [QUOTE_FAIL_CLOSED: missing bid/ask/arrival quote]"
+                elif best_bid <= 0 or best_ask <= 0 or best_ask < best_bid:
+                    feed_healthy = False
+                    notes += " [QUOTE_FAIL_CLOSED: inverted or non-positive spread]"
 
-        # Calculate PnL if arrival and exit exist and feed is healthy
-        gross_pnl = None
-        net_pnl = None
-        det_cost = candidate_spec.deterministic_friction_pts
-        if arrival_price is not None and next_session_open is not None and feed_healthy:
-            if arrival_price > 0 and next_session_open > 0:
-                gross_pnl = round(next_session_open - arrival_price, 2)
-                net_pnl = round(gross_pnl - det_cost, 2)
+                if not feed_healthy:
+                    effective_state = ObserverLifecycleState.OBSERVATION_INVALID
 
-        # Build raw payload for hashing
-        payload_for_hashing = {
-            "sequence_number": new_seq,
-            "lifecycle_state": lifecycle_state.value,
-            "sub_ledger": sub_ledger,
-            "candidate_id": candidate_spec.candidate_id,
-            "spec_digest": candidate_spec.spec_digest,
-            "schedule_sha256": schedule_sha256,
-            "session_date": session_date,
-            "decision_timestamp_ist": decision_ts,
-            "macro_uptrend": macro_uptrend,
-            "day_gain_pct": round(day_gain_pct, 4),
-            "is_monday": is_monday,
-            "qualified": qualified,
-            "arrival_timestamp_ist": arrival_ts,
-            "arrival_price": arrival_price,
-            "best_bid": best_bid,
-            "best_ask": best_ask,
-            "midpoint": midpoint,
-            "spread_pts": spread_pts,
-            "next_session_open": next_session_open,
-            "gross_pnl_pts": gross_pnl,
-            "deterministic_cost_pts": det_cost,
-            "net_pnl_pts": net_pnl,
-            "feed_healthy": feed_healthy,
-        }
+            # Enforce state transition graph
+            self.validate_transition(session_key, effective_state)
 
-        rec_hash = compute_record_hash(prev_hash, payload_for_hashing)
-        obs_id = f"OBS-{session_date}-{candidate_spec.candidate_id[:2]}-{new_seq:04d}"
+            seq, prev_hash = self.get_latest_entry_info(sub_ledger)
+            new_seq = seq + 1
+            obs_id = f"OBS-{session_date}-{candidate_spec.candidate_id[:2]}-{new_seq:04d}"
 
-        entry = TamperEvidentObservationEntry(
-            sequence_number=new_seq,
-            previous_record_hash=prev_hash,
-            record_hash=rec_hash,
-            lifecycle_state=lifecycle_state.value,
-            observation_id=obs_id,
-            sub_ledger=sub_ledger,
-            candidate_id=candidate_spec.candidate_id,
-            spec_digest=candidate_spec.spec_digest,
-            schedule_sha256=schedule_sha256,
-            session_date=session_date,
-            decision_timestamp_ist=decision_ts,
-            macro_uptrend=macro_uptrend,
-            day_gain_pct=day_gain_pct,
-            is_monday=is_monday,
-            qualified=qualified,
-            arrival_timestamp_ist=arrival_ts,
-            arrival_price=arrival_price,
-            best_bid=best_bid,
-            best_ask=best_ask,
-            midpoint=midpoint,
-            spread_pts=spread_pts,
-            market_buy_arrival_estimate=market_buy_estimate,
-            passive_limit_tracked_price=best_bid if feed_healthy else None,
-            next_session_open=next_session_open,
-            gross_pnl_pts=gross_pnl,
-            deterministic_cost_pts=det_cost,
-            net_pnl_pts=net_pnl,
-            quote_freshness_ms=quote_freshness_ms,
-            feed_healthy=feed_healthy,
-            validation_notes=notes,
-        )
+            midpoint = None
+            spread_pts = None
+            market_buy_estimate = None
+            if best_bid is not None and best_ask is not None and feed_healthy:
+                midpoint = round((best_bid + best_ask) / 2.0, 2)
+                spread_pts = round(best_ask - best_bid, 2)
+                market_buy_estimate = best_ask
 
-        ledger_file = os.path.join(self.ledger_dir, f"{sub_ledger.lower()}_ledger.jsonl")
-        serialized = json.dumps(asdict(entry), sort_keys=True)
-        with open(ledger_file, "a") as f:
-            f.write(serialized + "\n")
+            gross_pnl = None
+            net_pnl = None
+            det_cost = candidate_spec.deterministic_friction_pts
+            if arrival_price is not None and next_session_open is not None and feed_healthy:
+                if arrival_price > 0 and next_session_open > 0:
+                    gross_pnl = round(next_session_open - arrival_price, 2)
+                    net_pnl = round(gross_pnl - det_cost, 2)
 
-        return entry
+            raw_dict = {
+                "sequence_number": new_seq,
+                "previous_record_hash": prev_hash,
+                "lifecycle_state": effective_state.value,
+                "observation_id": obs_id,
+                "sub_ledger": sub_ledger,
+                "candidate_id": candidate_spec.candidate_id,
+                "spec_digest": candidate_spec.spec_digest,
+                "schedule_sha256": schedule_sha256,
+                "session_date": session_date,
+                "decision_timestamp_ist": decision_ts,
+                "macro_uptrend": macro_uptrend,
+                "day_gain_pct": round(day_gain_pct, 4),
+                "is_monday": is_monday,
+                "qualified": qualified,
+                "arrival_timestamp_ist": arrival_ts,
+                "arrival_price": arrival_price,
+                "best_bid": best_bid,
+                "best_ask": best_ask,
+                "midpoint": midpoint,
+                "spread_pts": spread_pts,
+                "market_buy_arrival_estimate": market_buy_estimate,
+                "passive_limit_tracked_price": best_bid if feed_healthy else None,
+                "next_session_open": next_session_open,
+                "gross_pnl_pts": gross_pnl,
+                "deterministic_cost_pts": det_cost,
+                "net_pnl_pts": net_pnl,
+                "quote_freshness_ms": quote_freshness_ms,
+                "feed_healthy": feed_healthy,
+                "validation_notes": notes,
+            }
 
-    def verify_ledger_integrity(self, sub_ledger: str) -> bool:
-        """Verifies the complete cryptographic hash-chain of a prospective sub-ledger."""
+            rec_hash = compute_canonical_record_hash(prev_hash, raw_dict)
+            raw_dict["record_hash"] = rec_hash
+
+            entry = TamperEvidentObservationEntry(**raw_dict)
+
+            # Append to JSONL
+            ledger_file = os.path.join(self.ledger_dir, f"{sub_ledger.lower()}_ledger.jsonl")
+            with open(ledger_file, "a") as f:
+                f.write(json.dumps(asdict(entry), sort_keys=True) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+
+            # Update external head anchor
+            anchor_payload = {
+                "sub_ledger": sub_ledger,
+                "total_records": new_seq,
+                "latest_sequence": new_seq,
+                "latest_record_hash": rec_hash,
+                "anchor_updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            with open(self._get_head_anchor_path(sub_ledger), "w") as af:
+                json.dump(anchor_payload, af, indent=2, sort_keys=True)
+                af.flush()
+                os.fsync(af.fileno())
+
+            return entry
+
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
+
+    def verify_ledger_integrity(self, sub_ledger: str) -> Tuple[bool, str]:
+        """
+        Verifies both:
+        1. Complete internal cryptographic hash-chain coverage over all fields.
+        2. External head-anchor agreement (detecting tail truncation or deletion).
+        """
         ledger_path = os.path.join(self.ledger_dir, f"{sub_ledger.lower()}_ledger.jsonl")
+        anchor_path = self._get_head_anchor_path(sub_ledger)
+
         if not os.path.exists(ledger_path):
-            return True  # Empty is valid
+            return True, "EMPTY_LEDGER_VALID"
+
+        if not os.path.exists(anchor_path):
+            return False, "MISSING_EXTERNAL_HEAD_ANCHOR"
+
+        with open(anchor_path, "r") as af:
+            anchor = json.load(af)
 
         prev_hash = "GENESIS_OVERNIGHT_DRIFT_0000000000000000000000000000000000000000"
         expected_seq = 1
+        last_hash_seen = None
 
         with open(ledger_path, "r") as f:
-            for line in f:
+            for line_idx, line in enumerate(f):
                 if not line.strip():
                     continue
                 entry = json.loads(line.strip())
 
                 if entry["sequence_number"] != expected_seq:
-                    return False
+                    return False, f"SEQUENCE_BROKEN_AT_LINE_{line_idx+1}"
                 if entry["previous_record_hash"] != prev_hash:
-                    return False
+                    return False, f"PREV_HASH_MISMATCH_AT_LINE_{line_idx+1}"
 
-                # Reconstruct hashing payload
-                payload = {
-                    "sequence_number": entry["sequence_number"],
-                    "lifecycle_state": entry["lifecycle_state"],
-                    "sub_ledger": entry["sub_ledger"],
-                    "candidate_id": entry["candidate_id"],
-                    "spec_digest": entry["spec_digest"],
-                    "schedule_sha256": entry["schedule_sha256"],
-                    "session_date": entry["session_date"],
-                    "decision_timestamp_ist": entry["decision_timestamp_ist"],
-                    "macro_uptrend": entry["macro_uptrend"],
-                    "day_gain_pct": round(entry["day_gain_pct"], 4),
-                    "is_monday": entry["is_monday"],
-                    "qualified": entry["qualified"],
-                    "arrival_timestamp_ist": entry["arrival_timestamp_ist"],
-                    "arrival_price": entry["arrival_price"],
-                    "best_bid": entry["best_bid"],
-                    "best_ask": entry["best_ask"],
-                    "midpoint": entry["midpoint"],
-                    "spread_pts": entry["spread_pts"],
-                    "next_session_open": entry["next_session_open"],
-                    "gross_pnl_pts": entry["gross_pnl_pts"],
-                    "deterministic_cost_pts": entry["deterministic_cost_pts"],
-                    "net_pnl_pts": entry["net_pnl_pts"],
-                    "feed_healthy": entry["feed_healthy"],
-                }
-                computed = compute_record_hash(prev_hash, payload)
+                computed = compute_canonical_record_hash(prev_hash, entry)
                 if computed != entry["record_hash"]:
-                    return False
+                    return False, f"TAMPERED_RECORD_PAYLOAD_AT_LINE_{line_idx+1}"
 
                 prev_hash = entry["record_hash"]
+                last_hash_seen = entry["record_hash"]
                 expected_seq += 1
 
-        return True
+        actual_records = expected_seq - 1
+
+        # Tail-truncation check against external anchor
+        if actual_records != anchor["total_records"]:
+            return False, f"TAIL_TRUNCATION_DETECTED: Ledger has {actual_records} rows, anchor specifies {anchor['total_records']}"
+
+        if last_hash_seen != anchor["latest_record_hash"]:
+            return False, f"HEAD_ANCHOR_HASH_MISMATCH: Last hash {last_hash_seen} != anchor {anchor['latest_record_hash']}"
+
+        return True, "CHAIN_AND_ANCHOR_VERIFIED_PERFECT"
