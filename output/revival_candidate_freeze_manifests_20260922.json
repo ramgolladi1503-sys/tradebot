@@ -1,0 +1,196 @@
+{
+  "candidates": {
+    "CAND_01_SESSION_DIR_OVERNIGHT": {
+      "boundary_semantics": "D > 0 is Long, D < 0 is Short, D == 0 is Flat (excluded).",
+      "candidate_version": "1.0.0",
+      "cost_semantics": "Historical gross; stress evaluated at 12.14, 15, and 20 pts.",
+      "data_source_ids": [
+        "NIFTY50_1m_2009_2026_v3_research_ready.parquet",
+        "NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet"
+      ],
+      "data_source_sha256s": {
+        "NIFTY50_1m_2009_2026_v3_research_ready.parquet": "829f2e72ab3e97b8a9262cee741f738ac62a37d2634fe108886648ff125ffec9",
+        "NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet": "2311981231d3fb847a216c9165ef73c3e7b788ab354d6de493ab1a5edb32e7a9"
+      },
+      "direction_definition": "Signed outcome = direction * G.",
+      "entry_definition": "Next chronological session 09:15 open.",
+      "exit_definition": "Evaluated on gap G = open_next_09:15 - close_current_15:29.",
+      "filters": [
+        "require both 09:15 open and 15:29 close in current session",
+        "require next session 09:15 open"
+      ],
+      "historical_periods": {
+        "train": "2009-2024",
+        "validation_canonical_2026": "2026-01-01 to 2026-09-22"
+      },
+      "instrument_semantics": "NIFTY Index Spot (Statistical Gap Predictability). Futures translation is a separate audited candidate.",
+      "missing_data_policy": "Exclude session if either boundary timestamp bar is missing; no interpolation.",
+      "prospective_start_boundary": "2026-09-22T04:30:00+05:30",
+      "reconciliation_status": "RECONCILED_FOR_PROSPECTIVE_SHADOW",
+      "signal_definition": "D = close_15:29 - open_09:15. If D > 0 => direction = +1; if D < 0 => direction = -1; if D == 0 => no signal.",
+      "source_artifact_paths": [
+        "output/SESSION_DIRECTION_OVERNIGHT_SELECTION_FREEZE_20260922.md",
+        "output/ohlc_session_direction_overnight_independent_reproduction_20260922.md"
+      ],
+      "source_artifact_sha256s": {
+        "output/SESSION_DIRECTION_OVERNIGHT_SELECTION_FREEZE_20260922.md": "4ad7418493c1ec4af5197d3b169bf1007863e09263c125d2101b3a0fbd2d595e",
+        "output/ohlc_session_direction_overnight_independent_reproduction_20260922.md": "ac59b65051a90532a474f8289ee7d4a0eba2669169e30b0cd98b5be817f0516a"
+      },
+      "source_git_sha": "c73e172bd4369f637d17fa94ee28eb8967ef7d1f",
+      "strategy_id": "CAND_01_SESSION_DIR_OVERNIGHT",
+      "thresholds": {
+        "min_move_pts": 0.0
+      },
+      "timezone": "Asia/Kolkata"
+    },
+    "CAND_02_GAP_DIR_CONFLUENCE_A": {
+      "boundary_semantics": "Strict equality of non-zero signs; zero signs emit no signal.",
+      "candidate_version": "1.0.0",
+      "cost_semantics": "Historical gross and adverse proxy (half bar ranges + 12.14 pt).",
+      "data_source_ids": [
+        "NIFTY50_1m_2009_2026_v3_research_ready.parquet"
+      ],
+      "data_source_sha256s": {
+        "NIFTY50_1m_2009_2026_v3_research_ready.parquet": "829f2e72ab3e97b8a9262cee741f738ac62a37d2634fe108886648ff125ffec9"
+      },
+      "direction_definition": "Signed outcome = selected sign * (close_10:15 - close_09:20).",
+      "entry_definition": "Current session 09:20 close.",
+      "exit_definition": "Current session 10:15 close.",
+      "filters": [
+        "prior_direction != 0",
+        "opening_gap != 0",
+        "prior_direction == opening_gap"
+      ],
+      "historical_periods": {
+        "validation_canonical_2026": "2026-01-01 to 2026-09-22"
+      },
+      "instrument_semantics": "NIFTY Index Spot / Futures",
+      "missing_data_policy": "Drop session if prior 09:15/15:29 or current 09:15/09:20/10:15 missing.",
+      "prospective_start_boundary": "2026-09-22T04:30:00+05:30",
+      "reconciliation_status": "RECONCILED_FOR_PROSPECTIVE_SHADOW",
+      "signal_definition": "Prior session direction = sign(15:29 close - prior 09:15 open). Opening gap = sign(current 09:15 open - prior 15:29 close). Select only when both signs are non-zero and equal.",
+      "source_artifact_paths": [
+        "output/GAP_DIRECTION_CONFLUENCE_DELAYED_ENTRY_SELECTION_FREEZE_20260922.md"
+      ],
+      "source_artifact_sha256s": {
+        "output/GAP_DIRECTION_CONFLUENCE_DELAYED_ENTRY_SELECTION_FREEZE_20260922.md": "c4c42df02462acc7e1ecbfd714b586a595e28f24d23f2d8e3a43c533228bb30d"
+      },
+      "source_git_sha": "c73e172bd4369f637d17fa94ee28eb8967ef7d1f",
+      "strategy_id": "CAND_02_GAP_DIR_CONFLUENCE_A",
+      "thresholds": {},
+      "timezone": "Asia/Kolkata"
+    },
+    "CAND_03_DAY_NIGHT_MOMENTUM": {
+      "boundary_semantics": "Strict inequality |Rday| > 50.0.",
+      "candidate_version": "1.0.0",
+      "cost_semantics": "3.0 pt illustrative deduction.",
+      "data_source_ids": [
+        "NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet"
+      ],
+      "data_source_sha256s": {
+        "NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet": "2311981231d3fb847a216c9165ef73c3e7b788ab354d6de493ab1a5edb32e7a9"
+      },
+      "direction_definition": "Long (+1) if Rday = close_15:25 - open_09:15 > +50 pts; Short (-1) if Rday < -50 pts.",
+      "entry_definition": "Current session 15:25 futures close (carry overnight).",
+      "exit_definition": "Next session 09:16 futures open, verifying contract key unchanged.",
+      "filters": [
+        "exact 09:15 open and 15:25 close required",
+        "exact next session 09:16 open required",
+        "contract key unchanged across boundary"
+      ],
+      "historical_periods": {
+        "holdout": "2026-04-09 to 2026-07-28",
+        "train": "2024-07-26 to 2025-12-17",
+        "validation": "2025-12-18 to 2026-04-08"
+      },
+      "instrument_semantics": "NIFTY Futures Front Month",
+      "missing_data_policy": "Drop session on missing timestamps or contract roll boundary.",
+      "prospective_start_boundary": "2026-09-22T04:30:00+05:30",
+      "reconciliation_status": "RECONCILED_FOR_PROSPECTIVE_SHADOW",
+      "signal_definition": "Rday = futures_close(15:25) - futures_open(09:15). Trade long if Rday > +50 pts, short if Rday < -50 pts.",
+      "source_artifact_paths": [
+        "output/day_to_night_momentum_reconciled_candidate_20260921.md",
+        "output/day_to_night_momentum_holdout_audit_20260921.md"
+      ],
+      "source_artifact_sha256s": {
+        "output/day_to_night_momentum_holdout_audit_20260921.md": "27db1154b5683ebbb321a0f8bfdfcb7a61d1df36ad0b36873b22e1189c4709cf",
+        "output/day_to_night_momentum_reconciled_candidate_20260921.md": "7a8e2445a3bb8327cf0876e1fa4a9ac05b8d9d5967df2b077febc98b8ce8a567"
+      },
+      "source_git_sha": "c73e172bd4369f637d17fa94ee28eb8967ef7d1f",
+      "strategy_id": "CAND_03_DAY_NIGHT_MOMENTUM",
+      "thresholds": {
+        "abs_rday_threshold_pts": 50.0
+      },
+      "timezone": "Asia/Kolkata"
+    },
+    "CAND_04_LOW_GAP_LOW_PRIOR_RET": {
+      "boundary_semantics": "Strictly less than 20th percentile training cutoffs.",
+      "candidate_version": "1.0.0",
+      "cost_semantics": "5 bps nominal deduction.",
+      "data_source_ids": [
+        "NIFTY50_1m_2009_2026_v3_research_ready.parquet"
+      ],
+      "data_source_sha256s": {
+        "NIFTY50_1m_2009_2026_v3_research_ready.parquet": "829f2e72ab3e97b8a9262cee741f738ac62a37d2634fe108886648ff125ffec9"
+      },
+      "direction_definition": "Long (+1) when both low-quantile conditions met.",
+      "entry_definition": "Current session 09:15 open.",
+      "exit_definition": "Current session 11:30 close.",
+      "filters": [
+        "overnight gap observable at open",
+        "prior session fully completed"
+      ],
+      "historical_periods": {
+        "holdout_2025": "2025-01-01 to 2025-12-31",
+        "holdout_2026": "2026-01-01 to 2026-09-21",
+        "train": "through 2024"
+      },
+      "instrument_semantics": "NIFTY Index Spot",
+      "missing_data_policy": "Exclude session if opening gap or 11:30 price missing.",
+      "prospective_start_boundary": "2026-09-22T04:30:00+05:30",
+      "reconciliation_status": "RECONCILED_FOR_PROSPECTIVE_SHADOW",
+      "signal_definition": "Current overnight gap < -17.04 bps AND prior completed session open-to-close return < -69.30 bps.",
+      "source_artifact_paths": [
+        "output/frozen_holdout_gap_prior_return_20260921.md"
+      ],
+      "source_artifact_sha256s": {
+        "output/frozen_holdout_gap_prior_return_20260921.md": "b6f47e9fb185d4d8cae539bbf80bc043db875f7ccbe739249e4d9e43b4d141f6"
+      },
+      "source_git_sha": "c73e172bd4369f637d17fa94ee28eb8967ef7d1f",
+      "strategy_id": "CAND_04_LOW_GAP_LOW_PRIOR_RET",
+      "thresholds": {
+        "overnight_gap_max_bps": -17.04,
+        "prior_return_max_bps": -69.3
+      },
+      "timezone": "Asia/Kolkata"
+    },
+    "CAND_05_DAY_NIGHT_OI_CONFIRM": {
+      "candidate_version": "1.0.0",
+      "reconciliation_blocker_reason": "Exact machine-readable OI delta threshold (absolute vs relative %) and contract roll exclusions are declared in prose as PROMISING_NEW_MECHANISM_REQUIRES_FROZEN_PROSPECTIVE_AUDIT without a frozen SELECTION_FREEZE artifact. Fails closed until literal spec hash is committed.",
+      "reconciliation_status": "BLOCKED_RECONCILIATION_REQUIRED",
+      "source_artifact_paths": [
+        "output/day_to_night_oi_confirmation_candidate_20260921.md",
+        "output/day_to_night_oi_confirmation_cost_margin_20260921.md"
+      ],
+      "source_artifact_sha256s": {
+        "output/day_to_night_oi_confirmation_candidate_20260921.md": "f179cb306f5c44de6d414f1f8eb0ed5ce1e9e890433c981b31e649d545cfb681",
+        "output/day_to_night_oi_confirmation_cost_margin_20260921.md": "3c01c0b368735230ef52cf3452db16bf248d28a4746f3458e0a3eb738f71092a"
+      },
+      "strategy_id": "CAND_05_DAY_NIGHT_OI_CONFIRM"
+    },
+    "CAND_06_GAP_CONFLUENCE_RANGE_EXP_B": {
+      "candidate_version": "1.0.0",
+      "reconciliation_blocker_reason": "Artifact explicitly notes that the current late-half failure prevents certification and the branch remains watchlist-only requiring independent freeze/reproduction. Fails closed until formalized.",
+      "reconciliation_status": "BLOCKED_RECONCILIATION_REQUIRED",
+      "source_artifact_paths": [
+        "output/gap_confluence_prior_range_expansion_replication_20260922.md"
+      ],
+      "source_artifact_sha256s": {
+        "output/gap_confluence_prior_range_expansion_replication_20260922.md": "776f5f800e1418dd566caffa3b4d7a486ed8798e4a290eec0bd48e2d2c8fbd63"
+      },
+      "strategy_id": "CAND_06_GAP_CONFLUENCE_RANGE_EXP_B"
+    }
+  },
+  "generated_at": "2026-09-22T04:32:00+05:30",
+  "manifest_schema_version": "1.0.0"
+}
