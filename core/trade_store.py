@@ -698,6 +698,30 @@ def _warn_depth_db_lock_once(err: Exception) -> None:
     )
 
 
+def prune_depth_snapshots(*, limit: int | None = None) -> int:
+    """Prune depth snapshots older than retention limit outside the hot write path."""
+    init_db()
+    effective_limit = max(1, int(limit or getattr(cfg, "DEPTH_SNAPSHOT_LIMIT", 10000) or 10000))
+    try:
+        with _conn() as conn:
+            cursor = conn.execute(
+                """
+            DELETE FROM depth_snapshots
+            WHERE rowid NOT IN (
+                SELECT rowid FROM depth_snapshots ORDER BY timestamp_epoch DESC LIMIT ?
+            )
+            """,
+                (effective_limit,),
+            )
+            return int(cursor.rowcount or 0)
+    except Exception as exc:
+        if _is_database_locked_error(exc):
+            _warn_depth_db_lock_once(exc)
+            return 0
+        logger.warning("depth_snapshot_prune_failed err=%s", type(exc).__name__)
+        return 0
+
+
 def insert_depth_snapshot(ts_iso, instrument_token, depth_json, ts_epoch=None):
     init_db()
     # Ensure timestamp fields are always present and normalized
@@ -723,7 +747,6 @@ def insert_depth_snapshot(ts_iso, instrument_token, depth_json, ts_epoch=None):
         float(getattr(cfg, "DEPTH_SNAPSHOT_DB_WRITE_RETRY_BACKOFF_SEC", 0.05) or 0.05),
     )
     skip_on_lock = bool(getattr(cfg, "DEPTH_SNAPSHOT_DB_LOCK_SKIP_ENABLE", True))
-    should_prune = _should_prune_depth_snapshots(float(ts_epoch or time.time()))
     for attempt in range(1, retry_attempts + 1):
         try:
             with _conn() as conn:
@@ -734,17 +757,6 @@ def insert_depth_snapshot(ts_iso, instrument_token, depth_json, ts_epoch=None):
                 """,
                     (ts_iso, instrument_token, depth_json, ts_iso, ts_epoch),
                 )
-                if should_prune:
-                    limit = int(getattr(cfg, "DEPTH_SNAPSHOT_LIMIT", 10000) or 10000)
-                    conn.execute(
-                        """
-                    DELETE FROM depth_snapshots
-                    WHERE rowid NOT IN (
-                        SELECT rowid FROM depth_snapshots ORDER BY timestamp_epoch DESC LIMIT ?
-                    )
-                    """,
-                        (limit,),
-                    )
             return True
         except Exception as exc:
             if _is_database_locked_error(exc) and attempt < retry_attempts:
@@ -787,7 +799,6 @@ def insert_depth_snapshots_batch(items):
     retry_attempts = max(1, int(getattr(cfg, "DEPTH_SNAPSHOT_DB_WRITE_RETRY_ATTEMPTS", 3) or 3))
     retry_backoff_sec = max(0.0, float(getattr(cfg, "DEPTH_SNAPSHOT_DB_WRITE_RETRY_BACKOFF_SEC", 0.05) or 0.05))
     skip_on_lock = bool(getattr(cfg, "DEPTH_SNAPSHOT_DB_LOCK_SKIP_ENABLE", True))
-    should_prune = _should_prune_depth_snapshots(max_epoch)
 
     for attempt in range(1, retry_attempts + 1):
         try:
@@ -799,17 +810,6 @@ def insert_depth_snapshots_batch(items):
                 """,
                     normalized,
                 )
-                if should_prune:
-                    limit = int(getattr(cfg, "DEPTH_SNAPSHOT_LIMIT", 10000) or 10000)
-                    conn.execute(
-                        """
-                    DELETE FROM depth_snapshots
-                    WHERE rowid NOT IN (
-                        SELECT rowid FROM depth_snapshots ORDER BY timestamp_epoch DESC LIMIT ?
-                    )
-                    """,
-                        (limit,),
-                    )
             return len(normalized)
         except Exception as exc:
             if _is_database_locked_error(exc) and attempt < retry_attempts:

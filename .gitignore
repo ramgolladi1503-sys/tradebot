@@ -94,6 +94,7 @@ build/
 runtime/live_observation/
 runtime/feed_soak/
 runtime/analytics/
+runtime/market_event_graph_live_shadow/
 
 # Upstox Replay Data
 runtime/upstox_candidate_replay/

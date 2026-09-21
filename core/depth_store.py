@@ -27,12 +27,13 @@ class DepthStore:
         self._last_persist_epoch_by_token = defaultdict(float)
         queue_maxsize = max(
             1,
-            int(getattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 16384) or 16384),
+            int(getattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 32768) or 32768),
         )
         self._persist_queue = queue.Queue(maxsize=queue_maxsize)
         self._persist_stop = threading.Event()
         self._persist_lock = threading.Lock()
         self._persist_enqueued = 0
+        self._persist_in_flight = 0
         self._persisted = 0
         self._persist_rejected = 0
         self._persist_failures = 0
@@ -76,14 +77,21 @@ class DepthStore:
             logger.error("depth_rejection_provenance_write_failed error=%s", type(exc).__name__)
 
     def _persist_loop(self):
-        batch_size = max(1, int(getattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 50) or 50))
+        batch_size = max(1, int(getattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 100) or 100))
+        prune_interval_sec = max(
+            5.0,
+            float(getattr(cfg, "DEPTH_SNAPSHOT_PRUNE_INTERVAL_SEC", 30.0) or 30.0),
+        )
+        last_prune_epoch = time.time()
+        from core.trade_store import prune_depth_snapshots
+
         while not self._persist_stop.is_set() or not self._persist_queue.empty():
             items = []
             try:
                 first = self._persist_queue.get(timeout=0.1)
                 items.append(first)
             except queue.Empty:
-                continue
+                pass
 
             while len(items) < batch_size:
                 try:
@@ -91,57 +99,72 @@ class DepthStore:
                 except queue.Empty:
                     break
 
-            try:
-                if insert_depth_snapshot is not _DEFAULT_INSERT_DEPTH_SNAPSHOT:
-                    persisted_count = 0
-                    for item in items:
-                        if insert_depth_snapshot(*item):
-                            persisted_count += 1
-                elif len(items) == 1:
-                    ok = insert_depth_snapshot(*items[0])
-                    persisted_count = 1 if ok else 0
-                else:
-                    persisted_count = insert_depth_snapshots_batch(items)
-
-                skipped_count = len(items) - persisted_count
+            if items:
                 with self._persist_lock:
-                    self._persisted += persisted_count
-                    if skipped_count > 0:
-                        self._persist_rejected += skipped_count
+                    self._persist_in_flight += len(items)
+                try:
+                    if insert_depth_snapshot is not _DEFAULT_INSERT_DEPTH_SNAPSHOT:
+                        persisted_count = 0
+                        for item in items:
+                            if insert_depth_snapshot(*item):
+                                persisted_count += 1
+                    elif len(items) == 1:
+                        ok = insert_depth_snapshot(*items[0])
+                        persisted_count = 1 if ok else 0
+                    else:
+                        persisted_count = insert_depth_snapshots_batch(items)
+
+                    skipped_count = len(items) - persisted_count
+                    with self._persist_lock:
+                        self._persist_in_flight -= len(items)
+                        self._persisted += persisted_count
+                        if skipped_count > 0:
+                            self._persist_rejected += skipped_count
+                            self._persist_degraded = True
+                            record_degradation("depth", "DEPTH_LOCK_SKIPPED")
+                            for item in items[persisted_count:]:
+                                token = item[1] if len(item) > 1 else None
+                                receipt_epoch = item[3] if len(item) > 3 else time.time()
+                                self._record_rejection(
+                                    reason_code="LOCK_SKIPPED",
+                                    instrument_token=token,
+                                    receipt_epoch=receipt_epoch,
+                                    queue_depth=self._persist_queue.qsize(),
+                                )
+                except Exception as exc:
+                    with self._persist_lock:
+                        self._persist_in_flight -= len(items)
+                        self._persist_failures += len(items)
                         self._persist_degraded = True
-                        record_degradation("depth", "DEPTH_LOCK_SKIPPED")
-                        for item in items[persisted_count:]:
+                        record_degradation("depth", "DEPTH_PERSISTENCE_FAILURE")
+                        for item in items:
                             token = item[1] if len(item) > 1 else None
                             receipt_epoch = item[3] if len(item) > 3 else time.time()
                             self._record_rejection(
-                                reason_code="LOCK_SKIPPED",
+                                reason_code="PERSISTENCE_FAILURE",
                                 instrument_token=token,
                                 receipt_epoch=receipt_epoch,
                                 queue_depth=self._persist_queue.qsize(),
                             )
-            except Exception as exc:
-                with self._persist_lock:
-                    self._persist_failures += len(items)
-                    self._persist_degraded = True
-                    record_degradation("depth", "DEPTH_PERSISTENCE_FAILURE")
-                    for item in items:
-                        token = item[1] if len(item) > 1 else None
-                        receipt_epoch = item[3] if len(item) > 3 else time.time()
-                        self._record_rejection(
-                            reason_code="PERSISTENCE_FAILURE",
-                            instrument_token=token,
-                            receipt_epoch=receipt_epoch,
-                            queue_depth=self._persist_queue.qsize(),
-                        )
-                logger.warning("depth_persistence_failed count=%d error=%s", len(items), type(exc).__name__)
-            finally:
-                for _ in items:
-                    self._persist_queue.task_done()
+                    logger.warning("depth_persistence_failed count=%d error=%s", len(items), type(exc).__name__)
+                finally:
+                    for _ in items:
+                        self._persist_queue.task_done()
+
+            # Out-of-band asynchronous retention pruning (only when queue is healthy)
+            now_epoch = time.time()
+            if (now_epoch - last_prune_epoch) >= prune_interval_sec and self._persist_queue.qsize() < batch_size:
+                last_prune_epoch = now_epoch
+                try:
+                    prune_depth_snapshots()
+                except Exception as prune_exc:
+                    logger.debug("background_depth_prune_skipped err=%s", prune_exc)
 
     def _should_persist_snapshot(self, instrument_token, now_epoch: float) -> bool:
+        configured_interval = getattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.5)
         min_interval_sec = max(
             0.0,
-            float(getattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.5) or 0.5),
+            float(0.5 if configured_interval is None else configured_interval),
         )
         if min_interval_sec <= 0.0:
             self._last_persist_epoch_by_token[instrument_token] = now_epoch
@@ -189,13 +212,11 @@ class DepthStore:
                     item_bytes = len(json.dumps({"depth": depth, "imbalance": imbalance}, sort_keys=True, separators=(",", ":")).encode("utf-8")) + 110
                 require_item_size(item_bytes, MAX_DEPTH_QUEUE_ITEM_BYTES, "DEPTH_QUEUE")
                 try:
-                    # Apply bounded, time-limited backpressure instead of
-                    # dropping a depth snapshot when SQLite briefly falls
-                    # behind.  The timeout preserves fail-closed behavior if
-                    # the persistence worker is genuinely stalled.
+                    # Apply bounded, time-limited backpressure without stalling the
+                    # live WebSocket ingestion callback loop.
                     put_timeout_sec = max(
                         0.0,
-                        float(getattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 1.0) or 1.0),
+                        float(getattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 0.05) or 0.05),
                     )
                     self._persist_queue.put((
                         now_iso, instrument_token,
@@ -240,16 +261,29 @@ class DepthStore:
 
     def persistence_state(self) -> dict:
         with self._persist_lock:
+            qsize = self._persist_queue.qsize()
+            enqueued = self._persist_enqueued
+            in_flight = self._persist_in_flight
+            persisted = self._persisted
+            rejected = self._persist_rejected
+            unaccounted = enqueued - (persisted + in_flight + qsize + rejected)
             return {
-                "queue_depth": self._persist_queue.qsize(),
-                "enqueued": self._persist_enqueued,
-                "persisted": self._persisted,
-                "rejected": self._persist_rejected,
+                "queue_depth": qsize,
+                "in_flight": in_flight,
+                "enqueued": enqueued,
+                "persisted": persisted,
+                "rejected": rejected,
                 "failures": self._persist_failures,
+                "unaccounted_remainder": unaccounted,
+                "accounting_invariant_ok": (unaccounted == 0),
                 "durability_degraded": self._persist_degraded,
                 "shutdown": self._persist_shutdown,
                 "worker_alive": self._persist_thread.is_alive(),
             }
+
+    def persistence_accounting(self) -> dict:
+        """Expose institutional-grade accounting invariant metrics."""
+        return self.persistence_state()
 
     def shutdown_persistence(self, deadline_seconds: float = 2.0) -> dict:
         with self._persist_lock:

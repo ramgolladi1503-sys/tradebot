@@ -21,7 +21,9 @@ def test_depth_store_rate_limits_snapshot_persistence(monkeypatch):
     seq = {"items": [1000.0, 1000.2, 1001.3]}
 
     def _fake_time():
-        return seq["items"].pop(0)
+        if seq["items"]:
+            return seq["items"].pop(0)
+        return 1002.0
 
     monkeypatch.setattr(depth_store_module.time, "time", _fake_time)
 

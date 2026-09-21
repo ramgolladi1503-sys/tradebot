@@ -395,6 +395,14 @@ class LiveSourceRuntimeBridge:
         index_end = _bar_end_epoch(index_bar)
         if index_end is None:
             return None, INDEX_INTERVAL_MISALIGNED, (contract.index_symbol,)
+        if self._last_source_bar_end_epoch is not None:
+            if float(index_end) == float(self._last_source_bar_end_epoch):
+                return None, "IDLE_UNCHANGED_INTERVAL", ()
+            elif float(index_end) < float(self._last_source_bar_end_epoch):
+                return None, "TIME_REGRESSION", ()
+        if float(index_end) > float(cycle_cutoff.timestamp()):
+            return None, "FUTURE_SOURCE_BAR", ()
+
         ok, reason = _bar_has_live_provenance(
             index_bar,
             expected_symbol=contract.index_symbol,
@@ -429,11 +437,6 @@ class LiveSourceRuntimeBridge:
             bar["source_bar_end_epoch"] = float(index_end)
             bar["completed"] = True
             constituent_bars.append(bar)
-
-        if self._last_source_bar_end_epoch is not None and float(index_end) <= float(self._last_source_bar_end_epoch):
-            return None, "DUPLICATE_INTERVAL", ()
-        if float(index_end) > float(cycle_cutoff.timestamp()):
-            return None, "FUTURE_SOURCE_BAR", ()
 
         source_dt = datetime.fromtimestamp(float(index_end), tz=IST_TZ)
         return (
@@ -485,7 +488,12 @@ class LiveSourceRuntimeBridge:
         }
         self._diagnostics.append(row)
         self._write_rejection(row, audit or {})
-        logger.warning("market_event_graph_live_source_rejected reason=%s identities=%s", reason, ",".join(row["affected_identities"]))
+        if str(reason) == "IDLE_UNCHANGED_INTERVAL":
+            logger.debug("market_event_graph_live_source_idle reason=%s", reason)
+        elif str(reason) == "TIME_REGRESSION":
+            logger.error("market_event_graph_live_source_time_regression reason=%s identities=%s", reason, ",".join(row["affected_identities"]))
+        else:
+            logger.warning("market_event_graph_live_source_rejected reason=%s identities=%s", reason, ",".join(row["affected_identities"]))
         return LiveSourceBridgeResult(
             attempted=True,
             exported=False,
