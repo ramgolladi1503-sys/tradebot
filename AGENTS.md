@@ -117,6 +117,21 @@ DISABLE_KILL_SWITCH
 DISABLE_FEED_FRESHNESS_GATE
 ```
 
+## Mandatory Two-Stage Hermes -> GSD Workflow Pipeline
+
+For all current and future engineering and research tasks in this repository, work must strictly and automatically proceed through the two-stage pipeline:
+
+1. **Stage 1: Hermes (Architecture, Contracts & Acceptance Gates)**
+   - Prior to any implementation code or patch generation, **Hermes** must specify the design, invariant contracts, microstructure hypotheses, risk boundaries, and acceptance proof criteria.
+   - Declares `source_agent: hermes` with allowed actions: `DESIGN_ARCHITECTURE`, `DEFINE_CONTRACT`, `MAP_WORKFLOW`, `CREATE_ACCEPTANCE_GATES`, `UPDATE_DOCS`.
+
+2. **Stage 2: GSD (Scoped Execution & Verification)**
+   - Following Hermes design, **GSD** executes the scoped patch, writes comprehensive tests proving behavior, verifies the gates, and captures cryptographic hashes/telemetry.
+   - Declares `source_agent: gsd` with allowed actions: `PLAN_PR`, `GENERATE_TESTS`, `GENERATE_PATCH`, `FIX_TEST_FAILURE`, `UPDATE_DOCS`.
+   - Never introduces runtime wiring, live mode alterations, or broker API calls without explicit approval.
+
+No direct, unstructured patch generation is permitted without this explicit Hermes architecture + GSD execution pairing.
+
 ## Required Agent Work Shape
 
 Every agent task must declare:
