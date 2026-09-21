@@ -1,0 +1,53 @@
+{
+  "candidate_id": "S1_MOMENTUM_OVERNIGHT_V1",
+  "candidate_version": "1.0.0",
+  "candidate_status": "FROZEN_HISTORICAL_CANDIDATE",
+  "economic_family": "OVERNIGHT_EQUITY_RISK_TRANSFER",
+  "expression_type": "MOMENTUM_CONDITIONED",
+  "underlying": "NIFTY50",
+  "macro_trend_filter": {
+    "indicator": "SMA_200",
+    "basis": "DAILY_CLOSE_T_MINUS_1",
+    "rule": "Close[t-1] > SMA200[t-1]",
+    "fail_closed_on_nan": true
+  },
+  "signal_evaluation": {
+    "cutoff_wall_clock_ist": "15:20:00.000",
+    "day_gain_basis": "Close[15:20] / Day_Open - 1.0",
+    "threshold_pct": 0.50,
+    "rule": "Macro_Uptrend == True AND Day_Gain_Pct > 0.50"
+  },
+  "execution_model": {
+    "entry_wall_clock_ist": "15:21:00.000",
+    "entry_reference": "FIRST_VALID_ARRIVAL_STRICTLY_AFTER_15:20_CUTOFF",
+    "exit_wall_clock_ist": "09:15:00.000",
+    "exit_reference": "NEXT_SESSION_OFFICIAL_OPEN",
+    "direction": "LONG",
+    "order_type_prospective": "PASSIVE_MIDPOINT_TRACKED_OR_CROSSING_ESTIMATE",
+    "statutory_cost_model": "INDIAN_DERIVATIVES_COST_MODEL_2026_SCHEDULE",
+    "deterministic_friction_pts": 14.30
+  },
+  "historical_validation_evidence": {
+    "corpus": "CANONICAL_NIFTY_18_YEAR_1M",
+    "sessions_evaluated": 4091,
+    "clean_trades_n": 532,
+    "gross_expectancy_pts": 20.63,
+    "net_expectancy_pts": 6.33,
+    "gross_win_rate_pct": 69.5,
+    "net_win_rate_pct": 50.4,
+    "gross_profit_factor": 2.88,
+    "net_profit_factor": 1.38,
+    "total_net_points": 3366.3,
+    "loyo_net_range_pts": [3.61, 8.16],
+    "historical_cost_stress": "REMAINS_POSITIVE_THROUGH_PLUS_3_PTS_ADDITIONAL_DRAG",
+    "multiplicity_status": "NOMINAL_P_0_043_FAILS_CAMPAIGN_BONFERRONI"
+  },
+  "read_only_governance": {
+    "broker_write_authority": false,
+    "order_authority": false,
+    "paper_authorized": false,
+    "live_authorized": false,
+    "allowed_for_live_execution": false,
+    "fresh_prospective_n": 0
+  }
+}
