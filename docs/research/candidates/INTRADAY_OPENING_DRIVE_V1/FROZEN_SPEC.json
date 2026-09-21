@@ -1,0 +1,41 @@
+{
+  "candidate_id": "INTRADAY_OPENING_DRIVE_V1",
+  "candidate_version": "1.1.0",
+  "candidate_status": "TERMINALLY_FROZEN_HISTORICAL_RESEARCH_HALTED",
+  "signal_source": "NIFTY_FUTURES_ONLY",
+  "signal_formula": "Gap = Futures_Open(09:15) - Futures_Close(T-1_15:29); Drive_5m = Futures_Close(09:20) - Futures_Open(09:15)",
+  "gap_threshold_pts": 30.0,
+  "drive_threshold_pts": 20.0,
+  "previous_close_timestamp_rule": "EXACT_15:29:00_REGULAR_SESSION_BAR_FAIL_CLOSED",
+  "contract_key_authoritative_sources": [
+    "selected_futures_contract_key",
+    "expired_instrument_key",
+    "instrument_key"
+  ],
+  "contract_key_placeholder_rejection_policy": [
+    "DEFAULT",
+    "UNKNOWN",
+    "NONE",
+    "NULL",
+    "NAN",
+    "EMPTY_STRING"
+  ],
+  "contract_continuity_policy": "STRICT_EQUALITY_PREV_KEY_EQUALS_CURR_KEY_FAIL_CLOSED_ON_MISMATCH_OR_MISSING",
+  "signal_sealing_time": "09:21:00.000",
+  "historical_entry_reference": "09:21_BAR_CLOSE_KNOWN_AT_09:22:00",
+  "historical_exit_reference": "11:00_BAR_CLOSE_KNOWN_AT_11:01:00",
+  "prospective_shadow_entry_rule": "FIRST_VALID_QUOTE_STRICTLY_AFTER_09:22:00.000",
+  "prospective_shadow_exit_rule": "FIRST_VALID_QUOTE_STRICTLY_AFTER_11:01:00.000",
+  "holding_window": "09:22:00_TO_11:01:00_IST",
+  "spot_atm_strike_rule": "NIFTY_50_SPOT_CLOSE_09:20",
+  "strike_grid_pts": 50.0,
+  "strike_tie_rule": "EXACT_MIDPOINT_ROUNDS_UP",
+  "expiry_selection_rule": "MINIMUM_EXPIRY_STRICTLY_GREATER_THAN_TODAY_EXIT_11:01",
+  "depth_validation_rule": "BID_GT_ZERO_AND_ASK_GT_ZERO_AND_ASK_GTE_BID_AND_FINITE_NOT_NAN",
+  "lot_size_source": "AUTHORITATIVE_INSTRUMENT_MASTER_OR_CONTRACT_METADATA",
+  "vehicle_primary": "NIFTY_ATM_OPTION_BUY_CE_OR_PE",
+  "vehicle_benchmark": "NIFTY_FUTURES",
+  "order_execution_mode": "CONSERVATIVE_CROSSING_BUY_ASK_SELL_BID",
+  "statutory_fee_schedule": "INDIAN_DERIVATIVES_COST_MODEL_2026_SCHEDULE",
+  "read_only_governance": "AGENTS_MD_STRICT_FAIL_CLOSED"
+}
