@@ -48,6 +48,8 @@ ALLOWLIST_EXACT: dict[str, set[int]] = {
     "core/paper_shadow/run_day_to_night_option_shadow.py": {219, 220, 549},
     "scripts/research/reprice_contract_level_all_epochs.py": {23, 24, 27},
     "scripts/research/audit_option_depth_feasibility.py": {22},
+    "core/paper_shadow/run_intraday_opening_drive_shadow.py": {158},
+    "scripts/research/audit_causal_intraday_drive.py": {19, 20},
 }
 
 
