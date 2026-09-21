@@ -91,7 +91,7 @@ def load_index_series(*, desk_id: str, lookback_sec: int = 7200, max_points: int
     try:
         conn = sqlite3.connect(f"file:{db.resolve()}?mode=ro", uri=True, timeout=0.5)
         # Find maximum available tick timestamp to support historical/offline fixtures
-        row_max = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks WHERE timestamp_epoch IS NOT NULL").fetchone()
+        row_max = conn.execute("SELECT timestamp_epoch FROM ticks WHERE timestamp_epoch IS NOT NULL ORDER BY timestamp_epoch DESC LIMIT 1").fetchone()
         anchor_ts = float(row_max[0]) if (row_max and row_max[0] is not None) else now
         if anchor_ts > now:
             anchor_ts = now

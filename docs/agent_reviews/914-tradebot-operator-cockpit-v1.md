@@ -66,3 +66,45 @@ Verification Evidence:
 - `tests/test_upstox_option_chain_reader.py`: PASS (3/3)
 - `tests/test_streamlit*.py`, `tests/test_edge53*.py`: PASS (32/32)
 - Zero order authority. Zero broker writes. Read-only observation verified.
+
+## Acceptance Proof
+
+```bash
+pytest -v tests/test_operator_cockpit_truth.py tests/test_upstox_option_chain_reader.py
+pytest -q tests/test_streamlit*.py tests/test_edge53*.py
+python -m py_compile core/upstox_ui_snapshot.py dashboard/operator_cockpit.py dashboard/operator_truth.py dashboard/upstox_option_chain_reader.py scripts/upstox_option_chain_ui_sidecar.py
+python scripts/validate_agent_review_evidence.py --base-ref origin/main --candidate-ref HEAD
+```
+
+## Runtime Proof Required After Merge
+
+Run the Streamlit Operator Cockpit locally:
+```bash
+streamlit run dashboard/operator_cockpit.py --server.port 8501
+```
+Verify feeds observe background runtime snapshots and fail closed without orders or broker writes.
+
+## What This PR Does Not Prove
+
+This PR does not prove strategy profitability, execution viability, or live trading alpha. It provides a read-only operator observability cockpit with strict source boundaries.
+
+## Human Approval
+
+Approved by human operator for integration, rebase, and verification onto main.
+
+## High-Risk Path Review
+
+N/A - does not modify files under config/, core/execution/, core/risk/, core/broker/, or strategies/.
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: 914-tradebot-operator-cockpit-v1
+- decision: PASS
+- reason: Agent review complete and validated
+- timestamp: 2026-09-21T22:33:00+05:30
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false
