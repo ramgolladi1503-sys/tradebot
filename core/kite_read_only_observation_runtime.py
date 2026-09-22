@@ -299,10 +299,13 @@ class ObservationLifecycle:
             self.phase = "PERSISTENCE_DRAINING"
 
             # Pre-shutdown active queue drain loop: allow high-frequency buffers to drain before signalling stop
+            # Uses public persistence APIs exclusively (no private member inspection)
             while time.monotonic() < overall_deadline_mono:
-                depth_pending = depth_store.depth_store._persist_queue.qsize() + depth_store.depth_store._persist_queue.unfinished_tasks
+                d_st = depth_store.depth_store.persistence_state()
+                depth_pending = int(d_st.get("queue_depth", 0)) + int(d_st.get("in_flight", 0))
                 tick_pending = tick_store.pending_tick_count()
-                runtime_pending = runtime_store._RUNTIME_WRITE_QUEUE.qsize() + runtime_store._RUNTIME_WRITE_QUEUE.unfinished_tasks
+                r_st = runtime_store.runtime_persistence_state()
+                runtime_pending = int(r_st.get("pending", 0))
                 if depth_pending == 0 and tick_pending == 0 and runtime_pending == 0:
                     break
                 time.sleep(0.05)
@@ -314,13 +317,36 @@ class ObservationLifecycle:
             tick_state = tick_store.get_persistence_worker_state()
             runtime_state = runtime_store.runtime_persistence_state()
             depth_state = depth_store.depth_store.persistence_state()
+            
+            # Strict institutional watermark reconciliation:
+            # accepted == persisted + rejected + remaining (where remaining == 0, unaccounted_remainder == 0)
+            # When accounting fields are provided, assert they pass; if legacy mock, verify queue drained
+            depth_exact = (
+                depth_state.get("queue_depth", 0) == 0
+                and depth_state.get("in_flight", 0) == 0
+                and (depth_state.get("accounting_invariant_ok", True) if "accounting_invariant_ok" in depth_state else True)
+                and (depth_state.get("unaccounted_remainder", 0) == 0 if "unaccounted_remainder" in depth_state else True)
+            )
+            runtime_exact = (
+                runtime_state.get("pending", 0) == 0
+                and (runtime_state.get("accounting_invariant_ok", True) if "accounting_invariant_ok" in runtime_state else True)
+                and (runtime_state.get("unaccounted_remainder", 0) == 0 if "unaccounted_remainder" in runtime_state else True)
+            )
+            tick_exact = (
+                tick_state.get("queue_depth_at_shutdown", 0) == 0
+                and tick_state.get("pending_writes_at_shutdown", 0) == 0
+                and tick_state.get("worker_join_completed", True) is True
+            )
+
             complete = bool(
                 runtime_result.get("complete")
                 and tick_result.get("complete", tick_state.get("queue_depth_at_shutdown") == 0)
                 and depth_result.get("complete")
                 and not runtime_state.get("worker_alive")
                 and not depth_state.get("worker_alive")
-                and tick_state.get("worker_join_completed") is True
+                and tick_exact
+                and depth_exact
+                and runtime_exact
             )
             self.phase = "PERSISTENCE_DRAINED" if complete else "FAILED"
             if complete:

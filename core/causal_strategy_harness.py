@@ -134,12 +134,16 @@ def evaluate_causal_strategies(
         age_sec = sym_info.get("option_last_tick_age_sec")
 
         # 1. Strategy Applicability & Feed Gate
-        # Associate symbol with relevant strategies (NIFTY strategies evaluate on NIFTY underlying/options; single-stock symbols evaluate for generic advisory)
+        # Match symbol against declared required_underlyings in CANONICAL_STRATEGIES (no string-matching heuristics)
         applicable_strategy_ids = []
-        for strat_id in registered_strategy_ids:
-            # Index strategies require NIFTY; stock symbols do not evaluate on index strategies
-            if "NIFTY" in strat_id or "MORNING_REVERSAL" in strat_id or "OPENING_DRIVE" in strat_id or "OVERNIGHT" in strat_id:
-                if symbol == "NIFTY" or symbol.startswith("NIFTY"):
+        for strat in CANONICAL_STRATEGIES:
+            if not strat.get("enabled"):
+                continue
+            strat_id = strat["strategy_id"]
+            req_underlyings = strat.get("required_underlyings", ())
+            if req_underlyings:
+                # If strategy declares explicit underlyings, require symbol to match one of them
+                if any(symbol == u or symbol.startswith(u) for u in req_underlyings):
                     applicable_strategy_ids.append(strat_id)
             else:
                 applicable_strategy_ids.append(strat_id)
