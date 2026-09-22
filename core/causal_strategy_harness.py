@@ -93,7 +93,23 @@ def evaluate_causal_strategies(
     rejections: list[dict[str, Any]] = []
 
     symbols_evaluated = 0
-    symbols_data = (feed_health_truth or {}).get("symbols", []) if isinstance(feed_health_truth, Mapping) else []
+    symbols_data = []
+    if isinstance(feed_health_truth, Mapping):
+        symbols_data = feed_health_truth.get("symbols") or (feed_health_truth.get("payload") or {}).get("symbols") or ((feed_health_truth.get("feed_health_truth") or {}).get("symbols")) or []
+    if not symbols_data and isinstance(market_snapshot, Mapping):
+        # Fallback to market_snapshot symbols if feed_health_truth symbols list is not populated
+        snap_symbols = market_snapshot.get("symbols") if isinstance(market_snapshot.get("symbols"), Mapping) else {}
+        for sym_k, sym_v in snap_symbols.items():
+            if isinstance(sym_v, Mapping):
+                fh = sym_v.get("feed_health") or {}
+                qt = sym_v.get("quote_truth") or {}
+                symbols_data.append({
+                    "symbol": sym_k,
+                    "feed_ok": fh.get("status") == "HEALTHY",
+                    "instrument_token": int(qt.get("instrument_token") or 256265 if sym_k == "NIFTY" else 0),
+                    "option_last_tick_age_sec": fh.get("underlying_quote_age_sec"),
+                    "ltp": sym_v.get("ltp"),
+                })
     
     # Extract canonical regime from feed health / market snapshot context
     regime = "UNKNOWN"

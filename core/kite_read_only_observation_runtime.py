@@ -445,13 +445,15 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             if (output_root / "STOP_REQUESTED").is_file():
                 lifecycle.request_stop("operator_control_file")
                 break
-            cycle_cutoff = datetime.now(timezone.utc)
+            from zoneinfo import ZoneInfo
             from core.session_calendar import is_open as is_session_open
             from core.market_quote_resolver import get_index_quote_snapshot
             from core.market_snapshot_builder import build_market_snapshot, build_symbol_market_snapshot
             from core.market_event_graph_live_ohlc_buffer import shadow_ohlc_buffer
 
-            active_market_open = is_session_open(cycle_cutoff, segment="NSE_FNO")
+            cycle_cutoff = datetime.now(timezone.utc)
+            now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+            active_market_open = is_session_open(now_ist, segment="NSE_FNO")
             nifty_quote = get_index_quote_snapshot("NIFTY")
             nifty_ltp = nifty_quote.get("last_price")
             nifty_ts_epoch = nifty_quote.get("ts_epoch")
