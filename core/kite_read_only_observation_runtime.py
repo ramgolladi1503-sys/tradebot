@@ -230,9 +230,27 @@ def write_meg_wiring_evidence(
 class ObservationLifecycle:
     """Own the read-only feed lifecycle and prove an ordered, idempotent drain."""
 
-    def __init__(self, feed: Any, *, drain_deadline_seconds: float = 5.0) -> None:
+    def __init__(self, feed: Any, *, drain_deadline_seconds: float | None = None) -> None:
         self.feed = feed
-        self.drain_deadline_seconds = float(drain_deadline_seconds)
+        if drain_deadline_seconds is not None:
+            self.drain_deadline_seconds = float(drain_deadline_seconds)
+        else:
+            configured_deadline = os.environ.get("OBSERVATION_SHUTDOWN_DRAIN_DEADLINE_SEC")
+            if configured_deadline is not None:
+                try:
+                    self.drain_deadline_seconds = max(1.0, float(configured_deadline))
+                except ValueError:
+                    self.drain_deadline_seconds = 30.0
+            else:
+                try:
+                    from config import config as cfg
+                    cfg_val = getattr(cfg, "OBSERVATION_SHUTDOWN_DRAIN_DEADLINE_SEC", 30.0)
+                except Exception:
+                    cfg_val = 30.0
+                self.drain_deadline_seconds = max(
+                    1.0,
+                    float(cfg_val or 30.0),
+                )
         self.accepting = False
         self._stop_requested = threading.Event()
         self._shutdown_lock = threading.Lock()
@@ -269,7 +287,8 @@ class ObservationLifecycle:
             if self._shutdown_report is not None:
                 return dict(self._shutdown_report)
             self.request_stop(reason)
-            deadline = self.drain_deadline_seconds
+            start_mono = time.monotonic()
+            overall_deadline_mono = start_mono + max(1.0, float(self.drain_deadline_seconds))
             import core.tick_store as tick_store
             import core.depth_store as depth_store
             import core.feed.runtime_store as runtime_store
@@ -278,9 +297,20 @@ class ObservationLifecycle:
             bridge_result = bridge_module.flush_live_source_bridge()
             self.phase = "MEG_FLUSHED"
             self.phase = "PERSISTENCE_DRAINING"
-            tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=deadline)
-            depth_result = depth_store.depth_store.shutdown_persistence(deadline_seconds=deadline)
-            runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=deadline)
+
+            # Pre-shutdown active queue drain loop: allow high-frequency buffers to drain before signalling stop
+            while time.monotonic() < overall_deadline_mono:
+                depth_pending = depth_store.depth_store._persist_queue.qsize() + depth_store.depth_store._persist_queue.unfinished_tasks
+                tick_pending = tick_store.pending_tick_count()
+                runtime_pending = runtime_store._RUNTIME_WRITE_QUEUE.qsize() + runtime_store._RUNTIME_WRITE_QUEUE.unfinished_tasks
+                if depth_pending == 0 and tick_pending == 0 and runtime_pending == 0:
+                    break
+                time.sleep(0.05)
+
+            remaining_sec = max(0.5, overall_deadline_mono - time.monotonic())
+            tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=remaining_sec)
+            depth_result = depth_store.depth_store.shutdown_persistence(deadline_seconds=remaining_sec)
+            runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=remaining_sec)
             tick_state = tick_store.get_persistence_worker_state()
             runtime_state = runtime_store.runtime_persistence_state()
             depth_state = depth_store.depth_store.persistence_state()
@@ -454,9 +484,6 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             cycle_cutoff = datetime.now(timezone.utc)
             now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
             active_market_open = is_session_open(now_ist, segment="NSE_FNO")
-            if not active_market_open and now_ist.hour >= 15 and now_ist.minute >= 30:
-                lifecycle.request_stop("market_session_closed")
-                break
             nifty_quote = get_index_quote_snapshot("NIFTY")
             nifty_ltp = nifty_quote.get("last_price")
             nifty_ts_epoch = nifty_quote.get("ts_epoch")
@@ -632,6 +659,9 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                         reason=str(getattr(meg_result, "reason", "")),
                         exported=bool(getattr(meg_result, "exported", False)),
                     )
+            if deadline is None and session_date == now_ist.date().isoformat() and not active_market_open and (now_ist.hour > 15 or (now_ist.hour == 15 and now_ist.minute >= 30)):
+                lifecycle.request_stop("market_session_closed")
+                break
             if deadline is not None and time.monotonic() >= deadline:
                 break
             time.sleep(0.05 if deadline is not None else 1.0)

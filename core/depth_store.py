@@ -35,7 +35,8 @@ class DepthStore:
         self._persist_enqueued = 0
         self._persist_in_flight = 0
         self._persisted = 0
-        self._persist_rejected = 0
+        self._persist_queue_rejected = 0
+        self._persist_pre_enqueue_rejected = 0
         self._persist_failures = 0
         self._persist_degraded = False
         self._persist_shutdown = False
@@ -119,7 +120,7 @@ class DepthStore:
                         self._persist_in_flight -= len(items)
                         self._persisted += persisted_count
                         if skipped_count > 0:
-                            self._persist_rejected += skipped_count
+                            self._persist_queue_rejected += skipped_count
                             self._persist_degraded = True
                             record_degradation("depth", "DEPTH_LOCK_SKIPPED")
                             for item in items[persisted_count:]:
@@ -195,7 +196,7 @@ class DepthStore:
             if self._should_persist_snapshot(instrument_token, now_epoch):
                 with self._persist_lock:
                     if self._persist_shutdown:
-                        self._persist_rejected += 1
+                        self._persist_pre_enqueue_rejected += 1
                         self._persist_degraded = True
                         record_degradation("depth", "DEPTH_PERSISTENCE_SHUTDOWN")
                         self._record_rejection(reason_code="SHUTDOWN_REJECT", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
@@ -224,7 +225,7 @@ class DepthStore:
                     ), timeout=put_timeout_sec)
                 except queue.Full:
                     with self._persist_lock:
-                        self._persist_rejected += 1
+                        self._persist_queue_rejected += 1
                         self._persist_degraded = True
                         record_degradation("depth", "DEPTH_QUEUE_FULL")
                         self._record_rejection(reason_code="QUEUE_REJECTED", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
@@ -239,7 +240,7 @@ class DepthStore:
                     send_telegram_message(f"Depth imbalance spike {imbalance:.2f} for token {instrument_token}")
         except (StorageBoundViolation, ValueError, TypeError) as exc:
             with self._persist_lock:
-                self._persist_rejected += 1
+                self._persist_pre_enqueue_rejected += 1
                 self._persist_degraded = True
             record_degradation("depth", "DEPTH_BOUND_REJECTED")
             self._record_rejection(reason_code="BOUND_REJECTED", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
@@ -265,14 +266,18 @@ class DepthStore:
             enqueued = self._persist_enqueued
             in_flight = self._persist_in_flight
             persisted = self._persisted
-            rejected = self._persist_rejected
-            unaccounted = enqueued - (persisted + in_flight + qsize + rejected)
+            queue_rejected = self._persist_queue_rejected
+            pre_enqueue_rejected = self._persist_pre_enqueue_rejected
+            total_rejected = queue_rejected + pre_enqueue_rejected
+            unaccounted = enqueued - (persisted + in_flight + qsize + queue_rejected)
             return {
                 "queue_depth": qsize,
                 "in_flight": in_flight,
                 "enqueued": enqueued,
                 "persisted": persisted,
-                "rejected": rejected,
+                "rejected": total_rejected,
+                "queue_rejected": queue_rejected,
+                "pre_enqueue_rejected": pre_enqueue_rejected,
                 "failures": self._persist_failures,
                 "unaccounted_remainder": unaccounted,
                 "accounting_invariant_ok": (unaccounted == 0),

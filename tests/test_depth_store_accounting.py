@@ -131,3 +131,45 @@ def test_prune_depth_snapshots_isolated_function(tmp_path, monkeypatch):
     with _conn() as conn:
         remaining = conn.execute("SELECT count(*) FROM depth_snapshots").fetchone()[0]
         assert remaining == 20
+
+
+def test_depth_accounting_invariant_holds_post_shutdown(tmp_path, monkeypatch):
+    """Snapshots arriving after shutdown increment pre_enqueue_rejected without corrupting accounting invariant."""
+    db_file = tmp_path / "test_post_shutdown.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_file), raising=False)
+    monkeypatch.setenv("TRADE_DB_PATH", str(db_file))
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+
+    store = DepthStore()
+    sample_depth = {
+        "buy": [{"price": 100.0, "quantity": 10}],
+        "sell": [{"price": 101.0, "quantity": 10}],
+    }
+
+    # Ingest 5 normal snapshots
+    for i in range(5):
+        store.update(5000 + i, sample_depth)
+
+    # Shut down cleanly
+    state = store.shutdown_persistence(deadline_seconds=5.0)
+    assert state["complete"] is True
+    assert state["enqueued"] == 5
+    assert state["persisted"] == 5
+    assert state["rejected"] == 0
+    assert state["unaccounted_remainder"] == 0
+    assert state["accounting_invariant_ok"] is True
+
+    # Ingest 3 snapshots AFTER shutdown has set _persist_shutdown=True
+    for i in range(3):
+        store.update(6000 + i, sample_depth)
+
+    state_after = store.persistence_state()
+    assert state_after["enqueued"] == 5
+    assert state_after["persisted"] == 5
+    assert state_after["pre_enqueue_rejected"] == 3
+    assert state_after["queue_rejected"] == 0
+    assert state_after["rejected"] == 3
+    # Invariant must remain strictly True with 0 remainder
+    assert state_after["unaccounted_remainder"] == 0
+    assert state_after["accounting_invariant_ok"] is True
+
