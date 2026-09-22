@@ -1,0 +1,45 @@
+{
+  "sources": [
+    {
+      "logical_name": "closing_market_snapshot_20260922",
+      "absolute_path": "/Volumes/TradeBotData/sessions/session_2026-09-22/2026-09-22/meg-live-2026-09-22-session-continuation/market_snapshot.json",
+      "source_type": "MARKET_SNAPSHOT_JSON",
+      "instrument_identity": "NIFTY_SPOT (token=256265, symbol=NIFTY, exchange=NSE)",
+      "coverage": "2026-09-22 session close",
+      "row_count": 1,
+      "timezone": "Asia/Kolkata",
+      "sha256": "f2feb19fd45aeb5af1fe3aeeac00e2045a13ad9f165e24547ace64abcaec3706",
+      "semantic_justification": "Authoritative NIFTY spot closing LTP (23329.0) at 15:29:59 IST produced by live observer session continuation.",
+      "status": "VERIFIED_AVAILABLE"
+    },
+    {
+      "logical_name": "futures_intraday_nifty26sepfut_20260922",
+      "absolute_path": null,
+      "source_type": "FUTURES_1M_BAR_OR_TICK",
+      "instrument_identity": "NIFTY26SEPFUT (token=17512194, expiry=2026-09-29, exchange=NFO)",
+      "coverage": "2026-09-22 15:29:00 IST",
+      "row_count": 0,
+      "timezone": "Asia/Kolkata",
+      "sha256": null,
+      "semantic_justification": "Token 17512194 was not subscribed during live observation on 2026-09-22. Offline 1-min archives contain no rows for 2026-09-22.",
+      "status": "BLOCKED_SOURCE_AUTHORITY"
+    },
+    {
+      "logical_name": "historical_nifty_spot_daily_200_bars",
+      "absolute_path": null,
+      "source_type": "DAILY_BAR_SERIES",
+      "instrument_identity": "NIFTY 50 SPOT INDEX",
+      "coverage": "200 consecutive sessions up to 2026-09-22",
+      "row_count": 0,
+      "timezone": "Asia/Kolkata",
+      "sha256": null,
+      "semantic_justification": "Local offline warehouses contain data only up to 2026-07-28; continuous sessions between 2026-07-29 and 2026-09-21 are absent.",
+      "status": "BLOCKED_SOURCE_AUTHORITY"
+    }
+  ],
+  "verdicts": {
+    "T1_PREV_CLOSE_STATUS": "BLOCKED_SOURCE_AUTHORITY",
+    "SMA200_STATUS": "BLOCKED_SOURCE_AUTHORITY",
+    "SPOT_DAILY_CLOSE_STATUS": "VERIFIED_AVAILABLE"
+  }
+}

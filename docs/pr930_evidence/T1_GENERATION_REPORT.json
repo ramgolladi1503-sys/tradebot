@@ -1,0 +1,15 @@
+{
+  "generator_script": "scripts/generate_t1_prerequisites.py",
+  "generated_manifest": "runtime/preflight/t1_prerequisites_2026-09-23.json",
+  "spot_close_source": "/Volumes/TradeBotData/sessions/session_2026-09-22/2026-09-22/meg-live-2026-09-22-session-continuation/market_snapshot.json",
+  "spot_close_sha256": "f2feb19fd45aeb5af1fe3aeeac00e2045a13ad9f165e24547ace64abcaec3706",
+  "spot_close_value": 23329.0,
+  "spot_close_status": "VERIFIED_AUTHORITATIVE",
+  "t1_futures_close_1529": null,
+  "t1_futures_close_status": "BLOCKED_SOURCE_AUTHORITY",
+  "sma200_value": null,
+  "sma200_status": "BLOCKED_SOURCE_AUTHORITY",
+  "hardcoded_defaults_eliminated": true,
+  "fail_closed_policy": "STRICT_FAIL_CLOSED_WITHOUT_FABRICATION",
+  "payload_sha256": "bcf4dcb8b5363eff014dae14cd10d17d7e3f38c6f4eef6704c7f506d159a306f"
+}

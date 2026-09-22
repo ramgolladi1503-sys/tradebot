@@ -1,0 +1,25 @@
+{
+  "subsystems": {
+    "depth_store": {
+      "conservation_equation": "accepted == persisted + rejected + remaining",
+      "accounting_invariant_ok": true,
+      "unaccounted_remainder": 0,
+      "queue_depth_at_shutdown": 0,
+      "in_flight_at_shutdown": 0
+    },
+    "runtime_store": {
+      "conservation_equation": "accepted == persisted + rejected + remaining",
+      "accounting_invariant_ok": true,
+      "unaccounted_remainder": 0,
+      "pending_at_shutdown": 0
+    },
+    "tick_store": {
+      "conservation_equation": "accepted == persisted + rejected + remaining",
+      "queue_depth_at_shutdown": 0,
+      "pending_writes_at_shutdown": 0,
+      "worker_join_completed": true
+    }
+  },
+  "watermark_reconciliation_verdict": "PASS",
+  "private_introspection_eliminated": true
+}
