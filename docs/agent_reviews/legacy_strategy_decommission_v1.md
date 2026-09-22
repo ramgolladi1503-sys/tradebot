@@ -1,9 +1,22 @@
 mode: READ_ONLY
-source_agent: hermes
-action: DESIGN_ARCHITECTURE
-title: Legacy strategy decommission phase 1 — authority removal and synthetic backtest invalidation
-scope: Remove rejected legacy strategies from the old certification registry, remove synthetic legacy backtest/WFA executables and their dedicated tests, add tombstones and anti-resurrection coverage. Do not delete strategy implementation modules in this phase.
-requested_paths:
+candidate_id: legacy_strategy_decommission_v1
+decision: PHASE_1_DEAUTHORIZE_AND_INVALIDATE_SYNTHETIC_EVIDENCE
+reason: Remove legacy strategy certification reachability and synthetic economic runners without changing current governed/live strategy behavior.
+timestamp: 2026-09-23T05:30:00+05:30
+is_order_action: false
+broker_api_called: false
+allowed_for_live_execution: false
+source: docs/agent_reviews/legacy_strategy_decommission_v1.md
+
+# Legacy Strategy Decommission V1
+
+## Agent Work Contract
+
+- source_agent: hermes
+- action: DESIGN_ARCHITECTURE
+- title: Legacy strategy decommission phase 1 — authority removal and synthetic backtest invalidation
+- scope: Remove rejected/uncertified legacy strategies from the old certification registry, remove synthetic legacy backtest/WFA executables and their dedicated shallow tests, add tombstones and anti-resurrection coverage. Do not delete physical strategy implementation modules in this phase.
+- requested_paths:
   - strategies/strategy_registry.py
   - scripts/run_candidate_strategy_backtest.py
   - scripts/run_candidate_strategy_wfa.py
@@ -13,9 +26,9 @@ requested_paths:
   - tests/test_legacy_strategy_decommission.py
   - docs/strategy_truth/legacy_strategy_tombstones_v1.json
   - docs/agent_reviews/legacy_strategy_decommission_v1.md
-allowed_paths:
-  - files listed above only
-forbidden_paths:
+  - docs/agent_reviews/legacy_strategy_decommission_v1_gsd.md
+- allowed_paths: exactly the files listed above
+- forbidden_paths:
   - main.py
   - run_live.sh
   - config/**
@@ -27,35 +40,40 @@ forbidden_paths:
   - core/feed*
   - core/runtime_safety_boot_guard.py
   - current frozen candidate specs
-  - PR #930 files
-expected_tests:
+  - PR #930 runtime files
+- expected_tests:
   - tests/test_strategy_registry.py
   - tests/test_legacy_strategy_decommission.py
-  - repository required CI
-acceptance_proof:
-  - rejected legacy strategies absent from legacy certification registry
+  - candidate safety CI
+  - required repository CI
+- acceptance_proof:
+  - decommissioned IDs absent from legacy certification registry
   - MEG remains shadow/advisory-only
   - helper/test-fixture registry behavior retained
   - synthetic backtest/WFA scripts removed
-  - dedicated tests for those synthetic scripts removed
-  - tombstone list exists
-  - anti-resurrection test proves removed IDs are not registry-reachable
+  - tombstone manifest present
+  - anti-resurrection test present
   - no broker/order/risk/feed/live paths changed
 
-# Hermes Architecture
+## Scope Guard
 
-## Problem
+This PR is registration/evidence cleanup only.
 
-The repository contains an old certification registry that still exposes rejected or uncertified heuristic strategies. Separately, two legacy scripts named as backtest/WFA runners emit fixed economic metrics when basic preconditions pass rather than deriving those metrics from real event/trade ledgers. Keeping these paths available creates two risks:
+In scope:
+- old certification registry authority;
+- removal of two known synthetic economic runners;
+- deletion of their two dedicated shallow artifact tests;
+- tombstone and anti-resurrection evidence.
 
-1. a rejected strategy can be rediscovered through old audit tooling and appear certifiable;
-2. synthetic economic outputs can be mistaken for backtest evidence.
+Out of scope:
+- strategy threshold changes;
+- current C1/C2/CAS/MEG implementation changes;
+- current frozen prospective candidate changes;
+- broker/order/risk/feed/live execution;
+- physical deletion of legacy strategy implementations;
+- rewriting historical runtime evidence.
 
-This phase removes those authorities without deleting implementation modules yet.
-
-## Safety boundary
-
-This phase is registration/evidence cleanup only.
+Safety invariants:
 
 ```text
 read_only=true
@@ -69,75 +87,131 @@ ORDERS_MODIFIED=0
 ORDERS_CANCELLED=0
 ```
 
-No strategy thresholds are changed.
+## Grill Me Review
 
-## Phase split
+Challenge: Are we deleting tests simply because strategies failed?
 
-### Phase 1 — this PR
+Answer: No. Only two tests whose sole purpose was to inspect artifacts from the synthetic economic runners are removed. Shared ranking, candidate-pool, observability, replay, safety, regime and execution-firewall tests remain untouched.
 
-- remove rejected legacy strategies from `strategies/strategy_registry.py`;
-- retain only MEG shadow/advisory registration plus non-strategy helpers/test fixture needed by old audit tooling;
-- delete `scripts/run_candidate_strategy_backtest.py`;
-- delete `scripts/run_candidate_strategy_wfa.py`;
-- delete their two dedicated tests, which only assert shape of legacy artifacts;
-- add a tombstone manifest;
-- add anti-resurrection tests.
+Challenge: Could a deleted legacy name still re-enter through the old certification registry?
 
-### Phase 2 — follow-up only after Phase 1 CI proves isolation
+Answer: The registry test and dedicated anti-resurrection test require all tombstoned IDs to be absent.
 
-Build an import/call-graph inventory for the physical strategy modules. Delete implementation files and implementation-specific tests only when each file has zero current governed/shadow/runtime dependency. Shared safety/ranking/replay tests must be retained and converted to neutral fixtures where needed.
+Challenge: Are historical reports being silently rewritten?
 
-## Decommission set for Phase 1
+Answer: No. Existing runtime/research artifacts remain in place. The tombstone explicitly labels the two removed runners as invalidated evidence generators.
 
-The old registry must no longer expose:
+Challenge: Does this remove current MEG/CAS/C1/C2/frozen shadow work?
 
-- SIMPLE_ORB
-- HTF_OPENING_DRIVE_CONT
-- MEAN_REVERSION_EXTENSION
-- COMPRESSION_BREAKOUT
-- TREND_PULLBACK
-- VWAP_RECLAIM
-- OPENING_DRIVE
-- FAILED_BREAKOUT_TRAP
-- EXHAUSTION_REVERSAL
-- EVENT_VOLATILITY_EXPANSION
-- LATE_DAY_MOMENTUM
-- OPTION_PRESSURE
-- OPENING_RANGE_BREAKOUT
-- NO_TRADE_CHOP
-- PRO_STRATEGY_ENGINE
-- ENSEMBLE
-- TRADE_BUILDER
-- NIFTY_INTRADAY
-- BANKNIFTY_INTRADAY
-- SENSEX_INTRADAY
-- VWAP_ORB
-- ZERO_HERO
-- PAIRS_ARBITRAGE
-- VOLATILITY_TREND
+Answer: No. MEG remains explicitly shadow/advisory-only in the old registry. Current governed/frozen implementations are outside this PR.
 
-These IDs are not current governed execution authority.
+Verdict: PASS for Phase 1 scope.
 
-## Explicitly preserved
+## Hermes Review
 
-- MARKET_EVENT_GRAPH_REVERSAL remains shadow/advisory-only;
-- RISK_MANAGER, POSITION_SIZER, SOFT_SIGNAL and PRO_DECISION_ADAPTER remain registered only as non-strategy helper modules for legacy tooling;
-- TEST_STRAT remains a test fixture;
-- all current C1/C2/CAS/MEG/frozen prospective implementations remain untouched;
-- no physical strategy implementation files are deleted in this phase.
+Architecture:
 
-## Evidence integrity
+```text
+historical legacy strategy code
+        |
+        v
+old certification registry  --REMOVED AUTHORITY--> tombstone
+        |
+        X  rejected/uncertified entries no longer discoverable
 
-The removed backtest/WFA scripts contain fixed economic outputs. Historical reports produced by those scripts are not deleted here because history should not be silently rewritten. The tombstone manifest records that these two runners are invalidated as evidence generators.
+synthetic backtest/WFA runner --DELETE--> historical artifacts retained
+                                      \-> invalidation recorded
+```
 
-## Acceptance gates
+Phase 1 intentionally leaves physical strategy modules in place. That prevents accidental import breakage while authority is removed first.
 
-1. Registry contains no decommissioned strategy ID.
-2. MEG is present and `certification_supported == false`.
-3. MEG track remains `shadow_live_observation_only`.
-4. Helper modules are non-certifiable.
-5. Test fixture remains excluded.
-6. Legacy synthetic backtest/WFA files do not exist.
-7. No changed file belongs to broker/order/risk/feed/live execution paths.
-8. Required GitHub CI passes before merge.
-9. PR #930 remains separate; this cleanup must not merge before #930 integration is resolved.
+Phase 2 may delete implementation files only after fresh call-graph/import evidence proves zero current governed/shadow/runtime dependency and Phase 1 CI is green.
+
+Hermes verdict: PASS.
+
+## GSD Review
+
+Planned implementation is restricted to the declared files.
+
+Required behavior:
+- old registry becomes residual shadow/helper/test-fixture metadata only;
+- rejected legacy IDs are absent;
+- MEG remains non-certifiable shadow-only;
+- synthetic backtest/WFA executables are absent;
+- dedicated synthetic-artifact tests are absent;
+- replacement tests prove decommission state.
+
+No implementation file deletion is authorized by this Phase 1 contract.
+
+GSD readiness verdict: PASS.
+
+## QA / Safety Review
+
+Required regression proof:
+1. load_strategy_registry() cannot return a tombstoned strategy ID;
+2. MARKET_EVENT_GRAPH_REVERSAL remains certification_supported=false;
+3. helper entries remain not_certifiable;
+4. TEST_STRAT remains test-only;
+5. synthetic runner paths do not exist;
+6. tombstone authority flags remain false;
+7. repository candidate-safety checks remain green;
+8. no changed path is a broker/order/risk/feed/live execution file.
+
+No live/paper session is required for this cleanup.
+
+QA/Safety verdict: PENDING_CI until GitHub checks complete.
+
+## Acceptance Proof
+
+Expected focused tests:
+
+```bash
+pytest -q tests/test_strategy_registry.py tests/test_legacy_strategy_decommission.py
+```
+
+Repository acceptance additionally requires required GitHub checks to pass on the final immutable PR head.
+
+Changed-path acceptance:
+- only declared Phase 1 files may differ from main;
+- no strategy threshold or current frozen strategy spec may change.
+
+## Runtime Proof Required After Merge
+
+No live-market proof is required because this PR removes legacy authority and synthetic research tooling; it does not introduce runtime behavior.
+
+After merge, Phase 2 must independently prove physical implementation reachability before deleting strategy modules.
+
+The strongest allowed post-merge conclusion is:
+
+`LEGACY_PHASE1_AUTHORITY_REMOVED_IMPLEMENTATIONS_PENDING_DEPENDENCY_SAFE_CLEANUP`
+
+## What This PR Does Not Prove
+
+This PR does not prove:
+- any strategy is profitable;
+- any legacy strategy failed for a particular numeric reason;
+- structural edge certification;
+- execution viability;
+- live readiness;
+- current governed strategy performance;
+- that every physical legacy implementation is safe to delete.
+
+## Human Approval
+
+The project owner explicitly requested autonomous removal/decommission of the negative legacy heuristic strategies, their dedicated tests where safe, and the legacy synthetic backtest path. Physical implementation deletion remains gated by dependency evidence and CI rather than being performed blindly.
+
+## High-Risk Path Review
+
+High-risk changed path:
+- `strategies/strategy_registry.py`
+
+Review:
+- this file is an old certification/audit registry, not the current read-only live strategy registry;
+- the change only removes legacy entries;
+- it does not add strategy logic;
+- it does not change thresholds;
+- it does not modify broker/order/risk/feed/live code;
+- MEG remains shadow/advisory-only;
+- current live read-only registry in `core/read_only_strategy_registry.py` is untouched.
+
+High-risk verdict: bounded removal-only change; no runtime execution authority added.
