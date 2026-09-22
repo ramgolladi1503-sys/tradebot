@@ -526,12 +526,17 @@ def reset_runtime_persistence_for_tests() -> None:
 
 def runtime_persistence_state() -> dict:
     with _RUNTIME_LOCK:
+        pending = _RUNTIME_WRITE_QUEUE.qsize()
+        unaccounted = _RUNTIME_ENQUEUED - (_RUNTIME_PERSISTED + pending)
         return {
             "enqueued": _RUNTIME_ENQUEUED,
             "persisted": _RUNTIME_PERSISTED,
             "rejected": _RUNTIME_REJECTED,
             "failures": _RUNTIME_FAILURES,
-            "pending": _RUNTIME_WRITE_QUEUE.qsize(),
+            "pending": pending,
+            "queue_depth": pending,
+            "unaccounted_remainder": unaccounted,
+            "accounting_invariant_ok": (unaccounted == 0),
             "worker_alive": bool(_RUNTIME_WORKER and _RUNTIME_WORKER.is_alive()),
             "worker_ident": _RUNTIME_WORKER.ident if _RUNTIME_WORKER else None,
             "shutdown": bool(_RUNTIME_SHUTDOWN),

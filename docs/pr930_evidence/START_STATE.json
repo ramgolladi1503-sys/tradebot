@@ -1,0 +1,19 @@
+{
+  "worktree": "/Volumes/TradeBotData/worktrees/governed-live-observer-recovery-20260922",
+  "branch": "fix/governed-live-observer-recovery-20260922",
+  "head": "b5768bb9913198827aadd7494b7c56914ca3e566",
+  "origin_main": "136915f30775b9bd4e43bb6b3b69791ef45d3950",
+  "merge_base": "136915f30775b9bd4e43bb6b3b69791ef45d3950",
+  "clean": true,
+  "agents_rule_present": true,
+  "timestamp_utc": "2026-09-22T22:38:00Z",
+  "read_only": true,
+  "shadow_only": true,
+  "broker_write_authority": false,
+  "order_authority": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "orders_placed": 0,
+  "orders_modified": 0,
+  "orders_cancelled": 0
+}

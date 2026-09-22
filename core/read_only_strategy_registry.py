@@ -21,6 +21,8 @@ CANONICAL_STRATEGIES = (
         "regime_dependencies": (),
         "candidate_type": "causal_advisory",
         "mode": "advisory_only",
+        "required_underlyings": ("NIFTY",),
+        "required_feeds": ("SPOT", "FUTURES"),
     },
 )
 

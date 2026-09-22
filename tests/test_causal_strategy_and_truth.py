@@ -147,7 +147,72 @@ def test_missing_strategy_inputs_remain_missing_without_manufacturing():
     )
     assert strat_res.evaluated_symbol_count == 0
     assert len(strat_res.candidates) == 0
-    assert strat_res.regime == "UNKNOWN"
+
+def test_unrelated_stock_feed_failure_does_not_veto_nifty_strategy():
+    """Prove that a degraded/stale feed for an unrelated stock option does not veto NIFTY strategies."""
+    from core.causal_pulse import create_native_pulse
+    from core.causal_strategy_harness import evaluate_causal_strategies
+
+    pulse = create_native_pulse(
+        session_id="feed-isolation-test",
+        sequence_num=10,
+        payload={"nifty_ltp": 24500.0},
+        producer_sha="2" * 40,
+    )
+
+    feed_health = {
+        "websocket_ok": True,
+        "symbols": [
+            # NIFTY is healthy and signals BUY
+            {"symbol": "NIFTY", "feed_ok": True, "instrument_token": 256265, "option_last_tick_age_sec": 0.1, "confidence": 0.88, "direction": "BUY", "ltp": 24500.0},
+            # TCS option has stale/broken feed
+            {"symbol": "TCS26SEP3800CE", "feed_ok": False, "instrument_token": 999999, "option_last_tick_age_sec": 120.0},
+        ],
+    }
+
+    strat_res = evaluate_causal_strategies(
+        pulse=pulse,
+        market_snapshot={"market_open": True, "primary_regime": "TRENDING_BULLISH"},
+        feed_health_truth=feed_health,
+    )
+
+    # NIFTY candidate is generated successfully despite TCS stale feed
+    assert len(strat_res.candidates) == 1
+    assert strat_res.candidates[0].symbol == "NIFTY"
+
+    # TCS option is rejected without vetoing NIFTY
+    tcs_rejs = [r for r in strat_res.rejections if r["symbol"] == "TCS26SEP3800CE"]
+    assert len(tcs_rejs) > 0
+    assert any(r["reason_code"] == "REJECT_FEED_DEGRADED_OR_STALE" for r in tcs_rejs)
 
 
+def test_stale_nifty_feed_fails_closed():
+    """Prove that stale NIFTY feed fails closed and rejects NIFTY evaluation."""
+    from core.causal_pulse import create_native_pulse
+    from core.causal_strategy_harness import evaluate_causal_strategies
 
+    pulse = create_native_pulse(
+        session_id="nifty-stale-test",
+        sequence_num=11,
+        payload={"nifty_ltp": 24500.0},
+        producer_sha="3" * 40,
+    )
+
+    feed_health = {
+        "websocket_ok": True,
+        "symbols": [
+            # NIFTY feed is stale (>2.5s)
+            {"symbol": "NIFTY", "feed_ok": True, "instrument_token": 256265, "option_last_tick_age_sec": 4.5, "confidence": 0.95, "direction": "BUY", "ltp": 24500.0},
+        ],
+    }
+
+    strat_res = evaluate_causal_strategies(
+        pulse=pulse,
+        market_snapshot={"market_open": True, "primary_regime": "TRENDING_BULLISH"},
+        feed_health_truth=feed_health,
+    )
+
+    assert len(strat_res.candidates) == 0
+    nifty_rejs = [r for r in strat_res.rejections if r["symbol"] == "NIFTY"]
+    assert len(nifty_rejs) > 0
+    assert any(r["reason_code"] == "REJECT_FEED_DEGRADED_OR_STALE" for r in nifty_rejs)

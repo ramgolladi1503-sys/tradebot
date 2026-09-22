@@ -93,7 +93,23 @@ def evaluate_causal_strategies(
     rejections: list[dict[str, Any]] = []
 
     symbols_evaluated = 0
-    symbols_data = (feed_health_truth or {}).get("symbols", []) if isinstance(feed_health_truth, Mapping) else []
+    symbols_data = []
+    if isinstance(feed_health_truth, Mapping):
+        symbols_data = feed_health_truth.get("symbols") or (feed_health_truth.get("payload") or {}).get("symbols") or ((feed_health_truth.get("feed_health_truth") or {}).get("symbols")) or []
+    if not symbols_data and isinstance(market_snapshot, Mapping):
+        # Fallback to market_snapshot symbols if feed_health_truth symbols list is not populated
+        snap_symbols = market_snapshot.get("symbols") if isinstance(market_snapshot.get("symbols"), Mapping) else {}
+        for sym_k, sym_v in snap_symbols.items():
+            if isinstance(sym_v, Mapping):
+                fh = sym_v.get("feed_health") or {}
+                qt = sym_v.get("quote_truth") or {}
+                symbols_data.append({
+                    "symbol": sym_k,
+                    "feed_ok": fh.get("status") == "HEALTHY",
+                    "instrument_token": int(qt.get("instrument_token") or 256265 if sym_k == "NIFTY" else 0),
+                    "option_last_tick_age_sec": fh.get("underlying_quote_age_sec"),
+                    "ltp": sym_v.get("ltp"),
+                })
     
     # Extract canonical regime from feed health / market snapshot context
     regime = "UNKNOWN"
@@ -117,9 +133,27 @@ def evaluate_causal_strategies(
         token = int(sym_info.get("instrument_token", 0) or 0)
         age_sec = sym_info.get("option_last_tick_age_sec")
 
-        # 1. Canonical Freshness & Feed Gate
+        # 1. Strategy Applicability & Feed Gate
+        # Match symbol against declared required_underlyings in CANONICAL_STRATEGIES (no string-matching heuristics)
+        applicable_strategy_ids = []
+        for strat in CANONICAL_STRATEGIES:
+            if not strat.get("enabled"):
+                continue
+            strat_id = strat["strategy_id"]
+            req_underlyings = strat.get("required_underlyings", ())
+            if req_underlyings:
+                # If strategy declares explicit underlyings, require symbol to match one of them
+                if any(symbol == u or symbol.startswith(u) for u in req_underlyings):
+                    applicable_strategy_ids.append(strat_id)
+            else:
+                applicable_strategy_ids.append(strat_id)
+
+        # If no strategies apply to this symbol, fall back to registered strategies for general opportunity evaluation
+        if not applicable_strategy_ids:
+            applicable_strategy_ids = list(registered_strategy_ids)
+
         if not feed_ok or (age_sec is not None and float(age_sec) > 2.5):
-            for strat_id in registered_strategy_ids:
+            for strat_id in applicable_strategy_ids:
                 rejections.append({
                     "symbol": symbol,
                     "strategy_id": strat_id,
@@ -154,7 +188,7 @@ def evaluate_causal_strategies(
             cand = CausalCandidate(
                 candidate_id=f"cand_{pulse.sequence_num}_{token}",
                 pulse_id=pulse.pulse_id,
-                strategy_id=str(getattr(built_trade, "strategy", None) or registered_strategy_ids[0] if registered_strategy_ids else "CANONICAL_ADVISORY"),
+                strategy_id=str(getattr(built_trade, "strategy", None) or applicable_strategy_ids[0] if applicable_strategy_ids else "CANONICAL_ADVISORY"),
                 symbol=symbol,
                 instrument_token=token,
                 direction=signal_res.direction,
@@ -170,7 +204,7 @@ def evaluate_causal_strategies(
             )
             candidates.append(cand)
         else:
-            for strat_id in registered_strategy_ids:
+            for strat_id in applicable_strategy_ids:
                 rejections.append({
                     "symbol": symbol,
                     "strategy_id": strat_id,

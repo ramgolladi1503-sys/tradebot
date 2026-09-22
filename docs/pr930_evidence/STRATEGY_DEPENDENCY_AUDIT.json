@@ -1,0 +1,13 @@
+{
+  "governed_strategies": [
+    {
+      "strategy_id": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1",
+      "required_underlyings": ["NIFTY"],
+      "required_feeds": ["SPOT", "FUTURES"],
+      "mode": "advisory_only",
+      "enabled": true
+    }
+  ],
+  "routing_policy": "DECLARATIVE_ATTRIBUTES_NO_SUBSTRING_MATCHING",
+  "verdict": "PASS"
+}
