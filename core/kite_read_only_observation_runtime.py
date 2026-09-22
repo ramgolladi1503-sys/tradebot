@@ -338,9 +338,15 @@ class ObservationLifecycle:
                 and tick_state.get("worker_join_completed", True) is True
             )
 
+            tick_result_complete = bool(
+                tick_result.get("complete")
+                or tick_result.get("status") in ("COMPLETE_DRAIN", "DRAIN_COMPLETE")
+                or (tick_result.get("status") is None and tick_state.get("queue_depth_at_shutdown") == 0)
+            )
+
             complete = bool(
                 runtime_result.get("complete")
-                and tick_result.get("complete", tick_state.get("queue_depth_at_shutdown") == 0)
+                and tick_result_complete
                 and depth_result.get("complete")
                 and not runtime_state.get("worker_alive")
                 and not depth_state.get("worker_alive")
