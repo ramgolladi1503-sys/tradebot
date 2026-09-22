@@ -172,4 +172,3 @@ def test_depth_accounting_invariant_holds_post_shutdown(tmp_path, monkeypatch):
     # Invariant must remain strictly True with 0 remainder
     assert state_after["unaccounted_remainder"] == 0
     assert state_after["accounting_invariant_ok"] is True
-

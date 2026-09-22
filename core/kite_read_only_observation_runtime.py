@@ -317,7 +317,7 @@ class ObservationLifecycle:
             tick_state = tick_store.get_persistence_worker_state()
             runtime_state = runtime_store.runtime_persistence_state()
             depth_state = depth_store.depth_store.persistence_state()
-            
+
             # Strict institutional watermark reconciliation:
             # accepted == persisted + rejected + remaining (where remaining == 0, unaccounted_remainder == 0)
             # When accounting fields are provided, assert they pass; if legacy mock, verify queue drained
