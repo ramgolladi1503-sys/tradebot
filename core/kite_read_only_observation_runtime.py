@@ -454,6 +454,9 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             cycle_cutoff = datetime.now(timezone.utc)
             now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
             active_market_open = is_session_open(now_ist, segment="NSE_FNO")
+            if not active_market_open and now_ist.hour >= 15 and now_ist.minute >= 30:
+                lifecycle.request_stop("market_session_closed")
+                break
             nifty_quote = get_index_quote_snapshot("NIFTY")
             nifty_ltp = nifty_quote.get("last_price")
             nifty_ts_epoch = nifty_quote.get("ts_epoch")
