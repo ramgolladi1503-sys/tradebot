@@ -117,9 +117,23 @@ def evaluate_causal_strategies(
         token = int(sym_info.get("instrument_token", 0) or 0)
         age_sec = sym_info.get("option_last_tick_age_sec")
 
-        # 1. Canonical Freshness & Feed Gate
+        # 1. Strategy Applicability & Feed Gate
+        # Associate symbol with relevant strategies (NIFTY strategies evaluate on NIFTY underlying/options; single-stock symbols evaluate for generic advisory)
+        applicable_strategy_ids = []
+        for strat_id in registered_strategy_ids:
+            # Index strategies require NIFTY; stock symbols do not evaluate on index strategies
+            if "NIFTY" in strat_id or "MORNING_REVERSAL" in strat_id or "OPENING_DRIVE" in strat_id or "OVERNIGHT" in strat_id:
+                if symbol == "NIFTY" or symbol.startswith("NIFTY"):
+                    applicable_strategy_ids.append(strat_id)
+            else:
+                applicable_strategy_ids.append(strat_id)
+
+        # If no strategies apply to this symbol, fall back to registered strategies for general opportunity evaluation
+        if not applicable_strategy_ids:
+            applicable_strategy_ids = list(registered_strategy_ids)
+
         if not feed_ok or (age_sec is not None and float(age_sec) > 2.5):
-            for strat_id in registered_strategy_ids:
+            for strat_id in applicable_strategy_ids:
                 rejections.append({
                     "symbol": symbol,
                     "strategy_id": strat_id,
@@ -154,7 +168,7 @@ def evaluate_causal_strategies(
             cand = CausalCandidate(
                 candidate_id=f"cand_{pulse.sequence_num}_{token}",
                 pulse_id=pulse.pulse_id,
-                strategy_id=str(getattr(built_trade, "strategy", None) or registered_strategy_ids[0] if registered_strategy_ids else "CANONICAL_ADVISORY"),
+                strategy_id=str(getattr(built_trade, "strategy", None) or applicable_strategy_ids[0] if applicable_strategy_ids else "CANONICAL_ADVISORY"),
                 symbol=symbol,
                 instrument_token=token,
                 direction=signal_res.direction,
@@ -170,7 +184,7 @@ def evaluate_causal_strategies(
             )
             candidates.append(cand)
         else:
-            for strat_id in registered_strategy_ids:
+            for strat_id in applicable_strategy_ids:
                 rejections.append({
                     "symbol": symbol,
                     "strategy_id": strat_id,

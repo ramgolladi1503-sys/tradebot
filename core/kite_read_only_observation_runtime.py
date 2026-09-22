@@ -445,12 +445,63 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             if (output_root / "STOP_REQUESTED").is_file():
                 lifecycle.request_stop("operator_control_file")
                 break
+            cycle_cutoff = datetime.now(timezone.utc)
+            from core.session_calendar import is_open as is_session_open
+            from core.market_quote_resolver import get_index_quote_snapshot
+            from core.market_snapshot_builder import build_market_snapshot, build_symbol_market_snapshot
+            from core.market_event_graph_live_ohlc_buffer import shadow_ohlc_buffer
+
+            active_market_open = is_session_open(cycle_cutoff, segment="NSE_FNO")
+            nifty_quote = get_index_quote_snapshot("NIFTY")
+            nifty_ltp = nifty_quote.get("last_price")
+            nifty_ts_epoch = nifty_quote.get("ts_epoch")
+            nifty_quote_age_sec = max(0.0, cycle_cutoff.timestamp() - float(nifty_ts_epoch)) if nifty_ts_epoch is not None else None
+
+            nifty_completed_bars = shadow_ohlc_buffer.get_completed_bars("NIFTY", as_of=cycle_cutoff)
+            latest_bar = nifty_completed_bars[-1] if nifty_completed_bars else {}
+
+            symbols_payload = {}
+            if nifty_ltp is not None:
+                symbols_payload["NIFTY"] = build_symbol_market_snapshot(
+                    spot=float(nifty_ltp),
+                    ltp=float(nifty_ltp),
+                    ohlc={
+                        "open": float(latest_bar.get("open", nifty_ltp)),
+                        "high": float(latest_bar.get("high", nifty_ltp)),
+                        "low": float(latest_bar.get("low", nifty_ltp)),
+                        "close": float(latest_bar.get("close", nifty_ltp)),
+                    } if latest_bar else None,
+                    feed_health={
+                        "underlying_quote_age_sec": nifty_quote_age_sec,
+                        "status": "HEALTHY" if (nifty_quote_age_sec is not None and nifty_quote_age_sec <= 2.5) else ("STALE" if nifty_quote_age_sec is not None else "UNKNOWN"),
+                    },
+                    quote_truth={
+                        "symbol": "NIFTY",
+                        "ltp": float(nifty_ltp),
+                        "is_fresh": bool(nifty_quote_age_sec is not None and nifty_quote_age_sec <= 2.5),
+                        "is_executable_quote": True,
+                        "source": str(nifty_quote.get("source") or "tick_store"),
+                    },
+                )
+
+            current_market_snapshot = build_market_snapshot(
+                generated_at=cycle_cutoff.isoformat(),
+                market_open=active_market_open,
+                symbols_payload=symbols_payload,
+                loop_id=run_id,
+            )
+
             latest_runtime_outputs = produce_and_store_runtime_snapshots(
-                market_snapshot=None,
+                market_snapshot=current_market_snapshot,
                 producer="kite_read_only_observation",
                 loop_id=run_id,
                 session_id=run_id,
                 source_sha=producer_commit,
+            )
+            from core.market_snapshot_store import write_market_snapshot_atomic
+            write_market_snapshot_atomic(
+                current_market_snapshot,
+                path=output_root / "snapshots" / "market_snapshot_latest.json",
             )
             if not isinstance(latest_runtime_outputs, Mapping):
                 latest_runtime_outputs = {}
