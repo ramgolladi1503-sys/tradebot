@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "total_mutations": 5,
+  "detected_count": 5,
+  "kill_rate_pct": 100.0,
+  "results": [
+    {
+      "mutation_id": "MUT_01_FEED_AGE_GATE_RELAXATION",
+      "description": "Change feed stale gate from 2.5s to 25.0s (unsafe tolerance increase)",
+      "expected_failing_test": "test_causal_strategy_and_truth.py::test_stale_nifty_feed_fails_closed",
+      "detected_by_tests": true,
+      "pytest_return_code": 1,
+      "pytest_output_snippet": "1 failed, 14 passed, 3 warnings in 16.51s"
+    },
+    {
+      "mutation_id": "MUT_02_COMPLETED_BAR_FORCE_EXEC_ELIGIBLE",
+      "description": "Force execution_eligible=True even when completed bar feed is stale",
+      "expected_failing_test": "test_candidate_pipeline_architecture_repair.py::test_1_completed_bar_signal_enters_candidate_pool_when_stale",
+      "detected_by_tests": true,
+      "pytest_return_code": 1,
+      "pytest_output_snippet": "1 failed, 14 passed, 3 warnings in 10.60s"
+    },
+    {
+      "mutation_id": "MUT_03_UNKNOWN_LIVE_QUOTE_PROMOTED_TO_QUALIFIED",
+      "description": "Promote live quote dependent stale signal to QUALIFIED instead of UNKNOWN",
+      "expected_failing_test": "test_candidate_pipeline_architecture_repair.py::test_2_live_quote_dependent_signal_with_stale_feed_yields_unknown",
+      "detected_by_tests": true,
+      "pytest_return_code": 1,
+      "pytest_output_snippet": "1 failed, 14 passed, 3 warnings in 8.94s"
+    },
+    {
+      "mutation_id": "MUT_04_NEAR_SIGNAL_PROMOTED_TO_CANDIDATE",
+      "description": "Promote near signals (<0.70 confidence) into candidates pool",
+      "expected_failing_test": "test_candidate_pipeline_architecture_repair.py::test_4_near_signal_recorded_in_observations_never_enters_candidate_pool",
+      "detected_by_tests": true,
+      "pytest_return_code": 1,
+      "pytest_output_snippet": "1 failed, 14 passed, 3 warnings in 9.28s"
+    },
+    {
+      "mutation_id": "MUT_05_MISSING_PREREQUISITE_IGNORED",
+      "description": "Bypass missing prerequisites gate and allow candidate evaluation",
+      "expected_failing_test": "test_candidate_pipeline_architecture_repair.py::test_6_missing_prerequisites_recorded_as_prerequisite_missing",
+      "detected_by_tests": true,
+      "pytest_return_code": 1,
+      "pytest_output_snippet": "1 failed, 14 passed, 3 warnings in 9.68s"
+    }
+  ]
+}

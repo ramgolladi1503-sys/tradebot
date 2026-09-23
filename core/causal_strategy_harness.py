@@ -367,7 +367,7 @@ def evaluate_causal_strategies(
                     builder = TradeBuilder()
                     builder_input = {
                         "symbol": symbol,
-                        "ltp": sym_info.get("ltp") or 100.0,
+                        "ltp": sym_info.get("ltp"),
                         "regime": regime,
                         "option_chain": sym_info.get("option_chain") or [],
                     }
@@ -380,6 +380,9 @@ def evaluate_causal_strategies(
                         "confidence": conf,
                     }
                     cand_hash = sha256_canonical(cand_body)
+                    cand_entry = getattr(built_trade, "entry_price", sym_info.get("ltp"))
+                    cand_sl = getattr(built_trade, "stop_loss", sym_info.get("stop_loss"))
+                    cand_tgt = getattr(built_trade, "target", sym_info.get("target_price"))
                     cand = CausalCandidate(
                         candidate_id=f"cand_{pulse.sequence_num}_{token}",
                         pulse_id=pulse.pulse_id,
@@ -387,9 +390,9 @@ def evaluate_causal_strategies(
                         symbol=symbol,
                         instrument_token=token,
                         direction=direction,
-                        entry_price=float(getattr(built_trade, "entry_price", sym_info.get("ltp") or 0.0)),
-                        stop_loss=float(getattr(built_trade, "stop_loss", sym_info.get("stop_loss") or 0.0)),
-                        target_price=float(getattr(built_trade, "target", sym_info.get("target_price") or 0.0)),
+                        entry_price=float(cand_entry) if cand_entry is not None else None,
+                        stop_loss=float(cand_sl) if cand_sl is not None else None,
+                        target_price=float(cand_tgt) if cand_tgt is not None else None,
                         regime=regime,
                         confidence=float(conf),
                         timestamp_epoch=pulse.timestamp_epoch,
@@ -457,7 +460,7 @@ def evaluate_causal_strategies(
                 builder = TradeBuilder()
                 builder_input = {
                     "symbol": symbol,
-                    "ltp": sym_info.get("ltp") or 100.0,
+                    "ltp": sym_info.get("ltp"),
                     "regime": regime,
                     "option_chain": sym_info.get("option_chain") or [],
                 }
@@ -470,6 +473,9 @@ def evaluate_causal_strategies(
                     "confidence": conf,
                 }
                 cand_hash = sha256_canonical(cand_body)
+                cand_entry = getattr(built_trade, "entry_price", sym_info.get("ltp"))
+                cand_sl = getattr(built_trade, "stop_loss", sym_info.get("stop_loss"))
+                cand_tgt = getattr(built_trade, "target", sym_info.get("target_price"))
                 cand = CausalCandidate(
                     candidate_id=f"cand_{pulse.sequence_num}_{token}",
                     pulse_id=pulse.pulse_id,
@@ -477,9 +483,9 @@ def evaluate_causal_strategies(
                     symbol=symbol,
                     instrument_token=token,
                     direction=direction,
-                    entry_price=float(getattr(built_trade, "entry_price", sym_info.get("ltp") or 0.0)),
-                    stop_loss=float(getattr(built_trade, "stop_loss", sym_info.get("stop_loss") or 0.0)),
-                    target_price=float(getattr(built_trade, "target", sym_info.get("target_price") or 0.0)),
+                    entry_price=float(cand_entry) if cand_entry is not None else None,
+                    stop_loss=float(cand_sl) if cand_sl is not None else None,
+                    target_price=float(cand_tgt) if cand_tgt is not None else None,
                     regime=regime,
                     confidence=float(conf),
                     timestamp_epoch=pulse.timestamp_epoch,

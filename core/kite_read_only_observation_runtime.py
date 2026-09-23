@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 import threading
@@ -10,6 +11,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
+
+logger = logging.getLogger(__name__)
 
 from core.read_only_live_evidence import (
     MegIntervalScheduler,
