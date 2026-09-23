@@ -1,0 +1,17 @@
+SOURCE_AGENT: gsd
+DATE: 2026-09-23T17:29:15+05:30
+BRANCH: fix/candidate-pipeline-architecture-repair-v1
+BASE_COMMIT: 45ba28e8b32c3b977c60093cc331aca529c28456
+WORKTREE: /Volumes/TradeBotData/worktrees/mros-dynamic-releasestore-binding-v1
+
+SAFETY INVARIANTS CHECK:
+- read_only = true
+- order_authority = false
+- broker_write_authority = false
+- is_order_action = false
+- orders_placed = 0
+- broker_api_called = false
+- allowed_for_live_execution = false
+- feed_freshness_gate = 2.5s (UNTOUCHED)
+- signal_confidence_threshold = 0.70 (UNTOUCHED)
+- mock_bypass_introduced = false

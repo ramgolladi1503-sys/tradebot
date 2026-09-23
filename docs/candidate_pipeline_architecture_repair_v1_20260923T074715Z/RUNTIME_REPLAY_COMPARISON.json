@@ -1,0 +1,7 @@
+{
+  "comparison_summary": "Legacy pipeline suppressed 100% of candidates on stale ticks regardless of bar completion status.",
+  "new_pipeline_behavior": "Preserves causal observation trace and distinguishes qualification from execution eligibility.",
+  "counter_conservation_verified": true,
+  "candidate_pool_entry_on_completed_bars": true,
+  "execution_block_intact": true
+}

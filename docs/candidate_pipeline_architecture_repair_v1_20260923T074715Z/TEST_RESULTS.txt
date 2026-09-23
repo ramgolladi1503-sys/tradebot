@@ -1,0 +1,40 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-9.0.2, pluggy-1.6.0 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: /Volumes/TradeBotData/worktrees/mros-dynamic-releasestore-binding-v1
+configfile: pytest.ini
+plugins: anyio-4.14.1, timeout-2.4.0, hypothesis-6.151.5
+collecting ... collected 15 items
+
+tests/test_candidate_pipeline_architecture_repair.py::test_1_completed_bar_signal_enters_candidate_pool_when_stale PASSED [  6%]
+tests/test_candidate_pipeline_architecture_repair.py::test_2_live_quote_dependent_signal_with_stale_feed_yields_unknown PASSED [ 13%]
+tests/test_candidate_pipeline_architecture_repair.py::test_3_fresh_feed_and_qualified_signal_enters_candidate_and_executable_pool PASSED [ 20%]
+tests/test_candidate_pipeline_architecture_repair.py::test_4_near_signal_recorded_in_observations_never_enters_candidate_pool PASSED [ 26%]
+tests/test_candidate_pipeline_architecture_repair.py::test_5_inapplicable_strategy_recorded_as_inapplicable PASSED [ 33%]
+tests/test_candidate_pipeline_architecture_repair.py::test_6_missing_prerequisites_recorded_as_prerequisite_missing PASSED [ 40%]
+tests/test_candidate_pipeline_architecture_repair.py::test_7_telemetry_counter_conservation_invariant_holds PASSED [ 46%]
+tests/test_candidate_pipeline_architecture_repair.py::test_8_pipeline_latency_root_cause_diagnostics PASSED [ 53%]
+tests/test_candidate_pipeline_architecture_repair.py::test_9_time_of_day_strategy_matrix PASSED [ 60%]
+tests/test_candidate_pipeline_architecture_repair.py::test_10_pure_read_only_safety_guarantees_hold PASSED [ 66%]
+tests/test_causal_strategy_and_truth.py::test_causal_12hop_shadow_lineage PASSED [ 73%]
+tests/test_causal_strategy_and_truth.py::test_causal_spies_prove_canonical_authorities_invoked PASSED [ 80%]
+tests/test_causal_strategy_and_truth.py::test_missing_strategy_inputs_remain_missing_without_manufacturing PASSED [ 86%]
+tests/test_causal_strategy_and_truth.py::test_unrelated_stock_feed_failure_does_not_veto_nifty_strategy PASSED [ 93%]
+tests/test_causal_strategy_and_truth.py::test_stale_nifty_feed_fails_closed PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../../opt/anaconda3/lib/python3.12/site-packages/_hypothesis_pytestplugin.py:481
+  /opt/anaconda3/lib/python3.12/site-packages/_hypothesis_pytestplugin.py:481: UserWarning: Skipping collection of '.hypothesis' directory - this usually means you've explicitly set the `norecursedirs` pytest config option, replacing rather than extending the default ignores.
+    warnings.warn(
+
+../../../../opt/anaconda3/lib/python3.12/site-packages/pandas/core/computation/expressions.py:23
+  /opt/anaconda3/lib/python3.12/site-packages/pandas/core/computation/expressions.py:23: UserWarning: Pandas requires version '2.10.2' or newer of 'numexpr' (version '2.8.7' currently installed).
+    from pandas.core.computation.check import NUMEXPR_INSTALLED
+
+../../../../opt/anaconda3/lib/python3.12/site-packages/pandas/core/arrays/masked.py:56
+  /opt/anaconda3/lib/python3.12/site-packages/pandas/core/arrays/masked.py:56: UserWarning: Pandas requires version '1.4.2' or newer of 'bottleneck' (version '1.3.7' currently installed).
+    from pandas.core import (
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 15 passed, 3 warnings in 12.64s ========================
