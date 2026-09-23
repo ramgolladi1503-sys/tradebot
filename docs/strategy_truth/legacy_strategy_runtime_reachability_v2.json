@@ -1,0 +1,154 @@
+{
+  "schema_version": 2,
+  "campaign": "legacy_strategy_code_removal_v2",
+  "base_observed": "a443bae9fea10949fb882538b751c373b9fd51a6",
+  "status": "HERMES_REACHABILITY_MAP_PREIMPLEMENTATION",
+  "safety": {
+    "read_only": true,
+    "broker_write_authority": false,
+    "order_authority": false,
+    "paper_authorized": false,
+    "live_authorized": false
+  },
+  "retained_current_or_shared": [
+    {
+      "path": "strategies/trade_builder.py",
+      "classification": "CURRENT_RUNTIME_DEPENDENCY",
+      "evidence": "core/causal_strategy_harness.py imports TradeBuilder"
+    },
+    {
+      "path": "strategies/ensemble.py",
+      "classification": "SHARED_RUNTIME_SUPPORT",
+      "evidence": "strategies/trade_builder.py imports ensemble helper functions"
+    },
+    {
+      "path": "strategies/movement/no_trade_chop.py",
+      "classification": "CURRENT_DEFENSIVE_DEPENDENCY",
+      "evidence": "core/candidate_pool_orchestrator.py references no-trade chop"
+    },
+    {
+      "path": "strategies/movement/market_event_graph_reversal.py",
+      "classification": "CURRENT_SHADOW_ADVISORY",
+      "evidence": "MEG shadow/read-only program remains governed observational work"
+    },
+    {
+      "path": "strategies/movement/_utils.py",
+      "classification": "SHARED_SUPPORT_PENDING_RETAINED_IMPORT_CHECK",
+      "evidence": "movement helper; retain unless post-delete import audit proves unused"
+    },
+    {
+      "path": "core/strategy_regime_policy.py",
+      "classification": "CURRENT_SHARED_POLICY",
+      "evidence": "core/opportunity_scoring.py imports this policy"
+    }
+  ],
+  "strong_retirement_candidates": [
+    "strategies/movement/opening_drive.py",
+    "strategies/movement/opening_range_breakout.py",
+    "strategies/movement/compression_breakout.py",
+    "strategies/movement/trend_pullback.py",
+    "strategies/movement/vwap_reclaim.py",
+    "strategies/movement/failed_breakout_trap.py",
+    "strategies/movement/exhaustion_reversal.py",
+    "strategies/movement/mean_reversion_extension.py",
+    "strategies/movement/event_volatility_expansion.py",
+    "strategies/movement/late_day_momentum.py",
+    "strategies/movement/option_pressure.py",
+    "strategies/simple_orb.py",
+    "strategies/vwap_orb.py",
+    "strategies/nifty_intraday.py",
+    "strategies/banknifty_intraday.py",
+    "strategies/sensex_intraday.py",
+    "strategies/pairs_arbitrage.py",
+    "strategies/zero_hero.py",
+    "strategies/volatility_trend.py"
+  ],
+  "conditional_retirement_candidates": [
+    {
+      "path": "strategies/pro_layer/pro_strategy_engine.py",
+      "condition": "delete only with pro_decision_adapter and dedicated tests after confirming no current runtime imports"
+    },
+    {
+      "path": "strategies/pro_layer/pro_decision_adapter.py",
+      "condition": "delete only if final search still shows no current runtime consumer"
+    },
+    {
+      "path": "core/strategy_parameter_profiles.py",
+      "condition": "delete only after all legacy movement and opening-range replay consumers are removed"
+    },
+    {
+      "path": "core/replay_candidate_handoff_entrypoint.py",
+      "condition": "retain generic replay infrastructure; remove only dead legacy strategy adapters/imports"
+    },
+    {
+      "path": "core/strategy_spec.py",
+      "condition": "retain generic contract machinery; prune retired default alpha specs so deleted modules are not advertised"
+    }
+  ],
+  "legacy_backtest_and_research_cleanup": [
+    {
+      "path": "scripts/run_candidate_strategy_backtest.py",
+      "action": "REMOVED_IN_PHASE1",
+      "reason": "synthetic fixed economic metrics"
+    },
+    {
+      "path": "scripts/run_candidate_strategy_wfa.py",
+      "action": "REMOVED_IN_PHASE1",
+      "reason": "synthetic fixed WFA metrics"
+    },
+    {
+      "path": "scripts/backtest_all_strategies_available_data.py",
+      "action": "RETIRE_IN_PHASE2",
+      "reason": "legacy broad directional-proxy strategy campaign"
+    },
+    {
+      "path": "scripts/analyze_all_available_strategy_edge.py",
+      "action": "RETIRE_WITH_PARENT",
+      "reason": "imports the legacy all-strategy backtest module"
+    },
+    {
+      "path": "tests/test_backtest_all_strategies_available_data.py",
+      "action": "RETIRE_WITH_PARENT",
+      "reason": "dedicated test for the retired legacy broad backtest"
+    }
+  ],
+  "legacy_opening_replay_cleanup": [
+    {
+      "path": "research/opening_range_retest/replay_contract.py",
+      "classification": "OFFLINE_RESEARCH_ONLY",
+      "action": "DELETE_IF_NO_EXTERNAL_CURRENT_CONSUMER"
+    },
+    {
+      "path": "research/opening_range_retest/replay_engine.py",
+      "classification": "OFFLINE_RESEARCH_ONLY",
+      "action": "DELETE_IF_NO_EXTERNAL_CURRENT_CONSUMER"
+    },
+    {
+      "path": "core/orb_ohlcv_validation.py",
+      "classification": "LEGACY_ORB_VALIDATION",
+      "action": "DELETE_OR_ARCHIVE_AFTER_REFERENCE_AUDIT"
+    }
+  ],
+  "test_policy": {
+    "delete_only_implementation_specific_tests": true,
+    "preserve_generic_pipeline_tests": [
+      "candidate pool",
+      "ranking",
+      "observability",
+      "execution firewall",
+      "fallback safety",
+      "feed safety",
+      "generic replay integrity",
+      "current frozen candidate safety"
+    ],
+    "replace_legacy_fixture_ids_with_neutral_test_fixture_when_needed": true
+  },
+  "protected_paths": [
+    "core/read_only_strategy_registry.py",
+    "core/causal_strategy_harness.py",
+    "core/governed_strategy_authority.py",
+    "core/candidate_audits/intraday_opening_drive.py",
+    "core/paper_shadow/strategy_shadow_adapter.py"
+  ],
+  "implementation_gate": "PR931_REQUIRED_CI_GREEN_AND_MERGED"
+}
