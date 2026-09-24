@@ -1,8 +1,8 @@
 # Final Acceptance Report: Candidate Pipeline Architecture Repair V1
 
 ### Executive Summary
-The candidate pipeline architecture has been fully repaired in accordance with the Hermes stage 1 architectural contract. 
-Strategy qualification is now cleanly separated from live execution eligibility. 
+The candidate pipeline architecture has been fully repaired in accordance with the Hermes stage 1 architectural contract.
+Strategy qualification is now cleanly separated from live execution eligibility.
 
 ### Acceptance Proof Highlights
 1. **Separation of Concerns**: Strategy qualification from completed bars (`is_completed_bar_signal=True`) properly creates a `CausalCandidate` in `candidate_pool.jsonl` even if current execution quotes are stale, tagging `execution_eligible=False` and `execution_block_reason="FEED_STALE_EXECUTION_BLOCK"`.

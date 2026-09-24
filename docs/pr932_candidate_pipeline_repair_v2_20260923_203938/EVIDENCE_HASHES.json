@@ -8,8 +8,8 @@
       "size_bytes": 2381
     },
     "ARCHITECTURE_INVARIANTS.md": {
-      "sha256": "ebee2788b2cf84416668ba2fc26901cec1c37081ff98bc94e8f848281915e27c",
-      "size_bytes": 729
+      "sha256": "4ee055e0a0ff52352a49819f325e693fd0bf9d4c8fde01c81cb833675997b73d",
+      "size_bytes": 816
     },
     "CANDIDATE_POOL_STATUS.md": {
       "sha256": "bc155f35aceecd3095ea448907d245288620f3a115659475a5939f989b208eb7",
@@ -28,8 +28,8 @@
       "size_bytes": 512
     },
     "MEG_INTEGRATION_STATUS.md": {
-      "sha256": "b817db74be449f2bde4d0983337ae226b4ece55b036ea1dde894d800337f0f98",
-      "size_bytes": 238
+      "sha256": "3b980924ee50c04068de37841199a530f2980dd7e2ae962c372a9188d4a6d685",
+      "size_bytes": 278
     },
     "MUTATION_RESULTS.json": {
       "sha256": "f88652c17417d329f7c4068bd2a7636003d269863a4ae1fe961f0154e6ab511e",
@@ -48,28 +48,28 @@
       "size_bytes": 447
     },
     "PR_SUMMARY.md": {
-      "sha256": "7918d5df6367559490d2c72b5d3d48bfa8190ccdbd22c0d8b7b5be05b986b344",
-      "size_bytes": 918
+      "sha256": "d162d9447d162343e912b45b8762edfb93f70b95f5cba899d09fd7a0ffe95f7e",
+      "size_bytes": 1100
     },
     "REGISTRY_AUTHORITY_AUDIT.md": {
-      "sha256": "0d1f05a4bf7be6011c0ff9f4cbb6d56e4c13b3b9a17f8a81888f88b0ffb91512",
-      "size_bytes": 284
+      "sha256": "37e913d195b136b273870565c9cb9e532ff0ff56dd7b49d6ad44c940e7d63843",
+      "size_bytes": 422
     },
     "REPLAY_VERDICT.md": {
-      "sha256": "7319d7f0acbc1bb2529496344742a044d51d612342543f22a915ea02bcd4c32c",
-      "size_bytes": 467
+      "sha256": "3a9a0467d241933efa1e4a668b2143afe67dd62a210877dcd00a141ad52176a8",
+      "size_bytes": 594
     },
     "RISK_GATES_AUDIT.md": {
-      "sha256": "d611537b44bf6b03b78cdb6ac51818052664adf2c8308cf174e2915d6f70c65c",
-      "size_bytes": 212
+      "sha256": "3a2f8dbc3c416579941b2767ee9f189a3fb5d0820be21ad6317eae0f4c1e436d",
+      "size_bytes": 265
     },
     "RUNTIME_REPLAY_REPORT.json": {
       "sha256": "3a7d9c013961ebfa3b4628174d99c83569ec9c18e8c9e93eb8ea5d7e41085609",
       "size_bytes": 1738
     },
     "TELEMETRY_CONSERVATION_PROOF.md": {
-      "sha256": "ec86b308bceefadbc3b6de70f2743de380b4baff91f16087a5acba04bf7466dc",
-      "size_bytes": 290
+      "sha256": "9ba68147173b9329f0dcf5045308c7ceb8d78e30d4842426e15d831c0ebf0b08",
+      "size_bytes": 457
     },
     "TEST_COVERAGE_REPORT.md": {
       "sha256": "4f5ae866a1af7a750f490447e2fea825e47bfc3dbce9113e25d895bfacd79998",

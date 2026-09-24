@@ -2,7 +2,7 @@
 
 The telemetry conservation invariant requires:
 
-
+$$\text{symbols\_evaluated} = \text{qualified\_candidates} + \text{near\_signals} + \text{no\_signal} + \text{qualification\_unknown} + \text{blocked\_prerequisites}$$
 
 During 2026-09-23 replay:
 - Symbols evaluated: 2 (NIFTY, BANKNIFTY)

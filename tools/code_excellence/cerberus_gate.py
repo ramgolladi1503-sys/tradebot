@@ -343,16 +343,21 @@ def _line_contains_required_field_assignment(line: str, name: str) -> bool:
 
 def _line_matches_required_field(line: str, name: str, expected: str) -> bool:
     normalized = _normalize_assignment_line(line)
+    lowered_name = name.lower()
     expected_pairs = {
-        f"{name.lower()}={expected}",
-        f"{name.lower()}:{expected}",
+        f"{lowered_name}={expected}",
+        f"{lowered_name}:{expected}",
     }
     if expected == "false":
         expected_pairs.update({
-            f"{name.lower()}=false",
-            f"{name.lower()}:false",
-            f"{name.lower()}isfalse",
+            f"{lowered_name}=false",
+            f"{lowered_name}:false",
+            f"{lowered_name}isfalse",
         })
+        # Support dataclass type annotations e.g. name: bool = False or name: Any = False
+        type_annotated_pattern = rf"^{lowered_name}(?::[a-z0-9_\[\],\.]+)?=(?:false|field\(.*default=false.*\))$"
+        if re.search(type_annotated_pattern, normalized):
+            return True
     return any(pair in normalized for pair in expected_pairs)
 
 
