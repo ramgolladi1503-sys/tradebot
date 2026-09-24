@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from core.causal_pulse import NativePulse, sha256_canonical
-from core.read_only_strategy_registry import CANONICAL_STRATEGIES
+from core.read_only_strategy_registry import CANONICAL_STRATEGIES, _spec_sha
 from core.causal_cas_qualification import STRATEGY_ID
 from core.causal_pipeline_telemetry import build_causal_telemetry
 
@@ -232,7 +232,7 @@ def evaluate_causal_strategies(
                 from core.causal_cas_qualification import qualify_cas
                 qualified = qualify_cas(pulse=pulse, store=cas_primitive_store, token=token)
                 qualification, reason, direction = qualified.state, qualified.reason, qualified.direction
-                evidence = dict(qualified.evidence)
+                evidence = {**qualified.evidence, "registry_spec_sha": _spec_sha(strategy)}
                 if qualification == "NOT_IN_WINDOW":
                     applicability, qualification = "INAPPLICABLE", "UNKNOWN"
                 if qualification == "UNKNOWN":
@@ -307,7 +307,7 @@ def evaluate_causal_strategies(
                     "execution_status": "advisory_only",
                 },
                 strategy_qualified=True,
-                qualification_evidence=qualified.evidence,
+                qualification_evidence=evidence,
                 advisory_ready=advisory_ready,
                 execution_eligible=False,
                 execution_block_reason="SHADOW_ONLY_NO_EXECUTION_AUTHORITY",
