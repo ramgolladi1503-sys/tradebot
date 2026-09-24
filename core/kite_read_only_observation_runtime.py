@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import sys
 import threading
@@ -457,11 +458,27 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     cas_store = CASPrimitiveStore(output_root / f"cas_short_horizon_primitives_{run_id}.json", session_id=run_id, source_sha=producer_commit, underlying_token=cas_token)
     cas_targets = {"0915": datetime.fromisoformat(f"{session_date}T09:15:00+05:30").timestamp(), "1000": datetime.fromisoformat(f"{session_date}T10:00:00+05:30").timestamp(), "1514": datetime.fromisoformat(f"{session_date}T15:14:00+05:30").timestamp()}
     def cas_tick_sink(tick):
-        if not lifecycle.accepting or tick.get("underlying_symbol") != "NIFTY" or int(tick.get("instrument_token") or 0) != cas_token:
+        if (not lifecycle.accepting or cas_token <= 0
+                or tick.get("underlying_symbol") != "NIFTY"
+                or int(tick.get("instrument_token") or 0) != cas_token):
             return
+        # kite_depth_ws's freshness timestamp may be *receipt time*. Use only
+        # the original authoritative exchange timestamp for frozen CAS input.
+        if (tick.get("timestamp_authority") != "EXCHANGE_TIMESTAMP"
+                or tick.get("timestamp_fallback_used") is not False):
+            return
+        try:
+            source_epoch = float(tick["source_timestamp_epoch"])
+        except (ValueError, TypeError, KeyError):
+            return
+        if not math.isfinite(source_epoch):
+            return
+        source_tick = dict(tick, timestamp_epoch=source_epoch,
+                           price_source="core/kite_depth_ws.py:normalized_tick_sink")
         for name, target in cas_targets.items():
-            if name not in cas_store.rows and tick.get("timestamp_epoch") is not None and float(tick["timestamp_epoch"]) >= target:
-                cas_store.capture(name, target, tick, capture_timestamp_ist=datetime.now(timezone.utc).isoformat())
+            if name not in cas_store.rows and source_epoch >= target:
+                cas_store.capture(name, target, source_tick,
+                                  capture_timestamp_ist=datetime.now(timezone.utc).isoformat())
     lifecycle.start(tokens, tick_sink=cas_tick_sink)
     previous_feed_live = False
 
