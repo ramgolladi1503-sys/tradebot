@@ -11,6 +11,7 @@ from typing import Any, Mapping
 from core.causal_pulse import NativePulse, sha256_canonical
 from core.read_only_strategy_registry import CANONICAL_STRATEGIES
 from core.causal_cas_qualification import STRATEGY_ID
+from core.causal_pipeline_telemetry import build_causal_telemetry
 
 
 @dataclass(frozen=True)
@@ -192,15 +193,6 @@ def evaluate_causal_strategies(
     observations: list[StrategyObservation] = []
     rejections: list[dict[str, Any]] = []
     seen = 0
-    tc: dict[str, Any] = {
-        "symbols_seen": len(symbols_data), "symbols_evaluated": 0,
-        "strategy_observations": 0, "qualified_candidates": 0,
-        "execution_eligible_candidates": 0, "advisory_ready_candidates": 0,
-        "qualification_unknown": 0, "no_signal": 0,
-        "blocked_prerequisites": 0,
-        # Execution gates cannot be inferred from a fresh underlying quote.
-        "execution_gates": "NOT_EVALUATED_SHADOW_ONLY",
-    }
     for info in symbols_data:
         if not isinstance(info, Mapping):
             continue
@@ -208,7 +200,7 @@ def evaluate_causal_strategies(
         if not symbol:
             continue
         seen += 1
-        tc["symbols_evaluated"] += 1
+
         token = int(info.get("instrument_token") or 0)
         if (symbol == "NIFTY" and token <= 0 and cas_primitive_store is not None
                 and getattr(cas_primitive_store, "session_id", None) == pulse.session_id
@@ -242,12 +234,11 @@ def evaluate_causal_strategies(
                     applicability, qualification = "INAPPLICABLE", "UNKNOWN"
                 if qualification == "UNKNOWN":
                     missing = [reason]
-                    tc["qualification_unknown"] += 1
-                    tc["blocked_prerequisites"] += 1
+
+
                 elif qualification == "NO_SIGNAL":
-                    tc["no_signal"] += 1
+
             else:
-                tc["qualification_unknown"] += 1
 
             obs = StrategyObservation(
                 timestamp_epoch=pulse.timestamp_epoch,
@@ -265,7 +256,7 @@ def evaluate_causal_strategies(
                 source_event_or_snapshot_reference=evidence,
             )
             observations.append(obs)
-            tc["strategy_observations"] += 1
+
             if qualification != "QUALIFIED" or qualified is None:
                 if applicability == "APPLICABLE":
                     rejections.append({
@@ -327,12 +318,15 @@ def evaluate_causal_strategies(
                 candidate_state="QUALIFIED_SHADOW_ADVISORY" if advisory_ready else "QUALIFIED_ADVISORY_BLOCKED",
             )
             candidates.append(cand)
-            tc["qualified_candidates"] += 1
+
             if advisory_ready:
-                tc["advisory_ready_candidates"] += 1
+
     return StrategyEvaluationResult(
         pulse_id=pulse.pulse_id, regime=regime, candidates=candidates,
         rejections=rejections, evaluated_symbol_count=seen,
         timestamp_epoch=pulse.timestamp_epoch, observations=observations,
-        telemetry_counters=tc,
+        telemetry_counters=build_causal_telemetry(
+            symbols_seen=len(symbols_data), symbols_evaluated=seen,
+            observations=observations, candidates=candidates,
+        ),
     )
