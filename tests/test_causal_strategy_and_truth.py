@@ -82,7 +82,9 @@ def test_causal_12hop_shadow_lineage(tmp_path):
     assert truth.decision.candidate_score is None
     assert truth.decision.rank is None
     assert truth.execution.intended_action == "NO_TRADE"
-    assert truth.timing.exchange_timestamp_epoch is None  # pulse is not exchange tick
+    assert truth.timing.exchange_timestamp_epoch == result.candidates[0].qualification_evidence["decision_exchange_ts_epoch"]
+    assert truth.timing.receive_timestamp_epoch == result.candidates[0].qualification_evidence["receive_ts_epoch"]
+    assert truth.timing.normalization_timestamp_epoch is None
 
 
 def test_real_cas_evaluator_called_not_tradebuilder_or_unverified_risk(tmp_path, monkeypatch):
