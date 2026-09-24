@@ -169,23 +169,23 @@ def evaluate_causal_strategies(
     snapshot = market_snapshot if isinstance(market_snapshot, Mapping) else {}
     feed = feed_health_truth if isinstance(feed_health_truth, Mapping) else {}
     symbols_data = feed.get("symbols") or (feed.get("payload") or {}).get("symbols") or []
-    if not symbols_data:
-        snapshots = snapshot.get("symbols") or {}
-        if isinstance(snapshots, Mapping):
-            symbols_data = []
-            for sym, payload in snapshots.items():
-                if not isinstance(payload, Mapping):
-                    continue
-                quote = payload.get("quote_truth") or {}
-                health = payload.get("feed_health") or {}
-                symbols_data.append({
-                    "symbol": sym,
-                    "instrument_token": quote.get("instrument_token"),
-                    "feed_ok": health.get("status") == "HEALTHY",
-                    "underlying_quote_age_sec": health.get("underlying_quote_age_sec"),
-                })
-    if not isinstance(symbols_data, (tuple, list)):
-        symbols_data = []
+    symbols_data = list(symbols_data) if isinstance(symbols_data, (list, tuple)) else []
+    # The aggregate health report may cover options without listing the index.
+    # Read NIFTY only from an actual market snapshot rather than fabricate one.
+    snapshots = snapshot.get("symbols") or {}
+    if isinstance(snapshots, Mapping):
+        listed = {str(row.get("symbol") or "").upper() for row in symbols_data if isinstance(row, Mapping)}
+        for sym, payload in snapshots.items():
+            if not isinstance(payload, Mapping) or str(sym).upper() in listed:
+                continue
+            quote = payload.get("quote_truth") or {}
+            health = payload.get("feed_health") or {}
+            symbols_data.append({
+                "symbol": sym,
+                "instrument_token": quote.get("instrument_token"),
+                "feed_ok": health.get("status") == "HEALTHY",
+                "underlying_quote_age_sec": health.get("underlying_quote_age_sec"),
+            })
     regime = str(snapshot.get("primary_regime") or snapshot.get("regime") or
                  (feed.get("context") or {}).get("primary_regime") or "UNKNOWN")
     candidates: list[CausalCandidate] = []
@@ -210,6 +210,11 @@ def evaluate_causal_strategies(
         seen += 1
         tc["symbols_evaluated"] += 1
         token = int(info.get("instrument_token") or 0)
+        if (symbol == "NIFTY" and token <= 0 and cas_primitive_store is not None
+                and getattr(cas_primitive_store, "session_id", None) == pulse.session_id
+                and getattr(cas_primitive_store, "source_sha", None) == pulse.producer_sha):
+            # The store token was resolved against the runtime's NIFTY mapping.
+            token = int(getattr(cas_primitive_store, "underlying_token", 0) or 0)
         for strategy in CANONICAL_STRATEGIES:
             strategy_id = str(strategy["strategy_id"])
             required = list(strategy.get("inputs", ()))
