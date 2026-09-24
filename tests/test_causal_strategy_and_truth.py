@@ -1,218 +1,153 @@
-"""Tests for Hops 5-12 (Canonical Strategy evaluation, Selection, Risk, and Trade Truth)."""
-import pytest
+"""Offline contracts for Hops 5–12 under canonical CAS shadow-only authority.
+
+Fixtures are synthetic unit inputs, never replay/live proof.
+"""
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+from core.cas_primitive_producer import CASPrimitiveStore
 from core.causal_pulse import create_native_pulse
 from core.causal_strategy_harness import evaluate_causal_strategies
 from core.causal_shadow_decision import evaluate_shadow_decision
 from core.causal_trade_truth_emitter import build_canonical_trade_truth
 
+IST = ZoneInfo("Asia/Kolkata")
+SOURCE = "b" * 40
 
-def test_causal_12hop_shadow_lineage():
-    producer_sha = "49f813899d062b33ad6d2f3b8231470ff8f31d94"
-    session_id = "test-live-session-001"
 
-    # Hop 1-4: Pulse creation from normalized tick
+def _epoch(h, m, offset=0.0):
+    return datetime(2026, 9, 23, h, m, tzinfo=IST).timestamp() + offset
+
+
+def _authoritative_fixture(tmp_path, session):
+    store = CASPrimitiveStore(
+        tmp_path / "cas.json", session_id=session,
+        source_sha=SOURCE, underlying_token=256265,
+    )
+    for name, h, m, price in (
+        ("0915", 9, 15, 100.0), ("1000", 10, 0, 101.0),
+        ("1514", 15, 14, 25000.0),
+    ):
+        at = _epoch(h, m)
+        store.capture(
+            name, at, {
+                "underlying_symbol": "NIFTY", "last_price": price,
+                "timestamp_epoch": at + 0.1,
+                "source_timestamp_epoch": at + 0.1,
+                "receive_timestamp_epoch": at + 0.3,
+                "timestamp_authority": "EXCHANGE_TIMESTAMP",
+                "timestamp_fallback_used": False,
+            },
+            capture_timestamp_ist=datetime.fromtimestamp(at + 0.3, timezone.utc).astimezone(IST).isoformat(),
+        )
+    return store
+
+
+def _eval(tmp_path, symbols=None, session="cas-test"):
     pulse = create_native_pulse(
-        session_id=session_id,
-        sequence_num=101,
-        payload={"nifty_ltp": 24500.0, "timestamp": 1789710000.0},
-        producer_sha=producer_sha,
+        session_id=session, sequence_num=1, producer_sha=SOURCE,
+        timestamp_epoch=_epoch(15, 14, 0.8), payload={"unit": True},
     )
-
-    feed_health = {
-        "websocket_ok": True,
-        "feed_truth_state": "LIVE",
-        "symbols": [
-            {"symbol": "RELIANCE", "feed_ok": True, "instrument_token": 738561, "option_last_tick_age_sec": 0.2, "confidence": 0.85, "direction": "BUY", "ltp": 2950.0},
-            {"symbol": "TCS", "feed_ok": False, "instrument_token": 895745, "option_last_tick_age_sec": 5.4},
-        ]
-    }
-
-    # Hop 5-8: Strategy evaluation via canonical registry/signal engine
-    strat_res = evaluate_causal_strategies(
-        pulse=pulse,
-        market_snapshot={"market_open": True, "nifty_ltp": 24500.0, "primary_regime": "TRENDING_BULLISH"},
-        feed_health_truth=feed_health,
+    symbols = symbols if symbols is not None else [
+        {"symbol": "NIFTY", "instrument_token": 256265, "feed_ok": True},
+    ]
+    result = evaluate_causal_strategies(
+        pulse=pulse, market_snapshot={"market_open": True, "nifty_ltp": 25000.0},
+        feed_health_truth={"symbols": symbols},
+        cas_primitive_store=_authoritative_fixture(tmp_path, session),
     )
-    assert strat_res.pulse_id == pulse.pulse_id
-    assert strat_res.evaluated_symbol_count == 2
-    assert strat_res.regime == "TRENDING_BULLISH"
-    assert len(strat_res.candidates) == 1
-    assert strat_res.candidates[0].symbol == "RELIANCE"
+    return pulse, result
 
-    # TCS is rejected due to stale feed >2.5s
-    tcs_rej = next(r for r in strat_res.rejections if r["symbol"] == "TCS")
-    assert tcs_rej["reason_code"] == "REJECT_FEED_DEGRADED_OR_STALE"
 
-    # Hop 9-10: Shadow Decision & Risk via canonical select_best_opportunity and RiskEngine
-    decision_res = evaluate_shadow_decision(
-        pulse=pulse,
-        strategy_result=strat_res,
-        feed_health_truth=feed_health,
+def test_causal_12hop_shadow_lineage(tmp_path):
+    pulse, result = _eval(tmp_path)
+    assert result.evaluated_symbol_count == 1
+    assert len(result.candidates) == 1
+    assert result.candidates[0].strategy_id == "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1"
+    assert result.candidates[0].execution_eligible is False
+    decisions = evaluate_shadow_decision(
+        pulse=pulse, strategy_result=result, feed_health_truth={},
     )
-    assert decision_res.pulse_id == pulse.pulse_id
-    assert decision_res.read_only is True
-    assert decision_res.order_authority is False
-    assert decision_res.orders_placed == 0
-    assert len(decision_res.selected_candidates) == 1
-
-    # Hop 11-12: Canonical Trade Truth Record
+    assert decisions.selected_candidates == []
+    assert decisions.risk_verdict == "NOT_EVALUATED_SHADOW_ONLY"
+    assert decisions.orders_placed == 0 and decisions.broker_write_authority is False
     truth = build_canonical_trade_truth(
-        pulse=pulse,
-        market_snapshot={"market_open": True, "nifty_ltp": 24500.0},
-        feed_health_truth=feed_health,
-        strategy_result=strat_res,
-        decision_result=decision_res,
+        pulse=pulse, strategy_result=result, decision_result=decisions,
+        market_snapshot={"market_open": True, "nifty_ltp": 25000.0},
+        feed_health_truth={},
     )
+    assert truth.identity.session_id == pulse.session_id
+    assert truth.identity.strategy_id == result.candidates[0].strategy_id
+    assert truth.decision.candidate_generated is True
+    assert truth.decision.candidate_score is None
+    assert truth.decision.rank is None
+    assert truth.execution.intended_action == "NO_TRADE"
+    assert truth.timing.exchange_timestamp_epoch == result.candidates[0].qualification_evidence["decision_exchange_ts_epoch"]
+    assert truth.timing.receive_timestamp_epoch == result.candidates[0].qualification_evidence["receive_ts_epoch"]
+    assert truth.timing.normalization_timestamp_epoch is None
 
-    assert truth.identity.trace_id == pulse.pulse_id
-    assert truth.identity.session_id == session_id
-    assert truth.identity.instrument == "RELIANCE"
-def test_causal_spies_prove_canonical_authorities_invoked(monkeypatch):
-    import strategies.trade_builder as tb_mod
-    import core.opportunity_engine as opp_mod
-    import core.risk_engine as risk_mod
-    from core.causal_pulse import create_native_pulse
-    from core.causal_strategy_harness import evaluate_causal_strategies
-    from core.causal_shadow_decision import evaluate_shadow_decision
 
-    spies = {"trade_builder": 0, "select_best_opportunity": 0, "risk_engine": 0}
+def test_real_cas_evaluator_called_not_tradebuilder_or_unverified_risk(tmp_path, monkeypatch):
+    import core.causal_cas_qualification as adapter
+    from strategies.trade_builder import TradeBuilder
+    from core.risk_engine import RiskEngine
+    called = {"cas": 0, "tradebuilder": 0, "risk": 0}
+    original = adapter.evaluate_cas
 
-    orig_build = tb_mod.TradeBuilder.build
-    def spy_build(self, *args, **kwargs):
-        spies["trade_builder"] += 1
-        return orig_build(self, *args, **kwargs)
-    monkeypatch.setattr(tb_mod.TradeBuilder, "build", spy_build)
+    def spy(*args, **kwargs):
+        called["cas"] += 1
+        return original(*args, **kwargs)
 
-    orig_select = opp_mod.select_best_opportunity
-    def spy_select(*args, **kwargs):
-        spies["select_best_opportunity"] += 1
-        return orig_select(*args, **kwargs)
-    monkeypatch.setattr(opp_mod, "select_best_opportunity", spy_select)
+    def prohibit_build(*args, **kwargs):
+        called["tradebuilder"] += 1
+        raise AssertionError("CAS advisory has no verified option quote")
 
-    orig_eval_trade = risk_mod.RiskEngine.evaluate_trade
-    def spy_eval_trade(self, *args, **kwargs):
-        spies["risk_engine"] += 1
-        return orig_eval_trade(self, *args, **kwargs)
-    monkeypatch.setattr(risk_mod.RiskEngine, "evaluate_trade", spy_eval_trade)
+    def prohibit_risk(*args, **kwargs):
+        called["risk"] += 1
+        raise AssertionError("CAS must not receive fictional portfolio risk PASS")
 
-    pulse = create_native_pulse(
-        session_id="spy-proof-session",
-        sequence_num=1,
-        payload={"ltp": 25000.0},
-        producer_sha="1" * 40,
+    monkeypatch.setattr(adapter, "evaluate_cas", spy)
+    monkeypatch.setattr(TradeBuilder, "build", prohibit_build)
+    monkeypatch.setattr(RiskEngine, "evaluate_trade", prohibit_risk)
+    pulse, result = _eval(tmp_path)
+    decision = evaluate_shadow_decision(
+        pulse=pulse, strategy_result=result, feed_health_truth={},
     )
-
-    feed_health = {
-        "websocket_ok": True,
-        "feed_truth_state": "LIVE",
-        "symbols": [
-            {"symbol": "NIFTY", "feed_ok": True, "instrument_token": 256265, "option_last_tick_age_sec": 0.1, "confidence": 0.85, "direction": "BUY", "ltp": 25000.0}
-        ]
-    }
-
-    strat_res = evaluate_causal_strategies(
-        pulse=pulse,
-        market_snapshot={"market_open": True, "primary_regime": "TRENDING_BULLISH"},
-        feed_health_truth=feed_health,
-    )
-    assert spies["trade_builder"] >= 1, "TradeBuilder was not invoked in candidate construction!"
-
-    decision_res = evaluate_shadow_decision(
-        pulse=pulse,
-        strategy_result=strat_res,
-        feed_health_truth=feed_health,
-    )
-    assert spies["select_best_opportunity"] >= 1, "Canonical select_best_opportunity was not invoked!"
-    assert spies["risk_engine"] >= 1, "Canonical RiskEngine.evaluate_trade was not invoked!"
+    assert called == {"cas": 1, "tradebuilder": 0, "risk": 0}
+    assert decision.risk_verdict == "NOT_EVALUATED_SHADOW_ONLY"
 
 
 def test_missing_strategy_inputs_remain_missing_without_manufacturing():
-    from core.causal_pulse import create_native_pulse
-    from core.causal_strategy_harness import evaluate_causal_strategies
-
     pulse = create_native_pulse(
-        session_id="missing-inputs-proof",
-        sequence_num=1,
-        payload={"ltp": 25000.0},
-        producer_sha="1" * 40,
+        session_id="missing", sequence_num=1, producer_sha=SOURCE,
+        payload={"fixture": True},
     )
-
-    # Empty feed / unobserved symbols
-    feed_health = {"websocket_ok": True, "symbols": []}
-
-    strat_res = evaluate_causal_strategies(
-        pulse=pulse,
-        market_snapshot=None,
-        feed_health_truth=feed_health,
+    result = evaluate_causal_strategies(
+        pulse=pulse, market_snapshot={}, feed_health_truth={"symbols": []},
     )
-    assert strat_res.evaluated_symbol_count == 0
-    assert len(strat_res.candidates) == 0
-
-def test_unrelated_stock_feed_failure_does_not_veto_nifty_strategy():
-    """Prove that a degraded/stale feed for an unrelated stock option does not veto NIFTY strategies."""
-    from core.causal_pulse import create_native_pulse
-    from core.causal_strategy_harness import evaluate_causal_strategies
-
-    pulse = create_native_pulse(
-        session_id="feed-isolation-test",
-        sequence_num=10,
-        payload={"nifty_ltp": 24500.0},
-        producer_sha="2" * 40,
-    )
-
-    feed_health = {
-        "websocket_ok": True,
-        "symbols": [
-            # NIFTY is healthy and signals BUY
-            {"symbol": "NIFTY", "feed_ok": True, "instrument_token": 256265, "option_last_tick_age_sec": 0.1, "confidence": 0.88, "direction": "BUY", "ltp": 24500.0},
-            # TCS option has stale/broken feed
-            {"symbol": "TCS26SEP3800CE", "feed_ok": False, "instrument_token": 999999, "option_last_tick_age_sec": 120.0},
-        ],
-    }
-
-    strat_res = evaluate_causal_strategies(
-        pulse=pulse,
-        market_snapshot={"market_open": True, "primary_regime": "TRENDING_BULLISH"},
-        feed_health_truth=feed_health,
-    )
-
-    # NIFTY candidate is generated successfully despite TCS stale feed
-    assert len(strat_res.candidates) == 1
-    assert strat_res.candidates[0].symbol == "NIFTY"
-
-    # TCS option is rejected without vetoing NIFTY
-    tcs_rejs = [r for r in strat_res.rejections if r["symbol"] == "TCS26SEP3800CE"]
-    assert len(tcs_rejs) > 0
-    assert any(r["reason_code"] == "REJECT_FEED_DEGRADED_OR_STALE" for r in tcs_rejs)
+    assert result.evaluated_symbol_count == 0
+    assert not result.candidates
 
 
-def test_stale_nifty_feed_fails_closed():
-    """Prove that stale NIFTY feed fails closed and rejects NIFTY evaluation."""
-    from core.causal_pulse import create_native_pulse
-    from core.causal_strategy_harness import evaluate_causal_strategies
+def test_unrelated_stock_feed_failure_does_not_veto_nifty_strategy(tmp_path):
+    pulse, result = _eval(tmp_path, symbols=[
+        {"symbol": "NIFTY", "instrument_token": 256265, "feed_ok": True},
+        {"symbol": "TCS", "instrument_token": 895745, "feed_ok": False},
+    ])
+    assert len(result.candidates) == 1
+    assert result.candidates[0].symbol == "NIFTY"
+    tcs = next(o for o in result.observations if o.symbol == "TCS")
+    assert tcs.applicability_state == "INAPPLICABLE"
 
-    pulse = create_native_pulse(
-        session_id="nifty-stale-test",
-        sequence_num=11,
-        payload={"nifty_ltp": 24500.0},
-        producer_sha="3" * 40,
-    )
 
-    feed_health = {
-        "websocket_ok": True,
-        "symbols": [
-            # NIFTY feed is stale (>2.5s)
-            {"symbol": "NIFTY", "feed_ok": True, "instrument_token": 256265, "option_last_tick_age_sec": 4.5, "confidence": 0.95, "direction": "BUY", "ltp": 24500.0},
-        ],
-    }
-
-    strat_res = evaluate_causal_strategies(
-        pulse=pulse,
-        market_snapshot={"market_open": True, "primary_regime": "TRENDING_BULLISH"},
-        feed_health_truth=feed_health,
-    )
-
-    assert len(strat_res.candidates) == 0
-    nifty_rejs = [r for r in strat_res.rejections if r["symbol"] == "NIFTY"]
-    assert len(nifty_rejs) > 0
-    assert any(r["reason_code"] == "REJECT_FEED_DEGRADED_OR_STALE" for r in nifty_rejs)
+def test_stale_quote_keeps_verified_signal_but_blocks_advisory(tmp_path):
+    pulse, result = _eval(tmp_path, symbols=[
+        {"symbol": "NIFTY", "instrument_token": 256265, "feed_ok": False},
+    ])
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.strategy_qualified is True
+    assert candidate.advisory_ready is False
+    assert candidate.execution_eligible is False
+    assert result.executable_candidates == []
+    assert result.advisory_candidates == []

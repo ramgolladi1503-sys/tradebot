@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import sys
 import threading
@@ -449,18 +450,35 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         cadence_seconds=float(os.environ.get("CANONICAL_CYCLE_CADENCE_SECONDS", "60")),
     )
     from core.cas_primitive_producer import CASPrimitiveStore
-    authoritative_nifty_tokens = set(int(t) for t in (launch_plan.get("underlying_tokens") or []) if t)
-    if not authoritative_nifty_tokens:
-        authoritative_nifty_tokens = {int(t) for t, symbol in getattr(kite_depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}).items() if str(symbol).upper() == "NIFTY"}
-    cas_token = next(iter(authoritative_nifty_tokens), 0)
+    # Intersect subscription with verified NIFTY mapping, never arbitrary token.
+    configured = {int(t) for t in (launch_plan.get("underlying_tokens") or []) if t}
+    known_nifty = {int(t) for t, symbol in getattr(kite_depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}).items() if str(symbol).upper() == "NIFTY"}
+    authorized_nifty = configured & known_nifty if configured else known_nifty
+    cas_token = next(iter(sorted(authorized_nifty)), 0)
     cas_store = CASPrimitiveStore(output_root / f"cas_short_horizon_primitives_{run_id}.json", session_id=run_id, source_sha=producer_commit, underlying_token=cas_token)
-    cas_targets = {"0915": datetime.fromisoformat(f"{session_date}T09:15:00+05:30").timestamp(), "1000": datetime.fromisoformat(f"{session_date}T10:00:00+05:30").timestamp()}
+    cas_targets = {"0915": datetime.fromisoformat(f"{session_date}T09:15:00+05:30").timestamp(), "1000": datetime.fromisoformat(f"{session_date}T10:00:00+05:30").timestamp(), "1514": datetime.fromisoformat(f"{session_date}T15:14:00+05:30").timestamp()}
     def cas_tick_sink(tick):
-        if not lifecycle.accepting or tick.get("underlying_symbol") != "NIFTY" or int(tick.get("instrument_token") or 0) != cas_token:
+        if (not lifecycle.accepting or cas_token <= 0
+                or tick.get("underlying_symbol") != "NIFTY"
+                or int(tick.get("instrument_token") or 0) != cas_token):
             return
+        # kite_depth_ws's freshness timestamp may be *receipt time*. Use only
+        # the original authoritative exchange timestamp for frozen CAS input.
+        if (tick.get("timestamp_authority") != "EXCHANGE_TIMESTAMP"
+                or tick.get("timestamp_fallback_used") is not False):
+            return
+        try:
+            source_epoch = float(tick["source_timestamp_epoch"])
+        except (ValueError, TypeError, KeyError):
+            return
+        if not math.isfinite(source_epoch):
+            return
+        source_tick = dict(tick, timestamp_epoch=source_epoch,
+                           price_source="core/kite_depth_ws.py:normalized_tick_sink")
         for name, target in cas_targets.items():
-            if name not in cas_store.rows and tick.get("timestamp_epoch") is not None and float(tick["timestamp_epoch"]) >= target:
-                cas_store.capture(name, target, tick, capture_timestamp_ist=datetime.now(timezone.utc).isoformat())
+            if name not in cas_store.rows and source_epoch >= target:
+                cas_store.capture(name, target, source_tick,
+                                  capture_timestamp_ist=datetime.now(timezone.utc).isoformat())
     lifecycle.start(tokens, tick_sink=cas_tick_sink)
     previous_feed_live = False
 
@@ -547,7 +565,8 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                         "ltp": float(nifty_ltp),
                         "is_fresh": bool(nifty_quote_age_sec is not None and nifty_quote_age_sec <= 2.5),
                         "is_executable_quote": True,
-                        "source": str(nifty_quote.get("source") or "tick_store"),
+                        "source": str(nifty_quote.get("source") or "UNKNOWN"),
+                    "instrument_token": cas_token if cas_token > 0 else None,
                     },
                 )
 
@@ -648,6 +667,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 pulse=cycle_pulse,
                 market_snapshot=market_snapshot if isinstance(market_snapshot, Mapping) else {},
                 feed_health_truth=feed_truth if isinstance(feed_truth, Mapping) else {},
+                cas_primitive_store=cas_store,
             )
             shadow_decisions = evaluate_shadow_decision(
                 pulse=cycle_pulse,
@@ -669,6 +689,10 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             with (output_root / "candidate_pool.jsonl").open("a", encoding="utf-8") as cp_file:
                 for cand in strat_result.candidates:
                     cp_file.write(json.dumps(cand.to_dict(), sort_keys=True) + "\n")
+            # CAS advisory observations are not executable instruments.
+            with (output_root / "advisory_pool.jsonl").open("a", encoding="utf-8") as ap_file:
+                for advisory in strat_result.advisory_candidates:
+                    ap_file.write(json.dumps(advisory.to_dict(), sort_keys=True) + "\n")
             with (output_root / "executable_pool.jsonl").open("a", encoding="utf-8") as ep_file:
                 for excand in strat_result.executable_candidates:
                     ep_file.write(json.dumps(excand.to_dict(), sort_keys=True) + "\n")
@@ -683,14 +707,12 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             if strat_result.telemetry_counters:
                 tc = strat_result.telemetry_counters
                 logger.info(
-                    "PIPELINE_TELEMETRY symbols_eval=%d obs=%d near=%d qual=%d exec=%d stale_feed=%d stale_quote=%d prereq_blocked=%d",
+                    "PIPELINE_TELEMETRY symbols_eval=%d obs=%d qual=%d exec=%d advisory=%d execution_gates=NOT_EVALUATED_SHADOW_ONLY prereq_blocked=%d",
                     tc.get("symbols_evaluated", 0),
                     tc.get("strategy_observations", 0),
-                    tc.get("near_signals", 0),
                     tc.get("qualified_candidates", 0),
                     tc.get("execution_eligible_candidates", 0),
-                    tc.get("blocked_feed_stale", 0),
-                    tc.get("blocked_option_quote_stale", 0),
+                    tc.get("advisory_ready_candidates", 0),
                     tc.get("blocked_prerequisites", 0),
                 )
 
