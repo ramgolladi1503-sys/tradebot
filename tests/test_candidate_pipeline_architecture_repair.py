@@ -15,6 +15,7 @@ from core.causal_strategy_harness import (
     evaluate_causal_strategies,
 )
 from core.cas_primitive_producer import CASPrimitiveStore
+from core.read_only_strategy_registry import CANONICAL_STRATEGIES
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -160,6 +161,25 @@ def test_qualification_evidence_contains_strategy_identity_and_both_verified_pri
     assert evidence["broker_write_authority"] is False
     assert evidence["order_authority"] is False
     assert evidence["live_execution_authorized"] is False
+
+
+def test_registry_required_feeds_match_canonical_cas_evidence(tmp_path):
+    declaration = next(
+        item for item in CANONICAL_STRATEGIES
+        if item["strategy_id"] == "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1"
+    )
+    candidate = evaluate_causal_strategies(
+        pulse=_pulse(),
+        market_snapshot=None,
+        feed_health_truth=_feed(),
+        cas_primitive_store=_cas_store(tmp_path),
+    ).candidates[0]
+
+    assert declaration["required_feeds"] == ("SPOT",)
+    # The evaluator's two verified NIFTY price primitives constitute SPOT
+    # evidence; the CAS contract does not consume or claim a FUTURES feed.
+    assert set(candidate.qualification_evidence["primitive_references"]) == {"0915", "1000"}
+    assert candidate.qualification_evidence["registry_declaration"]["required_feeds"] == ("SPOT",)
 
 
 def test_missing_prices_remain_unknown_and_do_not_create_candidate(tmp_path):
