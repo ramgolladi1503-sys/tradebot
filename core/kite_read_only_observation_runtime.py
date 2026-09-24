@@ -707,10 +707,9 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             if strat_result.telemetry_counters:
                 tc = strat_result.telemetry_counters
                 logger.info(
-                    "PIPELINE_TELEMETRY symbols_eval=%d obs=%d near=%d qual=%d exec=%d advisory=%d execution_gates=NOT_EVALUATED_SHADOW_ONLY prereq_blocked=%d",
+                    "PIPELINE_TELEMETRY symbols_eval=%d obs=%d qual=%d exec=%d advisory=%d execution_gates=NOT_EVALUATED_SHADOW_ONLY prereq_blocked=%d",
                     tc.get("symbols_evaluated", 0),
                     tc.get("strategy_observations", 0),
-                    tc.get("near_signals", 0),
                     tc.get("qualified_candidates", 0),
                     tc.get("execution_eligible_candidates", 0),
                     tc.get("advisory_ready_candidates", 0),
