@@ -74,10 +74,13 @@ def qualify_cas(*, pulse: NativePulse, store: Any, token: int) -> CASQualificati
         row = rows.get(name)
         if not isinstance(row, dict):
             return CASQualification("UNKNOWN", "CAS_" + name + "_PRIMITIVE_MISSING")
-        verified, why = verify_primitive(
-            row, session_id=pulse.session_id, source_sha=pulse.producer_sha,
-            underlying_token=token,
-        )
+        try:
+            verified, why = verify_primitive(
+                row, session_id=pulse.session_id, source_sha=pulse.producer_sha,
+                underlying_token=token,
+            )
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return CASQualification("UNKNOWN", "CAS_" + name + "_PRIMITIVE_MALFORMED")
         if not verified or not _primitive_time_valid(row, session_day=now.date(), hour=h, minute=m):
             return CASQualification("UNKNOWN", "CAS_" + name + "_PRIMITIVE_INVALID:" + why)
         if float(row["timestamp_epoch"]) > pulse.timestamp_epoch:
@@ -115,7 +118,7 @@ def qualify_cas(*, pulse: NativePulse, store: Any, token: int) -> CASQualificati
         return CASQualification("NO_SIGNAL", "CAS_MORNING_RETURN_FLAT")
     if result.get("strategy_id") != STRATEGY_ID or result.get("direction") not in ("UP", "DOWN"):
         return CASQualification("UNKNOWN", "CAS_EVALUATOR_OUTPUT_INVALID")
-    ready = 0 <= (pulse.timestamp_epoch - float(quote["timestamp_epoch"])) <= 2.5
+    ready = 0 <= (pulse.timestamp_epoch - float(quote["timestamp_epoch"])) <= 2.0
     evidence = {
         "strategy_id": STRATEGY_ID,
         "primitive_spec_sha": SPEC_SHA,
