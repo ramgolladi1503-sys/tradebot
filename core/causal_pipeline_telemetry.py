@@ -42,8 +42,19 @@ def build_causal_telemetry(
         "execution_gates": "NOT_EVALUATED_SHADOW_ONLY",
         "near_signal_calibration": "NOT_AVAILABLE",
     }
-    if counters["execution_eligible_candidates"] != 0 and not any(
-        c.execution_eligible for c in cand
-    ):
-        raise AssertionError("executable_candidate_counter_corrupt")
+    # Verify conservation against actual immutable events; do not self-assert
+    # merely because counters were computed by this function.
+    identities = [(o.pulse_id, o.symbol, o.strategy_id) for o in obs]
+    if len(identities) != len(set(identities)):
+        raise ValueError("duplicate_strategy_observation_identity")
+    seen_qualified = {
+        (o.pulse_id, o.symbol, o.strategy_id) for o in obs
+        if o.qualification_state == "QUALIFIED" and o.applicability_state == "APPLICABLE"
+    }
+    candidate_ids = [c.candidate_id for c in cand]
+    if len(candidate_ids) != len(set(candidate_ids)):
+        raise ValueError("duplicate_candidate_identity")
+    for c in cand:
+        if not c.strategy_qualified or (c.pulse_id, c.symbol, c.strategy_id) not in seen_qualified:
+            raise ValueError("candidate_without_matching_qualified_observation")
     return counters
