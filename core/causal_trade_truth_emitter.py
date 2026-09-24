@@ -64,9 +64,20 @@ def build_canonical_trade_truth(
         underlying=underlying,
     )
 
+    # Authenticated CAS primitives contain actual event and receipt clocks.
+    # Never substitute the cycle pulse for an unobserved market timestamp.
+    qualification = primary_candidate.qualification_evidence if primary_candidate else {}
+    timed = bool(primary_candidate and primary_candidate.strategy_qualified and
+                 qualification.get("input_record_hashes"))
     timing_truth = TimingTruth(
-        exchange_timestamp_epoch=None,  # cycle timestamp is not exchange truth
-        receive_timestamp_epoch=None,   # missing must not be set equal to pulse
+        exchange_timestamp_epoch=(
+            float(qualification["decision_exchange_ts_epoch"])
+            if timed and qualification.get("decision_exchange_ts_epoch") is not None else None
+        ),
+        receive_timestamp_epoch=(
+            float(qualification["receive_ts_epoch"])
+            if timed and qualification.get("receive_ts_epoch") is not None else None
+        ),
         normalization_timestamp_epoch=None,
         decision_timestamp_epoch=pulse.timestamp_epoch,
         execution_boundary_timestamp_epoch=None,
