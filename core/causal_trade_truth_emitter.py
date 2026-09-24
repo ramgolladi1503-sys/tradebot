@@ -39,7 +39,7 @@ def build_canonical_trade_truth(
 
     # Truth Law: UNKNOWN != TRUE, MISSING != ZERO
     underlying = str(mkt.get("underlying_symbol") or mkt.get("symbol") or "NIFTY")
-    ltp = mkt.get("nifty_ltp") or mkt.get("ltp")
+    ltp = mkt.get("nifty_ltp") if mkt.get("nifty_ltp") is not None else mkt.get("ltp")
 
     market_truth = MarketTruth(
         underlying=underlying,
@@ -50,7 +50,8 @@ def build_canonical_trade_truth(
         spread_pct=None,
     )
 
-    primary_candidate = decision_result.selected_candidates[0] if decision_result.selected_candidates else None
+    primary_candidate = (decision_result.selected_candidates[0] if decision_result.selected_candidates
+                         else strategy_result.candidates[0] if strategy_result.candidates else None)
 
     identity_truth = IdentityTruth(
         truth_record_id=f"truth_{pulse.session_id}_{pulse.sequence_num}",
@@ -64,22 +65,23 @@ def build_canonical_trade_truth(
     )
 
     timing_truth = TimingTruth(
-        exchange_timestamp_epoch=pulse.timestamp_epoch,
-        receive_timestamp_epoch=pulse.timestamp_epoch,
-        normalization_timestamp_epoch=pulse.timestamp_epoch,
+        exchange_timestamp_epoch=None,  # cycle timestamp is not exchange truth
+        receive_timestamp_epoch=None,   # missing must not be set equal to pulse
+        normalization_timestamp_epoch=None,
         decision_timestamp_epoch=pulse.timestamp_epoch,
         execution_boundary_timestamp_epoch=None,
     )
 
     analytical_truth = AnalyticalTruth(
         regime=strategy_result.regime,
-        features_used={"evaluated_symbol_count": strategy_result.evaluated_symbol_count},
+        features_used={"evaluated_symbol_count": strategy_result.evaluated_symbol_count,
+                       "qualification_evidence": primary_candidate.qualification_evidence if primary_candidate else {}},
     )
 
     decision_truth = DecisionTruth(
-        candidate_generated=bool(decision_result.selected_candidates),
+        candidate_generated=bool(strategy_result.candidates),
         candidate_score=primary_candidate.confidence if primary_candidate else None,
-        rank=1 if primary_candidate else None,
+        rank=1 if decision_result.selected_candidates else None,
         ranking_reasons=tuple(r.get("reason_code", "UNKNOWN") for r in decision_result.rejected_decisions) or ("NO_CANDIDATE",),
         risk_result=decision_result.risk_verdict,
         governance_decision="ALLOWED" if decision_result.selected_candidates else "BLOCKED",
@@ -88,11 +90,11 @@ def build_canonical_trade_truth(
     )
 
     execution_truth = ExecutionTruth(
-        intended_action="BUY" if (primary_candidate and primary_candidate.direction == "BUY") else "NO_TRADE",
-        intended_entry=primary_candidate.entry_price if primary_candidate else None,
+        intended_action="NO_TRADE",  # read-only shadow-only CAS has no order authority
+        intended_entry=None,
         executable_market_state="NOT_EXECUTABLE",
-        theoretical_executable_price=primary_candidate.entry_price if primary_candidate else None,
-        execution_type="OBSERVED_MARKET_EXECUTABILITY",
+        theoretical_executable_price=None,
+        execution_type="OBSERVATION_ONLY",
         broker_submission_authorized=False,
         actual_broker_submission=False,
         is_counterfactual=True,
