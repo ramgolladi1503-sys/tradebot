@@ -82,11 +82,11 @@ def build_canonical_trade_truth(
         candidate_generated=bool(strategy_result.candidates),
         candidate_score=primary_candidate.confidence if primary_candidate else None,
         rank=1 if decision_result.selected_candidates else None,
-        ranking_reasons=tuple(r.get("reason_code", "UNKNOWN") for r in decision_result.rejected_decisions) or ("NO_CANDIDATE",),
+        ranking_reasons=tuple(r.get("reason_code", "UNKNOWN") for r in decision_result.rejected_decisions) or (("SHADOW_ONLY_NOT_RANKED",) if primary_candidate else ("NO_CANDIDATE",)),
         risk_result=decision_result.risk_verdict,
         governance_decision="ALLOWED" if decision_result.selected_candidates else "BLOCKED",
         final_action="OBSERVE",
-        reason_codes=tuple(r.get("reason_code", "UNKNOWN") for r in decision_result.rejected_decisions) or ("NO_CANDIDATE",),
+        reason_codes=tuple(r.get("reason_code", "UNKNOWN") for r in decision_result.rejected_decisions) or (("SHADOW_ONLY_NO_EXECUTION_AUTHORITY",) if primary_candidate else ("NO_CANDIDATE",)),
     )
 
     execution_truth = ExecutionTruth(
