@@ -280,7 +280,7 @@ def evaluate_causal_strategies(
             # new candidate after the advisory window has expired.
             decision_epoch = float(qualified.evidence["decision_exchange_ts_epoch"])
             decision_lag = pulse.timestamp_epoch - decision_epoch
-            if not 0 <= decision_lag <= 2.5:
+            if not 0 <= decision_lag <= 2.0:
                 rejections.append({
                     "symbol": symbol, "strategy_id": strategy_id,
                     "reason_code": "CAS_ADVISORY_WINDOW_EXPIRED",
