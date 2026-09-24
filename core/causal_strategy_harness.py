@@ -235,11 +235,6 @@ def evaluate_causal_strategies(
                 if qualification == "UNKNOWN":
                     missing = [reason]
 
-
-                elif qualification == "NO_SIGNAL":
-
-            else:
-
             obs = StrategyObservation(
                 timestamp_epoch=pulse.timestamp_epoch,
                 timestamp_ist=pulse.timestamp_ist,
