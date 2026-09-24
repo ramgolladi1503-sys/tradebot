@@ -1,11 +1,11 @@
 {
   "evidence_pack_version": "pr932_v2",
-  "file_count": 24,
+  "file_count": 25,
   "generated_for_pr": 932,
   "hashes": {
     "ACCEPTANCE_GATES.md": {
-      "sha256": "f523148b6f9ffac2fa79f946fb523fa66f56ec4cade433c32064fbb18d5f0fca",
-      "size_bytes": 2381
+      "sha256": "ef8eb7284c37269610d94a008170a3d2618b8d716aefbdb2ea01f87073f462a2",
+      "size_bytes": 1923
     },
     "ARCHITECTURE_INVARIANTS.md": {
       "sha256": "4ee055e0a0ff52352a49819f325e693fd0bf9d4c8fde01c81cb833675997b73d",
@@ -20,8 +20,12 @@
       "size_bytes": 863
     },
     "FEED_LATENCY_REPORT.md": {
-      "sha256": "fc5c3cf6c361bddc9a209fdf707155ef6fa9d92f822a01b70ac04a702fa33d56",
-      "size_bytes": 391
+      "sha256": "8a7fe833e2983c2491c5b6b3e2403b6715b4c2408746ef86ea7c87df6c63072e",
+      "size_bytes": 409
+    },
+    "FINAL_VERDICT.json": {
+      "sha256": "32a3c844b959d164e3efef479b6ea97ee4c9d55901c4aec9eaead3553bac01df",
+      "size_bytes": 1810
     },
     "LIVE_TRUTH_EVALUATION.md": {
       "sha256": "7c96fa06505c81cf247ee768d8e5626f9ef2ff10e4602a85a97b75729e9cb470",
@@ -44,36 +48,36 @@
       "size_bytes": 394
     },
     "PR932_MERGE_READINESS.md": {
-      "sha256": "5014c69299cf813034edb2282d96c3fa602429fcbbc2dc0c4532c95dcf182729",
-      "size_bytes": 447
+      "sha256": "273b86b38da3caf5f27dc22e0b3d6b85d269ce5def6699530177422be3230e30",
+      "size_bytes": 1310
     },
     "PR_SUMMARY.md": {
-      "sha256": "d162d9447d162343e912b45b8762edfb93f70b95f5cba899d09fd7a0ffe95f7e",
-      "size_bytes": 1100
+      "sha256": "9038da4865f7680902c1646b7ad5b197bf1cbe14e0543dfcbf985cbc145be787",
+      "size_bytes": 1138
     },
     "REGISTRY_AUTHORITY_AUDIT.md": {
       "sha256": "37e913d195b136b273870565c9cb9e532ff0ff56dd7b49d6ad44c940e7d63843",
       "size_bytes": 422
     },
     "REPLAY_VERDICT.md": {
-      "sha256": "3a9a0467d241933efa1e4a668b2143afe67dd62a210877dcd00a141ad52176a8",
-      "size_bytes": 594
+      "sha256": "2bafcd78359897c05362439c8b420cbd4560bf4abd9bd5495bb6618d1adad31f",
+      "size_bytes": 602
     },
     "RISK_GATES_AUDIT.md": {
       "sha256": "3a2f8dbc3c416579941b2767ee9f189a3fb5d0820be21ad6317eae0f4c1e436d",
       "size_bytes": 265
     },
     "RUNTIME_REPLAY_REPORT.json": {
-      "sha256": "3a7d9c013961ebfa3b4628174d99c83569ec9c18e8c9e93eb8ea5d7e41085609",
-      "size_bytes": 1738
+      "sha256": "bbaa5a4654cf2f613f0f8e2be849afccd77bf8fe868f654c1b1c4937e35f7763",
+      "size_bytes": 2071
     },
     "TELEMETRY_CONSERVATION_PROOF.md": {
       "sha256": "9ba68147173b9329f0dcf5045308c7ceb8d78e30d4842426e15d831c0ebf0b08",
       "size_bytes": 457
     },
     "TEST_COVERAGE_REPORT.md": {
-      "sha256": "4f5ae866a1af7a750f490447e2fea825e47bfc3dbce9113e25d895bfacd79998",
-      "size_bytes": 598
+      "sha256": "aa33fff222aaa44bb3ada650ee863436d8b66890301372cf2261a6aeaca1f5f0",
+      "size_bytes": 798
     },
     "candidate_decisions.jsonl": {
       "sha256": "f1bf39d288c601332d68e1da20cee65ebe0f3ac1e7b7dce43627e9748206d952",
@@ -101,5 +105,5 @@
     }
   },
   "schema_version": 1,
-  "timestamp_epoch": 1789710000.0
+  "timestamp_epoch": 1790226387.940075
 }

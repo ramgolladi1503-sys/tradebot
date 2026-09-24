@@ -648,6 +648,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 pulse=cycle_pulse,
                 market_snapshot=market_snapshot if isinstance(market_snapshot, Mapping) else {},
                 feed_health_truth=feed_truth if isinstance(feed_truth, Mapping) else {},
+                cas_primitive_store=cas_store,
             )
             shadow_decisions = evaluate_shadow_decision(
                 pulse=cycle_pulse,

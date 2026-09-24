@@ -1,21 +1,26 @@
-# PR Summary: Candidate Pipeline Architecture Repair V2
+# PR #932 Candidate Pipeline Repair
 
-## What Changed?
-1. Resolved missing logger declaration in `core/kite_read_only_observation_runtime.py`.
-2. Removed hardcoded 100.0 pricing fallbacks in `core/causal_strategy_harness.py`, strictly preserving `None` for unpriced candidates.
-3. Verified strict qualification vs execution eligibility gating.
-4. Validated full 12-hop pipeline and trade truth emission against real 2026-09-23 market data.
+## Changes
 
-## Why does this move safety/stability forward?
-- Eliminates silent default pricing fallbacks that violate Truth Law.
-- Disentangles analytical strategy qualification from market quote staleness.
-- Guarantees zero phantom order actions.
+- Candidate creation now requires the exact enabled CAS registry declaration,
+  two identity- and integrity-verified primitive records, and a directional
+  result from the canonical CAS evaluator.
+- Generic confidence and completed-bar flags remain observation inputs only.
+- Candidate qualification and feed freshness are separate states. Feed
+  freshness is labeled advisory-only; this pipeline emits no executable
+  candidates.
+- Missing option prices remain null. Broker/order authority remains disabled.
+- Telemetry counters are derived after strategy evaluation.
 
-## What did not change?
-- Broker adapters, risk parameters, and order routers were NOT modified.
-- Live trading remained completely disabled (`read_only=True`).
+## Validation
 
-## What tests prove it?
-- 15/15 unit and integration tests passing (`test_candidate_pipeline_architecture_repair.py` and `test_causal_strategy_and_truth.py`).
-- 5/5 mutation tests killed.
-- Full replay of 2026-09-23 parquet market capture.
+The focused suite passed 16 tests. The unit fixtures are not market replay or
+performance evidence. No replay or latency measurement was run against the
+repaired source. Earlier replay artifacts used the pre-repair generic candidate
+path and are superseded for qualification/execution claims.
+
+## Scope
+
+No broker adapter, order router, credentials, risk threshold, or live authority
+was changed. Fresh exact-SHA CI and replay verification remain outstanding;
+current verdict is `PR932_NOT_MERGE_READY`.

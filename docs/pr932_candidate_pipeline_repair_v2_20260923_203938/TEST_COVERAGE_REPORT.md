@@ -1,15 +1,17 @@
-# Test Coverage Report
+# Focused Test Coverage
 
-```text
-============================= test session starts ==============================
-platform darwin -- Python 3.12.2, pytest-9.0.2, pluggy-1.6.0
-rootdir: /Volumes/TradeBotData/worktrees/mros-dynamic-releasestore-binding-v1
-configfile: pytest.ini
-plugins: anyio-4.14.1, timeout-2.4.0, hypothesis-6.151.5
-collected 15 items
+Executed on the repair worktree before commit:
 
-tests/test_candidate_pipeline_architecture_repair.py ..........          [ 66%]
-tests/test_causal_strategy_and_truth.py .....                            [100%]
+Command: python3 -m pytest -q tests/test_candidate_pipeline_architecture_repair.py tests/test_causal_strategy_and_truth.py tests/test_cas_morning_reversal_advisory.py
 
-======================= 15 passed, 3 warnings in 12.45s ========================
-```
+Result: 16 passed, 1 warning in 58.32s.
+
+Coverage includes generic-confidence and completed-bar negative cases, exact
+registry applicability, canonical evaluator invocation from integrity-checked
+primitive fixtures, complete qualification provenance, null price preservation,
+the 2.5-second freshness boundary, advisory-only state, and broker/order
+authority invariants.
+
+The test primitives are deterministic unit fixtures. They are not market replay
+or performance evidence. No latency measurement or real-data replay was run
+against the repaired source.

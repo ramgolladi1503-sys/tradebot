@@ -1,16 +1,54 @@
-"""Causal Strategy Observation Adapter (Hops 5-8).
+"""Read-only strategy observations and CAS candidate adaptation.
 
-Wraps canonical strategy registry and signal evaluation primitives into immutable
-NativePulse trace envelopes without duplicating strategy logic or inventing fake setups.
+Candidate qualification is delegated to the canonical CAS evaluator. Generic
+signal confidence, symbol naming patterns, and completed-bar flags cannot
+create candidates.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
+import math
 from typing import Any, Mapping
+from zoneinfo import ZoneInfo
 
 from core.causal_pulse import NativePulse, sha256_canonical
+from core.cas_morning_reversal_advisory import SPEC_SHA as CAS_SPEC_SHA
+from core.cas_morning_reversal_advisory import STRATEGY_ID, evaluate as evaluate_cas
+from core.cas_primitive_producer import build_cas_input, verify_primitive
 from core.read_only_strategy_registry import CANONICAL_STRATEGIES
 from core.signal_engine import evaluate as evaluate_signal
+
+
+IST = ZoneInfo("Asia/Kolkata")
+FEED_FRESHNESS_LIMIT_SECONDS = 2.5
+GENERIC_CONFIDENCE_THRESHOLD = 0.70
+
+
+class ApplicabilityState(str, Enum):
+    APPLICABLE = "APPLICABLE"
+    INAPPLICABLE = "INAPPLICABLE"
+    DISABLED = "DISABLED"
+
+
+class QualificationState(str, Enum):
+    QUALIFIED = "QUALIFIED"
+    NO_SIGNAL = "NO_SIGNAL"
+    NEAR_SIGNAL = "NEAR_SIGNAL"
+    UNKNOWN = "UNKNOWN"
+    PREREQUISITE_MISSING = "PREREQUISITE_MISSING"
+
+
+class CandidateState(str, Enum):
+    QUALIFIED = "QUALIFIED"
+    UNKNOWN = "UNKNOWN"
+
+
+class ExecutionState(str, Enum):
+    ADVISORY_ONLY_FEED_FRESH = "ADVISORY_ONLY_FEED_FRESH"
+    ADVISORY_ONLY_FEED_STALE = "ADVISORY_ONLY_FEED_STALE"
+    NOT_EVALUATED = "NOT_EVALUATED"
 
 
 @dataclass(frozen=True)
@@ -20,9 +58,9 @@ class StrategyObservation:
     pulse_id: str
     symbol: str
     strategy_id: str
-    applicability_state: str  # APPLICABLE, INAPPLICABLE, DISABLED
-    qualification_state: str  # QUALIFIED, NO_SIGNAL, NEAR_SIGNAL, UNKNOWN, PREREQUISITE_MISSING
-    direction: str  # BUY, SELL, UNKNOWN
+    applicability_state: ApplicabilityState
+    qualification_state: QualificationState
+    direction: str
     confidence: float | None
     required_inputs: list[str] = field(default_factory=list)
     missing_or_stale_inputs: list[str] = field(default_factory=list)
@@ -39,8 +77,8 @@ class StrategyObservation:
             "pulse_id": self.pulse_id,
             "symbol": self.symbol,
             "strategy_id": self.strategy_id,
-            "applicability_state": self.applicability_state,
-            "qualification_state": self.qualification_state,
+            "applicability_state": self.applicability_state.value,
+            "qualification_state": self.qualification_state.value,
             "direction": self.direction,
             "confidence": self.confidence,
             "required_inputs": list(self.required_inputs),
@@ -65,18 +103,19 @@ class CausalCandidate:
     stop_loss: float | None
     target_price: float | None
     regime: str
-    confidence: float
+    confidence: float | None
     timestamp_epoch: float
     timestamp_ist: str
     payload_sha256: str
     metadata: dict[str, Any] = field(default_factory=dict)
-    strategy_qualified: bool = True
+    strategy_qualified: bool = False
     qualification_evidence: dict[str, Any] = field(default_factory=dict)
-    execution_eligible: bool = True
+    execution_eligible: bool = False
+    execution_state: ExecutionState = ExecutionState.NOT_EVALUATED
     execution_block_reason: str | None = None
     feed_age_sec: float | None = None
     option_quote_age_sec: float | None = None
-    candidate_state: str = "QUALIFIED"
+    candidate_state: CandidateState = CandidateState.UNKNOWN
     is_order_action: bool = False
     broker_api_called: bool = False
     read_only: bool = True
@@ -100,14 +139,18 @@ class CausalCandidate:
             "metadata": dict(self.metadata),
             "strategy_qualified": self.strategy_qualified,
             "qualification_evidence": dict(self.qualification_evidence),
-            "execution_eligible": self.execution_eligible,
+            "execution_eligible": False,
+            "execution_state": self.execution_state.value,
             "execution_block_reason": self.execution_block_reason,
             "feed_age_sec": self.feed_age_sec,
             "option_quote_age_sec": self.option_quote_age_sec,
-            "candidate_state": self.candidate_state,
+            "candidate_state": self.candidate_state.value,
+            "read_only": True,
             "is_order_action": False,
             "broker_api_called": False,
-            "read_only": True,
+            "broker_write_authority": False,
+            "order_authority": False,
+            "allowed_for_live_execution": False,
         }
 
 
@@ -124,26 +167,232 @@ class StrategyEvaluationResult:
 
     @property
     def executable_candidates(self) -> list[CausalCandidate]:
-        return [c for c in self.candidates if c.execution_eligible]
+        # Feed freshness alone is not execution readiness or authority.
+        return []
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "pulse_id": self.pulse_id,
             "regime": self.regime,
             "candidates_count": len(self.candidates),
-            "candidates": [c.to_dict() for c in self.candidates],
-            "executable_candidates_count": len(self.executable_candidates),
-            "executable_candidates": [c.to_dict() for c in self.executable_candidates],
+            "candidates": [candidate.to_dict() for candidate in self.candidates],
+            "executable_candidates_count": 0,
+            "executable_candidates": [],
             "observations_count": len(self.observations),
-            "observations": [o.to_dict() for o in self.observations],
+            "observations": [observation.to_dict() for observation in self.observations],
             "telemetry_counters": dict(self.telemetry_counters),
             "rejections_count": len(self.rejections),
-            "rejections": self.rejections,
+            "rejections": list(self.rejections),
             "evaluated_symbol_count": self.evaluated_symbol_count,
             "timestamp_epoch": self.timestamp_epoch,
             "read_only": True,
             "is_order_action": False,
+            "broker_api_called": False,
+            "broker_write_authority": False,
+            "order_authority": False,
+            "allowed_for_live_execution": False,
+            "orders_placed": 0,
         }
+
+
+def _symbol_rows(
+    market_snapshot: Mapping[str, Any] | None,
+    feed_health_truth: Mapping[str, Any] | None,
+) -> list[Mapping[str, Any]]:
+    if isinstance(feed_health_truth, Mapping):
+        rows = feed_health_truth.get("symbols")
+        if not isinstance(rows, list):
+            payload = feed_health_truth.get("payload")
+            rows = payload.get("symbols") if isinstance(payload, Mapping) else None
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, Mapping)]
+    if not isinstance(market_snapshot, Mapping):
+        return []
+    symbols = market_snapshot.get("symbols")
+    if not isinstance(symbols, Mapping):
+        return []
+    result: list[Mapping[str, Any]] = []
+    for symbol, row in symbols.items():
+        if not isinstance(row, Mapping):
+            continue
+        feed = row.get("feed_health")
+        quote = row.get("quote_truth")
+        feed = feed if isinstance(feed, Mapping) else {}
+        quote = quote if isinstance(quote, Mapping) else {}
+        result.append({
+            "symbol": symbol,
+            "feed_ok": feed.get("status") == "HEALTHY",
+            "instrument_token": quote.get("instrument_token"),
+            "option_last_tick_age_sec": feed.get("underlying_quote_age_sec"),
+        })
+    return result
+
+
+def _finite_float(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _feed_freshness(row: Mapping[str, Any]) -> tuple[bool, float | None]:
+    age = _finite_float(row.get("option_last_tick_age_sec"))
+    fresh = row.get("feed_ok") is True and age is not None and 0 <= age <= FEED_FRESHNESS_LIMIT_SECONDS
+    return fresh, age
+
+
+def _primitive_pair(
+    store: Any,
+    *,
+    pulse: NativePulse,
+    token: int,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Return CAS inputs only when both immutable primitives verify exactly."""
+    if store is None:
+        return None, "CAS_PRIMITIVE_STORE_UNAVAILABLE"
+    if (
+        getattr(store, "session_id", None) != pulse.session_id
+        or getattr(store, "source_sha", None) != pulse.producer_sha
+        or _finite_float(getattr(store, "underlying_token", None)) != token
+    ):
+        return None, "CAS_PRIMITIVE_STORE_IDENTITY_MISMATCH"
+    rows = getattr(store, "rows", None)
+    if not isinstance(rows, Mapping):
+        return None, "CAS_PRIMITIVES_MISSING"
+    target_times = {"0915": "09:15:00.000", "1000": "10:00:00.000"}
+    decision_date = datetime.fromtimestamp(pulse.timestamp_epoch, tz=timezone.utc).astimezone(IST).date()
+    for name, expected_target in target_times.items():
+        row = rows.get(name)
+        if not isinstance(row, Mapping):
+            return None, f"CAS_PRIMITIVE_{name}_MISSING"
+        try:
+            verified, _reason = verify_primitive(
+                dict(row),
+                session_id=pulse.session_id,
+                source_sha=pulse.producer_sha,
+                underlying_token=token,
+            )
+        except (TypeError, ValueError, KeyError, OverflowError):
+            verified = False
+        if not verified:
+            return None, f"CAS_PRIMITIVE_{name}_INVALID"
+        if (
+            row.get("strategy_id") != STRATEGY_ID
+            or row.get("underlying_symbol") != "NIFTY"
+            or row.get("primitive_name") != name
+            or row.get("target_timestamp_ist") != expected_target
+            or row.get("timestamp_fallback_used") is not False
+            or row.get("admissible_for_prospective_campaign") is not True
+            or row.get("price_field") != "last_price"
+            or row.get("price_source") != "core/tick_store.py"
+            or not row.get("timestamp_source_field")
+        ):
+            return None, f"CAS_PRIMITIVE_{name}_PROVENANCE_INCOMPLETE"
+        if _finite_float(row.get("source_timestamp_epoch")) is None or _finite_float(row.get("receive_timestamp_epoch")) is None:
+            return None, f"CAS_PRIMITIVE_{name}_TIMESTAMP_PROVENANCE_INCOMPLETE"
+        selected_epoch = _finite_float(row.get("timestamp_epoch"))
+        source_epoch = _finite_float(row.get("source_timestamp_epoch"))
+        if selected_epoch is None or source_epoch is None or abs(selected_epoch - source_epoch) > 0.001:
+            return None, f"CAS_PRIMITIVE_{name}_TIMESTAMP_BINDING_INVALID"
+        selected_time = datetime.fromtimestamp(selected_epoch, tz=timezone.utc).astimezone(IST)
+        target_hour, target_minute = (9, 15) if name == "0915" else (10, 0)
+        lateness_ms = _finite_float(row.get("lateness_ms"))
+        price = _finite_float(row.get("price"))
+        target_epoch = datetime(
+            decision_date.year, decision_date.month, decision_date.day,
+            target_hour, target_minute, tzinfo=IST,
+        ).timestamp()
+        measured_lateness_ms = (selected_epoch - target_epoch) * 1000
+        if (
+            selected_time.date() != decision_date
+            or selected_time.hour != target_hour
+            or selected_time.minute != target_minute
+            or lateness_ms is None
+            or not 0 <= measured_lateness_ms <= 2000
+            or abs(lateness_ms - round(measured_lateness_ms)) > 1
+            or price is None
+            or price <= 0
+        ):
+            return None, f"CAS_PRIMITIVE_{name}_TARGET_OR_PRICE_INVALID"
+
+    cas_input = build_cas_input(
+        dict(rows),
+        session_id=pulse.session_id,
+        source_sha=pulse.producer_sha,
+        cycle_id=pulse.pulse_id,
+        underlying_token=token,
+    )
+    if not isinstance(cas_input, dict):
+        return None, "CAS_INPUT_UNAVAILABLE"
+    return cas_input, None
+
+
+def _qualify_cas(
+    *,
+    store: Any,
+    pulse: NativePulse,
+    symbol: str,
+    token: int,
+) -> tuple[dict[str, Any] | None, str | None]:
+    cas_input, reason = _primitive_pair(store, pulse=pulse, token=token)
+    if cas_input is None:
+        return None, reason
+    if cas_input.get("symbol") != symbol or cas_input.get("strategy_id") != STRATEGY_ID:
+        return None, "CAS_INPUT_IDENTITY_MISMATCH"
+
+    observation_time = datetime.fromtimestamp(pulse.timestamp_epoch, tz=timezone.utc)
+    cutoff = observation_time.astimezone(IST).replace(hour=15, minute=14, second=0, microsecond=0)
+    try:
+        received_time = datetime.fromisoformat(str(pulse.timestamp_ist).replace("Z", "+00:00"))
+        if received_time.tzinfo is None or received_time.utcoffset() is None:
+            return None, "CAS_RECEIVE_TIMESTAMP_UNKNOWN"
+        decision = evaluate_cas(
+            session_id=pulse.session_id,
+            symbol=symbol,
+            morning_return=float(cas_input["morning_return"]),
+            observation_timestamp=observation_time,
+            cutoff_timestamp=cutoff,
+            received_timestamp=received_time,
+            source_sha=pulse.producer_sha,
+            signal_input_09_15=float(cas_input["signal_input_09_15"]),
+            signal_input_10_00=float(cas_input["signal_input_10_00"]),
+        )
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None, "CAS_EVALUATION_NOT_ADMISSIBLE"
+    if (
+        decision.get("strategy_id") != STRATEGY_ID
+        or decision.get("spec_sha") != CAS_SPEC_SHA
+        or decision.get("session_id") != pulse.session_id
+        or decision.get("source_sha") != pulse.producer_sha
+        or decision.get("read_only") is not True
+        or decision.get("broker_write_authority") is not False
+        or decision.get("order_authority") is not False
+        or decision.get("live_execution_authorized") is not False
+    ):
+        return None, "CAS_EVALUATION_PROVENANCE_INCOMPLETE"
+    return decision, None
+
+
+def _telemetry(
+    *,
+    symbols_seen: int,
+    symbols_evaluated: int,
+    observations: list[StrategyObservation],
+    candidates: list[CausalCandidate],
+) -> dict[str, int]:
+    # Counts are derived after decisions; they do not participate in qualification.
+    return {
+        "symbols_seen": symbols_seen,
+        "symbols_evaluated": symbols_evaluated,
+        "strategy_observations": len(observations),
+        "near_signals": sum(o.qualification_state is QualificationState.NEAR_SIGNAL for o in observations),
+        "qualified_candidates": len(candidates),
+        "execution_eligible_candidates": 0,
+        "blocked_feed_stale": sum(c.execution_state is ExecutionState.ADVISORY_ONLY_FEED_STALE for c in candidates),
+        "qualification_unknown": sum(o.qualification_state is QualificationState.UNKNOWN for o in observations),
+        "no_signal": sum(o.qualification_state is QualificationState.NO_SIGNAL for o in observations),
+    }
 
 
 def evaluate_causal_strategies(
@@ -153,405 +402,205 @@ def evaluate_causal_strategies(
     feed_health_truth: Mapping[str, Any] | None,
     cas_primitive_store: Any | None = None,
 ) -> StrategyEvaluationResult:
-    """Evaluate frozen canonical strategies against incoming pulse and normalized feed."""
+    """Record CAS strategy observations; generic signals cannot create candidates."""
     candidates: list[CausalCandidate] = []
+    observations: list[StrategyObservation] = []
     rejections: list[dict[str, Any]] = []
-
-    symbols_evaluated = 0
-    symbols_data = []
-    if isinstance(feed_health_truth, Mapping):
-        symbols_data = feed_health_truth.get("symbols") or (feed_health_truth.get("payload") or {}).get("symbols") or ((feed_health_truth.get("feed_health_truth") or {}).get("symbols")) or []
-    if not symbols_data and isinstance(market_snapshot, Mapping):
-        # Fallback to market_snapshot symbols if feed_health_truth symbols list is not populated
-        snap_symbols = market_snapshot.get("symbols") if isinstance(market_snapshot.get("symbols"), Mapping) else {}
-        for sym_k, sym_v in snap_symbols.items():
-            if isinstance(sym_v, Mapping):
-                fh = sym_v.get("feed_health") or {}
-                qt = sym_v.get("quote_truth") or {}
-                symbols_data.append({
-                    "symbol": sym_k,
-                    "feed_ok": fh.get("status") == "HEALTHY",
-                    "instrument_token": int(qt.get("instrument_token") or 256265 if sym_k == "NIFTY" else 0),
-                    "option_last_tick_age_sec": fh.get("underlying_quote_age_sec"),
-                    "ltp": sym_v.get("ltp"),
-                })
-    
-    # Extract canonical regime from feed health / market snapshot context
+    symbols_data = _symbol_rows(market_snapshot, feed_health_truth)
+    registry = tuple(item for item in CANONICAL_STRATEGIES if isinstance(item, Mapping))
     regime = "UNKNOWN"
     if isinstance(market_snapshot, Mapping):
         regime = str(market_snapshot.get("primary_regime") or market_snapshot.get("regime") or "UNKNOWN")
     if regime == "UNKNOWN" and isinstance(feed_health_truth, Mapping):
-        regime = str((feed_health_truth.get("context") or {}).get("primary_regime") or "UNKNOWN")
+        context = feed_health_truth.get("context")
+        if isinstance(context, Mapping):
+            regime = str(context.get("primary_regime") or "UNKNOWN")
 
-    # Telemetry counters tracking
-    telemetry = {
-        "symbols_seen": len(symbols_data),
-        "symbols_evaluated": 0,
-        "strategy_observations": 0,
-        "near_signals": 0,
-        "qualified_candidates": 0,
-        "execution_eligible_candidates": 0,
-        "blocked_feed_stale": 0,
-        "blocked_option_quote_stale": 0,
-        "blocked_spread": 0,
-        "blocked_depth": 0,
-        "blocked_liquidity": 0,
-        "blocked_prerequisites": 0,
-        "blocked_session": 0,
-        "blocked_risk": 0,
-        "blocked_governance": 0,
-        "no_signal": 0,
-        "qualification_unknown": 0,
-    }
-
-    observations: list[StrategyObservation] = []
-
-    # Canonical Strategy Registry Reference
-    registered_strategy_ids = [s["strategy_id"] for s in CANONICAL_STRATEGIES if s.get("enabled")]
-
-    for sym_info in symbols_data:
-        if not isinstance(sym_info, Mapping):
-            continue
-        symbol = str(sym_info.get("symbol", "")).upper()
+    symbols_evaluated = 0
+    for row in symbols_data:
+        symbol = str(row.get("symbol") or "").strip().upper()
         if not symbol:
             continue
         symbols_evaluated += 1
-        telemetry["symbols_evaluated"] += 1
+        token_value = _finite_float(row.get("instrument_token"))
+        token = int(token_value) if token_value is not None and token_value > 0 else 0
+        fresh, feed_age = _feed_freshness(row)
+        # Generic signal output is diagnostic only and never qualifies CAS.
+        signal = evaluate_signal(snapshot=row, signal_payload=row)
 
-        feed_ok = bool(sym_info.get("feed_ok", False))
-        token = int(sym_info.get("instrument_token", 0) or 0)
-        age_sec = sym_info.get("option_last_tick_age_sec")
-        is_completed_bar = bool(sym_info.get("is_completed_bar_signal", False) or sym_info.get("signal_mode") == "COMPLETED_BARS")
-        missing_prereqs = list(sym_info.get("missing_prerequisites") or [])
-
-        # 1. Strategy Applicability
-        applicable_strategy_ids = []
-        for strat in CANONICAL_STRATEGIES:
-            strat_id = strat["strategy_id"]
-            if not strat.get("enabled"):
-                telemetry["strategy_observations"] += 1
+        for declaration in registry:
+            strategy_id = str(declaration.get("strategy_id") or "")
+            required = [str(value) for value in declaration.get("inputs", ())]
+            if declaration.get("enabled") is not True:
                 observations.append(StrategyObservation(
-                    timestamp_epoch=pulse.timestamp_epoch,
-                    timestamp_ist=pulse.timestamp_ist,
-                    pulse_id=pulse.pulse_id,
-                    symbol=symbol,
-                    strategy_id=strat_id,
-                    applicability_state="DISABLED",
-                    qualification_state="NO_SIGNAL",
-                    direction="UNKNOWN",
-                    confidence=None,
-                    required_inputs=list(strat.get("inputs", ())),
-                    missing_or_stale_inputs=[],
+                    pulse.timestamp_epoch, pulse.timestamp_ist, pulse.pulse_id,
+                    symbol, strategy_id, ApplicabilityState.DISABLED,
+                    QualificationState.NO_SIGNAL, "UNKNOWN", None, required,
                     reason_code="STRATEGY_DISABLED",
                     source_event_or_snapshot_reference={"symbol": symbol},
                 ))
                 continue
 
-            req_underlyings = strat.get("required_underlyings", ())
-            # Non-equity / out-of-universe commodities are strictly INAPPLICABLE for canonical equity/index advisory
-            is_commodity = any(symbol.startswith(prefix) for prefix in ("CRUDE", "GOLD", "SILVER", "NATURAL", "COPPER", "MCX"))
-            if is_commodity or (req_underlyings and not any(symbol == u or symbol.startswith(u) for u in req_underlyings) and not any(symbol.startswith(p) for p in ("NIFTY", "BANKNIFTY", "FINNIFTY", "RELIANCE", "TCS", "INFY"))):
-                telemetry["strategy_observations"] += 1
+            permitted_underlyings = declaration.get("required_underlyings", ())
+            # Exact membership in the canonical registry is the applicability authority.
+            if not isinstance(permitted_underlyings, (list, tuple, set, frozenset)) or symbol not in permitted_underlyings:
                 observations.append(StrategyObservation(
-                    timestamp_epoch=pulse.timestamp_epoch,
-                    timestamp_ist=pulse.timestamp_ist,
-                    pulse_id=pulse.pulse_id,
-                    symbol=symbol,
-                    strategy_id=strat_id,
-                    applicability_state="INAPPLICABLE",
-                    qualification_state="NO_SIGNAL",
-                    direction="UNKNOWN",
-                    confidence=None,
-                    required_inputs=list(strat.get("inputs", ())),
-                    missing_or_stale_inputs=[],
-                    reason_code="STRATEGY_INAPPLICABLE",
+                    pulse.timestamp_epoch, pulse.timestamp_ist, pulse.pulse_id,
+                    symbol, strategy_id, ApplicabilityState.INAPPLICABLE,
+                    QualificationState.NO_SIGNAL, "UNKNOWN", None, required,
+                    reason_code="REGISTRY_SYMBOL_NOT_APPLICABLE",
                     source_event_or_snapshot_reference={"symbol": symbol},
                 ))
-            else:
-                applicable_strategy_ids.append(strat_id)
+                continue
 
-        # If no strategies are applicable for this symbol, continue
-        if not applicable_strategy_ids:
-            continue
-
-        # Missing Prerequisites Gate
-        if missing_prereqs:
-            telemetry["blocked_prerequisites"] += 1
-            for strat_id in applicable_strategy_ids:
-                telemetry["strategy_observations"] += 1
+            if strategy_id != STRATEGY_ID or token <= 0:
                 observations.append(StrategyObservation(
-                    timestamp_epoch=pulse.timestamp_epoch,
-                    timestamp_ist=pulse.timestamp_ist,
-                    pulse_id=pulse.pulse_id,
-                    symbol=symbol,
-                    strategy_id=strat_id,
-                    applicability_state="APPLICABLE",
-                    qualification_state="PREREQUISITE_MISSING",
-                    direction="UNKNOWN",
-                    confidence=None,
-                    required_inputs=list(missing_prereqs),
-                    missing_or_stale_inputs=list(missing_prereqs),
-                    reason_code="PREREQUISITE_MISSING",
-                    source_event_or_snapshot_reference={"symbol": symbol, "missing": missing_prereqs},
+                    pulse.timestamp_epoch, pulse.timestamp_ist, pulse.pulse_id,
+                    symbol, strategy_id, ApplicabilityState.APPLICABLE,
+                    QualificationState.UNKNOWN, "UNKNOWN", None, required,
+                    missing_or_stale_inputs=required,
+                    reason_code="CANONICAL_STRATEGY_OR_TOKEN_UNAVAILABLE",
+                    source_event_or_snapshot_reference={"symbol": symbol},
                 ))
-                rejections.append({
-                    "symbol": symbol,
-                    "strategy_id": strat_id,
-                    "reason_code": "PREREQUISITE_MISSING",
-                    "detail": f"missing={missing_prereqs}",
-                })
-            continue
+                continue
 
-        # Evaluate Signal (Hops 7 & 8)
-        signal_res = evaluate_signal(snapshot=sym_info, signal_payload=sym_info)
-        conf = signal_res.confidence
-        direction = signal_res.direction
-
-        feed_stale = (not feed_ok) or (age_sec is not None and float(age_sec) > 2.5)
-        stale_inputs = ["feed_quote"] if feed_stale else []
-
-        # Check Near Signal (e.g. 0.50 <= conf < 0.70)
-        if conf is not None and 0.50 <= conf < 0.70 and direction in ("BUY", "SELL"):
-            telemetry["near_signals"] += 1
-            for strat_id in applicable_strategy_ids:
-                telemetry["strategy_observations"] += 1
+            decision, block_reason = _qualify_cas(
+                store=cas_primitive_store, pulse=pulse, symbol=symbol, token=token,
+            )
+            if decision is None:
+                generic_is_high = signal.confidence is not None and signal.confidence >= GENERIC_CONFIDENCE_THRESHOLD
+                reason = block_reason or "CAS_QUALIFICATION_UNKNOWN"
                 observations.append(StrategyObservation(
-                    timestamp_epoch=pulse.timestamp_epoch,
-                    timestamp_ist=pulse.timestamp_ist,
-                    pulse_id=pulse.pulse_id,
-                    symbol=symbol,
-                    strategy_id=strat_id,
-                    applicability_state="APPLICABLE",
-                    qualification_state="NEAR_SIGNAL",
-                    direction=direction,
-                    confidence=conf,
-                    required_inputs=["feed_quote"],
-                    missing_or_stale_inputs=stale_inputs,
-                    reason_code="NO_QUALIFIED_SIGNAL",
-                    source_event_or_snapshot_reference={"confidence": conf, "direction": direction},
+                    pulse.timestamp_epoch, pulse.timestamp_ist, pulse.pulse_id,
+                    symbol, strategy_id, ApplicabilityState.APPLICABLE,
+                    QualificationState.UNKNOWN,
+                    signal.direction if generic_is_high else "UNKNOWN",
+                    signal.confidence, required, required,
+                    reason_code=reason,
+                    source_event_or_snapshot_reference={"generic_signal_used_for_qualification": False},
                 ))
-                rejections.append({
-                    "symbol": symbol,
-                    "strategy_id": strat_id,
-                    "reason_code": "NO_QUALIFIED_SIGNAL",
-                    "detail": f"confidence={conf} direction={direction}",
-                })
-            continue
+                rejections.append({"symbol": symbol, "strategy_id": strategy_id, "reason_code": reason})
+                continue
 
-        # Case: Signal naturally qualifies
-        if conf is not None and conf >= 0.70 and direction in ("BUY", "SELL"):
-            if feed_stale:
-                if is_completed_bar:
-                    # Example A: Completed bar signal is causally qualified even if current execution quote is stale!
-                    telemetry["qualified_candidates"] += 1
-                    telemetry["blocked_feed_stale"] += 1
-                    for strat_id in applicable_strategy_ids:
-                        telemetry["strategy_observations"] += 1
-                        observations.append(StrategyObservation(
-                            timestamp_epoch=pulse.timestamp_epoch,
-                            timestamp_ist=pulse.timestamp_ist,
-                            pulse_id=pulse.pulse_id,
-                            symbol=symbol,
-                            strategy_id=strat_id,
-                            applicability_state="APPLICABLE",
-                            qualification_state="QUALIFIED",
-                            direction=direction,
-                            confidence=conf,
-                            required_inputs=["completed_bars"],
-                            missing_or_stale_inputs=stale_inputs,
-                            reason_code="FEED_STALE_EXECUTION_BLOCK",
-                            source_event_or_snapshot_reference={"features": signal_res.features},
-                        ))
+            cas_direction = str(decision.get("direction") or "")
+            if cas_direction == "NO_SIGNAL":
+                observations.append(StrategyObservation(
+                    pulse.timestamp_epoch, pulse.timestamp_ist, pulse.pulse_id,
+                    symbol, strategy_id, ApplicabilityState.APPLICABLE,
+                    QualificationState.NO_SIGNAL, "UNKNOWN", None, required,
+                    reason_code="CAS_NO_DIRECTIONAL_SIGNAL",
+                    source_event_or_snapshot_reference={"strategy_id": strategy_id, "spec_sha": decision.get("spec_sha")},
+                ))
+                continue
+            if cas_direction not in {"UP", "DOWN"}:
+                observations.append(StrategyObservation(
+                    pulse.timestamp_epoch, pulse.timestamp_ist, pulse.pulse_id,
+                    symbol, strategy_id, ApplicabilityState.APPLICABLE,
+                    QualificationState.UNKNOWN, "UNKNOWN", None, required,
+                    reason_code="CAS_DIRECTION_INVALID",
+                ))
+                rejections.append({"symbol": symbol, "strategy_id": strategy_id, "reason_code": "CAS_DIRECTION_INVALID"})
+                continue
 
-                    from strategies.trade_builder import TradeBuilder
-                    builder = TradeBuilder()
-                    builder_input = {
-                        "symbol": symbol,
-                        "ltp": sym_info.get("ltp"),
-                        "regime": regime,
-                        "option_chain": sym_info.get("option_chain") or [],
+            primitive_rows = getattr(cas_primitive_store, "rows", {})
+            evidence = {
+                "evaluator": "core.cas_morning_reversal_advisory.evaluate",
+                "registry_declaration": dict(declaration),
+                "canonical_decision": dict(decision),
+                "strategy_id": strategy_id,
+                "spec_sha": decision.get("spec_sha"),
+                "source_sha": decision.get("source_sha"),
+                "session_id": decision.get("session_id"),
+                "candidate_id": decision.get("candidate_id"),
+                "decision_timestamp": decision.get("decision_timestamp"),
+                "received_timestamp": decision.get("received_timestamp"),
+                "received_lag_ms": decision.get("received_lag_ms"),
+                "entry_reference_timestamp": decision.get("entry_reference_timestamp"),
+                "morning_return": decision.get("morning_return"),
+                "direction": cas_direction,
+                "option_side": decision.get("option_side"),
+                "signal_input_09_15": decision.get("signal_input_09_15"),
+                "signal_input_10_00": decision.get("signal_input_10_00"),
+                "primitive_references": {
+                    name: {
+                        "record_sha256": primitive_rows[name]["record_sha256"],
+                        "timestamp_epoch": primitive_rows[name]["timestamp_epoch"],
+                        "price": primitive_rows[name]["price"],
+                        "primitive": dict(primitive_rows[name]),
                     }
-                    built_trade = builder.build(builder_input) if hasattr(builder, "build") else None
+                    for name in ("0915", "1000")
+                },
+                "execution_status": "advisory_only",
+                "read_only": True,
+                "broker_write_authority": False,
+                "order_authority": False,
+                "live_execution_authorized": False,
+            }
+            required_evidence = (
+                "spec_sha", "source_sha", "session_id", "candidate_id",
+                "decision_timestamp", "received_timestamp", "entry_reference_timestamp", "morning_return",
+                "signal_input_09_15", "signal_input_10_00",
+            )
+            if (
+                any(evidence.get(key) in (None, "") for key in required_evidence)
+                or len(evidence["primitive_references"]) != 2
+                or any(not evidence["primitive_references"][name]["record_sha256"] for name in ("0915", "1000"))
+            ):
+                observations.append(StrategyObservation(
+                    pulse.timestamp_epoch, pulse.timestamp_ist, pulse.pulse_id,
+                    symbol, strategy_id, ApplicabilityState.APPLICABLE,
+                    QualificationState.UNKNOWN, "UNKNOWN", None, required,
+                    reason_code="QUALIFICATION_EVIDENCE_INCOMPLETE",
+                ))
+                rejections.append({"symbol": symbol, "strategy_id": strategy_id, "reason_code": "QUALIFICATION_EVIDENCE_INCOMPLETE"})
+                continue
 
-                    cand_body = {
-                        "pulse_id": pulse.pulse_id,
-                        "symbol": symbol,
-                        "direction": direction,
-                        "confidence": conf,
-                    }
-                    cand_hash = sha256_canonical(cand_body)
-                    cand_entry = getattr(built_trade, "entry_price", sym_info.get("ltp"))
-                    cand_sl = getattr(built_trade, "stop_loss", sym_info.get("stop_loss"))
-                    cand_tgt = getattr(built_trade, "target", sym_info.get("target_price"))
-                    cand = CausalCandidate(
-                        candidate_id=f"cand_{pulse.sequence_num}_{token}",
-                        pulse_id=pulse.pulse_id,
-                        strategy_id=str(getattr(built_trade, "strategy", None) or applicable_strategy_ids[0] if applicable_strategy_ids else "CANONICAL_ADVISORY"),
-                        symbol=symbol,
-                        instrument_token=token,
-                        direction=direction,
-                        entry_price=float(cand_entry) if cand_entry is not None else None,
-                        stop_loss=float(cand_sl) if cand_sl is not None else None,
-                        target_price=float(cand_tgt) if cand_tgt is not None else None,
-                        regime=regime,
-                        confidence=float(conf),
-                        timestamp_epoch=pulse.timestamp_epoch,
-                        timestamp_ist=pulse.timestamp_ist,
-                        payload_sha256=cand_hash,
-                        metadata={"features": signal_res.features, "trade_object": getattr(built_trade, "trade_id", None)},
-                        strategy_qualified=True,
-                        qualification_evidence={"is_completed_bar_signal": True, "confidence": conf},
-                        execution_eligible=False,
-                        execution_block_reason="FEED_STALE_EXECUTION_BLOCK",
-                        feed_age_sec=float(age_sec) if age_sec is not None else None,
-                        candidate_state="QUALIFIED_EXECUTION_BLOCKED",
-                    )
-                    candidates.append(cand)
-                else:
-                    # Example B: Signal itself requires live quote/tick. Stale quote -> qualification unknown!
-                    telemetry["qualification_unknown"] += 1
-                    telemetry["blocked_feed_stale"] += 1
-                    for strat_id in applicable_strategy_ids:
-                        telemetry["strategy_observations"] += 1
-                        observations.append(StrategyObservation(
-                            timestamp_epoch=pulse.timestamp_epoch,
-                            timestamp_ist=pulse.timestamp_ist,
-                            pulse_id=pulse.pulse_id,
-                            symbol=symbol,
-                            strategy_id=strat_id,
-                            applicability_state="APPLICABLE",
-                            qualification_state="UNKNOWN",
-                            direction=direction,
-                            confidence=conf,
-                            required_inputs=["feed_quote"],
-                            missing_or_stale_inputs=stale_inputs,
-                            reason_code="REQUIRED_LIVE_INPUT_STALE",
-                            source_event_or_snapshot_reference={"symbol": symbol, "age_sec": age_sec},
-                        ))
-                        rejections.append({
-                            "symbol": symbol,
-                            "strategy_id": strat_id,
-                            "reason_code": "REJECT_FEED_DEGRADED_OR_STALE",
-                            "detail": f"age_sec={age_sec} feed_ok={feed_ok}",
-                        })
-            else:
-                # Fresh feed + Qualified signal
-                telemetry["qualified_candidates"] += 1
-                telemetry["execution_eligible_candidates"] += 1
-                for strat_id in applicable_strategy_ids:
-                    telemetry["strategy_observations"] += 1
-                    observations.append(StrategyObservation(
-                        timestamp_epoch=pulse.timestamp_epoch,
-                        timestamp_ist=pulse.timestamp_ist,
-                        pulse_id=pulse.pulse_id,
-                        symbol=symbol,
-                        strategy_id=strat_id,
-                        applicability_state="APPLICABLE",
-                        qualification_state="QUALIFIED",
-                        direction=direction,
-                        confidence=conf,
-                        required_inputs=["feed_quote"],
-                        missing_or_stale_inputs=[],
-                        reason_code="EXECUTION_ELIGIBLE",
-                        source_event_or_snapshot_reference={"features": signal_res.features},
-                    ))
+            execution_state = (
+                ExecutionState.ADVISORY_ONLY_FEED_FRESH
+                if fresh else ExecutionState.ADVISORY_ONLY_FEED_STALE
+            )
+            evidence_sha = sha256_canonical(evidence)
+            candidate = CausalCandidate(
+                candidate_id=str(decision["candidate_id"]),
+                pulse_id=pulse.pulse_id,
+                strategy_id=strategy_id,
+                symbol=symbol,
+                instrument_token=token,
+                direction="BUY" if cas_direction == "UP" else "SELL",
+                # CAS supplies underlying references, not option entry/stop/target prices.
+                entry_price=None,
+                stop_loss=None,
+                target_price=None,
+                regime=regime,
+                confidence=None,
+                timestamp_epoch=pulse.timestamp_epoch,
+                timestamp_ist=pulse.timestamp_ist,
+                payload_sha256=evidence_sha,
+                metadata={"option_side": decision.get("option_side")},
+                strategy_qualified=True,
+                qualification_evidence=evidence,
+                execution_eligible=False,
+                execution_state=execution_state,
+                execution_block_reason=None if fresh else "FEED_FRESHNESS_NOT_CONFIRMED",
+                feed_age_sec=feed_age,
+                candidate_state=CandidateState.QUALIFIED,
+            )
+            candidates.append(candidate)
+            observations.append(StrategyObservation(
+                pulse.timestamp_epoch, pulse.timestamp_ist, pulse.pulse_id,
+                symbol, strategy_id, ApplicabilityState.APPLICABLE,
+                QualificationState.QUALIFIED, cas_direction, None, required,
+                missing_or_stale_inputs=[] if fresh else ["feed_quote"],
+                reason_code="CAS_STRATEGY_QUALIFIED_ADVISORY_ONLY",
+                source_event_or_snapshot_reference={"candidate_id": candidate.candidate_id, "evidence_sha256": evidence_sha},
+            ))
 
-                from strategies.trade_builder import TradeBuilder
-                builder = TradeBuilder()
-                builder_input = {
-                    "symbol": symbol,
-                    "ltp": sym_info.get("ltp"),
-                    "regime": regime,
-                    "option_chain": sym_info.get("option_chain") or [],
-                }
-                built_trade = builder.build(builder_input) if hasattr(builder, "build") else None
-
-                cand_body = {
-                    "pulse_id": pulse.pulse_id,
-                    "symbol": symbol,
-                    "direction": direction,
-                    "confidence": conf,
-                }
-                cand_hash = sha256_canonical(cand_body)
-                cand_entry = getattr(built_trade, "entry_price", sym_info.get("ltp"))
-                cand_sl = getattr(built_trade, "stop_loss", sym_info.get("stop_loss"))
-                cand_tgt = getattr(built_trade, "target", sym_info.get("target_price"))
-                cand = CausalCandidate(
-                    candidate_id=f"cand_{pulse.sequence_num}_{token}",
-                    pulse_id=pulse.pulse_id,
-                    strategy_id=str(getattr(built_trade, "strategy", None) or applicable_strategy_ids[0] if applicable_strategy_ids else "CANONICAL_ADVISORY"),
-                    symbol=symbol,
-                    instrument_token=token,
-                    direction=direction,
-                    entry_price=float(cand_entry) if cand_entry is not None else None,
-                    stop_loss=float(cand_sl) if cand_sl is not None else None,
-                    target_price=float(cand_tgt) if cand_tgt is not None else None,
-                    regime=regime,
-                    confidence=float(conf),
-                    timestamp_epoch=pulse.timestamp_epoch,
-                    timestamp_ist=pulse.timestamp_ist,
-                    payload_sha256=cand_hash,
-                    metadata={"features": signal_res.features, "trade_object": getattr(built_trade, "trade_id", None)},
-                    strategy_qualified=True,
-                    qualification_evidence={"confidence": conf},
-                    execution_eligible=True,
-                    execution_block_reason=None,
-                    feed_age_sec=float(age_sec) if age_sec is not None else None,
-                    candidate_state="QUALIFIED",
-                )
-                candidates.append(cand)
-        else:
-            # No qualified signal
-            telemetry["no_signal"] += 1
-            if feed_stale and not is_completed_bar and (conf is None or conf == 0):
-                for strat_id in applicable_strategy_ids:
-                    telemetry["strategy_observations"] += 1
-                    observations.append(StrategyObservation(
-                        timestamp_epoch=pulse.timestamp_epoch,
-                        timestamp_ist=pulse.timestamp_ist,
-                        pulse_id=pulse.pulse_id,
-                        symbol=symbol,
-                        strategy_id=strat_id,
-                        applicability_state="APPLICABLE",
-                        qualification_state="UNKNOWN",
-                        direction=direction,
-                        confidence=conf,
-                        required_inputs=["feed_quote"],
-                        missing_or_stale_inputs=stale_inputs,
-                        reason_code="REQUIRED_LIVE_INPUT_STALE",
-                        source_event_or_snapshot_reference={"symbol": symbol, "age_sec": age_sec},
-                    ))
-                    rejections.append({
-                        "symbol": symbol,
-                        "strategy_id": strat_id,
-                        "reason_code": "REJECT_FEED_DEGRADED_OR_STALE",
-                        "detail": f"age_sec={age_sec} feed_ok={feed_ok}",
-                    })
-            else:
-                for strat_id in applicable_strategy_ids:
-                    telemetry["strategy_observations"] += 1
-                    observations.append(StrategyObservation(
-                        timestamp_epoch=pulse.timestamp_epoch,
-                        timestamp_ist=pulse.timestamp_ist,
-                        pulse_id=pulse.pulse_id,
-                        symbol=symbol,
-                        strategy_id=strat_id,
-                        applicability_state="APPLICABLE",
-                        qualification_state="NO_SIGNAL",
-                        direction=direction,
-                        confidence=conf,
-                        required_inputs=["feed_quote"],
-                        missing_or_stale_inputs=stale_inputs,
-                        reason_code="NO_QUALIFIED_SIGNAL",
-                        source_event_or_snapshot_reference={"confidence": conf, "direction": direction},
-                    ))
-                    rejections.append({
-                        "symbol": symbol,
-                        "strategy_id": strat_id,
-                        "reason_code": "NO_QUALIFIED_SIGNAL",
-                        "detail": f"confidence={conf} direction={direction}",
-                    })
-
+    telemetry = _telemetry(
+        symbols_seen=len(symbols_data),
+        symbols_evaluated=symbols_evaluated,
+        observations=observations,
+        candidates=candidates,
+    )
     return StrategyEvaluationResult(
         pulse_id=pulse.pulse_id,
         regime=regime,

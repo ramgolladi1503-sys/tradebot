@@ -1,11 +1,9 @@
-# Feed Latency Report - 2026-09-23 Capture
+# Feed Latency Evidence Status
 
-- **Underlying Quote Feed Latency**: 0.15s (nominal: < 0.5s, SLA: < 2.5s)
-- **Status**: HEALTHY
-- **Websocket Connectivity**: CONNECTED / LIVE
-- **Cycle Timing**:
-  - Ingestion to Normalization: 12.5 ms
-  - Strategy Evaluation: 2.1 ms
-  - Shadow Decision: 1.4 ms
-  - Trade Truth Emission: 0.8 ms
-  - Total Pipeline Latency: 16.8 ms << 2500 ms SLA
+**Not verified for the repaired source.**
+
+An earlier report in this pack stated feed and stage latency values, but the
+repair work did not reproduce or independently validate those measurements. The
+focused unit tests prove the configured 2.5-second freshness boundary only;
+they do not measure runtime latency. The stated values must not be used as
+current runtime evidence.
