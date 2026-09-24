@@ -201,7 +201,10 @@ def evaluate_causal_strategies(
             continue
         seen += 1
 
-        token = int(info.get("instrument_token") or 0)
+        try:
+            token = int(info.get("instrument_token") or 0)
+        except (ValueError, TypeError, OverflowError):
+            token = 0
         if (symbol == "NIFTY" and token <= 0 and cas_primitive_store is not None
                 and getattr(cas_primitive_store, "session_id", None) == pulse.session_id
                 and getattr(cas_primitive_store, "source_sha", None) == pulse.producer_sha):
@@ -273,7 +276,7 @@ def evaluate_causal_strategies(
                 })
                 continue
             feed_ok = info.get("feed_ok") is True
-            advisory_ready = qualified.advisory_ready and feed_ok
+            advisory_ready = qualified.advisory_ready and feed_ok and snapshot.get("market_open") is True
             # No option contract, option depth, or portfolio risk is established
             # by the underlying-only CAS evaluator. Do NOT call TradeBuilder.
             candidate_id = f"cas:{pulse.session_id}:{symbol}:1514"
