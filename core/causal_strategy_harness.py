@@ -314,8 +314,6 @@ def evaluate_causal_strategies(
             )
             candidates.append(cand)
 
-            if advisory_ready:
-
     return StrategyEvaluationResult(
         pulse_id=pulse.pulse_id, regime=regime, candidates=candidates,
         rejections=rejections, evaluated_symbol_count=seen,
