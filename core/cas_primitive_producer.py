@@ -46,7 +46,7 @@ class CASPrimitiveStore:
         if old is not None: return old
         if not _valid_tick(tick,target_epoch):
             return self._terminal(name,target_epoch,"BLOCKED",None,capture_timestamp_ist)
-        row=Primitive(1,STRATEGY_ID,self.session_id,self.source_sha,"NIFTY",self.underlying_token,name,TARGETS[name],"CAPTURED",capture_timestamp_ist,float(tick["last_price"]),"last_price","core/tick_store.py",float(tick["timestamp_epoch"]),tick["timestamp_authority"],tick.get("timestamp_source_field"),tick.get("source_timestamp_epoch"),tick.get("receive_timestamp_epoch"),tick.get("timestamp_fallback_used"),int(round((float(tick["timestamp_epoch"])-target_epoch)*1000)),True,True,True,True,capture_timestamp_ist). __dict__
+        row=Primitive(1,STRATEGY_ID,self.session_id,self.source_sha,"NIFTY",self.underlying_token,name,TARGETS[name],"CAPTURED",capture_timestamp_ist,float(tick["last_price"]),"last_price",str(tick.get("price_source") or "UNKNOWN"),float(tick["timestamp_epoch"]),tick["timestamp_authority"],tick.get("timestamp_source_field"),tick.get("source_timestamp_epoch"),tick.get("receive_timestamp_epoch"),tick.get("timestamp_fallback_used"),int(round((float(tick["timestamp_epoch"])-target_epoch)*1000)),True,True,True,True,capture_timestamp_ist). __dict__
         row["record_sha256"]=_hash(row); self.rows[name]=row; self.persist(); return row
     def _terminal(self,name,target,status,price,captured):
         row=Primitive(1,STRATEGY_ID,self.session_id,self.source_sha,"NIFTY",self.underlying_token,name,TARGETS[name],status,captured,price,"last_price","core/tick_store.py",None,"UNKNOWN",None,None,None,None,None,False,False,False,False,captured).__dict__
