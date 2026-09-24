@@ -70,55 +70,64 @@ def evaluate_shadow_decision(
             timestamp_epoch=pulse.timestamp_epoch,
         )
 
-    # 1. Canonical Candidate Selection Call (Hop 9)
+    # Shadow-only CAS candidates are observations, never risk-approved orders.
+    # Do not invent a default portfolio to manufacture risk PASS.
+    from core.governed_strategy_authority import is_strategy_governed_eligible
+    admissible = [
+        c for c in strategy_result.candidates
+        if c.execution_eligible and is_strategy_governed_eligible(c.strategy_id)
+    ]
+    if not admissible:
+        return ShadowDecisionResult(
+            pulse_id=pulse.pulse_id, selected_candidates=[],
+            rejected_decisions=[
+                {"candidate_id": c.candidate_id, "symbol": c.symbol,
+                 "reason_code": "SHADOW_ONLY_OR_EXECUTION_GATES_NOT_PASSED"}
+                for c in strategy_result.candidates
+            ],
+            risk_verdict="NOT_EVALUATED_SHADOW_ONLY",
+            timestamp_epoch=pulse.timestamp_epoch,
+        )
+    if portfolio_state is None:
+        return ShadowDecisionResult(
+            pulse_id=pulse.pulse_id, selected_candidates=[],
+            rejected_decisions=[
+                {"candidate_id": c.candidate_id, "symbol": c.symbol,
+                 "reason_code": "PORTFOLIO_STATE_MISSING"}
+                for c in admissible
+            ],
+            risk_verdict="NOT_EVALUATED_PORTFOLIO_UNKNOWN",
+            timestamp_epoch=pulse.timestamp_epoch,
+        )
+    # This branch remains available for future *actually authorized* strategies.
     import core.opportunity_engine as opp_engine
-    candidate_dicts = [c.to_dict() for c in strategy_result.candidates]
-    best_candidate, ranked_candidates = opp_engine.select_best_opportunity(
-        candidate_dicts,
-        scope="build:causal_observation",
+    candidate_dicts = [c.to_dict() for c in admissible]
+    best, ranked = opp_engine.select_best_opportunity(
+        candidate_dicts, scope="build:causal_observation",
     )
-
-    # 2. Canonical RiskEngine Evaluation (Hop 10)
-    risk_engine = RiskEngine()
-    portfolio = dict(portfolio_state or {
-        "capital": 1000000.0,
-        "equity_high": 1000000.0,
-        "daily_profit": 0.0,
-        "daily_loss": 0.0,
-        "open_risk_pct": 0.0,
-        "symbol_profit": {},
-        "trades_today": 0,
-    })
-    risk_decision = risk_engine.evaluate_trade(
-        portfolio=portfolio,
-        regime=strategy_result.regime,
-        trade=best_candidate,
+    if not isinstance(best, Mapping):
+        return ShadowDecisionResult(
+            pulse_id=pulse.pulse_id, selected_candidates=[],
+            rejected_decisions=[], risk_verdict="NOT_EVALUATED_NO_SELECTION",
+            timestamp_epoch=pulse.timestamp_epoch,
+        )
+    from core.risk_engine import RiskEngine
+    decision = RiskEngine().evaluate_trade(
+        portfolio=dict(portfolio_state), regime=strategy_result.regime, trade=best,
     )
-
-    for cand_dict in ranked_candidates:
-        cand_id = cand_dict.get("candidate_id")
-        orig_cand = next((c for c in strategy_result.candidates if c.candidate_id == cand_id), None)
-        if not orig_cand:
-            continue
-
-        if best_candidate and cand_id == best_candidate.get("candidate_id") and risk_decision.allowed:
-            selected.append(orig_cand)
-        else:
-            reason = risk_decision.reason if (best_candidate and cand_id == best_candidate.get("candidate_id")) else "opportunity_rank_suboptimal"
-            rejected.append({
-                "candidate_id": cand_id,
-                "symbol": orig_cand.symbol,
-                "reason_code": str(risk_decision.reason_code) if (best_candidate and cand_id == best_candidate.get("candidate_id")) else "REJECT_RANK_NOT_SELECTED",
-                "detail": str(reason),
-            })
-
-    risk_verdict = "PASS_SHADOW" if risk_decision.allowed else "BLOCKED_BY_RISK_ENGINE"
-
+    selected = [
+        c for c in admissible
+        if c.candidate_id == best.get("candidate_id") and decision.allowed
+    ]
+    rejected = [
+        {"candidate_id": c.candidate_id, "symbol": c.symbol,
+         "reason_code": str(decision.reason_code) if
+         c.candidate_id == best.get("candidate_id") else "REJECT_RANK_NOT_SELECTED"}
+        for c in admissible if c not in selected
+    ]
     return ShadowDecisionResult(
-        pulse_id=pulse.pulse_id,
-        selected_candidates=selected,
+        pulse_id=pulse.pulse_id, selected_candidates=selected,
         rejected_decisions=rejected,
-        risk_verdict=risk_verdict,
+        risk_verdict="PASS_SHADOW" if decision.allowed else "BLOCKED_BY_RISK_ENGINE",
         timestamp_epoch=pulse.timestamp_epoch,
     )
-
