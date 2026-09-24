@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "pr": 932,
+  "branch": "fix/candidate-pipeline-architecture-repair-v1",
+  "base_head_before_repair": "dc0dfa0bb0ae36da99891569013f42d4df7a48fe",
+  "validation_scope": "Focused tests were run on the repaired code immediately before committing this evidence.",
+  "verdict": "PR932_NOT_MERGE_READY",
+  "acceptance": {
+    "GENERIC_SIGNAL_CAN_NOT_CREATE_CAS_CANDIDATE": "PASS",
+    "REGISTRY_IS_AUTHORITATIVE": "PASS",
+    "QUALIFICATION_IS_STRATEGY_SPECIFIC": "PASS",
+    "EXECUTION_STATE_IS_TRUTHFUL": "PASS",
+    "COMPLETED_BAR_DOES_NOT_IMPLY_QUALIFICATION": "PASS",
+    "QUALIFICATION_EVIDENCE_COMPLETE": "PASS",
+    "NO_SYMBOL_HEURISTICS": "PASS",
+    "FRESHNESS_THRESHOLD_2_5_SECONDS": "PASS",
+    "CAS_RECEIVE_TIME_WITHIN_2_SECONDS": "PASS",
+    "BROKER_WRITE_AUTHORITY": false,
+    "ORDERS_PLACED": 0,
+    "REAL_REPLAY_ON_REPAIRED_SHA": "NOT_RUN",
+    "RUNTIME_LATENCY_ON_REPAIRED_SHA": "NOT_VERIFIED",
+    "FULL_CI_ON_REPAIRED_SHA": "NOT_RUN"
+  },
+  "focused_tests": {
+    "command": "python3 -m pytest -q tests/test_candidate_pipeline_architecture_repair.py tests/test_causal_strategy_and_truth.py tests/test_cas_morning_reversal_advisory.py",
+    "result": "16 passed, 1 warning"
+  },
+  "remote_checks_on_pre_repair_head": {
+    "code-excellence-gates": "FAIL",
+    "focused-contracts": "FAIL",
+    "unit_tests": "FAIL: 8248 passed, 1 failed; a later run was cancelled"
+  },
+  "authority": {
+    "read_only": true,
+    "is_order_action": false,
+    "broker_api_called": false,
+    "allowed_for_live_execution": false,
+    "append": false,
+    "broker_write_authority": false
+  },
+  "remaining_blockers": [
+    "Run fresh CI for the repaired SHA and resolve required failures.",
+    "Run and independently verify an authorized real-data replay against the repaired SHA."
+  ]
+}

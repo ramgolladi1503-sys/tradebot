@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 import threading
@@ -10,6 +11,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
+
+logger = logging.getLogger(__name__)
 
 from core.read_only_live_evidence import (
     MegIntervalScheduler,
@@ -645,6 +648,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 pulse=cycle_pulse,
                 market_snapshot=market_snapshot if isinstance(market_snapshot, Mapping) else {},
                 feed_health_truth=feed_truth if isinstance(feed_truth, Mapping) else {},
+                cas_primitive_store=cas_store,
             )
             shadow_decisions = evaluate_shadow_decision(
                 pulse=cycle_pulse,
@@ -660,9 +664,15 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             )
 
             # Append-only persistence to causal ledgers
+            with (output_root / "strategy_observations.jsonl").open("a", encoding="utf-8") as so_file:
+                for obs in strat_result.observations:
+                    so_file.write(json.dumps(obs.to_dict(), sort_keys=True) + "\n")
             with (output_root / "candidate_pool.jsonl").open("a", encoding="utf-8") as cp_file:
                 for cand in strat_result.candidates:
                     cp_file.write(json.dumps(cand.to_dict(), sort_keys=True) + "\n")
+            with (output_root / "executable_pool.jsonl").open("a", encoding="utf-8") as ep_file:
+                for excand in strat_result.executable_candidates:
+                    ep_file.write(json.dumps(excand.to_dict(), sort_keys=True) + "\n")
             with (output_root / "candidate_decisions.jsonl").open("a", encoding="utf-8") as cd_file:
                 for dec in shadow_decisions.selected_candidates:
                     cd_file.write(json.dumps(dec.to_dict(), sort_keys=True) + "\n")
@@ -670,6 +680,20 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 tt_file.write(json.dumps(trade_truth_record.to_dict(), sort_keys=True) + "\n")
             with (output_root / "native_pulse_stream.jsonl").open("a", encoding="utf-8") as np_file:
                 np_file.write(json.dumps(cycle_pulse.to_dict(), sort_keys=True) + "\n")
+
+            if strat_result.telemetry_counters:
+                tc = strat_result.telemetry_counters
+                logger.info(
+                    "PIPELINE_TELEMETRY symbols_eval=%d obs=%d near=%d qual=%d exec=%d stale_feed=%d stale_quote=%d prereq_blocked=%d",
+                    tc.get("symbols_evaluated", 0),
+                    tc.get("strategy_observations", 0),
+                    tc.get("near_signals", 0),
+                    tc.get("qualified_candidates", 0),
+                    tc.get("execution_eligible_candidates", 0),
+                    tc.get("blocked_feed_stale", 0),
+                    tc.get("blocked_option_quote_stale", 0),
+                    tc.get("blocked_prerequisites", 0),
+                )
 
             if interval_end is not None:
                     interval_identity = f"{session_date}:{int(float(interval_end))}"

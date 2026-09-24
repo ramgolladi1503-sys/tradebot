@@ -22,7 +22,10 @@ CANONICAL_STRATEGIES = (
         "candidate_type": "causal_advisory",
         "mode": "advisory_only",
         "required_underlyings": ("NIFTY",),
-        "required_feeds": ("SPOT", "FUTURES"),
+        # The canonical CAS evaluator is defined only over NIFTY spot
+        # primitives (09:15 and 10:00); futures are not an input to this
+        # advisory contract and must not be declared as a prerequisite.
+        "required_feeds": ("SPOT",),
     },
 )
 

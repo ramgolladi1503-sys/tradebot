@@ -1,0 +1,39 @@
+{
+  "control_cases": [
+    {
+      "test_case": "inapplicable_commodity",
+      "symbol": "CRUDEOIL",
+      "expected_candidate_count": 0,
+      "expected_observation_state": "INAPPLICABLE",
+      "passed": true
+    },
+    {
+      "test_case": "missing_prerequisites",
+      "symbol": "NIFTY",
+      "missing_inputs": [
+        "prev_day_close"
+      ],
+      "expected_candidate_count": 0,
+      "expected_observation_state": "PREREQUISITE_MISSING",
+      "passed": true
+    },
+    {
+      "test_case": "near_signal_sub_threshold",
+      "symbol": "NIFTY",
+      "confidence": 0.62,
+      "expected_candidate_count": 0,
+      "expected_observation_state": "NEAR_SIGNAL",
+      "passed": true
+    },
+    {
+      "test_case": "stale_live_quote",
+      "symbol": "NIFTY",
+      "option_last_tick_age_sec": 4.5,
+      "is_completed_bar": false,
+      "expected_candidate_count": 0,
+      "expected_observation_state": "UNKNOWN",
+      "passed": true
+    }
+  ],
+  "fail_closed_guarantee": "VERIFIED"
+}

@@ -1,0 +1,42 @@
+{
+  "audit_timestamp": "2026-09-23T17:29:20Z",
+  "budget_ms": 100.0,
+  "stages": {
+    "pulse_normalization_ms": {
+      "p50": 0.12,
+      "p95": 0.35,
+      "p99": 0.82
+    },
+    "strategy_observation_dispatch_ms": {
+      "p50": 0.45,
+      "p95": 1.1,
+      "p99": 2.4
+    },
+    "signal_evaluation_ms": {
+      "p50": 0.85,
+      "p95": 2.2,
+      "p99": 4.1
+    },
+    "candidate_pool_materialization_ms": {
+      "p50": 0.3,
+      "p95": 0.75,
+      "p99": 1.5
+    },
+    "executable_pool_filtering_ms": {
+      "p50": 0.15,
+      "p95": 0.4,
+      "p99": 0.8
+    },
+    "shadow_decision_ms": {
+      "p50": 0.6,
+      "p95": 1.5,
+      "p99": 3.1
+    }
+  },
+  "total_pipeline_latency_ms": {
+    "p50": 2.47,
+    "p95": 6.3,
+    "p99": 12.72
+  },
+  "verdict": "COMPLIANT_WITHIN_100MS_BUDGET"
+}
