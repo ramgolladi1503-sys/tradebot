@@ -229,20 +229,35 @@ class DepthStore:
                             json.dumps({"depth": canonical_depth, "imbalance": imbalance}, sort_keys=True, separators=(",", ":")), now_epoch)
                     # Hold admission serialization through enqueue + ledger update so
                     # the worker cannot dequeue an item before it is counted.
-                    with self._persist_admission_lock:
-                        with self._persist_lock:
-                            if self._persist_shutdown:
-                                self._persist_pre_enqueue_rejected += 1
-                                self._persist_degraded = True
-                                record_degradation("depth", "DEPTH_PERSISTENCE_SHUTDOWN")
-                                shutdown_rejected = True
-                            else:
-                                shutdown_rejected = False
-                        if not shutdown_rejected:
-                            self._persist_queue.put(item, timeout=put_timeout_sec)
+                    deadline = time.monotonic() + put_timeout_sec
+                    while True:
+                        with self._persist_admission_lock:
                             with self._persist_lock:
-                                self._persist_enqueued += 1
-                            self._persist_wakeup.set()
+                                shutdown_rejected = self._persist_shutdown
+                                if shutdown_rejected:
+                                    self._persist_pre_enqueue_rejected += 1
+                                    self._persist_degraded = True
+                                    record_degradation("depth", "DEPTH_PERSISTENCE_SHUTDOWN")
+                            if shutdown_rejected:
+                                break
+                            try:
+                                self._persist_queue.put_nowait(item)
+                            except queue.Full:
+                                pass
+                            else:
+                                with self._persist_lock:
+                                    self._persist_enqueued += 1
+                                self._persist_wakeup.set()
+                                break
+
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise queue.Full
+                        # Wait on Queue's own condition without holding the
+                        # admission lock, allowing the worker to dequeue.
+                        with self._persist_queue.not_full:
+                            if self._persist_queue._qsize() >= self._persist_queue.maxsize:
+                                self._persist_queue.not_full.wait(timeout=remaining)
                 except queue.Full:
                     with self._persist_lock:
                         self._persist_pre_enqueue_rejected += 1
