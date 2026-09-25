@@ -544,6 +544,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                     },
                     quote_truth={
                         "symbol": "NIFTY",
+                        "instrument_token": cas_token,
                         "ltp": float(nifty_ltp),
                         "is_fresh": bool(nifty_quote_age_sec is not None and nifty_quote_age_sec <= 2.5),
                         "is_executable_quote": True,

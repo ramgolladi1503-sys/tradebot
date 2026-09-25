@@ -230,9 +230,9 @@ class DepthStore:
                         record_degradation("depth", "DEPTH_QUEUE_FULL")
                         self._record_rejection(reason_code="QUEUE_REJECTED", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
                     logger.error("depth_persistence_queue_full")
-                    raise
-                with self._persist_lock:
-                    self._persist_enqueued += 1
+                else:
+                    with self._persist_lock:
+                        self._persist_enqueued += 1
             # alert on spikes (optional)
             if getattr(cfg, "IMBALANCE_ALERT_ENABLE", False):
                 if abs(imbalance) > getattr(cfg, "IMBALANCE_ALERT", 0.6):
