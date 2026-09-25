@@ -281,3 +281,38 @@ def test_telemetry_is_derived_from_observations_and_candidates(tmp_path):
     assert telemetry["strategy_observations"] == len(result.observations)
     assert telemetry["qualified_candidates"] == len(result.candidates)
     assert telemetry["execution_eligible_candidates"] == len(result.executable_candidates) == 0
+
+
+def test_causal_strategy_symbol_token_enrichment_prevents_starvation(tmp_path):
+    """When feed_health_truth symbol row lacks instrument_token (or is None),
+    token is enriched from market_snapshot or NIFTY fallback, preventing CANONICAL_STRATEGY_OR_TOKEN_UNAVAILABLE starvation."""
+    store = _cas_store(tmp_path)
+    # Feed row has symbol NIFTY but instrument_token is None (as in live session bug)
+    feed_without_token = {
+        "websocket_ok": True,
+        "symbols": [{
+            "symbol": "NIFTY",
+            "feed_ok": True,
+            "instrument_token": None,
+            "option_last_tick_age_sec": 0.5,
+            "confidence": 0.95,
+        }],
+    }
+    # Market snapshot provides quote_truth token
+    snapshot = {
+        "symbols": {
+            "NIFTY": {
+                "feed_health": {"status": "HEALTHY", "underlying_quote_age_sec": 0.5},
+                "quote_truth": {"instrument_token": TOKEN, "ltp": 25000.0},
+            }
+        }
+    }
+    result = evaluate_causal_strategies(
+        pulse=_pulse(),
+        market_snapshot=snapshot,
+        feed_health_truth=feed_without_token,
+        cas_primitive_store=store,
+    )
+    assert len(result.candidates) == 1
+    assert result.candidates[0].strategy_qualified is True
+    assert result.observations[0].reason_code != "CANONICAL_STRATEGY_OR_TOKEN_UNAVAILABLE"
