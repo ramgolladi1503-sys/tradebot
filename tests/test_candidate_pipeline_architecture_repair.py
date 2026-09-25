@@ -284,8 +284,7 @@ def test_telemetry_is_derived_from_observations_and_candidates(tmp_path):
 
 
 def test_causal_strategy_symbol_token_enrichment_prevents_starvation(tmp_path):
-    """When feed_health_truth symbol row lacks instrument_token (or is None),
-    token is enriched from market_snapshot or NIFTY fallback, preventing CANONICAL_STRATEGY_OR_TOKEN_UNAVAILABLE starvation."""
+    """A snapshot token matching immutable CAS identity can recover a missing feed token."""
     store = _cas_store(tmp_path)
     # Feed row has symbol NIFTY but instrument_token is None (as in live session bug)
     feed_without_token = {
@@ -316,3 +315,30 @@ def test_causal_strategy_symbol_token_enrichment_prevents_starvation(tmp_path):
     assert len(result.candidates) == 1
     assert result.candidates[0].strategy_qualified is True
     assert result.observations[0].reason_code != "CANONICAL_STRATEGY_OR_TOKEN_UNAVAILABLE"
+    assert result.candidates[0].instrument_token == TOKEN
+    assert result.candidates[0].execution_eligible is False
+    assert result.to_dict()["read_only"] is True
+    assert result.to_dict()["broker_write_authority"] is False
+    assert result.to_dict()["order_authority"] is False
+    assert result.to_dict()["allowed_for_live_execution"] is False
+
+
+def test_cas_missing_or_conflicting_token_authority_stays_unknown(tmp_path):
+    store = _cas_store(tmp_path)
+    feed = {"symbols": [{"symbol": "NIFTY", "feed_ok": True, "instrument_token": None,
+                         "option_last_tick_age_sec": 0.5}]}
+    for snapshot in (None, {"symbols": {"NIFTY": {"quote_truth": {"instrument_token": TOKEN + 1}}}}):
+        result = evaluate_causal_strategies(pulse=_pulse(), market_snapshot=snapshot,
+                                            feed_health_truth=feed, cas_primitive_store=store)
+        assert result.candidates == []
+        assert result.observations[0].qualification_state is QualificationState.UNKNOWN
+
+
+def test_cas_rejects_malformed_and_non_integral_tokens(tmp_path):
+    store = _cas_store(tmp_path)
+    for invalid in ("not-a-token", float("inf"), float("nan"), 0, -1, TOKEN + 0.5):
+        feed = _feed(instrument_token=invalid)
+        result = evaluate_causal_strategies(pulse=_pulse(), market_snapshot=None,
+                                            feed_health_truth=feed, cas_primitive_store=store)
+        assert result.candidates == []
+        assert result.observations[0].qualification_state is QualificationState.UNKNOWN

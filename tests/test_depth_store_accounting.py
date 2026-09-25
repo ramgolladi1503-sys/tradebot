@@ -107,6 +107,9 @@ def test_depth_put_timeout_non_stalling(monkeypatch):
     state = store.persistence_state()
     assert state["enqueued"] == 1
     assert state["rejected"] == 1
+    assert state["pre_enqueue_rejected"] == 1
+    assert state["queue_rejected"] == 0
+    assert state["unaccounted_remainder"] == 0
     assert state["durability_degraded"] is True
 
 
@@ -172,3 +175,59 @@ def test_depth_accounting_invariant_holds_post_shutdown(tmp_path, monkeypatch):
     # Invariant must remain strictly True with 0 remainder
     assert state_after["unaccounted_remainder"] == 0
     assert state_after["accounting_invariant_ok"] is True
+
+
+def test_depth_accounting_concurrent_sampling_and_writer_failure(monkeypatch, tmp_path):
+    import threading
+    import core.depth_store as ds_mod
+
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 8, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 1.0, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+    store = DepthStore()
+    store.configure_rejection_provenance(tmp_path / "missing" / "rejections.jsonl",
+                                         session_id="fixture", producer_sha="fixture-sha")
+    monkeypatch.setattr(store._rejection_path.__class__, "open", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("writer unavailable")))
+    depths = {"buy": [{"price": 100.0, "quantity": 1}], "sell": [{"price": 101.0, "quantity": 1}]}
+    done = threading.Event()
+
+    def producer():
+        for i in range(300):
+            store.update(i + 1, depths)
+        done.set()
+
+    worker = threading.Thread(target=producer)
+    worker.start()
+    while not done.is_set():
+        state = store.persistence_state()
+        assert state["unaccounted_remainder"] == 0
+        assert state["accounting_invariant_ok"] is True
+        assert state["admission_accounting_invariant_ok"] is True
+    worker.join()
+    state = store.shutdown_persistence(deadline_seconds=5.0)
+    assert state["complete"] is True
+    assert state["unaccounted_remainder"] == 0
+    assert state["enqueued"] == state["persisted"] + state["queue_rejected"]
+    assert state["rejected"] >= state["pre_enqueue_rejected"]
+    assert state["admission_accounting_invariant_ok"] is True
+    assert state["provenance_write_failures"] > 0
+
+
+def test_depth_worker_exception_is_terminal_and_conserved(monkeypatch):
+    import core.depth_store as ds_mod
+
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 4, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+    monkeypatch.setattr(ds_mod, "insert_depth_snapshots_batch", lambda items: (_ for _ in ()).throw(RuntimeError("fixture failure")))
+    monkeypatch.setattr(ds_mod, "insert_depth_snapshot", lambda *item: (_ for _ in ()).throw(RuntimeError("fixture failure")))
+    store = DepthStore()
+    sample = {"buy": [{"price": 100.0, "quantity": 1}], "sell": [{"price": 101.0, "quantity": 1}]}
+    store.update(71, sample)
+    state = store.shutdown_persistence(deadline_seconds=3.0)
+    assert state["complete"] is True
+    assert state["enqueued"] == 1
+    assert state["failures"] == 1
+    assert state["persisted"] == 0
+    assert state["unaccounted_remainder"] == 0
+    assert state["admission_accounting_invariant_ok"] is True
