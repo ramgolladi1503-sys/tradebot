@@ -198,14 +198,32 @@ class StrategyEvaluationResult:
 def _symbol_rows(
     market_snapshot: Mapping[str, Any] | None,
     feed_health_truth: Mapping[str, Any] | None,
+    cas_primitive_store: Any | None = None,
 ) -> list[Mapping[str, Any]]:
+    snapshot_symbols = market_snapshot.get("symbols", {}) if isinstance(market_snapshot, Mapping) else {}
     if isinstance(feed_health_truth, Mapping):
         rows = feed_health_truth.get("symbols")
         if not isinstance(rows, list):
             payload = feed_health_truth.get("payload")
             rows = payload.get("symbols") if isinstance(payload, Mapping) else None
         if isinstance(rows, list):
-            return [row for row in rows if isinstance(row, Mapping)]
+            enriched_rows: list[Mapping[str, Any]] = []
+            for r in rows:
+                if not isinstance(r, Mapping):
+                    continue
+                d = dict(r)
+                sym = str(d.get("symbol") or "").upper()
+                tok = _finite_float(d.get("instrument_token"))
+                if tok is None or tok <= 0 or not tok.is_integer():
+                    snap_sym = snapshot_symbols.get(sym, {}) if isinstance(snapshot_symbols, Mapping) else {}
+                    quote = snap_sym.get("quote_truth", {}) if isinstance(snap_sym, Mapping) else {}
+                    snap_tok = _finite_float(quote.get("instrument_token"))
+                    if snap_tok is not None and snap_tok > 0 and snap_tok.is_integer():
+                        primitive_token = _finite_float(getattr(cas_primitive_store, "underlying_token", None))
+                        if sym != "NIFTY" or (primitive_token is not None and snap_tok == primitive_token):
+                            d["instrument_token"] = int(snap_tok)
+                enriched_rows.append(d)
+            return enriched_rows
     if not isinstance(market_snapshot, Mapping):
         return []
     symbols = market_snapshot.get("symbols")
@@ -219,10 +237,11 @@ def _symbol_rows(
         quote = row.get("quote_truth")
         feed = feed if isinstance(feed, Mapping) else {}
         quote = quote if isinstance(quote, Mapping) else {}
+        tok = _finite_float(quote.get("instrument_token"))
         result.append({
             "symbol": symbol,
             "feed_ok": feed.get("status") == "HEALTHY",
-            "instrument_token": quote.get("instrument_token"),
+        "instrument_token": int(tok) if tok is not None and tok > 0 and tok.is_integer() else quote.get("instrument_token"),
             "option_last_tick_age_sec": feed.get("underlying_quote_age_sec"),
         })
     return result
@@ -406,7 +425,7 @@ def evaluate_causal_strategies(
     candidates: list[CausalCandidate] = []
     observations: list[StrategyObservation] = []
     rejections: list[dict[str, Any]] = []
-    symbols_data = _symbol_rows(market_snapshot, feed_health_truth)
+    symbols_data = _symbol_rows(market_snapshot, feed_health_truth, cas_primitive_store)
     registry = tuple(item for item in CANONICAL_STRATEGIES if isinstance(item, Mapping))
     regime = "UNKNOWN"
     if isinstance(market_snapshot, Mapping):
@@ -423,7 +442,7 @@ def evaluate_causal_strategies(
             continue
         symbols_evaluated += 1
         token_value = _finite_float(row.get("instrument_token"))
-        token = int(token_value) if token_value is not None and token_value > 0 else 0
+        token = int(token_value) if token_value is not None and token_value > 0 and token_value.is_integer() else 0
         fresh, feed_age = _feed_freshness(row)
         # Generic signal output is diagnostic only and never qualifies CAS.
         signal = evaluate_signal(snapshot=row, signal_payload=row)
@@ -453,7 +472,10 @@ def evaluate_causal_strategies(
                 ))
                 continue
 
-            if strategy_id != STRATEGY_ID or token <= 0:
+            primitive_token = _finite_float(getattr(cas_primitive_store, "underlying_token", None))
+            if strategy_id != STRATEGY_ID or token <= 0 or (
+                symbol == "NIFTY" and cas_primitive_store is not None and primitive_token != token
+            ):
                 observations.append(StrategyObservation(
                     pulse.timestamp_epoch, pulse.timestamp_ist, pulse.pulse_id,
                     symbol, strategy_id, ApplicabilityState.APPLICABLE,

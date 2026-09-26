@@ -30,6 +30,8 @@ class DepthStore:
             int(getattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 32768) or 32768),
         )
         self._persist_queue = queue.Queue(maxsize=queue_maxsize)
+        self._persist_admission_lock = threading.Lock()
+        self._persist_wakeup = threading.Event()
         self._persist_stop = threading.Event()
         self._persist_lock = threading.Lock()
         self._persist_enqueued = 0
@@ -37,6 +39,7 @@ class DepthStore:
         self._persisted = 0
         self._persist_queue_rejected = 0
         self._persist_pre_enqueue_rejected = 0
+        self._persist_provenance_write_failures = 0
         self._persist_failures = 0
         self._persist_degraded = False
         self._persist_shutdown = False
@@ -75,6 +78,8 @@ class DepthStore:
             with self._rejection_lock, path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(row, sort_keys=True) + "\n")
         except Exception as exc:
+            with self._persist_lock:
+                self._persist_provenance_write_failures += 1
             logger.error("depth_rejection_provenance_write_failed error=%s", type(exc).__name__)
 
     def _persist_loop(self):
@@ -88,22 +93,26 @@ class DepthStore:
 
         while not self._persist_stop.is_set() or not self._persist_queue.empty():
             items = []
-            try:
-                first = self._persist_queue.get(timeout=0.1)
-                items.append(first)
-            except queue.Empty:
-                pass
+            with self._persist_admission_lock:
+                while len(items) < batch_size:
+                    try:
+                        items.append(self._persist_queue.get_nowait())
+                        with self._persist_lock:
+                            self._persist_in_flight += 1
+                    except queue.Empty:
+                        break
+                if not items:
+                    # Clear while serialized with producers: a later admission
+                    # sets the event after publishing its queue item.
+                    self._persist_wakeup.clear()
 
-            while len(items) < batch_size:
-                try:
-                    items.append(self._persist_queue.get_nowait())
-                except queue.Empty:
-                    break
+            if not items:
+                self._persist_wakeup.wait(timeout=0.1)
+                continue
 
             if items:
-                with self._persist_lock:
-                    self._persist_in_flight += len(items)
                 try:
+                    rejection_rows = []
                     if insert_depth_snapshot is not _DEFAULT_INSERT_DEPTH_SNAPSHOT:
                         persisted_count = 0
                         for item in items:
@@ -126,27 +135,21 @@ class DepthStore:
                             for item in items[persisted_count:]:
                                 token = item[1] if len(item) > 1 else None
                                 receipt_epoch = item[3] if len(item) > 3 else time.time()
-                                self._record_rejection(
-                                    reason_code="LOCK_SKIPPED",
-                                    instrument_token=token,
-                                    receipt_epoch=receipt_epoch,
-                                    queue_depth=self._persist_queue.qsize(),
-                                )
+                                rejection_rows.append(("LOCK_SKIPPED", token, receipt_epoch))
+                    for reason_code, token, receipt_epoch in rejection_rows:
+                        self._record_rejection(reason_code=reason_code, instrument_token=token,
+                                               receipt_epoch=receipt_epoch, queue_depth=self._persist_queue.qsize())
                 except Exception as exc:
                     with self._persist_lock:
                         self._persist_in_flight -= len(items)
                         self._persist_failures += len(items)
                         self._persist_degraded = True
                         record_degradation("depth", "DEPTH_PERSISTENCE_FAILURE")
-                        for item in items:
-                            token = item[1] if len(item) > 1 else None
-                            receipt_epoch = item[3] if len(item) > 3 else time.time()
-                            self._record_rejection(
-                                reason_code="PERSISTENCE_FAILURE",
-                                instrument_token=token,
-                                receipt_epoch=receipt_epoch,
-                                queue_depth=self._persist_queue.qsize(),
-                            )
+                    for item in items:
+                        token = item[1] if len(item) > 1 else None
+                        receipt_epoch = item[3] if len(item) > 3 else time.time()
+                        self._record_rejection(reason_code="PERSISTENCE_FAILURE", instrument_token=token,
+                                               receipt_epoch=receipt_epoch, queue_depth=self._persist_queue.qsize())
                     logger.warning("depth_persistence_failed count=%d error=%s", len(items), type(exc).__name__)
                 finally:
                     for _ in items:
@@ -199,8 +202,13 @@ class DepthStore:
                         self._persist_pre_enqueue_rejected += 1
                         self._persist_degraded = True
                         record_degradation("depth", "DEPTH_PERSISTENCE_SHUTDOWN")
-                        self._record_rejection(reason_code="SHUTDOWN_REJECT", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
-                        raise RuntimeError("depth persistence is shut down")
+                        shutdown_rejected = True
+                    else:
+                        shutdown_rejected = False
+                if shutdown_rejected:
+                    self._record_rejection(reason_code="SHUTDOWN_REJECT", instrument_token=instrument_token,
+                                           receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
+                    return
                 try:
                     canonical_depth = canonicalize_kite_depth(depth)
                     item_bytes = depth_queue_item_bytes(now_iso, instrument_token, canonical_depth, imbalance)
@@ -215,24 +223,53 @@ class DepthStore:
                 try:
                     # Apply bounded, time-limited backpressure without stalling the
                     # live WebSocket ingestion callback loop.
-                    put_timeout_sec = max(
-                        0.0,
-                        float(getattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 0.05) or 0.05),
-                    )
-                    self._persist_queue.put((
-                        now_iso, instrument_token,
-                        json.dumps({"depth": canonical_depth, "imbalance": imbalance}, sort_keys=True, separators=(",", ":")), now_epoch,
-                    ), timeout=put_timeout_sec)
+                    put_timeout_sec = min(0.05, max(0.0, float(
+                        getattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 0.05) or 0.05)))
+                    item = (now_iso, instrument_token,
+                            json.dumps({"depth": canonical_depth, "imbalance": imbalance}, sort_keys=True, separators=(",", ":")), now_epoch)
+                    # Hold admission serialization through enqueue + ledger update so
+                    # the worker cannot dequeue an item before it is counted.
+                    deadline = time.monotonic() + put_timeout_sec
+                    while True:
+                        with self._persist_admission_lock:
+                            with self._persist_lock:
+                                shutdown_rejected = self._persist_shutdown
+                                if shutdown_rejected:
+                                    self._persist_pre_enqueue_rejected += 1
+                                    self._persist_degraded = True
+                                    record_degradation("depth", "DEPTH_PERSISTENCE_SHUTDOWN")
+                            if shutdown_rejected:
+                                break
+                            try:
+                                self._persist_queue.put_nowait(item)
+                            except queue.Full:
+                                pass
+                            else:
+                                with self._persist_lock:
+                                    self._persist_enqueued += 1
+                                self._persist_wakeup.set()
+                                break
+
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise queue.Full
+                        # Wait on Queue's own condition without holding the
+                        # admission lock, allowing the worker to dequeue.
+                        with self._persist_queue.not_full:
+                            if self._persist_queue._qsize() >= self._persist_queue.maxsize:
+                                self._persist_queue.not_full.wait(timeout=remaining)
                 except queue.Full:
                     with self._persist_lock:
-                        self._persist_queue_rejected += 1
+                        self._persist_pre_enqueue_rejected += 1
                         self._persist_degraded = True
                         record_degradation("depth", "DEPTH_QUEUE_FULL")
-                        self._record_rejection(reason_code="QUEUE_REJECTED", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
+                    self._record_rejection(reason_code="QUEUE_REJECTED", instrument_token=instrument_token,
+                                           receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
                     logger.error("depth_persistence_queue_full")
-                    raise
-                with self._persist_lock:
-                    self._persist_enqueued += 1
+                else:
+                    if shutdown_rejected:
+                        self._record_rejection(reason_code="SHUTDOWN_REJECT", instrument_token=instrument_token,
+                                               receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
             # alert on spikes (optional)
             if getattr(cfg, "IMBALANCE_ALERT_ENABLE", False):
                 if abs(imbalance) > getattr(cfg, "IMBALANCE_ALERT", 0.6):
@@ -247,7 +284,11 @@ class DepthStore:
             logger.warning("depth_persistence_bound_rejected error=%s", type(exc).__name__)
         except Exception as exc:
             if str(exc) not in {"", "depth persistence is shut down"}:
-                self._record_rejection(reason_code="UNKNOWN_REJECTION", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
+                try:
+                    self._record_rejection(reason_code="UNKNOWN_REJECTION", instrument_token=instrument_token, receipt_epoch=now_epoch, queue_depth=self._persist_queue.qsize())
+                except Exception:
+                    with self._persist_lock:
+                        self._persist_provenance_write_failures += 1
             try:
                 ok = _ERROR_LOGGER.write({
                     "ts_epoch": now_epoch,
@@ -261,30 +302,38 @@ class DepthStore:
                 logger.error("depth_store_error_log_failed path=%s err=%s:%s", _ERROR_LOG_PATH, type(log_exc).__name__, log_exc)
 
     def persistence_state(self) -> dict:
-        with self._persist_lock:
-            qsize = self._persist_queue.qsize()
-            enqueued = self._persist_enqueued
-            in_flight = self._persist_in_flight
-            persisted = self._persisted
-            queue_rejected = self._persist_queue_rejected
-            pre_enqueue_rejected = self._persist_pre_enqueue_rejected
-            total_rejected = queue_rejected + pre_enqueue_rejected
-            unaccounted = enqueued - (persisted + in_flight + qsize + queue_rejected)
-            return {
+        with self._persist_admission_lock:
+            with self._persist_lock:
+                qsize = self._persist_queue.qsize()
+                enqueued = self._persist_enqueued
+                in_flight = self._persist_in_flight
+                persisted = self._persisted
+                queue_rejected = self._persist_queue_rejected
+                pre_enqueue_rejected = self._persist_pre_enqueue_rejected
+                total_rejected = queue_rejected + pre_enqueue_rejected
+                failures = self._persist_failures
+                unaccounted = enqueued - (persisted + in_flight + qsize + queue_rejected + failures)
+                total_attempts = enqueued + pre_enqueue_rejected
+                return {
                 "queue_depth": qsize,
                 "in_flight": in_flight,
                 "enqueued": enqueued,
+                "admission_attempts": total_attempts,
                 "persisted": persisted,
                 "rejected": total_rejected,
                 "queue_rejected": queue_rejected,
                 "pre_enqueue_rejected": pre_enqueue_rejected,
                 "failures": self._persist_failures,
+                "provenance_write_failures": self._persist_provenance_write_failures,
                 "unaccounted_remainder": unaccounted,
                 "accounting_invariant_ok": (unaccounted == 0),
+                "admission_accounting_invariant_ok": (
+                    total_attempts == persisted + in_flight + qsize + queue_rejected + failures + pre_enqueue_rejected
+                ),
                 "durability_degraded": self._persist_degraded,
                 "shutdown": self._persist_shutdown,
                 "worker_alive": self._persist_thread.is_alive(),
-            }
+                }
 
     def persistence_accounting(self) -> dict:
         """Expose institutional-grade accounting invariant metrics."""
@@ -293,6 +342,7 @@ class DepthStore:
     def shutdown_persistence(self, deadline_seconds: float = 2.0) -> dict:
         with self._persist_lock:
             self._persist_shutdown = True
+        self._persist_wakeup.set()
         deadline = time.monotonic() + max(0.0, float(deadline_seconds))
         while self._persist_queue.unfinished_tasks and time.monotonic() < deadline:
             time.sleep(0.01)

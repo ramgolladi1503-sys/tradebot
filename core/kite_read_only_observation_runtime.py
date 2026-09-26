@@ -449,10 +449,15 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         cadence_seconds=float(os.environ.get("CANONICAL_CYCLE_CADENCE_SECONDS", "60")),
     )
     from core.cas_primitive_producer import CASPrimitiveStore
-    authoritative_nifty_tokens = set(int(t) for t in (launch_plan.get("underlying_tokens") or []) if t)
-    if not authoritative_nifty_tokens:
-        authoritative_nifty_tokens = {int(t) for t, symbol in getattr(kite_depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}).items() if str(symbol).upper() == "NIFTY"}
-    cas_token = next(iter(authoritative_nifty_tokens), 0)
+    launch_nifty_tokens = set(int(t) for t in (launch_plan.get("underlying_tokens") or []) if t)
+    binding_nifty_tokens = {
+        int(t) for t, symbol in getattr(kite_depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}).items()
+        if str(symbol).upper() == "NIFTY"
+    }
+    if launch_nifty_tokens and binding_nifty_tokens and launch_nifty_tokens.isdisjoint(binding_nifty_tokens):
+        raise RuntimeError("CAS_NIFTY_TOKEN_BINDING_CONFLICT")
+    authoritative_nifty_tokens = launch_nifty_tokens or binding_nifty_tokens
+    cas_token = next(iter(authoritative_nifty_tokens), 0) if len(authoritative_nifty_tokens) == 1 else 0
     cas_store = CASPrimitiveStore(output_root / f"cas_short_horizon_primitives_{run_id}.json", session_id=run_id, source_sha=producer_commit, underlying_token=cas_token)
     cas_targets = {"0915": datetime.fromisoformat(f"{session_date}T09:15:00+05:30").timestamp(), "1000": datetime.fromisoformat(f"{session_date}T10:00:00+05:30").timestamp()}
     def cas_tick_sink(tick):
@@ -544,6 +549,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                     },
                     quote_truth={
                         "symbol": "NIFTY",
+                        "instrument_token": cas_token,
                         "ltp": float(nifty_ltp),
                         "is_fresh": bool(nifty_quote_age_sec is not None and nifty_quote_age_sec <= 2.5),
                         "is_executable_quote": True,
