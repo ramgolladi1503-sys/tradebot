@@ -1,40 +1,64 @@
-import pytest
-from strategies.strategy_registry import load_strategy_registry, StrategyRegistryEntry
+from strategies.strategy_registry import load_strategy_registry
 
-def test_registry_contains_simple_orb():
-    registry = load_strategy_registry()
-    assert "SIMPLE_ORB" in registry
-    entry = registry["SIMPLE_ORB"]
-    assert entry.strategy_kind == "execution_signal_strategy"
-    assert entry.certification_track == "phase_1_to_5_execution_replay"
-    assert entry.certification_supported is True
 
-def test_registry_contains_movement_strategies():
+DECOMMISSIONED_STRATEGY_IDS = {
+    "SIMPLE_ORB",
+    "HTF_OPENING_DRIVE_CONT",
+    "MEAN_REVERSION_EXTENSION",
+    "COMPRESSION_BREAKOUT",
+    "TREND_PULLBACK",
+    "VWAP_RECLAIM",
+    "OPENING_DRIVE",
+    "FAILED_BREAKOUT_TRAP",
+    "EXHAUSTION_REVERSAL",
+    "EVENT_VOLATILITY_EXPANSION",
+    "LATE_DAY_MOMENTUM",
+    "OPTION_PRESSURE",
+    "OPENING_RANGE_BREAKOUT",
+    "NO_TRADE_CHOP",
+    "PRO_STRATEGY_ENGINE",
+    "ENSEMBLE",
+    "TRADE_BUILDER",
+    "NIFTY_INTRADAY",
+    "BANKNIFTY_INTRADAY",
+    "SENSEX_INTRADAY",
+    "VWAP_ORB",
+    "ZERO_HERO",
+    "PAIRS_ARBITRAGE",
+    "VOLATILITY_TREND",
+}
+
+
+def test_decommissioned_legacy_strategies_are_absent_from_registry():
     registry = load_strategy_registry()
-    assert "MEAN_REVERSION_EXTENSION" in registry
-    entry = registry["MEAN_REVERSION_EXTENSION"]
+    assert DECOMMISSIONED_STRATEGY_IDS.isdisjoint(registry)
+
+
+def test_meg_remains_shadow_advisory_only():
+    registry = load_strategy_registry()
+    entry = registry["MARKET_EVENT_GRAPH_REVERSAL"]
     assert entry.strategy_kind == "candidate_generator_strategy"
-    assert entry.certification_track == "candidate_generator_contract_only"
-    assert entry.callable_name == "generate_mean_reversion_extension_candidates"
-    
+    assert entry.certification_track == "shadow_live_observation_only"
+    assert entry.certification_supported is False
+
+
 def test_registry_contains_test_strat_excluded():
     registry = load_strategy_registry()
-    assert "TEST_STRAT" in registry
     entry = registry["TEST_STRAT"]
     assert entry.strategy_kind == "test_fixture"
     assert entry.certification_track == "not_certifiable"
     assert entry.certification_supported is False
 
-def test_registry_contains_helper_modules():
-    registry = load_strategy_registry()
-    assert "RISK_MANAGER" in registry
-    entry = registry["RISK_MANAGER"]
-    assert entry.strategy_kind == "helper_module"
-    assert entry.certification_track == "not_certifiable"
 
-def test_registry_contains_aggregate_engine():
+def test_registry_retains_only_non_strategy_helpers():
     registry = load_strategy_registry()
-    assert "PRO_STRATEGY_ENGINE" in registry
-    entry = registry["PRO_STRATEGY_ENGINE"]
-    assert entry.strategy_kind == "aggregate_engine"
-    assert entry.certification_track == "aggregate_engine_certification"
+    for strategy_id in {
+        "RISK_MANAGER",
+        "POSITION_SIZER",
+        "SOFT_SIGNAL",
+        "PRO_DECISION_ADAPTER",
+    }:
+        entry = registry[strategy_id]
+        assert entry.strategy_kind == "helper_module"
+        assert entry.certification_track == "not_certifiable"
+        assert entry.certification_supported is False
