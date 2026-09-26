@@ -1,0 +1,77 @@
+version: 1
+project:
+  id: tradebot
+  name: TradeBot
+  status: flagship
+  lab: Aixion Lab
+  repository: ramgolladi1503-sys/tradebot
+  risk_class: high
+  purpose: real-time financial decision, risk, execution-monitoring, QA, and research system
+
+source_of_truth:
+  agent_rules: AGENTS.md
+  architecture: README.md
+  release_policy:
+    - docs/BRANCH_PROTECTION.md
+    - docs/RELEASE_CHECKLIST.md
+  evidence_scope:
+    - README.md
+    - docs/
+    - research/
+
+context:
+  default_budget_kb: 8
+  persist_chat_transcript: false
+  prefer_file_references_over_copying: true
+  load_failures_on_related_tasks: true
+  load_evidence_on_claims: true
+
+commands:
+  install: pip install -r requirements.txt
+  tests: pytest -q
+  health_gate: python -m core.health_gate --desk DEFAULT --strict
+  rag_build: PYTHONPATH=. python scripts/tradebot_rag.py build
+  rag_doctor: PYTHONPATH=. python scripts/tradebot_rag.py doctor
+  rag_evaluate: PYTHONPATH=. python scripts/tradebot_rag.py evaluate
+
+agent_capabilities:
+  - repo-explorer
+  - planner
+  - research-synthesizer
+  - backtest-worker
+  - robustness-worker
+  - implementer
+  - verifier
+  - failure-miner
+  - release-gate
+
+high_risk_paths:
+  - main.py
+  - run_live.sh
+  - config/
+  - credentials.py
+  - core/execution*
+  - core/broker*
+  - core/order*
+  - core/risk*
+  - core/feed*
+  - core/option_token_resolver.py
+  - core/runtime_safety_boot_guard.py
+  - strategies/
+
+forbidden_without_explicit_human_approval:
+  - broker calls
+  - order placement/modification/cancellation
+  - live-mode changes
+  - credential or token changes
+  - weakening risk gates
+  - weakening kill switches
+  - weakening feed freshness gates
+  - strategy threshold changes
+  - unrelated file edits
+
+verification:
+  code_change_requires_tests: true
+  safety_sensitive_change_requires_health_gate: true
+  research_claim_requires_evidence: true
+  unsupported_claims_must_fail_closed: true
