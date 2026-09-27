@@ -44,6 +44,8 @@ acceptance_proof:
 
 Change only `_monte_carlo`; do not alter `_load_trades`, orchestration, walk-forward, risk state, or report schema. Use a local `random.Random(seed)` so global random state is untouched. Draw `len(pnl)` observations with replacement for each replication, sort aggregate sums, and retain the current percentile/rounding fields. The default seed is fixed for reproducibility; make `n` and `seed` explicit keyword-compatible parameters. This is IID bootstrap of individual trade outcomes only; it does not handle serial dependence, overlapping labels, regime structure, or multiple testing and must not be presented as inferential certification.
 
+The existing `core/auto_retrain.py` invokes `ResearchPipeline.run()` in a cooldown path. Source inspection found that `_overfit_alarms()` accepts `mc` but does not read it; it bases its degraded-strategy set on trade count, Sharpe, expectancy, tail loss and walk-forward expectancy. The repair changes the diagnostic Monte Carlo payload only. It must not change the alarm or tracker/risk-state logic.
+
 ```text
 read_only=true for tests
 append=false

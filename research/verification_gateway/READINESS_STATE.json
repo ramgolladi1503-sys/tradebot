@@ -6,28 +6,41 @@
     "input_scope": "Inline synthetic fixtures only; no protected outcomes, runtime artifacts, broker APIs, or order actions accessed",
     "patch_parent_sha": "35d46108c05ccd11bfd66fdfd4f453f15690c120",
     "patch_scope_verified": true,
+    "remote_ci": {
+      "commit": "043577edd4b2c79c763690a64bbc6cfdf1cb7a0f",
+      "conclusion": "failure",
+      "failed_step": "Run fast deterministic tests",
+      "gateway_test_modules_collection_errors": 5,
+      "interpretation": "The remote run tested parent commit before latest docs/test-only EMA parity extension; no dependency integration was added, so the known collection failure remains applicable to any re-trigger.",
+      "reason": "ModuleNotFoundError: No module named pydantic",
+      "run_id": 36310696255
+    },
     "source_sha256": {
       "BASELINE_AND_SAFETY_MAP.md": "5a93f175088ff30b9651b920b67ae27f75009652af70851b2d46bf06117663c2",
+      "core/indicators_live.py": "bce5db52e9386e8f46e21c23237285f1f43697669dbe5ff48d466df6aa6aad89",
       "core/research_pipeline.py": "594c9a2e05a74f994777d586c2678c2ad62fb2bbbb3f75d842df38ae7d978b30",
-      "docs/research/PR936_MONTE_CARLO_RESAMPLING_CONTRACT.md": "3444786821ff69f8289299981fced6221a2d90091bdf3265f1e2789a78f2e101",
-      "research/verification_gateway/ACCEPTANCE_TEST_LOG_20260927.txt": "bb52254dfb61357b98f2d47b918d6e7b6013c88091c0bd88f32ef13b21426aa2",
+      "docs/research/PR936_MONTE_CARLO_RESAMPLING_CONTRACT.md": "0684ddcd0e7fc7de240cbee02bf502c6b6b3718bc0bfb3b5da7a68eec6c421e3",
+      "research/verification_gateway/ACCEPTANCE_TEST_LOG_20260927.txt": "4ecd1c3424d016cface2715044d14cff6f5dfcdc420154dac2d7928c89deefc0",
       "research/verification_gateway/DEPENDENCY_ADOPTION_DECISIONS.md": "7bbecf2a87970b3ab6ed61341f1c13fb8a1aca13337d2897783ac15d8a4976f5",
-      "research/verification_gateway/FINAL_CONTROLLED_DISCOVERY_READINESS.md": "e045c2cc98508e39cd224377aae4955169611c930ea5213da2ef8ccb500cfa70",
+      "research/verification_gateway/ENTRYPOINT_STATIC_INVENTORY_20260927.md": "3b2b49e76902fa5b625c7f236baed97cb5b5e97e846a074895602622d4ffc8ca",
+      "research/verification_gateway/FINAL_CONTROLLED_DISCOVERY_READINESS.md": "697029a032d0d54005078be3f1f050bbdc00499aa1e1467aa1170631530dae4f",
       "research/verification_gateway/HERMES_ARCHITECTURE_CONTRACT.md": "836b63f73cd971b362abbd978e7021b7956d3720af941cac841c3d1d8635b3e5",
       "research/verification_gateway/README.md": "621df92eda58a2f5509f942fd654642eaa753beefa949458998f1fef908fd7bb",
+      "research/verification_gateway/REMOTE_CI_STATUS_20260927.md": "b449d3c157ca2e17caa52cb8eafb30a56872f2d3a19369e075c4ff649f805914",
       "research/verification_gateway/contracts.py": "7b7cbeb9ae7c45dded432bc2000a974ae9b8c578e1cfb8b24fbf634ffb6c7fbc",
-      "research/verification_gateway/data_checks.py": "27ea5232b51f15389447e91a80a0d6d7685a0f821c239a6b2790b6df6c78d7b4",
-      "research/verification_gateway/reference_execution.py": "0a64a52beefb89222940dc401a7d05684f359b58895854e81897683e8274d643",
+      "research/verification_gateway/data_checks.py": "9bd258ed0b02109e840b30cd364bb9b4cd0a02ae41e900bcac753e68fa401e05",
+      "research/verification_gateway/reference_execution.py": "e1ceca6fd07bdfa05bd8c771c509928479719e9ff2fc6306a1698bed60773d50",
       "research/verification_gateway/reference_math.py": "44e5a6d43ef734db898689bfbe18ac9aef3637ea6d634e4e3d1d5a4bb1328a3d",
       "research/verification_gateway/registry_bridge.py": "f693e1111f4d2a1373e265f3106b974d9b1c369f7672e5434e7d431fa274dc52",
       "research/verification_gateway/requirements-verification-lock-py312-macos-arm64.txt": "a55cc60832852ed1485e2ee7a34c27d73a76bac193181a8319a5ea3a39949614",
       "research/verification_gateway/requirements-verification.txt": "c40f92619065d71ed74286e3a3af5bd33217721aedaf82aeaf03d8adc8057927",
       "tests/research/test_verification_gateway_contracts.py": "0620e9d346da4fd88b333fcb5ebebe1ab6404effa66f20550c37e8aa53a2c059",
-      "tests/research/test_verification_gateway_data.py": "fd258027c501c34b267e07298b45903a197a90671a7ac5204268ef0fde0fcc6a",
-      "tests/research/test_verification_gateway_reference_execution.py": "20bd754956279ac6bca730711b8f70acfadb6110e07082cddf62c6799b9b6aac",
-      "tests/research/test_verification_gateway_reference_math.py": "0ce8f45cdaf29995fb0703ab2e04c3228aa7fcb75a54f1aebb226d48a4228138",
+      "tests/research/test_verification_gateway_data.py": "18b0cdec59216210b9ab426c32197d3027236494246884f6087c79079a91670f",
+      "tests/research/test_verification_gateway_reference_execution.py": "1641cf41478a54fcb127768d349e3a633be9a517da0179e35209bbb3fab155ee",
+      "tests/research/test_verification_gateway_reference_math.py": "7aac4ff3c3b76ea33c418c0d886c11d96c628a62ef924e0f28c28fb3b66627bd",
       "tests/research/test_verification_gateway_registry_bridge.py": "25dada6a87a9ee475e347eaee3a74fc175185588df40a8814f260e9a01184f5e",
-      "tests/test_research_pipeline_monte_carlo.py": "f2f8011c4b595c8254871fe735c530d39b2c1836d5720828afdfe7bd117b0c90"
+      "tests/test_research_pipeline_monte_carlo.py": "f2f8011c4b595c8254871fe735c530d39b2c1836d5720828afdfe7bd117b0c90",
+      "docs/agent_reviews/pr936-verification-gateway-20260927.md": "98c3618bf6bff24ca0755a4f73530848919ad47d9e54092c83ab6262da903f66"
     },
     "synthetic_input_manifest": {
       "external_data_read": false,
@@ -37,16 +50,21 @@
     },
     "test_runs": [
       {
-        "command": "PYTHONPATH=. /tmp/pr936-verification-venv/bin/python -m pytest -q -o addopts='' tests/research/test_verification_gateway_contracts.py tests/research/test_verification_gateway_data.py tests/research/test_verification_gateway_registry_bridge.py tests/research/test_verification_gateway_reference_math.py tests/research/test_verification_gateway_reference_execution.py",
-        "result": "41 passed, 1 warning"
+        "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/research/test_verification_gateway_contracts.py tests/research/test_verification_gateway_data.py tests/research/test_verification_gateway_reference_math.py tests/research/test_verification_gateway_reference_execution.py tests/research/test_verification_gateway_registry_bridge.py",
+        "result": "52 passed, 1 warning"
       },
       {
-        "command": "PYTHONPATH=. /opt/anaconda3/bin/python -m pytest -q -o addopts='' tests/test_research_pipeline_monte_carlo.py",
+        "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/test_research_pipeline_monte_carlo.py",
         "result": "9 passed, 1 warning"
       }
-    ]
+    ],
+    "independent_review": {
+      "reviewer": "read-only adversarial subagent",
+      "findings": 2,
+      "status": "two findings remediated; CI and end-to-end acceptance remain blocked"
+    }
   },
-  "next_action": "Obtain separately authorized research-only CI dependency installation; continue H with official-entrypoint inventory and production parity review; preserve #1/#17 source-authority and OS sandbox blockers.",
+  "next_action": "Request/obtain the separately required authorization for isolated gateway CI dependency integration; meanwhile continue only source-backed, synthetic work that does not touch protected inputs. H requires a complete owner-reviewed call graph and OS read-path controls.",
   "nodes": [
     {
       "blockers": [
@@ -99,7 +117,7 @@
     },
     {
       "blockers": [
-        "No production implementation comparison",
+        "No strategy-level entry/exit translation comparison",
         "Authoritative historical #1/#17 source fixtures unavailable"
       ],
       "id": "D",
@@ -113,7 +131,7 @@
       ],
       "status": "PARTIAL",
       "tests": [
-        "6 synthetic hand-calculated and future-mutation tests pass"
+        "7 synthetic independent EMA oracle tests pass, including 1e-12 prefix comparison with pure core indicator calculation"
       ]
     },
     {
@@ -150,7 +168,7 @@
       ],
       "status": "PARTIAL",
       "tests": [
-        "11 synthetic event-tape mutation and acceptance tests pass"
+        "12 synthetic quote replay acceptance tests pass"
       ]
     },
     {
@@ -176,9 +194,14 @@
     },
     {
       "blockers": [
-        "Mandatory evidence-bound gateway and official-entrypoint bypass controls absent"
+        "Static candidate scan is not a complete owner-reviewed call graph",
+        "Official research entrypoints are not routed through one gateway",
+        "Direct outcome filesystem access is not OS restricted"
       ],
       "id": "H",
+      "outputs": [
+        "research/verification_gateway/ENTRYPOINT_STATIC_INVENTORY_20260927.md"
+      ],
       "owner": "GSD",
       "prerequisites": [
         "C",
@@ -195,9 +218,9 @@
       ],
       "id": "I",
       "outputs": [
-        "tests/research/test_verification_gateway_contracts.py",
-        "tests/research/test_verification_gateway_data.py",
-        "tests/research/test_verification_gateway_registry_bridge.py"
+        "research/verification_gateway/ENTRYPOINT_STATIC_INVENTORY_20260927.md",
+        "research/verification_gateway/ACCEPTANCE_TEST_LOG_20260927.txt",
+        "research/verification_gateway/REMOTE_CI_STATUS_20260927.md"
       ],
       "owner": "GSD",
       "prerequisites": [
@@ -205,18 +228,21 @@
       ],
       "status": "PARTIAL",
       "tests": [
-        "30 gateway contract/data/registry/reference-math tests pass",
-        "11 synthetic reference execution tests pass",
-        "9 synthetic Monte Carlo tests pass"
+        "52 gateway contract/data/registry/math/execution tests pass",
+        "9 synthetic Monte Carlo regression tests pass"
       ]
     },
     {
       "blockers": [
-        "Default CI missing Pydantic; workflow/dependency change explicitly protected",
-        "Independent reviewer not yet assigned",
-        "No end-to-end integration PR or controlled-discovery evidence"
+        "Remote CI run 36310696255 failed collecting 5 gateway modules: missing pydantic",
+        "CI and root dependency files are protected and unchanged",
+        "No end-to-end integration PR or controlled-discovery evidence",
+        "Independent review identified and remediated two input/replay findings; remote CI dependency integration remains unavailable under the current protected-path scope"
       ],
       "id": "J",
+      "outputs": [
+        "research/verification_gateway/REMOTE_CI_STATUS_20260927.md"
+      ],
       "owner": "GSD",
       "prerequisites": [
         "I"

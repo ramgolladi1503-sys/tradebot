@@ -65,7 +65,8 @@ def _price(value: Decimal | str | int, label: str) -> Decimal:
 
 
 def _first_eligible_quote(
-    quotes: Sequence[SyntheticQuote], decision: SyntheticDecision
+    quotes: Sequence[SyntheticQuote], decision: SyntheticDecision,
+    *, after_available_time: datetime | None = None,
 ) -> SyntheticQuote:
     _aware(decision.decided_at, "DECISION_TIME")
     candidates = []
@@ -77,6 +78,10 @@ def _first_eligible_quote(
             raise ValueError("CROSSED_QUOTE")
         if quote.available_time < quote.event_time:
             raise ValueError("QUOTE_AVAILABLE_BEFORE_EVENT")
+        if after_available_time is not None:
+            _aware(after_available_time, "PRIOR_FILL_AVAILABLE_TIME")
+            if quote.available_time <= after_available_time:
+                continue
         if quote.instrument_id != decision.instrument_id or quote.contract_id != decision.contract_id:
             continue
         # A quote must be generated and published no earlier than the decision.
@@ -135,9 +140,9 @@ def replay_long_round_trip(
         raise ValueError("NEGATIVE_COST_RATE")
     entry_quote = _first_eligible_quote(quotes, entry_decision)
     entry = _fill(entry_quote, entry_decision, side="BUY", fee_bps=fee * 10000, slippage_bps=slip * 10000)
-    exit_quote = _first_eligible_quote(quotes, exit_decision)
-    if exit_quote.available_time <= entry.available_time:
-        raise ValueError("EXIT_FILL_NOT_AFTER_ENTRY_FILL")
+    exit_quote = _first_eligible_quote(
+        quotes, exit_decision, after_available_time=entry.available_time
+    )
     exit_fill = _fill(exit_quote, exit_decision, side="SELL", fee_bps=fee * 10000, slippage_bps=slip * 10000)
     if exit_fill.contract_id != entry.contract_id:
         raise ValueError("FILL_CONTRACT_MISMATCH")

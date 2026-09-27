@@ -69,6 +69,29 @@ def test_contract_identity_is_required():
         validate_ohlcv_fixture(f)
 
 
+@pytest.mark.parametrize("column,value", [
+    ("open", float("inf")), ("high", float("-inf")),
+    ("low", float("nan")), ("close", float("inf")),
+    ("volume", float("inf")),
+])
+def test_nonfinite_ohlcv_is_rejected(column, value):
+    f = fixture()
+    f.loc[0, column] = value
+    with pytest.raises(ValueError, match="NONFINITE_OHLCV"):
+        validate_ohlcv_fixture(f)
+
+
+@pytest.mark.parametrize("column,value", [
+    ("instrument_id", ""), ("instrument_id", " NIFTY"),
+    ("contract_id", "   "), ("contract_id", "NIFTY-INDEX "),
+])
+def test_blank_or_untrimmed_identity_is_rejected(column, value):
+    f = fixture()
+    f.loc[0, column] = value
+    with pytest.raises(ValueError, match=f"INVALID_{column.upper()}"):
+        validate_ohlcv_fixture(f)
+
+
 def test_shape_pass_does_not_claim_source_or_execution_authority():
     report = inspect_ohlcv_fixture(fixture())
     assert report.data_shape == "DATA_SHAPE_PASS"

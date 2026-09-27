@@ -100,6 +100,17 @@ def test_exit_fill_must_follow_entry_fill():
         replay([quote(1, 99, 101), quote(2, 109, 111)], exit=decision(3, side="SELL"))
 
 
+def test_exit_skips_quotes_published_before_entry_fill_and_uses_later_quote():
+    result = replay([
+        quote(1, 99, 101, available_offset=2),  # entry quote
+        quote(3, 109, 111, available_offset=4),  # exit eligible, but predates entry fill
+        quote(4, 108, 110, available_offset=6),  # first exit quote after entry fill
+    ])
+    assert result.entry.available_time == decision(2).decided_at
+    assert result.exit.available_time == decision(4).decided_at
+    assert result.exit.price == Decimal("108.891")
+
+
 @pytest.mark.parametrize("fee,slip", [("-1", "0"), ("0", "-1")])
 def test_negative_costs_block(fee, slip):
     with pytest.raises(ValueError, match="NEGATIVE_COST_RATE"):

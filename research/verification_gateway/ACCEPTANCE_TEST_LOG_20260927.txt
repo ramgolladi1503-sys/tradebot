@@ -1,12 +1,21 @@
+Gateway contracts/data/registry/math/execution suite (Python 3.12 isolated research dependencies)
+....................................................                     [100%]
+52 passed, 1 warning
+
+Synthetic Monte Carlo suite (system Python 3.12)
+.........                                                                [100%]
+9 passed, 1 warning
+
+Earlier checkpoint results (before late-fill and stricter OHLCV regressions):
 Gateway + synthetic math/execution suite
-.........................................                                [100%]
+..........................................                               [100%]
 =============================== warnings summary ===============================
 ../../../../../../tmp/pr936-verification-venv/lib/python3.12/site-packages/_hypothesis_pytestplugin.py:487
   /tmp/pr936-verification-venv/lib/python3.12/site-packages/_hypothesis_pytestplugin.py:487: UserWarning: Skipping collection of '.hypothesis' directory - this usually means you've explicitly set the `norecursedirs` pytest config option, replacing rather than extending the default ignores.
     warnings.warn(
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-41 passed, 1 warning in 0.90s
+42 passed, 1 warning in 0.80s
 Synthetic Monte Carlo suite
 /opt/anaconda3/lib/python3.12/site-packages/pandas/core/computation/expressions.py:23: UserWarning: Pandas requires version '2.10.2' or newer of 'numexpr' (version '2.8.7' currently installed).
   from pandas.core.computation.check import NUMEXPR_INSTALLED

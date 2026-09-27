@@ -11,13 +11,13 @@ The PR #936 prototype is **not ready for a controlled strategy hunt**. This work
 | A — baseline, provenance, safety inventory | PARTIAL | `BASELINE_AND_SAFETY_MAP.md`; public PR/base identities and dirty canonical checkout recorded. OS-enforced protected-data sandbox and complete authoritative family census not verified. |
 | B — reuse/dependency audit | PARTIAL | `DEPENDENCY_ADOPTION_DECISIONS.md`; Pydantic/Pandera/Hypothesis isolated set pinned for Python 3.12 macOS arm64. CI/Linux lock and all selected-library POCs not complete. |
 | C — source fidelity + EDGE-65/67 bridge | BLOCK | `contracts.py` schema and registry metadata bridge exist. `verify_strategy_spec` intentionally returns BLOCKED; no authenticated source-review/evidence producer or extract/review/freeze/inspect CLI. |
-| D — independent mathematical oracle | PARTIAL | `reference_math.py` contains a separately written scalar SMA-seeded EMA/crossover oracle with hand-calculated and future-mutation tests. It is not compared with a production indicator implementation. Authentic historical references for #1/#17 remain unavailable; no authentic fixtures invented. |
+| D — independent mathematical oracle | PARTIAL | `reference_math.py` contains a separately written scalar SMA-seeded EMA/crossover oracle with hand-calculated and future-mutation tests. It agrees to 1e-12 with the existing pure in-memory EMA indicator on synthetic prefixes; this is indicator arithmetic only, not source strategy/entry/exit translation. Authentic historical references for #1/#17 remain unavailable; no authentic fixtures invented. |
 | E — PIT causality/data authority | PARTIAL | Synthetic OHLCV checks require instrument/contract identity and validate timestamps per identity; `FixtureValidationReport` keeps `DATA_SHAPE_PASS` separate from source authentication and execution-quote authority, both `NOT_VERIFIED`. PIT/survivorship and quote authority are absent. |
-| F — execution/cost parity | PARTIAL | `reference_execution.py` independently replays synthetic quote tapes with data availability, next permissible quote, contract identity, buy-only entry, bid/ask, slippage and fees. Eleven mutation/acceptance tests pass. No comparison to TradeBot's production research backtest exists; historical quote validity remains unproven. |
+| F — execution/cost parity | PARTIAL | `reference_execution.py` independently replays synthetic quote tapes with data availability, next permissible quote, contract identity, buy-only entry, bid/ask, slippage and fees. Twelve mutation/acceptance tests pass. No comparison to TradeBot's production research backtest exists; historical quote validity remains unproven. |
 | G — statistics/exposure controls | PARTIAL | Under separate Hermes contract, `_monte_carlo()` now uses seeded trade-level resampling with replacement; 9 synthetic tests pass. It remains IID and does not handle serial dependence; full trial denominator remains unavailable and DSR/PBO stay `NOT_ESTIMABLE`. |
-| H — evidence-bound official gateway | BLOCK | Prototype is not wired to official research entry points; caller flags were removed from its report function, but no evidence producer/access state machine exists. |
-| I — adversarial acceptance | PARTIAL | 30 gateway contract/data/registry/math tests, 11 synthetic execution tests, and 9 Monte Carlo tests pass in isolated environments. No OS-denied protected path test, official API bypass inventory, production parity, or clean CI run. |
-| J — independent audit/release | BLOCK | No independent reviewer signoff. Default PR CI currently fails collecting gateway tests because the workflow does not install Pydantic. Task instructions protect CI and root dependency files, so no such edit was made. |
+| H — evidence-bound official gateway | BLOCK | [Static inventory](ENTRYPOINT_STATIC_INVENTORY_20260927.md) found 5 `scripts/research` command candidates and 46 outcome/ledger-reference script candidates, but this is not an owner-reviewed complete call graph. `run_strategy_pipeline_research.py` and `run_governed_strategy_research.py` remain separate; `core/analytics/walk_forward_pipeline.py` reads the outcomes directory directly. No central gateway or OS read-path restriction exists. |
+| I — adversarial acceptance | PARTIAL | 52 gateway contract/data/registry/math/execution tests and 9 Monte Carlo tests pass in isolated environments. No OS-denied protected path test, official API bypass test, full research-entrypoint inventory, or clean CI run. |
+| J — independent audit/release | BLOCK | No independent reviewer signoff. Updated PR CI run 36310696255 failed collection on all five gateway modules with `ModuleNotFoundError: No module named 'pydantic'`; see [remote CI record](REMOTE_CI_STATUS_20260927.md). Task instructions protect CI and root dependency files, so no such edit was made. |
 
 ## Work completed
 
@@ -28,7 +28,9 @@ The PR #936 prototype is **not ready for a controlled strategy hunt**. This work
 - Added digest-mutation, forged-flag, review-string, timezone-aware shape and naive-time rejection tests.
 - Added required instrument/contract identity and per-contract timestamp checks; kept shape success separate from source and execution quote status.
 - Added a standalone SMA-seeded EMA/crossover scalar oracle with explicit warm-up and strict crossing behavior, hand-checkable numeric assertions, and future-mutation invariance tests. It is synthetic methodology only, not evidence that any source strategy is faithfully translated.
+- Compared the reference SMA-seeded EMA against `core.indicators_live.compute_indicators()` over each prefix of one synthetic candle tape; values agree to 1e-12. The pure indicator function was invoked with in-memory synthetic data only; no strategy/runtime or broker path was executed.
 - Added `reference_execution.py`, an independent Decimal-based synthetic quote-tape replay that blocks pre-decision fills, quote publication before event, crossed quotes, contract mismatches, non-buy entries, and negative costs. It accounts for bid/ask, explicit basis-point slippage and fees. It has no live/broker integration and is not compared to a TradeBot production backtest.
+- Added a static candidate inventory for research CLIs and outcome/ledger access paths. It also confirms a direct outcome-directory read in `core/analytics/walk_forward_pipeline.py`; no candidate scripts or outcome paths were run/read. This is evidence of an unresolved bypass surface, not complete entrypoint enumeration.
 - Repaired the exact Monte Carlo defect under [a separate Hermes contract](../../docs/research/PR936_MONTE_CARLO_RESAMPLING_CONTRACT.md): fixed-seed `random.Random.choices` bootstrap with replacement, preserving minimum sample omission and report fields. Its 9 tests pass. This is an IID descriptive diagnostic, not dependence-aware inference.
 - Pinned the isolated dependency set and wrote a platform-specific lock and dependency decision record.
 - Added baseline/safety map and machine-readable DAG checkpoint.
@@ -41,7 +43,7 @@ PYTHONPATH=. /tmp/pr936-verification-venv/bin/python -m pytest -q -o addopts='' 
   tests/research/test_verification_gateway_data.py \
   tests/research/test_verification_gateway_registry_bridge.py \
   tests/research/test_verification_gateway_reference_math.py
-# 30 passed, 12 warnings
+# 42 passed, 1 warning
 
 PYTHONPATH=. /opt/anaconda3/bin/python -m pytest -q -o addopts='' \
   tests/test_research_pipeline_monte_carlo.py
@@ -52,15 +54,16 @@ PYTHONPATH=. /tmp/pr936-verification-venv/bin/python -m pytest -q -o addopts='' 
 # 11 passed, 1 warning
 ```
 
-The current remote PR CI is not green: the default workflow installs root requirements and pandas only, while all three new tests import Pydantic. The run failed collection with three `ModuleNotFoundError: No module named 'pydantic'` errors. The dependency/CI installation must be proposed through a separately authorized protected-path change; no CI gates were weakened.
+The current remote PR CI is not green: the default workflow installs root requirements and pandas only, while five gateway test modules import Pydantic. The run failed collection with five `ModuleNotFoundError: No module named 'pydantic'` errors. The dependency/CI installation must be proposed through a separately authorized protected-path change; no CI gates were weakened.
 
 ## Exact dependencies and resume commands
 
 1. **Dependency/CI owner:** authorize a narrow follow-up that installs the research-only locked set in an isolated gateway CI job (or an equivalent safe path), without modifying runtime dependency behavior. Then rerun PR checks on the resulting exact SHA.
 2. **Research statistics owner:** review the completed Monte Carlo patch against its contract, especially IID-vs-dependent sample limits. A future dependence-aware method needs a separate spec, synthetic overlapping-label fixture, and a registered trial-denominator source. Keep DSR/PBO `NOT_ESTIMABLE` until the full search denominator is recoverable.
-3. **Research platform owner:** supply authoritative source references for historical defects #1 and #17 and define source-review identity/signature authority. Until supplied, synthetic defect tests cannot be described as source fidelity.
-4. **Security/deployment owner:** provide a disposable OS/container sandbox with no credential and protected-outcome read permissions, and demonstrate denied access attempts. Python API tests alone cannot prove this boundary.
-5. Continue DAG from earliest blocked nodes; do not copy uncommitted canonical-checkout research files into PR #936 or claim the referenced local repairs are integrated.
+3. **Research platform owner:** source/audit a complete official-entrypoint call graph, then separately authorize routing each entrypoint through the evidence gateway. The static scan found direct filesystem paths; it is not a bypass test.
+4. **Research platform owner:** supply authoritative source references for historical defects #1 and #17 and define source-review identity/signature authority. Until supplied, synthetic defect tests cannot be described as source fidelity.
+5. **Security/deployment owner:** provide a disposable OS/container sandbox with no credential and protected-outcome read permissions, and demonstrate denied access attempts. Python API tests alone cannot prove this boundary.
+6. Continue DAG from earliest blocked nodes; do not copy uncommitted canonical-checkout research files into PR #936 or claim the referenced local repairs are integrated.
 
 Suggested commands after these dependencies are met:
 
@@ -77,4 +80,4 @@ PYTHONPATH=. /opt/anaconda3/bin/python -m pytest -q -o addopts='' \
   tests/test_research_pipeline_monte_carlo.py
 ```
 
-No PR update/push, merge, protected outcome access, broker API, order action, runtime change, or live/paper action was performed. The separate PR #936 remains a draft. No new config keys or production migration were added. No PR-specific CI dependency workflow was changed due the explicit protected-path instructions. The isolated dependency lock and new test hooks are listed above. Risks still fail closed where evidence or permission authority is missing.
+The separate draft PR #936 was updated with the initial scoped checkpoint at commit `043577edd4b2c79c763690a64bbc6cfdf1cb7a0f`; no merge occurred. No protected outcome access, broker API, order action, live/paper action, config key, or CI/dependency workflow change was made. Subsequent local documentation, synthetic indicator comparison, and independent-review remediations remain a follow-up to that checkpoint and must be committed/pushed before the PR reflects them. Risks still fail closed where evidence or permission authority is missing.

@@ -2,6 +2,7 @@
 import pytest
 
 from research.verification_gateway.reference_math import ema_cross_up_reference
+from core.indicators_live import compute_indicators
 
 
 def test_sma_seed_and_recursive_warmup_are_explicit():
@@ -29,6 +30,25 @@ def test_future_mutation_cannot_change_prior_reference_values_or_events():
     assert original.fast[:len(prefix)] == mutated.fast[:len(prefix)]
     assert original.slow[:len(prefix)] == mutated.slow[:len(prefix)]
     assert original.cross_up_indices == mutated.cross_up_indices
+
+
+def test_independent_ema_matches_pure_existing_indicator_on_synthetic_prefixes():
+    closes = [100, 101, 99, 102, 103, 100, 105, 104, 107, 106,
+              110, 108, 111, 109, 113, 115, 112, 117, 116, 119,
+              121, 118, 122, 124, 120, 126, 125, 129]
+    reference = ema_cross_up_reference(closes, fast_period=5, slow_period=20)
+    for prefix_end in range(20, len(closes) + 1):
+        prefix = closes[:prefix_end]
+        candles = [
+            {"ts": index, "close": close, "high": close + 1,
+             "low": close - 1, "volume": 10}
+            for index, close in enumerate(prefix)
+        ]
+        observed = compute_indicators(
+            candles, vwap_window=1, atr_period=1, adx_period=1,
+            vol_window=1, slope_window=1,
+        )["ema"]
+        assert observed == pytest.approx(reference.slow[prefix_end - 1], abs=1e-12)
 
 
 @pytest.mark.parametrize("closes", [[1, float("nan")], [1, float("inf")]])
