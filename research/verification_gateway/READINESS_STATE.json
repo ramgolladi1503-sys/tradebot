@@ -20,10 +20,10 @@
       "core/indicators_live.py": "bce5db52e9386e8f46e21c23237285f1f43697669dbe5ff48d466df6aa6aad89",
       "core/research_pipeline.py": "594c9a2e05a74f994777d586c2678c2ad62fb2bbbb3f75d842df38ae7d978b30",
       "docs/research/PR936_MONTE_CARLO_RESAMPLING_CONTRACT.md": "0684ddcd0e7fc7de240cbee02bf502c6b6b3718bc0bfb3b5da7a68eec6c421e3",
-      "research/verification_gateway/ACCEPTANCE_TEST_LOG_20260927.txt": "4ecd1c3424d016cface2715044d14cff6f5dfcdc420154dac2d7928c89deefc0",
+      "research/verification_gateway/ACCEPTANCE_TEST_LOG_20260927.txt": "4ce9d59d8e6ef52508588601d381ef2e5535e1c424537f849123cb11df81a8e6",
       "research/verification_gateway/DEPENDENCY_ADOPTION_DECISIONS.md": "7bbecf2a87970b3ab6ed61341f1c13fb8a1aca13337d2897783ac15d8a4976f5",
       "research/verification_gateway/ENTRYPOINT_STATIC_INVENTORY_20260927.md": "3b2b49e76902fa5b625c7f236baed97cb5b5e97e846a074895602622d4ffc8ca",
-      "research/verification_gateway/FINAL_CONTROLLED_DISCOVERY_READINESS.md": "697029a032d0d54005078be3f1f050bbdc00499aa1e1467aa1170631530dae4f",
+      "research/verification_gateway/FINAL_CONTROLLED_DISCOVERY_READINESS.md": "1e2941f2647fe07970f6e62a70ed81a14e68082f84bc2f07c1dba1b160cb2f80",
       "research/verification_gateway/HERMES_ARCHITECTURE_CONTRACT.md": "836b63f73cd971b362abbd978e7021b7956d3720af941cac841c3d1d8635b3e5",
       "research/verification_gateway/README.md": "621df92eda58a2f5509f942fd654642eaa753beefa949458998f1fef908fd7bb",
       "research/verification_gateway/REMOTE_CI_STATUS_20260927.md": "b449d3c157ca2e17caa52cb8eafb30a56872f2d3a19369e075c4ff649f805914",
@@ -40,7 +40,11 @@
       "tests/research/test_verification_gateway_reference_math.py": "7aac4ff3c3b76ea33c418c0d886c11d96c628a62ef924e0f28c28fb3b66627bd",
       "tests/research/test_verification_gateway_registry_bridge.py": "25dada6a87a9ee475e347eaee3a74fc175185588df40a8814f260e9a01184f5e",
       "tests/test_research_pipeline_monte_carlo.py": "f2f8011c4b595c8254871fe735c530d39b2c1836d5720828afdfe7bd117b0c90",
-      "docs/agent_reviews/pr936-verification-gateway-20260927.md": "98c3618bf6bff24ca0755a4f73530848919ad47d9e54092c83ab6262da903f66"
+      "docs/agent_reviews/pr936-verification-gateway-20260927.md": "70f994b72b9f1cb1ce87b4809d375ef732c55a56ad33452c9df69b3e354ce9b3",
+      "core/analytics/candidate_ml_v2/dataset.py": "b651a14545ee00b18fd99f1a5d65081107700cd0ee7c29f5787449fe0a0a7bb4",
+      "core/analytics/candidate_ml_v2/certification.py": "455abaff6c85336439f6da2de361986f8d73b33dd0c406a32d4643f2ba3234f2",
+      "tests/test_candidate_ml_v2.py": "092a6a37920e4ddbbb70451f7b036a20809eb3428d81ed506c2f301c466312f4",
+      "docs/research/PR936_PURGED_EMBARGO_CONTRACT.md": "c2879aa54d575b86138c9dcabd2e725c6a41a9b09bcac0f723d1163a91119fac"
     },
     "synthetic_input_manifest": {
       "external_data_read": false,
@@ -56,15 +60,41 @@
       {
         "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/test_research_pipeline_monte_carlo.py",
         "result": "9 passed, 1 warning"
+      },
+      {
+        "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/test_candidate_ml_v2.py -k 'purged_walk_forward or nested_chronological or nested_model_forwards or ablation_training'",
+        "result": "9 passed, 6 deselected, 1 warning"
+      },
+      {
+        "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/test_candidate_ml_v2.py",
+        "result": "15 passed, 1 warning in 19.50s"
+      },
+      {
+        "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/analytics tests/test_candidate_ml_v2.py tests/test_candidate_ml_v2_replay_ledger.py tests/test_candidate_ml_v2_provenance.py tests/test_candidate_ml_v2_historical_options.py tests/test_candidate_ml_v2_corpus_loader.py tests/test_candidate_ml_v2_market_corpus.py tests/test_analytics_schema_store.py",
+        "result": "86 passed, 4237 warnings in 24.51s; tests use synthetic fixtures or temporary directories"
       }
     ],
     "independent_review": {
       "reviewer": "read-only adversarial subagent",
       "findings": 2,
       "status": "two findings remediated; CI and end-to-end acceptance remain blocked"
+    },
+    "last_remote_ci": {
+      "commit": "489218be2f6b9536b5ca44506d892b70b6e645b8",
+      "run_id": 36312194925,
+      "conclusion": "failure",
+      "failed_step": "Run fast deterministic tests",
+      "collection_errors": 5,
+      "reason": "ModuleNotFoundError: No module named pydantic",
+      "health_gate": "skipped"
+    },
+    "independent_review_node_g": {
+      "reviewer": "read-only GSD code reviewer",
+      "findings_corrected": 4,
+      "status": "final follow-up review found no remaining issue within scoped files"
     }
   },
-  "next_action": "Request/obtain the separately required authorization for isolated gateway CI dependency integration; meanwhile continue only source-backed, synthetic work that does not touch protected inputs. H requires a complete owner-reviewed call graph and OS read-path controls.",
+  "next_action": "Continue G with full trial-family registration and dependence-aware inference, plus regime-amputation governance review; then establish H official-entrypoint gateway and OS read-path controls. Protected CI dependency integration and inherited frozen-path PR scope remain external governed dependencies.",
   "nodes": [
     {
       "blockers": [
@@ -173,13 +203,17 @@
     },
     {
       "blockers": [
-        "Full trial-family denominator remains incomplete; dependence-aware resampling not implemented"
+        "Trial-family denominator remains incomplete; Monte Carlo is IID; full regime-amputation governance audit remains outstanding"
       ],
       "id": "G",
       "outputs": [
+        "core/analytics/candidate_ml_v2/certification.py",
+        "core/analytics/candidate_ml_v2/dataset.py",
         "core/research_pipeline.py",
-        "tests/test_research_pipeline_monte_carlo.py",
-        "docs/research/PR936_MONTE_CARLO_RESAMPLING_CONTRACT.md"
+        "docs/research/PR936_MONTE_CARLO_RESAMPLING_CONTRACT.md",
+        "docs/research/PR936_PURGED_EMBARGO_CONTRACT.md",
+        "tests/test_candidate_ml_v2.py",
+        "tests/test_research_pipeline_monte_carlo.py"
       ],
       "owner": "GSD",
       "prerequisites": [
@@ -189,7 +223,11 @@
       ],
       "status": "PARTIAL",
       "tests": [
-        "9 synthetic Monte Carlo regression tests pass"
+        "9 seeded synthetic Monte Carlo regression tests pass",
+        "Synthetic boundary, embargo, nested split, ablation and minimum-session purge regressions pass",
+        "Full candidate_ml_v2 test module: 15 pass",
+        "Offline analytics/candidate_ml_v2 suite: 86 pass",
+        "Independent read-only review: no remaining scoped findings"
       ]
     },
     {

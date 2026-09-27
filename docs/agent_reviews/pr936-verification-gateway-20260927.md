@@ -32,6 +32,8 @@ Scoped remediation is implemented. Gateway, registry, reference mathematics, dat
 
 Validation: 52 gateway tests passed (one pytest cache warning) in `/tmp/pr936-verification-venv`; 9 Monte Carlo tests passed (one pytest cache warning) in the system Python environment. These local runs used only inline synthetic fixtures. The live remote CI result remains failed at collection because the protected default workflow does not install Pydantic. No CI failure was bypassed or hidden. Full project test suite, OS-level protected-path denial, API bypass prevention, and production backtest parity are not established.
 
+Subsequent node G work was performed under `docs/research/PR936_PURGED_EMBARGO_CONTRACT.md`: purged/embargoed outer and nested folds plus ablation parity. The focused split suite passed 9 tests, the complete candidate ML module passed 15 tests, and the offline analytics/candidate ML suite passed 86 tests with synthetic or temporary-directory fixtures. A separate read-only reviewer examined the current G patch, reported four findings across iterations, and confirmed the final scoped changes resolve them.
+
 ## Acceptance Proof
 
 The exact local test command is recorded in `research/verification_gateway/ACCEPTANCE_TEST_LOG_20260927.txt`. Independent review findings have matching regression coverage. The code still reports `BLOCKED_WITH_EXACT_DEPENDENCY`; no controlled research release is claimed.

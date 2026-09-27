@@ -29,3 +29,32 @@ Synthetic Monte Carlo suite
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 9 passed, 1 warning in 0.28s
+
+Purged/embargoed candidate walk-forward focused regressions
+.....                                                                    [100%]
+5 passed, 6 deselected, 1 warning
+
+Full candidate_ml_v2 analytics tests
+...........                                                              [100%]
+11 passed, 1 warning
+
+Offline analytics and candidate_ml_v2 regression set (temporary/in-memory synthetic fixtures)
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed, 4237 warnings in 22.91s
+
+Final node G review remediation rerun
+Purged/embargoed WFA plus ablation focused regressions: 6 passed, 6 deselected, 1 warning
+Full candidate_ml_v2 analytics tests: 12 passed, 1 warning in 50.70s
+Offline analytics and candidate_ml_v2 regression set: 83 passed, 4237 warnings in 24.97s
+
+Final node G purge/embargo review remediation rerun
+Purged/embargoed WFA, nested split, and ablation focused regressions: 9 passed, 6 deselected, 1 warning
+Full candidate_ml_v2 analytics tests: 14 passed, 1 warning in 21.69s
+Offline analytics and candidate_ml_v2 regression set: 85 passed, 4237 warnings in 25.60s
+
+Final reviewed node G state
+Focused split/embargo/nested/ablation/support regressions: 9 passed, 6 deselected, 1 warning
+Full candidate_ml_v2 tests: 15 passed, 1 warning in 19.50s
+Offline analytics and candidate_ml_v2 suite: 86 passed, 4237 warnings in 24.51s
+Independent read-only follow-up review: no remaining scoped findings
