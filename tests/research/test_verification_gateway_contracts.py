@@ -38,10 +38,28 @@ def valid_payload():
 
 def test_unreviewed_source_never_verified():
     spec = ResearchStrategySpec.model_validate(valid_payload())
-    report = verify_strategy_spec(spec, reference_comparison_passed=True,
-                                  causal_checks_passed=True, data_checks_passed=True)
+    report = verify_strategy_spec(spec)
     assert not report.translation_verified
+    assert report.status == "BLOCKED"
     assert "SOURCE_REVIEW_NOT_VERIFIED" in report.issues
+    assert "INDEPENDENT_VERIFIER_NOT_IMPLEMENTED" in report.issues
+
+
+def test_review_evidence_string_does_not_create_authority():
+    payload = valid_payload()
+    payload["source_review_status"] = "INDEPENDENTLY_REVIEWED"
+    payload["independent_reviewer_evidence"] = "reviewed=true"
+    spec = ResearchStrategySpec.model_validate(payload)
+    report = verify_strategy_spec(spec)
+    assert not report.translation_verified
+    assert report.status == "BLOCKED"
+    assert "SOURCE_REVIEW_ATTESTATION_UNAUTHENTICATED" in report.issues
+
+
+def test_caller_cannot_supply_forged_pass_flags():
+    spec = ResearchStrategySpec.model_validate(valid_payload())
+    with pytest.raises(TypeError):
+        verify_strategy_spec(spec, reference_comparison_passed=True)
 
 
 def test_reviewed_requires_proof():
@@ -62,6 +80,14 @@ def test_content_digest_stable():
     a = ResearchStrategySpec.model_validate(valid_payload())
     b = ResearchStrategySpec.model_validate(valid_payload())
     assert a.content_digest() == b.content_digest()
+
+
+def test_content_digest_changes_when_frozen_rule_changes():
+    original = valid_payload()
+    changed = valid_payload()
+    changed["entry_rule"] = "enter before the signal bar closes"
+    assert (ResearchStrategySpec.model_validate(original).content_digest() !=
+            ResearchStrategySpec.model_validate(changed).content_digest())
 
 
 def test_known_causal_failure():

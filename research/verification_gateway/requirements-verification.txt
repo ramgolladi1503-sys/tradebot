@@ -1,5 +1,6 @@
 # Research-only optional dependencies; do NOT edit the frozen root requirements.
-# Resolve and pin exact compatible versions in an isolated lockfile before CI adoption.
-pydantic>=2,<3
-pandera>=0.20,<1
-hypothesis>=6,<7
+# These exact resolver outputs were produced in an isolated Python 3.12 venv
+# on macOS arm64. Re-resolve and verify against other supported platforms.
+pydantic==2.13.5
+pandera==0.33.1
+hypothesis==6.168.2

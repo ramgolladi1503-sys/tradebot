@@ -71,17 +71,16 @@ class ResearchStrategySpec(BaseModel):
 class VerificationReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     spec_sha256: str
-    source_reviewed: bool
-    reference_comparison_passed: bool
-    causal_checks_passed: bool
-    data_checks_passed: bool
+    status: Literal["NOT_VERIFIED", "BLOCKED"] = "NOT_VERIFIED"
+    evidence_sha256: str | None = None
     issues: tuple[str, ...] = ()
 
     @property
     def translation_verified(self) -> bool:
-        return (self.source_reviewed and self.reference_comparison_passed
-                and self.causal_checks_passed and self.data_checks_passed
-                and not self.issues)
+        # A schema object cannot assert its own verification. A future
+        # independent verifier may produce a separately authenticated proof;
+        # this prototype intentionally has no PASS-producing path.
+        return False
 
 
 def check_causality(*, data_available: datetime, signal_decision: datetime,
@@ -98,23 +97,19 @@ def check_causality(*, data_available: datetime, signal_decision: datetime,
     return tuple(issues)
 
 
-def verify_strategy_spec(
-    spec: ResearchStrategySpec, *, reference_comparison_passed: bool,
-    causal_checks_passed: bool, data_checks_passed: bool,
-    issues: tuple[str, ...] = (),
-) -> VerificationReport:
-    """Aggregation only: explicit caller evidence required for each check.
+def verify_strategy_spec(spec: ResearchStrategySpec) -> VerificationReport:
+    """Return a blocked shell until an independent proof producer exists.
 
-    A positive result is engineering translation verification, never evidence
-    of profitability, untouched OOS status, or authorization to backtest.
+    In particular this function accepts no caller-authored gate booleans or
+    reviewer strings as authority. It does not imply readiness or grant access.
     """
-    source_reviewed = bool(spec.source_review_status == "INDEPENDENTLY_REVIEWED"
-                           and spec.independent_reviewer_evidence)
-    if not source_reviewed:
-        issues = (*issues, "SOURCE_REVIEW_NOT_VERIFIED")
+    issues = ["INDEPENDENT_VERIFIER_NOT_IMPLEMENTED"]
+    if spec.source_review_status != "INDEPENDENTLY_REVIEWED":
+        issues.append("SOURCE_REVIEW_NOT_VERIFIED")
+    else:
+        # The schema's evidence string is descriptive metadata only; it is not
+        # cryptographically authenticated or checked against source bytes.
+        issues.append("SOURCE_REVIEW_ATTESTATION_UNAUTHENTICATED")
     return VerificationReport(
-        spec_sha256=spec.content_digest(), source_reviewed=source_reviewed,
-        reference_comparison_passed=reference_comparison_passed,
-        causal_checks_passed=causal_checks_passed,
-        data_checks_passed=data_checks_passed, issues=issues,
+        spec_sha256=spec.content_digest(), status="BLOCKED", issues=tuple(issues)
     )

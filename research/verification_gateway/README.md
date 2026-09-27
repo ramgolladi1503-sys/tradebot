@@ -29,12 +29,17 @@ may reference EDGE-65, but no adapter or authorization is claimed yet.
 - Hypothesis: property-based synthetic causal-order regression tests.
 
 Install separately for research tests in an isolated environment using
-`requirements-verification.txt`; resolve a reproducible lock before promotion.
+`requirements-verification.txt`. It is not installed by the repository's
+default CI because `requirements.txt` and CI workflow files are protected for
+this change. The current remote PR therefore has a known collection failure:
+these tests require Pydantic, which the default CI environment does not install.
+Do not treat the default CI failure as fixed until the dependency is integrated
+through a separately authorized dependency/CI change.
 
 ```sh
 python -m venv .venv-research-verify
 . .venv-research-verify/bin/activate
-python -m pip install -r research/verification_gateway/requirements-verification.txt pytest pandas
+python -m pip install -r research/verification_gateway/requirements-verification.txt pytest 'pandas<3'
 PYTHONPATH=. python -m pytest -q tests/research/test_verification_gateway_contracts.py tests/research/test_verification_gateway_data.py
 ```
 
@@ -60,10 +65,12 @@ Do not claim green until the exact branch is executed in a safe isolated checkou
 1. Reconcile the current dirty local worktree with GitHub main and the latest
    root-cause report; do not overwrite local-only research fixes.
 2. Review this prototype against current protected-ledger access boundaries.
-   Make schema validation evidence-based: caller-provided boolean flags are
-   explicitly UNTRUSTED placeholders and must be replaced by signed or
-   independently produced verifier artifacts (content hashes, fixture and
-   implementation digests, and reviewer provenance).
+   `verify_strategy_spec` intentionally returns BLOCKED: no independent proof
+   producer exists yet. No caller-provided pass flags or reviewer strings are
+   accepted as authority. A later verifier must bind source/spec, fixture/data,
+   implementation and reviewer evidence and must independently recompute each
+   check. Any verifier key custody/reviewer identity mechanism requires a
+   separately specified governance contract.
 3. Add an adapter mapping `ResearchStrategySpec.existing_registry_strategy_id`
    to EDGE-65 without importing/executing strategy modules. Preserve EDGE-65
    safety semantics; fail closed on nonexistent or conflicting IDs.
