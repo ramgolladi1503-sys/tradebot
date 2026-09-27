@@ -23,7 +23,7 @@
       "research/verification_gateway/ACCEPTANCE_TEST_LOG_20260927.txt": "4ce9d59d8e6ef52508588601d381ef2e5535e1c424537f849123cb11df81a8e6",
       "research/verification_gateway/DEPENDENCY_ADOPTION_DECISIONS.md": "7bbecf2a87970b3ab6ed61341f1c13fb8a1aca13337d2897783ac15d8a4976f5",
       "research/verification_gateway/ENTRYPOINT_STATIC_INVENTORY_20260927.md": "3b2b49e76902fa5b625c7f236baed97cb5b5e97e846a074895602622d4ffc8ca",
-      "research/verification_gateway/FINAL_CONTROLLED_DISCOVERY_READINESS.md": "1e2941f2647fe07970f6e62a70ed81a14e68082f84bc2f07c1dba1b160cb2f80",
+      "research/verification_gateway/FINAL_CONTROLLED_DISCOVERY_READINESS.md": "1134060377e95a09634bd3e3458ad875417e4d3c64d780605d9010abc6ab1308",
       "research/verification_gateway/HERMES_ARCHITECTURE_CONTRACT.md": "836b63f73cd971b362abbd978e7021b7956d3720af941cac841c3d1d8635b3e5",
       "research/verification_gateway/README.md": "621df92eda58a2f5509f942fd654642eaa753beefa949458998f1fef908fd7bb",
       "research/verification_gateway/REMOTE_CI_STATUS_20260927.md": "b449d3c157ca2e17caa52cb8eafb30a56872f2d3a19369e075c4ff649f805914",
@@ -44,7 +44,11 @@
       "core/analytics/candidate_ml_v2/dataset.py": "b651a14545ee00b18fd99f1a5d65081107700cd0ee7c29f5787449fe0a0a7bb4",
       "core/analytics/candidate_ml_v2/certification.py": "455abaff6c85336439f6da2de361986f8d73b33dd0c406a32d4643f2ba3234f2",
       "tests/test_candidate_ml_v2.py": "092a6a37920e4ddbbb70451f7b036a20809eb3428d81ed506c2f301c466312f4",
-      "docs/research/PR936_PURGED_EMBARGO_CONTRACT.md": "c2879aa54d575b86138c9dcabd2e725c6a41a9b09bcac0f723d1163a91119fac"
+      "docs/research/PR936_PURGED_EMBARGO_CONTRACT.md": "c2879aa54d575b86138c9dcabd2e725c6a41a9b09bcac0f723d1163a91119fac",
+      "docs/research/PR936_REGIME_SELECTION_GOVERNANCE_CONTRACT.md": "732c553188e07e7915e113ed79facd2f2347829b6782888e6fbc049fce26b11a",
+      "docs/research/strategy_research_playbook.md": "47ac638394b91396a310ff7dfd06ee65c2fbf3f81f74ba7eb88ba48b1159ca68",
+      "docs/research/strategy_deepdive_checklist.md": "c107a211b67e527b3bb04387eb6195cb98d540a84a15a75a15344ca0ef616f7e",
+      "docs/research/htf_range_expansion_deepdive_timeline.md": "64ef6c3f9193b22a4b66da84f1df9a27964dcee6b22197b6b0e7b69eaf9f262e"
     },
     "synthetic_input_manifest": {
       "external_data_read": false,
@@ -203,7 +207,7 @@
     },
     {
       "blockers": [
-        "Trial-family denominator remains incomplete; Monte Carlo is IID; full regime-amputation governance audit remains outstanding"
+        "Individual historical regime-filtered trial families and their complete selection denominator are not reconciled; the HTF narrative has no authenticated source artifacts or independent prospective evidence"
       ],
       "id": "G",
       "outputs": [
@@ -212,6 +216,10 @@
         "core/research_pipeline.py",
         "docs/research/PR936_MONTE_CARLO_RESAMPLING_CONTRACT.md",
         "docs/research/PR936_PURGED_EMBARGO_CONTRACT.md",
+        "docs/research/PR936_REGIME_SELECTION_GOVERNANCE_CONTRACT.md",
+        "docs/research/htf_range_expansion_deepdive_timeline.md",
+        "docs/research/strategy_deepdive_checklist.md",
+        "docs/research/strategy_research_playbook.md",
         "tests/test_candidate_ml_v2.py",
         "tests/test_research_pipeline_monte_carlo.py"
       ],
@@ -227,7 +235,8 @@
         "Synthetic boundary, embargo, nested split, ablation and minimum-session purge regressions pass",
         "Full candidate_ml_v2 test module: 15 pass",
         "Offline analytics/candidate_ml_v2 suite: 86 pass",
-        "Independent read-only review: no remaining scoped findings"
+        "Independent read-only review: no remaining scoped findings",
+        "Static regime-governance review corrected outcome-selected regime restrictions to exposed child hypotheses; no historical outcome data accessed"
       ]
     },
     {
