@@ -3,30 +3,79 @@
     "allowed_read_paths": [
       "inline synthetic test fixtures only"
     ],
+    "independent_review": {
+      "findings": 2,
+      "reviewer": "read-only adversarial subagent",
+      "status": "two findings remediated; CI and end-to-end acceptance remain blocked"
+    },
+    "independent_review_node_g": {
+      "findings_corrected": 4,
+      "reviewer": "read-only GSD code reviewer",
+      "status": "final follow-up review found no remaining issue within scoped files"
+    },
     "input_scope": "Inline synthetic fixtures only; no protected outcomes, runtime artifacts, broker APIs, or order actions accessed",
+    "last_remote_ci": {
+      "commit": "32b26a1e582a098486abbf3642323d310b16218c",
+      "conclusion": "mixed_blocked",
+      "focused_candidate_ml_v2": "success",
+      "real_market_corpus_pilot": "failure",
+      "reason": "Git LFS budget exhausted before corpus validation/training",
+      "run_id": 36313532028,
+      "separate_merge_checks": "base-authority/live-flow/deploy checks failed; unit_tests pending at recorded snapshot"
+    },
+    "last_remote_ci_snapshot_utc": "2026-09-27T10:46:43Z",
+    "market_corpus_training_ran": false,
     "patch_parent_sha": "35d46108c05ccd11bfd66fdfd4f453f15690c120",
     "patch_scope_verified": true,
+    "protected_data_materialized": false,
+    "protected_outcomes_read": false,
     "remote_ci": {
-      "commit": "043577edd4b2c79c763690a64bbc6cfdf1cb7a0f",
-      "conclusion": "failure",
-      "failed_step": "Run fast deterministic tests",
-      "gateway_test_modules_collection_errors": 5,
-      "interpretation": "The remote run tested parent commit before latest docs/test-only EMA parity extension; no dependency integration was added, so the known collection failure remains applicable to any re-trigger.",
-      "reason": "ModuleNotFoundError: No module named pydantic",
-      "run_id": 36310696255
+      "blocking_checks": [
+        "code-excellence-base-authority",
+        "pr818-live-flow-freeze-target",
+        "real_market_corpus_pilot",
+        "Netlify Header rules",
+        "Netlify Pages changed",
+        "Netlify Redirect rules",
+        "Netlify Deploy Preview"
+      ],
+      "commit": "32b26a1e582a098486abbf3642323d310b16218c",
+      "default_unit_tests": "pending_at_snapshot",
+      "focused_candidate_ml_v2": "success",
+      "interpretation": "Focused synthetic/replay-lane checks passed, but real-corpus pilot did not materialize files and performed no training. Required CI and authority checks are not green.",
+      "other_blocking_checks": [
+        "code-excellence-base-authority",
+        "pr818-live-flow-freeze-target",
+        "Netlify deploy preview checks"
+      ],
+      "real_market_corpus_failure": "Git LFS repository budget exhausted; selected corpus objects unavailable",
+      "real_market_corpus_pilot": "failure_before_training",
+      "replay_ledger_proxy_training": "success",
+      "run_id": 36313532028,
+      "unit_tests": "pending_at_latest_snapshot",
+      "verify": "success"
     },
+    "remote_ci_snapshot_note": "gh pr checks refreshed after verify completed; unit_tests remain pending at this snapshot",
     "source_sha256": {
       "BASELINE_AND_SAFETY_MAP.md": "5a93f175088ff30b9651b920b67ae27f75009652af70851b2d46bf06117663c2",
+      "core/analytics/candidate_ml_v2/certification.py": "455abaff6c85336439f6da2de361986f8d73b33dd0c406a32d4643f2ba3234f2",
+      "core/analytics/candidate_ml_v2/dataset.py": "b651a14545ee00b18fd99f1a5d65081107700cd0ee7c29f5787449fe0a0a7bb4",
       "core/indicators_live.py": "bce5db52e9386e8f46e21c23237285f1f43697669dbe5ff48d466df6aa6aad89",
       "core/research_pipeline.py": "594c9a2e05a74f994777d586c2678c2ad62fb2bbbb3f75d842df38ae7d978b30",
+      "docs/agent_reviews/pr936-verification-gateway-20260927.md": "70f994b72b9f1cb1ce87b4809d375ef732c55a56ad33452c9df69b3e354ce9b3",
       "docs/research/PR936_MONTE_CARLO_RESAMPLING_CONTRACT.md": "0684ddcd0e7fc7de240cbee02bf502c6b6b3718bc0bfb3b5da7a68eec6c421e3",
+      "docs/research/PR936_PURGED_EMBARGO_CONTRACT.md": "c2879aa54d575b86138c9dcabd2e725c6a41a9b09bcac0f723d1163a91119fac",
+      "docs/research/PR936_REGIME_SELECTION_GOVERNANCE_CONTRACT.md": "732c553188e07e7915e113ed79facd2f2347829b6782888e6fbc049fce26b11a",
+      "docs/research/htf_range_expansion_deepdive_timeline.md": "64ef6c3f9193b22a4b66da84f1df9a27964dcee6b22197b6b0e7b69eaf9f262e",
+      "docs/research/strategy_deepdive_checklist.md": "c107a211b67e527b3bb04387eb6195cb98d540a84a15a75a15344ca0ef616f7e",
+      "docs/research/strategy_research_playbook.md": "47ac638394b91396a310ff7dfd06ee65c2fbf3f81f74ba7eb88ba48b1159ca68",
       "research/verification_gateway/ACCEPTANCE_TEST_LOG_20260927.txt": "4ce9d59d8e6ef52508588601d381ef2e5535e1c424537f849123cb11df81a8e6",
       "research/verification_gateway/DEPENDENCY_ADOPTION_DECISIONS.md": "7bbecf2a87970b3ab6ed61341f1c13fb8a1aca13337d2897783ac15d8a4976f5",
       "research/verification_gateway/ENTRYPOINT_STATIC_INVENTORY_20260927.md": "3b2b49e76902fa5b625c7f236baed97cb5b5e97e846a074895602622d4ffc8ca",
-      "research/verification_gateway/FINAL_CONTROLLED_DISCOVERY_READINESS.md": "1134060377e95a09634bd3e3458ad875417e4d3c64d780605d9010abc6ab1308",
+      "research/verification_gateway/FINAL_CONTROLLED_DISCOVERY_READINESS.md": "d1cb47c3b057e2f31b29f2128d625fe797ff316bbc54f50f9c13fdc977e55f1a",
       "research/verification_gateway/HERMES_ARCHITECTURE_CONTRACT.md": "836b63f73cd971b362abbd978e7021b7956d3720af941cac841c3d1d8635b3e5",
       "research/verification_gateway/README.md": "621df92eda58a2f5509f942fd654642eaa753beefa949458998f1fef908fd7bb",
-      "research/verification_gateway/REMOTE_CI_STATUS_20260927.md": "b449d3c157ca2e17caa52cb8eafb30a56872f2d3a19369e075c4ff649f805914",
+      "research/verification_gateway/REMOTE_CI_STATUS_20260927.md": "a5b8b105fee677ef2482cc376ae5cc132af82c894370fc4cfeafaddea6343fe5",
       "research/verification_gateway/contracts.py": "7b7cbeb9ae7c45dded432bc2000a974ae9b8c578e1cfb8b24fbf634ffb6c7fbc",
       "research/verification_gateway/data_checks.py": "9bd258ed0b02109e840b30cd364bb9b4cd0a02ae41e900bcac753e68fa401e05",
       "research/verification_gateway/reference_execution.py": "e1ceca6fd07bdfa05bd8c771c509928479719e9ff2fc6306a1698bed60773d50",
@@ -39,16 +88,8 @@
       "tests/research/test_verification_gateway_reference_execution.py": "1641cf41478a54fcb127768d349e3a633be9a517da0179e35209bbb3fab155ee",
       "tests/research/test_verification_gateway_reference_math.py": "7aac4ff3c3b76ea33c418c0d886c11d96c628a62ef924e0f28c28fb3b66627bd",
       "tests/research/test_verification_gateway_registry_bridge.py": "25dada6a87a9ee475e347eaee3a74fc175185588df40a8814f260e9a01184f5e",
-      "tests/test_research_pipeline_monte_carlo.py": "f2f8011c4b595c8254871fe735c530d39b2c1836d5720828afdfe7bd117b0c90",
-      "docs/agent_reviews/pr936-verification-gateway-20260927.md": "70f994b72b9f1cb1ce87b4809d375ef732c55a56ad33452c9df69b3e354ce9b3",
-      "core/analytics/candidate_ml_v2/dataset.py": "b651a14545ee00b18fd99f1a5d65081107700cd0ee7c29f5787449fe0a0a7bb4",
-      "core/analytics/candidate_ml_v2/certification.py": "455abaff6c85336439f6da2de361986f8d73b33dd0c406a32d4643f2ba3234f2",
       "tests/test_candidate_ml_v2.py": "092a6a37920e4ddbbb70451f7b036a20809eb3428d81ed506c2f301c466312f4",
-      "docs/research/PR936_PURGED_EMBARGO_CONTRACT.md": "c2879aa54d575b86138c9dcabd2e725c6a41a9b09bcac0f723d1163a91119fac",
-      "docs/research/PR936_REGIME_SELECTION_GOVERNANCE_CONTRACT.md": "732c553188e07e7915e113ed79facd2f2347829b6782888e6fbc049fce26b11a",
-      "docs/research/strategy_research_playbook.md": "47ac638394b91396a310ff7dfd06ee65c2fbf3f81f74ba7eb88ba48b1159ca68",
-      "docs/research/strategy_deepdive_checklist.md": "c107a211b67e527b3bb04387eb6195cb98d540a84a15a75a15344ca0ef616f7e",
-      "docs/research/htf_range_expansion_deepdive_timeline.md": "64ef6c3f9193b22a4b66da84f1df9a27964dcee6b22197b6b0e7b69eaf9f262e"
+      "tests/test_research_pipeline_monte_carlo.py": "f2f8011c4b595c8254871fe735c530d39b2c1836d5720828afdfe7bd117b0c90"
     },
     "synthetic_input_manifest": {
       "external_data_read": false,
@@ -77,28 +118,9 @@
         "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/analytics tests/test_candidate_ml_v2.py tests/test_candidate_ml_v2_replay_ledger.py tests/test_candidate_ml_v2_provenance.py tests/test_candidate_ml_v2_historical_options.py tests/test_candidate_ml_v2_corpus_loader.py tests/test_candidate_ml_v2_market_corpus.py tests/test_analytics_schema_store.py",
         "result": "86 passed, 4237 warnings in 24.51s; tests use synthetic fixtures or temporary directories"
       }
-    ],
-    "independent_review": {
-      "reviewer": "read-only adversarial subagent",
-      "findings": 2,
-      "status": "two findings remediated; CI and end-to-end acceptance remain blocked"
-    },
-    "last_remote_ci": {
-      "commit": "489218be2f6b9536b5ca44506d892b70b6e645b8",
-      "run_id": 36312194925,
-      "conclusion": "failure",
-      "failed_step": "Run fast deterministic tests",
-      "collection_errors": 5,
-      "reason": "ModuleNotFoundError: No module named pydantic",
-      "health_gate": "skipped"
-    },
-    "independent_review_node_g": {
-      "reviewer": "read-only GSD code reviewer",
-      "findings_corrected": 4,
-      "status": "final follow-up review found no remaining issue within scoped files"
-    }
+    ]
   },
-  "next_action": "Continue G with full trial-family registration and dependence-aware inference, plus regime-amputation governance review; then establish H official-entrypoint gateway and OS read-path controls. Protected CI dependency integration and inherited frozen-path PR scope remain external governed dependencies.",
+  "next_action": "Resume only after LFS budget is restored or an authorized equivalent source is provided; authorize protected CI/root dependency integration; obtain owner-reviewed complete research-entrypoint graph and OS-enforced outcome denial; reconcile inherited frozen-path PR scope through its governing process. Preserve BLOCKED_WITH_EXACT_DEPENDENCY.",
   "nodes": [
     {
       "blockers": [

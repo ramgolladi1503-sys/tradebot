@@ -17,7 +17,7 @@ The PR #936 prototype is **not ready for a controlled strategy hunt**. This work
 | G — statistics/exposure controls | PARTIAL | `_monte_carlo()` uses seeded trade-level resampling with replacement; 9 synthetic tests pass. Candidate ML outer and nested walk-forward plus feature-ablation partitions purge unresolved labels, apply configured `embargo_ms`, and fail closed if outer folds lose required training-session support; 9 focused splitter/ablation regressions, 15 full candidate ML tests, and 86 offline analytics tests pass. Resampling remains IID; full trial denominator remains unavailable and DSR/PBO stay `NOT_ESTIMABLE`. |
 | H — evidence-bound official gateway | BLOCK | [Static inventory](ENTRYPOINT_STATIC_INVENTORY_20260927.md) found 5 `scripts/research` command candidates and 46 outcome/ledger-reference script candidates, but this is not an owner-reviewed complete call graph. `run_strategy_pipeline_research.py` and `run_governed_strategy_research.py` remain separate; `core/analytics/walk_forward_pipeline.py` reads the outcomes directory directly. No central gateway or OS read-path restriction exists. |
 | I — adversarial acceptance | PARTIAL | 52 gateway contract/data/registry/math/execution tests and 9 Monte Carlo tests pass in isolated environments. No OS-denied protected path test, official API bypass test, full research-entrypoint inventory, or clean CI run. |
-| J — independent audit/release | BLOCK | No independent reviewer signoff. Updated PR CI run 36310696255 failed collection on all five gateway modules with `ModuleNotFoundError: No module named 'pydantic'`; see [remote CI record](REMOTE_CI_STATUS_20260927.md). Task instructions protect CI and root dependency files, so no such edit was made. |
+| J — independent audit/release | BLOCK | No independent end-to-end release signoff. At the latest exact-SHA snapshot (`32b26a1e582a098486abbf3642323d310b16218c`), focused `candidate_ml_v2`, replay-ledger proxy training, `verify`, CodeQL, security, and several contract checks passed. Default `unit_tests` remained pending. `real_market_corpus_pilot` failed before training because the repository Git LFS budget was exhausted; base-authority, protected live-flow, and Netlify checks also failed. See [remote CI record](REMOTE_CI_STATUS_20260927.md). CI and root dependency files remain protected and unchanged. |
 
 ## Work completed
 
@@ -58,16 +58,17 @@ PYTHONPATH=. /tmp/pr936-verification-venv/bin/python -m pytest -q -o addopts='' 
 # 11 passed, 1 warning
 ```
 
-The current remote PR CI is not green: the default workflow installs root requirements and pandas only, while five gateway test modules import Pydantic. The run failed collection with five `ModuleNotFoundError: No module named 'pydantic'` errors. The dependency/CI installation must be proposed through a separately authorized protected-path change; no CI gates were weakened.
+The earlier default workflow collection failure remains documented for its original SHA. Latest PR checks are recorded in `REMOTE_CI_STATUS_20260927.md`; focused checks passed, but unit tests were pending and merge blockers remained at the snapshot.
 
 ## Exact dependencies and resume commands
 
-1. **Dependency/CI owner:** authorize a narrow follow-up that installs the research-only locked set in an isolated gateway CI job (or an equivalent safe path), without modifying runtime dependency behavior. Then rerun PR checks on the resulting exact SHA.
-2. **Research statistics owner:** review the completed Monte Carlo patch against its contract, especially IID-vs-dependent sample limits. A future dependence-aware method needs a separate spec, synthetic overlapping-label fixture, and a registered trial-denominator source. Keep DSR/PBO `NOT_ESTIMABLE` until the full search denominator is recoverable.
-3. **Research platform owner:** source/audit a complete official-entrypoint call graph, then separately authorize routing each entrypoint through the evidence gateway. The static scan found direct filesystem paths; it is not a bypass test.
-4. **Research platform owner:** supply authoritative source references for historical defects #1 and #17 and define source-review identity/signature authority. Until supplied, synthetic defect tests cannot be described as source fidelity.
-5. **Security/deployment owner:** provide a disposable OS/container sandbox with no credential and protected-outcome read permissions, and demonstrate denied access attempts. Python API tests alone cannot prove this boundary.
-6. Continue DAG from earliest blocked nodes; do not copy uncommitted canonical-checkout research files into PR #936 or claim the referenced local repairs are integrated.
+1. **Repository/LFS owner:** restore the repository LFS budget or provide an authorized, provenance-preserving source for the explicitly selected corpus objects; then rerun the corpus pilot and verify it materializes data before any training is considered.
+2. **Dependency/CI owner:** authorize a narrow follow-up that installs the research-only locked set in an isolated gateway CI job (or an equivalent safe path), without modifying runtime dependency behavior. Then rerun PR checks on the resulting exact SHA.
+3. **Research statistics owner:** review the completed Monte Carlo patch against its contract, especially IID-vs-dependent sample limits. A future dependence-aware method needs a separate spec, synthetic overlapping-label fixture, and a registered trial-denominator source. Keep DSR/PBO `NOT_ESTIMABLE` until the full search denominator is recoverable.
+4. **Research platform owner:** source/audit a complete official-entrypoint call graph, then separately authorize routing each entrypoint through the evidence gateway. The static scan found direct filesystem paths; it is not a bypass test.
+5. **Research platform owner:** supply authoritative source references for historical defects #1 and #17 and define source-review identity/signature authority. Until supplied, synthetic defect tests cannot be described as source fidelity.
+6. **Security/deployment owner:** provide a disposable OS/container sandbox with no credential and protected-outcome read permissions, and demonstrate denied access attempts. Python API tests alone cannot prove this boundary.
+7. Continue DAG from earliest blocked nodes; do not copy uncommitted canonical-checkout research files into PR #936 or claim the referenced local repairs are integrated.
 
 Suggested commands after these dependencies are met:
 
@@ -84,4 +85,4 @@ PYTHONPATH=. /opt/anaconda3/bin/python -m pytest -q -o addopts='' \
   tests/test_research_pipeline_monte_carlo.py
 ```
 
-The separate draft PR #936 was updated with the initial scoped checkpoint at commit `043577edd4b2c79c763690a64bbc6cfdf1cb7a0f`; no merge occurred. No protected outcome access, broker API, order action, live/paper action, config key, or CI/dependency workflow change was made. Subsequent local documentation, synthetic indicator comparison, and independent-review remediations remain a follow-up to that checkpoint and must be committed/pushed before the PR reflects them. Risks still fail closed where evidence or permission authority is missing.
+PR #936 remains draft and blocked at head `32b26a1e582a098486abbf3642323d310b16218c`; no merge occurred. The CI snapshot is recorded in `REMOTE_CI_STATUS_20260927.md`. No protected outcomes were read locally, no broker API or order action occurred, and no live/paper behavior, risk boundary, runtime path, root dependency manifest, or CI workflow was changed. Readiness remains `BLOCKED_WITH_EXACT_DEPENDENCY`; `NO_CERTIFIED_EDGE` remains unchanged.
