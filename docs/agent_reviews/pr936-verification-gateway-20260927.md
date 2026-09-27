@@ -2,14 +2,14 @@
 
 ## Agent Work Contract
 
-source_agent: hermes_then_gsd  
-action: DESIGN_ARCHITECTURE, DEFINE_CONTRACT, MAP_WORKFLOW, CREATE_ACCEPTANCE_GATES, PLAN_PR, GENERATE_TESTS, GENERATE_PATCH, FIX_TEST_FAILURE, UPDATE_DOCS  
-title: Reuse-first verification gateway prototype and acceptance evidence  
-scope: Isolated research verification code, synthetic tests, and documentation in PR #936.  
-requested_paths: `research/verification_gateway/`, scoped research tests, `core/research_pipeline.py` Monte Carlo diagnostic only, and supporting documentation.  
-allowed_paths: Those scoped files only.  
-forbidden_paths: Broker/order/risk/feed/live paths, credentials, protected datasets/outcomes/runtime artifacts, CI workflow and root dependency manifests.  
-expected_tests: Synthetic schema, contract, reference-math, reference-execution, registry bridge, and seeded Monte Carlo tests.  
+source_agent: hermes_then_gsd
+action: DESIGN_ARCHITECTURE, DEFINE_CONTRACT, MAP_WORKFLOW, CREATE_ACCEPTANCE_GATES, PLAN_PR, GENERATE_TESTS, GENERATE_PATCH, FIX_TEST_FAILURE, UPDATE_DOCS
+title: Reuse-first verification gateway prototype and acceptance evidence
+scope: Isolated research verification code, synthetic tests, and documentation in PR #936.
+requested_paths: `research/verification_gateway/`, scoped research tests, `core/research_pipeline.py` Monte Carlo diagnostic only, and supporting documentation.
+allowed_paths: Those scoped files only.
+forbidden_paths: Broker/order/risk/feed/live paths, credentials, protected datasets/outcomes/runtime artifacts, CI workflow and root dependency manifests.
+expected_tests: Synthetic schema, contract, reference-math, reference-execution, registry bridge, and seeded Monte Carlo tests.
 acceptance_proof: Dependency-isolated gateway suite and Monte Carlo suite pass; verifier remains fail-closed; readiness state remains blocked where evidence is missing.
 
 ## Scope Guard
