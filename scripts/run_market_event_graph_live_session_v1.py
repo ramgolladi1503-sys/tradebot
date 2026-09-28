@@ -123,7 +123,7 @@ def _static_preflight_payload(*, session_date: str, registry: Any, master_path: 
         capture_dir / "presession_manifest.json",
         capture_dir / "live_observation.log",
     ]
-    output_unused = not capture_dir.exists() and not any(path.exists() for path in governed_files)
+    output_unused = not any(path.exists() for path in governed_files)
     session_day = validate_nse_session_day(datetime.strptime(session_date, "%Y-%m-%d").date())
     now_ist = datetime.now(tz=ZoneInfo("Asia/Kolkata"))
     session_policy = derive_market_session_policy(now=now_ist, segment="NSE_FNO")

@@ -134,6 +134,76 @@ def write_authority_snapshot(candidate: Mapping[str, Any], path: Path) -> dict[s
     return payload
 
 
+def resolve_cas_underlying_token(
+    launch_plan: Mapping[str, Any],
+    *,
+    symbol: str = "NIFTY",
+    binding_tokens_map: Mapping[int, str] | None = None,
+) -> int:
+    """Pure, authoritative resolver for CAS underlying token across launch plan and feed bindings.
+
+    Fail-closed semantics:
+    - Missing or empty token resolves to 0.
+    - Non-integral, boolean, non-positive, NaN, Inf, or malformed values are rejected (resolve to 0 or raise).
+    - If multiple distinct valid tokens are discovered for the symbol within launch plan, resolves to 0 (fail-closed).
+    - If binding_tokens_map is provided and contains a conflicting disjoint token, raises RuntimeError("CAS_NIFTY_TOKEN_BINDING_CONFLICT").
+    - If unambiguous, returns the unique positive integer token.
+    """
+    target_symbol = symbol.upper()
+    launch_tokens: set[int] = set()
+
+    # 1. Direct underlying_tokens field
+    raw_tokens = launch_plan.get("underlying_tokens")
+    if isinstance(raw_tokens, (list, tuple, set)):
+        for t in raw_tokens:
+            if isinstance(t, bool):
+                continue
+            try:
+                val = float(t)
+                if val > 0 and val.is_integer() and not (val != val or val == float("inf") or val == float("-inf")):
+                    launch_tokens.add(int(val))
+            except (ValueError, TypeError):
+                continue
+
+    # 2. Production resolution fallback if underlying_tokens yielded nothing
+    if not launch_tokens:
+        raw_res = launch_plan.get("production_resolution")
+        if isinstance(raw_res, (list, tuple)):
+            for row in raw_res:
+                if isinstance(row, Mapping) and str(row.get("symbol") or "").upper() == target_symbol:
+                    idx_tok = row.get("index_token")
+                    if isinstance(idx_tok, bool):
+                        continue
+                    try:
+                        val = float(idx_tok)
+                        if val > 0 and val.is_integer() and not (val != val or val == float("inf") or val == float("-inf")):
+                            launch_tokens.add(int(val))
+                    except (ValueError, TypeError):
+                        continue
+
+    # 3. Check binding tokens map (e.g. from kite_depth_ws._UNDERLYING_TOKEN_TO_SYMBOL)
+    binding_tokens: set[int] = set()
+    if binding_tokens_map and isinstance(binding_tokens_map, Mapping):
+        for t, sym in binding_tokens_map.items():
+            if str(sym).upper() == target_symbol:
+                if isinstance(t, bool):
+                    continue
+                try:
+                    val = float(t)
+                    if val > 0 and val.is_integer() and not (val != val or val == float("inf") or val == float("-inf")):
+                        binding_tokens.add(int(val))
+                except (ValueError, TypeError):
+                    continue
+
+    if launch_tokens and binding_tokens and launch_tokens.isdisjoint(binding_tokens):
+        raise RuntimeError("CAS_NIFTY_TOKEN_BINDING_CONFLICT")
+
+    authoritative = launch_tokens or binding_tokens
+    if len(authoritative) == 1:
+        return next(iter(authoritative))
+    return 0
+
+
 def _measured_meg_facts(*, bridge: Any, result: Any) -> dict[str, Any]:
     contract, _ = bridge._load_universe_contract()
     symbols = [contract.index_symbol, *contract.constituent_symbols] if contract is not None else []
@@ -449,15 +519,11 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         cadence_seconds=float(os.environ.get("CANONICAL_CYCLE_CADENCE_SECONDS", "60")),
     )
     from core.cas_primitive_producer import CASPrimitiveStore
-    launch_nifty_tokens = set(int(t) for t in (launch_plan.get("underlying_tokens") or []) if t)
-    binding_nifty_tokens = {
-        int(t) for t, symbol in getattr(kite_depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}).items()
-        if str(symbol).upper() == "NIFTY"
-    }
-    if launch_nifty_tokens and binding_nifty_tokens and launch_nifty_tokens.isdisjoint(binding_nifty_tokens):
-        raise RuntimeError("CAS_NIFTY_TOKEN_BINDING_CONFLICT")
-    authoritative_nifty_tokens = launch_nifty_tokens or binding_nifty_tokens
-    cas_token = next(iter(authoritative_nifty_tokens), 0) if len(authoritative_nifty_tokens) == 1 else 0
+    cas_token = resolve_cas_underlying_token(
+        launch_plan,
+        symbol="NIFTY",
+        binding_tokens_map=getattr(kite_depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}),
+    )
     cas_store = CASPrimitiveStore(output_root / f"cas_short_horizon_primitives_{run_id}.json", session_id=run_id, source_sha=producer_commit, underlying_token=cas_token)
     cas_targets = {"0915": datetime.fromisoformat(f"{session_date}T09:15:00+05:30").timestamp(), "1000": datetime.fromisoformat(f"{session_date}T10:00:00+05:30").timestamp()}
     def cas_tick_sink(tick):
