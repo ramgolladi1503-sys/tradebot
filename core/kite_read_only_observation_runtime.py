@@ -450,6 +450,12 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     )
     from core.cas_primitive_producer import CASPrimitiveStore
     launch_nifty_tokens = set(int(t) for t in (launch_plan.get("underlying_tokens") or []) if t)
+    if not launch_nifty_tokens:
+        for row in (launch_plan.get("production_resolution") or []):
+            if isinstance(row, Mapping) and str(row.get("symbol") or "").upper() == "NIFTY":
+                idx_tok = row.get("index_token")
+                if idx_tok is not None and int(idx_tok) > 0:
+                    launch_nifty_tokens.add(int(idx_tok))
     binding_nifty_tokens = {
         int(t) for t, symbol in getattr(kite_depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}).items()
         if str(symbol).upper() == "NIFTY"

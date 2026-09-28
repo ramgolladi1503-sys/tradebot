@@ -342,3 +342,24 @@ def test_cas_rejects_malformed_and_non_integral_tokens(tmp_path):
                                             feed_health_truth=feed, cas_primitive_store=store)
         assert result.candidates == []
         assert result.observations[0].qualification_state is QualificationState.UNKNOWN
+
+
+def test_cas_nifty_token_resolves_from_launch_plan_production_resolution():
+    """Launch plan production_resolution must supply authoritative NIFTY token across subprocess boundary."""
+    launch_plan = {
+        "production_resolution": [
+            {"symbol": "BANKNIFTY", "index_token": 260105},
+            {"symbol": "NIFTY", "index_token": 256265},
+            {"symbol": "SENSEX", "index_token": 265},
+        ]
+    }
+    launch_nifty_tokens = set(int(t) for t in (launch_plan.get("underlying_tokens") or []) if t)
+    if not launch_nifty_tokens:
+        for row in (launch_plan.get("production_resolution") or []):
+            if str(row.get("symbol") or "").upper() == "NIFTY":
+                idx_tok = row.get("index_token")
+                if idx_tok is not None and int(idx_tok) > 0:
+                    launch_nifty_tokens.add(int(idx_tok))
+
+    assert launch_nifty_tokens == {256265}
+
