@@ -346,6 +346,9 @@ def test_cas_rejects_malformed_and_non_integral_tokens(tmp_path):
 
 def test_cas_nifty_token_resolves_from_launch_plan_production_resolution():
     """Launch plan production_resolution must supply authoritative NIFTY token across subprocess boundary."""
+    from core.kite_read_only_observation_runtime import resolve_cas_underlying_token
+
+    # a. Positive case: production_resolution provides NIFTY token when underlying_tokens is missing
     launch_plan = {
         "production_resolution": [
             {"symbol": "BANKNIFTY", "index_token": 260105},
@@ -353,13 +356,52 @@ def test_cas_nifty_token_resolves_from_launch_plan_production_resolution():
             {"symbol": "SENSEX", "index_token": 265},
         ]
     }
-    launch_nifty_tokens = set(int(t) for t in (launch_plan.get("underlying_tokens") or []) if t)
-    if not launch_nifty_tokens:
-        for row in (launch_plan.get("production_resolution") or []):
-            if str(row.get("symbol") or "").upper() == "NIFTY":
-                idx_tok = row.get("index_token")
-                if idx_tok is not None and int(idx_tok) > 0:
-                    launch_nifty_tokens.add(int(idx_tok))
+    assert resolve_cas_underlying_token(launch_plan) == 256265
 
-    assert launch_nifty_tokens == {256265}
+    # b. Direct underlying_tokens takes precedence when present
+    launch_plan_with_tokens = {
+        "underlying_tokens": [256265],
+        "production_resolution": [
+            {"symbol": "NIFTY", "index_token": 999999},
+        ],
+    }
+    assert resolve_cas_underlying_token(launch_plan_with_tokens) == 256265
+
+    # c. Missing or empty underlying_tokens and production_resolution fails closed to 0
+    assert resolve_cas_underlying_token({}) == 0
+    assert resolve_cas_underlying_token({"underlying_tokens": []}) == 0
+    assert resolve_cas_underlying_token({"production_resolution": []}) == 0
+    assert resolve_cas_underlying_token({
+        "production_resolution": [{"symbol": "BANKNIFTY", "index_token": 260105}]
+    }) == 0
+
+    # d. Malformed, non-integral, boolean, NaN, and negative tokens fail closed
+    for bad_token in ("not_a_token", None, False, True, 0, -1, 256265.5, float("nan"), float("inf")):
+        assert resolve_cas_underlying_token({"underlying_tokens": [bad_token]}) == 0
+        assert resolve_cas_underlying_token({
+            "production_resolution": [{"symbol": "NIFTY", "index_token": bad_token}]
+        }) == 0
+
+    # e. Multiple conflicting tokens in launch plan fail closed to 0
+    multi_token_plan = {
+        "production_resolution": [
+            {"symbol": "NIFTY", "index_token": 256265},
+            {"symbol": "NIFTY", "index_token": 256266},
+        ]
+    }
+    assert resolve_cas_underlying_token(multi_token_plan) == 0
+
+    # f. Binding tokens map compatibility (consistent vs disjoint conflict)
+    import pytest
+    binding_map_ok = {256265: "NIFTY", 260105: "BANKNIFTY"}
+    assert resolve_cas_underlying_token(launch_plan, binding_tokens_map=binding_map_ok) == 256265
+
+    # When launch plan has no tokens, binding tokens map is used
+    assert resolve_cas_underlying_token({}, binding_tokens_map=binding_map_ok) == 256265
+
+    # Disjoint conflict must raise CAS_NIFTY_TOKEN_BINDING_CONFLICT
+    binding_map_conflict = {999999: "NIFTY"}
+    with pytest.raises(RuntimeError, match="CAS_NIFTY_TOKEN_BINDING_CONFLICT"):
+        resolve_cas_underlying_token(launch_plan, binding_tokens_map=binding_map_conflict)
+
 
