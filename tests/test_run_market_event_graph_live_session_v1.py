@@ -144,4 +144,3 @@ def test_session_orchestrator_blocks_collision_on_governed_files_at_session_root
     payload = json.loads(result.stdout.strip().splitlines()[-1])
     assert payload["ok"] is False
     assert payload["verdict"] == "BLOCKED_BY_GOVERNED_OUTPUT_COLLISION"
-

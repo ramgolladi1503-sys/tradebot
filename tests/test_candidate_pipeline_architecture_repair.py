@@ -403,5 +403,3 @@ def test_cas_nifty_token_resolves_from_launch_plan_production_resolution():
     binding_map_conflict = {999999: "NIFTY"}
     with pytest.raises(RuntimeError, match="CAS_NIFTY_TOKEN_BINDING_CONFLICT"):
         resolve_cas_underlying_token(launch_plan, binding_tokens_map=binding_map_conflict)
-
-
