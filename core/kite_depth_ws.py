@@ -320,9 +320,10 @@ def reset_market_event_graph_observation_plan_state() -> None:
 
 
 def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
+    global _INTENDED_TOKENS, _INTENDED_TOKEN_COUNT
     verdict = str(plan.get("verdict") or "")
     ok = bool(plan.get("ok")) and verdict == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
-    return _set_observation_plan_state(
+    res = _set_observation_plan_state(
         enabled=ok,
         verdict=verdict if verdict else "BLOCKED_BY_LAUNCH_PLAN_IDENTITY",
         production_tokens=plan.get("production_tokens") or (),
@@ -332,6 +333,10 @@ def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str
         configured_budget=plan.get("configured_budget"),
         plan_sha=str(plan.get("launch_plan_sha256") or ""),
     )
+    if ok and plan.get("final_union_tokens"):
+        _INTENDED_TOKENS = sorted({int(t) for t in (plan.get("final_union_tokens") or ()) if int(t) > 0})
+        _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
+    return res
 
 
 def _active_launch_plan_tokens() -> list[int]:
@@ -1807,9 +1812,10 @@ def reset_market_event_graph_observation_plan_state() -> None:
 
 
 def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
+    global _INTENDED_TOKENS, _INTENDED_TOKEN_COUNT
     verdict = str(plan.get("verdict") or "")
     ok = bool(plan.get("ok")) and verdict == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
-    return _set_observation_plan_state(
+    res = _set_observation_plan_state(
         enabled=ok,
         verdict=verdict if verdict else "BLOCKED_BY_LAUNCH_PLAN_IDENTITY",
         production_tokens=plan.get("production_tokens") or (),
@@ -1819,6 +1825,10 @@ def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str
         configured_budget=plan.get("configured_budget"),
         plan_sha=str(plan.get("launch_plan_sha256") or ""),
     )
+    if ok and plan.get("final_union_tokens"):
+        _INTENDED_TOKENS = sorted({int(t) for t in (plan.get("final_union_tokens") or ()) if int(t) > 0})
+        _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
+    return res
 
 
 def _ensure_feed_session_id() -> str:
@@ -3157,6 +3167,7 @@ def _reconcile_rebalance_intended_tokens(
             "atm_shift_steps=",
             "preserve_tokens_missing",
             "stale_option_prune_refresh",
+            "launch_plan_canonical_reconcile",
         ))
         or pending_tokens
         or not desired
@@ -7436,8 +7447,12 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _DEPTH_WS_START_EPOCH = float(now_utc_epoch())
     _RUNTIME_STATE = "STARTING"
     _LAST_RUNTIME_ERROR = ""
-    _INTENDED_TOKEN_COUNT = len(list(dict.fromkeys(instrument_tokens or [])))
-    _INTENDED_TOKENS = sorted({int(token) for token in (instrument_tokens or []) if int(token) > 0})
+    canonical_plan_tokens = _active_launch_plan_tokens()
+    if canonical_plan_tokens:
+        _INTENDED_TOKENS = sorted({int(token) for token in canonical_plan_tokens if int(token) > 0})
+    else:
+        _INTENDED_TOKENS = sorted({int(token) for token in (instrument_tokens or []) if int(token) > 0})
+    _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
     _persist_runtime_snapshot_row(
         ws_connected=None,
         source="start_depth_ws:starting",
