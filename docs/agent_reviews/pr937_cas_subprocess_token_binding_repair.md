@@ -1,8 +1,16 @@
 # PR #937 — CAS Subprocess Token Binding Repair and Non-Colliding Live Observation Restarts
 
+mode: PAPER
+candidate_id: PR937_CAS_SUBPROCESS_TOKEN_BINDING_REPAIR
+decision: REVIEW_PASS_READ_ONLY_REPAIR
+reason: Pure underlying token resolution across subprocess boundary and non-colliding session start timestamp proven with 20 passing unit tests.
+timestamp: 2026-09-28T20:00:00+05:30
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/pr937_cas_subprocess_token_binding_repair.md
+
 **PR**: #937
 **Branch**: `fix/cas-subprocess-token-binding-repair-v1`
-**Candidate SHA**: `e1554c531f3cdeff471413b3cd6a2e0b5dfe7cf4`
 **Base Main**: `0f95e60335ddcadbe397e5ca837946ed8b1cdec7`
 **Merge Base**: `0f95e60335ddcadbe397e5ca837946ed8b1cdec7`
 **Predecessor Live Producer**: `f7b32fcd6302ad4ac6a7b2ff20e63299686a0156`
@@ -14,7 +22,7 @@
 ### Scope
 - Extract pure `resolve_cas_underlying_token` function into `core/kite_read_only_observation_runtime.py` to resolve NIFTY token from launch plan `production_resolution` and feed binding map across the subprocess boundary.
 - Wire `resolve_cas_underlying_token` into `run_observation` in place of inline resolution logic.
-- Replace test-local resolution duplication in `tests/test_candidate_pipeline_architecture_repair.py` with comprehensive unit tests for `resolve_cas_underlying_token` testing positive resolution, precedence, missing keys, malformed/non-integral inputs, conflicting tokens, and disjoint binding maps.
+- Replace test-local resolution duplication in `tests/test_candidate_pipeline_architecture_repair.py` with comprehensive unit tests for `resolve_cas_underlying_token` testing positive resolution, precedence, absent dictionary entries, malformed/non-integral inputs, conflicting tokens, and disjoint binding maps.
 - Prove non-colliding session start semantics in `scripts/run_market_event_graph_live_session_v1.py` and add unit tests in `tests/test_run_market_event_graph_live_session_v1.py`.
 
 ### Non-Goals
