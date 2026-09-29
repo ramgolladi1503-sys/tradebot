@@ -110,3 +110,8 @@ After confirming no process command matched the referenced 2026-09-28 run and no
 ### Existing futures archive freshness check
 
 The existing provenance-backed Upstox archive was inspected read-only. Its `DATA_AUTHORITY_DECISION.json` SHA-256 is `0187dba32b58922a8dabc4f1332cb745078efe3b823c8d697f556de3be6ffb33`; the final report SHA-256 is `a3a679878932b4815bed64d279d29c3de9154a23588eeb1fe1528d8a34f0e940`. The report records verified raw hashes, contract identity, timezone, causal roll and deterministic spot/futures sync, with data through 2026-08-25 15:29 IST. This validates older futures history but does not supply the required 2026-09-28 T-1 bar or closure. No new acquisition or broker call was made.
+
+
+### Targeted local acquisition inventory recheck
+
+The current `/Volumes/TradeBotData/data_acquisition/raw/upstox/` inventory contains the populated `nifty_futures_raw_v2_20260830` source tree and an empty sibling `nifty_futures` directory; no second local Upstox futures source tree was found in these exact acquisition roots. The existing raw source manifest SHA-256 is `b4eaa58aa79fa2039751a743b061ea2b3ea5f6f556b1a76d14debc1b640dad02`; its verified acquisition report ends at 2026-08-25 15:29 IST. This confirms older source provenance while leaving 2026-09-28 T-1 blocked. No acquisition or broker request was made.

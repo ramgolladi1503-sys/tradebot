@@ -214,6 +214,15 @@
       "sha256": "a3a679878932b4815bed64d279d29c3de9154a23588eeb1fe1528d8a34f0e940",
       "source_authority": "VERIFIED_HISTORICAL_FUTURES_THROUGH_2026-08-25_ONLY",
       "status": "AUTHORITATIVE_BUT_STALE_FOR_T1"
+    },
+    {
+      "append": false,
+      "note": "Hash-verified raw acquisition manifest for the only populated local Upstox NIFTY futures raw-v2 inventory; the sibling data_acquisition/raw/upstox/nifty_futures directory is empty. The separately verified final report records fetched bars only through 2026-08-25 15:29 IST. This is genuine historical provenance, but stale for 2026-09-28 T-1; no acquisition or broker request was made in this task.",
+      "path": "/Volumes/TradeBotData/codex_fresh_upstox_nifty_futures_raw_refetch_v2_v1_20260830/RAW_SOURCE_MANIFEST.json",
+      "read_only": true,
+      "sha256": "b4eaa58aa79fa2039751a743b061ea2b3ea5f6f556b1a76d14debc1b640dad02",
+      "source_authority": "VERIFIED_HISTORICAL_FUTURES_THROUGH_2026-08-25_ONLY",
+      "status": "AUTHORITATIVE_BUT_STALE_FOR_T1"
     }
   ],
   "status": "SOURCE_ARCHAEOLOGY_ONLY"
