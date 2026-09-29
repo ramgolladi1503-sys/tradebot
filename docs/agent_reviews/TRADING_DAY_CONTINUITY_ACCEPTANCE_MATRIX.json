@@ -5,7 +5,7 @@
     "is_order_action": false,
     "read_only": true
   },
-  "campaign_result": "261 passed in the focused offline campaign; T-1 graph assembly, independent publication, CAS/T-1 contracts, read-only readiness, feed-consistency regressions, and rejection of unpinned T-1 inputs are fixture-verified; real source, scheduler, and fresh-runtime gates remain blocked or unknown",
+  "campaign_result": "266 passed in the focused offline campaign; cross-day T-1 graph assembly, independent runtime manifest re-verification, CAS/T-1 contracts, read-only readiness, feed-consistency regressions, and rejection of unpinned T-1 inputs are fixture-verified; real source, scheduler, and fresh-runtime gates remain blocked or unknown",
   "continuation_audit": {
     "branch_feed_regression_command": "python -m pytest -q tests/test_pulse_issues_and_feed_consistency.py tests/test_tick_store.py tests/test_kite_depth_ws_watchdog_scope.py tests/test_kite_read_only_observation_runtime.py tests/test_governed_morning_orchestrator.py",
     "branch_feed_regression_result": "73 passed, 2 optional dependency warnings",
@@ -19,8 +19,9 @@
     "source_branch": "fix/runtime-pulse-and-feed-consistency-v1",
     "source_head": "12d01da414d9a1ffc13718390e2c950c9f621bfd",
     "t1_graph_assembler": "Public fail-closed assembler requires exact predecessor calendar, complete required strategy fields, one verified source ancestor per prerequisite, instrument/contract/session identity, and decision-time admissibility; emits exactly two direct edges per prerequisite.",
+    "t1_runtime_reverification": "The pinned runtime loader runs both structural graph verification and the independent serialized-manifest verifier. T-1 semantic errors on requested prerequisite nodes remain field-local; graph/hash errors block the full manifest.",
     "tested_command": "python -m pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
-    "tested_result": "261 passed, 2 optional dependency warnings"
+    "tested_result": "266 passed, 2 optional dependency warnings"
   },
   "gates": [
     {
@@ -234,22 +235,32 @@
       "status": "PARTIAL_REAL_COVERAGE_UNVERIFIED; CALLBACK_TO_PROCESS_CACHE_FIXTURE_VERIFIED; PULSE_OUTPUT_JOIN_FIXTURE_VERIFIED; SNAPSHOT_CORRELATION_UNKNOWN"
     },
     {
-      "actual": "assertions passed, including exact T-1 ancestry assembly and independent publish verification",
+      "actual": "assertions passed, including independent pinned-manifest re-verification and field-local T-1 semantic blocking",
       "command": "python -m pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
       "expected": "fixture proves stated primitive only; no real data authority promotion",
       "id": "V22",
       "negative_control": "not claimed",
-      "proof": "tests/test_market_heritage_graph.py::test_t1_assembler_builds_exact_calendar_and_source_closure_and_publishes; assembler missing/extra/session/future negative controls; combined 261-test campaign",
+      "proof": "combined scoped regression: 266 passed; tests/test_market_heritage_graph.py::test_independent_verifier_and_runtime_reject_unverified_prerequisite_status_or_time",
       "source_authority": "SYNTHETIC_FIXTURE_ONLY",
       "status": "PASS_FOCUSED_REGRESSION"
     },
     {
-      "actual": "54 passed; assembled graph has 6 prerequisite nodes, 6 exact source nodes, 1 calendar node, and 12 direct dependency edges",
+      "actual": "59 passed, including exact T-1 ancestry assembly, independent publication, and five rehashed status/availability mutation cases",
       "command": "python -m pytest -q tests/test_market_heritage_graph.py",
       "expected": "assembler accepts complete exact evidence and blocks missing/extra fields, wrong predecessor source session, and future evidence",
       "id": "V23",
-      "negative_control": "missing, extra, duplicate/reused, mismatched, unused, or future evidence rejected",
+      "negative_control": "missing/extra/duplicate/reused/mismatched/unused/future evidence; derived status, payload status, and T-1 availability mutations rejected independently and by runtime loader",
       "proof": "tests/test_market_heritage_graph.py::test_t1_assembler_builds_exact_calendar_and_source_closure_and_publishes; tests/test_market_heritage_graph.py::test_t1_assembler_fails_closed_on_incomplete_or_mismatched_evidence",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_IMPLEMENTATION"
+    },
+    {
+      "actual": "5 rehashed mutations blocked by independent verifier and runtime loader; unrelated strategies retain independent readiness evaluation.",
+      "command": "python -m pytest -q tests/test_market_heritage_graph.py::test_independent_verifier_and_runtime_reject_unverified_prerequisite_status_or_time",
+      "expected": "A self-consistent rehashed manifest with unverified prerequisite status or inadmissible/missing evidence availability is rejected before runtime consumption; independent strategy readiness remains field-local.",
+      "id": "V24",
+      "negative_control": "derived node OBSERVED, payload BLOCKED, future payload availability, missing prerequisite node availability, missing calendar availability",
+      "proof": "tests/test_market_heritage_graph.py::test_independent_verifier_and_runtime_reject_unverified_prerequisite_status_or_time",
       "source_authority": "SYNTHETIC_FIXTURE_ONLY",
       "status": "PASS_IMPLEMENTATION"
     }
