@@ -1528,6 +1528,7 @@ def _soft_resubscribe_current(reason: str) -> bool:
             def on_applied():
                 global _LAST_TOKENS
                 _LAST_TOKENS = list(sorted(set(tokens)))
+                _PENDING_SUBSCRIBE_TOKENS.difference_update(tokens)
                 _log_ws("FEED_MUTATION_APPLIED", log_payload)
 
             res_sub, res_mode = safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=on_applied)
@@ -1598,6 +1599,7 @@ def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
             def on_refresh_applied():
                 global _LAST_TOKENS
                 _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []).union(set(refresh_tokens))))
+                _PENDING_SUBSCRIBE_TOKENS.difference_update(refresh_tokens)
 
             res_sub, res_mode = safe_subscribe_full_mode(ws_obj, refresh_tokens, reason, now_epoch, on_applied_callback=on_refresh_applied)
 
@@ -3216,6 +3218,7 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
             def on_sub_applied():
                 global _LAST_TOKENS
                 _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []).union(set(to_subscribe))))
+                _PENDING_SUBSCRIBE_TOKENS.difference_update(to_subscribe)
                 _log_ws("FEED_MUTATION_APPLIED", {"action": "subscribe", "count": len(to_subscribe), "reason": reason})
 
             res_sub, res_mode = safe_subscribe_full_mode(ws, to_subscribe, reason, now_epoch, on_applied_callback=on_sub_applied)
@@ -3232,6 +3235,7 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
             def on_unsub_applied():
                 global _LAST_TOKENS
                 _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []) - set(to_unsubscribe)))
+                _PENDING_UNSUBSCRIBE_TOKENS.difference_update(to_unsubscribe)
                 _log_ws("FEED_MUTATION_APPLIED", {"action": "unsubscribe", "count": len(to_unsubscribe), "reason": reason})
 
             res_unsub = safe_unsubscribe(ws, to_unsubscribe, reason, now_epoch, on_applied_callback=on_unsub_applied)

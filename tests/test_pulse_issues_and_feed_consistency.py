@@ -116,3 +116,24 @@ def test_load_canonical_t1_prerequisites_discovers_state_root_session_manifest(t
     assert prereqs["opening_drive_target_expiry"] == "2026-09-29"
     assert prereqs["overnight_prev_daily_close"] == 22788.25
     assert prereqs["overnight_prev_sma200"] == 22150.0
+
+
+def test_pending_tokens_cleared_on_mutation_callbacks(monkeypatch):
+    monkeypatch.setattr(ws, "_PENDING_SUBSCRIBE_TOKENS", {1001, 1002})
+    monkeypatch.setattr(ws, "_PENDING_UNSUBSCRIBE_TOKENS", {2001})
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [2001, 3001])
+
+    # Simulate subscribe callback
+    to_sub = [1001, 1002]
+    ws._PENDING_SUBSCRIBE_TOKENS.difference_update(to_sub)
+    ws._LAST_TOKENS = list(sorted(set(ws._LAST_TOKENS).union(set(to_sub))))
+
+    # Simulate unsubscribe callback
+    to_unsub = [2001]
+    ws._PENDING_UNSUBSCRIBE_TOKENS.difference_update(to_unsub)
+    ws._LAST_TOKENS = list(sorted(set(ws._LAST_TOKENS) - set(to_unsub)))
+
+    assert len(ws._PENDING_SUBSCRIBE_TOKENS) == 0
+    assert len(ws._PENDING_UNSUBSCRIBE_TOKENS) == 0
+    assert ws._LAST_TOKENS == [1001, 1002, 3001]
+
