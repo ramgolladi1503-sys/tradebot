@@ -105,12 +105,12 @@
       "status": "PASS_FIXTURE_CAS_PAIR_IDEMPOTENCY"
     },
     {
-      "actual": "BLOCKED_SOURCE_EVIDENCE: current local research-ready spot-index corpus ends 2026-09-04; 2026-09-07 is provisional; no exact 2026-09-28 futures 15:29 source/contract closure was found in the approved inventories.",
+      "actual": "BLOCKED_SOURCE_EVIDENCE: preflight source_snapshot_sha256 resolves to the exact 2026-09-28 10:00 UTC market_snapshot; market_open=false, quote is STALE, last_tick_ts is null, and OHLC merely repeats LTP 22788.25. No 15:29 bar or futures source exists in the supplied manifest (path/hash null, row count 0).",
       "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
       "expected": "remain blocked",
       "id": "V09",
       "negative_control": "not claimed",
-      "proof": "No verified exact previous-session 15:29 futures bar and matching contract closure.",
+      "proof": "SOURCE_AND_HERITAGE_MANIFEST.json entries for the supplied preflight and its exact referenced market_snapshot.json SHA-256 8ca6fe36148c6fe6fdf7e31945d095da08009d367ac4e709d888066c29c2925f",
       "source_authority": "RESEARCH_ONLY_CANDIDATE_REJECTED_FOR_T1",
       "status": "BLOCKED_SOURCE_EVIDENCE"
     },

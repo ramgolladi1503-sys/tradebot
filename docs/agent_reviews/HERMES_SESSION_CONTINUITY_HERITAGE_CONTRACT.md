@@ -100,3 +100,13 @@ The current TradeBotData canonical NIFTY registry was re-read by exact path. Its
 
 
 Runtime localization addendum: future-information errors on an ancestor are mapped through the serialized dependency edges to only the requested T-1 prerequisite nodes that depend on that ancestor. A future source for one strategy must not suppress unrelated valid strategies. Hash/schema/unresolved-ancestor errors and future nodes with no safely attributable requested T-1 closure remain manifest-wide blockers.
+
+
+### Referenced preflight source snapshot resolution
+
+After confirming no process command matched the referenced 2026-09-28 run and no open handle held the exact `market_snapshot.json`, the file hash was rechecked against the untracked preflight's pinned `source_snapshot_sha256`. It contains `market_open=false`, generated at `2026-09-28T10:00:02.033544Z`, NIFTY LTP/spot/OHLC all `22788.25`, `feed_health=STALE`, `underlying_quote_age_sec≈4.94`, and `quote_truth.last_tick_ts=null`. This is an early stale point-in-time quote, not the 15:29 daily close. The preflight's `VERIFIED_AUTHORITATIVE` close label is therefore unsupported; it remains `BLOCKED_SOURCE_EVIDENCE`. The source bytes were not changed.
+
+
+### Existing futures archive freshness check
+
+The existing provenance-backed Upstox archive was inspected read-only. Its `DATA_AUTHORITY_DECISION.json` SHA-256 is `0187dba32b58922a8dabc4f1332cb745078efe3b823c8d697f556de3be6ffb33`; the final report SHA-256 is `a3a679878932b4815bed64d279d29c3de9154a23588eeb1fe1528d8a34f0e940`. The report records verified raw hashes, contract identity, timezone, causal roll and deterministic spot/futures sync, with data through 2026-08-25 15:29 IST. This validates older futures history but does not supply the required 2026-09-28 T-1 bar or closure. No new acquisition or broker call was made.
