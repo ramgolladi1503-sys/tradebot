@@ -160,3 +160,10 @@ git diff --check
 - Corrected V08's stale test reference to `test_claim_completion_and_restart_are_idempotent`.
 - V07 is explicitly partial: prior verified process downtime is reported, but intraprocess cadence and continuous-coverage readiness remain `UNKNOWN_EXPECTED_CADENCE_NOT_PROVIDED`. Frozen strategy specs reviewed here do not define a per-token cadence, so no threshold was invented.
 - Final rerun after the venue case: graph suite **65 passed**, combined scoped campaign **272 passed**; each reported two optional pandas dependency warnings.
+
+
+## Operator runbook measurability update
+
+- Expanded `NEXT_READ_ONLY_LIVE_VERIFICATION_RUNBOOK.md` with process/open-handle stability checks, producer SHA and safety-contract admission, explicit prohibition on broker login/profile calls, source-event clock separation, independent manifest verification, per-edge join counts, cadence-unknown behavior, and a required append-only operator run record.
+- The runbook remains `LIVE_VERIFICATION_PENDING` and was not executed. It grants no runtime or broker authority and directs the operator to defer when a writer is active.
+- Validation: `git diff --check` passed; no runtime code, configuration, protected source data, or behavior changed.
