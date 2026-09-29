@@ -13,7 +13,7 @@
     "decision_epoch_validation": "Non-finite decision epochs are rejected by both graph preflight and the independent verifier.",
     "implementation_commit_scope": "Includes pinned T-1 runtime, legacy-loader fail-closed shim, bounded source inventory/oracle, cross-day graph publisher, authority tests, and evidence updates.",
     "integration_branch": "ram/mros-session-continuity-live-integration",
-    "integration_commit": "ae303bcc7f1eca6432bee69db8d14006be1a8b2a",
+    "integration_commit": "df5bb856a",
     "legacy_generator_policy": "inventory only; all T-1 values null and BLOCKED_SOURCE_AUTHORITY; independent oracle rejects promoted values",
     "scope_note": "The branch worktree changes were preserved. The T-1 loader trust path was replaced with the pinned graph verifier, and the original standalone helper now fails closed.",
     "source_branch": "fix/runtime-pulse-and-feed-consistency-v1",

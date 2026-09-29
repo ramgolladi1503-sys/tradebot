@@ -31,7 +31,7 @@
   },
   "append": false,
   "implementation_branch": "ram/mros-session-continuity-live-integration",
-  "implementation_code_commit": "ae303bcc7f1eca6432bee69db8d14006be1a8b2a",
+  "implementation_code_commit": "df5bb856a",
   "implementation_status": "READ_ONLY_RUNTIME_INTEGRATION_FIXTURE_VERIFIED; VERIFIED_T1_GRAPH_PUBLICATION_FIXTURE_VERIFIED; LEGACY_T1_INVENTORY_ONLY_AND_FAILS_CLOSED; REAL_T1_SOURCES_AND_FRESH_RUNTIME_GATES_BLOCKED",
   "latest_check_utc": "2026-09-29T12:02:11Z",
   "raw_sources_modified": false,
