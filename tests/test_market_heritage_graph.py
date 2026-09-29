@@ -235,6 +235,72 @@ def test_session_index_recovers_after_lock_owner_process_exits(tmp_path):
     assert len(index.resolve()) == 1
 
 
+def test_manifest_publication_recovers_after_process_death_before_atomic_link(tmp_path):
+    """A killed writer leaves no accepted head; retry publishes one valid graph."""
+    root = tmp_path / "crash-recovery"
+    root.mkdir()
+    script = r'''\
+import os
+import sys
+from pathlib import Path
+import core.market_heritage_graph as heritage
+
+def die_after_temp_file_fsync(_fd):
+    os._exit(73)
+
+heritage.os.fsync = die_after_temp_file_fsync
+heritage._atomic_publish(Path(sys.argv[1]) / "interrupted.json", {"payload": "fixture"})
+'''
+    child = subprocess.run([sys.executable, "-c", script, str(root)],
+        cwd=Path(__file__).resolve().parents[1], check=False, timeout=5)
+    assert child.returncode == 73
+    assert not (root / "interrupted.json").exists()
+    # A crash may leave a private temporary file. Readers/indexes never treat
+    # it as a manifest; an identical content-addressed retry remains safe.
+    assert list(root.glob(".*.tmp"))
+
+    graph = HeritageGraph()
+    graph.add_node(node("crash-recovered"))
+    manifest = graph.publish(root, session_identity=SESSION)
+    report = verify_market_heritage_manifest(manifest, decision_epoch=11)
+    assert report["verdict"] == "PASS"
+    index = SessionHeritageIndex(root, session=SESSION)
+    registered = index.register(manifest, run_id="crash-recovered-run", session=SESSION)
+    resolved = index.resolve(run_id="crash-recovered-run")
+    assert len(resolved) == 1
+    assert resolved[0]["manifest_sha256"] == registered["manifest_sha256"]
+
+
+def test_session_index_recovers_after_process_death_before_atomic_replace(tmp_path):
+    first = HeritageGraph()
+    first.add_node(node("index-before-crash"))
+    first_manifest = first.publish(tmp_path, session_identity=SESSION)
+    index = SessionHeritageIndex(tmp_path, session=SESSION)
+    index.register(first_manifest, run_id="before-crash", session=SESSION)
+
+    second = HeritageGraph()
+    second.add_node(node("index-after-crash"))
+    second_manifest = second.publish(tmp_path, session_identity=SESSION)
+    script = (
+        "import os,sys,json; from core.market_heritage_graph import SessionHeritageIndex; "
+        "os.replace=lambda *_args: os._exit(74); "
+        "SessionHeritageIndex(sys.argv[1], session=json.loads(sys.argv[3]), "
+        "lock_timeout_seconds=5).register(sys.argv[2], run_id=sys.argv[4], "
+        "session=json.loads(sys.argv[3]))"
+    )
+    child = subprocess.run([sys.executable, "-c", script, str(tmp_path),
+        str(second_manifest), json.dumps(SESSION), "after-crash"],
+        cwd=Path(__file__).resolve().parents[1], check=False, timeout=5)
+    assert child.returncode == 74
+    assert {row["run_id"] for row in index.resolve()} == {"before-crash"}
+
+    retry = index.register(second_manifest, run_id="after-crash", session=SESSION)
+    resolved = index.resolve()
+    assert {row["run_id"] for row in resolved} == {"before-crash", "after-crash"}
+    assert next(row for row in resolved if row["run_id"] == "after-crash")[
+        "manifest_sha256"] == retry["manifest_sha256"]
+
+
 def test_legacy_indexer_is_bounded_read_only_and_never_promotes_authority(tmp_path, monkeypatch):
     sessions = tmp_path / "sessions"
     legacy_root = sessions / "session_2026-09-29" / "2026-09-29"
@@ -304,6 +370,29 @@ def test_session_index_concurrent_writers_preserve_both_manifests(tmp_path):
 
     assert {row["run_id"] for row in results} == {"writer-a", "writer-b"}
     assert {row["run_id"] for row in index.resolve()} == {"writer-a", "writer-b"}
+
+
+def test_session_index_concurrent_process_writers_preserve_both_manifests(tmp_path):
+    manifests = []
+    for key in ("process-writer-a", "process-writer-b"):
+        graph = HeritageGraph()
+        graph.add_node(node(key))
+        manifests.append(graph.publish(tmp_path, session_identity=SESSION))
+    script = (
+        "import json,sys; from core.market_heritage_graph import SessionHeritageIndex; "
+        "SessionHeritageIndex(sys.argv[1], session=json.loads(sys.argv[3]), "
+        "lock_timeout_seconds=5).register(sys.argv[2], run_id=sys.argv[4], "
+        "session=json.loads(sys.argv[3]))"
+    )
+    processes = [subprocess.Popen([sys.executable, "-c", script, str(tmp_path),
+        str(manifest), json.dumps(SESSION), run_id],
+        cwd=Path(__file__).resolve().parents[1], stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, text=True)
+        for run_id, manifest in zip(("process-a", "process-b"), manifests)]
+    results = [process.communicate(timeout=10) for process in processes]
+    assert [process.returncode for process in processes] == [0, 0], results
+    index = SessionHeritageIndex(tmp_path, session=SESSION)
+    assert {row["run_id"] for row in index.resolve()} == {"process-a", "process-b"}
 
 
 def test_session_index_rejects_oversized_serialized_index_before_read(tmp_path):

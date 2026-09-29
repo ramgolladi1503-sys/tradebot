@@ -2,9 +2,11 @@
   "allowed_for_live_execution": false,
   "broker_api_called": false,
   "commands": [
-    "pytest -q focused continuity, feed-consistency, pinned T-1, legacy inventory rejection, publication and authority regressions: 268 passed, 2 optional dependency warnings (see GSD_IMPLEMENTATION_CHANGESET.md)",
-    "python -m compileall -q on all changed runtime, graph, verifier, generator and ledger modules (see GSD_IMPLEMENTATION_CHANGESET.md)",
-    "git diff --check (see GSD_IMPLEMENTATION_CHANGESET.md)"
+    "/opt/anaconda3/bin/pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py: 271 passed, 2 optional dependency warnings",
+    "/opt/anaconda3/bin/pytest -q tests/test_market_heritage_graph.py: 64 passed, 2 optional dependency warnings",
+    "/opt/anaconda3/bin/pytest -q tests/test_market_heritage_graph.py::test_manifest_publication_recovers_after_process_death_before_atomic_link tests/test_market_heritage_graph.py::test_session_index_recovers_after_process_death_before_atomic_replace tests/test_market_heritage_graph.py::test_session_index_concurrent_process_writers_preserve_both_manifests tests/test_market_heritage_graph.py::test_verified_heritage_publisher_independently_checks_then_indexes tests/test_market_heritage_graph.py::test_verified_heritage_publisher_does_not_publish_future_dependency: 5 passed, 2 optional dependency warnings",
+    "/opt/anaconda3/bin/python -m compileall -q core/kite_depth_ws.py core/market_heritage_graph.py core/market_heritage_verifier.py core/cas_primitive_producer.py core/cas_evaluation_ledger.py core/read_only_coverage_ledger.py core/observation_lineage.py core/kite_read_only_observation_runtime.py core/runtime_snapshot_producer.py core/canonical_cycle_coordinator.py core/read_only_consumer_cycle.py core/paper_shadow/strategy_shadow_adapter.py scripts/generate_t1_prerequisites.py scripts/verify_t1_prerequisites_oracle.py: passed",
+    "git diff --check: passed"
   ],
   "is_order_action": false,
   "not_verified": [
@@ -72,7 +74,10 @@
     "The T-1 graph assembler emits only exact predecessor-calendar and source-ancestor edges after field, instrument, contract, session and decision-time checks; assembler fixture publication independently verifies.",
     "The pinned runtime loader invokes the separate serialized-manifest verifier and rejects rehashed prerequisite status and availability mutations before exposing values; T-1 semantic blockers remain strategy-local while structural/hash failures block globally.",
     "Independent T-1 verifier requires VERIFIED status on both prerequisite node and payload and finite, decision-admissible availability on prerequisite, source, and calendar ancestors.",
-    "Future or missing source-ancestor availability is attached to the exact requested T-1 prerequisite; unrelated strategies remain READY when their ancestry is valid."
+    "Future or missing source-ancestor availability is attached to the exact requested T-1 prerequisite; unrelated strategies remain READY when their ancestry is valid.",
+    "subprocess crash after temporary-manifest fsync before immutable link leaves no accepted manifest/index; retry publishes independently verified immutable state",
+    "subprocess crash after index temporary-file fsync before atomic replacement preserves the prior valid index and retry safely registers the new manifest",
+    "simultaneous subprocess writers preserve both unique verified session-index entries under the process lock"
   ],
   "verifier": "core.market_heritage_verifier.verify_market_heritage_manifest"
 }

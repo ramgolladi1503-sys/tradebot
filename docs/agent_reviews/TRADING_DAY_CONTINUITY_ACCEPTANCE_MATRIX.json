@@ -5,7 +5,7 @@
     "is_order_action": false,
     "read_only": true
   },
-  "campaign_result": "268 passed in the focused offline campaign; T-1 graph assembly, pinned independent runtime verification, field-local prerequisite failure propagation including source-ancestor time, CAS/T-1 contracts, read-only readiness and feed regressions are fixture-verified; real source/calendar and fresh-runtime gates remain blocked or unknown",
+  "campaign_result": "Final scoped offline continuity/feed/T-1 campaign: 271 passed, 2 optional dependency warnings; heritage graph suite: 64 passed, 2 warnings; V17 crash/publication command: 5 passed, 2 warnings. Real source/calendar and fresh-runtime gates remain blocked or unknown.",
   "continuation_audit": {
     "branch_feed_regression_command": "python -m pytest -q tests/test_pulse_issues_and_feed_consistency.py tests/test_tick_store.py tests/test_kite_depth_ws_watchdog_scope.py tests/test_kite_read_only_observation_runtime.py tests/test_governed_morning_orchestrator.py",
     "branch_feed_regression_result": "73 passed, 2 optional dependency warnings",
@@ -21,7 +21,7 @@
     "t1_graph_assembler": "Public fail-closed assembler requires exact predecessor calendar, complete required strategy fields, one verified source ancestor per prerequisite, instrument/contract/session identity, and decision-time admissibility; emits exactly two direct edges per prerequisite.",
     "t1_runtime_reverification": "Pinned runtime loader runs structural graph verification and the independent serialized-manifest verifier. Semantic failures localize to requested prerequisite ancestry; unrelated strategy prerequisites remain eligible. Structural/hash failures remain manifest-wide.",
     "tested_command": "python -m pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
-    "tested_result": "268 passed, 2 optional dependency warnings"
+    "tested_result": "271 passed, 2 optional dependency warnings"
   },
   "gates": [
     {
@@ -185,14 +185,14 @@
       "status": "PASS_FROZEN_ENTRY_WINDOW_NO_BACKDATE"
     },
     {
-      "actual": "Content-addressed graph publication runs a decision-time preflight, the separate verifier, and only then registers the artifact in the bounded session index; a future dependency is blocked before publication.",
-      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
-      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "actual": "Process death after temporary-manifest fsync but before atomic link leaves no accepted manifest/index head; retry publishes a hash-verified manifest. Process death after index-temp fsync but before atomic replace preserves the prior valid index without the new entry; retry registers it. Concurrent subprocess writers preserve both entries. Publisher independently verifies before indexing.",
+      "command": "pytest -q tests/test_market_heritage_graph.py::test_manifest_publication_recovers_after_process_death_before_atomic_link tests/test_market_heritage_graph.py::test_session_index_recovers_after_process_death_before_atomic_replace tests/test_market_heritage_graph.py::test_session_index_concurrent_process_writers_preserve_both_manifests tests/test_market_heritage_graph.py::test_verified_heritage_publisher_independently_checks_then_indexes tests/test_market_heritage_graph.py::test_verified_heritage_publisher_does_not_publish_future_dependency",
+      "expected": "no partially accepted manifest/index state after interrupted immutable publication; verified retry and independent writers preserve complete closure; no real source authority promotion",
       "id": "V17",
-      "negative_control": "not claimed",
-      "proof": "tests/test_market_heritage_graph.py::test_verified_heritage_publisher_independently_checks_then_indexes; tests/test_market_heritage_graph.py::test_verified_heritage_publisher_does_not_publish_future_dependency; existing interruption and idempotency fixtures",
+      "negative_control": "process exits before immutable manifest link or mutable index replacement: no partial accepted state; prior index remains valid; retry succeeds; concurrent independent writers preserve both unique run entries",
+      "proof": "tests/test_market_heritage_graph.py::test_manifest_publication_recovers_after_process_death_before_atomic_link; tests/test_market_heritage_graph.py::test_session_index_recovers_after_process_death_before_atomic_replace; tests/test_market_heritage_graph.py::test_session_index_concurrent_process_writers_preserve_both_manifests; publisher independent verification and future-dependency rejection tests",
       "source_authority": "SYNTHETIC_FIXTURE_ONLY",
-      "status": "PASS_FIXTURE_LOCK_RECEIPT_AND_PUBLICATION"
+      "status": "PASS_PROCESS_CRASH_RECOVERY_AND_MULTIPROCESS_PUBLICATION_FIXTURE"
     },
     {
       "actual": "Independent verifier rejects self-consistent rehashed manifests with changed CAS event payloads, stale rolling source-row hashes, wrong exact futures bar, contract mismatch or rolling computation closure failure.",
@@ -225,7 +225,7 @@
       "status": "PASS_BOUNDED_LEGACY_INDEX_WITH_ACTIVE_WRITER_CAVEAT"
     },
     {
-      "actual": "stable 2026-09-28 run: 8,971 pulse IDs validated, 5,916 selected refs across 51 tokens (116 each), max token receipt interval 347.947s. Second 9/28 run: 1,326 selected refs across 51 tokens (26 each), max interval 324.294s. Stable earlier 9/29 run: 1,530 refs (51\u00d730). Active 9/29 run PID 82150 had changing files, so no full stable snapshot. New forward-only callback ID/hash is carried into the process-local tick cache by the actual callback function in an offline regression; no persistence or fresh runtime is established. One read-only lineage record now binds exact consumed tick identity/provenance and snapshot/feed hashes into the NativePulse input, then joins strategy output, candidate IDs, decision results and canonical trade-truth trace ID; fixture mutation checks verify the record. No real runtime coverage proof. At each observer pulse the runtime now samples the process-local tick cache without DB fallback and hashes those observations alongside (but distinct from) the exact strategy snapshot; each record states strategy-input correlation UNKNOWN unless shared event IDs match. The envelope reports exact per-token match, mismatch, or unknown between process-local ticks and event identities in the strategy snapshot; IDs are not inferred from token or timestamp proximity.",
+      "actual": "stable 2026-09-28 run: 8,971 pulse IDs validated, 5,916 selected refs across 51 tokens (116 each), max token receipt interval 347.947s. Second 9/28 run: 1,326 selected refs across 51 tokens (26 each), max interval 324.294s. Stable earlier 9/29 run: 1,530 refs (51×30). Active 9/29 run PID 82150 had changing files, so no full stable snapshot. New forward-only callback ID/hash is carried into the process-local tick cache by the actual callback function in an offline regression; no persistence or fresh runtime is established. One read-only lineage record now binds exact consumed tick identity/provenance and snapshot/feed hashes into the NativePulse input, then joins strategy output, candidate IDs, decision results and canonical trade-truth trace ID; fixture mutation checks verify the record. No real runtime coverage proof. At each observer pulse the runtime now samples the process-local tick cache without DB fallback and hashes those observations alongside (but distinct from) the exact strategy snapshot; each record states strategy-input correlation UNKNOWN unless shared event IDs match. The envelope reports exact per-token match, mismatch, or unknown between process-local ticks and event identities in the strategy snapshot; IDs are not inferred from token or timestamp proximity.",
       "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
       "expected": "remain blocked",
       "id": "V21",
@@ -240,7 +240,7 @@
       "expected": "fixture proves stated primitive only; no real data authority promotion",
       "id": "V22",
       "negative_control": "not claimed",
-      "proof": "combined scoped regression: 268 passed; rehashed status/time/source ancestor mutation fixtures",
+      "proof": "final combined scoped regression: 271 passed; includes rehashed status/time/source ancestor mutations plus manifest/index crash recovery and concurrent process writer controls",
       "source_authority": "SYNTHETIC_FIXTURE_ONLY",
       "status": "PASS_FOCUSED_REGRESSION"
     },

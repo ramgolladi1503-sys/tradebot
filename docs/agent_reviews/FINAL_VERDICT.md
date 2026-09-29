@@ -2,7 +2,7 @@
 
 ## Verdict
 
-`PARTIAL_IMPLEMENTATION_COMPLETE`; full `IMPLEMENTATION_COMPLETE` remains unproven.
+`PARTIAL_IMPLEMENTATION_COMPLETE`; full `IMPLEMENTATION_COMPLETE` remains unproven. V17 now includes process-death recovery before atomic publication and concurrent independent-process index writers; the final graph and combined suites pass 64 and 271 tests respectively.
 
 The continuation branch based on the user-designated worktree is `ram/mros-session-continuity-live-integration`, with heritage integration commit `ae303bcc7f1eca6432bee69db8d14006be1a8b2a` and T-1 hardening commit `df5bb856a`. It incorporates the heritage implementation while retaining the supplied feed-token reconciliation and configured queue-capacity changes. The observer no longer consumes naked T-1 values: the pinned graph-verifier path is used, and the compatibility loader returns null values with an explicit blocked reason. Negative tests prove that launch-plan values, generic JSON, and environment overrides cannot enable the shadow adapters. The publisher preflights graph time, writes immutable content-addressed manifests, runs the separate semantic verifier, and indexes only a verified graph. `assemble_t1_heritage_graph` now wires a complete exact T-1 field set to its verified predecessor calendar and source nodes; missing, extra, mismatched, reused, unused, or future evidence fails closed. The legacy T-1 generator inventories hashes only and the separate oracle rejects any promoted close, SMA, or futures value.
 
@@ -22,8 +22,10 @@ The continuation branch based on the user-designated worktree is `ram/mros-sessi
 
 ## Verified commands
 
+- V17 publication fault-injection and multi-process writer command: **5 passed, 2 optional dependency warnings**. Manifest and index crash/retry controls preserve fail-closed publication; concurrent subprocess registrations preserve both entries.
+
 - Focused continuity, tick-store compatibility, and snapshot-lineage regression: **241 passed**.
-- Combined continuity, user-branch feed-consistency, candidate/authority and T-1 source-gate regression on the continuation branch: **268 passed, 2 optional dependency warnings**; the supplied branch feed-specific suite also passed **73 tests** with the same two warnings. The graph-only suite passed **61 tests**.
+- Combined continuity, user-branch feed-consistency, candidate/authority and T-1 source-gate regression on the continuation branch: **270 passed, 2 optional dependency warnings**; the supplied branch feed-specific suite also passed **73 tests** with the same two warnings. The graph-only suite passed **64 tests**.
 - `python -m compileall -q core/kite_depth_ws.py core/market_heritage_graph.py core/market_heritage_verifier.py core/cas_primitive_producer.py core/cas_evaluation_ledger.py core/read_only_coverage_ledger.py core/observation_lineage.py core/kite_read_only_observation_runtime.py core/runtime_snapshot_producer.py core/canonical_cycle_coordinator.py core/read_only_consumer_cycle.py core/paper_shadow/strategy_shadow_adapter.py`: passed.
 - `git diff --check`: passed.
 

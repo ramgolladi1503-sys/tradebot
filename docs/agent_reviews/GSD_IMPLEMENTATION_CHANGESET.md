@@ -122,7 +122,7 @@ No broker API calls, orders, live/paper authorization, strategy entry windows/th
 - `core/market_heritage_verifier.py` now rejects non-VERIFIED prerequisite node/payload statuses, unsupported strategy fields, absent/non-finite/future prerequisite or source availability, and absent/non-finite/future calendar availability.
 - `core/market_heritage_graph.py` invokes that separate verifier at runtime after pinned hash and structural checks. It localizes semantic errors to the exact requested prerequisite node so unrelated strategy readiness remains independent; structural/hash failures still block the manifest. Runtime row validation preserves precise blocker reasons.
 - Added five self-consistent rehashed-manifest negative cases covering derived node status, payload status, future payload availability, missing prerequisite availability, and missing calendar availability. Each is rejected by both the independent verifier and runtime loader.
-- Validation: graph suite **61 passed**; combined scoped campaign **268 passed**; feed regression **73 passed**; compileall and diff check passed. Synthetic-only; real T-1 sources/calendar and fresh runtime remain blocked/unknown.
+- Validation at the prior verifier-hardening checkpoint: graph suite **61 passed**; combined scoped campaign **268 passed**; supplied feed regression **73 passed**; compileall and diff check passed. The later V17 update below supersedes graph/campaign counts with **64** and **271**. Synthetic-only; real T-1 sources/calendar and fresh runtime remain blocked/unknown.
 
 
 ## Local source-corpus gate recheck
@@ -132,4 +132,23 @@ No broker API calls, orders, live/paper authorization, strategy entry windows/th
 - This data cannot establish the `2026-09-28` daily close/SMA input or exact NIFTY futures contract/15:29 bar. Added both hashes to the source manifest as rejected research-only candidates; `V09` and real `V12` remain `BLOCKED_SOURCE_EVIDENCE`.
 
 - A seven-case self-consistent rehash mutation campaign now includes absent/future source-ancestor availability. The independent verifier rejects the source; the runtime localizes the future/missing time blocker to the dependent strategy while S1/S4 remain ready on the independent fixture evidence.
-- Latest scoped outcomes: graph **61 passed**, combined campaign **268 passed**, supplied feed regression **73 passed**, all with two optional pandas dependency warnings.
+- Scoped outcomes before the V17 additions: graph **61 passed**, combined campaign **268 passed**, supplied feed regression **73 passed**, all with two optional pandas dependency warnings.
+
+
+## V17 crash recovery and multi-process publication proof
+
+- Added `test_manifest_publication_recovers_after_process_death_before_atomic_link`: a child exits immediately after the temporary manifest file is fsynced and before the no-clobber atomic link. The interrupted file is not discoverable as a manifest or indexed head; a retry publishes, independently verifies, registers, and resolves exactly one immutable manifest. The crash may leave a dot-prefixed temporary file, which is non-authoritative.
+- Added `test_session_index_recovers_after_process_death_before_atomic_replace`: a child exits immediately before replacing a fully fsynced index temp file. The previously accepted index stays intact without the new row; retry atomically adds it and both entries resolve.
+- Added `test_session_index_concurrent_process_writers_preserve_both_manifests`: two independent Python processes concurrently register distinct verified manifests into one session index; both entries must survive and resolve. This covers OS process locking beyond the earlier thread-level fixture.
+- All three fault-injection controls pass. The manifest crash leaves no accepted manifest/index head; the index replacement crash preserves the prior valid index and the new row appears only on retry; independent concurrent process writers preserve both entries. Final validation: graph suite **64 passed**, combined scoped campaign **271 passed**, and the exact V17 command **5 passed**, each with two optional pandas dependency warnings. The fixtures prove publication recovery and index concurrency only. It does not prove filesystem power-loss guarantees on every mounted volume or source-data authority.
+
+
+Final commands at the V17 validation checkpoint:
+
+```bash
+/opt/anaconda3/bin/pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py
+/opt/anaconda3/bin/pytest -q tests/test_market_heritage_graph.py
+/opt/anaconda3/bin/pytest -q tests/test_market_heritage_graph.py::test_manifest_publication_recovers_after_process_death_before_atomic_link tests/test_market_heritage_graph.py::test_session_index_recovers_after_process_death_before_atomic_replace tests/test_market_heritage_graph.py::test_session_index_concurrent_process_writers_preserve_both_manifests tests/test_market_heritage_graph.py::test_verified_heritage_publisher_independently_checks_then_indexes tests/test_market_heritage_graph.py::test_verified_heritage_publisher_does_not_publish_future_dependency
+/opt/anaconda3/bin/python -m compileall -q core/kite_depth_ws.py core/market_heritage_graph.py core/market_heritage_verifier.py core/cas_primitive_producer.py core/cas_evaluation_ledger.py core/read_only_coverage_ledger.py core/observation_lineage.py core/kite_read_only_observation_runtime.py core/runtime_snapshot_producer.py core/canonical_cycle_coordinator.py core/read_only_consumer_cycle.py core/paper_shadow/strategy_shadow_adapter.py scripts/generate_t1_prerequisites.py scripts/verify_t1_prerequisites_oracle.py
+git diff --check
+```
