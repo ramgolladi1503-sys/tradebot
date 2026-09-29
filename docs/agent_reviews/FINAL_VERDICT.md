@@ -43,3 +43,10 @@ The user-designated worktree at `/Volumes/TradeBotData/worktrees/mros-dynamic-re
 
 
 The continuation audit found and repaired an independent-verification bypass: a hash-consistent prerequisite node marked `OBSERVED` could be accepted when its payload still said `VERIFIED`. The runtime now calls the separate verifier; prerequisite/source/calendar availability must be explicit and decision-admissible. Semantic T-1 failures stay field-local, while graph integrity failures remain manifest-wide. The live process check found no command matching the user-designated worktree, but canonical supervisor/watchdog/scheduler processes remain and were left untouched.
+
+
+## Stopped runtime evidence update
+
+A later stable read-only inspection of the named 2026-09-29 run found PID 82150 absent, but the stored identity still says RUNNING and names producer SHA `12d01da414d9a1ffc13718390e2c950c9f621bfd` (the supplied branch, not this integration branch). The stable shutdown artifact is `PARTIAL`/`FAILED`: tick persistence has 50,801 pending writes, queue depth 49,801, 330 worker failures, no final flush, and worker termination false; runtime and depth drains are also incomplete. Feed health is DEGRADED with 95 blockers. The run has no per-token coverage ledger or same-day heritage artifact, and its 0915/1000 CAS values remain null and blocked. A zero-byte stop marker and absent PID do not establish clean drain or durable output.
+
+The persistent Antigravity weekday schedule referencing the user worktree remains configured (`15 3 * * 1-5`, timezone UNKNOWN); no child was observed and it was not changed. Canonical checkout `run_all.sh`, watchdog, and scheduler processes also remain active (PIDs 1403, 1469, 67023) and were not touched. No raw files were modified. This is negative runtime evidence, not `LIVE_VERIFIED`; the next safe step requires the operator to address the scheduled trigger and provide a successful read-only session running the integration SHA with a complete drain.

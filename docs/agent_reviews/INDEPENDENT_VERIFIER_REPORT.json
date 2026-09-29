@@ -30,7 +30,11 @@
     "whether currently observed canonical checkout supervisor, watchdog, and scheduler processes own the historical protected run files",
     "authoritative source/calendar-backed producer inputs and a real verified T-1 heritage graph",
     "current local research-ready NIFTY spot-index series ends 2026-09-04, 2026-09-07 is provisional, and the declared dataset manifest is absent; it cannot establish 2026-09-28 T-1 close or futures contract continuity",
-    "the supplied 2026-09-28 VERIFIED_AUTHORITATIVE daily-close claim resolves to a stale 10:00 UTC point-in-time LTP with market_open=false, repeated scalar OHLC and no last tick timestamp"
+    "the supplied 2026-09-28 VERIFIED_AUTHORITATIVE daily-close claim resolves to a stale 10:00 UTC point-in-time LTP with market_open=false, repeated scalar OHLC and no last tick timestamp",
+    "the 2026-09-29 runtime artifacts came from the integration branch; recorded producer SHA is the supplied source branch",
+    "clean shutdown and durable persistence for the 2026-09-29 stopped run; shutdown_drain.json is FAILED/PARTIAL with pending queues and failed workers",
+    "fresh per-token callback coverage or same-day heritage runtime wiring in that run; expected artifacts are absent",
+    "future non-execution of the scheduled Antigravity observer; a recurring weekday schedule remains configured, though no child was present at check"
   ],
   "read_only": true,
   "schema_version": 1,
@@ -80,5 +84,37 @@
     "subprocess crash after index temporary-file fsync before atomic replacement preserves the prior valid index and retry safely registers the new manifest",
     "simultaneous subprocess writers preserve both unique verified session-index entries under the process lock"
   ],
-  "verifier": "core.market_heritage_verifier.verify_market_heritage_manifest"
+  "verifier": "core.market_heritage_verifier.verify_market_heritage_manifest",
+  "observed_runtime_artifacts": {
+    "source_authority": "STABLE_RUNTIME_OUTPUTS_OBSERVED_BUT_NOT_SEALED_OR_INTEGRATION_SHA",
+    "run_id": "meg-live-2026-09-29-4533aa1ab52b-f0aa2c226d8e",
+    "producer_sha": "12d01da414d9a1ffc13718390e2c950c9f621bfd",
+    "recorded_pid": 82150,
+    "current_process_state": "PID_NOT_PRESENT",
+    "recorded_process_identity_state": "RUNNING",
+    "shutdown_drain_sha256": "4ec7bc977dbc5c3b03a07e7a8cab87bea9f4db3fb9fbd414f47d491caec1ae4c",
+    "shutdown_final_seal": "PARTIAL",
+    "shutdown_phase": "FAILED",
+    "tick_pending_writes": 50801,
+    "tick_queue_depth": 49801,
+    "tick_worker_failures": 330,
+    "tick_worker_terminated": false,
+    "tick_final_flush_completed": false,
+    "feed_health_sha256": "5b7e0ef61fce039e4be766102368322da2dfc4acd10ed4f7196f60162a16e149",
+    "feed_truth_state": "DEGRADED",
+    "feed_ok": false,
+    "global_feed_ok": false,
+    "feed_blocker_count": 95,
+    "coverage_ledger": "ABSENT",
+    "same_day_heritage_artifact": "ABSENT",
+    "scheduled_trigger": "PRESENT_NO_CHILD_OBSERVED_NOT_MODIFIED",
+    "raw_files_modified": false,
+    "read_only": true,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "allowed_for_live_execution": false,
+    "schedule_expression": "15 3 * * 1-5",
+    "schedule_timezone": "UNKNOWN",
+    "process_check_utc": "2026-09-29T13:11:05Z"
+  }
 }

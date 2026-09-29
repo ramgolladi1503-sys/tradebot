@@ -167,3 +167,11 @@ git diff --check
 - Expanded `NEXT_READ_ONLY_LIVE_VERIFICATION_RUNBOOK.md` with process/open-handle stability checks, producer SHA and safety-contract admission, explicit prohibition on broker login/profile calls, source-event clock separation, independent manifest verification, per-edge join counts, cadence-unknown behavior, and a required append-only operator run record.
 - The runbook remains `LIVE_VERIFICATION_PENDING` and was not executed. It grants no runtime or broker authority and directs the operator to defer when a writer is active.
 - Validation: `git diff --check` passed; no runtime code, configuration, protected source data, or behavior changed.
+
+
+## Stable stopped-run evidence recheck
+
+- Verified no current `ps` entry for recorded PID 82150 and no observer child under Antigravity scheduler PID 1167. Canonical checkout `run_all.sh` PID 1403, watchdog PID 1469, and scheduler PID 67023 remain active and untouched. Exact `lsof` checks were empty for selected artifacts; every file read was checked as a regular non-symlink file with unchanged inode/size/mtime before and after read. No runtime process or schedule was modified.
+- Hash-bound shutdown evidence now records `PARTIAL`/`FAILED`, incomplete persistence drains, 50,801 pending tick writes, 330 worker failures, expired drain deadline and no final flush. The process identity remains stale `RUNNING` and records source branch SHA `12d01da414d9a1ffc13718390e2c950c9f621bfd`, not the integration SHA.
+- Feed truth is DEGRADED with 95 blockers; per-token coverage and same-day heritage artifacts are absent; CAS targets remain blocked/null. The recurring Antigravity weekday trigger for the supplied worktree remains present with no child. See `SOURCE_AND_HERITAGE_MANIFEST.json` for exact hashes and typed statuses.
+- Result: runtime proof fails clean-shutdown, integration-SHA, and coverage-artifact checks. This does not invalidate synthetic code tests, but prohibits live/runtime acceptance claims.

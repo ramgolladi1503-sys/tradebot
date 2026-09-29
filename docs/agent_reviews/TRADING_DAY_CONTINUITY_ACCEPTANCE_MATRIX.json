@@ -5,7 +5,7 @@
     "is_order_action": false,
     "read_only": true
   },
-  "campaign_result": "Final scoped offline continuity/feed/T-1 campaign: 272 passed, 2 optional dependency warnings; heritage graph suite: 65 passed, 2 warnings; V17 publication fault-injection command: 5 passed, 2 warnings. Wrong-source-venue mutation now covered. V07 intraprocess continuous-coverage readiness remains UNKNOWN because frozen strategy contracts provide no per-token cadence. Real T-1 source/calendar and fresh-runtime gates remain blocked or unknown.",
+  "campaign_result": "Offline implementation tests remain green; newly inspected stable 2026-09-29 runtime artifacts contradict clean runtime verification: producer SHA is the supplied branch, feed truth is DEGRADED, per-token coverage/heritage files are absent, process_identity is stale, and shutdown drain is FAILED/PARTIAL. No live verification pass.",
   "continuation_audit": {
     "branch_feed_regression_command": "python -m pytest -q tests/test_pulse_issues_and_feed_consistency.py tests/test_tick_store.py tests/test_kite_depth_ws_watchdog_scope.py tests/test_kite_read_only_observation_runtime.py tests/test_governed_morning_orchestrator.py",
     "branch_feed_regression_result": "73 passed, 2 optional dependency warnings",
@@ -21,7 +21,8 @@
     "t1_graph_assembler": "Public fail-closed assembler requires exact predecessor calendar, complete required strategy fields, one verified source ancestor per prerequisite, instrument/contract/session identity, and decision-time admissibility; emits exactly two direct edges per prerequisite.",
     "t1_runtime_reverification": "Pinned runtime loader runs structural graph verification and the independent serialized-manifest verifier. Semantic failures localize to requested prerequisite ancestry; unrelated strategy prerequisites remain eligible. Structural/hash failures remain manifest-wide.",
     "tested_command": "python -m pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
-    "tested_result": "272 passed, 2 optional dependency warnings"
+    "tested_result": "272 passed, 2 optional dependency warnings",
+    "runtime_evidence_update": "2026-09-29 stopped run PID is absent, but stable shutdown drain is FAILED/PARTIAL and references pre-integration source SHA; no per-token coverage or same-day heritage artifact exists."
   },
   "gates": [
     {
@@ -85,14 +86,14 @@
       "status": "PASS_FIXTURE_BOUNDARY"
     },
     {
-      "actual": "Verified prior-run process downtime is reported in the runtime heritage record. Per-token source interarrival maxima are measured, but the ledger deliberately reports UNKNOWN_EXPECTED_CADENCE_NOT_PROVIDED; the frozen strategy contracts specify no per-token continuity cadence, so continuous-coverage readiness remains unverified.",
+      "actual": "The stopped run did not execute the integration branch: presession/process records cite producer SHA 12d01da414d9a1ffc13718390e2c950c9f621bfd; expected feed_coverage_ledger.json and cas_session_heritage.json are absent. shutdown_drain.json is FAILED/PARTIAL. Per-token callback coverage and process-gap propagation are therefore not observed in this run; fixture wiring remains separate.",
       "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
-      "expected": "process downtime remains explicit; intraprocess gap classification and strategy readiness remain UNKNOWN until frozen cadence/coverage requirements exist",
+      "expected": "fixture coverage wiring may pass; this run cannot establish runtime gap persistence or strategy coverage readiness",
       "id": "V07",
-      "negative_control": "without an exact cadence contract, no measured interval is classified as a strategy-breaking gap and no strategy readiness is upgraded from these counts",
-      "proof": "tests/core/test_read_only_coverage_ledger.py::test_process_gap_uses_only_verified_prior_same_session_intervals; tests/core/test_read_only_coverage_ledger.py::test_coverage_ledger_reports_intended_vs_observed_and_event_identity; core/kite_read_only_observation_runtime.py process_gap serialization",
+      "negative_control": "old producer SHA, missing coverage artifacts, stale RUNNING identity with absent PID, and incomplete shutdown block any runtime coverage claim",
+      "proof": "SOURCE_AND_HERITAGE_MANIFEST.json stopped-run process_identity, shutdown_drain, and absent feed_coverage_ledger/cas_session_heritage records; tests/core/test_read_only_coverage_ledger.py fixtures",
       "source_authority": "SYNTHETIC_FIXTURE_ONLY",
-      "status": "PARTIAL_PROCESS_GAP_MEASURED_INTRAPROCESS_CADENCE_UNKNOWN"
+      "status": "BLOCKED_RUNTIME_PROOF_OLD_SHA_COVERAGE_ARTIFACTS_ABSENT"
     },
     {
       "actual": "completed identical source event pair is blocked before evaluator invocation after restart",
@@ -225,14 +226,14 @@
       "status": "PASS_BOUNDED_LEGACY_INDEX_WITH_ACTIVE_WRITER_CAVEAT"
     },
     {
-      "actual": "stable 2026-09-28 run: 8,971 pulse IDs validated, 5,916 selected refs across 51 tokens (116 each), max token receipt interval 347.947s. Second 9/28 run: 1,326 selected refs across 51 tokens (26 each), max interval 324.294s. Stable earlier 9/29 run: 1,530 refs (51×30). Active 9/29 run PID 82150 had changing files, so no full stable snapshot. New forward-only callback ID/hash is carried into the process-local tick cache by the actual callback function in an offline regression; no persistence or fresh runtime is established. One read-only lineage record now binds exact consumed tick identity/provenance and snapshot/feed hashes into the NativePulse input, then joins strategy output, candidate IDs, decision results and canonical trade-truth trace ID; fixture mutation checks verify the record. No real runtime coverage proof. At each observer pulse the runtime now samples the process-local tick cache without DB fallback and hashes those observations alongside (but distinct from) the exact strategy snapshot; each record states strategy-input correlation UNKNOWN unless shared event IDs match. The envelope reports exact per-token match, mismatch, or unknown between process-local ticks and event identities in the strategy snapshot; IDs are not inferred from token or timestamp proximity.",
+      "actual": "Stable stopped-run artifacts are not an acceptance pass: feed_health_truth_latest reports feed_ok=false/global_feed_ok=false, DEGRADED, 95 blockers; process_identity records PID 82150 RUNNING but ps shows it absent; producer SHA is 12d01da414d9a1ffc13718390e2c950c9f621bfd; feed_coverage_ledger.json is absent. shutdown_drain.json final_seal=PARTIAL/phase=FAILED: tick persistence has 50,801 pending writes, queue depth 49,801, 330 worker failures, deadline expired, final flush false and worker not terminated; runtime/depth drains also incomplete. Selected-tick artifacts do not close event-to-downstream lineage.",
       "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
-      "expected": "remain blocked",
+      "expected": "remain blocked; no LIVE_VERIFIED claim",
       "id": "V21",
-      "negative_control": "Selected refs omit exchange timestamp/price; scheduler cadence and downstream joins are not demonstrated. PID 82150 was absent at resume; a later broad process listing observed TradeBot run_all.sh, watchdog.sh, and scheduler.py in the canonical checkout (PIDs 1403, 1469, 67023). Their relation to the recorded external run directory is UNKNOWN. No signals, restarts, or protected-file reads occurred.",
-      "proof": "external legacy runtime telemetry artifact referenced in SOURCE_AND_HERITAGE_MANIFEST.json; authority remains LEGACY_UNVERIFIED; tests/core/test_tick_store_db_truth.py::test_tick_event_identity_survives_memory_and_sqlite_reads; tests/core/test_observation_lineage.py; tests/core/test_observation_lineage.py::test_process_local_tick_store_event_is_bound_into_pulse_record",
+      "negative_control": "do not infer a clean stop from a zero-byte STOP_REQUESTED marker or absent PID; PARTIAL/FAILED drain, stale process identity, wrong producer SHA, degraded feed truth, and missing per-token ledger block runtime acceptance",
+      "proof": "SOURCE_AND_HERITAGE_MANIFEST.json stable stopped-run records with exact hashes for shutdown_drain.json, process_identity.json, feed_health_truth_latest.json, market_snapshot.json, CAS primitives, and explicit absent coverage/heritage artifacts; prior bounded legacy telemetry remains LEGACY_UNVERIFIED",
       "source_authority": "UNKNOWN",
-      "status": "PARTIAL_REAL_COVERAGE_UNVERIFIED; CALLBACK_TO_PROCESS_CACHE_FIXTURE_VERIFIED; PULSE_OUTPUT_JOIN_FIXTURE_VERIFIED; SNAPSHOT_CORRELATION_UNKNOWN"
+      "status": "RUNTIME_VERIFICATION_FAILED_STOP_DRAIN_PARTIAL_SHA_MISMATCH"
     },
     {
       "actual": "assertions passed, including independent pinned-manifest re-verification and field-local status/availability blocking",
