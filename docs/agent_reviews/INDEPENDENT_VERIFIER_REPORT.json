@@ -2,8 +2,8 @@
   "allowed_for_live_execution": false,
   "broker_api_called": false,
   "commands": [
-    "pytest -q focused continuity, feed-consistency, unpinned T-1 rejection, and authority regressions: 252 passed, 2 dependency warnings (see GSD_IMPLEMENTATION_CHANGESET.md)",
-    "python -m compileall -q on all changed runtime and ledger modules (see GSD_IMPLEMENTATION_CHANGESET.md)",
+    "pytest -q focused continuity, feed-consistency, pinned T-1, legacy inventory rejection, publication and authority regressions: 256 passed, 2 optional dependency warnings (see GSD_IMPLEMENTATION_CHANGESET.md)",
+    "python -m compileall -q on all changed runtime, graph, verifier, generator and ledger modules (see GSD_IMPLEMENTATION_CHANGESET.md)",
     "git diff --check (see GSD_IMPLEMENTATION_CHANGESET.md)"
   ],
   "is_order_action": false,
@@ -24,7 +24,8 @@
     "legacy CAS events cannot be retroactively rebound to normalized source payloads",
     "real feed-to-pulse-to-candidate/decision lineage in a fresh session",
     "correlation between process-local tick-cache observations and dashboard-shaped strategy snapshot when no shared event identity is present",
-    "whether currently observed canonical checkout supervisor, watchdog, and scheduler processes own the historical protected run files"
+    "whether currently observed canonical checkout supervisor, watchdog, and scheduler processes own the historical protected run files",
+    "authoritative source/calendar-backed producer inputs and a real verified T-1 heritage graph"
   ],
   "read_only": true,
   "schema_version": 1,
@@ -62,7 +63,10 @@
     "independent verifier binds run coverage record identity, source hash, manifest session, interval, token set, and authority flags",
     "process-gap computation rejects wrong-session or changed-hash prior coverage reports",
     "Opening Drive shadow adapter expires the frozen entry window without recording a late-start entry",
-    "legacy T-1 compatibility helper rejects launch-plan, environment, and generic JSON values without a pinned verified graph manifest"
+    "legacy T-1 compatibility helper rejects launch-plan, environment, and generic JSON values without a pinned verified graph manifest",
+    "T-1 heritage publication performs decision-time preflight, independent semantic verification, then bounded session-index registration; future dependencies block before publication",
+    "legacy T-1 inventory generator and independent oracle cannot promote snapshot LTP, loose futures rows, or unbound rolling values",
+    "Graph preflight and the separate semantic verifier reject non-finite decision epochs"
   ],
   "verifier": "core.market_heritage_verifier.verify_market_heritage_manifest"
 }

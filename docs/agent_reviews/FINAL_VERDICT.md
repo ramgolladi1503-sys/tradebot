@@ -4,7 +4,7 @@
 
 `PARTIAL_IMPLEMENTATION_COMPLETE`; full `IMPLEMENTATION_COMPLETE` remains unproven.
 
-The continuation branch based on the user-designated worktree is `ram/mros-session-continuity-live-integration`. It incorporates the heritage implementation while retaining the supplied feed-token reconciliation and configured queue-capacity changes. The observer no longer consumes naked T-1 values: the pinned graph-verifier path is used, and the compatibility loader returns null values with an explicit blocked reason. Negative tests prove that launch-plan values, generic JSON, and environment overrides cannot enable the shadow adapters.
+The continuation branch based on the user-designated worktree is `ram/mros-session-continuity-live-integration`, with integrated code commit `ae303bcc7f1eca6432bee69db8d14006be1a8b2a`. It incorporates the heritage implementation while retaining the supplied feed-token reconciliation and configured queue-capacity changes. The observer no longer consumes naked T-1 values: the pinned graph-verifier path is used, and the compatibility loader returns null values with an explicit blocked reason. Negative tests prove that launch-plan values, generic JSON, and environment overrides cannot enable the shadow adapters. A new publisher preflights graph time, writes immutable content-addressed manifests, runs the separate semantic verifier, and indexes only a verified graph. The legacy T-1 generator now inventories hashes only and the separate oracle rejects any promoted close, SMA, or futures value.
 
 - `REPOSITORY_IMPLEMENTATION_VALID`: PASS for the offline heritage graph, explicit session index, previous-session resolver, per-strategy readiness, rolling-close derivation, separate verifier, source-event envelope, CAS persistence, scoped read-only runtime/candidate integration with per-observation heritage lineage, per-token callback coverage ledger with independently checked source manifest/report hashes and same-session binding, and restart-safe CAS evaluation idempotency.
 - `HERITAGE_GRAPH_INVARIANTS_PASS`: PASS on synthetic fixtures, including concurrent index writers.
@@ -22,7 +22,7 @@ The continuation branch based on the user-designated worktree is `ram/mros-sessi
 ## Verified commands
 
 - Focused continuity, tick-store compatibility, and snapshot-lineage regression: **241 passed**.
-- Combined continuity, user-branch feed-consistency, candidate/authority and T-1 source-gate regression on the continuation branch: **252 passed, 2 dependency warnings**.
+- Combined continuity, user-branch feed-consistency, candidate/authority and T-1 source-gate regression on the continuation branch: **256 passed, 2 optional dependency warnings**; the supplied branch feed-specific suite also passed **73 tests** with the same two warnings.
 - `python -m compileall -q core/kite_depth_ws.py core/market_heritage_graph.py core/market_heritage_verifier.py core/cas_primitive_producer.py core/cas_evaluation_ledger.py core/read_only_coverage_ledger.py core/observation_lineage.py core/kite_read_only_observation_runtime.py core/runtime_snapshot_producer.py core/canonical_cycle_coordinator.py core/read_only_consumer_cycle.py core/paper_shadow/strategy_shadow_adapter.py`: passed.
 - `git diff --check`: passed.
 

@@ -241,6 +241,12 @@ class HeritageGraph:
 
     def verify(self, *, decision_epoch: float | None = None) -> dict[str, Any]:
         errors: list[dict[str, str]] = []
+        if decision_epoch is not None:
+            try:
+                if not math.isfinite(float(decision_epoch)):
+                    raise ValueError
+            except (TypeError, ValueError, OverflowError):
+                errors.append({"code": "INVALID_DECISION_EPOCH", "id": "graph"})
         conflicts = {key: sorted(ids) for key, ids in self.logical_keys.items() if len(ids) > 1}
         for logical_key in sorted(conflicts):
             errors.append({"code": "LOGICAL_KEY_CONFLICT", "id": logical_key})
@@ -438,6 +444,53 @@ class SessionHeritageIndex:
                 raise ValueError("INDEXED_MANIFEST_CHANGED_OR_UNVERIFIED")
             resolved.append({**entry, "path": str(path), "verification": verification})
         return resolved
+
+
+def publish_verified_heritage_manifest(*, graph: HeritageGraph,
+                                      approved_root: str | Path,
+                                      session_identity: Mapping[str, Any],
+                                      run_id: str,
+                                      decision_epoch: float) -> dict[str, Any]:
+    """Publish, independently verify, then index one immutable session graph.
+
+    Caller-supplied evidence remains subject to the graph's source/contract
+    checks. A failed independent check is never indexed; its content-addressed
+    file, if already atomically published, remains an untrusted orphan for
+    audit and cannot be resolved through the index.
+    """
+    if not isinstance(graph, HeritageGraph):
+        return {"status": "BLOCKED", "reason": "HERITAGE_GRAPH_REQUIRED", **AUTHORITY}
+    if not isinstance(run_id, str) or not run_id.strip() or not isinstance(session_identity, Mapping):
+        return {"status": "BLOCKED", "reason": "RUN_AND_SESSION_IDENTITY_REQUIRED", **AUTHORITY}
+    try:
+        if not math.isfinite(float(decision_epoch)):
+            raise ValueError
+    except (TypeError, ValueError, OverflowError):
+        return {"status": "BLOCKED", "reason": "INVALID_DECISION_EPOCH", **AUTHORITY}
+    try:
+        root = Path(approved_root).resolve()
+        session = dict(session_identity)
+        preflight = graph.verify(decision_epoch=decision_epoch)
+        if preflight.get("verdict") != "PASS":
+            return {"status": "BLOCKED", "reason": "GRAPH_PREFLIGHT_FAILED",
+                    "verification": preflight, **AUTHORITY}
+        path = graph.publish(root, session_identity=session)
+        from core.market_heritage_verifier import verify_market_heritage_manifest
+        independent = verify_market_heritage_manifest(path, decision_epoch=decision_epoch)
+        if independent.get("verdict") != "PASS":
+            return {"status": "BLOCKED", "reason": "INDEPENDENT_VERIFICATION_FAILED",
+                    "manifest_path": str(path),
+                    "manifest_sha256": independent.get("manifest_sha256"),
+                    "independent_verification": independent, **AUTHORITY}
+        entry = SessionHeritageIndex(root, session=session).register(
+            path, run_id=run_id, session=session)
+        return {"status": "PUBLISHED_VERIFIED", "reason": "INDEPENDENTLY_VERIFIED_AND_INDEXED",
+                "manifest_path": str(path), "manifest_sha256": independent.get("manifest_sha256"),
+                "graph_verification": preflight,
+                "independent_verification": independent,
+                "index_entry": entry, **AUTHORITY}
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        return {"status": "BLOCKED", "reason": str(exc) or "HERITAGE_PUBLICATION_FAILED", **AUTHORITY}
 
 
 _LEGACY_FIXED_NAMES = {

@@ -311,6 +311,8 @@ def _verify_run_coverage_node(*, node_id: str, node: dict[str, Any],
 def verify_market_heritage_manifest(path: str | Path, *, decision_epoch: float | None = None) -> dict[str, Any]:
     errors: list[dict[str, str]] = []
     try:
+        if decision_epoch is not None and not math.isfinite(float(decision_epoch)):
+            raise ValueError("INVALID_DECISION_EPOCH")
         artifact = Path(path)
         if artifact.stat().st_size > MAX_MANIFEST_BYTES:
             raise ValueError("MANIFEST_SIZE_BOUND_EXCEEDED")

@@ -19,6 +19,7 @@ from core.market_heritage_graph import (
     load_verified_t1_prerequisites,
     load_same_session_cas_references,
     index_legacy_session_runs,
+    publish_verified_heritage_manifest,
     publish_same_session_cas_manifest,
     rolling_source_row_hash,
     make_node,
@@ -375,7 +376,8 @@ def _publish_t1_manifest(root, *, omit_calendar_edge=False, corrupt_contract=Fal
                          target_date="2026-09-29", prior_date="2026-09-25",
                          mismatch_prior_contract=False, late_1529_bar=False,
                          wrong_1529_epoch=False, omit_rolling_row=False,
-                         corrupt_rolling_hash=False, tamper_rolling_row=False):
+                         corrupt_rolling_hash=False, tamper_rolling_row=False,
+                         publish=True):
     import math
     target = {**SESSION, "trading_date": target_date}
     prior = {**SESSION, "trading_date": prior_date}
@@ -500,8 +502,55 @@ def _publish_t1_manifest(root, *, omit_calendar_edge=False, corrupt_contract=Fal
             if not omit_calendar_edge:
                 graph.add_edge(parent_id=calendar["node_id"], child_id=derived["node_id"],
                     requirement="PREVIOUS_ELIGIBLE_SESSION", parent_hash=calendar["node_id"])
-    path = graph.publish(root, session_identity=target)
-    return path, target, required, instruments
+    if publish:
+        path = graph.publish(root, session_identity=target)
+        return path, target, required, instruments
+    return graph, target, required, instruments
+
+
+def test_verified_heritage_publisher_independently_checks_then_indexes(tmp_path):
+    graph, target, required, instruments = _publish_t1_manifest(
+        tmp_path, publish=False)
+    root = tmp_path / "session-2026-09-29"
+    result = publish_verified_heritage_manifest(
+        graph=graph, approved_root=root, session_identity=target,
+        run_id="target-session-run", decision_epoch=100)
+    assert result["status"] == "PUBLISHED_VERIFIED"
+    assert result["independent_verification"]["verdict"] == "PASS"
+    assert result["read_only"] is True
+    assert result["is_order_action"] is False
+    resolved = SessionHeritageIndex(root, session=target).resolve(
+        run_id="target-session-run")
+    assert len(resolved) == 1
+    assert resolved[0]["manifest_sha256"] == result["manifest_sha256"]
+    t1 = load_verified_t1_prerequisites(
+        manifest_path=result["manifest_path"],
+        expected_manifest_sha256=result["manifest_sha256"],
+        approved_root=root, target_session=target, decision_epoch=100,
+        required_fields=required, target_instruments=instruments)
+    assert t1["heritage_verification"]["status"] == "VERIFIED"
+
+
+def test_verified_heritage_publisher_does_not_publish_future_dependency(tmp_path):
+    graph, target, _, _ = _publish_t1_manifest(tmp_path, publish=False)
+    result = publish_verified_heritage_manifest(
+        graph=graph, approved_root=tmp_path / "blocked-session",
+        session_identity=target, run_id="future-source-run", decision_epoch=40)
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "GRAPH_PREFLIGHT_FAILED"
+    assert not (tmp_path / "blocked-session").exists()
+
+
+def test_heritage_verifiers_reject_nonfinite_decision_epoch(tmp_path):
+    path, target, _, _ = _publish_t1_manifest(tmp_path)
+    result = publish_verified_heritage_manifest(
+        graph=HeritageGraph(), approved_root=tmp_path / "invalid-time",
+        session_identity=target, run_id="invalid-time-run", decision_epoch=float("nan"))
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "INVALID_DECISION_EPOCH"
+    independent = verify_market_heritage_manifest(path, decision_epoch=float("nan"))
+    assert independent["verdict"] == "BLOCKED"
+    assert independent["errors"][0]["id"] == "INVALID_DECISION_EPOCH"
 
 
 def test_runtime_prerequisite_loader_requires_pinned_manifest_and_calendar_ancestor(tmp_path):

@@ -5,14 +5,21 @@
     "is_order_action": false,
     "read_only": true
   },
-  "campaign_result": "252 passed in the focused offline campaign; immutable graph, CAS/T-1 contracts, read-only readiness, callback lineage, feed-consistency regressions, and rejection of unpinned T-1 inputs are fixture-verified; real source, scheduler, and fresh-runtime gates remain blocked or unknown",
+  "campaign_result": "256 passed in the focused offline campaign; immutable graph and independently verified publication, CAS/T-1 contracts, read-only readiness, feed-consistency regressions, and rejection of unpinned T-1 inputs are fixture-verified; real source, scheduler, and fresh-runtime gates remain blocked or unknown",
   "continuation_audit": {
+    "branch_feed_regression_command": "pytest -q tests/test_pulse_issues_and_feed_consistency.py tests/test_tick_store.py tests/test_kite_depth_ws_watchdog_scope.py tests/test_kite_read_only_observation_runtime.py tests/test_governed_morning_orchestrator.py",
+    "branch_feed_regression_result": "73 passed, 2 optional dependency warnings",
+    "cross_day_publisher": "decision-time graph preflight -> separate semantic verifier -> bounded session index; failures are not indexed",
+    "decision_epoch_validation": "Non-finite decision epochs are rejected by both graph preflight and the independent verifier.",
+    "implementation_commit_scope": "Includes pinned T-1 runtime, legacy-loader fail-closed shim, bounded source inventory/oracle, cross-day graph publisher, authority tests, and evidence updates.",
     "integration_branch": "ram/mros-session-continuity-live-integration",
+    "integration_commit": "ae303bcc7f1eca6432bee69db8d14006be1a8b2a",
+    "legacy_generator_policy": "inventory only; all T-1 values null and BLOCKED_SOURCE_AUTHORITY; independent oracle rejects promoted values",
     "scope_note": "The branch worktree changes were preserved. The T-1 loader trust path was replaced with the pinned graph verifier, and the original standalone helper now fails closed.",
     "source_branch": "fix/runtime-pulse-and-feed-consistency-v1",
     "source_head": "12d01da414d9a1ffc13718390e2c950c9f621bfd",
     "tested_command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
-    "tested_result": "252 passed, 2 warnings"
+    "tested_result": "256 passed, 2 optional dependency warnings"
   },
   "gates": [
     {
@@ -176,12 +183,12 @@
       "status": "PASS_FROZEN_ENTRY_WINDOW_NO_BACKDATE"
     },
     {
-      "actual": "lock-owner process exit, idempotent immutable publication, receipt recovery and duplicate CAS event replay are fixture-verified",
+      "actual": "Content-addressed graph publication runs a decision-time preflight, the separate verifier, and only then registers the artifact in the bounded session index; a future dependency is blocked before publication.",
       "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
       "expected": "fixture proves stated primitive only; no real data authority promotion",
       "id": "V17",
       "negative_control": "not claimed",
-      "proof": "tests/test_market_heritage_graph.py interrupted-lock and publication tests; tests/test_cas_evaluation_ledger.py receipt recovery",
+      "proof": "tests/test_market_heritage_graph.py::test_verified_heritage_publisher_independently_checks_then_indexes; tests/test_market_heritage_graph.py::test_verified_heritage_publisher_does_not_publish_future_dependency; existing interruption and idempotency fixtures",
       "source_authority": "SYNTHETIC_FIXTURE_ONLY",
       "status": "PASS_FIXTURE_LOCK_RECEIPT_AND_PUBLICATION"
     },
@@ -206,7 +213,7 @@
       "status": "PASS_SYNTHETIC_SIX_EPOCH_TWO_SESSION_CHAIN"
     },
     {
-      "actual": "Expanded bounded 9/28 and 9/29 inventories cover 29 and 30 allowlisted files respectively; each remains LEGACY_UNVERIFIED. PID 82150 was confirmed active during the earlier bounded inventory; measured files changed, so the inventory remains LEGACY_UNVERIFIED.",
+      "actual": "Expanded bounded 9/28 and 9/29 inventories cover 29 and 30 allowlisted files respectively; each remains LEGACY_UNVERIFIED. PID 82150 was confirmed active during the earlier bounded inventory; measured files changed, so the inventory remains LEGACY_UNVERIFIED. The legacy T-1 generator now emits a hash-bound inventory only; all prerequisite values and calendar authority remain blocked.",
       "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
       "expected": "fixture proves stated primitive only; no real data authority promotion",
       "id": "V20",
@@ -226,7 +233,7 @@
       "status": "PARTIAL_REAL_COVERAGE_UNVERIFIED; CALLBACK_TO_PROCESS_CACHE_FIXTURE_VERIFIED; PULSE_OUTPUT_JOIN_FIXTURE_VERIFIED; SNAPSHOT_CORRELATION_UNKNOWN"
     },
     {
-      "actual": "252 focused offline tests passed, including existing candidate/authority regressions and explicit rejection tests for unpinned T-1 inputs.",
+      "actual": "256 focused offline tests passed, including graph publication, temporal fail-closed behavior, existing candidate/authority regressions, and T-1 source rejection tests.",
       "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
       "expected": "fixture proves stated primitive only; no real data authority promotion",
       "id": "V22",
