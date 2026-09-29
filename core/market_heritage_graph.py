@@ -1138,10 +1138,35 @@ def load_verified_t1_prerequisites(*, manifest_path: str | Path | None,
         if verification.get("verdict") != "PASS":
             reasons = sorted({row.get("code", "INVALID_MANIFEST") for row in verification.get("errors", [])})
             raise ValueError("MANIFEST_NOT_VERIFIED:" + ",".join(reasons))
+        from core.market_heritage_verifier import verify_market_heritage_manifest
+        independent_verification = verify_market_heritage_manifest(
+            path, decision_epoch=decision_epoch)
         payload = json.loads(path.read_text(encoding="utf-8"))
         session = payload.get("session_identity")
         if not isinstance(session, Mapping) or any(session.get(key) != value for key, value in target_session.items()):
             raise ValueError("TARGET_SESSION_MISMATCH")
+
+        independent_errors_by_node: dict[str, set[str]] = defaultdict(set)
+        if independent_verification.get("verdict") != "PASS":
+            t1_node_ids = {
+                str(node.get("node_id"))
+                for node in payload.get("nodes", [])
+                if isinstance(node, Mapping)
+                and isinstance(node.get("payload"), Mapping)
+                and node["payload"].get("strategy_id") in required_fields
+                and node["payload"].get("field") in required_fields.get(
+                    node["payload"].get("strategy_id"), {})
+            }
+            for error in independent_verification.get("errors", []):
+                code, node_id = error.get("code"), str(error.get("id"))
+                # A semantically invalid field blocks only its owning strategy.
+                # Structural/hash errors and unrequested T-1 nodes remain
+                # manifest-wide failures because their affected closure is not
+                # safe to infer at this boundary.
+                if not isinstance(code, str) or not code.startswith("T1_") or node_id not in t1_node_ids:
+                    raise ValueError("INDEPENDENT_HERITAGE_VERIFICATION_FAILED:" +
+                                     str(code or "INVALID_MANIFEST"))
+                independent_errors_by_node[node_id].add(code)
 
         fields: dict[tuple[str, str], dict[str, Any]] = {}
         conflicts: set[tuple[str, str]] = set()
@@ -1204,9 +1229,15 @@ def load_verified_t1_prerequisites(*, manifest_path: str | Path | None,
             except (KeyError, TypeError, ValueError):
                 valid_parent = False
                 valid_calendar_ancestor = False
-            row = {**dict(body), "verification_status": body.get("verification_status") if valid_parent and valid_calendar_ancestor else "INVALID",
-                   "reason": body.get("reason") if valid_parent and valid_calendar_ancestor else (
-                       "VERIFIED_ANCESTOR_EDGE_REQUIRED" if not valid_parent else "VERIFIED_CALENDAR_PREDECESSOR_REQUIRED"),
+            node_verified = (node.get("status") == "VERIFIED"
+                             and body.get("verification_status") == "VERIFIED")
+            independent_codes = independent_errors_by_node.get(str(node.get("node_id")), set())
+            row_valid = valid_parent and valid_calendar_ancestor and node_verified
+            row = {**dict(body), "verification_status": body.get("verification_status") if row_valid else "INVALID",
+                   "reason": ("VERIFIED_ANCESTOR_EDGE_REQUIRED" if not valid_parent else
+                       "VERIFIED_CALENDAR_PREDECESSOR_REQUIRED" if not valid_calendar_ancestor else
+                       "T1_PREREQUISITE_STATUS_NOT_VERIFIED" if not node_verified else
+                       (body.get("reason") or "T1_PREREQUISITE_INVALID")),
                    "content_sha256": body.get("content_sha256")}
             value = row.get("value")
             if row.get("verification_status") == "VERIFIED":
@@ -1294,6 +1325,9 @@ def load_verified_t1_prerequisites(*, manifest_path: str | Path | None,
                     except (KeyError, TypeError, ValueError, OverflowError) as exc:
                         row["verification_status"] = "INVALID"
                         row["reason"] = str(exc) or "SMA200_INDEPENDENT_RECOMPUTATION_MISMATCH"
+                if row.get("verification_status") == "VERIFIED" and independent_codes:
+                    row["verification_status"] = "INVALID"
+                    row["reason"] = sorted(independent_codes)[0]
             if key in fields and fields[key] != row:
                 conflicts.add(key)
             fields[key] = row
@@ -1350,6 +1384,7 @@ def load_verified_t1_prerequisites(*, manifest_path: str | Path | None,
             "reason": "PINNED_HASH_BOUND_HERITAGE_MANIFEST",
             "manifest_path": str(path), "manifest_sha256": actual_sha,
             "target_session": dict(session), "strategy_readiness": readiness,
+            "independent_verification": independent_verification,
             **AUTHORITY}}
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
         return {**{key: None for key in empty}, "heritage_verification": {

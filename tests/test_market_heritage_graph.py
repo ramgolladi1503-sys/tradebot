@@ -598,6 +598,70 @@ def test_verified_heritage_publisher_does_not_publish_future_dependency(tmp_path
     assert not (tmp_path / "blocked-session").exists()
 
 
+@pytest.mark.parametrize("case,expected_code", [
+    ("node_status", "T1_PREREQUISITE_STATUS_NOT_VERIFIED"),
+    ("payload_status", "T1_PREREQUISITE_STATUS_NOT_VERIFIED"),
+    ("future_payload_availability", "T1_PREREQUISITE_AVAILABILITY_INVALID"),
+    ("missing_node_availability", "T1_PREREQUISITE_AVAILABILITY_INVALID"),
+    ("missing_calendar_availability", "T1_CALENDAR_AVAILABILITY_INVALID"),
+])
+def test_independent_verifier_and_runtime_reject_unverified_prerequisite_status_or_time(
+        tmp_path, case, expected_code):
+    path, target, required, instruments = _publish_t1_manifest(tmp_path)
+    manifest = json.loads(path.read_text())
+    if case == "missing_calendar_availability":
+        mutated = next(node for node in manifest["nodes"]
+            if node.get("payload", {}).get("record_type") == "calendar_predecessor")
+    else:
+        mutated = next(node for node in manifest["nodes"]
+            if node.get("payload", {}).get("strategy_id") == "INTRADAY_OPENING_DRIVE_V1")
+    old_id = mutated["node_id"]
+    if case == "node_status":
+        mutated["status"] = "OBSERVED"
+    elif case == "payload_status":
+        mutated["payload"]["verification_status"] = "BLOCKED"
+    elif case == "future_payload_availability":
+        mutated["payload"]["available_epoch"] = 101
+    elif case == "missing_node_availability":
+        mutated["available_epoch"] = None
+    elif case == "missing_calendar_availability":
+        mutated["available_epoch"] = None
+
+    def digest(value):
+        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+
+    mutated["node_id"] = digest({key: value for key, value in mutated.items()
+        if key != "node_id"})
+    new_id = mutated["node_id"]
+    for edge in manifest["edges"]:
+        if edge["parent_id"] == old_id:
+            edge["parent_id"] = new_id
+            edge["parent_hash"] = new_id
+        if edge["child_id"] == old_id:
+            edge["child_id"] = new_id
+    manifest["nodes"].sort(key=lambda row: row["node_id"])
+    manifest["graph_sha256"] = digest({"session_identity": manifest["session_identity"],
+        "nodes": sorted(row["node_id"] for row in manifest["nodes"]),
+        "edges": sorted(manifest["edges"], key=lambda row: (row["parent_id"],
+            row["child_id"], row["requirement"]))})
+    mutated_path = tmp_path / f"mutated-t1-{case}.json"
+    mutated_path.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n")
+
+    independent = verify_market_heritage_manifest(mutated_path, decision_epoch=100)
+    assert independent["verdict"] == "BLOCKED"
+    assert expected_code in {row["code"] for row in independent["errors"]}
+
+    loaded = load_verified_t1_prerequisites(manifest_path=mutated_path,
+        expected_manifest_sha256=hashlib.sha256(mutated_path.read_bytes()).hexdigest(),
+        approved_root=tmp_path, target_session=target, decision_epoch=100,
+        required_fields=required, target_instruments=instruments)
+    assert loaded["opening_drive_prev_close_1529"] is None
+    blockers = loaded["heritage_verification"]["strategy_readiness"][
+        "INTRADAY_OPENING_DRIVE_V1"]["blockers"]
+    assert expected_code in {item["reason"] for item in blockers}
+
+
 def test_heritage_verifiers_reject_nonfinite_decision_epoch(tmp_path):
     path, target, _, _ = _publish_t1_manifest(tmp_path)
     result = publish_verified_heritage_manifest(

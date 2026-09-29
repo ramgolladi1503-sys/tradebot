@@ -39,6 +39,14 @@ def _verify_prerequisite_semantics(*, nodes: dict[str, dict[str, Any]],
         "INTRADAY_OPENING_DRIVE_V1", "S1_MOMENTUM_OVERNIGHT_V1",
         "S4_MONDAY_OVERNIGHT_V1",
     }
+    required_strategy_fields = {
+        "INTRADAY_OPENING_DRIVE_V1": {
+            "opening_drive_prev_contract_key", "opening_drive_prev_close_1529"},
+        "S1_MOMENTUM_OVERNIGHT_V1": {
+            "overnight_prev_daily_close", "overnight_prev_sma200"},
+        "S4_MONDAY_OVERNIGHT_V1": {
+            "overnight_prev_daily_close", "overnight_prev_sma200"},
+    }
     for node_id, node in nodes.items():
         body = node.get("payload")
         if not isinstance(body, dict) or body.get("strategy_id") not in required_strategy_ids:
@@ -48,6 +56,24 @@ def _verify_prerequisite_semantics(*, nodes: dict[str, dict[str, Any]],
         contract_id = body.get("contract_id")
         source_session = body.get("source_session")
         target_session = body.get("target_session")
+        if node.get("status") != "VERIFIED" or body.get("verification_status") != "VERIFIED":
+            errors.append({"code": "T1_PREREQUISITE_STATUS_NOT_VERIFIED", "id": node_id})
+            continue
+        if field not in required_strategy_fields[strategy_id]:
+            errors.append({"code": "T1_PREREQUISITE_FIELD_UNSUPPORTED", "id": node_id})
+            continue
+        try:
+            node_available = float(node.get("available_epoch"))
+            payload_available = float(body.get("available_epoch"))
+            if (not math.isfinite(node_available) or not math.isfinite(payload_available)
+                    or payload_available != node_available
+                    or (decision_epoch is not None and
+                        (node_available > float(decision_epoch)
+                         or payload_available > float(decision_epoch)))):
+                raise ValueError
+        except (TypeError, ValueError, OverflowError):
+            errors.append({"code": "T1_PREREQUISITE_AVAILABILITY_INVALID", "id": node_id})
+            continue
         if target_session != manifest_session or not isinstance(source_session, dict):
             errors.append({"code": "T1_SESSION_IDENTITY_INVALID", "id": node_id})
             continue
@@ -76,6 +102,14 @@ def _verify_prerequisite_semantics(*, nodes: dict[str, dict[str, Any]],
                 or source.get("instrument") != body.get("instrument")):
             errors.append({"code": "T1_SOURCE_PARENT_BINDING_INVALID", "id": node_id})
             continue
+        try:
+            source_available = float(source.get("available_epoch"))
+            if (not math.isfinite(source_available)
+                    or (decision_epoch is not None and source_available > float(decision_epoch))):
+                raise ValueError
+        except (TypeError, ValueError, OverflowError):
+            errors.append({"code": "T1_SOURCE_AVAILABILITY_INVALID", "id": node_id})
+            continue
         calendar_edges = [edge for edge in parents
             if edge.get("outcome") == "VERIFIED"
             and edge.get("requirement") == "PREVIOUS_ELIGIBLE_SESSION"
@@ -96,6 +130,15 @@ def _verify_prerequisite_semantics(*, nodes: dict[str, dict[str, Any]],
                 or calendar_body.get("calendar_id") != manifest_session.get("calendar_id")
                 or calendar_body.get("calendar_version") != manifest_session.get("calendar_version")):
             errors.append({"code": "T1_CALENDAR_ANCESTOR_MISMATCH", "id": node_id})
+            continue
+        try:
+            calendar_available = float(calendar.get("available_epoch"))
+            if (not math.isfinite(calendar_available)
+                    or (decision_epoch is not None
+                        and calendar_available > float(decision_epoch))):
+                raise ValueError
+        except (TypeError, ValueError, OverflowError):
+            errors.append({"code": "T1_CALENDAR_AVAILABILITY_INVALID", "id": node_id})
             continue
         if not isinstance(source_body, dict):
             errors.append({"code": "T1_SOURCE_PAYLOAD_REQUIRED", "id": node_id})
