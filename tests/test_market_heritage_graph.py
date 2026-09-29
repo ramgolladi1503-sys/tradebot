@@ -660,6 +660,12 @@ def test_independent_verifier_and_runtime_reject_unverified_prerequisite_status_
     blockers = loaded["heritage_verification"]["strategy_readiness"][
         "INTRADAY_OPENING_DRIVE_V1"]["blockers"]
     assert expected_code in {item["reason"] for item in blockers}
+    assert loaded["heritage_verification"]["strategy_readiness"][
+        "INTRADAY_OPENING_DRIVE_V1"]["status"] == "BLOCKED"
+    if case != "missing_calendar_availability":
+        for strategy_id in ("S1_MOMENTUM_OVERNIGHT_V1", "S4_MONDAY_OVERNIGHT_V1"):
+            assert loaded["heritage_verification"]["strategy_readiness"][
+                strategy_id]["status"] == "READY"
 
 
 def test_heritage_verifiers_reject_nonfinite_decision_epoch(tmp_path):
