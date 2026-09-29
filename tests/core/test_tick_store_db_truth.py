@@ -32,6 +32,38 @@ def test_get_latest_tick_db_returns_inserted_row(monkeypatch, tmp_path):
     assert abs(float(row["ts_epoch"]) - now_epoch) < 5.0
 
 
+def test_tick_event_identity_survives_memory_and_sqlite_reads(monkeypatch, tmp_path):
+    _setup_tick_db(monkeypatch, tmp_path)
+    now_epoch = float(time.time())
+    identity = {
+        "timestamp_authority": "EXCHANGE_TIMESTAMP",
+        "timestamp_source_field": "exchange_timestamp",
+        "source_timestamp_epoch": now_epoch,
+        "receive_timestamp_epoch": now_epoch + 0.25,
+        "timestamp_fallback_used": False,
+        "source_event_id": "feed-session:9:256265:abc123",
+        "source_event_sha256": "a" * 64,
+    }
+    assert tick_store.insert_tick(ts=now_epoch, token=256265, last_price=25001.25, **identity)
+    memory = tick_store.get_last_tick(256265, include_provenance=True)
+    assert memory is not None
+    assert {key: (memory.get("_provenance") or {}).get(key) for key in identity} == identity
+    sqlite_row = tick_store.get_latest_tick_db(256265)
+    assert sqlite_row is not None
+    assert sqlite_row.get("source_event_id") is None  # SQLite remains the bounded 12-field legacy contract.
+
+
+def test_latest_memory_tick_preserves_event_identity_for_equal_timestamps(monkeypatch, tmp_path):
+    _setup_tick_db(monkeypatch, tmp_path)
+    ts = float(time.time())
+    assert tick_store.insert_tick(ts=ts, token=256265, last_price=1.0, source_event_id="first", source_event_sha256="1" * 64)
+    assert tick_store.insert_tick(ts=ts, token=256265, last_price=2.0, source_event_id="second", source_event_sha256="2" * 64)
+    row = tick_store.get_last_tick(256265, include_provenance=True)
+    assert row["ltp"] == 2.0
+    assert row["_provenance"]["source_event_id"] == "second"
+    assert row["_provenance"]["source_event_sha256"] == "2" * 64
+
+
 def test_get_max_tick_epoch_db_returns_correct_max(monkeypatch, tmp_path):
     _setup_tick_db(monkeypatch, tmp_path)
     now_epoch = float(time.time())

@@ -1,0 +1,39 @@
+# Final Verdict — Session Continuity Architecture
+
+## Verdict
+
+`PARTIAL_IMPLEMENTATION_COMPLETE`; full `IMPLEMENTATION_COMPLETE` remains unproven.
+
+The continuation branch based on the user-designated worktree is `ram/mros-session-continuity-live-integration`. It incorporates the heritage implementation while retaining the supplied feed-token reconciliation and configured queue-capacity changes. The observer no longer consumes naked T-1 values: the pinned graph-verifier path is used, and the compatibility loader returns null values with an explicit blocked reason. Negative tests prove that launch-plan values, generic JSON, and environment overrides cannot enable the shadow adapters.
+
+- `REPOSITORY_IMPLEMENTATION_VALID`: PASS for the offline heritage graph, explicit session index, previous-session resolver, per-strategy readiness, rolling-close derivation, separate verifier, source-event envelope, CAS persistence, scoped read-only runtime/candidate integration with per-observation heritage lineage, per-token callback coverage ledger with independently checked source manifest/report hashes and same-session binding, and restart-safe CAS evaluation idempotency.
+- `HERITAGE_GRAPH_INVARIANTS_PASS`: PASS on synthetic fixtures, including concurrent index writers.
+- `CAS_TIMESTAMP_CONTRACT_PASS`: PASS on fixtures for the frozen selection rule: selected timestamp is the source-validated exchange event, at/after target and at most 2,000 ms late; receive time is retained separately and may differ. Pre-target whole-second events cannot qualify based on later receipt. Historical rows without an event envelope remain blocked.
+- `SAME_DAY_RESTART_PASS`: PASS on synthetic three-process continuity with split target captures, verified mixed current/inherited inputs, and next-day isolation. This does not establish actual runtime-source quality.
+- `CROSS_DAY_T_MINUS_1_PASS`: `BLOCKED_SOURCE_EVIDENCE`. The loader and independent verifier now enforce the frozen exact prior-session 15:29:00 regular-session one-minute futures bar, event epoch, contract key equality, and source closure. No real prior-session bar/contract closure was verified.
+- `ROLLING_PREREQUISITES_PASS`: PASS for a synthetic complete 200-row exact-session sequence, canonical row-content digests and independent recomputation; 199 rows or stale row digest fail. Real NIFTY50 SMA200 source series and adjustment rules remain blocked.
+- `INDEPENDENT_VERIFIER_PASS`: PASS for synthetic artifacts using the separately implemented verifier module.
+- `ENTRY_WINDOW_NO_BACKDATE`: PASS for the frozen Opening Drive shadow window; a first quote at 11:01 or later expires the observer without recording an entry. No candidate or order authority is added.
+- `AUTHORITY_BOUNDARY_UNCHANGED`: PASS for touched paths and focused regressions; no broker API, order action, paper/live authorization, threshold change, or live runtime operation occurred.
+- `CALLBACK_TO_PROCESS_CACHE_EVENT_IDENTITY`: PASS in an offline regression invoking the actual WebSocket callback and verifying its emitted ID/hash/payload in the process-local tick cache. The separately sampled process-local cache and dashboard-shaped strategy snapshot correlate only on exact shared event IDs; absent IDs remain UNKNOWN. Pulse/candidate/decision/trade-truth joins are synthetic fixture evidence. Public legacy tick readers and 12-field SQLite persistence remain unchanged; SQLite-only callback identity is unavailable.
+- `LEGACY_EVIDENCE_VERIFIED_OR_EXPLICITLY_UNVERIFIED`: old CAS rows remain blocked/unverified because they predate source-event envelopes. No raw evidence file was modified.
+- `LIVE_VERIFICATION_PENDING`: no live runtime action was taken by this task. Earlier read-only inventory found PID 82150 active and flagged changing files unstable. At resume recheck that PID was absent. A later broad process listing observed `run_all.sh`, `watchdog.sh`, and `scheduler.py` in the canonical checkout (PIDs 1403, 1469, 67023), with unknown relation to the recorded external run directory. No process was signaled, stopped, restarted, or launched. No protected run files were read; no stable snapshot or fresh runtime proof is claimed.
+
+## Verified commands
+
+- Focused continuity, tick-store compatibility, and snapshot-lineage regression: **241 passed**.
+- Combined continuity, user-branch feed-consistency, candidate/authority and T-1 source-gate regression on the continuation branch: **252 passed, 2 dependency warnings**.
+- `python -m compileall -q core/kite_depth_ws.py core/market_heritage_graph.py core/market_heritage_verifier.py core/cas_primitive_producer.py core/cas_evaluation_ledger.py core/read_only_coverage_ledger.py core/observation_lineage.py core/kite_read_only_observation_runtime.py core/runtime_snapshot_producer.py core/canonical_cycle_coordinator.py core/read_only_consumer_cycle.py core/paper_shadow/strategy_shadow_adapter.py`: passed.
+- `git diff --check`: passed.
+
+## Remaining blockers
+
+1. The 2026-09-29 10:00 historical CAS row carries a source event time at 09:47:15 IST and receipt/selected time at 10:00:01.588 IST; the event envelope was not captured then, so it cannot be retroactively verified.
+2. The repository calendar helper is not an authoritative venue history contract. The resolver requires an injected versioned calendar and fails closed without it.
+3. No exact T-1 15:29 NIFTY futures source with strict matching contract key, nor the verified 200-session daily NIFTY50 close series and adjustment rules, was established. The repository calendar helper is not authoritative; production readiness requires an injected versioned venue calendar.
+4. Runtime wiring and per-token callback coverage ledger are fixture-tested, but no fresh runtime session was executed by this task. PID 82150 was absent at resume, but TradeBot supervisor/watchdog/scheduler processes were later observed in the canonical checkout; no new runtime was launched. Historical selected-tick rows have no exchange timestamp/price and cannot show scheduler cadence, market coverage, or downstream per-token correlation. Forward tick-cache-to-pulse-to-output joins are fixture-verified. Current strategy-snapshot correlation, fresh runtime cadence, market coverage, and historical joins remain unavailable where shared event identity is absent.
+5. CAS duplicate-pair evaluation is now prevented across restart; this is scoped to the CAS consumer and does not imply idempotency for other strategies.
+
+No config keys were added. Expanded bounded read-only inventories and a derived telemetry summary were written outside protected session trees and their hashes are recorded in the source manifest; source bytes were not modified and every entry remains `LEGACY_UNVERIFIED`. Synthetic tests prove implementation properties only; they do not establish historical data authority, market coverage, strategy viability, paper/live readiness, or structural edge. Rollout remains offline until the source/calendar gates pass; runtime observation requires an operator-controlled session after resolving the existing writer.
+
+The user-designated worktree at `/Volumes/TradeBotData/worktrees/mros-dynamic-releasestore-binding-v1` remains unchanged. Its untracked `runtime/preflight/t1_prerequisites_2026-09-29.json` is hash-recorded as `LEGACY_UNVERIFIED`; the exact prior 15:29 futures bar and 200-session daily series are not established. No process command or working directory matched that worktree at the latest check. Canonical `run_all.sh`, watchdog and scheduler processes were still present, so no protected external session files were read and no process was signaled or stopped.

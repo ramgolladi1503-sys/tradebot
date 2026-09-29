@@ -608,6 +608,9 @@ def produce_and_store_runtime_snapshots(
     cycle_feed_truth_payload: Mapping[str, Any] | None = None,
     session_id: str | None = None,
     source_sha: str | None = None,
+    inherited_cas_references: Mapping[str, Any] | None = None,
+    trading_session_identity: Mapping[str, Any] | None = None,
+    cas_primitive_path: Path | None = None,
 ) -> dict[str, Any]:
     outputs: dict[str, Any] = {}
     timings: list[dict[str, Any]] = []
@@ -634,16 +637,40 @@ def produce_and_store_runtime_snapshots(
     )
     # Bridge only already-captured, immutable primitives; never reconstruct here.
     if session_id and source_sha and cas_feed_healthy:
+        current_cas_primitives: dict[str, Any] = {}
         try:
             from core.cas_primitive_producer import build_cas_input
-            primitive_path = logs_dir() / f"cas_short_horizon_primitives_{session_id}.json"
+            primitive_path = (Path(cas_primitive_path) if cas_primitive_path is not None
+                              else logs_dir() / f"cas_short_horizon_primitives_{session_id}.json")
             if primitive_path.is_file():
                 stored = json.loads(primitive_path.read_text(encoding="utf-8"))
                 primitives = stored.get("primitives") if isinstance(stored, dict) else None
                 if isinstance(primitives, dict):
-                    cas_input = build_cas_input(primitives, session_id=session_id, source_sha=source_sha, cycle_id=str(loop_id or ""), observation_timestamp=now_ist().isoformat())
-                    if cas_input is not None:
-                        outputs["cas_short_horizon_inputs"] = cas_input
+                    current_cas_primitives = primitives
+            if (isinstance(inherited_cas_references, Mapping)
+                    and isinstance(trading_session_identity, Mapping)):
+                from core.cas_primitive_producer import build_same_session_cas_input
+                all_token_rows = [row for row in current_cas_primitives.values() if isinstance(row, Mapping)]
+                all_token_rows.extend(item["primitive"] for item in inherited_cas_references.values()
+                    if isinstance(item, Mapping) and isinstance(item.get("primitive"), Mapping))
+                token = next((int(row["underlying_token"]) for row in all_token_rows
+                              if row.get("underlying_token") is not None), 0)
+                inherited_input = build_same_session_cas_input(
+                    current_cas_primitives, dict(inherited_cas_references), current_run_id=session_id,
+                    source_sha=source_sha, cycle_id=str(loop_id or ""),
+                    underlying_token=token,
+                    session_identity=dict(trading_session_identity),
+                    decision_epoch=time.time()) if token > 0 else None
+                if inherited_input is not None:
+                    outputs["cas_short_horizon_inputs"] = inherited_input
+            if "cas_short_horizon_inputs" not in outputs and current_cas_primitives:
+                cas_input = build_cas_input(current_cas_primitives, session_id=session_id,
+                    source_sha=source_sha, cycle_id=str(loop_id or ""),
+                    observation_timestamp=now_ist().isoformat(),
+                    trading_session_identity=(dict(trading_session_identity)
+                        if isinstance(trading_session_identity, Mapping) else None))
+                if cas_input is not None:
+                    outputs["cas_short_horizon_inputs"] = cas_input
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
             pass
 

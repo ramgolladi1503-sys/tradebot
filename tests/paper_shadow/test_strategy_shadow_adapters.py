@@ -31,6 +31,7 @@ from core.candidate_audits.intraday_opening_drive import (
 from core.candidate_audits.nifty_overnight_drift import (
     CANDIDATE_S1_ID,
     CANDIDATE_S1_SCHEDULE_SHA256,
+    CANDIDATE_S4_ID,
 )
 
 
@@ -251,6 +252,41 @@ def test_opening_drive_workflow():
     assert res["gross_pnl_pts"] == 23.0  # 145.0 - 122.0
     assert res["orders_placed"] == 0
     assert res["broker_write_authority"] is False
+
+
+def test_opening_drive_late_start_does_not_create_entry_after_frozen_window():
+    adapter = IntradayOpeningDriveShadowAdapter(
+        prev_futures_contract_key="NIFTY26SEPFUT",
+        prev_close_1529=25000.0,
+    )
+    adapter.signal_qualified = True
+    adapter.signal_side = "BUY_CE"
+    adapter.resolved_option_type = "CE"
+    adapter.resolved_atm_strike = 25050
+    snapshot = StrategyMarketSnapshotV1(
+        session_id="2026-09-22",
+        instrument_key="TEST_KEY_CE",
+        trading_symbol="NIFTY26SEP25050CE",
+        instrument_class="INDEX_OPTION",
+        source_timestamp_ist=datetime(2026, 9, 22, 11, 1, tzinfo=IST_TZ),
+        receipt_timestamp_ist=datetime(2026, 9, 22, 11, 1, 0, 10000, tzinfo=IST_TZ),
+        age_ms=10.0,
+        feed_health="HEALTHY",
+        session_health="NORMAL",
+        strike_price=25050.0,
+        option_type="CE",
+        l1_depth=Level1Depth(bid_price=120.0, bid_qty=500, ask_price=122.0, ask_qty=600),
+    )
+
+    result = adapter.on_market_pulse("late-pulse", snapshot)
+
+    assert result is None
+    assert adapter.shadow_entry_observed is False
+    assert adapter.shadow_entry_price is None
+    assert adapter.shadow_entry_window_expired is True
+    assert adapter.observation_finalized is True
+    assert adapter.telemetry_history[-1].checkpoint_name == "SHADOW_ENTRY_WINDOW_EXPIRED"
+    assert adapter.telemetry_history[-1].root_cause == "ENTRY_WINDOW_EXPIRED_BEFORE_FIRST_VALID_QUOTE"
 
 
 def test_overnight_drift_cross_session_recovery(temp_ledger_dir):
@@ -738,6 +774,85 @@ def test_registry_prerequisites_fail_closed(temp_ledger_dir):
     assert "DISABLED_FAIL_CLOSED" in shutdown_rep["strategy_statuses"][OPENING_DRIVE_ID]
 
 
+def test_registry_keeps_heritage_readiness_strategy_local(temp_ledger_dir):
+    from core.paper_shadow.strategy_shadow_adapter import StrategyShadowAdapterRegistry
+    from core.candidate_audits.nifty_overnight_drift import CANDIDATE_S4_ID
+
+    report = {
+        "status": "PARTIAL", "read_only": True, "is_order_action": False,
+        "broker_api_called": False, "allowed_for_live_execution": False,
+        "strategy_readiness": {
+            CANDIDATE_S1_ID: {"status": "READY", "accepted_fields": {"close": "a"}},
+            CANDIDATE_S4_ID: {"status": "BLOCKED", "blockers": [{"field": "sma", "reason": "MISSING"}]},
+            OPENING_DRIVE_ID: {"status": "BLOCKED", "blockers": [{"field": "close", "reason": "MISSING"}]},
+        },
+    }
+    registry = StrategyShadowAdapterRegistry(
+        session_id="SESSION_LOCAL_READINESS",
+        source_sha="e16028e94c82edf122f194a056013955b8c45516",
+        evidence_root=temp_ledger_dir,
+        overnight_prev_daily_close=25000.0,
+        overnight_prev_sma200=24000.0,
+        prerequisite_verification=report,
+    )
+    assert set(registry.adapters) == {CANDIDATE_S1_ID}
+    assert CANDIDATE_S4_ID in registry.disabled_strategies
+    persisted = json.loads((__import__("pathlib").Path(temp_ledger_dir) / "registry.json").read_text())
+    assert persisted["prerequisite_verification"] == report
+    assert persisted["read_only"] is True
+    assert persisted["order_authority"] is False
+
+
+def test_shadow_observation_and_checkpoints_carry_exact_heritage_lineage(
+        temp_ledger_dir, monkeypatch):
+    from core.paper_shadow.strategy_shadow_adapter import (
+        StrategyMarketSnapshotBuilder, StrategyShadowAdapterRegistry,
+    )
+    from core.candidate_audits.nifty_overnight_drift import CANDIDATE_S4_ID
+    accepted = {
+        "overnight_prev_daily_close": {"content_sha256": "a" * 64,
+            "contract_id": "b" * 64, "source_session": {"trading_date": "2026-09-28"}},
+        "overnight_prev_sma200": {"content_sha256": "c" * 64,
+            "contract_id": "b" * 64, "source_session": {"trading_date": "2026-09-28"}},
+    }
+    report = {"status": "PARTIAL", "manifest_sha256": "d" * 64,
+        "strategy_readiness": {
+            CANDIDATE_S1_ID: {"status": "READY", "accepted_fields": accepted,
+                "blockers": [], "evaluation_eligible": True, "entry_eligible": False},
+            CANDIDATE_S4_ID: {"status": "BLOCKED", "accepted_fields": {},
+                "blockers": [{"field": "overnight_prev_sma200", "reason": "MISSING"}]},
+            OPENING_DRIVE_ID: {"status": "BLOCKED", "accepted_fields": {},
+                "blockers": [{"field": "opening_drive_prev_close_1529", "reason": "MISSING"}]},
+        },
+    }
+    registry = StrategyShadowAdapterRegistry(session_id="SESSION_LINEAGE",
+        source_sha="e16028e94c82edf122f194a056013955b8c45516",
+        evidence_root=temp_ledger_dir, overnight_prev_daily_close=25000.0,
+        overnight_prev_sma200=24000.0, prerequisite_verification=report)
+    adapter = registry.adapters[CANDIDATE_S1_ID]
+    adapter.record_checkpoint("PULSE_LINEAGE", "HERITAGE_READY", "PASS")
+    adapter.on_market_pulse = lambda pulse_id, snapshot: {
+        "pulse_id": pulse_id, "candidate_id": CANDIDATE_S1_ID,
+        "action": "OBSERVED"}
+    monkeypatch.setattr(StrategyMarketSnapshotBuilder, "build_snapshots",
+        staticmethod(lambda **kwargs: [object()]))
+
+    class Pulse:
+        pulse_id = "PULSE_LINEAGE"
+        timestamp_epoch = datetime(2026, 9, 29, 10, 0, tzinfo=IST_TZ).timestamp()
+
+    results = registry.on_pulse(pulse=Pulse(), market_snapshot={}, feed_health_truth={})
+    assert results[0]["heritage_lineage"]["manifest_sha256"] == "d" * 64
+    assert results[0]["heritage_lineage"]["accepted_fields"] == accepted
+    assert results[0]["heritage_lineage"]["strategy_status"] == "READY"
+    assert results[0]["heritage_lineage"]["allowed_for_live_execution"] is False
+    with open(os.path.join(temp_ledger_dir, "checkpoints.jsonl"), encoding="utf-8") as handle:
+        checkpoint_rows = [json.loads(line) for line in handle]
+    assert len(checkpoint_rows) == 1
+    assert checkpoint_rows[0]["heritage_lineage"]["manifest_sha256"] == "d" * 64
+    assert checkpoint_rows[0]["heritage_lineage"]["accepted_fields"] == accepted
+
+
 def test_shutdown_failure_propagation(temp_ledger_dir, monkeypatch):
     """Prove that on_session_shutdown propagates exceptions and records STRATEGY_SHADOW_EVIDENCE_SEAL_FAIL."""
     from core.paper_shadow.strategy_shadow_adapter import StrategyShadowAdapterRegistry
@@ -915,22 +1030,16 @@ def test_wrong_expiry_same_strike_same_type_is_rejected():
     assert adapter.telemetry_history[-1].status == "PASS"
 
 
-def test_runtime_loads_t1_prerequisites_without_manual_env(temp_ledger_dir, monkeypatch):
-    """Prove that load_canonical_t1_prerequisites loads from launch_plan or disk manifests without manual env vars."""
+def test_legacy_t1_loader_rejects_unpinned_launch_plan_disk_and_environment(temp_ledger_dir, monkeypatch):
+    """Unpinned T-1 inputs stay blocked and cannot enable any shadow adapter."""
     from core.paper_shadow.strategy_shadow_adapter import (
         load_canonical_t1_prerequisites,
         StrategyShadowAdapterRegistry,
     )
     from pathlib import Path
 
-    # Clear environment overrides
-    monkeypatch.delenv("OPENING_DRIVE_PREV_FUTURES_KEY", raising=False)
-    monkeypatch.delenv("OPENING_DRIVE_PREV_CLOSE_1529", raising=False)
-    monkeypatch.delenv("OPENING_DRIVE_TARGET_EXPIRY", raising=False)
-    monkeypatch.delenv("OVERNIGHT_PREV_DAILY_CLOSE", raising=False)
-    monkeypatch.delenv("OVERNIGHT_PREV_SMA200", raising=False)
-
     launch_plan = {
+        "selected_futures_contract_key": "NIFTY26SEPFUT",
         "t1_facts": {
             "opening_drive_prev_contract_key": "NIFTY26SEPFUT",
             "opening_drive_prev_close_1529": 25100.5,
@@ -939,15 +1048,33 @@ def test_runtime_loads_t1_prerequisites_without_manual_env(temp_ledger_dir, monk
             "overnight_prev_sma200": 24200.0,
         }
     }
+    data_dir = Path(temp_ledger_dir) / "legacy"
+    data_dir.mkdir()
+    (data_dir / "t1_prerequisites_2026-09-22.json").write_text(json.dumps({
+        "opening_drive_prev_contract_key": "NIFTY26SEPFUT",
+        "opening_drive_prev_close_1529": 25100.5,
+        "overnight_prev_daily_close": 25120.0,
+        "overnight_prev_sma200": 24200.0,
+    }))
+    monkeypatch.setenv("OPENING_DRIVE_PREV_FUTURES_KEY", "NIFTY26SEPFUT")
+    monkeypatch.setenv("OPENING_DRIVE_PREV_CLOSE_1529", "25100.5")
+    monkeypatch.setenv("OVERNIGHT_PREV_DAILY_CLOSE", "25120.0")
+    monkeypatch.setenv("OVERNIGHT_PREV_SMA200", "24200.0")
 
-    facts = load_canonical_t1_prerequisites(session_date="2026-09-22", launch_plan=launch_plan)
-    assert facts["opening_drive_prev_contract_key"] == "NIFTY26SEPFUT"
-    assert facts["opening_drive_prev_close_1529"] == 25100.5
-    assert facts["opening_drive_target_expiry"] == "2026-09-24"
-    assert facts["overnight_prev_daily_close"] == 25120.0
-    assert facts["overnight_prev_sma200"] == 24200.0
+    facts = load_canonical_t1_prerequisites(
+        session_date="2026-09-22", launch_plan=launch_plan, data_dir=data_dir
+    )
+    assert all(facts[key] is None for key in (
+        "opening_drive_prev_contract_key",
+        "opening_drive_prev_close_1529",
+        "opening_drive_target_expiry",
+        "overnight_prev_daily_close",
+        "overnight_prev_sma200",
+    ))
+    assert facts["heritage_verification"]["status"] == "BLOCKED"
+    assert facts["heritage_verification"]["reason"] == "PINNED_HERITAGE_MANIFEST_REQUIRED"
 
-    # Ensure StrategyShadowAdapterRegistry initializes all 3 adapters from these facts
+    # The compatibility helper cannot make unverified values adapter-ready.
     reg = StrategyShadowAdapterRegistry(
         session_id="SESS_AUTO_T1",
         source_sha="e16028e94c82edf122f194a056013955b8c45516",
@@ -957,8 +1084,10 @@ def test_runtime_loads_t1_prerequisites_without_manual_env(temp_ledger_dir, monk
         opening_drive_target_expiry=facts["opening_drive_target_expiry"],
         overnight_prev_daily_close=facts["overnight_prev_daily_close"],
         overnight_prev_sma200=facts["overnight_prev_sma200"],
+        prerequisite_verification=facts["heritage_verification"],
     )
-    assert len(reg.adapters) == 3
-    assert len(reg.disabled_strategies) == 0
-    assert OPENING_DRIVE_ID in reg.adapters
-    assert reg.adapters[OPENING_DRIVE_ID].target_expiry == "2026-09-24"
+    assert reg.adapters == {}
+    assert set(reg.disabled_strategies) == {OPENING_DRIVE_ID, CANDIDATE_S1_ID, CANDIDATE_S4_ID}
+    assert reg.read_only is True
+    assert reg.broker_write_authority is False
+    assert reg.order_authority is False

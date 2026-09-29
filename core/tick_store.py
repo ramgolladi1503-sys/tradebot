@@ -424,10 +424,17 @@ def get_latest_tick_db(token: int) -> dict | None:
             oi_expr = "oi" if "oi" in cols else "NULL"
             row = conn.execute(
                 f"""
-                SELECT {last_price_expr} AS last_price, timestamp_epoch, {volume_expr} AS volume, {oi_expr} AS oi
+                SELECT {last_price_expr} AS last_price, timestamp_epoch, {volume_expr} AS volume, {oi_expr} AS oi,
+                       {('timestamp_authority' if 'timestamp_authority' in cols else 'NULL')},
+                       {('timestamp_source_field' if 'timestamp_source_field' in cols else 'NULL')},
+                       {('source_timestamp_epoch' if 'source_timestamp_epoch' in cols else 'NULL')},
+                       {('receive_timestamp_epoch' if 'receive_timestamp_epoch' in cols else 'NULL')},
+                       {('timestamp_fallback_used' if 'timestamp_fallback_used' in cols else 'NULL')},
+                       NULL AS source_event_id,
+                       NULL AS source_event_sha256
                 FROM ticks
                 WHERE instrument_token=?
-                ORDER BY timestamp_epoch DESC
+                ORDER BY timestamp_epoch DESC, rowid DESC
                 LIMIT 1
                 """,
                 (token_int,),
@@ -461,6 +468,13 @@ def get_latest_tick_db(token: int) -> dict | None:
         "volume": volume,
         "oi": oi,
         "source": "sqlite",
+        "timestamp_authority": row[4],
+        "timestamp_source_field": row[5],
+        "source_timestamp_epoch": row[6],
+        "receive_timestamp_epoch": row[7],
+        "timestamp_fallback_used": row[8],
+        "source_event_id": None,
+        "source_event_sha256": None,
     }
 
 
@@ -525,6 +539,13 @@ def get_latest_tick_rows_db(tokens: list[int]) -> dict[int, dict]:
                         "volume": volume,
                         "oi": oi,
                         "source": "sqlite",
+                        "timestamp_authority": None,
+                        "timestamp_source_field": None,
+                        "source_timestamp_epoch": None,
+                        "receive_timestamp_epoch": None,
+                        "timestamp_fallback_used": None,
+                        "source_event_id": None,
+                        "source_event_sha256": None,
                     }
     except Exception:
         return out
@@ -604,7 +625,7 @@ def record_tick_epoch(ts_epoch):
 
 
 def _write_rows(
-    rows: list[tuple[str, int | None, float | None, float | None, float | None, float, str]],
+    rows: list[tuple],
     *,
     worker_owned: bool = False,
 ) -> bool:
@@ -641,7 +662,7 @@ def _write_rows(
         with _conn() as conn:
             conn.executemany(
                 """
-            INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso, timestamp_authority, timestamp_source_field, source_timestamp_epoch, receive_timestamp_epoch, timestamp_fallback_used)
+                INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso, timestamp_authority, timestamp_source_field, source_timestamp_epoch, receive_timestamp_epoch, timestamp_fallback_used)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """,
                 rows,
@@ -706,7 +727,7 @@ def _write_rows(
 def _flush_pending_ticks(max_rows: int | None = None, *, worker_owned: bool = False) -> int:
     global _FLUSH_COUNT, _QUEUE_HIGH_WATER
     batch_limit = max_rows if max_rows is not None else _flush_batch_size()
-    rows: list[tuple[str, int | None, float | None, float | None, float | None, float, str]] = []
+    rows: list[tuple] = []
     with _WRITE_QUEUE_LOCK:
         while _WRITE_QUEUE and len(rows) < batch_limit:
             rows.append(_WRITE_QUEUE.popleft())
@@ -820,7 +841,7 @@ def _ensure_flush_thread() -> None:
         _AUDIT_COUNTERS["worker_started"] += 1
 
 
-def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float | None, float, str]) -> bool:
+def _enqueue_row(row: tuple) -> bool:
     global _WRITE_ENQUEUE_COUNT, _QUEUE_HIGH_WATER, _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS
     try:
         require_item_size(tick_item_bytes(row), MAX_TICK_ITEM_BYTES, "TICK")
@@ -1043,8 +1064,38 @@ if not aexit_registered:
     aexit_registered = True
 
 
+def _cache_tick_with_provenance(token, last_price, ts_epoch, timestamp_authority, timestamp_source_field, source_timestamp_epoch, receive_timestamp_epoch, timestamp_fallback_used, source_event_id, source_event_sha256, source_event_payload) -> None:
+    token_int = _normalize_token(token)
+    if token_int is None:
+        return
+    previous = _LAST_TICK_BY_TOKEN.get(token_int) or {}
+    previous_epoch = _to_epoch(previous.get("ts_epoch"))
+    if previous_epoch is not None and previous_epoch > ts_epoch:
+        return
+    payload = None
+    if isinstance(source_event_payload, dict):
+        try:
+            encoded = json.dumps(source_event_payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+            if len(encoded) <= 2048:
+                payload = dict(source_event_payload)
+        except (TypeError, ValueError, OverflowError):
+            payload = None
+    _LAST_TICK_BY_TOKEN[token_int] = {
+        "ltp": float(last_price) if last_price is not None else None,
+        "ts_epoch": ts_epoch,
+        "timestamp_authority": timestamp_authority,
+        "timestamp_source_field": timestamp_source_field,
+        "source_timestamp_epoch": source_timestamp_epoch,
+        "receive_timestamp_epoch": receive_timestamp_epoch,
+        "timestamp_fallback_used": timestamp_fallback_used,
+        "source_event_id": source_event_id,
+        "source_event_sha256": source_event_sha256,
+        "source_event_payload": payload,
+    }
+
+
 def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kwargs):
-    allowed_aliases = {"ts_epoch", "instrument_token", "timestamp_authority", "timestamp_source_field", "source_timestamp_epoch", "receive_timestamp_epoch", "timestamp_fallback_used"}
+    allowed_aliases = {"ts_epoch", "instrument_token", "timestamp_authority", "timestamp_source_field", "source_timestamp_epoch", "receive_timestamp_epoch", "timestamp_fallback_used", "source_event_id", "source_event_sha256", "source_event_payload"}
     unexpected = sorted(set(kwargs.keys()) - allowed_aliases)
     if unexpected:
         allowed = "ts, token, last_price, volume, oi, ts_epoch, instrument_token"
@@ -1061,6 +1112,9 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
     source_timestamp_epoch = kwargs.pop("source_timestamp_epoch", None)
     receive_timestamp_epoch = kwargs.pop("receive_timestamp_epoch", None)
     timestamp_fallback_used = kwargs.pop("timestamp_fallback_used", None)
+    source_event_id = kwargs.pop("source_event_id", None)
+    source_event_sha256 = kwargs.pop("source_event_sha256", None)
+    source_event_payload = kwargs.pop("source_event_payload", None)
 
     if ts_alias is not None:
         if ts is not None and ts != ts_alias:
@@ -1113,25 +1167,23 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
         )
     except Exception:
         pass
-    try:
-        if token is not None:
-            _LAST_TICK_BY_TOKEN[int(token)] = {
-                "ltp": float(last_price) if last_price is not None else None,
-                "ts_epoch": ts_epoch,
-            }
-    except Exception:
-        pass
-
     if not _db_writes_enabled():
+        _cache_tick_with_provenance(token, last_price, ts_epoch, timestamp_authority, timestamp_source_field, source_timestamp_epoch, receive_timestamp_epoch, timestamp_fallback_used, source_event_id, source_event_sha256, source_event_payload)
         return True
 
     row = (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso, timestamp_authority, timestamp_source_field, source_timestamp_epoch, receive_timestamp_epoch, timestamp_fallback_used)
     if _async_db_writes_enabled():
         # The reactor only enqueues. SQLite connections and flushes belong to the
         # single persistence worker; waiting for read-after-write here stalls Twisted.
-        return _enqueue_row(row)
+        accepted = _enqueue_row(row)
+        if accepted:
+            _cache_tick_with_provenance(token, last_price, ts_epoch, timestamp_authority, timestamp_source_field, source_timestamp_epoch, receive_timestamp_epoch, timestamp_fallback_used, source_event_id, source_event_sha256, source_event_payload)
+        return accepted
 
-    return _write_rows([row])
+    accepted = _write_rows([row])
+    if accepted:
+        _cache_tick_with_provenance(token, last_price, ts_epoch, timestamp_authority, timestamp_source_field, source_timestamp_epoch, receive_timestamp_epoch, timestamp_fallback_used, source_event_id, source_event_sha256, source_event_payload)
+    return accepted
 
 
 def msgs_last_min() -> int:
@@ -1150,6 +1202,7 @@ def get_last_tick(
     allow_db: bool = True,
     *,
     decision_path: bool = False,
+    include_provenance: bool = False,
 ) -> dict | None:
     token_int = _normalize_token(token)
     if token_int is None:
@@ -1161,13 +1214,19 @@ def get_last_tick(
     if not force_sqlite:
         cached = _LAST_TICK_BY_TOKEN.get(token_int)
         if cached and cached.get("ts_epoch") is not None:
-            return {"ltp": cached.get("ltp"), "ts_epoch": cached.get("ts_epoch"), "source": "memory"}
+            result = {key: cached.get(key) for key in ("ltp", "ts_epoch")} | {"source": "memory"}
+            if include_provenance:
+                result["_provenance"] = {k: cached.get(k) for k in ("timestamp_authority", "timestamp_source_field", "source_timestamp_epoch", "receive_timestamp_epoch", "timestamp_fallback_used", "source_event_id", "source_event_sha256", "source_event_payload")}
+            return result
     if not allow_db:
         return None
     row = get_latest_tick_db(token_int)
     if not isinstance(row, dict):
         return None
-    return {"ltp": row.get("ltp"), "ts_epoch": row.get("ts_epoch"), "source": "sqlite"}
+    result = {key: row.get(key) for key in ("ltp", "ts_epoch")} | {"source": "sqlite"}
+    if include_provenance:
+        result["_provenance"] = {k: row.get(k) for k in ("timestamp_authority", "timestamp_source_field", "source_timestamp_epoch", "receive_timestamp_epoch", "timestamp_fallback_used", "source_event_id", "source_event_sha256")}
+    return result
 
 
 def get_ltp(

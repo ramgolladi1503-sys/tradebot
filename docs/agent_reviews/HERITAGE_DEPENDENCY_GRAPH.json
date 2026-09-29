@@ -1,0 +1,192 @@
+{
+  "authority": {
+    "allowed_for_live_execution": false,
+    "append": false,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "design_contract": "HERMES_SESSION_CONTINUITY_HERITAGE_CONTRACT.md",
+  "edges": [
+    {
+      "contract": "authoritative eligible-session resolution",
+      "from": "calendar_contract",
+      "status": "BLOCKED",
+      "to": "t1_prerequisites"
+    },
+    {
+      "contract": "exact fields/formula/instrument",
+      "from": "strategy_frozen_contracts",
+      "status": "DEFINED",
+      "to": "t1_prerequisites"
+    },
+    {
+      "contract": "source-event identity and selected-time semantics",
+      "from": "raw_run_artifacts",
+      "status": "BLOCKED",
+      "to": "source_event_binding"
+    },
+    {
+      "contract": "original source and parent hash verification",
+      "from": "source_event_binding",
+      "status": "IMPLEMENTED_FORWARD_ONLY",
+      "to": "same_day_inheritance"
+    },
+    {
+      "contract": "decision-time availability and per-strategy required inputs",
+      "from": "t1_prerequisites",
+      "status": "BLOCKED",
+      "to": "causal_readiness"
+    },
+    {
+      "contract": "same trading session only",
+      "from": "same_day_inheritance",
+      "status": "IMPLEMENTED_FIXTURE_VERIFIED",
+      "to": "causal_readiness"
+    },
+    {
+      "contract": "new normalized callback event ID/hash required; historical rows without it are rejected",
+      "from": "source_event_binding",
+      "status": "IMPLEMENTED_FORWARD_ONLY",
+      "to": "same_day_inheritance"
+    },
+    {
+      "contract": "caller-supplied verified calendar identity; no repository fallback",
+      "from": "calendar_contract",
+      "status": "IMPLEMENTED_FAIL_CLOSED",
+      "to": "causal_readiness"
+    },
+    {
+      "contract": "pinned manifest and per-strategy readiness only; no entry authority",
+      "from": "causal_readiness",
+      "status": "IMPLEMENTED_FIXTURE_VERIFIED",
+      "to": "read_only_runtime_integration"
+    },
+    {
+      "contract": "pulse payload hash binds consumed snapshot/tick and feed truth identity; outputs bind pulse ID",
+      "from": "callback_snapshot_pulse_lineage",
+      "status": "IMPLEMENTED_FIXTURE_VERIFIED",
+      "to": "strategy_candidate_decision_join"
+    },
+    {
+      "contract": "fresh runtime and historical downstream correlation proof",
+      "from": "raw_run_artifacts",
+      "status": "BLOCKED_SOURCE_EVIDENCE",
+      "to": "callback_snapshot_pulse_lineage"
+    }
+  ],
+  "execution_order": [
+    "verify_calendar",
+    "verify_frozen_contract",
+    "verify_immutable_sources",
+    "verify_source_event_binding",
+    "derive_and_independently_verify_t1",
+    "publish_manifest",
+    "compute_strategy_local_readiness"
+  ],
+  "nodes": [
+    {
+      "id": "calendar_contract",
+      "status": "BLOCKED_SOURCE_EVIDENCE",
+      "type": "authority"
+    },
+    {
+      "id": "strategy_frozen_contracts",
+      "sha256": [
+        "10087e1166d8e11cde194960707e3b490d0ca30ec1df9f30bc3c42889c77cc0b",
+        "3e60d58c9caaa28d72fb1a79553c477cab4cd27f4d2ed27c66c4a392da1a4b7a",
+        "eed4ceed76a593bb253fa795558d1a185ae0f0c698b2686d31b4be680c889d32"
+      ],
+      "status": "VERIFIED_REPOSITORY",
+      "type": "contract"
+    },
+    {
+      "id": "raw_run_artifacts",
+      "references": [
+        {
+          "append": false,
+          "bytes": 2469,
+          "note": "later run blocked CAS rows",
+          "path": "/Volumes/TradeBotData/sessions/session_2026-09-29/2026-09-29/meg-live-2026-09-29-4533aa1ab52b-f0aa2c226d8e/cas_short_horizon_primitives_meg-live-2026-09-29-4533aa1ab52b-f0aa2c226d8e.json",
+          "read_only": true,
+          "sha256": "2a8a9b83d43e97596f24c4fd8982eab8ebe9c069101ac90690ca0b44a9bdbbc7",
+          "status": "BLOCKED"
+        },
+        {
+          "append": false,
+          "bytes": 2593,
+          "note": "captured values fail selected/source event binding",
+          "path": "/Volumes/TradeBotData/sessions/session_2026-09-29/2026-09-29/meg-live-2026-09-29-d3c500333920-98146571ce5a/cas_short_horizon_primitives_meg-live-2026-09-29-d3c500333920-98146571ce5a.json",
+          "read_only": true,
+          "sha256": "7f1d659d0b29affc6f616305103d7efffe13e2f28f4488bc15c6305e08d2b7b2",
+          "status": "BLOCKED_SOURCE_BINDING"
+        },
+        {
+          "append": false,
+          "bytes": 2469,
+          "note": "both CAS rows blocked with null data",
+          "path": "/Volumes/TradeBotData/sessions/session_2026-09-28/2026-09-28/meg-live-2026-09-28-273b137bc421-d1912dd7d32c/cas_short_horizon_primitives_meg-live-2026-09-28-273b137bc421-d1912dd7d32c.json",
+          "read_only": true,
+          "sha256": "f6c4abc78c63277d642579b82ca3ecc352c080d930b276571fef48f15500cc9b",
+          "status": "BLOCKED"
+        },
+        {
+          "append": false,
+          "bytes": 1443,
+          "note": "manifest asserts read-only, does not bind frozen prerequisites",
+          "path": "/Volumes/TradeBotData/sessions/session_2026-09-28/2026-09-28/meg-live-2026-09-28-19bc4b9996c7-0e4544e32f8d/presession_manifest.json",
+          "read_only": true,
+          "sha256": "973a2bb9b1d91fa5cbb57f60b42d6cf6d87ccd607056fbe5ed38a8ec08858fe3",
+          "status": "UNKNOWN_T1"
+        },
+        {
+          "append": false,
+          "bytes": 1443,
+          "note": "manifest asserts read-only, does not bind frozen prerequisites",
+          "path": "/Volumes/TradeBotData/sessions/session_2026-09-28/2026-09-28/meg-live-2026-09-28-273b137bc421-d1912dd7d32c/presession_manifest.json",
+          "read_only": true,
+          "sha256": "bd1894945531ca8a393978edd252a31ca7916a316d54b2d2785c17754aadfc62",
+          "status": "UNKNOWN_T1"
+        }
+      ],
+      "status": "HASHED_READ_ONLY",
+      "type": "evidence"
+    },
+    {
+      "id": "source_event_binding",
+      "status": "IMPLEMENTED_FOR_FUTURE_CALLBACKS_HISTORICAL_BLOCKED",
+      "type": "verification"
+    },
+    {
+      "id": "t1_prerequisites",
+      "status": "DERIVER_IMPLEMENTED_SOURCE_EVIDENCE_BLOCKED",
+      "type": "derived_manifest"
+    },
+    {
+      "id": "same_day_inheritance",
+      "status": "IMPLEMENTED_OFFLINE_SOURCE_CLOSURE_REQUIRED",
+      "type": "lineage"
+    },
+    {
+      "id": "causal_readiness",
+      "status": "IMPLEMENTED_FIXTURE_VERIFIED_REAL_T1_BLOCKED_BY_SOURCE_AUTHORITY",
+      "type": "readiness"
+    },
+    {
+      "id": "read_only_runtime_integration",
+      "status": "IMPLEMENTED_FIXTURE_VERIFIED",
+      "type": "runtime_consumer"
+    },
+    {
+      "id": "callback_snapshot_pulse_lineage",
+      "status": "IMPLEMENTED_FIXTURE_VERIFIED",
+      "type": "read_only_telemetry"
+    },
+    {
+      "id": "strategy_candidate_decision_join",
+      "status": "IMPLEMENTED_FIXTURE_VERIFIED",
+      "type": "read_only_telemetry"
+    }
+  ],
+  "schema_version": 1
+}

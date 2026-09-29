@@ -7,6 +7,7 @@ PENDING/BLOCKED states, not synthetic candidates or PASS results.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -157,6 +158,8 @@ def run_consumer_cycle(
     result["consumers"]["cas_v2"] = _evaluate_cas(
         runtime_outputs=runtime_outputs, output_root=root, session_id=session_id,
         source_sha=source_sha, now=datetime.now(timezone.utc),
+        evaluation_ledger_root=(Path(context["cas_evaluation_ledger_root"])
+            if context.get("cas_evaluation_ledger_root") else None),
     )
     # Emit CANDIDATE_POOL checkpoint via TruthFeedRuntimeHook.
     hook = TruthFeedRuntimeHook(
@@ -471,7 +474,8 @@ def run_consumer_cycle(
 
 
 def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
-                  session_id: str, source_sha: str, now: datetime) -> dict[str, Any]:
+                  session_id: str, source_sha: str, now: datetime,
+                  evaluation_ledger_root: Path | None = None) -> dict[str, Any]:
     """Evaluate only the canonical short-horizon causal advisory input."""
     boundary = now.replace(hour=15, minute=14, second=0, microsecond=0)
     raw = runtime_outputs.get("cas_short_horizon_inputs")
@@ -486,12 +490,65 @@ def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
         })
         return _state("PENDING", reason="short_horizon_inputs_missing", freeze_boundary=boundary.isoformat())
     try:
+        evaluation_ledger = None
+        evaluation_claim = None
+        evaluation_identity = raw.get("evaluation_identity_sha256")
+        event_hashes = raw.get("source_event_sha256s")
+        session_identity = raw.get("session_identity")
+        if evaluation_ledger_root is not None:
+            if (not isinstance(session_identity, Mapping)
+                    or not all(session_identity.get(name) for name in
+                        ("trading_date", "venue", "calendar_id", "calendar_version"))):
+                raise ValueError("CAS_EVALUATION_SESSION_IDENTITY_MISSING")
+            if not isinstance(event_hashes, list) or len(event_hashes) != 2:
+                raise ValueError("CAS_EVALUATION_SOURCE_EVENT_IDENTITY_MISSING")
+            if raw.get("source_sha") != source_sha or raw.get("session_id") != session_id:
+                raise ValueError("CAS_EVALUATION_RUN_IDENTITY_MISMATCH")
+            if raw.get("strategy_id") != STRATEGY_ID:
+                raise ValueError("CAS_EVALUATION_STRATEGY_IDENTITY_MISMATCH")
+            from core.cas_primitive_producer import SPEC_SHA
+            expected_identity = hashlib.sha256(json.dumps({
+                "strategy_id": STRATEGY_ID, "spec_sha": SPEC_SHA,
+                "source_sha": source_sha, "session_identity": dict(session_identity),
+                "source_event_sha256s": sorted(event_hashes),
+            }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            if evaluation_identity != expected_identity:
+                raise ValueError("CAS_EVALUATION_IDENTITY_HASH_MISMATCH")
+            from core.cas_evaluation_ledger import CASEvaluationLedger
+            evaluation_ledger = CASEvaluationLedger(
+                evaluation_ledger_root, session_identity=session_identity)
+            evaluation_claim = evaluation_ledger.claim(
+                evaluation_identity_sha256=str(evaluation_identity or ""),
+                run_id=session_id, source_event_sha256s=event_hashes,
+                source_sha=source_sha, now_epoch=now.timestamp())
+            if evaluation_claim.get("status") != "CLAIMED":
+                reason = ("DUPLICATE_CAS_EVALUATION" if evaluation_claim.get("status")
+                    in {"DUPLICATE_COMPLETED", "DUPLICATE_IN_PROGRESS"}
+                    else str(evaluation_claim.get("reason") or "CAS_EVALUATION_CLAIM_BLOCKED"))
+                _write_bounded_json(output_root / "cas_readiness_latest.json", {
+                    "schema_version": 1, "strategy_id": STRATEGY_ID,
+                    "session_id": session_id, "source_sha": source_sha,
+                    "cycle_id": str(raw.get("cycle_id") or ""),
+                    "readiness_state": "BLOCKED", "cas_invoked": False,
+                    "cas_rejection_reason": reason,
+                    "evaluation_identity_sha256": evaluation_identity,
+                    "execution_status": "advisory_only",
+                    "broker_write_authority": False, "order_authority": False,
+                    **_risk_halt_evidence(),
+                })
+                return _state("PENDING", reason=reason,
+                    evaluation_identity_sha256=evaluation_identity,
+                    duplicate_receipt=(evaluation_claim.get("receipt") or {}).get("receipt_sha256"))
         decision = evaluate(session_id=session_id, symbol=str(raw["symbol"]),
                             morning_return=float(raw["morning_return"]),
                             observation_timestamp=datetime.fromisoformat(str(raw["observation_timestamp"])),
                             cutoff_timestamp=boundary, received_timestamp=(datetime.fromisoformat(str(raw["received_timestamp"])) if raw.get("received_timestamp") else None),
                             source_sha=source_sha, signal_input_09_15=raw.get("signal_input_09_15"), signal_input_10_00=raw.get("signal_input_10_00"))
-    except (KeyError, TypeError, ValueError) as exc:
+    except (KeyError, TypeError, ValueError, OSError, TimeoutError) as exc:
+        if (evaluation_ledger is not None and evaluation_claim is not None
+                and evaluation_claim.get("status") == "CLAIMED"):
+            evaluation_ledger.release_claim(evaluation_identity_sha256=str(evaluation_identity),
+                run_id=session_id, claim_generation=int(evaluation_claim["claim_generation"]))
         halt = _risk_halt_evidence()
         _write_bounded_json(output_root / "cas_readiness_latest.json", {
             "schema_version": 1, "strategy_id": STRATEGY_ID, "session_id": session_id,
@@ -502,6 +559,20 @@ def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
             "broker_write_authority": False, "order_authority": False, **halt,
         })
         return _state("PENDING", reason=str(exc))
+    if evaluation_ledger is not None and evaluation_claim is not None:
+        try:
+            completed = evaluation_ledger.complete(
+                evaluation_identity_sha256=str(evaluation_identity),
+                run_id=session_id,
+                claim_generation=int(evaluation_claim["claim_generation"]),
+                source_sha=source_sha, source_event_sha256s=event_hashes,
+                decision=decision, completed_epoch=now.timestamp())
+        except (OSError, TypeError, ValueError, TimeoutError) as exc:
+            return _state("PENDING", reason=f"CAS_EVALUATION_RECEIPT_WRITE_FAILED:{type(exc).__name__}")
+        if completed.get("status") != "COMPLETED":
+            evaluation_ledger.release_claim(evaluation_identity_sha256=str(evaluation_identity),
+                run_id=session_id, claim_generation=int(evaluation_claim["claim_generation"]))
+            return _state("PENDING", reason=str(completed.get("reason") or "CAS_EVALUATION_RECEIPT_BLOCKED"))
     destination = output_root / "cas_v2_artifact.json"
     payload = {"schema_version": 1, "cas_spec_id": STRATEGY_ID, "session_id": session_id,
                "source_sha": source_sha, "decision": decision,

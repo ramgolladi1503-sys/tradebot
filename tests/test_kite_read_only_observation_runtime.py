@@ -323,6 +323,7 @@ def test_run_observation_dispatches_native_pulse_to_shadow_registry(
     import core.runtime_snapshot_producer as snapshots
     import core.runtime_storage_authority as rsa
     import core.paper_shadow.strategy_shadow_adapter as shadow_mod
+    import core.market_heritage_graph as heritage_mod
 
     observed = {"shadow_pulses": 0, "shutdowns": 0}
 
@@ -343,14 +344,17 @@ def test_run_observation_dispatches_native_pulse_to_shadow_registry(
 
     monkeypatch.setattr(shadow_mod, "StrategyShadowAdapterRegistry", FakeRegistry)
     monkeypatch.setattr(
-        shadow_mod,
-        "load_canonical_t1_prerequisites",
+        heritage_mod,
+        "load_verified_t1_prerequisites",
         lambda **_: {
             "opening_drive_prev_contract_key": "NIFTY26SEPFUT",
             "opening_drive_prev_close_1529": 23440.7,
             "opening_drive_target_expiry": "2026-09-29",
             "overnight_prev_daily_close": 23414.3,
             "overnight_prev_sma200": 24473.368,
+            "heritage_verification": {"status": "VERIFIED", "read_only": True,
+                "is_order_action": False, "broker_api_called": False,
+                "allowed_for_live_execution": False},
         },
     )
     monkeypatch.setattr(auth, "get_kite_credentials", lambda **_: ("api-key", "token"))
@@ -400,6 +404,7 @@ def test_run_observation_dispatches_native_pulse_to_shadow_registry(
     assert observed["shadow_pulses"] >= 1
     assert observed["shutdowns"] == 1
     assert observed["registry_kwargs"]["source_sha"] == "2" * 40
+    assert observed["registry_kwargs"]["prerequisite_verification"]["status"] == "VERIFIED"
     identity = json.loads((governed_root / "out" / "process_identity.json").read_text())
     assert identity["read_only"] is True
     assert identity["order_authority"] is False
@@ -417,12 +422,15 @@ def test_shadow_registry_shutdown_failure_is_propagated(
     import core.runtime_snapshot_producer as snapshots
     import core.runtime_storage_authority as rsa
     import core.paper_shadow.strategy_shadow_adapter as shadow_mod
+    import core.market_heritage_graph as heritage_mod
+
+    observed = {}
 
     class FailingRegistry:
         adapters = {}
         disabled_strategies = {}
         def __init__(self, **kwargs):
-            pass
+            observed["registry_kwargs"] = kwargs
         def on_pulse(self, **kwargs):
             return []
         def on_session_shutdown(self):
@@ -430,15 +438,18 @@ def test_shadow_registry_shutdown_failure_is_propagated(
 
     monkeypatch.setattr(shadow_mod, "StrategyShadowAdapterRegistry", FailingRegistry)
     monkeypatch.setattr(
-        shadow_mod,
-        "load_canonical_t1_prerequisites",
-        lambda **_: {
+        heritage_mod,
+        "load_verified_t1_prerequisites",
+        lambda **kwargs: (observed.update({"heritage_kwargs": kwargs}) or {
             "opening_drive_prev_contract_key": None,
             "opening_drive_prev_close_1529": None,
             "opening_drive_target_expiry": None,
             "overnight_prev_daily_close": None,
             "overnight_prev_sma200": None,
-        },
+            "heritage_verification": {"status": "BLOCKED", "read_only": True,
+                "is_order_action": False, "broker_api_called": False,
+                "allowed_for_live_execution": False},
+        }),
     )
     monkeypatch.setattr(auth, "get_kite_credentials", lambda **_: ("api-key", "token"))
     monkeypatch.setattr(auth, "get_kite_client", lambda **_: type("Profile", (), {"profile": lambda self: {"user_id": "redacted"}})())
@@ -464,7 +475,9 @@ def test_shadow_registry_shutdown_failure_is_propagated(
     monkeypatch.setattr(rsa, "revalidate", lambda *_: None)
     token_path = governed_root / "token"
     token_path.write_text("redacted")
-    plan = {"final_union_tokens": [256265], "commit_sha": "3" * 40}
+    plan = {"final_union_tokens": [256265], "commit_sha": "3" * 40,
+            "t1_facts": {"opening_drive_prev_close_1529": 99999.0,
+                         "overnight_prev_sma200": 99999.0}}
 
     from core.kite_read_only_observation_runtime import run_observation
     with pytest.raises(RuntimeError, match="synthetic_shadow_seal_failure"):
@@ -477,5 +490,9 @@ def test_shadow_registry_shutdown_failure_is_propagated(
         )
 
     marker = governed_root / "out" / "STRATEGY_SHADOW_EVIDENCE_SEAL_FAIL"
+    assert observed["heritage_kwargs"]["manifest_path"] is None
+    assert observed["heritage_kwargs"]["expected_manifest_sha256"] is None
+    assert observed["registry_kwargs"]["opening_drive_prev_close_1529"] is None
+    assert observed["registry_kwargs"]["overnight_prev_sma200"] is None
     assert marker.is_file()
     assert "synthetic_shadow_seal_failure" in marker.read_text()

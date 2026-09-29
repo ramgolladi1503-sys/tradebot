@@ -12,7 +12,7 @@ from core.market_snapshot_schema import (
     validate_market_snapshot,
 )
 from core.snapshot_schema import compute_snapshot_id
-from core.tick_store import get_latest_tick_db, get_latest_tick_rows_db
+from core.tick_store import get_last_tick, get_latest_tick_db, get_latest_tick_rows_db
 from core.time_utils import normalize_epoch_seconds, now_ist, now_utc_epoch
 
 
@@ -74,6 +74,7 @@ def _min_option_token_count() -> int:
 
 def _tick_payload(token: int, row: dict[str, Any] | None) -> dict[str, Any]:
     row = dict(row or {})
+    row.update(dict(row.get("_provenance") or {}))
     ts_epoch = normalize_epoch_seconds(row.get("ts_epoch"))
     return {
         "instrument_token": int(token),
@@ -81,6 +82,14 @@ def _tick_payload(token: int, row: dict[str, Any] | None) -> dict[str, Any]:
         "timestamp_epoch": ts_epoch,
         "volume": row.get("volume"),
         "oi": row.get("oi"),
+        "timestamp_authority": row.get("timestamp_authority"),
+        "timestamp_source_field": row.get("timestamp_source_field"),
+        "source_timestamp_epoch": row.get("source_timestamp_epoch"),
+        "receive_timestamp_epoch": row.get("receive_timestamp_epoch"),
+        "timestamp_fallback_used": row.get("timestamp_fallback_used"),
+        "source_event_id": row.get("source_event_id"),
+        "source_event_sha256": row.get("source_event_sha256"),
+        "source_event_payload": row.get("source_event_payload"),
     }
 
 
@@ -113,7 +122,7 @@ def _build_tick_health_snapshot(
     opt_tokens = _normalize_tokens(option_tokens)
     blockers: list[dict[str, Any]] = []
 
-    index_row = get_latest_tick_db(idx_token) if idx_token > 0 else None
+    index_row = get_last_tick(idx_token, allow_db=True, include_provenance=True) if idx_token > 0 else None
     option_rows = get_latest_tick_rows_db(opt_tokens) if opt_tokens else {}
 
     option_ticks: dict[str, dict[str, Any]] = {}

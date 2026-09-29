@@ -5,6 +5,7 @@ import os
 import time
 import threading
 import json
+import hashlib
 import re
 import atexit
 import sqlite3
@@ -129,7 +130,7 @@ def get_latest_tick_rows_db(tokens: list[int] | None) -> dict[int, dict]:
             tok_int = int(tok)
         except Exception:
             continue
-        tick = get_last_tick(tok_int, allow_db=True)
+        tick = get_last_tick(tok_int, allow_db=True, include_provenance=True)
         if not isinstance(tick, dict):
             continue
         if tick.get("ts_epoch") is None:
@@ -137,6 +138,7 @@ def get_latest_tick_rows_db(tokens: list[int] | None) -> dict[int, dict]:
         out[tok_int] = {
             "ts_epoch": tick.get("ts_epoch"),
             "ltp": tick.get("ltp"),
+            **dict(tick.get("_provenance") or {}),
         }
     return out
 
@@ -6943,9 +6945,26 @@ def on_ticks(ws, ticks):
         last_price_float = _safe_float(last_price)
         timestamp_provenance = _timestamp_provenance(t, receive_epoch=now_epoch)
         if _NORMALIZED_TICK_SINK is not None:
+            source_event_payload = {
+                "instrument_token": token_int,
+                "underlying_symbol": symbol,
+                "last_price": last_price_float,
+                "volume": t.get("volume", t.get("volume_traded")),
+                "oi": t.get("oi"),
+                "source_timestamp_field": timestamp_provenance.get("timestamp_source_field"),
+                "source_timestamp_epoch": timestamp_provenance.get("source_timestamp_epoch"),
+            }
+            source_event_hash = hashlib.sha256(
+                json.dumps(source_event_payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+            ).hexdigest()
+            source_event_id = f"{_ensure_feed_session_id()}:{_FEED_ON_TICKS_ROW_SEQ}:{token_int}:{source_event_hash[:16]}"
             _NORMALIZED_TICK_SINK({"instrument_token": token_int, "underlying_symbol": symbol,
                 "last_price": last_price_float,
-                "timestamp_epoch": ts_value, **timestamp_provenance})
+                "timestamp_epoch": ts_value,
+                "source_event_id": source_event_id,
+                "source_event_sha256": source_event_hash,
+                "source_event_payload": source_event_payload,
+                **timestamp_provenance})
         volume = t.get("volume")
         if volume is None:
             volume = t.get("volume_traded")
@@ -6979,6 +6998,9 @@ def on_ticks(ws, ticks):
                 last_price=last_price_float,
                 volume=volume,
                 oi=oi,
+                source_event_id=source_event_id if _NORMALIZED_TICK_SINK is not None else None,
+                source_event_sha256=source_event_hash if _NORMALIZED_TICK_SINK is not None else None,
+                source_event_payload=source_event_payload if _NORMALIZED_TICK_SINK is not None else None,
                 **timestamp_provenance,
             )
             if not ok:

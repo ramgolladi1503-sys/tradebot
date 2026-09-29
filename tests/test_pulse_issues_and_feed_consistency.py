@@ -79,7 +79,7 @@ def test_tick_store_write_queue_capacity_is_50000(monkeypatch):
     assert tick_store._WRITE_QUEUE_CAPACITY >= 50000
 
 
-def test_load_canonical_t1_prerequisites_discovers_state_root_session_manifest(tmp_path, monkeypatch):
+def test_legacy_t1_loader_does_not_trust_unpinned_state_root_manifest(tmp_path, monkeypatch):
     session_date = "2026-09-29"
     sessions_dir = tmp_path / "sessions" / f"session_{session_date}"
     sessions_dir.mkdir(parents=True, exist_ok=True)
@@ -111,11 +111,15 @@ def test_load_canonical_t1_prerequisites_discovers_state_root_session_manifest(t
         data_dir=sessions_dir,
     )
 
-    assert prereqs["opening_drive_prev_contract_key"] == "NIFTY26SEPFUT"
-    assert prereqs["opening_drive_prev_close_1529"] == 22788.25
-    assert prereqs["opening_drive_target_expiry"] == "2026-09-29"
-    assert prereqs["overnight_prev_daily_close"] == 22788.25
-    assert prereqs["overnight_prev_sma200"] == 22150.0
+    assert all(prereqs[key] is None for key in (
+        "opening_drive_prev_contract_key",
+        "opening_drive_prev_close_1529",
+        "opening_drive_target_expiry",
+        "overnight_prev_daily_close",
+        "overnight_prev_sma200",
+    ))
+    assert prereqs["heritage_verification"]["status"] == "BLOCKED"
+    assert prereqs["heritage_verification"]["reason"] == "PINNED_HERITAGE_MANIFEST_REQUIRED"
 
 
 def test_pending_tokens_cleared_on_mutation_callbacks(monkeypatch):
@@ -136,4 +140,3 @@ def test_pending_tokens_cleared_on_mutation_callbacks(monkeypatch):
     assert len(ws._PENDING_SUBSCRIBE_TOKENS) == 0
     assert len(ws._PENDING_UNSUBSCRIBE_TOKENS) == 0
     assert ws._LAST_TOKENS == [1001, 1002, 3001]
-
