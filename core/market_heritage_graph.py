@@ -1135,9 +1135,6 @@ def load_verified_t1_prerequisites(*, manifest_path: str | Path | None,
         if actual_sha != expected_manifest_sha256:
             raise ValueError("PINNED_MANIFEST_HASH_MISMATCH")
         verification = verify_manifest(path, decision_epoch=decision_epoch)
-        if verification.get("verdict") != "PASS":
-            reasons = sorted({row.get("code", "INVALID_MANIFEST") for row in verification.get("errors", [])})
-            raise ValueError("MANIFEST_NOT_VERIFIED:" + ",".join(reasons))
         from core.market_heritage_verifier import verify_market_heritage_manifest
         independent_verification = verify_market_heritage_manifest(
             path, decision_epoch=decision_epoch)
@@ -1145,28 +1142,6 @@ def load_verified_t1_prerequisites(*, manifest_path: str | Path | None,
         session = payload.get("session_identity")
         if not isinstance(session, Mapping) or any(session.get(key) != value for key, value in target_session.items()):
             raise ValueError("TARGET_SESSION_MISMATCH")
-
-        independent_errors_by_node: dict[str, set[str]] = defaultdict(set)
-        if independent_verification.get("verdict") != "PASS":
-            t1_node_ids = {
-                str(node.get("node_id"))
-                for node in payload.get("nodes", [])
-                if isinstance(node, Mapping)
-                and isinstance(node.get("payload"), Mapping)
-                and node["payload"].get("strategy_id") in required_fields
-                and node["payload"].get("field") in required_fields.get(
-                    node["payload"].get("strategy_id"), {})
-            }
-            for error in independent_verification.get("errors", []):
-                code, node_id = error.get("code"), str(error.get("id"))
-                # A semantically invalid field blocks only its owning strategy.
-                # Structural/hash errors and unrequested T-1 nodes remain
-                # manifest-wide failures because their affected closure is not
-                # safe to infer at this boundary.
-                if not isinstance(code, str) or not code.startswith("T1_") or node_id not in t1_node_ids:
-                    raise ValueError("INDEPENDENT_HERITAGE_VERIFICATION_FAILED:" +
-                                     str(code or "INVALID_MANIFEST"))
-                independent_errors_by_node[node_id].add(code)
 
         fields: dict[tuple[str, str], dict[str, Any]] = {}
         conflicts: set[tuple[str, str]] = set()
@@ -1176,6 +1151,51 @@ def load_verified_t1_prerequisites(*, manifest_path: str | Path | None,
         for edge in payload.get("edges", []):
             if isinstance(edge, Mapping):
                 incoming[str(edge.get("child_id"))].append(edge)
+        requested_t1_nodes = {
+            str(node.get("node_id"))
+            for node in payload.get("nodes", [])
+            if isinstance(node, Mapping)
+            and isinstance(node.get("payload"), Mapping)
+            and node["payload"].get("strategy_id") in required_fields
+            and node["payload"].get("field") in required_fields.get(
+                node["payload"].get("strategy_id"), {})
+        }
+
+        def requested_dependents_of(node_id: str) -> set[str]:
+            affected: set[str] = set()
+            for prerequisite_id in requested_t1_nodes:
+                pending = [prerequisite_id]
+                visited: set[str] = set()
+                while pending:
+                    current = pending.pop()
+                    if current in visited:
+                        continue
+                    visited.add(current)
+                    if current == node_id:
+                        affected.add(prerequisite_id)
+                        break
+                    pending.extend(str(edge.get("parent_id"))
+                                   for edge in incoming.get(current, []))
+            return affected
+
+        independent_errors_by_node: dict[str, set[str]] = defaultdict(set)
+        for report in (verification, independent_verification):
+            for error in report.get("errors", []):
+                code, node_id = error.get("code"), str(error.get("id"))
+                if code == "FUTURE_INFORMATION":
+                    dependents = requested_dependents_of(node_id)
+                    if dependents:
+                        for prerequisite_id in dependents:
+                            independent_errors_by_node[prerequisite_id].add(
+                                "T1_EVIDENCE_FUTURE_INFORMATION")
+                        continue
+                if isinstance(code, str) and code.startswith("T1_") and node_id in requested_t1_nodes:
+                    independent_errors_by_node[node_id].add(code)
+                    continue
+                if report is verification:
+                    raise ValueError("MANIFEST_NOT_VERIFIED:" + str(code or "INVALID_MANIFEST"))
+                raise ValueError("INDEPENDENT_HERITAGE_VERIFICATION_FAILED:" +
+                                 str(code or "INVALID_MANIFEST"))
         for node in payload.get("nodes", []):
             body = node.get("payload") if isinstance(node, Mapping) else None
             if not isinstance(body, Mapping):

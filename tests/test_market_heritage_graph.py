@@ -668,6 +668,63 @@ def test_independent_verifier_and_runtime_reject_unverified_prerequisite_status_
                 strategy_id]["status"] == "READY"
 
 
+@pytest.mark.parametrize("available,expected_independent_code,expected_runtime_code", [
+    (None, "T1_SOURCE_AVAILABILITY_INVALID", "T1_SOURCE_AVAILABILITY_INVALID"),
+    (101, "T1_SOURCE_AVAILABILITY_INVALID", "T1_EVIDENCE_FUTURE_INFORMATION"),
+])
+def test_independent_verifier_and_runtime_reject_source_parent_availability(
+        tmp_path, available, expected_independent_code, expected_runtime_code):
+    path, target, required, instruments = _publish_t1_manifest(tmp_path)
+    manifest = json.loads(path.read_text())
+    source = next(node for node in manifest["nodes"]
+        if node.get("logical_key") ==
+        "source:INTRADAY_OPENING_DRIVE_V1:opening_drive_prev_contract_key")
+    derived = next(node for node in manifest["nodes"]
+        if node.get("logical_key") ==
+        "prerequisite:INTRADAY_OPENING_DRIVE_V1:opening_drive_prev_contract_key")
+    old_source_id, old_derived_id = source["node_id"], derived["node_id"]
+    source["available_epoch"] = available
+
+    def digest(value):
+        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+
+    source["node_id"] = digest({key: value for key, value in source.items()
+        if key != "node_id"})
+    new_source_id = source["node_id"]
+    derived["payload"]["content_sha256"] = new_source_id
+    derived["node_id"] = digest({key: value for key, value in derived.items()
+        if key != "node_id"})
+    new_derived_id = derived["node_id"]
+    for edge in manifest["edges"]:
+        if edge["parent_id"] == old_source_id:
+            edge["parent_id"] = new_source_id
+            edge["parent_hash"] = new_source_id
+        if edge["child_id"] == old_derived_id:
+            edge["child_id"] = new_derived_id
+    manifest["nodes"].sort(key=lambda row: row["node_id"])
+    manifest["graph_sha256"] = digest({"session_identity": manifest["session_identity"],
+        "nodes": sorted(row["node_id"] for row in manifest["nodes"]),
+        "edges": sorted(manifest["edges"], key=lambda row: (row["parent_id"],
+            row["child_id"], row["requirement"]))})
+    mutated_path = tmp_path / f"mutated-t1-source-availability-{available}.json"
+    mutated_path.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n")
+
+    independent = verify_market_heritage_manifest(mutated_path, decision_epoch=100)
+    assert independent["verdict"] == "BLOCKED"
+    assert expected_independent_code in {row["code"] for row in independent["errors"]}
+    loaded = load_verified_t1_prerequisites(manifest_path=mutated_path,
+        expected_manifest_sha256=hashlib.sha256(mutated_path.read_bytes()).hexdigest(),
+        approved_root=tmp_path, target_session=target, decision_epoch=100,
+        required_fields=required, target_instruments=instruments)
+    readiness = loaded["heritage_verification"]["strategy_readiness"]
+    assert readiness["INTRADAY_OPENING_DRIVE_V1"]["status"] == "BLOCKED"
+    assert expected_runtime_code in {item["reason"] for item in
+        readiness["INTRADAY_OPENING_DRIVE_V1"]["blockers"]}
+    assert readiness["S1_MOMENTUM_OVERNIGHT_V1"]["status"] == "READY"
+    assert readiness["S4_MONDAY_OVERNIGHT_V1"]["status"] == "READY"
+
+
 def test_heritage_verifiers_reject_nonfinite_decision_epoch(tmp_path):
     path, target, _, _ = _publish_t1_manifest(tmp_path)
     result = publish_verified_heritage_manifest(
