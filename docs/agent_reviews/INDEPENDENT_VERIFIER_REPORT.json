@@ -2,7 +2,7 @@
   "allowed_for_live_execution": false,
   "broker_api_called": false,
   "commands": [
-    "pytest -q focused continuity, feed-consistency, pinned T-1, legacy inventory rejection, publication and authority regressions: 256 passed, 2 optional dependency warnings (see GSD_IMPLEMENTATION_CHANGESET.md)",
+    "pytest -q focused continuity, feed-consistency, pinned T-1, legacy inventory rejection, publication and authority regressions: 261 passed, 2 optional dependency warnings (see GSD_IMPLEMENTATION_CHANGESET.md)",
     "python -m compileall -q on all changed runtime, graph, verifier, generator and ledger modules (see GSD_IMPLEMENTATION_CHANGESET.md)",
     "git diff --check (see GSD_IMPLEMENTATION_CHANGESET.md)"
   ],
@@ -66,7 +66,8 @@
     "legacy T-1 compatibility helper rejects launch-plan, environment, and generic JSON values without a pinned verified graph manifest",
     "T-1 heritage publication performs decision-time preflight, independent semantic verification, then bounded session-index registration; future dependencies block before publication",
     "legacy T-1 inventory generator and independent oracle cannot promote snapshot LTP, loose futures rows, or unbound rolling values",
-    "Graph preflight and the separate semantic verifier reject non-finite decision epochs"
+    "Graph preflight and the separate semantic verifier reject non-finite decision epochs",
+    "The T-1 graph assembler emits only exact predecessor-calendar and source-ancestor edges after field, instrument, contract, session and decision-time checks; assembler fixture publication independently verifies."
   ],
   "verifier": "core.market_heritage_verifier.verify_market_heritage_manifest"
 }
