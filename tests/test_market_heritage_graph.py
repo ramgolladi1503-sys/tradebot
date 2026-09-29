@@ -15,6 +15,7 @@ from core.market_heritage_graph import (
     MAX_INDEX_BYTES,
     HeritageGraph,
     SessionHeritageIndex,
+    assemble_t1_heritage_graph,
     evaluate_prerequisite_readiness,
     load_verified_t1_prerequisites,
     load_same_session_cas_references,
@@ -506,6 +507,62 @@ def _publish_t1_manifest(root, *, omit_calendar_edge=False, corrupt_contract=Fal
         path = graph.publish(root, session_identity=target)
         return path, target, required, instruments
     return graph, target, required, instruments
+
+
+def _assemble_fixture_t1(graph, target, required, instruments, *, sources=None,
+                         prerequisites=None):
+    calendar = next(node for node in graph.nodes.values()
+                    if node["payload"].get("record_type") == "calendar_predecessor")
+    sources = list(sources if sources is not None else [node for node in graph.nodes.values()
+        if node["logical_key"].startswith("source:")])
+    prerequisites = list(prerequisites if prerequisites is not None else [node for node in graph.nodes.values()
+        if node["logical_key"].startswith("prerequisite:")])
+    return assemble_t1_heritage_graph(session_identity=target, calendar_node=calendar,
+        source_nodes=sources, prerequisite_nodes=prerequisites,
+        required_fields=required, target_instruments=instruments, decision_epoch=100)
+
+
+def test_t1_assembler_builds_exact_calendar_and_source_closure_and_publishes(tmp_path):
+    fixture_graph, target, required, instruments = _publish_t1_manifest(tmp_path, publish=False)
+    graph = _assemble_fixture_t1(fixture_graph, target, required, instruments)
+    assert len(graph.edges) == 12
+    assert len(graph.nodes) == 13
+    result = publish_verified_heritage_manifest(graph=graph,
+        approved_root=tmp_path / "assembled", session_identity=target,
+        run_id="assembled-t1", decision_epoch=100)
+    assert result["status"] == "PUBLISHED_VERIFIED"
+    assert result["independent_verification"]["verdict"] == "PASS"
+
+
+@pytest.mark.parametrize("case,reason", [
+    ("missing", "MISSING_T1_PREREQUISITE_FIELD"),
+    ("extra", "UNEXPECTED_T1_PREREQUISITE_FIELD"),
+    ("wrong_source_session", "SOURCE_ANCESTOR_IDENTITY_MISMATCH"),
+    ("future_evidence", "T1_EVIDENCE_NOT_AVAILABLE_AT_DECISION"),
+])
+def test_t1_assembler_fails_closed_on_incomplete_or_mismatched_evidence(tmp_path, case, reason):
+    fixture_graph, target, required, instruments = _publish_t1_manifest(tmp_path, publish=False)
+    calendar = next(node for node in fixture_graph.nodes.values()
+                    if node["payload"].get("record_type") == "calendar_predecessor")
+    sources = [node for node in fixture_graph.nodes.values()
+               if node["logical_key"].startswith("source:")]
+    prerequisites = [node for node in fixture_graph.nodes.values()
+                     if node["logical_key"].startswith("prerequisite:")]
+    if case == "missing":
+        prerequisites.pop()
+    elif case == "extra":
+        extra = dict(prerequisites[0])
+        extra["payload"] = {**extra["payload"], "field": "unexpected_field"}
+        prerequisites.append(extra)
+    elif case == "wrong_source_session":
+        sources[0] = {**sources[0], "session": {**sources[0]["session"],
+            "trading_date": target["trading_date"]}}
+    elif case == "future_evidence":
+        sources[0] = {**sources[0], "available_epoch": 101}
+    with pytest.raises(ValueError, match=reason):
+        assemble_t1_heritage_graph(session_identity=target, calendar_node=calendar,
+            source_nodes=sources, prerequisite_nodes=prerequisites,
+            required_fields=required, target_instruments=instruments, decision_epoch=100)
 
 
 def test_verified_heritage_publisher_independently_checks_then_indexes(tmp_path):

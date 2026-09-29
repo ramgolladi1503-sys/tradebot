@@ -298,6 +298,154 @@ class HeritageGraph:
         return destination
 
 
+def assemble_t1_heritage_graph(*, session_identity: Mapping[str, Any],
+                               calendar_node: Mapping[str, Any],
+                               source_nodes: list[Mapping[str, Any]],
+                               prerequisite_nodes: list[Mapping[str, Any]],
+                               required_fields: Mapping[str, Mapping[str, str]],
+                               target_instruments: Mapping[str, Mapping[str, Any]],
+                               decision_epoch: float) -> HeritageGraph:
+    """Assemble a fail-closed T-1 dependency graph from verified evidence.
+
+    This API wires caller-verified evidence and exact contracts only. It does
+    not discover a calendar, verify upstream source files, or derive values.
+    """
+    try:
+        epoch = float(decision_epoch)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("INVALID_DECISION_EPOCH") from exc
+    if not math.isfinite(epoch):
+        raise ValueError("INVALID_DECISION_EPOCH")
+    if not isinstance(session_identity, Mapping) or not all(
+            session_identity.get(key) for key in
+            ("trading_date", "venue", "calendar_id", "calendar_version")):
+        raise ValueError("MANIFEST_SESSION_IDENTITY_REQUIRED")
+    try:
+        target_day = date.fromisoformat(str(session_identity["trading_date"]))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("INVALID_TARGET_SESSION_DATE") from exc
+    if not isinstance(required_fields, Mapping) or not required_fields:
+        raise ValueError("REQUIRED_T1_FIELDS_REQUIRED")
+    if set(required_fields) != set(target_instruments):
+        raise ValueError("TARGET_STRATEGY_INSTRUMENT_SET_MISMATCH")
+    if not isinstance(calendar_node, Mapping):
+        raise ValueError("VERIFIED_CALENDAR_PREDECESSOR_REQUIRED")
+    calendar = dict(calendar_node)
+    calendar_payload = calendar.get("payload")
+    if (calendar.get("status") != "VERIFIED" or
+            not isinstance(calendar_payload, Mapping) or
+            calendar_payload.get("record_type") != "calendar_predecessor" or
+            calendar_payload.get("verified") is not True or
+            calendar_payload.get("eligible") is not True or
+            calendar_payload.get("target_session") != dict(session_identity) or
+            calendar.get("session") != dict(session_identity) or
+            calendar.get("instrument") != {"calendar": session_identity["calendar_id"]} or
+            calendar_payload.get("calendar_id") != session_identity["calendar_id"] or
+            calendar_payload.get("calendar_version") != session_identity["calendar_version"]):
+        raise ValueError("VERIFIED_CALENDAR_PREDECESSOR_REQUIRED")
+    predecessor = calendar_payload.get("predecessor_session")
+    if (not isinstance(predecessor, Mapping) or
+            predecessor.get("venue") != session_identity["venue"] or
+            predecessor.get("calendar_id") != session_identity["calendar_id"] or
+            predecessor.get("calendar_version") != session_identity["calendar_version"]):
+        raise ValueError("CALENDAR_PREDECESSOR_IDENTITY_MISMATCH")
+    try:
+        prior_day = date.fromisoformat(str(predecessor.get("trading_date")))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("INVALID_PREDECESSOR_SESSION_DATE") from exc
+    if prior_day >= target_day:
+        raise ValueError("CALENDAR_PREDECESSOR_NOT_BEFORE_TARGET")
+
+    if not isinstance(source_nodes, list) or not isinstance(prerequisite_nodes, list):
+        raise ValueError("T1_NODES_MUST_BE_LISTS")
+    sources_by_id: dict[str, dict[str, Any]] = {}
+    for raw in source_nodes:
+        if not isinstance(raw, Mapping):
+            raise ValueError("SOURCE_NODE_INVALID")
+        node = dict(raw)
+        node_id = node.get("node_id")
+        if not isinstance(node_id, str) or node_id in sources_by_id:
+            raise ValueError("DUPLICATE_OR_INVALID_SOURCE_NODE")
+        sources_by_id[node_id] = node
+
+    expected: dict[tuple[str, str], str] = {}
+    for strategy_id, fields in required_fields.items():
+        if not isinstance(fields, Mapping) or not fields:
+            raise ValueError("REQUIRED_T1_FIELDS_INVALID")
+        for field, contract_id in fields.items():
+            if not all(isinstance(value, str) and value.strip()
+                       for value in (strategy_id, field, contract_id)):
+                raise ValueError("REQUIRED_T1_FIELDS_INVALID")
+            expected[(strategy_id, field)] = contract_id
+    observed: dict[tuple[str, str], dict[str, Any]] = {}
+    used_source_ids: set[str] = set()
+    for raw in prerequisite_nodes:
+        if not isinstance(raw, Mapping):
+            raise ValueError("PREREQUISITE_NODE_INVALID")
+        node = dict(raw)
+        payload = node.get("payload")
+        if not isinstance(payload, Mapping):
+            raise ValueError("PREREQUISITE_PAYLOAD_INVALID")
+        key = (payload.get("strategy_id"), payload.get("field"))
+        if key not in expected:
+            raise ValueError("UNEXPECTED_T1_PREREQUISITE_FIELD")
+        if key in observed:
+            raise ValueError("DUPLICATE_T1_PREREQUISITE_FIELD")
+        contract_id = expected[key]
+        source_id = payload.get("content_sha256")
+        source = sources_by_id.get(source_id)
+        instrument = target_instruments[key[0]]
+        if (node.get("status") != "VERIFIED" or
+                payload.get("verification_status") != "VERIFIED" or
+                payload.get("target_session") != dict(session_identity) or
+                node.get("session") != dict(session_identity) or
+                payload.get("instrument") != dict(instrument) or
+                node.get("instrument") != dict(instrument) or
+                payload.get("contract_id") != contract_id or
+                node.get("contract_id") != contract_id):
+            raise ValueError("PREREQUISITE_IDENTITY_OR_CONTRACT_MISMATCH")
+        if source is None:
+            raise ValueError("EXACT_SOURCE_ANCESTOR_REQUIRED")
+        if source_id in used_source_ids:
+            raise ValueError("SOURCE_ANCESTOR_REUSED")
+        if (source.get("status") != "VERIFIED" or
+                source.get("session", {}).get("trading_date") != prior_day.isoformat() or
+                source.get("session", {}).get("venue") != session_identity["venue"] or
+                source.get("session", {}).get("calendar_id") != session_identity["calendar_id"] or
+                source.get("session", {}).get("calendar_version") != session_identity["calendar_version"] or
+                source.get("instrument") != dict(instrument) or
+                payload.get("source_session") != dict(predecessor) or
+                payload.get("source_contract_id") != source.get("contract_id")):
+            raise ValueError("SOURCE_ANCESTOR_IDENTITY_MISMATCH")
+        for evidence in (node, source):
+            available = evidence.get("available_epoch")
+            if (available is None or not isinstance(available, (int, float)) or
+                    not math.isfinite(float(available)) or float(available) > epoch):
+                raise ValueError("T1_EVIDENCE_NOT_AVAILABLE_AT_DECISION")
+        observed[key] = node
+        used_source_ids.add(source_id)
+    if set(observed) != set(expected):
+        raise ValueError("MISSING_T1_PREREQUISITE_FIELD")
+    if set(sources_by_id) != used_source_ids:
+        raise ValueError("UNRESOLVED_OR_UNUSED_SOURCE_NODE")
+
+    graph = HeritageGraph()
+    calendar_id = graph.add_node(calendar)
+    for node in sources_by_id.values():
+        graph.add_node(node)
+    for key, node in observed.items():
+        node_id = graph.add_node(node)
+        source_id = node["payload"]["content_sha256"]
+        graph.add_edge(parent_id=source_id, child_id=node_id,
+                       requirement=expected[key], parent_hash=source_id)
+        graph.add_edge(parent_id=calendar_id, child_id=node_id,
+                       requirement="PREVIOUS_ELIGIBLE_SESSION", parent_hash=calendar_id)
+    report = graph.verify(decision_epoch=epoch)
+    if report.get("verdict") != "PASS":
+        raise ValueError("ASSEMBLED_T1_GRAPH_VERIFICATION_FAILED")
+    return graph
+
+
 class SessionHeritageIndex:
     """Bounded, explicit index of immutable run manifests for one session.
 
