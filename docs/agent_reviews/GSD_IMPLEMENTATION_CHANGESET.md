@@ -123,3 +123,10 @@ No broker API calls, orders, live/paper authorization, strategy entry windows/th
 - `core/market_heritage_graph.py` invokes that separate verifier at runtime after pinned hash and structural checks. It localizes semantic errors to the exact requested prerequisite node so unrelated strategy readiness remains independent; structural/hash failures still block the manifest. Runtime row validation preserves precise blocker reasons.
 - Added five self-consistent rehashed-manifest negative cases covering derived node status, payload status, future payload availability, missing prerequisite availability, and missing calendar availability. Each is rejected by both the independent verifier and runtime loader.
 - Validation: graph suite **59 passed**; combined scoped campaign **266 passed**; feed regression **73 passed**; compileall and diff check passed. Synthetic-only; real T-1 sources/calendar and fresh runtime remain blocked/unknown.
+
+
+## Local source-corpus gate recheck
+
+- Read the current canonical registry at `/Volumes/TradeBotData/NIFTY50_1M_2009_2026_V3_CURRENT/datasets/NIFTY50_1M_CANONICAL.json` (SHA-256 `6af17029074fc130cfb78a83d95bef7f456220d12ed4df4e65e584e9e205b2a5`) and its research-ready parquet (SHA-256 `829f2e72ab3e97b8a9262cee741f738ac62a37d2634fe108886648ff125ffec9`).
+- The registered research-ready window ends `2026-09-04 15:29:00+05:30`; `2026-09-07` is provisional. The corpus is spot index, explicitly research-only, and has non-authoritative volume. The registry's declared `MASTER_MANIFEST.json` path is absent.
+- This data cannot establish the `2026-09-28` daily close/SMA input or exact NIFTY futures contract/15:29 bar. Added both hashes to the source manifest as rejected research-only candidates; `V09` and real `V12` remain `BLOCKED_SOURCE_EVIDENCE`.

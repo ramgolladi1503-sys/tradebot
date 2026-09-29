@@ -92,3 +92,8 @@ The public T-1 publishing API must not require callers to hand-wire ancestry edg
 ### Runtime independent-verification and field-local failure addendum
 
 The pinned runtime loader must run both structural graph/hash verification and `verify_market_heritage_manifest` against the serialized artifact at the supplied decision epoch before exposing prerequisite values. The independent verifier requires the prerequisite node and payload to both report `VERIFIED`, requires prerequisite/source/calendar availability timestamps to be finite and admissible, and rejects unsupported fields. A semantic T-1 error naming a requested prerequisite node blocks only that field/strategy; unrelated valid strategies remain independently eligible. Structural, canonical hash, unresolved-edge, or unrequested/ambiguous closure errors block the whole manifest. Mutation tests must rehash the altered node, edges, graph root, and manifest bytes so rejection proves semantics rather than incidental hash failure.
+
+
+### Current local market-data candidate check
+
+The current TradeBotData canonical NIFTY registry was re-read by exact path. Its pinned research-ready spot-index file matches SHA-256 `829f2e72ab3e97b8a9262cee741f738ac62a37d2634fe108886648ff125ffec9` and ends at `2026-09-04 15:29:00+05:30`; the registry's full actual window extends to `2026-09-07` only as a provisional tail. Registry volume is non-authoritative, the dataset is explicitly research-only, and its declared `MASTER_MANIFEST.json` target is absent. This cannot establish the 2026-09-28 daily close, exact NIFTY futures 15:29 contract continuity, or the frozen authoritative SMA200 source. It remains `RESEARCH_ONLY`, not T-1 evidence.

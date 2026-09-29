@@ -19,7 +19,7 @@
       }
     ],
     "further_reads_after_discovery": "NONE",
-    "latest_check_utc": "2026-09-29T12:21:59Z",
+    "latest_check_utc": "2026-09-29T12:28:01Z",
     "pid": 82150,
     "protected_runtime_files_read_after_latest_process_check": false,
     "raw_run_files_modified_by_this_task": false,
@@ -34,7 +34,7 @@
   "implementation_branch": "ram/mros-session-continuity-live-integration",
   "implementation_code_commit": "b04d3764d3b65a329dac14e07ed9e4dab8ba18e0",
   "implementation_status": "READ_ONLY_RUNTIME_INTEGRATION_FIXTURE_VERIFIED; T1_GRAPH_ASSEMBLY_AND_INDEPENDENT_RUNTIME_VERIFICATION_FIXTURE_VERIFIED; LEGACY_T1_INVENTORY_ONLY_AND_FAILS_CLOSED; REAL_T1_SOURCES_AND_FRESH_RUNTIME_GATES_BLOCKED",
-  "latest_check_utc": "2026-09-29T12:21:59Z",
+  "latest_check_utc": "2026-09-29T12:28:01Z",
   "raw_sources_modified": false,
   "read_only": true,
   "runtime_source_authority": "NO_NEW_RUNTIME_SOURCE_EVIDENCE_CAPTURED",
@@ -157,6 +157,28 @@
       "sha256": "dac3bd51275b789d0c1f9352e65922bd36ead86be9abb115e267f603144145e5",
       "source_authority": "LEGACY_UNVERIFIED",
       "status": "BLOCKED_SOURCE_EVIDENCE"
+    },
+    {
+      "append": false,
+      "bytes": 3177,
+      "note": "Current research-only spot-index registry inspected directly; research-ready window ends 2026-09-04, full actual window includes 2026-09-07 provisional tail, volume is non-authoritative, and its declared MASTER_MANIFEST.json path is absent. Does not establish 2026-09-28 T-1 close, futures contract identity, or an authoritative 200-session prerequisite source.",
+      "path": "/Volumes/TradeBotData/NIFTY50_1M_2009_2026_V3_CURRENT/datasets/NIFTY50_1M_CANONICAL.json",
+      "read_only": true,
+      "sha256": "6af17029074fc130cfb78a83d95bef7f456220d12ed4df4e65e584e9e205b2a5",
+      "status": "RESEARCH_ONLY_REGISTRY_NOT_T1_AUTHORITY"
+    },
+    {
+      "append": false,
+      "bytes": 31980370,
+      "coverage_end": "2026-09-04 15:29:00+05:30",
+      "instrument": "NIFTY 50 spot index",
+      "note": "Observed bytes match registry hash. The series is spot-index OHLC, ends before the 2026-09-28 predecessor session, has no futures contract identity, and is explicitly research-only; it cannot verify the 15:29 futures prerequisite or the required T-1 close/SMA inputs.",
+      "path": "/Volumes/TradeBotData/NIFTY50_1M_2009_2026_V3_CURRENT/acquisitions/nifty50/20260908_master_1m_2009_2026_v3/canonical/NIFTY50_1m_2009_2026_v3_research_ready.parquet",
+      "read_only": true,
+      "sha256": "829f2e72ab3e97b8a9262cee741f738ac62a37d2634fe108886648ff125ffec9",
+      "sha256_expected_by_registry": "829f2e72ab3e97b8a9262cee741f738ac62a37d2634fe108886648ff125ffec9",
+      "source_authority": "RESEARCH_ONLY_NO_T1_SOURCE_AUTHORITY",
+      "status": "RESEARCH_ONLY_SPOT_INDEX_STALE_FOR_T1"
     }
   ],
   "status": "SOURCE_ARCHAEOLOGY_ONLY"

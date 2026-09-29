@@ -105,13 +105,13 @@
       "status": "PASS_FIXTURE_CAS_PAIR_IDEMPOTENCY"
     },
     {
-      "actual": "not established",
+      "actual": "BLOCKED_SOURCE_EVIDENCE: current local research-ready spot-index corpus ends 2026-09-04; 2026-09-07 is provisional; no exact 2026-09-28 futures 15:29 source/contract closure was found in the approved inventories.",
       "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
       "expected": "remain blocked",
       "id": "V09",
       "negative_control": "not claimed",
       "proof": "No verified exact previous-session 15:29 futures bar and matching contract closure.",
-      "source_authority": "UNKNOWN",
+      "source_authority": "RESEARCH_ONLY_CANDIDATE_REJECTED_FOR_T1",
       "status": "BLOCKED_SOURCE_EVIDENCE"
     },
     {
@@ -135,13 +135,13 @@
       "status": "PASS_SYNTHETIC_EXACT_1529_FAIL_CLOSED"
     },
     {
-      "actual": "assertions passed",
+      "actual": "Synthetic 200-row calculation/recomputation passes; current local NIFTY spot corpus ends 2026-09-04 and is research-only, so the real T-1 rolling input remains blocked.",
       "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
       "expected": "fixture proves stated primitive only; no real data authority promotion",
       "id": "V12",
       "negative_control": "not claimed",
       "proof": "test_rolling_sma_recomputes_complete_verified_series_independently",
-      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY; REAL_SOURCE_BLOCKED",
       "status": "PASS_SCALED_FIXTURE"
     },
     {
