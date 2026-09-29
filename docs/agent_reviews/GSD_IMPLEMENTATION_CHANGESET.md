@@ -140,7 +140,7 @@ No broker API calls, orders, live/paper authorization, strategy entry windows/th
 - Added `test_manifest_publication_recovers_after_process_death_before_atomic_link`: a child exits immediately after the temporary manifest file is fsynced and before the no-clobber atomic link. The interrupted file is not discoverable as a manifest or indexed head; a retry publishes, independently verifies, registers, and resolves exactly one immutable manifest. The crash may leave a dot-prefixed temporary file, which is non-authoritative.
 - Added `test_session_index_recovers_after_process_death_before_atomic_replace`: a child exits immediately before replacing a fully fsynced index temp file. The previously accepted index stays intact without the new row; retry atomically adds it and both entries resolve.
 - Added `test_session_index_concurrent_process_writers_preserve_both_manifests`: two independent Python processes concurrently register distinct verified manifests into one session index; both entries must survive and resolve. This covers OS process locking beyond the earlier thread-level fixture.
-- All three fault-injection controls pass. The manifest crash leaves no accepted manifest/index head; the index replacement crash preserves the prior valid index and the new row appears only on retry; independent concurrent process writers preserve both entries. Final validation: graph suite **64 passed**, combined scoped campaign **271 passed**, and the exact V17 command **5 passed**, each with two optional pandas dependency warnings. The fixtures prove publication recovery and index concurrency only. It does not prove filesystem power-loss guarantees on every mounted volume or source-data authority.
+- All three fault-injection controls pass. The manifest crash leaves no accepted manifest/index head; the index replacement crash preserves the prior valid index and the new row appears only on retry; independent concurrent process writers preserve both entries. Final validation before the added venue mutation: graph suite **64 passed**, combined scoped campaign **271 passed**, and the exact V17 command **5 passed**, each with two optional pandas dependency warnings. The fixtures prove publication recovery and index concurrency only. It does not prove filesystem power-loss guarantees on every mounted volume or source-data authority.
 
 
 Final commands at the V17 validation checkpoint:
@@ -152,3 +152,11 @@ Final commands at the V17 validation checkpoint:
 /opt/anaconda3/bin/python -m compileall -q core/kite_depth_ws.py core/market_heritage_graph.py core/market_heritage_verifier.py core/cas_primitive_producer.py core/cas_evaluation_ledger.py core/read_only_coverage_ledger.py core/observation_lineage.py core/kite_read_only_observation_runtime.py core/runtime_snapshot_producer.py core/canonical_cycle_coordinator.py core/read_only_consumer_cycle.py core/paper_shadow/strategy_shadow_adapter.py scripts/generate_t1_prerequisites.py scripts/verify_t1_prerequisites_oracle.py
 git diff --check
 ```
+
+
+## Final acceptance-matrix audit
+
+- V03 now includes an explicit wrong prior-source venue mutation in `test_t1_assembler_fails_closed_on_incomplete_or_mismatched_evidence`; the targeted parameterized test passed **5 cases**, including wrong date, wrong venue and future-source controls.
+- Corrected V08's stale test reference to `test_claim_completion_and_restart_are_idempotent`.
+- V07 is explicitly partial: prior verified process downtime is reported, but intraprocess cadence and continuous-coverage readiness remain `UNKNOWN_EXPECTED_CADENCE_NOT_PROVIDED`. Frozen strategy specs reviewed here do not define a per-token cadence, so no threshold was invented.
+- Final rerun after the venue case: graph suite **65 passed**, combined scoped campaign **272 passed**; each reported two optional pandas dependency warnings.

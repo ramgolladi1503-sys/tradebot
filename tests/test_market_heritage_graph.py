@@ -627,6 +627,7 @@ def test_t1_assembler_builds_exact_calendar_and_source_closure_and_publishes(tmp
     ("missing", "MISSING_T1_PREREQUISITE_FIELD"),
     ("extra", "UNEXPECTED_T1_PREREQUISITE_FIELD"),
     ("wrong_source_session", "SOURCE_ANCESTOR_IDENTITY_MISMATCH"),
+    ("wrong_source_venue", "SOURCE_ANCESTOR_IDENTITY_MISMATCH"),
     ("future_evidence", "T1_EVIDENCE_NOT_AVAILABLE_AT_DECISION"),
 ])
 def test_t1_assembler_fails_closed_on_incomplete_or_mismatched_evidence(tmp_path, case, reason):
@@ -646,6 +647,9 @@ def test_t1_assembler_fails_closed_on_incomplete_or_mismatched_evidence(tmp_path
     elif case == "wrong_source_session":
         sources[0] = {**sources[0], "session": {**sources[0]["session"],
             "trading_date": target["trading_date"]}}
+    elif case == "wrong_source_venue":
+        sources[0] = {**sources[0], "session": {**sources[0]["session"],
+            "venue": "BSE"}}
     elif case == "future_evidence":
         sources[0] = {**sources[0], "available_epoch": 101}
     with pytest.raises(ValueError, match=reason):
