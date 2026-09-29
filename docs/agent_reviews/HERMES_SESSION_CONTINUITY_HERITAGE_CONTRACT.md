@@ -97,3 +97,6 @@ The pinned runtime loader must run both structural graph/hash verification and `
 ### Current local market-data candidate check
 
 The current TradeBotData canonical NIFTY registry was re-read by exact path. Its pinned research-ready spot-index file matches SHA-256 `829f2e72ab3e97b8a9262cee741f738ac62a37d2634fe108886648ff125ffec9` and ends at `2026-09-04 15:29:00+05:30`; the registry's full actual window extends to `2026-09-07` only as a provisional tail. Registry volume is non-authoritative, the dataset is explicitly research-only, and its declared `MASTER_MANIFEST.json` target is absent. This cannot establish the 2026-09-28 daily close, exact NIFTY futures 15:29 contract continuity, or the frozen authoritative SMA200 source. It remains `RESEARCH_ONLY`, not T-1 evidence.
+
+
+Runtime localization addendum: future-information errors on an ancestor are mapped through the serialized dependency edges to only the requested T-1 prerequisite nodes that depend on that ancestor. A future source for one strategy must not suppress unrelated valid strategies. Hash/schema/unresolved-ancestor errors and future nodes with no safely attributable requested T-1 closure remain manifest-wide blockers.
