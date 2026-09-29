@@ -256,7 +256,7 @@
     },
     {
       "actual": "7 rehashed-manifest mutations blocked by the independent verifier and runtime loader; unrelated strategies remain READY for field-local semantic/source-time failures",
-      "command": "python -m pytest -q tests/test_market_heritage_graph.py::test_independent_verifier_and_runtime_reject_source_parent_availability",
+      "command": "python -m pytest -q tests/test_market_heritage_graph.py::test_independent_verifier_and_runtime_reject_unverified_prerequisite_status_or_time tests/test_market_heritage_graph.py::test_independent_verifier_and_runtime_reject_source_parent_availability",
       "expected": "A self-consistent rehashed manifest with unverified prerequisite status or inadmissible/missing evidence availability is rejected before runtime consumption; independent strategy readiness remains field-local.",
       "id": "V24",
       "negative_control": "derived node OBSERVED, payload BLOCKED, future payload availability, missing prerequisite availability, missing calendar availability, missing source availability, future source availability",
