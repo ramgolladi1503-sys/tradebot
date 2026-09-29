@@ -326,8 +326,13 @@ def assemble_t1_heritage_graph(*, session_identity: Mapping[str, Any],
         raise ValueError("INVALID_TARGET_SESSION_DATE") from exc
     if not isinstance(required_fields, Mapping) or not required_fields:
         raise ValueError("REQUIRED_T1_FIELDS_REQUIRED")
+    if not isinstance(target_instruments, Mapping):
+        raise ValueError("TARGET_INSTRUMENTS_INVALID")
     if set(required_fields) != set(target_instruments):
         raise ValueError("TARGET_STRATEGY_INSTRUMENT_SET_MISMATCH")
+    if any(not isinstance(value, Mapping) or not value
+           for value in target_instruments.values()):
+        raise ValueError("TARGET_INSTRUMENTS_INVALID")
     if not isinstance(calendar_node, Mapping):
         raise ValueError("VERIFIED_CALENDAR_PREDECESSOR_REQUIRED")
     calendar = dict(calendar_node)
@@ -408,11 +413,14 @@ def assemble_t1_heritage_graph(*, session_identity: Mapping[str, Any],
             raise ValueError("EXACT_SOURCE_ANCESTOR_REQUIRED")
         if source_id in used_source_ids:
             raise ValueError("SOURCE_ANCESTOR_REUSED")
+        source_session = source.get("session")
+        if not isinstance(source_session, Mapping) or not isinstance(source.get("instrument"), Mapping):
+            raise ValueError("SOURCE_ANCESTOR_IDENTITY_MISMATCH")
         if (source.get("status") != "VERIFIED" or
-                source.get("session", {}).get("trading_date") != prior_day.isoformat() or
-                source.get("session", {}).get("venue") != session_identity["venue"] or
-                source.get("session", {}).get("calendar_id") != session_identity["calendar_id"] or
-                source.get("session", {}).get("calendar_version") != session_identity["calendar_version"] or
+                source_session.get("trading_date") != prior_day.isoformat() or
+                source_session.get("venue") != session_identity["venue"] or
+                source_session.get("calendar_id") != session_identity["calendar_id"] or
+                source_session.get("calendar_version") != session_identity["calendar_version"] or
                 source.get("instrument") != dict(instrument) or
                 payload.get("source_session") != dict(predecessor) or
                 payload.get("source_contract_id") != source.get("contract_id")):
