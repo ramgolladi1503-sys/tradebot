@@ -8,6 +8,8 @@ def test_storage_environment_is_bound_before_depth_store_import(monkeypatch, tmp
     observed = {}
     configured = {}
     monkeypatch.setattr(observation_runtime.os, "environ", dict(os.environ))
+    stale_storage_root = tmp_path / "stale-runtime.sqlite"
+    observation_runtime.os.environ["TRADE_DB_PATH"] = str(stale_storage_root)
     fake_depth_store = SimpleNamespace(
         depth_store=SimpleNamespace(
             configure_rejection_provenance=lambda path, *, session_id, producer_sha: configured.update(
@@ -30,6 +32,7 @@ def test_storage_environment_is_bound_before_depth_store_import(monkeypatch, tmp
 
     assert returned is fake_depth_store
     assert observed["storage_root"] == str(tmp_path / "runtime.sqlite")
+    assert observed["storage_root"] != str(stale_storage_root)
     assert configured == {
         "path": output_root / "depth_rejections.jsonl",
         "session_id": "fixture-run",
