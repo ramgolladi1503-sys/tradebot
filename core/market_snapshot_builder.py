@@ -74,6 +74,7 @@ def _min_option_token_count() -> int:
 
 def _tick_payload(token: int, row: dict[str, Any] | None) -> dict[str, Any]:
     row = dict(row or {})
+    row.update(dict(row.get("_provenance") or {}))
     ts_epoch = normalize_epoch_seconds(row.get("ts_epoch"))
     return {
         "instrument_token": int(token),
@@ -81,6 +82,21 @@ def _tick_payload(token: int, row: dict[str, Any] | None) -> dict[str, Any]:
         "timestamp_epoch": ts_epoch,
         "volume": row.get("volume"),
         "oi": row.get("oi"),
+        "timestamp_authority": row.get("timestamp_authority"),
+        "timestamp_source_field": row.get("timestamp_source_field"),
+        "source_timestamp_epoch": row.get("source_timestamp_epoch"),
+        "receive_timestamp_epoch": row.get("receive_timestamp_epoch"),
+        "timestamp_fallback_used": row.get("timestamp_fallback_used"),
+        "source_event_id": row.get("source_event_id"),
+        "source_event_sha256": row.get("source_event_sha256"),
+        "source_event_payload": row.get("source_event_payload"),
+        "source_event_identity_status": (
+            "UNAVAILABLE"
+            if not row.get("source_event_id")
+            or not row.get("source_event_sha256")
+            or row.get("source_event_payload") is None
+            else "PRESENT_UNVERIFIED"
+        ),
     }
 
 

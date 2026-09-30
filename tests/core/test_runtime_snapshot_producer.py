@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+import hashlib
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from core.advisory_schema import deserialize_advisory_row, serialize_advisory_row
@@ -109,6 +110,102 @@ def test_runtime_snapshot_producer_classifies_feed_truth_once_per_cycle(tmp_path
 
     assert calls["truth"] == 1
     assert outputs["feed_health_truth_latest"]["feed_truth_state"] == "OK"
+
+
+def test_runtime_snapshot_uses_verified_same_day_cas_reference_after_restart(tmp_path, monkeypatch):
+    from core.cas_primitive_producer import CASPrimitiveStore
+    from core.market_heritage_graph import (
+        load_same_session_cas_references,
+        publish_same_session_cas_manifest,
+    )
+
+    run_root = tmp_path / "run-a"
+    run_root.mkdir()
+    source_sha = "1" * 40
+    session_date = (date.today() - timedelta(days=1)).isoformat()
+    session = {"trading_date": session_date, "venue": "NSE",
+        "calendar_id": "fixture-calendar", "calendar_version": "v1"}
+    store = CASPrimitiveStore(run_root / "cas.json", session_id="run-a",
+        source_sha=source_sha, underlying_token=256265)
+
+    def tick(price, epoch):
+        payload = {"instrument_token": 256265, "underlying_symbol": "NIFTY",
+            "last_price": price, "volume": 10, "oi": 20,
+            "source_timestamp_field": "exchange_timestamp",
+            "source_timestamp_epoch": epoch}
+        digest = hashlib.sha256(json.dumps(payload, sort_keys=True,
+            separators=(",", ":"), default=str).encode()).hexdigest()
+        return {**payload, "timestamp_epoch": epoch,
+            "timestamp_authority": "EXCHANGE_TIMESTAMP",
+            "timestamp_source_field": "exchange_timestamp",
+            "receive_timestamp_epoch": epoch, "timestamp_fallback_used": False,
+            "source_event_id": f"feed:run-a:1:256265:{digest[:16]}",
+            "source_event_sha256": digest, "source_event_payload": payload}
+
+    target_0915 = datetime.fromisoformat(f"{session_date}T09:15:00+05:30").timestamp()
+    target_1000 = datetime.fromisoformat(f"{session_date}T10:00:00+05:30").timestamp()
+    store.capture("0915", target_0915, tick(25000.0, target_0915 + 0.5), capture_timestamp_ist="09:15")
+    store.capture("1000", target_1000, tick(25100.0, target_1000 + 0.5), capture_timestamp_ist="10:00")
+    heritage_root = tmp_path / "heritage"
+    assert publish_same_session_cas_manifest(heritage_root=heritage_root,
+        session_identity=session, run_id="run-a", source_sha=source_sha,
+        underlying_token=256265, primitives=store.rows)["status"] == "PUBLISHED"
+    inherited = load_same_session_cas_references(heritage_root=heritage_root,
+        session_identity=session, current_run_id="run-b", source_sha=source_sha,
+        underlying_token=256265)
+
+    runtime_root = tmp_path / "runtime"
+    logs_root = runtime_root / "logs"
+    logs_root.mkdir(parents=True, exist_ok=True)
+    market_snapshot = build_market_snapshot(
+        generated_at="2026-03-10T12:00:00Z", market_open=True,
+        symbols_payload={"NIFTY": build_symbol_market_snapshot(spot=22500.0, ltp=22510.0)},
+        warnings=[], compute_ms=3.0, loop_id="loop-inherited")
+    monkeypatch.setattr(producer, "logs_dir", lambda: logs_root)
+    monkeypatch.setattr(producer, "canonical_suggestions_log_path", lambda: logs_root / "suggestions.jsonl")
+    monkeypatch.setattr(producer, "MARKET_SNAPSHOT_PATH", runtime_root / "market_snapshot.json")
+    monkeypatch.setattr(producer, "ADVISORY_LATEST_PATH", runtime_root / "advisory_latest.json")
+    monkeypatch.setattr(producer, "FEED_RUNTIME_LATEST_PATH", runtime_root / "feed_runtime_latest.json")
+    monkeypatch.setattr(producer, "TOKEN_RESOLUTION_LATEST_PATH", runtime_root / "token_resolution_latest.json")
+    monkeypatch.setattr(producer, "_build_advisory_latest_payload", lambda limit=200: {"rows": [], "row_count": 0, "source_path": "", "notes": []})
+    monkeypatch.setattr(producer, "_build_and_write_canonical_ranked_snapshot", lambda *args, **kwargs: None)
+    monkeypatch.setattr(producer, "stages_build_feed_health_truth_latest_payload", lambda payload: (
+        {"feed_ok": True, "feed_truth_state": "OK", "feed_truth_strict_live": True},
+        SimpleNamespace(to_payload=lambda: {"feed_ok": True})))
+    monkeypatch.setattr(producer, "load_current_feed_runtime", lambda path: {
+        "valid": True, "payload": {"ws_connected": True}})
+
+    outputs = producer.produce_and_store_runtime_snapshots(
+        market_snapshot=market_snapshot, producer="unit_test", loop_id="run-b:1",
+        session_id="run-b", source_sha=source_sha,
+        inherited_cas_references=inherited["primitives"],
+        trading_session_identity=session)
+    assert outputs["cas_short_horizon_inputs"]["lineage_status"] == "INHERITED_VERIFIED"
+    assert outputs["cas_short_horizon_inputs"]["session_id"] == "run-b"
+    assert outputs["cas_short_horizon_inputs"]["source_run_ids"] == ["run-a"]
+
+    current_path = runtime_root / "cas_short_horizon_primitives_run-b.json"
+    current_store = CASPrimitiveStore(current_path, session_id="run-b",
+        source_sha=source_sha, underlying_token=256265)
+    current_store.capture("1000", target_1000, tick(25100.0, target_1000 + 0.5), capture_timestamp_ist="10:00")
+    mixed_outputs = producer.produce_and_store_runtime_snapshots(
+        market_snapshot=market_snapshot, producer="unit_test", loop_id="run-b:2",
+        session_id="run-b", source_sha=source_sha,
+        inherited_cas_references=inherited["primitives"],
+        trading_session_identity=session, cas_primitive_path=current_path)
+    mixed = mixed_outputs["cas_short_horizon_inputs"]
+    assert mixed["lineage_status"] == "SAME_SESSION_HERITAGE_VERIFIED"
+    assert mixed["source_run_ids"] == ["run-a", "run-b"]
+    assert mixed["lineage"]["0915"]["source_run_id"] == "run-a"
+    assert mixed["lineage"]["1000"]["source_run_id"] == "run-b"
+
+    current_store.capture("0915", target_0915, tick(25000.0, target_0915 + 0.5), capture_timestamp_ist="09:15")
+    current_outputs = producer.produce_and_store_runtime_snapshots(
+        market_snapshot=market_snapshot, producer="unit_test", loop_id="run-b:3",
+        session_id="run-b", source_sha=source_sha,
+        cas_primitive_path=current_path)
+    assert current_outputs["cas_short_horizon_inputs"]["session_id"] == "run-b"
+    assert "lineage_status" not in current_outputs["cas_short_horizon_inputs"]
 
 
 def test_tail_jsonl_rows_uses_cache_when_file_is_unchanged(tmp_path, monkeypatch):

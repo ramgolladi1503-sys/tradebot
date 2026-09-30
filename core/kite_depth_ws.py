@@ -5,6 +5,7 @@ import os
 import time
 import threading
 import json
+import hashlib
 import re
 import atexit
 import sqlite3
@@ -129,7 +130,7 @@ def get_latest_tick_rows_db(tokens: list[int] | None) -> dict[int, dict]:
             tok_int = int(tok)
         except Exception:
             continue
-        tick = get_last_tick(tok_int, allow_db=True)
+        tick = get_last_tick(tok_int, allow_db=True, include_provenance=True)
         if not isinstance(tick, dict):
             continue
         if tick.get("ts_epoch") is None:
@@ -137,6 +138,7 @@ def get_latest_tick_rows_db(tokens: list[int] | None) -> dict[int, dict]:
         out[tok_int] = {
             "ts_epoch": tick.get("ts_epoch"),
             "ltp": tick.get("ltp"),
+            **dict(tick.get("_provenance") or {}),
         }
     return out
 
@@ -365,6 +367,29 @@ def _nifty_mode_lifecycle_path() -> Path | None:
     return Path(root) / "live" / "nifty_mode_lifecycle.jsonl"
 
 
+def _broker_api_safety_fields() -> dict[str, Any]:
+    ledger = getattr(kite_client, "_broker_api_ledger", None)
+    if ledger is not None:
+        return ledger.safety_fields()
+    return {
+        "broker_api_measurement_scope": "UNMEASURED_NO_ACTIVE_OBSERVER_LEDGER",
+        "broker_api_called": False,
+        "broker_api_call_count": 0,
+        "broker_api_call_attempt_count": 0,
+        "broker_api_call_failure_count": 0,
+        "broker_api_call_blocked_count": 0,
+        "broker_api_ledger_write_failure_count": 0,
+        "broker_api_call_ledger_event_count": 0,
+        "broker_api_call_ledger_head_sha256": "0" * 64,
+        "broker_api_call_ledger_verified": False,
+        "broker_api_call_ledger_verification_status": "PENDING",
+        "broker_write_authority": False,
+        "order_authority": False,
+        "paper_authorized": False,
+        "live_authorized": False,
+    }
+
+
 def _client_mode_for_token(ws: Any, token: int) -> object:
     try:
         subscribed_tokens = getattr(ws, "subscribed_tokens", None)
@@ -418,7 +443,7 @@ def _record_ws_subscription_operation(
         "reason": str(reason or ""),
         "read_only": True,
         "is_order_action": False,
-        "broker_api_called": False,
+        **_broker_api_safety_fields(),
         "allowed_for_live_execution": False,
     }
     path = _nifty_mode_lifecycle_path()
@@ -736,7 +761,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         },
         "read_only": True,
         "is_order_action": False,
-        "broker_api_called": False,
+        **_broker_api_safety_fields(),
         "allowed_for_live_execution": False,
     }
     observation_state = _observation_state_payload()
@@ -761,6 +786,7 @@ _LAST_FEED_TICK_LOG_MINUTE: int | None = None
 _LAST_FEED_HEALTH_STATE: str | None = None
 _RUNTIME_STATE: str = "STOPPED"
 _LAST_RUNTIME_ERROR: str = ""
+_ACTIVE_AUTH_MODE: str = "profile"
 _INTENDED_TOKEN_COUNT: int = 0
 _LAST_OPTION_TOKEN_INCIDENT_TS: dict[str, float] = {}
 _LAST_ATM_BY_SYMBOL: dict[str, int] = {}
@@ -2075,7 +2101,7 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
         },
         "read_only": True,
         "is_order_action": False,
-        "broker_api_called": False,
+        **_broker_api_safety_fields(),
         "allowed_for_live_execution": False,
     }
     observation_state = _observation_state_payload()
@@ -6943,9 +6969,26 @@ def on_ticks(ws, ticks):
         last_price_float = _safe_float(last_price)
         timestamp_provenance = _timestamp_provenance(t, receive_epoch=now_epoch)
         if _NORMALIZED_TICK_SINK is not None:
+            source_event_payload = {
+                "instrument_token": token_int,
+                "underlying_symbol": symbol,
+                "last_price": last_price_float,
+                "volume": t.get("volume", t.get("volume_traded")),
+                "oi": t.get("oi"),
+                "source_timestamp_field": timestamp_provenance.get("timestamp_source_field"),
+                "source_timestamp_epoch": timestamp_provenance.get("source_timestamp_epoch"),
+            }
+            source_event_hash = hashlib.sha256(
+                json.dumps(source_event_payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+            ).hexdigest()
+            source_event_id = f"{_ensure_feed_session_id()}:{_FEED_ON_TICKS_ROW_SEQ}:{token_int}:{source_event_hash[:16]}"
             _NORMALIZED_TICK_SINK({"instrument_token": token_int, "underlying_symbol": symbol,
                 "last_price": last_price_float,
-                "timestamp_epoch": ts_value, **timestamp_provenance})
+                "timestamp_epoch": ts_value,
+                "source_event_id": source_event_id,
+                "source_event_sha256": source_event_hash,
+                "source_event_payload": source_event_payload,
+                **timestamp_provenance})
         volume = t.get("volume")
         if volume is None:
             volume = t.get("volume_traded")
@@ -6979,6 +7022,9 @@ def on_ticks(ws, ticks):
                 last_price=last_price_float,
                 volume=volume,
                 oi=oi,
+                source_event_id=source_event_id if _NORMALIZED_TICK_SINK is not None else None,
+                source_event_sha256=source_event_hash if _NORMALIZED_TICK_SINK is not None else None,
+                source_event_payload=source_event_payload if _NORMALIZED_TICK_SINK is not None else None,
                 **timestamp_provenance,
             )
             if not ok:
@@ -7177,7 +7223,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     Full restart: close existing ticker and recreate with last known tokens.
     Rate-limited to avoid restart storms.
     """
-    global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+    global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _ACTIVE_AUTH_MODE
 
     _log_ws("feed_restart_required", {"reason": reason})
     try:
@@ -7368,7 +7414,12 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
             try:
                 _log_ws("feed_restart_attempt", {"reason": reason})
-                started = start_depth_ws(tokens, profile_verified=False, skip_guard=True)
+                started = start_depth_ws(
+                    tokens,
+                    profile_verified=False,
+                    skip_guard=True,
+                    auth_mode=_ACTIVE_AUTH_MODE,
+                )
             except Exception as exc:
                 _log_ws("feed_restart_failed", {"reason": reason, "error": str(exc)})
                 _RUNTIME_STATE = "RESTART_FAILED"
@@ -7429,8 +7480,8 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 
 
-def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False, tick_sink=None) -> bool:
-    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION
+def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False, tick_sink=None, *, auth_mode: str = "profile") -> bool:
+    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION, _ACTIVE_AUTH_MODE
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
         try:
@@ -7528,8 +7579,23 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
     except Exception as exc:
         logger.debug("kite_ws_paths_error err=%s:%s", type(exc).__name__, exc)
-    auth_payload = get_kite_auth_health(force=True)
-    if not auth_payload.get("ok"):
+    if auth_mode not in {"profile", "read_only_observer"}:
+        raise ValueError("KITE_AUTH_MODE_UNSUPPORTED")
+    _ACTIVE_AUTH_MODE = auth_mode
+    auth_payload = get_kite_auth_health(
+        force=True,
+        **({"auth_mode": auth_mode} if auth_mode == "read_only_observer" else {}),
+    )
+    observer_auth_pending = (
+        auth_mode == "read_only_observer"
+        and auth_payload.get("auth_state") == "PENDING_WEBSOCKET_AUTH"
+    )
+    auth_contract_ok = (
+        observer_auth_pending
+        if auth_mode == "read_only_observer"
+        else bool(auth_payload.get("ok"))
+    )
+    if not auth_contract_ok:
         err = auth_payload.get("error") or "unknown_auth_error"
         _log_ws("FEED_AUTH_BLOCKED", {"error": err})
         _RUNTIME_STATE = "AUTH_BLOCKED"
@@ -7635,21 +7701,33 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
 
     computed_profile_verified = False
     profile_error = ""
-    try:
-        if rest_client is not None:
-            profile = rest_client.profile() or {}
-            user_id = str(profile.get("user_id") or "").strip()
-            if user_id:
-                computed_profile_verified = True
-                _log_ws("FEED_AUTH_PROFILE_OK", {"user_last4": user_id[-4:]})
+    if auth_mode == "read_only_observer":
+        profile_error = "profile_probe_skipped_pending_websocket_handshake"
+        _log_ws("FEED_AUTH_PENDING_WEBSOCKET_HANDSHAKE", {
+            "auth_state": "PENDING_WEBSOCKET_AUTH",
+            "read_only": True,
+            "is_order_action": False,
+            "broker_write_authority": False,
+            "order_authority": False,
+            "paper_authorized": False,
+            "live_authorized": False,
+        })
+    else:
+        try:
+            if rest_client is not None:
+                profile = rest_client.profile() or {}
+                user_id = str(profile.get("user_id") or "").strip()
+                if user_id:
+                    computed_profile_verified = True
+                    _log_ws("FEED_AUTH_PROFILE_OK", {"user_last4": user_id[-4:]})
+                else:
+                    profile_error = "missing_user_id"
             else:
-                profile_error = "missing_user_id"
-        else:
-            profile_error = "kite_client_unavailable"
-    except Exception as exc:
-        profile_error = f"{type(exc).__name__}:{exc}"
-    if not computed_profile_verified:
-        _log_ws("FEED_AUTH_PROFILE_FAIL", {"error": profile_error or "unknown"})
+                profile_error = "kite_client_unavailable"
+        except Exception as exc:
+            profile_error = f"{type(exc).__name__}:{exc}"
+        if not computed_profile_verified:
+            _log_ws("FEED_AUTH_PROFILE_FAIL", {"error": profile_error or "unknown"})
 
     stats_api = _masked_secret_stats("api_key", api_key)
     stats_token = _masked_secret_stats("access_token", access_token)
@@ -8122,6 +8200,17 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             campaign_raw_diagnostics.start_reactor_heartbeat(getattr(getattr(ws, "factory", None), "reactor", None))
             if not _generation_is_current("on_connect"):
                 return
+            if auth_mode == "read_only_observer":
+                _log_ws("FEED_WS_AUTHENTICATED", {
+                    "auth_state": "VERIFIED_BY_WEBSOCKET_HANDSHAKE",
+                    "source": "websocket_on_connect",
+                    "read_only": True,
+                    "is_order_action": False,
+                    "broker_write_authority": False,
+                    "order_authority": False,
+                    "paper_authorized": False,
+                    "live_authorized": False,
+                })
             _clear_last_disconnected_info()
             _record_feed_restart_verify_connect(now_epoch=float(now_utc_epoch()))
             _log_ws("ws_connected", {"response": str(response), "ws_lifecycle_state": "CONNECTED"})
@@ -9048,7 +9137,26 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         from twisted.internet import reactor
         if getattr(reactor, "_started", False) and not getattr(reactor, "running", False):
             raise RuntimeError("ReactorNotRestartable: Twisted reactor was started and stopped")
-        kws.connect(threaded=True)
+        broker_api_ledger = getattr(kite_client, "_broker_api_ledger", None)
+        websocket_call_id = None
+        if broker_api_ledger is not None:
+            # Persist the observer's outbound websocket attempt before handing
+            # control to the SDK transport. The URL query contains credentials
+            # and is intentionally omitted from evidence by the ledger.
+            websocket_call_id = broker_api_ledger.record_websocket_connect_attempt(
+                getattr(kws, "socket_url", "")
+            )
+        try:
+            kws.connect(threaded=True)
+        except Exception as connect_exc:
+            if broker_api_ledger is not None and websocket_call_id is not None:
+                broker_api_ledger.record_websocket_connect_outcome(
+                    websocket_call_id, error=connect_exc
+                )
+            raise
+        else:
+            if broker_api_ledger is not None and websocket_call_id is not None:
+                broker_api_ledger.record_websocket_connect_outcome(websocket_call_id)
     except Exception as exc:
         reconnect_blocked_reason = None
         if _is_reactor_not_restartable_error(exc):

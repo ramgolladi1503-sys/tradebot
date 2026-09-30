@@ -119,10 +119,16 @@ class CanonicalCycleCoordinator:
     """Serialize canonical cycles and emit reconstructable cycle evidence."""
 
     def __init__(self, *, output_root: str | Path, session_id: str, source_sha: str,
-                 cadence_seconds: float = 60.0) -> None:
+                 cadence_seconds: float = 60.0,
+                 inherited_cas_references: Mapping[str, Any] | None = None,
+                 trading_session_identity: Mapping[str, Any] | None = None,
+                 cas_primitive_path: str | Path | None = None) -> None:
         self.output_root = Path(output_root)
         self.session_id = str(session_id)
         self.source_sha = str(source_sha)
+        self.inherited_cas_references = dict(inherited_cas_references or {})
+        self.trading_session_identity = dict(trading_session_identity or {})
+        self.cas_primitive_path = Path(cas_primitive_path) if cas_primitive_path is not None else None
         self.cadence_seconds = float(cadence_seconds)
         self._lock = threading.Lock()
         self._last_started = 0.0
@@ -198,12 +204,17 @@ class CanonicalCycleCoordinator:
                 cycle_feed_truth_payload=None,
                 session_id=request.session_id,
                 source_sha=request.source_sha,
+                inherited_cas_references=self.inherited_cas_references,
+                trading_session_identity=self.trading_session_identity,
+                cas_primitive_path=self.cas_primitive_path,
             )
             consumer = run_consumer_cycle(
                 runtime_outputs=runtime_outputs, output_root=self.output_root,
                 session_id=request.session_id, source_sha=request.source_sha,
                 cycle_context={"cycle_id": request.cycle_id, "causal_data_cutoff": request.causal_data_cutoff,
-                               "trigger": request.trigger},
+                               "trigger": request.trigger,
+                               "cas_evaluation_ledger_root": str(self.output_root.parent
+                                   / "heritage" / "cas-evaluations")},
             )
             counts = _counts(runtime_outputs, consumer)
             completed = datetime.now(timezone.utc)

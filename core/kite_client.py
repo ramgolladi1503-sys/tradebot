@@ -4,6 +4,8 @@ import json
 import time
 import logging
 import inspect
+import threading
+from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -92,6 +94,43 @@ class KiteClient:
         self._last_instruments_fetch: Optional[str] = None
         self._historical_auth_cooldown_until = 0.0
         self._historical_auth_cooldown_reason = ""
+        self._broker_api_ledger = None
+        self._broker_api_ledger_lock = threading.RLock()
+
+    @contextmanager
+    def observe_broker_api_calls(self, ledger):
+        """Scope REST transport accounting to one read-only observation run."""
+        with self._broker_api_ledger_lock:
+            if self._broker_api_ledger is not None:
+                raise RuntimeError("BROKER_API_LEDGER_ALREADY_ACTIVE")
+            self._broker_api_ledger = ledger
+            try:
+                if self.kite is not None:
+                    ledger.instrument_client(self.kite)
+            except Exception:
+                self._broker_api_ledger = None
+                ledger.close()
+                raise
+        try:
+            yield ledger
+        finally:
+            ownership_changed = False
+            with self._broker_api_ledger_lock:
+                if self._broker_api_ledger is not ledger:
+                    ownership_changed = True
+                else:
+                    self._broker_api_ledger = None
+            try:
+                ledger.close()
+            finally:
+                if ownership_changed:
+                    raise RuntimeError("BROKER_API_LEDGER_OWNERSHIP_CHANGED")
+
+    def _instrument_for_observation(self, kite):
+        with self._broker_api_ledger_lock:
+            ledger = self._broker_api_ledger
+            if ledger is not None:
+                ledger.instrument_client(kite)
 
     # ---------------------------
     # Logging (atomic write)
@@ -139,6 +178,7 @@ class KiteClient:
             and self._active_access_token == access_token
         ):
             self.last_init_error = ""
+            self._instrument_for_observation(self.kite)
             return self.kite
         try:
             # Runtime auth remains file-based and credentials are checked on every
@@ -160,6 +200,7 @@ class KiteClient:
             f"kite_id={id(kite)}"
         )
 
+        self._instrument_for_observation(kite)
         self.kite = kite
         self._active_api_key = api_key
         self._active_access_token = access_token

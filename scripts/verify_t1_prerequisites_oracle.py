@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Materially separate independent oracle verifier for T-1 prerequisites manifest.
+"""Independent verifier for the fail-closed legacy T-1 inventory.
 
-Independently hashes sources, re-derives spot close, re-computes SMA200 if series
-is present, verifies contract semantics, checks fail-closed bounds, and re-computes
-the payload canonical SHA-256 without calling or importing generate_t1_prerequisites.py.
+This verifier authenticates file references and the inventory payload only. It
+does not certify market values. Runtime prerequisites require the separate
+content-addressed graph verifier and pinned manifest path/hash.
 """
 from __future__ import annotations
 
@@ -11,106 +11,108 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Mapping
-import pandas as pd
+from typing import Any
+
+MAX_INVENTORY_SOURCE_BYTES = 512 * 1024 * 1024
+
+
+def _sha256_file(path: Path) -> str:
+    before = path.stat()
+    if before.st_size > MAX_INVENTORY_SOURCE_BYTES:
+        raise ValueError("SOURCE_FILE_SIZE_BOUND_EXCEEDED")
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    after = path.stat()
+    if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
+            after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+        raise ValueError("SOURCE_CHANGED_DURING_HASH")
+    return digest.hexdigest()
+
+
+def _verify_optional_source(doc: dict[str, Any], path_key: str, sha_key: str) -> bool:
+    source = doc.get(path_key)
+    digest = doc.get(sha_key)
+    if source is None:
+        if digest is not None:
+            raise ValueError(f"{sha_key} must be null when {path_key} is absent")
+        return False
+    source_path = Path(source)
+    if not source_path.is_file():
+        raise FileNotFoundError(f"Underlying source missing: {source_path}")
+    if _sha256_file(source_path) != digest:
+        raise ValueError(f"{sha_key} mismatch")
+    return True
 
 
 def verify_manifest(manifest_path: Path) -> dict[str, Any]:
     if not manifest_path.is_file():
         raise FileNotFoundError(f"Manifest not found: {manifest_path}")
+    doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if doc.get("schema_version") != 2 or doc.get("artifact_type") != "LEGACY_T1_SOURCE_INVENTORY":
+        raise ValueError("Unsupported artifact schema or type")
 
-    raw_manifest = manifest_path.read_text(encoding="utf-8")
-    doc = json.loads(raw_manifest)
+    snapshot_path = Path(doc["source_snapshot"])
+    if not snapshot_path.is_file():
+        raise FileNotFoundError(f"Underlying snapshot missing: {snapshot_path}")
+    snapshot_sha = _sha256_file(snapshot_path)
+    if snapshot_sha != doc.get("source_snapshot_sha256"):
+        raise ValueError("Source snapshot SHA-256 mismatch")
 
-    # 1. Independent Snapshot Source Hashing and Verification
-    snap_path = Path(doc["source_snapshot"])
-    if not snap_path.is_file():
-        raise FileNotFoundError(f"Underlying snapshot missing: {snap_path}")
+    futures_present = _verify_optional_source(doc, "futures_dataset_path", "futures_dataset_sha256")
+    history_present = _verify_optional_source(doc, "historical_dataset_path", "historical_dataset_sha256")
+    blocked_fields = {
+        "opening_drive_prev_contract_key": "opening_drive_prev_contract_key_status",
+        "opening_drive_prev_close_1529": "opening_drive_prev_close_1529_status",
+        "overnight_prev_daily_close": "overnight_prev_daily_close_status",
+        "overnight_prev_sma200": "sma200_status",
+    }
+    for value_key, status_key in blocked_fields.items():
+        if doc.get(value_key) is not None:
+            raise ValueError(f"{value_key} cannot be promoted by a legacy inventory")
+        if doc.get(status_key) != "BLOCKED_SOURCE_AUTHORITY":
+            raise ValueError(f"{status_key} must remain BLOCKED_SOURCE_AUTHORITY")
+    if doc.get("opening_drive_target_expiry") is not None:
+        raise ValueError("opening_drive_target_expiry cannot be promoted by a legacy inventory")
+    if doc.get("sma200_calculation_window_days") != 0 or doc.get("futures_row_count") is not None:
+        raise ValueError("legacy inventory cannot claim source row or calculation coverage")
+    if doc.get("calendar_status") != "BLOCKED_SOURCE_AUTHORITY" or doc.get("manifest_status") != "BLOCKED_SOURCE_AUTHORITY":
+        raise ValueError("calendar and manifest authority must remain blocked")
+    if (doc.get("read_only") is not True or doc.get("append") is not False
+            or doc.get("is_order_action") is not False
+            or doc.get("broker_api_called") is not False
+            or doc.get("allowed_for_live_execution") is not False):
+        raise ValueError("Authority boundary invalid")
 
-    snap_bytes = snap_path.read_bytes()
-    computed_snap_sha = hashlib.sha256(snap_bytes).hexdigest()
-    if computed_snap_sha != doc.get("source_snapshot_sha256"):
-        raise ValueError(f"Snapshot SHA mismatch: computed {computed_snap_sha} vs doc {doc.get('source_snapshot_sha256')}")
-
-    snap_json = json.loads(snap_bytes.decode("utf-8"))
-    nifty_spot = (snap_json.get("payload") or {}).get("symbols", {}).get("NIFTY", {})
-    ltp = nifty_spot.get("ltp") or (nifty_spot.get("quote_truth") or {}).get("ltp")
-    if ltp is None or float(ltp) != doc["overnight_prev_daily_close"]:
-        raise ValueError(f"Spot close mismatch: oracle={ltp} vs manifest={doc['overnight_prev_daily_close']}")
-
-    # 2. Independent Futures 15:29 Verification
-    fut_path_str = doc.get("futures_dataset_path")
-    if fut_path_str is not None:
-        fut_path = Path(fut_path_str)
-        if fut_path.is_file():
-            fut_bytes = fut_path.read_bytes()
-            computed_fut_sha = hashlib.sha256(fut_bytes).hexdigest()
-            if computed_fut_sha != doc.get("futures_dataset_sha256"):
-                raise ValueError("Futures dataset SHA-256 mismatch")
-    else:
-        # Source authority is blocked; manifest must declare null and BLOCKED_SOURCE_AUTHORITY
-        if doc.get("opening_drive_prev_close_1529") is not None:
-            raise ValueError("opening_drive_prev_close_1529 must be null when futures dataset is absent")
-        if doc.get("t1_prev_close_status") != "BLOCKED_SOURCE_AUTHORITY":
-            raise ValueError("t1_prev_close_status must be BLOCKED_SOURCE_AUTHORITY when futures dataset is absent")
-
-    # 3. Independent SMA200 Window & Calculation Verification
-    hist_path_str = doc.get("historical_dataset_path")
-    if hist_path_str is not None:
-        hist_path = Path(hist_path_str)
-        if hist_path.is_file():
-            hist_bytes = hist_path.read_bytes()
-            computed_hist_sha = hashlib.sha256(hist_bytes).hexdigest()
-            if computed_hist_sha != doc.get("historical_dataset_sha256"):
-                raise ValueError("Historical dataset SHA-256 mismatch")
-            if hist_path.suffix in (".parquet", ".pq"):
-                hdf = pd.read_parquet(hist_path)
-            else:
-                hdf = pd.read_csv(hist_path)
-            date_col = "Date" if "Date" in hdf.columns else ("session_date" if "session_date" in hdf.columns else "date")
-            close_col = "Close" if "Close" in hdf.columns else ("close" if "close" in hdf.columns else "spot_close")
-            clean_hdf = hdf[[date_col, close_col]].dropna().drop_duplicates(subset=[date_col]).sort_values(by=date_col)
-            clean_hdf = clean_hdf[clean_hdf[date_col].astype(str) <= doc["source_session_date"]]
-            w_df = clean_hdf.tail(200)
-            computed_sma = round(float(w_df[close_col].mean()), 4)
-            if computed_sma != doc.get("overnight_prev_sma200"):
-                raise ValueError("SMA-200 calculation mismatch")
-            if str(w_df.iloc[0][date_col]) != doc.get("sma200_window_start") or str(w_df.iloc[-1][date_col]) != doc.get("sma200_window_end"):
-                raise ValueError("SMA-200 window dates mismatch")
-    else:
-        # Historical daily series blocked; manifest must declare null and BLOCKED_SOURCE_AUTHORITY
-        if doc.get("overnight_prev_sma200") is not None:
-            raise ValueError("overnight_prev_sma200 must be null when historical daily dataset is absent")
-        if doc.get("sma200_status") != "BLOCKED_SOURCE_AUTHORITY":
-            raise ValueError("sma200_status must be BLOCKED_SOURCE_AUTHORITY when historical daily dataset is absent")
-
-    # 4. Independent Payload SHA-256 Verification
     payload_copy = dict(doc)
     stored_sha = payload_copy.pop("payload_sha256", None)
-    canonical_repr = json.dumps(payload_copy, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    recalculated_sha = hashlib.sha256(canonical_repr).hexdigest()
-    if stored_sha != recalculated_sha:
-        raise ValueError(f"Payload SHA-256 mismatch: stored {stored_sha} vs recalculated {recalculated_sha}")
+    canonical = json.dumps(payload_copy, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+    recalculated = hashlib.sha256(canonical).hexdigest()
+    if stored_sha != recalculated:
+        raise ValueError("Inventory payload SHA-256 mismatch")
 
     return {
         "manifest_path": str(manifest_path),
         "source_snapshot_sha_verified": True,
-        "spot_close_recalculated": float(ltp),
-        "spot_close_matches": True,
-        "t1_close_authority_status": doc.get("t1_prev_close_status"),
-        "sma200_authority_status": doc.get("sma200_status"),
+        "futures_source_hash_verified": futures_present,
+        "historical_source_hash_verified": history_present,
+        "data_authority": "BLOCKED_SOURCE_AUTHORITY",
         "payload_sha_verified": True,
-        "independent_oracle_verdict": "PASS",
+        "independent_oracle_verdict": "PASS_BLOCKED_INVENTORY_ONLY",
+        "read_only": True,
+        "append": False,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Independent Oracle for T-1 prerequisites")
+    parser = argparse.ArgumentParser(description="Verify a blocked legacy T-1 source inventory")
     parser.add_argument("--manifest", type=Path, required=True)
     args = parser.parse_args()
-
-    res = verify_manifest(args.manifest)
-    print(json.dumps(res, indent=2))
+    print(json.dumps(verify_manifest(args.manifest), indent=2))
     return 0
 
 

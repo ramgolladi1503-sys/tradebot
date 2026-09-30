@@ -26,6 +26,20 @@ _FORBIDDEN_OBSERVER_PREFIXES = (
 )
 
 
+class _SyntheticBrokerRequestSession:
+    def request(self, method, url, **kwargs):
+        return type("Response", (), {"status_code": 200})()
+
+
+class _SyntheticProfileClient:
+    def __init__(self):
+        self.reqsession = _SyntheticBrokerRequestSession()
+
+    def profile(self):
+        self.reqsession.request("GET", "https://api.kite.trade/user/profile")
+        return {"user_id": "redacted"}
+
+
 @pytest.fixture
 def clean_observer_import_boundary():
     """Temporarily remove test-preloaded broker mocks without weakening runtime checks."""
@@ -104,6 +118,9 @@ def test_lifecycle_drain_report_uses_real_persistence_shutdown_apis(monkeypatch)
     assert report["shutdown_drain_complete"] is True
     assert report["feed_close_requested"] is True
     assert report["meg_bridge_flush"]["flushed"] is True
+    assert report["broker_api_called"] is False
+    assert report["broker_api_call_count"] == 0
+    assert report["broker_api_measurement_scope"] == "UNMEASURED_NO_ACTIVE_OBSERVER_LEDGER"
 
 
 def test_safe_environment_overwrites_inherited_live_values():
@@ -171,7 +188,7 @@ def test_real_composition_wires_launch_plan_to_feed_start(
     observed = {}
 
     monkeypatch.setattr(auth, "get_kite_credentials", lambda **_: ("api-key", "token"))
-    monkeypatch.setattr(auth, "get_kite_client", lambda **_: type("Profile", (), {"profile": lambda self: {"user_id": "redacted"}})())
+    monkeypatch.setattr(auth, "get_kite_client", lambda **_: _SyntheticProfileClient())
     monkeypatch.setattr(feed, "activate_market_event_graph_launch_plan", lambda plan: observed.setdefault("plan", plan) or {"ok": True})
     monkeypatch.setattr(feed, "start_depth_ws", lambda tokens, **kwargs: observed.update(tokens=list(tokens), kwargs=kwargs) or True)
     monkeypatch.setattr(feed, "stop_depth_ws", lambda **kwargs: observed.setdefault("stopped", True))
@@ -198,8 +215,27 @@ def test_real_composition_wires_launch_plan_to_feed_start(
     from core.kite_read_only_observation_runtime import run_observation
     assert run_observation(launch_plan=plan, output_root=governed_root / "out", token_path=token_path, session_date="2026-08-04", max_runtime_sec=0.06) == 0
     assert observed["tokens"] == [256265, 6401]
-    assert observed["kwargs"]["profile_verified"] is True
+    assert observed["kwargs"]["profile_verified"] is False
+    assert observed["kwargs"]["auth_mode"] == "read_only_observer"
     assert observed["stopped"] is True
+    drain = json.loads((governed_root / "out" / "shutdown_drain.json").read_text(encoding="utf-8"))
+    assert drain["broker_api_called"] is False
+    assert drain["broker_api_call_count"] == 0
+    assert drain["broker_api_call_ledger_verified"] is True
+    assert drain["broker_api_call_ledger_verification_status"] == "VERIFIED"
+    assert drain["broker_write_authority"] is False
+    assert drain["order_authority"] is False
+    startup = json.loads((governed_root / "out" / "startup_safety_contract.json").read_text(encoding="utf-8"))
+    assert startup["broker_api_called"] is False
+    assert startup["broker_api_call_count"] == 0
+    assert startup["broker_api_measurement_scope"] == "STARTUP_SNAPSHOT_BEFORE_OBSERVER_API_PROBES"
+    assert not (governed_root / "out" / "broker_api_calls.jsonl").exists()
+    coverage = json.loads((governed_root / "out" / "feed_coverage_ledger.json").read_text(encoding="utf-8"))
+    assert coverage["broker_api_called"] is False
+    assert coverage["broker_api_call_ledger_verified"] is True
+    publication = json.loads((governed_root / "out" / "cas_heritage_publication.json").read_text(encoding="utf-8"))
+    assert publication["status"] == "BLOCKED"
+    assert publication["reason"] == "MANIFEST_SESSION_IDENTITY_REQUIRED"
 
 
 def test_active_launch_plan_tokens_are_canonical_and_not_widened(monkeypatch):
@@ -282,21 +318,44 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
         _active_api_key = "api-key"
         _active_access_token = "access-token"
         def ensure(self): return self
-        def profile(self): return {"user_id": "proof"}
+        def profile(self): raise AssertionError("observer_feed_must_not_call_profile")
 
     fake = FakeTicker()
+    feed_events = []
+    auth_payload = {"ok": True}
     monkeypatch.setattr(feed, "get_kite_ticker", lambda **_: fake)
     monkeypatch.setattr(feed, "kite_client", FakeClient())
-    monkeypatch.setattr(feed, "get_kite_auth_health", lambda **_: {"ok": True})
+    monkeypatch.setattr(feed, "get_kite_auth_health", lambda **_: dict(auth_payload))
+    monkeypatch.setattr(feed, "_log_ws", lambda event, payload=None: feed_events.append((event, payload or {})))
+    monkeypatch.setattr(feed, "_persist_runtime_snapshot_row", lambda **_: None)
+    monkeypatch.setattr(feed, "_mark_auth_required", lambda *args, **kwargs: None)
     monkeypatch.setattr(cfg, "KITE_API_KEY", "api-key")
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True)
-    assert feed.start_depth_ws(tokens, profile_verified=True, skip_lock=True, skip_guard=True)
+    assert not feed.start_depth_ws(
+        tokens, profile_verified=True, auth_mode="read_only_observer",
+        skip_lock=True, skip_guard=True,
+    )
+    assert feed._RUNTIME_STATE == "AUTH_BLOCKED"
+    auth_payload.update(ok=False, auth_state="PENDING_WEBSOCKET_AUTH")
+    assert feed.start_depth_ws(
+        tokens, profile_verified=False, auth_mode="read_only_observer",
+        skip_lock=True, skip_guard=True,
+    )
+    attempt = next(payload for event, payload in feed_events if event == "FEED_WS_HANDSHAKE_CREDENTIAL_PROOF")
+    assert attempt["profile_verified"] is False
+    assert any(event == "FEED_AUTH_PENDING_WEBSOCKET_HANDSHAKE" for event, _ in feed_events)
+    authenticated = next(payload for event, payload in feed_events if event == "FEED_WS_AUTHENTICATED")
+    assert authenticated["auth_state"] == "VERIFIED_BY_WEBSOCKET_HANDSHAKE"
+    assert feed._RUNTIME_STATE == "RUNNING"
     result = bridge.observe_cycle([], cycle_cutoff=__import__("datetime").datetime.now(__import__("datetime").timezone.utc))
     assert result.attempted is True and result.exported is True
     assert result.accepted_constituent_count == 50
     row = json.loads(export_path.read_text().splitlines()[0])
     assert len(row["constituent_bar_details"]) == 50
     assert row["read_only"] is True
+    fake.on_error(fake, 403, "TokenException: invalid access token")
+    assert any(event == "FEED_WS_AUTH_FAILURE_PROOF" for event, _ in feed_events)
+    assert feed._RUNTIME_STATE != "RUNNING"
     from core.kite_read_only_observation_runtime import write_meg_wiring_evidence
     write_meg_wiring_evidence(
         bridge=bridge,
@@ -323,6 +382,7 @@ def test_run_observation_dispatches_native_pulse_to_shadow_registry(
     import core.runtime_snapshot_producer as snapshots
     import core.runtime_storage_authority as rsa
     import core.paper_shadow.strategy_shadow_adapter as shadow_mod
+    import core.market_heritage_graph as heritage_mod
 
     observed = {"shadow_pulses": 0, "shutdowns": 0}
 
@@ -343,18 +403,21 @@ def test_run_observation_dispatches_native_pulse_to_shadow_registry(
 
     monkeypatch.setattr(shadow_mod, "StrategyShadowAdapterRegistry", FakeRegistry)
     monkeypatch.setattr(
-        shadow_mod,
-        "load_canonical_t1_prerequisites",
+        heritage_mod,
+        "load_verified_t1_prerequisites",
         lambda **_: {
             "opening_drive_prev_contract_key": "NIFTY26SEPFUT",
             "opening_drive_prev_close_1529": 23440.7,
             "opening_drive_target_expiry": "2026-09-29",
             "overnight_prev_daily_close": 23414.3,
             "overnight_prev_sma200": 24473.368,
+            "heritage_verification": {"status": "VERIFIED", "read_only": True,
+                "is_order_action": False, "broker_api_called": False,
+                "allowed_for_live_execution": False},
         },
     )
     monkeypatch.setattr(auth, "get_kite_credentials", lambda **_: ("api-key", "token"))
-    monkeypatch.setattr(auth, "get_kite_client", lambda **_: type("Profile", (), {"profile": lambda self: {"user_id": "redacted"}})())
+    monkeypatch.setattr(auth, "get_kite_client", lambda **_: _SyntheticProfileClient())
     monkeypatch.setattr(feed, "activate_market_event_graph_launch_plan", lambda plan: {"ok": True})
     monkeypatch.setattr(feed, "start_depth_ws", lambda tokens, **kwargs: True)
     monkeypatch.setattr(feed, "stop_depth_ws", lambda **kwargs: None)
@@ -400,6 +463,7 @@ def test_run_observation_dispatches_native_pulse_to_shadow_registry(
     assert observed["shadow_pulses"] >= 1
     assert observed["shutdowns"] == 1
     assert observed["registry_kwargs"]["source_sha"] == "2" * 40
+    assert observed["registry_kwargs"]["prerequisite_verification"]["status"] == "VERIFIED"
     identity = json.loads((governed_root / "out" / "process_identity.json").read_text())
     assert identity["read_only"] is True
     assert identity["order_authority"] is False
@@ -417,12 +481,15 @@ def test_shadow_registry_shutdown_failure_is_propagated(
     import core.runtime_snapshot_producer as snapshots
     import core.runtime_storage_authority as rsa
     import core.paper_shadow.strategy_shadow_adapter as shadow_mod
+    import core.market_heritage_graph as heritage_mod
+
+    observed = {}
 
     class FailingRegistry:
         adapters = {}
         disabled_strategies = {}
         def __init__(self, **kwargs):
-            pass
+            observed["registry_kwargs"] = kwargs
         def on_pulse(self, **kwargs):
             return []
         def on_session_shutdown(self):
@@ -430,18 +497,21 @@ def test_shadow_registry_shutdown_failure_is_propagated(
 
     monkeypatch.setattr(shadow_mod, "StrategyShadowAdapterRegistry", FailingRegistry)
     monkeypatch.setattr(
-        shadow_mod,
-        "load_canonical_t1_prerequisites",
-        lambda **_: {
+        heritage_mod,
+        "load_verified_t1_prerequisites",
+        lambda **kwargs: (observed.update({"heritage_kwargs": kwargs}) or {
             "opening_drive_prev_contract_key": None,
             "opening_drive_prev_close_1529": None,
             "opening_drive_target_expiry": None,
             "overnight_prev_daily_close": None,
             "overnight_prev_sma200": None,
-        },
+            "heritage_verification": {"status": "BLOCKED", "read_only": True,
+                "is_order_action": False, "broker_api_called": False,
+                "allowed_for_live_execution": False},
+        }),
     )
     monkeypatch.setattr(auth, "get_kite_credentials", lambda **_: ("api-key", "token"))
-    monkeypatch.setattr(auth, "get_kite_client", lambda **_: type("Profile", (), {"profile": lambda self: {"user_id": "redacted"}})())
+    monkeypatch.setattr(auth, "get_kite_client", lambda **_: _SyntheticProfileClient())
     monkeypatch.setattr(feed, "activate_market_event_graph_launch_plan", lambda plan: {"ok": True})
     monkeypatch.setattr(feed, "start_depth_ws", lambda tokens, **kwargs: True)
     monkeypatch.setattr(feed, "stop_depth_ws", lambda **kwargs: None)
@@ -464,7 +534,9 @@ def test_shadow_registry_shutdown_failure_is_propagated(
     monkeypatch.setattr(rsa, "revalidate", lambda *_: None)
     token_path = governed_root / "token"
     token_path.write_text("redacted")
-    plan = {"final_union_tokens": [256265], "commit_sha": "3" * 40}
+    plan = {"final_union_tokens": [256265], "commit_sha": "3" * 40,
+            "t1_facts": {"opening_drive_prev_close_1529": 99999.0,
+                         "overnight_prev_sma200": 99999.0}}
 
     from core.kite_read_only_observation_runtime import run_observation
     with pytest.raises(RuntimeError, match="synthetic_shadow_seal_failure"):
@@ -477,5 +549,9 @@ def test_shadow_registry_shutdown_failure_is_propagated(
         )
 
     marker = governed_root / "out" / "STRATEGY_SHADOW_EVIDENCE_SEAL_FAIL"
+    assert observed["heritage_kwargs"]["manifest_path"] is None
+    assert observed["heritage_kwargs"]["expected_manifest_sha256"] is None
+    assert observed["registry_kwargs"]["opening_drive_prev_close_1529"] is None
+    assert observed["registry_kwargs"]["overnight_prev_sma200"] is None
     assert marker.is_file()
     assert "synthetic_shadow_seal_failure" in marker.read_text()

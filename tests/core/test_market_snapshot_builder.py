@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 
 from config import config as cfg
@@ -43,7 +45,65 @@ def test_build_market_snapshot_passes_invariants(monkeypatch, tmp_path):
     assert snapshot["snapshot_id"]
     assert snapshot["token_coverage"]["option_tokens_count"] == 2
     assert snapshot["health"]["ok"] is True
+    option_tick = snapshot["ticks"]["options"][str(option_tokens[1])]
+    assert option_tick["source_event_id"] is None
+    assert option_tick["timestamp_authority"] is None
     assert_invariants(snapshot, stage="unit_test")
+
+
+def test_market_snapshot_uses_sqlite_contract_without_claiming_callback_lineage(monkeypatch, tmp_path):
+    _setup_runtime(monkeypatch, tmp_path)
+    now_epoch = float(time.time())
+    token = 256265
+    source_payload = {
+        "instrument_token": token, "underlying_symbol": "NIFTY", "last_price": 24700.0,
+        "volume": 100, "oi": 0, "source_timestamp_field": "exchange_timestamp",
+        "source_timestamp_epoch": now_epoch,
+    }
+    source_hash = hashlib.sha256(json.dumps(source_payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+    assert insert_tick(
+        ts=now_epoch, token=token, last_price=24700.0, volume=100, oi=0,
+        timestamp_authority="EXCHANGE_TIMESTAMP", timestamp_source_field="exchange_timestamp",
+        source_timestamp_epoch=now_epoch, receive_timestamp_epoch=now_epoch + 0.1,
+        timestamp_fallback_used=False, source_event_id=f"feed:1:{token}:{source_hash[:16]}",
+        source_event_sha256=source_hash, source_event_payload=source_payload,
+    )
+    assert insert_tick(ts=now_epoch, token=910001, last_price=100.0, volume=1, oi=1)
+    snapshot = build_market_snapshot(
+        "NIFTY", index_token=token, option_tokens=[910001],
+        strike_window={"atm": 24700, "step": 50, "around": 1}, expiry_date="2026-10-01",
+    )
+    index_tick = snapshot["ticks"]["index"]
+    assert index_tick["source_event_id"] is None
+    assert index_tick["source_event_sha256"] is None
+    assert index_tick["source_event_payload"] is None
+    assert index_tick["source_event_identity_status"] == "UNAVAILABLE"
+
+
+def test_market_snapshot_index_uses_database_value_not_process_memory(monkeypatch, tmp_path):
+    _setup_runtime(monkeypatch, tmp_path)
+    now_epoch = float(time.time())
+    token = 256265
+    assert insert_tick(ts=now_epoch, token=token, last_price=24700.0, volume=100, oi=0)
+    assert insert_tick(ts=now_epoch, token=910001, last_price=100.0, volume=1, oi=1)
+
+    import core.tick_store as tick_store
+    tick_store._LAST_TICK_BY_TOKEN[token] = {
+        "ltp": 99999.0,
+        "ts_epoch": now_epoch,
+        "source_event_id": "unpersisted-memory-event",
+        "source_event_sha256": "f" * 64,
+        "source_event_payload": {"unpersisted": True},
+    }
+    snapshot = build_market_snapshot(
+        "NIFTY", index_token=token, option_tokens=[910001],
+        strike_window={"atm": 24700, "step": 50, "around": 1}, expiry_date="2026-10-01",
+    )
+
+    index_tick = snapshot["ticks"]["index"]
+    assert index_tick["last_price"] == 24700.0
+    assert index_tick["source_event_id"] is None
+    assert index_tick["source_event_identity_status"] == "UNAVAILABLE"
 
 
 def test_build_market_snapshot_stale_ticks_sets_blocker(monkeypatch, tmp_path):

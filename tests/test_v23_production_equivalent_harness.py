@@ -6,6 +6,7 @@ coordinator, consumer, CAS evaluator, and readiness writer are production code.
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,6 +22,8 @@ class ControlledRuntimeHarness:
         self.logs = self.root / "logs"
         self.logs.mkdir(parents=True)
         self.session_id = "v23-session"
+        self.session_identity = {"trading_date": "2026-09-05", "venue": "NSE",
+            "calendar_id": "fixture-calendar", "calendar_version": "v1"}
         self.first_price = first_price
         self.second_price = second_price
         self.capture_0915 = capture_0915
@@ -64,6 +67,7 @@ class ControlledRuntimeHarness:
             def now(cls, tz=None):
                 return cls(2026, 9, 5, 15, 14, tzinfo=tz or timezone.utc)
         monkeypatch.setattr(consumer, "datetime", DecisionClock)
+        monkeypatch.setattr(consumer.time, "time", lambda: datetime(2026, 9, 5, 15, 14, tzinfo=timezone.utc).timestamp())
         monkeypatch.setattr(consumer.risk_halt.cfg, "RISK_HALT_FILE", str(self.root / "risk_halt.json"), raising=False)
         monkeypatch.setattr(coordinator, "produce_and_store_runtime_snapshots", producer.produce_and_store_runtime_snapshots)
 
@@ -82,10 +86,15 @@ class ControlledRuntimeHarness:
         if self.risk_halt:
             (self.root / "risk_halt.json").write_text(json.dumps({"halted": True, "reason": "V23_TEST_RISK_HALT", "timestamp_ist": "2026-09-05T12:00:00+05:30"}))
         self.store = CASPrimitiveStore(self.logs / f"cas_short_horizon_primitives_{self.session_id}.json", session_id=self.session_id, source_sha=SHA, underlying_token=1)
-        self.cas_targets = {"0915": 100.0, "1000": 200.0}
+        self.cas_targets = {
+            "0915": datetime.fromisoformat("2026-09-05T09:15:00+05:30").timestamp(),
+            "1000": datetime.fromisoformat("2026-09-05T10:00:00+05:30").timestamp(),
+        }
         self.lifecycle_ticks = []
         def tick(price, epoch, **overrides):
-            return {"underlying_symbol": "NIFTY", "instrument_token": 1, "last_price": price, "timestamp_epoch": epoch, "timestamp_authority": "EXCHANGE_TIMESTAMP", "timestamp_source_field": "exchange_timestamp", "source_timestamp_epoch": epoch, "receive_timestamp_epoch": epoch, "timestamp_fallback_used": False, **overrides}
+            event_payload = {"instrument_token": 1, "underlying_symbol": "NIFTY", "last_price": price, "volume": None, "oi": None, "source_timestamp_field": "exchange_timestamp", "source_timestamp_epoch": epoch}
+            event_sha = hashlib.sha256(json.dumps(event_payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+            return {"underlying_symbol": "NIFTY", "instrument_token": 1, "last_price": price, "timestamp_epoch": epoch, "timestamp_authority": "EXCHANGE_TIMESTAMP", "timestamp_source_field": "exchange_timestamp", "source_timestamp_epoch": epoch, "receive_timestamp_epoch": epoch, "timestamp_fallback_used": False, "source_event_id": f"fixture-feed:1:1:{event_sha[:16]}", "source_event_sha256": event_sha, "source_event_payload": event_payload, **overrides}
         class Feed:
             def __init__(self): self.tick_sink = None
             def start_depth_ws(self, tokens, **kwargs): self.tick_sink = kwargs.get("tick_sink"); return True
@@ -104,17 +113,20 @@ class ControlledRuntimeHarness:
                     self.store.capture(name, target, value, capture_timestamp_ist="2026-09-05T09:15:00+05:30" if name == "0915" else "2026-09-05T10:00:00+05:30")
         self.lifecycle.start([1], tick_sink=lifecycle_sink)
         if self.capture_0915:
-            timestamp = 102.001 if self.late == "0915" else 100.5
+            timestamp = self.cas_targets["0915"] + (2.001 if self.late == "0915" else 0.5)
             self.emit_normalized_tick(tick(self.first_price, timestamp))
         if self.capture_1000:
-            timestamp = 202.001 if self.late == "1000" else 200.5
+            timestamp = self.cas_targets["1000"] + (2.001 if self.late == "1000" else 0.5)
             self.emit_normalized_tick(tick(self.second_price, timestamp, timestamp_authority=self.authority))
 
     def emit_normalized_tick(self, tick):
         self.feed.emit(dict(tick))
 
     def request_cycle(self):
-        coordinator = self.coordinator_module.CanonicalCycleCoordinator(output_root=self.root / "out", session_id=self.session_id, source_sha=SHA)
+        coordinator = self.coordinator_module.CanonicalCycleCoordinator(
+            output_root=self.root / "out", session_id=self.session_id, source_sha=SHA,
+            trading_session_identity=dict(self.session_identity),
+            cas_primitive_path=self.logs / f"cas_short_horizon_primitives_{self.session_id}.json")
         return coordinator.run(coordinator.request("MARKET_OPEN_INITIAL"))
 
     def inspect(self):
@@ -125,12 +137,16 @@ class ControlledRuntimeHarness:
 
 
 def _tick(price=100.0, timestamp=100.5, **extra):
+    event_payload = {"instrument_token": 1, "underlying_symbol": "NIFTY", "last_price": price, "volume": None, "oi": None, "source_timestamp_field": "exchange_timestamp", "source_timestamp_epoch": timestamp}
+    event_sha = hashlib.sha256(json.dumps(event_payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
     return {
         "underlying_symbol": "NIFTY", "last_price": price,
         "timestamp_epoch": timestamp, "timestamp_authority": "EXCHANGE_TIMESTAMP",
         "timestamp_source_field": "exchange_timestamp",
         "source_timestamp_epoch": timestamp, "receive_timestamp_epoch": timestamp,
-        "timestamp_fallback_used": False, **extra,
+        "timestamp_fallback_used": False, "instrument_token": 1,
+        "source_event_id": f"fixture-feed:1:1:{event_sha[:16]}",
+        "source_event_sha256": event_sha, "source_event_payload": event_payload, **extra,
     }
 
 
@@ -490,8 +506,8 @@ def test_v23_readiness_transition_pending_to_ready_uses_same_cycle_path(monkeypa
     h.start_preopen()
     h.request_cycle()
     assert h.inspect()[1]["readiness_state"] == "PENDING"
-    h.emit_normalized_tick(_tick(100, 100.5, instrument_token=1))
-    h.emit_normalized_tick(_tick(110, 200.5, instrument_token=1))
+    h.emit_normalized_tick(_tick(100, h.cas_targets["0915"] + 0.5, instrument_token=1))
+    h.emit_normalized_tick(_tick(110, h.cas_targets["1000"] + 0.5, instrument_token=1))
     h.request_cycle()
     assert h.inspect()[1]["readiness_state"] == "READY"
 
@@ -514,7 +530,8 @@ def test_v23_o_restart_cycle_reaches_cas_without_recapture(monkeypatch, tmp_path
     h.request_cycle()
     primitive_after = json.loads((h.logs / f"cas_short_horizon_primitives_{h.session_id}.json").read_text())
     assert primitive_after == primitive_before
-    assert h.inspect()[1]["readiness_state"] == "READY"
+    assert h.inspect()[1]["readiness_state"] == "BLOCKED"
+    assert h.inspect()[1]["cas_rejection_reason"] == "DUPLICATE_CAS_EVALUATION"
 
 
 def test_v23_x_restart_between_targets_preserves_first_capture(monkeypatch, tmp_path):

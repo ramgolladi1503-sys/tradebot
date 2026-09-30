@@ -69,12 +69,15 @@ jobs:
           pytest -q -o addopts='' tests/test_kite_read_only_observation_runtime.py
 
       - name: Verify protected runtime scope
+        env:
+          PR_HEAD_REF: ${{ github.head_ref }}
         run: |
           python - <<'PY'
           import os
           import subprocess
 
-          if os.environ.get('GITHUB_HEAD_REF') == 'fix/full-live-multicycle-meg-and-feed-stall-v1':
+          head_ref = os.environ.get('PR_HEAD_REF')
+          if head_ref == 'fix/full-live-multicycle-meg-and-feed-stall-v1':
               base = '624aa59fb9c165af2b2c14cbaa8e519f32d813aa'
               subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
               changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
@@ -95,6 +98,64 @@ jobs:
                   path for path in changed
                   if path not in allowed_exact and not any(path.startswith(prefix) for prefix in allowed_prefixes)
               ]
+          elif head_ref == 'ram/mros-session-continuity-live-integration':
+              base = '723ec4432dfed9d6f9214efd7d216de1e9fdf812'
+              subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
+              changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+              allowed = set('''
+              .github/workflows/pr782-remaining-evidence-contracts.yml
+              core/auth_health.py
+              core/canonical_cycle_coordinator.py
+              core/cas_evaluation_ledger.py
+              core/cas_primitive_producer.py
+              core/kite_client.py
+              core/kite_depth_ws.py
+              core/kite_read_only_observation_runtime.py
+              core/market_heritage_graph.py
+              core/market_heritage_verifier.py
+              core/market_snapshot_builder.py
+              core/observation_lineage.py
+              core/paper_shadow/strategy_shadow_adapter.py
+              core/read_only_broker_api_ledger.py
+              core/read_only_consumer_cycle.py
+              core/read_only_coverage_ledger.py
+              core/runtime_snapshot_producer.py
+              core/tick_store.py
+              docs/agent_reviews/FINAL_VERDICT.md
+              docs/agent_reviews/GSD_IMPLEMENTATION_CHANGESET.md
+              docs/agent_reviews/HERITAGE_DEPENDENCY_GRAPH.json
+              docs/agent_reviews/HERMES_SESSION_CONTINUITY_HERITAGE_CONTRACT.md
+              docs/agent_reviews/INDEPENDENT_VERIFIER_REPORT.json
+              docs/agent_reviews/NEXT_READ_ONLY_LIVE_VERIFICATION_RUNBOOK.md
+              docs/agent_reviews/SOURCE_AND_HERITAGE_MANIFEST.json
+              docs/agent_reviews/TRADING_DAY_CONTINUITY_ACCEPTANCE_MATRIX.json
+              scripts/generate_t1_prerequisites.py
+              scripts/run_kite_read_only_observation_v1.py
+              scripts/verify_t1_prerequisites_oracle.py
+              tests/core/test_market_snapshot_builder.py
+              tests/core/test_observation_lineage.py
+              tests/core/test_read_only_coverage_ledger.py
+              tests/core/test_runtime_snapshot_producer.py
+              tests/core/test_tick_store_db_truth.py
+              tests/paper_shadow/test_strategy_shadow_adapters.py
+              tests/paper_shadow/test_t1_prerequisites_authority.py
+              tests/test_auth_health.py
+              tests/test_candidate_pipeline_architecture_repair.py
+              tests/test_cas_coordinator_lifecycle.py
+              tests/test_cas_evaluation_ledger.py
+              tests/test_cas_primitive_producer.py
+              tests/test_kite_depth_restart.py
+              tests/test_kite_read_only_observation_entrypoint.py
+              tests/test_kite_read_only_observation_runtime.py
+              tests/test_market_heritage_graph.py
+              tests/test_pulse_issues_and_feed_consistency.py
+              tests/test_read_only_broker_api_ledger.py
+              tests/test_read_only_consumer_cycle.py
+              tests/test_read_only_observation_storage_binding.py
+              tests/test_v23_production_equivalent_harness.py
+              tests/test_ws_tick_ingestion_updates_tick_store.py
+              '''.split())
+              unexpected = sorted(set(changed) - allowed)
           else:
               base = subprocess.check_output(
                   ['git', 'merge-base', 'origin/post-pr783/kite-read-only-observation-runtime-v1', 'HEAD'],
@@ -120,9 +181,13 @@ jobs:
           PY
 
       - name: Validate diff
+        env:
+          PR_HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "${GITHUB_HEAD_REF:-}" = "fix/full-live-multicycle-meg-and-feed-stall-v1" ]; then
+          if [ "${PR_HEAD_REF:-}" = "fix/full-live-multicycle-meg-and-feed-stall-v1" ]; then
             git diff --check 624aa59fb9c165af2b2c14cbaa8e519f32d813aa HEAD
+          elif [ "${PR_HEAD_REF:-}" = "ram/mros-session-continuity-live-integration" ]; then
+            git diff --check 723ec4432dfed9d6f9214efd7d216de1e9fdf812 HEAD
           else
             git diff --check origin/post-pr783/kite-read-only-observation-runtime-v1...HEAD
           fi

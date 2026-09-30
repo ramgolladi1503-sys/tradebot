@@ -225,6 +225,7 @@ class IntradayOpeningDriveShadowAdapter(StrategyShadowAdapter):
         self.shadow_entry_observed: bool = False
         self.shadow_entry_price: Optional[float] = None
         self.shadow_entry_ts: Optional[str] = None
+        self.shadow_entry_window_expired: bool = False
         self.shadow_exit_observed: bool = False
         self.shadow_exit_price: Optional[float] = None
         self.shadow_exit_ts: Optional[str] = None
@@ -412,8 +413,25 @@ class IntradayOpeningDriveShadowAdapter(StrategyShadowAdapter):
             )
 
             if snapshot.l1_depth and snapshot.l1_depth.is_valid():
-                # Entry window: strictly after 09:22:00
-                if not self.shadow_entry_observed and t > dtime(9, 22):
+                # The frozen holding window ends at 11:01. A recovered or
+                # late-start observer must not turn a later quote into an
+                # entry after the observation window has expired.
+                if (not self.shadow_entry_observed and not self.shadow_entry_window_expired
+                        and t >= dtime(11, 1)):
+                    self.shadow_entry_window_expired = True
+                    self.observation_finalized = True
+                    self.record_checkpoint(
+                        pulse_id=pulse_id,
+                        checkpoint_name="SHADOW_ENTRY_WINDOW_EXPIRED",
+                        status="FAIL",
+                        root_cause="ENTRY_WINDOW_EXPIRED_BEFORE_FIRST_VALID_QUOTE",
+                        designed="09:22:00 < source_time < 11:01:00 IST",
+                        observed=snapshot.source_timestamp_ist.isoformat(),
+                    )
+                    return None
+                # Entry window: strictly after 09:22:00 and before 11:01:00.
+                if (not self.shadow_entry_observed and not self.shadow_entry_window_expired
+                        and dtime(9, 22) < t < dtime(11, 1)):
                     self.shadow_entry_observed = True
                     self.shadow_entry_price = snapshot.l1_depth.ask_price  # Long buys at ask
                     self.shadow_entry_ts = snapshot.source_timestamp_ist.isoformat()
@@ -946,6 +964,7 @@ class StrategyShadowAdapterRegistry:
         opening_drive_target_expiry: Optional[str] = None,
         overnight_prev_daily_close: Optional[float] = None,
         overnight_prev_sma200: Optional[float] = None,
+        prerequisite_verification: Optional[Mapping[str, Any]] = None,
     ):
         self.session_id = session_id
         self.source_sha = source_sha
@@ -956,6 +975,11 @@ class StrategyShadowAdapterRegistry:
         self.orders_placed: int = 0
         self.orders_modified: int = 0
         self.orders_cancelled: int = 0
+        self.prerequisite_verification = dict(prerequisite_verification or {
+            "status": "BLOCKED", "reason": "VERIFIED_HERITAGE_MANIFEST_REQUIRED",
+            "read_only": True, "is_order_action": False,
+            "broker_api_called": False, "allowed_for_live_execution": False,
+        })
 
         # Directories
         self.evidence_root.mkdir(parents=True, exist_ok=True)
@@ -967,7 +991,19 @@ class StrategyShadowAdapterRegistry:
         self.disabled_strategies: Dict[str, str] = {}
 
         # 1. Opening Drive
-        if opening_drive_prev_contract_key and opening_drive_prev_close_1529 is not None:
+        readiness = self.prerequisite_verification.get("strategy_readiness")
+        if isinstance(readiness, Mapping):
+            opening_drive_ready = readiness.get(OPENING_DRIVE_ID, {}).get("status") == "READY"
+            overnight_s1_ready = readiness.get(CANDIDATE_S1_ID, {}).get("status") == "READY"
+            overnight_s4_ready = readiness.get(CANDIDATE_S4_ID, {}).get("status") == "READY"
+        else:
+            # Legacy offline replay/test construction remains supported. The
+            # production observer always supplies the verified-manifest report.
+            opening_drive_ready = bool(opening_drive_prev_contract_key and opening_drive_prev_close_1529 is not None)
+            overnight_s1_ready = overnight_s4_ready = bool(
+                overnight_prev_daily_close is not None and overnight_prev_sma200 is not None)
+
+        if opening_drive_ready and opening_drive_prev_contract_key and opening_drive_prev_close_1529 is not None:
             self.adapters[OPENING_DRIVE_ID] = IntradayOpeningDriveShadowAdapter(
                 prev_futures_contract_key=opening_drive_prev_contract_key,
                 prev_close_1529=opening_drive_prev_close_1529,
@@ -979,7 +1015,7 @@ class StrategyShadowAdapterRegistry:
             logger.warning("Strategy %s disabled fail-closed: %s", OPENING_DRIVE_ID, reason)
 
         # 2. S1 Overnight & 3. S4 Overnight
-        if overnight_prev_daily_close is not None and overnight_prev_sma200 is not None:
+        if overnight_prev_daily_close is not None and overnight_prev_sma200 is not None and overnight_s1_ready:
             s1_dir = str(self.evidence_root / CANDIDATE_S1_ID)
             self.adapters[CANDIDATE_S1_ID] = OvernightDriftShadowAdapter(
                 candidate_id=CANDIDATE_S1_ID,
@@ -989,6 +1025,12 @@ class StrategyShadowAdapterRegistry:
                 sub_ledger_dir=s1_dir,
             )
 
+        else:
+            reason = "MISSING_T_MINUS_1_OVERNIGHT_PREREQUISITES"
+            self.disabled_strategies[CANDIDATE_S1_ID] = f"DISABLED_FAIL_CLOSED: {reason}"
+            logger.warning("Overnight strategy %s disabled fail-closed: %s", CANDIDATE_S1_ID, reason)
+
+        if overnight_prev_daily_close is not None and overnight_prev_sma200 is not None and overnight_s4_ready:
             s4_dir = str(self.evidence_root / CANDIDATE_S4_ID)
             self.adapters[CANDIDATE_S4_ID] = OvernightDriftShadowAdapter(
                 candidate_id=CANDIDATE_S4_ID,
@@ -999,9 +1041,8 @@ class StrategyShadowAdapterRegistry:
             )
         else:
             reason = "MISSING_T_MINUS_1_OVERNIGHT_PREREQUISITES"
-            self.disabled_strategies[CANDIDATE_S1_ID] = f"DISABLED_FAIL_CLOSED: {reason}"
             self.disabled_strategies[CANDIDATE_S4_ID] = f"DISABLED_FAIL_CLOSED: {reason}"
-            logger.warning("Overnight strategies disabled fail-closed: %s", reason)
+            logger.warning("Overnight strategy %s disabled fail-closed: %s", CANDIDATE_S4_ID, reason)
 
         self._write_registry_manifest()
 
@@ -1017,6 +1058,7 @@ class StrategyShadowAdapterRegistry:
             "live_authorized": False,
             "shadow_strategy_ids": list(self.adapters.keys()),
             "disabled_strategies": dict(self.disabled_strategies),
+            "prerequisite_verification": self.prerequisite_verification,
             "adapters": {
                 cid: {
                     "candidate_digest": adapter.candidate_digest,
@@ -1028,6 +1070,23 @@ class StrategyShadowAdapterRegistry:
         }
         with open(self.registry_manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2, sort_keys=True)
+
+    def _heritage_lineage_for(self, strategy_id: str) -> dict[str, Any]:
+        readiness = self.prerequisite_verification.get("strategy_readiness")
+        strategy_readiness = readiness.get(strategy_id) if isinstance(readiness, Mapping) else None
+        if not isinstance(strategy_readiness, Mapping):
+            strategy_readiness = {"status": "UNKNOWN_UNVERIFIED_LEGACY_CONSTRUCTOR"}
+        return {
+            "manifest_sha256": self.prerequisite_verification.get("manifest_sha256"),
+            "manifest_status": self.prerequisite_verification.get("status", "UNKNOWN"),
+            "strategy_status": strategy_readiness.get("status", "UNKNOWN"),
+            "accepted_fields": dict(strategy_readiness.get("accepted_fields") or {}),
+            "blockers": list(strategy_readiness.get("blockers") or []),
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+        }
 
     def on_pulse(
         self,
@@ -1052,6 +1111,8 @@ class StrategyShadowAdapterRegistry:
             for strat_id, adapter in self.adapters.items():
                 res = adapter.on_market_pulse(pulse_id=pulse_id, snapshot=snap)
                 if res:
+                    res = dict(res)
+                    res["heritage_lineage"] = self._heritage_lineage_for(strat_id)
                     results.append(res)
                     # Persist observation under strategy subdirectory
                     strat_dir = self.evidence_root / strat_id
@@ -1080,6 +1141,7 @@ class StrategyShadowAdapterRegistry:
                                 "root_cause": cp.root_cause,
                                 "designed": cp.designed_threshold,
                                 "observed": cp.observed_value,
+                                "heritage_lineage": self._heritage_lineage_for(strat_id),
                             },
                             sort_keys=True,
                         )
@@ -1137,128 +1199,29 @@ def load_canonical_t1_prerequisites(
     launch_plan: Optional[Mapping[str, Any]] = None,
     data_dir: Optional[Path | str] = None,
 ) -> Dict[str, Any]:
-    """
-    Loads canonical T-1 market facts for strategy shadow adapters without requiring manual environment variables.
-    Lookup precedence:
-    1. Explicit environment overrides (if set by operator)
-    2. launch_plan["t1_facts"] / launch_plan["preflight_facts"] / launch_plan metadata
-    3. Persisted disk manifest in data_dir or runtime/sessions / runtime/preflight
+    """Deprecated fail-closed compatibility shim for legacy T-1 callers.
 
-    Returns a dict containing:
-    - opening_drive_prev_contract_key: Optional[str]
-    - opening_drive_prev_close_1529: Optional[float]
-    - opening_drive_target_expiry: Optional[str]
-    - overnight_prev_daily_close: Optional[float]
-    - overnight_prev_sma200: Optional[float]
+    Plain launch-plan values, environment overrides, and discovered files do
+    not prove source identity, content hash, calendar ancestry, or as-of time.
+    Runtime callers must use ``load_verified_t1_prerequisites`` with a pinned
+    manifest and the complete session/instrument contracts. Keep this shim's
+    result shape for older callers, but never let an unverified value enable a
+    strategy adapter.
     """
-    res: Dict[str, Any] = {
+    del session_date, launch_plan, data_dir
+    return {
         "opening_drive_prev_contract_key": None,
         "opening_drive_prev_close_1529": None,
         "opening_drive_target_expiry": None,
         "overnight_prev_daily_close": None,
         "overnight_prev_sma200": None,
+        "heritage_verification": {
+            "status": "BLOCKED",
+            "reason": "PINNED_HERITAGE_MANIFEST_REQUIRED",
+            "source": "LEGACY_UNVERIFIED",
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+        },
     }
-
-    # 1. Inspect launch_plan
-    if isinstance(launch_plan, Mapping):
-        facts = (
-            launch_plan.get("t1_facts")
-            or launch_plan.get("preflight_facts")
-            or launch_plan.get("strategy_prerequisites")
-            or {}
-        )
-        if isinstance(facts, Mapping):
-            if facts.get("opening_drive_prev_contract_key"):
-                res["opening_drive_prev_contract_key"] = str(facts["opening_drive_prev_contract_key"])
-            elif facts.get("prev_futures_contract_key"):
-                res["opening_drive_prev_contract_key"] = str(facts["prev_futures_contract_key"])
-
-            if facts.get("opening_drive_prev_close_1529") is not None:
-                res["opening_drive_prev_close_1529"] = float(facts["opening_drive_prev_close_1529"])
-            elif facts.get("prev_close_1529") is not None:
-                res["opening_drive_prev_close_1529"] = float(facts["prev_close_1529"])
-
-            if facts.get("opening_drive_target_expiry"):
-                res["opening_drive_target_expiry"] = str(facts["opening_drive_target_expiry"])
-            elif facts.get("target_expiry"):
-                res["opening_drive_target_expiry"] = str(facts["target_expiry"])
-
-            if facts.get("overnight_prev_daily_close") is not None:
-                res["overnight_prev_daily_close"] = float(facts["overnight_prev_daily_close"])
-            elif facts.get("prev_daily_close") is not None:
-                res["overnight_prev_daily_close"] = float(facts["prev_daily_close"])
-
-            if facts.get("overnight_prev_sma200") is not None:
-                res["overnight_prev_sma200"] = float(facts["overnight_prev_sma200"])
-            elif facts.get("prev_sma200") is not None:
-                res["overnight_prev_sma200"] = float(facts["prev_sma200"])
-
-        # Also check top-level keys in launch_plan
-        if res["opening_drive_prev_contract_key"] is None and launch_plan.get("selected_futures_contract_key"):
-            res["opening_drive_prev_contract_key"] = str(launch_plan["selected_futures_contract_key"])
-        if res["opening_drive_target_expiry"] is None and launch_plan.get("target_expiry"):
-            res["opening_drive_target_expiry"] = str(launch_plan["target_expiry"])
-
-    # 2. Inspect persisted disk manifest if still missing
-    search_dirs: List[Path] = []
-    if data_dir is not None:
-        search_dirs.append(Path(data_dir))
-    search_dirs.extend([
-        Path("runtime/preflight"),
-        Path("runtime/sessions"),
-        Path("runtime/truth"),
-        Path("/Volumes/TradeBotData/sessions") / f"session_{session_date}",
-        Path("/Volumes/TradeBotData/sessions"),
-        Path("/Volumes/TradeBotData/runtime/preflight"),
-    ])
-
-    for s_dir in search_dirs:
-        if not s_dir.is_dir():
-            continue
-        # Check files matching session_date or t1_facts
-        candidate_files = [
-            s_dir / f"t1_prerequisites_{session_date}.json",
-            s_dir / "t1_prerequisites.json",
-            s_dir / f"preflight_{session_date}.json",
-        ]
-        for c_file in candidate_files:
-            if c_file.is_file():
-                try:
-                    with c_file.open("r", encoding="utf-8") as f:
-                        disk_facts = json.load(f)
-                    if isinstance(disk_facts, Mapping):
-                        if res["opening_drive_prev_contract_key"] is None and disk_facts.get("opening_drive_prev_contract_key"):
-                            res["opening_drive_prev_contract_key"] = str(disk_facts["opening_drive_prev_contract_key"])
-                        if res["opening_drive_prev_close_1529"] is None and disk_facts.get("opening_drive_prev_close_1529") is not None:
-                            res["opening_drive_prev_close_1529"] = float(disk_facts["opening_drive_prev_close_1529"])
-                        if res["opening_drive_target_expiry"] is None and disk_facts.get("opening_drive_target_expiry"):
-                            res["opening_drive_target_expiry"] = str(disk_facts["opening_drive_target_expiry"])
-                        if res["overnight_prev_daily_close"] is None and disk_facts.get("overnight_prev_daily_close") is not None:
-                            res["overnight_prev_daily_close"] = float(disk_facts["overnight_prev_daily_close"])
-                        if res["overnight_prev_sma200"] is None and disk_facts.get("overnight_prev_sma200") is not None:
-                            res["overnight_prev_sma200"] = float(disk_facts["overnight_prev_sma200"])
-                except Exception as exc:
-                    logger.warning("Failed reading T-1 manifest from %s: %s", c_file, exc)
-
-    # 3. Environment overrides take precedence if explicitly populated
-    if os.environ.get("OPENING_DRIVE_PREV_FUTURES_KEY"):
-        res["opening_drive_prev_contract_key"] = os.environ["OPENING_DRIVE_PREV_FUTURES_KEY"]
-    if "OPENING_DRIVE_PREV_CLOSE_1529" in os.environ:
-        try:
-            res["opening_drive_prev_close_1529"] = float(os.environ["OPENING_DRIVE_PREV_CLOSE_1529"])
-        except ValueError:
-            pass
-    if os.environ.get("OPENING_DRIVE_TARGET_EXPIRY"):
-        res["opening_drive_target_expiry"] = os.environ["OPENING_DRIVE_TARGET_EXPIRY"]
-    if "OVERNIGHT_PREV_DAILY_CLOSE" in os.environ:
-        try:
-            res["overnight_prev_daily_close"] = float(os.environ["OVERNIGHT_PREV_DAILY_CLOSE"])
-        except ValueError:
-            pass
-    if "OVERNIGHT_PREV_SMA200" in os.environ:
-        try:
-            res["overnight_prev_sma200"] = float(os.environ["OVERNIGHT_PREV_SMA200"])
-        except ValueError:
-            pass
-
-    return res

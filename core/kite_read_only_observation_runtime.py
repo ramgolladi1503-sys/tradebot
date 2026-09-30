@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import os
@@ -22,6 +23,7 @@ from core.read_only_live_evidence import (
     write_authority_snapshot_bundle,
     write_json_atomic,
 )
+from core.read_only_broker_api_ledger import ReadOnlyBrokerApiLedger
 
 
 UNSAFE_IMPORT_PREFIXES = (
@@ -303,8 +305,9 @@ def write_meg_wiring_evidence(
 class ObservationLifecycle:
     """Own the read-only feed lifecycle and prove an ordered, idempotent drain."""
 
-    def __init__(self, feed: Any, *, drain_deadline_seconds: float | None = None) -> None:
+    def __init__(self, feed: Any, *, drain_deadline_seconds: float | None = None, broker_api_ledger: ReadOnlyBrokerApiLedger | None = None) -> None:
         self.feed = feed
+        self.broker_api_ledger = broker_api_ledger
         if drain_deadline_seconds is not None:
             self.drain_deadline_seconds = float(drain_deadline_seconds)
         else:
@@ -340,7 +343,13 @@ class ObservationLifecycle:
                 tick_sink(tick)
 
         self.accepting = True
-        if not self.feed.start_depth_ws(tokens, profile_verified=True, skip_lock=True, tick_sink=lifecycle_owned_tick_sink):
+        if not self.feed.start_depth_ws(
+            tokens,
+            profile_verified=False,
+            auth_mode="read_only_observer",
+            skip_lock=True,
+            tick_sink=lifecycle_owned_tick_sink,
+        ):
             self.accepting = False
             raise RuntimeError("READ_ONLY_KITE_FEED_START_FAILED")
         self.phase = "RUNNING"
@@ -431,6 +440,27 @@ class ObservationLifecycle:
             if complete:
                 self.phase = "WORKERS_JOINED"
                 self.phase = "CLOSED"
+            broker_api_safety = (
+                self.broker_api_ledger.verified_safety_fields()
+                if self.broker_api_ledger is not None
+                else {
+                    "broker_api_measurement_scope": "UNMEASURED_NO_ACTIVE_OBSERVER_LEDGER",
+                    "broker_api_called": False,
+                    "broker_api_call_count": 0,
+                    "broker_api_call_attempt_count": 0,
+                    "broker_api_call_failure_count": 0,
+                    "broker_api_call_blocked_count": 0,
+                    "broker_api_ledger_write_failure_count": 0,
+                    "broker_api_call_ledger_event_count": 0,
+                    "broker_api_call_ledger_head_sha256": "0" * 64,
+                    "broker_api_call_ledger_verified": False,
+                    "broker_api_call_ledger_verification_status": "PENDING",
+                    "broker_write_authority": False,
+                    "order_authority": False,
+                    "paper_authorized": False,
+                    "live_authorized": False,
+                }
+            )
             self._shutdown_report = {
                 "proof_kind": "PR763_LIVE_ACCEPTANCE",
                 "shutdown_drain_complete": complete,
@@ -449,9 +479,7 @@ class ObservationLifecycle:
                 "meg_bridge_flush": bridge_result,
                 "read_only": True,
                 "is_order_action": False,
-                "broker_api_called": False,
-                "broker_write_authority": False,
-                "order_authority": False,
+                **broker_api_safety,
                 "storage_authority_lost": reason.startswith("runtime_storage_authority_lost"),
                 "final_seal": __import__("core.runtime_storage_authority", fromlist=["final_seal_status"]).final_seal_status(storage_lost=reason.startswith("runtime_storage_authority_lost"), drain_complete=complete),
                 "allowed_for_live_execution": False,
@@ -461,26 +489,56 @@ class ObservationLifecycle:
 
 
 def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None = None) -> int:
-    from core.runtime_storage_authority import StorageAuthorityError, establish, revalidate
-    storage_authority = establish(volume=Path("/Volumes/TradeBotData"), runtime_root=output_root)
-    env = safe_environment()
-    contract = safety_contract(env, child_command=[sys.executable, "-B", "core.kite_read_only_observation_runtime.py"])
-    output_root.mkdir(parents=True, exist_ok=True)
-    # Bind the governed runtime environment before importing any module that
-    # resolves config-dependent storage paths at import time.  In particular,
-    # core.depth_store imports config.config, whose TRADE_DB_PATH is otherwise
-    # frozen to the process's pre-existing/default runtime root.
+    from core.kite_client import kite_client
+
+    ledger = ReadOnlyBrokerApiLedger(output_root / "broker_api_calls.jsonl")
+    with kite_client.observe_broker_api_calls(ledger):
+        return _run_observation_impl(
+            launch_plan=launch_plan,
+            output_root=output_root,
+            token_path=token_path,
+            session_date=session_date,
+            max_runtime_sec=max_runtime_sec,
+            broker_api_ledger=ledger,
+        )
+
+
+def _bind_storage_environment_and_depth_store(
+    *, env: Mapping[str, str], output_root: Path, launch_plan: Mapping[str, Any]
+):
+    """Bind storage configuration before importing its config-dependent store."""
     os.environ.update(env)
-    import core.depth_store as depth_store
+    depth_store = importlib.import_module("core.depth_store")
+
     depth_store.depth_store.configure_rejection_provenance(
         output_root / "depth_rejections.jsonl",
         session_id=str(launch_plan.get("run_id") or output_root.name),
         producer_sha=str(launch_plan.get("commit_sha") or os.environ.get("TRADEBOT_PRODUCER_SHA") or ""),
     )
+    return depth_store
+
+
+def _run_observation_impl(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None, broker_api_ledger: ReadOnlyBrokerApiLedger) -> int:
+    from core.runtime_storage_authority import StorageAuthorityError, establish, revalidate
+    storage_authority = establish(volume=Path("/Volumes/TradeBotData"), runtime_root=output_root)
+    env = safe_environment()
+    contract = safety_contract(env, child_command=[sys.executable, "-B", "core.kite_read_only_observation_runtime.py"])
+    contract.update(broker_api_ledger.safety_fields())
+    contract["broker_api_measurement_scope"] = "STARTUP_SNAPSHOT_BEFORE_OBSERVER_API_PROBES"
+    output_root.mkdir(parents=True, exist_ok=True)
+    # Bind the governed runtime environment before importing any module that
+    # resolves config-dependent storage paths at import time.  In particular,
+    # core.depth_store imports config.config, whose TRADE_DB_PATH is otherwise
+    # frozen to the process's pre-existing/default runtime root.
+    depth_store = _bind_storage_environment_and_depth_store(
+        env=env,
+        output_root=output_root,
+        launch_plan=launch_plan,
+    )
     (output_root / "startup_safety_contract.json").write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     assert_import_boundary()
 
-    from core.auth import get_kite_client, get_kite_credentials
+    from core.auth import get_kite_credentials
     from core import kite_depth_ws
     from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
     from core.canonical_cycle_coordinator import CanonicalCycleCoordinator
@@ -490,14 +548,13 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     api_key, _ = get_kite_credentials(repo_root_path=Path.cwd())
     if not api_key or not token_path.is_file():
         raise RuntimeError("KITE_ACCESS_TOKEN_MISSING")
-    get_kite_client(repo_root_path=Path.cwd()).profile()
     kite_depth_ws.activate_market_event_graph_launch_plan(launch_plan)
     tokens = list(launch_plan.get("final_union_tokens") or [])
     if not tokens:
         raise RuntimeError("READ_ONLY_LAUNCH_PLAN_EMPTY")
     from core.market_event_graph_live_runtime_bridge import get_live_source_bridge
 
-    lifecycle = ObservationLifecycle(kite_depth_ws)
+    lifecycle = ObservationLifecycle(kite_depth_ws, broker_api_ledger=broker_api_ledger)
     meg_bridge = get_live_source_bridge()
     scheduler = MegIntervalScheduler()
     meg_cycle_count = 0
@@ -512,6 +569,22 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     )
     if not producer_commit:
         raise RuntimeError("MEG_PRODUCER_SHA_REQUIRED")
+    target_session = {
+        "trading_date": session_date,
+        "venue": launch_plan.get("venue"),
+        "calendar_id": launch_plan.get("calendar_id"),
+        "calendar_version": launch_plan.get("calendar_version"),
+    }
+    from core.read_only_coverage_ledger import (
+        ReadOnlyCoverageLedger,
+        build_process_gap_report,
+    )
+    coverage_ledger = ReadOnlyCoverageLedger(
+        run_id=run_id,
+        session_identity=target_session,
+        intended_tokens=tokens,
+        started_epoch=time.time(),
+    )
     canonical_coordinator = CanonicalCycleCoordinator(
         output_root=output_root,
         session_id=run_id,
@@ -524,13 +597,66 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         symbol="NIFTY",
         binding_tokens_map=getattr(kite_depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}),
     )
+    from core.market_heritage_graph import (
+        load_same_session_cas_references,
+        publish_same_session_cas_manifest,
+    )
+    from core.runtime_storage_authority import assert_same_device
     cas_store = CASPrimitiveStore(output_root / f"cas_short_horizon_primitives_{run_id}.json", session_id=run_id, source_sha=producer_commit, underlying_token=cas_token)
+    heritage_root = output_root.parent / "heritage"
+    assert_same_device(storage_authority, heritage_root)
+    same_session_heritage = load_same_session_cas_references(
+        heritage_root=heritage_root,
+        session_identity=target_session,
+        current_run_id=run_id,
+        source_sha=producer_commit,
+        underlying_token=cas_token,
+    )
+    inherited_cas_references = same_session_heritage.get("primitives", {})
+    canonical_coordinator.inherited_cas_references = dict(inherited_cas_references)
+    canonical_coordinator.trading_session_identity = dict(target_session)
+    canonical_coordinator.cas_primitive_path = cas_store.path
+    cas_session_status = {
+        name: {
+            "inherited_reference": inherited_cas_references.get(name, {}).get("lineage"),
+            "current_run_capture_status": (
+                "NOT_ATTEMPTED_INHERITED_VERIFIED" if name in inherited_cas_references else
+                "EXPIRED_NO_CURRENT_CAPTURE" if time.time() > target + 2.0 else
+                "WAITING_FOR_TARGET"
+            ),
+        }
+        for name, target in {
+            "0915": datetime.fromisoformat(f"{session_date}T09:15:00+05:30").timestamp(),
+            "1000": datetime.fromisoformat(f"{session_date}T10:00:00+05:30").timestamp(),
+        }.items()
+    }
+    process_gap_report = build_process_gap_report(
+        current_run_id=run_id,
+        current_started_epoch=coverage_ledger.started_epoch,
+        session_identity=target_session,
+        prior_coverage=same_session_heritage.get("coverage", []),
+    )
+    write_json_atomic(output_root / "cas_session_heritage.json", {
+        "schema_version": 1, "session_identity": target_session,
+        "status": same_session_heritage.get("status"),
+        "blockers": same_session_heritage.get("blockers", []),
+        "prior_run_coverage": same_session_heritage.get("coverage", []),
+        "process_gap": process_gap_report,
+        "primitives": cas_session_status,
+        "read_only": True, "is_order_action": False,
+        **broker_api_ledger.safety_fields(), "allowed_for_live_execution": False,
+    })
     cas_targets = {"0915": datetime.fromisoformat(f"{session_date}T09:15:00+05:30").timestamp(), "1000": datetime.fromisoformat(f"{session_date}T10:00:00+05:30").timestamp()}
     def cas_tick_sink(tick):
+        coverage_ledger.record_tick(tick)
+        if not isinstance(tick, Mapping):
+            return
         if not lifecycle.accepting or tick.get("underlying_symbol") != "NIFTY" or int(tick.get("instrument_token") or 0) != cas_token:
             return
         for name, target in cas_targets.items():
-            if name not in cas_store.rows and tick.get("timestamp_epoch") is not None and float(tick["timestamp_epoch"]) >= target:
+            if (name not in cas_store.rows and name not in inherited_cas_references
+                    and tick.get("timestamp_epoch") is not None
+                    and float(tick["timestamp_epoch"]) >= target):
                 cas_store.capture(name, target, tick, capture_timestamp_ist=datetime.now(timezone.utc).isoformat())
     lifecycle.start(tokens, tick_sink=cas_tick_sink)
     previous_feed_live = False
@@ -539,12 +665,51 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     # No second feed, no broker/order authority, and all prerequisites fail closed.
     from core.paper_shadow.strategy_shadow_adapter import (
         StrategyShadowAdapterRegistry,
-        load_canonical_t1_prerequisites,
     )
-    t1_prereqs = load_canonical_t1_prerequisites(
-        session_date=session_date,
-        launch_plan=launch_plan,
-        data_dir=Path("runtime/preflight"),
+    from core.market_heritage_graph import load_verified_t1_prerequisites
+    from core.candidate_audits.intraday_opening_drive import CANDIDATE_ID as OPENING_DRIVE_ID
+    from core.candidate_audits.nifty_overnight_drift import CANDIDATE_S1_ID, CANDIDATE_S4_ID
+
+    repository_root = Path(__file__).resolve().parents[1]
+    frozen_contract_paths = {
+        OPENING_DRIVE_ID: repository_root / "docs/research/candidates/INTRADAY_OPENING_DRIVE_V1/FROZEN_SPEC.json",
+        CANDIDATE_S1_ID: repository_root / "docs/research/candidates/S1_MOMENTUM_OVERNIGHT_V1/FROZEN_SPEC.json",
+        CANDIDATE_S4_ID: repository_root / "docs/research/candidates/S4_MONDAY_OVERNIGHT_V1/FROZEN_SPEC.json",
+    }
+    contract_ids = {
+        strategy_id: __import__("hashlib").sha256(path.read_bytes()).hexdigest()
+        for strategy_id, path in frozen_contract_paths.items()
+    }
+    current_futures_key = str(launch_plan.get("selected_futures_contract_key") or "")
+    t1_prereqs = load_verified_t1_prerequisites(
+        manifest_path=launch_plan.get("heritage_manifest_path"),
+        expected_manifest_sha256=launch_plan.get("heritage_manifest_sha256"),
+        approved_root=storage_authority.volume / "sessions",
+        target_session=target_session,
+        decision_epoch=time.time(),
+        required_fields={
+            OPENING_DRIVE_ID: {
+                "opening_drive_prev_contract_key": contract_ids[OPENING_DRIVE_ID],
+                "opening_drive_prev_close_1529": contract_ids[OPENING_DRIVE_ID],
+            },
+            CANDIDATE_S1_ID: {
+                "overnight_prev_daily_close": contract_ids[CANDIDATE_S1_ID],
+                "overnight_prev_sma200": contract_ids[CANDIDATE_S1_ID],
+            },
+            CANDIDATE_S4_ID: {
+                "overnight_prev_daily_close": contract_ids[CANDIDATE_S4_ID],
+                "overnight_prev_sma200": contract_ids[CANDIDATE_S4_ID],
+            },
+        },
+        target_instruments={
+            OPENING_DRIVE_ID: {"contract_key": current_futures_key},
+            CANDIDATE_S1_ID: {"symbol": "NIFTY50", "basis": "INDEX"},
+            CANDIDATE_S4_ID: {"symbol": "NIFTY50", "basis": "INDEX"},
+        },
+    )
+    heritage_verification = t1_prereqs.pop("heritage_verification")
+    t1_prereqs["opening_drive_target_expiry"] = (
+        launch_plan.get("target_expiry") or launch_plan.get("selected_futures_contract_expiry")
     )
     shadow_evidence_root = output_root / "strategy_shadow"
     shadow_registry = StrategyShadowAdapterRegistry(
@@ -556,6 +721,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         opening_drive_target_expiry=t1_prereqs["opening_drive_target_expiry"],
         overnight_prev_daily_close=t1_prereqs["overnight_prev_daily_close"],
         overnight_prev_sma200=t1_prereqs["overnight_prev_sma200"],
+        prerequisite_verification=heritage_verification,
     )
 
     write_json_atomic(output_root / "process_identity.json", {
@@ -636,6 +802,9 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 loop_id=run_id,
                 session_id=run_id,
                 source_sha=producer_commit,
+                inherited_cas_references=inherited_cas_references,
+                trading_session_identity=target_session,
+                cas_primitive_path=cas_store.path,
             )
             from core.market_snapshot_store import write_market_snapshot_atomic
             write_market_snapshot_atomic(
@@ -692,17 +861,37 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             from core.causal_strategy_harness import evaluate_causal_strategies
             from core.causal_shadow_decision import evaluate_shadow_decision
             from core.causal_trade_truth_emitter import build_canonical_trade_truth
+            from core.causal_pulse import sha256_canonical
+            from core.observation_lineage import (
+                build_observation_lineage_record,
+                compare_snapshot_tick_event_ids,
+                current_tick_store_lineage,
+                snapshot_tick_lineage,
+            )
 
             if not hasattr(run_observation, "_pulse_tracker"):
                 run_observation._pulse_tracker = NativePulseTracker(session_id=run_id, producer_sha=producer_commit)
             
+            consumed_snapshot = market_snapshot if isinstance(market_snapshot, Mapping) else {}
+            consumed_feed_truth = feed_truth if isinstance(feed_truth, Mapping) else {}
+            process_local_tick_lineage = current_tick_store_lineage(tokens)
+            consumed_tick_lineage = snapshot_tick_lineage(consumed_snapshot)
+            tick_store_snapshot_correlation = compare_snapshot_tick_event_ids(
+                consumed_tick_lineage, process_local_tick_lineage,
+            )
+            pulse_input = {
+                "cycle_count": meg_cycle_count,
+                "interval_end_epoch": interval_end,
+                "market_open": market_open,
+                "feed_live": feed_live,
+                "market_snapshot_sha256": sha256_canonical(dict(consumed_snapshot)),
+                "tick_lineage": consumed_tick_lineage,
+                "process_local_tick_lineage": process_local_tick_lineage,
+                "tick_store_snapshot_correlation": tick_store_snapshot_correlation,
+                "feed_health_truth_sha256": sha256_canonical(dict(consumed_feed_truth)),
+            }
             cycle_pulse = run_observation._pulse_tracker.next_pulse(
-                payload={
-                    "cycle_count": meg_cycle_count,
-                    "interval_end_epoch": interval_end,
-                    "market_open": market_open,
-                    "feed_live": feed_live,
-                },
+                payload=pulse_input,
                 timestamp_epoch=cycle_cutoff.timestamp(),
                 timestamp_ist=datetime.now(timezone.utc).isoformat(),
             )
@@ -734,6 +923,16 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 strategy_result=strat_result,
                 decision_result=shadow_decisions,
             )
+            lineage_record = build_observation_lineage_record(
+                pulse=cycle_pulse,
+                pulse_input=pulse_input,
+                market_snapshot=consumed_snapshot,
+                feed_health_truth=consumed_feed_truth,
+                process_local_tick_lineage=process_local_tick_lineage,
+                strategy_result=strat_result,
+                decision_result=shadow_decisions,
+                trade_truth_record=trade_truth_record,
+            )
 
             # Append-only persistence to causal ledgers
             with (output_root / "strategy_observations.jsonl").open("a", encoding="utf-8") as so_file:
@@ -750,6 +949,8 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                     cd_file.write(json.dumps(dec.to_dict(), sort_keys=True) + "\n")
             with (output_root / "trade_truth_stream.jsonl").open("a", encoding="utf-8") as tt_file:
                 tt_file.write(json.dumps(trade_truth_record.to_dict(), sort_keys=True) + "\n")
+            with (output_root / "causal_observation_lineage.jsonl").open("a", encoding="utf-8") as lineage_file:
+                lineage_file.write(json.dumps(lineage_record, sort_keys=True) + "\n")
             with (output_root / "native_pulse_stream.jsonl").open("a", encoding="utf-8") as np_file:
                 np_file.write(json.dumps(cycle_pulse.to_dict(), sort_keys=True) + "\n")
 
@@ -828,11 +1029,33 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         if not report["shutdown_drain_complete"]:
             raise RuntimeError("READ_ONLY_SHUTDOWN_DRAIN_INCOMPLETE")
         if storage_loss_reason is None:
+            try:
+                revalidate(storage_authority)
+                assert_same_device(storage_authority, heritage_root)
+                coverage_report = coverage_ledger.snapshot(ended_epoch=time.time())
+                coverage_report.update(broker_api_ledger.verified_safety_fields())
+                write_json_atomic(output_root / "feed_coverage_ledger.json", coverage_report)
+                publication = publish_same_session_cas_manifest(
+                    heritage_root=heritage_root,
+                    session_identity=target_session,
+                    run_id=run_id,
+                    source_sha=producer_commit,
+                    underlying_token=cas_token,
+                    primitives=cas_store.rows,
+                    coverage_report=coverage_report,
+                )
+            except Exception as exc:
+                publication = {"status": "BLOCKED", "reason":
+                    f"{type(exc).__name__}:{exc}", "read_only": True,
+                    "is_order_action": False, **broker_api_ledger.verified_safety_fields(),
+                    "allowed_for_live_execution": False}
+            write_json_atomic(output_root / "cas_heritage_publication.json", publication)
             write_json_atomic(output_root / "process_identity.json", {
                 "run_id": run_id, "pid": os.getpid(), "producer_sha": producer_commit,
                 "session_root": str(output_root.resolve()), "state": "STOPPED",
                 "shutdown_drain_complete": bool(report.get("shutdown_drain_complete")),
                 "read_only": True, "order_authority": False, "broker_write_authority": False,
+                **broker_api_ledger.verified_safety_fields(),
                 "shadow_strategy_ids": list(shadow_registry.adapters.keys()),
                 "shadow_disabled_strategies": dict(shadow_registry.disabled_strategies),
             })

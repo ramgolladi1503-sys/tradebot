@@ -5,6 +5,8 @@ live-market, latency, or strategy-performance evidence.
 """
 from dataclasses import replace
 from datetime import datetime
+import hashlib
+import json
 from zoneinfo import ZoneInfo
 
 from core.causal_pulse import create_native_pulse
@@ -38,6 +40,18 @@ def _cas_store(tmp_path, *, prices=(100.0, 99.0)):
     for (name, target), price in zip(target_times.items(), prices, strict=True):
         target_epoch = target.timestamp()
         selected_epoch = target_epoch + 0.5
+        source_payload = {
+            "instrument_token": TOKEN,
+            "underlying_symbol": "NIFTY",
+            "last_price": price,
+            "volume": None,
+            "oi": None,
+            "source_timestamp_field": "exchange_timestamp",
+            "source_timestamp_epoch": selected_epoch,
+        }
+        source_hash = hashlib.sha256(
+            json.dumps(source_payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+        ).hexdigest()
         tick = {
             "underlying_symbol": "NIFTY",
             "instrument_token": TOKEN,
@@ -48,6 +62,9 @@ def _cas_store(tmp_path, *, prices=(100.0, 99.0)):
             "receive_timestamp_epoch": selected_epoch + 0.05,
             "timestamp_fallback_used": False,
             "last_price": price,
+            "source_event_id": f"{SESSION_ID}:1:{TOKEN}:{source_hash[:16]}",
+            "source_event_sha256": source_hash,
+            "source_event_payload": source_payload,
         }
         store.capture(
             name,

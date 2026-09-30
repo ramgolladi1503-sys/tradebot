@@ -1,0 +1,271 @@
+{
+  "authority": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "campaign_result": "Offline implementation tests remain green; newly inspected stable 2026-09-29 runtime artifacts contradict clean runtime verification: producer SHA is the supplied branch, feed truth is DEGRADED, per-token coverage/heritage files are absent, process_identity is stale, and shutdown drain is FAILED/PARTIAL. No live verification pass.",
+  "continuation_audit": {
+    "branch_feed_regression_command": "python -m pytest -q tests/test_pulse_issues_and_feed_consistency.py tests/test_tick_store.py tests/test_kite_depth_ws_watchdog_scope.py tests/test_kite_read_only_observation_runtime.py tests/test_governed_morning_orchestrator.py",
+    "branch_feed_regression_result": "73 passed, 2 optional dependency warnings",
+    "cross_day_publisher": "decision-time graph preflight -> separate semantic verifier -> bounded session index; failures are not indexed",
+    "decision_epoch_validation": "Non-finite decision epochs are rejected by both graph preflight and the independent verifier.",
+    "implementation_commit_scope": "Includes pinned T-1 runtime, legacy-loader fail-closed shim, bounded source inventory/oracle, cross-day graph publisher, authority tests, and evidence updates.",
+    "integration_branch": "ram/mros-session-continuity-live-integration",
+    "integration_commit": "df5bb856a",
+    "legacy_generator_policy": "inventory only; all T-1 values null and BLOCKED_SOURCE_AUTHORITY; independent oracle rejects promoted values",
+    "scope_note": "The branch worktree changes were preserved. The T-1 loader trust path was replaced with the pinned graph verifier, and the original standalone helper now fails closed.",
+    "source_branch": "fix/runtime-pulse-and-feed-consistency-v1",
+    "source_head": "12d01da414d9a1ffc13718390e2c950c9f621bfd",
+    "t1_graph_assembler": "Public fail-closed assembler requires exact predecessor calendar, complete required strategy fields, one verified source ancestor per prerequisite, instrument/contract/session identity, and decision-time admissibility; emits exactly two direct edges per prerequisite.",
+    "t1_runtime_reverification": "Pinned runtime loader runs structural graph verification and the independent serialized-manifest verifier. Semantic failures localize to requested prerequisite ancestry; unrelated strategy prerequisites remain eligible. Structural/hash failures remain manifest-wide.",
+    "tested_command": "python -m pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+    "tested_result": "272 passed, 2 optional dependency warnings",
+    "runtime_evidence_update": "2026-09-29 stopped run PID is absent, but stable shutdown drain is FAILED/PARTIAL and references pre-integration source SHA; no per-token coverage or same-day heritage artifact exists."
+  },
+  "gates": [
+    {
+      "actual": "same-day verified references survive process restart; original source run IDs and capture rows remain bound",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V01",
+      "negative_control": "not claimed",
+      "proof": "tests/test_market_heritage_graph.py::test_same_session_cas_restart_inherits_only_verified_immutable_references; V23 restart tests",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_SYNTHETIC_RESTART_ONLY"
+    },
+    {
+      "actual": "assertions passed, including exact T-1 ancestry assembly and independent publish verification",
+      "command": "python -m pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V02",
+      "negative_control": "covered by graph tamper/cycle/conflict tests or CAS strict-binding test",
+      "proof": "test_publication_is_content_addressed_idempotent_and_independently_verified",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_IMPLEMENTATION"
+    },
+    {
+      "actual": "Wrong prior-session trading date and venue are explicitly rejected by the T1 assembler; wrong instrument and contract identity are rejected by the readiness/runtime loader.",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V03",
+      "negative_control": "covered by graph tamper/cycle/conflict tests or CAS strict-binding test",
+      "proof": "tests/test_market_heritage_graph.py::test_t1_assembler_fails_closed_on_incomplete_or_mismatched_evidence (wrong source date and venue cases); tests/test_market_heritage_graph.py::test_strategy_readiness_rejects_wrong_instrument_and_missing_t1_field; tests/test_market_heritage_graph.py::test_runtime_prerequisite_loader_rejects_inexact_bar_contract_or_rolling_history (contract mismatch case)",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_SYNTHETIC_CONTRACT_AND_SESSION_REJECTION"
+    },
+    {
+      "actual": "assertions passed",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V04",
+      "negative_control": "covered by graph tamper/cycle/conflict tests or CAS strict-binding test",
+      "proof": "test_conflicting_logical_key_and_future_information_are_not_ready; test_two_distinct_captured_values_are_a_conflict",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_IMPLEMENTATION"
+    },
+    {
+      "actual": "The frozen CAS spec selects on validated exchange timestamp and retains local receive time separately. A delayed receipt is accepted when source and selected exchange epochs match and the selected event is within the target window.",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V05",
+      "negative_control": "not claimed",
+      "proof": "tests/test_cas_primitive_producer.py::test_exchange_selection_time_and_local_receive_time_remain_distinct; test_event_payload_hash_binds_price_token_and_source_time",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_FIXTURE_DISTINCT_CLOCKS"
+    },
+    {
+      "actual": "A pre-target whole-second exchange event remains blocked even when it is received after target; receipt time cannot substitute for event time.",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V06",
+      "negative_control": "not claimed",
+      "proof": "tests/test_cas_primitive_producer.py::test_pre_target_whole_second_event_is_rejected_even_after_target_receive; test_selected_receipt_time_cannot_substitute_for_late_exchange_event",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_FIXTURE_BOUNDARY"
+    },
+    {
+      "actual": "The stopped run did not execute the integration branch: presession/process records cite producer SHA 12d01da414d9a1ffc13718390e2c950c9f621bfd; expected feed_coverage_ledger.json and cas_session_heritage.json are absent. shutdown_drain.json is FAILED/PARTIAL. Per-token callback coverage and process-gap propagation are therefore not observed in this run; fixture wiring remains separate.",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture coverage wiring may pass; this run cannot establish runtime gap persistence or strategy coverage readiness",
+      "id": "V07",
+      "negative_control": "old producer SHA, missing coverage artifacts, stale RUNNING identity with absent PID, and incomplete shutdown block any runtime coverage claim",
+      "proof": "SOURCE_AND_HERITAGE_MANIFEST.json stopped-run process_identity, shutdown_drain, and absent feed_coverage_ledger/cas_session_heritage records; tests/core/test_read_only_coverage_ledger.py fixtures",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "BLOCKED_RUNTIME_PROOF_OLD_SHA_COVERAGE_ARTIFACTS_ABSENT"
+    },
+    {
+      "actual": "completed identical source event pair is blocked before evaluator invocation after restart",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V08",
+      "negative_control": "does not deduplicate other strategy evaluators or authorize entry",
+      "proof": "tests/test_cas_evaluation_ledger.py::test_claim_completion_and_restart_are_idempotent; tests/test_cas_evaluation_ledger.py::test_receipt_published_before_index_crash_is_recovered_idempotently; V23 duplicate-cycle fixture",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_FIXTURE_CAS_PAIR_IDEMPOTENCY"
+    },
+    {
+      "actual": "BLOCKED_SOURCE_EVIDENCE: preflight source_snapshot_sha256 resolves to the exact 2026-09-28 10:00 UTC market_snapshot; market_open=false, quote is STALE, last_tick_ts is null, and OHLC merely repeats LTP 22788.25. No 15:29 bar or futures source exists in the supplied manifest (path/hash null, row count 0).",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "remain blocked",
+      "id": "V09",
+      "negative_control": "not claimed",
+      "proof": "SOURCE_AND_HERITAGE_MANIFEST.json entries for the supplied preflight and its exact referenced market_snapshot.json SHA-256 8ca6fe36148c6fe6fdf7e31945d095da08009d367ac4e709d888066c29c2925f",
+      "source_authority": "RESEARCH_ONLY_CANDIDATE_REJECTED_FOR_T1",
+      "status": "BLOCKED_SOURCE_EVIDENCE"
+    },
+    {
+      "actual": "assertions passed",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V10",
+      "negative_control": "not claimed",
+      "proof": "test_previous_eligible_session_skips_calendar_gaps_without_date_arithmetic",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_INJECTED_CALENDAR_FIXTURE"
+    },
+    {
+      "actual": "frozen spec requires exact 15:29:00 regular-session 1-minute futures bar; synthetic 15:28 and event-epoch mismatch are rejected; real prior-session source unavailable",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "remain blocked",
+      "id": "V11",
+      "negative_control": "not claimed",
+      "proof": "docs/research/candidates/INTRADAY_OPENING_DRIVE_V1/FROZEN_SPEC.json; tests/test_market_heritage_graph.py::test_runtime_prerequisite_loader_rejects_inexact_bar_contract_or_rolling_history",
+      "source_authority": "UNKNOWN",
+      "status": "PASS_SYNTHETIC_EXACT_1529_FAIL_CLOSED"
+    },
+    {
+      "actual": "Synthetic 200-row calculation/recomputation passes; current local NIFTY spot corpus ends 2026-09-04 and is research-only, so the real T-1 rolling input remains blocked.",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V12",
+      "negative_control": "not claimed",
+      "proof": "test_rolling_sma_recomputes_complete_verified_series_independently",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY; REAL_SOURCE_BLOCKED",
+      "status": "PASS_SCALED_FIXTURE"
+    },
+    {
+      "actual": "Pinned loader requires exactly 200 calendar-session rows with row-content digests, independently recomputed formula/result closure, and complete source ancestry; 199 rows and changed-close/stale-row-hash mutation block.",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "remain blocked",
+      "id": "V13",
+      "negative_control": "not claimed",
+      "proof": "tests/test_market_heritage_graph.py::test_runtime_prerequisite_loader_rejects_inexact_bar_contract_or_rolling_history; test_rolling_sma_rejects_incomplete_or_ambiguous_ancestors",
+      "source_authority": "UNKNOWN",
+      "status": "PASS_SYNTHETIC_200_SERIES_AND_199_BLOCK"
+    },
+    {
+      "actual": "assertions passed",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V14",
+      "negative_control": "not claimed",
+      "proof": "test_strategy_readiness_is_field_local_and_asof_constrained",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_FIXTURE"
+    },
+    {
+      "actual": "Per-strategy readiness remains local; the legacy adapter helper now rejects plain launch-plan facts, generic disk JSON, environment overrides, and current-contract fallback without a pinned verified heritage manifest. All dependent strategies remain disabled.",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V15",
+      "negative_control": "not claimed",
+      "proof": "tests/test_market_heritage_graph.py::test_strategy_readiness_is_field_local_and_asof_constrained; tests/paper_shadow/test_strategy_shadow_adapters.py::test_legacy_t1_loader_rejects_unpinned_launch_plan_disk_and_environment; tests/test_pulse_issues_and_feed_consistency.py::test_legacy_t1_loader_does_not_trust_unpinned_state_root_manifest",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_FIXTURE"
+    },
+    {
+      "actual": "A first valid quote at or after the frozen 11:01 cutoff finalizes the shadow adapter with an explicit expired-window checkpoint and records no entry.",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "remain blocked",
+      "id": "V16",
+      "negative_control": "A late-start/recovered observer cannot create a backdated or post-window shadow entry; no entry/order authority is added.",
+      "proof": "tests/paper_shadow/test_strategy_shadow_adapters.py::test_opening_drive_late_start_does_not_create_entry_after_frozen_window; existing read-only authority regression",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_FROZEN_ENTRY_WINDOW_NO_BACKDATE"
+    },
+    {
+      "actual": "Process death after temporary-manifest fsync but before atomic link leaves no accepted manifest/index head; retry publishes a hash-verified manifest. Process death after index-temp fsync but before atomic replace preserves the prior valid index without the new entry; retry registers it. Concurrent subprocess writers preserve both entries. Publisher independently verifies before indexing.",
+      "command": "pytest -q tests/test_market_heritage_graph.py::test_manifest_publication_recovers_after_process_death_before_atomic_link tests/test_market_heritage_graph.py::test_session_index_recovers_after_process_death_before_atomic_replace tests/test_market_heritage_graph.py::test_session_index_concurrent_process_writers_preserve_both_manifests tests/test_market_heritage_graph.py::test_verified_heritage_publisher_independently_checks_then_indexes tests/test_market_heritage_graph.py::test_verified_heritage_publisher_does_not_publish_future_dependency",
+      "expected": "no partially accepted manifest/index state after interrupted immutable publication; verified retry and independent writers preserve complete closure; no real source authority promotion",
+      "id": "V17",
+      "negative_control": "process exits before immutable manifest link or mutable index replacement: no partial accepted state; prior index remains valid; retry succeeds; concurrent independent writers preserve both unique run entries",
+      "proof": "tests/test_market_heritage_graph.py::test_manifest_publication_recovers_after_process_death_before_atomic_link; tests/test_market_heritage_graph.py::test_session_index_recovers_after_process_death_before_atomic_replace; tests/test_market_heritage_graph.py::test_session_index_concurrent_process_writers_preserve_both_manifests; publisher independent verification and future-dependency rejection tests",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_PROCESS_CRASH_RECOVERY_AND_MULTIPROCESS_PUBLICATION_FIXTURE"
+    },
+    {
+      "actual": "Independent verifier rejects self-consistent rehashed manifests with changed CAS event payloads, stale rolling source-row hashes, wrong exact futures bar, contract mismatch or rolling computation closure failure.",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V18",
+      "negative_control": "not claimed",
+      "proof": "tests/test_market_heritage_graph.py::test_independent_verifier_rejects_self_consistent_manifest_with_tampered_cas_event; test_runtime_prerequisite_loader_rejects_inexact_bar_contract_or_rolling_history; tests/core/test_read_only_coverage_ledger.py::test_independent_verifier_rejects_self_consistent_wrong_run_coverage",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_INDEPENDENT_SEMANTIC_MUTATION_FIXTURES"
+    },
+    {
+      "actual": "six process epochs across two adjacent fixture sessions: three same-day epochs each, T-1 prerequisite handoff to the next session, and next-session CAS references only next-session source runs",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "remain blocked",
+      "id": "V19",
+      "negative_control": "not claimed",
+      "proof": "tests/test_market_heritage_graph.py::test_consecutive_sessions_three_process_epochs_per_day_handoff_only_t1; calendar and market data remain synthetic",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_SYNTHETIC_SIX_EPOCH_TWO_SESSION_CHAIN"
+    },
+    {
+      "actual": "Expanded bounded 9/28 and 9/29 inventories cover 29 and 30 allowlisted files respectively; each remains LEGACY_UNVERIFIED. PID 82150 was confirmed active during the earlier bounded inventory; measured files changed, so the inventory remains LEGACY_UNVERIFIED. The legacy T-1 generator now emits a hash-bound inventory only; all prerequisite values and calendar authority remain blocked.",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V20",
+      "negative_control": "not claimed",
+      "proof": "SOURCE_AND_HERITAGE_MANIFEST.json records exact external hashes and active-writer caveat",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_BOUNDED_LEGACY_INDEX_WITH_ACTIVE_WRITER_CAVEAT"
+    },
+    {
+      "actual": "Stable stopped-run artifacts are not an acceptance pass: feed_health_truth_latest reports feed_ok=false/global_feed_ok=false, DEGRADED, 95 blockers; process_identity records PID 82150 RUNNING but ps shows it absent; producer SHA is 12d01da414d9a1ffc13718390e2c950c9f621bfd; feed_coverage_ledger.json is absent. shutdown_drain.json final_seal=PARTIAL/phase=FAILED: tick persistence has 50,801 pending writes, queue depth 49,801, 330 worker failures, deadline expired, final flush false and worker not terminated; runtime/depth drains also incomplete. Selected-tick artifacts do not close event-to-downstream lineage.",
+      "command": "pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "remain blocked; no LIVE_VERIFIED claim",
+      "id": "V21",
+      "negative_control": "do not infer a clean stop from a zero-byte STOP_REQUESTED marker or absent PID; PARTIAL/FAILED drain, stale process identity, wrong producer SHA, degraded feed truth, and missing per-token ledger block runtime acceptance",
+      "proof": "SOURCE_AND_HERITAGE_MANIFEST.json stable stopped-run records with exact hashes for shutdown_drain.json, process_identity.json, feed_health_truth_latest.json, market_snapshot.json, CAS primitives, and explicit absent coverage/heritage artifacts; prior bounded legacy telemetry remains LEGACY_UNVERIFIED",
+      "source_authority": "UNKNOWN",
+      "status": "RUNTIME_VERIFICATION_FAILED_STOP_DRAIN_PARTIAL_SHA_MISMATCH"
+    },
+    {
+      "actual": "assertions passed, including independent pinned-manifest re-verification and field-local status/availability blocking",
+      "command": "python -m pytest -q tests/test_cas_primitive_producer.py tests/test_cas_evaluation_ledger.py tests/test_market_heritage_graph.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/core/test_read_only_coverage_ledger.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/test_causal_strategy_and_truth.py tests/test_read_only_consumer_cycle.py tests/test_v23_production_equivalent_harness.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_cas_coordinator_lifecycle.py tests/core/test_observation_lineage.py tests/core/test_tick_store_db_truth.py tests/core/test_market_snapshot_builder.py tests/test_tick_store.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/test_pulse_issues_and_feed_consistency.py tests/paper_shadow/test_t1_prerequisites_authority.py",
+      "expected": "fixture proves stated primitive only; no real data authority promotion",
+      "id": "V22",
+      "negative_control": "not claimed",
+      "proof": "final combined scoped regression: 271 passed; includes rehashed status/time/source ancestor mutations plus manifest/index crash recovery and concurrent process writer controls",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_FOCUSED_REGRESSION"
+    },
+    {
+      "actual": "61 passed, including exact T-1 assembly/publication, independent runtime verification, and rehashed status/availability mutations",
+      "command": "python -m pytest -q tests/test_market_heritage_graph.py",
+      "expected": "assembler accepts complete exact evidence and blocks missing/extra fields, wrong predecessor source session, and future evidence",
+      "id": "V23",
+      "negative_control": "missing/extra/duplicate/reused/mismatched/unused/future evidence; derived status and prerequisite/source/calendar availability mutations rejected, with unrelated strategy readiness preserved",
+      "proof": "tests/test_market_heritage_graph.py::test_t1_assembler_builds_exact_calendar_and_source_closure_and_publishes; tests/test_market_heritage_graph.py::test_t1_assembler_fails_closed_on_incomplete_or_mismatched_evidence",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_IMPLEMENTATION"
+    },
+    {
+      "actual": "7 rehashed-manifest mutations blocked by the independent verifier and runtime loader; unrelated strategies remain READY for field-local semantic/source-time failures",
+      "command": "python -m pytest -q tests/test_market_heritage_graph.py::test_independent_verifier_and_runtime_reject_unverified_prerequisite_status_or_time tests/test_market_heritage_graph.py::test_independent_verifier_and_runtime_reject_source_parent_availability",
+      "expected": "A self-consistent rehashed manifest with unverified prerequisite status or inadmissible/missing evidence availability is rejected before runtime consumption; independent strategy readiness remains field-local.",
+      "id": "V24",
+      "negative_control": "derived node OBSERVED, payload BLOCKED, future payload availability, missing prerequisite availability, missing calendar availability, missing source availability, future source availability",
+      "proof": "tests/test_market_heritage_graph.py::test_independent_verifier_and_runtime_reject_unverified_prerequisite_status_or_time; tests/test_market_heritage_graph.py::test_independent_verifier_and_runtime_reject_source_parent_availability",
+      "source_authority": "SYNTHETIC_FIXTURE_ONLY",
+      "status": "PASS_IMPLEMENTATION"
+    }
+  ],
+  "schema_version": 1,
+  "source_sha": "ab229d3e32f5f6ceb02c476efdd53253aa55ee83"
+}

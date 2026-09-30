@@ -22,7 +22,6 @@ for _module_name in tuple(sys.modules):
     if _module_name == "core.broker" or _module_name.startswith("core.broker."):
         sys.modules.pop(_module_name, None)
 
-from core.kite_read_only_observation_runtime import run_observation, safe_environment
 from core.market_event_graph_live_launch_plan import load_launch_plan
 from core.daily_instrument_authority import validate_authority
 
@@ -34,13 +33,34 @@ def main() -> int:
     parser.add_argument("--output-root", required=True, type=Path)
     parser.add_argument("--kite-instruments-file", required=True, type=Path)
     parser.add_argument("--launch-plan", required=True, type=Path)
-    parser.add_argument("--token-path", required=True, type=Path)
+    parser.add_argument("--token-path", type=Path)
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--authority-artifact", required=True, type=Path)
     parser.add_argument("--parquet-export", action="store_true")
     parser.add_argument("--parquet-export-interval-seconds", type=float, default=15.0)
     parser.add_argument("--disk-budget-contract", type=Path)
     args = parser.parse_args()
+
+    # This branch is deliberately local-only: do not establish runtime storage,
+    # inspect credentials, sanitize a runtime environment, or import observer/auth
+    # modules. It validates only the frozen local launch and instrument artifacts.
+    if args.validate_only:
+        authority = validate_authority(
+            artifact_path=args.authority_artifact,
+            master_path=args.kite_instruments_file,
+            session_date=args.session_date,
+            source_sha=os.environ.get("TRADEBOT_COMMIT_SHA", ""),
+            required_tokens=[],
+        )
+        if not authority["ok"]:
+            raise SystemExit(authority["verdict"])
+        plan = load_launch_plan(args.launch_plan)
+        if plan.get("session_date") != args.session_date:
+            raise SystemExit("BLOCKED_BY_LAUNCH_PLAN_SESSION_DATE")
+        return 0
+
+    if args.token_path is None:
+        raise SystemExit("KITE_TOKEN_PATH_REQUIRED_FOR_OBSERVATION")
     if not args.token_path.is_file():
         raise SystemExit("KITE_ACCESS_TOKEN_MISSING")
     from core.runtime_storage_authority import StorageAuthorityError, establish, bind_environment
@@ -68,18 +88,12 @@ def main() -> int:
             raise SystemExit(f"DISK_BUDGET_{decision.verdict}")
     os.environ["TRADING_BOT_TOKEN_PATH"] = str(args.token_path.resolve())
     plan = load_launch_plan(args.launch_plan)
+    from core.kite_read_only_observation_runtime import run_observation, safe_environment
     env = safe_environment()
     os.environ.update(env)
-    from core.kite_read_only_observation_runtime import assert_import_boundary, safety_contract
+    from core.kite_read_only_observation_runtime import safety_contract
     contract = safety_contract(env, child_command=["read-only-observation"], child_pid=None)
     (args.output_root / "startup_safety_contract.json").write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    if args.validate_only:
-        from core.auth import get_kite_client
-        from core import kite_depth_ws
-        from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
-        assert_import_boundary()
-        get_kite_client(repo_root_path=Path.cwd()).profile()
-        return 0
     exporter = None
     try:
         if args.parquet_export:
