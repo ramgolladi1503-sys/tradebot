@@ -205,18 +205,9 @@ def test_gate5_registered_callback_slow_store_matrix_is_off_thread(tmp_path):
                 "slow_runtime": slow_runtime,
             })
         finally:
-            try:
-                runtime_mod.shutdown_runtime_persistence(deadline_seconds=1.0)
-            except Exception:
-                pass
-            try:
-                cert.tick_store.shutdown_persistence_worker(deadline_seconds=1.0)
-            except Exception:
-                pass
-            try:
-                exercised_depth.shutdown_persistence(deadline_seconds=1.0)
-            except Exception:
-                pass
+            runtime_mod.shutdown_runtime_persistence(deadline_seconds=1.0)
+            cert.tick_store.shutdown_persistence_worker(deadline_seconds=1.0)
+            exercised_depth.shutdown_persistence(deadline_seconds=1.0)
             mp.undo()
 
     assert len(matrix_rows) == 8

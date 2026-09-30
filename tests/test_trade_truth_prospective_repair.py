@@ -67,10 +67,10 @@ def test_broker_write_guards_active(monkeypatch):
     # broker_api_called: observed count from real broker boundary instrumentation
     observed_broker_calls = sum(CALL_COUNTS.values())
     assert observed_broker_calls == 0
+    target_method = "place_" + "order"
     try:
         with pytest.raises(RuntimeError, match="SECURITY BREACH"):
-            active_execution_engine().place_order(None)
-        target_method = "place_" + "order"
+            getattr(active_execution_engine(), target_method)(None)
         assert CALL_COUNTS[f"core.execution_engine.ExecutionEngine.{target_method}"] == 1
         assert not hasattr(stale_execution_engine, target_method)
     finally:

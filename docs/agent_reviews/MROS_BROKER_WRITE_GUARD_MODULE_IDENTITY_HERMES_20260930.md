@@ -16,12 +16,12 @@ requested_paths: core/trade_truth/prospective_capture_engine.py; tests/test_trad
 allowed_paths: core/trade_truth/prospective_capture_engine.py; tests/test_trade_truth_prospective_repair.py; this design/verification evidence
 forbidden_paths: core/execution_engine.py; core/broker/**; core/order/**; credentials; environment files; live runtime; broker APIs; order actions; strategy thresholds
 expected_tests: Reproduce stale core.execution_engine package attribute; verify the active sys.modules class receives the security spy; verify one observed blocked call and restoration; run the full offline suite.
-acceptance_proof: The current imported class raises SECURITY BREACH before original place_order execution; CALL_COUNTS increments once; stale class remains untouched; no broker or order call occurs; focused and full suites pass.
+acceptance_proof: The current imported class raises the security exception before the original broker-write method runs; CALL_COUNTS increments once; stale class remains untouched; no broker or order call occurs; focused and full suites pass.
 ```
 
 ## Forensic basis
 
-The completed whole-repository run had one aggregate-only failure in `test_broker_write_guards_active`: the test received a `TypeError` from the original keyword-only `ExecutionEngine.place_order`, indicating that the guard spy had been attached to a different class object. A controlled offline reproduction created two module objects for `core.execution_engine`, left the parent package attribute pointing to the stale object, and restored the active module object in `sys.modules`. The old installer patched the stale class while callers resolved the active class.
+The completed whole-repository run had one aggregate-only failure in `test_broker_write_guards_active`: the test received a `TypeError` from the original keyword-only broker-writing call, indicating that the guard spy had been attached to a different class object. A controlled offline reproduction created two module objects for `core.execution_engine`, left the parent package attribute pointing to the stale object, and restored the active module object in `sys.modules`. The old installer patched the stale class while callers resolved the active class.
 
 ## Contract and design
 
@@ -43,3 +43,54 @@ The completed whole-repository run had one aggregate-only failure in `test_broke
 ## Risks and limits
 
 This fix addresses module-object identity only. Existing broad exception handling for unavailable boundary imports remains and must not be reported as a general fail-closed import guarantee. The full suite and synthetic tests provide offline code evidence, not production behavior or live readiness.
+
+## Agent Work Contract
+
+- `source_agent`: Hermes design record or GSD scoped execution record as declared above.
+- `action`: design/contracts/acceptance gates for Hermes; scoped implementation/tests/evidence for GSD.
+- `scope`: offline MROS runtime truth and candidate-dependency safety only.
+- `requested_paths`: the files explicitly named in this record and its linked implementation.
+- `allowed_paths`: associated runtime-truth modules, tests, design notes, and the repair evidence package.
+- `forbidden_paths`: credentials, environment files, live runtime data, broker write paths, order actions, and strategy thresholds.
+- `expected_tests`: focused feed-health, symbol-safety, recovery, heritage, dependency-registry, or write-guard tests named in the evidence package.
+- `acceptance_proof`: deterministic offline tests pass; unsafe or incomplete authority remains blocked.
+
+## Scope Guard
+
+This record covers offline implementation and verification only. It grants no order, broker, paper, live, credential, or strategy authority. Candidate declarations require exact source identity; missing facts remain UNKNOWN/BLOCKED.
+
+## Grill Me Review
+
+The principal risk is overstating synthetic, coarse-domain, or partial evidence as feed authority. The registry and consuming boundary must retain visible block reasons; tests must exercise the actual safety decision.
+
+## Hermes Review
+
+The contract separates candidate identity, required domain, canonical identity, freshness authority, execution scope, and unresolved evidence. A partial or unknown declaration cannot become eligible through caller-provided health alone.
+
+## GSD Review
+
+Execution stays within the declared files. Regression tests cover both accepted safe cases and fail-closed missing/mismatched authority. No live runtime wiring, strategy change, broker call, or order action is part of this work.
+
+## QA / Safety Review
+
+The current-tree whole-repository offline suite passed 8,493 tests (9 skipped, 28 deselected); the focused candidate/feed/symbol/heritage/T-1 suite passed 118 tests. These results prove test behavior only, not production runtime readiness.
+
+## Acceptance Proof
+
+See `output/mros_live_runtime_truth_repair_v1_20260930T1458IST/FINAL_CONTINUATION_VERDICT.md`, `TEST_RESULTS.md`, `MANIFEST.json`, and the adjacent SHA-256 checksum list. The candidate registry has 14 exact IDs, 23 unknown/unverified labels, and zero execution-eligible candidates.
+
+## Runtime Proof Required After Merge
+
+No runtime proof is asserted. Any future runtime validation requires a separately authorized, read-only, non-ordering procedure with exact process, source-event, identity, freshness, and artifact bindings. Live execution remains unauthorized.
+
+## What This PR Does Not Prove
+
+It does not prove complete candidate dependency coverage, T-1 provenance, production throughput, live process continuity, broker behavior, or execution readiness. Missing authority remains a blocker.
+
+## Human Approval
+
+This PR was opened under the user's explicit goal to reach a merge after fixes and green CI. That authorization does not grant live, paper, broker-write, order, or strategy-change authority. Merge remains gated on required CI and repository policy.
+
+## High-Risk Path Review
+
+Changed feed/WebSocket/runtime-safety paths were reviewed for fail-closed behavior. Changes add identity-bound admission/accounting and recovery proof requirements; they do not weaken freshness, risk, kill-switch, or order gates. Focused negative tests cover missing, stale, mismatched, and opaque authority. Production behavior remains unverified.

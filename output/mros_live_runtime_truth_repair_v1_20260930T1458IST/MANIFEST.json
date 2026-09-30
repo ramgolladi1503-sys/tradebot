@@ -162,9 +162,9 @@
     "CANDIDATE_DEPENDENCY_REGISTRY.json": "70817679870f7759841e19a60f600de7c87a044b22b2e5149e731da94469c78f",
     "CONTINUATION_FAILURE_ISOLATION.log": "248736d08c70a3448135a7db96aef0159eefa970c27d8b6fa2bcc7178c94735f",
     "FINAL_CONTINUATION_VERDICT.md": "a87f66b5599ee1d000cdc1d6acdecebd3f67ce26b9cbeb1240604da22f0e17b0",
-    "SHA256SUMS.txt": "0480690e2c67903f593a71b1c63bb77c7c5c95d33c24d673d827381e1acae89d",
+    "SHA256SUMS.txt": "52fa83f8017ff3234362bae2863827d0d3d1751779c41de5361f92791d5bebf2",
     "T1_AUTHORITY_FORENSICS.md": "48d995ce988689b3334fdcddc18ca03a49e07ea317c076540b80a9739a403f45",
-    "TEST_RESULTS.md": "a6272899e59599f0b17e2f25ff3f953c8d3f5e81e3bb0f5c0cb7e65febde160a",
+    "TEST_RESULTS.md": "676a205f8d502c08e47a8cf2cc5e343ef447873ebe7d3e6679ae0cb23534cc1a",
     "WHOLE_REPO_FAILURE_CLASSIFICATION.json": "1657dc3d2531e08e3eb3ce0141c4095d2e6b043958b702d51cc5cb35d3489b46",
     "WHOLE_REPO_FAILURE_CLASSIFICATION.md": "8853049de95431e4529780b79ee57df677426a3a361bb206a8134bc6d1e8c2d5",
     "WHOLE_REPO_REGRESSION_ISOLATED_TMP_20261001.log": "f0bf5eb5e48534c48e0ac5e9e780a3730542bf3a51af133e496a86def7600297"
@@ -195,11 +195,11 @@
   "direct_artifact_writes_throttled_for_same_state_ticks": true,
   "domain_health_contract": "Runtime producer emits index spot and index/stock option states from explicit maps; index futures and stock spot remain UNKNOWN absent authoritative identities. Consumer blocks on declared required domains and overall state incorporates transport blockers and monitored degradation.",
   "evidence_checksums_file": "SHA256SUMS.txt",
-  "evidence_checksums_sha256": "0480690e2c67903f593a71b1c63bb77c7c5c95d33c24d673d827381e1acae89d",
+  "evidence_checksums_sha256": "52fa83f8017ff3234362bae2863827d0d3d1751779c41de5361f92791d5bebf2",
   "evidence_file_count_excluding_manifest_and_checksums": 29,
   "evidence_files_sha256": "See SHA256SUMS.txt; MANIFEST.json is excluded from its own hash list.",
   "evidence_sha256_file": "SHA256SUMS.txt",
-  "evidence_sha256_file_sha256": "0480690e2c67903f593a71b1c63bb77c7c5c95d33c24d673d827381e1acae89d",
+  "evidence_sha256_file_sha256": "52fa83f8017ff3234362bae2863827d0d3d1751779c41de5361f92791d5bebf2",
   "expanded_combined_regression_result": {
     "failed": 1,
     "failure": "test_feed_runtime_states.py::test_start_depth_ws_writes_import_missing_state",
@@ -297,6 +297,13 @@
   },
   "lightweight_admission_check_runs_per_tick_callback": true,
   "live_verification_required": true,
+  "local_code_excellence_after_review_gate_remediation": {
+    "blocks": 0,
+    "changed_paths": 74,
+    "exit_code": 0,
+    "findings": 105,
+    "report": "/tmp/mros-ce-report3.md"
+  },
   "modified_source_test_and_design_paths": [
     "TRADE_TRUTH_PROSPECTIVE_PREFLIGHT_RESULTS.json",
     "TRADE_TRUTH_PROSPECTIVE_VERIFICATION_REPORT.json",
@@ -427,12 +434,19 @@
     "skipped": 0,
     "warnings": 4
   },
+  "review_gate_remediation_focused_tests": {
+    "command": "/opt/anaconda3/bin/pytest -q tests/test_pr763_offline_remaining_gates.py tests/test_trade_truth_prospective_repair.py",
+    "duration_seconds": 18.42,
+    "failed": 0,
+    "passed": 36,
+    "warnings": 3
+  },
   "schema": "mros_live_runtime_truth_repair_evidence_manifest_v1",
   "sidecar_unknown_subsystem_regression": "FIXED_REQUIRED_SUBSYSTEM_KEYS_EXPLICITLY_DEFAULT_TO_UNKNOWN",
   "source_file_count": 51,
-  "source_files_sha256": "6747174d3e844c07e914ac82e8719d3b4fd73099be7c476f234192ed4242c2a4",
+  "source_files_sha256": "94217d4673dcbeb8f47288e338e4b54d41639ea13cde645ba3dcf3bb0b8cdcc9",
   "source_sha256_file": "SOURCE_SHA256SUMS.txt",
-  "source_sha256_file_sha256": "6747174d3e844c07e914ac82e8719d3b4fd73099be7c476f234192ed4242c2a4",
+  "source_sha256_file_sha256": "94217d4673dcbeb8f47288e338e4b54d41639ea13cde645ba3dcf3bb0b8cdcc9",
   "sqlite_sink_drain_test": "PASS_855_IDENTITIES_TEMPORARY_SQLITE_ACTUAL_WRITER_ARTIFACT_SIDE_OUTPUTS_MOCKED",
   "stress_test_status": "OFFLINE_855_REQUEST_PRODUCER_GATE_855_IDENTITY_RUNTIME_SQLITE_DRAIN_855_TOKEN_DEPTH_ADMISSION_AND_SQLITE_DRAIN_ACTUAL_855_ROW_CALLBACK_REPLAY_PASS_PRODUCTION_STRESS_NOT_RUN",
   "t1_authority": "BLOCKED_PROVENANCE_UNVERIFIED_NO_PROVENANCE_MANIFEST_CREATED",
