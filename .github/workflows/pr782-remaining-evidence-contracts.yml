@@ -69,12 +69,14 @@ jobs:
           pytest -q -o addopts='' tests/test_kite_read_only_observation_runtime.py
 
       - name: Verify protected runtime scope
+        env:
+          PR_HEAD_REF: ${{ github.head_ref }}
         run: |
           python - <<'PY'
           import os
           import subprocess
 
-          head_ref = os.environ.get('GITHUB_HEAD_REF')
+          head_ref = os.environ.get('PR_HEAD_REF')
           if head_ref == 'fix/full-live-multicycle-meg-and-feed-stall-v1':
               base = '624aa59fb9c165af2b2c14cbaa8e519f32d813aa'
               subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
@@ -97,12 +99,11 @@ jobs:
                   if path not in allowed_exact and not any(path.startswith(prefix) for prefix in allowed_prefixes)
               ]
           elif head_ref == 'ram/mros-session-continuity-live-integration':
-              base = '12d01da414d9a1ffc13718390e2c950c9f621bfd'
+              base = '723ec4432dfed9d6f9214efd7d216de1e9fdf812'
               subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
               changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
               allowed = set('''
               .github/workflows/pr782-remaining-evidence-contracts.yml
-              .gsd-forensics.yaml
               core/auth_health.py
               core/canonical_cycle_coordinator.py
               core/cas_evaluation_ledger.py
@@ -143,8 +144,6 @@ jobs:
               tests/test_cas_coordinator_lifecycle.py
               tests/test_cas_evaluation_ledger.py
               tests/test_cas_primitive_producer.py
-              tests/test_code_excellence_cerberus_gate.py
-              tests/test_code_excellence_evidence_gate.py
               tests/test_kite_depth_restart.py
               tests/test_kite_read_only_observation_entrypoint.py
               tests/test_kite_read_only_observation_runtime.py
@@ -182,11 +181,13 @@ jobs:
           PY
 
       - name: Validate diff
+        env:
+          PR_HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "${GITHUB_HEAD_REF:-}" = "fix/full-live-multicycle-meg-and-feed-stall-v1" ]; then
+          if [ "${PR_HEAD_REF:-}" = "fix/full-live-multicycle-meg-and-feed-stall-v1" ]; then
             git diff --check 624aa59fb9c165af2b2c14cbaa8e519f32d813aa HEAD
-          elif [ "${GITHUB_HEAD_REF:-}" = "ram/mros-session-continuity-live-integration" ]; then
-            git diff --check 12d01da414d9a1ffc13718390e2c950c9f621bfd HEAD
+          elif [ "${PR_HEAD_REF:-}" = "ram/mros-session-continuity-live-integration" ]; then
+            git diff --check 723ec4432dfed9d6f9214efd7d216de1e9fdf812 HEAD
           else
             git diff --check origin/post-pr783/kite-read-only-observation-runtime-v1...HEAD
           fi

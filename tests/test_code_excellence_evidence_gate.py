@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -180,22 +181,33 @@ def test_evidence_gate_scopes_to_evidence_paths_only(tmp_path):
     assert report.block_count == 0
 
 
-def test_evidence_gate_does_not_treat_review_documents_as_runtime_records(tmp_path):
-    config = _write_config(tmp_path)
-    config.write_text(
-        config.read_text(encoding="utf-8").replace("      - docs/agent_reviews\n", ""),
-        encoding="utf-8",
-    )
-    _write_file(tmp_path, "docs/agent_reviews/architecture.md", "design contract and acceptance gates")
+def test_repository_evidence_policy_excludes_agent_review_contracts(tmp_path):
+    policy = Path(__file__).parents[1] / ".gsd-forensics.yaml"
+    _write_file(tmp_path, "docs/agent_reviews/architecture.md", "design contract")
 
     report = run_evidence_gate(
         repo_root=tmp_path,
-        config_path=config,
+        config_path=policy,
         changed_paths=("docs/agent_reviews/architecture.md",),
     )
 
     assert report.findings == ()
-    assert report.block_count == 0
+
+
+def test_repository_evidence_policy_still_requires_runtime_trace_fields(tmp_path):
+    policy = Path(__file__).parents[1] / ".gsd-forensics.yaml"
+    _write_file(tmp_path, "runtime/analytics/trace.json", json.dumps({"mode": "SIM"}))
+
+    report = run_evidence_gate(
+        repo_root=tmp_path,
+        config_path=policy,
+        changed_paths=("runtime/analytics/trace.json",),
+    )
+
+    assert report.block_count > 0
+    assert {item.field for item in report.blocked_findings} >= {
+        "candidate_id", "decision", "reason", "timestamp", "is_order_action", "broker_api_called", "source"
+    }
 
 
 def test_evidence_gate_report_lists_contract(tmp_path):

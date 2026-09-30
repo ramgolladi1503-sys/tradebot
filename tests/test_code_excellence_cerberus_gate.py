@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import textwrap
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -153,8 +154,8 @@ def test_cerberus_gate_blocks_forbidden_marker_in_scoped_file(tmp_path):
     assert report.exit_code == 1
 
 
-def test_cerberus_gate_allows_truthful_api_event_telemetry(tmp_path):
-    config = _write_config(tmp_path)
+def test_repository_policy_allows_true_api_event_telemetry(tmp_path):
+    policy = Path(__file__).parents[1] / ".gsd-forensics.yaml"
     _write_file(
         tmp_path,
         "tools/ledger.py",
@@ -163,22 +164,15 @@ def test_cerberus_gate_allows_truthful_api_event_telemetry(tmp_path):
 
     report = run_cerberus_gate(
         repo_root=tmp_path,
-        config_path=config,
+        config_path=policy,
         changed_paths=("tools/ledger.py",),
     )
 
     assert report.block_count == 0
 
 
-def test_cerberus_gate_still_blocks_broker_authority(tmp_path):
-    config = _write_config(tmp_path)
-    config.write_text(
-        _config_text().replace(
-            "      - no_action=false\n      - client_called=false",
-            "      - broker_write_authority=false\n      - order_authority=false",
-        ),
-        encoding="utf-8",
-    )
+def test_repository_policy_blocks_true_broker_authority(tmp_path):
+    policy = Path(__file__).parents[1] / ".gsd-forensics.yaml"
     _write_file(
         tmp_path,
         "tools/unsafe_authority.py",
@@ -187,7 +181,7 @@ def test_cerberus_gate_still_blocks_broker_authority(tmp_path):
 
     report = run_cerberus_gate(
         repo_root=tmp_path,
-        config_path=config,
+        config_path=policy,
         changed_paths=("tools/unsafe_authority.py",),
     )
 
