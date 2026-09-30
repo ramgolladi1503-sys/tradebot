@@ -2,6 +2,8 @@
 
 ## PR943 CI applicability repair — 2026-10-01
 
+Follow-up: exact-head CE was unable to create the candidate worktree because GitHub LFS bandwidth was exhausted for unrelated Parquet objects. Candidate materialization now sets `GIT_LFS_SKIP_SMUDGE=1`; the scanner still reads exact-head source, while unrelated LFS payloads remain pointers. The focused `test_code_excellence_workflow_requires_agent_elite_report` passes after this change. A hosted exact-head CE pass is still required.
+
 ```yaml
 source_agent: gsd
 action: PLAN_PR, GENERATE_TESTS, GENERATE_PATCH, FIX_TEST_FAILURE, UPDATE_DOCS

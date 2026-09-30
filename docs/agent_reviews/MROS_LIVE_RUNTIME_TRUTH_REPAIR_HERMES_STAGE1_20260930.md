@@ -18,6 +18,10 @@ The recurring PR943 CI failures are attributable to workflow input/applicability
 
 No required checks, test assertions, certification rules, token permissions, or runtime safety gates may be disabled, skipped, or weakened. Frozen-flow and Netlify checks are outside this amendment and are explicitly excluded by the user. No live process or broker action is authorized.
 
+### LFS-safe candidate materialization amendment
+
+Code Excellence's trusted workflow must materialize the exact candidate tree without fetching unrelated Git LFS payloads. Set `GIT_LFS_SKIP_SMUDGE=1` only for the candidate worktree operation. The gate scans source as text; LFS pointer files remain pointers and do not stand in for changed source files. Keep exact candidate SHA validation and the trusted base versions of the CE scripts/config. Do not suppress unrelated LFS failures elsewhere in CI.
+
 **Date:** 2026-09-30
 **Source agent:** `hermes`
 **Allowed actions:** `DESIGN_ARCHITECTURE`, `DEFINE_CONTRACT`, `MAP_WORKFLOW`, `CREATE_ACCEPTANCE_GATES`, `UPDATE_DOCS`
