@@ -1856,6 +1856,7 @@ def test_hard_feed_dead_no_ticks_ignores_cooldown_and_forces_full_restart(monkey
     monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 1000.0, raising=False)
     monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_ACTIVE_AUTH_MODE", "read_only_observer", raising=False)
     monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
     monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
     monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
@@ -1872,7 +1873,7 @@ def test_hard_feed_dead_no_ticks_ignores_cooldown_and_forces_full_restart(monkey
     events = []
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
 
-    calls = {"stop": 0, "start": 0, "soft": 0}
+    calls = {"stop": 0, "start": 0, "soft": 0, "start_auth_mode": None}
     monkeypatch.setattr(
         ws,
         "stop_depth_ws",
@@ -1881,7 +1882,11 @@ def test_hard_feed_dead_no_ticks_ignores_cooldown_and_forces_full_restart(monkey
     monkeypatch.setattr(
         ws,
         "start_depth_ws",
-        lambda tokens, profile_verified=False, **kwargs: calls.__setitem__("start", calls["start"] + 1) or True,
+        lambda tokens, profile_verified=False, **kwargs: (
+            calls.__setitem__("start", calls["start"] + 1)
+            or calls.__setitem__("start_auth_mode", kwargs.get("auth_mode"))
+            or True
+        ),
     )
     monkeypatch.setattr(
         ws,
@@ -1900,6 +1905,7 @@ def test_hard_feed_dead_no_ticks_ignores_cooldown_and_forces_full_restart(monkey
     )
     assert calls["stop"] == 1
     assert calls["start"] == 1
+    assert calls["start_auth_mode"] == "read_only_observer"
     assert calls["soft"] == 0
     assert "FEED_RESTART_FORCE_FULL_PATH" in [event for event, _payload in events]
 

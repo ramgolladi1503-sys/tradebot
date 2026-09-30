@@ -72,6 +72,41 @@ def test_auth_health_profile_probe_uses_fresh_client_from_ensure(monkeypatch):
     assert counter["calls"] == 1
 
 
+def test_read_only_observer_auth_health_stays_pending_without_profile_call(monkeypatch):
+    auth_health._reset_cache_for_tests()
+    monkeypatch.setattr(
+        auth_health,
+        "get_kite_credentials",
+        lambda **_: ("synthetic-key", "synthetic-token"),
+    )
+
+    def forbidden_profile_probe():
+        raise AssertionError("observer_auth_health_must_not_call_profile")
+
+    monkeypatch.setattr(auth_health, "_kite_profile_payload", forbidden_profile_probe)
+    payload = auth_health.get_kite_auth_health(force=True, auth_mode="read_only_observer")
+
+    assert payload["ok"] is False
+    assert payload["auth_state"] == "PENDING_WEBSOCKET_AUTH"
+    assert payload["source"] == "read_only_observer"
+    assert payload["user_id"] == ""
+    assert payload["error"] == "websocket_handshake_not_yet_confirmed"
+
+
+def test_read_only_observer_auth_health_fails_closed_without_local_credentials(monkeypatch):
+    auth_health._reset_cache_for_tests()
+
+    def missing_credentials(**_):
+        raise FileNotFoundError("synthetic missing token")
+
+    monkeypatch.setattr(auth_health, "get_kite_credentials", missing_credentials)
+    payload = auth_health.get_kite_auth_health(force=True, auth_mode="read_only_observer")
+
+    assert payload["ok"] is False
+    assert payload["auth_state"] == "FAILED"
+    assert payload["error"] == "missing_access_token:FileNotFoundError"
+
+
 def test_auth_health_clears_db_write_halt(tmp_path, monkeypatch):
     auth_health._reset_cache_for_tests()
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)

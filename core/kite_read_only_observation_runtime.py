@@ -22,6 +22,7 @@ from core.read_only_live_evidence import (
     write_authority_snapshot_bundle,
     write_json_atomic,
 )
+from core.read_only_broker_api_ledger import ReadOnlyBrokerApiLedger
 
 
 UNSAFE_IMPORT_PREFIXES = (
@@ -303,8 +304,9 @@ def write_meg_wiring_evidence(
 class ObservationLifecycle:
     """Own the read-only feed lifecycle and prove an ordered, idempotent drain."""
 
-    def __init__(self, feed: Any, *, drain_deadline_seconds: float | None = None) -> None:
+    def __init__(self, feed: Any, *, drain_deadline_seconds: float | None = None, broker_api_ledger: ReadOnlyBrokerApiLedger | None = None) -> None:
         self.feed = feed
+        self.broker_api_ledger = broker_api_ledger
         if drain_deadline_seconds is not None:
             self.drain_deadline_seconds = float(drain_deadline_seconds)
         else:
@@ -340,7 +342,13 @@ class ObservationLifecycle:
                 tick_sink(tick)
 
         self.accepting = True
-        if not self.feed.start_depth_ws(tokens, profile_verified=True, skip_lock=True, tick_sink=lifecycle_owned_tick_sink):
+        if not self.feed.start_depth_ws(
+            tokens,
+            profile_verified=False,
+            auth_mode="read_only_observer",
+            skip_lock=True,
+            tick_sink=lifecycle_owned_tick_sink,
+        ):
             self.accepting = False
             raise RuntimeError("READ_ONLY_KITE_FEED_START_FAILED")
         self.phase = "RUNNING"
@@ -431,6 +439,27 @@ class ObservationLifecycle:
             if complete:
                 self.phase = "WORKERS_JOINED"
                 self.phase = "CLOSED"
+            broker_api_safety = (
+                self.broker_api_ledger.verified_safety_fields()
+                if self.broker_api_ledger is not None
+                else {
+                    "broker_api_measurement_scope": "UNMEASURED_NO_ACTIVE_OBSERVER_LEDGER",
+                    "broker_api_called": False,
+                    "broker_api_call_count": 0,
+                    "broker_api_call_attempt_count": 0,
+                    "broker_api_call_failure_count": 0,
+                    "broker_api_call_blocked_count": 0,
+                    "broker_api_ledger_write_failure_count": 0,
+                    "broker_api_call_ledger_event_count": 0,
+                    "broker_api_call_ledger_head_sha256": "0" * 64,
+                    "broker_api_call_ledger_verified": False,
+                    "broker_api_call_ledger_verification_status": "PENDING",
+                    "broker_write_authority": False,
+                    "order_authority": False,
+                    "paper_authorized": False,
+                    "live_authorized": False,
+                }
+            )
             self._shutdown_report = {
                 "proof_kind": "PR763_LIVE_ACCEPTANCE",
                 "shutdown_drain_complete": complete,
@@ -449,9 +478,7 @@ class ObservationLifecycle:
                 "meg_bridge_flush": bridge_result,
                 "read_only": True,
                 "is_order_action": False,
-                "broker_api_called": False,
-                "broker_write_authority": False,
-                "order_authority": False,
+                **broker_api_safety,
                 "storage_authority_lost": reason.startswith("runtime_storage_authority_lost"),
                 "final_seal": __import__("core.runtime_storage_authority", fromlist=["final_seal_status"]).final_seal_status(storage_lost=reason.startswith("runtime_storage_authority_lost"), drain_complete=complete),
                 "allowed_for_live_execution": False,
@@ -461,10 +488,27 @@ class ObservationLifecycle:
 
 
 def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None = None) -> int:
+    from core.kite_client import kite_client
+
+    ledger = ReadOnlyBrokerApiLedger(output_root / "broker_api_calls.jsonl")
+    with kite_client.observe_broker_api_calls(ledger):
+        return _run_observation_impl(
+            launch_plan=launch_plan,
+            output_root=output_root,
+            token_path=token_path,
+            session_date=session_date,
+            max_runtime_sec=max_runtime_sec,
+            broker_api_ledger=ledger,
+        )
+
+
+def _run_observation_impl(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None, broker_api_ledger: ReadOnlyBrokerApiLedger) -> int:
     from core.runtime_storage_authority import StorageAuthorityError, establish, revalidate
     storage_authority = establish(volume=Path("/Volumes/TradeBotData"), runtime_root=output_root)
     env = safe_environment()
     contract = safety_contract(env, child_command=[sys.executable, "-B", "core.kite_read_only_observation_runtime.py"])
+    contract.update(broker_api_ledger.safety_fields())
+    contract["broker_api_measurement_scope"] = "STARTUP_SNAPSHOT_BEFORE_OBSERVER_API_PROBES"
     output_root.mkdir(parents=True, exist_ok=True)
     # Bind the governed runtime environment before importing any module that
     # resolves config-dependent storage paths at import time.  In particular,
@@ -480,7 +524,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     (output_root / "startup_safety_contract.json").write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     assert_import_boundary()
 
-    from core.auth import get_kite_client, get_kite_credentials
+    from core.auth import get_kite_credentials
     from core import kite_depth_ws
     from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
     from core.canonical_cycle_coordinator import CanonicalCycleCoordinator
@@ -490,14 +534,13 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
     api_key, _ = get_kite_credentials(repo_root_path=Path.cwd())
     if not api_key or not token_path.is_file():
         raise RuntimeError("KITE_ACCESS_TOKEN_MISSING")
-    get_kite_client(repo_root_path=Path.cwd()).profile()
     kite_depth_ws.activate_market_event_graph_launch_plan(launch_plan)
     tokens = list(launch_plan.get("final_union_tokens") or [])
     if not tokens:
         raise RuntimeError("READ_ONLY_LAUNCH_PLAN_EMPTY")
     from core.market_event_graph_live_runtime_bridge import get_live_source_bridge
 
-    lifecycle = ObservationLifecycle(kite_depth_ws)
+    lifecycle = ObservationLifecycle(kite_depth_ws, broker_api_ledger=broker_api_ledger)
     meg_bridge = get_live_source_bridge()
     scheduler = MegIntervalScheduler()
     meg_cycle_count = 0
@@ -587,7 +630,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         "process_gap": process_gap_report,
         "primitives": cas_session_status,
         "read_only": True, "is_order_action": False,
-        "broker_api_called": False, "allowed_for_live_execution": False,
+        **broker_api_ledger.safety_fields(), "allowed_for_live_execution": False,
     })
     cas_targets = {"0915": datetime.fromisoformat(f"{session_date}T09:15:00+05:30").timestamp(), "1000": datetime.fromisoformat(f"{session_date}T10:00:00+05:30").timestamp()}
     def cas_tick_sink(tick):
@@ -976,6 +1019,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 revalidate(storage_authority)
                 assert_same_device(storage_authority, heritage_root)
                 coverage_report = coverage_ledger.snapshot(ended_epoch=time.time())
+                coverage_report.update(broker_api_ledger.verified_safety_fields())
                 write_json_atomic(output_root / "feed_coverage_ledger.json", coverage_report)
                 publication = publish_same_session_cas_manifest(
                     heritage_root=heritage_root,
@@ -989,7 +1033,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
             except Exception as exc:
                 publication = {"status": "BLOCKED", "reason":
                     f"{type(exc).__name__}:{exc}", "read_only": True,
-                    "is_order_action": False, "broker_api_called": False,
+                    "is_order_action": False, **broker_api_ledger.verified_safety_fields(),
                     "allowed_for_live_execution": False}
             write_json_atomic(output_root / "cas_heritage_publication.json", publication)
             write_json_atomic(output_root / "process_identity.json", {
@@ -997,6 +1041,7 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
                 "session_root": str(output_root.resolve()), "state": "STOPPED",
                 "shutdown_drain_complete": bool(report.get("shutdown_drain_complete")),
                 "read_only": True, "order_authority": False, "broker_write_authority": False,
+                **broker_api_ledger.verified_safety_fields(),
                 "shadow_strategy_ids": list(shadow_registry.adapters.keys()),
                 "shadow_disabled_strategies": dict(shadow_registry.disabled_strategies),
             })

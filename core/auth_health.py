@@ -181,12 +181,59 @@ def _maybe_proactive_refresh(payload: Dict[str, Any], *, force: bool, now_epoch:
     return refreshed
 
 
-def get_kite_auth_health(force: bool = False) -> Dict[str, Any]:
+def get_kite_auth_health(force: bool = False, *, auth_mode: str = "profile") -> Dict[str, Any]:
     """
     Canonical Kite auth health check with caching. Returns ok=False on failures.
     """
+    if auth_mode not in {"profile", "read_only_observer"}:
+        raise ValueError("KITE_AUTH_MODE_UNSUPPORTED")
     now_epoch = time.time()
     ttl_sec = float(getattr(cfg, "AUTH_HEALTH_TTL_SEC", 60))
+    if auth_mode == "read_only_observer":
+        # A local token file is not proof that the token is accepted. The
+        # observer may proceed only to attempt the read-only websocket
+        # handshake; readiness remains pending until its on_connect callback.
+        try:
+            api_key, raw_token = get_kite_credentials(
+                repo_root_path=Path(__file__).resolve().parents[1]
+            )
+        except Exception as exc:
+            payload = {
+                "ok": False, "auth_state": "FAILED", "ts_epoch": now_epoch,
+                "source": "read_only_observer", "ttl_sec": ttl_sec,
+                "latency_sec": None, "api_key_tail4": "",
+                "access_token_tail4": "", "access_token_has_whitespace": False,
+                "user_id": "", "user_name": "",
+                "error": f"missing_access_token:{type(exc).__name__}",
+            }
+            _log_event(payload)
+            return payload
+        token = str(raw_token or "").strip()
+        api_key = str(api_key or "").strip()
+        if not api_key or not token:
+            payload = {
+                "ok": False, "auth_state": "FAILED", "ts_epoch": now_epoch,
+                "source": "read_only_observer", "ttl_sec": ttl_sec,
+                "latency_sec": None, "api_key_tail4": _tail4(api_key),
+                "access_token_tail4": _tail4(token),
+                "access_token_has_whitespace": any(ch.isspace() for ch in str(raw_token or "")),
+                "user_id": "", "user_name": "",
+                "error": "missing_api_key_or_access_token",
+            }
+            _log_event(payload)
+            return payload
+        payload = {
+            "ok": False, "auth_state": "PENDING_WEBSOCKET_AUTH",
+            "ts_epoch": now_epoch, "source": "read_only_observer",
+            "ttl_sec": ttl_sec, "latency_sec": 0.0,
+            "api_key_tail4": _tail4(api_key),
+            "access_token_tail4": _tail4(token),
+            "access_token_has_whitespace": any(ch.isspace() for ch in str(raw_token or "")),
+            "user_id": "", "user_name": "",
+            "error": "websocket_handshake_not_yet_confirmed",
+        }
+        _log_event(payload)
+        return payload
     if not force and _CACHE.get("ts_epoch") and (now_epoch - float(_CACHE["ts_epoch"])) <= ttl_sec:
         cached = dict(_CACHE.get("payload") or {})
         cached["source"] = "cache"
