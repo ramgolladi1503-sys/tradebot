@@ -60,14 +60,6 @@ def _clear_callback_truth(depth_ws) -> None:
 def test_gate3_authority_local_fifo_and_immutable_envelopes(tmp_path, monkeypatch):
     """Each authority is FIFO; no cross-authority total order is claimed."""
 
-    ordering_contract = {
-        "scope": "AUTHORITY_LOCAL_FIFO",
-        "cross_authority_total_order": False,
-        "reason": "independent bounded workers intentionally avoid callback coupling",
-    }
-    assert ordering_contract["scope"] == "AUTHORITY_LOCAL_FIFO"
-    assert ordering_contract["cross_authority_total_order"] is False
-
     # Tick rows are immutable tuples and the worker observes enqueue order.
     tick_store.reset_runtime_state_for_tests()
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "tick.db"), raising=False)
