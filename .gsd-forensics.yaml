@@ -308,11 +308,19 @@ agent_parameters:
       - exit_order
       - kite.place_order
       - broker.place_order
+    # These markers preserve transport telemetry while keeping execution
+    # authority independently fail-closed. A read-only request can truthfully
+    # record broker_api_called=true; its endpoint classification is not order
+    # authority or an executed order action.
     required_non_action_fields:
-      - is_order_action=false
-      - broker_api_called=false
+      - read_only=true
       - live_order_action=false
       - broker_order_action=false
+      - broker_write_authority=false
+      - order_authority=false
+      - paper_authorized=false
+      - live_authorized=false
+      - allowed_for_live_execution=false
     block_on:
       - paper_imports_live_broker
       - sim_imports_live_broker
@@ -340,7 +348,6 @@ agent_parameters:
       - .runtime/reports
       - runtime/analytics
       - docs/repo_forensics/reports
-      - docs/agent_reviews
     weak_evidence_patterns:
       - "status ok only"
       - "safe true only"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -219,3 +220,24 @@ def test_evidence_gate_fails_closed_when_config_missing(tmp_path):
 
     with pytest.raises(ConfigError, match="agent_parameters_missing agent=evidence_auditor"):
         run_evidence_gate(repo_root=tmp_path, config_path=path, changed_paths=("docs/agent_reviews/evidence.json",))
+
+
+def test_repo_policy_excludes_review_prose_and_keeps_governed_evidence_strict(tmp_path):
+    repo_root = Path(__file__).resolve().parents[1]
+    _write_file(tmp_path, "docs/agent_reviews/review.md", "status ok only")
+    _write_file(tmp_path, "runtime/analytics/report.json", json.dumps({"mode": "CHECK"}))
+
+    review_report = run_evidence_gate(
+        repo_root=tmp_path,
+        config_path=repo_root / ".gsd-forensics.yaml",
+        changed_paths=("docs/agent_reviews/review.md",),
+    )
+    evidence_report = run_evidence_gate(
+        repo_root=tmp_path,
+        config_path=repo_root / ".gsd-forensics.yaml",
+        changed_paths=("runtime/analytics/report.json",),
+    )
+
+    assert review_report.findings == ()
+    assert evidence_report.block_count > 0
+    assert any(finding.reason == "required_evidence_field_missing" for finding in evidence_report.blocked_findings)
