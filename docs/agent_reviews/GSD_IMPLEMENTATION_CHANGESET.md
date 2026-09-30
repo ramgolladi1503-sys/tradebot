@@ -2,6 +2,8 @@
 
 ## PR943 CI applicability repair — 2026-10-01
 
+LFS follow-up: the exact-head CE worktree now sets `GIT_LFS_SKIP_SMUDGE=1` because the static source scan does not consume unrelated Parquet datasets. This prevents LFS quota exhaustion while preserving exact candidate source and trusted scanner/config. `tests/test_code_excellence_ci_wiring.py::test_code_excellence_workflow_requires_agent_elite_report` passes locally. Hosted exact-head CE remains the acceptance gate.
+
 ```yaml
 source_agent: gsd
 action: PLAN_PR, GENERATE_TESTS, GENERATE_PATCH, FIX_TEST_FAILURE, UPDATE_DOCS

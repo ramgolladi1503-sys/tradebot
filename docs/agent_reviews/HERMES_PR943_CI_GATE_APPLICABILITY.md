@@ -7,6 +7,7 @@
 ## Contracts
 
 - Code Excellence remains a trusted `pull_request_target` workflow. It runs gate scripts and config from the base checkout and reads the exact candidate commit from a detached worktree as inert data only.
+- Candidate worktree creation sets `GIT_LFS_SKIP_SMUDGE=1`: CE source analysis does not require unrelated LFS payloads. Exact candidate source remains checked out; pointer files do not replace the changed source files being analyzed.
 - PR782 compares against the event PR base, never an unrelated historical stacked-PR branch. Its focused test commands remain unconditional once triggered. Protected-scope validation applies when PR782-owned runtime or evidence artifacts change.
 - MEG certification uses a dedicated applicability job. Workflow-only and shared-test-only changes do not claim an out-of-scope certification; owned certification inputs run the full certification and forbidden-scope check.
 - No check, assertion, token permission, certification rule, or safety boundary is disabled or weakened. Frozen-flow and Netlify checks are the only user-authorized exceptions for PR943.
@@ -18,6 +19,10 @@
 3. PR782 focused tests execute and pass; unrelated shared test changes do not hit its stale-base scope assertion.
 4. MEG only certifies owned inputs and reports non-applicability for unrelated shared tests.
 5. Exact-SHA required CI passes before PR943 is merged.
+
+## LFS quota handling
+
+The workflow must not spend the repository's LFS download budget just to materialize candidate source. The skip-smudge setting is local to the temporary CE worktree creation; normal repository LFS behavior and all unrelated CI jobs stay unchanged. Acceptance requires the exact-head CE check to complete successfully without attempting an LFS object download.
 
 No runtime code, broker calls, order actions, risk changes, strategy changes, credentials, live data, or branch-protection settings are in scope.
 
