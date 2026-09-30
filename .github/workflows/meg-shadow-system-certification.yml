@@ -16,7 +16,10 @@ on:
       - "tests/auth/**"
       - "tests/qa/**"
       - "tests/test_ai_reliability*.py"
-      - "tests/test_runtime_authority*.py"
+      # The shared runtime-authority cutover tests also cover feed truth and
+      # may change for unrelated integration work. Keep MEG certification
+      # scoped to its own tests and authority contracts.
+      - "tests/test_runtime_authority_contract*.py"
       - "tests/test_canonical_execution_decision.py"
       - "tests/test_ranking_authority.py"
       - "tests/test_test_integrity_audit.py"
@@ -30,7 +33,70 @@ permissions:
   contents: read
 
 jobs:
+  scope:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      applicable: ${{ steps.scope.outputs.applicable }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          lfs: false
+      - id: scope
+        name: Determine certification applicability
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "applicable=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python - <<'PY'
+          import os
+          import subprocess
+
+          base = os.environ['PR_BASE_SHA']
+          head = os.environ['PR_HEAD_SHA']
+          changed = subprocess.check_output(
+              ['git', 'diff', '--name-only', f'{base}...{head}'], text=True
+          ).splitlines()
+          prefixes = (
+              'core/qa_certification/', 'core/ai_reliability_agent/',
+              'tests/auth/', 'tests/qa/', 'tests/test_ai_reliability',
+              'tests/test_runtime_authority_contract', 'docs/qa/',
+              'docs/test-reports/meg_shadow_',
+          )
+          exact = {
+              'core/runtime_authority_cutover.py',
+              'core/canonical_execution_decision.py',
+              'core/runtime_authority_contract.py',
+              'core/ranking_authority.py', 'core/auth_manager.py',
+              'scripts/run_meg_shadow_offline_certification.py',
+              'scripts/assemble_meg_shadow_system_certificate.py',
+              'scripts/audit_test_integrity.py',
+              'tests/test_canonical_execution_decision.py',
+              'tests/test_ranking_authority.py',
+              'tests/test_test_integrity_audit.py',
+              'docs/agent_reviews/meg_shadow_system_certification_v1.md',
+          }
+          relevant = [
+              path for path in changed
+              if path in exact or any(path.startswith(prefix) for prefix in prefixes)
+          ]
+          applicable = bool(relevant)
+          print(f'meg_certification_applicable={str(applicable).lower()} relevant_paths={len(relevant)}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f"applicable={'true' if applicable else 'false'}\n")
+          PY
+
   offline-certification:
+    needs: scope
+    if: github.event_name == 'workflow_dispatch' || needs.scope.outputs.applicable == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
