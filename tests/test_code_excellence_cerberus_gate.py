@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import textwrap
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -151,6 +152,41 @@ def test_cerberus_gate_blocks_forbidden_marker_in_scoped_file(tmp_path):
     assert finding.reason == "forbidden_boundary_marker_in_scoped_file"
     assert finding.marker == "restricted_client.place"
     assert report.exit_code == 1
+
+
+def test_repository_policy_allows_true_api_event_telemetry(tmp_path):
+    policy = Path(__file__).parents[1] / ".gsd-forensics.yaml"
+    _write_file(
+        tmp_path,
+        "tools/ledger.py",
+        'EVENT = {"broker_api_called": True, "broker_write_authority": False, "order_authority": False}',
+    )
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=policy,
+        changed_paths=("tools/ledger.py",),
+    )
+
+    assert report.block_count == 0
+
+
+def test_repository_policy_blocks_true_broker_authority(tmp_path):
+    policy = Path(__file__).parents[1] / ".gsd-forensics.yaml"
+    _write_file(
+        tmp_path,
+        "tools/unsafe_authority.py",
+        'REPORT = {"broker_write_authority": True, "order_authority": False}',
+    )
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=policy,
+        changed_paths=("tools/unsafe_authority.py",),
+    )
+
+    assert report.block_count == 1
+    assert report.blocked_findings[0].marker == "broker_write_authority=false"
 
 
 def test_cerberus_gate_blocks_non_action_field_regression(tmp_path):

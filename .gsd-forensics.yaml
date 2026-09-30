@@ -309,10 +309,13 @@ agent_parameters:
       - kite.place_order
       - broker.place_order
     required_non_action_fields:
-      - is_order_action=false
-      - broker_api_called=false
       - live_order_action=false
       - broker_order_action=false
+      - broker_write_authority=false
+      - order_authority=false
+      - paper_authorized=false
+      - live_authorized=false
+      - allowed_for_live_execution=false
     block_on:
       - paper_imports_live_broker
       - sim_imports_live_broker
@@ -340,7 +343,6 @@ agent_parameters:
       - .runtime/reports
       - runtime/analytics
       - docs/repo_forensics/reports
-      - docs/agent_reviews
     weak_evidence_patterns:
       - "status ok only"
       - "safe true only"
