@@ -6,12 +6,14 @@ import queue
 import threading
 import time
 import logging
+import math
 from copy import deepcopy
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from config import config as cfg
+from config import feed_runtime_reliability as reliability_cfg
 from core.events import write_json_atomic
 from core.feed_execution_truth import attach_feed_execution_truth
 from core.feed_startup_lifecycle import record_feed_startup_event
@@ -30,7 +32,8 @@ from core.sqlite_write_lock import sqlite_transaction_lock
 
 logger = logging.getLogger(__name__)
 
-_RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=2048)
+_RUNTIME_QUEUE_MAXSIZE = max(1, int(getattr(reliability_cfg, "FEED_RUNTIME_SNAPSHOT_QUEUE_MAXSIZE", 2048) or 2048))
+_RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=_RUNTIME_QUEUE_MAXSIZE)
 _RUNTIME_STOP = threading.Event()
 _RUNTIME_LOCK = threading.Lock()
 _RUNTIME_WORKER = None
@@ -40,6 +43,115 @@ _RUNTIME_FAILURES = 0
 _RUNTIME_DEGRADED = False
 _RUNTIME_PERSISTED = 0
 _RUNTIME_SHUTDOWN = False
+_RUNTIME_REQUESTED = 0
+_RUNTIME_COALESCED = 0
+_RUNTIME_HIGH_WATERMARK = 0
+_RUNTIME_IN_FLIGHT = 0
+_RUNTIME_WRITER_LAG_MS = 0.0
+_RUNTIME_PENDING: dict[tuple[Any, ...], tuple[dict[str, Any], float, float]] = {}
+_RUNTIME_LAST_TICK_SNAPSHOT_AT: float | None = None
+_RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY: tuple[Any, ...] | None = None
+_RUNTIME_PRODUCER_REQUESTED = 0
+_RUNTIME_PRODUCER_COALESCED = 0
+_RUNTIME_PRODUCER_LAST_TICK_AT: float | None = None
+_RUNTIME_PRODUCER_LAST_TICK_IDENTITY: tuple[Any, ...] | None = None
+_RUNTIME_INVALID_INTERVAL_LOGGED = False
+_RUNTIME_WRITE_OUTCOME_LOCAL = threading.local()
+
+
+def _snapshot_identity(payload: dict[str, Any]) -> tuple[Any, ...]:
+    """Return an identity that coalesces repeats but preserves source/state transitions."""
+    option_blockers = payload.get("option_feed_block_reason_by_symbol")
+    blocker_signature = tuple(sorted(
+        (str(key).upper(), str(value).upper())
+        for key, value in option_blockers.items()
+    )) if isinstance(option_blockers, dict) else ()
+    state_machine = payload.get("state_machine")
+    state_machine_state = state_machine.get("state") if isinstance(state_machine, dict) else ""
+    restart_verification = payload.get("restart_verification")
+    restart_verification_state = (
+        restart_verification.get("state") if isinstance(restart_verification, dict) else ""
+    )
+    return (
+        str(payload.get("feed_session_id") or payload.get("run_id") or payload.get("source") or "unknown"),
+        str(payload.get("boot_epoch") or ""),
+        str(payload.get("feed_epoch") or ""),
+        str(payload.get("event_type") or payload.get("event") or payload.get("source") or "unknown"),
+        payload.get("ws_connected"),
+        str(payload.get("runtime_state") or "").upper(),
+        str(payload.get("feed_truth_state") or "").upper(),
+        str(state_machine_state or "").upper(),
+        bool(payload.get("process_restart_required")),
+        bool(payload.get("recovery_blocked")),
+        bool(payload.get("auth_required")),
+        str(payload.get("reconnect_blocked_reason") or "").lower(),
+        str(payload.get("disconnected_code") or ""),
+        str(payload.get("disconnected_reason") or "").lower(),
+        str(restart_verification_state or "").upper(),
+        payload.get("option_ticks_verified"),
+        blocker_signature,
+    )
+
+
+def _producer_interval_sec() -> float:
+    try:
+        interval = float(getattr(reliability_cfg, "FEED_RUNTIME_SNAPSHOT_INTERVAL_SEC", 0.5))
+    except (TypeError, ValueError):
+        interval = 0.5
+    if not math.isfinite(interval) or interval <= 0.0:
+        interval = 0.5
+    return interval
+
+
+def admit_runtime_snapshot_assembly(
+    *, source: str, safety_identity: tuple[Any, ...], now_monotonic: float | None = None
+) -> bool:
+    """Bound tick callback snapshot assembly before DB/depth/status collection.
+
+    This gate is separate from queue admission counters. Non-tick lifecycle
+    publications always pass. The caller supplies only safety-relevant state,
+    never per-tick timestamps, so identical health states coalesce by cadence.
+    """
+    global _RUNTIME_PRODUCER_REQUESTED, _RUNTIME_PRODUCER_COALESCED
+    global _RUNTIME_PRODUCER_LAST_TICK_AT, _RUNTIME_PRODUCER_LAST_TICK_IDENTITY
+    _RUNTIME_WRITE_OUTCOME_LOCAL.producer_admitted = False
+    try:
+        admitted_at = time.monotonic() if now_monotonic is None else float(now_monotonic)
+    except (TypeError, ValueError, OverflowError):
+        admitted_at = math.nan
+    if not math.isfinite(admitted_at) or admitted_at < 0.0:
+        # An invalid injected/runtime clock must not pin the gate open or make
+        # every later request appear inside cadence.
+        admitted_at = time.monotonic()
+    identity = tuple(safety_identity)
+    with _RUNTIME_LOCK:
+        _RUNTIME_PRODUCER_REQUESTED += 1
+        if str(source or "") != "on_ticks":
+            return True
+        if not identity or not str(identity[0] or "").strip():
+            # Unknown session identity cannot safely coalesce across sessions.
+            return True
+        interval = _producer_interval_sec()
+        if (
+            _RUNTIME_PRODUCER_LAST_TICK_AT is not None
+            and admitted_at - _RUNTIME_PRODUCER_LAST_TICK_AT < interval
+            and identity == _RUNTIME_PRODUCER_LAST_TICK_IDENTITY
+        ):
+            _RUNTIME_PRODUCER_COALESCED += 1
+            return False
+        _RUNTIME_PRODUCER_LAST_TICK_AT = admitted_at
+        _RUNTIME_PRODUCER_LAST_TICK_IDENTITY = identity
+        return True
+
+
+def clear_runtime_snapshot_producer_admission() -> None:
+    """Clear the per-thread producer token before processing another request."""
+    _RUNTIME_WRITE_OUTCOME_LOCAL.producer_admitted = False
+
+
+def mark_runtime_snapshot_producer_admitted() -> None:
+    """Allow the downstream queue writer to reuse this producer cadence decision."""
+    _RUNTIME_WRITE_OUTCOME_LOCAL.producer_admitted = True
 
 
 def _db_path() -> Path:
@@ -305,6 +417,9 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
     out["is_order_action"] = False
     out["broker_api_called"] = False
     out["source"] = str(out.get("source") or "core.feed.runtime_store.write_runtime_snapshot")
+    # Snapshot persistence counters are attached at sink time. This captures
+    # queue pressure and writer lag with the same artifact as the health state.
+    out["runtime_persistence"] = runtime_persistence_state()
     incoming_snapshot_hash = out.get("snapshot_hash")
     out.update(
         build_truth_integrity_payload(
@@ -430,21 +545,39 @@ def _write_runtime_snapshot_sync(payload: dict[str, Any]) -> bool:
 
 def _runtime_write_loop() -> None:
     global _RUNTIME_FAILURES, _RUNTIME_DEGRADED, _RUNTIME_PERSISTED
+    global _RUNTIME_IN_FLIGHT, _RUNTIME_WRITER_LAG_MS
     while not _RUNTIME_STOP.is_set() or not _RUNTIME_WRITE_QUEUE.empty():
         try:
-            payload = _RUNTIME_WRITE_QUEUE.get(timeout=0.1)
+            identity = _RUNTIME_WRITE_QUEUE.get(timeout=0.1)
         except queue.Empty:
             continue
+        with _RUNTIME_LOCK:
+            pending = _RUNTIME_PENDING.pop(identity, None)
+            if pending is None:
+                _RUNTIME_WRITE_QUEUE.task_done()
+                continue
+            payload, requested_at, enqueued_at = pending
+            _RUNTIME_IN_FLIGHT += 1
+            _RUNTIME_WRITER_LAG_MS = max(0.0, (time.monotonic() - enqueued_at) * 1000.0)
         try:
             if not _write_runtime_snapshot_sync(payload):
                 with _RUNTIME_LOCK:
+                    _RUNTIME_IN_FLIGHT -= 1
                     _RUNTIME_FAILURES += 1
                     _RUNTIME_DEGRADED = True
                     record_degradation("runtime", "RUNTIME_PERSISTENCE_FAILURE")
                 logger.warning("feed_runtime_snapshot_persist_failed")
             else:
                 with _RUNTIME_LOCK:
+                    _RUNTIME_IN_FLIGHT -= 1
                     _RUNTIME_PERSISTED += 1
+        except Exception:
+            with _RUNTIME_LOCK:
+                _RUNTIME_IN_FLIGHT -= 1
+                _RUNTIME_FAILURES += 1
+                _RUNTIME_DEGRADED = True
+                record_degradation("runtime", "RUNTIME_PERSISTENCE_FAILURE")
+            logger.warning("feed_runtime_snapshot_persist_failed", exc_info=True)
         finally:
             _RUNTIME_WRITE_QUEUE.task_done()
 
@@ -459,28 +592,98 @@ def _ensure_runtime_worker() -> None:
 
 
 def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
+    """Enqueue a runtime snapshot.
+
+    The thread-local outcome records whether a tick request was cadence
+    suppressed, so the callback can avoid a second synchronous artifact write.
+    """
+    _RUNTIME_WRITE_OUTCOME_LOCAL.value = None
+    producer_admitted = bool(getattr(_RUNTIME_WRITE_OUTCOME_LOCAL, "producer_admitted", False))
+    _RUNTIME_WRITE_OUTCOME_LOCAL.producer_admitted = False
+
+    def outcome(accepted: bool, emit_direct_artifact: bool) -> bool:
+        _RUNTIME_WRITE_OUTCOME_LOCAL.value = (bool(accepted), bool(emit_direct_artifact))
+        return accepted
+
     global _RUNTIME_ENQUEUED, _RUNTIME_REJECTED, _RUNTIME_DEGRADED, _RUNTIME_SHUTDOWN
+    global _RUNTIME_REQUESTED, _RUNTIME_COALESCED, _RUNTIME_HIGH_WATERMARK
+    global _RUNTIME_LAST_TICK_SNAPSHOT_AT, _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY
+    global _RUNTIME_INVALID_INTERVAL_LOGGED
     if not isinstance(payload, dict):
-        return False
+        return outcome(False, False)
     with _RUNTIME_LOCK:
+        _RUNTIME_REQUESTED += 1
         if _RUNTIME_SHUTDOWN:
             _RUNTIME_REJECTED += 1
             _RUNTIME_DEGRADED = True
             record_degradation('runtime', 'RUNTIME_PERSISTENCE_SHUTDOWN')
-            return False
+            return outcome(False, False)
     _ensure_runtime_worker()
-    try:
-        _RUNTIME_WRITE_QUEUE.put_nowait(deepcopy(payload))
-    except queue.Full:
-        with _RUNTIME_LOCK:
+    identity = _snapshot_identity(payload)
+    pending_payload = deepcopy(payload)
+    requested_at = time.monotonic()
+    source = str(payload.get("source") or "")
+    with _RUNTIME_LOCK:
+        if source == "on_ticks":
+            interval = _producer_interval_sec()
+            try:
+                configured_interval = float(getattr(reliability_cfg, "FEED_RUNTIME_SNAPSHOT_INTERVAL_SEC", 0.5))
+            except (TypeError, ValueError):
+                configured_interval = math.nan
+            if not math.isfinite(configured_interval) or configured_interval <= 0.0:
+                if not _RUNTIME_INVALID_INTERVAL_LOGGED:
+                    logger.error("feed_runtime_snapshot_interval_invalid; using conservative 0.5s interval")
+                    _RUNTIME_INVALID_INTERVAL_LOGGED = True
+            interval_not_elapsed = (
+                _RUNTIME_LAST_TICK_SNAPSHOT_AT is not None
+                and requested_at - _RUNTIME_LAST_TICK_SNAPSHOT_AT < interval
+                and identity == _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY
+            )
+            if interval_not_elapsed and not producer_admitted:
+                # Preserve the newest state when the writer has not yet consumed
+                # the pending identity, even when this request is inside cadence.
+                if identity in _RUNTIME_PENDING:
+                    _, _, enqueued_at = _RUNTIME_PENDING[identity]
+                    _RUNTIME_PENDING[identity] = (pending_payload, requested_at, enqueued_at)
+                _RUNTIME_COALESCED += 1
+                return outcome(True, False)
+        if identity in _RUNTIME_PENDING:
+            _, _, enqueued_at = _RUNTIME_PENDING[identity]
+            _RUNTIME_PENDING[identity] = (pending_payload, requested_at, enqueued_at)
+            _RUNTIME_COALESCED += 1
+            if source == "on_ticks":
+                _RUNTIME_LAST_TICK_SNAPSHOT_AT = requested_at
+                _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY = identity
+            return outcome(True, True)
+        try:
+            # Serialize identity reservation with queue publication. The writer
+            # may dequeue immediately, but cannot read pending state until this
+            # lock is released.
+            _RUNTIME_WRITE_QUEUE.put_nowait(identity)
+        except queue.Full:
             _RUNTIME_REJECTED += 1
             _RUNTIME_DEGRADED = True
             record_degradation("runtime", "RUNTIME_QUEUE_FULL")
+            rejected = True
+        else:
+            rejected = False
+            _RUNTIME_PENDING[identity] = (pending_payload, requested_at, requested_at)
+            _RUNTIME_ENQUEUED += 1
+            _RUNTIME_HIGH_WATERMARK = max(_RUNTIME_HIGH_WATERMARK, _RUNTIME_WRITE_QUEUE.qsize())
+            if source == "on_ticks":
+                _RUNTIME_LAST_TICK_SNAPSHOT_AT = requested_at
+                _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY = identity
+    if rejected:
         logger.error("feed_runtime_snapshot_queue_full")
-        return False
-    with _RUNTIME_LOCK:
-        _RUNTIME_ENQUEUED += 1
-    return True
+        return outcome(False, False)
+    return outcome(True, True)
+
+
+def consume_runtime_snapshot_write_outcome() -> tuple[bool, bool] | None:
+    """Return and clear the current thread's latest writer decision, if any."""
+    value = getattr(_RUNTIME_WRITE_OUTCOME_LOCAL, "value", None)
+    _RUNTIME_WRITE_OUTCOME_LOCAL.value = None
+    return value if isinstance(value, tuple) and len(value) == 2 else None
 
 
 def shutdown_runtime_persistence(deadline_seconds: float | None = None) -> dict:
@@ -508,12 +711,18 @@ def reset_runtime_persistence_for_tests() -> None:
     """Reset the terminal runtime persistence lifecycle between tests only."""
     global _RUNTIME_WRITE_QUEUE, _RUNTIME_WORKER, _RUNTIME_ENQUEUED
     global _RUNTIME_REJECTED, _RUNTIME_FAILURES, _RUNTIME_DEGRADED
-    global _RUNTIME_PERSISTED, _RUNTIME_SHUTDOWN
+    global _RUNTIME_PERSISTED, _RUNTIME_SHUTDOWN, _RUNTIME_REQUESTED
+    global _RUNTIME_COALESCED, _RUNTIME_HIGH_WATERMARK, _RUNTIME_IN_FLIGHT
+    global _RUNTIME_WRITER_LAG_MS, _RUNTIME_PENDING
+    global _RUNTIME_LAST_TICK_SNAPSHOT_AT, _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY
+    global _RUNTIME_PRODUCER_REQUESTED, _RUNTIME_PRODUCER_COALESCED
+    global _RUNTIME_PRODUCER_LAST_TICK_AT, _RUNTIME_PRODUCER_LAST_TICK_IDENTITY
+    global _RUNTIME_INVALID_INTERVAL_LOGGED
     result = shutdown_runtime_persistence(deadline_seconds=1.0)
     if result.get('worker_alive'):
         raise RuntimeError('runtime persistence worker did not stop for test reset')
     with _RUNTIME_LOCK:
-        _RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=2048)
+        _RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=_RUNTIME_QUEUE_MAXSIZE)
         _RUNTIME_STOP.clear()
         _RUNTIME_WORKER = None
         _RUNTIME_ENQUEUED = 0
@@ -522,19 +731,49 @@ def reset_runtime_persistence_for_tests() -> None:
         _RUNTIME_DEGRADED = False
         _RUNTIME_PERSISTED = 0
         _RUNTIME_SHUTDOWN = False
+        _RUNTIME_REQUESTED = 0
+        _RUNTIME_COALESCED = 0
+        _RUNTIME_HIGH_WATERMARK = 0
+        _RUNTIME_IN_FLIGHT = 0
+        _RUNTIME_WRITER_LAG_MS = 0.0
+        _RUNTIME_PENDING = {}
+        _RUNTIME_LAST_TICK_SNAPSHOT_AT = None
+        _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY = None
+        _RUNTIME_PRODUCER_REQUESTED = 0
+        _RUNTIME_PRODUCER_COALESCED = 0
+        _RUNTIME_PRODUCER_LAST_TICK_AT = None
+        _RUNTIME_PRODUCER_LAST_TICK_IDENTITY = None
+        _RUNTIME_INVALID_INTERVAL_LOGGED = False
 
 
 def runtime_persistence_state() -> dict:
     with _RUNTIME_LOCK:
-        pending = _RUNTIME_WRITE_QUEUE.qsize()
-        unaccounted = _RUNTIME_ENQUEUED - (_RUNTIME_PERSISTED + pending)
+        pending = len(_RUNTIME_PENDING)
+        queue_depth = _RUNTIME_WRITE_QUEUE.qsize()
+        unaccounted = _RUNTIME_ENQUEUED - (_RUNTIME_PERSISTED + _RUNTIME_IN_FLIGHT + pending + _RUNTIME_FAILURES)
         return {
+            "requested": _RUNTIME_REQUESTED,
+            "coalesced": _RUNTIME_COALESCED,
+            "producer_requested": _RUNTIME_PRODUCER_REQUESTED,
+            "producer_coalesced": _RUNTIME_PRODUCER_COALESCED,
+            "producer_admitted": _RUNTIME_PRODUCER_REQUESTED - _RUNTIME_PRODUCER_COALESCED,
+            "producer_accounting_invariant_ok": (
+                _RUNTIME_PRODUCER_REQUESTED
+                == _RUNTIME_PRODUCER_COALESCED
+                + (_RUNTIME_PRODUCER_REQUESTED - _RUNTIME_PRODUCER_COALESCED)
+            ),
             "enqueued": _RUNTIME_ENQUEUED,
             "persisted": _RUNTIME_PERSISTED,
             "rejected": _RUNTIME_REJECTED,
+            "queue_high_watermark": _RUNTIME_HIGH_WATERMARK,
+            "writer_lag_ms": _RUNTIME_WRITER_LAG_MS,
+            "tick_snapshot_interval_sec": float(getattr(reliability_cfg, "FEED_RUNTIME_SNAPSHOT_INTERVAL_SEC", 0.5)),
+            "last_tick_snapshot_identity": _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY,
+            "durability_degraded": _RUNTIME_DEGRADED,
             "failures": _RUNTIME_FAILURES,
             "pending": pending,
-            "queue_depth": pending,
+            "in_flight": _RUNTIME_IN_FLIGHT,
+            "queue_depth": queue_depth,
             "unaccounted_remainder": unaccounted,
             "accounting_invariant_ok": (unaccounted == 0),
             "worker_alive": bool(_RUNTIME_WORKER and _RUNTIME_WORKER.is_alive()),

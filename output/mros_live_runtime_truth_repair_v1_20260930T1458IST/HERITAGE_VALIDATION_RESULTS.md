@@ -1,0 +1,7 @@
+# T-1 heritage validation results
+
+The pinned runtime consumer in `core/market_heritage_graph.py` now requires exact equality between manifest and requested target session identities. A previously accepted partial caller identity (trading date and venue only) now fails with `TARGET_SESSION_MISMATCH`, leaves prerequisite values empty, and retains `allowed_for_live_execution=false`.
+
+The focused heritage graph and T-1 authority suites passed **72 tests, 3 warnings, 5.62s**. The combined expanded offline regression, including these modules and candidate dependency tests, passed **462 tests, 4 warnings, 45.10s**. Tests cover pinned manifest hash, approved root, exact session/contract, calendar ancestry, source provenance, future-time checks, independent verification, immutable publication, and fail-closed blocked legacy inventory behavior.
+
+The existing `scripts/generate_t1_prerequisites.py` remains an inventory-only producer. It records hashes for legacy inputs but intentionally leaves T-1 values null and `BLOCKED_SOURCE_AUTHORITY`; those inputs do not prove the exact futures contract/bar, authoritative predecessor calendar, or complete daily-close ancestry. No authoritative current source package was present in the repair checkout. Accordingly, T-1 production source readiness and next-session operational consumption remain **UNKNOWN / BLOCKED**. No source values, manifest, or live evidence were fabricated or modified.

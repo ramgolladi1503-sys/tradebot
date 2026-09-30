@@ -41,7 +41,7 @@ def test_feed_health_truth_allows_consistent_healthy_feed():
 
 def test_global_feed_unhealthy_blocks_even_when_symbol_reason_is_ok():
     decision = classify_feed_health_truth(
-        _payload(feed_ok=False, option_feed_block_reason_by_symbol={"NIFTY": "OK"}),
+        _payload(feed_ok=False, global_feed_blocked=True, option_feed_block_reason_by_symbol={"NIFTY": "OK"}),
         symbols=("NIFTY",),
     )
 
@@ -49,6 +49,23 @@ def test_global_feed_unhealthy_blocks_even_when_symbol_reason_is_ok():
     assert decision.reason_code == FEED_HEALTH_TRUTH_BLOCK_REASON
     assert GLOBAL_FEED_UNHEALTHY_REASON in decision.reasons
     assert decision.symbols[0].feed_ok is True
+
+
+def test_unrelated_aggregate_degradation_does_not_veto_requested_symbols():
+    decision = classify_feed_health_truth(
+        _payload(
+            feed_ok=False,
+            feed_ok_scope="symbol_aggregate",
+            option_feed_block_reason_by_symbol={"NIFTY": "OK", "TCS": "STALE"},
+            option_last_tick_age_by_symbol={"NIFTY": 0.5, "TCS": 900.0},
+        ),
+        symbols=("NIFTY",),
+    )
+
+    assert decision.feed_ok is True
+    assert decision.symbols[0].feed_ok is True
+    assert decision.context["aggregate_feed_ok"] is False
+    assert decision.context["monitored_degraded_symbols"] == ["TCS"]
 
 
 def test_websocket_disconnected_blocks_feed_truth():
@@ -72,6 +89,19 @@ def test_symbol_stale_option_ticks_block_symbol_and_global_truth():
     assert "NIFTY:option_ticks_stale" in decision.reasons
     assert decision.symbols[0].feed_ok is False
     assert OPTION_TICKS_STALE_REASON in decision.symbols[0].reasons
+
+
+def test_missing_requested_symbol_evidence_fails_closed():
+    decision = classify_feed_health_truth(
+        _payload(
+            option_feed_block_reason_by_symbol={"NIFTY": "OK"},
+            option_last_tick_age_by_symbol={"NIFTY": 0.5},
+        ),
+        symbols=("BANKNIFTY",),
+    )
+
+    assert decision.feed_ok is False
+    assert "BANKNIFTY:option_age_missing" in decision.reasons
 
 
 def test_symbol_option_feed_blocker_is_preserved():
@@ -118,3 +148,93 @@ def test_to_payload_is_serializable_and_preserves_symbol_reasons():
     assert payload["feed_ok"] is False
     assert payload["symbols"][0]["symbol"] == "NIFTY"
     assert payload["symbols"][0]["reasons"] == (OPTION_TICKS_STALE_REASON,)
+
+
+def _healthy_domains(**overrides):
+    domains = {
+        "INDEX_SPOT": {"state": "HEALTHY"},
+        "INDEX_FUTURES": {"state": "HEALTHY"},
+        "INDEX_OPTIONS": {"state": "HEALTHY"},
+        "STOCK_SPOT": {"state": "HEALTHY"},
+        "STOCK_OPTIONS": {"state": "HEALTHY"},
+    }
+    domains.update(overrides)
+    return domains
+
+
+def test_unrelated_degraded_domain_is_visible_without_blocking_required_index_domains():
+    decision = classify_feed_health_truth(
+        _payload(
+            feed_ok=False,
+            feed_ok_scope="symbol_aggregate",
+            domain_health_by_domain=_healthy_domains(
+                STOCK_SPOT={"state": "DEGRADED"},
+                STOCK_OPTIONS={"state": "DEGRADED"},
+            ),
+        ),
+        symbols=("NIFTY",),
+        required_domains=("INDEX_SPOT", "INDEX_FUTURES", "INDEX_OPTIONS"),
+    )
+
+    assert decision.feed_ok is True
+    assert decision.overall_state == "OPERATIONAL_DEGRADED"
+    assert decision.domains["stock_spot"] == {"state": "DEGRADED"}
+    assert decision.domains["stock_options"] == {"state": "DEGRADED"}
+    assert decision.to_payload()["overall_state"] == "OPERATIONAL_DEGRADED"
+
+
+def test_stale_required_index_option_domain_blocks_dependency_set():
+    decision = classify_feed_health_truth(
+        _payload(domain_health_by_domain=_healthy_domains(INDEX_OPTIONS={"state": "DEGRADED"})),
+        symbols=("NIFTY",),
+        required_domains=("INDEX_SPOT", "INDEX_FUTURES", "INDEX_OPTIONS"),
+    )
+
+    assert decision.feed_ok is False
+    assert "required_domain_not_healthy:INDEX_OPTIONS:DEGRADED" in decision.reasons
+
+
+def test_missing_required_domain_fails_closed_and_unknown_domain_is_not_inferred():
+    decision = classify_feed_health_truth(
+        _payload(domain_health_by_domain={"STOCK_OPTIONS": {"state": "HEALTHY"}}),
+        symbols=("NIFTY",),
+        required_domains=("INDEX_SPOT", "INDEX_OPTIONS"),
+    )
+
+    assert decision.feed_ok is False
+    assert decision.domains["index_spot"] == {"state": "UNKNOWN"}
+    assert "required_domain_unknown:INDEX_SPOT" in decision.reasons
+    assert "required_domain_unknown:INDEX_OPTIONS" in decision.reasons
+
+
+def test_unrecognized_domain_state_is_unknown_and_invalid_required_domain_blocks():
+    decision = classify_feed_health_truth(
+        _payload(domain_health_by_domain=_healthy_domains(INDEX_SPOT={"state": "FRESH"})),
+        symbols=("NIFTY",),
+        required_domains=("INDEX_SPOT", "INDEX_CRYPTO"),
+    )
+
+    assert decision.feed_ok is False
+    assert decision.domains["index_spot"] == {"state": "UNKNOWN"}
+    assert "required_domain_unknown:INDEX_SPOT" in decision.reasons
+    assert "required_domain_unknown:INDEX_CRYPTO" in decision.reasons
+
+
+def test_overall_state_cannot_be_healthy_with_transport_failure_or_monitored_symbol_degradation():
+    healthy = _healthy_domains()
+    transport_failure = classify_feed_health_truth(
+        _payload(domain_health_by_domain=healthy, ws_connected=False, effective_ws_connected=False),
+        symbols=("NIFTY",),
+    )
+    unrelated_degradation = classify_feed_health_truth(
+        _payload(
+            domain_health_by_domain=healthy,
+            option_feed_block_reason_by_symbol={"NIFTY": "OK", "TCS": "STALE_OPTION_LTP"},
+            option_last_tick_age_by_symbol={"NIFTY": 0.5, "TCS": 900.0},
+        ),
+        symbols=("NIFTY",),
+    )
+
+    assert transport_failure.overall_state == "BLOCKED"
+    assert unrelated_degradation.feed_ok is True
+    assert unrelated_degradation.overall_state == "OPERATIONAL_DEGRADED"

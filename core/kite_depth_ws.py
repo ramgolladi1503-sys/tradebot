@@ -1,9 +1,11 @@
 from config import config as cfg
+from config import feed_runtime_reliability as reliability_cfg
 import logging
 import hashlib
 import os
 import time
 import threading
+import math
 import json
 import hashlib
 import re
@@ -57,7 +59,13 @@ from core.market_event_graph_live_observation_registry import (
 from core.market_event_graph_live_ohlc_buffer import record_live_source_shadow_tick
 from core.market_event_graph_live_launch_plan import load_launch_plan
 from core.unified_live_validation_pr748_756.campaign_contract import EVIDENCE_ROOT_ENV
-from core.feed.runtime_store import write_runtime_snapshot as write_feed_runtime_snapshot
+from core.feed.runtime_store import (
+    admit_runtime_snapshot_assembly,
+    consume_runtime_snapshot_write_outcome,
+    mark_runtime_snapshot_producer_admitted,
+    clear_runtime_snapshot_producer_admission,
+    write_runtime_snapshot as write_feed_runtime_snapshot,
+)
 from core.feed.runtime_store import canonicalize_feed_runtime_snapshot_truth
 from core.feed_forensics import append_event as append_feed_forensic_event
 from core.feed_health_duration import build_feed_health_duration_artifact
@@ -172,6 +180,7 @@ _SYMBOL_LAST_OPTION_TICK_TS: dict[str, float] = {}
 _STALE_PRUNE_STRIKES_BY_TOKEN: dict[int, int] = {}
 _LAST_WS_TICK_EPOCH: float = 0.0
 _LAST_MSG_TS_BY_TOKEN: dict[int, float] = {}
+_LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LAST_PAYLOAD_TS_BY_TOKEN: dict[int, float] = {}
 _FEED_SESSION_ID: str = ""
 _FEED_RECONNECT_GENERATION = 0
@@ -805,6 +814,8 @@ _RECOVERY_IN_PROGRESS: bool = False
 _WS1006_RECOVERABLE_ATTEMPTS: int = 0
 _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH: float = 0.0
 _WS1006_RECOVERABLE_LAST_REASON: str = ""
+_WS_RECOVERY_PROOF_LOCK = threading.RLock()
+_WS_RECOVERY_PROOF_CONTEXT: dict[str, Any] | None = None
 _FEED_RECOVERY_COORDINATOR = get_feed_recovery_coordinator()
 
 _TOKEN_RECOVERY_MAX_ATTEMPTS = int(getattr(cfg, "TOKEN_RECOVERY_MAX_ATTEMPTS", 3) or 3)
@@ -2500,11 +2511,13 @@ def _ws1006_recoverable_retry_cooldown_sec() -> float:
 
 
 def _clear_ws1006_recovery_state() -> None:
-    global _RECOVERY_IN_PROGRESS, _WS1006_RECOVERABLE_ATTEMPTS, _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH, _WS1006_RECOVERABLE_LAST_REASON
+    global _RECOVERY_IN_PROGRESS, _WS1006_RECOVERABLE_ATTEMPTS, _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH, _WS1006_RECOVERABLE_LAST_REASON, _WS_RECOVERY_PROOF_CONTEXT
     _RECOVERY_IN_PROGRESS = False
     _WS1006_RECOVERABLE_ATTEMPTS = 0
     _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH = 0.0
     _WS1006_RECOVERABLE_LAST_REASON = ""
+    with _WS_RECOVERY_PROOF_LOCK:
+        _WS_RECOVERY_PROOF_CONTEXT = None
     try:
         _FEED_RECOVERY_COORDINATOR.reset()
     except Exception:
@@ -2553,18 +2566,328 @@ def _ws1006_fault_category(*, code: int | None, reason_text: str | None) -> str:
     return "UNKNOWN"
 
 
+def _new_ws_recovery_proof_context(*, disconnect_started_at: float) -> dict[str, Any]:
+    """Snapshot exact subscription and critical underlying evidence at disconnect."""
+    expected_tokens = _normalize_positive_tokens(_LAST_TOKENS)
+    required_tokens = sorted({int(token) for token in (_UNDERLYING_TOKENS or set()) if int(token) > 0})
+    symbol_by_token = {
+        str(int(token)): str(symbol or "").strip().upper()
+        for token, symbol in dict(_UNDERLYING_TOKEN_TO_SYMBOL or {}).items()
+        if int(token) in set(required_tokens)
+    }
+    pre_ticks = {
+        str(token): _coerce_epoch(_LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN.get(int(token)))
+        for token in required_tokens
+    }
+    invalid = []
+    if not expected_tokens:
+        invalid.append("expected_subscription_set_missing")
+    if not required_tokens:
+        invalid.append("required_underlying_identity_set_missing")
+    if set(required_tokens) - set(expected_tokens):
+        invalid.append("required_underlying_not_subscribed")
+    if any(value is None or float(value) > float(disconnect_started_at) for value in pre_ticks.values()):
+        invalid.append("required_pre_disconnect_receipt_missing_or_future")
+    if set(symbol_by_token) != {str(token) for token in required_tokens}:
+        invalid.append("required_underlying_symbol_mapping_incomplete")
+    return {
+        "disconnect_started_at": float(disconnect_started_at),
+        "expected_tokens": [str(token) for token in expected_tokens],
+        "required_identity_tokens": [str(token) for token in required_tokens],
+        "required_identity_symbols": symbol_by_token,
+        "last_pre_disconnect_timestamp_by_required_identity": pre_ticks,
+        "first_post_disconnect_timestamp_by_required_identity": {},
+        "invalid_reasons": invalid,
+        "reconnected_at": None,
+        "actual_tokens": [],
+        "actual_subscription_evidence": "",
+        "health_window_start": None,
+    }
+
+
+def _record_ws_recovery_reconnect(*, now_epoch: float, actual_tokens: Sequence[int]) -> None:
+    with _WS_RECOVERY_PROOF_LOCK:
+        context = _WS_RECOVERY_PROOF_CONTEXT
+        if not isinstance(context, dict) or context.get("reconnected_at") is not None:
+            return
+        actual = _normalize_positive_tokens(actual_tokens)
+        context["reconnected_at"] = float(now_epoch)
+        context["actual_tokens"] = [str(token) for token in actual]
+        context["actual_subscription_evidence"] = "LOCAL_SUBSCRIBE_AND_MODE_CALL_RETURNED"
+        if actual != [int(token) for token in context.get("expected_tokens") or []]:
+            context.setdefault("invalid_reasons", []).append("subscription_set_reconciliation_failed")
+
+
+def _record_ws_recovery_tick_receipt(*, token: int, receipt_epoch: float) -> None:
+    token_int = int(token)
+    receipt = float(receipt_epoch)
+    _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN[token_int] = receipt
+    with _WS_RECOVERY_PROOF_LOCK:
+        context = _WS_RECOVERY_PROOF_CONTEXT
+        token_key = str(token_int)
+        if (
+            isinstance(context, dict)
+            and context.get("reconnected_at") is not None
+            and receipt >= float(context["reconnected_at"])
+            and token_key in set(context.get("required_identity_tokens") or [])
+        ):
+            context.setdefault("first_post_disconnect_timestamp_by_required_identity", {}).setdefault(
+                token_key, receipt
+            )
+
+
+def _ws_recovery_proof_progress_payload(*, now_epoch: float) -> dict[str, Any]:
+    with _WS_RECOVERY_PROOF_LOCK:
+        context = dict(_WS_RECOVERY_PROOF_CONTEXT or {})
+        for key in (
+            "expected_tokens",
+            "required_identity_tokens",
+            "actual_tokens",
+            "invalid_reasons",
+        ):
+            context[key] = list((_WS_RECOVERY_PROOF_CONTEXT or {}).get(key) or [])
+        for key in (
+            "required_identity_symbols",
+            "last_pre_disconnect_timestamp_by_required_identity",
+            "first_post_disconnect_timestamp_by_required_identity",
+        ):
+            context[key] = dict((_WS_RECOVERY_PROOF_CONTEXT or {}).get(key) or {})
+    if not context:
+        return {
+            "state": "NO_ACTIVE_RECOVERY_PROOF",
+            "recovery_verdict": "UNKNOWN",
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+        }
+    expected = set(str(item) for item in context.get("expected_tokens") or [])
+    actual = set(str(item) for item in context.get("actual_tokens") or [])
+    required = set(str(item) for item in context.get("required_identity_tokens") or [])
+    pre = dict(context.get("last_pre_disconnect_timestamp_by_required_identity") or {})
+    post = dict(context.get("first_post_disconnect_timestamp_by_required_identity") or {})
+    missing_pre = sorted(required - {key for key, value in pre.items() if _coerce_epoch(value) is not None})
+    missing_post = sorted(required - {key for key, value in post.items() if _coerce_epoch(value) is not None})
+    gaps: dict[str, float] = {}
+    for identity in sorted(required & set(pre) & set(post)):
+        pre_epoch = _coerce_epoch(pre.get(identity))
+        post_epoch = _coerce_epoch(post.get(identity))
+        if pre_epoch is not None and post_epoch is not None:
+            gaps[identity] = max(0.0, post_epoch - pre_epoch)
+    if context.get("invalid_reasons"):
+        progress_state = "BLOCKED_INVALID_EVIDENCE"
+    elif context.get("reconnected_at") is None:
+        progress_state = "WAITING_FOR_RECONNECT_AND_SUBSCRIPTION_RECONCILIATION"
+    elif missing_pre or missing_post:
+        progress_state = "WAITING_FOR_REQUIRED_IDENTITY_TICKS"
+    elif context.get("health_window_start") is None:
+        progress_state = "WAITING_FOR_OPTION_VERIFICATION_AND_HEALTH_WINDOW"
+    else:
+        progress_state = "HEALTH_WINDOW_IN_PROGRESS"
+    state = getattr(_FEED_RECOVERY_COORDINATOR, "state", None)
+    verdict = "PENDING"
+    if bool(getattr(state, "recovery_timeout", False)) or bool(getattr(state, "recovery_blocked", False)):
+        verdict = "BLOCKED"
+    return {
+        "state": progress_state,
+        "disconnect_started_at": context.get("disconnect_started_at"),
+        "reconnected_at": context.get("reconnected_at"),
+        "expected_token_count": len(expected),
+        "actual_resubscribed_token_count": len(actual),
+        "missing_tokens": sorted(expected - actual),
+        "extra_tokens": sorted(actual - expected),
+        "required_identity_tokens": sorted(required),
+        "required_identity_symbols": context.get("required_identity_symbols") or {},
+        "missing_pre_disconnect_identities": missing_pre,
+        "missing_post_disconnect_identities": missing_post,
+        "last_pre_disconnect_timestamp_by_required_identity": pre,
+        "first_post_disconnect_timestamp_by_required_identity": post,
+        "gap_duration_by_identity": gaps,
+        "state_rebuild_status": "REBUILT" if required and not missing_post else "PENDING",
+        "health_window_start": context.get("health_window_start"),
+        "health_window_end": float(now_epoch) if context.get("health_window_start") is not None else None,
+        "recovery_verdict": verdict,
+        "invalid_reasons": list(context.get("invalid_reasons") or []),
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+    }
+
+
+def _attempt_causal_ws1006_recovery_clear(*, now_epoch: float) -> bool:
+    """Clear only recoverable peer-drop state after exact, fresh, stable proof."""
+    global _WS_RECOVERY_PROOF_CONTEXT, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+    try:
+        state = _FEED_RECOVERY_COORDINATOR.get_state_snapshot()
+    except Exception:
+        state = getattr(_FEED_RECOVERY_COORDINATOR, "state", None)
+    if state is None:
+        return False
+    if bool(getattr(state, "recovery_timeout", False)) or bool(getattr(state, "recovery_blocked", False)):
+        _RUNTIME_STATE = "RECOVERY_BLOCKED"
+        _LAST_RUNTIME_ERROR = str(getattr(state, "recovery_reason", "recovery_proof_timeout") or "recovery_proof_timeout")
+        _sync_ws1006_recovery_state_from_coordinator()
+        return False
+    if not bool(getattr(state, "recovery_in_progress", False)):
+        return False
+    if _reconnect_recovery_blocked_active() or _reactor_terminal_restart_block_active() or _AUTH_REQUIRED_LATCH:
+        return False
+    ws_connected = _ws_connected_state()
+    runtime_state = str(_RUNTIME_STATE or "").strip().upper()
+    if ws_connected is not True or runtime_state not in {"VERIFYING_RECOVERY", "RUNNING", "LIVE", "HEALTHY", "OK"}:
+        with _WS_RECOVERY_PROOF_LOCK:
+            if isinstance(_WS_RECOVERY_PROOF_CONTEXT, dict):
+                _WS_RECOVERY_PROOF_CONTEXT["health_window_start"] = None
+        return False
+    with _WS_RECOVERY_PROOF_LOCK:
+        context = dict(_WS_RECOVERY_PROOF_CONTEXT or {})
+        context["first_post_disconnect_timestamp_by_required_identity"] = dict(
+            (_WS_RECOVERY_PROOF_CONTEXT or {}).get("first_post_disconnect_timestamp_by_required_identity") or {}
+        )
+        context["invalid_reasons"] = list((_WS_RECOVERY_PROOF_CONTEXT or {}).get("invalid_reasons") or [])
+    if not context or context.get("invalid_reasons"):
+        return False
+    reconnected_at = _coerce_epoch(context.get("reconnected_at"))
+    disconnect_at = _coerce_epoch(context.get("disconnect_started_at"))
+    expected_tokens = list(context.get("expected_tokens") or [])
+    actual_tokens = list(context.get("actual_tokens") or [])
+    required_tokens = list(context.get("required_identity_tokens") or [])
+    pre_ticks = dict(context.get("last_pre_disconnect_timestamp_by_required_identity") or {})
+    post_ticks = dict(context.get("first_post_disconnect_timestamp_by_required_identity") or {})
+    if (
+        reconnected_at is None
+        or disconnect_at is None
+        or not expected_tokens
+        or expected_tokens != actual_tokens
+        or not required_tokens
+        or set(required_tokens) != set(pre_ticks)
+        or set(required_tokens) != set(post_ticks)
+        or not context.get("actual_subscription_evidence")
+    ):
+        return False
+    try:
+        max_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
+        max_gap = float(getattr(reliability_cfg, "FEED_RECOVERY_MAX_GAP_SEC", 3.0))
+        window_sec = float(getattr(reliability_cfg, "FEED_RECOVERY_HEALTH_WINDOW_SEC", 2.0))
+    except (TypeError, ValueError):
+        return False
+    if not all(math.isfinite(value) and value > 0.0 for value in (max_age, max_gap, window_sec)):
+        return False
+    gaps: dict[str, float] = {}
+    for identity in required_tokens:
+        pre = _coerce_epoch(pre_ticks.get(identity))
+        post = _coerce_epoch(post_ticks.get(identity))
+        latest = _coerce_epoch(_LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN.get(int(identity)))
+        if pre is None or post is None or latest is None or post < reconnected_at:
+            return False
+        gap = post - pre
+        if not math.isfinite(gap) or gap < 0.0 or gap > max_gap or (float(now_epoch) - latest) > max_age:
+            with _WS_RECOVERY_PROOF_LOCK:
+                if isinstance(_WS_RECOVERY_PROOF_CONTEXT, dict):
+                    _WS_RECOVERY_PROOF_CONTEXT["health_window_start"] = None
+            return False
+        gaps[identity] = gap
+    option_verification = str(_OPTION_FEED_VERIFY_STATE or "IDLE").strip().upper()
+    required_option_symbols = set(str(item).upper() for item in (_OPTION_FEED_VERIFY_REQUIRED_SYMBOLS or []) if str(item).strip())
+    verified_option_symbols = set(str(item).upper() for item in (_OPTION_FEED_VERIFY_VERIFIED_SYMBOLS or []) if str(item).strip())
+    expected_option_symbols = {
+        str(symbol).strip().upper()
+        for symbol, count in dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}).items()
+        if str(symbol).strip() and _safe_non_negative_count(count) > 0
+    }
+    if expected_option_symbols and (
+        not _option_feed_verification_enabled()
+        or required_option_symbols != expected_option_symbols
+        or option_verification != "OK"
+        or required_option_symbols != verified_option_symbols
+    ):
+        with _WS_RECOVERY_PROOF_LOCK:
+            if isinstance(_WS_RECOVERY_PROOF_CONTEXT, dict):
+                _WS_RECOVERY_PROOF_CONTEXT["health_window_start"] = None
+        if option_verification == "FAILED":
+            _RUNTIME_STATE = "RECOVERY_BLOCKED"
+            _LAST_RUNTIME_ERROR = str(_OPTION_FEED_VERIFY_FAILURE_DETAIL or "required_option_feed_verification_failed")
+        return False
+    with _WS_RECOVERY_PROOF_LOCK:
+        if not isinstance(_WS_RECOVERY_PROOF_CONTEXT, dict):
+            return False
+        window_start = _coerce_epoch(_WS_RECOVERY_PROOF_CONTEXT.get("health_window_start"))
+        if window_start is None:
+            window_start = float(now_epoch)
+            _WS_RECOVERY_PROOF_CONTEXT["health_window_start"] = window_start
+    if float(now_epoch) - window_start < window_sec:
+        return False
+    proof = {
+        "disconnect_started_at": disconnect_at,
+        "reconnected_at": reconnected_at,
+        "expected_tokens": expected_tokens,
+        "actual_tokens": actual_tokens,
+        "expected_token_count": len(expected_tokens),
+        "actual_resubscribed_token_count": len(actual_tokens),
+        "actual_subscription_evidence": context.get("actual_subscription_evidence"),
+        "required_identity_tokens": required_tokens,
+        "gap_duration_by_identity": gaps,
+        "last_pre_disconnect_timestamp_by_required_identity": pre_ticks,
+        "first_post_disconnect_timestamp_by_required_identity": post_ticks,
+        "state_rebuild_status": "REBUILT",
+        "health_window_start": window_start,
+        "health_window_end": float(now_epoch),
+        "health_window_status": "HEALTHY",
+        "ws_connected": True,
+        "runtime_state": "RUNNING",
+        "required_feeds_fresh": True,
+        "recovery_verdict": "RECOVERED",
+    }
+    cleared = _FEED_RECOVERY_COORDINATOR.clear_recovery(
+        source="causal_runtime_recovery_proof",
+        reason="exact_subscription_and_required_underlying_health_verified",
+        proof=proof,
+    )
+    _sync_ws1006_recovery_state_from_coordinator()
+    history = _FEED_RECOVERY_COORDINATOR.incident_history
+    result = history[-1] if history else {}
+    _log_ws(
+        "FEED_RECOVERY_RESOLVED" if not cleared.recovery_in_progress else "FEED_RECOVERY_CLEAR_DENIED",
+        {**dict(result), "proof": proof, "runtime_state": runtime_state},
+    )
+    try:
+        append_feed_forensic_event(
+            "RECOVERY_SUCCEEDED" if not cleared.recovery_in_progress else "RECOVERY_FAILED",
+            status="RECOVERED" if not cleared.recovery_in_progress else "BLOCKED",
+            reason="causal_runtime_recovery_proof",
+            recovery_proof=proof,
+            failures=list(result.get("failures") or []),
+        )
+    except Exception:
+        pass
+    if not cleared.recovery_in_progress:
+        _RUNTIME_STATE = "RUNNING"
+        _LAST_RUNTIME_ERROR = ""
+        with _WS_RECOVERY_PROOF_LOCK:
+            _WS_RECOVERY_PROOF_CONTEXT = None
+        return True
+    return False
+
+
 def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str | None) -> bool:
-    global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+    global _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _WS_RECOVERY_PROOF_CONTEXT
     category = _ws1006_fault_category(code=code, reason_text=reason)
     if category != "RECOVERABLE_WS_DROP":
         return False
     reason_text = str(reason or "")
+    already_in_progress = bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False))
+    disconnect_epoch = float(now_utc_epoch())
+    proof_context = None if already_in_progress else _new_ws_recovery_proof_context(disconnect_started_at=disconnect_epoch)
     decision = _FEED_RECOVERY_COORDINATOR.request_recovery(
         source=source,
         code=code,
         reason=reason_text,
         max_recoverable_attempts_per_session=_ws1006_recoverable_max_attempts_per_session(),
     )
+    if decision.accepted and decision.action == "SOFT_RECONNECT" and proof_context is not None:
+        with _WS_RECOVERY_PROOF_LOCK:
+            _WS_RECOVERY_PROOF_CONTEXT = proof_context
     _sync_ws1006_recovery_state_from_coordinator()
     _emit_feed_recovery_events(decision.events_emitted, source=source, code=code, reason=reason_text)
     if decision.action == "AUTH_REQUIRED":
@@ -2887,12 +3210,15 @@ def _emit_reconnect_recovery_blocked_snapshot(
     return payload
 
 
-def _clear_reconnect_blocked_reason() -> None:
+def _clear_reconnect_blocked_reason() -> bool:
     global _RECONNECT_BLOCKED_REASON, _RECONNECT_BLOCKED_SINCE_EPOCH, _REACTOR_NOT_RESTARTABLE_DETECTED, _LAST_INTERNAL_RETRY_SUPPRESSION_STATE
+    if _reconnect_recovery_blocked_active():
+        return False
     _RECONNECT_BLOCKED_REASON = ""
     _RECONNECT_BLOCKED_SINCE_EPOCH = 0.0
     _REACTOR_NOT_RESTARTABLE_DETECTED = False
     _LAST_INTERNAL_RETRY_SUPPRESSION_STATE = {}
+    return True
 
 
 def _reconnect_recovery_blocked_active() -> bool:
@@ -3029,23 +3355,39 @@ def _transition_partial_activity_recovery(
         previous_stable_cycles=previous_cycles,
     )
     _PARTIAL_RECOVERY_VERIFICATION = dict(verification)
-    if bool(verification.get("verified")):
-        _clear_reconnect_blocked_reason()
+    verified_local_activity = bool(verification.get("verified"))
+    restart_required_blocked = _reconnect_recovery_blocked_active()
+    clearance_allowed = False
+    if verified_local_activity and not restart_required_blocked:
+        clearance_allowed = _clear_reconnect_blocked_reason()
+    if verified_local_activity and clearance_allowed:
         _RUNTIME_STATE = "LIVE"
         _LAST_RUNTIME_ERROR = ""
+    elif restart_required_blocked:
+        _RUNTIME_STATE = "RECOVERY_BLOCKED"
+        _LAST_RUNTIME_ERROR = str(_RECONNECT_BLOCKED_REASON or "process_restart_required")
     else:
         _RUNTIME_STATE = "VERIFYING_RECOVERY" if int(verification.get("stable_cycles") or 0) > 0 else "DEGRADED_LOCAL"
         _LAST_RUNTIME_ERROR = "partial_activity_verification_pending"
+    verification["local_activity_verified"] = verified_local_activity
+    verification["recovery_clearance"] = (
+        "CLEARED_LOCAL_RECOVERY"
+        if clearance_allowed
+        else "BLOCKED_CAUSAL_PROOF_REQUIRED" if restart_required_blocked else "PENDING"
+    )
     _log_ws(
         "FEED_PARTIAL_RECOVERY_VERIFYING",
         {
             **verification,
             "runtime_state": _RUNTIME_STATE,
-            "reconnect_blocked_reason": None,
-            "process_restart_required": False,
-            "restart_suppressed": False,
+            "reconnect_blocked_reason": str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or None,
+            "process_restart_required": bool(restart_required_blocked),
+            "restart_suppressed": bool(restart_required_blocked),
             "no_order_action": True,
             "order_safe": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
         },
     )
     return verification
@@ -3738,15 +4080,34 @@ def _tick_option_feed_verification(*, now_epoch: float) -> None:
         subscribed_count = int(subscribed_by_symbol.get(sym, 0) or 0)
         requested_count = int(requested_by_symbol.get(sym, 0) or 0)
         if subscribed_count <= 0 and requested_count <= 0:
+            missing_symbols.append(sym)
             continue
-        last_tick_ts = _coerce_epoch(_SYMBOL_LAST_OPTION_TICK_TS.get(sym))
-        if last_tick_ts is not None and last_tick_ts >= start_epoch:
+        fresh_token_count = 0
+        for token, raw_tick_epoch in dict(_LAST_MSG_TS_BY_TOKEN or {}).items():
+            try:
+                token_int = int(token)
+            except (TypeError, ValueError):
+                continue
+            if str(_TOKEN_TO_SYMBOL.get(token_int) or "").upper() != sym:
+                continue
+            if token_int not in set(int(item) for item in (_LAST_TOKENS or [])):
+                continue
+            tick_epoch = _coerce_epoch(raw_tick_epoch)
+            if tick_epoch is not None and tick_epoch >= start_epoch:
+                fresh_token_count += 1
+        if fresh_token_count == 0:
+            # Legacy symbol-level evidence can prove at least one post-start
+            # delivery, but cannot satisfy a multi-tick threshold.
+            symbol_tick_epoch = _coerce_epoch(_SYMBOL_LAST_OPTION_TICK_TS.get(sym))
+            if symbol_tick_epoch is not None and symbol_tick_epoch >= start_epoch and min_ticks == 1:
+                fresh_token_count = 1
+        ticks_by_symbol[sym] = fresh_token_count
+        if fresh_token_count >= min_ticks:
             verified_symbols.append(sym)
-            ticks_by_symbol[sym] = int(ticks_by_symbol.get(sym, 0)) + 1
         else:
             missing_symbols.append(sym)
 
-    verified = bool(required_symbols and not missing_symbols and len(verified_symbols) >= min_ticks)
+    verified = bool(required_symbols and not missing_symbols and len(verified_symbols) == len(required_symbols))
     stage_event = "FEED_OPTION_VERIFY_OK" if verified else "FEED_OPTION_VERIFY_WAITING_TICKS"
     if _OPTION_FEED_VERIFY_LAST_STAGE_EVENT != stage_event:
         with _RESTART_VERIFY_LOCK:
@@ -3781,14 +4142,9 @@ def _tick_option_feed_verification(*, now_epoch: float) -> None:
                     _OPTION_FEED_VERIFY_FAILURE_DETAIL = ""
                     _OPTION_FEED_VERIFY_MISSING_SYMBOLS = []
                     _OPTION_FEED_VERIFY_VERIFIED_SYMBOLS = list(sorted(set(verified_symbols)))
-            try:
-                _FEED_RECOVERY_COORDINATOR.clear_recovery(
-                    source="option_feed_verification_ok",
-                    reason=reason,
-                )
-            except Exception:
-                pass
-            _sync_ws1006_recovery_state_from_coordinator()
+            # Option verification is one component of recovery proof. The
+            # caller attempts clearance only after checking exact subscription
+            # reconciliation, per-identity gaps, and the healthy window.
             return
 
     if deadline > 0.0 and now_epoch_f >= deadline:
@@ -4109,14 +4465,19 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
         _log_ws("subscription_replay_verified", {"reason": "verified"})
         if _reconnect_recovery_blocked_active():
             cleared_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "recovery_blocked"
-            _clear_reconnect_blocked_reason()
-            _clear_last_disconnected_info()
             _log_ws(
-                "FEED_RECONNECT_RECOVERY_CLEARED",
+                "FEED_RECONNECT_RECOVERY_CLEAR_DENIED",
                 {
                     "reason": reason,
-                    "cleared_reason": cleared_reason,
+                    "reconnect_blocked_reason": cleared_reason,
                     "verified_epoch": float(now_epoch_f),
+                    "subscription_replay_verified": True,
+                    "causal_recovery_proof_present": False,
+                    "clearance": "BLOCKED_CAUSAL_PROOF_REQUIRED",
+                    "read_only": True,
+                    "is_order_action": False,
+                    "broker_api_called": False,
+                    "allowed_for_live_execution": False,
                 },
             )
         _log_ws(
@@ -4449,6 +4810,135 @@ def _write_feed_health_duration_artifact(snapshot: dict[str, object]) -> dict[st
     return artifact
 
 
+def _build_feed_domain_health_payload(
+    *,
+    now_epoch: float,
+    option_ages_by_symbol: dict[str, float | None],
+    option_blockers_by_symbol: dict[str, str],
+    option_counts_by_symbol: dict[str, int],
+    underlying_tokens: set[int],
+    underlying_symbol_by_token: dict[int, str],
+    tick_epochs_by_token: dict[int, float],
+    index_symbols: set[str],
+    max_index_age_sec: float,
+    max_option_age_sec: float,
+) -> dict[str, dict[str, str]]:
+    """Publish domain health only from explicit runtime token/symbol evidence."""
+    index_names = {str(symbol).strip().upper() for symbol in index_symbols if str(symbol).strip()}
+
+    def finite_number(value: Any) -> float | None:
+        if isinstance(value, bool):
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        return number if math.isfinite(number) else None
+
+    now_value = finite_number(now_epoch)
+    max_index_age = finite_number(max_index_age_sec)
+    max_option_age = finite_number(max_option_age_sec)
+
+    def state_from_evidence(states: list[str]) -> str:
+        if not states:
+            return "UNKNOWN"
+        if "UNHEALTHY" in states:
+            return "UNHEALTHY"
+        if "DEGRADED" in states:
+            return "DEGRADED"
+        if "UNKNOWN" in states:
+            return "UNKNOWN"
+        return "HEALTHY"
+
+    index_spot_states: list[str] = []
+    stock_spot_states: list[str] = []
+    unclassified_underlying = False
+    for raw_token in underlying_tokens:
+        try:
+            token = int(raw_token)
+        except (TypeError, ValueError):
+            unclassified_underlying = True
+            continue
+        symbol = str(underlying_symbol_by_token.get(token) or "").strip().upper()
+        if not symbol:
+            unclassified_underlying = True
+            continue
+        states = index_spot_states if symbol in index_names else stock_spot_states
+        try:
+            tick_epoch = finite_number(tick_epochs_by_token[token])
+            age = None if now_value is None or tick_epoch is None else now_value - tick_epoch
+        except (KeyError, TypeError, ValueError):
+            states.append("UNKNOWN")
+            continue
+        if age is None or age < 0:
+            states.append("UNKNOWN")
+        elif max_index_age is None or max_index_age < 0.0:
+            states.append("UNKNOWN")
+        elif age > max_index_age:
+            states.append("DEGRADED")
+        else:
+            states.append("HEALTHY")
+    if unclassified_underlying:
+        stock_spot_states.append("UNKNOWN")
+
+    option_states: dict[str, list[str]] = {"INDEX_OPTIONS": [], "STOCK_OPTIONS": []}
+    normalized_counts = {
+        str(symbol).strip().upper(): count
+        for symbol, count in option_counts_by_symbol.items()
+        if str(symbol).strip()
+    }
+    normalized_ages = {
+        str(symbol).strip().upper(): age
+        for symbol, age in option_ages_by_symbol.items()
+        if str(symbol).strip()
+    }
+    normalized_blockers = {
+        str(symbol).strip().upper(): str(reason or "").strip().upper()
+        for symbol, reason in option_blockers_by_symbol.items()
+        if str(symbol).strip()
+    }
+    tracked_symbols = {
+        symbol for symbol, count in normalized_counts.items()
+        if _safe_non_negative_count(count) > 0
+    }
+    for symbol in sorted(tracked_symbols):
+        domain = "INDEX_OPTIONS" if symbol in index_names else "STOCK_OPTIONS"
+        blocker = normalized_blockers.get(symbol)
+        age = finite_number(normalized_ages.get(symbol))
+        if blocker is None or not blocker:
+            option_states[domain].append("UNKNOWN")
+        elif blocker not in {"OK", "NONE", "HEALTHY", "FRESH"}:
+            option_states[domain].append("DEGRADED")
+        elif age is None:
+            option_states[domain].append("UNKNOWN")
+        elif age < 0.0 or max_option_age is None or max_option_age < 0.0:
+            option_states[domain].append("UNKNOWN")
+        elif age > max_option_age:
+            option_states[domain].append("DEGRADED")
+        else:
+            option_states[domain].append("HEALTHY")
+
+    def result(state: str, reason: str | None = None) -> dict[str, str]:
+        return {"state": state, **({"reason": reason} if reason else {})}
+
+    index_spot_state = state_from_evidence(index_spot_states)
+    stock_spot_state = state_from_evidence(stock_spot_states)
+    return {
+        "index_spot": result(index_spot_state, "required_index_tick_missing_or_invalid" if index_spot_state == "UNKNOWN" else None),
+        "index_futures": result("UNKNOWN", "no_authoritative_futures_identity_source"),
+        "index_options": result(state_from_evidence(option_states["INDEX_OPTIONS"]), "no_tracked_index_options" if not option_states["INDEX_OPTIONS"] else None),
+        "stock_spot": result(stock_spot_state, "no_tracked_stock_spot_tokens" if not stock_spot_states else None),
+        "stock_options": result(state_from_evidence(option_states["STOCK_OPTIONS"]), "no_tracked_stock_options" if not option_states["STOCK_OPTIONS"] else None),
+    }
+
+
+def _safe_non_negative_count(value: Any) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
 def _write_feed_runtime_snapshot(
     *,
     now_epoch: float,
@@ -4587,6 +5077,19 @@ def _write_feed_runtime_snapshot(
         if process_restart_required is not None
         else bool(normalized_blocked_reason),
     }
+    payload["domain_health_by_domain"] = _build_feed_domain_health_payload(
+        now_epoch=float(now_epoch),
+        option_ages_by_symbol=dict(option_last_tick_age_by_symbol or {}),
+        option_blockers_by_symbol=dict(option_feed_block_reason_by_symbol or {}),
+        option_counts_by_symbol=dict(option_tokens_subscribed_count_by_symbol or option_tokens_resolved_count_by_symbol or {}),
+        underlying_tokens=set(_UNDERLYING_TOKENS or set()),
+        underlying_symbol_by_token=dict(_UNDERLYING_TOKEN_TO_SYMBOL or {}),
+        tick_epochs_by_token=dict(_LAST_MSG_TS_BY_TOKEN or {}),
+        index_symbols=set(_INDEX_SYMBOLS),
+        max_index_age_sec=float(getattr(cfg, "FEED_HEALTH_INDEX_OK_AGE_SEC", 1.0)),
+        max_option_age_sec=float(getattr(cfg, "FEED_HEALTH_OPTION_OK_AGE_SEC", 2.5)),
+    )
+    payload["recovery_proof_progress"] = _ws_recovery_proof_progress_payload(now_epoch=float(now_epoch))
     payload.update(
         _runtime_transport_truth_fields(
             now_epoch=float(now_epoch),
@@ -4795,6 +5298,22 @@ def _latest_depth_epoch_from_store() -> float | None:
     return latest
 
 
+def _enqueue_runtime_snapshot_with_direct_artifact(
+    payload: dict[str, Any],
+    *,
+    direct_artifact_writer,
+) -> bool:
+    """Persist through the bounded store and avoid duplicate tick-path writes."""
+    accepted = write_feed_runtime_snapshot(payload)
+    outcome = consume_runtime_snapshot_write_outcome()
+    # Missing outcome means an older/test-injected writer; preserve its legacy
+    # direct artifact behavior. Queue rejection also retains direct fallback.
+    emit_direct = bool(outcome[1]) if outcome is not None and accepted else True
+    if emit_direct:
+        direct_artifact_writer()
+    return bool(accepted)
+
+
 def _persist_runtime_snapshot_row(
     *,
     ws_connected: bool | None,
@@ -4831,6 +5350,42 @@ def _persist_runtime_snapshot_row(
         ws_connected=ws_connected,
     )
     err_text = str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000]
+    try:
+        session_identity = get_current_feed_session_identity()
+    except Exception:
+        session_identity = {}
+    coordinator_state = getattr(_FEED_RECOVERY_COORDINATOR, "state", None)
+    safety_identity = (
+        str(session_identity.get("feed_session_id") or ""),
+        str(_DEPTH_WS_START_EPOCH or ""),
+        str(session_identity.get("feed_epoch") or ""),
+        str(session_identity.get("reconnect_generation") or ""),
+        str(getattr(coordinator_state, "recovery_generation_id", "") or ""),
+        ws_connected,
+        effective_state_text,
+        normalized_blocked_reason or "",
+        bool(_AUTH_REQUIRED_LATCH),
+        process_restart_required,
+        str(disconnected_code if disconnected_code is not None else _LAST_DISCONNECTED_CODE or ""),
+        str(disconnected_reason if disconnected_reason is not None else _LAST_DISCONNECTED_REASON or "").strip().lower(),
+        str(restart_blocked_reason or "").strip().lower(),
+        restart_attempt_allowed,
+        restart_attempted,
+        bool(_REACTOR_NOT_RESTARTABLE_DETECTED),
+        str(_RECONNECT_BLOCKED_REASON or "").strip().lower(),
+        int(_INTENDED_TOKEN_COUNT or 0),
+        bool(_RECOVERY_IN_PROGRESS),
+        str(_FEED_RESTART_VERIFY_STATE or "").upper(),
+        str(_OPTION_FEED_VERIFY_STATE or "").upper(),
+        str(_OPTION_FEED_VERIFY_REASON or "").strip().lower(),
+        tuple(sorted(str(item).upper() for item in (_OPTION_FEED_VERIFY_REQUIRED_SYMBOLS or []))),
+        tuple(sorted(str(item).upper() for item in (_OPTION_FEED_VERIFY_VERIFIED_SYMBOLS or []))),
+        tuple(sorted(str(item).upper() for item in (_OPTION_FEED_VERIFY_MISSING_SYMBOLS or []))),
+        restart_verify_failure or "",
+        err_text.lower(),
+    )
+    if not admit_runtime_snapshot_assembly(source=source, safety_identity=safety_identity):
+        return
     sub_counts = _subscribed_tokens_count_by_symbol(_LAST_TOKENS)
     missing_count, missing_counts_by_symbol = _missing_option_tokens_stats()
     session_policy = derive_market_session_policy(segment="NSE_FNO")
@@ -4933,6 +5488,7 @@ def _persist_runtime_snapshot_row(
         "disconnected_reason": str(disconnected_reason_value or "").strip() or None,
         "reconnect_blocked_reason": normalized_blocked_reason,
         "restart_blocked_reason": str(restart_blocked_reason or normalized_blocked_reason or "").strip().lower() or None,
+        "recovery_proof_progress": _ws_recovery_proof_progress_payload(now_epoch=ts_epoch),
     }
     option_feed_verification = _option_feed_verification_overlay_payload()
     if option_feed_verification:
@@ -5010,52 +5566,62 @@ def _persist_runtime_snapshot_row(
         payload["restart_verification"] = restart_verify
     if restart_verify_failure:
         payload["restart_verification_failure_detail"] = str(restart_verify_failure)
-    ok = write_feed_runtime_snapshot(payload)
+    def _emit_direct_artifact() -> None:
+        _write_feed_runtime_snapshot(
+            now_epoch=ts_epoch,
+            ws_connected=ws_connected,
+            subscribed_tokens_count=len(_LAST_TOKENS or []),
+            intended_tokens_count=int(payload["intended_tokens_count"] or 0),
+            subscribed_tokens_count_by_symbol=sub_counts,
+            missing_option_tokens_count=missing_count,
+            missing_option_tokens_count_by_symbol=missing_counts_by_symbol,
+            last_db_tick_epoch=last_db_tick_epoch,
+            last_db_tick_age_sec=last_db_tick_age_sec,
+            last_ws_tick_epoch=last_ws_tick_epoch,
+            last_tick_age_sec=last_tick_age_sec,
+            last_depth_epoch=last_depth_epoch,
+            last_depth_age_sec=last_depth_age_sec,
+            market_open=market_open,
+            state_machine=state_machine,
+            subscribed_option_tokens_count=int(option_state.get("option_count") or 0),
+            option_last_tick_age_by_symbol=dict(option_state.get("option_age_by_symbol") or {}),
+            option_last_tick_sample=list(option_state.get("sample_rows") or []),
+            option_tokens_resolved_count_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
+            option_tokens_subscribed_count_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
+            option_ticks_received_count_by_symbol=dict(option_state.get("ticks_received_count_by_symbol") or {}),
+            last_option_tick_ts_by_symbol=dict(option_state.get("last_tick_ts_by_symbol") or {}),
+            option_feed_block_reason_by_symbol=option_feed_block_reason_by_symbol,
+            option_active_blockers_by_symbol=option_active_blockers_by_symbol,
+            option_ticks_verified=payload.get("option_ticks_verified"),
+            verified_option_symbols=payload.get("verified_option_symbols"),
+            missing_option_symbols=payload.get("missing_option_symbols"),
+            warmup_clean_cycles=payload.get("warmup_clean_cycles"),
+            warmup_required_clean_cycles=payload.get("warmup_required_clean_cycles"),
+            restart_count_1h=_restart_count_1h(ts_epoch),
+            stale_strikes=_STALE_STRIKES,
+            runtime_state=effective_state_text,
+            last_error=err_text,
+            reconnect_blocked_reason=str(payload.get("reconnect_blocked_reason") or "").strip().lower() or None,
+            internal_retry_disabled=internal_retry_disabled,
+            stop_retry_called=stop_retry_called,
+            factory_stop_trying_called=factory_stop_trying_called,
+            auto_reconnect_disabled=auto_reconnect_disabled,
+            internal_retry_error=internal_retry_error,
+            internal_retry_reason=internal_retry_reason,
+            process_restart_required=payload.get("process_restart_required"),
+        )
+
+    if source == "on_ticks":
+        mark_runtime_snapshot_producer_admitted()
+    try:
+        ok = _enqueue_runtime_snapshot_with_direct_artifact(
+            payload,
+            direct_artifact_writer=_emit_direct_artifact,
+        )
+    finally:
+        clear_runtime_snapshot_producer_admission()
     if not ok:
         _log_ws("FEED_RUNTIME_STORE_WRITE_ERROR", {"source": source})
-    _write_feed_runtime_snapshot(
-        now_epoch=ts_epoch,
-        ws_connected=ws_connected,
-        subscribed_tokens_count=len(_LAST_TOKENS or []),
-        intended_tokens_count=int(payload["intended_tokens_count"] or 0),
-        subscribed_tokens_count_by_symbol=sub_counts,
-        missing_option_tokens_count=missing_count,
-        missing_option_tokens_count_by_symbol=missing_counts_by_symbol,
-        last_db_tick_epoch=last_db_tick_epoch,
-        last_db_tick_age_sec=last_db_tick_age_sec,
-        last_ws_tick_epoch=last_ws_tick_epoch,
-        last_tick_age_sec=last_tick_age_sec,
-        last_depth_epoch=last_depth_epoch,
-        last_depth_age_sec=last_depth_age_sec,
-        market_open=market_open,
-        state_machine=state_machine,
-        subscribed_option_tokens_count=int(option_state.get("option_count") or 0),
-        option_last_tick_age_by_symbol=dict(option_state.get("option_age_by_symbol") or {}),
-        option_last_tick_sample=list(option_state.get("sample_rows") or []),
-        option_tokens_resolved_count_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
-        option_tokens_subscribed_count_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
-        option_ticks_received_count_by_symbol=dict(option_state.get("ticks_received_count_by_symbol") or {}),
-        last_option_tick_ts_by_symbol=dict(option_state.get("last_tick_ts_by_symbol") or {}),
-        option_feed_block_reason_by_symbol=option_feed_block_reason_by_symbol,
-        option_active_blockers_by_symbol=option_active_blockers_by_symbol,
-        option_ticks_verified=payload.get("option_ticks_verified"),
-        verified_option_symbols=payload.get("verified_option_symbols"),
-        missing_option_symbols=payload.get("missing_option_symbols"),
-        warmup_clean_cycles=payload.get("warmup_clean_cycles"),
-        warmup_required_clean_cycles=payload.get("warmup_required_clean_cycles"),
-        restart_count_1h=_restart_count_1h(ts_epoch),
-        stale_strikes=_STALE_STRIKES,
-        runtime_state=effective_state_text,
-        last_error=err_text,
-        reconnect_blocked_reason=str(payload.get("reconnect_blocked_reason") or "").strip().lower() or None,
-        internal_retry_disabled=internal_retry_disabled,
-        stop_retry_called=stop_retry_called,
-        factory_stop_trying_called=factory_stop_trying_called,
-        auto_reconnect_disabled=auto_reconnect_disabled,
-        internal_retry_error=internal_retry_error,
-        internal_retry_reason=internal_retry_reason,
-        process_restart_required=payload.get("process_restart_required"),
-    )
 
 
 def _run_db_tick_watchdog_cycle(
@@ -6148,8 +6714,10 @@ def _maybe_trigger_silent_reconnect(
             option_threshold_sec=float(option_threshold_sec),
         )
     elif action.get("stale_tokens") == 0 and str(_RUNTIME_STATE or "").strip().upper() in {"DEGRADED_LOCAL", "VERIFYING_RECOVERY"}:
-        _clear_reconnect_blocked_reason()
-        globals()["_RUNTIME_STATE"] = "LIVE"
+        if _reconnect_recovery_blocked_active():
+            globals()["_RUNTIME_STATE"] = "RECOVERY_BLOCKED"
+        elif _clear_reconnect_blocked_reason():
+            globals()["_RUNTIME_STATE"] = "LIVE"
 
     if not bool(action.get("silent_detected")):
         state["confirm_hits"] = 0
@@ -6667,7 +7235,7 @@ def set_normalized_tick_sink(sink=None):
     _NORMALIZED_TICK_SINK = sink
 
 def on_ticks(ws, ticks):
-    global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _FEED_ON_TICKS_ROW_SEQ
+    global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _FEED_ON_TICKS_ROW_SEQ
     _ = ws
     if not ticks:
         return
@@ -6773,6 +7341,7 @@ def on_ticks(ws, ticks):
         last_price = t.get("last_price")
         if token_int is not None:
             _LAST_MSG_TS_BY_TOKEN[int(token_int)] = float(freshness_tick_epoch)
+            _record_ws_recovery_tick_receipt(token=int(token_int), receipt_epoch=float(now_epoch))
             _record_observation_callback_truth(
                 tick=t,
                 instrument_token=int(token_int),
@@ -7087,10 +7656,14 @@ def on_ticks(ws, ticks):
     if _reconnect_recovery_blocked_active():
         _RUNTIME_STATE = "RECOVERY_BLOCKED"
         _LAST_RUNTIME_ERROR = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "recovery_blocked"
+    elif bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
+        _RUNTIME_STATE = "VERIFYING_RECOVERY"
+        _LAST_RUNTIME_ERROR = "causal_recovery_proof_pending"
     else:
         _RUNTIME_STATE = "RUNNING"
         _LAST_RUNTIME_ERROR = ""
     _tick_option_feed_verification(now_epoch=now_epoch)
+    _attempt_causal_ws1006_recovery_clear(now_epoch=float(now_epoch))
     record_fd_trace(
         "on_ticks.pre_runtime_snapshot",
         row_index=_FEED_ON_TICKS_ROW_SEQ,
@@ -7176,7 +7749,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
     """
-    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
+    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
     campaign_raw_diagnostics.shutdown()
     _reset_feed_restart_verification(reason=f"stop_depth_ws:{reason}")
     _reset_option_feed_verification(reason=f"stop_depth_ws:{reason}")
@@ -7201,6 +7774,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
         _LAST_FEED_HEALTH_STATE = None
         _LAST_WS_TICK_EPOCH = 0.0
         _LAST_MSG_TS_BY_TOKEN = {}
+        _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN = {}
         _LAST_PAYLOAD_TS_BY_TOKEN = {}
         _SYMBOL_LAST_OPTION_TICK_TS = {}
         _LAST_FEED_TICK_LOG_MINUTE = None
@@ -7481,7 +8055,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False, tick_sink=None, *, auth_mode: str = "profile") -> bool:
-    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION, _ACTIVE_AUTH_MODE
+    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION, _ACTIVE_AUTH_MODE
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
         try:
@@ -7678,6 +8252,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _STOP_REQUESTED = False
     _LAST_WS_TICK_EPOCH = 0.0
     _LAST_MSG_TS_BY_TOKEN = {}
+    _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN = {}
     _LAST_PAYLOAD_TS_BY_TOKEN = {}
     _SYMBOL_LAST_OPTION_TICK_TS = {}
     _LAST_FEED_TICK_LOG_MINUTE = None
@@ -8231,6 +8806,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     book["ts_epoch"] = None
                     book["ts"] = None
             resubscribe_result = _resubscribe_full(ws, reason="connect")
+            if bool(resubscribe_result.get("success")):
+                _record_ws_recovery_reconnect(
+                    now_epoch=float(now_utc_epoch()),
+                    actual_tokens=list(_LAST_TOKENS or []),
+                )
             if resubscribe_result.get("status") == "SUCCESS_CHANGED":
                 _advance_completed_transition(
                     "SUBSCRIPTION_REBUILD_COMPLETED",
@@ -8249,13 +8829,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     "result": "snapshot",
                 },
             )
-            _RUNTIME_STATE = "RUNNING"
-            _LAST_RUNTIME_ERROR = ""
+            recovery_pending = bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False))
+            _RUNTIME_STATE = "VERIFYING_RECOVERY" if recovery_pending else "RUNNING"
+            _LAST_RUNTIME_ERROR = "causal_recovery_proof_pending" if recovery_pending else ""
             _persist_runtime_snapshot_row(
                 ws_connected=True,
                 source="on_connect",
-                runtime_state="RUNNING",
-                last_error="",
+                runtime_state=_RUNTIME_STATE,
+                last_error=_LAST_RUNTIME_ERROR,
             )
         except Exception as exc:
             _RUNTIME_STATE = "SUBSCRIBE_FAILED"
@@ -8575,6 +9156,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
             )
             _tick_option_feed_verification(now_epoch=now_epoch)
+            _attempt_causal_ws1006_recovery_clear(now_epoch=float(now_epoch))
             try:
                 with _KITE_TICKER_LOCK:
                     ws_connected_runtime = bool(_KITE_TICKER is not None)

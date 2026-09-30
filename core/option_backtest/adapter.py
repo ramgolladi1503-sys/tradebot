@@ -145,6 +145,10 @@ def build_candidate_from_candle(row: dict[str, Any], cfg: OptionBacktestConfig) 
     source_flags = {
         "runtime_mode": "SIM",
         "candidate_origin": "historical_option_replay",
+        # Historical replay validates quote, timing, and provenance from the
+        # replay rows. Current websocket health is not meaningful for rows
+        # whose timestamps belong to a prior session.
+        "feed_health_scope": "HISTORICAL_REPLAY",
         "quote_source": "csv_bid_ask" if has_bid_ask else "csv_close_only",
         "fresh_quote_ok": has_bid_ask,
         "spread_ok": has_bid_ask,
@@ -195,6 +199,7 @@ def build_candidate_from_candle(row: dict[str, Any], cfg: OptionBacktestConfig) 
         "candidate_class": candidate_class,
         "truth_quality": truth_quality,
         "source_flags": source_flags,
+        "feed_health_scope": "HISTORICAL_REPLAY",
         "data_state": "DATA_OK" if has_bid_ask else "DATA_MISSING",
         "feature_cutoff_ts": feature_cutoff_ts,
         "signal_ts": signal_ts,

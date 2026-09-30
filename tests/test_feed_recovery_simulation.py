@@ -15,6 +15,30 @@ from core.expectancy.top_opportunity_selector import select_top_opportunities
 from core.observability import build_observability_evidence_bundle, FeedStateEventEmitter, ObservabilityContext, ObservabilityIds
 
 
+def _valid_recovery_proof(now: float) -> dict:
+    return {
+        "disconnect_started_at": now - 3.0,
+        "reconnected_at": now - 2.0,
+        "expected_tokens": ["101"],
+        "actual_tokens": ["101"],
+        "expected_token_count": 1,
+        "actual_resubscribed_token_count": 1,
+        "actual_subscription_evidence": "LOCAL_SUBSCRIBE_AND_MODE_CALL_RETURNED",
+        "required_identity_tokens": ["101"],
+        "gap_duration_by_identity": {"101": 1.0},
+        "last_pre_disconnect_timestamp_by_required_identity": {"101": now - 3.0},
+        "first_post_disconnect_timestamp_by_required_identity": {"101": now - 2.0},
+        "state_rebuild_status": "REBUILT",
+        "health_window_start": now - 2.0,
+        "health_window_end": now,
+        "health_window_status": "HEALTHY",
+        "ws_connected": True,
+        "runtime_state": "RUNNING",
+        "required_feeds_fresh": True,
+        "recovery_verdict": "RECOVERED",
+    }
+
+
 def test_ws1006_classification():
     """
     Verify WS 1006 classification:
@@ -38,7 +62,7 @@ def test_ws1006_classification():
     assert res1.action == "SOFT_RECONNECT"
     assert res1.state.recovery_in_progress is True
     
-    coord.clear_recovery(source="test", reason="reconnect_verified")
+    coord.clear_recovery(source="test", reason="reconnect_verified", proof=_valid_recovery_proof(coord._now_epoch()))
     
     # Attempt 2: accepted as soft reconnect
     res2 = coord.request_recovery(
@@ -49,7 +73,7 @@ def test_ws1006_classification():
     assert res2.accepted is True
     assert res2.action == "SOFT_RECONNECT"
     
-    coord.clear_recovery(source="test", reason="reconnect_verified")
+    coord.clear_recovery(source="test", reason="reconnect_verified", proof=_valid_recovery_proof(coord._now_epoch()))
     
     # Attempt 3: blocked (exceeds session attempt budget)
     res3 = coord.request_recovery(

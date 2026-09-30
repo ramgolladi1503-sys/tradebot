@@ -211,9 +211,11 @@ def test_runtime_queue_saturation_is_bounded_and_fail_closed(monkeypatch):
     runtime_store._RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=1)
     runtime_store._RUNTIME_WORKER = None
     monkeypatch.setattr(runtime_store, "_ensure_runtime_worker", lambda: None)
-    assert runtime_store.write_runtime_snapshot({"seq": 1}) is True
+    # Queue pressure is defined over distinct safety identities; repeats of
+    # one identity are latest-state coalescing, not queue saturation.
+    assert runtime_store.write_runtime_snapshot({"seq": 1, "runtime_state": "RUNNING"}) is True
     started = time.monotonic_ns()
-    assert runtime_store.write_runtime_snapshot({"seq": 2}) is False
+    assert runtime_store.write_runtime_snapshot({"seq": 2, "runtime_state": "DISCONNECTED"}) is False
     assert time.monotonic_ns() - started < 5_000_000_000
     assert durability.snapshot()["persistence_durability_degraded"] is True
     runtime_store._RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=2048)

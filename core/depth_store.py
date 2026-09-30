@@ -5,9 +5,11 @@ import time
 import json
 import logging
 import hashlib
+import math
 from pathlib import Path
 from datetime import datetime, timezone
 from config import config as cfg
+from config import feed_runtime_reliability as reliability_cfg
 from core.trade_store import insert_depth_snapshot, insert_depth_snapshots_batch
 _DEFAULT_INSERT_DEPTH_SNAPSHOT = insert_depth_snapshot
 from core.paths import logs_dir
@@ -35,6 +37,10 @@ class DepthStore:
         self._persist_stop = threading.Event()
         self._persist_lock = threading.Lock()
         self._persist_enqueued = 0
+        self._raw_updates_seen = 0
+        self._sample_windows = 0
+        self._coalesced_updates = 0
+        self._depth_duplicates = 0
         self._persist_in_flight = 0
         self._persisted = 0
         self._persist_queue_rejected = 0
@@ -42,6 +48,7 @@ class DepthStore:
         self._persist_provenance_write_failures = 0
         self._persist_failures = 0
         self._persist_degraded = False
+        self._sampling_interval_config_invalid = False
         self._persist_shutdown = False
         self._persist_thread = threading.Thread(target=self._persist_loop, name="depth-store-persistence", daemon=True)
         self._persist_thread.start()
@@ -165,11 +172,7 @@ class DepthStore:
                     logger.debug("background_depth_prune_skipped err=%s", prune_exc)
 
     def _should_persist_snapshot(self, instrument_token, now_epoch: float) -> bool:
-        configured_interval = getattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.5)
-        min_interval_sec = max(
-            0.0,
-            float(0.5 if configured_interval is None else configured_interval),
-        )
+        min_interval_sec = self._sampling_interval_sec()
         if min_interval_sec <= 0.0:
             self._last_persist_epoch_by_token[instrument_token] = now_epoch
             return True
@@ -179,8 +182,27 @@ class DepthStore:
             return True
         return False
 
+    def _sampling_interval_sec(self) -> float:
+        raw = getattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.5)
+        try:
+            interval = float(0.5 if raw is None else raw)
+        except (TypeError, ValueError, OverflowError):
+            interval = math.nan
+        if math.isfinite(interval) and interval >= 0.0:
+            return interval
+        with self._persist_lock:
+            first_invalid = not self._sampling_interval_config_invalid
+            self._sampling_interval_config_invalid = True
+            self._persist_degraded = True
+        if first_invalid:
+            record_degradation("depth", "DEPTH_SAMPLING_INTERVAL_INVALID")
+            logger.warning("depth_sampling_interval_invalid; using conservative 0.5s default")
+        return 0.5
+
     def update(self, instrument_token, depth):
         now_epoch = time.time()
+        with self._persist_lock:
+            self._raw_updates_seen += 1
         now_iso = datetime.fromtimestamp(now_epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
         self._ts_window.append(now_epoch)
         self.books[instrument_token] = {
@@ -196,7 +218,13 @@ class DepthStore:
             imbalance = 0.0
             if buy_qty + sell_qty > 0:
                 imbalance = (buy_qty - sell_qty) / (buy_qty + sell_qty)
-            if self._should_persist_snapshot(instrument_token, now_epoch):
+            should_persist = self._should_persist_snapshot(instrument_token, now_epoch)
+            with self._persist_lock:
+                if should_persist:
+                    self._sample_windows += 1
+                else:
+                    self._coalesced_updates += 1
+            if should_persist:
                 with self._persist_lock:
                     if self._persist_shutdown:
                         self._persist_pre_enqueue_rejected += 1
@@ -302,6 +330,7 @@ class DepthStore:
                 logger.error("depth_store_error_log_failed path=%s err=%s:%s", _ERROR_LOG_PATH, type(log_exc).__name__, log_exc)
 
     def persistence_state(self) -> dict:
+        sampling_interval_sec = self._sampling_interval_sec()
         with self._persist_admission_lock:
             with self._persist_lock:
                 qsize = self._persist_queue.qsize()
@@ -315,6 +344,19 @@ class DepthStore:
                 unaccounted = enqueued - (persisted + in_flight + qsize + queue_rejected + failures)
                 total_attempts = enqueued + pre_enqueue_rejected
                 return {
+                "capture_mode": str(getattr(reliability_cfg, "DEPTH_CAPTURE_MODE", "UNKNOWN")),
+                "depth_input_count": self._raw_updates_seen,
+                "depth_accepted_count": self._persist_enqueued,
+                "depth_persisted_count": self._persisted,
+                "depth_rejected_count": total_rejected,
+                "depth_duplicate_count": None,
+                "depth_duplicate_count_status": "UNAVAILABLE_NO_STABLE_EVENT_ID",
+                "raw_updates_seen": self._raw_updates_seen,
+                "sample_windows": self._sample_windows,
+                "snapshots_persisted": self._persisted,
+                "coalesced_updates": self._coalesced_updates,
+                "sampling_interval_ms": int(sampling_interval_sec * 1000),
+                "sampling_interval_config_valid": not self._sampling_interval_config_invalid,
                 "queue_depth": qsize,
                 "in_flight": in_flight,
                 "enqueued": enqueued,

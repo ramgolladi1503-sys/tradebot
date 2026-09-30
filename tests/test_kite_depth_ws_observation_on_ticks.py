@@ -3,6 +3,7 @@ import time
 from datetime import date
 
 from config import config as cfg
+from config import feed_runtime_reliability as reliability_cfg
 
 UNIVERSE = "runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json"
 
@@ -74,6 +75,227 @@ def test_on_ticks_routes_observation_tokens_into_shadow_buffer(monkeypatch):
     assert bars[-1]["bar_provenance"]["instrument_token"] == 256265
     assert bars[-1]["bar_provenance"]["reconnect_generation"] == 1
     assert bars[-1]["bar_provenance"]["live_feed_session_id"] == "session-1"
+
+
+def test_required_option_tick_verification_does_not_clear_recovery_without_gap_proof(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    from core.feed_recovery_coordinator import FeedRecoveryCoordinator
+
+    class Clock:
+        now = 1000.0
+
+        def __call__(self):
+            return self.now
+
+    clock = Clock()
+    coordinator = FeedRecoveryCoordinator(now_epoch_fn=clock)
+    coordinator.request_recovery(source="on_error", code=1006, reason="peer dropped")
+    monkeypatch.setattr(ws, "_FEED_RECOVERY_COORDINATOR", coordinator)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [1234])
+    monkeypatch.setitem(ws._TOKEN_TO_SYMBOL, 1234, "NIFTY")
+    monkeypatch.setitem(ws._LAST_MSG_TS_BY_TOKEN, 1234, 1001.0)
+    monkeypatch.setattr(cfg, "FEED_OPTION_VERIFY_MIN_OPTION_TICKS_PER_SYMBOL", 1, raising=False)
+    ws._reset_option_feed_verification(reason="unit_test")
+    ws._begin_option_feed_verification(
+        reason="reconnect",
+        start_epoch=1000.0,
+        requested_by_symbol={"NIFTY": 1},
+        subscribed_by_symbol={"NIFTY": 1},
+    )
+    clock.now = 1002.0
+
+    ws._tick_option_feed_verification(now_epoch=1002.0)
+
+    assert ws._option_feed_verification_overlay_payload()["state"] == "OK"
+    assert coordinator.get_state_snapshot().recovery_in_progress is True
+    assert coordinator.incident_history == ()
+
+
+def test_pending_recovery_proof_progress_is_visible_and_fail_closed(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    from core.feed_recovery_coordinator import FeedRecoveryCoordinator
+
+    coordinator = FeedRecoveryCoordinator(now_epoch_fn=lambda: 20.0)
+    coordinator.request_recovery(source="on_error", code=1006, reason="peer dropped")
+    monkeypatch.setattr(ws, "_FEED_RECOVERY_COORDINATOR", coordinator)
+    monkeypatch.setattr(
+        ws,
+        "_WS_RECOVERY_PROOF_CONTEXT",
+        {
+            "disconnect_started_at": 10.0,
+            "reconnected_at": 12.0,
+            "expected_tokens": ["101", "202"],
+            "actual_tokens": ["101"],
+            "required_identity_tokens": ["101"],
+            "required_identity_symbols": {"101": "NIFTY"},
+            "last_pre_disconnect_timestamp_by_required_identity": {"101": 9.5},
+            "first_post_disconnect_timestamp_by_required_identity": {},
+            "health_window_start": None,
+            "invalid_reasons": [],
+        },
+    )
+
+    progress = ws._ws_recovery_proof_progress_payload(now_epoch=20.0)
+
+    assert progress["state"] == "WAITING_FOR_REQUIRED_IDENTITY_TICKS"
+    assert progress["missing_tokens"] == ["202"]
+    assert progress["missing_post_disconnect_identities"] == ["101"]
+    assert progress["recovery_verdict"] == "PENDING"
+    assert progress["read_only"] is True
+    assert progress["is_order_action"] is False
+    assert progress["broker_api_called"] is False
+    assert progress["allowed_for_live_execution"] is False
+
+
+def test_runtime_domain_producer_partitions_index_and_stock_spot_evidence():
+    ws = importlib.import_module("core.kite_depth_ws")
+
+    domains = ws._build_feed_domain_health_payload(
+        now_epoch=100.0,
+        option_ages_by_symbol={"NIFTY": 0.5, "TCS": 900.0},
+        option_blockers_by_symbol={"NIFTY": "OK", "TCS": "STALE_OPTION_LTP"},
+        option_counts_by_symbol={"NIFTY": 4, "TCS": 12},
+        underlying_tokens={256265, 738561},
+        underlying_symbol_by_token={256265: "NIFTY", 738561: "TCS"},
+        tick_epochs_by_token={256265: 99.5, 738561: 90.0},
+        index_symbols={"NIFTY", "BANKNIFTY", "SENSEX"},
+        max_index_age_sec=1.0,
+        max_option_age_sec=2.5,
+    )
+
+    assert domains["index_spot"]["state"] == "HEALTHY"
+    assert domains["stock_spot"]["state"] == "DEGRADED"
+    assert domains["index_options"]["state"] == "HEALTHY"
+    assert domains["stock_options"]["state"] == "DEGRADED"
+    assert domains["index_futures"]["state"] == "UNKNOWN"
+
+
+def test_runtime_domain_producer_marks_missing_or_invalid_underlying_unknown():
+    import math
+
+    ws = importlib.import_module("core.kite_depth_ws")
+    domains = ws._build_feed_domain_health_payload(
+        now_epoch=100.0,
+        option_ages_by_symbol={"NIFTY": math.nan},
+        option_blockers_by_symbol={"NIFTY": "OK"},
+        option_counts_by_symbol={"NIFTY": 1},
+        underlying_tokens={256265},
+        underlying_symbol_by_token={256265: "NIFTY"},
+        tick_epochs_by_token={},
+        index_symbols={"NIFTY"},
+        max_index_age_sec=1.0,
+        max_option_age_sec=2.5,
+    )
+
+    assert domains["index_spot"]["state"] == "UNKNOWN"
+    assert domains["index_options"]["state"] == "UNKNOWN"
+    bool_age = ws._build_feed_domain_health_payload(
+        now_epoch=100.0,
+        option_ages_by_symbol={"NIFTY": True},
+        option_blockers_by_symbol={"NIFTY": "OK"},
+        option_counts_by_symbol={"NIFTY": 1},
+        underlying_tokens={256265},
+        underlying_symbol_by_token={256265: "NIFTY"},
+        tick_epochs_by_token={256265: True},
+        index_symbols={"NIFTY"},
+        max_index_age_sec=1.0,
+        max_option_age_sec=2.5,
+    )
+    assert bool_age["index_spot"]["state"] == "UNKNOWN"
+    assert bool_age["index_options"]["state"] == "UNKNOWN"
+
+
+def test_runtime_snapshot_callback_skips_same_state_direct_writes_but_keeps_transitions(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    store = importlib.import_module("core.feed.runtime_store")
+    store.reset_runtime_persistence_for_tests()
+    monkeypatch.setattr(store, "_ensure_runtime_worker", lambda: None)
+    monkeypatch.setattr(reliability_cfg, "FEED_RUNTIME_SNAPSHOT_INTERVAL_SEC", 60.0, raising=False)
+    direct_writes = []
+    submit = ws._enqueue_runtime_snapshot_with_direct_artifact
+    try:
+        for state_text, source in (
+            ("RUNNING", "on_ticks"),
+            ("RUNNING", "on_ticks"),
+            ("RECOVERY_BLOCKED", "on_ticks"),
+            ("RECOVERY_BLOCKED", "websocket_disconnect"),
+        ):
+            payload = {
+                "feed_session_id": "session-cadence-test",
+                "boot_epoch": 1,
+                "feed_epoch": 1,
+                "source": source,
+                "runtime_state": state_text,
+            }
+            assert submit(payload, direct_artifact_writer=lambda: direct_writes.append(payload["source"])) is True
+
+        state = store.runtime_persistence_state()
+        assert direct_writes == ["on_ticks", "on_ticks", "websocket_disconnect"]
+        assert state["requested"] == 4
+        assert state["enqueued"] == 3
+        assert state["coalesced"] == 1
+        assert state["rejected"] == 0
+    finally:
+        store.reset_runtime_persistence_for_tests()
+
+
+def test_tick_snapshot_producer_gate_runs_before_expensive_collection(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    store = importlib.import_module("core.feed.runtime_store")
+    store.reset_runtime_persistence_for_tests()
+    monkeypatch.setattr(reliability_cfg, "FEED_RUNTIME_SNAPSHOT_INTERVAL_SEC", 60.0, raising=False)
+    collection_calls = []
+    publications = []
+    monkeypatch.setattr(ws, "_subscribed_tokens_count_by_symbol", lambda _tokens: collection_calls.append("symbols") or {})
+    monkeypatch.setattr(ws, "_missing_option_tokens_stats", lambda: (0, {}))
+    monkeypatch.setattr(ws, "derive_market_session_policy", lambda **kwargs: type("Policy", (), {"market_state": "MARKET_OPEN"})())
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_latest_db_tick_epoch", lambda: 100.0)
+    monkeypatch.setattr(ws, "_latest_depth_epoch_from_store", lambda: 100.0)
+    monkeypatch.setattr(ws, "_option_runtime_state", lambda **kwargs: {
+        "option_count": 0,
+        "option_age_by_symbol": {},
+        "sample_rows": [],
+        "subscribed_count_by_symbol": {},
+        "ticks_received_count_by_symbol": {},
+        "last_tick_ts_by_symbol": {},
+        "feed_block_reason_by_symbol": {},
+        "active_blockers_by_symbol": {},
+    })
+    monkeypatch.setattr(ws, "_restart_verify_overlay_payload", lambda: {})
+    monkeypatch.setattr(ws, "_option_feed_verification_overlay_payload", lambda: {})
+    monkeypatch.setattr(ws, "_runtime_transport_truth_fields", lambda **kwargs: {})
+    monkeypatch.setattr(
+        ws,
+        "_enqueue_runtime_snapshot_with_direct_artifact",
+        lambda payload, direct_artifact_writer: publications.append(payload) or True,
+    )
+
+    try:
+        for source, state_text, timestamp in (
+            ("on_ticks", "RUNNING", 100.0),
+            ("on_ticks", "RUNNING", 100.1),
+            ("on_ticks", "RECOVERY_BLOCKED", 100.2),
+            ("websocket_disconnect", "RECOVERY_BLOCKED", 100.3),
+        ):
+            ws._persist_runtime_snapshot_row(
+                ws_connected=source == "on_ticks",
+                source=source,
+                runtime_state=state_text,
+                now_epoch=timestamp,
+            )
+        assert len(collection_calls) == 3
+        assert [item["source"] for item in publications] == [
+            "on_ticks",
+            "on_ticks",
+            "websocket_disconnect",
+        ]
+        assert all("recovery_proof_progress" in item for item in publications)
+        state = store.runtime_persistence_state()
+        assert state["producer_requested"] == 4
+        assert state["producer_coalesced"] == 1
+    finally:
+        store.reset_runtime_persistence_for_tests()
 
 
 def test_on_ticks_ignores_non_observation_tokens(monkeypatch):

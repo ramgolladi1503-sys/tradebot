@@ -100,11 +100,11 @@ def test_gate3_authority_local_fifo_and_immutable_envelopes(tmp_path, monkeypatc
         "_write_runtime_snapshot_sync",
         lambda payload: runtime_payloads.append(payload) or True,
     )
-    first_runtime = {"sequence": 1, "nested": {"values": [1]}}
+    first_runtime = {"sequence": 1, "runtime_state": "STATE_1", "nested": {"values": [1]}}
     assert runtime_store.write_runtime_snapshot(first_runtime)
     first_runtime["nested"]["values"].append(999)
-    assert runtime_store.write_runtime_snapshot({"sequence": 2, "nested": {"values": [2]}})
-    assert runtime_store.write_runtime_snapshot({"sequence": 3, "nested": {"values": [3]}})
+    assert runtime_store.write_runtime_snapshot({"sequence": 2, "runtime_state": "STATE_2", "nested": {"values": [2]}})
+    assert runtime_store.write_runtime_snapshot({"sequence": 3, "runtime_state": "STATE_3", "nested": {"values": [3]}})
     runtime_drain = runtime_store.shutdown_runtime_persistence(deadline_seconds=2.0)
     assert runtime_drain["complete"] is True
     assert [row["sequence"] for row in runtime_payloads] == [1, 2, 3]

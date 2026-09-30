@@ -149,16 +149,67 @@ class SidecarReporter:
             "system_critical": False,
         }
 
-        # 5. Executive State Summary
-        overall_state = "HEALTHY"
-        if tok_health.get("system_critical"):
-            overall_state = "SYSTEM_CRITICAL_BLOCK"
-        elif first_div and first_div.diverged and not first_div.upstream_stages_healthy:
-            overall_state = "PIPELINE_DIVERGENCE_DEGRADED"
-        elif tok_health.get("overall_health") != "HEALTHY":
-            overall_state = str(tok_health.get("overall_health"))
+        # 5. Executive State Summary. Missing subsystem evidence stays UNKNOWN;
+        # defaults are not evidence of health.
+        execution = dict(execution_plane_state or {})
+        supplied_subsystems = execution.get("subsystems")
+        subsystem_states = dict(supplied_subsystems) if isinstance(supplied_subsystems, Mapping) else {}
+        for source_key, subsystem_key in (
+            ("websocket_status", "ws_recovery"),
+            ("queue_health", "runtime_metadata"),
+            ("process_health", "process_health"),
+            ("raw_tick_capture", "raw_tick_capture"),
+            ("depth_capture", "depth_capture"),
+            ("feed_truth", "feed_truth"),
+            ("meg", "meg"),
+            ("heritage", "heritage"),
+            ("candidate_pipeline", "candidate_pipeline"),
+        ):
+            if source_key in execution:
+                subsystem_states.setdefault(subsystem_key, execution[source_key])
+        if "broker_authority" not in subsystem_states:
+            authority_values = (
+                execution.get("broker_write_authority"),
+                execution.get("order_authority"),
+                execution.get("paper_authorized"),
+                execution.get("live_authorized"),
+            )
+            if any(value is True for value in authority_values):
+                subsystem_states["broker_authority"] = "UNSAFE"
+            elif all(value is False for value in authority_values):
+                subsystem_states["broker_authority"] = "HEALTHY"
 
-        action_required = "NONE" if overall_state in {"HEALTHY", "PARTIAL_HEALTHY"} else f"INVESTIGATE_{overall_state}"
+        if tok_health.get("system_critical"):
+            subsystem_states.setdefault("feed_truth", "BLOCKED")
+        elif tok_health.get("overall_health") in {"DEGRADED_NONFATAL", "PARTIAL_HEALTHY"}:
+            subsystem_states.setdefault("feed_truth", "OPERATIONAL_DEGRADED")
+        if first_div and first_div.diverged and not first_div.upstream_stages_healthy:
+            subsystem_states.setdefault("candidate_pipeline", "OPERATIONAL_DEGRADED")
+
+        required_subsystems = (
+            "process_health", "raw_tick_capture", "runtime_metadata", "depth_capture",
+            "ws_recovery", "feed_truth", "meg", "heritage", "candidate_pipeline",
+            "broker_authority",
+        )
+        for key in required_subsystems:
+            subsystem_states.setdefault(key, "UNKNOWN")
+        normalized_states = {
+            str(key): _normalize_subsystem_state(value)
+            for key, value in subsystem_states.items()
+        }
+        states = [normalized_states.get(key, "UNKNOWN") for key in required_subsystems]
+        if "UNSAFE" in states:
+            overall_state = "UNSAFE"
+        elif "BLOCKED" in states:
+            overall_state = "BLOCKED"
+        elif "OPERATIONAL_DEGRADED" in states:
+            overall_state = "OPERATIONAL_DEGRADED"
+        elif "UNKNOWN" in states:
+            overall_state = "UNKNOWN"
+        else:
+            overall_state = "HEALTHY"
+
+        action_required = "NONE" if overall_state == "HEALTHY" else f"INVESTIGATE_{overall_state}"
 
         first_div_stage = first_div.first_divergence_stage if (first_div and first_div.diverged) else "NONE"
 
@@ -174,14 +225,15 @@ class SidecarReporter:
             },
             "executive_state": {
                 "OVERALL_STATE": overall_state,
+                "SUBSYSTEM_STATES": normalized_states,
                 "FIRST_DIVERGENCE": first_div_stage,
                 "CANDIDATE_POOL_STATUS": empty_diagnosis.get("EMPTY_POOL_CLASS", "UNKNOWN"),
                 "CRITICAL_TOKEN_HEALTH": "HEALTHY" if tok_health.get("critical_underlying_healthy") else "UNHEALTHY",
                 "AFFECTED_STRATEGIES": tok_health.get("affected_strategies", []),
                 "ACTION_REQUIRED": action_required,
-                "SESSION_STATE": (execution_plane_state or {}).get("session_state", "REGULAR_MARKET"),
-                "WEBSOCKET": (execution_plane_state or {}).get("websocket_status", "CONNECTED"),
-                "QUEUE_HEALTH": (execution_plane_state or {}).get("queue_health", "HEALTHY"),
+                "SESSION_STATE": execution.get("session_state", "UNKNOWN"),
+                "WEBSOCKET": execution.get("websocket_status", "UNKNOWN"),
+                "QUEUE_HEALTH": execution.get("queue_health", "UNKNOWN"),
             },
             "pipeline_lineage": checkpoint_lineage,
             "first_divergence_analysis": first_div.to_dict() if first_div else None,
@@ -202,6 +254,7 @@ class SidecarReporter:
         self.last_report_ts = now_utc
         self.strategy_tracker.reset_report_interval_flags()
         return report
+
 
     def render_markdown_report(self, payload: Mapping[str, Any]) -> str:
         """Render concise Markdown representation for operations and operators."""
@@ -284,3 +337,16 @@ class SidecarReporter:
         md_path.write_text(md_text, encoding="utf-8")
 
         return json_path, md_path
+
+
+def _normalize_subsystem_state(value: Any) -> str:
+    text = str(value or "UNKNOWN").strip().upper()
+    if text in {"HEALTHY", "OK", "PASS", "CONNECTED", "FRESH", "NOMINAL"}:
+        return "HEALTHY"
+    if text in {"UNSAFE", "AUTHORITY_VIOLATION", "SAFETY_VIOLATION"}:
+        return "UNSAFE"
+    if text in {"BLOCKED", "FAILED", "DOWN", "MISSING", "RESTART_REQUIRED", "RECOVERY_BLOCKED", "SYSTEM_CRITICAL_BLOCK", "STRATEGY_SPECIFIC_BLOCK"}:
+        return "BLOCKED"
+    if text in {"DEGRADED", "PARTIAL", "PARTIAL_HEALTHY", "STALE", "DISCONNECTED", "CONNECTED_UNVERIFIED", "UNVERIFIED", "RECOVERY_PENDING", "QUEUE_DEGRADED", "PIPELINE_DIVERGENCE_DEGRADED", "DEGRADED_NONFATAL", "OPERATIONAL_DEGRADED"}:
+        return "OPERATIONAL_DEGRADED"
+    return "UNKNOWN"

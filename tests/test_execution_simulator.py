@@ -36,6 +36,11 @@ def _candidate(**overrides):
         "ltp": 100.0,
         "quote_completeness": "FULL",
         "spread_source": "live_quote",
+        "feed_ok": True,
+        "ws_connected": True,
+        "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+        "option_last_tick_age_by_symbol": {"NIFTY": 0.5},
+        "symbol_feed_ok_by_symbol": {"NIFTY": True},
     }
     base.update(overrides)
     return base
@@ -77,7 +82,7 @@ def test_execution_sim_reprices_or_cancels_when_rr_collapses(monkeypatch):
     result = simulate_execution(
         _candidate(),
         market_snapshot={"bid": 99.9, "ask": 100.1, "quote_age_sec": 0.3, "volume": 5000},
-        revalidated_snapshot={"bid": 106.8, "ask": 107.0, "quote_age_sec": 0.4, "volume": 5000},
+        revalidated_snapshot={"bid": 106.8, "ask": 107.0, "quote_age_sec": 0.4, "volume": 5000, "feed_ok": True, "ws_connected": True, "option_feed_block_reason_by_symbol": {"NIFTY": "OK"}, "option_last_tick_age_by_symbol": {"NIFTY": 0.5}, "symbol_feed_ok_by_symbol": {"NIFTY": True}},
     )
 
     assert result.status in {"SIM_REPRICED", "SIM_CANCELLED"}
@@ -122,7 +127,7 @@ def test_execution_sim_can_model_partial_fill(monkeypatch):
 
     result = simulate_execution(
         _candidate(qty=10, execution_entry=100.3, entry_price=100.3),
-        market_snapshot={"bid": 99.8, "ask": 100.2, "quote_age_sec": 0.1, "volume": 5000, "ask_qty": 4},
+        market_snapshot={"bid": 99.8, "ask": 100.2, "quote_age_sec": 0.1, "volume": 5000, "ask_qty": 4, "feed_ok": True, "ws_connected": True, "option_feed_block_reason_by_symbol": {"NIFTY": "OK"}, "option_last_tick_age_by_symbol": {"NIFTY": 0.5}, "symbol_feed_ok_by_symbol": {"NIFTY": True}},
         allow_partial_fill=True,
     )
 

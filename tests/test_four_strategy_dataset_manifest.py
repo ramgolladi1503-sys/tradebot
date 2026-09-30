@@ -33,6 +33,7 @@ REAL_CANDLE_CANDIDATES = [
 ]
 REAL_TICK_CANDIDATES = [
     REPO_ROOT / "runtime" / "market_data" / "upstox" / "20260714" / "ticks_1784016031.parquet",
+    Path("/Users/madhuram/tradebot/runtime/market_data/upstox/20260714/ticks_1784016031.parquet"),
     REPO_ROOT / ".runtime" / "market_data" / "ticks_20260707_132935.parquet",
     Path("/Users/madhuram/tradebot/.runtime/market_data/ticks_20260707_132935.parquet"),
 ]
@@ -41,6 +42,14 @@ REAL_TICK_CANDIDATES = [
 def _first_existing_path(candidates: list[Path], *, description: str) -> Path:
     for path in candidates:
         if path.exists():
+            # A Git LFS pointer is a valid text file but is not the dataset.
+            # Continue to another explicitly declared local candidate; if
+            # none exists, report the corpus as unavailable instead of
+            # passing a pointer to the Parquet reader.
+            with path.open("rb") as stream:
+                header = stream.read(128)
+            if header.startswith(b"version https://git-lfs.github.com/spec/v1\n"):
+                continue
             return path
     pytest.skip(f"{description} is unavailable in this checkout")
 
@@ -116,6 +125,31 @@ def live_manifest(live_inventory: dict[str, object]) -> dict[str, object]:
 def test_frozen_contract_bundle_matches_sidecar(bundle: dict[str, object]) -> None:
     assert bundle["architecture_decision"] == "KEEP_CANONICAL_AND_LIVE_PHASE2_SEPARATE"
     assert bundle["bundle_id"] == "four_strategy_contract_bundle_v1"
+
+
+def test_first_existing_path_skips_lfs_pointer_for_next_local_candidate(tmp_path: Path) -> None:
+    pointer = tmp_path / "pointer.parquet"
+    pointer.write_bytes(
+        b"version https://git-lfs.github.com/spec/v1\n"
+        b"oid sha256:30e6b7372cd521c80831a0da478e2402ce884c20bc00e47d7ea07122473ebda7\n"
+        b"size 7604505\n"
+    )
+    local = tmp_path / "local.parquet"
+    local.write_bytes(b"PAR1")
+
+    assert _first_existing_path([pointer, local], description="test data") == local
+
+
+def test_first_existing_path_skips_when_only_lfs_pointer_is_available(tmp_path: Path) -> None:
+    pointer = tmp_path / "pointer.parquet"
+    pointer.write_bytes(
+        b"version https://git-lfs.github.com/spec/v1\n"
+        b"oid sha256:30e6b7372cd521c80831a0da478e2402ce884c20bc00e47d7ea07122473ebda7\n"
+        b"size 7604505\n"
+    )
+
+    with pytest.raises(pytest.skip.Exception, match="unavailable"):
+        _first_existing_path([pointer], description="test data")
 
 
 def test_real_candle_and_tick_truth_prove_current_field_classification(bundle: dict[str, object]) -> None:

@@ -43,6 +43,11 @@ def _candidate(
         "display_entry": execution_entry if execution_entry is not None else (bid + ask) / 2.0,
         "display_entry_status": "displayable",
         "quote_ok": True,
+        "feed_ok": True,
+        "ws_connected": True,
+        "option_feed_block_reason_by_symbol": {symbol: "OK"},
+        "option_last_tick_age_by_symbol": {symbol: 0.5},
+        "symbol_feed_ok_by_symbol": {symbol: True},
     }
 
 

@@ -536,9 +536,22 @@ class FullMarketReplayRunner:
 
 
 @pytest.mark.skipif(not REPLAY_DATA_AVAILABLE, reason="Historical dataset not found on filesystem")
-def test_baseline_full_market_replay():
+def test_baseline_full_market_replay(tmp_path: pathlib.Path, monkeypatch):
     """Verify full-market baseline replay: 0 lost traces, 0 trace mutations, 0 silent drops."""
-    runner = FullMarketReplayRunner()
+    runner = FullMarketReplayRunner(evidence_output_dir=tmp_path / "replay_evidence")
+    # The replay configures the production-equivalence path below by direct
+    # assignment. Preserve each process-global value so later tests do not
+    # inherit PAPER mode, disabled fast-loop, or disabled tick persistence.
+    for name in (
+        "KITE_USE_API",
+        "EXECUTION_MODE",
+        "ORCHESTRATOR_FAST_LOOP_ENABLE",
+        "TICK_STORE_ENABLE_DB_WRITES",
+        "PLANNING_NO_SIGNAL_FALLBACK_ENABLE",
+        "REQUIRE_LIVE_QUOTES",
+    ):
+        prior = getattr(cfg, name, True if name == "ORCHESTRATOR_FAST_LOOP_ENABLE" else None)
+        monkeypatch.setattr(cfg, name, prior, raising=False)
     assert runner.token_summary["TOKEN_IDENTITY_COVERAGE"] == 1.0
     assert runner.token_summary["TOKENS_UNKNOWN"] == 0
 

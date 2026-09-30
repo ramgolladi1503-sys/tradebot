@@ -15,6 +15,7 @@ Repairs:
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import os
 import subprocess
@@ -103,32 +104,32 @@ def reset_broker_write_guards():
 
 def arm_broker_write_guards():
     try:
-        import core.execution_engine
+        execution_engine_module = importlib.import_module("core.execution_engine")
         _install_broker_write_guard(
-            core.execution_engine.ExecutionEngine,
+            execution_engine_module.ExecutionEngine,
             "place_order",
             "core.execution_engine.ExecutionEngine.place_order",
         )
     except Exception:
         pass
     try:
-        import core.broker.mock_broker
+        mock_broker_module = importlib.import_module("core.broker.mock_broker")
         _install_broker_write_guard(
-            core.broker.mock_broker.MockBroker,
+            mock_broker_module.MockBroker,
             "place_order",
             "core.broker.mock_broker.MockBroker.place_order",
         )
         _install_broker_write_guard(
-            core.broker.mock_broker.MockBroker,
+            mock_broker_module.MockBroker,
             "cancel_order",
             "core.broker.mock_broker.MockBroker.cancel_order",
         )
     except Exception:
         pass
     try:
-        import core.kite_client
+        kite_client_module = importlib.import_module("core.kite_client")
         _install_broker_write_guard(
-            core.kite_client.KiteClient,
+            kite_client_module.KiteClient,
             "submit_order",
             "core.kite_client.KiteClient.submit_order",
         )

@@ -12,6 +12,7 @@ import atexit
 import hashlib
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -19,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from config import config as cfg
+from config import feed_runtime_reliability as reliability_cfg
 from core.market_data import get_token_for_symbol
 from core.market_event_graph_live_ohlc_buffer import shadow_ohlc_buffer
 from core.market_event_graph_live_source import (
@@ -46,6 +48,7 @@ RECONNECT_GENERATION_MISMATCH = "RECONNECT_GENERATION_MISMATCH"
 PRE_GENERATION_TICK_PROVENANCE = "PRE_GENERATION_TICK_PROVENANCE"
 INDEX_INTERVAL_MISALIGNED = "INDEX_INTERVAL_MISALIGNED"
 SNAPSHOT_INCOMPLETE = "SNAPSHOT_INCOMPLETE"
+SNAPSHOT_TIMED_OUT = "SNAPSHOT_TIMED_OUT"
 
 
 @dataclass(frozen=True)
@@ -110,6 +113,17 @@ class LiveSourceRuntimeBridge:
         self._rejection_write_failures = 0
         self._max_queue_depth = 0
         self._diagnostics: list[dict[str, Any]] = []
+        self._metrics: dict[str, Any] = {
+            "meg_cycles_attempted": 0,
+            "meg_cycles_emitted": 0,
+            "meg_cycles_rejected": 0,
+            "meg_snapshot_incomplete_count": 0,
+            "meg_timeout_count": 0,
+            "meg_max_consecutive_rejections": 0,
+            "meg_consecutive_rejections": 0,
+            "meg_missing_identity_counts": {},
+            "meg_completion_latency_ms": 0.0,
+        }
         self._rejection_path = Path(
             getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_REJECTION_PATH", "runtime/market_event_graph_live_shadow/rejections.jsonl")
         )
@@ -123,6 +137,7 @@ class LiveSourceRuntimeBridge:
         latency_ms = {"snapshot_assembly": 0.0, "validation": 0.0, "queue_write": 0.0}
         if not bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
             return LiveSourceBridgeResult(False, False, "DISABLED", latency_ms=latency_ms)
+        self._metrics["meg_cycles_attempted"] += 1
 
         t0 = time.perf_counter()
         contract, reason = self._load_universe_contract()
@@ -138,7 +153,21 @@ class LiveSourceRuntimeBridge:
         snapshot, snapshot_reason, rejected = self._assemble_snapshot(contract, subscription, cycle_cutoff=cycle_cutoff)
         latency_ms["snapshot_assembly"] = (time.perf_counter() - t1) * 1000.0
         if snapshot is None:
+            if snapshot_reason in {SNAPSHOT_INCOMPLETE, SNAPSHOT_TIMED_OUT}:
+                self._metrics["meg_snapshot_incomplete_count"] += 1
+            if snapshot_reason == SNAPSHOT_TIMED_OUT:
+                self._metrics["meg_timeout_count"] += 1
             return self._reject(snapshot_reason, latency_ms=latency_ms, identities=rejected, audit=subscription)
+
+        try:
+            max_freshness_sec = float(getattr(reliability_cfg, "MEG_MAX_DECISION_FRESHNESS_SEC", 15.0))
+        except (TypeError, ValueError):
+            max_freshness_sec = 0.0
+        if not math.isfinite(max_freshness_sec) or max_freshness_sec <= 0.0:
+            return self._reject("SNAPSHOT_FRESHNESS_CONFIG_INVALID", latency_ms=latency_ms, identities=(), audit=subscription)
+        snapshot_age = float(snapshot["observed_at_epoch"]) - float(snapshot["source_bar_end_epoch"])
+        if snapshot_age < 0.0 or snapshot_age > max_freshness_sec:
+            return self._reject("SNAPSHOT_STALE", latency_ms=latency_ms, identities=(), audit=subscription)
 
         validation_start = time.perf_counter()
         row = build_live_captured_metadata_row(
@@ -183,6 +212,8 @@ class LiveSourceRuntimeBridge:
 
         self._last_source_bar_end_epoch = float(row["source_bar_end_epoch"])
         self._last_session_date = str(row["session_date"])
+        self._metrics["meg_cycles_emitted"] += 1
+        self._metrics["meg_consecutive_rejections"] = 0
         return LiveSourceBridgeResult(
             attempted=True,
             exported=True,
@@ -389,6 +420,42 @@ class LiveSourceRuntimeBridge:
         *,
         cycle_cutoff: datetime,
     ) -> tuple[dict[str, Any] | None, str, tuple[str, ...]]:
+        started = time.monotonic()
+        try:
+            grace_ms = min(2000, max(0, int(getattr(reliability_cfg, "MEG_COMPLETION_GRACE_MS", 800))))
+        except (TypeError, ValueError, OverflowError):
+            grace_ms = 0
+        deadline = started + grace_ms / 1000.0
+        while True:
+            waited = max(0.0, time.monotonic() - started)
+            effective_cutoff = cycle_cutoff + timedelta(seconds=waited)
+            result = self._assemble_snapshot_once(
+                contract, subscription, cycle_cutoff=effective_cutoff
+            )
+            if result[1] != SNAPSHOT_INCOMPLETE:
+                self._metrics["meg_completion_latency_ms"] = max(
+                    float(self._metrics["meg_completion_latency_ms"]), waited * 1000.0
+                )
+                return result
+            missing_counts = self._metrics["meg_missing_identity_counts"]
+            for identity in result[2]:
+                missing_counts[str(identity)] = int(missing_counts.get(str(identity), 0)) + 1
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
+                self._metrics["meg_completion_latency_ms"] = max(
+                    float(self._metrics["meg_completion_latency_ms"]),
+                    max(0.0, time.monotonic() - started) * 1000.0,
+                )
+                return None, SNAPSHOT_TIMED_OUT, result[2]
+            time.sleep(min(0.025, remaining))
+
+    def _assemble_snapshot_once(
+        self,
+        contract: LiveUniverseContract,
+        subscription: Mapping[str, Any],
+        *,
+        cycle_cutoff: datetime,
+    ) -> tuple[dict[str, Any] | None, str, tuple[str, ...]]:
         index_bar = self._completed_bar_for(contract.index_symbol, cycle_cutoff=cycle_cutoff)
         if index_bar is None:
             return None, SNAPSHOT_INCOMPLETE, (contract.index_symbol,)
@@ -477,6 +544,12 @@ class LiveSourceRuntimeBridge:
         identities: Sequence[str] = (),
         audit: Mapping[str, Any] | None = None,
     ) -> LiveSourceBridgeResult:
+        self._metrics["meg_cycles_rejected"] += 1
+        consecutive = int(self._metrics["meg_consecutive_rejections"]) + 1
+        self._metrics["meg_consecutive_rejections"] = consecutive
+        self._metrics["meg_max_consecutive_rejections"] = max(
+            int(self._metrics["meg_max_consecutive_rejections"]), consecutive
+        )
         row = {
             "reason": str(reason),
             "affected_identities": [str(item) for item in identities],
@@ -505,6 +578,8 @@ class LiveSourceRuntimeBridge:
         )
 
     def _audit_payload(self, subscription: Mapping[str, Any]) -> dict[str, Any]:
+        attempted = int(self._metrics.get("meg_cycles_attempted") or 0)
+        rejected = int(self._metrics.get("meg_cycles_rejected") or 0)
         return {
             "export_path": str(self.exporter.path),
             "last_source_bar_end_epoch": self._last_source_bar_end_epoch,
@@ -514,6 +589,10 @@ class LiveSourceRuntimeBridge:
             "rejection_write_failures": self._rejection_write_failures,
             "max_queue_high_water_mark": self._max_queue_depth,
             "diagnostic_count": len(self._diagnostics),
+            "metrics": {
+                **dict(self._metrics),
+                "meg_rejection_rate": (rejected / attempted) if attempted else 0.0,
+            },
             "latest_diagnostic": dict(self._diagnostics[-1]) if self._diagnostics else None,
             "subscription_evidence": dict(subscription or {}),
             "read_only": True,

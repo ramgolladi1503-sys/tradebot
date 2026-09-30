@@ -25,6 +25,40 @@ def test_watchdog_binds_authoritative_intended_tokens_as_global():
     assert "_INTENDED_TOKENS" in declared_globals
 
 
+def test_watchdog_emits_periodic_snapshots_without_tick_callback():
+    watchdog = _watchdog_node()
+    periodic_loops = [
+        node
+        for node in ast.walk(watchdog)
+        if isinstance(node, ast.While)
+        and isinstance(node.test, ast.Constant)
+        and node.test.value is True
+    ]
+    assert periodic_loops
+
+    for loop in periodic_loops:
+        sleep_lines = [
+            node.lineno
+            for node in ast.walk(loop)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "time"
+            and node.func.attr == "sleep"
+        ]
+        snapshot_lines = [
+            node.lineno
+            for node in ast.walk(loop)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_emit_snapshot"
+        ]
+        if sleep_lines and snapshot_lines and min(sleep_lines) < max(snapshot_lines):
+            return
+
+    raise AssertionError("watchdog timer loop must emit snapshots after waiting, without on_ticks")
+
+
 def test_intended_token_statistics_preserve_exact_identity(monkeypatch):
     rows = []
     monkeypatch.setattr(ws, "_log_ws", lambda event, extra=None, **kwargs: rows.append(extra))

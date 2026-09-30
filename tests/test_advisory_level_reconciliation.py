@@ -44,6 +44,11 @@ def _canonical_row(**overrides):
         "capital_at_risk": 20.0,
         "rr_ratio": 1.5,
         "truth_quality": "TRUTH_LIVE_FRESH",
+        "feed_ok": True,
+        "ws_connected": True,
+        "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+        "option_last_tick_age_by_symbol": {"NIFTY": 0.5},
+        "symbol_feed_ok_by_symbol": {"NIFTY": True},
     }
     row.update(overrides)
     return row
@@ -150,6 +155,11 @@ def test_apply_level_normalization_promotes_valid_queue_only_candidate():
         "stop_loss": 150.0,
         "target": 260.0,
         "truth_quality": "TRUTH_LIVE_FRESH",
+        "feed_ok": True,
+        "ws_connected": True,
+        "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+        "option_last_tick_age_by_symbol": {"NIFTY": 0.5},
+        "symbol_feed_ok_by_symbol": {"NIFTY": True},
     }
     out = review_queue._apply_level_normalization_and_promotion(row)
 

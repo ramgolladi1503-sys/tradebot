@@ -184,6 +184,9 @@ def test_start_depth_ws_writes_import_missing_state(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
     monkeypatch.setattr(cfg, "KITE_API_KEY", "test_key", raising=False)
     monkeypatch.setattr(depth_ws, "KiteTicker", None, raising=True)
+    # This case verifies the caller-supplied token count; an active governed
+    # launch plan is a separate precedence contract covered by its own tests.
+    monkeypatch.setattr(depth_ws, "_active_launch_plan_tokens", lambda: [])
 
     depth_ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True)
 

@@ -1,10 +1,12 @@
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from config import config as cfg
+from config import feed_runtime_reliability as reliability_cfg
 from core.market_event_graph_live_runtime_bridge import (
     BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE,
     BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION,
@@ -18,11 +20,15 @@ from core.market_event_graph_live_runtime_bridge import (
     flush_live_source_bridge,
 )
 from core.market_event_graph_live_source import LiveCapturedMetadataExporter, load_validated_live_jsonl
+from core.feed.feed_epoch import _reset_feed_epoch_for_tests
 
 
 @pytest.fixture(autouse=True)
 def _sandbox_rejection_path(monkeypatch, tmp_path):
+    _reset_feed_epoch_for_tests()
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_REJECTION_PATH", str(tmp_path / "rejections.jsonl"))
+    yield
+    _reset_feed_epoch_for_tests()
 
 
 def _symbols():
@@ -215,11 +221,104 @@ def test_real_exporter_persists_exactly_one_valid_live_row(monkeypatch, tmp_path
     assert stored_row["allowed_for_live_execution"] is False
     assert stored_row["source_bar_end_epoch"] == 120.0
     assert stored_row["index_source_bar_end_epoch"] == 120.0
-    assert stored_row["observed_at_epoch"] == 130.0
+    assert stored_row["observed_at_epoch"] == pytest.approx(130.0, abs=0.01)
     assert stored_row["live_universe"]["version"] == "2026-07-30.test"
     assert stored_row["universe_hash"] == contract_payload["canonical_sha256"]
     (validated_row,) = load_validated_live_jsonl(output_path)
     assert validated_row["universe_hash"] == contract_payload["canonical_sha256"]
+
+
+def test_bridge_waits_for_late_completed_bar_within_grace(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(reliability_cfg, "MEG_COMPLETION_GRACE_MS", 900)
+    contract_payload = _contract()
+    delayed = "NIFTY_00"
+    _install_bars(monkeypatch, contract_payload=contract_payload, missing_symbol=delayed)
+    from core.market_event_graph_live_runtime_bridge import shadow_ohlc_buffer
+
+    original = shadow_ohlc_buffer.get_completed_bars
+    start = time.monotonic()
+
+    def delayed_bar(symbol, as_of):
+        if symbol == delayed and time.monotonic() - start < 0.7:
+            return []
+        if symbol == delayed:
+            return [_bar(
+                60.0,
+                delayed,
+                token=1000,
+                universe_hash=contract_payload["canonical_sha256"],
+                provenance={
+                    "source_type": "live_websocket",
+                    "symbol": delayed,
+                    "live_feed_session_id": "feed-session-1",
+                    "feed_epoch": 0,
+                    "reconnect_generation": 1,
+                    "instrument_token": 1000,
+                    "provider": "kite",
+                    "token_domain": "kite_instrument_token",
+                    "universe_hash": contract_payload["canonical_sha256"],
+                    "first_live_tick_epoch": 61.0,
+                    "last_live_tick_epoch": 110.0,
+                    "historical_seed": False,
+                    "replay_fixture": False,
+                    "non_live_fallback": False,
+                    "recovered_synthetic": False,
+                },
+            )]
+        return original(symbol, as_of)
+
+    monkeypatch.setattr(shadow_ohlc_buffer, "get_completed_bars", delayed_bar)
+    bridge = LiveSourceRuntimeBridge(
+        exporter=LiveCapturedMetadataExporter(tmp_path / "late.jsonl"),
+        universe_contract=contract_payload,
+        subscription_evidence_provider=_evidence,
+    )
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+
+    assert result.exported is True
+    assert result.latency_ms["snapshot_assembly"] >= 650
+    assert result.audit["metrics"]["meg_completion_latency_ms"] >= 650
+
+
+def test_permanently_missing_bar_times_out_without_synthesis(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(reliability_cfg, "MEG_COMPLETION_GRACE_MS", 50)
+    contract_payload = _contract()
+    missing = "NIFTY"
+    _install_bars(monkeypatch, contract_payload=contract_payload, missing_symbol=missing)
+    output = tmp_path / "missing.jsonl"
+    bridge = LiveSourceRuntimeBridge(
+        exporter=LiveCapturedMetadataExporter(output),
+        universe_contract=contract_payload,
+        subscription_evidence_provider=_evidence,
+    )
+
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(140.0, tz=timezone.utc))
+
+    assert result.exported is False
+    assert result.reason == "SNAPSHOT_TIMED_OUT"
+    assert result.rejected_identities == (missing,)
+    assert output.exists() is False
+    assert bridge.flush()["metrics"]["meg_timeout_count"] == 1
+
+
+def test_bridge_rejects_snapshot_over_freshness_cap(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(reliability_cfg, "MEG_COMPLETION_GRACE_MS", 0)
+    monkeypatch.setattr(reliability_cfg, "MEG_MAX_DECISION_FRESHNESS_SEC", 5.0)
+    contract_payload = _contract()
+    _install_bars(monkeypatch, contract_payload=contract_payload)
+    bridge = LiveSourceRuntimeBridge(
+        exporter=LiveCapturedMetadataExporter(tmp_path / "stale.jsonl"),
+        universe_contract=contract_payload,
+        subscription_evidence_provider=_evidence,
+    )
+
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+
+    assert result.exported is False
+    assert result.reason == "SNAPSHOT_STALE"
 
 
 def test_no_explicit_live_universe_contract_exports_nothing(monkeypatch, tmp_path):

@@ -7,6 +7,8 @@ import pytest
 
 from core.option_backtest import OptionBacktestConfig, run_option_symbol_backtest
 from core.option_backtest.models import OptionBacktestCostConfig, ResearchMode
+from core.option_backtest.adapter import build_candidate_from_candle
+from core.symbol_execution_safety import has_symbol_execution_safety_evidence
 
 
 def _base_row(**overrides):
@@ -30,6 +32,18 @@ def _base_row(**overrides):
     }
     row.update(overrides)
     return row
+
+
+def test_historical_option_replay_uses_replay_truth_not_current_websocket_health():
+    cfg = OptionBacktestConfig(symbol="NIFTY24APR25500CE", data_path=Path("unused.csv"))
+    row = _base_row()
+    row["timestamp"] = pd.Timestamp(row["timestamp"]).tz_localize(cfg.timezone)
+
+    candidate = build_candidate_from_candle(row, cfg)
+
+    assert candidate["feed_health_scope"] == "HISTORICAL_REPLAY"
+    assert candidate["source_flags"]["feed_health_scope"] == "HISTORICAL_REPLAY"
+    assert has_symbol_execution_safety_evidence(candidate) is False
 
 
 def test_backtest_fallback_rows_never_trade(tmp_path: Path):

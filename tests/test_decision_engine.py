@@ -40,6 +40,11 @@ def _base_candidate(**overrides):
         "side": "BUY",
         "strategy_family": "ensemble_opt",
         "source_flags": {},
+        "feed_ok": True,
+        "ws_connected": True,
+        "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+        "option_last_tick_age_by_symbol": {"NIFTY": 0.5},
+        "symbol_feed_ok_by_symbol": {"NIFTY": True},
     }
     base.update(overrides)
     return base

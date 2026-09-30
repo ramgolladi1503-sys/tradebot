@@ -852,6 +852,30 @@ def test_runtime_prerequisite_loader_requires_pinned_manifest_and_calendar_ances
     assert unpinned["heritage_verification"]["reason"] == "PINNED_HERITAGE_MANIFEST_REQUIRED"
 
 
+def test_runtime_prerequisite_loader_rejects_incomplete_target_session_identity(tmp_path):
+    path, target, required, instruments = _publish_t1_manifest(tmp_path)
+    incomplete_target = {
+        "trading_date": target["trading_date"],
+        "venue": target["venue"],
+    }
+
+    loaded = load_verified_t1_prerequisites(
+        manifest_path=path,
+        expected_manifest_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        approved_root=tmp_path,
+        target_session=incomplete_target,
+        decision_epoch=100,
+        required_fields=required,
+        target_instruments=instruments,
+    )
+
+    assert loaded["opening_drive_prev_close_1529"] is None
+    assert loaded["heritage_verification"]["status"] == "BLOCKED"
+    assert loaded["heritage_verification"]["reason"] == "TARGET_SESSION_MISMATCH"
+    assert loaded["heritage_verification"]["read_only"] is True
+    assert loaded["heritage_verification"]["allowed_for_live_execution"] is False
+
+
 @pytest.mark.parametrize("case,reason", [
     ("no_calendar", "VERIFIED_CALENDAR_PREDECESSOR_REQUIRED"),
     ("wrong_pin", "PINNED_MANIFEST_HASH_MISMATCH"),

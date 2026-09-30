@@ -52,6 +52,7 @@ def test_runtime_store_writes_canonical_truth_to_required_artifacts(monkeypatch,
             "last_depth_epoch": 199.0,
             "last_depth_age_sec": 1.0,
             "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+            "option_last_tick_age_by_symbol": {"NIFTY": 1.0},
             "runtime_state": "RUNNING",
             "source": "unit-test",
         }

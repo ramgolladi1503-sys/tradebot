@@ -196,8 +196,7 @@ def test_real_composition_wires_launch_plan_to_feed_start(
 
     import core.runtime_storage_authority as rsa
 
-    base_dir = "/Volumes/TradeBotData" if Path("/Volumes/TradeBotData").is_dir() else str(tmp_path)
-    governed_root = Path(tempfile.mkdtemp(prefix="tradebot-composition-", dir=base_dir))
+    governed_root = Path(tempfile.mkdtemp(prefix="tradebot-composition-", dir=str(tmp_path)))
     fake_authority = rsa.StorageAuthority(
         volume=governed_root,
         runtime_root=governed_root / "out",
@@ -305,7 +304,6 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
                 self.modes[int(value)] = mode
         def connect(self, threaded=True):
             self.on_connect(self, {})
-            base = float(int(time.time() // 60) * 60 - 120)
             for offset in (0, 60, 120):
                 packet = []
                 for token in tokens:
@@ -313,6 +311,11 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
                 self.on_ticks(self, packet)
         def close(self):
             return None
+
+    # Place the synthetic completed bars at a fixed five-second observation
+    # age. Using wall-clock now makes this test intermittently stale later in
+    # a minute, which correctly trips the production freshness cap.
+    base = float(int(time.time() // 60) * 60 - 180)
 
     class FakeClient:
         _active_api_key = "api-key"
@@ -347,7 +350,12 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     authenticated = next(payload for event, payload in feed_events if event == "FEED_WS_AUTHENTICATED")
     assert authenticated["auth_state"] == "VERIFIED_BY_WEBSOCKET_HANDSHAKE"
     assert feed._RUNTIME_STATE == "RUNNING"
-    result = bridge.observe_cycle([], cycle_cutoff=__import__("datetime").datetime.now(__import__("datetime").timezone.utc))
+    result = bridge.observe_cycle(
+        [],
+        cycle_cutoff=__import__("datetime").datetime.fromtimestamp(
+            base + 126, tz=__import__("datetime").timezone.utc
+        ),
+    )
     assert result.attempted is True and result.exported is True
     assert result.accepted_constituent_count == 50
     row = json.loads(export_path.read_text().splitlines()[0])
