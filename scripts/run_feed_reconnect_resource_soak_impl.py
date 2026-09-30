@@ -268,6 +268,7 @@ def _current_safety_limits() -> dict:
         ),
         "recoveries_per_time_window": int(getattr(coordinator, "_max_recoveries_per_window", 0)),
         "recovery_timeout_sec": float(getattr(coordinator, "_recovery_timeout_sec", 0.0)),
+        "minimum_healthy_window_sec": float(getattr(coordinator, "_min_healthy_window_sec", 0.0)),
         "restart_storm_limit": int(getattr(cfg, "FEED_RESTART_STORM_TRIP", 0)),
         "restart_guard_enabled": True,
         "feed_breaker_enabled": True,
@@ -344,6 +345,10 @@ def patch_kite(profile: str, monkeypatch=None):
             raising=False,
         )
         pm.setattr(ws._FEED_RECOVERY_COORDINATOR, "_max_recoveries_per_window", 10000, raising=False)
+        # This offline stress harness validates resource behavior with a synthetic
+        # recovery timeline. Keep the interval short, explicit, and local to the
+        # harness; production retains the configured health window.
+        pm.setattr(ws._FEED_RECOVERY_COORDINATOR, "_min_healthy_window_sec", 0.01, raising=False)
         pm.setattr(cfg, "DEPTH_WS_WS1006_RECOVERABLE_MAX_ATTEMPTS_PER_SESSION", 10000, raising=False)
         pm.setattr(ws._FEED_RECOVERY_COORDINATOR, "_recoverable_retry_cooldown_sec", 0.0, raising=False)
         pm.setattr(ws, "feed_breaker_tripped", lambda: False, raising=False)
@@ -519,10 +524,57 @@ class ResourceSoakRunner:
         replay, no terminal/block state, and no lock/resource leak. The synthetic
         owner is cleared only after those transport conditions are proven.
         """
+        # The soak has no live feed and must never be used as live recovery
+        # evidence. Supply a clearly identified synthetic timeline solely so
+        # the coordinator can validate its recovery-clear contract while this
+        # harness measures repeated transport and resource behavior.
+        now_epoch = float(time.time())
+        state = ws._FEED_RECOVERY_COORDINATOR.state
+        disconnect_epoch = float(getattr(state, "recovery_started_epoch", 0.0) or now_epoch - 1.0)
+        with getattr(ws, "_WS_RECOVERY_PROOF_LOCK"):
+            proof_context = dict(getattr(ws, "_WS_RECOVERY_PROOF_CONTEXT") or {})
+        reconnect_epoch = float(proof_context.get("reconnected_at") or 0.0)
+        if reconnect_epoch <= disconnect_epoch or reconnect_epoch >= now_epoch:
+            reconnect_epoch = min(now_epoch - 0.05, disconnect_epoch + 0.05)
+        required_identity = str(self.tokens[0])
+        pre_tick_epoch = disconnect_epoch - 0.1
+        post_tick_epoch = reconnect_epoch + 0.001
+        health_window_start = reconnect_epoch + 0.002
+        health_window_sec = max(
+            0.01,
+            float(getattr(ws._FEED_RECOVERY_COORDINATOR, "_min_healthy_window_sec", 0.01)),
+        ) + 0.1  # clear strict float-boundary comparisons deterministically
+        health_window_end = health_window_start + health_window_sec
+        if health_window_end > now_epoch:
+            time.sleep(health_window_end - now_epoch + 0.005)
+            now_epoch = float(time.time())
+        proof = {
+            "evidence_source": "SYNTHETIC_RESOURCE_SOAK_FIXTURE",
+            "disconnect_started_at": disconnect_epoch,
+            "reconnected_at": reconnect_epoch,
+            "expected_tokens": [str(token) for token in self.tokens],
+            "actual_tokens": [str(token) for token in self.tokens],
+            "expected_token_count": len(self.tokens),
+            "actual_resubscribed_token_count": len(self.tokens),
+            "actual_subscription_evidence": "LOCAL_SUBSCRIBE_AND_MODE_CALL_RETURNED",
+            "required_identity_tokens": [required_identity],
+            "gap_duration_by_identity": {required_identity: post_tick_epoch - pre_tick_epoch},
+            "last_pre_disconnect_timestamp_by_required_identity": {required_identity: pre_tick_epoch},
+            "first_post_disconnect_timestamp_by_required_identity": {required_identity: post_tick_epoch},
+            "state_rebuild_status": "REBUILT",
+            "health_window_start": health_window_start,
+            "health_window_end": health_window_end,
+            "health_window_status": "HEALTHY",
+            "ws_connected": True,
+            "runtime_state": "RUNNING",
+            "required_feeds_fresh": True,
+            "recovery_verdict": "RECOVERED",
+        }
         try:
             ws._FEED_RECOVERY_COORDINATOR.clear_recovery(
-                source="resource_soak_transport_verified",
+                source="resource_soak_synthetic_fixture",
                 reason=f"cycle_{cycle_index}_transport_verified",
+                proof=proof,
             )
             ws._sync_ws1006_recovery_state_from_coordinator()
         except Exception as exc:
