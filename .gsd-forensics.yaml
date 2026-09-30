@@ -313,6 +313,7 @@ agent_parameters:
     # record broker_api_called=true; its endpoint classification is not order
     # authority or an executed order action.
     required_non_action_fields:
+      - read_only=true
       - live_order_action=false
       - broker_order_action=false
       - broker_write_authority=false

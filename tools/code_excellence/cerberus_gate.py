@@ -358,6 +358,11 @@ def _line_matches_required_field(line: str, name: str, expected: str) -> bool:
         type_annotated_pattern = rf"^{lowered_name}(?::[a-z0-9_\[\],\.]+)?=(?:false|field\(.*default=false.*\))$"
         if re.search(type_annotated_pattern, normalized):
             return True
+    elif expected == "true":
+        expected_pairs.add(f"{lowered_name}istrue")
+        type_annotated_pattern = rf"^{lowered_name}(?::[a-z0-9_\[\],\.]+)?=true$"
+        if re.search(type_annotated_pattern, normalized):
+            return True
     return any(pair in normalized for pair in expected_pairs)
 
 

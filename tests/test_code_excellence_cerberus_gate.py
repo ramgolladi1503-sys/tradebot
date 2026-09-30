@@ -326,6 +326,42 @@ def test_cerberus_gate_report_lists_configured_contract(tmp_path):
     assert "client_called=false" in rendered
 
 
+def test_cerberus_gate_accepts_python_true_assertion_and_blocks_false_value(tmp_path):
+    config = tmp_path / ".gsd-forensics.yaml"
+    config.write_text(_config_text().replace("client_called=false", "read_only=true"), encoding="utf-8")
+    _write_file(
+        tmp_path,
+        "tools/read_only_report.py",
+        """
+        class Report:
+            read_only = True
+
+        REPORT = Report()
+        assert REPORT.read_only is True
+        """,
+    )
+
+    passing = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tools/read_only_report.py",),
+    )
+    _write_file(
+        tmp_path,
+        "tools/read_only_report.py",
+        "class Report:\n    read_only = False\n",
+    )
+    failing = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tools/read_only_report.py",),
+    )
+
+    assert passing.block_count == 0
+    assert failing.block_count == 1
+    assert failing.blocked_findings[0].marker == "read_only=true"
+
+
 def test_repo_policy_allows_read_only_api_telemetry_but_requires_no_order_authority(tmp_path):
     repo_root = Path(__file__).resolve().parents[1]
     _write_file(
