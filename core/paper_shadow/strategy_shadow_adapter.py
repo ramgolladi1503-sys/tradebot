@@ -1207,6 +1207,9 @@ def load_canonical_t1_prerequisites(
         Path("runtime/preflight"),
         Path("runtime/sessions"),
         Path("runtime/truth"),
+        Path("/Volumes/TradeBotData/sessions") / f"session_{session_date}",
+        Path("/Volumes/TradeBotData/sessions"),
+        Path("/Volumes/TradeBotData/runtime/preflight"),
     ])
 
     for s_dir in search_dirs:
