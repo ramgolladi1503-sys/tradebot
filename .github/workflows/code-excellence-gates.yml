@@ -129,7 +129,10 @@ jobs:
 
       - name: Remove candidate analysis worktree
         if: always()
-        run: git worktree remove --force "$RUNNER_TEMP/pr-candidate" || true
+        run: |
+          if git worktree list --porcelain | grep -Fqx "worktree $RUNNER_TEMP/pr-candidate"; then
+            git worktree remove --force "$RUNNER_TEMP/pr-candidate"
+          fi
 
       - name: Build required Agent Elite report
         if: always()
