@@ -1,5 +1,23 @@
 # MROS Live Runtime Truth Repair — Hermes Stage 1
 
+## CI gate applicability amendment — 2026-10-01
+
+**source_agent:** `hermes`
+**action:** `DEFINE_CONTRACT`, `MAP_WORKFLOW`, `CREATE_ACCEPTANCE_GATES`, `UPDATE_DOCS`
+**title:** PR943 exact-candidate CI applicability repair
+**scope:** Correct CI inputs and applicability for PR943 without weakening required gates or changing runtime behavior.
+**requested_paths:** `.github/workflows/code-excellence-gates.yml`, `.github/workflows/pr782-remaining-evidence-contracts.yml`, `.github/workflows/meg-shadow-system-certification.yml`, `docs/agent_reviews/MROS_LIVE_RUNTIME_TRUTH_REPAIR_HERMES_STAGE1_20260930.md`, `docs/agent_reviews/GSD_IMPLEMENTATION_CHANGESET.md`
+**allowed_paths:** those listed paths only
+**forbidden_paths:** runtime code, risk/order/broker/strategy paths, credentials, secrets, live data, required-check policy
+**expected_tests:** workflow YAML validation; exact candidate source analyzed by trusted CE implementation; PR782 test execution and applicable scope validation; MEG workflow does not trigger for unrelated shared test-only changes; GitHub exact-head checks
+**acceptance_proof:** required exact-SHA CI remains passing; CE consumes candidate source as inert input while trusted gate code/config stays from base; PR782 protected-scope checks use the PR base only for applicable owned paths and always execute focused tests when triggered; MEG certification triggers only on owned certification inputs; no check is waived by condition or failure suppression.
+
+### Design and invariants
+
+The recurring PR943 CI failures are attributable to workflow input/applicability defects. `Code Excellence Gates` is a trusted `pull_request_target` workflow and must not execute candidate scripts. It may check out the exact PR head as inert data, while running the gate scripts and configuration from the trusted base checkout. `PR782 Remaining Evidence Contracts` must not compare a new PR against a historical unrelated stacked-PR baseline; use the event PR base for applicability and protected-scope validation, while retaining focused tests. `MEG Shadow System Certification` must be triggered by its actual owned certification inputs, not the broad `tests/test_runtime_authority*.py` family whose shared cutover test may change for unrelated fail-closed integration.
+
+No required checks, test assertions, certification rules, token permissions, or runtime safety gates may be disabled, skipped, or weakened. Frozen-flow and Netlify checks are outside this amendment and are explicitly excluded by the user. No live process or broker action is authorized.
+
 **Date:** 2026-09-30
 **Source agent:** `hermes`
 **Allowed actions:** `DESIGN_ARCHITECTURE`, `DEFINE_CONTRACT`, `MAP_WORKFLOW`, `CREATE_ACCEPTANCE_GATES`, `UPDATE_DOCS`

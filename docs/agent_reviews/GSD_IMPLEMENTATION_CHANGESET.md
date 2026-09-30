@@ -1,5 +1,23 @@
 # GSD Implementation Changeset — Session Continuity
 
+## PR943 CI applicability repair — 2026-10-01
+
+```yaml
+source_agent: gsd
+action: PLAN_PR, GENERATE_TESTS, GENERATE_PATCH, FIX_TEST_FAILURE, UPDATE_DOCS
+title: PR943 trusted CI candidate-input and workflow-scope repair
+scope: Correct three non-authorized CI failures without weakening required tests, static analysis, or safety certification.
+requested_paths: .github/workflows/code-excellence-gates.yml, .github/workflows/pr782-remaining-evidence-contracts.yml, .github/workflows/meg-shadow-system-certification.yml, docs/agent_reviews/MROS_LIVE_RUNTIME_TRUTH_REPAIR_HERMES_STAGE1_20260930.md, docs/agent_reviews/GSD_IMPLEMENTATION_CHANGESET.md
+allowed_paths: listed paths only
+forbidden_paths: runtime code, strategy/risk/order/broker code, credentials, secrets, live data, branch-protection settings
+expected_tests: YAML parse; candidate-source CE gate; focused PR782 suites and applicable-scope validation; exact-SHA hosted required CI
+acceptance_proof: required exact-SHA CI success; candidate source is data-only for trusted CE scripts; inapplicable PR-specific scope does not fail unrelated integration changes; no assertions or required checks weakened.
+```
+
+Changed the CE workflow to analyze files from a detached exact-head worktree as inert inputs while continuing to execute the trusted base checkout's gate scripts and configuration. Changed PR782's fallback from a stale PR783 baseline to the event's PR base, and made its protected-scope assertion conditional on PR782-owned artifacts while keeping all focused suites unconditional when the workflow runs. Narrowed MEG's trigger away from the broad shared runtime-authority test family and added a dedicated applicability job, so workflow-only or shared-test-only edits do not run or claim an out-of-scope certification; owned certification inputs still run the full guard and suite.
+
+Risks: the CE workflow change is loaded from `main` because this is a `pull_request_target`; therefore this PR cannot use its own change to alter the current trusted workflow run. A separate trusted-base update is necessary before CE can evaluate PR943's candidate source. No new config keys. Validation hooks: local workflow YAML parse and exact-head CE runner exercise; focused hosted suites and exact-SHA checks remain final proof. Rollout: merge the trusted workflow correction to `main`, rerun PR943 checks, then merge PR943 only after required CI is green and only the user's two named exceptions remain.
+
 - source_agent: gsd
 - action: GENERATE_TESTS, GENERATE_PATCH, FIX_TEST_FAILURE, UPDATE_DOCS
 - title: Session continuity heritage graph, CAS lineage, and read-only runtime integration

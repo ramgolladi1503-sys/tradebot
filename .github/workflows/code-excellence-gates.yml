@@ -111,13 +111,25 @@ jobs:
           echo '--- CE-scoped paths ---'
           cat docs/code_excellence/reports/changed_paths.txt
 
+      - name: Materialize exact PR source as inert analysis input
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          CANDIDATE_REF="refs/remotes/origin/pr-${PR_NUMBER}-head"
+          test "$(git rev-parse "$CANDIDATE_REF")" = "$HEAD_SHA"
+          git worktree add --detach "$RUNNER_TEMP/pr-candidate" "$CANDIDATE_REF"
+
       - name: Run unified CE gates
         run: |
           PYTHONPATH=. python scripts/run_unified_ce_gates.py \
-            --repo . \
-            --config .gsd-forensics.yaml \
+            --repo "$RUNNER_TEMP/pr-candidate" \
+            --config "$GITHUB_WORKSPACE/.gsd-forensics.yaml" \
             --changed-paths-file docs/code_excellence/reports/changed_paths.txt \
             --out docs/code_excellence/reports/unified_ce_gate_latest.md
+
+      - name: Remove candidate analysis worktree
+        if: always()
+        run: git worktree remove --force "$RUNNER_TEMP/pr-candidate" || true
 
       - name: Build required Agent Elite report
         if: always()

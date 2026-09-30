@@ -71,6 +71,7 @@ jobs:
       - name: Verify protected runtime scope
         env:
           PR_HEAD_REF: ${{ github.head_ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           python - <<'PY'
           import os
@@ -157,11 +158,26 @@ jobs:
               '''.split())
               unexpected = sorted(set(changed) - allowed)
           else:
-              base = subprocess.check_output(
-                  ['git', 'merge-base', 'origin/post-pr783/kite-read-only-observation-runtime-v1', 'HEAD'],
-                  text=True,
-              ).strip()
+              base = os.environ.get('PR_BASE_SHA')
+              if not base:
+                  raise SystemExit('PR_BASE_SHA_MISSING')
               changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+              # Only enforce this PR782 scope contract when its owned runtime
+              # or evidence artifacts changed. Shared tests can be edited by
+              # other PRs; their focused suites above still run in full.
+              owned = {
+                  'core/read_only_live_evidence.py',
+                  'core/kite_read_only_observation_runtime.py',
+                  'scripts/seal_pr763_read_only_evidence.py',
+                  'tests/test_pr782_remaining_evidence_contracts.py',
+                  'docs/agent_reviews/pr782_remaining_evidence_contracts_v1.md',
+                  'docs/certification/pr782_remaining_evidence_contracts_v1.md',
+                  'research/pr782_remaining_evidence_contracts_v1/offline_closure.json',
+                  'research/pr782_remaining_evidence_contracts_v1/offline_closure.md',
+              }
+              if not set(changed) & owned:
+                  print(f'PR782 scope not applicable; focused tests passed; base={base}')
+                  raise SystemExit(0)
               allowed = {
                   'core/read_only_live_evidence.py',
                   'core/kite_read_only_observation_runtime.py',
@@ -189,5 +205,5 @@ jobs:
           elif [ "${PR_HEAD_REF:-}" = "ram/mros-session-continuity-live-integration" ]; then
             git diff --check 723ec4432dfed9d6f9214efd7d216de1e9fdf812 HEAD
           else
-            git diff --check origin/post-pr783/kite-read-only-observation-runtime-v1...HEAD
+            git diff --check '${{ github.event.pull_request.base.sha }}'...HEAD
           fi
