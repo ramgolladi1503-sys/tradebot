@@ -4,6 +4,7 @@ import textwrap
 import subprocess
 
 import pytest
+from pathlib import Path
 
 from tools.code_excellence.cerberus_gate import (
     CerberusGateError,
@@ -323,6 +324,39 @@ def test_cerberus_gate_report_lists_configured_contract(tmp_path):
     assert "LIVE" in rendered
     assert "no_action=false" in rendered
     assert "client_called=false" in rendered
+
+
+def test_repo_policy_allows_read_only_api_telemetry_but_requires_no_order_authority(tmp_path):
+    repo_root = Path(__file__).resolve().parents[1]
+    _write_file(
+        tmp_path,
+        "runtime/analytics/read_only_ledger.py",
+        """
+        LEDGER = {
+            "read_only": True,
+            "is_order_action": True,
+            "broker_api_called": True,
+            "live_order_action": False,
+            "broker_order_action": False,
+            "broker_write_authority": False,
+            "order_authority": False,
+            "paper_authorized": False,
+            "live_authorized": False,
+            "allowed_for_live_execution": False,
+        }
+        """,
+    )
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=repo_root / ".gsd-forensics.yaml",
+        changed_paths=("runtime/analytics/read_only_ledger.py",),
+    )
+
+    assert report.block_count == 0
+    assert report.exit_code == 0
+    assert "broker_api_called=false" not in report.required_non_action_fields
+    assert "allowed_for_live_execution=false" in report.required_non_action_fields
 
 
 def test_read_changed_paths_file_rejects_missing_file(tmp_path):
