@@ -7,7 +7,7 @@ source_agent: gsd
 action: PLAN_PR, GENERATE_TESTS, GENERATE_PATCH, FIX_TEST_FAILURE, UPDATE_DOCS
 title: PR943 trusted CI candidate-input and workflow-scope repair
 scope: Correct three non-authorized CI failures without weakening required tests, static analysis, or safety certification.
-requested_paths: .github/workflows/code-excellence-gates.yml, .github/workflows/pr782-remaining-evidence-contracts.yml, .github/workflows/meg-shadow-system-certification.yml, docs/agent_reviews/MROS_LIVE_RUNTIME_TRUTH_REPAIR_HERMES_STAGE1_20260930.md, docs/agent_reviews/GSD_IMPLEMENTATION_CHANGESET.md
+requested_paths: .github/workflows/code-excellence-gates.yml, .github/workflows/pr782-remaining-evidence-contracts.yml, .github/workflows/meg-shadow-system-certification.yml, docs/agent_reviews/HERMES_PR943_CI_GATE_APPLICABILITY.md, docs/agent_reviews/MROS_LIVE_RUNTIME_TRUTH_REPAIR_HERMES_STAGE1_20260930.md, docs/agent_reviews/GSD_IMPLEMENTATION_CHANGESET.md
 allowed_paths: listed paths only
 forbidden_paths: runtime code, strategy/risk/order/broker code, credentials, secrets, live data, branch-protection settings
 expected_tests: YAML parse; candidate-source CE gate; focused PR782 suites and applicable-scope validation; exact-SHA hosted required CI
