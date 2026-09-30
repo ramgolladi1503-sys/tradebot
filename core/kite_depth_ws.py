@@ -157,6 +157,7 @@ _PENDING_UNSUBSCRIBE_TOKENS = set()
 _PENDING_MODE_FULL_TOKENS = set()
 _LAST_MUTATION_RESULT = None
 _SOCKET_GENERATION = 0
+_LAST_ON_TICKS_RUNTIME_SNAPSHOT_EPOCH = 0.0
 
 _LAST_DESIRED_TOKENS: list[int] | None = None
 _INTENDED_TOKENS: list[int] | None = None
@@ -7103,14 +7104,17 @@ def on_ticks(ws, ticks):
     if _LAST_FEED_TICK_LOG_MINUTE != minute_bucket:
         _LAST_FEED_TICK_LOG_MINUTE = minute_bucket
         _log_ws("FEED_TICK", {"ticks": len(ticks), "last_ws_tick_epoch": _LAST_WS_TICK_EPOCH})
-    _persist_runtime_snapshot_row(
-        ws_connected=True,
-        source="on_ticks",
-        now_epoch=now_epoch,
-        runtime_state=_RUNTIME_STATE,
-        last_error=_LAST_RUNTIME_ERROR,
-        reconnect_blocked_reason=_RECONNECT_BLOCKED_REASON if _reconnect_recovery_blocked_active() else None,
-    )
+    global _LAST_ON_TICKS_RUNTIME_SNAPSHOT_EPOCH
+    if (now_epoch - _LAST_ON_TICKS_RUNTIME_SNAPSHOT_EPOCH) >= 1.0 or _reconnect_recovery_blocked_active():
+        _LAST_ON_TICKS_RUNTIME_SNAPSHOT_EPOCH = now_epoch
+        _persist_runtime_snapshot_row(
+            ws_connected=True,
+            source="on_ticks",
+            now_epoch=now_epoch,
+            runtime_state=_RUNTIME_STATE,
+            last_error=_LAST_RUNTIME_ERROR,
+            reconnect_blocked_reason=_RECONNECT_BLOCKED_REASON if _reconnect_recovery_blocked_active() else None,
+        )
     try:
         identity = get_current_feed_session_identity()
         append_feed_forensic_event(

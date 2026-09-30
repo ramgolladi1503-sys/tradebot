@@ -229,6 +229,35 @@ def main():
         except Exception as e:
             logger.error(f"Error flushing parquet: {e}")
 
+    writer_closed = False
+    writer_lock = threading.Lock()
+
+    def finalize_and_close_parquet():
+        nonlocal writer_closed
+        with writer_lock:
+            if writer_closed:
+                return
+            flush_buffer()
+            try:
+                writer.close()
+                logger.info(f"Parquet writer closed successfully for {out_file}.")
+            except Exception as e:
+                logger.error(f"Error closing parquet writer: {e}")
+            writer_closed = True
+
+            # Verify parquet footer magic bytes
+            try:
+                if out_file.exists() and out_file.stat().st_size >= 4:
+                    with open(out_file, "rb") as f:
+                        f.seek(-4, 2)
+                        magic = f.read(4)
+                    if magic == b"PAR1":
+                        logger.info("Parquet footer verification: VALID PAR1.")
+                    else:
+                        logger.warning(f"Parquet footer verification failed: expected b'PAR1', found {magic!r}.")
+            except Exception as e:
+                logger.warning(f"Could not verify parquet footer: {e}")
+
     kws = KiteTicker(API_KEY, ACCESS_TOKEN)
     stop_time = datetime_time(15, 45)
 
@@ -236,11 +265,7 @@ def main():
         now = datetime.now()
         if now.time() >= stop_time:
             logger.info("Observation cutoff (15:45 IST) reached. Shutting down tick collector.")
-            flush_buffer()
-            try:
-                writer.close()
-            except Exception:
-                pass
+            finalize_and_close_parquet()
             try:
                 ws.close()
             except Exception:
@@ -251,6 +276,7 @@ def main():
                     reactor.callFromThread(reactor.stop)
             except Exception:
                 pass
+            time.sleep(0.5)
             os._exit(0)
 
         for t in ticks:
@@ -294,11 +320,7 @@ def main():
 
     def handle_sigint(*args):
         logger.info("Shutting down collector due to signal...")
-        flush_buffer()
-        try:
-            writer.close()
-        except Exception:
-            pass
+        finalize_and_close_parquet()
         try:
             kws.close()
         except Exception:
@@ -309,6 +331,7 @@ def main():
                 reactor.callFromThread(reactor.stop)
         except Exception:
             pass
+        time.sleep(0.5)
         os._exit(0)
 
     signal.signal(signal.SIGINT, handle_sigint)

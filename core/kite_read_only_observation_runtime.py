@@ -392,7 +392,7 @@ class ObservationLifecycle:
                     break
                 time.sleep(0.05)
 
-            remaining_sec = max(0.5, overall_deadline_mono - time.monotonic())
+            remaining_sec = max(10.0, overall_deadline_mono - time.monotonic())
             tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=remaining_sec)
             depth_result = depth_store.depth_store.shutdown_persistence(deadline_seconds=remaining_sec)
             runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=remaining_sec)
