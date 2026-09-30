@@ -136,4 +136,3 @@ def test_pending_tokens_cleared_on_mutation_callbacks(monkeypatch):
     assert len(ws._PENDING_SUBSCRIBE_TOKENS) == 0
     assert len(ws._PENDING_UNSUBSCRIBE_TOKENS) == 0
     assert ws._LAST_TOKENS == [1001, 1002, 3001]
-
