@@ -126,3 +126,47 @@ The `shutdown_drain.json` SHA-256 is `4ec7bc977dbc5c3b03a07e7a8cab87bea9f4db3fb9
 `feed_health_truth_latest.json` SHA-256 `5b7e0ef61fce039e4be766102368322da2dfc4acd10ed4f7196f60162a16e149` reports feed/global health false, `DEGRADED`, 95 blockers. The exact run has no `feed_coverage_ledger.json` or `cas_session_heritage.json`. CAS 0915/1000 rows are `BLOCKED`, with null price and event/selected/receive timestamps and `timestamp_authority=UNKNOWN`. `market_snapshot.json` SHA-256 `bf46397719797531ebf5d3ed92b14eead0283d18507249bf74bbe99a8d1fd3ee` is a 10:00 UTC point-in-time snapshot with `market_open=false`, repeated scalar OHLC 22683.75 and null `last_tick_ts`; it is not a close. The presession manifest says runtime mode SIM and execution/broker authority false.
 
 The recurring Antigravity schedule for `scripts/run_governed_morning_observer_v1.py` remains configured in PID 1167 with expression `15 3 * * 1-5`; no child was observed and it was not modified. The scheduler timezone is UNKNOWN, so this audit does not infer its next trigger time. This makes process absence alone insufficient for a no-future-writer guarantee. The stopped run remains `LIVE_VERIFICATION_PENDING`/`RUNTIME_VERIFICATION_FAILED`, not `LIVE_VERIFIED`; no raw source was changed.
+
+## Agent Work Contract
+
+This continuation repairs concrete PR #939 CI failures only: stacked-PR scope validation, failing focused tests, review/evidence gate policy, and required review record sections. No runtime was started.
+
+## Scope Guard
+
+Changed paths are controlled by the exact candidate diff and PR782 workflow allowlist. No credentials, broker calls, orders, risk gates, strategy thresholds, or live configuration were changed.
+
+## Grill Me Review
+
+No external Grill Me review is claimed. Self-review retains actual API event facts as telemetry and does not falsify them to satisfy an authority policy.
+
+## Hermes Review
+
+The bounded 12-field SQLite tick schema remains unchanged. Snapshot assembly uses the SQLite getter and explicitly marks absent persisted callback identity as `UNAVAILABLE`; it does not synthesize lineage.
+
+## GSD Review
+
+Focused regressions passed locally after the repair. Hosted checks are authoritative for the final candidate SHA; no pending result is considered acceptance.
+
+## QA / Safety Review
+
+Changes and tests are offline. Explicit broker-write, order, paper, and live authority fields remain fail-closed. No runtime or broker path was invoked.
+
+## Acceptance Proof
+
+Acceptance requires exact-SHA green required CI, passing review-evidence validation, clean diff checks, and reconciled changed-path count. Record final SHA and check URLs after publication.
+
+## Runtime Proof Required After Merge
+
+A separate operator authorization and a same-SHA read-only session with complete drain evidence remain required. This CI repair is not runtime proof.
+
+## What This PR Does Not Prove
+
+It does not prove T-1 source admission, market-data quality, live observation readiness, strategy edge, execution readiness, or `LIVE_VERIFIED`.
+
+## Human Approval
+
+The user authorized CI repair work. This does not authorize merge, runtime observation, broker calls, credential access, or order authority.
+
+## High-Risk Path Review
+
+`core/kite_depth_ws.py` remains within previously scoped read-only observer work and is not changed by this CI repair. `core/market_snapshot_builder.py` now reads the SQLite getter and labels absent event identity `UNAVAILABLE`; no execution authority is added.

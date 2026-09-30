@@ -153,6 +153,48 @@ def test_cerberus_gate_blocks_forbidden_marker_in_scoped_file(tmp_path):
     assert report.exit_code == 1
 
 
+def test_cerberus_gate_allows_truthful_api_event_telemetry(tmp_path):
+    config = _write_config(tmp_path)
+    _write_file(
+        tmp_path,
+        "tools/ledger.py",
+        'EVENT = {"broker_api_called": True, "broker_write_authority": False, "order_authority": False}',
+    )
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tools/ledger.py",),
+    )
+
+    assert report.block_count == 0
+
+
+def test_cerberus_gate_still_blocks_broker_authority(tmp_path):
+    config = _write_config(tmp_path)
+    config.write_text(
+        _config_text().replace(
+            "      - no_action=false\n      - client_called=false",
+            "      - broker_write_authority=false\n      - order_authority=false",
+        ),
+        encoding="utf-8",
+    )
+    _write_file(
+        tmp_path,
+        "tools/unsafe_authority.py",
+        'REPORT = {"broker_write_authority": True, "order_authority": False}',
+    )
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tools/unsafe_authority.py",),
+    )
+
+    assert report.block_count == 1
+    assert report.blocked_findings[0].marker == "broker_write_authority=false"
+
+
 def test_cerberus_gate_blocks_non_action_field_regression(tmp_path):
     config = _write_config(tmp_path)
     _write_file(

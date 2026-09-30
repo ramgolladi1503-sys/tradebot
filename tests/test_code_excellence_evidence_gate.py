@@ -180,6 +180,24 @@ def test_evidence_gate_scopes_to_evidence_paths_only(tmp_path):
     assert report.block_count == 0
 
 
+def test_evidence_gate_does_not_treat_review_documents_as_runtime_records(tmp_path):
+    config = _write_config(tmp_path)
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("      - docs/agent_reviews\n", ""),
+        encoding="utf-8",
+    )
+    _write_file(tmp_path, "docs/agent_reviews/architecture.md", "design contract and acceptance gates")
+
+    report = run_evidence_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("docs/agent_reviews/architecture.md",),
+    )
+
+    assert report.findings == ()
+    assert report.block_count == 0
+
+
 def test_evidence_gate_report_lists_contract(tmp_path):
     config = _write_config(tmp_path)
     _write_file(tmp_path, "docs/agent_reviews/evidence.json", json.dumps(_valid_payload()))

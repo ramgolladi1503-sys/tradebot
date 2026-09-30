@@ -175,3 +175,59 @@ git diff --check
 - Hash-bound shutdown evidence now records `PARTIAL`/`FAILED`, incomplete persistence drains, 50,801 pending tick writes, 330 worker failures, expired drain deadline and no final flush. The process identity remains stale `RUNNING` and records source branch SHA `12d01da414d9a1ffc13718390e2c950c9f621bfd`, not the integration SHA.
 - Feed truth is DEGRADED with 95 blockers; per-token coverage and same-day heritage artifacts are absent; CAS targets remain blocked/null. The recurring Antigravity weekday trigger for the supplied worktree remains present with no child. See `SOURCE_AND_HERITAGE_MANIFEST.json` for exact hashes and typed statuses.
 - Result: runtime proof fails clean-shutdown, integration-SHA, and coverage-artifact checks. This does not invalidate synthetic code tests, but prohibits live/runtime acceptance claims.
+
+## Agent Work Contract
+
+```yaml
+source_agent: hermes_then_gsd
+action: PLAN_PR, GENERATE_TESTS, GENERATE_PATCH, FIX_TEST_FAILURE, UPDATE_DOCS
+title: PR939 CI blocker repair
+scope: Repair verified hosted CI failures while preserving read-only authority and the frozen SQLite tick contract.
+requested_paths: .github/workflows/pr782-remaining-evidence-contracts.yml, .gsd-forensics.yaml, core/kite_read_only_observation_runtime.py, core/market_snapshot_builder.py, docs/agent_reviews/{FINAL_VERDICT,GSD_IMPLEMENTATION_CHANGESET,HERMES_SESSION_CONTINUITY_HERITAGE_CONTRACT,NEXT_READ_ONLY_LIVE_VERIFICATION_RUNBOOK}.md, tests/core/test_market_snapshot_builder.py, tests/test_candidate_pipeline_architecture_repair.py, tests/test_code_excellence_cerberus_gate.py, tests/test_code_excellence_evidence_gate.py, tests/test_read_only_observation_storage_binding.py
+allowed_paths: listed requested paths only
+forbidden_paths: credentials, environment files, order/execution/risk/strategy behavior, broker API invocation, runtime session artifacts
+expected_tests: affected regression suites, unified Code Excellence gates, full pytest suite, required hosted PR checks
+acceptance_proof: exact-SHA green required CI, zero gate blocks, exact changed-path reconciliation, no runtime/broker activity
+```
+
+This continuation repairs concrete PR #939 CI failures only: stacked-PR scope validation, failing focused tests, review/evidence gate policy, and required review record sections. No runtime was started.
+
+## Scope Guard
+
+Changed paths are controlled by the exact candidate diff and PR782 workflow allowlist. No credentials, broker calls, orders, risk gates, strategy thresholds, or live configuration were changed.
+
+## Grill Me Review
+
+No external Grill Me review is claimed. Self-review retains actual API event facts as telemetry and does not falsify them to satisfy an authority policy.
+
+## Hermes Review
+
+The bounded 12-field SQLite tick schema remains unchanged. Snapshot assembly uses the SQLite getter and explicitly marks absent persisted callback identity as `UNAVAILABLE`; it does not synthesize lineage.
+
+## GSD Review
+
+Focused regressions passed locally after the repair. Hosted checks are authoritative for the final candidate SHA; no pending result is considered acceptance.
+
+## QA / Safety Review
+
+Changes and tests are offline. Explicit broker-write, order, paper, and live authority fields remain fail-closed. No runtime or broker path was invoked.
+
+## Acceptance Proof
+
+Acceptance requires exact-SHA green required CI, passing review-evidence validation, clean diff checks, and reconciled changed-path count. Record final SHA and check URLs after publication.
+
+## Runtime Proof Required After Merge
+
+A separate operator authorization and a same-SHA read-only session with complete drain evidence remain required. This CI repair is not runtime proof.
+
+## What This PR Does Not Prove
+
+It does not prove T-1 source admission, market-data quality, live observation readiness, strategy edge, execution readiness, or `LIVE_VERIFIED`.
+
+## Human Approval
+
+The user authorized CI repair work. This does not authorize merge, runtime observation, broker calls, credential access, or order authority.
+
+## High-Risk Path Review
+
+`core/kite_depth_ws.py` remains within previously scoped read-only observer work and is not changed by this CI repair. `core/market_snapshot_builder.py` now reads the SQLite getter and labels absent event identity `UNAVAILABLE`; no execution authority is added.

@@ -54,3 +54,47 @@ live_authorized=false, allowed_for_live_execution=false
 ```
 
 The final operator summary must distinguish `REPOSITORY_VERIFIED`, `DATA_VERIFIED`, `INDEPENDENTLY_DERIVED`, `LIVE_VERIFICATION_PENDING`, `UNKNOWN`, and `BLOCKED`. This procedure does not itself authorize entering paper/live modes or any execution behavior.
+
+## Agent Work Contract
+
+This continuation repairs concrete PR #939 CI failures only: stacked-PR scope validation, failing focused tests, review/evidence gate policy, and required review record sections. No runtime was started.
+
+## Scope Guard
+
+Changed paths are controlled by the exact candidate diff and PR782 workflow allowlist. No credentials, broker calls, orders, risk gates, strategy thresholds, or live configuration were changed.
+
+## Grill Me Review
+
+No external Grill Me review is claimed. Self-review retains actual API event facts as telemetry and does not falsify them to satisfy an authority policy.
+
+## Hermes Review
+
+The bounded 12-field SQLite tick schema remains unchanged. Snapshot assembly uses the SQLite getter and explicitly marks absent persisted callback identity as `UNAVAILABLE`; it does not synthesize lineage.
+
+## GSD Review
+
+Focused regressions passed locally after the repair. Hosted checks are authoritative for the final candidate SHA; no pending result is considered acceptance.
+
+## QA / Safety Review
+
+Changes and tests are offline. Explicit broker-write, order, paper, and live authority fields remain fail-closed. No runtime or broker path was invoked.
+
+## Acceptance Proof
+
+Acceptance requires exact-SHA green required CI, passing review-evidence validation, clean diff checks, and reconciled changed-path count. Record final SHA and check URLs after publication.
+
+## Runtime Proof Required After Merge
+
+A separate operator authorization and a same-SHA read-only session with complete drain evidence remain required. This CI repair is not runtime proof.
+
+## What This PR Does Not Prove
+
+It does not prove T-1 source admission, market-data quality, live observation readiness, strategy edge, execution readiness, or `LIVE_VERIFIED`.
+
+## Human Approval
+
+The user authorized CI repair work. This does not authorize merge, runtime observation, broker calls, credential access, or order authority.
+
+## High-Risk Path Review
+
+`core/kite_depth_ws.py` remains within previously scoped read-only observer work and is not changed by this CI repair. `core/market_snapshot_builder.py` now reads the SQLite getter and labels absent event identity `UNAVAILABLE`; no execution authority is added.

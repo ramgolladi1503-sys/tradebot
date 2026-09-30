@@ -50,3 +50,47 @@ The continuation audit found and repaired an independent-verification bypass: a 
 A later stable read-only inspection of the named 2026-09-29 run found PID 82150 absent, but the stored identity still says RUNNING and names producer SHA `12d01da414d9a1ffc13718390e2c950c9f621bfd` (the supplied branch, not this integration branch). The stable shutdown artifact is `PARTIAL`/`FAILED`: tick persistence has 50,801 pending writes, queue depth 49,801, 330 worker failures, no final flush, and worker termination false; runtime and depth drains are also incomplete. Feed health is DEGRADED with 95 blockers. The run has no per-token coverage ledger or same-day heritage artifact, and its 0915/1000 CAS values remain null and blocked. A zero-byte stop marker and absent PID do not establish clean drain or durable output.
 
 The persistent Antigravity weekday schedule referencing the user worktree remains configured (`15 3 * * 1-5`, timezone UNKNOWN); no child was observed and it was not changed. Canonical checkout `run_all.sh`, watchdog, and scheduler processes also remain active (PIDs 1403, 1469, 67023) and were not touched. No raw files were modified. This is negative runtime evidence, not `LIVE_VERIFIED`; the next safe step requires the operator to address the scheduled trigger and provide a successful read-only session running the integration SHA with a complete drain.
+
+## Agent Work Contract
+
+This continuation repairs concrete PR #939 CI failures only: stacked-PR scope validation, failing focused tests, review/evidence gate policy, and required review record sections. No runtime was started.
+
+## Scope Guard
+
+Changed paths are controlled by the exact candidate diff and PR782 workflow allowlist. No credentials, broker calls, orders, risk gates, strategy thresholds, or live configuration were changed.
+
+## Grill Me Review
+
+No external Grill Me review is claimed. Self-review retains actual API event facts as telemetry and does not falsify them to satisfy an authority policy.
+
+## Hermes Review
+
+The bounded 12-field SQLite tick schema remains unchanged. Snapshot assembly uses the SQLite getter and explicitly marks absent persisted callback identity as `UNAVAILABLE`; it does not synthesize lineage.
+
+## GSD Review
+
+Focused regressions passed locally after the repair. Hosted checks are authoritative for the final candidate SHA; no pending result is considered acceptance.
+
+## QA / Safety Review
+
+Changes and tests are offline. Explicit broker-write, order, paper, and live authority fields remain fail-closed. No runtime or broker path was invoked.
+
+## Acceptance Proof
+
+Acceptance requires exact-SHA green required CI, passing review-evidence validation, clean diff checks, and reconciled changed-path count. Record final SHA and check URLs after publication.
+
+## Runtime Proof Required After Merge
+
+A separate operator authorization and a same-SHA read-only session with complete drain evidence remain required. This CI repair is not runtime proof.
+
+## What This PR Does Not Prove
+
+It does not prove T-1 source admission, market-data quality, live observation readiness, strategy edge, execution readiness, or `LIVE_VERIFIED`.
+
+## Human Approval
+
+The user authorized CI repair work. This does not authorize merge, runtime observation, broker calls, credential access, or order authority.
+
+## High-Risk Path Review
+
+`core/kite_depth_ws.py` remains within previously scoped read-only observer work and is not changed by this CI repair. `core/market_snapshot_builder.py` now reads the SQLite getter and labels absent event identity `UNAVAILABLE`; no execution authority is added.

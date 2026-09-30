@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import os
@@ -502,6 +503,21 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         )
 
 
+def _bind_storage_environment_and_depth_store(
+    *, env: Mapping[str, str], output_root: Path, launch_plan: Mapping[str, Any]
+):
+    """Bind storage configuration before importing its config-dependent store."""
+    os.environ.update(env)
+    depth_store = importlib.import_module("core.depth_store")
+
+    depth_store.depth_store.configure_rejection_provenance(
+        output_root / "depth_rejections.jsonl",
+        session_id=str(launch_plan.get("run_id") or output_root.name),
+        producer_sha=str(launch_plan.get("commit_sha") or os.environ.get("TRADEBOT_PRODUCER_SHA") or ""),
+    )
+    return depth_store
+
+
 def _run_observation_impl(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None, broker_api_ledger: ReadOnlyBrokerApiLedger) -> int:
     from core.runtime_storage_authority import StorageAuthorityError, establish, revalidate
     storage_authority = establish(volume=Path("/Volumes/TradeBotData"), runtime_root=output_root)
@@ -514,12 +530,10 @@ def _run_observation_impl(*, launch_plan: Mapping[str, Any], output_root: Path, 
     # resolves config-dependent storage paths at import time.  In particular,
     # core.depth_store imports config.config, whose TRADE_DB_PATH is otherwise
     # frozen to the process's pre-existing/default runtime root.
-    os.environ.update(env)
-    import core.depth_store as depth_store
-    depth_store.depth_store.configure_rejection_provenance(
-        output_root / "depth_rejections.jsonl",
-        session_id=str(launch_plan.get("run_id") or output_root.name),
-        producer_sha=str(launch_plan.get("commit_sha") or os.environ.get("TRADEBOT_PRODUCER_SHA") or ""),
+    depth_store = _bind_storage_environment_and_depth_store(
+        env=env,
+        output_root=output_root,
+        launch_plan=launch_plan,
     )
     (output_root / "startup_safety_contract.json").write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     assert_import_boundary()

@@ -12,7 +12,7 @@ from core.market_snapshot_schema import (
     validate_market_snapshot,
 )
 from core.snapshot_schema import compute_snapshot_id
-from core.tick_store import get_last_tick, get_latest_tick_db, get_latest_tick_rows_db
+from core.tick_store import get_latest_tick_db, get_latest_tick_rows_db
 from core.time_utils import normalize_epoch_seconds, now_ist, now_utc_epoch
 
 
@@ -90,6 +90,13 @@ def _tick_payload(token: int, row: dict[str, Any] | None) -> dict[str, Any]:
         "source_event_id": row.get("source_event_id"),
         "source_event_sha256": row.get("source_event_sha256"),
         "source_event_payload": row.get("source_event_payload"),
+        "source_event_identity_status": (
+            "UNAVAILABLE"
+            if not row.get("source_event_id")
+            or not row.get("source_event_sha256")
+            or row.get("source_event_payload") is None
+            else "PRESENT_UNVERIFIED"
+        ),
     }
 
 
@@ -122,7 +129,7 @@ def _build_tick_health_snapshot(
     opt_tokens = _normalize_tokens(option_tokens)
     blockers: list[dict[str, Any]] = []
 
-    index_row = get_last_tick(idx_token, allow_db=True, include_provenance=True) if idx_token > 0 else None
+    index_row = get_latest_tick_db(idx_token) if idx_token > 0 else None
     option_rows = get_latest_tick_rows_db(opt_tokens) if opt_tokens else {}
 
     option_ticks: dict[str, dict[str, Any]] = {}

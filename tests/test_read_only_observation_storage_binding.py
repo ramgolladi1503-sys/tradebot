@@ -1,43 +1,37 @@
-import ast
-from pathlib import Path
+import os
+from types import SimpleNamespace
+
+from core import kite_read_only_observation_runtime as observation_runtime
 
 
-SOURCE = Path(__file__).parents[1] / "core" / "kite_read_only_observation_runtime.py"
+def test_storage_environment_is_bound_before_depth_store_import(monkeypatch, tmp_path):
+    observed = {}
+    configured = {}
+    monkeypatch.setattr(observation_runtime.os, "environ", dict(os.environ))
+    fake_depth_store = SimpleNamespace(
+        depth_store=SimpleNamespace(
+            configure_rejection_provenance=lambda path, *, session_id, producer_sha: configured.update(
+                path=path, session_id=session_id, producer_sha=producer_sha
+            )
+        )
+    )
+    def import_hook(name):
+        if name == "core.depth_store":
+            observed["storage_root"] = os.environ.get("TRADE_DB_PATH")
+            return fake_depth_store
 
-
-def _statement_index(body, predicate):
-    for index, statement in enumerate(body):
-        if predicate(statement):
-            return index
-    raise AssertionError("expected statement was not found")
-
-
-def test_storage_environment_is_bound_before_depth_store_import():
-    tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
-    function = next(
-        node for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == "run_observation"
+    monkeypatch.setattr(observation_runtime.importlib, "import_module", import_hook)
+    output_root = tmp_path / "observation"
+    returned = observation_runtime._bind_storage_environment_and_depth_store(
+        env={"TRADE_DB_PATH": str(tmp_path / "runtime.sqlite")},
+        output_root=output_root,
+        launch_plan={"run_id": "fixture-run", "commit_sha": "a" * 40},
     )
 
-    env_update_index = _statement_index(
-        function.body,
-        lambda node: (
-            isinstance(node, ast.Expr)
-            and isinstance(node.value, ast.Call)
-            and isinstance(node.value.func, ast.Attribute)
-            and isinstance(node.value.func.value, ast.Attribute)
-            and isinstance(node.value.func.value.value, ast.Name)
-            and node.value.func.value.value.id == "os"
-            and node.value.func.value.attr == "environ"
-            and node.value.func.attr == "update"
-        ),
-    )
-    depth_import_index = _statement_index(
-        function.body,
-        lambda node: (
-            isinstance(node, ast.Import)
-            and any(alias.name == "core.depth_store" for alias in node.names)
-        ),
-    )
-
-    assert env_update_index < depth_import_index
+    assert returned is fake_depth_store
+    assert observed["storage_root"] == str(tmp_path / "runtime.sqlite")
+    assert configured == {
+        "path": output_root / "depth_rejections.jsonl",
+        "session_id": "fixture-run",
+        "producer_sha": "a" * 40,
+    }
