@@ -154,7 +154,7 @@ jobs:
               tests/test_read_only_observation_storage_binding.py
               tests/test_v23_production_equivalent_harness.py
               tests/test_ws_tick_ingestion_updates_tick_store.py
-              ''')
+              '''.split())
               unexpected = sorted(set(changed) - allowed)
           else:
               base = subprocess.check_output(
