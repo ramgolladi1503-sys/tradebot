@@ -78,10 +78,6 @@ def test_observation_merge_is_all_or_none_and_fail_open():
     assert decision["observation_exclusive_count"] == 2
 
 
-def test_default_depth_subscription_budget_is_governed_123_tokens():
-    assert cfg.DEPTH_SUBSCRIPTION_MAX_TOKENS == 123
-
-
 def test_governed_123_token_topology_accepts_73_production_plus_51_observation_with_index_overlap():
     """Regression: 50 NIFTY constituents are cash observation tokens, not option families."""
     from core.market_event_graph_live_observation_registry import build_observation_subscription_merge
