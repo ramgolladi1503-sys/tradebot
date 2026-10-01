@@ -102,10 +102,12 @@ def evaluate_pre_live_readiness(*, mode: str = "LIVE", dependencies: PreLiveRead
         block("fallback_execution_enabled_live")
 
     tokens, resolution = _resolve_tokens(deps.token_resolver, symbols)
-    token_summary = _token_universe_summary(tokens, resolution)
+    token_summary = _token_universe_summary(tokens, resolution, expected_symbols=symbols)
     checks["token_universe"] = token_summary
     if mode_u == "LIVE" and int(token_summary["option_token_count"]) <= 0:
         block("token_universe_zero")
+    if mode_u == "LIVE" and int(token_summary["option_token_count"]) > 0 and not token_summary["symbol_coverage_ok"]:
+        block("token_universe_symbol_coverage_incomplete")
     if token_summary["degraded_but_subscribable"]:
         warn("token_universe_degraded_but_subscribable")
 
@@ -313,30 +315,53 @@ def _positive_ints(values: Any) -> list[int]:
     return out
 
 
-def _token_universe_summary(tokens: Sequence[int], resolution: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def _token_universe_summary(
+    tokens: Sequence[int],
+    resolution: Sequence[Mapping[str, Any]],
+    *,
+    expected_symbols: Sequence[str] = (),
+) -> dict[str, Any]:
     option_count = 0
     resolved_option_count = 0
     statuses: list[str] = []
     reasons: list[str] = []
     rows = [dict(row) for row in resolution]
+    symbol_coverage: list[dict[str, Any]] = []
     for row in rows:
         final_count = _int(row.get("final_option_count"), _int(row.get("option_count"), 0))
         resolved_count = _int(row.get("resolved_option_count"), final_count)
+        min_required = max(0, _int(row.get("option_min_required"), 0))
         option_count += max(0, final_count)
         resolved_option_count += max(0, resolved_count)
         status = str(row.get("option_coverage_status") or "").strip().upper()
         reason = str(row.get("option_coverage_reason") or row.get("option_fail_reason") or "").strip()
+        symbol = str(row.get("symbol") or "").strip().upper()
+        meets_minimum = final_count >= min_required
+        row_ok = bool(symbol and final_count > 0 and meets_minimum and status not in {"ZERO", "DEGRADED"})
+        symbol_coverage.append({
+            "symbol": symbol,
+            "final_option_count": max(0, final_count),
+            "option_min_required": min_required,
+            "option_coverage_status": status or "UNKNOWN",
+            "ok": row_ok,
+        })
         if status:
             statuses.append(status)
         if reason:
             reasons.append(reason)
     if not rows:
         statuses.append("ZERO")
+    covered_symbols = {row["symbol"] for row in symbol_coverage if row["symbol"]}
+    missing_symbols = [str(symbol).strip().upper() for symbol in expected_symbols if str(symbol).strip().upper() not in covered_symbols]
+    symbol_coverage_ok = bool(symbol_coverage) and all(row["ok"] for row in symbol_coverage) and not missing_symbols
     return {
-        "ok": option_count > 0,
+        "ok": option_count > 0 and symbol_coverage_ok,
         "token_count": len(list(tokens or [])),
         "option_token_count": int(option_count),
         "resolved_option_token_count": int(resolved_option_count),
+        "symbol_coverage_ok": symbol_coverage_ok,
+        "symbol_coverage": symbol_coverage,
+        "missing_symbols": missing_symbols,
         "coverage_statuses": _dedupe(statuses),
         "coverage_reasons": _dedupe(reasons),
         "degraded_but_subscribable": bool(option_count > 0 and any(status == "DEGRADED" for status in statuses)),
