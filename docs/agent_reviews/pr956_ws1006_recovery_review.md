@@ -27,7 +27,7 @@ The scoped patch centralizes plain WS1006 reason recognition so the coordinator 
 
 ## QA / Safety Review
 - High-Risk Path Review: `core/kite_depth_ws.py` is a feed/WebSocket runtime path. Changes are restricted to classifying plain code-1006 transport reasons and binding existing recovery proof to the selected token set. Reconnect attempts remain bounded; existing subscription mutation guards and freshness gates are preserved. No broker API or order action is introduced.
-- Unit evidence will be recorded after focused tests run.
+- Focused merged-base run: coordinator, websocket stability, observation-on-tick, read-only observation runtime, and subscription truth tests (144 passed).
 - Runtime connectivity and same-session recovery evidence remain required after merge.
 
 ## Acceptance Proof
