@@ -265,6 +265,7 @@ _SCHEMA_LOG_TS = 0.0
 _INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
 _AUTH_REQUIRED_LATCH = False
 _OBSERVATION_PLAN_STATE_LOCK = threading.RLock()
+_GOVERNED_FEED_SUBSCRIPTION_BUDGET = 123
 _OBSERVATION_PLAN_STATE: dict[str, Any] = {
     "enabled": False,
     "verdict": "DISABLED",
@@ -6110,7 +6111,23 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     option_rank_by_token: dict[int, tuple[float, int, float, int, int]] = {}
     token_exchange_hint: dict[int, str] = {}
     if max_tokens is None:
-        max_tokens = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123))
+        max_tokens = getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", _GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+    try:
+        requested_budget = int(max_tokens)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("depth subscription budget must be a positive integer") from exc
+    if requested_budget <= 0:
+        raise ValueError("depth subscription budget must be a positive integer")
+    max_tokens = min(requested_budget, _GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+    if max_tokens < requested_budget:
+        _log_ws(
+            "FEED_SUBSCRIPTION_BUDGET_CAPPED",
+            {
+                "requested_budget": requested_budget,
+                "effective_budget": max_tokens,
+                "governed_budget": _GOVERNED_FEED_SUBSCRIPTION_BUDGET,
+            },
+        )
     strikes_around_default = int(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6))
     strikes_by_symbol = getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {}
     step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}

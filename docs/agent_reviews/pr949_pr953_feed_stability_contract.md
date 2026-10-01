@@ -6,7 +6,7 @@
 - `action: DESIGN_ARCHITECTURE, DEFINE_CONTRACT, MAP_WORKFLOW, CREATE_ACCEPTANCE_GATES, UPDATE_DOCS` for Stage 1; Stage 2 is limited to `PLAN_PR, GENERATE_TESTS, GENERATE_PATCH, FIX_TEST_FAILURE, UPDATE_DOCS`.
 - `title: Restore governed market-data subscription topology and remove depth retention work from the active persistence path`.
 - `scope: PR #949 topology repair and its required stack through PR #953, including #950 health evidence, #951 exact subscription parity, and #952 recent-token feed diagnostics`.
-- `requested_paths: config/config.py, core/depth_subscription_engine.py, core/kite_depth_ws.py, scripts/check_option_pipeline_health.py, scripts/run_market_event_graph_live_session_v1.py, core/subscription_truth_contract.py, core/feed_debug.py, core/depth_store.py, tests/test_kite_depth_ws_observation_on_ticks.py, tests/test_kite_depth_ws_stability.py, tests/test_market_event_graph_live_observation_registry.py, tests/test_check_option_pipeline_health.py, tests/test_subscription_truth_contract.py, tests/test_feed_debug.py, tests/test_feed_debug_runtime_store.py, tests/test_depth_store_accounting.py, docs/agent_reviews/pr949_pr953_feed_stability_contract.md`.
+- `requested_paths: config/config.py, core/depth_subscription_engine.py, core/kite_depth_ws.py, scripts/check_option_pipeline_health.py, scripts/run_market_event_graph_live_session_v1.py, core/subscription_truth_contract.py, core/feed_debug.py, core/depth_store.py, tests/test_kite_depth_ws_observation_on_ticks.py, tests/test_kite_depth_ws_stability.py, tests/test_kite_read_only_observation_runtime.py, tests/test_market_event_graph_live_observation_registry.py, tests/test_check_option_pipeline_health.py, tests/test_subscription_truth_contract.py, tests/test_feed_debug.py, tests/test_feed_debug_runtime_store.py, tests/test_depth_store_accounting.py, docs/agent_reviews/pr949_pr953_feed_stability_contract.md`.
 - `allowed_paths`: only the requested paths above. Any discovered failure outside those paths must be reported and must not be repaired as part of this scope without a new contract.
 - `forbidden_paths`: credentials, environment files, broker/order/execution/risk/feed gate configuration, strategy thresholds, dashboards/UI, runtime data, and unrelated source or research artifacts.
 - `expected_tests`: focused tests for the observation/option-universe boundary, exact parity and <=123 budget, health evidence at that topology, recent distinct-token diagnostics, idle-only depth pruning, then repository-required unit and health gates plus exact-head CI for each affected PR.
@@ -14,7 +14,7 @@
 
 ## Scope Guard
 
-The intended topology remains approximately 51 observation instruments plus approximately 72 controlled index/option instruments, with a deduplicated final union capped at 123. The cap must not be increased, option minimums must not be reduced, and constituent observation must remain enabled. This repairs universe construction; it does not redefine which individual option quotes are fresh or whether a feed is ready.
+The intended topology remains approximately 51 observation instruments plus approximately 72 controlled index/option instruments, with a deduplicated final union capped at 123. Every caller-supplied or configured budget is capped at 123 at the subscription-builder boundary; invalid or nonpositive budgets fail closed. The cap must not be increased, option minimums must not be reduced, and constituent observation must remain enabled. This repairs universe construction; it does not redefine which individual option quotes are fresh or whether a feed is ready.
 
 Depth retention pruning may run only when queued persistence work is zero and in-flight persistence work is zero. Queue size, timeouts, batching, sampling, durability, and rejection semantics remain unchanged. Recent-token debug evidence is read-only and bounded to its configured time window; missing/unreadable evidence remains fail-closed.
 
@@ -28,7 +28,7 @@ Adversarial checks: ensure no constituent ticker is passed to generic option res
 
 Stage 1 design is to keep the two input authorities separate: the configured index production symbols go through option resolution, while the authoritative constituent registry contributes cash observation tokens through its existing identity-preserving path. The final subscription set is deduplicated and constrained by the existing 123-token budget. Subscription authority, desired tokens, registered tokens, and observed token activity remain distinct evidence states.
 
-The persistence worker's idle condition is the conjunction `queue_depth == 0 && in_flight == 0`. A false or unavailable measurement must not authorize pruning. Debug token counts remain diagnostic evidence and do not grant readiness or execution authority. Recent tick rows establish observed activity only; when authoritative runtime or snapshot subscription evidence is unavailable, observed counts must not be substituted for subscribed or intended counts.
+The persistence worker's idle condition is the conjunction `queue_depth == 0 && in_flight == 0`. A false or unavailable measurement must not authorize pruning. Debug token counts remain diagnostic evidence and do not grant readiness or execution authority. Recent tick rows establish observed activity only; when authoritative runtime or snapshot subscription evidence is unavailable, observed counts must not be substituted for subscribed or intended counts. Feed callback test doubles must accept the production logging throttle keyword so test harness mismatches do not hide callback-thread failures.
 
 ## GSD Review
 
@@ -40,7 +40,7 @@ Required negative cases include: constituent option resolution is absent; exceed
 
 ## Acceptance Proof
 
-- Focused tests prove the separated cash-observation and index-option universes, final deduplicated <=123 topology, exact subscription parity, health evidence, bounded recent-token counts, and queue-idle pruning.
+- Focused tests prove the separated cash-observation and index-option universes, the 123-token cap even when a caller supplies 150, rejection of nonpositive budgets, final deduplicated <=123 topology, exact subscription parity, health evidence, bounded recent-token counts, queue-idle pruning, and callback test boundaries that accept the production throttle keyword without unhandled thread exceptions.
 - Required full unit and health gates pass on each affected PR's exact head. Skipped, cancelled, stale-SHA, or partial CI is not a pass.
 - No change expands broker/order/live authority or weakens a feed safety gate.
 - Runtime topology and feed freshness still require post-merge read-only runtime proof; offline tests alone do not establish live behavior.

@@ -71,6 +71,11 @@ def test_feed_debug_infers_connected_when_ticks_recent(monkeypatch, tmp_path):
     assert payload["ws_connected"] is True
     assert payload["ws_connected_source"] == "inferred_ticks"
     assert payload["subscribed_tokens_count"] == 0
+    assert payload["subscribed_tokens_source"] == "unavailable"
+    assert payload["intended_tokens_count"] == 0
+    assert payload["intended_tokens_source"] == "unavailable"
+    assert payload["observed_tokens_recent_count"] == 2
+    assert payload["observed_tokens_recent_available"] is True
 
 
 def test_feed_debug_reports_disconnected_when_ticks_stale(monkeypatch, tmp_path):
