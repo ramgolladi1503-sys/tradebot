@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import logging
+import os
 from pathlib import Path
 import sqlite3
 from typing import Any, Iterable
@@ -10,7 +11,7 @@ from collections.abc import Mapping
 
 from config import config as cfg
 from core.learning_paths import blocked_outcomes_path, rejected_candidates_paths
-from core.paths import logs_dir
+from core.paths import logs_dir, repo_root
 
 from .schema import (
     GateDecision,
@@ -312,6 +313,9 @@ def _event_ts_ms(row: dict) -> int | None:
         or _coerce_epoch_ms(row.get("timestamp_epoch_ms"))
         or _coerce_epoch_ms(row.get("timestamp_epoch"))
         or _coerce_epoch_ms(row.get("ts_epoch"))
+        or _coerce_epoch_ms(row.get("decision_timestamp_epoch"))
+        or _coerce_epoch_ms(row.get("exchange_timestamp_epoch"))
+        or _coerce_epoch_ms(row.get("normalization_timestamp_epoch"))
         or _coerce_epoch_ms(row.get("timestamp_utc_iso"))
         or _coerce_epoch_ms(row.get("timestamp_iso"))
         or _coerce_epoch_ms(row.get("timestamp"))
@@ -660,16 +664,234 @@ def load_trade_table_events(*, db_path: Path | None = None, limit: int = 2000) -
     return events
 
 
+def _int_event_from_strategy_observation_row(row: dict, *, source: str) -> TradeIntentEvent | None:
+    ts_ms = _event_ts_ms(row)
+    symbol = _text(row.get("symbol")).upper()
+    if ts_ms is None or not symbol:
+        return None
+    strategy_id = _text(row.get("strategy_id"))
+    reason_code = _text(row.get("reason_code")) or "STRATEGY_UNQUALIFIED"
+    pulse_id = _text(row.get("pulse_id"))
+    direction = _text(row.get("direction")).upper() or None
+    if direction == "UNKNOWN":
+        direction = None
+    row_for_key = dict(row)
+    if not row_for_key.get("side") and direction:
+        row_for_key["side"] = direction
+    trade_key = _build_trade_key_from_row(row_for_key)
+    event_id = build_event_id(
+        trade_key=trade_key,
+        event_kind="rejected",
+        ts_epoch_ms=ts_ms,
+        source=source,
+        discriminator=f"{strategy_id}|{reason_code}|{pulse_id}",
+    )
+    gate_decisions = [
+        GateDecision(
+            gate_name="strategy_qualification",
+            passed=False,
+            reason=reason_code,
+            metrics_snapshot={"pulse_id": pulse_id, "strategy_id": strategy_id},
+        )
+    ]
+    payload = {
+        "trade_key": trade_key,
+        "event_id": event_id,
+        "intent": "rejected",
+        "ts_epoch_ms": int(ts_ms),
+        "symbol": symbol,
+        "expiry": None,
+        "strike": None,
+        "option_type": None,
+        "side": direction,
+        "source": source,
+        "reject_reason": reason_code,
+        "gate_decisions": [g.to_dict() for g in gate_decisions],
+        "metrics_snapshot": {
+            "strategy_id": strategy_id,
+            "reason_code": reason_code,
+            "pulse_id": pulse_id,
+            "applicability_state": _text(row.get("applicability_state")),
+            "missing_or_stale_inputs": row.get("missing_or_stale_inputs"),
+        },
+    }
+    try:
+        return TradeIntentEvent.from_dict(payload)
+    except Exception as exc:
+        logger.warning("analytics_store_skip_invalid_strategy_obs_event source=%s err=%s", source, exc)
+        return None
+
+
+def _int_event_from_trade_truth_row(row: dict, *, source: str) -> TradeIntentEvent | None:
+    timing = row.get("timing") if isinstance(row.get("timing"), Mapping) else {}
+    ts_ms = _event_ts_ms(timing) or _event_ts_ms(row)
+    identity = row.get("identity") if isinstance(row.get("identity"), Mapping) else {}
+    symbol = _text(identity.get("underlying") or identity.get("instrument") or row.get("symbol")).upper()
+    if ts_ms is None or not symbol:
+        return None
+    decision = row.get("decision") if isinstance(row.get("decision"), Mapping) else {}
+    gov_decision = _text(decision.get("governance_decision")).upper()
+    reason_codes = decision.get("reason_codes") or decision.get("ranking_reasons") or []
+    if isinstance(reason_codes, (list, tuple)):
+        reason_code_str = ",".join(str(r) for r in reason_codes if _text(r))
+    else:
+        reason_code_str = _text(reason_codes)
+    reject_reason = reason_code_str or _text(decision.get("risk_result")) or gov_decision or "BLOCKED"
+    if gov_decision in {"BLOCKED", "REJECTED"} or reject_reason:
+        intent = "rejected"
+    elif gov_decision in {"AUTHORIZED", "ALLOWED", "ACCEPTED"}:
+        intent = "accepted"
+    else:
+        intent = "advisory"
+
+    trace_id = _text(identity.get("trace_id"))
+    trade_key_row = {
+        "symbol": symbol,
+        "expiry": identity.get("expiry"),
+        "strike": identity.get("strike"),
+        "option_type": identity.get("option_type"),
+        "strategy_id": identity.get("strategy_id"),
+    }
+    trade_key = _build_trade_key_from_row(trade_key_row)
+    event_id = build_event_id(
+        trade_key=trade_key,
+        event_kind=intent,
+        ts_epoch_ms=ts_ms,
+        source=source,
+        discriminator=trace_id or reject_reason,
+    )
+    gate_decisions = [
+        GateDecision(
+            gate_name="governance_decision",
+            passed=(intent == "accepted"),
+            reason=reject_reason if intent != "accepted" else None,
+            metrics_snapshot={"governance_decision": gov_decision, "trace_id": trace_id},
+        )
+    ]
+    payload = {
+        "trade_key": trade_key,
+        "event_id": event_id,
+        "intent": intent,
+        "ts_epoch_ms": int(ts_ms),
+        "symbol": symbol,
+        "expiry": identity.get("expiry"),
+        "strike": _safe_float(identity.get("strike")),
+        "option_type": _normalize_option_type(identity.get("option_type")),
+        "side": None,
+        "source": source,
+        "reject_reason": reject_reason if intent != "accepted" else None,
+        "gate_decisions": [g.to_dict() for g in gate_decisions],
+        "metrics_snapshot": {
+            "trace_id": trace_id,
+            "truth_record_id": _text(identity.get("truth_record_id")),
+            "governance_decision": gov_decision,
+            "ranking_reasons": decision.get("ranking_reasons"),
+            "reason_codes": decision.get("reason_codes"),
+            "risk_result": decision.get("risk_result"),
+        },
+    }
+    try:
+        return TradeIntentEvent.from_dict(payload)
+    except Exception as exc:
+        logger.warning("analytics_store_skip_invalid_trade_truth_event source=%s err=%s", source, exc)
+        return None
+
+
+def discover_session_paths(
+    *,
+    date_key: str | None = None,
+    session_dir: Path | str | None = None,
+) -> list[Path]:
+    paths: list[Path] = []
+
+    def _collect_subdirs(base: Path, max_depth: int = 3) -> None:
+        if not base.exists() or not base.is_dir():
+            return
+        paths.append(base)
+        if max_depth <= 0:
+            return
+        try:
+            for child in base.iterdir():
+                if child.is_dir() and not child.name.startswith("."):
+                    _collect_subdirs(child, max_depth=max_depth - 1)
+        except Exception:
+            pass
+
+    search_roots = [
+        Path("/Volumes/TradeBotData/sessions"),
+        repo_root() / ".runtime" / "live_sessions",
+        repo_root() / "sessions",
+    ]
+    if session_dir is not None:
+        p = Path(session_dir).expanduser()
+        if p.exists() and p.is_dir():
+            search_roots.insert(0, p)
+            _collect_subdirs(p, max_depth=3)
+
+    env_dir = os.getenv("TRADEBOT_SESSION_DIR")
+    if env_dir:
+        ep = Path(env_dir).expanduser()
+        if ep.exists() and ep.is_dir():
+            search_roots.insert(0, ep)
+            _collect_subdirs(ep, max_depth=3)
+
+    for root in search_roots:
+        if not root.exists():
+            continue
+        if date_key:
+            candidates = [
+                root / f"session_{date_key}",
+                root / date_key,
+            ]
+            for c in candidates:
+                if c.exists() and c.is_dir():
+                    _collect_subdirs(c, max_depth=3)
+        else:
+            try:
+                for sub in root.glob("session_*"):
+                    if sub.is_dir():
+                        _collect_subdirs(sub, max_depth=3)
+            except Exception:
+                pass
+    return _unique_paths(paths)
+
+
+def load_session_events(session_paths: Iterable[Path] | None = None) -> list[TradeIntentEvent]:
+    events: list[TradeIntentEvent] = []
+    if session_paths is None:
+        resolved_dirs = discover_session_paths()
+    else:
+        resolved_dirs = list(session_paths)
+
+    for sdir in _unique_paths(resolved_dirs):
+        obs_file = sdir / "strategy_observations.jsonl"
+        if obs_file.exists():
+            for row in _iter_jsonl(obs_file):
+                evt = _int_event_from_strategy_observation_row(row, source=f"session_obs:{sdir.name}")
+                if evt is not None:
+                    events.append(evt)
+        truth_file = sdir / "trade_truth_stream.jsonl"
+        if truth_file.exists():
+            for row in _iter_jsonl(truth_file):
+                evt = _int_event_from_trade_truth_row(row, source=f"session_truth:{sdir.name}")
+                if evt is not None:
+                    events.append(evt)
+    events.sort(key=lambda e: e.ts_epoch_ms)
+    return events
+
+
 def load_trade_intent_events(
     *,
     review_queue_paths: Iterable[Path] | None = None,
     decision_telemetry_paths: Iterable[Path] | None = None,
+    session_paths: Iterable[Path] | None = None,
     db_path: Path | None = None,
     limit: int = 5000,
 ) -> list[TradeIntentEvent]:
     merged: list[TradeIntentEvent] = []
     merged.extend(load_review_queue_events(paths=review_queue_paths))
     merged.extend(load_decision_telemetry_events(paths=decision_telemetry_paths))
+    merged.extend(load_session_events(session_paths=session_paths))
     merged.extend(load_trade_table_events(db_path=db_path, limit=limit))
     out: list[TradeIntentEvent] = []
     seen = set()

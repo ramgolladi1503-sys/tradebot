@@ -18,6 +18,7 @@ from .missed_opportunity import analyze_missed_opportunity
 from .shadow_portfolio import build_executable_shadow_portfolio_report
 from .regime_analysis import build_regime_analysis
 from .schema import TradeIntentEvent, TradeOutcome
+from .store import discover_session_paths, load_trade_intent_events
 from .target_sl_calibration import build_target_sl_calibration_report
 
 
@@ -81,7 +82,7 @@ def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     )
 
 
-def _ensure_outcomes_available(date_key: str, *, attempt_replay: bool) -> dict:
+def _ensure_outcomes_available(date_key: str, *, attempt_replay: bool, session_dir: Path | str | None = None) -> dict:
     outcome_path = _default_outcome_path(date_key)
     status = {
         "path": str(outcome_path),
@@ -100,6 +101,8 @@ def _ensure_outcomes_available(date_key: str, *, attempt_replay: bool) -> dict:
     status["attempted_replay"] = True
     try:
         cmd = [sys.executable, "-m", "core.analytics.outcome_replay", "--date", date_key]
+        if session_dir is not None:
+            cmd.extend(["--session-dir", str(session_dir)])
         proc = subprocess.run(
             cmd,
             capture_output=True,
@@ -527,6 +530,7 @@ def build_daily_intelligence_report(
     quote_rows: Sequence[Mapping[str, Any]] | None = None,
     attempt_outcome_replay: bool = True,
     output_dir: Path | None = None,
+    session_dir: Path | str | None = None,
 ) -> dict:
     date_key = _parse_date_key(date)
     base_dir = Path(output_dir) if output_dir is not None else _report_dir(date_key)
@@ -534,9 +538,21 @@ def build_daily_intelligence_report(
 
     warnings: list[str] = []
 
-    outcomes_status = _ensure_outcomes_available(date_key, attempt_replay=bool(attempt_outcome_replay))
+    outcomes_status = _ensure_outcomes_available(
+        date_key,
+        attempt_replay=bool(attempt_outcome_replay),
+        session_dir=session_dir,
+    )
     if _norm_text(outcomes_status.get("warning")):
         warnings.append(_norm_text(outcomes_status.get("warning")))
+
+    if events is None:
+        session_paths = discover_session_paths(date_key=date_key, session_dir=session_dir)
+        events = [
+            e
+            for e in load_trade_intent_events(session_paths=session_paths)
+            if _to_day_key(int(e.ts_epoch_ms)) == date_key
+        ]
 
     gate_path = base_dir / "gate_scorecard.json"
     missed_path = base_dir / "missed_opportunity.json"
@@ -704,6 +720,7 @@ def _build_cli() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not attempt to run outcome replay when outcomes are missing.",
     )
+    parser.add_argument("--session-dir", default=None, help="Explicit session directory or root.")
     return parser
 
 
@@ -714,6 +731,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.date,
         attempt_outcome_replay=not bool(args.skip_outcome_replay),
         output_dir=out_dir,
+        session_dir=args.session_dir,
     )
     print(
         json.dumps(

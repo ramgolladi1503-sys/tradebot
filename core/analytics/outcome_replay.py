@@ -11,7 +11,7 @@ from config import config as cfg
 from core.paths import repo_root
 
 from .schema import TradeIntentEvent, TradeOutcome
-from .store import load_trade_intent_events
+from .store import discover_session_paths, load_session_events, load_trade_intent_events
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -511,15 +511,17 @@ def build_outcomes_for_date(
     lookahead_minutes: int = 30,
     candle_interval: str = "minute",
     output_path: Path | None = None,
+    session_dir: Path | str | None = None,
 ) -> dict:
     date_key = _parse_date_key(date)
     normalized_scope = _norm_text(scope).lower() or "rejected"
     if normalized_scope not in {"rejected", "accepted", "advisory"}:
         raise ValueError(f"invalid_scope:{scope}")
 
+    session_paths = discover_session_paths(date_key=date_key, session_dir=session_dir)
     events = [
         event
-        for event in load_trade_intent_events()
+        for event in load_trade_intent_events(session_paths=session_paths)
         if _to_day_key(int(event.ts_epoch_ms)) == date_key and _norm_text(event.intent).lower() == normalized_scope
     ]
 
@@ -563,6 +565,7 @@ def _build_cli() -> argparse.ArgumentParser:
     )
     parser.add_argument("--lookahead-min", type=int, default=30, help="Replay lookahead in minutes.")
     parser.add_argument("--candle-interval", default="minute", help="Candle interval label for replay.")
+    parser.add_argument("--session-dir", default=None, help="Explicit session directory or root.")
     return parser
 
 
@@ -573,6 +576,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         scope=args.scope,
         lookahead_minutes=int(args.lookahead_min),
         candle_interval=str(args.candle_interval),
+        session_dir=args.session_dir,
     )
     print(json.dumps(payload, ensure_ascii=True, sort_keys=True))
     return 0
