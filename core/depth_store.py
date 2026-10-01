@@ -16,7 +16,13 @@ from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.persistence_durability import record_degradation
 from core.kite_depth_protocol import canonicalize_kite_depth
-from core.storage_bounds_v37 import MAX_DEPTH_QUEUE_ITEM_BYTES, StorageBoundViolation, depth_queue_item_bytes, require_item_size
+from core.storage_bounds_v37 import (
+    DEPTH_QUEUE_MAX_ITEMS,
+    MAX_DEPTH_QUEUE_ITEM_BYTES,
+    StorageBoundViolation,
+    depth_queue_item_bytes,
+    require_item_size,
+)
 
 _ERROR_LOG_PATH = logs_dir() / "depth_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
@@ -31,10 +37,19 @@ class DepthStore:
         self.books = defaultdict(dict)
         self._ts_window = deque(maxlen=10000)
         self._last_persist_epoch_by_token = defaultdict(float)
-        queue_maxsize = max(
-            1,
-            int(getattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 32768) or 32768),
-        )
+        raw_queue_maxsize = getattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 32768)
+        try:
+            queue_maxsize = int(raw_queue_maxsize)
+        except (TypeError, ValueError) as exc:
+            logger.error("depth_persist_queue_maxsize_invalid value=%r", raw_queue_maxsize)
+            raise ValueError("DEPTH_PERSIST_QUEUE_MAXSIZE_INVALID") from exc
+        if not 1 <= queue_maxsize <= DEPTH_QUEUE_MAX_ITEMS:
+            logger.error(
+                "depth_persist_queue_maxsize_out_of_bounds configured=%s allowed_min=1 allowed_max=%s",
+                queue_maxsize,
+                DEPTH_QUEUE_MAX_ITEMS,
+            )
+            raise ValueError("DEPTH_PERSIST_QUEUE_MAXSIZE_OUT_OF_BOUNDS")
         self._persist_queue = queue.Queue(maxsize=queue_maxsize)
         self._persist_admission_lock = threading.Lock()
         self._persist_wakeup = threading.Event()
