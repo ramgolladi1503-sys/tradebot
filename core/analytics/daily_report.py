@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -18,8 +19,9 @@ from .missed_opportunity import analyze_missed_opportunity
 from .shadow_portfolio import build_executable_shadow_portfolio_report
 from .regime_analysis import build_regime_analysis
 from .schema import TradeIntentEvent, TradeOutcome
-from .store import discover_session_paths, load_trade_intent_events
+from .store import discover_session_paths, load_session_diagnostics, load_session_events, load_trade_intent_events
 from .target_sl_calibration import build_target_sl_calibration_report
+from .outcome_replay import default_outcomes_path
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -61,11 +63,8 @@ def _report_dir(date_key: str) -> Path:
     return repo_root() / "runtime" / "analytics" / "reports" / date_key
 
 
-def _default_outcome_path(date_key: str) -> Path:
-    base = _norm_text(getattr(cfg, "OUTCOME_REPLAY_DIR", ""))
-    if base:
-        return Path(base) / f"{date_key}.jsonl"
-    return repo_root() / "runtime" / "analytics" / "outcomes" / f"{date_key}.jsonl"
+def _default_outcome_path(date_key: str, session_dir: Path | str | None = None) -> Path:
+    return default_outcomes_path(date_key, session_dir=session_dir)
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -83,7 +82,7 @@ def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def _ensure_outcomes_available(date_key: str, *, attempt_replay: bool, session_dir: Path | str | None = None) -> dict:
-    outcome_path = _default_outcome_path(date_key)
+    outcome_path = _default_outcome_path(date_key, session_dir)
     status = {
         "path": str(outcome_path),
         "exists": bool(outcome_path.exists()),
@@ -390,10 +389,21 @@ def _compose_markdown(
     feed_quality: Mapping[str, Any],
     executable_shadow: Mapping[str, Any],
     action_list: Sequence[Mapping[str, Any]],
+    session_telemetry: Mapping[str, Any],
     warnings: Sequence[str],
 ) -> str:
     lines: list[str] = []
     lines.append(f"# Daily Intelligence Report - {date_key}")
+    lines.append("")
+
+    lines.append("## Session telemetry (diagnostic only)")
+    lines.append(
+        "- "
+        f"records={int(session_telemetry.get('record_count') or 0)}, "
+        f"malformed={int(session_telemetry.get('malformed_record_count') or 0)}, "
+        f"source_files={len(session_telemetry.get('source_files') or [])}"
+    )
+    lines.append("- These records are not trade intents and are excluded from outcome replay.")
     lines.append("")
     lines.append(f"Date: {date_key}")
     lines.append(f"Universe: {', '.join(universe) if universe else 'UNKNOWN'}")
@@ -546,11 +556,16 @@ def build_daily_intelligence_report(
     if _norm_text(outcomes_status.get("warning")):
         warnings.append(_norm_text(outcomes_status.get("warning")))
 
+    session_paths = discover_session_paths(date_key=date_key, session_dir=session_dir)
+    session_telemetry = load_session_diagnostics(session_paths=session_paths)
     if events is None:
-        session_paths = discover_session_paths(date_key=date_key, session_dir=session_dir)
+        if session_dir is not None or os.getenv("TRADEBOT_SESSION_DIR"):
+            source_events = load_session_events(session_paths=session_paths)
+        else:
+            source_events = load_trade_intent_events(session_paths=session_paths)
         events = [
             e
-            for e in load_trade_intent_events(session_paths=session_paths)
+            for e in source_events
             if _to_day_key(int(e.ts_epoch_ms)) == date_key
         ]
 
@@ -670,6 +685,7 @@ def build_daily_intelligence_report(
         feed_quality=feed_quality,
         executable_shadow=executable_shadow,
         action_list=action_list,
+        session_telemetry=session_telemetry,
         warnings=warnings,
     )
 
@@ -690,6 +706,7 @@ def build_daily_intelligence_report(
             "target_sl_calibration": target_sl,
             "feed_quality_impact": feed_quality,
             "executable_shadow_portfolio": executable_shadow,
+            "session_telemetry": session_telemetry,
         },
         "action_list": action_list,
         "analytics_outputs": {

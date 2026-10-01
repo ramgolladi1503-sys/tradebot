@@ -3,144 +3,128 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from core.analytics.store import (
-    _int_event_from_strategy_observation_row,
-    _int_event_from_trade_truth_row,
+    _int_event_from_candidate_journal_row,
     discover_session_paths,
+    load_session_diagnostics,
     load_session_events,
     load_trade_intent_events,
 )
 
 
-def test_strategy_observation_parses_into_rejected_event():
+def _candidate_row(**overrides):
     row = {
-        "applicability_state": "APPLICABLE",
-        "broker_api_called": False,
-        "confidence": None,
-        "direction": "UNKNOWN",
-        "is_order_action": False,
-        "missing_or_stale_inputs": ["09:15_10:00_underlying_return", "15:14_fresh_observation"],
-        "pulse_id": "7021db21cd023671a97ab7c58368a99dea80d70f11c24be7725370a5f2fbad3d",
-        "qualification_state": "UNKNOWN",
-        "read_only": True,
-        "reason_code": "CAS_PRIMITIVE_0915_INVALID",
-        "required_inputs": ["09:15_10:00_underlying_return", "15:14_fresh_observation"],
-        "source_event_or_snapshot_reference": {"generic_signal_used_for_qualification": False},
-        "strategy_id": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1",
+        "candidate_id": "candidate-1",
+        "journal_event": "candidate_reported",
         "symbol": "NIFTY",
-        "timestamp_epoch": 1790841503.883224,
-        "timestamp_ist": "2026-10-01T13:28:23.883224+05:30",
+        "expiry": "2026-10-08",
+        "strike": 25000,
+        "option_type": "CE",
+        "side": "BUY",
+        "permission": "BLOCK",
+        "permission_reason": "FEED_STALE",
+        "entry_price": 100,
+        "target_price": 110,
+        "stop_loss": 95,
+        "timestamp_epoch": 1790841500.0,
     }
-    event = _int_event_from_strategy_observation_row(row, source="session_obs:test")
+    row.update(overrides)
+    return row
+
+
+@pytest.mark.parametrize("permission", ["EXECUTE", "ALLOW", "ACCEPT"])
+def test_candidate_journal_acceptance_is_not_misclassified_as_rejected(permission):
+    row = _candidate_row(permission=permission, permission_reason=None, reject_reason=None)
+    event = _int_event_from_candidate_journal_row(row, source="test")
     assert event is not None
-    assert event.symbol == "NIFTY"
-    assert event.intent == "rejected"
-    assert event.reject_reason == "CAS_PRIMITIVE_0915_INVALID"
-    assert len(event.gate_decisions) == 1
-    assert event.gate_decisions[0].gate_name == "strategy_qualification"
-    assert event.gate_decisions[0].passed is False
-    assert event.metrics_snapshot["strategy_id"] == "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1"
-    assert event.metrics_snapshot["pulse_id"] == "7021db21cd023671a97ab7c58368a99dea80d70f11c24be7725370a5f2fbad3d"
+    assert event.intent == "accepted"
+    assert event.reject_reason is None
+    assert event.metrics_snapshot["entry"] == 100
 
 
-def test_trade_truth_stream_parses_into_rejected_event():
-    row = {
-        "identity": {
-            "candidate_id": "NONE",
-            "expiry": None,
-            "instrument": "NIFTY",
-            "lot_size": None,
-            "option_type": None,
-            "parent_trace_id": None,
-            "session_id": "meg-live-test",
-            "strategy_id": "NONE",
-            "strike": None,
-            "trace_id": "f8242e0b556e4fc1c46faca7752e3ca3a12e9424a2a8f24a96a29899d94089c9",
-            "truth_record_id": "truth_meg-live-test_1",
-            "underlying": "NIFTY",
-        },
-        "decision": {
-            "blockers": [],
-            "candidate_generated": False,
-            "candidate_score": None,
-            "final_action": "OBSERVE",
-            "governance_decision": "BLOCKED",
-            "option_selection_reason": None,
-            "rank": None,
-            "ranking_reasons": ["NO_CANDIDATE"],
-            "reason_codes": ["NO_CANDIDATE"],
-            "risk_result": "NOT_APPLICABLE_NO_CANDIDATES",
-        },
-        "timing": {
-            "decision_timestamp_epoch": 1790841488.280399,
-        },
-    }
-    event = _int_event_from_trade_truth_row(row, source="session_truth:test")
-    assert event is not None
-    assert event.symbol == "NIFTY"
-    assert event.intent == "rejected"
-    assert event.reject_reason == "NO_CANDIDATE"
-    assert len(event.gate_decisions) == 1
-    assert event.gate_decisions[0].gate_name == "governance_decision"
-    assert event.gate_decisions[0].passed is False
-    assert event.metrics_snapshot["governance_decision"] == "BLOCKED"
-    assert event.metrics_snapshot["trace_id"] == "f8242e0b556e4fc1c46faca7752e3ca3a12e9424a2a8f24a96a29899d94089c9"
+@pytest.mark.parametrize("missing", ["expiry", "strike", "option_type", "side", "entry", "target", "stop"])
+def test_candidate_journal_incomplete_candidate_fails_closed(missing):
+    row = _candidate_row()
+    if missing in {"expiry", "strike", "option_type"}:
+        row[missing] = None
+    elif missing == "side":
+        row["side"] = "UNKNOWN"
+    else:
+        key = {"entry": "entry_price", "target": "target_price", "stop": "stop_loss"}[missing]
+        row[key] = None
+    assert _int_event_from_candidate_journal_row(row, source="test") is None
 
 
-def test_load_session_events_from_directory(tmp_path: Path):
-    session_dir = tmp_path / "meg-live-test-run"
-    session_dir.mkdir(parents=True)
-
-    obs_file = session_dir / "strategy_observations.jsonl"
-    obs_file.write_text(
-        json.dumps(
-            {
-                "symbol": "BANKNIFTY",
-                "strategy_id": "CAS_STRATEGY_TEST",
-                "reason_code": "PREMARKET_DATA_MISSING",
-                "pulse_id": "p12345",
-                "timestamp_epoch": 1790841500.0,
-            }
-        )
-        + "\n",
+def test_session_observations_and_governance_snapshots_are_diagnostic_only(tmp_path: Path):
+    session_dir = tmp_path / "run-001"
+    session_dir.mkdir()
+    (session_dir / "strategy_observations.jsonl").write_text(
+        json.dumps({"symbol": "NIFTY", "reason_code": "CAS_PRIMITIVE_0915_INVALID", "timestamp_epoch": 1790841500}) + "\n",
+        encoding="utf-8",
+    )
+    (session_dir / "trade_truth_stream.jsonl").write_text(
+        json.dumps({"identity": {"underlying": "NIFTY"}, "decision": {"governance_decision": "BLOCKED"}}) + "\n",
         encoding="utf-8",
     )
 
-    truth_file = session_dir / "trade_truth_stream.jsonl"
-    truth_file.write_text(
-        json.dumps(
-            {
-                "identity": {"underlying": "BANKNIFTY", "trace_id": "tr_999"},
-                "decision": {
-                    "governance_decision": "BLOCKED",
-                    "reason_codes": ["FEED_STALE"],
-                },
-                "timing": {"decision_timestamp_epoch": 1790841505.0},
-            }
-        )
-        + "\n",
-        encoding="utf-8",
+    assert load_session_events([session_dir]) == []
+    review_path = tmp_path / "review.json"
+    review_path.write_text("[]", encoding="utf-8")
+    empty_telemetry = tmp_path / "decisions.jsonl"
+    empty_telemetry.write_text("", encoding="utf-8")
+    assert load_trade_intent_events(
+        session_paths=[session_dir], review_queue_paths=[review_path],
+        decision_telemetry_paths=[empty_telemetry], db_path=tmp_path / "missing.sqlite"
+    ) == []
+    diagnostics = load_session_diagnostics([session_dir])
+    assert diagnostics["record_count"] == 2
+    assert diagnostics["malformed_record_count"] == 0
+    assert diagnostics["read_only"] is True
+    assert diagnostics["broker_api_called"] is False
+    assert len(diagnostics["source_files"]) == 2
+    assert all(len(source["sha256"]) == 64 for source in diagnostics["source_files"])
+
+
+def test_session_candidate_journal_requires_complete_candidate(tmp_path: Path):
+    session_dir = tmp_path / "run-002"
+    session_dir.mkdir()
+    rows = [_candidate_row(), _candidate_row(candidate_id="candidate-incomplete", target_price=None)]
+    (session_dir / "candidate_journal.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
     )
 
     events = load_session_events([session_dir])
-    assert len(events) == 2
-    assert events[0].symbol == "BANKNIFTY"
-    assert events[0].reject_reason == "PREMARKET_DATA_MISSING"
-    assert events[1].symbol == "BANKNIFTY"
-    assert events[1].reject_reason == "FEED_STALE"
-
-    all_events = load_trade_intent_events(
-        session_paths=[session_dir],
-        review_queue_paths=[],
-        decision_telemetry_paths=[],
-    )
-    assert len(all_events) == 2
+    assert len(events) == 1
+    assert events[0].intent == "rejected"
+    assert events[0].reject_reason == "FEED_STALE"
+    assert events[0].metrics_snapshot["candidate_id"] == "candidate-1"
+    assert events[0].metrics_snapshot["entry"] == 100
+    assert events[0].event_id != ""
 
 
-def test_discover_session_paths(tmp_path: Path):
-    sessions_root = tmp_path / "sessions"
-    date_dir = sessions_root / "session_2026-10-01" / "2026-10-01" / "run_abc"
-    date_dir.mkdir(parents=True)
+def test_explicit_session_path_is_exclusive_and_invalid_path_errors(tmp_path: Path, monkeypatch):
+    explicit = tmp_path / "sessions"
+    (explicit / "session_2026-10-01" / "run-good").mkdir(parents=True)
+    (explicit / "session_2026-09-30" / "run-other").mkdir(parents=True)
+    env = tmp_path / "other"
+    (env / "session_2026-10-01").mkdir(parents=True)
+    monkeypatch.setenv("TRADEBOT_SESSION_DIR", str(env))
+    paths = discover_session_paths(date_key="2026-10-01", session_dir=explicit)
+    assert any("run-good" in str(path) for path in paths)
+    assert not any("run-other" in str(path) for path in paths)
+    assert not any(env in path.parents for path in paths)
+    with pytest.raises(ValueError, match="session_dir_not_a_directory"):
+        discover_session_paths(date_key="2026-10-01", session_dir=tmp_path / "missing")
 
-    paths = discover_session_paths(date_key="2026-10-01", session_dir=sessions_root)
-    assert any(p == date_dir for p in paths)
+
+def test_diagnostics_count_malformed_records_and_preserve_source_hash(tmp_path: Path):
+    session_dir = tmp_path / "run-003"
+    session_dir.mkdir()
+    source = session_dir / "strategy_observations.jsonl"
+    source.write_text('{"reason_code":"OK"}\nnot-json\n', encoding="utf-8")
+    result = load_session_diagnostics([session_dir])
+    assert result["record_count"] == 1
+    assert result["malformed_record_count"] == 1
+    assert result["source_files"][0]["sha256"]

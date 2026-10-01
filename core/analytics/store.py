@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 import logging
 import os
@@ -664,136 +665,44 @@ def load_trade_table_events(*, db_path: Path | None = None, limit: int = 2000) -
     return events
 
 
-def _int_event_from_strategy_observation_row(row: dict, *, source: str) -> TradeIntentEvent | None:
-    ts_ms = _event_ts_ms(row)
+def _int_event_from_candidate_journal_row(row: dict, *, source: str) -> TradeIntentEvent | None:
+    candidate_id = _text(row.get("candidate_id"))
     symbol = _text(row.get("symbol")).upper()
-    if ts_ms is None or not symbol:
+    expiry = _text(row.get("expiry") or row.get("expiry_date"))
+    strike = _safe_float(row.get("strike"))
+    option_type = _normalize_option_type(row.get("option_type") or row.get("type"))
+    side = _text(row.get("side") or row.get("direction")).upper()
+    entry = _safe_float(row.get("entry_price") or row.get("execution_entry") or row.get("entry"))
+    target = _safe_float(row.get("target_price") or row.get("target"))
+    stop = _safe_float(row.get("stop_price") or row.get("stop_loss") or row.get("stop"))
+    ts_ms = _event_ts_ms(row)
+    if not (candidate_id and symbol and expiry and strike is not None and option_type and side in {"BUY", "SELL"}):
         return None
-    strategy_id = _text(row.get("strategy_id"))
-    reason_code = _text(row.get("reason_code")) or "STRATEGY_UNQUALIFIED"
-    pulse_id = _text(row.get("pulse_id"))
-    direction = _text(row.get("direction")).upper() or None
-    if direction == "UNKNOWN":
-        direction = None
-    row_for_key = dict(row)
-    if not row_for_key.get("side") and direction:
-        row_for_key["side"] = direction
-    trade_key = _build_trade_key_from_row(row_for_key)
-    event_id = build_event_id(
-        trade_key=trade_key,
-        event_kind="rejected",
-        ts_epoch_ms=ts_ms,
+    if ts_ms is None or entry is None or target is None or stop is None or min(entry, target, stop) <= 0:
+        return None
+    if side == "BUY" and not (target > entry > stop):
+        return None
+    if side == "SELL" and not (target < entry < stop):
+        return None
+
+    event = _int_event_from_review_row(row, source=source)
+    if event is None:
+        return None
+    payload = event.to_dict()
+    payload["event_id"] = build_event_id(
+        trade_key=event.trade_key,
+        event_kind=event.intent,
+        ts_epoch_ms=event.ts_epoch_ms,
         source=source,
-        discriminator=f"{strategy_id}|{reason_code}|{pulse_id}",
+        discriminator=candidate_id,
     )
-    gate_decisions = [
-        GateDecision(
-            gate_name="strategy_qualification",
-            passed=False,
-            reason=reason_code,
-            metrics_snapshot={"pulse_id": pulse_id, "strategy_id": strategy_id},
-        )
-    ]
-    payload = {
-        "trade_key": trade_key,
-        "event_id": event_id,
-        "intent": "rejected",
-        "ts_epoch_ms": int(ts_ms),
-        "symbol": symbol,
-        "expiry": None,
-        "strike": None,
-        "option_type": None,
-        "side": direction,
-        "source": source,
-        "reject_reason": reason_code,
-        "gate_decisions": [g.to_dict() for g in gate_decisions],
-        "metrics_snapshot": {
-            "strategy_id": strategy_id,
-            "reason_code": reason_code,
-            "pulse_id": pulse_id,
-            "applicability_state": _text(row.get("applicability_state")),
-            "missing_or_stale_inputs": row.get("missing_or_stale_inputs"),
-        },
-    }
+    metrics = dict(payload.get("metrics_snapshot") or {})
+    metrics.update({"candidate_id": candidate_id, "entry": entry, "target": target, "stop": stop})
+    payload["metrics_snapshot"] = metrics
     try:
         return TradeIntentEvent.from_dict(payload)
     except Exception as exc:
-        logger.warning("analytics_store_skip_invalid_strategy_obs_event source=%s err=%s", source, exc)
-        return None
-
-
-def _int_event_from_trade_truth_row(row: dict, *, source: str) -> TradeIntentEvent | None:
-    timing = row.get("timing") if isinstance(row.get("timing"), Mapping) else {}
-    ts_ms = _event_ts_ms(timing) or _event_ts_ms(row)
-    identity = row.get("identity") if isinstance(row.get("identity"), Mapping) else {}
-    symbol = _text(identity.get("underlying") or identity.get("instrument") or row.get("symbol")).upper()
-    if ts_ms is None or not symbol:
-        return None
-    decision = row.get("decision") if isinstance(row.get("decision"), Mapping) else {}
-    gov_decision = _text(decision.get("governance_decision")).upper()
-    reason_codes = decision.get("reason_codes") or decision.get("ranking_reasons") or []
-    if isinstance(reason_codes, (list, tuple)):
-        reason_code_str = ",".join(str(r) for r in reason_codes if _text(r))
-    else:
-        reason_code_str = _text(reason_codes)
-    reject_reason = reason_code_str or _text(decision.get("risk_result")) or gov_decision or "BLOCKED"
-    if gov_decision in {"BLOCKED", "REJECTED"} or reject_reason:
-        intent = "rejected"
-    elif gov_decision in {"AUTHORIZED", "ALLOWED", "ACCEPTED"}:
-        intent = "accepted"
-    else:
-        intent = "advisory"
-
-    trace_id = _text(identity.get("trace_id"))
-    trade_key_row = {
-        "symbol": symbol,
-        "expiry": identity.get("expiry"),
-        "strike": identity.get("strike"),
-        "option_type": identity.get("option_type"),
-        "strategy_id": identity.get("strategy_id"),
-    }
-    trade_key = _build_trade_key_from_row(trade_key_row)
-    event_id = build_event_id(
-        trade_key=trade_key,
-        event_kind=intent,
-        ts_epoch_ms=ts_ms,
-        source=source,
-        discriminator=trace_id or reject_reason,
-    )
-    gate_decisions = [
-        GateDecision(
-            gate_name="governance_decision",
-            passed=(intent == "accepted"),
-            reason=reject_reason if intent != "accepted" else None,
-            metrics_snapshot={"governance_decision": gov_decision, "trace_id": trace_id},
-        )
-    ]
-    payload = {
-        "trade_key": trade_key,
-        "event_id": event_id,
-        "intent": intent,
-        "ts_epoch_ms": int(ts_ms),
-        "symbol": symbol,
-        "expiry": identity.get("expiry"),
-        "strike": _safe_float(identity.get("strike")),
-        "option_type": _normalize_option_type(identity.get("option_type")),
-        "side": None,
-        "source": source,
-        "reject_reason": reject_reason if intent != "accepted" else None,
-        "gate_decisions": [g.to_dict() for g in gate_decisions],
-        "metrics_snapshot": {
-            "trace_id": trace_id,
-            "truth_record_id": _text(identity.get("truth_record_id")),
-            "governance_decision": gov_decision,
-            "ranking_reasons": decision.get("ranking_reasons"),
-            "reason_codes": decision.get("reason_codes"),
-            "risk_result": decision.get("risk_result"),
-        },
-    }
-    try:
-        return TradeIntentEvent.from_dict(payload)
-    except Exception as exc:
-        logger.warning("analytics_store_skip_invalid_trade_truth_event source=%s err=%s", source, exc)
+        logger.warning("analytics_store_skip_invalid_candidate_journal_event source=%s err=%s", source, exc)
         return None
 
 
@@ -810,30 +719,50 @@ def discover_session_paths(
         paths.append(base)
         if max_depth <= 0:
             return
-        try:
-            for child in base.iterdir():
-                if child.is_dir() and not child.name.startswith("."):
-                    _collect_subdirs(child, max_depth=max_depth - 1)
-        except Exception:
-            pass
+        for child in base.iterdir():
+            if child.is_dir() and not child.name.startswith("."):
+                _collect_subdirs(child, max_depth=max_depth - 1)
 
-    search_roots = [
-        Path("/Volumes/TradeBotData/sessions"),
-        repo_root() / ".runtime" / "live_sessions",
-        repo_root() / "sessions",
-    ]
+    search_roots = [Path("/Volumes/TradeBotData/sessions"), repo_root() / ".runtime" / "live_sessions", repo_root() / "sessions"]
     if session_dir is not None:
         p = Path(session_dir).expanduser()
-        if p.exists() and p.is_dir():
-            search_roots.insert(0, p)
-            _collect_subdirs(p, max_depth=3)
-
-    env_dir = os.getenv("TRADEBOT_SESSION_DIR")
-    if env_dir:
+        if not p.exists() or not p.is_dir():
+            raise ValueError(f"session_dir_not_a_directory:{p}")
+        explicit_candidates = [p / f"session_{date_key}", p / date_key] if date_key else []
+        matching = [candidate for candidate in explicit_candidates if candidate.is_dir()]
+        if matching:
+            search_roots = matching
+            for candidate in matching:
+                _collect_subdirs(candidate, max_depth=3)
+        else:
+            has_session_children = any(child.is_dir() and child.name.startswith("session_") for child in p.iterdir())
+            if date_key and has_session_children:
+                search_roots = [child for child in p.glob(f"session_{date_key}") if child.is_dir()]
+                for candidate in search_roots:
+                    _collect_subdirs(candidate, max_depth=3)
+            else:
+                search_roots = [p]
+                _collect_subdirs(p, max_depth=3)
+    elif os.getenv("TRADEBOT_SESSION_DIR"):
+        env_dir = os.getenv("TRADEBOT_SESSION_DIR") or ""
         ep = Path(env_dir).expanduser()
-        if ep.exists() and ep.is_dir():
-            search_roots.insert(0, ep)
-            _collect_subdirs(ep, max_depth=3)
+        if not ep.exists() or not ep.is_dir():
+            raise ValueError(f"TRADEBOT_SESSION_DIR_not_a_directory:{ep}")
+        explicit_candidates = [ep / f"session_{date_key}", ep / date_key] if date_key else []
+        matching = [candidate for candidate in explicit_candidates if candidate.is_dir()]
+        if matching:
+            search_roots = matching
+            for candidate in matching:
+                _collect_subdirs(candidate, max_depth=3)
+        else:
+            has_session_children = any(child.is_dir() and child.name.startswith("session_") for child in ep.iterdir())
+            if date_key and has_session_children:
+                search_roots = [child for child in ep.glob(f"session_{date_key}") if child.is_dir()]
+                for candidate in search_roots:
+                    _collect_subdirs(candidate, max_depth=3)
+            else:
+                search_roots = [ep]
+                _collect_subdirs(ep, max_depth=3)
 
     for root in search_roots:
         if not root.exists():
@@ -847,12 +776,9 @@ def discover_session_paths(
                 if c.exists() and c.is_dir():
                     _collect_subdirs(c, max_depth=3)
         else:
-            try:
-                for sub in root.glob("session_*"):
-                    if sub.is_dir():
-                        _collect_subdirs(sub, max_depth=3)
-            except Exception:
-                pass
+            for sub in root.glob("session_*"):
+                if sub.is_dir():
+                    _collect_subdirs(sub, max_depth=3)
     return _unique_paths(paths)
 
 
@@ -864,20 +790,77 @@ def load_session_events(session_paths: Iterable[Path] | None = None) -> list[Tra
         resolved_dirs = list(session_paths)
 
     for sdir in _unique_paths(resolved_dirs):
-        obs_file = sdir / "strategy_observations.jsonl"
-        if obs_file.exists():
-            for row in _iter_jsonl(obs_file):
-                evt = _int_event_from_strategy_observation_row(row, source=f"session_obs:{sdir.name}")
-                if evt is not None:
-                    events.append(evt)
-        truth_file = sdir / "trade_truth_stream.jsonl"
-        if truth_file.exists():
-            for row in _iter_jsonl(truth_file):
-                evt = _int_event_from_trade_truth_row(row, source=f"session_truth:{sdir.name}")
+        candidate_file = sdir / "candidate_journal.jsonl"
+        if candidate_file.exists():
+            for row in _iter_jsonl(candidate_file):
+                # Candidate journals are the only session source treated as
+                # candidate intent. Observations and governance snapshots stay
+                # diagnostic telemetry and are never sent through outcome replay.
+                source = f"session_candidate_journal:{sdir.resolve()}"
+                evt = _int_event_from_candidate_journal_row(row, source=source)
                 if evt is not None:
                     events.append(evt)
     events.sort(key=lambda e: e.ts_epoch_ms)
     return events
+
+
+def load_session_diagnostics(session_paths: Iterable[Path] | None = None) -> dict[str, Any]:
+    """Summarize session observations/truth as diagnostics, never trade intents."""
+    resolved_dirs = list(session_paths) if session_paths is not None else discover_session_paths()
+    source_files: list[dict[str, Any]] = []
+    reason_counts: dict[str, int] = {}
+    for sdir in _unique_paths(resolved_dirs):
+        for filename, kind in (("strategy_observations.jsonl", "strategy_observations"),
+                               ("trade_truth_stream.jsonl", "trade_truth"),
+                               ("candidate_journal.jsonl", "candidate_journal")):
+            path = sdir / filename
+            if not path.exists():
+                continue
+            digest = hashlib.sha256()
+            record_count = 0
+            malformed_count = 0
+            try:
+                with path.open("rb") as handle:
+                    for raw_line in handle:
+                        digest.update(raw_line)
+                        if not raw_line.strip():
+                            continue
+                        try:
+                            row = json.loads(raw_line)
+                        except (UnicodeDecodeError, json.JSONDecodeError):
+                            malformed_count += 1
+                            continue
+                        if not isinstance(row, dict):
+                            malformed_count += 1
+                            continue
+                        record_count += 1
+                        if kind == "strategy_observations":
+                            reason = _text(row.get("reason_code"))
+                        elif kind == "candidate_journal":
+                            reason = _text(row.get("reject_reason") or row.get("permission_reason")) or _text(row.get("permission"))
+                        else:
+                            decision = row.get("decision") if isinstance(row.get("decision"), Mapping) else {}
+                            reason = _text(decision.get("governance_decision")) or "UNKNOWN"
+                        reason_counts[f"{kind}:{reason or 'UNKNOWN'}"] = reason_counts.get(f"{kind}:{reason or 'UNKNOWN'}", 0) + 1
+            except OSError as exc:
+                raise OSError(f"session_telemetry_read_failed:{path}:{type(exc).__name__}") from exc
+            source_files.append({
+                "path": str(path.resolve()),
+                "kind": kind,
+                "sha256": digest.hexdigest(),
+                "records": record_count,
+                "malformed_records": malformed_count,
+            })
+    return {
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+        "source_files": source_files,
+        "record_count": sum(row["records"] for row in source_files),
+        "malformed_record_count": sum(row["malformed_records"] for row in source_files),
+        "reason_counts": dict(sorted(reason_counts.items())),
+    }
 
 
 def load_trade_intent_events(

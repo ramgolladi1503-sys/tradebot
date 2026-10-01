@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from zoneinfo import ZoneInfo
@@ -484,11 +486,27 @@ def analyze_event_outcome(
     }
 
 
-def _default_outcomes_path(date_key: str) -> Path:
+def default_outcomes_path(date_key: str, *, session_dir: Path | str | None = None) -> Path:
     base = _norm_text(getattr(cfg, "OUTCOME_REPLAY_DIR", ""))
-    if base:
-        return Path(base) / f"{date_key}.jsonl"
-    return repo_root() / "runtime" / "analytics" / "outcomes" / f"{date_key}.jsonl"
+    root = Path(base) if base else repo_root() / "runtime" / "analytics" / "outcomes"
+    effective_session_dir = session_dir or os.getenv("TRADEBOT_SESSION_DIR")
+    if effective_session_dir is not None:
+        canonical_session_dir = str(Path(effective_session_dir).expanduser().resolve())
+        session_paths = discover_session_paths(date_key=date_key, session_dir=effective_session_dir)
+        fingerprint = hashlib.sha256(canonical_session_dir.encode("utf-8"))
+        for directory in sorted({Path(path).resolve() for path in session_paths}, key=str):
+            candidate_path = directory / "candidate_journal.jsonl"
+            if not candidate_path.is_file():
+                continue
+            source_hash = hashlib.sha256()
+            with candidate_path.open("rb") as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    source_hash.update(chunk)
+            fingerprint.update(str(candidate_path).encode("utf-8"))
+            fingerprint.update(source_hash.digest())
+        session_key = fingerprint.hexdigest()[:16]
+        return root / date_key / f"session-{session_key}.jsonl"
+    return root / f"{date_key}.jsonl"
 
 
 def _parse_date_key(text: str) -> str:
@@ -518,10 +536,16 @@ def build_outcomes_for_date(
     if normalized_scope not in {"rejected", "accepted", "advisory"}:
         raise ValueError(f"invalid_scope:{scope}")
 
+    session_scoped = session_dir is not None or bool(os.getenv("TRADEBOT_SESSION_DIR"))
+    path = Path(output_path) if output_path is not None else default_outcomes_path(date_key, session_dir=session_dir)
     session_paths = discover_session_paths(date_key=date_key, session_dir=session_dir)
+    if session_scoped:
+        source_events = load_session_events(session_paths=session_paths)
+    else:
+        source_events = load_trade_intent_events(session_paths=session_paths)
     events = [
         event
-        for event in load_trade_intent_events(session_paths=session_paths)
+        for event in source_events
         if _to_day_key(int(event.ts_epoch_ms)) == date_key and _norm_text(event.intent).lower() == normalized_scope
     ]
 
@@ -534,7 +558,9 @@ def build_outcomes_for_date(
         for event in events
     ]
 
-    path = Path(output_path) if output_path is not None else _default_outcomes_path(date_key)
+    if output_path is None and session_scoped:
+        if path != default_outcomes_path(date_key, session_dir=session_dir):
+            raise RuntimeError("session_candidate_journal_changed_during_replay")
     _atomic_write_jsonl(path, rows)
 
     outcome_counts = {"hit_target": 0, "hit_sl": 0, "no_hit": 0}

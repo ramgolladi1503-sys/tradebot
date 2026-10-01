@@ -93,6 +93,14 @@ PY
 )"
 fi
 
+OUTCOME_PATH="$("$PYTHON_BIN" - "$DATE" "$SESSION_DIR" <<'PY'
+import sys
+from core.analytics.outcome_replay import default_outcomes_path
+
+print(default_outcomes_path(sys.argv[1], session_dir=sys.argv[2] or None))
+PY
+)"
+
 EXTRA_ARGS=()
 if [[ -n "$SESSION_DIR" ]]; then
   EXTRA_ARGS+=(--session-dir "$SESSION_DIR")
@@ -108,7 +116,6 @@ echo "[daily_intel] running outcome replay (rejected)"
 echo "[daily_intel] running daily report"
 "$PYTHON_BIN" -m core.analytics.daily_report --date "$DATE" "${EXTRA_ARGS[@]}"
 
-OUTCOME_PATH="$ROOT/runtime/analytics/outcomes/${DATE}.jsonl"
 REPORT_MD_PATH="$ROOT/runtime/analytics/reports/${DATE}/daily_report.md"
 REPORT_JSON_PATH="$ROOT/runtime/analytics/reports/${DATE}/daily_report.json"
 
