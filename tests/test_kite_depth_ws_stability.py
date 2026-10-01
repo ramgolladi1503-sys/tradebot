@@ -2295,4 +2295,3 @@ def test_ws_recovery_proof_context_aligns_with_resubscribe_selection(monkeypatch
     # Proof context expected tokens should contain both tokens (aligned with what resubscribe will apply)
     assert set(context["expected_tokens"]) == {str(underlying), str(option_token)}
     assert "expected_subscription_set_missing" not in context["invalid_reasons"]
-

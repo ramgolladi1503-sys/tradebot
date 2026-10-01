@@ -20,6 +20,26 @@ RecoveryAction = Literal[
 ]
 
 
+def is_plain_ws1006_peer_drop(*, code: int | None, reason: str | None) -> bool:
+    """Recognize known plain transport-close text for websocket close code 1006."""
+    try:
+        code_int = int(code or 0)
+    except (TypeError, ValueError):
+        return False
+    if code_int != 1006:
+        return False
+    reason_lower = str(reason or "").lower()
+    return any(
+        marker in reason_lower
+        for marker in (
+            "connection was closed uncleanly",
+            "peer dropped",
+            "closed abnormally",
+            "without closing handshake",
+        )
+    )
+
+
 @dataclass(frozen=True)
 class FeedRecoveryState:
     recovery_in_progress: bool = False
@@ -338,18 +358,7 @@ class FeedRecoveryCoordinator:
         return "auth" in reason_lower or "token" in reason_lower or code_text in {"401", "403"}
 
     def _is_plain_ws1006_peer_drop(self, *, code: int | None, reason: str) -> bool:
-        if int(code or 0) != 1006:
-            return False
-        reason_lower = reason.lower()
-        return any(
-            marker in reason_lower
-            for marker in (
-                "connection was closed uncleanly",
-                "peer dropped",
-                "closed abnormally",
-                "without closing handshake",
-            )
-        )
+        return is_plain_ws1006_peer_drop(code=code, reason=reason)
 
     def _terminal_decision(self, *, source: str, reason: str) -> FeedRecoveryDecision:
         now_epoch = self._now_epoch()
