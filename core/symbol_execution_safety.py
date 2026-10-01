@@ -96,6 +96,8 @@ def _feed_payload(candidate: Any) -> dict[str, Any]:
 
     for key in (
         "feed_ok",
+        "feed_ok_scope",
+        "global_feed_blocked",
         "ws_connected",
         "effective_ws_connected",
         "option_feed_block_reason_by_symbol",
@@ -224,22 +226,6 @@ def classify_symbol_execution_safety(
     # This consumer has already selected a candidate symbol; the legacy
     # feed_ok field is an aggregate over all monitored subscriptions. It may
     # be ignored only when the caller carries explicit per-symbol evidence.
-    if payload.get("feed_ok") is False and "feed_ok_scope" not in payload:
-        normalized_symbol = symbol.strip().upper()
-
-        def has_selected_symbol_evidence(key: str) -> bool:
-            values = payload.get(key)
-            return isinstance(values, dict) and any(
-                str(candidate_key).strip().upper() == normalized_symbol
-                for candidate_key in values
-            )
-
-        has_option_identity_and_age = all(
-            has_selected_symbol_evidence(key)
-            for key in ("option_feed_block_reason_by_symbol", "option_last_tick_age_by_symbol")
-        )
-        if has_option_identity_and_age:
-            payload["feed_ok_scope"] = "symbol_aggregate"
     feed_truth = classify_feed_health_truth(
         payload,
         symbols=(symbol,),

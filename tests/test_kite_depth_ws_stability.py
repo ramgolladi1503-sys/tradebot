@@ -1453,6 +1453,125 @@ def test_option_feed_verification_logs_begin_and_ok(monkeypatch):
     ws._tick_option_feed_verification(now_epoch=1002.0)
     assert any(event == "FEED_OPTION_VERIFY_OK" for event, _ in events)
     assert ws._option_feed_verification_overlay_payload()["state"] == "OK"
+
+
+def test_option_feed_verification_fails_closed_without_required_symbols(monkeypatch):
+    _patch_common(monkeypatch)
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
+    ws._reset_option_feed_verification(reason="unit_test")
+
+    ws._begin_option_feed_verification(
+        reason="connect",
+        start_epoch=1000.0,
+        requested_by_symbol={},
+        subscribed_by_symbol={},
+    )
+
+    overlay = ws._option_feed_verification_overlay_payload()
+    assert overlay["state"] == "FAILED"
+    assert overlay["failure_detail"] == "no_required_option_symbols"
+    assert any(event == "FEED_OPTION_VERIFY_FAILED" for event, _ in events)
+
+
+def test_launch_plan_activation_seeds_validated_option_metadata(monkeypatch):
+    _patch_common(monkeypatch)
+    plan = {
+        "ok": True,
+        "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
+        "production_tokens": [101, 201, 202],
+        "final_union_tokens": [101, 201, 202, 301],
+        "observation_tokens": [301],
+        "configured_budget": 200,
+        "production_resolution": [
+            {
+                "symbol": "NIFTY",
+                "index_token": 101,
+                "tokens": [101, 201, 202],
+                "final_option_count": 2,
+                "option_min_required": 2,
+            }
+        ],
+        "production_option_count": 2,
+        "launch_plan_sha256": "plan-sha",
+    }
+
+    ws.activate_market_event_graph_launch_plan(plan)
+
+    assert ws._LAST_OPTION_COUNTS_BY_SYMBOL == {"NIFTY": 2}
+    assert ws._LAST_OPTION_MIN_REQUIRED_BY_SYMBOL == {"NIFTY": 2}
+    assert ws._TOKEN_TO_SYMBOL == {201: "NIFTY", 202: "NIFTY", 101: "NIFTY"}
+    assert ws._observation_state_payload()["enabled"] is True
+
+
+def test_launch_plan_activation_rejects_inconsistent_option_metadata(monkeypatch):
+    _patch_common(monkeypatch)
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
+    plan = {
+        "ok": True,
+        "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
+        "production_tokens": [101, 201],
+        "final_union_tokens": [101, 201],
+        "configured_budget": 100,
+        "production_resolution": [
+            {
+                "symbol": "NIFTY",
+                "index_token": 101,
+                "tokens": [101, 201],
+                "final_option_count": 5,
+                "option_min_required": 2,
+            }
+        ],
+        "production_option_count": 1,
+    }
+    ws.activate_market_event_graph_launch_plan(plan)
+
+    assert ws._LAST_OPTION_COUNTS_BY_SYMBOL == {}
+    assert ws._LAST_OPTION_MIN_REQUIRED_BY_SYMBOL == {}
+    assert ws._TOKEN_TO_SYMBOL == {}
+    assert any(event == "FEED_LAUNCH_PLAN_OPTION_METADATA_BLOCKED" for event, _ in events)
+
+
+def test_intermediate_observation_merge_preserves_resolved_option_identity(monkeypatch):
+    from datetime import date
+    from types import SimpleNamespace
+
+    _patch_common(monkeypatch)
+    registry_mod = __import__("core.market_event_graph_live_observation_registry", fromlist=["*"])
+    registry = SimpleNamespace(
+        constituent_symbols=("NIFTY", "RELIANCE"),
+        all_tokens=(256265, 738561),
+        token_by_symbol={"NIFTY": 256265, "RELIANCE": 738561},
+        index_token=256265,
+        canonical_sha256="registry-sha",
+    )
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 1, raising=False)
+    monkeypatch.setattr(ws, "get_sticky_tokens", lambda: set())
+    monkeypatch.setattr(ws, "_underlying_ltp", lambda symbol, token=None: (25000.0, "test"))
+    monkeypatch.setattr(ws.kite_client, "resolve_index_token", lambda symbol: {"NIFTY": 256265, "RELIANCE": 738561}[symbol])
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda symbol, exchange="NFO": date(2026, 8, 6))
+    monkeypatch.setattr(
+        ws.kite_client,
+        "resolve_option_tokens_window",
+        lambda **kwargs: [910001, 910002, 910003, 910004]
+        if kwargs["symbol"] == "NIFTY"
+        else [920001, 920002, 920003, 920004],
+    )
+    monkeypatch.setattr(ws, "_load_option_token_meta", lambda *args, **kwargs: {})
+    monkeypatch.setattr(registry_mod, "load_observation_registry", lambda force=False: registry)
+
+    tokens, resolution = ws.build_subscription_tokens(symbols=["NIFTY"], max_tokens=150)
+
+    assert {910001, 910002, 910003, 910004}.issubset(set(tokens))
+    assert ws._TOKEN_TO_SYMBOL[910001] == "NIFTY"
+    assert ws._TOKEN_TO_SYMBOL[256265] == "NIFTY"
+    assert ws._TOKEN_TO_SYMBOL[738561] == "RELIANCE"
+    assert ws._LAST_OPTION_COUNTS_BY_SYMBOL["NIFTY"] == 4
+    assert next(row for row in resolution if row["symbol"] == "NIFTY")["final_option_count"] == 4
 def test_persist_runtime_snapshot_row_publishes_canonical_feed_truth_when_verified(monkeypatch, tmp_path):
     _patch_common(monkeypatch)
     monkeypatch.setattr(ws, "logs_dir", lambda: tmp_path)
@@ -1483,6 +1602,8 @@ def test_persist_runtime_snapshot_row_publishes_canonical_feed_truth_when_verifi
         intended_tokens_count=2,
     )
     payload = json.loads((tmp_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["feed_ok_scope"] == "symbol_aggregate"
+    assert payload["global_feed_blocked"] is False
     assert payload["canonical_feed_truth"]["state"] == "VERIFIED_HEALTHY"
     assert payload["canonical_feed_truth"]["ws_connected"] is True
     assert payload["canonical_feed_truth"]["option_ticks_verified"] is True
@@ -1501,6 +1622,7 @@ def test_persist_runtime_snapshot_row_publishes_restart_required_canonical_feed_
         intended_tokens_count=2,
     )
     payload = json.loads((tmp_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["global_feed_blocked"] is True
     assert payload["canonical_feed_truth"]["state"] == "RESTART_REQUIRED"
     assert payload["canonical_feed_truth"]["process_restart_required"] is True
     assert payload["canonical_feed_truth"]["recovery_blocked"] is True

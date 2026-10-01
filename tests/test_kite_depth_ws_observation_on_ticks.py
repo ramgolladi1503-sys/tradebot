@@ -92,6 +92,7 @@ def test_required_option_tick_verification_does_not_clear_recovery_without_gap_p
     coordinator.request_recovery(source="on_error", code=1006, reason="peer dropped")
     monkeypatch.setattr(ws, "_FEED_RECOVERY_COORDINATOR", coordinator)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [1234])
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {})
     monkeypatch.setitem(ws._TOKEN_TO_SYMBOL, 1234, "NIFTY")
     monkeypatch.setitem(ws._LAST_MSG_TS_BY_TOKEN, 1234, 1001.0)
     monkeypatch.setattr(cfg, "FEED_OPTION_VERIFY_MIN_OPTION_TICKS_PER_SYMBOL", 1, raising=False)
