@@ -1563,6 +1563,7 @@ def test_intermediate_observation_merge_preserves_resolved_option_identity(monke
     )
     monkeypatch.setattr(ws, "_load_option_token_meta", lambda *args, **kwargs: {})
     monkeypatch.setattr(registry_mod, "load_observation_registry", lambda force=False: registry)
+    monkeypatch.setattr(ws, "load_observation_registry", lambda force=False: registry)
 
     tokens, resolution = ws.build_subscription_tokens(symbols=["NIFTY"], max_tokens=150)
 
