@@ -341,7 +341,15 @@ class FeedRecoveryCoordinator:
         if int(code or 0) != 1006:
             return False
         reason_lower = reason.lower()
-        return any(marker in reason_lower for marker in ("connection was closed uncleanly", "peer dropped"))
+        return any(
+            marker in reason_lower
+            for marker in (
+                "connection was closed uncleanly",
+                "peer dropped",
+                "closed abnormally",
+                "without closing handshake",
+            )
+        )
 
     def _terminal_decision(self, *, source: str, reason: str) -> FeedRecoveryDecision:
         now_epoch = self._now_epoch()

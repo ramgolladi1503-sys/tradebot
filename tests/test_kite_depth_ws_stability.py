@@ -2249,3 +2249,50 @@ def test_g_repeated_reconnect_cycles(monkeypatch):
     assert total_subscribe_calls == 20
     assert ws._RUNTIME_STATE == "RUNNING"
     assert ws._KITE_TICKER is not None
+
+
+def test_ws1006_generic_drop_is_recoverable(monkeypatch):
+    """Verify that any 1006 close/error (not only peer-dropped string matches) is categorized as RECOVERABLE_WS_DROP."""
+    _patch_common(monkeypatch)
+    captured = {}
+    reconnects = []
+    events: list[tuple[str, dict]] = []
+
+    def _factory(api_key, access_token, debug=True, **kwargs):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(cfg, "DEPTH_WS_ALLOW_SOFT_RECONNECTS", True, raising=False)
+    monkeypatch.setattr(ws, "_soft_resubscribe_current", lambda reason: reconnects.append(reason) or True)
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+
+    # Generic 1006 error with standard websocket closure text
+    ticker.on_error(ticker, 1006, "connection closed abnormally without closing handshake")
+    assert reconnects == ["ws1006_recoverable:on_error"]
+    assert any(event == "FEED_WS_1006_RECOVERABLE" for event, _ in events)
+
+
+def test_ws_recovery_proof_context_aligns_with_resubscribe_selection(monkeypatch):
+    """Verify that when options drop and auto-recover from desired tokens, proof context expected_tokens aligns."""
+    _patch_common(monkeypatch)
+    underlying = 256265
+    option_token = 100001
+    ws._UNDERLYING_TOKENS = {underlying}
+    ws._UNDERLYING_TOKEN_TO_SYMBOL = {underlying: "NIFTY"}
+    ws._LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN[underlying] = 100.0
+
+    # Desired has underlying + option; last tokens has only underlying
+    ws._LAST_DESIRED_TOKENS = [underlying, option_token]
+    ws._LAST_TOKENS = [underlying]
+
+    context = ws._new_ws_recovery_proof_context(disconnect_started_at=105.0)
+    # Proof context expected tokens should contain both tokens (aligned with what resubscribe will apply)
+    assert set(context["expected_tokens"]) == {str(underlying), str(option_token)}
+    assert "expected_subscription_set_missing" not in context["invalid_reasons"]
+

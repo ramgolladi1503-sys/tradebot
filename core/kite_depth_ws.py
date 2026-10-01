@@ -2626,14 +2626,20 @@ def _ws1006_fault_category(*, code: int | None, reason_text: str | None) -> str:
         return "AUTH_BLOCKED"
     if _is_terminal_ws_fault(code=code_int, reason_text=reason_text):
         return "TERMINAL_PROCESS_RESTART_REQUIRED"
-    if code_int == 1006 and any(marker in reason_lower for marker in ("connection was closed uncleanly", "peer dropped")):
+    if code_int == 1006 and any(marker in reason_lower for marker in (
+        "connection was closed uncleanly",
+        "peer dropped",
+        "closed abnormally",
+        "without closing handshake",
+    )):
         return "RECOVERABLE_WS_DROP"
     return "UNKNOWN"
 
 
 def _new_ws_recovery_proof_context(*, disconnect_started_at: float) -> dict[str, Any]:
     """Snapshot exact subscription and critical underlying evidence at disconnect."""
-    expected_tokens = _normalize_positive_tokens(_LAST_TOKENS)
+    resub_tokens, _ = _resubscribe_token_selection()
+    expected_tokens = _normalize_positive_tokens(resub_tokens or _LAST_TOKENS)
     required_tokens = sorted({int(token) for token in (_UNDERLYING_TOKENS or set()) if int(token) > 0})
     symbol_by_token = {
         str(int(token)): str(symbol or "").strip().upper()
