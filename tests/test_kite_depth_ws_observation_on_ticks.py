@@ -1196,15 +1196,16 @@ def test_build_subscription_tokens_activates_observation_plan(monkeypatch):
     monkeypatch.setattr(ws, "_underlying_ltp", lambda symbol, token=None: (25000.0, "test"))
     monkeypatch.setattr(ws.kite_client, "resolve_index_token", lambda symbol: 256265)
     monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda symbol, exchange="NFO": date(2026, 8, 6))
+    option_resolution_symbols = []
     monkeypatch.setattr(
         ws.kite_client,
         "resolve_option_tokens_window",
-        lambda **_kwargs: [910001, 910002, 910003, 910004],
+        lambda **kwargs: option_resolution_symbols.append(kwargs["symbol"]) or [910001, 910002, 910003, 910004],
     )
     registry_mod.reset_observation_registry()
     ws._reset_market_event_graph_generation_evidence()
 
-    tokens, _resolution = ws.build_subscription_tokens(symbols=["NIFTY"], max_tokens=150)
+    tokens, _resolution = ws.build_subscription_tokens(symbols=["NIFTY"], max_tokens=123)
     registry = registry_mod.load_observation_registry(force=True)
     state = ws._observation_state_payload()
 
@@ -1215,6 +1216,8 @@ def test_build_subscription_tokens_activates_observation_plan(monkeypatch):
     assert set(registry.all_tokens).issubset(set(ws._LAST_DESIRED_TOKENS))
     assert ws._TOKEN_TO_SYMBOL[registry.index_token] == "NIFTY"
     assert ws._TOKEN_TO_SYMBOL[registry.token_by_symbol["RELIANCE"]] == "RELIANCE"
+    assert option_resolution_symbols == ["NIFTY"]
+    assert len(tokens) <= 123
 
 
 def test_depth_subscription_engine_activates_observation_plan(monkeypatch):
@@ -1231,15 +1234,16 @@ def test_depth_subscription_engine_activates_observation_plan(monkeypatch):
     monkeypatch.setattr(ws, "_underlying_ltp", lambda symbol, token=None: (25000.0, "test"))
     monkeypatch.setattr(ws.kite_client, "resolve_index_token", lambda symbol: 256265)
     monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda symbol, exchange="NFO": date(2026, 8, 6))
+    option_resolution_symbols = []
     monkeypatch.setattr(
         ws.kite_client,
         "resolve_option_tokens_window",
-        lambda **_kwargs: [920001, 920002, 920003, 920004],
+        lambda **kwargs: option_resolution_symbols.append(kwargs["symbol"]) or [920001, 920002, 920003, 920004],
     )
     registry_mod.reset_observation_registry()
     ws._reset_market_event_graph_generation_evidence()
 
-    tokens, _resolution = engine.build_subscription_tokens(symbols=["NIFTY"], max_tokens=150)
+    tokens, _resolution = engine.build_subscription_tokens(symbols=["NIFTY"], max_tokens=123)
     registry = registry_mod.load_observation_registry(force=True)
     state = ws._observation_state_payload()
 
@@ -1247,3 +1251,5 @@ def test_depth_subscription_engine_activates_observation_plan(monkeypatch):
     assert state["verdict"] == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
     assert set(registry.all_tokens).issubset(set(tokens))
     assert set(registry.all_tokens).issubset(set(ws._LAST_DESIRED_TOKENS))
+    assert option_resolution_symbols == ["NIFTY"]
+    assert len(tokens) <= 123

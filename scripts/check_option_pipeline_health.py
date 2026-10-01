@@ -201,7 +201,7 @@ def main() -> int:
         try:
             _tokens, resolution = build_subscription_tokens(
                 symbols=symbols,
-                max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)),
+                max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123)),
             )
             option_total = sum(
                 int((row or {}).get("option_count") or 0)
