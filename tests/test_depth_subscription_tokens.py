@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from types import SimpleNamespace
 
 from config import config as cfg
 from core import kite_depth_ws as ws
@@ -516,3 +517,66 @@ def test_build_depth_subscription_tokens_fallback_preserves_symbols_argument(mon
     assert calls == [["NIFTY"]]
     assert tokens == [101]
     assert resolution == [{"symbol": "NIFTY", "count": 1}]
+
+
+def test_meg_constituents_stay_cash_only_and_restore_123_token_union(monkeypatch):
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
+
+    constituent_symbols = [f"STOCK{i:02d}" for i in range(1, 51)]
+    constituent_tokens = [700000 + i for i in range(1, 51)]
+    observation_tokens = [ctx["index_tokens"]["NIFTY"], *constituent_tokens]
+    token_by_symbol = {
+        "NIFTY": ctx["index_tokens"]["NIFTY"],
+        **dict(zip(constituent_symbols, constituent_tokens)),
+    }
+    registry = SimpleNamespace(
+        all_tokens=tuple(observation_tokens),
+        token_by_symbol=token_by_symbol,
+        canonical_sha256="unit-test-meg-universe",
+    )
+    monkeypatch.setattr(ws, "load_observation_registry", lambda force=False: registry)
+    monkeypatch.setattr(
+        ws,
+        "activate_market_event_graph_launch_plan",
+        lambda plan: ws._set_observation_plan_state(
+            enabled=bool(plan.get("ok")),
+            verdict=str(plan.get("verdict") or ""),
+            production_tokens=plan.get("production_tokens") or [],
+            observation_tokens=plan.get("observation_tokens") or [],
+            final_union_tokens=plan.get("final_union_tokens") or [],
+            missing_observation_tokens=plan.get("missing_observation_tokens") or [],
+            configured_budget=plan.get("configured_budget"),
+            plan_sha=plan.get("launch_plan_sha256") or "",
+        ),
+    )
+
+    requested_symbols = [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX",
+        *constituent_symbols,
+    ]
+    tokens, resolution = ws.build_subscription_tokens(
+        symbols=requested_symbols,
+        max_tokens=150,
+    )
+
+    assert len(tokens) == 123
+    assert len(set(tokens)) == 123
+    assert set(observation_tokens).issubset(set(tokens))
+    assert {row["symbol"] for row in resolution} == {
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX",
+    }
+    assert {call["symbol"] for call in ctx["calls"]} == {
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX",
+    }
+    assert set(ws._LAST_OPTION_COUNTS_BY_SYMBOL) == {
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX",
+    }
