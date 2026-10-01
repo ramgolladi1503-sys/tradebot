@@ -1572,6 +1572,19 @@ def test_intermediate_observation_merge_preserves_resolved_option_identity(monke
     assert ws._TOKEN_TO_SYMBOL[738561] == "RELIANCE"
     assert ws._LAST_OPTION_COUNTS_BY_SYMBOL["NIFTY"] == 4
     assert next(row for row in resolution if row["symbol"] == "NIFTY")["final_option_count"] == 4
+    assert ws._observation_state_payload()["configured_budget"] == 123
+    assert len(tokens) <= 123
+
+
+def test_build_subscription_tokens_rejects_nonpositive_budget(monkeypatch):
+    _patch_common(monkeypatch)
+
+    import pytest
+
+    with pytest.raises(ValueError, match="positive integer"):
+        ws.build_subscription_tokens(symbols=["NIFTY"], max_tokens=0)
+
+
 def test_persist_runtime_snapshot_row_publishes_canonical_feed_truth_when_verified(monkeypatch, tmp_path):
     _patch_common(monkeypatch)
     monkeypatch.setattr(ws, "logs_dir", lambda: tmp_path)
