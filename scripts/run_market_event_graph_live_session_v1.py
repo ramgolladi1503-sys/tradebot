@@ -166,7 +166,7 @@ def _build_production_launch_plan(
 ) -> dict[str, Any]:
     from core import kite_depth_ws
 
-    budget = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150))
+    budget = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123))
     try:
         production_tokens, resolution = kite_depth_ws.build_subscription_tokens(list(cfg.SYMBOLS), max_tokens=budget)
     except BaseException as exc:

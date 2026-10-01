@@ -265,6 +265,7 @@ _SCHEMA_LOG_TS = 0.0
 _INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
 _AUTH_REQUIRED_LATCH = False
 _OBSERVATION_PLAN_STATE_LOCK = threading.RLock()
+_GOVERNED_FEED_SUBSCRIPTION_BUDGET = 123
 _OBSERVATION_PLAN_STATE: dict[str, Any] = {
     "enabled": False,
     "verdict": "DISABLED",
@@ -6096,24 +6097,12 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     global _LAST_DESIRED_TOKENS
     global _LAST_OPTION_COUNTS_BY_SYMBOL, _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL
     symbols = list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))
-    # The live MEG contract covers the authoritative constituent universe, not
-    # only the three index symbols used by the general-purpose feed.  Include
-    # those constituents before resolving options so snapshot completeness is
-    # achievable without weakening any freshness or coverage gate.
-    if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
-        try:
-            from core.market_event_graph_live_observation_registry import load_observation_registry
+    # Keep the production option universe limited to cfg.SYMBOLS (the three
+    # index products).  MARKET_EVENT_GRAPH constituents are cash observation
+    # tokens and are merged separately by the observation subscription plan;
+    # feeding their symbols into this option resolver expands each constituent
+    # into an option chain and violates the governed ~123-token topology.
 
-            live_registry = load_observation_registry(force=True)
-            if live_registry is not None:
-                symbols = list(dict.fromkeys(
-                    [str(symbol).upper() for symbol in symbols]
-                    + [str(symbol).upper() for symbol in live_registry.constituent_symbols]
-                ))
-        except Exception:
-            # The authoritative registry is validated again below; a failed
-            # lookup must not create an alternate or synthetic universe.
-            pass
     tokens: list[int] = []
     resolution: list[dict] = []
     underlying_tokens: list[int] = []
@@ -6122,7 +6111,23 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     option_rank_by_token: dict[int, tuple[float, int, float, int, int]] = {}
     token_exchange_hint: dict[int, str] = {}
     if max_tokens is None:
-        max_tokens = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150))
+        max_tokens = getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", _GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+    try:
+        requested_budget = int(max_tokens)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("depth subscription budget must be a positive integer") from exc
+    if requested_budget <= 0:
+        raise ValueError("depth subscription budget must be a positive integer")
+    max_tokens = min(requested_budget, _GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+    if max_tokens < requested_budget:
+        _log_ws(
+            "FEED_SUBSCRIPTION_BUDGET_CAPPED",
+            {
+                "requested_budget": requested_budget,
+                "effective_budget": max_tokens,
+                "governed_budget": _GOVERNED_FEED_SUBSCRIPTION_BUDGET,
+            },
+        )
     strikes_around_default = int(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6))
     strikes_by_symbol = getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {}
     step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
@@ -6427,7 +6432,12 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         active_trade_tokens=active_trade_tokens,
     )
     try:
-        observation_registry = load_observation_registry(force=False)
+        # Resolve through the registry module at call time.  This keeps the
+        # observation identity authority separate from the option resolver and
+        # avoids stale imported aliases during governed runtime/test swaps.
+        from core import market_event_graph_live_observation_registry as _observation_registry_mod
+
+        observation_registry = _observation_registry_mod.load_observation_registry(force=False)
     except Exception as exc:
         reset_market_event_graph_observation_plan_state()
         _log_ws(
@@ -9691,7 +9701,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 try:
                     desired_tokens_raw, resolution = build_subscription_tokens(
                         symbols=list(getattr(cfg, "SYMBOLS", []) or []),
-                        max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)),
+                        max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123)),
                     )
                 except Exception as exc:
                     _log_ws("FEED_REBALANCE_BUILD_ERROR", {"error": str(exc)})
