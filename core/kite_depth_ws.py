@@ -6415,7 +6415,12 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         active_trade_tokens=active_trade_tokens,
     )
     try:
-        observation_registry = load_observation_registry(force=False)
+        # Resolve through the registry module at call time.  This keeps the
+        # observation identity authority separate from the option resolver and
+        # avoids stale imported aliases during governed runtime/test swaps.
+        from core import market_event_graph_live_observation_registry as _observation_registry_mod
+
+        observation_registry = _observation_registry_mod.load_observation_registry(force=False)
     except Exception as exc:
         reset_market_event_graph_observation_plan_state()
         _log_ws(
