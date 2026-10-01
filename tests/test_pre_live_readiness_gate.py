@@ -97,6 +97,52 @@ def test_valid_config_token_universe_and_no_breaker_passes_when_market_open():
     assert payload["checks"]["feed_circuit_breaker"]["tripped"] is False
 
 
+def test_partial_option_coverage_fails_live_readiness_even_when_aggregate_is_positive():
+    payload = _run(
+        config=_cfg(SYMBOLS=["NIFTY", "BANKNIFTY"]),
+        token_resolver=lambda symbols: (
+            [1, 2, 3],
+            [
+                {
+                    "symbol": "NIFTY",
+                    "resolved_option_count": 12,
+                    "final_option_count": 3,
+                    "option_min_required": 12,
+                    "option_coverage_status": "DEGRADED",
+                }
+            ],
+        ),
+    )
+
+    coverage = payload["checks"]["token_universe"]
+    assert payload["outcome"] == gate.FAIL
+    assert payload["blockers"] == ["token_universe_symbol_coverage_incomplete"]
+    assert coverage["option_token_count"] == 3
+    assert coverage["symbol_coverage_ok"] is False
+    assert coverage["symbol_coverage"][0]["ok"] is False
+    assert coverage["missing_symbols"] == ["BANKNIFTY"]
+
+
+def test_zero_option_symbol_fails_live_readiness():
+    payload = _run(
+        token_resolver=lambda symbols: (
+            [1],
+            [
+                {
+                    "symbol": "NIFTY",
+                    "resolved_option_count": 0,
+                    "final_option_count": 0,
+                    "option_min_required": 12,
+                    "option_coverage_status": "ZERO",
+                }
+            ],
+        ),
+    )
+
+    assert payload["outcome"] == gate.FAIL
+    assert payload["blockers"] == ["token_universe_zero"]
+
+
 def test_market_closed_returns_pending_tick_proof_without_false_pass():
     payload = _run(market_open=False)
 

@@ -358,7 +358,7 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     conf = _cfg(ws)
     symbols_l = [str(s).upper() for s in list(symbols or list(getattr(conf, "SYMBOLS", []) or []))]
     if max_tokens is None:
-        max_tokens = _cfg_int(conf, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)
+        max_tokens = _cfg_int(conf, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123)
     around_default = _cfg_int(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6)
     around_by_symbol = dict(getattr(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {})
     step_map = dict(getattr(conf, "STRIKE_STEP_BY_SYMBOL", {}) or {})

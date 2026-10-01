@@ -152,6 +152,13 @@ def _symbol_value(payload: dict[str, Any], symbol: str, *keys: str) -> Any:
     return None
 
 
+def _has_symbol_entry(payload: dict[str, Any], field: str, symbol: str) -> bool:
+    values = payload.get(field)
+    return isinstance(values, dict) and any(
+        _normalize_symbol(candidate) == symbol for candidate in values
+    )
+
+
 def _global_websocket_ok(payload: dict[str, Any]) -> bool | None:
     effective = _bool_or_none(payload.get("effective_ws_connected"))
     if effective is not None:
@@ -271,7 +278,19 @@ def classify_feed_health_truth(
     # value may be caused by an unrelated illiquid symbol. Hard transport and
     # runtime blockers remain checked below; callers may additionally provide
     # an explicit global_feed_blocked flag for a genuinely system-wide fault.
-    aggregate_is_symbol_scoped = payload.get("feed_ok_scope") == "symbol_aggregate"
+    scope_symbols = requested_symbols or monitored_names
+    aggregate_scope_declared = payload.get("feed_ok_scope") == "symbol_aggregate"
+    aggregate_scope_has_evidence = bool(scope_symbols) and all(
+        _has_symbol_entry(payload, "option_feed_block_reason_by_symbol", symbol)
+        and _has_symbol_entry(payload, "option_last_tick_age_by_symbol", symbol)
+        for symbol in scope_symbols
+    )
+    aggregate_is_symbol_scoped = (
+        aggregate_scope_declared
+        and payload.get("global_feed_blocked") is False
+        and websocket_ok is True
+        and aggregate_scope_has_evidence
+    )
     if payload.get("global_feed_blocked") is True or (
         global_feed_ok is False and not aggregate_is_symbol_scoped
     ):

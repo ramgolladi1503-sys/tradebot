@@ -22,6 +22,10 @@ _ERROR_LOG_PATH = logs_dir() / "depth_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
 logger = logging.getLogger(__name__)
 
+def _retention_prune_allowed(*, queue_depth: int, in_flight: int) -> bool:
+    """Retention maintenance must yield to any pending persistence work."""
+    return int(queue_depth) == 0 and int(in_flight) == 0
+
 class DepthStore:
     def __init__(self):
         self.books = defaultdict(dict)
@@ -162,9 +166,16 @@ class DepthStore:
                     for _ in items:
                         self._persist_queue.task_done()
 
-            # Out-of-band asynchronous retention pruning (only when queue is healthy)
+            # Run retention pruning only when persistence is genuinely idle.
+            # A merely sub-batch backlog is still live write pressure; running
+            # the retention DELETE then can extend SQLite writer occupancy and
+            # turn a recoverable backlog into queue rejection.
             now_epoch = time.time()
-            if (now_epoch - last_prune_epoch) >= prune_interval_sec and self._persist_queue.qsize() < batch_size:
+            queue_idle = _retention_prune_allowed(
+                queue_depth=self._persist_queue.qsize(),
+                in_flight=self._persist_in_flight,
+            )
+            if (now_epoch - last_prune_epoch) >= prune_interval_sec and queue_idle:
                 last_prune_epoch = now_epoch
                 try:
                     prune_depth_snapshots()

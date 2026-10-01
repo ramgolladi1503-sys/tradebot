@@ -265,6 +265,7 @@ _SCHEMA_LOG_TS = 0.0
 _INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
 _AUTH_REQUIRED_LATCH = False
 _OBSERVATION_PLAN_STATE_LOCK = threading.RLock()
+_GOVERNED_FEED_SUBSCRIPTION_BUDGET = 123
 _OBSERVATION_PLAN_STATE: dict[str, Any] = {
     "enabled": False,
     "verdict": "DISABLED",
@@ -328,26 +329,6 @@ def _set_observation_plan_state(
 
 def reset_market_event_graph_observation_plan_state() -> None:
     _set_observation_plan_state(enabled=False, verdict="DISABLED")
-
-
-def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
-    global _INTENDED_TOKENS, _INTENDED_TOKEN_COUNT
-    verdict = str(plan.get("verdict") or "")
-    ok = bool(plan.get("ok")) and verdict == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
-    res = _set_observation_plan_state(
-        enabled=ok,
-        verdict=verdict if verdict else "BLOCKED_BY_LAUNCH_PLAN_IDENTITY",
-        production_tokens=plan.get("production_tokens") or (),
-        observation_tokens=plan.get("observation_tokens") or (),
-        final_union_tokens=plan.get("final_union_tokens") or (),
-        missing_observation_tokens=plan.get("missing_observation_tokens") or (),
-        configured_budget=plan.get("configured_budget"),
-        plan_sha=str(plan.get("launch_plan_sha256") or ""),
-    )
-    if ok and plan.get("final_union_tokens"):
-        _INTENDED_TOKENS = sorted({int(t) for t in (plan.get("final_union_tokens") or ()) if int(t) > 0})
-        _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
-    return res
 
 
 def _active_launch_plan_tokens() -> list[int]:
@@ -1850,8 +1831,70 @@ def reset_market_event_graph_observation_plan_state() -> None:
     _set_observation_plan_state(enabled=False, verdict="DISABLED")
 
 
+def _launch_plan_option_metadata(
+    plan: Mapping[str, Any],
+) -> tuple[dict[str, int], dict[str, int], dict[int, str]] | None:
+    """Validate option identity/counts embedded in a governed launch plan."""
+    final_tokens = set(_normalize_positive_tokens(plan.get("final_union_tokens") or ()))
+    production_tokens = set(_normalize_positive_tokens(plan.get("production_tokens") or ()))
+    rows = plan.get("production_resolution")
+    if not final_tokens or not production_tokens or not isinstance(rows, list) or not rows:
+        return None
+
+    requested_by_symbol: dict[str, int] = {}
+    min_required_by_symbol: dict[str, int] = {}
+    token_to_symbol: dict[int, str] = {}
+    resolved_production_tokens: set[int] = set()
+    for row in rows:
+        if not isinstance(row, Mapping):
+            return None
+        symbol = str(row.get("symbol") or "").strip().upper()
+        row_tokens = set(_normalize_positive_tokens(row.get("tokens") or ()))
+        try:
+            index_token = int(row.get("index_token") or 0)
+            declared_option_count = int(row.get("final_option_count", row.get("option_count", -1)))
+            min_required = int(row.get("option_min_required") or 0)
+        except (TypeError, ValueError):
+            return None
+        if not symbol or not row_tokens or index_token not in row_tokens:
+            return None
+        if not row_tokens.issubset(production_tokens):
+            return None
+        option_tokens = row_tokens - {index_token}
+        if declared_option_count != len(option_tokens) or min_required <= 0:
+            return None
+        if symbol in requested_by_symbol:
+            return None
+        requested_by_symbol[symbol] = declared_option_count
+        min_required_by_symbol[symbol] = min_required
+        resolved_production_tokens.update(row_tokens)
+        for token in option_tokens:
+            previous_symbol = token_to_symbol.get(token)
+            if previous_symbol and previous_symbol != symbol:
+                return None
+            token_to_symbol[token] = symbol
+
+    if resolved_production_tokens != production_tokens or not production_tokens.issubset(final_tokens):
+        return None
+    observation_tokens = set(_normalize_positive_tokens(plan.get("observation_tokens") or ()))
+    if not observation_tokens.issubset(final_tokens):
+        return None
+    observation_only = final_tokens - production_tokens
+    if not observation_only.issubset(observation_tokens):
+        return None
+    try:
+        declared_option_total = int(plan.get("production_option_count", -1))
+    except (TypeError, ValueError):
+        return None
+    if declared_option_total != sum(requested_by_symbol.values()):
+        return None
+    return requested_by_symbol, min_required_by_symbol, token_to_symbol
+
+
 def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
     global _INTENDED_TOKENS, _INTENDED_TOKEN_COUNT
+    global _LAST_OPTION_COUNTS_BY_SYMBOL, _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL, _TOKEN_TO_SYMBOL
+    global _UNDERLYING_TOKEN_TO_SYMBOL
     verdict = str(plan.get("verdict") or "")
     ok = bool(plan.get("ok")) and verdict == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
     res = _set_observation_plan_state(
@@ -1864,9 +1907,32 @@ def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str
         configured_budget=plan.get("configured_budget"),
         plan_sha=str(plan.get("launch_plan_sha256") or ""),
     )
-    if ok and plan.get("final_union_tokens"):
-        _INTENDED_TOKENS = sorted({int(t) for t in (plan.get("final_union_tokens") or ()) if int(t) > 0})
-        _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
+    if not ok:
+        return res
+
+    _INTENDED_TOKENS = _normalize_positive_tokens(plan.get("final_union_tokens") or ())
+    _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
+    metadata = _launch_plan_option_metadata(plan)
+    if metadata is None:
+        _LAST_OPTION_COUNTS_BY_SYMBOL = {}
+        _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL = {}
+        _TOKEN_TO_SYMBOL = {}
+        _UNDERLYING_TOKEN_TO_SYMBOL = {}
+        _log_ws(
+            "FEED_LAUNCH_PLAN_OPTION_METADATA_BLOCKED",
+            {"reason": "invalid_or_incomplete_production_resolution", "plan_sha": str(plan.get("launch_plan_sha256") or "")},
+        )
+        return res
+
+    requested_by_symbol, min_required_by_symbol, option_token_to_symbol = metadata
+    _LAST_OPTION_COUNTS_BY_SYMBOL = dict(requested_by_symbol)
+    _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL = dict(min_required_by_symbol)
+    _UNDERLYING_TOKEN_TO_SYMBOL = {
+        int(row["index_token"]): str(row["symbol"]).strip().upper()
+        for row in (plan.get("production_resolution") or ())
+    }
+    _TOKEN_TO_SYMBOL = dict(option_token_to_symbol)
+    _TOKEN_TO_SYMBOL.update(_UNDERLYING_TOKEN_TO_SYMBOL)
     return res
 
 
@@ -3983,11 +4049,18 @@ def _begin_option_feed_verification(
         for symbol, count in dict(subscribed_by_symbol or {}).items()
         if str(symbol or "").strip()
     }
-    required_symbols = sorted({sym for sym, count in {**requested_map, **subscribed_map}.items() if int(count or 0) > 0})
+    required_symbols = sorted(
+        {sym for sym, count in {**requested_map, **subscribed_map}.items() if int(count or 0) > 0}
+        | {
+            str(symbol or "").strip().upper()
+            for symbol, minimum in dict(_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL or {}).items()
+            if str(symbol or "").strip() and int(minimum or 0) > 0
+        }
+    )
     if not required_symbols:
         with _RESTART_VERIFY_LOCK:
-            _OPTION_FEED_VERIFY_STATE = "OK"
-            _OPTION_FEED_VERIFY_REASON = f"{reason}:auto_ok_empty"
+            _OPTION_FEED_VERIFY_STATE = "FAILED"
+            _OPTION_FEED_VERIFY_REASON = str(reason or "")
             _OPTION_FEED_VERIFY_START_EPOCH = start_epoch_f
             _OPTION_FEED_VERIFY_DEADLINE_EPOCH = 0.0
             _OPTION_FEED_VERIFY_REQUIRED_SYMBOLS = []
@@ -3995,10 +4068,13 @@ def _begin_option_feed_verification(
             _OPTION_FEED_VERIFY_SUBSCRIBED_BY_SYMBOL = dict(subscribed_map)
             _OPTION_FEED_VERIFY_VERIFIED_SYMBOLS = []
             _OPTION_FEED_VERIFY_MISSING_SYMBOLS = []
-            _OPTION_FEED_VERIFY_VERIFIED_EPOCH = start_epoch_f
-            _OPTION_FEED_VERIFY_FAILURE_DETAIL = ""
-            _OPTION_FEED_VERIFY_LAST_STAGE_EVENT = "auto_ok_empty"
-        _log_ws("FEED_OPTION_VERIFY_AUTO_OK", {"reason": str(reason or "")})
+            _OPTION_FEED_VERIFY_VERIFIED_EPOCH = None
+            _OPTION_FEED_VERIFY_FAILURE_DETAIL = "no_required_option_symbols"
+            _OPTION_FEED_VERIFY_LAST_STAGE_EVENT = "empty_required_set_blocked"
+        _log_ws(
+            "FEED_OPTION_VERIFY_FAILED",
+            {"reason": str(reason or ""), "detail": "no_required_option_symbols", "required_symbols": []},
+        )
         return
     deadline = start_epoch_f + float(_option_feed_verification_timeout_sec())
     with _RESTART_VERIFY_LOCK:
@@ -5101,6 +5177,16 @@ def _write_feed_runtime_snapshot(
             reconnect_blocked_reason=normalized_blocked_reason,
         )
     )
+    payload["feed_ok_scope"] = "symbol_aggregate"
+    payload["global_feed_blocked"] = bool(
+        ws_connected is not True
+        or str(effective_state_text or "").strip().upper()
+        in {"AUTH_BLOCKED", "IMPORT_MISSING", "STOPPED", "RECOVERY_BLOCKED", "RESTART_REQUIRED"}
+        or bool(normalized_blocked_reason)
+        or bool(process_restart_required)
+        or _AUTH_REQUIRED_LATCH
+        or _REACTOR_NOT_RESTARTABLE_DETECTED
+    )
     payload["feed_ok"] = derive_feed_ok(payload)
     stage_started = _mark_stage("payload_assembly_ms", stage_started)
     if (
@@ -6011,24 +6097,12 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     global _LAST_DESIRED_TOKENS
     global _LAST_OPTION_COUNTS_BY_SYMBOL, _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL
     symbols = list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))
-    # The live MEG contract covers the authoritative constituent universe, not
-    # only the three index symbols used by the general-purpose feed.  Include
-    # those constituents before resolving options so snapshot completeness is
-    # achievable without weakening any freshness or coverage gate.
-    if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
-        try:
-            from core.market_event_graph_live_observation_registry import load_observation_registry
+    # Keep the production option universe limited to cfg.SYMBOLS (the three
+    # index products).  MARKET_EVENT_GRAPH constituents are cash observation
+    # tokens and are merged separately by the observation subscription plan;
+    # feeding their symbols into this option resolver expands each constituent
+    # into an option chain and violates the governed ~123-token topology.
 
-            live_registry = load_observation_registry(force=True)
-            if live_registry is not None:
-                symbols = list(dict.fromkeys(
-                    [str(symbol).upper() for symbol in symbols]
-                    + [str(symbol).upper() for symbol in live_registry.constituent_symbols]
-                ))
-        except Exception:
-            # The authoritative registry is validated again below; a failed
-            # lookup must not create an alternate or synthetic universe.
-            pass
     tokens: list[int] = []
     resolution: list[dict] = []
     underlying_tokens: list[int] = []
@@ -6037,7 +6111,23 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     option_rank_by_token: dict[int, tuple[float, int, float, int, int]] = {}
     token_exchange_hint: dict[int, str] = {}
     if max_tokens is None:
-        max_tokens = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150))
+        max_tokens = getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", _GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+    try:
+        requested_budget = int(max_tokens)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("depth subscription budget must be a positive integer") from exc
+    if requested_budget <= 0:
+        raise ValueError("depth subscription budget must be a positive integer")
+    max_tokens = min(requested_budget, _GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+    if max_tokens < requested_budget:
+        _log_ws(
+            "FEED_SUBSCRIPTION_BUDGET_CAPPED",
+            {
+                "requested_budget": requested_budget,
+                "effective_budget": max_tokens,
+                "governed_budget": _GOVERNED_FEED_SUBSCRIPTION_BUDGET,
+            },
+        )
     strikes_around_default = int(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6))
     strikes_by_symbol = getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {}
     step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
@@ -6342,7 +6432,12 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         active_trade_tokens=active_trade_tokens,
     )
     try:
-        observation_registry = load_observation_registry(force=False)
+        # Resolve through the registry module at call time.  This keeps the
+        # observation identity authority separate from the option resolver and
+        # avoids stale imported aliases during governed runtime/test swaps.
+        from core import market_event_graph_live_observation_registry as _observation_registry_mod
+
+        observation_registry = _observation_registry_mod.load_observation_registry(force=False)
     except Exception as exc:
         reset_market_event_graph_observation_plan_state()
         _log_ws(
@@ -6357,21 +6452,22 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             observation_tokens=observation_token_list,
             budget=max_tokens,
         )
-        plan = {
-            "ok": bool(merge.get("ok")),
-            "verdict": (
+        _set_observation_plan_state(
+            enabled=bool(merge.get("ok")),
+            verdict=(
                 "PASS_LIVE_SOURCE_PRESESSION_READINESS"
                 if bool(merge.get("ok"))
                 else str(merge.get("reason") or BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET)
             ),
-            "production_tokens": [int(token) for token in tokens],
-            "observation_tokens": observation_token_list,
-            "final_union_tokens": [int(token) for token in list(merge.get("tokens") or [])],
-            "missing_observation_tokens": [int(token) for token in list(merge.get("missing_or_pruned_observation_tokens") or [])],
-            "configured_budget": max_tokens,
-            "launch_plan_sha256": str(getattr(observation_registry, "canonical_sha256", "") or ""),
-        }
-        activate_market_event_graph_launch_plan(plan)
+            production_tokens=[int(token) for token in tokens],
+            observation_tokens=observation_token_list,
+            final_union_tokens=[int(token) for token in list(merge.get("tokens") or [])],
+            missing_observation_tokens=[
+                int(token) for token in list(merge.get("missing_or_pruned_observation_tokens") or [])
+            ],
+            configured_budget=max_tokens,
+            plan_sha=str(getattr(observation_registry, "canonical_sha256", "") or ""),
+        )
         if bool(merge.get("ok")):
             tokens = [int(token) for token in list(merge.get("tokens") or [])]
             for symbol, token in dict(observation_registry.token_by_symbol).items():
@@ -9605,7 +9701,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 try:
                     desired_tokens_raw, resolution = build_subscription_tokens(
                         symbols=list(getattr(cfg, "SYMBOLS", []) or []),
-                        max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)),
+                        max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123)),
                     )
                 except Exception as exc:
                     _log_ws("FEED_REBALANCE_BUILD_ERROR", {"error": str(exc)})

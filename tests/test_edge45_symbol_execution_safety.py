@@ -103,6 +103,8 @@ def test_symbol_execution_safety_blocks_stale_symbol_option_ticks():
 def test_symbol_execution_safety_ignores_aggregate_degradation_for_healthy_symbol():
     decision = classify_symbol_execution_safety(_candidate(
         feed_ok=False,
+        feed_ok_scope="symbol_aggregate",
+        global_feed_blocked=False,
         option_feed_block_reason_by_symbol={"NIFTY": "OK", "TCS": "STALE"},
         option_last_tick_age_by_symbol={"NIFTY": 0.5, "TCS": 900.0},
     ))
@@ -110,6 +112,18 @@ def test_symbol_execution_safety_ignores_aggregate_degradation_for_healthy_symbo
     assert decision.execution_allowed is True
     assert decision.reasons == ()
     assert decision.context["feed_health_truth"]["context"]["monitored_degraded_symbols"] == ["TCS"]
+
+
+def test_symbol_execution_safety_does_not_infer_global_clear_from_symbol_maps():
+    decision = classify_symbol_execution_safety(_candidate(
+        feed_ok=False,
+        option_feed_block_reason_by_symbol={"NIFTY": "OK", "TCS": "STALE"},
+        option_last_tick_age_by_symbol={"NIFTY": 0.5, "TCS": 900.0},
+    ))
+
+    assert decision.execution_allowed is False
+    assert SYMBOL_FEED_UNSAFE_REASON in decision.reasons
+    assert decision.context["feed_health_truth"]["context"]["feed_ok_scope"] == "global_or_unknown"
 
 
 def test_declared_index_dependencies_ignore_unrelated_stock_domain_degradation():
