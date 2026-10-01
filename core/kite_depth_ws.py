@@ -6442,21 +6442,22 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             observation_tokens=observation_token_list,
             budget=max_tokens,
         )
-        plan = {
-            "ok": bool(merge.get("ok")),
-            "verdict": (
+        _set_observation_plan_state(
+            enabled=bool(merge.get("ok")),
+            verdict=(
                 "PASS_LIVE_SOURCE_PRESESSION_READINESS"
                 if bool(merge.get("ok"))
                 else str(merge.get("reason") or BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET)
             ),
-            "production_tokens": [int(token) for token in tokens],
-            "observation_tokens": observation_token_list,
-            "final_union_tokens": [int(token) for token in list(merge.get("tokens") or [])],
-            "missing_observation_tokens": [int(token) for token in list(merge.get("missing_or_pruned_observation_tokens") or [])],
-            "configured_budget": max_tokens,
-            "launch_plan_sha256": str(getattr(observation_registry, "canonical_sha256", "") or ""),
-        }
-        activate_market_event_graph_launch_plan(plan)
+            production_tokens=[int(token) for token in tokens],
+            observation_tokens=observation_token_list,
+            final_union_tokens=[int(token) for token in list(merge.get("tokens") or [])],
+            missing_observation_tokens=[
+                int(token) for token in list(merge.get("missing_or_pruned_observation_tokens") or [])
+            ],
+            configured_budget=max_tokens,
+            plan_sha=str(getattr(observation_registry, "canonical_sha256", "") or ""),
+        )
         if bool(merge.get("ok")):
             tokens = [int(token) for token in list(merge.get("tokens") or [])]
             for symbol, token in dict(observation_registry.token_by_symbol).items():

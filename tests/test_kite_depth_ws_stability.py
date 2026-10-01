@@ -1531,6 +1531,47 @@ def test_launch_plan_activation_rejects_inconsistent_option_metadata(monkeypatch
     assert ws._LAST_OPTION_MIN_REQUIRED_BY_SYMBOL == {}
     assert ws._TOKEN_TO_SYMBOL == {}
     assert any(event == "FEED_LAUNCH_PLAN_OPTION_METADATA_BLOCKED" for event, _ in events)
+
+
+def test_intermediate_observation_merge_preserves_resolved_option_identity(monkeypatch):
+    from datetime import date
+    from types import SimpleNamespace
+
+    _patch_common(monkeypatch)
+    registry_mod = __import__("core.market_event_graph_live_observation_registry", fromlist=["*"])
+    registry = SimpleNamespace(
+        constituent_symbols=("NIFTY", "RELIANCE"),
+        all_tokens=(256265, 738561),
+        token_by_symbol={"NIFTY": 256265, "RELIANCE": 738561},
+        index_token=256265,
+        canonical_sha256="registry-sha",
+    )
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 1, raising=False)
+    monkeypatch.setattr(ws, "get_sticky_tokens", lambda: set())
+    monkeypatch.setattr(ws, "_underlying_ltp", lambda symbol, token=None: (25000.0, "test"))
+    monkeypatch.setattr(ws.kite_client, "resolve_index_token", lambda symbol: {"NIFTY": 256265, "RELIANCE": 738561}[symbol])
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda symbol, exchange="NFO": date(2026, 8, 6))
+    monkeypatch.setattr(
+        ws.kite_client,
+        "resolve_option_tokens_window",
+        lambda **kwargs: [910001, 910002, 910003, 910004]
+        if kwargs["symbol"] == "NIFTY"
+        else [920001, 920002, 920003, 920004],
+    )
+    monkeypatch.setattr(ws, "_load_option_token_meta", lambda *args, **kwargs: {})
+    monkeypatch.setattr(registry_mod, "load_observation_registry", lambda force=False: registry)
+
+    tokens, resolution = ws.build_subscription_tokens(symbols=["NIFTY"], max_tokens=150)
+
+    assert {910001, 910002, 910003, 910004}.issubset(set(tokens))
+    assert ws._TOKEN_TO_SYMBOL[910001] == "NIFTY"
+    assert ws._TOKEN_TO_SYMBOL[256265] == "NIFTY"
+    assert ws._TOKEN_TO_SYMBOL[738561] == "RELIANCE"
+    assert ws._LAST_OPTION_COUNTS_BY_SYMBOL["NIFTY"] == 4
+    assert next(row for row in resolution if row["symbol"] == "NIFTY")["final_option_count"] == 4
 def test_persist_runtime_snapshot_row_publishes_canonical_feed_truth_when_verified(monkeypatch, tmp_path):
     _patch_common(monkeypatch)
     monkeypatch.setattr(ws, "logs_dir", lambda: tmp_path)

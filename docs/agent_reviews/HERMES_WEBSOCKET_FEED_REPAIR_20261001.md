@@ -72,3 +72,55 @@ PR #943 introduced the current symbol-aware feed-health classifier. It permits a
 - The patch can allow a healthy explicitly requested symbol through an unrelated symbol's aggregate failure, but cannot restore missing ticks or make an under-covered symbol healthy.
 - The observed 150-token plan cannot satisfy 12 option tokens for every symbol in the 53-symbol universe. No code in this patch will widen the configured budget or narrow the universe automatically.
 - Current PIDs remain on the deployed commit and do not receive this code. Deployment requires a later operator-controlled session after separate review and capacity proof.
+
+## Stage 1 addendum — intermediate plan activation regression
+
+Read-only verification of the October 1 live artifact and exact source at `a79dfb46ef70fe2a19b22db16c131774c31adec6` found a regression in the initial remediation: `build_subscription_tokens()` constructs an intermediate observation-merge mapping without `production_resolution`, then calls `activate_market_event_graph_launch_plan()` before it assembles final per-symbol resolution rows. The strict activation function interpreted this incomplete intermediate mapping as malformed and cleared `_TOKEN_TO_SYMBOL`, `_UNDERLYING_TOKEN_TO_SYMBOL`, option counts, and minimums. The builder then derived zero option counts for every symbol. Live logs show the metadata-block event at 13:28:07 and empty-scope verification failures at 13:28:08; the persisted plan shows 70 option tokens outside the zero-option resolution rows. This explains the option attribution and feed-health failure. The exact process-exit cause remains unresolved.
+
+### Revised implementation contract
+
+- The intermediate observation merge may update only observation-plan state; it must not call the full launch-plan metadata validator or mutate token-to-symbol/count/minimum maps.
+- The full `activate_market_event_graph_launch_plan()` path remains strict for actual launch plans and clears stale metadata on malformed authoritative plans.
+- A regression test must exercise `build_subscription_tokens()` with a synthetic, read-only registry and assert resolved option token ownership and per-symbol counts survive observation-plan activation.
+- No direct token-to-symbol inference from an unassociated token list; no provider calls; no live process action; no threshold/budget changes.
+
+```yaml
+source_agent: hermes
+action: DEFINE_CONTRACT
+title: Preserve resolved option identity across intermediate observation merge
+scope: Repair the intermediate observation-plan state update and add a regression test
+requested_paths:
+  - core/kite_depth_ws.py
+  - tests/test_kite_depth_ws_stability.py
+  - docs/agent_reviews/HERMES_WEBSOCKET_FEED_REPAIR_20261001.md
+allowed_paths:
+  - core/kite_depth_ws.py
+  - tests/test_kite_depth_ws_stability.py
+  - docs/agent_reviews/HERMES_WEBSOCKET_FEED_REPAIR_20261001.md
+forbidden_paths:
+  - config/
+  - credentials.py
+  - environment files and access tokens
+  - runtime/live*
+  - core/execution*
+  - core/broker*
+  - core/order*
+  - core/risk*
+  - strategies/
+  - any running process or production artifact
+expected_tests:
+  - tests/test_kite_depth_ws_stability.py
+acceptance_proof:
+  - Intermediate merge preserves option and underlying symbol maps and option counts.
+  - Full launch-plan activation remains fail-closed on invalid metadata.
+  - No token ownership is inferred from unassociated tokens.
+  - No live/runtime/configuration change occurs.
+```
+
+## Stage 2 execution record
+
+- `core/kite_depth_ws.py`: intermediate observation merge now updates only observation-plan state through `_set_observation_plan_state()`; strict full launch-plan validation remains on the actual launch-plan activation path.
+- `tests/test_kite_depth_ws_stability.py`: added an in-memory observation-merge regression test verifying option and underlying token mappings plus per-symbol option counts survive the intermediate state update.
+- Focused validation passed: 124 tests across WebSocket stability, observation callbacks, feed health truth, and canonical feed truth; an additional 17 direct subscription-token tests passed. `git diff --check` passed.
+- Two environment warnings remain: installed `numexpr` and `bottleneck` versions are below pandas' declared recommendations.
+- The patch is local to the isolated worktree, not deployed. The inspected live PIDs are absent now; no PID action was taken. The exact reason the process tree exited remains unproven.
