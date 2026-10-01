@@ -97,7 +97,38 @@ def _resolve_db_epochs(db_path: Path) -> tuple[Optional[float], Optional[float],
 
 
 def _recent_distinct_tokens(db_path: Path, now_ts: float, window_sec: float) -> int:
-    return 0
+    if not db_path.exists():
+        return 0
+    try:
+        cutoff = float(now_ts) - max(0.0, float(window_sec))
+    except Exception:
+        return 0
+    try:
+        conn = sqlite3.connect(str(db_path))
+    except Exception:
+        return 0
+    try:
+        if not _table_exists(conn, "ticks"):
+            return 0
+        row = conn.execute(
+            """
+            SELECT COUNT(DISTINCT instrument_token)
+            FROM ticks
+            WHERE timestamp_epoch IS NOT NULL
+              AND timestamp_epoch >= ?
+              AND timestamp_epoch <= ?
+              AND instrument_token IS NOT NULL
+            """,
+            (cutoff, float(now_ts)),
+        ).fetchone()
+        return max(0, int((row or [0])[0] or 0))
+    except Exception:
+        return 0
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def _latest_depth_epoch_from_store() -> Optional[float]:
