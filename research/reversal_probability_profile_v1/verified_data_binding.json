@@ -1,0 +1,49 @@
+{
+  "binding_id": "RPP_NIFTY_VERIFIED_INPUT_BINDING_V1",
+  "status": "FAIL_CLOSED_EXACT_SHA_ONLY",
+  "instrument": "NIFTY",
+  "frequency": "1m",
+  "timezone": "Asia/Kolkata",
+  "accepted_inputs": [
+    {
+      "authority_id": "UPSTOX_NIFTY_SPOT_REPAIRED_V1",
+      "preferred_path": "/Users/madhuram/tradebot/data/research/upstox_nifty_spot_raw/normalized/NIFTY_1MIN_20240726_20260728_REPAIRED_V1.parquet",
+      "repo_relative_path": "data/research/upstox_nifty_spot_raw/normalized/NIFTY_1MIN_20240726_20260728_REPAIRED_V1.parquet",
+      "sha256": "0d615f7e490735f0c065338f6fc7cd15c4d3997a2a22f162573c9c5eefaf6d1e",
+      "reported_rows": 185751,
+      "reported_sessions": 497,
+      "reported_first_timestamp": "2024-07-26 09:15:00+05:30",
+      "reported_last_timestamp": "2026-07-28 15:29:00+05:30",
+      "use_columns": ["timestamp", "open", "high", "low", "close"]
+    },
+    {
+      "authority_id": "NIFTY_SPOT_FUTURES_ALIGNED_V1",
+      "preferred_path": "/Users/madhuram/tradebot/data/research/nifty_futures_alignment_v1/NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet",
+      "repo_relative_path": "data/research/nifty_futures_alignment_v1/NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet",
+      "sha256": "2311981231d3fb847a216c9165ef73c3e7b788ab354d6de493ab1a5edb32e7a9",
+      "reported_rows": 185681,
+      "reported_sessions": 497,
+      "reported_first_timestamp": "2024-07-26 09:15:00+05:30",
+      "reported_last_timestamp": "2026-07-28 15:29:00+05:30",
+      "use_columns": ["timestamp", "spot_open", "spot_high", "spot_low", "spot_close"]
+    }
+  ],
+  "evidence": {
+    "spot_repair_report_basis": "historical independent QA artifacts in the TradeBot research corpus",
+    "aligned_panel_report": "research/evidence/futures_alignment_v1/NIFTY_FUTURES_ALIGNMENT_V1_REPORT.md",
+    "aligned_panel_verdict": "NIFTY_FUTURES_ALIGNMENT_V1_PASS_WITH_UNKNOWNS",
+    "selection_discrepancies": 0,
+    "roll_transitions_verified": 20
+  },
+  "rules": {
+    "exact_sha_required": true,
+    "same_row_count_without_sha_is_not_authority": true,
+    "similar_filename_is_not_authority": true,
+    "reconstructed_equivalent_is_not_automatically_authority": true,
+    "holdout_access_authorized": false,
+    "broker_write_authority": false,
+    "order_authority": false,
+    "paper_authorized": false,
+    "live_authorized": false
+  }
+}
