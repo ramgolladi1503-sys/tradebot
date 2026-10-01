@@ -119,6 +119,8 @@ def build_subscription_truth_contract(payload: Mapping[str, Any] | None) -> Subs
         blockers.append(state)
     if intended_tokens_count > 0 and subscribed_tokens_count <= 0:
         blockers.append("NO_SUBSCRIBED_TOKENS")
+    if intended_tokens_count > 0 and subscribed_tokens_count > 0 and subscribed_tokens_count != intended_tokens_count:
+        blockers.append("SUBSCRIPTION_COUNT_MISMATCH")
     if intended_tokens_count > 0 and subscribed_option_tokens_count <= 0:
         blockers.append("NO_SUBSCRIBED_OPTION_TOKENS")
     if missing_option_tokens_count > 0:
@@ -130,7 +132,7 @@ def build_subscription_truth_contract(payload: Mapping[str, Any] | None) -> Subs
 
     verified_complete = (
         intended_tokens_count > 0
-        and subscribed_tokens_count >= intended_tokens_count
+        and subscribed_tokens_count == intended_tokens_count
         and subscribed_option_tokens_count > 0
         and not missing_option_tokens_count
         and not missing_option_symbols
