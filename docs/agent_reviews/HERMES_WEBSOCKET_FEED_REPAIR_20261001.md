@@ -124,3 +124,94 @@ acceptance_proof:
 - Focused validation passed: 124 tests across WebSocket stability, observation callbacks, feed health truth, and canonical feed truth; an additional 17 direct subscription-token tests passed. `git diff --check` passed.
 - Two environment warnings remain: installed `numexpr` and `bottleneck` versions are below pandas' declared recommendations.
 - The patch is local to the isolated worktree, not deployed. The inspected live PIDs are absent now; no PID action was taken. The exact reason the process tree exited remains unproven.
+
+## Follow-up scope addendum — symbol safety and LIVE readiness
+
+```yaml
+source_agent: hermes
+action: DEFINE_CONTRACT
+title: Require explicit producer authority for symbol-scoped health and complete LIVE preflight coverage
+scope: Preserve explicit transport/global-health authority at symbol execution safety and prevent partial per-symbol option coverage from passing LIVE preflight
+requested_paths:
+  - core/symbol_execution_safety.py
+  - core/pre_live_readiness_gate.py
+  - tests/test_edge45_symbol_execution_safety.py
+  - tests/test_kite_depth_ws_observation_on_ticks.py
+  - tests/test_pre_live_readiness_gate.py
+  - docs/agent_reviews/HERMES_WEBSOCKET_FEED_REPAIR_20261001.md
+allowed_paths:
+  - core/symbol_execution_safety.py
+  - core/pre_live_readiness_gate.py
+  - tests/test_edge45_symbol_execution_safety.py
+  - tests/test_kite_depth_ws_observation_on_ticks.py
+  - tests/test_pre_live_readiness_gate.py
+  - docs/agent_reviews/HERMES_WEBSOCKET_FEED_REPAIR_20261001.md
+forbidden_paths:
+  - config/
+  - credentials.py
+  - environment files and access tokens
+  - runtime/live*
+  - core/execution*
+  - core/broker*
+  - core/order*
+  - core/risk*
+  - strategies/
+  - any running process or production data mutation
+expected_tests:
+  - tests/test_edge45_symbol_execution_safety.py
+  - tests/test_kite_depth_ws_observation_on_ticks.py
+  - tests/test_pre_live_readiness_gate.py
+acceptance_proof:
+  - Aggregate feed degradation can be scoped to a healthy candidate symbol only when the producer declares symbol-aggregate scope, explicitly declares no global block, and supplies connected transport and complete per-symbol health evidence.
+  - Symbol maps alone cannot establish that global transport or recovery state is clear.
+  - LIVE preflight blocks positive aggregate coverage when any configured symbol is absent, degraded, or below its declared option minimum.
+  - Option-verification tests isolate module-level minimum maps without changing production verification behavior.
+  - No subscription budget, configured universe, auth, risk, broker/order, or live process behavior is changed.
+```
+
+## Agent Work Contract
+
+The task is read-only feed diagnosis and offline source repair for option-token attribution, symbol-scoped feed truth, and readiness reporting. All modifications are limited to the code and tests in the two Hermes contracts above plus this review evidence. The work contains no broker calls, order actions, credential access, runtime configuration changes, or live process operations.
+
+## Scope Guard
+
+The code preserves existing option minimums and freshness checks. It does not alter the 150-token budget, reduce the symbol list, enable LIVE execution, or claim that depth persistence can sustain a wider subscription universe. The readiness fix reports insufficient coverage as a blocker.
+
+## High-Risk Path Review
+
+`core/kite_depth_ws.py` and `core/symbol_execution_safety.py` affect WebSocket/feed eligibility. The launch-plan path validates authoritative production-resolution metadata and clears invalid maps. The symbol-safety path accepts scoped aggregate degradation only with an explicit producer scope, `global_feed_blocked=false`, connected WebSocket evidence, and complete selected-symbol evidence. No threshold, credential, execution, broker, or order path was changed. Synthetic tests cover incomplete and valid scope evidence.
+
+## Grill Me Review
+
+- Could readiness report PASS when one configured symbol is absent? The new expected-symbol comparison blocks that case.
+- Could a healthy symbol bypass an explicit transport/recovery block because another symbol is degraded? No; global block and disconnected or unknown transport remain hard blockers.
+- Does this make all candidates eligible? No. It makes preflight truthful; tick freshness, depth persistence, strategy qualification, and other downstream gates remain authoritative.
+- Does the queue-full evidence prove a single lock owner or a specific throughput bottleneck? No. Queue saturation remains a separately investigated operational issue.
+
+## Hermes Review
+
+The Stage 1 contracts above define authoritative producer scope, fail-closed missing coverage, existing minimum preservation, allowed paths, forbidden paths, and observable acceptance criteria. The implementation follows those contracts and retains negative outcomes when authority is missing.
+
+## GSD Review
+
+The Stage 2 changes implement the two scoped contracts, add behavior tests for both positive and negative feed-scope cases, add partial/missing/zero-option readiness cases, and isolate the required-option verification test from module-level state left by unrelated tests. No safety gate was weakened to satisfy tests.
+
+## QA / Safety Review
+
+The focused feed/readiness suite passed 95 tests before CI review. CI then found two additional issues: a legacy symbol-safety test omitted the newly required explicit global-clear/scope evidence, and an option-verification test depended on residual module-level minimum state. The tests and fixture authority have been corrected; the focused checks are being rerun. The first CI run also reported frozen-main baseline drift in unrelated files already present between the repository's pinned PR818 baseline and current `main`; this PR does not change the freeze gate or baseline.
+
+## Acceptance Proof
+
+Acceptance requires the focused feed, symbol-safety, option-verification, and readiness tests to pass; the agent-review evidence validator to pass against the exact PR head; and CI to retain all existing hard feed, freshness, recovery, and LIVE execution boundaries. The local 95-test result covers the original targeted suite; updated validation results will be recorded in the PR after fixes.
+
+## Runtime Proof Required After Merge
+
+Before claiming live readiness after a later operator-controlled rollout, capture exact deployed SHA, authenticated WebSocket state, connected transport, configured and verified per-symbol token counts, per-symbol tick/depth freshness, recovery proof state, depth-persistence queue/rejection metrics, candidate qualification/ranking outputs, and all blocker reasons. Keep the run read-only and do not infer healthy candidate flow from preflight alone.
+
+## What This PR Does Not Prove
+
+This PR does not prove the persistence queue can keep up with the full configured universe, identify the cause of every queue rejection or process exit, guarantee that market data is fresh, establish strategy edge, guarantee candidate availability, certify auth for a future session, or authorize live deployment or order execution.
+
+## Human Approval
+
+The user authorized investigation, fixes, and PR creation. No merge, live rollout, process restart, token-budget change, universe change, or order execution is authorized by this evidence. Those actions remain subject to explicit operator control and the repository's normal review gates.
