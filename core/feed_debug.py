@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import json
+import math
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
@@ -96,20 +97,26 @@ def _resolve_db_epochs(db_path: Path) -> tuple[Optional[float], Optional[float],
     return tick_epoch, depth_epoch, ticks_table_exists, ticks_table_auto_created
 
 
-def _recent_distinct_tokens(db_path: Path, now_ts: float, window_sec: float) -> int:
+def _recent_distinct_token_evidence(
+    db_path: Path, now_ts: float, window_sec: float
+) -> tuple[int, bool, str]:
     if not db_path.exists():
-        return 0
+        return 0, False, "database_missing"
     try:
-        cutoff = float(now_ts) - max(0.0, float(window_sec))
-    except Exception:
-        return 0
+        now_value = float(now_ts)
+        window_value = float(window_sec)
+        if not math.isfinite(now_value) or not math.isfinite(window_value):
+            return 0, False, "invalid_time_window"
+        cutoff = now_value - max(0.0, window_value)
+    except (TypeError, ValueError, OverflowError):
+        return 0, False, "invalid_time_window"
     try:
         conn = sqlite3.connect(str(db_path))
     except Exception:
-        return 0
+        return 0, False, "database_unavailable"
     try:
         if not _table_exists(conn, "ticks"):
-            return 0
+            return 0, False, "ticks_table_missing"
         row = conn.execute(
             """
             SELECT COUNT(DISTINCT instrument_token)
@@ -119,16 +126,21 @@ def _recent_distinct_tokens(db_path: Path, now_ts: float, window_sec: float) -> 
               AND timestamp_epoch <= ?
               AND instrument_token IS NOT NULL
             """,
-            (cutoff, float(now_ts)),
+            (cutoff, now_value),
         ).fetchone()
-        return max(0, int((row or [0])[0] or 0))
+        return max(0, int((row or [0])[0] or 0)), True, "ok"
     except Exception:
-        return 0
+        return 0, False, "query_failed"
     finally:
         try:
             conn.close()
         except Exception:
             pass
+
+
+def _recent_distinct_tokens(db_path: Path, now_ts: float, window_sec: float) -> int:
+    """Compatibility wrapper for callers that need only the fail-closed count."""
+    return _recent_distinct_token_evidence(db_path, now_ts, window_sec)[0]
 
 
 def _latest_depth_epoch_from_store() -> Optional[float]:
@@ -251,10 +263,12 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
 
     db_tick_epoch, db_depth_epoch, ticks_table_exists, ticks_table_auto_created = _resolve_db_epochs(db_path)
     db_tick_age = compute_age_sec(db_tick_epoch, now_ts) if db_tick_epoch else None
-    distinct_tokens_recent = _recent_distinct_tokens(
-        db_path=db_path,
-        now_ts=now_ts,
-        window_sec=float(getattr(cfg, "FEED_DB_TOKEN_WINDOW_SEC", 10.0)),
+    distinct_tokens_recent, observed_tokens_available, observed_tokens_status = (
+        _recent_distinct_token_evidence(
+            db_path=db_path,
+            now_ts=now_ts,
+            window_sec=float(getattr(cfg, "FEED_DB_TOKEN_WINDOW_SEC", 10.0)),
+        )
     )
 
     runtime_row = read_latest_runtime_snapshot() or {}
@@ -347,25 +361,36 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
         ws_connected = local_ws
         ws_connected_source = "local_process"
 
-    if runtime_fresh and runtime_sub_count > 0:
+    if runtime_fresh:
+        # A fresh runtime row is authoritative even when it reports zero.
+        # Recent ticks prove observed activity, not a subscription request or
+        # successful subscription acknowledgement.
         subs_count = runtime_sub_count
         subs_sample = runtime_sub_sample[:10]
         subs_by_symbol = runtime_sub_by_symbol
         missing_option_count = runtime_missing_option_count
         missing_option_by_symbol = runtime_missing_option_by_symbol
-    elif snapshot_sub_count > 0:
+        subscribed_tokens_source = "feed_runtime"
+        intended_tokens_count = runtime_intended_count
+        intended_tokens_source = "feed_runtime"
+    elif isinstance(snapshot_payload, dict):
         subs_count = snapshot_sub_count
         subs_sample = snapshot_sub_sample[:10]
         subs_by_symbol = snapshot_sub_by_symbol
         missing_option_count = snapshot_missing_option_count
         missing_option_by_symbol = snapshot_missing_option_by_symbol
+        subscribed_tokens_source = "snapshot_file"
+        intended_tokens_count = snapshot_intended_count
+        intended_tokens_source = "snapshot_file"
     else:
-        subs_count = int(distinct_tokens_recent)
+        subs_count = 0
         subs_sample = []
         subs_by_symbol = {}
         missing_option_count = 0
         missing_option_by_symbol = {}
-    intended_tokens_count = runtime_intended_count or snapshot_intended_count or int(subs_count)
+        subscribed_tokens_source = "unavailable"
+        intended_tokens_count = 0
+        intended_tokens_source = "unavailable"
     runtime_state_final = runtime_state or snapshot_state or None
     runtime_error_final = runtime_error or snapshot_error or None
     reconnect_blocked_reason_final = runtime_reconnect_blocked_reason or snapshot_reconnect_blocked_reason or None
@@ -414,7 +439,9 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
         "ws_connected": ws_connected,
         "ws_connected_source": ws_connected_source,
         "subscribed_tokens_count": subs_count,
+        "subscribed_tokens_source": subscribed_tokens_source,
         "intended_tokens_count": intended_tokens_count,
+        "intended_tokens_source": intended_tokens_source,
         "subscribed_tokens_sample": subs_sample,
         "subscribed_tokens_count_by_symbol": subs_by_symbol,
         "missing_option_tokens_count": int(missing_option_count),
@@ -473,6 +500,9 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
         "last_subscription_generation_id": snapshot_payload.get("last_subscription_generation_id") if isinstance(snapshot_payload, dict) else None,
         "ws_connected_inferred": inferred_connected,
         "distinct_tokens_recent": distinct_tokens_recent,
+        "observed_tokens_recent_count": distinct_tokens_recent,
+        "observed_tokens_recent_available": observed_tokens_available,
+        "observed_tokens_recent_status": observed_tokens_status,
         "last_tick_epoch_memory_local": mem_tick_epoch,
         "last_tick_age_sec_local": mem_tick_age,
     }

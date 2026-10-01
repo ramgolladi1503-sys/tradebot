@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from config import config as cfg
@@ -54,5 +55,23 @@ def test_feed_debug_counts_recent_distinct_tokens(tmp_path, monkeypatch):
     finally:
         conn.close()
 
+    (isolated_logs / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "ts_epoch": 1000.0,
+                "ws_connected": True,
+                "subscribed_tokens_count": 0,
+                "intended_tokens_count": 123,
+            }
+        ),
+        encoding="utf-8",
+    )
     out = get_feed_debug(now_epoch=1000.0)
     assert out["distinct_tokens_recent"] == 2
+    assert out["observed_tokens_recent_count"] == 2
+    assert out["observed_tokens_recent_available"] is True
+    assert out["observed_tokens_recent_status"] == "ok"
+    assert out["subscribed_tokens_count"] == 0
+    assert out["subscribed_tokens_source"] == "snapshot_file"
+    assert out["intended_tokens_count"] == 123
+    assert out["intended_tokens_source"] == "snapshot_file"
