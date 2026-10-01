@@ -6095,25 +6095,11 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING, _TOKEN_TO_SYMBOL, _LAST_ATM_BY_SYMBOL
     global _LAST_DESIRED_TOKENS
     global _LAST_OPTION_COUNTS_BY_SYMBOL, _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL
-    symbols = list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))
-    # The live MEG contract covers the authoritative constituent universe, not
-    # only the three index symbols used by the general-purpose feed.  Include
-    # those constituents before resolving options so snapshot completeness is
-    # achievable without weakening any freshness or coverage gate.
-    if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
-        try:
-            from core.market_event_graph_live_observation_registry import load_observation_registry
-
-            live_registry = load_observation_registry(force=True)
-            if live_registry is not None:
-                symbols = list(dict.fromkeys(
-                    [str(symbol).upper() for symbol in symbols]
-                    + [str(symbol).upper() for symbol in live_registry.constituent_symbols]
-                ))
-        except Exception:
-            # The authoritative registry is validated again below; a failed
-            # lookup must not create an alternate or synthetic universe.
-            pass
+    # Production option resolution is intentionally restricted to the caller's
+    # configured index symbols (NIFTY/BANKNIFTY/SENSEX).  NIFTY50 constituents
+    # belong to the separate cash observation universe and are merged later as
+    # exact instrument tokens; they must never enter option-chain resolution.
+    symbols = [str(symbol).upper() for symbol in list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))]
     tokens: list[int] = []
     resolution: list[dict] = []
     underlying_tokens: list[int] = []
