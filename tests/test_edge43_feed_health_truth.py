@@ -56,6 +56,7 @@ def test_unrelated_aggregate_degradation_does_not_veto_requested_symbols():
         _payload(
             feed_ok=False,
             feed_ok_scope="symbol_aggregate",
+            global_feed_blocked=False,
             option_feed_block_reason_by_symbol={"NIFTY": "OK", "TCS": "STALE"},
             option_last_tick_age_by_symbol={"NIFTY": 0.5, "TCS": 900.0},
         ),
@@ -66,6 +67,36 @@ def test_unrelated_aggregate_degradation_does_not_veto_requested_symbols():
     assert decision.symbols[0].feed_ok is True
     assert decision.context["aggregate_feed_ok"] is False
     assert decision.context["monitored_degraded_symbols"] == ["TCS"]
+
+
+def test_unscoped_false_aggregate_remains_global_blocker():
+    decision = classify_feed_health_truth(
+        _payload(feed_ok=False),
+        symbols=("NIFTY",),
+    )
+
+    assert decision.feed_ok is False
+    assert GLOBAL_FEED_UNHEALTHY_REASON in decision.reasons
+
+
+def test_symbol_scope_requires_explicit_global_clear_and_complete_evidence():
+    base = {
+        "feed_ok": False,
+        "feed_ok_scope": "symbol_aggregate",
+        "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+        "option_last_tick_age_by_symbol": {"NIFTY": 0.5},
+    }
+    for overrides in (
+        {"global_feed_blocked": None},
+        {"global_feed_blocked": False, "option_last_tick_age_by_symbol": {}},
+        {"global_feed_blocked": True},
+    ):
+        decision = classify_feed_health_truth(
+            _payload(**{**base, **overrides}),
+            symbols=("NIFTY",),
+        )
+        assert decision.feed_ok is False
+        assert GLOBAL_FEED_UNHEALTHY_REASON in decision.reasons
 
 
 def test_websocket_disconnected_blocks_feed_truth():
@@ -167,6 +198,7 @@ def test_unrelated_degraded_domain_is_visible_without_blocking_required_index_do
         _payload(
             feed_ok=False,
             feed_ok_scope="symbol_aggregate",
+            global_feed_blocked=False,
             domain_health_by_domain=_healthy_domains(
                 STOCK_SPOT={"state": "DEGRADED"},
                 STOCK_OPTIONS={"state": "DEGRADED"},
