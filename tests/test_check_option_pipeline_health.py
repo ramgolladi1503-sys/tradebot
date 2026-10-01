@@ -48,3 +48,47 @@ def test_strict_fails_when_resolution_fails_even_with_runtime_tokens(monkeypatch
     monkeypatch.setattr("sys.argv", ["check_option_pipeline_health.py", "--strict"])
     assert health_script.main() == 1
 
+
+
+def test_live_option_evidence_does_not_treat_123_token_union_as_options():
+    count, source = health_script._live_option_token_evidence(
+        {
+            "subscribed_tokens_count": 123,
+            "intended_tokens_count": 123,
+            "distinct_tokens_recent": 123,
+            "subscribed_option_tokens_count": 0,
+            "option_tokens_subscribed_count_by_symbol": {},
+        },
+        resolved_option_tokens_count=0,
+    )
+    assert count == 0
+    assert source == "unverified"
+
+
+def test_live_option_evidence_prefers_runtime_option_counts_by_symbol():
+    count, source = health_script._live_option_token_evidence(
+        {
+            "subscribed_tokens_count": 123,
+            "subscribed_option_tokens_count": 70,
+            "option_tokens_subscribed_count_by_symbol": {
+                "NIFTY": 26,
+                "BANKNIFTY": 26,
+                "SENSEX": 18,
+            },
+        },
+        resolved_option_tokens_count=72,
+    )
+    assert count == 70
+    assert source == "runtime_option_counts_by_symbol"
+
+
+def test_live_option_evidence_uses_exact_runtime_option_count_before_resolution():
+    count, source = health_script._live_option_token_evidence(
+        {
+            "subscribed_option_tokens_count": 68,
+            "option_tokens_subscribed_count_by_symbol": {},
+        },
+        resolved_option_tokens_count=72,
+    )
+    assert count == 68
+    assert source == "runtime_option_subscription_count"
