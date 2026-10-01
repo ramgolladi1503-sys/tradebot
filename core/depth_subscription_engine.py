@@ -356,7 +356,18 @@ def _resolve_known_tokens(ws: Any) -> set[int]:
 def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None = None) -> tuple[list[int], list[dict[str, Any]]]:
     ws = _ws_module()
     conf = _cfg(ws)
-    symbols_l = [str(s).upper() for s in list(symbols or list(getattr(conf, "SYMBOLS", []) or []))]
+    requested_symbols_l = [str(s).upper() for s in list(symbols or list(getattr(conf, "SYMBOLS", []) or []))]
+    symbols_l = list(requested_symbols_l)
+    if bool(getattr(conf, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
+        # MEG/CAS observation requires NIFTY + its 50 cash constituents, but those
+        # constituent symbols must never become option-resolution inputs.  Keep
+        # the production option universe restricted to the three index symbols;
+        # the 51 cash observation tokens are merged separately below.
+        index_symbols = {
+            str(symbol).upper()
+            for symbol in getattr(ws, "_INDEX_SYMBOLS", {"NIFTY", "BANKNIFTY", "SENSEX"})
+        }
+        symbols_l = [symbol for symbol in requested_symbols_l if symbol in index_symbols]
     if max_tokens is None:
         max_tokens = _cfg_int(conf, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)
     around_default = _cfg_int(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6)
