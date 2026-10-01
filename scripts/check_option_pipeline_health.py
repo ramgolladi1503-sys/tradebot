@@ -126,6 +126,40 @@ def _build_synthetic_lotto_candidates(symbol: str = "NIFTY") -> int:
             setattr(cfg, key, value)
 
 
+def _live_option_token_evidence(
+    feed_debug: dict[str, Any], resolved_option_tokens_count: int
+) -> tuple[int, str]:
+    """Return live option-token evidence without treating cash observations as options.
+
+    The governed feed may include ~50 NIFTY constituent cash tokens in addition
+    to index underlyings and option tokens. Aggregate subscription counts cannot
+    therefore be converted into option counts by subtracting the number of
+    configured symbols. Prefer explicit runtime option counts, then fall back to
+    resolver evidence; otherwise fail closed as unverified.
+    """
+    by_symbol = feed_debug.get("option_tokens_subscribed_count_by_symbol") or {}
+    if isinstance(by_symbol, dict) and by_symbol:
+        total = 0
+        for value in by_symbol.values():
+            try:
+                total += max(0, int(value or 0))
+            except (TypeError, ValueError):
+                continue
+        return int(total), "runtime_option_counts_by_symbol"
+
+    try:
+        exact_runtime_count = int(feed_debug.get("subscribed_option_tokens_count") or 0)
+    except (TypeError, ValueError):
+        exact_runtime_count = 0
+    if exact_runtime_count > 0:
+        return exact_runtime_count, "runtime_option_subscription_count"
+
+    if int(resolved_option_tokens_count) > 0:
+        return int(resolved_option_tokens_count), "subscription_resolution"
+
+    return 0, "unverified"
+
+
 def _derivative_cache_stats() -> dict[str, int]:
     cache_path = Path(data_root()) / "kite_instruments.json"
     if not cache_path.exists():
@@ -241,23 +275,9 @@ def main() -> int:
             if isinstance(row, dict)
         )
     )
-    live_option_tokens_count = int(resolved_option_tokens_count)
-    live_option_tokens_source = "subscription_resolution"
-    if live_option_tokens_count <= 0:
-        recent_tokens = int(feed_debug.get("distinct_tokens_recent") or 0)
-        inferred_recent_option_tokens = max(0, recent_tokens - len(symbols))
-        if inferred_recent_option_tokens > 0:
-            live_option_tokens_count = inferred_recent_option_tokens
-            live_option_tokens_source = "recent_tick_activity"
-    if live_option_tokens_count <= 0:
-        subscribed_tokens_count = int(feed_debug.get("subscribed_tokens_count") or 0)
-        intended_tokens_count = int(feed_debug.get("intended_tokens_count") or 0)
-        inferred_runtime_option_tokens = max(
-            0, max(subscribed_tokens_count, intended_tokens_count) - len(symbols)
-        )
-        if inferred_runtime_option_tokens > 0:
-            live_option_tokens_count = inferred_runtime_option_tokens
-            live_option_tokens_source = "runtime_subscription_counts"
+    live_option_tokens_count, live_option_tokens_source = _live_option_token_evidence(
+        feed_debug, resolved_option_tokens_count
+    )
 
     ws_connected = feed_debug.get("ws_connected")
     max_tick_age = feed_debug.get("last_db_tick_age_sec")

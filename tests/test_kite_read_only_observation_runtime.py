@@ -329,7 +329,7 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     monkeypatch.setattr(feed, "get_kite_ticker", lambda **_: fake)
     monkeypatch.setattr(feed, "kite_client", FakeClient())
     monkeypatch.setattr(feed, "get_kite_auth_health", lambda **_: dict(auth_payload))
-    monkeypatch.setattr(feed, "_log_ws", lambda event, payload=None: feed_events.append((event, payload or {})))
+    monkeypatch.setattr(feed, "_log_ws", lambda event, payload=None, throttle_key=None: feed_events.append((event, payload or {})))
     monkeypatch.setattr(feed, "_persist_runtime_snapshot_row", lambda **_: None)
     monkeypatch.setattr(feed, "_mark_auth_required", lambda *args, **kwargs: None)
     monkeypatch.setattr(cfg, "KITE_API_KEY", "api-key")

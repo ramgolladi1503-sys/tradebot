@@ -76,3 +76,23 @@ def test_refresh_verification_reports_verified_when_counts_and_freshness_match()
     assert contract.truth_state == SUBSCRIPTION_TRUTH_REFRESH_VERIFIED
     assert payload["is_order_action"] is False
     assert payload["broker_api_called"] is False
+
+
+def test_subscription_truth_blocks_oversubscription_count_mismatch():
+    contract = build_subscription_truth_contract(
+        _payload(intended_tokens_count=123, subscribed_tokens_count=124)
+    )
+
+    assert contract.subscription_truth_ok is False
+    assert contract.truth_state == SUBSCRIPTION_TRUTH_BLOCKED
+    assert "SUBSCRIPTION_COUNT_MISMATCH" in contract.blockers
+
+
+def test_subscription_truth_blocks_undersubscription_count_mismatch():
+    contract = build_subscription_truth_contract(
+        _payload(intended_tokens_count=123, subscribed_tokens_count=122)
+    )
+
+    assert contract.subscription_truth_ok is False
+    assert contract.truth_state == SUBSCRIPTION_TRUTH_BLOCKED
+    assert "SUBSCRIPTION_COUNT_MISMATCH" in contract.blockers

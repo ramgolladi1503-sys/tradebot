@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from config import config as cfg
-from core.depth_store import DepthStore
+from core.depth_store import DepthStore, _retention_prune_allowed
 from core.trade_store import prune_depth_snapshots, _conn, init_db
 
 
@@ -376,3 +376,10 @@ def test_855_token_sampled_depth_burst_persists_to_temporary_sqlite_sink(tmp_pat
     assert state["complete"] is True
     assert state["accounting_invariant_ok"] is True
     assert state["admission_accounting_invariant_ok"] is True
+
+
+def test_depth_retention_prune_requires_fully_idle_persistence():
+    assert _retention_prune_allowed(queue_depth=0, in_flight=0) is True
+    assert _retention_prune_allowed(queue_depth=1, in_flight=0) is False
+    assert _retention_prune_allowed(queue_depth=0, in_flight=1) is False
+    assert _retention_prune_allowed(queue_depth=1, in_flight=1) is False
