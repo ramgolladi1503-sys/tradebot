@@ -118,3 +118,34 @@ def test_depth_store_persist_loop_lock_skip_records_rejections_fail_closed(tmp_p
     rejections = [json.loads(line) for line in rejection_file.read_text().splitlines() if line.strip()]
     assert len(rejections) == 5
     assert all(r["reason_code"] == "LOCK_SKIPPED" for r in rejections)
+
+
+def test_depth_store_high_volume_burst_drains_without_rejection(tmp_path, monkeypatch):
+    """A high-volume multi-token burst (e.g. 500 distinct tokens at market open) is absorbed and drained without queue rejection."""
+    db_file = tmp_path / "test_burst.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_file), raising=False)
+    monkeypatch.setenv("TRADE_DB_PATH", str(db_file))
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 250, raising=False)
+
+    store = DepthStore()
+    sample_depth = {
+        "buy": [{"price": 100.0, "quantity": 10, "orders": 1}],
+        "sell": [{"price": 101.0, "quantity": 10, "orders": 1}],
+    }
+
+    burst_count = 500
+    for i in range(burst_count):
+        store.update(10000 + i, sample_depth)
+
+    state = store.shutdown_persistence(deadline_seconds=10.0)
+    assert state["complete"] is True
+    assert state["queue_rejected"] == 0
+    assert state["pre_enqueue_rejected"] == 0
+    assert state["rejected"] == 0
+    assert state["failures"] == 0
+    assert state["enqueued"] == burst_count
+    assert state["persisted"] == burst_count
+    assert state["unaccounted_remainder"] == 0
+    assert state["accounting_invariant_ok"] is True
+

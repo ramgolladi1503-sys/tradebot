@@ -29,7 +29,7 @@ class DepthStore:
         self._last_persist_epoch_by_token = defaultdict(float)
         queue_maxsize = max(
             1,
-            int(getattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 32768) or 32768),
+            int(getattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 65536) or 65536),
         )
         self._persist_queue = queue.Queue(maxsize=queue_maxsize)
         self._persist_admission_lock = threading.Lock()
