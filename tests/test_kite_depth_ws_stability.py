@@ -2,7 +2,9 @@ from pathlib import Path
 import importlib
 from datetime import datetime, timezone
 import sqlite3
+import time
 from config import config as cfg
+from config import feed_runtime_reliability as reliability_cfg
 import core.auth as auth_module
 from core.auth import reset_kite_runtime_credentials_guard
 import json
@@ -256,6 +258,115 @@ def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
     assert callbacks and callbacks[0][0] == 1
     assert callbacks[0][1][0]["_audit_source_row_index"] == 7
 
+
+def test_on_ticks_855_row_batches_preserve_tick_depth_observation_when_snapshot_coalesces(monkeypatch):
+    from core.feed import runtime_store
+
+    _patch_common(monkeypatch)
+    runtime_store.reset_runtime_persistence_for_tests()
+    monkeypatch.setattr(reliability_cfg, "FEED_RUNTIME_SNAPSHOT_INTERVAL_SEC", 60.0, raising=False)
+    monkeypatch.setattr(ws, "record_fd_trace", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "callback", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "normalized", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "published", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "publication_failed", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "inc", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "append_feed_forensic_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "record_tick", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "record_depth", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "record_tick_epoch", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "write_queue_depth", lambda: 0)
+    monkeypatch.setattr(ws, "write_enqueue_count", lambda: 0)
+    monkeypatch.setattr(ws, "write_flush_count", lambda: 0)
+    monkeypatch.setattr(ws, "_should_throttle_ws_event", lambda *args, **kwargs: True)
+    monkeypatch.setattr(ws, "_extract_tick_epoch", lambda tick: tick.get("exchange_timestamp"))
+    monkeypatch.setattr(ws, "_normalized_tick_epoch", lambda *args, **kwargs: 1234.5)
+    monkeypatch.setattr(ws, "canonicalize_kite_depth", lambda depth: depth)
+    monkeypatch.setattr(ws, "_depth_has_bid_ask", lambda depth: bool(depth))
+    monkeypatch.setattr(ws, "_best_price", lambda rows: None)
+    monkeypatch.setattr(ws, "_update_symbol_freshness", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_update_index_quote_cache", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_is_index_symbol", lambda symbol: False)
+    monkeypatch.setattr(ws, "_is_underlying_token", lambda token: True)
+    monkeypatch.setattr(ws, "_log_tick_ingest_error", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_reset_stale_on_fresh_ws_tick", lambda **kwargs: None)
+    monkeypatch.setattr(ws, "_reconnect_recovery_blocked_active", lambda: False)
+    monkeypatch.setattr(ws, "_tick_option_feed_verification", lambda **kwargs: None)
+    monkeypatch.setattr(ws, "_attempt_causal_ws1006_recovery_clear", lambda **kwargs: None)
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: 1234.5)
+    monkeypatch.setattr(ws, "_SCHEMA_LOG_TS", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_FEED_ON_TICKS_ROW_SEQ", 0, raising=False)
+    ws._LAST_TOKENS = list(range(1, 856))
+    ws._TOKEN_TO_SYMBOL = {token: f"S{token}" for token in ws._LAST_TOKENS}
+
+    processed_ticks = []
+    processed_depth = []
+    snapshot_collection_calls = []
+    snapshot_publications = []
+    monkeypatch.setattr(
+        ws,
+        "insert_tick",
+        lambda **kwargs: processed_ticks.append(kwargs["token"]) or True,
+    )
+    monkeypatch.setattr(
+        ws.depth_store,
+        "update",
+        lambda token, depth: processed_depth.append(token) or True,
+    )
+    monkeypatch.setattr(
+        ws,
+        "_subscribed_tokens_count_by_symbol",
+        lambda tokens: snapshot_collection_calls.append(len(tokens)) or {},
+    )
+    monkeypatch.setattr(ws, "_missing_option_tokens_stats", lambda: (0, {}))
+    monkeypatch.setattr(ws, "derive_market_session_policy", lambda **kwargs: type("Policy", (), {"market_state": "MARKET_OPEN"})())
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_latest_db_tick_epoch", lambda: 1234.5)
+    monkeypatch.setattr(ws, "_latest_depth_epoch_from_store", lambda: 1234.5)
+    monkeypatch.setattr(ws, "_option_runtime_state", lambda **kwargs: {
+        "option_count": 0, "option_age_by_symbol": {}, "sample_rows": [],
+        "subscribed_count_by_symbol": {}, "ticks_received_count_by_symbol": {},
+        "last_tick_ts_by_symbol": {}, "feed_block_reason_by_symbol": {},
+        "active_blockers_by_symbol": {},
+    })
+    monkeypatch.setattr(ws, "_restart_verify_overlay_payload", lambda: {})
+    monkeypatch.setattr(ws, "_option_feed_verification_overlay_payload", lambda: {})
+    monkeypatch.setattr(ws, "_runtime_transport_truth_fields", lambda **kwargs: {})
+    monkeypatch.setattr(
+        ws,
+        "_enqueue_runtime_snapshot_with_direct_artifact",
+        lambda payload, direct_artifact_writer: snapshot_publications.append(payload) or True,
+    )
+    batch = [
+        {
+            "instrument_token": token,
+            "last_price": float(token),
+            "exchange_timestamp": 1234.5,
+            "depth": {
+                "buy": [{"price": 100.0, "quantity": 1, "orders": 1}],
+                "sell": [{"price": 101.0, "quantity": 1, "orders": 1}],
+            },
+        }
+        for token in ws._LAST_TOKENS
+    ]
+
+    try:
+        ws.on_ticks(None, batch)
+        ws.on_ticks(None, batch)
+
+        assert len(processed_ticks) == 1710
+        assert len(processed_depth) == 1710
+        assert processed_ticks[:855] == ws._LAST_TOKENS
+        assert processed_ticks[855:] == ws._LAST_TOKENS
+        assert processed_depth == processed_ticks
+        assert snapshot_collection_calls == [855]
+        assert [item["source"] for item in snapshot_publications] == ["on_ticks"]
+        state = runtime_store.runtime_persistence_state()
+        assert state["producer_requested"] == 2
+        assert state["producer_coalesced"] == 1
+    finally:
+        runtime_store.reset_runtime_persistence_for_tests()
+
 def test_on_close_does_not_restart_after_stop(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
@@ -374,7 +485,32 @@ def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
     )
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws._handle_ws1006_recoverable(source="on_error", ws=object(), code=1006, reason="connection was closed uncleanly (peer dropped)")
-    ws._FEED_RECOVERY_COORDINATOR.clear_recovery(source="unit_test", reason="reconnect_verified")
+    now = time.time()
+    ws._FEED_RECOVERY_COORDINATOR.clear_recovery(
+        source="unit_test",
+        reason="reconnect_verified",
+        proof={
+            "disconnect_started_at": now - 3.0,
+            "reconnected_at": now - 2.0,
+            "expected_tokens": ["101"],
+            "actual_tokens": ["101"],
+            "expected_token_count": 1,
+            "actual_resubscribed_token_count": 1,
+            "actual_subscription_evidence": "LOCAL_SUBSCRIBE_AND_MODE_CALL_RETURNED",
+            "required_identity_tokens": ["101"],
+            "last_pre_disconnect_timestamp_by_required_identity": {"101": now - 3.0},
+            "first_post_disconnect_timestamp_by_required_identity": {"101": now - 2.0},
+            "gap_duration_by_identity": {"101": 1.0},
+            "state_rebuild_status": "REBUILT",
+            "health_window_start": now - 2.0,
+            "health_window_end": now,
+            "health_window_status": "HEALTHY",
+            "ws_connected": True,
+            "runtime_state": "RUNNING",
+            "required_feeds_fresh": True,
+            "recovery_verdict": "RECOVERED",
+        },
+    )
     ws._sync_ws1006_recovery_state_from_coordinator()
     ws._handle_ws1006_recoverable(source="on_error", ws=object(), code=1006, reason="connection was closed uncleanly (peer dropped)")
     assert any(event == "FEED_RECOVERY_BLOCKED" for event, _ in events)
@@ -391,6 +527,88 @@ def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
     assert payload["process_restart_required"] is True
     assert payload["reconnect_blocked_reason"] == "recovery_blocked"
     assert payload["restart_suppressed"] is True
+
+
+def test_runtime_ws_recovery_requires_complete_identity_proof_and_healthy_window(monkeypatch):
+    now = {"value": 1002.0}
+    coordinator = FeedRecoveryCoordinator(now_epoch_fn=lambda: now["value"], max_recovery_gap_sec=3.0)
+    coordinator.request_recovery(source="on_close", code=1006, reason="peer dropped")
+    monkeypatch.setattr(ws, "_FEED_RECOVERY_COORDINATOR", coordinator)
+    monkeypatch.setattr(ws, "_ws_connected_state", lambda: True)
+    monkeypatch.setattr(ws, "_reconnect_recovery_blocked_active", lambda: False)
+    monkeypatch.setattr(ws, "_reactor_terminal_restart_block_active", lambda: False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "VERIFYING_RECOVERY")
+    monkeypatch.setattr(ws, "_LAST_RUNTIME_ERROR", "causal_recovery_proof_pending")
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {})
+    monkeypatch.setattr(ws, "_OPTION_FEED_VERIFY_REQUIRED_SYMBOLS", [])
+    monkeypatch.setattr(ws, "_OPTION_FEED_VERIFY_VERIFIED_SYMBOLS", [])
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 202])
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101})
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {101: "NIFTY"})
+    monkeypatch.setattr(ws, "_LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN", {101: 999.0})
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    monkeypatch.setattr(reliability_cfg, "FEED_RECOVERY_HEALTH_WINDOW_SEC", 2.0, raising=False)
+    monkeypatch.setattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5, raising=False)
+    context = ws._new_ws_recovery_proof_context(disconnect_started_at=1000.0)
+    monkeypatch.setattr(ws, "_WS_RECOVERY_PROOF_CONTEXT", context)
+    ws._record_ws_recovery_reconnect(now_epoch=1001.0, actual_tokens=[101, 202])
+    ws._record_ws_recovery_tick_receipt(token=101, receipt_epoch=1001.5)
+
+    assert ws._attempt_causal_ws1006_recovery_clear(now_epoch=1002.0) is False
+    assert coordinator.state.recovery_in_progress is True
+    now["value"] = 1004.0
+    assert ws._attempt_causal_ws1006_recovery_clear(now_epoch=1004.0) is True
+    assert coordinator.state.recovery_in_progress is False
+    assert coordinator.incident_history[-1]["event"] == "RECOVERY_RESOLVED"
+    assert coordinator.incident_history[-1]["proof"]["required_identity_tokens"] == ["101"]
+    assert ws._RUNTIME_STATE == "RUNNING"
+    assert coordinator.incident_history[-1]["broker_api_called"] is False
+
+
+def test_runtime_ws_recovery_does_not_clear_on_subscription_set_mismatch(monkeypatch):
+    now = {"value": 1004.0}
+    coordinator = FeedRecoveryCoordinator(now_epoch_fn=lambda: now["value"], max_recovery_gap_sec=3.0)
+    coordinator.request_recovery(source="on_close", code=1006, reason="peer dropped")
+    monkeypatch.setattr(ws, "_FEED_RECOVERY_COORDINATOR", coordinator)
+    monkeypatch.setattr(ws, "_ws_connected_state", lambda: True)
+    monkeypatch.setattr(ws, "_reconnect_recovery_blocked_active", lambda: False)
+    monkeypatch.setattr(ws, "_reactor_terminal_restart_block_active", lambda: False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "VERIFYING_RECOVERY")
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {})
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 202])
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101})
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {101: "NIFTY"})
+    monkeypatch.setattr(ws, "_LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN", {101: 999.0})
+    context = ws._new_ws_recovery_proof_context(disconnect_started_at=1000.0)
+    monkeypatch.setattr(ws, "_WS_RECOVERY_PROOF_CONTEXT", context)
+    ws._record_ws_recovery_reconnect(now_epoch=1001.0, actual_tokens=[101])
+    ws._record_ws_recovery_tick_receipt(token=101, receipt_epoch=1001.5)
+
+    assert ws._attempt_causal_ws1006_recovery_clear(now_epoch=1004.0) is False
+    assert coordinator.state.recovery_in_progress is True
+    assert not coordinator.incident_history
+
+
+def test_runtime_ws_recovery_records_first_post_reconnect_receipt_per_required_token(monkeypatch):
+    context = {
+        "reconnected_at": 1001.0,
+        "required_identity_tokens": ["101"],
+        "first_post_disconnect_timestamp_by_required_identity": {},
+    }
+    monkeypatch.setattr(ws, "_WS_RECOVERY_PROOF_CONTEXT", context)
+    monkeypatch.setattr(ws, "_LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN", {})
+
+    ws._record_ws_recovery_tick_receipt(token=101, receipt_epoch=1000.9)
+    assert context["first_post_disconnect_timestamp_by_required_identity"] == {}
+    ws._record_ws_recovery_tick_receipt(token=999, receipt_epoch=1001.2)
+    assert context["first_post_disconnect_timestamp_by_required_identity"] == {}
+    ws._record_ws_recovery_tick_receipt(token=101, receipt_epoch=1001.3)
+    ws._record_ws_recovery_tick_receipt(token=101, receipt_epoch=1001.7)
+
+    assert context["first_post_disconnect_timestamp_by_required_identity"] == {"101": 1001.3}
+    assert ws._LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN[101] == 1001.7
 def test_ws1006_main_loop_terminated_routes_to_process_restart_required(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
@@ -1765,6 +1983,99 @@ def test_partial_recovery_stale_critical_stays_degraded(monkeypatch):
     assert ws._RUNTIME_STATE == "DEGRADED_LOCAL"
     assert ws._PARTIAL_RECOVERY_VERIFICATION["critical_feed_fresh"] is False
     assert "critical_feed_stale" in ws._PARTIAL_RECOVERY_VERIFICATION["failure_reasons"]
+
+
+def test_partial_tick_recovery_cannot_clear_restart_required_blocker(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ticker.on_connect(ticker, "mock_response")
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 1, raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102], raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101}, raising=False)
+    monkeypatch.setattr(ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", True, raising=False)
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {"stable_cycles": 0}, raising=False)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: (_ for _ in ()).throw(AssertionError("broker API called")), raising=False)
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
+
+    results = [
+        ws._transition_partial_activity_recovery(
+            now_epoch=float(tick_epoch),
+            current_tokens={101, 102},
+            underlying_tokens={101},
+            last_msg_by_token={101: float(tick_epoch), 102: float(tick_epoch)},
+            index_threshold_sec=5.0,
+            option_threshold_sec=5.0,
+        )
+        for tick_epoch in (100.0, 101.0, 102.0)
+    ]
+    result = results[-1]
+
+    assert [entry["stable_cycles"] for entry in results] == [1, 2, 3]
+    assert result["verified"] is True
+    assert result["local_activity_verified"] is True
+    assert result["recovery_clearance"] == "BLOCKED_CAUSAL_PROOF_REQUIRED"
+    assert ws._RECONNECT_BLOCKED_REASON == "ws1006_process_restart_required"
+    assert ws._REACTOR_NOT_RESTARTABLE_DETECTED is True
+    assert ws._RUNTIME_STATE == "RECOVERY_BLOCKED"
+    final_event_payload = [payload for event, payload in events if event == "FEED_PARTIAL_RECOVERY_VERIFYING"][-1]
+    assert final_event_payload["process_restart_required"] is True
+    assert final_event_payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert final_event_payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert final_event_payload["no_order_action"] is True
+    assert final_event_payload["order_safe"] is True
+    assert final_event_payload["is_order_action"] is False
+    assert final_event_payload["broker_api_called"] is False
+    assert final_event_payload["allowed_for_live_execution"] is False
+
+
+def test_zero_stale_local_recovery_branch_cannot_report_live_with_restart_blocker(monkeypatch, tmp_path):
+    _patch_common(monkeypatch)
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "DEGRADED_LOCAL", raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", True, raising=False)
+    broker_calls = []
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: broker_calls.append(True), raising=False)
+
+    result = ws._maybe_trigger_silent_reconnect(
+        now_epoch=100.0,
+        current_tokens={101, 102},
+        underlying_tokens={101},
+        last_global_msg_epoch=100.0,
+        last_msg_by_token={101: 100.0, 102: 100.0},
+        state={},
+        index_threshold_sec=5.0,
+        option_threshold_sec=5.0,
+        confirm_needed=1,
+        backoff_min_sec=1.0,
+        backoff_max_sec=1.0,
+        force_full_restart_after_sec=None,
+        restart_cb=lambda **kwargs: (_ for _ in ()).throw(AssertionError("restart callback called")),
+    )
+    ws._persist_runtime_snapshot_row(
+        ws_connected=True,
+        source="unit_test_zero_stale_local_ticks",
+        now_epoch=100.0,
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+    payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert result is False
+    assert ws._RECONNECT_BLOCKED_REASON == "ws1006_process_restart_required"
+    assert ws._REACTOR_NOT_RESTARTABLE_DETECTED is True
+    assert ws._RUNTIME_STATE == "RECOVERY_BLOCKED"
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["process_restart_required"] is True
+    assert broker_calls == []
 
 def test_f_duplicate_and_out_of_order_ticks(monkeypatch):
     _patch_common(monkeypatch)

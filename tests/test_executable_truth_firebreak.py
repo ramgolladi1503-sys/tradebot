@@ -24,6 +24,12 @@ def _clean_candidate(**overrides):
         "current_volume": 50000,
         "oi": 100000,
         "quote_ok": True,
+        "feed_ok": True,
+        "ws_connected": True,
+        "effective_ws_connected": True,
+        "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+        "option_last_tick_age_by_symbol": {"NIFTY": 0.5},
+        "symbol_feed_ok_by_symbol": {"NIFTY": True},
         "source_flags": {},
     }
     candidate.update(overrides)

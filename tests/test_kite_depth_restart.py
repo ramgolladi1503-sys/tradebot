@@ -1726,7 +1726,7 @@ def test_restart_verification_failed_state_can_recover_after_fresh_proof(monkeyp
     ws._reset_feed_restart_verification(reason="unit_test_teardown")
 
 
-def test_restart_verification_clears_ws1006_recovery_blocked_metadata_on_success(monkeypatch, tmp_path):
+def test_restart_subscription_verification_does_not_clear_ws1006_recovery_blocker(monkeypatch, tmp_path):
     logs_path = tmp_path / "logs"
     logs_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
@@ -1762,8 +1762,15 @@ def test_restart_verification_clears_ws1006_recovery_blocked_metadata_on_success
 
     ws._tick_feed_restart_verification(now_epoch=1001.0)
 
-    assert ws._reconnect_recovery_blocked_active() is False
-    assert "FEED_RECONNECT_RECOVERY_CLEARED" in [event for event, _payload in events]
+    assert ws._reconnect_recovery_blocked_active() is True
+    assert ws._RECONNECT_BLOCKED_REASON == "ws1006_process_restart_required"
+    denied = [payload for event, payload in events if event == "FEED_RECONNECT_RECOVERY_CLEAR_DENIED"]
+    assert denied and denied[-1]["clearance"] == "BLOCKED_CAUSAL_PROOF_REQUIRED"
+    assert denied[-1]["causal_recovery_proof_present"] is False
+    assert denied[-1]["read_only"] is True
+    assert denied[-1]["is_order_action"] is False
+    assert denied[-1]["broker_api_called"] is False
+    assert denied[-1]["allowed_for_live_execution"] is False
     ws._persist_runtime_snapshot_row(
         ws_connected=True,
         source="unit_test_recovered_ticks",
@@ -1772,10 +1779,8 @@ def test_restart_verification_clears_ws1006_recovery_blocked_metadata_on_success
         last_error="",
     )
     payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["reconnect_blocked_reason"] in {"", None}
-    assert payload["runtime_state"] == "RUNNING"
-    assert payload["state_machine"]["state"] == "LIVE"
-    assert payload["state_machine"]["reason"] == "ticks_flowing"
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["process_restart_required"] is True
     ws._reset_feed_restart_verification(reason="unit_test_teardown")
 
 

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import copy
 import time
 import threading
+import math
 from dataclasses import dataclass, replace
-from typing import Callable, Literal
+from typing import Any, Callable, Literal, Mapping
+
+from config import feed_runtime_reliability as reliability_cfg
 
 
 RecoveryAction = Literal[
@@ -52,6 +56,7 @@ class FeedRecoveryCoordinator:
         recovery_timeout_sec: float = 90.0,
         max_recoveries_per_window: int = 3,
         recovery_window_sec: float = 600.0,
+        max_recovery_gap_sec: float | None = None,
         now_epoch_fn: Callable[[], float] | None = None,
     ) -> None:
         self._max_recoverable_attempts_per_session = max(1, int(max_recoverable_attempts_per_session or 1))
@@ -59,8 +64,30 @@ class FeedRecoveryCoordinator:
         self._recovery_timeout_sec = max(0.0, float(recovery_timeout_sec or 0.0))
         self._max_recoveries_per_window = max(1, int(max_recoveries_per_window or 1))
         self._recovery_window_sec = max(0.0, float(recovery_window_sec or 0.0))
+        try:
+            gap_limit = float(
+                max_recovery_gap_sec
+                if max_recovery_gap_sec is not None
+                else getattr(reliability_cfg, "FEED_RECOVERY_MAX_GAP_SEC", 3.0)
+            )
+        except (TypeError, ValueError):
+            gap_limit = 0.0
+        self._max_recovery_gap_sec = max(0.0, gap_limit) if math.isfinite(gap_limit) else 0.0
+        try:
+            health_window = float(getattr(reliability_cfg, "FEED_RECOVERY_HEALTH_WINDOW_SEC", 2.0))
+        except (TypeError, ValueError):
+            health_window = math.inf
+        self._min_healthy_window_sec = (
+            health_window if math.isfinite(health_window) and health_window > 0.0 else math.inf
+        )
         self._now_epoch_fn = now_epoch_fn or time.time
         self._state = FeedRecoveryState()
+        self._incident_history: list[dict[str, Any]] = []
+
+    @property
+    def incident_history(self) -> tuple[dict[str, Any], ...]:
+        """Return isolated snapshots; nested evidence must not alias internal history."""
+        return tuple(copy.deepcopy(row) for row in self._incident_history)
 
     @property
     def state(self) -> FeedRecoveryState:
@@ -106,10 +133,28 @@ class FeedRecoveryCoordinator:
 
     def reset(self) -> FeedRecoveryState:
         self._state = FeedRecoveryState()
+        self._incident_history.clear()
         return self._state
 
-    def clear_recovery(self, *, source: str, reason: str) -> FeedRecoveryState:
+    def clear_recovery(
+        self, *, source: str, reason: str, proof: Mapping[str, Any] | None = None
+    ) -> FeedRecoveryState:
         now_epoch = self._now_epoch()
+        valid, failures = self._validate_recovery_proof(proof, now_epoch=now_epoch)
+        self._incident_history.append({
+            "event": "RECOVERY_RESOLVED" if valid else "RECOVERY_CLEAR_REJECTED",
+            "source": str(source),
+            "reason": str(reason),
+            "at_epoch": now_epoch,
+            "proof": copy.deepcopy(dict(proof or {})),
+            "failures": list(failures),
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+        })
+        if not valid:
+            return self._current_state()
         next_state = replace(
             self._current_state(),
             recovery_in_progress=False,
@@ -126,6 +171,124 @@ class FeedRecoveryCoordinator:
         )
         self._state = next_state
         return next_state
+
+    def _validate_recovery_proof(
+        self, proof: Mapping[str, Any] | None, *, now_epoch: float
+    ) -> tuple[bool, tuple[str, ...]]:
+        if not isinstance(proof, Mapping):
+            return False, ("recovery_proof_missing",)
+        failures: list[str] = []
+        try:
+            disconnect = float(proof.get("disconnect_started_at"))
+            reconnect = float(proof.get("reconnected_at"))
+        except (TypeError, ValueError):
+            disconnect = reconnect = 0.0
+        if (
+            not math.isfinite(disconnect)
+            or not math.isfinite(reconnect)
+            or disconnect <= 0
+            or reconnect < disconnect
+            or reconnect > now_epoch
+        ):
+            failures.append("recovery_timestamps_invalid")
+        expected_raw = proof.get("expected_tokens")
+        actual_raw = proof.get("actual_tokens")
+        if not isinstance(expected_raw, (list, tuple, set)) or not isinstance(actual_raw, (list, tuple, set)):
+            failures.append("required_token_set_invalid")
+            expected_raw, actual_raw = (), ()
+        expected_values = [str(x).strip() for x in expected_raw if str(x).strip()]
+        actual_values = [str(x).strip() for x in actual_raw if str(x).strip()]
+        expected = tuple(sorted(set(expected_values)))
+        actual = tuple(sorted(set(actual_values)))
+        if len(expected) != len(expected_values) or len(actual) != len(actual_values):
+            failures.append("required_token_set_has_duplicates")
+        if not expected:
+            failures.append("required_token_set_missing")
+        if expected != actual:
+            failures.append("required_token_set_mismatch")
+        if type(proof.get("expected_token_count")) is not int or proof.get("expected_token_count") != len(expected):
+            failures.append("expected_token_count_mismatch")
+        if (
+            type(proof.get("actual_resubscribed_token_count")) is not int
+            or proof.get("actual_resubscribed_token_count") != len(actual)
+        ):
+            failures.append("actual_resubscribed_token_count_mismatch")
+        if str(proof.get("actual_subscription_evidence") or "").strip().upper() != "LOCAL_SUBSCRIBE_AND_MODE_CALL_RETURNED":
+            failures.append("actual_subscription_evidence_unproven")
+        gaps = proof.get("gap_duration_by_identity")
+        pre_ticks = proof.get("last_pre_disconnect_timestamp_by_required_identity")
+        post_ticks = proof.get("first_post_disconnect_timestamp_by_required_identity")
+        required_raw = proof.get("required_identity_tokens")
+        if not isinstance(required_raw, (list, tuple, set)):
+            failures.append("required_identity_set_invalid")
+            required_raw = ()
+        required_values = [str(x).strip() for x in required_raw if str(x).strip()]
+        required = tuple(sorted(set(required_values)))
+        if len(required) != len(required_values):
+            failures.append("required_identity_set_has_duplicates")
+        if not required:
+            failures.append("required_identity_set_missing")
+        if not set(required).issubset(set(expected)):
+            failures.append("required_identity_not_subscribed")
+        if (
+            not isinstance(gaps, Mapping)
+            or not isinstance(pre_ticks, Mapping)
+            or not isinstance(post_ticks, Mapping)
+            or set(map(str, gaps.keys())) != set(required)
+            or set(map(str, pre_ticks.keys())) != set(required)
+            or set(map(str, post_ticks.keys())) != set(required)
+        ):
+            failures.append("required_identity_gap_evidence_incomplete")
+        else:
+            for identity, raw_gap in gaps.items():
+                try:
+                    gap = float(raw_gap)
+                    pre_tick = float(pre_ticks[identity])
+                    post_tick = float(post_ticks[identity])
+                except (TypeError, ValueError):
+                    gap = pre_tick = post_tick = -1.0
+                if (
+                    not math.isfinite(gap)
+                    or not math.isfinite(pre_tick)
+                    or not math.isfinite(post_tick)
+                    or
+                    gap < 0.0
+                    or gap > self._max_recovery_gap_sec
+                    or pre_tick <= 0.0
+                    or pre_tick > disconnect
+                    or post_tick < reconnect
+                    or post_tick > now_epoch
+                    or abs((post_tick - pre_tick) - gap) > 0.001
+                ):
+                    failures.append(f"required_identity_gap_invalid:{identity}")
+        if str(proof.get("state_rebuild_status") or "").strip().upper() != "REBUILT":
+            failures.append("state_rebuild_unproven")
+        try:
+            window_start = float(proof.get("health_window_start"))
+            window_end = float(proof.get("health_window_end"))
+        except (TypeError, ValueError):
+            window_start = window_end = 0.0
+        if (
+            window_start < reconnect
+            or window_end <= window_start
+            or window_end > now_epoch
+            or (window_end - window_start) < self._min_healthy_window_sec
+        ):
+            failures.append("health_window_unproven")
+        if not math.isfinite(window_start) or not math.isfinite(window_end):
+            failures.append("health_window_unproven")
+        if str(proof.get("recovery_verdict") or "").strip().upper() != "RECOVERED":
+            failures.append("recovery_verdict_unproven")
+        if str(proof.get("health_window_status") or "").strip().upper() != "HEALTHY":
+            failures.append("health_window_not_healthy")
+        if proof.get("ws_connected") is not True:
+            failures.append("health_window_websocket_not_connected")
+        if proof.get("required_feeds_fresh") is not True:
+            failures.append("health_window_required_feeds_not_fresh")
+        runtime_state = str(proof.get("runtime_state") or "").strip().upper()
+        if runtime_state not in {"RUNNING", "LIVE", "HEALTHY", "OK"}:
+            failures.append("health_window_runtime_state_unsafe")
+        return not failures, tuple(failures)
 
     def request_recovery(
         self,

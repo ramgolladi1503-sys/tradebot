@@ -18,6 +18,14 @@ FEED_HEALTH_TRUTH_BLOCK_REASON = "feed_health_truth_failed"
 _OPTION_OK_CODES = {"", "OK", "NONE", "HEALTHY", "FRESH"}
 _SAFE_RUNTIME_STATES = {"", "RUNNING", "LIVE", "HEALTHY", "OK", "DEGRADED_LOCAL", "VERIFYING_RECOVERY"}
 _SAFE_FEED_STATES = {"", "LIVE", "RUNNING", "HEALTHY", "OK", "DEGRADED_LOCAL", "VERIFYING_RECOVERY"}
+FEED_HEALTH_DOMAINS = (
+    "INDEX_SPOT",
+    "INDEX_FUTURES",
+    "INDEX_OPTIONS",
+    "STOCK_SPOT",
+    "STOCK_OPTIONS",
+)
+_DOMAIN_HEALTH_STATES = {"HEALTHY", "DEGRADED", "UNHEALTHY", "UNKNOWN"}
 
 
 @dataclass(frozen=True)
@@ -43,6 +51,8 @@ class FeedHealthTruthDecision:
     websocket_ok: bool | None = None
     symbols: tuple[SymbolFeedTruth, ...] = ()
     context: dict[str, Any] = field(default_factory=dict)
+    domains: dict[str, dict[str, str]] = field(default_factory=dict)
+    overall_state: str = "UNKNOWN"
 
     def to_payload(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -99,6 +109,20 @@ def _normalize_reason(reason: Any) -> str:
 
 def _normalize_state(value: Any) -> str:
     return str(value or "").strip().upper()
+
+
+def _domain_health(payload: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Return only explicit producer-supplied domain evidence; never infer it."""
+    supplied = payload.get("domain_health_by_domain")
+    supplied = supplied if isinstance(supplied, dict) else {}
+    result: dict[str, dict[str, str]] = {}
+    for domain in FEED_HEALTH_DOMAINS:
+        raw = next((value for key, value in supplied.items() if _normalize_state(key) == domain), None)
+        state = _normalize_state(raw.get("state")) if isinstance(raw, dict) else "UNKNOWN"
+        if state not in _DOMAIN_HEALTH_STATES:
+            state = "UNKNOWN"
+        result[domain.lower()] = {"state": state}
+    return result
 
 
 def _symbols_from_payload(payload: dict[str, Any], requested_symbols: tuple[str, ...]) -> tuple[str, ...]:
@@ -162,14 +186,25 @@ def classify_symbol_feed_truth(
     symbol_feed_ok = _bool_or_none(
         _symbol_value(payload, normalized, "symbol_feed_ok_by_symbol", "feed_ok_by_symbol")
     )
+    symbol_evidence_present = any(
+        normalized in {_normalize_symbol(key) for key in (payload.get(field) or {})}
+        for field in (
+            "option_feed_block_reason_by_symbol",
+            "option_last_tick_age_by_symbol",
+            "symbol_feed_ok_by_symbol",
+            "feed_ok_by_symbol",
+        )
+        if isinstance(payload.get(field), dict)
+    )
 
     if block_reason not in _OPTION_OK_CODES:
         _append_unique(reasons, OPTION_FEED_BLOCKED_REASON)
     if option_age is None:
-        if "option_last_tick_age_by_symbol" in payload:
-            _append_unique(reasons, OPTION_AGE_MISSING_REASON)
+        _append_unique(reasons, OPTION_AGE_MISSING_REASON)
     elif option_age > max_option_tick_age_sec:
         _append_unique(reasons, OPTION_TICKS_STALE_REASON)
+    if not symbol_evidence_present:
+        _append_unique(reasons, SYMBOL_FEED_UNKNOWN_REASON)
     if symbol_feed_ok is False:
         _append_unique(reasons, SYMBOL_FEED_UNKNOWN_REASON if not reasons else None)
 
@@ -192,6 +227,7 @@ def classify_feed_health_truth(
     max_option_tick_age_sec: float = 3.0,
     max_ltp_age_sec: float | None = None,
     max_depth_age_sec: float | None = None,
+    required_domains: tuple[str, ...] | list[str] = (),
 ) -> FeedHealthTruthDecision:
     """Reconcile global, runtime, websocket, and per-symbol feed health.
 
@@ -221,9 +257,24 @@ def classify_feed_health_truth(
         classify_symbol_feed_truth(payload, symbol, max_option_tick_age_sec=max_option_age)
         for symbol in symbol_names
     )
+    monitored_names = _symbols_from_payload(payload, ())
+    monitored_truths = tuple(
+        classify_symbol_feed_truth(payload, symbol, max_option_tick_age_sec=max_option_age)
+        for symbol in monitored_names
+    )
+    domains = _domain_health(payload)
+    required_domain_names = tuple(dict.fromkeys(_normalize_state(item) for item in required_domains if _normalize_state(item)))
 
     reasons: list[str] = []
-    if global_feed_ok is False:
+    # ``feed_ok`` is an aggregate across monitored symbols in current runtime
+    # artifacts. When a consumer supplies explicit dependencies, its false
+    # value may be caused by an unrelated illiquid symbol. Hard transport and
+    # runtime blockers remain checked below; callers may additionally provide
+    # an explicit global_feed_blocked flag for a genuinely system-wide fault.
+    aggregate_is_symbol_scoped = payload.get("feed_ok_scope") == "symbol_aggregate"
+    if payload.get("global_feed_blocked") is True or (
+        global_feed_ok is False and not aggregate_is_symbol_scoped
+    ):
         _append_unique(reasons, GLOBAL_FEED_UNHEALTHY_REASON)
     if websocket_ok is False:
         _append_unique(reasons, WEBSOCKET_DISCONNECTED_REASON)
@@ -258,7 +309,51 @@ def classify_feed_health_truth(
         for reason in symbol_truth.reasons:
             _append_unique(reasons, f"{symbol_truth.symbol}:{reason}")
 
-    feed_ok = not reasons and global_feed_ok is not False and websocket_ok is not False
+    for domain in required_domain_names:
+        if domain not in FEED_HEALTH_DOMAINS:
+            _append_unique(reasons, f"required_domain_unknown:{domain}")
+            continue
+        state = domains[domain.lower()]["state"]
+        if state == "UNKNOWN":
+            _append_unique(reasons, f"required_domain_unknown:{domain}")
+        elif state != "HEALTHY":
+            _append_unique(reasons, f"required_domain_not_healthy:{domain}:{state}")
+
+    feed_ok = (
+        not reasons
+        and (global_feed_ok is not False or aggregate_is_symbol_scoped)
+        and websocket_ok is not False
+    )
+    domain_states = [item["state"] for item in domains.values()]
+    hard_block = any(
+        reason in reasons
+        for reason in (
+            GLOBAL_FEED_UNHEALTHY_REASON,
+            WEBSOCKET_DISCONNECTED_REASON,
+            FEED_STATE_UNSAFE_REASON,
+            RUNTIME_STATE_UNSAFE_REASON,
+        )
+    ) or "UNHEALTHY" in domain_states
+    monitored_unknown = any(
+        SYMBOL_FEED_UNKNOWN_REASON in truth.reasons
+        or OPTION_AGE_MISSING_REASON in truth.reasons
+        for truth in monitored_truths
+    )
+    monitored_degraded = any(
+        not truth.feed_ok
+        and any(reason not in {SYMBOL_FEED_UNKNOWN_REASON, OPTION_AGE_MISSING_REASON} for reason in truth.reasons)
+        for truth in monitored_truths
+    )
+    if hard_block:
+        overall_state = "BLOCKED"
+    elif "DEGRADED" in domain_states or monitored_degraded or any(
+        reason.startswith("required_domain_not_healthy:") for reason in reasons
+    ):
+        overall_state = "OPERATIONAL_DEGRADED"
+    elif "UNKNOWN" in domain_states or monitored_unknown or reasons:
+        overall_state = "UNKNOWN"
+    else:
+        overall_state = "HEALTHY"
     return FeedHealthTruthDecision(
         feed_ok=feed_ok,
         reason_code="ok" if feed_ok else FEED_HEALTH_TRUTH_BLOCK_REASON,
@@ -266,9 +361,18 @@ def classify_feed_health_truth(
         global_feed_ok=global_feed_ok,
         websocket_ok=websocket_ok,
         symbols=symbol_truths,
+        domains=domains,
+        overall_state=overall_state,
         context={
             "symbols_requested": list(requested_symbols),
+            "required_domains": list(required_domain_names),
             "symbols_evaluated": list(symbol_names),
+            "monitored_degraded_symbols": [
+                truth.symbol for truth in monitored_truths if not truth.feed_ok
+            ],
+            "aggregate_feed_ok": global_feed_ok,
+            "global_feed_blocked": payload.get("global_feed_blocked") is True,
+            "feed_ok_scope": "symbol_aggregate" if aggregate_is_symbol_scoped else "global_or_unknown",
             "max_option_tick_age_sec": max_option_age,
             "max_ltp_age_sec": max_ltp_age,
             "max_depth_age_sec": max_depth_age,

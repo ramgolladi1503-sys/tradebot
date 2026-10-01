@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from core.candidate_feed_dependencies import REGISTRY_ENTRIES, resolve_candidate_dependencies
 from core.feed_health_truth import classify_feed_health_truth
 
 SYMBOL_EXECUTION_SAFETY_BLOCK_REASON = "symbol_execution_safety_failed"
@@ -11,6 +12,10 @@ SYMBOL_FEED_UNSAFE_REASON = "symbol_feed_unsafe"
 SYMBOL_SUBSCRIPTION_FAILED_REASON = "symbol_subscription_failed"
 SYMBOL_STALE_OPTION_REASON = "symbol_stale_option_ticks"
 SYMBOL_OPTION_BLOCKED_REASON = "symbol_option_feed_blocked"
+SYMBOL_FEED_DEPENDENCIES_MISSING_REASON = "candidate_feed_dependencies_missing"
+SYMBOL_FEED_DEPENDENCIES_INVALID_REASON = "candidate_feed_dependencies_invalid"
+SYMBOL_FEED_DEPENDENCY_ID_MISSING_REASON = "candidate_feed_dependency_id_missing"
+SYMBOL_FEED_DEPENDENCY_AUTHORITY_BLOCK_REASON = "candidate_feed_dependency_authority_blocked"
 
 
 @dataclass(frozen=True)
@@ -40,6 +45,15 @@ def _source_flags(candidate: Any) -> dict[str, Any]:
 
 def _normalize_symbol(symbol: Any) -> str:
     return str(symbol or "").strip().upper()
+
+
+def _safety_metadata() -> dict[str, bool]:
+    return {
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+    }
 
 
 def _append_unique(reasons: list[str], reason: str | None) -> None:
@@ -93,6 +107,10 @@ def _feed_payload(candidate: Any) -> dict[str, Any]:
         "subscribed_option_tokens_count",
         "option_subscribe_count",
         "subscribed_option_tokens",
+        "required_feed_domains",
+        "required_feed_identities",
+        "domain_health_by_domain",
+        "feed_health_by_identity",
     ):
         candidate_value = _candidate_get(candidate, key)
         flag_value = flags.get(key)
@@ -111,6 +129,10 @@ def has_symbol_execution_safety_evidence(candidate: Any) -> bool:
     Those should not be retroactively failed by EDGE-45. Real candidates that
     carry symbol identity or feed-health evidence are still gated.
     """
+    if str(_candidate_get(candidate, "feed_health_scope", "") or "").strip().upper() == "HISTORICAL_REPLAY":
+        return False
+    if str(_source_flags(candidate).get("feed_health_scope", "") or "").strip().upper() == "HISTORICAL_REPLAY":
+        return False
     if resolve_candidate_symbol(candidate):
         return True
     return bool(_feed_payload(candidate))
@@ -150,19 +172,96 @@ def classify_symbol_execution_safety(
             reason_code=SYMBOL_EXECUTION_SAFETY_BLOCK_REASON,
             reasons=(SYMBOL_MISSING_REASON,),
             symbol=None,
-            context={"feed_health_truth": None},
+            context={"feed_health_truth": None, **_safety_metadata()},
         )
 
     payload = _feed_payload(candidate)
+    flags = _source_flags(candidate)
+    # Prefer a governed family or exact candidate ID. When candidate_id is a
+    # per-signal lineage key, resolve only through an explicit strategy_id;
+    # never discard an opaque ID into symbol-only compatibility.
+    declared_family = _coalesce(
+        _candidate_get(candidate, "candidate_family"),
+        flags.get("candidate_family"),
+    )
+    candidate_id = _coalesce(
+        _candidate_get(candidate, "candidate_id"),
+        flags.get("candidate_id"),
+    )
+    strategy_id = _coalesce(
+        _candidate_get(candidate, "strategy_id"),
+        flags.get("strategy_id"),
+    )
+    registered_ids = {entry.candidate_id for entry in REGISTRY_ENTRIES}
+    if declared_family is not None:
+        dependency_family = declared_family
+    elif candidate_id in registered_ids:
+        dependency_family = candidate_id
+    elif strategy_id is not None:
+        # Opaque candidate IDs are lineage identifiers in several producers;
+        # resolve them only through an explicit registered strategy ID.
+        dependency_family = strategy_id
+    else:
+        # Do not silently discard an unrecognized ID into symbol-only legacy
+        # compatibility. It has candidate identity but no dependency authority.
+        dependency_family = candidate_id
+    has_domain_evidence = any(
+        key in payload
+        for key in (
+            "domain_health_by_domain",
+            "feed_health_by_identity",
+            "required_feed_domains",
+            "required_feed_identities",
+        )
+    )
+    dependency_resolution = None
+    if dependency_family is not None or has_domain_evidence:
+        dependency_resolution = resolve_candidate_dependencies(
+            None if dependency_family is None else str(dependency_family),
+            caller_required_domains=payload.get("required_feed_domains"),
+            identity_health_by_identity=payload.get("feed_health_by_identity"),
+        )
+    # This consumer has already selected a candidate symbol; the legacy
+    # feed_ok field is an aggregate over all monitored subscriptions. It may
+    # be ignored only when the caller carries explicit per-symbol evidence.
+    if payload.get("feed_ok") is False and "feed_ok_scope" not in payload:
+        normalized_symbol = symbol.strip().upper()
+
+        def has_selected_symbol_evidence(key: str) -> bool:
+            values = payload.get(key)
+            return isinstance(values, dict) and any(
+                str(candidate_key).strip().upper() == normalized_symbol
+                for candidate_key in values
+            )
+
+        has_option_identity_and_age = all(
+            has_selected_symbol_evidence(key)
+            for key in ("option_feed_block_reason_by_symbol", "option_last_tick_age_by_symbol")
+        )
+        if has_option_identity_and_age:
+            payload["feed_ok_scope"] = "symbol_aggregate"
     feed_truth = classify_feed_health_truth(
         payload,
         symbols=(symbol,),
         max_option_tick_age_sec=max_option_tick_age_sec,
+        required_domains=_required_feed_domains(payload.get("required_feed_domains")),
     )
     reasons: list[str] = []
     if not feed_truth.feed_ok:
         for reason in feed_truth.reasons:
             _append_unique(reasons, _map_feed_reason(reason))
+    if "domain_health_by_domain" in payload:
+        raw_domains = payload.get("required_feed_domains")
+        if raw_domains is None or (isinstance(raw_domains, (list, tuple)) and not raw_domains):
+            _append_unique(reasons, SYMBOL_FEED_DEPENDENCIES_MISSING_REASON)
+        elif not _valid_required_feed_domains(raw_domains):
+            _append_unique(reasons, SYMBOL_FEED_DEPENDENCIES_INVALID_REASON)
+    if dependency_resolution is not None and not dependency_resolution.execution_eligible:
+        reason = dependency_resolution.reason
+        if reason == "CANDIDATE_FEED_DEPENDENCY_ID_MISSING":
+            _append_unique(reasons, SYMBOL_FEED_DEPENDENCY_ID_MISSING_REASON)
+        else:
+            _append_unique(reasons, SYMBOL_FEED_DEPENDENCY_AUTHORITY_BLOCK_REASON)
     for symbol_truth in feed_truth.symbols:
         if symbol_truth.symbol != symbol:
             continue
@@ -178,5 +277,37 @@ def classify_symbol_execution_safety(
         reason_code="ok" if allowed else SYMBOL_EXECUTION_SAFETY_BLOCK_REASON,
         reasons=tuple(reasons),
         symbol=symbol,
-        context={"feed_health_truth": feed_truth.to_payload()},
+        context={
+            "feed_health_truth": feed_truth.to_payload(),
+            "candidate_feed_dependency": (
+                dependency_resolution.to_payload()
+                if dependency_resolution is not None
+                else {
+                    "status": "LEGACY_UNRESOLVED",
+                    "reason": "SYMBOL_ONLY_COMPATIBILITY_WITHOUT_STRUCTURED_DOMAIN_EVIDENCE",
+                    "registry_coverage": False,
+                    "read_only": True,
+                    "is_order_action": False,
+                    "broker_api_called": False,
+                    "allowed_for_live_execution": False,
+                    "append": False,
+                }
+            ),
+            **_safety_metadata(),
+        },
     )
+
+
+def _required_feed_domains(value: Any) -> tuple[str, ...]:
+    """Normalize explicit candidate dependencies; malformed declarations block."""
+    if value is None:
+        return ()
+    if isinstance(value, (list, tuple)):
+        return tuple(str(item) for item in value)
+    return ("__INVALID_REQUIRED_FEED_DOMAINS__",)
+
+
+def _valid_required_feed_domains(value: Any) -> bool:
+    if not isinstance(value, (list, tuple)) or not value:
+        return False
+    return all(isinstance(item, str) and item.strip() for item in value)

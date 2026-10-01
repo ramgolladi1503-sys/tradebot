@@ -1,0 +1,838 @@
+{
+  "acceptance_results": {
+    "c1_c2_exact_id_and_emitted_candidate_integration": "PASS_PARTIAL_DECLARATIONS_BLOCK_AT_SYMBOL_SAFETY_BOUNDARY",
+    "exact_id_registry_and_digest_tests": "PASS",
+    "opaque_candidate_id_without_registered_family": "PASS_UNKNOWN_BLOCKED",
+    "opaque_lineage_id_with_registered_strategy": "PASS_RESOLVES_TO_PARTIAL_AUTHORITY_AND_BLOCKS",
+    "optional_dependency_nonblocking": "NOT_CLAIMED_NO_AUTHORITATIVE_OPTIONAL_DEPENDENCY_DECLARED",
+    "source_flag_and_domain_mismatch_tests": "PASS",
+    "structured_identity_health_without_family": "PASS_BLOCKED",
+    "undeclared_dependency_access_detection": "NOT_IMPLEMENTED_BLOCKED_NO_RUNTIME_ACCESS_CONTRACT",
+    "unknown_and_partial_block_tests": "PASS",
+    "unrelated_stock_degradation_domain_classifier_regression": "PASS_IN_EXISTING_TESTS"
+  },
+  "compatibility_path": {
+    "behavior": "Existing selected-symbol feed checks remain; this path is not evidence of complete dependency health or live readiness.",
+    "condition": "No exact candidate_id/family and no structured domain evidence",
+    "registry_coverage": false,
+    "status": "LEGACY_UNRESOLVED"
+  },
+  "coverage_counts": {
+    "exact_ids_registered": 14,
+    "execution_eligible": 0,
+    "unknown_or_unverified_families": 23
+  },
+  "inspected_source_sha256": [
+    {
+      "path": "config/feed_runtime_reliability.py",
+      "sha256": "089c9487546dd63b723b347b2f3819990a432bddc9f0a760c2a8647e259243ef"
+    },
+    {
+      "path": "core/candidate_audits/intraday_opening_drive.py",
+      "sha256": "426fb5bc479941effd4d959dbec1f9882e2460f6550e737f81cbb7bad4ea2401"
+    },
+    {
+      "path": "core/candidate_audits/nifty_overnight_drift.py",
+      "sha256": "1fdf2f9ccda8c019568fcc20ae2928fa0ccfb740d4801d1d59a001162d0889f0"
+    },
+    {
+      "path": "core/candidate_evaluators.py",
+      "sha256": "073e1dcdfb4d46033deb3ae6f24b6c9126878c981d05617e21ff4b1e17322b46"
+    },
+    {
+      "path": "core/candidate_feed_dependencies.py",
+      "sha256": "f48b5f95c933999903df7c54e16eb844d4c0faa679d51136af3c3a7c83341e6e"
+    },
+    {
+      "path": "core/cas_morning_reversal_advisory.py",
+      "sha256": "08136c2e8f21fceef20b87ae72c0a72573987d861cef7f795aba60701fc962d2"
+    },
+    {
+      "path": "core/feed_health_truth.py",
+      "sha256": "890030a87f9ef72c4ef4dde4c4c2cc15c9b50908fc89e960ee015ed1dcc502da"
+    },
+    {
+      "path": "core/governed_strategy_authority.py",
+      "sha256": "54d08ecc0fe676875e46b26c87ab00bf1cc07f026b245a4c198013793c5e18fc"
+    },
+    {
+      "path": "core/kite_depth_ws.py",
+      "sha256": "4fe0c485a64b6fbab5e0c4a49b7cdc758e4ed588d4f4049a42fe8bd07992abfc"
+    },
+    {
+      "path": "core/kite_read_only_observation_runtime.py",
+      "sha256": "25d3a998998136192f960983354b9883b9e3287032edb88dbce88623a68aea90"
+    },
+    {
+      "path": "core/market_session_store.py",
+      "sha256": "5482d74a3255fbb0510485996944253c6f91634a2aaab2b0c5504733725a6db9"
+    },
+    {
+      "path": "core/orchestrator.py",
+      "sha256": "f14daf71f06dadc29847eac17f2b2472d1be7e6e5ad520a4b23a906a19251efd"
+    },
+    {
+      "path": "core/paper_shadow/run_day_to_night_option_shadow.py",
+      "sha256": "e6977bf657e4591fb585b4a8a2209128de11a3fb8a93efd018b223585f16618c"
+    },
+    {
+      "path": "core/paper_shadow/run_day_to_night_shadow.py",
+      "sha256": "ede15c3f6d83542bc962ad5024d4ac00a92a7ae94de5a197d3edbf78f020b8a3"
+    },
+    {
+      "path": "core/paper_shadow/strategy_shadow_adapter.py",
+      "sha256": "4b6ed99ee10c891949ac1f1cae8018320990e19644fc11994ec2372afea73ef9"
+    },
+    {
+      "path": "core/read_only_strategy_registry.py",
+      "sha256": "1810fb68441617c2614296b8dcffe96eee947878c692ceae653654196e51ebee"
+    },
+    {
+      "path": "core/read_only_subscription_authority.py",
+      "sha256": "ad3b564d4e8a57b8b2f22f9cc5bab76b1e7dfc621f025826e5358a65fde28259"
+    },
+    {
+      "path": "core/strategy_family_contract.py",
+      "sha256": "fc3e3b4d30ca38222a187375de649be544062455b6f65b9312a78f2bcb60ef46"
+    },
+    {
+      "path": "core/symbol_execution_safety.py",
+      "sha256": "ad61ec144cbe83bead23e7cb441d3cd2b2364c387aa81a16e9035ba79c3fae7c"
+    },
+    {
+      "path": "strategies/banknifty_intraday.py",
+      "sha256": "945f53c68ab33933f21ef692a335581e78df2f12f9433edcc7515597b5fd252b"
+    },
+    {
+      "path": "strategies/nifty_intraday.py",
+      "sha256": "86f0aff6e0e893cb6e39886502a74c7abb23796264a52da01e134abdac11a31e"
+    },
+    {
+      "path": "strategies/strategy_registry.py",
+      "sha256": "77ea9bc5aa0b26e32ed39b23a6d122b84a8660128f3c5480dee38f6ddd866526"
+    },
+    {
+      "path": "tests/test_candidate_feed_dependencies.py",
+      "sha256": "bae724215383c2f1994ac3452665a9dd6b753d5a09afa9418314b690cd7cd1af"
+    },
+    {
+      "path": "tests/test_edge45_symbol_execution_safety.py",
+      "sha256": "f8d69c260d0fd3e959e5b0adbe65b05816ad815a8ced4d4d1db59d863cc3f0b6"
+    }
+  ],
+  "registry_entries": [
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_inputs": [],
+      "candidate_id": "C1",
+      "execution_eligible": false,
+      "execution_scope": "GOVERNED_CANDIDATE_WITH_UNVERIFIED_FEED_BINDING",
+      "fallback_inputs": [
+        "generic_market_data_to_synthetic_MarketMemorySnapshot_when_session_store_missing"
+      ],
+      "freshness_policy": [
+        "rejects_nonpositive_freshness_watermark; no timestamp-age SLA"
+      ],
+      "optional_domains": [],
+      "required_domains": [
+        "INDEX_SPOT",
+        "INDEX_FUTURES"
+      ],
+      "required_identities": [
+        {
+          "domain": "INDEX_SPOT",
+          "identity": null
+        },
+        {
+          "domain": "INDEX_FUTURES",
+          "identity": null
+        }
+      ],
+      "source_sha256": [
+        {
+          "path": "core/candidate_evaluators.py",
+          "sha256": "073e1dcdfb4d46033deb3ae6f24b6c9126878c981d05617e21ff4b1e17322b46"
+        },
+        {
+          "path": "core/market_session_store.py",
+          "sha256": "5482d74a3255fbb0510485996944253c6f91634a2aaab2b0c5504733725a6db9"
+        },
+        {
+          "path": "core/orchestrator.py",
+          "sha256": "f14daf71f06dadc29847eac17f2b2472d1be7e6e5ad520a4b23a906a19251efd"
+        },
+        {
+          "path": "core/governed_strategy_authority.py",
+          "sha256": "54d08ecc0fe676875e46b26c87ab00bf1cc07f026b245a4c198013793c5e18fc"
+        }
+      ],
+      "unresolved_requirements": [
+        "market_memory_symbol_not_bound_to_authoritative_feed_identity",
+        "futures_entry_exit_identity_not_bound_to_health_evidence",
+        "generic_market_data_fallback_can_synthesize_memory_without_source_identity",
+        "freshness_watermark_is_not_age_bounded"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_inputs": [],
+      "candidate_id": "C1_INTRADAY_15M_IMPULSE",
+      "execution_eligible": false,
+      "execution_scope": "GOVERNED_CANDIDATE_WITH_UNVERIFIED_FEED_BINDING",
+      "fallback_inputs": [
+        "generic_market_data_to_synthetic_MarketMemorySnapshot_when_session_store_missing"
+      ],
+      "freshness_policy": [
+        "rejects_nonpositive_freshness_watermark; no timestamp-age SLA"
+      ],
+      "optional_domains": [],
+      "required_domains": [
+        "INDEX_SPOT",
+        "INDEX_FUTURES"
+      ],
+      "required_identities": [
+        {
+          "domain": "INDEX_SPOT",
+          "identity": null
+        },
+        {
+          "domain": "INDEX_FUTURES",
+          "identity": null
+        }
+      ],
+      "source_sha256": [
+        {
+          "path": "core/candidate_evaluators.py",
+          "sha256": "073e1dcdfb4d46033deb3ae6f24b6c9126878c981d05617e21ff4b1e17322b46"
+        },
+        {
+          "path": "core/market_session_store.py",
+          "sha256": "5482d74a3255fbb0510485996944253c6f91634a2aaab2b0c5504733725a6db9"
+        },
+        {
+          "path": "core/orchestrator.py",
+          "sha256": "f14daf71f06dadc29847eac17f2b2472d1be7e6e5ad520a4b23a906a19251efd"
+        },
+        {
+          "path": "core/governed_strategy_authority.py",
+          "sha256": "54d08ecc0fe676875e46b26c87ab00bf1cc07f026b245a4c198013793c5e18fc"
+        }
+      ],
+      "unresolved_requirements": [
+        "market_memory_symbol_not_bound_to_authoritative_feed_identity",
+        "futures_entry_exit_identity_not_bound_to_health_evidence",
+        "generic_market_data_fallback_can_synthesize_memory_without_source_identity",
+        "freshness_watermark_is_not_age_bounded"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_inputs": [],
+      "candidate_id": "C2",
+      "execution_eligible": false,
+      "execution_scope": "GOVERNED_CANDIDATE_WITH_UNVERIFIED_FEED_BINDING",
+      "fallback_inputs": [
+        "generic_market_data_to_synthetic_MarketMemorySnapshot_when_session_store_missing"
+      ],
+      "freshness_policy": [
+        "rejects_nonpositive_freshness_watermark; no timestamp-age SLA"
+      ],
+      "optional_domains": [],
+      "required_domains": [
+        "INDEX_SPOT",
+        "INDEX_FUTURES"
+      ],
+      "required_identities": [
+        {
+          "domain": "INDEX_SPOT",
+          "identity": null
+        },
+        {
+          "domain": "INDEX_FUTURES",
+          "identity": null
+        }
+      ],
+      "source_sha256": [
+        {
+          "path": "core/candidate_evaluators.py",
+          "sha256": "073e1dcdfb4d46033deb3ae6f24b6c9126878c981d05617e21ff4b1e17322b46"
+        },
+        {
+          "path": "core/market_session_store.py",
+          "sha256": "5482d74a3255fbb0510485996944253c6f91634a2aaab2b0c5504733725a6db9"
+        },
+        {
+          "path": "core/orchestrator.py",
+          "sha256": "f14daf71f06dadc29847eac17f2b2472d1be7e6e5ad520a4b23a906a19251efd"
+        },
+        {
+          "path": "core/governed_strategy_authority.py",
+          "sha256": "54d08ecc0fe676875e46b26c87ab00bf1cc07f026b245a4c198013793c5e18fc"
+        }
+      ],
+      "unresolved_requirements": [
+        "market_memory_symbol_not_bound_to_authoritative_feed_identity",
+        "futures_entry_exit_identity_not_bound_to_health_evidence",
+        "generic_market_data_fallback_can_synthesize_memory_without_source_identity",
+        "freshness_watermark_is_not_age_bounded"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_inputs": [],
+      "candidate_id": "C2_OVERNIGHT_TREND",
+      "execution_eligible": false,
+      "execution_scope": "GOVERNED_CANDIDATE_WITH_UNVERIFIED_FEED_BINDING",
+      "fallback_inputs": [
+        "generic_market_data_to_synthetic_MarketMemorySnapshot_when_session_store_missing"
+      ],
+      "freshness_policy": [
+        "rejects_nonpositive_freshness_watermark; no timestamp-age SLA"
+      ],
+      "optional_domains": [],
+      "required_domains": [
+        "INDEX_SPOT",
+        "INDEX_FUTURES"
+      ],
+      "required_identities": [
+        {
+          "domain": "INDEX_SPOT",
+          "identity": null
+        },
+        {
+          "domain": "INDEX_FUTURES",
+          "identity": null
+        }
+      ],
+      "source_sha256": [
+        {
+          "path": "core/candidate_evaluators.py",
+          "sha256": "073e1dcdfb4d46033deb3ae6f24b6c9126878c981d05617e21ff4b1e17322b46"
+        },
+        {
+          "path": "core/market_session_store.py",
+          "sha256": "5482d74a3255fbb0510485996944253c6f91634a2aaab2b0c5504733725a6db9"
+        },
+        {
+          "path": "core/orchestrator.py",
+          "sha256": "f14daf71f06dadc29847eac17f2b2472d1be7e6e5ad520a4b23a906a19251efd"
+        },
+        {
+          "path": "core/governed_strategy_authority.py",
+          "sha256": "54d08ecc0fe676875e46b26c87ab00bf1cc07f026b245a4c198013793c5e18fc"
+        }
+      ],
+      "unresolved_requirements": [
+        "market_memory_symbol_not_bound_to_authoritative_feed_identity",
+        "futures_entry_exit_identity_not_bound_to_health_evidence",
+        "generic_market_data_fallback_can_synthesize_memory_without_source_identity",
+        "freshness_watermark_is_not_age_bounded"
+      ]
+    },
+    {
+      "authority_status": "VERIFIED_DECLARATION",
+      "breadth_inputs": null,
+      "candidate_id": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1",
+      "execution_eligible": false,
+      "execution_scope": "ADVISORY_ONLY",
+      "fallback_inputs": null,
+      "freshness_policy": null,
+      "optional_domains": null,
+      "required_domains": [
+        "INDEX_SPOT"
+      ],
+      "required_identities": [
+        {
+          "domain": "INDEX_SPOT",
+          "identity": "NIFTY"
+        }
+      ],
+      "source_sha256": [
+        {
+          "path": "core/read_only_strategy_registry.py",
+          "sha256": "1810fb68441617c2614296b8dcffe96eee947878c692ceae653654196e51ebee"
+        },
+        {
+          "path": "core/cas_morning_reversal_advisory.py",
+          "sha256": "08136c2e8f21fceef20b87ae72c0a72573987d861cef7f795aba60701fc962d2"
+        }
+      ],
+      "unresolved_requirements": [
+        "advisory_contract_has_no_execution_authority"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_constituent_inputs": "UNKNOWN_NOT_DECLARED",
+      "breadth_inputs": null,
+      "candidate_id": "DAY_TO_NIGHT_MOMENTUM_V1",
+      "execution_eligible": false,
+      "execution_scope": "UNVERIFIED",
+      "fallback_inputs": null,
+      "freshness_policy": null,
+      "optional_domains": null,
+      "required_domains": [],
+      "required_identities": [],
+      "source_sha256": [
+        {
+          "path": "core/paper_shadow/run_day_to_night_shadow.py",
+          "sha256": "ede15c3f6d83542bc962ad5024d4ac00a92a7ae94de5a197d3edbf78f020b8a3"
+        }
+      ],
+      "unresolved_requirements": [
+        "no_versioned_frozen_spec_contract_found",
+        "candidate_inputs_identity_optional_fallback_and_freshness_not_governed",
+        "paper_shadow_runner_is_not_paper_execution_authority"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_constituent_inputs": "UNKNOWN_NOT_DECLARED",
+      "breadth_inputs": null,
+      "candidate_id": "DAY_TO_NIGHT_MOMENTUM_V2_A_OPTION",
+      "execution_eligible": false,
+      "execution_scope": "PAPER_SHADOW_READ_ONLY",
+      "fallback_inputs": null,
+      "freshness_policy": null,
+      "optional_domains": null,
+      "required_domains": [
+        "INDEX_FUTURES",
+        "INDEX_SPOT",
+        "INDEX_OPTIONS"
+      ],
+      "required_identities": [
+        {
+          "domain": "INDEX_FUTURES",
+          "identity": null
+        },
+        {
+          "domain": "INDEX_SPOT",
+          "identity": "NIFTY 50"
+        },
+        {
+          "domain": "INDEX_OPTIONS",
+          "identity": null
+        }
+      ],
+      "source_sha256": [
+        {
+          "path": "docs/research/candidates/DAY_TO_NIGHT_MOMENTUM_V2_A_OPTION/FROZEN_SPEC.json",
+          "sha256": "da1beaef784ec61a6d4899448915c4c73f5ffe736c349aaed1793dd3cb5cab03"
+        },
+        {
+          "path": "core/paper_shadow/run_day_to_night_option_shadow.py",
+          "sha256": "e6977bf657e4591fb585b4a8a2209128de11a3fb8a93efd018b223585f16618c"
+        }
+      ],
+      "unresolved_requirements": [
+        "active_futures_contract_identity_not_bound_to_health_evidence",
+        "dynamic_option_contract_identity_not_bound_to_health_evidence",
+        "quote_window_is_causal_bounded_but_no_identity_scoped_freshness_policy_exists",
+        "paper_shadow_runner_is_not_paper_execution_authority"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_inputs": [],
+      "candidate_id": "ENTRY_C_INTRADAY_15M_IMPULSE_50BPS_X_STOP_40BPS_CLOSE",
+      "execution_eligible": false,
+      "execution_scope": "GOVERNED_CANDIDATE_WITH_UNVERIFIED_FEED_BINDING",
+      "fallback_inputs": [
+        "generic_market_data_to_synthetic_MarketMemorySnapshot_when_session_store_missing"
+      ],
+      "freshness_policy": [
+        "rejects_nonpositive_freshness_watermark; no timestamp-age SLA"
+      ],
+      "optional_domains": [],
+      "required_domains": [
+        "INDEX_SPOT",
+        "INDEX_FUTURES"
+      ],
+      "required_identities": [
+        {
+          "domain": "INDEX_SPOT",
+          "identity": null
+        },
+        {
+          "domain": "INDEX_FUTURES",
+          "identity": null
+        }
+      ],
+      "source_sha256": [
+        {
+          "path": "core/candidate_evaluators.py",
+          "sha256": "073e1dcdfb4d46033deb3ae6f24b6c9126878c981d05617e21ff4b1e17322b46"
+        },
+        {
+          "path": "core/market_session_store.py",
+          "sha256": "5482d74a3255fbb0510485996944253c6f91634a2aaab2b0c5504733725a6db9"
+        },
+        {
+          "path": "core/orchestrator.py",
+          "sha256": "f14daf71f06dadc29847eac17f2b2472d1be7e6e5ad520a4b23a906a19251efd"
+        },
+        {
+          "path": "core/governed_strategy_authority.py",
+          "sha256": "54d08ecc0fe676875e46b26c87ab00bf1cc07f026b245a4c198013793c5e18fc"
+        }
+      ],
+      "unresolved_requirements": [
+        "market_memory_symbol_not_bound_to_authoritative_feed_identity",
+        "futures_entry_exit_identity_not_bound_to_health_evidence",
+        "generic_market_data_fallback_can_synthesize_memory_without_source_identity",
+        "freshness_watermark_is_not_age_bounded"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_inputs": [],
+      "candidate_id": "ENTRY_E3_OVERNIGHT_TREND_1512_SIGNAL_1514_ENTRY_OPEN_EXIT",
+      "execution_eligible": false,
+      "execution_scope": "GOVERNED_CANDIDATE_WITH_UNVERIFIED_FEED_BINDING",
+      "fallback_inputs": [
+        "generic_market_data_to_synthetic_MarketMemorySnapshot_when_session_store_missing"
+      ],
+      "freshness_policy": [
+        "rejects_nonpositive_freshness_watermark; no timestamp-age SLA"
+      ],
+      "optional_domains": [],
+      "required_domains": [
+        "INDEX_SPOT",
+        "INDEX_FUTURES"
+      ],
+      "required_identities": [
+        {
+          "domain": "INDEX_SPOT",
+          "identity": null
+        },
+        {
+          "domain": "INDEX_FUTURES",
+          "identity": null
+        }
+      ],
+      "source_sha256": [
+        {
+          "path": "core/candidate_evaluators.py",
+          "sha256": "073e1dcdfb4d46033deb3ae6f24b6c9126878c981d05617e21ff4b1e17322b46"
+        },
+        {
+          "path": "core/market_session_store.py",
+          "sha256": "5482d74a3255fbb0510485996944253c6f91634a2aaab2b0c5504733725a6db9"
+        },
+        {
+          "path": "core/orchestrator.py",
+          "sha256": "f14daf71f06dadc29847eac17f2b2472d1be7e6e5ad520a4b23a906a19251efd"
+        },
+        {
+          "path": "core/governed_strategy_authority.py",
+          "sha256": "54d08ecc0fe676875e46b26c87ab00bf1cc07f026b245a4c198013793c5e18fc"
+        }
+      ],
+      "unresolved_requirements": [
+        "market_memory_symbol_not_bound_to_authoritative_feed_identity",
+        "futures_entry_exit_identity_not_bound_to_health_evidence",
+        "generic_market_data_fallback_can_synthesize_memory_without_source_identity",
+        "freshness_watermark_is_not_age_bounded"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_inputs": null,
+      "candidate_id": "INTRADAY_OPENING_DRIVE_V1",
+      "execution_eligible": false,
+      "execution_scope": "HISTORICAL_SHADOW_ONLY",
+      "fallback_inputs": null,
+      "freshness_policy": null,
+      "optional_domains": null,
+      "required_domains": [
+        "INDEX_SPOT",
+        "INDEX_FUTURES",
+        "INDEX_OPTIONS"
+      ],
+      "required_identities": [
+        {
+          "domain": "INDEX_SPOT",
+          "identity": "NIFTY 50"
+        },
+        {
+          "domain": "INDEX_FUTURES",
+          "identity": null
+        },
+        {
+          "domain": "INDEX_OPTIONS",
+          "identity": null
+        }
+      ],
+      "source_sha256": [
+        {
+          "path": "docs/research/candidates/INTRADAY_OPENING_DRIVE_V1/FROZEN_SPEC.json",
+          "sha256": "10087e1166d8e11cde194960707e3b490d0ca30ec1df9f30bc3c42889c77cc0b"
+        },
+        {
+          "path": "core/paper_shadow/strategy_shadow_adapter.py",
+          "sha256": "4b6ed99ee10c891949ac1f1cae8018320990e19644fc11994ec2372afea73ef9"
+        }
+      ],
+      "unresolved_requirements": [
+        "authoritative_nifty_futures_contract_identity_unavailable",
+        "dynamic_atm_option_identity_not_bound_to_health_evidence",
+        "candidate_spec_terminally_frozen_historical_research_halted"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_inputs": null,
+      "candidate_id": "S1_MOMENTUM_OVERNIGHT_V1",
+      "execution_eligible": false,
+      "execution_scope": "HISTORICAL_CANDIDATE_ONLY",
+      "fallback_inputs": null,
+      "freshness_policy": null,
+      "optional_domains": null,
+      "required_domains": [
+        "INDEX_SPOT"
+      ],
+      "required_identities": [
+        {
+          "domain": "INDEX_SPOT",
+          "identity": "NIFTY50"
+        }
+      ],
+      "source_sha256": [
+        {
+          "path": "docs/research/candidates/S1_MOMENTUM_OVERNIGHT_V1/FROZEN_SPEC.json",
+          "sha256": "3e60d58c9caaa28d72fb1a79553c477cab4cd27f4d2ed27c66c4a392da1a4b7a"
+        },
+        {
+          "path": "core/paper_shadow/strategy_shadow_adapter.py",
+          "sha256": "4b6ed99ee10c891949ac1f1cae8018320990e19644fc11994ec2372afea73ef9"
+        },
+        {
+          "path": "core/candidate_audits/nifty_overnight_drift.py",
+          "sha256": "1fdf2f9ccda8c019568fcc20ae2928fa0ccfb740d4801d1d59a001162d0889f0"
+        }
+      ],
+      "unresolved_requirements": [
+        "identity_scoped_spot_freshness_not_produced",
+        "t1_heritage_is_separate_required_authority",
+        "frozen_candidate_not_paper_or_live_authorized"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_inputs": null,
+      "candidate_id": "S4_MONDAY_OVERNIGHT_V1",
+      "execution_eligible": false,
+      "execution_scope": "HISTORICAL_CANDIDATE_ONLY",
+      "fallback_inputs": null,
+      "freshness_policy": null,
+      "optional_domains": null,
+      "required_domains": [
+        "INDEX_SPOT"
+      ],
+      "required_identities": [
+        {
+          "domain": "INDEX_SPOT",
+          "identity": "NIFTY50"
+        }
+      ],
+      "source_sha256": [
+        {
+          "path": "docs/research/candidates/S4_MONDAY_OVERNIGHT_V1/FROZEN_SPEC.json",
+          "sha256": "eed4ceed76a593bb253fa795558d1a185ae0f0c698b2686d31b4be680c889d32"
+        },
+        {
+          "path": "core/paper_shadow/strategy_shadow_adapter.py",
+          "sha256": "4b6ed99ee10c891949ac1f1cae8018320990e19644fc11994ec2372afea73ef9"
+        },
+        {
+          "path": "core/candidate_audits/nifty_overnight_drift.py",
+          "sha256": "1fdf2f9ccda8c019568fcc20ae2928fa0ccfb740d4801d1d59a001162d0889f0"
+        }
+      ],
+      "unresolved_requirements": [
+        "identity_scoped_spot_freshness_not_produced",
+        "t1_heritage_is_separate_required_authority",
+        "frozen_candidate_not_paper_or_live_authorized"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_inputs": null,
+      "candidate_id": "banknifty_intraday",
+      "execution_eligible": false,
+      "execution_scope": "UNVERIFIED",
+      "fallback_inputs": null,
+      "freshness_policy": null,
+      "optional_domains": null,
+      "required_domains": [],
+      "required_identities": [],
+      "source_sha256": [
+        {
+          "path": "strategies/banknifty_intraday.py",
+          "sha256": "945f53c68ab33933f21ef692a335581e78df2f12f9433edcc7515597b5fd252b"
+        }
+      ],
+      "unresolved_requirements": [
+        "strategy_contract_inputs_are_coarse_labels_BANKNIFTY_SPOT_AND_BANKNIFTY_OPTIONS",
+        "canonical_domain_mapping_and_freshness_are_undeclared"
+      ]
+    },
+    {
+      "authority_status": "PARTIAL_DECLARATION",
+      "breadth_inputs": null,
+      "candidate_id": "nifty_intraday",
+      "execution_eligible": false,
+      "execution_scope": "UNVERIFIED",
+      "fallback_inputs": null,
+      "freshness_policy": null,
+      "optional_domains": null,
+      "required_domains": [],
+      "required_identities": [],
+      "source_sha256": [
+        {
+          "path": "strategies/nifty_intraday.py",
+          "sha256": "86f0aff6e0e893cb6e39886502a74c7abb23796264a52da01e134abdac11a31e"
+        }
+      ],
+      "unresolved_requirements": [
+        "strategy_contract_inputs_are_coarse_labels_NIFTY_SPOT_AND_NIFTY_OPTIONS",
+        "canonical_domain_mapping_and_freshness_are_undeclared"
+      ]
+    }
+  ],
+  "registry_integrity_errors": [],
+  "runtime_enforcement": "EXACT_CANDIDATE_ID_REQUIRED_FOR_STRUCTURED_DOMAIN_HEALTH; PARTIAL_OR_UNKNOWN_AUTHORITY_BLOCKS",
+  "safety": {
+    "allowed_for_live_execution": false,
+    "append": false,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema": "mros_candidate_dependency_authority_registry_v2",
+  "unknown_families": [
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "MEAN_REVERSION_EXTENSION",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "COMPRESSION_BREAKOUT",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "TREND_PULLBACK",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "VWAP_RECLAIM",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "OPENING_DRIVE",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "FAILED_BREAKOUT_TRAP",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "EXHAUSTION_REVERSAL",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "EVENT_VOLATILITY_EXPANSION",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "LATE_DAY_MOMENTUM",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "OPTION_PRESSURE",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "OPENING_RANGE_BREAKOUT",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "NO_TRADE_CHOP",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "SIMPLE_ORB",
+      "reason": "Execution-signal registry entry has no source-backed feed identity/freshness declaration."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "HTF_OPENING_DRIVE_CONT",
+      "reason": "Execution-signal registry entry has no source-backed feed identity/freshness declaration."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "MARKET_EVENT_GRAPH_REVERSAL",
+      "reason": "Shadow-live observation entry is underlying-only; options validation remains pending and no complete feed contract was found."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "PRO_STRATEGY_ENGINE",
+      "reason": "Aggregate engine declaration is not a feed dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "ENSEMBLE",
+      "reason": "Deferred strategy registry entry has no feed dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "OPENING_BREAKOUT",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "TREND_CONTINUATION",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "MEAN_REVERSION",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "RANGE_WATCHLIST",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "EVENT_VOLATILITY",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    },
+    {
+      "authority_status": "UNKNOWN_BLOCKED",
+      "candidate_family": "NO_TRADE",
+      "reason": "Strategy registry or family contract provides only a name/description/callable label; no source-backed identity, freshness, optional, fallback, or breadth dependency contract."
+    }
+  ],
+  "unresolved_runtime_health_gaps": [
+    "runtime does not emit identity-scoped health keyed by authoritative contract identity",
+    "NIFTY futures identity unavailable; INDEX_FUTURES remains UNKNOWN",
+    "options identities are dynamic/exact contract identity not bound to candidate health evidence",
+    "candidate dependency declarations do not establish T-1 heritage authority",
+    "candidate family registry entries are not exhaustive of all external/plugin producers"
+  ],
+  "verdict": "PARTIAL_BLOCKED"
+}

@@ -231,3 +231,148 @@ def test_depth_worker_exception_is_terminal_and_conserved(monkeypatch):
     assert state["persisted"] == 0
     assert state["unaccounted_remainder"] == 0
     assert state["admission_accounting_invariant_ok"] is True
+
+
+def _stop_worker_without_shutdown(store):
+    store._persist_stop.set()
+    store._persist_wakeup.set()
+    store._persist_thread.join(timeout=1.0)
+    assert not store._persist_thread.is_alive()
+
+
+@pytest.mark.parametrize("invalid_interval", [-0.1, float("nan")])
+def test_invalid_sampling_interval_uses_conservative_default_and_is_visible(monkeypatch, invalid_interval):
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 4, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", invalid_interval, raising=False)
+    store = DepthStore()
+    _stop_worker_without_shutdown(store)
+    store._record_rejection = lambda **kwargs: None
+    sample = {"buy": [{"price": 100.0, "quantity": 1}], "sell": [{"price": 101.0, "quantity": 1}]}
+
+    store.update(91, sample)
+    store.update(91, sample)
+    state = store.persistence_accounting()
+
+    assert state["sampling_interval_ms"] == 500
+    assert state["sampling_interval_config_valid"] is False
+    assert state["durability_degraded"] is True
+    assert state["sample_windows"] == 1
+    assert state["coalesced_updates"] == 1
+    assert state["admission_accounting_invariant_ok"] is True
+    store.shutdown_persistence(deadline_seconds=0.0)
+
+
+def test_depth_capture_is_explicitly_sampled_and_coalescing_is_accounted(monkeypatch):
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 8, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 60.0, raising=False)
+    store = DepthStore()
+    _stop_worker_without_shutdown(store)
+    store._record_rejection = lambda **kwargs: None
+    sample = {"buy": [{"price": 100.0, "quantity": 10}], "sell": [{"price": 101.0, "quantity": 10}]}
+
+    store.update(101, sample)
+    store.update(101, sample)
+    store.update(101, sample)
+
+    state = store.persistence_accounting()
+    assert state["capture_mode"] == "SAMPLED_DEPTH"
+    assert state["depth_input_count"] == 3
+    assert state["depth_accepted_count"] == 1
+    assert state["depth_persisted_count"] == 0
+    assert state["depth_rejected_count"] == 0
+    assert state["depth_duplicate_count"] is None
+    assert state["depth_duplicate_count_status"] == "UNAVAILABLE_NO_STABLE_EVENT_ID"
+    assert state["sample_windows"] == 1
+    assert state["coalesced_updates"] == 2
+    assert state["accounting_invariant_ok"] is True
+    store.shutdown_persistence(deadline_seconds=0.0)
+
+
+def test_forced_depth_queue_saturation_is_rejected_and_degraded(monkeypatch):
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 1, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+    store = DepthStore()
+    _stop_worker_without_shutdown(store)
+    store._record_rejection = lambda **kwargs: None
+    sample = {"buy": [{"price": 100.0, "quantity": 10}], "sell": [{"price": 101.0, "quantity": 10}]}
+
+    store.update(101, sample)
+    store.update(102, sample)
+
+    state = store.persistence_accounting()
+    assert state["capture_mode"] == "SAMPLED_DEPTH"
+    assert state["depth_input_count"] == 2
+    assert state["depth_accepted_count"] == 1
+    assert state["depth_rejected_count"] == 1
+    assert state["durability_degraded"] is True
+    assert state["admission_accounting_invariant_ok"] is True
+    store.shutdown_persistence(deadline_seconds=0.0)
+
+
+def test_855_token_depth_burst_accounts_sampled_updates_without_queue_rejection(monkeypatch):
+    token_count = 855
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", token_count, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.5, raising=False)
+    store = DepthStore()
+    _stop_worker_without_shutdown(store)
+    store._record_rejection = lambda **kwargs: None
+    sample = {"buy": [{"price": 100.0, "quantity": 10}], "sell": [{"price": 101.0, "quantity": 10}]}
+
+    for token in range(1, token_count + 1):
+        store.update(token, sample)
+    for token in range(1, token_count + 1):
+        store.update(token, sample)
+
+    state = store.persistence_accounting()
+    assert state["capture_mode"] == "SAMPLED_DEPTH"
+    assert state["raw_updates_seen"] == token_count * 2
+    assert state["sample_windows"] == token_count
+    assert state["enqueued"] == token_count
+    assert state["coalesced_updates"] == token_count
+    assert state["queue_rejected"] == 0
+    assert state["pre_enqueue_rejected"] == 0
+    assert state["accounting_invariant_ok"] is True
+    assert state["admission_accounting_invariant_ok"] is True
+    store.shutdown_persistence(deadline_seconds=0.0)
+
+
+def test_855_token_sampled_depth_burst_persists_to_temporary_sqlite_sink(tmp_path, monkeypatch):
+    token_count = 855
+    db_file = tmp_path / "depth-855-drain.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_file), raising=False)
+    monkeypatch.setenv("TRADE_DB_PATH", str(db_file))
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 1024, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 100, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 0.05, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_PRUNE_INTERVAL_SEC", 3600.0, raising=False)
+    store = DepthStore()
+    sample = {
+        "buy": [{"price": 100.0, "quantity": 10, "orders": 1}],
+        "sell": [{"price": 101.0, "quantity": 10, "orders": 1}],
+    }
+
+    for token in range(800_000, 800_000 + token_count):
+        store.update(token, sample)
+
+    state = store.shutdown_persistence(deadline_seconds=10.0)
+    with _conn() as conn:
+        persisted_rows = conn.execute(
+            "SELECT COUNT(*) FROM depth_snapshots WHERE instrument_token BETWEEN ? AND ?",
+            (800_000, 800_000 + token_count - 1),
+        ).fetchone()[0]
+
+    assert state["capture_mode"] == "SAMPLED_DEPTH"
+    assert state["sampling_interval_ms"] == 0
+    assert state["raw_updates_seen"] == token_count
+    assert state["sample_windows"] == token_count
+    assert state["enqueued"] == token_count
+    assert state["persisted"] == token_count
+    assert persisted_rows == token_count
+    assert state["queue_rejected"] == 0
+    assert state["pre_enqueue_rejected"] == 0
+    assert state["failures"] == 0
+    assert state["complete"] is True
+    assert state["accounting_invariant_ok"] is True
+    assert state["admission_accounting_invariant_ok"] is True

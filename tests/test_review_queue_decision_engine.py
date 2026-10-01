@@ -41,6 +41,11 @@ def _candidate(**overrides):
         "data_state": "DATA_LIVE",
         "truth_quality": "TRUTH_LIVE_FRESH",
         "truth_allows_execution": True,
+        "feed_ok": True,
+        "ws_connected": True,
+        "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+        "option_last_tick_age_by_symbol": {"NIFTY": 0.5},
+        "symbol_feed_ok_by_symbol": {"NIFTY": True},
     }
     row.update(overrides)
     return row

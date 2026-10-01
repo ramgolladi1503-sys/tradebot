@@ -60,14 +60,6 @@ def _clear_callback_truth(depth_ws) -> None:
 def test_gate3_authority_local_fifo_and_immutable_envelopes(tmp_path, monkeypatch):
     """Each authority is FIFO; no cross-authority total order is claimed."""
 
-    ordering_contract = {
-        "scope": "AUTHORITY_LOCAL_FIFO",
-        "cross_authority_total_order": False,
-        "reason": "independent bounded workers intentionally avoid callback coupling",
-    }
-    assert ordering_contract["scope"] == "AUTHORITY_LOCAL_FIFO"
-    assert ordering_contract["cross_authority_total_order"] is False
-
     # Tick rows are immutable tuples and the worker observes enqueue order.
     tick_store.reset_runtime_state_for_tests()
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "tick.db"), raising=False)
@@ -100,11 +92,11 @@ def test_gate3_authority_local_fifo_and_immutable_envelopes(tmp_path, monkeypatc
         "_write_runtime_snapshot_sync",
         lambda payload: runtime_payloads.append(payload) or True,
     )
-    first_runtime = {"sequence": 1, "nested": {"values": [1]}}
+    first_runtime = {"sequence": 1, "runtime_state": "STATE_1", "nested": {"values": [1]}}
     assert runtime_store.write_runtime_snapshot(first_runtime)
     first_runtime["nested"]["values"].append(999)
-    assert runtime_store.write_runtime_snapshot({"sequence": 2, "nested": {"values": [2]}})
-    assert runtime_store.write_runtime_snapshot({"sequence": 3, "nested": {"values": [3]}})
+    assert runtime_store.write_runtime_snapshot({"sequence": 2, "runtime_state": "STATE_2", "nested": {"values": [2]}})
+    assert runtime_store.write_runtime_snapshot({"sequence": 3, "runtime_state": "STATE_3", "nested": {"values": [3]}})
     runtime_drain = runtime_store.shutdown_runtime_persistence(deadline_seconds=2.0)
     assert runtime_drain["complete"] is True
     assert [row["sequence"] for row in runtime_payloads] == [1, 2, 3]
@@ -205,18 +197,9 @@ def test_gate5_registered_callback_slow_store_matrix_is_off_thread(tmp_path):
                 "slow_runtime": slow_runtime,
             })
         finally:
-            try:
-                runtime_mod.shutdown_runtime_persistence(deadline_seconds=1.0)
-            except Exception:
-                pass
-            try:
-                cert.tick_store.shutdown_persistence_worker(deadline_seconds=1.0)
-            except Exception:
-                pass
-            try:
-                exercised_depth.shutdown_persistence(deadline_seconds=1.0)
-            except Exception:
-                pass
+            runtime_mod.shutdown_runtime_persistence(deadline_seconds=1.0)
+            cert.tick_store.shutdown_persistence_worker(deadline_seconds=1.0)
+            exercised_depth.shutdown_persistence(deadline_seconds=1.0)
             mp.undo()
 
     assert len(matrix_rows) == 8

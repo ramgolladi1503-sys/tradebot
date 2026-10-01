@@ -45,20 +45,36 @@ def test_live_risk_provider_fails_closed_when_unconnected():
     assert snap.block_reason == "LIVE_PORTFOLIO_STATE_UNCONNECTED"
 
 
-def test_broker_write_guards_active():
+def test_broker_write_guards_active(monkeypatch):
+    import core
+    import importlib
+    from types import SimpleNamespace
     from core.trade_truth.prospective_capture_engine import reset_broker_write_guards
+
+    execution_engine_module = importlib.import_module("core.execution_engine")
+    active_execution_engine = execution_engine_module.ExecutionEngine
+    stale_execution_engine = type("StaleExecutionEngine", (), {})
     reset_broker_write_guards()
+    # A previous import-boundary test can restore sys.modules while leaving
+    # the package attribute bound to a different module object. The guard
+    # must patch the exact class callers import from sys.modules.
+    monkeypatch.setattr(
+        core,
+        "execution_engine",
+        SimpleNamespace(ExecutionEngine=stale_execution_engine),
+    )
     arm_broker_write_guards()
     # broker_api_called: observed count from real broker boundary instrumentation
     observed_broker_calls = sum(CALL_COUNTS.values())
     assert observed_broker_calls == 0
-    from core.execution_engine import ExecutionEngine
-    with pytest.raises(RuntimeError, match="SECURITY BREACH"):
-        ee = ExecutionEngine()
-        ee.place_order(None)
     target_method = "place_" + "order"
-    assert CALL_COUNTS[f"core.execution_engine.ExecutionEngine.{target_method}"] == 1
-    reset_broker_write_guards()
+    try:
+        with pytest.raises(RuntimeError, match="SECURITY BREACH"):
+            getattr(active_execution_engine(), target_method)(None)
+        assert CALL_COUNTS[f"core.execution_engine.ExecutionEngine.{target_method}"] == 1
+        assert not hasattr(stale_execution_engine, target_method)
+    finally:
+        reset_broker_write_guards()
 
 
 

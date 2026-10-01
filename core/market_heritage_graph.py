@@ -1140,7 +1140,7 @@ def load_verified_t1_prerequisites(*, manifest_path: str | Path | None,
             path, decision_epoch=decision_epoch)
         payload = json.loads(path.read_text(encoding="utf-8"))
         session = payload.get("session_identity")
-        if not isinstance(session, Mapping) or any(session.get(key) != value for key, value in target_session.items()):
+        if not isinstance(session, Mapping) or dict(session) != dict(target_session):
             raise ValueError("TARGET_SESSION_MISMATCH")
 
         fields: dict[tuple[str, str], dict[str, Any]] = {}

@@ -117,7 +117,9 @@ jobs:
         run: |
           CANDIDATE_REF="refs/remotes/origin/pr-${PR_NUMBER}-head"
           test "$(git rev-parse "$CANDIDATE_REF")" = "$HEAD_SHA"
-          git worktree add --detach "$RUNNER_TEMP/pr-candidate" "$CANDIDATE_REF"
+          # CE analyzes text/source files; it must not spend the repository's
+          # LFS bandwidth hydrating unrelated research datasets.
+          GIT_LFS_SKIP_SMUDGE=1 git worktree add --detach "$RUNNER_TEMP/pr-candidate" "$CANDIDATE_REF"
 
       - name: Run unified CE gates
         run: |
