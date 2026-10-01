@@ -6109,6 +6109,8 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     token_exchange_hint: dict[int, str] = {}
     if max_tokens is None:
         max_tokens = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150))
+    if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
+        max_tokens = min(int(max_tokens), 123)
     strikes_around_default = int(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6))
     strikes_by_symbol = getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {}
     step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
