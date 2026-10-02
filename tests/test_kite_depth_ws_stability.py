@@ -1480,6 +1480,9 @@ def test_launch_plan_activation_seeds_validated_option_metadata(monkeypatch):
         "ok": True,
         "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
         "production_tokens": [101, 201, 202],
+        "production_underlying_tokens": [101],
+        "production_option_tokens": [201, 202],
+        "production_sticky_tokens": [],
         "final_union_tokens": [101, 201, 202, 301],
         "observation_tokens": [301],
         "configured_budget": 200,
@@ -1530,7 +1533,50 @@ def test_launch_plan_activation_rejects_inconsistent_option_metadata(monkeypatch
     assert ws._LAST_OPTION_COUNTS_BY_SYMBOL == {}
     assert ws._LAST_OPTION_MIN_REQUIRED_BY_SYMBOL == {}
     assert ws._TOKEN_TO_SYMBOL == {}
+    assert ws._UNDERLYING_TOKEN_TO_SYMBOL == {}
     assert any(event == "FEED_LAUNCH_PLAN_OPTION_METADATA_BLOCKED" for event, _ in events)
+
+
+def test_launch_plan_activation_preserves_sticky_identity_and_zero_option_block(monkeypatch):
+    _patch_common(monkeypatch)
+    plan = {
+        "ok": True,
+        "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
+        "production_tokens": [101, 102, 201, 301],
+        "production_underlying_tokens": [101, 102],
+        "production_option_tokens": [201],
+        "production_sticky_tokens": [301],
+        "final_union_tokens": [101, 102, 201, 301, 401],
+        "observation_tokens": [401],
+        "configured_budget": 200,
+        "production_resolution": [
+            {
+                "symbol": "NIFTY", "index_token": 101, "tokens": [101, 201],
+                "option_count": 1, "final_option_count": 1, "option_min_required": 2,
+            },
+            {
+                "symbol": "BANKNIFTY", "index_token": 102, "tokens": [102],
+                "option_count": 0, "final_option_count": 0, "option_min_required": 2,
+            },
+        ],
+        "production_option_count": 1,
+        "launch_plan_sha256": "plan-sha-with-sticky",
+    }
+
+    ws.activate_market_event_graph_launch_plan(plan)
+    state = ws._option_runtime_state(
+        now_epoch=100.0,
+        tokens=plan["production_tokens"],
+        expected_counts_by_symbol=ws._LAST_OPTION_COUNTS_BY_SYMBOL,
+        min_required_by_symbol=ws._LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+        ws_connected=True,
+    )
+
+    assert ws._TOKEN_TO_SYMBOL == {201: "NIFTY", 301: "STICKY", 101: "NIFTY", 102: "BANKNIFTY"}
+    assert ws._LAST_OPTION_COUNTS_BY_SYMBOL == {"NIFTY": 1, "BANKNIFTY": 0}
+    assert state["option_count"] == 1
+    assert "BANKNIFTY" in state["active_blockers_by_symbol"]
+    assert state["feed_block_reason_by_symbol"]["BANKNIFTY"] != "OK"
 
 
 def test_intermediate_observation_merge_preserves_resolved_option_identity(monkeypatch):

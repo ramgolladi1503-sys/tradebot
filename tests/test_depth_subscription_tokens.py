@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from types import SimpleNamespace
 
 from config import config as cfg
 from core import kite_depth_ws as ws
@@ -282,6 +283,52 @@ def test_zero_option_tokens_marks_zero_coverage_and_keeps_underlying(monkeypatch
     assert int(row.get("resolved_option_count") or 0) == 0
     assert int(row.get("final_option_count") or 0) == 0
     assert tokens == [ctx["index_tokens"]["NIFTY"]]
+
+
+def test_production_resolution_counts_use_local_owner_map_after_global_map_change(monkeypatch):
+    _setup_depth_window_mocks(monkeypatch)
+    registry_module = __import__("core.market_event_graph_live_observation_registry", fromlist=["x"])
+    observation_tokens = list(range(8_000_000, 8_000_053))
+    registry = SimpleNamespace(
+        all_tokens=observation_tokens,
+        token_by_symbol={f"OBS{i}": token for i, token in enumerate(observation_tokens)},
+        canonical_sha256="registry-sha",
+    )
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "MIN_OPTION_TOKENS", 12, raising=False)
+    monkeypatch.setattr(
+        cfg,
+        "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL",
+        {"NIFTY": 3, "BANKNIFTY": 3, "SENSEX": 3},
+        raising=False,
+    )
+    monkeypatch.setattr(registry_module, "load_observation_registry", lambda force=False: registry)
+
+    original_merge = ws.build_observation_subscription_merge
+
+    def _merge_after_global_symbol_map_change(**kwargs):
+        result = original_merge(**kwargs)
+        # Simulate launch-plan activation racing this build and replacing the
+        # process-global merged map after the local production owners exist.
+        ws._TOKEN_TO_SYMBOL = {}
+        return result
+
+    monkeypatch.setattr(ws, "build_observation_subscription_merge", _merge_after_global_symbol_map_change)
+
+    tokens, resolution = ws.build_subscription_tokens(
+        symbols=["NIFTY", "BANKNIFTY", "SENSEX"],
+        max_tokens=150,
+    )
+
+    rows = {row["symbol"]: row for row in resolution}
+    assert len(tokens) <= 150
+    assert set(observation_tokens).issubset(tokens)
+    assert rows["NIFTY"]["final_option_count"] >= 12
+    assert rows["BANKNIFTY"]["final_option_count"] >= 12
+    assert rows["SENSEX"]["final_option_count"] >= 12
+    for symbol, row in rows.items():
+        option_tokens = [token for token in row["tokens"] if token != row["index_token"]]
+        assert len(option_tokens) == row["final_option_count"]
 
 
 def test_degraded_coverage_blocks_until_fresh_option_tick_proves_recovery(monkeypatch):
