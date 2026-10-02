@@ -58,7 +58,7 @@ def _payload(repo: Path, **supervisor_overrides):
         "acceptance_commands": [
             {
                 "name": "focused-tests",
-                "argv": ["python", "-m", "pytest", "tests/test_feature.py", "-q"],
+                "argv": ["python3", "-m", "pytest", "tests/test_feature.py", "-q"],
                 "timeout_seconds": 30,
             }
         ],

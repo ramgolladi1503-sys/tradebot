@@ -43,13 +43,6 @@ DESKS_ROOT = os.getenv("DESKS_ROOT", str(_DESKS_ROOT))
 LOGS_ROOT = os.getenv("LOGS_ROOT", str(_LOGS_ROOT))
 REPORTS_ROOT = os.getenv("REPORTS_ROOT", str(_REPORTS_ROOT))
 LOCKS_ROOT = os.getenv("LOCKS_ROOT", str(_LOCKS_ROOT))
-# Read-only MEG observer sessions may run from multiple git worktrees. Keep
-# their default singleton lock outside the checkout; explicit shared runtime
-# lock roots remain supported for deployments that already configure one.
-MEG_OBSERVATION_LOCKS_ROOT = os.getenv(
-    "MEG_OBSERVATION_LOCKS_ROOT",
-    os.getenv("LOCKS_ROOT", str(Path.home() / ".tradebot" / "locks")),
-)
 DB_ROOT = os.getenv("DB_ROOT", str(_DB_ROOT))
 TB_LOG_ROTATE_MAX_MB = int(os.getenv("TB_LOG_ROTATE_MAX_MB", "20"))
 TB_LOG_ROTATE_BACKUPS = int(os.getenv("TB_LOG_ROTATE_BACKUPS", "3"))

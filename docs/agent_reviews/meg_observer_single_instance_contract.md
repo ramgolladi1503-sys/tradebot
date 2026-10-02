@@ -6,7 +6,7 @@
 - `action: DESIGN_ARCHITECTURE, DEFINE_CONTRACT, MAP_WORKFLOW, CREATE_ACCEPTANCE_GATES, UPDATE_DOCS`
 - `title: Prevent overlapping MEG read-only sessions from contending on shared runtime storage`
 - `scope: Enforce one active Market Event Graph read-only observation run per host and user across git worktrees by default, with an explicit shared lock-root override. Acquire the lock only after static/launch preflight passes and only for an actual capture; leave preflight commands unaffected. Keep the guard independent from the LIVE/PAPER Kite execution lock.`
-- `requested_paths: config/config.py; core/instance_lock.py; scripts/run_market_event_graph_live_session_v1.py; tests/test_instance_lock.py; tests/test_run_market_event_graph_live_session_v1.py; docs/agent_reviews/meg_observer_single_instance_contract.md`
+- `requested_paths: config/feed_runtime_reliability.py; core/instance_lock.py; scripts/run_market_event_graph_live_session_v1.py; tests/test_instance_lock.py; tests/test_run_market_event_graph_live_session_v1.py; docs/agent_reviews/meg_observer_single_instance_contract.md`
 - `allowed_paths: exactly the requested paths`
 - `forbidden_paths: broker/order/execution/risk/strategy code; credential/environment files; main.py and live launcher behavior; broker calls; runtime artifacts; unrelated files`
 - `expected_tests: same-process and cross-process lock exclusion; stale metadata cleared while lock-file inode remains stable; lock path is identical across two checkout roots; second observation is rejected before creating capture output; lock path is recorded in the presession manifest; static and launch preflight-only paths do not acquire the lock.`
@@ -14,7 +14,7 @@
 
 ## Design and Boundaries
 
-The LIVE/PAPER `kite_session.lock` protects execution-bearing application processes. A MEG capture is intentionally SIM/read-only and uses `skip_lock=True`, so it does not contend with that lock. A repository-local fallback allowed two worktrees to capture concurrently. Use a separate per-user lock root at `~/.tradebot/locks` by default, overridable with `MEG_OBSERVATION_LOCKS_ROOT` or the existing explicit `LOCKS_ROOT` setting. The lock path is written into the presession manifest for later attribution.
+The LIVE/PAPER `kite_session.lock` protects execution-bearing application processes. A MEG capture is intentionally SIM/read-only and uses `skip_lock=True`, so it does not contend with that lock. A repository-local fallback allowed two worktrees to capture concurrently. Use a separate per-user lock root at `~/.tradebot/locks` by default, overridable with `MEG_OBSERVATION_LOCKS_ROOT` or the existing explicit `LOCKS_ROOT` environment setting. Keep this observer-only setting in `config/feed_runtime_reliability.py`; `config/config.py` is cryptographically pinned by an unrelated regime immutability audit. The lock path is written into the presession manifest for later attribution.
 
 The lock file must remain present while unlocked. Unlinking a lock path after unlock can race with another process opening and acquiring the old inode, allowing a third process to create and lock a new inode at the same path. Extend `InstanceLock` with an opt-in persistent-path mode that clears holder metadata while still holding the lock and then unlocks without unlinking. Existing LIVE/PAPER callers retain their current default behavior.
 

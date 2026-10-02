@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config import config as cfg
+from config import feed_runtime_reliability as reliability_cfg
 from core.market_event_graph_live_launch_plan import (
     PASS_STATIC_LIVE_SOURCE_PREFLIGHT,
     build_launch_plan,
@@ -119,7 +120,7 @@ def _commit_sha() -> str:
 def _new_observation_session_lock() -> InstanceLock:
     lock_root = Path(
         str(
-            getattr(cfg, "MEG_OBSERVATION_LOCKS_ROOT", "")
+            getattr(reliability_cfg, "MEG_OBSERVATION_LOCKS_ROOT", "")
             or getattr(cfg, "LOCKS_ROOT", "")
             or (Path.home() / ".tradebot" / "locks")
         )

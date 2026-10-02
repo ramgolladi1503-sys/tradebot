@@ -50,7 +50,7 @@ def test_active_observation_lock_blocks_before_capture_directory_creation(monkey
     from scripts import run_market_event_graph_live_session_v1 as session
 
     lock_root = tmp_path / "locks"
-    monkeypatch.setattr(session.cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(lock_root), raising=False)
+    monkeypatch.setattr(session.reliability_cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(lock_root), raising=False)
     owner = session._new_observation_session_lock()
     acquired, _ = owner.acquire()
     assert acquired is True
@@ -86,7 +86,7 @@ def test_observation_lock_defaults_to_one_path_across_checkout_roots(monkeypatch
 
     monkeypatch.delenv("MEG_OBSERVATION_LOCKS_ROOT", raising=False)
     monkeypatch.delenv("LOCKS_ROOT", raising=False)
-    monkeypatch.setattr(session.cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(Path.home() / ".tradebot" / "locks"), raising=False)
+    monkeypatch.setattr(session.reliability_cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(Path.home() / ".tradebot" / "locks"), raising=False)
     first_checkout = tmp_path / "checkout-a"
     second_checkout = tmp_path / "checkout-b"
 
@@ -112,7 +112,7 @@ def test_observation_capture_manifest_records_shared_lock_path(monkeypatch, tmp_
     from scripts import run_market_event_graph_live_session_v1 as session
 
     lock_root = tmp_path / "shared-locks"
-    monkeypatch.setattr(session.cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(lock_root), raising=False)
+    monkeypatch.setattr(session.reliability_cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(lock_root), raising=False)
     monkeypatch.setattr(session, "_commit_sha", lambda: "test-commit")
     monkeypatch.setattr(
         session.subprocess,
