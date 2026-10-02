@@ -43,3 +43,41 @@ Offline evidence -> launch-plan structural validation -> immutable hash-bound pl
 ## GSD Execution Scope
 
 GSD may modify only the requested paths. If tests reveal a required change outside that list, stop and report it as a separate scope item. Do not merge or deploy as part of this contract.
+
+## Scope Guard
+
+This repair validates identities already produced by the option resolver. It does not infer token ownership, widen the subscription budget, relax option minimums, modify freshness/recovery gates, or enable execution.
+
+## Grill Me Review
+
+- The incident producer claimed 123 production IDs while row metadata did not own all IDs; a websocket connection and a ready verdict were insufficient evidence.
+- The loader must reject unhashed readiness flags and derived-count tampering, not only malformed source rows.
+- Sticky tokens must remain separate from per-symbol options; sparse zero-option rows remain degraded and downstream option-health minimums still block.
+
+## Hermes Review
+
+The producer, immutable-plan loader, runtime activation, and final per-symbol resolution must share one exact ownership contract. Rows are the authority for index and option identities; invocation-local mappings are authoritative during build. Missing or duplicate ownership blocks readiness.
+
+## GSD Review
+
+GSD implemented exact row ownership, strict token-array validation, aggregate count and safety-metadata checks, local-map option attribution, and regression tests. The captured incident plan is replayed offline and rejected before activation.
+
+## QA / Safety Review
+
+**High-Risk Path Review:** `core/kite_depth_ws.py` is a feed/WebSocket path. This change only validates and reports identity mappings; it does not call a broker, alter feed freshness or recovery gates, or change subscription capacity. Invalid data fails closed. Tests use offline fixtures and assert read-only/no-order/no-broker/no-live-authority fields.
+
+## Acceptance Proof
+
+The focused launch/feed/supervisor/lock tests pass. The October 1 captured launch plan rejects as `BLOCKED_BY_LAUNCH_PLAN_IDENTITY`; a synthetic 53-observation-token replay retains at least 12 local options for each configured index under the existing governed cap. Plan tampering of verdict, safety flags, and derived counts is rejected.
+
+## Runtime Proof Required After Merge
+
+In a later operator-controlled read-only run, bind the producer SHA and verify actual production token ownership, per-symbol option token receipts and fresh ticks, exact subscription parity, recovery proof, and global/per-symbol feed truth. A plan pass alone does not establish these runtime facts.
+
+## What This PR Does Not Prove
+
+It does not prove future broker subscriptions, fresh market data, option coverage in a live run, strategy quality, or live execution readiness. It does not resolve `INDEX_INTERVAL_MISALIGNED` by synthesizing bars.
+
+## Human Approval
+
+Human review is required for merge and any later runtime rollout. This contract grants no order, broker-write, or live-execution authority.

@@ -19,3 +19,45 @@ The LIVE/PAPER `kite_session.lock` protects execution-bearing application proces
 The lock file must remain present while unlocked. Unlinking a lock path after unlock can race with another process opening and acquiring the old inode, allowing a third process to create and lock a new inode at the same path. Extend `InstanceLock` with an opt-in persistent-path mode that clears holder metadata while still holding the lock and then unlocks without unlinking. Existing LIVE/PAPER callers retain their current default behavior.
 
 Acquire only after launch-plan readiness succeeds and before creating per-run output. Keep the lock for the full child process duration and release in `finally`. Lock failure is a fail-closed observation-startup result, not a claim about broker or strategy readiness.
+
+## Agent Work Contract
+
+Hermes specifies the lock contract and safety boundary; GSD implements only the listed paths and verifies exclusion/release behavior.
+
+## Scope Guard
+
+The new singleton applies only to actual MEG read-only capture sessions. Static and launch preflight, ordinary LIVE/PAPER process locking, execution mode, broker calls, and order behavior remain unchanged.
+
+## Grill Me Review
+
+- Do not share the execution lock: observers are SIM/read-only and may coexist with the execution process.
+- Do not unlink the persistent lock path after release; inode replacement can permit two lock owners.
+- A blocked second launch must create no capture directory and must not be presented as a successful observation.
+
+## Hermes Review
+
+Use a distinct `LOCKS_ROOT/meg_read_only_observation.lock` with OS advisory locking, clear holder metadata before unlock, and retain the inode. Hold the lock across the observer child process and release it in a `finally` path.
+
+## GSD Review
+
+GSD added opt-in persistent-path support to the shared `InstanceLock`, preserved its existing default behavior, acquired the observer lock after preflight and before capture creation, and added lock lifecycle, conflict, and lock-free preflight tests.
+
+## QA / Safety Review
+
+**High-Risk Path Review:** The session orchestrator is a runtime entrypoint, but this change only adds mutual exclusion for read-only SIM captures. It does not touch broker adapters, order/risk logic, credentials, live config, or execution locks. Lock errors fail closed with an explicit blocker and safety flags.
+
+## Acceptance Proof
+
+The focused lock and session-runner tests pass: a contender is blocked while the lock is held, persistent lock metadata is cleared on release, reacquisition succeeds, legacy default unlink behavior remains intact, and preflight-only does not create/acquire the observer lock.
+
+## Runtime Proof Required After Merge
+
+On the next read-only session launch, record the exact commit, lock path, holder PID, and startup verdict. Attempting a second capture while the first is active must return the documented blocked verdict before creating a capture directory.
+
+## What This PR Does Not Prove
+
+It does not prove that unrelated observer programs or separate LOCKS_ROOT values coordinate, or that prior overlapping sessions caused a specific database lock failure. It prevents duplicate MEG wrappers sharing the configured runtime lock root.
+
+## Human Approval
+
+Human review is required before merge or runtime rollout. The observer lock does not grant live, paper, broker-write, or order authority.
