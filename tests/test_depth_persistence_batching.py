@@ -2,6 +2,7 @@
 import time
 import json
 import sqlite3
+import threading
 from pathlib import Path
 import pytest
 
@@ -118,3 +119,108 @@ def test_depth_store_persist_loop_lock_skip_records_rejections_fail_closed(tmp_p
     rejections = [json.loads(line) for line in rejection_file.read_text().splitlines() if line.strip()]
     assert len(rejections) == 5
     assert all(r["reason_code"] == "LOCK_SKIPPED" for r in rejections)
+
+
+def test_depth_store_incident_sized_backlog_drains_with_exact_accounting(tmp_path, monkeypatch):
+    """Synthetic books at the reported 37,936-item backlog scale drain exactly."""
+    db_file = tmp_path / "test_burst.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_file), raising=False)
+    monkeypatch.setenv("TRADE_DB_PATH", str(db_file))
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 65536, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_PRUNE_INTERVAL_SEC", 3600.0, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 250, raising=False)
+
+    import core.depth_store as ds_mod
+    original_batch_insert = ds_mod.insert_depth_snapshots_batch
+    first_batch_started = threading.Event()
+    release_first_batch = threading.Event()
+    batch_calls = []
+
+    def slow_first_batch(items):
+        batch_calls.append(len(items))
+        if len(batch_calls) == 1:
+            first_batch_started.set()
+            assert release_first_batch.wait(timeout=15.0)
+        return original_batch_insert(items)
+
+    monkeypatch.setattr(ds_mod, "insert_depth_snapshots_batch", slow_first_batch)
+    store = DepthStore()
+    sample_depth = {
+        "buy": [{"price": 100.0, "quantity": 10, "orders": 1}],
+        "sell": [{"price": 101.0, "quantity": 10, "orders": 1}],
+    }
+
+    burst_count = 37936
+    for i in range(burst_count):
+        store.update(10000 + i, sample_depth)
+
+    assert first_batch_started.wait(timeout=5.0)
+    during_backlog = store.persistence_state()
+    assert during_backlog["queue_depth"] <= 65536
+    assert during_backlog["queue_rejected"] == 0
+    release_first_batch.set()
+    state = store.shutdown_persistence(deadline_seconds=60.0)
+    assert state["complete"] is True
+    assert state["queue_rejected"] == 0
+    assert state["pre_enqueue_rejected"] == 0
+    assert state["rejected"] == 0
+    assert state["failures"] == 0
+    assert state["enqueued"] == burst_count
+    assert state["persisted"] == burst_count
+    assert state["unaccounted_remainder"] == 0
+    assert state["accounting_invariant_ok"] is True
+    assert batch_calls
+    assert max(batch_calls) <= 250
+    assert max(batch_calls) > 1
+    with _conn() as conn:
+        persisted_rows = conn.execute("SELECT COUNT(*) FROM depth_snapshots").fetchone()[0]
+    assert persisted_rows == burst_count
+
+
+def test_depth_store_overload_rejects_visibly_and_preserves_accounting(tmp_path, monkeypatch):
+    """A stalled persistence consumer causes bounded, visible rejection, never false persistence."""
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "stalled.sqlite"), raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 4, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 1, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 0.01, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+
+    import core.depth_store as ds_mod
+    entered = threading.Event()
+    release = threading.Event()
+
+    def blocked_insert(*_args):
+        entered.set()
+        assert release.wait(timeout=10.0)
+        return True
+
+    monkeypatch.setattr(ds_mod, "insert_depth_snapshot", blocked_insert)
+    store = DepthStore()
+    rejection_file = tmp_path / "logs" / "depth_rejections.jsonl"
+    store.configure_rejection_provenance(rejection_file, session_id="overload-test", producer_sha="test")
+    sample_depth = {"buy": [{"price": 100.0, "quantity": 1}], "sell": [{"price": 101.0, "quantity": 1}]}
+
+    store.update(1, sample_depth)
+    assert entered.wait(timeout=2.0)
+    for token in range(2, 6):
+        store.update(token, sample_depth)
+    store.update(6, sample_depth)
+    saturated = store.persistence_state()
+    assert saturated["queue_depth"] == 4
+    assert saturated["pre_enqueue_rejected"] == 1
+    assert saturated["rejected"] == 1
+    assert saturated["persisted"] == 0
+    assert saturated["unaccounted_remainder"] == 0
+
+    release.set()
+    final = store.shutdown_persistence(deadline_seconds=5.0)
+    assert final["complete"] is True
+    assert final["persisted"] == 5
+    assert final["pre_enqueue_rejected"] == 1
+    assert final["rejected"] == 1
+    assert final["unaccounted_remainder"] == 0
+    rejection_rows = [json.loads(line) for line in rejection_file.read_text().splitlines() if line.strip()]
+    assert len(rejection_rows) == 1
+    assert rejection_rows[0]["reason_code"] == "QUEUE_REJECTED"
