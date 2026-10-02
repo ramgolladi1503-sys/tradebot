@@ -73,6 +73,7 @@ def test_active_observation_lock_blocks_before_capture_directory_creation(monkey
     payload = json.loads(capsys.readouterr().out.strip())
     assert result == 2
     assert payload["verdict"] == "BLOCKED_BY_OBSERVATION_SESSION_ALREADY_ACTIVE"
+    assert payload["lock_path"] == str((lock_root / "meg_read_only_observation.lock").resolve())
     assert payload["read_only"] is True
     assert payload["is_order_action"] is False
     assert payload["broker_api_called"] is False

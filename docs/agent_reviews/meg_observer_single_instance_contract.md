@@ -48,7 +48,7 @@ GSD added the shared observer lock-root configuration, kept the generic `Instanc
 
 ## Acceptance Proof
 
-The focused lock and session-runner tests pass: 11 tests prove a contender is blocked across two simulated checkout roots and a child process, persistent lock metadata is cleared on release, reacquisition succeeds, legacy default unlink behavior remains intact, the manifest records the lock path, and preflight-only does not create/acquire the observer lock. `py_compile` and `git diff --check` pass. Ruff is unavailable in this environment.
+The focused lock and session-runner tests pass: 11 tests prove a contender is blocked across two simulated checkout roots and a child process, persistent lock metadata is cleared on release, reacquisition succeeds, legacy default unlink behavior remains intact, the manifest and blocked startup payloads record the lock path, and preflight-only does not create/acquire the observer lock. `py_compile` and `git diff --check` pass. Ruff is unavailable in this environment.
 
 ## Runtime Proof Required After Merge
 
