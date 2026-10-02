@@ -3,10 +3,65 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from core.analytics.outcome_replay import analyze_event_outcome
+from core.analytics import outcome_replay as replay_module
+from core.analytics.outcome_replay import analyze_event_outcome, build_outcomes_for_date, default_outcomes_path
+from core.analytics.schema import TradeIntentEvent
 
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
+
+
+def test_session_outcome_paths_are_isolated(tmp_path):
+    first = tmp_path / "sessions" / "run-a"
+    second = tmp_path / "sessions" / "run-b"
+    first.mkdir(parents=True)
+    second.mkdir()
+    default = default_outcomes_path("2026-10-01")
+    first_path = default_outcomes_path("2026-10-01", session_dir=first)
+    second_path = default_outcomes_path("2026-10-01", session_dir=second)
+    assert first_path != default
+    assert second_path != default
+    assert first_path != second_path
+    journal = first / "candidate_journal.jsonl"
+    journal.write_text('{"candidate_id":"one"}\n', encoding="utf-8")
+    before_append = default_outcomes_path("2026-10-01", session_dir=first)
+    journal.write_text('{"candidate_id":"one"}\n{"candidate_id":"two"}\n', encoding="utf-8")
+    after_append = default_outcomes_path("2026-10-01", session_dir=first)
+    assert after_append != before_append
+
+
+def test_session_replay_uses_session_candidates_without_workspace_events(tmp_path, monkeypatch):
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    event = TradeIntentEvent(
+        trade_key="NIFTY|2026-10-08|25000|CE|BUY",
+        event_id="evt_session_candidate",
+        intent="rejected",
+        ts_epoch_ms=1790841500000,
+        symbol="NIFTY",
+        side="BUY",
+        source="session_candidate_journal:test",
+        reject_reason="FEED_STALE",
+        metrics_snapshot={"entry": 100, "target": 110, "stop": 95},
+    )
+    monkeypatch.setattr(replay_module, "discover_session_paths", lambda **_kwargs: [session_dir])
+    monkeypatch.setattr(replay_module, "load_session_events", lambda **_kwargs: [event])
+    monkeypatch.setattr(
+        replay_module,
+        "load_trade_intent_events",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("workspace intents must not enter session replay")),
+    )
+    monkeypatch.setattr(
+        replay_module,
+        "analyze_event_outcome",
+        lambda candidate, **_kwargs: {"event_ref_id": candidate.event_id, "trade_outcome": {"outcome": "no_hit"}},
+    )
+
+    result = build_outcomes_for_date(
+        "2026-10-01", session_dir=session_dir, output_path=tmp_path / "session-outcomes.jsonl"
+    )
+    assert result["count"] == 1
+    assert json.loads((tmp_path / "session-outcomes.jsonl").read_text().splitlines()[0])["event_ref_id"] == event.event_id
 
 
 def _load_json(name: str):
