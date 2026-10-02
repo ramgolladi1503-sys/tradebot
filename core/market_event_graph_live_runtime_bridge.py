@@ -181,6 +181,17 @@ class LiveSourceRuntimeBridge:
         snapshot_age = float(snapshot["observed_at_epoch"]) - float(snapshot["source_bar_end_epoch"])
         if snapshot_age < 0.0 or snapshot_age > max_freshness_sec:
             return self._reject("SNAPSHOT_STALE", latency_ms=latency_ms, identities=(), audit=subscription)
+        stale_tick_context, stale_tick_symbols, stale_tick_reason = _source_tick_freshness_failure(
+            snapshot, max_age_sec=max_freshness_sec
+        )
+        if stale_tick_reason is not None:
+            return self._reject(
+                stale_tick_reason,
+                latency_ms=latency_ms,
+                identities=stale_tick_symbols,
+                audit=subscription,
+                diagnostic_context={"source_tick_freshness": stale_tick_context},
+            )
 
         validation_start = time.perf_counter()
         row = build_live_captured_metadata_row(
@@ -784,6 +795,47 @@ def _bar_last_live_tick_epoch(bar: Mapping[str, Any]) -> float | None:
         return None
     value = _coerce_float(provenance.get("last_live_tick_epoch"))
     return value if value is not None and math.isfinite(value) else None
+
+
+def _source_tick_freshness_failure(
+    snapshot: Mapping[str, Any], *, max_age_sec: float
+) -> tuple[dict[str, Any], tuple[str, ...], str | None]:
+    """Reject source bars whose last live tick is stale or invalid at observation time."""
+    observed_at = _coerce_float(snapshot.get("observed_at_epoch"))
+    bars = [snapshot.get("index_bar"), *(snapshot.get("constituent_bars") or [])]
+    failures: list[dict[str, Any]] = []
+    failure_reason: str | None = None
+    for bar in bars:
+        if not isinstance(bar, Mapping):
+            continue
+        symbol = str(bar.get("symbol") or "UNKNOWN").upper()
+        tick_epoch = _bar_last_live_tick_epoch(bar)
+        source_end = _coerce_float(bar.get("source_bar_end_epoch"))
+        if source_end is None:
+            source_end = _bar_end_epoch(bar)
+        age_sec = observed_at - tick_epoch if observed_at is not None and tick_epoch is not None else None
+        if observed_at is None or tick_epoch is None or source_end is None:
+            reason = "SNAPSHOT_SOURCE_TICK_INVALID"
+        elif tick_epoch > observed_at or tick_epoch > source_end:
+            reason = "SNAPSHOT_SOURCE_TICK_FUTURE"
+        elif age_sec is None or age_sec > max_age_sec:
+            reason = "SNAPSHOT_SOURCE_TICK_STALE"
+        else:
+            continue
+        if failure_reason is None:
+            failure_reason = reason
+        failures.append(
+            {
+                "symbol": symbol,
+                "source_bar_end_epoch": source_end,
+                "last_live_tick_epoch": tick_epoch,
+                "tick_age_sec": age_sec,
+                "observed_at_epoch": observed_at,
+                "max_age_sec": max_age_sec,
+                "reason": reason,
+            }
+        )
+    return {"failures": failures}, tuple(item["symbol"] for item in failures), failure_reason
 
 
 def _bar_has_live_provenance(

@@ -1,84 +1,40 @@
-# MEG Interval Mismatch Diagnostics Review
+# MEG Interval and Source-Tick Freshness Review
 
 ## Agent Work Contract
 
 ```text
 source_agent: hermes (design), then gsd (scoped execution)
-action: DEFINE_CONTRACT then GENERATE_PATCH
-title: Preserve fail-closed MEG interval rejection with endpoint evidence
-scope: add diagnostic context to INDEX_INTERVAL_MISALIGNED rejection records
+action: DEFINE_CONTRACT then GENERATE_TESTS and GENERATE_PATCH
+title: Preserve MEG interval truth and reject stale source ticks
+scope: retain mismatch diagnostics and reject aligned snapshots with invalid, future, or stale last live ticks
 requested_paths:
   - core/market_event_graph_live_runtime_bridge.py
   - tests/test_market_event_graph_live_runtime_bridge.py
-  - tests/test_market_event_graph_bridge_interval_state_machine.py
   - docs/agent_reviews/meg-interval-mismatch-diagnostics.md
-allowed_paths: the four requested paths only
-forbidden_paths: broker/order/risk/strategy paths, credentials, live runtime state, feed freshness policy
-expected_tests: focused MEG bridge tests; diff check; agent review evidence gate
-acceptance_proof: mismatch remains rejected and records index/constituent endpoints, delta, cycle cutoff and latest live tick timestamps
+allowed_paths: the three requested paths only
+forbidden_paths: broker/order/risk/strategy paths, credentials, live runtime state, threshold changes, bar synthesis or forward-fill
+expected_tests: focused MEG bridge and interval state-machine tests; py_compile; diff check; agent review evidence gate
+acceptance_proof: exact mismatch remains rejected; aligned snapshots export only when each last live tick is finite, nonfuture, and within the existing freshness limit at observation cutoff; stale/future diagnostics persisted
 ```
 
-## Scope Guard
+## Hermes Architecture and Contract
 
-The change adds RCA fields to the existing mismatch rejection. It preserves exact
-bar-end equality, `INDEX_INTERVAL_MISALIGNED`, and non-export behavior. It does not
-align bars, forward-fill prices, change freshness thresholds, or infer synchronized
-market data from receipt time.
+The Oct. 1 artifact review showed accepted source bars whose interval-end timestamp was recent while some underlying last-live-tick timestamps were roughly a minute older. Existing bar freshness alone cannot prove that the observations supporting a bar are fresh. An aligned snapshot is exportable only when the index and every constituent have the exact same finite source bar-end epoch, valid live provenance, and a finite last live tick no later than both the observation cutoff and its own bar endpoint. At the observation cutoff, each last live tick must be no older than the existing `MEG_MAX_DECISION_FRESHNESS_SEC`.
 
-## Grill Me Review
+Missing/non-finite tick provenance, a tick later than the cutoff or source endpoint, or a tick older than the limit fails closed. Rejections identify symbol, endpoint, last tick, age, cutoff, configured limit, and reason. Existing interval mismatch rejection remains unchanged and precedes tick validation. Never synthesize bars, forward-fill prices, relax freshness, or substitute receipt time. Output remains read-only and confers no live-execution authority.
 
-Diagnostic endpoints improve the next live run's evidence but do not identify the
-cause of the observed mismatch or repair data synchronization. The current patch
-must not be described as resolving the underlying runtime issue.
+## Evidence and Limitations
 
-## Hermes Review
+- In `/Volumes/TradeBotData/sessions/session_2026-10-01/2026-10-01/meg-live-2026-10-01-98670a53e299-8cf253a5738e/captured_metadata.jsonl`, the accepted 13:40 cycle has `source_bar_end_epoch=1790842200`, `observed_at_epoch=1790842211.518916`, and 51 provenance-bearing bars. Recursive inspection found all 51 last live ticks older than 15 seconds at observation time, with ages from approximately 63.5 to 67.5 seconds. This is direct evidence of stale-tick exposure in an accepted snapshot; it does not establish the cause of interval mismatch rejections.
+- Rejected-cycle source endpoints were not recorded in the original run, so the exact source of each `INDEX_INTERVAL_MISALIGNED` rejection remains unproven.
+- This fix can increase blocked MEG cycles when input ticks are stale. That is expected fail-closed behavior.
 
-Contract: a snapshot is exportable only when index and all constituent bars have
-the same finite source bar-end epoch and valid live provenance. On mismatch,
-reject unchanged and include the two symbols, endpoints, signed delta, cycle
-cutoff, and last live tick epochs when available. Missing or non-finite values
-remain null; they never satisfy the synchronization contract.
+## GSD Execution and Validation
 
-## GSD Review
+The implementation reuses `MEG_MAX_DECISION_FRESHNESS_SEC`; it adds no config key and changes no threshold. The runtime bridge, focused bridge tests, and this review document are the scoped paths. No broker, order, strategy, credential, risk, feed configuration, or live-process behavior is changed.
 
-The runtime bridge and its focused tests are the only implementation paths. One
-state-machine test is updated for the private snapshot helper's expanded return
-tuple. No runtime wiring, order, broker, strategy, freshness, or risk logic changed.
+Acceptance requires tests proving: (1) a fresh aligned snapshot remains exportable, (2) an aligned stale tick is rejected with symbol/age evidence, (3) future ticks relative to the bar endpoint or observation cutoff are rejected, (4) non-finite ticks are rejected, (5) a tick exactly at the configured freshness limit is accepted, (6) interval mismatch stays rejected with endpoint diagnostics, and (7) every rejection retains `read_only=true`, `is_order_action=false`, `broker_api_called=false`, and `allowed_for_live_execution=false`. Local validation: 27 focused bridge/state-machine tests passed; `py_compile`, `git diff --check`, and the agent-review evidence gate passed.
 
-## QA / Safety Review
+## What This Does Not Prove
 
-- Mismatched epochs remain blocked and unexported.
-- Evidence remains read-only; `is_order_action=false`, `broker_api_called=false`,
-  and `allowed_for_live_execution=false` remain present.
-- Focused tests verify returned and persisted diagnostic fields.
-- Local validation: 22 focused MEG bridge tests passed; `git diff --check` clean.
-
-## High-Risk Path Review
-
-The bridge is runtime market-data code. The patch changes only diagnostics on the
-existing rejection path; it does not change source selection or acceptance
-criteria. Any diagnostic write failure remains isolated from the fail-closed
-rejection result.
-
-## Acceptance Proof
-
-An exact 60-second endpoint mismatch remains rejected with no export, while the
-audit result and rejection JSONL carry both endpoint epochs, the signed delta,
-cycle cutoff, and last live tick epochs. Non-finite source epochs are not accepted.
-
-## Runtime Proof Required After Merge
-
-In a separately authorized read-only live observation, confirm the next mismatch
-record contains the source endpoints and last-tick timestamps. Do not infer that
-this instrumentation fixes the mismatch; use the added evidence to establish a
-separate root cause and narrowly scoped remediation.
-
-## What This PR Does Not Prove
-
-It does not prove why the live bars were misaligned, that historical bars can be
-safely aligned, feed health, trading edge, or paper/live readiness.
-
-## Human Approval
-
-No merge, live configuration change, broker call, order action, or execution
-authorization is included or implied.
+It does not explain the original interval mismatches, establish sustained feed health or depth persistence throughput, prove a trading edge, or certify paper/live readiness. A future read-only live observation is needed to establish whether and how often the new rejection occurs in production data.
