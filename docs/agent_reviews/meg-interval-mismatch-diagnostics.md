@@ -35,7 +35,7 @@ The implementation reuses `MEG_MAX_DECISION_FRESHNESS_SEC`; it adds no config ke
 
 Acceptance requires tests proving: (1) a fresh aligned snapshot remains exportable, (2) an aligned stale tick is rejected with symbol/age evidence, (3) future ticks relative to the bar endpoint or observation cutoff are rejected, (4) non-finite ticks are rejected, (5) a tick exactly at the configured freshness limit is accepted, (6) interval mismatch stays rejected with endpoint diagnostics, and (7) every rejection retains `read_only=true`, `is_order_action=false`, `broker_api_called=false`, and `allowed_for_live_execution=false`. Local validation: 27 focused bridge/state-machine tests passed; `py_compile`, `git diff --check`, and the agent-review evidence gate passed.
 
-## What This Does Not Prove
+## What This PR Does Not Prove
 
 It does not explain the original interval mismatches, establish sustained feed health or depth persistence throughput, prove a trading edge, or certify paper/live readiness. A future read-only live observation is needed to establish whether and how often the new rejection occurs in production data.
 
