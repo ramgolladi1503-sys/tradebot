@@ -20,15 +20,26 @@ Depth snapshots remain bounded and asynchronous. Every accepted item must be per
 - Remaining limitation: synthetic tests do not establish production soak throughput, peak RSS, or real raw-depth replay performance.
 
 ## Hermes Review
-Contract: read_only=true; is_order_action=false; broker_api_called=false; allowed_for_live_execution=false. Queue capacity is finite; rejected work is observable; accepted = persisted + rejected + in-flight/queued remainder at each snapshot. The configured batch is capped by the code's positive batch setting. No silent fallback may claim persistence.
+Contract: read_only=true; is_order_action=false; broker_api_called=false; allowed_for_live_execution=false. Queue capacity is finite; rejected work is observable; accepted = persisted + rejected + in-flight/queued remainder at each snapshot. The configured batch must be an integer in `[1, PERSISTENCE_BATCH_MAX_ITEMS]`, validated before starting the persistence worker; invalid or absent-to-invalid values fail closed. The worker uses the validated startup value and does not re-read mutable configuration. No silent fallback may claim persistence.
+
+### Hermes Follow-up: Batch Bound
+- `source_agent: hermes`; actions: `DESIGN_ARCHITECTURE`, `DEFINE_CONTRACT`, `CREATE_ACCEPTANCE_GATES`.
+- `title`: Enforce the declared maximum for configured depth persistence batches.
+- `scope`: Validate `DEPTH_PERSIST_BATCH_SIZE` at `DepthStore` construction and add focused negative/boundary tests.
+- `requested_paths` and `allowed_paths`: `core/depth_store.py`, `tests/test_depth_store_accounting.py`, and this review document.
+- `forbidden_paths`: broker/order APIs, strategies, feed freshness, risk/kill-switch gates, credentials, and unrelated files.
+- `expected_tests`: missing, malformed, fractional, boolean, zero, negative, and over-maximum batch settings fail before worker creation; the declared minimum and maximum are accepted; existing depth accounting and batching behavior remains intact.
+- `acceptance_proof`: failed construction starts no worker; valid settings store one immutable validated batch size; existing default 250-item batches still pass focused persistence tests.
+- Risk boundary: this prevents oversized configured transactions but does not claim a process-memory ceiling or production throughput certification.
 
 ## GSD Review
-Execution strengthens burst and stalled-consumer tests, retains explicit configuration keys, updates the exact immutable-config SHA baseline for the reviewed depth-persistence settings, and aligns the shared item-count bound with the configured maximum. The hash assertion remains exact and will fail on any later config edit.
+Execution strengthens burst and stalled-consumer tests, retains explicit configuration keys, updates the exact immutable-config SHA baseline for the reviewed depth-persistence settings, and aligns the shared item-count bound with the configured maximum. The hash assertion remains exact and will fail on any later config edit. The follow-up GSD patch validates the batch size before worker startup, uses the frozen validated value in the persistence worker, and does not change configuration defaults.
 
 ## QA / Safety Review
 - High-Risk Path Review: `config/config.py` contains runtime configuration. The change is limited to depth persistence queue capacity, enqueue timeout, and bounded batch size. It does not alter broker, order, risk, freshness, or live-mode gates. The existing immutability test's exact SHA was advanced to the reviewed complete file hash: `b1b23141428530b8e51f98f73810f5ecf77df49187d9d92538fb7cc71f8ba950`.
 - High-Risk Path Review: `core/depth_store.py` rejects configured queue capacities outside the declared positive bound before starting persistence work.
 - Tests run: depth batching, accounting, rate-limit, storage bounds, and exact config immutability audit (31 passed); `git diff --check` passed.
+- Batch-bound follow-up: `tests/test_depth_store_accounting.py` and `tests/test_depth_persistence_batching.py` (23 passed), including missing/malformed/fractional/boolean/zero/negative/over-maximum rejection before worker creation and acceptance of the declared minimum/maximum.
 - Current-base full CI failure also reports frozen PR818 baseline drift across unrelated files. That gate requires repository-level resolution and is not waived here.
 
 ## Acceptance Proof
