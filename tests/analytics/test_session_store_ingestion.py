@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -85,6 +86,43 @@ def test_session_observations_and_governance_snapshots_are_diagnostic_only(tmp_p
     assert diagnostics["broker_api_called"] is False
     assert len(diagnostics["source_files"]) == 2
     assert all(len(source["sha256"]) == 64 for source in diagnostics["source_files"])
+
+
+def test_empty_runtime_candidate_artifacts_are_present_in_diagnostics(tmp_path: Path):
+    session_dir = tmp_path / "run-empty-candidates"
+    session_dir.mkdir()
+    diagnostic_names = (
+        "candidate_pool.jsonl",
+        "candidate_decisions.jsonl",
+        "executable_pool.jsonl",
+    )
+    for name in diagnostic_names:
+        (session_dir / name).write_text("", encoding="utf-8")
+
+    diagnostics = load_session_diagnostics([session_dir])
+    by_kind = {source["kind"]: source for source in diagnostics["source_files"]}
+    for kind in ("candidate_pool", "candidate_decisions", "executable_pool"):
+        assert by_kind[kind]["records"] == 0
+        assert by_kind[kind]["malformed_records"] == 0
+        assert by_kind[kind]["sha256"] == hashlib.sha256(b"").hexdigest()
+    assert diagnostics["record_count"] == 0
+    assert diagnostics["read_only"] is True
+    assert diagnostics["is_order_action"] is False
+    assert diagnostics["broker_api_called"] is False
+    assert diagnostics["allowed_for_live_execution"] is False
+    assert load_session_events([session_dir]) == []
+
+
+def test_candidate_pool_and_decision_rows_remain_diagnostic_only(tmp_path: Path):
+    session_dir = tmp_path / "run-diagnostic-candidates"
+    session_dir.mkdir()
+    candidate_like_row = _candidate_row()
+    for name in ("candidate_pool.jsonl", "candidate_decisions.jsonl", "executable_pool.jsonl"):
+        (session_dir / name).write_text(json.dumps(candidate_like_row) + "\n", encoding="utf-8")
+
+    diagnostics = load_session_diagnostics([session_dir])
+    assert diagnostics["record_count"] == 3
+    assert load_session_events([session_dir]) == []
 
 
 def test_session_candidate_journal_requires_complete_candidate(tmp_path: Path):

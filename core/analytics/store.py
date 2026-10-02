@@ -810,9 +810,14 @@ def load_session_diagnostics(session_paths: Iterable[Path] | None = None) -> dic
     source_files: list[dict[str, Any]] = []
     reason_counts: dict[str, int] = {}
     for sdir in _unique_paths(resolved_dirs):
-        for filename, kind in (("strategy_observations.jsonl", "strategy_observations"),
-                               ("trade_truth_stream.jsonl", "trade_truth"),
-                               ("candidate_journal.jsonl", "candidate_journal")):
+        for filename, kind in (
+            ("strategy_observations.jsonl", "strategy_observations"),
+            ("trade_truth_stream.jsonl", "trade_truth"),
+            ("candidate_journal.jsonl", "candidate_journal"),
+            ("candidate_pool.jsonl", "candidate_pool"),
+            ("candidate_decisions.jsonl", "candidate_decisions"),
+            ("executable_pool.jsonl", "executable_pool"),
+        ):
             path = sdir / filename
             if not path.exists():
                 continue
@@ -838,9 +843,11 @@ def load_session_diagnostics(session_paths: Iterable[Path] | None = None) -> dic
                             reason = _text(row.get("reason_code"))
                         elif kind == "candidate_journal":
                             reason = _text(row.get("reject_reason") or row.get("permission_reason")) or _text(row.get("permission"))
-                        else:
+                        elif kind == "trade_truth":
                             decision = row.get("decision") if isinstance(row.get("decision"), Mapping) else {}
                             reason = _text(decision.get("governance_decision")) or "UNKNOWN"
+                        else:
+                            reason = _text(row.get("reason_code")) or "UNKNOWN"
                         reason_counts[f"{kind}:{reason or 'UNKNOWN'}"] = reason_counts.get(f"{kind}:{reason or 'UNKNOWN'}", 0) + 1
             except OSError as exc:
                 raise OSError(f"session_telemetry_read_failed:{path}:{type(exc).__name__}") from exc
