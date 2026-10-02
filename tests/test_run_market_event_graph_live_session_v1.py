@@ -50,7 +50,7 @@ def test_active_observation_lock_blocks_before_capture_directory_creation(monkey
     from scripts import run_market_event_graph_live_session_v1 as session
 
     lock_root = tmp_path / "locks"
-    monkeypatch.setattr(session.cfg, "LOCKS_ROOT", str(lock_root), raising=False)
+    monkeypatch.setattr(session.cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(lock_root), raising=False)
     owner = session._new_observation_session_lock()
     acquired, _ = owner.acquire()
     assert acquired is True
@@ -78,6 +78,69 @@ def test_active_observation_lock_blocks_before_capture_directory_creation(monkey
     assert payload["broker_api_called"] is False
     assert payload["allowed_for_live_execution"] is False
     assert not output_root.exists()
+
+
+def test_observation_lock_defaults_to_one_path_across_checkout_roots(monkeypatch, tmp_path):
+    from scripts import run_market_event_graph_live_session_v1 as session
+
+    monkeypatch.delenv("MEG_OBSERVATION_LOCKS_ROOT", raising=False)
+    monkeypatch.delenv("LOCKS_ROOT", raising=False)
+    monkeypatch.setattr(session.cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(Path.home() / ".tradebot" / "locks"), raising=False)
+    first_checkout = tmp_path / "checkout-a"
+    second_checkout = tmp_path / "checkout-b"
+
+    monkeypatch.setattr(session, "REPO_ROOT", first_checkout)
+    first = session._new_observation_session_lock()
+    monkeypatch.setattr(session, "REPO_ROOT", second_checkout)
+    second = session._new_observation_session_lock()
+
+    assert first.lock_path == second.lock_path
+    assert first.lock_path == (Path.home() / ".tradebot" / "locks" / "meg_read_only_observation.lock").resolve()
+    acquired, _ = first.acquire()
+    assert acquired is True
+    blocked, holder = second.acquire()
+    try:
+        assert blocked is False
+        assert holder["pid"] == os.getpid()
+    finally:
+        first.release()
+        second.release()
+
+
+def test_observation_capture_manifest_records_shared_lock_path(monkeypatch, tmp_path):
+    from scripts import run_market_event_graph_live_session_v1 as session
+
+    lock_root = tmp_path / "shared-locks"
+    monkeypatch.setattr(session.cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(lock_root), raising=False)
+    monkeypatch.setattr(session, "_commit_sha", lambda: "test-commit")
+    monkeypatch.setattr(
+        session.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(args=[], returncode=0),
+    )
+    output_root = tmp_path / "captures"
+    args = Namespace(output_root=output_root, authority_artifact=tmp_path / "authority.json")
+
+    result = session._run_observation_capture(
+        args=args,
+        session_date="2026-07-30",
+        registry=SimpleNamespace(canonical_sha256="registry", contract_path="contract.json"),
+        master_path=tmp_path / "master.json",
+        master_sha="master-sha",
+        broker_metadata_called=False,
+        launch_plan={"launch_plan_sha256": "plan-sha"},
+    )
+
+    manifest_path = next((output_root / "2026-07-30").glob("*/presession_manifest.json"))
+    manifest = json.loads(manifest_path.read_text())
+    assert result == 0
+    assert manifest["observation_lock_path"] == str(
+        (lock_root / "meg_read_only_observation.lock").resolve()
+    )
+    assert manifest["read_only"] is True
+    assert manifest["is_order_action"] is False
+    assert manifest["broker_api_called"] is False
+    assert manifest["allowed_for_live_execution"] is False
 
 
 def test_session_orchestrator_ignores_hostile_parent_argv(monkeypatch, tmp_path):

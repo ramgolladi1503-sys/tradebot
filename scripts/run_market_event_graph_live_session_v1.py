@@ -117,7 +117,13 @@ def _commit_sha() -> str:
 
 
 def _new_observation_session_lock() -> InstanceLock:
-    lock_root = Path(str(getattr(cfg, "LOCKS_ROOT", "") or (REPO_ROOT / ".runtime" / "locks"))).expanduser()
+    lock_root = Path(
+        str(
+            getattr(cfg, "MEG_OBSERVATION_LOCKS_ROOT", "")
+            or getattr(cfg, "LOCKS_ROOT", "")
+            or (Path.home() / ".tradebot" / "locks")
+        )
+    ).expanduser()
     lock_path = lock_root.resolve() / "meg_read_only_observation.lock"
     return InstanceLock(lock_path=lock_path, repo_root_path=REPO_ROOT, unlink_on_release=False)
 
@@ -174,6 +180,7 @@ def _run_observation_capture(
             "commit_sha": commit_sha,
             "session_date": session_date,
             "capture_session_id": run_id,
+            "observation_lock_path": str(lock.lock_path),
             "output_paths": {
                 "capture_dir": str(capture_dir),
                 "captured_metadata": str(capture_dir / "captured_metadata.jsonl"),
