@@ -47,14 +47,24 @@ class OhlcBuffer:
                     producer="core.ohlc_buffer.update_tick",
                 )
                 bar = bars[-1]
+                explicit_volume_quality = isinstance(provenance, dict) and "volume_observation_complete" in provenance
+                volume_incomplete = explicit_volume_quality and provenance.get("volume_observation_complete") is False
                 provenance_status = _merge_live_bar_provenance(bar, provenance, ts)
                 if provenance_status.get("accepted") is False:
                     return provenance_status
+                if volume_incomplete:
+                    bar["volume"] = None
                 bar["high"] = max(bar["high"], price)
                 bar["low"] = min(bar["low"], price)
                 bar["close"] = price
-                if volume is not None:
+                if volume is not None and bar.get("volume") is not None:
                     bar["volume"] += volume or 0
+                if explicit_volume_quality:
+                    merged_provenance = dict(bar.get("bar_provenance") or {})
+                    for key in ("volume_source", "volume_cumulative_day_value", "volume_delta_status", "volume_attribution", "volume_is_estimate"):
+                        if key in provenance:
+                            merged_provenance[key] = provenance[key]
+                    bar["bar_provenance"] = merged_provenance
                 return {
                     "accepted": True,
                     "status": "UPDATED_CURRENT_BAR",
@@ -90,6 +100,8 @@ class OhlcBuffer:
                     "close": price,
                     "volume": volume if volume is not None else 0,
                 }
+                if isinstance(provenance, dict) and "volume_observation_complete" in provenance:
+                    row["volume"] = volume if provenance.get("volume_observation_complete") is True and volume is not None else None
                 provenance_status = _merge_live_bar_provenance(row, provenance, ts)
                 if provenance_status.get("accepted") is False:
                     return provenance_status
@@ -305,7 +317,7 @@ def _merge_live_bar_provenance(bar, provenance, tick_ts):
     if tick_epoch is not None and source_type.lower() in {"live_websocket", "tick_store_live"}:
         first_epoch = tick_epoch if first_epoch is None else min(float(first_epoch), tick_epoch)
         last_epoch = tick_epoch if last_epoch is None else max(float(last_epoch), tick_epoch)
-    bar["bar_provenance"] = {
+    merged_provenance = {
         "source_type": source_type,
         "live_feed_session_id": _prefer_present(payload, existing, "live_feed_session_id"),
         "feed_epoch": _prefer_present(payload, existing, "feed_epoch"),
@@ -324,4 +336,16 @@ def _merge_live_bar_provenance(bar, provenance, tick_ts):
         "non_live_fallback": bool(payload.get("non_live_fallback", existing.get("non_live_fallback", False))),
         "recovered_synthetic": bool(payload.get("recovered_synthetic", existing.get("recovered_synthetic", False))),
     }
+    if "volume_observation_complete" in payload or "volume_observation_complete" in existing:
+        merged_provenance["volume_observation_complete"] = bool(
+            payload.get("volume_observation_complete", True)
+            and existing.get("volume_observation_complete", True)
+        )
+    for key in ("volume_source", "volume_cumulative_day_value", "volume_delta_status", "volume_attribution", "volume_is_estimate"):
+        if key in payload or key in existing:
+            if key == "volume_cumulative_day_value" and key in payload:
+                merged_provenance[key] = payload[key]
+            else:
+                merged_provenance[key] = _prefer_present(payload, existing, key)
+    bar["bar_provenance"] = merged_provenance
     return {"accepted": True, "status": "OK"}

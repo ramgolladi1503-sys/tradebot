@@ -7548,6 +7548,7 @@ def on_ticks(ws, ticks):
                     universe_hash=str(getattr(observation_registry, "canonical_sha256", "") or ""),
                     packet_kind=packet_kind,
                     is_full_payload=is_full_payload,
+                    cumulative_volume=(t.get("volume") if t.get("volume") is not None else t.get("volume_traded")),
                 )
             except Exception:
                 pass

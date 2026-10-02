@@ -216,6 +216,7 @@ def test_start_depth_ws_uses_resolved_token(monkeypatch):
 def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
     _patch_common(monkeypatch)
     callbacks = []
+    shadow_ticks = []
     monkeypatch.setattr(ws, "record_fd_trace", lambda *args, **kwargs: None)
     monkeypatch.setattr(ws.feed_evidence, "callback", lambda count, **kwargs: callbacks.append((count, kwargs.get("rows"))))
     monkeypatch.setattr(ws.feed_evidence, "normalized", lambda *args, **kwargs: None)
@@ -244,6 +245,24 @@ def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
     monkeypatch.setattr(ws, "now_utc_epoch", lambda: 1234.5)
     monkeypatch.setattr(ws, "_SCHEMA_LOG_TS", 0.0, raising=False)
     monkeypatch.setattr(ws, "_FEED_ON_TICKS_ROW_SEQ", 0, raising=False)
+    monkeypatch.setattr(ws, "load_observation_registry", lambda **kwargs: type("Registry", (), {
+        "all_tokens": [101], "canonical_sha256": "universe-hash",
+        "observation_identity": lambda self, token: {"symbol": "NIFTY", "instrument_class": "INDEX"},
+    })())
+    monkeypatch.setattr(ws, "_observation_state_payload", lambda: {
+        "enabled": True,
+        "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
+        "observation_tokens": [101],
+        "feed_session_id": "session-1",
+        "feed_epoch": 3,
+    })
+    monkeypatch.setattr(ws, "_ensure_feed_session_id", lambda: "session-1")
+    monkeypatch.setattr(ws, "current_feed_epoch", lambda: 3)
+    monkeypatch.setattr(ws, "get_current_feed_session_identity", lambda: {
+        "feed_session_id": "session-1", "feed_epoch": 3, "reconnect_generation": 1,
+    })
+    monkeypatch.setattr(ws, "_SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS", {101}, raising=False)
+    monkeypatch.setattr(ws, "record_live_source_shadow_tick", lambda **kwargs: shadow_ticks.append(kwargs))
 
     ws.on_ticks(None, [{
         "instrument_token": 101,
@@ -257,6 +276,8 @@ def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
 
     assert callbacks and callbacks[0][0] == 1
     assert callbacks[0][1][0]["_audit_source_row_index"] == 7
+    assert len(shadow_ticks) == 1
+    assert shadow_ticks[0]["cumulative_volume"] == 1.0
 
 
 def test_on_ticks_855_row_batches_preserve_tick_depth_observation_when_snapshot_coalesces(monkeypatch):
