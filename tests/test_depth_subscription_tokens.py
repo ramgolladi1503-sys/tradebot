@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from config import config as cfg
 from core import kite_depth_ws as ws
+from core.market_event_graph_live_launch_plan import build_launch_plan
 
 
 def _count(values) -> int:
@@ -287,7 +288,7 @@ def test_zero_option_tokens_marks_zero_coverage_and_keeps_underlying(monkeypatch
 
 def test_production_resolution_counts_use_local_owner_map_after_global_map_change(monkeypatch):
     _setup_depth_window_mocks(monkeypatch)
-    observation_tokens = list(range(8_000_000, 8_000_053))
+    observation_tokens = list(range(8_000_000, 8_000_051))
     registry = SimpleNamespace(
         all_tokens=observation_tokens,
         token_by_symbol={f"OBS{i}": token for i, token in enumerate(observation_tokens)},
@@ -330,6 +331,27 @@ def test_production_resolution_counts_use_local_owner_map_after_global_map_chang
     for symbol, row in rows.items():
         option_tokens = [token for token in row["tokens"] if token != row["index_token"]]
         assert len(option_tokens) == row["final_option_count"]
+
+    plan_state = ws._observation_state_payload()
+    launch_plan = build_launch_plan(
+        session_date="2026-10-01",
+        production_tokens=plan_state["production_tokens"],
+        production_resolution=resolution,
+        sticky_tokens=[],
+        observation_tokens=observation_tokens,
+        budget=150,
+        master_sha256="a" * 64,
+        universe_sha256="registry-sha",
+        configuration={"symbols": ["NIFTY", "BANKNIFTY", "SENSEX"]},
+        broker_metadata_called=False,
+    )
+    assert launch_plan["ok"] is True
+    assert launch_plan["production_option_count"] == sum(
+        int(row["final_option_count"]) for row in resolution
+    )
+    assert set(launch_plan["production_tokens"]) == set(
+        token for row in resolution for token in row["tokens"]
+    )
 
 
 def test_production_only_subscription_builder_excludes_observation_ids(monkeypatch):
