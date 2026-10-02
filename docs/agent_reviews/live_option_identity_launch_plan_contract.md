@@ -81,3 +81,20 @@ It does not prove future broker subscriptions, fresh market data, option coverag
 ## Human Approval
 
 Human review is required for merge and any later runtime rollout. This contract grants no order, broker-write, or live-execution authority.
+
+## Hermes Follow-On Contract: Full-Suite CI Regressions
+
+- `source_agent: hermes`; `action: DESIGN_ARCHITECTURE, DEFINE_CONTRACT, MAP_WORKFLOW, CREATE_ACCEPTANCE_GATES, UPDATE_DOCS`.
+- `title: Keep production launch-plan identities separate from observation identities`.
+- `scope: Repair PR #957's full-suite failures without changing the public subscription union semantics. A production launch-plan builder must obtain production-owned tokens and resolution rows from one invocation, before observation tokens are merged. The launch plan then merges the independently authorized observation set exactly once. The observation resolver must be called through one canonical, testable boundary so test import hooks cannot redirect it to a stale module object.`
+- `requested_paths: core/kite_depth_ws.py; scripts/run_market_event_graph_live_session_v1.py; tests/test_depth_subscription_tokens.py; tests/test_run_market_event_graph_live_session_v1.py; docs/agent_reviews/live_option_identity_launch_plan_contract.md`.
+- `allowed_paths: exactly the requested paths`.
+- `forbidden_paths: broker/order/execution/risk/strategy code; credentials or environment files; runtime evidence; safety-gate weakening; synthetic or forward-filled market data; unrelated test shims or files`.
+- `expected_tests: actual implementation retains local option ownership if the process-global symbol map changes during observation merge; production-only resolution contains no observation IDs; the final launch plan has disjoint production and observation sets and an exact final union; preflight without usable production metadata fails closed with zero claimed production tokens; existing default subscription callers retain their current merged-union behavior`.
+- `acceptance_proof: the two reported full-suite failures reproduce before the repair and pass after it; affected focused tests pass; full `ci.yml` and `tests.yml` suites pass on the same exact SHA; all other PR checks remain green except the explicitly user-excluded PR818 gate. The diff does not change credentials, call broker APIs, place orders, alter budgets/minimums/freshness/recovery gates, or grant live authority.`
+
+### Hermes Design Decision
+
+The PR-triggered unit suite completed with 8,549 passed, 16 skipped, 28 deselected, and two failures. One failure reported `registry_load_failed:FileNotFoundError:MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH` while checking local option ownership after a global-map replacement. The other showed a blocked launch plan claiming 51 production tokens, which overlaps the separately declared 51-token observation registry. These indicate the production builder and its test boundary are not stable under the repository's import-time depth compatibility hooks.
+
+GSD must preserve the public `build_subscription_tokens` behavior for ordinary feed subscription callers, while adding a dedicated production-only builder over the same internal implementation. The launch orchestrator must use that dedicated builder, then pass the independently loaded observation registry to `build_launch_plan`. The observation-registry lookup must be a canonical dependency boundary that tests can replace without relying on package-attribute import behavior. If production resolution fails, it must produce no claimed production IDs and retain the existing blocked verdict. Do not treat the captured 51 IDs as proof of ownership, fold observation tokens into production rows, or conceal the failure by loosening the identity validator.

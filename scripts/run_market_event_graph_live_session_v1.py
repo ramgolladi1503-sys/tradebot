@@ -279,7 +279,10 @@ def _build_production_launch_plan(
 
     budget = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123))
     try:
-        production_tokens, resolution = kite_depth_ws.build_subscription_tokens(list(cfg.SYMBOLS), max_tokens=budget)
+        production_builder = getattr(kite_depth_ws, "build_production_subscription_tokens", None)
+        if not callable(production_builder):
+            raise RuntimeError("production_only_subscription_builder_unavailable")
+        production_tokens, resolution = production_builder(list(cfg.SYMBOLS), max_tokens=budget)
     except BaseException as exc:
         return {
             "ok": False,

@@ -122,6 +122,11 @@ def test_session_orchestrator_launch_preflight_uses_production_builder_once(monk
         assert payload["final_union_count"] <= payload["configured_budget"]
         assert payload["production_token_count"] > 0
         assert payload["launch_plan_sha256"]
+        production = set(payload["production_tokens"])
+        observations = set(payload["observation_tokens"])
+        assert production.isdisjoint(observations)
+        assert set(payload["final_union_tokens"]) == production | observations
+        assert payload["production_token_count"] == len(production)
     else:
         assert payload["verdict"] == "BLOCKED_BY_PRODUCTION_SUBSCRIPTION_PLAN_UNPROVEN"
         assert payload["production_token_count"] == 0
