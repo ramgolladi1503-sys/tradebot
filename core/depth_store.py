@@ -16,7 +16,14 @@ from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.persistence_durability import record_degradation
 from core.kite_depth_protocol import canonicalize_kite_depth
-from core.storage_bounds_v37 import MAX_DEPTH_QUEUE_ITEM_BYTES, StorageBoundViolation, depth_queue_item_bytes, require_item_size
+from core.storage_bounds_v37 import (
+    DEPTH_QUEUE_MAX_ITEMS,
+    MAX_DEPTH_QUEUE_ITEM_BYTES,
+    PERSISTENCE_BATCH_MAX_ITEMS,
+    StorageBoundViolation,
+    depth_queue_item_bytes,
+    require_item_size,
+)
 
 _ERROR_LOG_PATH = logs_dir() / "depth_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
@@ -31,11 +38,42 @@ class DepthStore:
         self.books = defaultdict(dict)
         self._ts_window = deque(maxlen=10000)
         self._last_persist_epoch_by_token = defaultdict(float)
-        queue_maxsize = max(
-            1,
-            int(getattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 32768) or 32768),
-        )
+        raw_queue_maxsize = getattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", 32768)
+        try:
+            queue_maxsize = int(raw_queue_maxsize)
+        except (TypeError, ValueError) as exc:
+            logger.error("depth_persist_queue_maxsize_invalid value=%r", raw_queue_maxsize)
+            raise ValueError("DEPTH_PERSIST_QUEUE_MAXSIZE_INVALID") from exc
+        if not 1 <= queue_maxsize <= DEPTH_QUEUE_MAX_ITEMS:
+            logger.error(
+                "depth_persist_queue_maxsize_out_of_bounds configured=%s allowed_min=1 allowed_max=%s",
+                queue_maxsize,
+                DEPTH_QUEUE_MAX_ITEMS,
+            )
+            raise ValueError("DEPTH_PERSIST_QUEUE_MAXSIZE_OUT_OF_BOUNDS")
+        raw_batch_size = getattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", None)
+        try:
+            numeric_batch_size = float(raw_batch_size)
+        except (OverflowError, TypeError, ValueError) as exc:
+            logger.error("depth_persist_batch_size_invalid value=%r", raw_batch_size)
+            raise ValueError("DEPTH_PERSIST_BATCH_SIZE_INVALID") from exc
+        if (
+            isinstance(raw_batch_size, bool)
+            or not math.isfinite(numeric_batch_size)
+            or not numeric_batch_size.is_integer()
+        ):
+            logger.error("depth_persist_batch_size_invalid value=%r", raw_batch_size)
+            raise ValueError("DEPTH_PERSIST_BATCH_SIZE_INVALID")
+        batch_size = int(numeric_batch_size)
+        if not 1 <= batch_size <= PERSISTENCE_BATCH_MAX_ITEMS:
+            logger.error(
+                "depth_persist_batch_size_out_of_bounds configured=%s allowed_min=1 allowed_max=%s",
+                batch_size,
+                PERSISTENCE_BATCH_MAX_ITEMS,
+            )
+            raise ValueError("DEPTH_PERSIST_BATCH_SIZE_OUT_OF_BOUNDS")
         self._persist_queue = queue.Queue(maxsize=queue_maxsize)
+        self._persist_batch_size = batch_size
         self._persist_admission_lock = threading.Lock()
         self._persist_wakeup = threading.Event()
         self._persist_stop = threading.Event()
@@ -94,7 +132,7 @@ class DepthStore:
             logger.error("depth_rejection_provenance_write_failed error=%s", type(exc).__name__)
 
     def _persist_loop(self):
-        batch_size = max(1, int(getattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 100) or 100))
+        batch_size = self._persist_batch_size
         prune_interval_sec = max(
             5.0,
             float(getattr(cfg, "DEPTH_SNAPSHOT_PRUNE_INTERVAL_SEC", 30.0) or 30.0),

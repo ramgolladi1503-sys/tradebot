@@ -10,8 +10,83 @@ from unittest.mock import MagicMock
 import pytest
 
 from config import config as cfg
+import core.depth_store as depth_store_module
 from core.depth_store import DepthStore, _retention_prune_allowed
+from core.storage_bounds_v37 import DEPTH_QUEUE_MAX_ITEMS, PERSISTENCE_BATCH_MAX_ITEMS
 from core.trade_store import prune_depth_snapshots, _conn, init_db
+
+
+def test_depth_store_rejects_queue_capacity_outside_declared_bound_before_worker(monkeypatch, caplog):
+    worker_creations = []
+    monkeypatch.setattr(
+        depth_store_module.threading,
+        "Thread",
+        lambda *args, **kwargs: worker_creations.append((args, kwargs)) or object(),
+    )
+
+    invalid_values = (
+        (0, "DEPTH_PERSIST_QUEUE_MAXSIZE_OUT_OF_BOUNDS"),
+        (-1, "DEPTH_PERSIST_QUEUE_MAXSIZE_OUT_OF_BOUNDS"),
+        (DEPTH_QUEUE_MAX_ITEMS + 1, "DEPTH_PERSIST_QUEUE_MAXSIZE_OUT_OF_BOUNDS"),
+        ("invalid", "DEPTH_PERSIST_QUEUE_MAXSIZE_INVALID"),
+    )
+    for configured_value, expected_error in invalid_values:
+        monkeypatch.setattr(cfg, "DEPTH_PERSIST_QUEUE_MAXSIZE", configured_value, raising=False)
+        with pytest.raises(ValueError, match=expected_error):
+            DepthStore()
+
+    assert not worker_creations
+    assert "depth_persist_queue_maxsize_invalid" in caplog.text
+    assert "depth_persist_queue_maxsize_out_of_bounds" in caplog.text
+
+
+def test_depth_store_rejects_batch_size_outside_declared_bound_before_worker(monkeypatch, caplog):
+    worker_creations = []
+    monkeypatch.setattr(
+        depth_store_module.threading,
+        "Thread",
+        lambda *args, **kwargs: worker_creations.append((args, kwargs)) or object(),
+    )
+
+    invalid_values = (
+        (0, "DEPTH_PERSIST_BATCH_SIZE_OUT_OF_BOUNDS"),
+        (-1, "DEPTH_PERSIST_BATCH_SIZE_OUT_OF_BOUNDS"),
+        (PERSISTENCE_BATCH_MAX_ITEMS + 1, "DEPTH_PERSIST_BATCH_SIZE_OUT_OF_BOUNDS"),
+        ("invalid", "DEPTH_PERSIST_BATCH_SIZE_INVALID"),
+        (None, "DEPTH_PERSIST_BATCH_SIZE_INVALID"),
+        (True, "DEPTH_PERSIST_BATCH_SIZE_INVALID"),
+        (1.5, "DEPTH_PERSIST_BATCH_SIZE_INVALID"),
+        (float("nan"), "DEPTH_PERSIST_BATCH_SIZE_INVALID"),
+    )
+    for configured_value, expected_error in invalid_values:
+        monkeypatch.setattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", configured_value, raising=False)
+        with pytest.raises(ValueError, match=expected_error):
+            DepthStore()
+
+    assert not worker_creations
+    assert "depth_persist_batch_size_invalid" in caplog.text
+    assert "depth_persist_batch_size_out_of_bounds" in caplog.text
+
+    monkeypatch.delattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", raising=False)
+    with pytest.raises(ValueError, match="DEPTH_PERSIST_BATCH_SIZE_INVALID"):
+        DepthStore()
+    assert not worker_creations
+
+
+def test_depth_store_accepts_batch_size_boundary_values_before_worker(monkeypatch):
+    class _ThreadStub:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr(depth_store_module.threading, "Thread", _ThreadStub)
+    for configured_value in (1, PERSISTENCE_BATCH_MAX_ITEMS):
+        monkeypatch.setattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", configured_value, raising=False)
+        store = DepthStore()
+        assert store._persist_batch_size == configured_value
 
 
 def test_depth_accounting_invariant_enqueued_equals_persisted_plus_queued_plus_rejected(tmp_path, monkeypatch):
