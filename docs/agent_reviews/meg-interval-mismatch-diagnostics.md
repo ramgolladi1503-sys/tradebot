@@ -38,3 +38,39 @@ Acceptance requires tests proving: (1) a fresh aligned snapshot remains exportab
 ## What This Does Not Prove
 
 It does not explain the original interval mismatches, establish sustained feed health or depth persistence throughput, prove a trading edge, or certify paper/live readiness. A future read-only live observation is needed to establish whether and how often the new rejection occurs in production data.
+
+## Scope Guard
+
+Changed behavior is confined to read-only MEG observation, snapshot validation, and its quality evidence. Existing freshness threshold is reused unchanged. No broker, order, strategy, risk, credentials, feed configuration, execution, or live process state is altered. PR818's independent freeze gate is out of this change's scope.
+
+## High-Risk Path Review
+
+`core/kite_depth_ws.py` is classified as a high-risk WebSocket path. This PR's change at that callsite only forwards the observed cumulative volume field into the isolated MEG observer. It does not change subscriptions, connection lifecycle, authentication, packet acceptance, broker requests, or order behavior. The bridge change rejects stale evidence from a read-only snapshot and does not relax any feed or execution gate.
+
+## Grill Me Review
+
+Challenge: does freshness rejection mask the original mismatch or silently improve apparent health? No: interval mismatch remains rejected before tick validation; stale evidence includes the symbol, endpoint, last tick, age, cutoff, limit, and reason. Rejection can reduce exported snapshots, which is the intended fail-closed outcome.
+
+## Hermes Review
+
+Contract: only an exactly aligned, provenance-bearing snapshot whose last live ticks are finite, nonfuture, and within the existing freshness limit at observation cutoff can be exported. No synthesis, forward-fill, receipt-time substitution, or threshold change is permitted.
+
+## GSD Review
+
+Scoped implementation and regression coverage exercise fresh acceptance, stale/future/non-finite rejection, exact freshness boundary, interval mismatch diagnostics, and safety fields. Validation was run against the candidate head; see Acceptance Proof.
+
+## QA / Safety Review
+
+The behavior is fail-closed and read-only. It makes no broker API calls and has no order side effects. The full local suite passed on the candidate head. Remaining uncertainty is production frequency and upstream cause, not the rejection contract.
+
+## Acceptance Proof
+
+Candidate SHA `5c2292ead5bd81396228431d01ae27a398d2c8e9`: full suite 8,553 passed, 9 skipped, 28 deselected; final focused regression set 93 passed; `py_compile` and `git diff --check` passed. GitHub exact-head checks are tracked on PR #958.
+
+## Runtime Proof Required After Merge
+
+Use read-only runtime evidence to measure mismatch and stale-tick rejection counts, inspect source timestamp provenance and observer completeness, and confirm no downstream consumer treats rejected or incomplete evidence as valid. Do not change live processes during this verification.
+
+## Human Approval
+
+No live execution, broker, order, threshold, or risk-gate change is requested. Any later proposal to wire this observer into execution or change a freshness boundary requires separate explicit human approval.
