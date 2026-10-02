@@ -597,6 +597,18 @@ def test_index_constituent_source_interval_mismatch_is_rejected(monkeypatch, tmp
 
     assert result.reason == INDEX_INTERVAL_MISALIGNED
     assert result.exported is False
+    mismatch = result.audit["diagnostic_context"]["bar_interval_mismatch"]
+    assert mismatch["index_symbol"] == "NIFTY"
+    assert mismatch["index_bar_end_epoch"] == 180.0
+    assert mismatch["constituent_symbol"] == "NIFTY_00"
+    assert mismatch["constituent_bar_end_epoch"] == 120.0
+    assert mismatch["bar_interval_delta_seconds"] == -60.0
+    assert mismatch["cycle_cutoff_epoch"] == pytest.approx(190.0, abs=0.01)
+    assert mismatch["index_last_live_tick_epoch"] == 170.0
+    assert mismatch["constituent_last_live_tick_epoch"] == 110.0
+    rejection = json.loads((tmp_path / "rejections.jsonl").read_text().splitlines()[0])
+    assert rejection["reason"] == INDEX_INTERVAL_MISALIGNED
+    assert rejection["diagnostic_context"]["bar_interval_mismatch"] == mismatch
 
 
 def test_fetch_live_market_data_hook_disabled_enabled_and_failure_isolation(monkeypatch):

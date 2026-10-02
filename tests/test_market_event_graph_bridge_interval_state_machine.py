@@ -34,12 +34,12 @@ def test_bridge_interval_state_machine_distinguishes_unchanged_from_regression()
 
     # Case 1: Identical interval end epoch -> IDLE_UNCHANGED_INTERVAL (no error/warning)
     bridge._completed_bar_for = MagicMock(return_value={"ts": datetime.fromtimestamp(1000.0, tz=timezone.utc), "source_bar_end_epoch": 1000.0})
-    snapshot, reason, affected = bridge._assemble_snapshot(contract, {}, cycle_cutoff=datetime.fromtimestamp(1050.0, tz=timezone.utc))
+    snapshot, reason, affected, _audit = bridge._assemble_snapshot(contract, {}, cycle_cutoff=datetime.fromtimestamp(1050.0, tz=timezone.utc))
     assert snapshot is None
     assert reason == "IDLE_UNCHANGED_INTERVAL"
 
     # Case 2: Older interval end epoch -> TIME_REGRESSION (invariant fault)
     bridge._completed_bar_for = MagicMock(return_value={"ts": datetime.fromtimestamp(940.0, tz=timezone.utc), "source_bar_end_epoch": 940.0})
-    snapshot, reason, affected = bridge._assemble_snapshot(contract, {}, cycle_cutoff=datetime.fromtimestamp(1050.0, tz=timezone.utc))
+    snapshot, reason, affected, _audit = bridge._assemble_snapshot(contract, {}, cycle_cutoff=datetime.fromtimestamp(1050.0, tz=timezone.utc))
     assert snapshot is None
     assert reason == "TIME_REGRESSION"
