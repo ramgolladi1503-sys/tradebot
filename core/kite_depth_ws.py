@@ -38,7 +38,11 @@ from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.feed_runtime import build_canonical_feed_truth_state
 from core.feed_robustness_evidence import collector as feed_evidence
 from core.feed_fd_trace import process_fd_count, record_trace as record_fd_trace, reset_trace as reset_fd_trace
-from core.feed_recovery_coordinator import FeedRecoveryCoordinator, get_feed_recovery_coordinator
+from core.feed_recovery_coordinator import (
+    FeedRecoveryCoordinator,
+    get_feed_recovery_coordinator,
+    is_plain_ws1006_peer_drop,
+)
 from core.auth_manager import (
     clear_auth_required_state,
     invalidate_cache,
@@ -2622,19 +2626,19 @@ def _ws1006_fault_category(*, code: int | None, reason_text: str | None) -> str:
         code_int = int(code) if code is not None else None
     except Exception:
         code_int = None
-    reason_lower = str(reason_text or "").strip().lower()
     if is_auth_error(code=code_int, reason_text=reason_text):
         return "AUTH_BLOCKED"
     if _is_terminal_ws_fault(code=code_int, reason_text=reason_text):
         return "TERMINAL_PROCESS_RESTART_REQUIRED"
-    if code_int == 1006 and any(marker in reason_lower for marker in ("connection was closed uncleanly", "peer dropped")):
+    if is_plain_ws1006_peer_drop(code=code_int, reason=reason_text):
         return "RECOVERABLE_WS_DROP"
     return "UNKNOWN"
 
 
 def _new_ws_recovery_proof_context(*, disconnect_started_at: float) -> dict[str, Any]:
     """Snapshot exact subscription and critical underlying evidence at disconnect."""
-    expected_tokens = _normalize_positive_tokens(_LAST_TOKENS)
+    resub_tokens, _ = _resubscribe_token_selection()
+    expected_tokens = _normalize_positive_tokens(resub_tokens or _LAST_TOKENS)
     required_tokens = sorted({int(token) for token in (_UNDERLYING_TOKENS or set()) if int(token) > 0})
     symbol_by_token = {
         str(int(token)): str(symbol or "").strip().upper()
