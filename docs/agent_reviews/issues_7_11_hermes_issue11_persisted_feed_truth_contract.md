@@ -46,3 +46,47 @@ Revert the source-specific classification branch and the integration test. This 
 ## Freshness of the persisted snapshot itself
 
 The producer's `feed_fresh=true` is evaluated at write time. A later consumer must not treat that decision as current indefinitely. The supported v1 snapshot therefore also requires a finite numeric, non-boolean `generated_epoch`, which must not be future-dated and must be no older than `FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC`. The setting `FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC` is added to the existing dedicated runtime-reliability config module with a 3-second default, aligned with the existing `FEED_RECOVERY_MAX_GAP_SEC`; deployments may override it explicitly. Missing/invalid configuration or timestamp fails closed. This check does not change per-tick LTP/option SLA thresholds.
+
+## Agent Work Contract
+
+Campaign issue contract; see `issues_7_11_campaign_review.md` for the PR-level Hermes/GSD scope and actions.
+
+## Scope Guard
+
+Issue-level design boundary and restrictions are defined above; the consolidated review records the full campaign boundary.
+
+## Grill Me Review
+
+Campaign risk critique and unresolved proof limits are recorded in `issues_7_11_campaign_review.md`.
+
+## Hermes Review
+
+This file is the issue-specific Hermes contract. The consolidated review records the cross-issue architecture review.
+
+## GSD Review
+
+Execution evidence and test limits are recorded in `issues_7_11_campaign_review.md`; this contract alone is not implementation proof.
+
+## QA / Safety Review
+
+Safety boundary and verification limits are recorded in `issues_7_11_campaign_review.md`.
+
+## High-Risk Path Review
+
+See `issues_7_11_campaign_review.md` for the cross-cutting review of feed and orchestrator high-risk paths. This issue contract does not authorize runtime or broker actions.
+
+## Acceptance Proof
+
+Issue-specific acceptance criteria are defined above. Cross-issue executed proof and its limitations are recorded in `issues_7_11_campaign_review.md`.
+
+## Runtime Proof Required After Merge
+
+Runtime proof requirements are recorded in `issues_7_11_campaign_review.md`; offline contract text does not establish runtime parity.
+
+## What This PR Does Not Prove
+
+See the consolidated review for campaign-level limitations. This issue contract does not independently claim live verification.
+
+## Human Approval
+
+This design contract does not represent human approval. The PR remains subject to human review as described in `issues_7_11_campaign_review.md`.

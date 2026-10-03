@@ -38,3 +38,47 @@ Forbidden paths include live feed producers, candidate/feed safety, strategy eva
 6. Focused replay tests pass; the real Oct. 1 capture probe remains read-only and reports authority flags closed.
 
 **Hermes verdict:** narrow offline replay-source repair authorized. No live behavior or execution authority is changed. The capture cannot establish Issues 7/8 source authority or Issue 11 live latch cause.
+
+## Agent Work Contract
+
+Campaign issue contract; see `issues_7_11_campaign_review.md` for the PR-level Hermes/GSD scope and actions.
+
+## Scope Guard
+
+Issue-level design boundary and restrictions are defined above; the consolidated review records the full campaign boundary.
+
+## Grill Me Review
+
+Campaign risk critique and unresolved proof limits are recorded in `issues_7_11_campaign_review.md`.
+
+## Hermes Review
+
+This file is the issue-specific Hermes contract. The consolidated review records the cross-issue architecture review.
+
+## GSD Review
+
+Execution evidence and test limits are recorded in `issues_7_11_campaign_review.md`; this contract alone is not implementation proof.
+
+## QA / Safety Review
+
+Safety boundary and verification limits are recorded in `issues_7_11_campaign_review.md`.
+
+## High-Risk Path Review
+
+See `issues_7_11_campaign_review.md` for the cross-cutting review of feed and orchestrator high-risk paths. This issue contract does not authorize runtime or broker actions.
+
+## Acceptance Proof
+
+Issue-specific acceptance criteria are defined above. Cross-issue executed proof and its limitations are recorded in `issues_7_11_campaign_review.md`.
+
+## Runtime Proof Required After Merge
+
+Runtime proof requirements are recorded in `issues_7_11_campaign_review.md`; offline contract text does not establish runtime parity.
+
+## What This PR Does Not Prove
+
+See the consolidated review for campaign-level limitations. This issue contract does not independently claim live verification.
+
+## Human Approval
+
+This design contract does not represent human approval. The PR remains subject to human review as described in `issues_7_11_campaign_review.md`.
