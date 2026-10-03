@@ -402,7 +402,7 @@ def test_meg_builder_filters_cash_symbols_and_publishes_only_merged_identities(m
     original_merge = ws.build_observation_subscription_merge
 
     symbols = ["NIFTY", "BANKNIFTY", "SENSEX", *cash_symbols]
-    tokens, resolution = ws._build_subscription_tokens_impl(symbols, max_tokens=123)
+    tokens, resolution = ws._build_subscription_tokens_impl(symbols, max_tokens=150)
 
     assert len(tokens) == 123
     assert len(set(tokens)) == 123

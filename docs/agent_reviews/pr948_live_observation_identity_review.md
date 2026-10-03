@@ -6,7 +6,7 @@
 
 ## Scope Guard
 
-Only `core/depth_subscription_engine.py`, `core/kite_depth_ws.py`, focused tests, and these review/contract artifacts are in scope. In MEG mode, only configured index products reach option resolution. Verified cash observation tokens are added to the underlying identity maps after a successful merge. The 123-token budget/topology, feed freshness, recovery behavior, option-health evidence, risk gates, kill switches, and execution authority are unchanged. No new config key or migration is introduced.
+Only `core/depth_subscription_engine.py`, `core/kite_depth_ws.py`, focused tests, and these review/contract artifacts are in scope. In MEG mode, only configured index products reach option resolution; the effective budget is capped at the existing 123-token ceiling even when the general depth budget is higher. Verified cash observation tokens are added to the underlying identity maps after a successful merge. Feed freshness, recovery behavior, option-health evidence, risk gates, kill switches, and execution authority are unchanged. No new config key or migration is introduced.
 
 ## Grill Me Review
 
@@ -26,11 +26,11 @@ Validation is offline and deterministic. It must not call a broker or live proce
 
 ## Acceptance Proof
 
-The final candidate diff against current `main` contains only the two subscription builders, focused tests, and this PR's review/contract artifacts. The stale PR's budget, recovery, health-evidence, and runner changes are not in the candidate diff. The focused offline suite passed: `pytest -q tests/test_depth_subscription_tokens.py tests/test_depth_subscription_refresh_contract.py tests/test_subscription_universe_123_contract.py tests/test_kite_depth_ws_stability.py` — **90 passed**. `git diff --check` passed. Exact-head hosted CI remains pending. PR782 and PR818 are excluded by user instruction and are not represented as passing evidence.
+The final candidate diff against current `main` contains only the two subscription builders, focused tests, and this PR's review/contract artifacts. It retains the existing 123-token MEG ceiling; stale budget, recovery, health-evidence, and runner changes are not in the candidate diff. After adding the 150-to-123 cap assertion and cash-only fail-closed assertion, the focused offline suite passed: `pytest -q tests/test_depth_subscription_tokens.py tests/test_depth_subscription_refresh_contract.py tests/test_subscription_universe_123_contract.py tests/test_kite_depth_ws_stability.py` — **90 passed**. `git diff --check` passes. Exact-head hosted CI remains pending. PR782 and PR818 are excluded by user instruction and are not represented as passing evidence.
 
 ## High-Risk Path Review
 
-`core/depth_subscription_engine.py` and `core/kite_depth_ws.py` are high-risk feed paths. The patch filters MEG option-resolution inputs to `NIFTY`, `BANKNIFTY`, and `SENSEX`; cash-only inputs raise a clear error instead of creating an observation-only ready state. It requires complete registry-token identity coverage and final-union membership before publishing identities into generic and underlying maps. Conflicting or incomplete identity blocks readiness, and failed merges publish no observation-only identities. Tests confirm the 123-token union and resolver inputs. Budget, option selection/counts, recovery logic, freshness gates, and execution controls are unchanged by this scoped patch. No live process or broker was used.
+`core/depth_subscription_engine.py` and `core/kite_depth_ws.py` are high-risk feed paths. The patch filters MEG option-resolution inputs to `NIFTY`, `BANKNIFTY`, and `SENSEX`; cash-only inputs raise a clear error instead of creating an observation-only ready state. It caps a 150-token general depth budget at the existing 123-token MEG ceiling. It requires complete registry-token identity coverage and final-union membership before publishing identities into generic and underlying maps. Conflicting or incomplete identity blocks readiness, and failed merges publish no observation-only identities. Tests confirm the 123-token union and resolver inputs. Option selection/counts, recovery logic, freshness gates, and execution controls are unchanged by this scoped patch. No live process or broker was used.
 
 ## Runtime Proof Required After Merge
 

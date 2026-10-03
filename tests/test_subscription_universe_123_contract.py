@@ -98,7 +98,7 @@ def test_live_subscription_contract_is_exactly_123_and_constituents_are_cash_onl
     ]
     tokens, resolution = engine.build_subscription_tokens(
         symbols=requested_symbols,
-        max_tokens=123,
+        max_tokens=150,
     )
     state = ws._observation_state_payload()
 

@@ -367,6 +367,27 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             raise ValueError("MEG subscription requires at least one configured index option symbol")
     if max_tokens is None:
         max_tokens = _cfg_int(conf, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123)
+    if _cfg_bool(conf, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False):
+        try:
+            requested_budget = int(max_tokens)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("MEG subscription budget must be a positive integer") from exc
+        governed_budget = int(getattr(ws, "_GOVERNED_FEED_SUBSCRIPTION_BUDGET", 123))
+        if requested_budget <= 0 or governed_budget <= 0:
+            raise ValueError("MEG subscription budget must be a positive integer")
+        max_tokens = min(requested_budget, governed_budget)
+        if requested_budget > max_tokens:
+            try:
+                ws._log_ws(
+                    "FEED_SUBSCRIPTION_BUDGET_CAPPED",
+                    {
+                        "requested_budget": requested_budget,
+                        "effective_budget": max_tokens,
+                        "governed_budget": governed_budget,
+                    },
+                )
+            except Exception:
+                pass
     around_default = _cfg_int(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6)
     around_by_symbol = dict(getattr(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {})
     step_map = dict(getattr(conf, "STRIKE_STEP_BY_SYMBOL", {}) or {})
