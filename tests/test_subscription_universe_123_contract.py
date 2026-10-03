@@ -1,5 +1,6 @@
 from datetime import date
 import importlib
+from types import SimpleNamespace
 
 from config import config as cfg
 
@@ -83,8 +84,18 @@ def test_live_subscription_contract_is_exactly_123_and_constituents_are_cash_onl
     )
 
     ws.reset_market_event_graph_observation_plan_state()
+    requested_symbols = [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX",
+        *(
+            symbol
+            for symbol in registry.token_by_symbol
+            if symbol not in {"NIFTY", "BANKNIFTY", "SENSEX"}
+        ),
+    ]
     tokens, resolution = engine.build_subscription_tokens(
-        symbols=["NIFTY", "BANKNIFTY", "SENSEX"],
+        symbols=requested_symbols,
         max_tokens=123,
     )
     state = ws._observation_state_payload()
@@ -99,6 +110,53 @@ def test_live_subscription_contract_is_exactly_123_and_constituents_are_cash_onl
     assert len(tokens) == 123
     assert len(state["final_union_tokens"]) == 123
     assert set(registry.all_tokens).issubset(set(tokens))
+    assert set(registry.all_tokens).issubset(set(ws._UNDERLYING_TOKENS))
+    assert {
+        int(token): str(symbol).upper()
+        for symbol, token in registry.token_by_symbol.items()
+    }.items() <= ws._UNDERLYING_TOKEN_TO_SYMBOL.items()
     assert state["enabled"] is True
     assert state["verdict"] == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
     assert state["configured_budget"] == 123
+
+    # A failed union must not publish observation-only cash identities.
+    original_merge = ws.build_observation_subscription_merge
+    monkeypatch.setattr(
+        ws,
+        "build_observation_subscription_merge",
+        lambda **_kwargs: {
+            "ok": False,
+            "tokens": [],
+            "reason": "synthetic_blocked_merge",
+            "missing_or_pruned_observation_tokens": list(registry.all_tokens),
+        },
+    )
+    ws.reset_market_event_graph_observation_plan_state()
+    engine.build_subscription_tokens(symbols=requested_symbols, max_tokens=123)
+    cash_tokens = set(registry.all_tokens) - {int(registry.index_token)}
+    assert cash_tokens.isdisjoint(ws._UNDERLYING_TOKENS)
+    assert cash_tokens.isdisjoint(ws._UNDERLYING_TOKEN_TO_SYMBOL)
+    assert all(token not in ws._TOKEN_TO_SYMBOL for token in cash_tokens)
+    assert ws._observation_state_payload()["enabled"] is False
+
+    # A nominally successful union with incomplete registry identity also fails closed.
+    monkeypatch.setattr(ws, "build_observation_subscription_merge", original_merge)
+    incomplete_registry = SimpleNamespace(
+        all_tokens=registry.all_tokens,
+        token_by_symbol={
+            symbol: token
+            for symbol, token in registry.token_by_symbol.items()
+            if symbol != next(
+                symbol
+                for symbol in registry.token_by_symbol
+                if symbol not in {"NIFTY", "BANKNIFTY", "SENSEX"}
+            )
+        },
+        canonical_sha256=registry.canonical_sha256,
+    )
+    monkeypatch.setattr(ws, "load_observation_registry", lambda force=False: incomplete_registry)
+    ws.reset_market_event_graph_observation_plan_state()
+    engine.build_subscription_tokens(symbols=requested_symbols, max_tokens=123)
+    assert cash_tokens.isdisjoint(ws._UNDERLYING_TOKENS)
+    assert cash_tokens.isdisjoint(ws._UNDERLYING_TOKEN_TO_SYMBOL)
+    assert ws._observation_state_payload()["enabled"] is False
