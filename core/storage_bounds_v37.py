@@ -13,7 +13,7 @@ from typing import Any, Mapping
 from core.kite_depth_protocol import KITE_DEPTH_CANONICAL_MAX_BYTES, canonical_bytes
 
 V37_SCHEMA_VERSION = 1
-DEPTH_QUEUE_MAX_ITEMS = 16_384
+DEPTH_QUEUE_MAX_ITEMS = 65_536
 TICK_QUEUE_MAX_ITEMS = 10_000
 PERSISTENCE_BATCH_MAX_ITEMS = 1_000
 

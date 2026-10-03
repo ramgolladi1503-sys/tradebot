@@ -1,4 +1,7 @@
-from core.feed_recovery_coordinator import FeedRecoveryCoordinator
+from core.feed_recovery_coordinator import (
+    FeedRecoveryCoordinator,
+    is_plain_ws1006_peer_drop,
+)
 
 
 class _Clock:
@@ -65,6 +68,30 @@ def test_plain_ws1006_peer_drop_is_recoverable_first():
     assert result.state.recovery_in_progress is True
     assert result.state.process_restart_required is False
     assert result.state.terminal_failure is False
+
+
+def test_ws1006_reason_classification_is_shared_and_fail_closed():
+    reasons = (
+        "connection was closed uncleanly",
+        "peer dropped the TCP connection",
+        "connection closed abnormally",
+        "closed without closing handshake",
+    )
+    for reason in reasons:
+        assert is_plain_ws1006_peer_drop(code=1006, reason=reason)
+        decision = FeedRecoveryCoordinator(
+            recoverable_retry_cooldown_sec=0.0,
+        ).request_recovery(source="on_error", code=1006, reason=reason)
+        assert decision.action == "SOFT_RECONNECT"
+        assert decision.accepted is True
+
+    for code, reason in (
+        (1011, "connection closed abnormally"),
+        (1006, "unrecognized transport failure"),
+        (None, "peer dropped"),
+        ("invalid", "peer dropped"),
+    ):
+        assert not is_plain_ws1006_peer_drop(code=code, reason=reason)
 
 
 def test_main_loop_terminated_is_terminal():

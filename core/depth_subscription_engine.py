@@ -358,12 +358,7 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     conf = _cfg(ws)
     symbols_l = [str(s).upper() for s in list(symbols or list(getattr(conf, "SYMBOLS", []) or []))]
     if max_tokens is None:
-        max_tokens = _cfg_int(conf, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)
-    # Governed MEG live observation has a fixed 123-token authority:
-    # 3 index underlyings + 70 index options + 50 additional NIFTY50 cash
-    # constituents (NIFTY overlaps the 51-token observation universe).
-    if _cfg_bool(conf, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False):
-        max_tokens = min(int(max_tokens), 123)
+        max_tokens = _cfg_int(conf, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123)
     around_default = _cfg_int(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6)
     around_by_symbol = dict(getattr(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {})
     step_map = dict(getattr(conf, "STRIKE_STEP_BY_SYMBOL", {}) or {})
@@ -545,16 +540,9 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         ws.activate_market_event_graph_launch_plan(plan)
         if bool(merge.get("ok")):
             tokens = [int(token) for token in list(merge.get("tokens") or [])]
-            # Observation identities are cash/index instruments, not options.
-            # Preserve their underlying classification without ever sending
-            # constituent symbols through option-chain resolution.
             for symbol, token in dict(observation_registry.token_by_symbol).items():
-                token_i = int(token)
-                symbol_u = str(symbol).upper()
-                token_to_symbol[token_i] = symbol_u
-                ws._TOKEN_TO_SYMBOL[token_i] = symbol_u
-                ws._UNDERLYING_TOKENS.add(token_i)
-                ws._UNDERLYING_TOKEN_TO_SYMBOL[token_i] = symbol_u
+                token_to_symbol[int(token)] = str(symbol).upper()
+                ws._TOKEN_TO_SYMBOL[int(token)] = str(symbol).upper()
         else:
             try:
                 ws._log_ws(

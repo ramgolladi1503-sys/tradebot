@@ -8,6 +8,7 @@ production market-data OHLC state used by strategies, risk, or execution.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import math
 from typing import Any, Mapping
 
 from config import config as cfg
@@ -16,12 +17,14 @@ from core.time_utils import IST_TZ
 
 shadow_ohlc_buffer = OhlcBuffer()
 _LAST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
+_LAST_CUMULATIVE_VOLUME_BY_TOKEN: dict[int, tuple[str, float]] = {}
 _ACTIVE_CAPTURE_IDENTITY: dict[str, Any] | None = None
 
 
 def reset_live_source_shadow_buffer() -> None:
     shadow_ohlc_buffer._bars.clear()
     _LAST_SOURCE_TICK_EPOCH_BY_TOKEN.clear()
+    _LAST_CUMULATIVE_VOLUME_BY_TOKEN.clear()
     global _ACTIVE_CAPTURE_IDENTITY
     _ACTIVE_CAPTURE_IDENTITY = None
 
@@ -40,7 +43,7 @@ def _capture_identity_from(feed_identity: Mapping[str, Any] | None, *, provider:
 
 def _identity_changed(identity: Mapping[str, Any]) -> bool:
     current = dict(_ACTIVE_CAPTURE_IDENTITY or {})
-    return any(current.get(key) != identity.get(key) for key in ("provider", "token_domain", "universe_hash", "feed_session_id", "feed_epoch"))
+    return any(current.get(key) != identity.get(key) for key in ("provider", "token_domain", "universe_hash", "feed_session_id", "feed_epoch", "reconnect_generation"))
 
 
 def _apply_identity(identity: Mapping[str, Any]) -> None:
@@ -48,6 +51,33 @@ def _apply_identity(identity: Mapping[str, Any]) -> None:
     if _identity_changed(identity):
         reset_live_source_shadow_buffer()
         _ACTIVE_CAPTURE_IDENTITY = dict(identity)
+
+
+def _derive_cumulative_volume_delta(
+    *, token: int, cumulative_volume: Any, tick_epoch: float, feed_session_id: str
+) -> tuple[float | None, bool, str, tuple[str, float] | None]:
+    """Convert Kite's cumulative daily volume to an observed increment.
+
+    Increments are attributed to the current source tick minute. When an
+    observation gap spans minutes, this is an estimate, not exchange bucket
+    volume. The first value, day/session reset, regression, and invalid values
+    produce an explicitly incomplete volume observation.
+    """
+    try:
+        cumulative = float(cumulative_volume)
+        if not math.isfinite(cumulative) or cumulative < 0:
+            raise ValueError("cumulative volume must be finite and nonnegative")
+    except (TypeError, ValueError, OverflowError):
+        return None, False, "MISSING_OR_INVALID_CUMULATIVE", _LAST_CUMULATIVE_VOLUME_BY_TOKEN.get(token)
+
+    day_key = datetime.fromtimestamp(tick_epoch, tz=timezone.utc).astimezone(IST_TZ).date().isoformat()
+    baseline_key = f"{feed_session_id}:{day_key}"
+    previous = _LAST_CUMULATIVE_VOLUME_BY_TOKEN.get(token)
+    if previous is None or previous[0] != baseline_key:
+        return None, False, "BASELINE_REQUIRED", (baseline_key, cumulative)
+    if cumulative < previous[1]:
+        return None, False, "CUMULATIVE_REGRESSION_REBASELINE", (baseline_key, cumulative)
+    return cumulative - previous[1], True, "DELTA_OBSERVED", (baseline_key, cumulative)
 
 
 def record_live_source_shadow_tick(
@@ -64,6 +94,7 @@ def record_live_source_shadow_tick(
     universe_hash: str = "",
     packet_kind: str = "",
     is_full_payload: bool = False,
+    cumulative_volume: Any = None,
 ) -> dict[str, Any]:
     if not bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
         return {"accepted": False, "status": "DISABLED"}
@@ -111,10 +142,22 @@ def record_live_source_shadow_tick(
 
     tick_dt = datetime.fromtimestamp(tick_epoch, tz=timezone.utc).astimezone(IST_TZ)
     offline_fixture = normalized_source_type == "deterministic_test"
+    volume_delta, volume_complete, volume_status, next_volume_baseline = _derive_cumulative_volume_delta(
+        token=token,
+        cumulative_volume=cumulative_volume,
+        tick_epoch=tick_epoch,
+        feed_session_id=session_id,
+    )
+    try:
+        cumulative_volume_value = float(cumulative_volume)
+        if not math.isfinite(cumulative_volume_value) or cumulative_volume_value < 0:
+            cumulative_volume_value = None
+    except (TypeError, ValueError, OverflowError):
+        cumulative_volume_value = None
     result = shadow_ohlc_buffer.update_tick(
         str(symbol).upper(),
         price_value,
-        volume=None,
+        volume=volume_delta,
         ts=tick_dt,
         provenance={
             "source_type": normalized_source_type,
@@ -134,16 +177,27 @@ def record_live_source_shadow_tick(
             "live_evidence": not offline_fixture,
             "non_live_fallback": False,
             "recovered_synthetic": False,
+            "volume": volume_delta,
+            "volume_source": "kite_cumulative_day_volume",
+            "volume_cumulative_day_value": cumulative_volume_value,
+            "volume_delta_status": volume_status,
+            "volume_observation_complete": volume_complete,
+            "volume_attribution": "CURRENT_SOURCE_TICK_MINUTE_ESTIMATE",
+            "volume_is_estimate": True,
         },
     )
     if bool(result.get("accepted")):
         _LAST_SOURCE_TICK_EPOCH_BY_TOKEN[token] = tick_epoch
+        if next_volume_baseline is not None:
+            _LAST_CUMULATIVE_VOLUME_BY_TOKEN[token] = next_volume_baseline
     result["capture_identity"] = capture_identity
     result["delivery_observed"] = True
     result["bar_written"] = bool(result.get("accepted"))
     result["packet_kind"] = str(packet_kind or "")
     result["is_full_payload"] = bool(is_full_payload)
     result["live_evidence"] = not offline_fixture
+    result["volume_delta_status"] = volume_status
+    result["volume_observation_complete"] = volume_complete
     result["replay_fixture"] = offline_fixture
     if offline_fixture:
         result["fixture_kind"] = "OFFLINE_DETERMINISTIC_TEST"

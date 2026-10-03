@@ -216,6 +216,7 @@ def test_start_depth_ws_uses_resolved_token(monkeypatch):
 def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
     _patch_common(monkeypatch)
     callbacks = []
+    shadow_ticks = []
     monkeypatch.setattr(ws, "record_fd_trace", lambda *args, **kwargs: None)
     monkeypatch.setattr(ws.feed_evidence, "callback", lambda count, **kwargs: callbacks.append((count, kwargs.get("rows"))))
     monkeypatch.setattr(ws.feed_evidence, "normalized", lambda *args, **kwargs: None)
@@ -244,6 +245,24 @@ def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
     monkeypatch.setattr(ws, "now_utc_epoch", lambda: 1234.5)
     monkeypatch.setattr(ws, "_SCHEMA_LOG_TS", 0.0, raising=False)
     monkeypatch.setattr(ws, "_FEED_ON_TICKS_ROW_SEQ", 0, raising=False)
+    monkeypatch.setattr(ws, "load_observation_registry", lambda **kwargs: type("Registry", (), {
+        "all_tokens": [101], "canonical_sha256": "universe-hash",
+        "observation_identity": lambda self, token: {"symbol": "NIFTY", "instrument_class": "INDEX"},
+    })())
+    monkeypatch.setattr(ws, "_observation_state_payload", lambda: {
+        "enabled": True,
+        "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
+        "observation_tokens": [101],
+        "feed_session_id": "session-1",
+        "feed_epoch": 3,
+    })
+    monkeypatch.setattr(ws, "_ensure_feed_session_id", lambda: "session-1")
+    monkeypatch.setattr(ws, "current_feed_epoch", lambda: 3)
+    monkeypatch.setattr(ws, "get_current_feed_session_identity", lambda: {
+        "feed_session_id": "session-1", "feed_epoch": 3, "reconnect_generation": 1,
+    })
+    monkeypatch.setattr(ws, "_SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS", {101}, raising=False)
+    monkeypatch.setattr(ws, "record_live_source_shadow_tick", lambda **kwargs: shadow_ticks.append(kwargs))
 
     ws.on_ticks(None, [{
         "instrument_token": 101,
@@ -257,6 +276,8 @@ def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
 
     assert callbacks and callbacks[0][0] == 1
     assert callbacks[0][1][0]["_audit_source_row_index"] == 7
+    assert len(shadow_ticks) == 1
+    assert shadow_ticks[0]["cumulative_volume"] == 1.0
 
 
 def test_on_ticks_855_row_batches_preserve_tick_depth_observation_when_snapshot_coalesces(monkeypatch):
@@ -1480,6 +1501,9 @@ def test_launch_plan_activation_seeds_validated_option_metadata(monkeypatch):
         "ok": True,
         "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
         "production_tokens": [101, 201, 202],
+        "production_underlying_tokens": [101],
+        "production_option_tokens": [201, 202],
+        "production_sticky_tokens": [],
         "final_union_tokens": [101, 201, 202, 301],
         "observation_tokens": [301],
         "configured_budget": 200,
@@ -1530,7 +1554,50 @@ def test_launch_plan_activation_rejects_inconsistent_option_metadata(monkeypatch
     assert ws._LAST_OPTION_COUNTS_BY_SYMBOL == {}
     assert ws._LAST_OPTION_MIN_REQUIRED_BY_SYMBOL == {}
     assert ws._TOKEN_TO_SYMBOL == {}
+    assert ws._UNDERLYING_TOKEN_TO_SYMBOL == {}
     assert any(event == "FEED_LAUNCH_PLAN_OPTION_METADATA_BLOCKED" for event, _ in events)
+
+
+def test_launch_plan_activation_preserves_sticky_identity_and_zero_option_block(monkeypatch):
+    _patch_common(monkeypatch)
+    plan = {
+        "ok": True,
+        "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
+        "production_tokens": [101, 102, 201, 301],
+        "production_underlying_tokens": [101, 102],
+        "production_option_tokens": [201],
+        "production_sticky_tokens": [301],
+        "final_union_tokens": [101, 102, 201, 301, 401],
+        "observation_tokens": [401],
+        "configured_budget": 200,
+        "production_resolution": [
+            {
+                "symbol": "NIFTY", "index_token": 101, "tokens": [101, 201],
+                "option_count": 1, "final_option_count": 1, "option_min_required": 2,
+            },
+            {
+                "symbol": "BANKNIFTY", "index_token": 102, "tokens": [102],
+                "option_count": 0, "final_option_count": 0, "option_min_required": 2,
+            },
+        ],
+        "production_option_count": 1,
+        "launch_plan_sha256": "plan-sha-with-sticky",
+    }
+
+    ws.activate_market_event_graph_launch_plan(plan)
+    state = ws._option_runtime_state(
+        now_epoch=100.0,
+        tokens=plan["production_tokens"],
+        expected_counts_by_symbol=ws._LAST_OPTION_COUNTS_BY_SYMBOL,
+        min_required_by_symbol=ws._LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+        ws_connected=True,
+    )
+
+    assert ws._TOKEN_TO_SYMBOL == {201: "NIFTY", 301: "STICKY", 101: "NIFTY", 102: "BANKNIFTY"}
+    assert ws._LAST_OPTION_COUNTS_BY_SYMBOL == {"NIFTY": 1, "BANKNIFTY": 0}
+    assert state["option_count"] == 1
+    assert "BANKNIFTY" in state["active_blockers_by_symbol"]
+    assert state["feed_block_reason_by_symbol"]["BANKNIFTY"] != "OK"
 
 
 def test_intermediate_observation_merge_preserves_resolved_option_identity(monkeypatch):
@@ -1573,6 +1640,19 @@ def test_intermediate_observation_merge_preserves_resolved_option_identity(monke
     assert ws._TOKEN_TO_SYMBOL[738561] == "RELIANCE"
     assert ws._LAST_OPTION_COUNTS_BY_SYMBOL["NIFTY"] == 4
     assert next(row for row in resolution if row["symbol"] == "NIFTY")["final_option_count"] == 4
+    assert ws._observation_state_payload()["configured_budget"] == 123
+    assert len(tokens) <= 123
+
+
+def test_build_subscription_tokens_rejects_nonpositive_budget(monkeypatch):
+    _patch_common(monkeypatch)
+
+    import pytest
+
+    with pytest.raises(ValueError, match="positive integer"):
+        ws.build_subscription_tokens(symbols=["NIFTY"], max_tokens=0)
+
+
 def test_persist_runtime_snapshot_row_publishes_canonical_feed_truth_when_verified(monkeypatch, tmp_path):
     _patch_common(monkeypatch)
     monkeypatch.setattr(ws, "logs_dir", lambda: tmp_path)
@@ -2250,3 +2330,49 @@ def test_g_repeated_reconnect_cycles(monkeypatch):
     assert total_subscribe_calls == 20
     assert ws._RUNTIME_STATE == "RUNNING"
     assert ws._KITE_TICKER is not None
+
+
+def test_ws1006_generic_drop_is_recoverable(monkeypatch):
+    """Verify that any 1006 close/error (not only peer-dropped string matches) is categorized as RECOVERABLE_WS_DROP."""
+    _patch_common(monkeypatch)
+    captured = {}
+    reconnects = []
+    events: list[tuple[str, dict]] = []
+
+    def _factory(api_key, access_token, debug=True, **kwargs):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(cfg, "DEPTH_WS_ALLOW_SOFT_RECONNECTS", True, raising=False)
+    monkeypatch.setattr(ws, "_soft_resubscribe_current", lambda reason: reconnects.append(reason) or True)
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+
+    # Generic 1006 error with standard websocket closure text
+    ticker.on_error(ticker, 1006, "connection closed abnormally without closing handshake")
+    assert reconnects == ["ws1006_recoverable:on_error"]
+    assert any(event == "FEED_WS_1006_RECOVERABLE" for event, _ in events)
+
+
+def test_ws_recovery_proof_context_aligns_with_resubscribe_selection(monkeypatch):
+    """Verify that when options drop and auto-recover from desired tokens, proof context expected_tokens aligns."""
+    _patch_common(monkeypatch)
+    underlying = 256265
+    option_token = 100001
+    ws._UNDERLYING_TOKENS = {underlying}
+    ws._UNDERLYING_TOKEN_TO_SYMBOL = {underlying: "NIFTY"}
+    ws._LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN[underlying] = 100.0
+
+    # Desired has underlying + option; last tokens has only underlying
+    ws._LAST_DESIRED_TOKENS = [underlying, option_token]
+    ws._LAST_TOKENS = [underlying]
+
+    context = ws._new_ws_recovery_proof_context(disconnect_started_at=105.0)
+    # Proof context expected tokens should contain both tokens (aligned with what resubscribe will apply)
+    assert set(context["expected_tokens"]) == {str(underlying), str(option_token)}
+    assert "expected_subscription_set_missing" not in context["invalid_reasons"]

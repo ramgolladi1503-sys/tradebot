@@ -2,6 +2,7 @@ from config import config as cfg
 from config import feed_runtime_reliability as reliability_cfg
 import logging
 import hashlib
+import importlib
 import os
 import time
 import threading
@@ -38,7 +39,11 @@ from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.feed_runtime import build_canonical_feed_truth_state
 from core.feed_robustness_evidence import collector as feed_evidence
 from core.feed_fd_trace import process_fd_count, record_trace as record_fd_trace, reset_trace as reset_fd_trace
-from core.feed_recovery_coordinator import FeedRecoveryCoordinator, get_feed_recovery_coordinator
+from core.feed_recovery_coordinator import (
+    FeedRecoveryCoordinator,
+    get_feed_recovery_coordinator,
+    is_plain_ws1006_peer_drop,
+)
 from core.auth_manager import (
     clear_auth_required_state,
     invalidate_cache,
@@ -265,6 +270,7 @@ _SCHEMA_LOG_TS = 0.0
 _INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
 _AUTH_REQUIRED_LATCH = False
 _OBSERVATION_PLAN_STATE_LOCK = threading.RLock()
+_GOVERNED_FEED_SUBSCRIPTION_BUDGET = 123
 _OBSERVATION_PLAN_STATE: dict[str, Any] = {
     "enabled": False,
     "verdict": "DISABLED",
@@ -1844,28 +1850,54 @@ def _launch_plan_option_metadata(
     min_required_by_symbol: dict[str, int] = {}
     token_to_symbol: dict[int, str] = {}
     resolved_production_tokens: set[int] = set()
+    resolved_underlying_tokens: set[int] = set()
+    sticky_tokens = set(_normalize_positive_tokens(plan.get("production_sticky_tokens") or ()))
+    if not sticky_tokens.issubset(production_tokens):
+        return None
     for row in rows:
         if not isinstance(row, Mapping):
             return None
         symbol = str(row.get("symbol") or "").strip().upper()
-        row_tokens = set(_normalize_positive_tokens(row.get("tokens") or ()))
+        raw_row_tokens = row.get("tokens") or ()
+        if not isinstance(raw_row_tokens, (list, tuple, set)):
+            return None
+        normalized_row_tokens = _normalize_positive_tokens(raw_row_tokens)
+        row_tokens = set(normalized_row_tokens)
         try:
+            raw_index_token = row.get("index_token")
+            if isinstance(raw_index_token, bool):
+                return None
             index_token = int(row.get("index_token") or 0)
             declared_option_count = int(row.get("final_option_count", row.get("option_count", -1)))
             min_required = int(row.get("option_min_required") or 0)
         except (TypeError, ValueError):
             return None
-        if not symbol or not row_tokens or index_token not in row_tokens:
+        if (
+            not symbol
+            or not row_tokens
+            or len(normalized_row_tokens) != len(raw_row_tokens)
+            or index_token not in row_tokens
+            or resolved_production_tokens & row_tokens
+        ):
             return None
         if not row_tokens.issubset(production_tokens):
             return None
         option_tokens = row_tokens - {index_token}
         if declared_option_count != len(option_tokens) or min_required <= 0:
             return None
+        for count_key in ("final_option_count", "option_count"):
+            if count_key in row:
+                try:
+                    count_value = int(row[count_key])
+                except (TypeError, ValueError):
+                    return None
+                if count_value != len(option_tokens):
+                    return None
         if symbol in requested_by_symbol:
             return None
         requested_by_symbol[symbol] = declared_option_count
         min_required_by_symbol[symbol] = min_required
+        resolved_underlying_tokens.add(index_token)
         resolved_production_tokens.update(row_tokens)
         for token in option_tokens:
             previous_symbol = token_to_symbol.get(token)
@@ -1873,7 +1905,18 @@ def _launch_plan_option_metadata(
                 return None
             token_to_symbol[token] = symbol
 
-    if resolved_production_tokens != production_tokens or not production_tokens.issubset(final_tokens):
+    if (
+        resolved_production_tokens & sticky_tokens
+        or resolved_production_tokens | sticky_tokens != production_tokens
+        or not production_tokens.issubset(final_tokens)
+    ):
+        return None
+    declared_underlying = set(_normalize_positive_tokens(plan.get("production_underlying_tokens") or ()))
+    if "production_underlying_tokens" in plan and declared_underlying != resolved_underlying_tokens:
+        return None
+    declared_options = set(_normalize_positive_tokens(plan.get("production_option_tokens") or ()))
+    resolved_options = set(token_to_symbol)
+    if "production_option_tokens" in plan and declared_options != resolved_options:
         return None
     observation_tokens = set(_normalize_positive_tokens(plan.get("observation_tokens") or ()))
     if not observation_tokens.issubset(final_tokens):
@@ -1885,8 +1928,10 @@ def _launch_plan_option_metadata(
         declared_option_total = int(plan.get("production_option_count", -1))
     except (TypeError, ValueError):
         return None
-    if declared_option_total != sum(requested_by_symbol.values()):
+    if declared_option_total != sum(requested_by_symbol.values()) or declared_option_total != len(resolved_options):
         return None
+    for token in sticky_tokens:
+        token_to_symbol[token] = "STICKY"
     return requested_by_symbol, min_required_by_symbol, token_to_symbol
 
 
@@ -2621,19 +2666,19 @@ def _ws1006_fault_category(*, code: int | None, reason_text: str | None) -> str:
         code_int = int(code) if code is not None else None
     except Exception:
         code_int = None
-    reason_lower = str(reason_text or "").strip().lower()
     if is_auth_error(code=code_int, reason_text=reason_text):
         return "AUTH_BLOCKED"
     if _is_terminal_ws_fault(code=code_int, reason_text=reason_text):
         return "TERMINAL_PROCESS_RESTART_REQUIRED"
-    if code_int == 1006 and any(marker in reason_lower for marker in ("connection was closed uncleanly", "peer dropped")):
+    if is_plain_ws1006_peer_drop(code=code_int, reason=reason_text):
         return "RECOVERABLE_WS_DROP"
     return "UNKNOWN"
 
 
 def _new_ws_recovery_proof_context(*, disconnect_started_at: float) -> dict[str, Any]:
     """Snapshot exact subscription and critical underlying evidence at disconnect."""
-    expected_tokens = _normalize_positive_tokens(_LAST_TOKENS)
+    resub_tokens, _ = _resubscribe_token_selection()
+    expected_tokens = _normalize_positive_tokens(resub_tokens or _LAST_TOKENS)
     required_tokens = sorted({int(token) for token in (_UNDERLYING_TOKENS or set()) if int(token) > 0})
     symbol_by_token = {
         str(int(token)): str(symbol or "").strip().upper()
@@ -6091,15 +6136,28 @@ def get_sticky_tokens() -> set[int]:
     return out
 
 
-def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None = None) -> tuple[list[int], list[dict]]:
+def _load_observation_registry_for_subscription():
+    """Resolve the observation registry through its canonical module identity."""
+    registry_module = importlib.import_module("core.market_event_graph_live_observation_registry")
+    return registry_module.load_observation_registry(force=False)
+
+
+def _build_subscription_tokens_impl(
+    symbols: list[str] | None,
+    max_tokens: int | None = None,
+    *,
+    include_observation: bool = True,
+) -> tuple[list[int], list[dict]]:
     global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING, _TOKEN_TO_SYMBOL, _LAST_ATM_BY_SYMBOL
     global _LAST_DESIRED_TOKENS
     global _LAST_OPTION_COUNTS_BY_SYMBOL, _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL
-    # Production option resolution is intentionally restricted to the caller's
-    # configured index symbols (NIFTY/BANKNIFTY/SENSEX).  NIFTY50 constituents
-    # belong to the separate cash observation universe and are merged later as
-    # exact instrument tokens; they must never enter option-chain resolution.
-    symbols = [str(symbol).upper() for symbol in list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))]
+    symbols = list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))
+    # Keep the production option universe limited to cfg.SYMBOLS (the three
+    # index products).  MARKET_EVENT_GRAPH constituents are cash observation
+    # tokens and are merged separately by the observation subscription plan;
+    # feeding their symbols into this option resolver expands each constituent
+    # into an option chain and violates the governed ~123-token topology.
+
     tokens: list[int] = []
     resolution: list[dict] = []
     underlying_tokens: list[int] = []
@@ -6108,9 +6166,23 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     option_rank_by_token: dict[int, tuple[float, int, float, int, int]] = {}
     token_exchange_hint: dict[int, str] = {}
     if max_tokens is None:
-        max_tokens = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150))
-    if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
-        max_tokens = min(int(max_tokens), 123)
+        max_tokens = getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", _GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+    try:
+        requested_budget = int(max_tokens)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("depth subscription budget must be a positive integer") from exc
+    if requested_budget <= 0:
+        raise ValueError("depth subscription budget must be a positive integer")
+    max_tokens = min(requested_budget, _GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+    if max_tokens < requested_budget:
+        _log_ws(
+            "FEED_SUBSCRIPTION_BUDGET_CAPPED",
+            {
+                "requested_budget": requested_budget,
+                "effective_budget": max_tokens,
+                "governed_budget": _GOVERNED_FEED_SUBSCRIPTION_BUDGET,
+            },
+        )
     strikes_around_default = int(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6))
     strikes_by_symbol = getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {}
     step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
@@ -6414,16 +6486,17 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         sticky_tokens=sticky_tokens,
         active_trade_tokens=active_trade_tokens,
     )
-    try:
-        observation_registry = load_observation_registry(force=False)
-    except Exception as exc:
-        reset_market_event_graph_observation_plan_state()
-        _log_ws(
-            "MARKET_EVENT_GRAPH_OBSERVATION_PLAN_BLOCKED",
-            {"reason": f"registry_load_failed:{type(exc).__name__}:{exc}"},
-        )
-        observation_registry = None
-    if observation_registry is not None:
+    observation_registry = None
+    if include_observation:
+        try:
+            observation_registry = _load_observation_registry_for_subscription()
+        except Exception as exc:
+            reset_market_event_graph_observation_plan_state()
+            _log_ws(
+                "MARKET_EVENT_GRAPH_OBSERVATION_PLAN_BLOCKED",
+                {"reason": f"registry_load_failed:{type(exc).__name__}:{exc}"},
+            )
+    if include_observation and observation_registry is not None:
         observation_token_list = [int(token) for token in observation_registry.all_tokens]
         merge = build_observation_subscription_merge(
             production_tokens=[int(token) for token in tokens],
@@ -6461,21 +6534,26 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
                     "missing_observation_tokens": list(merge.get("missing_or_pruned_observation_tokens") or [])[:20],
                 },
             )
-    else:
+    elif include_observation:
         reset_market_event_graph_observation_plan_state()
 
     final_tokens_by_symbol: dict[str, list[int]] = {}
     final_option_counts_by_symbol: dict[str, int] = {}
+    underlying_token_set = {int(token) for token in underlying_tokens if token is not None}
     for tok in list(tokens or []):
         try:
             tok_int = int(tok)
         except Exception:
             continue
-        symbol = str(_TOKEN_TO_SYMBOL.get(tok_int) or "").upper()
+        # Build resolution rows from this invocation's ownership snapshot.
+        # The process-global map also contains observation symbols and can be
+        # replaced by launch-plan activation while the subscription plan is
+        # being assembled; it is not authoritative for this production result.
+        symbol = str(token_to_symbol.get(tok_int) or "").upper()
         if not symbol or symbol == "STICKY":
             continue
         final_tokens_by_symbol.setdefault(symbol, []).append(tok_int)
-        if not _is_underlying_token(tok_int):
+        if tok_int not in underlying_token_set:
             final_option_counts_by_symbol[symbol] = int(final_option_counts_by_symbol.get(symbol, 0)) + 1
 
     for row in resolution:
@@ -6561,6 +6639,22 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     desired_tokens = _normalize_positive_tokens(tokens)
     _LAST_DESIRED_TOKENS = desired_tokens or None
     return tokens, resolution
+
+
+def build_subscription_tokens(
+    symbols: list[str] | None,
+    max_tokens: int | None = None,
+) -> tuple[list[int], list[dict]]:
+    """Build the feed subscription set, merging observations when enabled."""
+    return _build_subscription_tokens_impl(symbols, max_tokens, include_observation=True)
+
+
+def build_production_subscription_tokens(
+    symbols: list[str] | None,
+    max_tokens: int | None = None,
+) -> tuple[list[int], list[dict]]:
+    """Build production-owned index/option tokens without observation IDs."""
+    return _build_subscription_tokens_impl(symbols, max_tokens, include_observation=False)
 
 
 def _resolution_atm_step_and_underlyings(resolution: list[dict] | None) -> tuple[dict[str, int], dict[str, float], set[int]]:
@@ -7522,6 +7616,7 @@ def on_ticks(ws, ticks):
                     universe_hash=str(getattr(observation_registry, "canonical_sha256", "") or ""),
                     packet_kind=packet_kind,
                     is_full_payload=is_full_payload,
+                    cumulative_volume=(t.get("volume") if t.get("volume") is not None else t.get("volume_traded")),
                 )
             except Exception:
                 pass
@@ -9679,7 +9774,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 try:
                     desired_tokens_raw, resolution = build_subscription_tokens(
                         symbols=list(getattr(cfg, "SYMBOLS", []) or []),
-                        max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)),
+                        max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123)),
                     )
                 except Exception as exc:
                     _log_ws("FEED_REBALANCE_BUILD_ERROR", {"error": str(exc)})

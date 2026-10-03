@@ -150,14 +150,27 @@ class LiveSourceRuntimeBridge:
             return self._reject(subscription_reason, latency_ms=latency_ms, identities=subscription_rejected, audit=subscription)
 
         t1 = time.perf_counter()
-        snapshot, snapshot_reason, rejected = self._assemble_snapshot(contract, subscription, cycle_cutoff=cycle_cutoff)
+        snapshot, snapshot_reason, rejected, snapshot_audit = self._assemble_snapshot(
+            contract, subscription, cycle_cutoff=cycle_cutoff
+        )
         latency_ms["snapshot_assembly"] = (time.perf_counter() - t1) * 1000.0
         if snapshot is None:
             if snapshot_reason in {SNAPSHOT_INCOMPLETE, SNAPSHOT_TIMED_OUT}:
                 self._metrics["meg_snapshot_incomplete_count"] += 1
             if snapshot_reason == SNAPSHOT_TIMED_OUT:
                 self._metrics["meg_timeout_count"] += 1
-            return self._reject(snapshot_reason, latency_ms=latency_ms, identities=rejected, audit=subscription)
+            diagnostic_context = {}
+            if snapshot_reason == INDEX_INTERVAL_MISALIGNED:
+                diagnostic_context = {
+                    "bar_interval_mismatch": snapshot_audit,
+                }
+            return self._reject(
+                snapshot_reason,
+                latency_ms=latency_ms,
+                identities=rejected,
+                audit=subscription,
+                diagnostic_context=diagnostic_context,
+            )
 
         try:
             max_freshness_sec = float(getattr(reliability_cfg, "MEG_MAX_DECISION_FRESHNESS_SEC", 15.0))
@@ -168,6 +181,17 @@ class LiveSourceRuntimeBridge:
         snapshot_age = float(snapshot["observed_at_epoch"]) - float(snapshot["source_bar_end_epoch"])
         if snapshot_age < 0.0 or snapshot_age > max_freshness_sec:
             return self._reject("SNAPSHOT_STALE", latency_ms=latency_ms, identities=(), audit=subscription)
+        stale_tick_context, stale_tick_symbols, stale_tick_reason = _source_tick_freshness_failure(
+            snapshot, max_age_sec=max_freshness_sec
+        )
+        if stale_tick_reason is not None:
+            return self._reject(
+                stale_tick_reason,
+                latency_ms=latency_ms,
+                identities=stale_tick_symbols,
+                audit=subscription,
+                diagnostic_context={"source_tick_freshness": stale_tick_context},
+            )
 
         validation_start = time.perf_counter()
         row = build_live_captured_metadata_row(
@@ -419,7 +443,7 @@ class LiveSourceRuntimeBridge:
         subscription: Mapping[str, Any],
         *,
         cycle_cutoff: datetime,
-    ) -> tuple[dict[str, Any] | None, str, tuple[str, ...]]:
+    ) -> tuple[dict[str, Any] | None, str, tuple[str, ...], dict[str, Any]]:
         started = time.monotonic()
         try:
             grace_ms = min(2000, max(0, int(getattr(reliability_cfg, "MEG_COMPLETION_GRACE_MS", 800))))
@@ -446,7 +470,7 @@ class LiveSourceRuntimeBridge:
                     float(self._metrics["meg_completion_latency_ms"]),
                     max(0.0, time.monotonic() - started) * 1000.0,
                 )
-                return None, SNAPSHOT_TIMED_OUT, result[2]
+                return None, SNAPSHOT_TIMED_OUT, result[2], {}
             time.sleep(min(0.025, remaining))
 
     def _assemble_snapshot_once(
@@ -455,20 +479,29 @@ class LiveSourceRuntimeBridge:
         subscription: Mapping[str, Any],
         *,
         cycle_cutoff: datetime,
-    ) -> tuple[dict[str, Any] | None, str, tuple[str, ...]]:
+    ) -> tuple[dict[str, Any] | None, str, tuple[str, ...], dict[str, Any]]:
         index_bar = self._completed_bar_for(contract.index_symbol, cycle_cutoff=cycle_cutoff)
         if index_bar is None:
-            return None, SNAPSHOT_INCOMPLETE, (contract.index_symbol,)
+            return None, SNAPSHOT_INCOMPLETE, (contract.index_symbol,), {}
         index_end = _bar_end_epoch(index_bar)
         if index_end is None:
-            return None, INDEX_INTERVAL_MISALIGNED, (contract.index_symbol,)
+            return None, INDEX_INTERVAL_MISALIGNED, (contract.index_symbol,), {
+                "index_symbol": contract.index_symbol,
+                "index_bar_end_epoch": None,
+                "constituent_symbol": None,
+                "constituent_bar_end_epoch": None,
+                "bar_interval_delta_seconds": None,
+                "cycle_cutoff_epoch": float(cycle_cutoff.timestamp()),
+                "index_last_live_tick_epoch": _bar_last_live_tick_epoch(index_bar),
+                "constituent_last_live_tick_epoch": None,
+            }
         if self._last_source_bar_end_epoch is not None:
             if float(index_end) == float(self._last_source_bar_end_epoch):
-                return None, "IDLE_UNCHANGED_INTERVAL", ()
+                return None, "IDLE_UNCHANGED_INTERVAL", (), {}
             elif float(index_end) < float(self._last_source_bar_end_epoch):
-                return None, "TIME_REGRESSION", ()
+                return None, "TIME_REGRESSION", (), {}
         if float(index_end) > float(cycle_cutoff.timestamp()):
-            return None, "FUTURE_SOURCE_BAR", ()
+            return None, "FUTURE_SOURCE_BAR", (), {}
 
         ok, reason = _bar_has_live_provenance(
             index_bar,
@@ -478,17 +511,28 @@ class LiveSourceRuntimeBridge:
             subscription=subscription,
         )
         if not ok:
-            return None, reason, (contract.index_symbol,)
+            return None, reason, (contract.index_symbol,), {}
 
         constituent_bars: list[dict[str, Any]] = []
         for spec in contract.constituents:
             symbol = str(spec["symbol"]).upper()
             bar = self._completed_bar_for(symbol, cycle_cutoff=cycle_cutoff)
             if bar is None:
-                return None, SNAPSHOT_INCOMPLETE, (symbol,)
+                return None, SNAPSHOT_INCOMPLETE, (symbol,), {}
             end_epoch = _bar_end_epoch(bar)
             if end_epoch != index_end:
-                return None, INDEX_INTERVAL_MISALIGNED, (symbol,)
+                return None, INDEX_INTERVAL_MISALIGNED, (symbol,), {
+                    "index_symbol": contract.index_symbol,
+                    "index_bar_end_epoch": float(index_end),
+                    "constituent_symbol": symbol,
+                    "constituent_bar_end_epoch": float(end_epoch) if end_epoch is not None else None,
+                    "bar_interval_delta_seconds": (
+                        float(end_epoch) - float(index_end) if end_epoch is not None else None
+                    ),
+                    "cycle_cutoff_epoch": float(cycle_cutoff.timestamp()),
+                    "index_last_live_tick_epoch": _bar_last_live_tick_epoch(index_bar),
+                    "constituent_last_live_tick_epoch": _bar_last_live_tick_epoch(bar),
+                }
             ok, reason = _bar_has_live_provenance(
                 bar,
                 expected_symbol=symbol,
@@ -497,7 +541,7 @@ class LiveSourceRuntimeBridge:
                 subscription=subscription,
             )
             if not ok:
-                return None, reason, (symbol,)
+                return None, reason, (symbol,), {}
             bar = dict(bar)
             bar["symbol"] = symbol
             bar["instrument_token"] = int(spec["instrument_token"])
@@ -519,6 +563,7 @@ class LiveSourceRuntimeBridge:
             },
             "OK",
             (),
+            {},
         )
 
     def _completed_bar_for(self, symbol: str, *, cycle_cutoff: datetime) -> dict[str, Any] | None:
@@ -543,6 +588,7 @@ class LiveSourceRuntimeBridge:
         latency_ms: Mapping[str, float],
         identities: Sequence[str] = (),
         audit: Mapping[str, Any] | None = None,
+        diagnostic_context: Mapping[str, Any] | None = None,
     ) -> LiveSourceBridgeResult:
         self._metrics["meg_cycles_rejected"] += 1
         consecutive = int(self._metrics["meg_consecutive_rejections"]) + 1
@@ -559,8 +605,10 @@ class LiveSourceRuntimeBridge:
             "broker_api_called": False,
             "allowed_for_live_execution": False,
         }
+        if diagnostic_context:
+            row["diagnostic_context"] = dict(diagnostic_context)
         self._diagnostics.append(row)
-        self._write_rejection(row, audit or {})
+        self._write_rejection(row, audit or {}, diagnostic_context or {})
         if str(reason) == "IDLE_UNCHANGED_INTERVAL":
             logger.debug("market_event_graph_live_source_idle reason=%s", reason)
         elif str(reason) == "TIME_REGRESSION":
@@ -574,10 +622,14 @@ class LiveSourceRuntimeBridge:
             latency_ms=dict(latency_ms),
             rejected_identities=tuple(row["affected_identities"]),
             missing_constituents=tuple(row["affected_identities"]),
-            audit=self._audit_payload(audit or {}),
+            audit=self._audit_payload(audit or {}, diagnostic_context or {}),
         )
 
-    def _audit_payload(self, subscription: Mapping[str, Any]) -> dict[str, Any]:
+    def _audit_payload(
+        self,
+        subscription: Mapping[str, Any],
+        diagnostic_context: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
         attempted = int(self._metrics.get("meg_cycles_attempted") or 0)
         rejected = int(self._metrics.get("meg_cycles_rejected") or 0)
         return {
@@ -595,18 +647,25 @@ class LiveSourceRuntimeBridge:
             },
             "latest_diagnostic": dict(self._diagnostics[-1]) if self._diagnostics else None,
             "subscription_evidence": dict(subscription or {}),
+            "diagnostic_context": dict(diagnostic_context or {}),
             "read_only": True,
             "is_order_action": False,
             "broker_api_called": False,
             "allowed_for_live_execution": False,
         }
 
-    def _write_rejection(self, row: Mapping[str, Any], audit: Mapping[str, Any]) -> None:
+    def _write_rejection(
+        self,
+        row: Mapping[str, Any],
+        audit: Mapping[str, Any],
+        diagnostic_context: Mapping[str, Any],
+    ) -> None:
         try:
             self._rejection_path.parent.mkdir(parents=True, exist_ok=True)
             payload = {
                 **dict(row),
                 "subscription_evidence": dict(audit or {}),
+                "diagnostic_context": dict(diagnostic_context or {}),
             }
             with self._rejection_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
@@ -720,13 +779,63 @@ def _bar_end_epoch(bar: Mapping[str, Any], interval_seconds: int = 60) -> float 
     ts = bar.get("source_bar_end_epoch")
     if ts is not None:
         try:
-            return float(ts)
+            value = float(ts)
+            return value if math.isfinite(value) else None
         except Exception:
             return None
     start = bar.get("ts")
     if not isinstance(start, datetime):
         return None
     return float((start + timedelta(seconds=interval_seconds)).timestamp())
+
+
+def _bar_last_live_tick_epoch(bar: Mapping[str, Any]) -> float | None:
+    provenance = bar.get("bar_provenance")
+    if not isinstance(provenance, Mapping):
+        return None
+    value = _coerce_float(provenance.get("last_live_tick_epoch"))
+    return value if value is not None and math.isfinite(value) else None
+
+
+def _source_tick_freshness_failure(
+    snapshot: Mapping[str, Any], *, max_age_sec: float
+) -> tuple[dict[str, Any], tuple[str, ...], str | None]:
+    """Reject source bars whose last live tick is stale or invalid at observation time."""
+    observed_at = _coerce_float(snapshot.get("observed_at_epoch"))
+    bars = [snapshot.get("index_bar"), *(snapshot.get("constituent_bars") or [])]
+    failures: list[dict[str, Any]] = []
+    failure_reason: str | None = None
+    for bar in bars:
+        if not isinstance(bar, Mapping):
+            continue
+        symbol = str(bar.get("symbol") or "UNKNOWN").upper()
+        tick_epoch = _bar_last_live_tick_epoch(bar)
+        source_end = _coerce_float(bar.get("source_bar_end_epoch"))
+        if source_end is None:
+            source_end = _bar_end_epoch(bar)
+        age_sec = observed_at - tick_epoch if observed_at is not None and tick_epoch is not None else None
+        if observed_at is None or tick_epoch is None or source_end is None:
+            reason = "SNAPSHOT_SOURCE_TICK_INVALID"
+        elif tick_epoch > observed_at or tick_epoch > source_end:
+            reason = "SNAPSHOT_SOURCE_TICK_FUTURE"
+        elif age_sec is None or age_sec > max_age_sec:
+            reason = "SNAPSHOT_SOURCE_TICK_STALE"
+        else:
+            continue
+        if failure_reason is None:
+            failure_reason = reason
+        failures.append(
+            {
+                "symbol": symbol,
+                "source_bar_end_epoch": source_end,
+                "last_live_tick_epoch": tick_epoch,
+                "tick_age_sec": age_sec,
+                "observed_at_epoch": observed_at,
+                "max_age_sec": max_age_sec,
+                "reason": reason,
+            }
+        )
+    return {"failures": failures}, tuple(item["symbol"] for item in failures), failure_reason
 
 
 def _bar_has_live_provenance(

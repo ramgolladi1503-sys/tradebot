@@ -7,13 +7,13 @@ cd "$ROOT"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/run_daily_intel.sh [--date YYYY-MM-DD]
-  scripts/run_daily_intel.sh -d YYYY-MM-DD
+  scripts/run_daily_intel.sh [--date YYYY-MM-DD] [--session-dir PATH]
+  scripts/run_daily_intel.sh -d YYYY-MM-DD -s PATH
   scripts/run_daily_intel.sh --help
 
 Runs:
-  1) python -m core.analytics.outcome_replay --date DATE --scope rejected
-  2) python -m core.analytics.daily_report --date DATE
+  1) python -m core.analytics.outcome_replay --date DATE --scope rejected [--session-dir PATH]
+  2) python -m core.analytics.daily_report --date DATE [--session-dir PATH]
 
 Default DATE:
   Yesterday in local timezone.
@@ -51,6 +51,7 @@ if [[ -z "$PYTHON_BIN" ]]; then
 fi
 
 DATE=""
+SESSION_DIR=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -d|--date)
@@ -60,6 +61,15 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       DATE="$2"
+      shift 2
+      ;;
+    -s|--session-dir)
+      if [[ $# -lt 2 ]]; then
+        echo "Missing value for $1" >&2
+        usage
+        exit 2
+      fi
+      SESSION_DIR="$2"
       shift 2
       ;;
     -h|--help)
@@ -83,14 +93,29 @@ PY
 )"
 fi
 
+OUTCOME_PATH="$("$PYTHON_BIN" - "$DATE" "$SESSION_DIR" <<'PY'
+import sys
+from core.analytics.outcome_replay import default_outcomes_path
+
+print(default_outcomes_path(sys.argv[1], session_dir=sys.argv[2] or None))
+PY
+)"
+
+EXTRA_ARGS=()
+if [[ -n "$SESSION_DIR" ]]; then
+  EXTRA_ARGS+=(--session-dir "$SESSION_DIR")
+fi
+
 echo "[daily_intel] date=$DATE"
+if [[ -n "$SESSION_DIR" ]]; then
+  echo "[daily_intel] session_dir=$SESSION_DIR"
+fi
 echo "[daily_intel] running outcome replay (rejected)"
-"$PYTHON_BIN" -m core.analytics.outcome_replay --date "$DATE" --scope rejected
+"$PYTHON_BIN" -m core.analytics.outcome_replay --date "$DATE" --scope rejected "${EXTRA_ARGS[@]}"
 
 echo "[daily_intel] running daily report"
-"$PYTHON_BIN" -m core.analytics.daily_report --date "$DATE"
+"$PYTHON_BIN" -m core.analytics.daily_report --date "$DATE" "${EXTRA_ARGS[@]}"
 
-OUTCOME_PATH="$ROOT/runtime/analytics/outcomes/${DATE}.jsonl"
 REPORT_MD_PATH="$ROOT/runtime/analytics/reports/${DATE}/daily_report.md"
 REPORT_JSON_PATH="$ROOT/runtime/analytics/reports/${DATE}/daily_report.json"
 

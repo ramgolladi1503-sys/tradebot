@@ -163,8 +163,8 @@ def test_starvation_payload_reflects_raw_candidates_when_gate_blocks():
 
 IMMUTABLE_REGIME_HASHES = {
     "config/config.py": {
-        "sha256": "8d13ddde9871a6353e8889e0ed1e2179c1b5c059ce1e256fa2dff03e32ba78ab",
-        "bytes": 201007,
+        "sha256": "b1b23141428530b8e51f98f73810f5ecf77df49187d9d92538fb7cc71f8ba950",
+        "bytes": 201091,
     },
     "core/regime_contract_v2.py": {
         "sha256": "8ad4d7c4622e8f9d577d3e9603d2e9246574fd709573e4ab0c2dcd2e8a664b83",

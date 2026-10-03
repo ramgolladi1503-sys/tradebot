@@ -24,4 +24,8 @@ MEG_COMPLETION_GRACE_MS = int(os.getenv("MEG_COMPLETION_GRACE_MS", "800"))
 MEG_MAX_DECISION_FRESHNESS_SEC = float(
     os.getenv("MEG_MAX_DECISION_FRESHNESS_SEC", "15.0")
 )
+MEG_OBSERVATION_LOCKS_ROOT = os.getenv(
+    "MEG_OBSERVATION_LOCKS_ROOT",
+    os.getenv("LOCKS_ROOT", os.path.join(os.path.expanduser("~"), ".tradebot", "locks")),
+)
 DEPTH_CAPTURE_MODE = "SAMPLED_DEPTH"

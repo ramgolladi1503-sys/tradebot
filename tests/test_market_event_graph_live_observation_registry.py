@@ -76,3 +76,46 @@ def test_observation_merge_is_all_or_none_and_fail_open():
     assert decision["tokens"] == [1, 2]
     assert decision["overlap_count"] == 1
     assert decision["observation_exclusive_count"] == 2
+
+
+def test_governed_123_token_topology_accepts_73_production_plus_51_observation_with_index_overlap():
+    """Regression: 50 NIFTY constituents are cash observation tokens, not option families."""
+    from core.market_event_graph_live_observation_registry import build_observation_subscription_merge
+
+    # Production owns the three index underlyings plus the controlled index-option window.
+    # Observation owns NIFTY plus its 50 cash constituents; NIFTY overlaps production once.
+    production_tokens = list(range(1, 74))
+    observation_tokens = [1] + list(range(1001, 1051))
+
+    decision = build_observation_subscription_merge(
+        production_tokens=production_tokens,
+        observation_tokens=observation_tokens,
+        budget=123,
+    )
+
+    assert decision["ok"] is True
+    assert decision["production_token_count"] == 73
+    assert decision["observation_token_count"] == 51
+    assert decision["overlap_count"] == 1
+    assert decision["observation_exclusive_count"] == 50
+    assert decision["final_union_count"] == 123
+    assert len(decision["tokens"]) == 123
+
+
+def test_governed_123_token_topology_rejects_expansion_beyond_contract():
+    from core.market_event_graph_live_observation_registry import (
+        BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET,
+        build_observation_subscription_merge,
+    )
+
+    production_tokens = list(range(1, 75))
+    observation_tokens = [1] + list(range(1001, 1051))
+    decision = build_observation_subscription_merge(
+        production_tokens=production_tokens,
+        observation_tokens=observation_tokens,
+        budget=123,
+    )
+
+    assert decision["ok"] is False
+    assert decision["reason"] == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET
+    assert decision["final_union_count"] == 124

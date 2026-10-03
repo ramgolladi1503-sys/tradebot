@@ -307,14 +307,14 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
             for offset in (0, 60, 120):
                 packet = []
                 for token in tokens:
-                    packet.append({"instrument_token": int(token), "last_price": 100.0 + (int(token) % 17) + offset / 100.0, "exchange_timestamp": base + offset + 1, "mode": "full", "volume": 10, "change": 0.1, "ohlc": {"open": 99.0, "high": 101.0, "low": 98.0, "close": 100.0}, "depth": {"buy": [{"price": 99.5, "quantity": 10}], "sell": [{"price": 100.5, "quantity": 10}]}})
+                    packet.append({"instrument_token": int(token), "last_price": 100.0 + (int(token) % 17) + offset / 100.0, "exchange_timestamp": base + offset + 55, "mode": "full", "volume": 10, "change": 0.1, "ohlc": {"open": 99.0, "high": 101.0, "low": 98.0, "close": 100.0}, "depth": {"buy": [{"price": 99.5, "quantity": 10}], "sell": [{"price": 100.5, "quantity": 10}]}})
                 self.on_ticks(self, packet)
         def close(self):
             return None
 
-    # Place the synthetic completed bars at a fixed five-second observation
-    # age. Using wall-clock now makes this test intermittently stale later in
-    # a minute, which correctly trips the production freshness cap.
+    # Align synthetic ticks to the last five seconds of each completed minute.
+    # The bridge cutoff then lands at the last bar boundary, so the newest
+    # completed bar has a five-second source tick age.
     base = float(int(time.time() // 60) * 60 - 180)
 
     class FakeClient:
@@ -329,7 +329,7 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     monkeypatch.setattr(feed, "get_kite_ticker", lambda **_: fake)
     monkeypatch.setattr(feed, "kite_client", FakeClient())
     monkeypatch.setattr(feed, "get_kite_auth_health", lambda **_: dict(auth_payload))
-    monkeypatch.setattr(feed, "_log_ws", lambda event, payload=None: feed_events.append((event, payload or {})))
+    monkeypatch.setattr(feed, "_log_ws", lambda event, payload=None, throttle_key=None: feed_events.append((event, payload or {})))
     monkeypatch.setattr(feed, "_persist_runtime_snapshot_row", lambda **_: None)
     monkeypatch.setattr(feed, "_mark_auth_required", lambda *args, **kwargs: None)
     monkeypatch.setattr(cfg, "KITE_API_KEY", "api-key")
@@ -353,7 +353,7 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     result = bridge.observe_cycle(
         [],
         cycle_cutoff=__import__("datetime").datetime.fromtimestamp(
-            base + 126, tz=__import__("datetime").timezone.utc
+            base + 180, tz=__import__("datetime").timezone.utc
         ),
     )
     assert result.attempted is True and result.exported is True

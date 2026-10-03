@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from core.analytics.daily_report import build_daily_intelligence_report
+from core.analytics.daily_report import _default_outcome_path, _ensure_outcomes_available, build_daily_intelligence_report
 from core.analytics.schema import GateDecision, TradeIntentEvent, TradeOutcome
 
 
@@ -98,6 +98,66 @@ def test_daily_report_contains_required_sections(tmp_path):
     assert "## Section 4: Target/SL calibration" in markdown
     assert "## Section 5: Feed quality impact" in markdown
     assert "## Action list" in markdown
+
+
+def test_session_report_does_not_reuse_date_wide_outcomes(tmp_path, monkeypatch):
+    from config import config as cfg
+
+    date_key = "2026-10-01"
+    session_dir = tmp_path / "sessions" / "run-a"
+    session_dir.mkdir(parents=True)
+    monkeypatch.setattr(cfg, "OUTCOME_REPLAY_DIR", str(tmp_path / "outcomes"), raising=False)
+    date_wide = _default_outcome_path(date_key)
+    date_wide.parent.mkdir(parents=True)
+    date_wide.write_text("stale-other-source\n", encoding="utf-8")
+
+    session_path = _default_outcome_path(date_key, session_dir)
+    assert session_path != date_wide
+    status = _ensure_outcomes_available(date_key, attempt_replay=False, session_dir=session_dir)
+    assert status["exists"] is False
+    assert status["attempted_replay"] is False
+    assert str(session_path) == status["path"]
+
+
+def test_explicit_session_report_uses_only_candidate_journal_events(tmp_path, monkeypatch):
+    from core.analytics import daily_report as report_module
+
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    monkeypatch.setattr(report_module, "discover_session_paths", lambda **_kwargs: [session_dir])
+    monkeypatch.setattr(
+        report_module,
+        "load_session_diagnostics",
+        lambda **_kwargs: {
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+            "source_files": [],
+            "record_count": 0,
+            "malformed_record_count": 0,
+            "reason_counts": {},
+        },
+    )
+    monkeypatch.setattr(report_module, "load_session_events", lambda **_kwargs: [])
+
+    def _unexpected_workspace_load(**_kwargs):
+        raise AssertionError("session-scoped reports must not load workspace-wide intents")
+
+    monkeypatch.setattr(report_module, "load_trade_intent_events", _unexpected_workspace_load)
+    monkeypatch.setattr(
+        report_module,
+        "_ensure_outcomes_available",
+        lambda *_args, **_kwargs: {"path": "scoped.jsonl", "exists": False, "attempted_replay": False,
+                                  "replay_success": False, "warning": None},
+    )
+    payload = build_daily_intelligence_report(
+        "2026-10-01",
+        session_dir=session_dir,
+        output_dir=tmp_path / "report",
+        attempt_outcome_replay=False,
+    )
+    assert payload["header"]["counts"]["events"] == 0
 
 
 def test_daily_report_includes_executable_shadow_section(tmp_path, monkeypatch: pytest.MonkeyPatch):

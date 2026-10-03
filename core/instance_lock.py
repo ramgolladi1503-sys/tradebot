@@ -21,10 +21,17 @@ class InstanceLock:
     Uses a POSIX file lock so stale lock files do not block forever.
     """
 
-    def __init__(self, lock_path: Path | str | None = None, repo_root_path: Path | str | None = None):
+    def __init__(
+        self,
+        lock_path: Path | str | None = None,
+        repo_root_path: Path | str | None = None,
+        *,
+        unlink_on_release: bool = True,
+    ):
         root = Path(repo_root_path).resolve() if repo_root_path is not None else repo_root()
         default = root / ".runtime" / "locks" / "kite_session.lock"
         self.lock_path = Path(lock_path).resolve() if lock_path is not None else default.resolve()
+        self._unlink_on_release = bool(unlink_on_release)
         self._fd: int | None = None
         self._acquired = False
 
@@ -87,6 +94,8 @@ class InstanceLock:
             self._acquired = False
             return
         try:
+            if not self._unlink_on_release:
+                self._write_payload({})
             if fcntl is not None:
                 fcntl.flock(self._fd, fcntl.LOCK_UN)
         finally:
@@ -96,11 +105,12 @@ class InstanceLock:
                 pass
             self._fd = None
             self._acquired = False
-        try:
-            if lock_path.exists():
-                lock_path.unlink()
-        except Exception:
-            pass
+        if self._unlink_on_release:
+            try:
+                if lock_path.exists():
+                    lock_path.unlink()
+            except Exception:
+                pass
 
     def __enter__(self) -> "InstanceLock":
         ok, holder = self.acquire()
