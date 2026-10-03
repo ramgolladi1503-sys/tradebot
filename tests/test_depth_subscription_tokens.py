@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date
 from types import SimpleNamespace
 
+import pytest
+
 from config import config as cfg
 from core import kite_depth_ws as ws
 from core.market_event_graph_live_launch_plan import build_launch_plan
@@ -449,6 +451,8 @@ def test_meg_builder_filters_cash_symbols_and_publishes_only_merged_identities(m
     assert set(cash_tokens).isdisjoint(ws._UNDERLYING_TOKENS)
     assert set(cash_tokens).isdisjoint(ws._UNDERLYING_TOKEN_TO_SYMBOL)
     assert ws._observation_state_payload()["enabled"] is False
+    with pytest.raises(ValueError, match="at least one configured index option symbol"):
+        ws._build_subscription_tokens_impl(cash_symbols, max_tokens=123)
 
 
 def test_degraded_coverage_blocks_until_fresh_option_tick_proves_recovery(monkeypatch):

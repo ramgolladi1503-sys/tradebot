@@ -2,6 +2,8 @@ from datetime import date
 import importlib
 from types import SimpleNamespace
 
+import pytest
+
 from config import config as cfg
 
 
@@ -160,3 +162,10 @@ def test_live_subscription_contract_is_exactly_123_and_constituents_are_cash_onl
     assert cash_tokens.isdisjoint(ws._UNDERLYING_TOKENS)
     assert cash_tokens.isdisjoint(ws._UNDERLYING_TOKEN_TO_SYMBOL)
     assert ws._observation_state_payload()["enabled"] is False
+    cash_only_symbols = [
+        symbol
+        for symbol in registry.token_by_symbol
+        if symbol not in {"NIFTY", "BANKNIFTY", "SENSEX"}
+    ]
+    with pytest.raises(ValueError, match="at least one configured index option symbol"):
+        engine.build_subscription_tokens(symbols=cash_only_symbols, max_tokens=123)
