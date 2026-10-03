@@ -1,0 +1,6 @@
+# Research-only optional dependencies; do NOT edit the frozen root requirements.
+# These exact resolver outputs were produced in an isolated Python 3.12 venv
+# on macOS arm64. Re-resolve and verify against other supported platforms.
+pydantic==2.13.5
+pandera==0.33.1
+hypothesis==6.168.2

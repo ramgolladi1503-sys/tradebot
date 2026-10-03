@@ -1,0 +1,23 @@
+# Resolver lock for Python 3.12 / macOS arm64; generated in disposable venv.
+annotated-types==0.8.0
+hypothesis==6.168.2
+iniconfig==2.3.0
+mypy_extensions==1.1.0
+numpy==2.5.3
+packaging==26.3
+pandas==2.3.3
+pandera==0.33.1
+pluggy==1.6.0
+pydantic==2.13.5
+pydantic_core==2.46.5
+Pygments==2.21.0
+pytest==9.1.1
+python-dateutil==2.9.0.post0
+pytz==2026.4
+six==1.17.0
+sortedcontainers==2.4.0
+typeguard==4.6.0
+typing-inspect==0.9.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+tzdata==2026.4

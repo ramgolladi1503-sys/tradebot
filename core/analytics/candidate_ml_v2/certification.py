@@ -22,6 +22,7 @@ from .model import CandidateMLBundle, _fit_unit
 class CandidateMLCertificationConfig:
     n_splits: int = 5
     min_train_sessions: int = 5
+    embargo_ms: int = 0
     min_selected_per_fold: int = 10
     min_positive_fold_fraction: float = 0.60
     min_mean_lift_r: float = 0.0
@@ -36,6 +37,8 @@ class CandidateMLCertificationConfig:
     def __post_init__(self) -> None:
         if self.n_splits < 3:
             raise ValueError("certification_requires_at_least_three_folds")
+        if self.embargo_ms < 0:
+            raise ValueError("certification_embargo_ms_negative")
         if self.min_selected_per_fold < 1:
             raise ValueError("min_selected_per_fold_invalid")
         if not 0 < self.min_positive_fold_fraction <= 1:
@@ -78,8 +81,11 @@ def _nested_model(
     model_config: CandidateMLConfig,
     *,
     features: Sequence[str] | None = None,
+    embargo_ms: int = 0,
 ) -> CandidateMLBundle:
-    inner_train, inner_validation = chronological_split(train_frame, model_config)
+    inner_train, inner_validation = chronological_split(
+        train_frame, model_config, embargo_ms=embargo_ms
+    )
     selected_features = list(features or feature_columns(inner_train))
     if not selected_features:
         raise ValueError("certification_feature_set_empty")
@@ -123,7 +129,9 @@ def _resolve_supported_min_train_sessions(
             research_df["session_date"].astype(str).isin(prefix_sessions)
         ].copy()
         try:
-            inner_train, inner_validation = chronological_split(prefix, model_config)
+            inner_train, inner_validation = chronological_split(
+                prefix, model_config, embargo_ms=certification_config.embargo_ms
+            )
         except ValueError as exc:
             attempts.append(
                 {
@@ -285,15 +293,28 @@ def _ablation_report(
     test_sessions = set(sessions[supported_train_sessions:])
     train = research_df[
         research_df["session_date"].astype(str).isin(train_sessions)
-    ].copy().reset_index(drop=True)
+    ].copy()
     validation = research_df[
         research_df["session_date"].astype(str).isin(test_sessions)
     ].copy().reset_index(drop=True)
     if validation.empty:
         raise ValueError("ablation_test_block_empty")
+    validation_start = int(validation["decision_ts_epoch_ms"].min())
+    train = train[
+        train["outcome_ts_epoch_ms"]
+        < validation_start - certification_config.embargo_ms
+    ]
+    if model_config.purge_rows:
+        train = train.iloc[: max(0, len(train) - model_config.purge_rows)]
+    train = train.reset_index(drop=True)
+    if train.empty:
+        raise ValueError("ablation_training_block_empty_after_purge")
 
     all_features = feature_columns(train)
-    base_bundle = _nested_model(train, model_config, features=all_features)
+    base_bundle = _nested_model(
+        train, model_config, features=all_features,
+        embargo_ms=certification_config.embargo_ms,
+    )
     base_metrics = _fold_metrics(_score_frame(base_bundle, validation))
     results: dict[str, Any] = {}
     for feature in all_features[: certification_config.max_ablation_features]:
@@ -301,7 +322,10 @@ def _ablation_report(
         if not remaining:
             continue
         try:
-            bundle = _nested_model(train, model_config, features=remaining)
+            bundle = _nested_model(
+                train, model_config, features=remaining,
+                embargo_ms=certification_config.embargo_ms,
+            )
             metrics = _fold_metrics(_score_frame(bundle, validation))
             results[feature] = {
                 "lift_r": metrics.get("lift_r"),
@@ -315,7 +339,7 @@ def _ablation_report(
         except Exception as exc:
             results[feature] = {"error": f"{type(exc).__name__}:{exc}"}
     return {
-        "train_sessions": int(supported_train_sessions),
+        "train_sessions": int(train["session_date"].nunique()),
         "train_rows": int(len(train)),
         "test_sessions": int(len(test_sessions)),
         "test_rows": int(len(validation)),
@@ -343,6 +367,7 @@ def certify_candidate_ml(
         n_splits=cert_cfg.n_splits,
         purge_rows=model_cfg.purge_rows,
         min_train_sessions=effective_train_sessions,
+        embargo_ms=cert_cfg.embargo_ms,
     )
     base_folds: list[dict[str, Any]] = []
     permutation_folds: list[dict[str, Any]] = []
@@ -354,7 +379,10 @@ def certify_candidate_ml(
         test_frame = research_df.iloc[test_idx].copy().reset_index(drop=True)
         features = feature_columns(train_frame)
         try:
-            base_bundle = _nested_model(train_frame, model_cfg, features=features)
+            base_bundle = _nested_model(
+                train_frame, model_cfg, features=features,
+                embargo_ms=cert_cfg.embargo_ms,
+            )
             base_metrics = _fold_metrics(_score_frame(base_bundle, test_frame))
             base_metrics["fold_index"] = fold_index
             base_metrics["train_rows"] = int(len(train_frame))
@@ -363,14 +391,20 @@ def certify_candidate_ml(
             base_folds.append(base_metrics)
 
             permuted = _permute_targets(train_frame, cert_cfg.random_state + fold_index)
-            permutation_bundle = _nested_model(permuted, model_cfg, features=features)
+            permutation_bundle = _nested_model(
+                permuted, model_cfg, features=features,
+                embargo_ms=cert_cfg.embargo_ms,
+            )
             permutation_metrics = _fold_metrics(_score_frame(permutation_bundle, test_frame))
             permutation_metrics["fold_index"] = fold_index
             permutation_folds.append(permutation_metrics)
 
             delayed_train = _delay_features(train_frame, features)
             delayed_test = _delay_features(test_frame, features)
-            delayed_bundle = _nested_model(delayed_train, model_cfg, features=features)
+            delayed_bundle = _nested_model(
+                delayed_train, model_cfg, features=features,
+                embargo_ms=cert_cfg.embargo_ms,
+            )
             delayed_metrics = _fold_metrics(_score_frame(delayed_bundle, delayed_test))
             delayed_metrics["fold_index"] = fold_index
             delayed_folds.append(delayed_metrics)

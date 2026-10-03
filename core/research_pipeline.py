@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 import statistics as stats
+import random
 from core.stress_generator import SyntheticStressGenerator
 
 
@@ -165,7 +166,18 @@ class ResearchPipeline:
             }
         return out
 
-    def _monte_carlo(self, trades, n=500):
+    def _monte_carlo(self, trades, n=500, seed=0):
+        """IID trade-level bootstrap diagnostic with replacement.
+
+        This is a descriptive resampling diagnostic only. It does not account
+        for serial dependence, overlapping labels, regime structure, or the
+        search denominator and must not be used as certification evidence.
+        """
+        if not isinstance(n, int) or isinstance(n, bool) or n <= 0:
+            raise ValueError("n must be a positive integer")
+        if not isinstance(seed, int) or isinstance(seed, bool):
+            raise ValueError("seed must be an integer")
+        rng = random.Random(seed)
         pnl_by_strategy = defaultdict(list)
         for t in trades:
             pnl_by_strategy[t["strategy"]].append(t["pnl_adj"])
@@ -175,7 +187,7 @@ class ResearchPipeline:
                 continue
             sims = []
             for _ in range(n):
-                sample = [pnl[int(i * len(pnl)) % len(pnl)] for i in range(len(pnl))]
+                sample = rng.choices(pnl, k=len(pnl))
                 sims.append(sum(sample))
             sims.sort()
             out[s] = {

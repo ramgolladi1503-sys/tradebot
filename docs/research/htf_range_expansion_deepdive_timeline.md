@@ -1,6 +1,8 @@
 # Deep-Dive Timeline: HTF_RANGE_EXPANSION
 
-This timeline documents the exact, rigid forensic process that transformed `HTF_RANGE_EXPANSION` from a fragile concept into a verified, paper-trading-ready strategy.
+This is a historical narrative about `HTF_RANGE_EXPANSION`; it is not a current readiness authority.
+
+> **Evidence and selection caveat:** This file is not an authenticated verification artifact. Its regime restriction was selected after reviewing an ablation matrix, so `VOL_EXPANSION`-only is an outcome-informed, exposed hypothesis. Preserve the all-regime parent, negative results, all tried subsets, and the selection denominator. Same-sample filtered metrics do not establish independent confirmation, untouched OOS, controlled-discovery readiness, or paper/live eligibility. Obtain original sources and exact artifacts before relying on quantitative claims below.
 
 ## 1. Initial Failure & Timezone Bug Discovery
 - **Status**: The strategy originally produced erratic, negative-expectancy results.
@@ -18,8 +20,8 @@ This timeline documents the exact, rigid forensic process that transformed `HTF_
 
 ## 4. Regime Isolation & Starvation RCA
 - **Status**: The new HTF engine was starving, producing only 4 signals.
-- **Intervention**: An ablation matrix proved that requiring both 15m and 30m trend regimes was mutually destructive to Range Expansion. We discovered that the structural edge existed exclusively inside the mathematically verified `VOL_EXPANSION` regime.
-- **Resolution**: All other regimes (TREND_UP, TREND_DN, RANGE, CHOP) were permanently amputated from the strategy's allowed gates.
+- **Intervention (as reported in this narrative)**: An ablation matrix was inspected after producing outcomes; its source artifacts, trial denominator, and independent analysis are not attached here.
+- **Disposition**: The resulting `VOL_EXPANSION`-only restriction is a new exposed child hypothesis. The all-regime parent and every inspected negative regime result remain part of the search history; the same outcomes cannot independently confirm the child.
 
 ## 5. Proxy Execution & Cost Model Audit
 - **Status**: Was the edge an artifact of treating Options like Futures?

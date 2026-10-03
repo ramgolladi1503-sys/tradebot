@@ -1,0 +1,60 @@
+Gateway contracts/data/registry/math/execution suite (Python 3.12 isolated research dependencies)
+....................................................                     [100%]
+52 passed, 1 warning
+
+Synthetic Monte Carlo suite (system Python 3.12)
+.........                                                                [100%]
+9 passed, 1 warning
+
+Earlier checkpoint results (before late-fill and stricter OHLCV regressions):
+Gateway + synthetic math/execution suite
+..........................................                               [100%]
+=============================== warnings summary ===============================
+../../../../../../tmp/pr936-verification-venv/lib/python3.12/site-packages/_hypothesis_pytestplugin.py:487
+  /tmp/pr936-verification-venv/lib/python3.12/site-packages/_hypothesis_pytestplugin.py:487: UserWarning: Skipping collection of '.hypothesis' directory - this usually means you've explicitly set the `norecursedirs` pytest config option, replacing rather than extending the default ignores.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+42 passed, 1 warning in 0.80s
+Synthetic Monte Carlo suite
+/opt/anaconda3/lib/python3.12/site-packages/pandas/core/computation/expressions.py:23: UserWarning: Pandas requires version '2.10.2' or newer of 'numexpr' (version '2.8.7' currently installed).
+  from pandas.core.computation.check import NUMEXPR_INSTALLED
+/opt/anaconda3/lib/python3.12/site-packages/pandas/core/arrays/masked.py:56: UserWarning: Pandas requires version '1.4.2' or newer of 'bottleneck' (version '1.3.7' currently installed).
+  from pandas.core import (
+.........                                                                [100%]
+=============================== warnings summary ===============================
+../../../../../../opt/anaconda3/lib/python3.12/site-packages/_hypothesis_pytestplugin.py:481
+  /opt/anaconda3/lib/python3.12/site-packages/_hypothesis_pytestplugin.py:481: UserWarning: Skipping collection of '.hypothesis' directory - this usually means you've explicitly set the `norecursedirs` pytest config option, replacing rather than extending the default ignores.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+9 passed, 1 warning in 0.28s
+
+Purged/embargoed candidate walk-forward focused regressions
+.....                                                                    [100%]
+5 passed, 6 deselected, 1 warning
+
+Full candidate_ml_v2 analytics tests
+...........                                                              [100%]
+11 passed, 1 warning
+
+Offline analytics and candidate_ml_v2 regression set (temporary/in-memory synthetic fixtures)
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed, 4237 warnings in 22.91s
+
+Final node G review remediation rerun
+Purged/embargoed WFA plus ablation focused regressions: 6 passed, 6 deselected, 1 warning
+Full candidate_ml_v2 analytics tests: 12 passed, 1 warning in 50.70s
+Offline analytics and candidate_ml_v2 regression set: 83 passed, 4237 warnings in 24.97s
+
+Final node G purge/embargo review remediation rerun
+Purged/embargoed WFA, nested split, and ablation focused regressions: 9 passed, 6 deselected, 1 warning
+Full candidate_ml_v2 analytics tests: 14 passed, 1 warning in 21.69s
+Offline analytics and candidate_ml_v2 regression set: 85 passed, 4237 warnings in 25.60s
+
+Final reviewed node G state
+Focused split/embargo/nested/ablation/support regressions: 9 passed, 6 deselected, 1 warning
+Full candidate_ml_v2 tests: 15 passed, 1 warning in 19.50s
+Offline analytics and candidate_ml_v2 suite: 86 passed, 4237 warnings in 24.51s
+Independent read-only follow-up review: no remaining scoped findings
