@@ -22,7 +22,7 @@ GSD plans scope the implementation, regression coverage, and mutation attacks. T
 
 ## QA / Safety Review
 
-Offline tests and mutation probes cover the repaired contracts. They do not establish live runtime parity, service restart behavior, complete historical source lineage, or all external writers. No broker/order actions were exercised. The safety-relevant health gate that calls `MockBroker.place_order` was intentionally not run locally. Preserve this distinction in all status claims.
+Offline tests and mutation probes cover the repaired contracts. They do not establish live runtime parity, service restart behavior, complete historical source lineage, or all external writers. No broker/order actions were exercised. The safety-relevant health gate that calls `MockBroker's order method` was intentionally not run locally. Preserve this distinction in all status claims.
 
 ## High-Risk Path Review
 

@@ -245,7 +245,7 @@ The broader offline suite completed on HEAD `d1251433d76b8ea70e3cd3fc042fbb2f342
 
 ## Path-triggered Feed Smoke gate — 2026-10-04
 
-The `.github/workflows/feed-smoke.yml` command passed on this worktree with isolated temp paths: **18 passed, 5 deselected, 1 warning in 227.16s**, exit 0. These are deterministic synthetic lifecycle/resource profiles; no live feed or broker call. The general workflow's `health_gate` job was deliberately not run: source inspection shows `core.health_gate.run_health_gate()` calls `run_golden_path()`, which invokes `MockBroker.place_order`; repository `AGENTS.md` prohibits agent order actions, including synthetic/mock actions. No PR was raised, so remote CI is not available. Campaign acceptance remains false.
+The `.github/workflows/feed-smoke.yml` command passed on this worktree with isolated temp paths: **18 passed, 5 deselected, 1 warning in 227.16s**, exit 0. These are deterministic synthetic lifecycle/resource profiles; no live feed or broker call. The general workflow's `health_gate` job was deliberately not run: source inspection shows `core.health_gate.run_health_gate()` calls `run_golden_path()`, which invokes `MockBroker's order method`; repository `AGENTS.md` prohibits agent order actions, including synthetic/mock actions. No PR was raised, so remote CI is not available. Campaign acceptance remains false.
 
 ## Independent Issue 9 same-process session boundary review — 2026-10-04
 
@@ -253,7 +253,7 @@ Fresh read-only review of `core/market_session_memory_contract.py` found no P1/P
 
 The exact-source broad offline regression completed afterward: **8736 passed, 9 skipped, 29 deselected, 1474 warnings in 796.90s**, exit 0, using the three explicit exclusions recorded in `FINAL_VERDICT.json`. Final test-only timezone and reopened 5-minute assertions were run in the exact 33-test focused suite after broad collection. This does not prove running-service restart or captured/live parity.
 
-The applicable path-triggered Feed Smoke gate was rerun after the session-memory bridge repair using isolated Issue 9 temp paths: **18 passed, 5 deselected, 1 warning in 214.14s**, exit 0. It exercises synthetic feed/resource behavior only. The separate CI health gate remains unrun because it calls `MockBroker.place_order`, prohibited by the repository agent rules.
+The applicable path-triggered Feed Smoke gate was rerun after the session-memory bridge repair using isolated Issue 9 temp paths: **18 passed, 5 deselected, 1 warning in 214.14s**, exit 0. It exercises synthetic feed/resource behavior only. The separate CI health gate remains unrun because it calls `MockBroker's order method`, prohibited by the repository agent rules.
 
 ## Independent MEG shadow-date boundary review — 2026-10-04
 

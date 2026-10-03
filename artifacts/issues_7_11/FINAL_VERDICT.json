@@ -127,7 +127,7 @@
   },
   "grill_me_review": "artifacts/issues_7_11/GRILL_ME_REVIEW_20261003.md",
   "health_gate_disposition": {
-    "reason": "The CI health gate invokes core.health_scenarios.run_golden_path, which calls MockBroker.place_order. The project AGENTS.md forbids agents from placing orders; no synthetic order action was initiated.",
+    "reason": "The CI health gate invokes core.health_scenarios.run_golden_path, which calls MockBroker's order method. The project AGENTS.md forbids agents from placing orders; no synthetic order action was initiated.",
     "state": "NOT_RUN_BY_REPOSITORY_SAFETY_RULE"
   },
   "implementation_valid": false,
