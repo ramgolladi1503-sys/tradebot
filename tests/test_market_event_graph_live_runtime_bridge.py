@@ -15,6 +15,7 @@ from core.market_event_graph_live_runtime_bridge import (
     LIVE_UNIVERSE_NOT_CONFIGURED,
     LiveSourceRuntimeBridge,
     RECONNECT_GENERATION_MISMATCH,
+    _source_tick_freshness_failure,
     build_live_constituent_subscription_audit,
     canonical_live_universe_sha256,
     flush_live_source_bridge,
@@ -151,7 +152,7 @@ def _bar(ts_epoch: float, symbol: str, close: float = 100.0, *, token: int | Non
             "token_domain": "kite_instrument_token",
             "universe_hash": universe_hash,
             "first_live_tick_epoch": ts_epoch + 1.0,
-            "last_live_tick_epoch": ts_epoch + 50.0,
+            "last_live_tick_epoch": ts_epoch + 60.0,
             "historical_seed": False,
             "replay_fixture": False,
             "non_live_fallback": False,
@@ -161,7 +162,7 @@ def _bar(ts_epoch: float, symbol: str, close: float = 100.0, *, token: int | Non
     }
 
 
-def _install_bars(monkeypatch, *, contract_payload, index_epoch=60.0, constituent_epoch=60.0, missing_symbol=None, provenance=None):
+def _install_bars(monkeypatch, *, contract_payload, index_epoch=60.0, constituent_epoch=60.0, missing_symbol=None, provenance=None, last_tick_by_symbol=None):
     token_by_symbol = {
         str(contract_payload["index_symbol"]).upper(): int(contract_payload["index_instrument_token"]),
         **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in contract_payload["constituents"]},
@@ -174,9 +175,15 @@ def _install_bars(monkeypatch, *, contract_payload, index_epoch=60.0, constituen
         if symbol == missing_symbol:
             return []
         if symbol_upper == str(contract_payload["index_symbol"]).upper():
-            return [_bar(index_epoch, symbol_upper, 25000.0, token=token_by_symbol[symbol_upper], universe_hash=universe_hash, provenance=provenance)]
+            bar = _bar(index_epoch, symbol_upper, 25000.0, token=token_by_symbol[symbol_upper], universe_hash=universe_hash, provenance=provenance)
+            if last_tick_by_symbol and symbol_upper in last_tick_by_symbol:
+                bar["bar_provenance"]["last_live_tick_epoch"] = last_tick_by_symbol[symbol_upper]
+            return [bar]
         if symbol_upper in symbols:
-            return [_bar(constituent_epoch, symbol_upper, 100.0, token=token_by_symbol[symbol_upper], universe_hash=universe_hash, provenance=provenance)]
+            bar = _bar(constituent_epoch, symbol_upper, 100.0, token=token_by_symbol[symbol_upper], universe_hash=universe_hash, provenance=provenance)
+            if last_tick_by_symbol and symbol_upper in last_tick_by_symbol:
+                bar["bar_provenance"]["last_live_tick_epoch"] = last_tick_by_symbol[symbol_upper]
+            return [bar]
         return []
 
     monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.shadow_ohlc_buffer.get_completed_bars", bars)
@@ -259,7 +266,7 @@ def test_bridge_waits_for_late_completed_bar_within_grace(monkeypatch, tmp_path)
                     "token_domain": "kite_instrument_token",
                     "universe_hash": contract_payload["canonical_sha256"],
                     "first_live_tick_epoch": 61.0,
-                    "last_live_tick_epoch": 110.0,
+                    "last_live_tick_epoch": 120.0,
                     "historical_seed": False,
                     "replay_fixture": False,
                     "non_live_fallback": False,
@@ -583,6 +590,64 @@ def test_live_provenance_with_kite_contract_is_accepted(monkeypatch, tmp_path):
     assert result.reason == "OK"
 
 
+@pytest.mark.parametrize(
+    ("symbol", "tick_epoch", "expected_reason"),
+    [
+        ("NIFTY_00", 100.0, "SNAPSHOT_SOURCE_TICK_STALE"),
+        ("NIFTY", 121.0, "SNAPSHOT_SOURCE_TICK_FUTURE"),
+        ("NIFTY", 131.0, "SNAPSHOT_SOURCE_TICK_FUTURE"),
+        ("NIFTY_00", float("nan"), "SNAPSHOT_SOURCE_TICK_INVALID"),
+    ],
+)
+def test_bridge_rejects_aligned_bars_with_stale_or_future_source_tick(
+    monkeypatch, tmp_path, symbol, tick_epoch, expected_reason
+):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(reliability_cfg, "MEG_COMPLETION_GRACE_MS", 0)
+    monkeypatch.setattr(reliability_cfg, "MEG_MAX_DECISION_FRESHNESS_SEC", 15.0)
+    contract_payload = _contract()
+    _install_bars(
+        monkeypatch,
+        contract_payload=contract_payload,
+        last_tick_by_symbol={symbol: tick_epoch},
+    )
+    bridge = LiveSourceRuntimeBridge(
+        exporter=LiveCapturedMetadataExporter(tmp_path / "invalid-tick.jsonl"),
+        universe_contract=contract_payload,
+        subscription_evidence_provider=_evidence,
+    )
+
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+
+    assert result.exported is False
+    assert result.reason == expected_reason
+    assert result.rejected_identities == (symbol,)
+    failure = result.audit["diagnostic_context"]["source_tick_freshness"]["failures"][0]
+    assert failure["symbol"] == symbol
+    assert failure["source_bar_end_epoch"] == 120.0
+    if expected_reason == "SNAPSHOT_SOURCE_TICK_INVALID":
+        assert failure["last_live_tick_epoch"] is None
+    else:
+        assert failure["last_live_tick_epoch"] == tick_epoch
+    expected_age = (
+        130.0 - tick_epoch if expected_reason != "SNAPSHOT_SOURCE_TICK_INVALID" else None
+    )
+    if expected_age is None:
+        assert failure["tick_age_sec"] is None
+        assert failure["last_live_tick_epoch"] is None
+    else:
+        assert failure["tick_age_sec"] == pytest.approx(expected_age, abs=0.001)
+    assert failure["observed_at_epoch"] == pytest.approx(130.0, abs=0.001)
+    assert failure["max_age_sec"] == 15.0
+    assert failure["reason"] == expected_reason
+    rejection = json.loads((tmp_path / "rejections.jsonl").read_text().splitlines()[0])
+    assert rejection["reason"] == expected_reason
+    assert rejection["read_only"] is True
+    assert rejection["is_order_action"] is False
+    assert rejection["broker_api_called"] is False
+    assert rejection["allowed_for_live_execution"] is False
+
+
 def test_index_constituent_source_interval_mismatch_is_rejected(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     contract_payload = _contract()
@@ -597,6 +662,34 @@ def test_index_constituent_source_interval_mismatch_is_rejected(monkeypatch, tmp
 
     assert result.reason == INDEX_INTERVAL_MISALIGNED
     assert result.exported is False
+    mismatch = result.audit["diagnostic_context"]["bar_interval_mismatch"]
+    assert mismatch["index_symbol"] == "NIFTY"
+    assert mismatch["index_bar_end_epoch"] == 180.0
+    assert mismatch["constituent_symbol"] == "NIFTY_00"
+    assert mismatch["constituent_bar_end_epoch"] == 120.0
+    assert mismatch["bar_interval_delta_seconds"] == -60.0
+    assert mismatch["cycle_cutoff_epoch"] == pytest.approx(190.0, abs=0.01)
+    assert mismatch["index_last_live_tick_epoch"] == 180.0
+    assert mismatch["constituent_last_live_tick_epoch"] == 120.0
+    rejection = json.loads((tmp_path / "rejections.jsonl").read_text().splitlines()[0])
+    assert rejection["reason"] == INDEX_INTERVAL_MISALIGNED
+    assert rejection["diagnostic_context"]["bar_interval_mismatch"] == mismatch
+
+
+def test_source_tick_at_freshness_limit_is_accepted():
+    bar = {
+        "symbol": "NIFTY",
+        "source_bar_end_epoch": 120.0,
+        "bar_provenance": {"last_live_tick_epoch": 115.0},
+    }
+    context, symbols, reason = _source_tick_freshness_failure(
+        {"observed_at_epoch": 130.0, "index_bar": bar, "constituent_bars": []},
+        max_age_sec=15.0,
+    )
+
+    assert context == {"failures": []}
+    assert symbols == ()
+    assert reason is None
 
 
 def test_fetch_live_market_data_hook_disabled_enabled_and_failure_isolation(monkeypatch):
