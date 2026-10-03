@@ -6,6 +6,9 @@ import pytest
 
 from config import config as cfg
 from core.engine_phase2_adapter import build_candidates_phase2
+from core.feed.artifact_loader import _INTEGRITY_EXCLUDED_KEYS
+from core.runtime_truth_integrity import truth_hash_from_mapping
+from tests.fixtures.canonical_feed_factory import make_valid_canonical_feed_pair
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.edge, pytest.mark.regression]
@@ -25,6 +28,14 @@ def _runtime_dirs(tmp_path, monkeypatch):
 
 def _write_json(path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.name == "feed_runtime_latest.json":
+        override = dict(payload)
+        _, runtime_path = make_valid_canonical_feed_pair(path.parent, feed_ok=bool(payload.get("feed_ok", True)))
+        payload = json.loads(runtime_path.read_text(encoding="utf-8"))
+        payload.update({key: value for key, value in override.items() if key != "feed_ok"})
+        payload["snapshot_hash"] = truth_hash_from_mapping(payload, exclude_keys=_INTEGRITY_EXCLUDED_KEYS)
+        payload["truth_integrity_status"] = "OK"
+        payload["snapshot_hash_version"] = 1
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
@@ -72,7 +83,7 @@ def test_stale_depth_runtime_truth_reaches_candidate_pipeline(_runtime_dirs, mon
             }
         ]
     )
-    assert out
+    assert out == []
 
     truth = _read_json(logs_root / "feed_truth_latest.json")
     assert truth["ws_connected"] is True

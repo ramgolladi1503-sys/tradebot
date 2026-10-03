@@ -2,7 +2,9 @@ import json
 import subprocess
 import os
 import sys
+from argparse import Namespace
 from pathlib import Path
+from types import SimpleNamespace
 from core.daily_instrument_authority import produce_authority
 
 def authority_args(repo_root, master, tmp_path, session_date="2026-07-30"):
@@ -26,6 +28,7 @@ def test_session_orchestrator_preflight_only_resolves_contract_path(monkeypatch,
     env = dict(os.environ)
     env["MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE"] = "true"
     env["MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH"] = "runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json"
+    env["LOCKS_ROOT"] = str(tmp_path / "locks")
     result = subprocess.run(
         [sys.executable, "-B", str(script), "--session-date", "2026-07-30", "--output-root", str(tmp_path), "--kite-instruments-file", str(master), "--preflight-only", *authority_args(repo_root, master, tmp_path)],
         check=True,
@@ -40,6 +43,105 @@ def test_session_orchestrator_preflight_only_resolves_contract_path(monkeypatch,
     assert payload["contract_path"].endswith(".json")
     assert payload["verdict"] == "PASS_STATIC_LIVE_SOURCE_PREFLIGHT"
     assert payload["broker_api_called"] is False
+    assert not (tmp_path / "locks" / "meg_read_only_observation.lock").exists()
+
+
+def test_active_observation_lock_blocks_before_capture_directory_creation(monkeypatch, tmp_path, capsys):
+    from scripts import run_market_event_graph_live_session_v1 as session
+
+    lock_root = tmp_path / "locks"
+    monkeypatch.setattr(session.reliability_cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(lock_root), raising=False)
+    owner = session._new_observation_session_lock()
+    acquired, _ = owner.acquire()
+    assert acquired is True
+    output_root = tmp_path / "captures"
+    args = Namespace(output_root=output_root, authority_artifact=tmp_path / "authority.json")
+
+    try:
+        result = session._run_observation_capture(
+            args=args,
+            session_date="2026-07-30",
+            registry=SimpleNamespace(canonical_sha256="registry", contract_path="contract.json"),
+            master_path=tmp_path / "master.json",
+            master_sha="master-sha",
+            broker_metadata_called=False,
+            launch_plan={"launch_plan_sha256": "plan-sha"},
+        )
+    finally:
+        owner.release()
+
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert result == 2
+    assert payload["verdict"] == "BLOCKED_BY_OBSERVATION_SESSION_ALREADY_ACTIVE"
+    assert payload["lock_path"] == str((lock_root / "meg_read_only_observation.lock").resolve())
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+    assert payload["broker_api_called"] is False
+    assert payload["allowed_for_live_execution"] is False
+    assert not output_root.exists()
+
+
+def test_observation_lock_defaults_to_one_path_across_checkout_roots(monkeypatch, tmp_path):
+    from scripts import run_market_event_graph_live_session_v1 as session
+
+    monkeypatch.delenv("MEG_OBSERVATION_LOCKS_ROOT", raising=False)
+    monkeypatch.delenv("LOCKS_ROOT", raising=False)
+    monkeypatch.setattr(session.reliability_cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(Path.home() / ".tradebot" / "locks"), raising=False)
+    first_checkout = tmp_path / "checkout-a"
+    second_checkout = tmp_path / "checkout-b"
+
+    monkeypatch.setattr(session, "REPO_ROOT", first_checkout)
+    first = session._new_observation_session_lock()
+    monkeypatch.setattr(session, "REPO_ROOT", second_checkout)
+    second = session._new_observation_session_lock()
+
+    assert first.lock_path == second.lock_path
+    assert first.lock_path == (Path.home() / ".tradebot" / "locks" / "meg_read_only_observation.lock").resolve()
+    acquired, _ = first.acquire()
+    assert acquired is True
+    blocked, holder = second.acquire()
+    try:
+        assert blocked is False
+        assert holder["pid"] == os.getpid()
+    finally:
+        first.release()
+        second.release()
+
+
+def test_observation_capture_manifest_records_shared_lock_path(monkeypatch, tmp_path):
+    from scripts import run_market_event_graph_live_session_v1 as session
+
+    lock_root = tmp_path / "shared-locks"
+    monkeypatch.setattr(session.reliability_cfg, "MEG_OBSERVATION_LOCKS_ROOT", str(lock_root), raising=False)
+    monkeypatch.setattr(session, "_commit_sha", lambda: "test-commit")
+    monkeypatch.setattr(
+        session.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(args=[], returncode=0),
+    )
+    output_root = tmp_path / "captures"
+    args = Namespace(output_root=output_root, authority_artifact=tmp_path / "authority.json")
+
+    result = session._run_observation_capture(
+        args=args,
+        session_date="2026-07-30",
+        registry=SimpleNamespace(canonical_sha256="registry", contract_path="contract.json"),
+        master_path=tmp_path / "master.json",
+        master_sha="master-sha",
+        broker_metadata_called=False,
+        launch_plan={"launch_plan_sha256": "plan-sha"},
+    )
+
+    manifest_path = next((output_root / "2026-07-30").glob("*/presession_manifest.json"))
+    manifest = json.loads(manifest_path.read_text())
+    assert result == 0
+    assert manifest["observation_lock_path"] == str(
+        (lock_root / "meg_read_only_observation.lock").resolve()
+    )
+    assert manifest["read_only"] is True
+    assert manifest["is_order_action"] is False
+    assert manifest["broker_api_called"] is False
+    assert manifest["allowed_for_live_execution"] is False
 
 
 def test_session_orchestrator_ignores_hostile_parent_argv(monkeypatch, tmp_path):
@@ -84,6 +186,11 @@ def test_session_orchestrator_launch_preflight_uses_production_builder_once(monk
         assert payload["final_union_count"] <= payload["configured_budget"]
         assert payload["production_token_count"] > 0
         assert payload["launch_plan_sha256"]
+        production = set(payload["production_tokens"])
+        observations = set(payload["observation_tokens"])
+        assert production.isdisjoint(observations)
+        assert set(payload["final_union_tokens"]) == production | observations
+        assert payload["production_token_count"] == len(production)
     else:
         assert payload["verdict"] == "BLOCKED_BY_PRODUCTION_SUBSCRIPTION_PLAN_UNPROVEN"
         assert payload["production_token_count"] == 0

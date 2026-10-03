@@ -20,12 +20,14 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config import config as cfg
+from config import feed_runtime_reliability as reliability_cfg
 from core.market_event_graph_live_launch_plan import (
     PASS_STATIC_LIVE_SOURCE_PREFLIGHT,
     build_launch_plan,
     write_launch_plan,
 )
 from core.market_event_graph_live_observation_registry import load_observation_registry
+from core.instance_lock import InstanceLock
 from core.daily_instrument_authority import validate_authority
 from core.market_session_state import derive_market_session_policy
 from core.session_calendar import is_open
@@ -115,6 +117,125 @@ def _commit_sha() -> str:
     return proc.stdout.strip()
 
 
+def _new_observation_session_lock() -> InstanceLock:
+    lock_root = Path(
+        str(
+            getattr(reliability_cfg, "MEG_OBSERVATION_LOCKS_ROOT", "")
+            or getattr(cfg, "LOCKS_ROOT", "")
+            or (Path.home() / ".tradebot" / "locks")
+        )
+    ).expanduser()
+    lock_path = lock_root.resolve() / "meg_read_only_observation.lock"
+    return InstanceLock(lock_path=lock_path, repo_root_path=REPO_ROOT, unlink_on_release=False)
+
+
+def _run_observation_capture(
+    *,
+    args: argparse.Namespace,
+    session_date: str,
+    registry: Any,
+    master_path: Path,
+    master_sha: str,
+    broker_metadata_called: bool,
+    launch_plan: dict[str, Any],
+) -> int:
+    lock = _new_observation_session_lock()
+    try:
+        acquired, holder = lock.acquire()
+    except RuntimeError as exc:
+        print(json.dumps({
+            "ok": False,
+            "verdict": "BLOCKED_BY_OBSERVATION_SESSION_LOCK",
+            "reason": f"{type(exc).__name__}:{exc}",
+            "lock_path": str(lock.lock_path),
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+        }, sort_keys=True))
+        return 2
+    if not acquired:
+        print(json.dumps({
+            "ok": False,
+            "verdict": "BLOCKED_BY_OBSERVATION_SESSION_ALREADY_ACTIVE",
+            "holder": dict(holder or {}),
+            "lock_path": str(lock.lock_path),
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+        }, sort_keys=True))
+        return 2
+
+    try:
+        plan_sha = str(launch_plan["launch_plan_sha256"])
+        run_nonce = hashlib.sha256(f"{session_date}:{plan_sha}:{time.time_ns()}".encode("utf-8")).hexdigest()[:12]
+        run_id = f"meg-live-{session_date}-{plan_sha[:12]}-{run_nonce}"
+        capture_dir = args.output_root.resolve() / session_date / run_id
+        capture_dir.mkdir(parents=True, exist_ok=False)
+        launch_plan_path = capture_dir / "launch_plan.json"
+        write_launch_plan(launch_plan_path, launch_plan)
+        commit_sha = _commit_sha()
+        manifest = {
+            "launch_plan_sha256": plan_sha,
+            "master_sha256": master_sha,
+            "universe_sha256": registry.canonical_sha256,
+            "commit_sha": commit_sha,
+            "session_date": session_date,
+            "capture_session_id": run_id,
+            "observation_lock_path": str(lock.lock_path),
+            "output_paths": {
+                "capture_dir": str(capture_dir),
+                "captured_metadata": str(capture_dir / "captured_metadata.jsonl"),
+                "launch_plan": str(launch_plan_path),
+                "log": str(capture_dir / "live_observation.log"),
+            },
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "broker_metadata_called": bool(broker_metadata_called),
+            "allowed_for_live_execution": False,
+            "runtime_entrypoint": "run_kite_read_only_observation_v1.py",
+            "runtime_mode": "SIM",
+            "real_market_data": True,
+            "broker_adapter_active": False,
+            "order_authority": False,
+            "broker_write_authority": False,
+            "allowed_for_paper_execution": False,
+        }
+        (capture_dir / "presession_manifest.json").write_text(
+            json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        )
+        log_path = capture_dir / "live_observation.log"
+        env = dict(os.environ)
+        token_path = Path(os.environ.get(
+            "TRADING_BOT_TOKEN_PATH", str(REPO_ROOT / ".runtime" / "kite_access_token")
+        )).expanduser().resolve()
+        env.update({
+            "RUN_ID": run_id,
+            "TRADEBOT_COMMIT_SHA": commit_sha,
+            "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE": "true",
+            "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH": registry.contract_path,
+            "MARKET_EVENT_GRAPH_LIVE_SOURCE_PATH": str(capture_dir / "captured_metadata.jsonl"),
+            "MARKET_EVENT_GRAPH_LIVE_LAUNCH_PLAN_PATH": str(launch_plan_path),
+            "FEED_FORENSICS_ENABLED": "true",
+            "TRADEBOT_FEED_FORENSICS_ROOT": str(capture_dir),
+        })
+        with log_path.open("w", encoding="utf-8") as log_file:
+            proc = subprocess.run([
+                sys.executable, "-B", "scripts/run_kite_read_only_observation_v1.py",
+                "--session-date", session_date,
+                "--output-root", str(capture_dir),
+                "--kite-instruments-file", str(master_path),
+                "--launch-plan", str(launch_plan_path),
+                "--token-path", str(token_path),
+                "--authority-artifact", str(args.authority_artifact),
+            ], cwd=REPO_ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT)
+        return int(proc.returncode)
+    finally:
+        lock.release()
+
+
 def _static_preflight_payload(*, session_date: str, registry: Any, master_path: Path, output_root: Path) -> dict[str, Any]:
     capture_dir = output_root / session_date
     governed_files = [
@@ -168,7 +289,10 @@ def _build_production_launch_plan(
 
     budget = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123))
     try:
-        production_tokens, resolution = kite_depth_ws.build_subscription_tokens(list(cfg.SYMBOLS), max_tokens=budget)
+        production_builder = getattr(kite_depth_ws, "build_production_subscription_tokens", None)
+        if not callable(production_builder):
+            raise RuntimeError("production_only_subscription_builder_unavailable")
+        production_tokens, resolution = production_builder(list(cfg.SYMBOLS), max_tokens=budget)
     except BaseException as exc:
         return {
             "ok": False,
@@ -268,67 +392,15 @@ def main() -> int:
         print(json.dumps({"static_preflight": static_preflight, "launch_preflight": launch_plan}, sort_keys=True))
         return 2
 
-    plan_sha = str(launch_plan["launch_plan_sha256"])
-    run_nonce = hashlib.sha256(f"{session_date}:{plan_sha}:{time.time_ns()}".encode("utf-8")).hexdigest()[:12]
-    run_id = f"meg-live-{session_date}-{plan_sha[:12]}-{run_nonce}"
-    capture_dir = args.output_root.resolve() / session_date / run_id
-    capture_dir.mkdir(parents=True, exist_ok=False)
-    launch_plan_path = capture_dir / "launch_plan.json"
-    write_launch_plan(launch_plan_path, launch_plan)
-    commit_sha = _commit_sha()
-    manifest = {
-        "launch_plan_sha256": plan_sha,
-        "master_sha256": master_sha,
-        "universe_sha256": registry.canonical_sha256,
-        "commit_sha": commit_sha,
-        "session_date": session_date,
-        "capture_session_id": run_id,
-        "output_paths": {
-            "capture_dir": str(capture_dir),
-            "captured_metadata": str(capture_dir / "captured_metadata.jsonl"),
-            "launch_plan": str(launch_plan_path),
-            "log": str(capture_dir / "live_observation.log"),
-        },
-        "read_only": True,
-        "is_order_action": False,
-        "broker_api_called": False,
-        "broker_metadata_called": bool(broker_metadata_called),
-        "allowed_for_live_execution": False,
-        "runtime_entrypoint": "run_kite_read_only_observation_v1.py",
-        "runtime_mode": "SIM",
-        "real_market_data": True,
-        "broker_adapter_active": False,
-        "order_authority": False,
-        "broker_write_authority": False,
-        "allowed_for_paper_execution": False,
-    }
-    (capture_dir / "presession_manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    log_path = capture_dir / "live_observation.log"
-    env = dict(os.environ)
-    token_path = Path(os.environ.get("TRADING_BOT_TOKEN_PATH", str(REPO_ROOT / ".runtime" / "kite_access_token"))).expanduser().resolve()
-    env.update(
-        {
-            "RUN_ID": run_id,
-            "TRADEBOT_COMMIT_SHA": commit_sha,
-            "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE": "true",
-            "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH": registry.contract_path,
-            "MARKET_EVENT_GRAPH_LIVE_SOURCE_PATH": str(capture_dir / "captured_metadata.jsonl"),
-            "MARKET_EVENT_GRAPH_LIVE_LAUNCH_PLAN_PATH": str(launch_plan_path),
-            "FEED_FORENSICS_ENABLED": "true",
-            "TRADEBOT_FEED_FORENSICS_ROOT": str(capture_dir),
-        }
+    return _run_observation_capture(
+        args=args,
+        session_date=session_date,
+        registry=registry,
+        master_path=master_path,
+        master_sha=master_sha,
+        broker_metadata_called=broker_metadata_called,
+        launch_plan=launch_plan,
     )
-    with log_path.open("w", encoding="utf-8") as log_file:
-        proc = subprocess.run([
-            sys.executable, "-B", "scripts/run_kite_read_only_observation_v1.py",
-            "--session-date", session_date,
-            "--output-root", str(capture_dir),
-            "--kite-instruments-file", str(master_path),
-            "--launch-plan", str(launch_plan_path),
-            "--token-path", str(token_path),
-            "--authority-artifact", str(args.authority_artifact),
-        ], cwd=REPO_ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT)
-    return int(proc.returncode)
 
 
 if __name__ == "__main__":
