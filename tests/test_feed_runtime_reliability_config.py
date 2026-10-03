@@ -11,6 +11,7 @@ def test_reliability_settings_preserve_environment_names_and_defaults() -> None:
         "assert c.FEED_RUNTIME_SNAPSHOT_QUEUE_MAXSIZE == 2048; "
         "assert c.FEED_RUNTIME_SNAPSHOT_INTERVAL_SEC == 0.5; "
         "assert c.FEED_RECOVERY_MAX_GAP_SEC == 3.0; "
+        "assert c.FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC == 3.0; "
         "assert c.FEED_RECOVERY_HEALTH_WINDOW_SEC == 2.0; "
         "assert c.MEG_COMPLETION_GRACE_MS == 800; "
         "assert c.MEG_MAX_DECISION_FRESHNESS_SEC == 15.0; "
@@ -21,6 +22,7 @@ def test_reliability_settings_preserve_environment_names_and_defaults() -> None:
         "FEED_RUNTIME_SNAPSHOT_QUEUE_MAXSIZE",
         "FEED_RUNTIME_SNAPSHOT_INTERVAL_SEC",
         "FEED_RECOVERY_MAX_GAP_SEC",
+        "FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC",
         "FEED_RECOVERY_HEALTH_WINDOW_SEC",
         "MEG_COMPLETION_GRACE_MS",
         "MEG_MAX_DECISION_FRESHNESS_SEC",
@@ -35,6 +37,7 @@ def test_reliability_settings_keep_existing_environment_overrides() -> None:
         "assert c.FEED_RUNTIME_SNAPSHOT_QUEUE_MAXSIZE == 17; "
         "assert c.FEED_RUNTIME_SNAPSHOT_INTERVAL_SEC == 1.25; "
         "assert c.FEED_RECOVERY_MAX_GAP_SEC == 4.5; "
+        "assert c.FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC == 6.0; "
         "assert c.FEED_RECOVERY_HEALTH_WINDOW_SEC == 3.5; "
         "assert c.MEG_COMPLETION_GRACE_MS == 125; "
         "assert c.MEG_MAX_DECISION_FRESHNESS_SEC == 7.5"
@@ -45,6 +48,7 @@ def test_reliability_settings_keep_existing_environment_overrides() -> None:
             "FEED_RUNTIME_SNAPSHOT_QUEUE_MAXSIZE": "17",
             "FEED_RUNTIME_SNAPSHOT_INTERVAL_SEC": "1.25",
             "FEED_RECOVERY_MAX_GAP_SEC": "4.5",
+            "FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC": "6.0",
             "FEED_RECOVERY_HEALTH_WINDOW_SEC": "3.5",
             "MEG_COMPLETION_GRACE_MS": "125",
             "MEG_MAX_DECISION_FRESHNESS_SEC": "7.5",

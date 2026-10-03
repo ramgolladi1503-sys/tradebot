@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import os
 import time
 from dataclasses import fields as dataclass_fields
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from collections.abc import Mapping
@@ -11,8 +14,8 @@ from collections.abc import Mapping
 from config import config as cfg
 from core.advisory_schema import AdvisorySchemaError, log_advisory_schema_error, serialize_advisory_row
 from core.feed_health_truth import classify_feed_health_truth
-from core.learning_paths import canonical_suggestions_log_path
 from core.jsonl_tail_cache import tail_jsonl_rows as cached_tail_jsonl_rows
+from core.learning_paths import canonical_suggestions_log_path
 from core.market_snapshot_store import DEFAULT_MARKET_SNAPSHOT_PATH, read_market_snapshot
 from core.paths import logs_dir, runtime_dir
 from core.time_utils import is_today_local, now_ist
@@ -43,6 +46,11 @@ FEED_HEALTH_TRUTH_LATEST_PATH = runtime_dir() / "feed_health_truth_latest.json"
 FEED_HEALTH_TRUTH_SNAPSHOT_SCHEMA_VERSION = 1
 
 
+def _tail_jsonl_rows(path: Path, limit: int = 200) -> list[str]:
+    """Shared cached tail helper retained for existing snapshot consumers."""
+    return cached_tail_jsonl_rows(path, limit=limit, namespace="runtime_snapshot_producer")
+
+
 def _read_json_payload(path: Path) -> tuple[Any, list[str]]:
     notes: list[str] = []
     if not path.exists():
@@ -57,10 +65,6 @@ def _read_json_payload(path: Path) -> tuple[Any, list[str]]:
             "parse_error": f"{type(exc).__name__}:{exc}",
             "source_path": str(path),
         }, notes
-
-
-def _tail_jsonl_rows(path: Path, limit: int = 200) -> list[str]:
-    return cached_tail_jsonl_rows(path, limit=limit, namespace="runtime_snapshot_producer")
 
 
 def _safe_float(value: Any, default: float | None = None) -> float | None:
@@ -78,6 +82,73 @@ def _safe_float(value: Any, default: float | None = None) -> float | None:
 def _candidate_decisions_log_path() -> Path:
     desk_id = str(getattr(cfg, "DESK_ID", "DEFAULT") or "DEFAULT").strip() or "DEFAULT"
     return logs_dir() / "desks" / desk_id / "candidate_decisions.jsonl"
+
+
+def _cas_spot_dependency_block_reason(
+    market_payload: Mapping[str, Any],
+    *,
+    expected_token: int,
+    now_epoch: float,
+) -> str | None:
+    """Require the current exact NIFTY spot identity and freshness for CAS."""
+    if type(expected_token) is not int or expected_token <= 0:
+        return "cas_required_spot_token_invalid"
+    symbols = market_payload.get("symbols")
+    nifty = symbols.get("NIFTY") if isinstance(symbols, Mapping) else None
+    if not isinstance(nifty, Mapping):
+        return "cas_required_spot_snapshot_missing"
+
+    quote = nifty.get("quote_truth")
+    health = nifty.get("feed_health")
+    if not isinstance(quote, Mapping) or not isinstance(health, Mapping):
+        return "cas_required_spot_health_missing"
+    quote_token = quote.get("instrument_token")
+    if (
+        quote.get("symbol") != "NIFTY"
+        or type(quote_token) is not int
+        or quote_token <= 0
+        or quote_token != expected_token
+    ):
+        return "cas_required_spot_identity_mismatch"
+    if quote.get("is_executable_quote") is not False:
+        return "cas_spot_quote_authority_invalid"
+    if quote.get("is_fresh") is not True or health.get("status") != "HEALTHY":
+        return "cas_required_spot_unhealthy"
+
+    quote_age = health.get("underlying_quote_age_sec")
+    if type(quote_age) not in (int, float) or not math.isfinite(float(quote_age)) or quote_age < 0:
+        return "cas_required_spot_age_invalid"
+    configured_age = getattr(cfg, "SLA_MAX_INDEX_LTP_AGE_SEC", None)
+    if configured_age is None:
+        configured_age = getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)
+    if (type(configured_age) not in (int, float) or not math.isfinite(float(configured_age))
+            or configured_age <= 0):
+        return "cas_required_spot_sla_invalid"
+    if float(quote_age) > float(configured_age):
+        return "cas_required_spot_stale"
+
+    generated_at = market_payload.get("generated_at")
+    if not isinstance(generated_at, str) or not generated_at.strip():
+        return "cas_spot_snapshot_timestamp_missing"
+    try:
+        generated = datetime.fromisoformat(generated_at.strip().replace("Z", "+00:00"))
+        if generated.tzinfo is None or generated.utcoffset() is None:
+            return "cas_spot_snapshot_timezone_missing"
+        generated_epoch = generated.timestamp()
+        max_snapshot_age = getattr(cfg, "FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC", 3.0)
+        age = float(now_epoch) - generated_epoch
+        if (type(max_snapshot_age) not in (int, float)
+                or not math.isfinite(float(max_snapshot_age))
+                or float(max_snapshot_age) <= 0
+                or not math.isfinite(age)):
+            return "cas_spot_snapshot_age_invalid"
+        if age < 0:
+            return "cas_spot_snapshot_from_future"
+        if age > float(max_snapshot_age):
+            return "cas_spot_snapshot_stale"
+    except (OverflowError, OSError, TypeError, ValueError):
+        return "cas_spot_snapshot_timestamp_invalid"
+    return None
 
 
 def _first_present(*values: Any) -> Any:
@@ -279,11 +350,20 @@ def _build_feed_health_truth_latest_payload(feed_payload: Any) -> tuple[dict[str
     return payload
 
 
-def _build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
+def _build_advisory_latest_payload(
+    limit: int = 200,
+    *,
+    candidate_decisions_path: Path | str | None = None,
+) -> dict[str, Any]:
     path = canonical_suggestions_log_path()
     rows: list[dict[str, Any]] = []
     notes: list[str] = []
-    for raw_line in _tail_jsonl_rows(path, limit=limit):
+    source_rows, source_state = _read_advisory_source(path, limit=limit)
+    if source_state == "PARTIAL":
+        notes.append("incomplete_trailing_jsonl_record:primary")
+    elif source_state == "TRUNCATED":
+        notes.append("bounded_tail_record_truncated:primary")
+    for raw_line in source_rows:
         try:
             payload = json.loads(raw_line)
         except Exception as exc:
@@ -314,6 +394,10 @@ def _build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
             "rows": rows,
             "row_count": int(len(rows)),
             "source_path": str(path),
+            "source_state": (
+                "ROWS_WITH_PARTIAL_TAIL" if source_state == "PARTIAL" else
+                "ROWS_WITH_TRUNCATED_PREFIX" if source_state == "TRUNCATED" else "ROWS"
+            ),
             "notes": notes,
         }
     if not bool(getattr(cfg, "RUNTIME_SNAPSHOT_ADVISORY_FALLBACK_CANDIDATE_DECISIONS_ENABLE", True)):
@@ -321,13 +405,22 @@ def _build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
             "rows": rows,
             "row_count": int(len(rows)),
             "source_path": str(path),
+            "source_state": source_state,
             "notes": notes,
         }
 
-    fallback_path = _candidate_decisions_log_path()
+    fallback_path = Path(candidate_decisions_path) if candidate_decisions_path is not None else _candidate_decisions_log_path()
+    fallback_source_rows, fallback_state = _read_advisory_source(
+        fallback_path,
+        limit=max(1, int(getattr(cfg, "RUNTIME_SNAPSHOT_ADVISORY_FALLBACK_CANDIDATE_DECISIONS_LIMIT", limit))),
+    )
     fallback_rows: list[dict[str, Any]] = []
     fallback_notes: list[str] = []
-    for raw_line in _tail_jsonl_rows(fallback_path, limit=max(1, int(getattr(cfg, "RUNTIME_SNAPSHOT_ADVISORY_FALLBACK_CANDIDATE_DECISIONS_LIMIT", limit)))):
+    if fallback_state == "PARTIAL":
+        fallback_notes.append("incomplete_trailing_jsonl_record:fallback")
+    elif fallback_state == "TRUNCATED":
+        fallback_notes.append("bounded_tail_record_truncated:fallback")
+    for raw_line in fallback_source_rows:
         try:
             payload = json.loads(raw_line)
         except Exception as exc:
@@ -364,8 +457,76 @@ def _build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
         "rows": fallback_rows,
         "row_count": int(len(fallback_rows)),
         "source_path": str(fallback_path),
+        "source_state": (
+            "ROWS_WITH_PARTIAL_TAIL" if fallback_rows and fallback_state == "PARTIAL" else
+            "ROWS_WITH_TRUNCATED_PREFIX" if fallback_rows and fallback_state == "TRUNCATED" else
+            "ROWS" if fallback_rows else fallback_state
+        ),
+        "primary_source_state": source_state,
         "notes": notes,
     }
+
+
+def _read_advisory_source(path: Path, *, limit: int) -> tuple[list[str], str]:
+    """Read a bounded JSONL tail from one file snapshot.
+
+    The descriptor size and bytes are captured together. A concurrent in-place
+    mutation is detected by comparing descriptor metadata before and after the
+    read; uncertain snapshots fail closed rather than mixing generations.
+    """
+    try:
+        max_lines = max(1, int(limit))
+        max_bytes = max(4096, int(getattr(cfg, "RUNTIME_SNAPSHOT_JSONL_TAIL_BYTES", 65536) or 65536))
+        with path.open("rb") as handle:
+            before = os.fstat(handle.fileno())
+            snapshot_size = int(before.st_size)
+            if snapshot_size == 0:
+                return [], "EMPTY"
+            offset = max(0, snapshot_size - max_bytes)
+            handle.seek(offset)
+            remaining = snapshot_size - offset
+            chunks: list[bytes] = []
+            while remaining:
+                chunk = handle.read(remaining)
+                if not chunk:
+                    return [], "READ_ERROR"
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            after = os.fstat(handle.fileno())
+            before_identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+            after_identity = (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+            if before_identity != after_identity:
+                return [], "READ_ERROR"
+        raw = b"".join(chunks)
+        if offset:
+            # The bounded window may start mid-record. Discard that fragment.
+            first_newline = raw.find(b"\n")
+            if first_newline < 0:
+                return [], "TRUNCATED"
+            raw = raw[first_newline + 1:]
+        terminated = raw.endswith(b"\n")
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeError:
+            return [], "READ_ERROR"
+        # JSONL records are delimited by LF only. `str.splitlines()` also
+        # splits legal JSON string characters such as U+2028/U+0085.
+        lines = [line[:-1] if line.endswith("\r") else line for line in text.split("\n")]
+        if not terminated and lines:
+            lines = lines[:-1]
+        lines = [line for line in lines if line.strip()]
+        rows = lines[-max_lines:]
+        if rows:
+            return rows, "PRESENT" if terminated else "PARTIAL"
+        if offset:
+            return [], "TRUNCATED"
+        if not text.strip():
+            return [], "EMPTY"
+        return [], "PARTIAL" if not terminated else "READ_ERROR"
+    except FileNotFoundError:
+        return [], "MISSING"
+    except (OSError, UnicodeError, ValueError):
+        return [], "READ_ERROR"
 
 
 def _candidate_decision_to_advisory_row(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -611,6 +772,7 @@ def produce_and_store_runtime_snapshots(
     inherited_cas_references: Mapping[str, Any] | None = None,
     trading_session_identity: Mapping[str, Any] | None = None,
     cas_primitive_path: Path | None = None,
+    candidate_decisions_path: Path | str | None = None,
 ) -> dict[str, Any]:
     outputs: dict[str, Any] = {}
     timings: list[dict[str, Any]] = []
@@ -624,19 +786,34 @@ def produce_and_store_runtime_snapshots(
             market_payload = {"missing": True, "error": f"{type(exc).__name__}:{exc}"}
     outputs["market_snapshot"] = market_payload
 
-    advisory_payload = _build_advisory_latest_payload()
+    if candidate_decisions_path is None:
+        advisory_payload = _build_advisory_latest_payload()
+    else:
+        advisory_payload = _build_advisory_latest_payload(
+            candidate_decisions_path=candidate_decisions_path
+        )
     outputs["advisory_latest"] = advisory_payload
-    # CAS inputs are admissible only while the canonical feed-runtime
-    # evidence is valid and connected.  Do not bridge captured primitives into
-    # an analytical cycle when the live feed is unhealthy or unverifiable.
+    # CAS has a declared exact INDEX_SPOT/NIFTY dependency. Preserve the global
+    # transport gate and additionally bind its advisory input to the current
+    # same-cycle NIFTY identity and quote-freshness evidence.
     cas_feed_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")
     cas_feed_payload = cas_feed_runtime.get("payload") if cas_feed_runtime.get("valid") else None
-    cas_feed_healthy = isinstance(cas_feed_payload, dict) and (
-        cas_feed_payload.get("effective_ws_connected") is True
-        or cas_feed_payload.get("ws_connected") is True
-    )
-    # Bridge only already-captured, immutable primitives; never reconstruct here.
-    if session_id and source_sha and cas_feed_healthy:
+    if not isinstance(cas_feed_payload, dict):
+        cas_feed_healthy = False
+    elif "effective_ws_connected" in cas_feed_payload:
+        # The validated effective field is authoritative when present. A
+        # contradictory legacy field must never resurrect unhealthy transport.
+        cas_feed_healthy = cas_feed_payload.get("effective_ws_connected") is True
+    else:
+        # Compatibility for older validated artifacts that predate the field.
+        cas_feed_healthy = cas_feed_payload.get("ws_connected") is True
+    cas_gate_reason = None
+    if not session_id or not source_sha:
+        cas_gate_reason = "cas_run_identity_missing"
+    elif not cas_feed_healthy:
+        cas_gate_reason = "cas_shared_feed_unhealthy_or_unknown"
+    else:
+        # Bridge only already-captured, immutable primitives; never reconstruct here.
         current_cas_primitives: dict[str, Any] = {}
         try:
             from core.cas_primitive_producer import build_cas_input
@@ -647,32 +824,67 @@ def produce_and_store_runtime_snapshots(
                 primitives = stored.get("primitives") if isinstance(stored, dict) else None
                 if isinstance(primitives, dict):
                     current_cas_primitives = primitives
-            if (isinstance(inherited_cas_references, Mapping)
-                    and isinstance(trading_session_identity, Mapping)):
-                from core.cas_primitive_producer import build_same_session_cas_input
-                all_token_rows = [row for row in current_cas_primitives.values() if isinstance(row, Mapping)]
-                all_token_rows.extend(item["primitive"] for item in inherited_cas_references.values()
-                    if isinstance(item, Mapping) and isinstance(item.get("primitive"), Mapping))
-                token = next((int(row["underlying_token"]) for row in all_token_rows
-                              if row.get("underlying_token") is not None), 0)
-                inherited_input = build_same_session_cas_input(
-                    current_cas_primitives, dict(inherited_cas_references), current_run_id=session_id,
-                    source_sha=source_sha, cycle_id=str(loop_id or ""),
-                    underlying_token=token,
-                    session_identity=dict(trading_session_identity),
-                    decision_epoch=time.time()) if token > 0 else None
-                if inherited_input is not None:
-                    outputs["cas_short_horizon_inputs"] = inherited_input
-            if "cas_short_horizon_inputs" not in outputs and current_cas_primitives:
-                cas_input = build_cas_input(current_cas_primitives, session_id=session_id,
-                    source_sha=source_sha, cycle_id=str(loop_id or ""),
-                    observation_timestamp=now_ist().isoformat(),
-                    trading_session_identity=(dict(trading_session_identity)
-                        if isinstance(trading_session_identity, Mapping) else None))
-                if cas_input is not None:
-                    outputs["cas_short_horizon_inputs"] = cas_input
+
+            dependency_rows = [current_cas_primitives.get(name) for name in ("0915", "1000")]
+            if isinstance(inherited_cas_references, Mapping):
+                dependency_rows.extend(
+                    item.get("primitive")
+                    for item in (inherited_cas_references.get(name) for name in ("0915", "1000"))
+                    if isinstance(item, Mapping)
+                )
+            primitive_tokens = [
+                row.get("underlying_token")
+                for row in dependency_rows
+                if isinstance(row, Mapping)
+            ]
+            if (len(primitive_tokens) < 2
+                    or any(type(token) is not int or token <= 0 for token in primitive_tokens)
+                    or len(set(primitive_tokens)) != 1):
+                cas_gate_reason = "cas_captured_spot_primitives_missing_or_mismatched"
+            else:
+                token = primitive_tokens[0]
+                cas_gate_reason = _cas_spot_dependency_block_reason(
+                    market_payload,
+                    expected_token=token,
+                    now_epoch=time.time(),
+                )
+                if cas_gate_reason is None and isinstance(inherited_cas_references, Mapping) and isinstance(trading_session_identity, Mapping):
+                    from core.cas_primitive_producer import build_same_session_cas_input
+                    inherited_input = build_same_session_cas_input(
+                        current_cas_primitives, dict(inherited_cas_references), current_run_id=session_id,
+                        source_sha=source_sha, cycle_id=str(loop_id or ""),
+                        underlying_token=token,
+                        session_identity=dict(trading_session_identity),
+                        decision_epoch=time.time())
+                    if inherited_input is not None:
+                        outputs["cas_short_horizon_inputs"] = inherited_input
+                if cas_gate_reason is None and "cas_short_horizon_inputs" not in outputs and current_cas_primitives:
+                    cas_input = build_cas_input(current_cas_primitives, session_id=session_id,
+                        source_sha=source_sha, cycle_id=str(loop_id or ""),
+                        observation_timestamp=now_ist().isoformat(),
+                        underlying_token=token,
+                        trading_session_identity=(dict(trading_session_identity)
+                            if isinstance(trading_session_identity, Mapping) else None))
+                    if cas_input is not None:
+                        outputs["cas_short_horizon_inputs"] = cas_input
+                if cas_gate_reason is None and "cas_short_horizon_inputs" not in outputs:
+                    cas_gate_reason = "cas_captured_primitives_invalid_or_incomplete"
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
-            pass
+            cas_gate_reason = "cas_input_bridge_error"
+
+    outputs["cas_input_gate"] = {
+        "state": "READY" if "cas_short_horizon_inputs" in outputs else "BLOCKED",
+        "reason_code": None if "cas_short_horizon_inputs" in outputs else cas_gate_reason,
+        "required_domain": "INDEX_SPOT",
+        "required_identity": "NIFTY",
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+        "paper_authorized": False,
+        "live_authorized": False,
+        "append": False,
+    }
 
     t1 = time.perf_counter()
     loaded_runtime = load_current_feed_runtime(logs_dir() / "feed_runtime_latest.json")

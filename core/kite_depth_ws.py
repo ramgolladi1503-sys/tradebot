@@ -5019,6 +5019,110 @@ def _safe_non_negative_count(value: Any) -> int:
         return 0
 
 
+def _underlying_feed_identity_by_symbol(
+    *,
+    now_epoch: float,
+    ws_connected: bool | None,
+    session_identity: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Return complete, generation-bound health evidence for configured underlyings.
+
+    This is diagnostic evidence from existing token/session state. It neither
+    changes subscription policy nor grants execution authority.
+    """
+    token_lists: dict[str, list[int]] = {}
+    for raw_token, raw_symbol in dict(_UNDERLYING_TOKEN_TO_SYMBOL or {}).items():
+        try:
+            if type(raw_token) not in (int, str):
+                continue
+            token = int(raw_token)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        symbol = str(raw_symbol or "").strip().upper()
+        if token > 0 and symbol:
+            token_lists.setdefault(symbol, []).append(token)
+
+    try:
+        raw_sla = getattr(cfg, "LTP_SLA_SECONDS", None)
+        sla_sec = float(raw_sla) if type(raw_sla) in (int, float) else float("nan")
+    except (TypeError, ValueError, OverflowError):
+        sla_sec = float("nan")
+    try:
+        identity_evidence = market_event_graph_subscription_evidence_for_tokens(
+            {symbol: tokens[0] for symbol, tokens in token_lists.items() if len(tokens) == 1}
+        )
+    except Exception:
+        identity_evidence = {}
+    identity_evidence = identity_evidence if isinstance(identity_evidence, dict) else {}
+    succeeded = set(identity_evidence.get("subscription_request_succeeded_symbols") or ())
+    lifecycle_by_token = identity_evidence.get("token_lifecycle")
+    lifecycle_by_token = lifecycle_by_token if isinstance(lifecycle_by_token, dict) else {}
+    active_tokens = {int(token) for token in (_LAST_TOKENS or ()) if str(token).isdigit()}
+    live_session_id = str(get_current_feed_session_identity().get("feed_session_id") or "")
+    rows: dict[str, dict[str, Any]] = {}
+    for symbol, tokens in sorted(token_lists.items()):
+        if len(tokens) != 1:
+            rows[symbol] = {"status": "UNKNOWN", "reason": "underlying_token_identity_ambiguous", "symbol": symbol}
+            continue
+        token = tokens[0]
+        lifecycle = lifecycle_by_token.get(str(token))
+        lifecycle = lifecycle if isinstance(lifecycle, dict) else {}
+        receipt_epoch = _coerce_epoch(lifecycle.get("latest_callback_receipt_epoch"))
+        source_epoch = _coerce_epoch(lifecycle.get("latest_source_tick_epoch"))
+        age_sec = float(now_epoch) - receipt_epoch if receipt_epoch is not None else None
+        age_valid = age_sec is not None and math.isfinite(age_sec) and age_sec >= 0.0
+        active_subscription = token in active_tokens and symbol in succeeded
+        current_identity = (
+            str(session_identity.get("feed_session_id") or ""),
+            session_identity.get("feed_epoch"),
+            session_identity.get("reconnect_generation"),
+        )
+        row_identity = (
+            str(lifecycle.get("feed_session_id") or ""),
+            lifecycle.get("feed_epoch"),
+            lifecycle.get("reconnect_generation"),
+        )
+        identity_matches = (
+            bool(current_identity[0])
+            and type(current_identity[1]) is int
+            and type(current_identity[2]) is int
+            and current_identity[1] >= 0
+            and current_identity[2] >= 0
+            and all(type(value) is int for value in row_identity[1:])
+            and current_identity == row_identity
+        )
+        session_is_current = bool(current_identity[0]) and current_identity[0] == live_session_id
+        domain = "INDEX_SPOT" if symbol in set(_INDEX_SYMBOLS or ()) else "STOCK_SPOT"
+        healthy = bool(
+            ws_connected is True
+            and session_is_current
+            and active_subscription
+            and identity_matches
+            and age_valid
+            and math.isfinite(sla_sec)
+            and sla_sec > 0.0
+            and age_sec <= sla_sec
+        )
+        rows[symbol] = {
+            "status": "HEALTHY" if healthy else "UNHEALTHY" if age_valid or not active_subscription or not session_is_current else "UNKNOWN",
+            "reason": "underlying_feed_fresh" if healthy else "underlying_feed_evidence_invalid_or_stale",
+            "symbol": symbol,
+            "identity_domain": domain,
+            "instrument_token": token,
+            "feed_session_id": row_identity[0],
+            "feed_epoch": row_identity[1],
+            "reconnect_generation": row_identity[2],
+            "active_subscription": active_subscription,
+            "subscription_succeeded": symbol in succeeded,
+            "receipt_epoch": receipt_epoch,
+            "source_epoch": source_epoch,
+            "age_sec": age_sec if age_valid else None,
+            "max_age_sec": sla_sec if math.isfinite(sla_sec) and sla_sec > 0.0 else None,
+            "generated_epoch": float(now_epoch),
+        }
+    return rows
+
+
 def _write_feed_runtime_snapshot(
     *,
     now_epoch: float,
@@ -5110,6 +5214,13 @@ def _write_feed_runtime_snapshot(
         and (disconnected_code_value is not None or str(disconnected_reason_value or "").strip())
     ):
         ws_connected = False
+    feed_session_identity = dict(get_current_feed_session_identity())
+    feed_session_identity["observed_epoch"] = float(now_epoch)
+    underlying_identity_by_symbol = _underlying_feed_identity_by_symbol(
+        now_epoch=float(now_epoch),
+        ws_connected=ws_connected,
+        session_identity=feed_session_identity,
+    )
     payload = {
         "ts_epoch": float(now_epoch),
         "ws_connected": ws_connected,
@@ -5125,6 +5236,8 @@ def _write_feed_runtime_snapshot(
         "last_depth_epoch": _coerce_epoch(last_depth_epoch),
         "last_depth_age_sec": _safe_float(last_depth_age_sec),
         "market_open": bool(market_open),
+        "feed_session_identity": feed_session_identity,
+        "underlying_feed_identity_by_symbol": underlying_identity_by_symbol,
         "state_machine": normalized_state_machine,
         "subscribed_option_tokens_count": int(subscribed_option_tokens_count or 0),
         "option_last_tick_age_by_symbol": dict(option_last_tick_age_by_symbol or {}),

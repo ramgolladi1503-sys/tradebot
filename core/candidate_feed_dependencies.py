@@ -32,6 +32,49 @@ _VALID_DOMAINS = {
 }
 
 
+def _required_identity_domains_match(
+    required_domains: object,
+    required_identities: object,
+) -> bool:
+    """Return whether identity declarations exactly cover required domains.
+
+    A `(domain, None)` entry is structurally declared but remains unresolved;
+    execution eligibility separately rejects its missing identity. This guard
+    prevents an empty identity list from passing via vacuous iteration.
+    """
+    if not isinstance(required_domains, tuple) or not isinstance(required_identities, tuple):
+        return False
+    if any(not isinstance(domain, str) or domain not in _VALID_DOMAINS for domain in required_domains):
+        return False
+    if len(set(required_domains)) != len(required_domains):
+        return False
+
+    declared_domains = set(required_domains)
+    identity_domains: set[str] = set()
+    identity_pairs: set[tuple[str, str | None]] = set()
+    for item in required_identities:
+        if (
+            not isinstance(item, tuple)
+            or len(item) != 2
+            or not isinstance(item[0], str)
+            or item[0] not in _VALID_DOMAINS
+            or (
+                item[1] is not None
+                and (
+                    not isinstance(item[1], str)
+                    or not item[1].strip()
+                    or item[1] != item[1].strip()
+                )
+            )
+        ):
+            return False
+        if item in identity_pairs:
+            return False
+        identity_pairs.add(item)
+        identity_domains.add(item[0])
+    return identity_domains == declared_domains
+
+
 @dataclass(frozen=True)
 class CandidateFeedDependencySpec:
     candidate_id: str
@@ -55,6 +98,10 @@ class CandidateFeedDependencySpec:
         return (
             self.authority_status == VERIFIED_DECLARATION
             and self.execution_scope == "EXECUTION"
+            and _required_identity_domains_match(
+                self.required_domains,
+                self.required_identities,
+            )
             and all(identity is not None for _, identity in self.required_identities)
             and not self.unresolved_requirements
         )
@@ -126,7 +173,7 @@ REGISTRY_ENTRIES: tuple[CandidateFeedDependencySpec, ...] = (
         ),
         source_sha256=(
             ("docs/research/candidates/INTRADAY_OPENING_DRIVE_V1/FROZEN_SPEC.json", "10087e1166d8e11cde194960707e3b490d0ca30ec1df9f30bc3c42889c77cc0b"),
-            ("core/paper_shadow/strategy_shadow_adapter.py", "4b6ed99ee10c891949ac1f1cae8018320990e19644fc11994ec2372afea73ef9"),
+            ("core/paper_shadow/strategy_shadow_adapter.py", "e83bbbca64ce5b8da7d2742f557f643d232f2e41abd462ffeaeefeb1b1f13034"),
         ),
         execution_scope="HISTORICAL_SHADOW_ONLY",
         unresolved_requirements=(
@@ -142,7 +189,7 @@ REGISTRY_ENTRIES: tuple[CandidateFeedDependencySpec, ...] = (
         required_identities=(("INDEX_SPOT", "NIFTY50"),),
         source_sha256=(
             ("docs/research/candidates/S1_MOMENTUM_OVERNIGHT_V1/FROZEN_SPEC.json", "3e60d58c9caaa28d72fb1a79553c477cab4cd27f4d2ed27c66c4a392da1a4b7a"),
-            ("core/paper_shadow/strategy_shadow_adapter.py", "4b6ed99ee10c891949ac1f1cae8018320990e19644fc11994ec2372afea73ef9"),
+            ("core/paper_shadow/strategy_shadow_adapter.py", "e83bbbca64ce5b8da7d2742f557f643d232f2e41abd462ffeaeefeb1b1f13034"),
             ("core/candidate_audits/nifty_overnight_drift.py", "1fdf2f9ccda8c019568fcc20ae2928fa0ccfb740d4801d1d59a001162d0889f0"),
         ),
         execution_scope="HISTORICAL_CANDIDATE_ONLY",
@@ -159,7 +206,7 @@ REGISTRY_ENTRIES: tuple[CandidateFeedDependencySpec, ...] = (
         required_identities=(("INDEX_SPOT", "NIFTY50"),),
         source_sha256=(
             ("docs/research/candidates/S4_MONDAY_OVERNIGHT_V1/FROZEN_SPEC.json", "eed4ceed76a593bb253fa795558d1a185ae0f0c698b2686d31b4be680c889d32"),
-            ("core/paper_shadow/strategy_shadow_adapter.py", "4b6ed99ee10c891949ac1f1cae8018320990e19644fc11994ec2372afea73ef9"),
+            ("core/paper_shadow/strategy_shadow_adapter.py", "e83bbbca64ce5b8da7d2742f557f643d232f2e41abd462ffeaeefeb1b1f13034"),
             ("core/candidate_audits/nifty_overnight_drift.py", "1fdf2f9ccda8c019568fcc20ae2928fa0ccfb740d4801d1d59a001162d0889f0"),
         ),
         execution_scope="HISTORICAL_CANDIDATE_ONLY",
@@ -211,8 +258,9 @@ REGISTRY_ENTRIES: tuple[CandidateFeedDependencySpec, ...] = (
             required_identities=(("INDEX_SPOT", None), ("INDEX_FUTURES", None)),
             source_sha256=(
                 ("core/candidate_evaluators.py", "073e1dcdfb4d46033deb3ae6f24b6c9126878c981d05617e21ff4b1e17322b46"),
-                ("core/market_session_store.py", "5482d74a3255fbb0510485996944253c6f91634a2aaab2b0c5504733725a6db9"),
-                ("core/orchestrator.py", "f14daf71f06dadc29847eac17f2b2472d1be7e6e5ad520a4b23a906a19251efd"),
+                ("core/market_data.py", "6d5984c15b59c8e41ab1e92a4292a1bd61317144c723610e9d0c791eabc8bd47"),
+                ("core/market_session_store.py", "50e89cfd40dbfe052773eda008fec23a4dabcebf9c877b4582e4f09341791551"),
+                ("core/orchestrator.py", "29c748f4a140928edb49f7e61dffaef9d9f513d50da5560cd91cd0c4dc0ecffa"),
                 ("core/governed_strategy_authority.py", "54d08ecc0fe676875e46b26c87ab00bf1cc07f026b245a4c198013793c5e18fc"),
             ),
             execution_scope="GOVERNED_CANDIDATE_WITH_UNVERIFIED_FEED_BINDING",
@@ -296,10 +344,30 @@ def validate_registry_entries(
             or len(item) != 2
             or not isinstance(item[0], str)
             or item[0] not in _VALID_DOMAINS
-            or (item[1] is not None and not isinstance(item[1], str))
+            or (
+                item[1] is not None
+                and (
+                    not isinstance(item[1], str)
+                    or not item[1].strip()
+                    or item[1] != item[1].strip()
+                )
+            )
             for item in entry.required_identities
         ):
             errors.append("REGISTRY_REQUIRED_IDENTITY_DOMAIN_INVALID")
+        if isinstance(entry.required_identities, tuple) and any(
+            isinstance(item, tuple)
+            and len(item) == 2
+            and isinstance(item[1], str)
+            and (not item[1].strip() or item[1] != item[1].strip())
+            for item in entry.required_identities
+        ):
+            errors.append("REGISTRY_REQUIRED_IDENTITY_VALUE_INVALID")
+        if not _required_identity_domains_match(
+            entry.required_domains,
+            entry.required_identities,
+        ):
+            errors.append("REGISTRY_REQUIRED_DOMAIN_IDENTITY_COVERAGE_MISMATCH")
         if not isinstance(entry.source_sha256, tuple) or any(
             not isinstance(item, tuple)
             or len(item) != 2
@@ -361,7 +429,7 @@ def resolve_candidate_dependencies(
             reason="CANDIDATE_FEED_DEPENDENCY_ID_MISSING",
             candidate_id=None,
         )
-    errors = validate_registry_entries()
+    errors = validate_registry_entries(REGISTRY_ENTRIES)
     if errors:
         return CandidateDependencyResolution(
             status=UNKNOWN_BLOCKED,

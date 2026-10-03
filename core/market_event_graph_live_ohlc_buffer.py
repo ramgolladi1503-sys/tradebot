@@ -7,8 +7,9 @@ production market-data OHLC state used by strategies, risk, or execution.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import math
+import time
 from typing import Any, Mapping
 
 from config import config as cfg
@@ -16,6 +17,9 @@ from core.ohlc_buffer import OhlcBuffer
 from core.time_utils import IST_TZ
 
 shadow_ohlc_buffer = OhlcBuffer()
+_SESSION_STORE: Any | None = None
+_SESSION_DATE: str | None = None
+_SESSION_SYMBOLS: tuple[str, ...] = ("NIFTY",)
 _LAST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LAST_CUMULATIVE_VOLUME_BY_TOKEN: dict[int, tuple[str, float]] = {}
 _ACTIVE_CAPTURE_IDENTITY: dict[str, Any] | None = None
@@ -27,6 +31,158 @@ def reset_live_source_shadow_buffer() -> None:
     _LAST_CUMULATIVE_VOLUME_BY_TOKEN.clear()
     global _ACTIVE_CAPTURE_IDENTITY
     _ACTIVE_CAPTURE_IDENTITY = None
+
+
+def configure_live_source_session_store(
+    store: Any | None, *, session_date: str | None,
+    symbols: tuple[str, ...] = ("NIFTY",),
+    restore_as_of: datetime | None = None,
+) -> None:
+    """Bind durable bars only to the isolated read-only shadow buffer."""
+    global _SESSION_STORE, _SESSION_DATE, _SESSION_SYMBOLS
+    if store is not None:
+        if not session_date:
+            raise ValueError("SESSION_DATE_REQUIRED_FOR_BAR_STORE")
+        if not isinstance(restore_as_of, datetime):
+            raise ValueError("BAR_STORE_RESTORE_CUTOFF_REQUIRED")
+        from datetime import date
+
+        date.fromisoformat(str(session_date))
+    _SESSION_STORE = store
+    _SESSION_DATE = str(session_date) if session_date is not None else None
+    _SESSION_SYMBOLS = tuple(sorted({str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()}))
+    reset_live_source_shadow_buffer()
+    if store is not None and restore_as_of is not None:
+        for symbol in _SESSION_SYMBOLS:
+            _restore_completed_bars(symbol, as_of=restore_as_of)
+
+
+def _restore_completed_bars(symbol: str, *, as_of: datetime) -> None:
+    if _SESSION_STORE is None or _SESSION_DATE is None:
+        return
+    if as_of.date().isoformat() != _SESSION_DATE:
+        return
+    bars = _SESSION_STORE.get_bars(
+        symbol,
+        as_of=as_of,
+        timeframe="1m",
+        session_date=_SESSION_DATE,
+    )
+    target = shadow_ohlc_buffer._bars[str(symbol).upper()]
+    restored_by_ts = {bar.get("ts"): bar for bar in target if isinstance(bar.get("ts"), datetime)}
+    for row in bars:
+        ts = row.get("ts")
+        if not isinstance(ts, datetime) or ts.date().isoformat() != _SESSION_DATE:
+            raise ValueError("RESTORED_BAR_SESSION_IDENTITY_INVALID")
+        if ts + timedelta(seconds=60) > as_of:
+            continue
+        provenance = dict(row.get("bar_provenance") or row.get("provenance") or {})
+        provenance["recovered_completed_bar"] = True
+        provenance["durable_persisted"] = True
+        provenance["persistence_row_sha256"] = str(row.get("row_hash") or "")
+        recovered = {
+            "ts": ts,
+            "open": float(row["open"]),
+            "high": float(row["high"]),
+            "low": float(row["low"]),
+            "close": float(row["close"]),
+            "volume": None if row.get("volume") is None else float(row["volume"]),
+            "bar_provenance": provenance,
+        }
+        existing = restored_by_ts.get(ts)
+        if existing is not None:
+            fields = ("open", "high", "low", "close", "volume")
+            if any(existing.get(field) != recovered.get(field) for field in fields):
+                raise ValueError("RESTORED_BAR_CONFLICTS_WITH_SHADOW_BUFFER")
+            continue
+        restored_by_ts[ts] = recovered
+    target.clear()
+    target.extend(restored_by_ts[ts] for ts in sorted(restored_by_ts))
+
+
+def persist_completed_live_source_shadow_bars(*, as_of: datetime, symbol: str | None = None) -> dict[str, int]:
+    """Persist bars complete at the caller's event-time cutoff, then report counts."""
+    if _SESSION_STORE is None or _SESSION_DATE is None:
+        return {"persisted": 0, "already_durable": 0, "skipped": 0}
+    if not isinstance(as_of, datetime):
+        raise ValueError("BAR_PERSISTENCE_AS_OF_REQUIRED")
+    cutoff = as_of.astimezone(IST_TZ) if as_of.tzinfo is not None else as_of.replace(tzinfo=IST_TZ)
+    if cutoff.date().isoformat() != _SESSION_DATE:
+        return {"persisted": 0, "already_durable": 0, "skipped": 0}
+    symbols = (str(symbol).strip().upper(),) if symbol else _SESSION_SYMBOLS
+    result = {"persisted": 0, "already_durable": 0, "skipped": 0}
+    for current_symbol in symbols:
+        bars = shadow_ohlc_buffer.get_bars(current_symbol)
+        for bar in bars:
+            ts = bar.get("ts")
+            if not isinstance(ts, datetime) or ts.date().isoformat() != _SESSION_DATE:
+                result["skipped"] += 1
+                continue
+            if ts + timedelta(seconds=60) > cutoff:
+                continue
+            provenance = dict(bar.get("bar_provenance") or {})
+            if provenance.get("durable_persisted") is True:
+                result["already_durable"] += 1
+                continue
+            source_type = str(provenance.get("source_type") or "").strip().lower()
+            if (source_type not in {"live_websocket", "tick_store_live"}
+                    or provenance.get("replay_fixture") is True
+                    or provenance.get("non_live_fallback") is True
+                    or provenance.get("recovered_synthetic") is True
+                    or provenance.get("historical_seed") is True):
+                result["skipped"] += 1
+                continue
+            durable_bar = dict(bar)
+            durable_bar["bar_provenance"] = {**provenance, "durable_persisted": True}
+            persistence_started = time.perf_counter()
+            stored = _SESSION_STORE.persist_completed_bar(
+                current_symbol, durable_bar, completed_as_of=cutoff
+            )
+            if stored.get("persisted") is not True:
+                raise RuntimeError(f"COMPLETED_BAR_PERSISTENCE_FAILED:{stored.get('status')}")
+            bar["bar_provenance"] = {
+                **durable_bar["bar_provenance"],
+                "persistence_row_sha256": str(stored.get("row_hash") or ""),
+            }
+            from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+            emit_candle_pipeline_event(
+                symbol=current_symbol, timeframe="1m", stage="T5_BAR_PERSISTED",
+                source_event_ts=cutoff, bucket_start=ts,
+                bucket_end=ts + timedelta(seconds=60), bar_ts=ts,
+                bar_state="COMPLETED_DURABLE", bar_count=len(bars),
+                feed_session_id=provenance.get("live_feed_session_id"),
+                instrument_token=provenance.get("instrument_token"),
+                producer="core.market_event_graph_live_ohlc_buffer",
+                details={
+                    "row_sha256": stored.get("row_hash"),
+                    "store_status": stored.get("status"),
+                    "persistence_latency_ms": (time.perf_counter() - persistence_started) * 1000.0,
+                },
+            )
+            result["persisted"] += int(stored.get("status") == "INSERTED")
+            result["already_durable"] += int(stored.get("status") == "EXISTS")
+    return result
+
+
+def get_live_source_shadow_completed_bars(symbol: str, *, as_of: datetime) -> list[dict[str, Any]]:
+    try:
+        persist_completed_live_source_shadow_bars(as_of=as_of, symbol=symbol)
+        cutoff = as_of.astimezone(IST_TZ) if as_of.tzinfo is not None else as_of.replace(tzinfo=IST_TZ)
+        bars = shadow_ohlc_buffer.get_completed_bars(symbol, as_of=as_of)
+        return [
+            bar for bar in bars
+            if isinstance(bar.get("ts"), datetime)
+            and (bar["ts"].astimezone(IST_TZ) if bar["ts"].tzinfo is not None else bar["ts"].replace(tzinfo=IST_TZ)).date() == cutoff.date()
+        ]
+    except Exception as exc:
+        from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+        emit_candle_pipeline_event(
+            symbol=str(symbol), timeframe="1m", stage="T5_BAR_PERSISTED",
+            source_event_ts=as_of, bar_state="PERSISTENCE_BLOCKED",
+            producer="core.market_event_graph_live_ohlc_buffer",
+            reason=f"{type(exc).__name__}:{exc}",
+        )
+        raise
 
 
 def _capture_identity_from(feed_identity: Mapping[str, Any] | None, *, provider: str, token_domain: str, universe_hash: str) -> dict[str, Any]:
@@ -46,10 +202,22 @@ def _identity_changed(identity: Mapping[str, Any]) -> bool:
     return any(current.get(key) != identity.get(key) for key in ("provider", "token_domain", "universe_hash", "feed_session_id", "feed_epoch", "reconnect_generation"))
 
 
-def _apply_identity(identity: Mapping[str, Any]) -> None:
+def _apply_identity(identity: Mapping[str, Any], *, as_of: datetime) -> None:
     global _ACTIVE_CAPTURE_IDENTITY
     if _identity_changed(identity):
-        reset_live_source_shadow_buffer()
+        # Callback-side identity changes must never query/write SQLite. Keep
+        # only bars whose event-time interval has elapsed; the observer cycle
+        # persists them off the WebSocket callback path.
+        for bars in shadow_ohlc_buffer._bars.values():
+            completed = [
+                bar for bar in bars
+                if isinstance(bar.get("ts"), datetime)
+                and bar["ts"] + timedelta(seconds=60) <= as_of
+            ]
+            bars.clear()
+            bars.extend(completed)
+        _LAST_SOURCE_TICK_EPOCH_BY_TOKEN.clear()
+        _LAST_CUMULATIVE_VOLUME_BY_TOKEN.clear()
         _ACTIVE_CAPTURE_IDENTITY = dict(identity)
 
 
@@ -121,7 +289,6 @@ def record_live_source_shadow_tick(
     except Exception:
         return {"accepted": False, "status": "RECONNECT_GENERATION_MISSING"}
     capture_identity = _capture_identity_from(identity, provider=provider, token_domain=token_domain, universe_hash=universe_hash)
-    _apply_identity(capture_identity)
     if source_tick_epoch is None:
         return {
             "accepted": False,
@@ -141,6 +308,32 @@ def record_live_source_shadow_tick(
         return {"accepted": False, "status": "STALE_OR_REPEATED_TICK", "capture_identity": capture_identity}
 
     tick_dt = datetime.fromtimestamp(tick_epoch, tz=timezone.utc).astimezone(IST_TZ)
+    if _SESSION_STORE is not None and _SESSION_DATE is not None:
+        if tick_dt.date().isoformat() != _SESSION_DATE:
+            return {
+                "accepted": False,
+                "bar_written": False,
+                "status": "SESSION_DATE_MISMATCH",
+                "capture_identity": capture_identity,
+            }
+    try:
+        _apply_identity(capture_identity, as_of=tick_dt)
+        existing = shadow_ohlc_buffer.get_bars(str(symbol).upper())
+        if (existing and existing[-1].get("ts") == tick_dt.replace(second=0, microsecond=0)
+                and bool((existing[-1].get("bar_provenance") or {}).get("durable_persisted"))):
+            return {
+                "accepted": False,
+                "bar_written": False,
+                "status": "LATE_TICK_AFTER_DURABLE_FINALIZATION",
+                "capture_identity": capture_identity,
+            }
+    except Exception as exc:
+        return {
+            "accepted": False,
+            "bar_written": False,
+            "status": f"SESSION_BAR_STORE_BLOCKED:{type(exc).__name__}:{exc}",
+            "capture_identity": capture_identity,
+        }
     offline_fixture = normalized_source_type == "deterministic_test"
     volume_delta, volume_complete, volume_status, next_volume_baseline = _derive_cumulative_volume_delta(
         token=token,
@@ -205,6 +398,9 @@ def record_live_source_shadow_tick(
 
 
 __all__ = [
+    "configure_live_source_session_store",
+    "get_live_source_shadow_completed_bars",
+    "persist_completed_live_source_shadow_bars",
     "record_live_source_shadow_tick",
     "reset_live_source_shadow_buffer",
     "shadow_ohlc_buffer",

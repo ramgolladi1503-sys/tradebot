@@ -270,3 +270,51 @@ def test_overall_state_cannot_be_healthy_with_transport_failure_or_monitored_sym
     assert transport_failure.overall_state == "BLOCKED"
     assert unrelated_degradation.feed_ok is True
     assert unrelated_degradation.overall_state == "OPERATIONAL_DEGRADED"
+def test_symbol_truth_preserves_underlying_identity_evidence_for_rank_scope():
+    from core.feed_health_truth import classify_feed_health_truth
+
+    observation_epoch = 2_000_000_000.0
+    payload = {
+        "feed_ok": True,
+        "feed_ok_scope": "symbol_aggregate",
+        "global_feed_blocked": False,
+        "effective_ws_connected": True,
+        "runtime_state": "RUNNING",
+        "state_machine": {"state": "LIVE"},
+        "ts_epoch": observation_epoch,
+        "feed_session_identity": {
+            "feed_session_id": "session-a",
+            "feed_epoch": 3,
+            "reconnect_generation": 2,
+            "observed_epoch": observation_epoch,
+        },
+        "underlying_feed_identity_by_symbol": {
+            "NIFTY": {
+                "status": "HEALTHY",
+                "symbol": "NIFTY",
+                "identity_domain": "INDEX_SPOT",
+                "instrument_token": 256265,
+                "feed_session_id": "session-a",
+                "feed_epoch": 3,
+                "reconnect_generation": 2,
+                "active_subscription": True,
+                "subscription_succeeded": True,
+                "receipt_epoch": observation_epoch - 0.2,
+                "age_sec": 0.2,
+                "max_age_sec": 2.5,
+                "generated_epoch": observation_epoch,
+            }
+        },
+        "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+        "option_last_tick_age_by_symbol": {"NIFTY": 0.2},
+        "last_tick_age_sec": 0.2,
+        "last_depth_age_sec": 0.5,
+    }
+
+    decision = classify_feed_health_truth(payload, symbols=("NIFTY",))
+
+    row = decision.symbols[0]
+    assert row.feed_ok is True
+    assert row.context["underlying_feed_identity"]["instrument_token"] == 256265
+    assert row.context["feed_session_identity"]["feed_epoch"] == 3
+    assert row.context["observation_epoch"] == observation_epoch

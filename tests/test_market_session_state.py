@@ -34,3 +34,15 @@ def test_before_premarket_remains_closed():
         segment="NSE_FNO",
     )
     assert policy.market_state == MARKET_CLOSED
+
+
+def test_nse_fno_listed_holiday_stays_closed_through_regular_session():
+    policy = derive_market_session_policy(
+        now=datetime(2026, 3, 3, 10, 0, tzinfo=IST_TZ),
+        segment="NSE_FNO",
+    )
+    assert policy.market_state == MARKET_CLOSED
+    assert policy.fresh_ticks_required is False
+    assert policy.persistence_advancement_required is False
+    assert policy.strategies_active is False
+    assert policy.cas_active is False

@@ -3,6 +3,29 @@ from datetime import date, datetime, timedelta
 from config import config as cfg
 from core.time_utils import is_market_open_ist, now_ist
 
+NSE_FNO_2026_HOLIDAYS = frozenset({
+    date(2026, 1, 15),  # NSE/FAOP/72262 amendment: Municipal Corporation Election
+    date(2026, 1, 26),
+    date(2026, 3, 3),
+    date(2026, 3, 26),
+    date(2026, 3, 31),
+    date(2026, 4, 3),
+    date(2026, 4, 14),
+    date(2026, 5, 1),
+    date(2026, 5, 28),
+    date(2026, 6, 26),
+    date(2026, 9, 14),
+    date(2026, 10, 2),
+    date(2026, 10, 20),
+    date(2026, 11, 10),
+    date(2026, 11, 24),
+    date(2026, 12, 25),
+})
+NSE_FNO_HOLIDAY_SOURCE = "https://nsearchives.nseindia.com/content/circulars/FAOP71777.pdf"
+NSE_FNO_HOLIDAY_SOURCE_BY_DATE = {
+    date(2026, 1, 15): "https://nsearchives.nseindia.com/content/circulars/FAOP72262.pdf",
+}
+
 try:
     import holidays
 
@@ -24,6 +47,14 @@ try:
             pass
 except Exception:
     IN_HOLIDAYS = set()
+
+# Preserve existing general-India entries and add exchange-specific closures
+# even when the optional holidays package omits them or is unavailable.
+for _holiday in NSE_FNO_2026_HOLIDAYS:
+    try:
+        IN_HOLIDAYS.append({_holiday.isoformat(): "NSE F&O Trading Holiday"})
+    except AttributeError:
+        IN_HOLIDAYS.add(_holiday)
 
 
 def _coerce_date(value):

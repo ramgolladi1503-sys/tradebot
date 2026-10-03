@@ -1,0 +1,899 @@
+{
+  "adjacent_feed_subscription_depth_tests": "252 passed; 1 warning",
+  "applicable_feed_smoke_gate_20261004": {
+    "command": "PYTHONPATH=. DATA_ROOT=/tmp/tradebot-issues-7-11-feed-smoke-issue9 DB_ROOT=/tmp/tradebot-issues-7-11-feed-smoke-issue9/db LOG_DIR=/tmp/tradebot-issues-7-11-feed-smoke-issue9/logs TRADE_DB_PATH=/tmp/tradebot-issues-7-11-feed-smoke-issue9/db/DEFAULT.sqlite EXECUTION_MODE=PAPER KITE_USE_API=false PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q -o addopts='' tests/test_feed_reconnect_resource_soak.py -m 'feed_smoke and not feed_soak and not certification' --durations=20",
+    "result": "18 passed, 5 deselected, 1 warning in 214.14s; exit code 0.",
+    "scope": "Synthetic feed/resource profiles isolated under /tmp; no live feed or broker calls.",
+    "workflow": ".github/workflows/feed-smoke.yml::feed_smoke"
+  },
+  "broad_regression_current_source": "8724 passed, 9 skipped, 29 deselected, 1474 warnings in 985.62s; exit code 0",
+  "broad_regression_loaded_attempt_20261003": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q --ignore=tests/test_upstox_daily_live_capture.py --ignore=tests/trade_truth/test_raw_tick_expected_separation.py -k 'not test_v5_verifier_deep_primitive_validation'",
+    "disposition": "Retained as a failed loaded run. The research test implementation was not changed because it is outside Issues 7-11; subsequent isolated broad rerun passed.",
+    "failure_reason": "git log --all -S VWAP_RECLAIM exceeded the helper 60-second timeout in both tests.",
+    "failures": [
+      "tests/research/option_e2e/test_signal_ledgers_v4_9.py::test_git_and_filesystem_discovery_execute_bounded_commands",
+      "tests/research/option_e2e/test_signal_ledgers_v4_9.py::test_v4_9_builder_records_discovery_without_false_no_signals"
+    ],
+    "isolation_check": "The two tests passed together in isolation: 2 passed, 1 warning in 80.71s.",
+    "result": "8669 passed, 9 skipped, 29 deselected, 2 failed, 1474 warnings in 995.43s; exit code 1",
+    "status": "FAILED_RESOURCE_SENSITIVE_RETRY_PASSED"
+  },
+  "code_review_status": "REQUIRED_REVIEW_COMPLETE_NO_P0_P1_FINDINGS_AFTER_ISSUE10_TOCTOU_REPAIR; CAMPAIGN_ACCEPTANCE_GATES_OPEN",
+  "continuation_trace_20261003": {
+    "action": "VERIFY, UPDATE_DOCS",
+    "broad_current_source": "8672 passed, 9 skipped, 29 deselected, 1474 warnings in 925.16s; exit code 0",
+    "files_added": [
+      "docs/agent_reviews/issues_7_11_hermes_issue10_writer_boundary.md",
+      "artifacts/issues_7_11/GSD_ISSUE10_WRITER_BOUNDARY_PLAN.md",
+      "artifacts/issues_7_11/ISSUE10_WRITER_MUTATION_RESULTS_20261003.md",
+      "scripts/verify_issues_7_11_issue10_writer_mutation.py"
+    ],
+    "files_updated": [
+      "core/locked_jsonl.py",
+      "core/kite_read_only_observation_runtime.py",
+      "core/reject_shadow.py",
+      "tests/test_kite_read_only_observation_runtime.py",
+      "docs/agent_reviews/issues_7_11_hermes_issue10_writer_boundary.md",
+      "artifacts/issues_7_11/GSD_ISSUE10_WRITER_BOUNDARY_PLAN.md",
+      "scripts/verify_issues_7_11_issue10_writer_mutation.py",
+      "artifacts/issues_7_11/ISSUE10_WRITER_MUTATION_RESULTS_20261003.md",
+      "artifacts/issues_7_11/defect_graph.json",
+      "artifacts/issues_7_11/defect_graph.md",
+      "artifacts/issues_7_11/INDEPENDENT_VERIFICATION.md",
+      "artifacts/issues_7_11/FINAL_VERDICT.json"
+    ],
+    "independence_limit": "Read-only executor trace; no fresh independent agent verifier was run.",
+    "repository_head": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+    "safety": "Narrow candidate-decision telemetry writer and its regression test changed; no candidate-generation, broker/order, live/paper authority, feed, risk, strategy, config, or token-universe behavior changed.",
+    "source_agent": "gsd",
+    "still_open": [
+      "Issue 10 external writer bypass and captured/live parity",
+      "Issue 11 candidate/evaluator dependency isolation and initiating transport/auth cause",
+      "Issues 7/8 historical source authority",
+      "Issue 9 running-service restart and captured/live parity",
+      "Scenarios B/E and campaign-wide mutation closure",
+      "applicable CI and full-scope independent verification"
+    ],
+    "verification": "42 focused tests passed, 1 warning. Multiprocess lock-removal mutant killed in isolated temp copy with source/test hashes unchanged. Current shared-writer tree broad suite: 8672 passed, 9 skipped, 29 deselected, 1474 warnings in 949.64s. Graph JSON/endpoints valid; git diff --check clean.",
+    "worktree_branch": "ram/issues-7-11-graph-repair"
+  },
+  "continuation_verification_20261003": {
+    "action": "VERIFY, UPDATE_DOCS",
+    "broad_current_source": "8671 passed, 9 skipped, 29 deselected, 1474 warnings in 902.81s; exit code 0",
+    "broad_loaded_failure_preserved": "8669 passed, 9 skipped, 29 deselected, 2 failed, 1474 warnings in 995.43s; exit code 1",
+    "broad_retry_disposition": "same two repository-history tests passed in an isolated pair and the subsequent non-overlapping broad rerun passed; unrelated research source was not changed",
+    "focused_campaign_result": "341 passed, 1 warning in 13.44s",
+    "graph_integrity": "121 unique nodes; 124 edges; zero dangling endpoints",
+    "independent_verification_limit": "No new independent agent verifier was run in this continuation; executor evidence is not represented as fresh independent certification.",
+    "issue9_mutation_artifact": "artifacts/issues_7_11/ISSUE9_MUTATION_RESULTS_20261003.md",
+    "repository_head": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+    "safety": "No broker/order calls, live/paper authority changes, credentials, risk/strategy semantics, or token-universe edits in this continuation.",
+    "source_agent": "gsd",
+    "still_open": [
+      "Issues 7/8 authoritative historical input provenance",
+      "Issue 9 actual running-service restart and captured/live parity",
+      "Issue 10 captured/live parity and multi-process writer semantics",
+      "Issue 11 candidate-level dependency isolation and initiating transport/auth cause",
+      "Scenarios B/E and governed candidate/evaluator C/D composition",
+      "campaign-wide mutations and full-scope independent verification",
+      "applicable CI status"
+    ],
+    "targeted_mutations": {
+      "issue10": "2/2 killed",
+      "issue11_loader_origin": "1/1 killed",
+      "issue7": "3/3 killed",
+      "issue8": "6/6 killed",
+      "issue9": "2/2 killed"
+    },
+    "worktree_branch": "ram/issues-7-11-graph-repair"
+  },
+  "execution_viability": "UNKNOWN",
+  "focused_campaign_tests": "post-Hermes-scope-correction feed/safety/shadow/observer regression: 116 passed, 1 skipped, 1 warning; separate Issues 7-11 heritage/store/EOD/feed suite: 368 passed, 1 skipped before the final observer event-time patch",
+  "fresh_independent_full_scope_audit": {
+    "adversarial_suite": "22 passed",
+    "audit_artifact": "artifacts/issues_7_11/INDEPENDENT_VERIFICATION.md",
+    "fresh_attack": "effective_ws_connected=\"true\" with legacy ws_connected=true blocks actual producer with cas_shared_feed_unhealthy_or_unknown and emits no CAS inputs",
+    "graph": "135 unique nodes, 142 edges, zero dangling endpoints",
+    "mutation": "prior OR transport mutant killed; no source/test hash change",
+    "remaining_open": [
+      "Issues 7/8 source authority",
+      "Issue 9 service restart and captured parity",
+      "Issue 10 external writer and captured parity",
+      "Issue 11 generic candidate isolation and initiating cause",
+      "Scenarios B/E",
+      "campaign-wide mutation closure",
+      "Issues 1\u20136 exact-current-source rerun",
+      "applicable CI"
+    ],
+    "result": "BOUNDED_PASS_FOR_ISSUE11_CAS_TRANSPORT_ONLY; CAMPAIGN_NOT_COMPLETE"
+  },
+  "fresh_issue9_verifier_attack": "Persisted ts_epoch shifted -60/+60 seconds while preserving ts_ist and row hash; pre-fix -60s shift caused pre-completion as-of inclusion and integrity PASS. Post-fix load rejects both; integrity reports timestamp_epoch_mismatch.",
+  "fresh_issues_1_6_preservation_rerun": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_kite_depth_ws_stability.py tests/test_depth_subscription_tokens.py tests/test_market_event_graph_live_observation_registry.py tests/test_market_event_graph_live_launch_plan.py tests/test_depth_persistence_batching.py tests/test_depth_store_accounting.py tests/test_market_event_graph_live_runtime_bridge.py tests/test_governed_morning_orchestrator.py tests/test_feed_recovery_coordinator.py tests/test_check_option_pipeline_health.py tests/test_subscription_truth_contract.py tests/test_pulse_issues_and_feed_consistency.py",
+    "exit_code": 0,
+    "result": "221 passed, 1 warning in 25.67s",
+    "scope_limit": "Exact current worktree offline preservation regression; does not prove Issues 1\u20136 live operational resolution."
+  },
+  "full_suite_excluding_upstox_module": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q --ignore=tests/test_upstox_daily_live_capture.py",
+    "environment_limit": "tests/test_upstox_daily_live_capture.py not collected because upstox_client is unavailable in the selected Python environment",
+    "exit_code": 0,
+    "focused_verification": "tests/core/test_market_session_runtime_bridge.py tests/test_market_data_warm_seed.py tests/core/test_market_session_store.py tests/test_c1_c2_regime_decoupling.py: 60 passed, 1 warning in 5.83s",
+    "pre_fix_reproduction": "Earlier clean broad run reproduced 6 warm-seed failures caused by durable-store state leakage across tests.",
+    "repair": "Scoped each explicit runtime-bridge test store attachment and isolated historical warm-seed tests from unrelated durable singleton state.",
+    "result": "8614 passed, 9 skipped, 28 deselected, 1474 warnings in 802.86s",
+    "scope_limit": "Offline regression only; campaign acceptance gates and captured/live runtime parity remain open."
+  },
+  "grill_me_review": "artifacts/issues_7_11/GRILL_ME_REVIEW_20261003.md",
+  "health_gate_disposition": {
+    "reason": "The CI health gate invokes core.health_scenarios.run_golden_path, which calls MockBroker.place_order. The project AGENTS.md forbids agents from placing orders; no synthetic order action was initiated.",
+    "state": "NOT_RUN_BY_REPOSITORY_SAFETY_RULE"
+  },
+  "implementation_valid": false,
+  "issue11_registry_identity_coverage": {
+    "finding": "Verified INDEX_OPTIONS with an empty identity list, and separately an empty-string identity with a matching healthy map key, passed validation/resolution as execution eligible before repair.",
+    "focused_tests": "61 passed, 1 warning in 12.70s",
+    "limits": [
+      "does not provide runtime feed_health_by_identity for dynamic futures/options",
+      "does not establish captured/live parity",
+      "overall campaign acceptance remains false"
+    ],
+    "mutation": "2/2 killed; validator and eligibility mutants each failed their named assertion sentinel; checkout source/test hashes unchanged",
+    "repair": "Validation and execution_eligible require exact required-domain coverage and nonempty trimmed string identities; dynamic (domain, None) remains unresolved and ineligible.",
+    "source_sha256": "07de4dafa4e79d40b269d479ec806154ae9d8cef2072bac579bb490d64e23014",
+    "test_sha256": "4bdef3f55db6ff7f949670d90bca894bc21b57ada6a13fb4812a18e28b092799"
+  },
+  "issue11_transport_contradiction_fix": {
+    "focused_result": "51 passed, 1 warning in 3.04s",
+    "gsd_plan": "artifacts/issues_7_11/GSD_ISSUE11_CAS_DEPENDENCY_PLAN.md",
+    "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_issue11_transport_consistency.md",
+    "live_verified": false,
+    "new_config_keys": [],
+    "overall_campaign_acceptance": false,
+    "transport_mutation": "prior OR behavior mutant killed; source/test hashes unchanged"
+  },
+  "issue7_additional_acquisition_report_recheck": {
+    "disposition": "UNKNOWN_T1_TARGET_SOURCE_AND_LINEAGE_NOT_ESTABLISHED",
+    "independent_verification": "Fresh read-only reviewer recomputed/confirmed all four listed artifact SHA-256 values and report metadata; confirmed no parquet files at any depth in the acquisition directory, 15 top-level files, end date 2026-08-25, SOURCE_SHA UNKNOWN, and target 2026-09-30 outside range. Independent reviewer confirms acquisition authority declaration is not reproducible without the absent dataset payload.",
+    "payload_found_in_report_directory": false,
+    "reason": "The report claims historical futures availability and granted authority, but its source SHA is UNKNOWN, no parquet payload exists in the inspected acquisition directory, and its range ends before the target date. The capture for 2026-09-30 still contains no futures symbols. Metadata assertions are not content or event-lineage authority.",
+    "report_path": "/Volumes/TradeBotData/antigravity_upstox_data_acquisition_research_unblock_v1_20260829/FINAL_REPORT.json",
+    "report_sha256": "e62107d74c78612f85dd2bd65c0e99cc3172d2bebdfeafe4c7e4f06cc78748e8",
+    "reported_end_date": "2026-08-25",
+    "reported_rows": 506423,
+    "reported_sessions": 516,
+    "required_t1_date": "2026-09-30",
+    "safety": "Read-only inspection; no files on the data mount changed; no broker/order calls.",
+    "source_sha": "UNKNOWN"
+  },
+  "issue7_additional_data_source_recheck": {
+    "disposition": "UNKNOWN_T1_SOURCE_AND_MANIFEST_AUTHORITY_NOT_ESTABLISHED; no data mounted files modified.",
+    "expiry_range": "2024-10-31 through 2026-08-25",
+    "finding": "Contract metadata only; no market bars, prices, source-event IDs, or event timestamps; does not establish the 2026-09-30 15:29 T-1 futures bar or lineage.",
+    "path": "/Volumes/TradeBotData/antigravity_upstox_data_acquisition_research_unblock_v1_20260829/NIFTY_FUTURES_CONTRACT_INVENTORY.csv",
+    "rows": 23,
+    "sha256": "a6f391bbcece00582d09cf8de07f02b22845aabe2cc7ff1c967d81e41ca02b46"
+  },
+  "issue7_calendar_edge_tests": {
+    "attack": "Temporary target-minus-one-calendar-day mutant was killed by both calendar cases.",
+    "full_heritage_suite": "69 passed, 1 warning in 5.74s",
+    "limits": [
+      "Supplied calendar records only; no validation of full external calendar completeness",
+      "No prerequisite values or source files changed",
+      "Issue 7 target-date futures data/source lineage remains UNKNOWN"
+    ],
+    "mutation_command": "PATH=/tmp/tradebot-test-python-bin:$PATH python3 scripts/verify_issues_7_11_issue7_mutations.py",
+    "mutation_result": "5/5 killed",
+    "new_cases": [
+      "Monday target skips ineligible Saturday/Sunday records to Friday",
+      "Wednesday after the explicit NSE holiday skips the holiday to Monday"
+    ],
+    "status": "PASS_BOUNDED_OFFLINE",
+    "targeted_result": "3 passed, 1 warning"
+  },
+  "issue7_canonical_corpus_target_date_recheck": {
+    "disposition": "UNKNOWN_T1_SOURCE_AND_MANIFEST_AUTHORITY_NOT_ESTABLISHED; existing prerequisite loader remains fail-closed.",
+    "finding": "Neither named aligned payload contains a 2026-09-30 session row; both end 2026-07-28. Repo file SHA matches V3 registry. V3 quality reports one invalid OHLC row and limited volume/OI semantics.",
+    "gsd_plan": "artifacts/issues_7_11/GSD_T1_CAPTURE_RECHECK_PLAN.md",
+    "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_issue7_canonical_corpus_recheck.md",
+    "limits": "Bounded to named registered/repaired payloads, V3 metadata, and the named Sep. 30 stitched capture. Does not rule out every unregistered external source; processed provenance remains partial. No values staged.",
+    "repaired_v2_payload": {
+      "path": "/Volumes/TradeBotData/NIFTY_SPOT_FUTURES_ALIGNED_V2_repaired.parquet",
+      "rows": 185680,
+      "session_range": [
+        "2024-07-26",
+        "2026-07-28"
+      ],
+      "sha256": "0108b00bcf62f2b42621fb3b3919b69d3faf6bc362776232c1faff8131107f9a",
+      "target_session_rows": 0
+    },
+    "repo_payload": {
+      "path": "/Users/madhuram/tradebot/data/research/nifty_futures_alignment_v1/NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet",
+      "rows": 185681,
+      "session_range": [
+        "2024-07-26",
+        "2026-07-28"
+      ],
+      "sha256": "2311981231d3fb847a216c9165ef73c3e7b788ab354d6de493ab1a5edb32e7a9",
+      "target_session_rows": 0
+    },
+    "source_agent": "hermes"
+  },
+  "issue7_holiday_calendar_alignment": {
+    "changes": [
+      "Centralized the NSE F&O 2026 dates/source in core.market_calendar.",
+      "Added January 15 source from official amendment FAOP/72262.",
+      "Live-session preflight imports the shared date/source set."
+    ],
+    "focused_command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_market_session_state.py tests/test_market_event_graph_live_session_preflight.py tests/test_expiry_selection.py tests/test_market_heritage_graph.py",
+    "focused_result": "81 passed, 1 warning in 9.61s",
+    "limits": [
+      "Calendar alignment does not establish T-1 futures values, contract identity, or source lineage.",
+      "No calendar completeness claim beyond the represented 2026 source and amendment.",
+      "Overall Issues 7\u201311 acceptance remains false."
+    ],
+    "mutation_command": "PATH=/tmp/tradebot-test-python-bin:$PATH python3 scripts/verify_issues_7_11_issue7_mutations.py",
+    "mutation_result": "5/5 killed; checkout source and test hashes unchanged.",
+    "official_sources": [
+      "https://nsearchives.nseindia.com/content/circulars/FAOP71777.pdf",
+      "https://nsearchives.nseindia.com/content/circulars/FAOP72262.pdf"
+    ],
+    "root_cause": "Live preflight had a versioned NSE F&O 2026 holiday set while shared session/expiry consumers used an incomplete separate IN_HOLIDAYS set; five exchange dates were missing, including March 3, and the later January 15 amendment was absent.",
+    "status": "PASS_BOUNDED_OFFLINE"
+  },
+  "issue7_verified_adapter_input_wiring": {
+    "assertions": "Exact T-1 loader values compared to actual adapter fields (prior futures key/close, overnight prior close/SMA200); nonempty current target expiry from a separate synthetic launch-plan input compared to Opening Drive adapter field; actual pulse dispatch still asserted.",
+    "disposition": "PASS_OFFLINE_SYNTHETIC_WIRING_ONLY; historical T-1 authority remains UNKNOWN.",
+    "limit": "Synthetic fixture only. Does not establish target-date futures source, event lineage, live prerequisite admission, or Issue 7 closure.",
+    "mutation": "scripts/verify_issues_7_11_issue7_adapter_input_mutation.py misroutes nonempty target expiry to None; the exact expiry assertion fails. Harness requires that assertion and AssertionError; source/test hashes unchanged.",
+    "test": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_market_heritage_graph.py::test_scenario_a_verified_t1_clean_boot_reaches_shadow_evaluators: 1 passed, 1 warning in 1.55s."
+  },
+  "issue9_fresh_process_restart_replay": {
+    "focused_command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/core/test_market_session_runtime_bridge.py::test_fresh_interpreter_restart_restores_completed_bars_and_evaluates_c1",
+    "focused_result": "1 passed, 1 warning in 10.78s",
+    "limits": [
+      "Deterministic synthetic replay, not captured market data",
+      "Not a managed service lifecycle/restart",
+      "No power-loss proof",
+      "No captured/live C1 or C2 parity",
+      "No PAPER/LIVE/order authority"
+    ],
+    "proof": "Writer and reader are distinct Python subprocesses. Writer installs the existing bridge and persists 30 completed deterministic_test bars to a temporary DB. Reader installs a fresh bridge/store, restores exact first/last bar timestamps/count, then actual C1 evaluator returns C1_QUALIFIED and one candidate using separately supplied fresh synthetic cycle-time evidence.",
+    "regression_command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/core/test_market_session_runtime_bridge.py tests/core/test_market_session_store.py",
+    "regression_result": "29 passed, 1 warning in 9.86s",
+    "status": "PASS_BOUNDED_OFFLINE",
+    "test": "tests/core/test_market_session_runtime_bridge.py::test_fresh_interpreter_restart_restores_completed_bars_and_evaluates_c1"
+  },
+  "issue9_process_death_recovery": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/core/test_market_session_store.py::test_process_death_before_store_context_commit_rolls_back_insert tests/core/test_market_session_store.py",
+    "limits": [
+      "One SQLite transaction interruption point only",
+      "No actual service restart or captured/live parity",
+      "No OS/power-loss guarantee",
+      "Overall Issues 7\u201311 acceptance remains false"
+    ],
+    "mutation": {
+      "checkout_hashes": "Production source and test hashes unchanged according to harness.",
+      "command": "PATH=/tmp/tradebot-test-python-bin:$PATH python3 scripts/verify_issues_7_11_issue9_mutations.py",
+      "mutants": [
+        "commit_completed_bar_before_context_exit",
+        "remove_event_time_completion_cutoff",
+        "remove_immutable_duplicate_hash_guard"
+      ],
+      "result": "3/3 killed",
+      "scope_limit": "Targeted Issue 9 guards only; not a campaign-wide mutation score or live restart proof."
+    },
+    "proof": "Child verifies the actual row is visible inside the uncommitted transaction after persist_completed_bar INSERT, then exits via os._exit(73) before context commit; fresh store has no row and SQLite integrity_check is ok.",
+    "result": "19 passed, 1 warning",
+    "status": "PASS_BOUNDED_OFFLINE",
+    "test": "tests/core/test_market_session_store.py::test_process_death_before_store_context_commit_rolls_back_insert"
+  },
+  "issue_10_eod_parity_verification": {
+    "analytics_suite": "pytest -q tests/analytics: 75 passed, 1 warning in 1.68s",
+    "focused_result": "1 passed, 1 warning in 1.75s",
+    "focused_test": "pytest -q tests/analytics/test_issues_7_11_eod_row_parity.py",
+    "gsd_plan": "artifacts/issues_7_11/GSD_EOD_PARITY_PLAN.md",
+    "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_eod_parity.md",
+    "limit": "Offline fixture only; captured/live row-set parity and external writers bypassing the canonical locked helper remain unverified.",
+    "proof": "Two advisory IDs matched the session ledger; EOD diagnostics matched the resolved ledger path, SHA-256, two valid rows, and zero malformed rows; trade-intent event count remained zero."
+  },
+  "issue_10_external_append_rollback_latest_verification": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_kite_read_only_observation_runtime.py tests/test_reject_shadow_eval.py tests/core/test_runtime_snapshot_producer.py tests/analytics/test_issues_7_11_eod_row_parity.py",
+    "limits": "Does not serialize non-cooperating writers or establish their inventory/captured parity.",
+    "mutation": "Both remove_exclusive_candidate_log_lock and unconditional_external_append_rollback mutants killed against final source; temporary copies only; checkout hashes unchanged",
+    "result": "53 passed, 1 warning in 4.36s",
+    "safety": "No decision generation, routing, execution, broker, order, risk, feed, strategy, credential, or token-universe behavior changed.",
+    "source_sha256": "68ce2ff7c4a2dbedc91b8c18b7d783021948c08a0b71d64f398308c7b3cb26fe",
+    "test_sha256": "1db2bf379e3f7dd3407e3f81710c0dd240d10ea71a5c39f0b0cce426073efee4"
+  },
+  "issue_10_latest_focused_verification": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_kite_read_only_observation_runtime.py tests/test_reject_shadow_eval.py tests/core/test_runtime_snapshot_producer.py tests/analytics/test_issues_7_11_eod_row_parity.py: 53 passed, 1 warning in 10.25s; includes consumer parse_error/zero-row assertion after malformed interleaved append. Independent reviewer confirms bounded behavior.",
+  "issue_10_writer_boundary": {
+    "broad_regression": "8672 passed, 9 skipped, 29 deselected, 1474 warnings in 949.64s; exit code 0.",
+    "external_append_rollback": {
+      "contract": "No fstat/ftruncate cleanup on append failure; preserves all bytes, logs and propagates original error. Actual advisory parser emits parse_error and admits zero rows for malformed concatenated bytes.",
+      "focused_result": "53 passed, 1 warning in 10.25s",
+      "gsd_plan": "artifacts/issues_7_11/GSD_ISSUE10_EXTERNAL_APPEND_ROLLBACK_PLAN.md",
+      "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_issue10_external_append_rollback.md",
+      "independent_review": "Fresh independent review found old check-then-truncate TOCTOU and confirmed revised no-truncate handler removes that deletion window; consumer-level malformed-row assertion closes silent-acceptance concern.",
+      "limits": "Foreign row may not be recoverable as a distinct JSONL record when appended behind a partial prefix. Bypass writers remain non-atomic and external writer inventory/captured-live parity remain UNKNOWN.",
+      "mutation": "scripts/verify_issues_7_11_issue10_rollback_mutation.py killed temporary destructive ftruncate(fd, 0) mutant; checkout source/test hashes unchanged",
+      "repair": "Failed append handler never performs fstat/ftruncate rollback; it logs and propagates original error. Partial tail may remain. Actual advisory consumer reports parse_error and admits zero rows when partial bytes concatenate with foreign append.",
+      "source_sha256": "2c7812f9e51b704ea90ac00672dc0cd694c714f81f7fb1511e1055e749e1d142",
+      "test_sha256": "daf1ed330feca4dfcb80740874fba1c2f4bf1d9bc403eb06f375e63a689127a2"
+    },
+    "focused_test": "42 passed, 1 warning: observer runtime, reject-shadow, snapshot producer, EOD row parity. Multiprocess test forces 1 KB writes, verifies 64 complete rows and contiguous batches.",
+    "gsd_plan": "artifacts/issues_7_11/GSD_ISSUE10_WRITER_BOUNDARY_PLAN.md",
+    "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_issue10_writer_boundary.md",
+    "limit": "Only the two known in-repository writer paths cooperate with this helper. External writer bypass and captured/live parity remain UNKNOWN.",
+    "mutation": "python3 scripts/verify_issues_7_11_issue10_writer_mutation.py: remove_exclusive_candidate_log_lock mutant killed; checkout source/test hashes unchanged.",
+    "repair": "Cross-process flock serializes cooperating writers over complete batches. Failed appends are logged and propagated without any in-place truncation; partial bytes may remain and are surfaced by advisory JSONL parsing.",
+    "shared_helper": "core/locked_jsonl.py::append_jsonl_batch; both core/kite_read_only_observation_runtime.py and core/reject_shadow.py call it."
+  },
+  "issue_11_candidate_health_boundary": {
+    "disposition": "PARTIAL_OFFLINE: CAS-local declared NIFTY spot dependency is now gated and composed through actual offline evaluator; generic candidate/evaluator isolation remains UNKNOWN.",
+    "gap": "Generic candidate feed_health_by_identity / required_feed_identities producer remains absent. CAS-local health is checked on the candidate-specific bridge only; does not establish initiating incident cause or live parity.",
+    "repository_trace": "CAS candidate input uses verified captured source events and now also gates against current fresh exact NIFTY spot health before actual advisory evaluator. Generic registry identity-health coverage is not produced in this runtime path."
+  },
+  "issue_11_cas_dependency_addendum": {
+    "action": "PATCH, GENERATE_TESTS, VERIFY, UPDATE_DOCS",
+    "broad_result": "8702 passed, 9 skipped, 29 deselected, 1474 warnings in 942.56s; exit code 0, bound to latest_broad_regression",
+    "focused_result": "176 passed, 1 deselected, 1 warning in 3.16s including V23 production-equivalent harness and CAS/feed/evaluator suites",
+    "gsd_plan": "artifacts/issues_7_11/GSD_ISSUE11_CAS_DEPENDENCY_PLAN.md",
+    "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_issue11_cas_dependency.md",
+    "limit": "Broad offline regression is green. Generic candidate isolation, initiating live transport/auth cause, historical authority, and captured/live parity remain UNKNOWN.",
+    "mutation": "scripts/verify_issues_7_11_issue11_cas_dependency_mutation.py killed removal of required NIFTY spot predicate; source/test hashes unchanged",
+    "new_config_keys": [],
+    "safety": {
+      "allowed_for_live_execution": false,
+      "broker_api_called": false,
+      "is_order_action": false,
+      "paper_authorized": false,
+      "read_only": true
+    },
+    "scope": "CAS declared INDEX_SPOT/NIFTY advisory dependency only; actual producer-to-evaluator C/D offline composition",
+    "source_agent": "gsd",
+    "transport_consistency_contract": "docs/agent_reviews/issues_7_11_hermes_issue11_transport_consistency.md",
+    "transport_focused_result": "51 passed, 1 warning in 3.04s",
+    "transport_mutation": "scripts/verify_issues_7_11_issue11_transport_mutation.py killed restoration of prior OR behavior; source/test hashes unchanged"
+  },
+  "issue_11_cross_symbol_hold_isolation": {
+    "contract": "Only explicit certified symbol_aggregate decisions may isolate other-symbol local option freshness reasons after exact target underlying token/session/epoch/reconnect/subscription/receipt-age/SLA validation; unknown/global/persisted/recovery/transport conditions keep aggregate hold.",
+    "disposition": "PARTIAL_OFFLINE_BOUNDED_REPAIR; full Issue 11 acceptance remains UNKNOWN/open.",
+    "implementation_files": [
+      "core/kite_depth_ws.py",
+      "core/feed_health_truth.py",
+      "core/feed_hold_gate.py",
+      "core/ranking_orchestrator.py"
+    ],
+    "limits": "Offline only. Exact dynamic same-symbol option/futures contract dependency is still absent; initiating auth/transport cause, captured/live parity, full scenario/mutation matrix, independent full-scope verification, remote CI, and campaign acceptance remain unresolved.",
+    "mutation": "scripts/verify_issues_7_11_issue11_symbol_scope_mutation.py: forced-all-symbols-healthy mutant killed; checkout source/test hashes unchanged.",
+    "safety": {
+      "allowed_for_live_execution": false,
+      "append": false,
+      "broker_api_called": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "tests": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_pr_feed_03_feed_hold_gate.py tests/test_ranking_orchestrator.py tests/test_feed_runtime_states.py tests/test_edge43_feed_health_truth.py tests/test_feed_truth_snapshot_ranking_contract.py: 87 passed, 1 warning in 5.03s."
+  },
+  "issue_11_hermes_scope_correction": {
+    "finding": "An independent verifier found shared feed-health and symbol-safety edits exceeded the Hermes Stage 1 observer-consumer scope.",
+    "remaining": "Candidate-level isolation under local option degradation remains unverified and was not widened.",
+    "repair": "Removed the shared classifier and candidate-safety exceptions and their direct tests; retained only read-only shadow consumer normalization and observer event-time protections.",
+    "verification": "pytest -q tests/test_edge43_feed_health_truth.py tests/test_edge45_symbol_execution_safety.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/replay/test_governed_market_replay.py tests/core/test_runtime_snapshot_producer.py tests/test_kite_read_only_observation_runtime.py: 116 passed, 1 skipped, 1 warning in 7.50s"
+  },
+  "issue_11_latest_focused_verification": "post-scope-correction pytest -q tests/test_edge43_feed_health_truth.py tests/test_edge45_symbol_execution_safety.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/replay/test_governed_market_replay.py tests/core/test_runtime_snapshot_producer.py tests/test_kite_read_only_observation_runtime.py: 116 passed, 1 skipped, 1 warning in 7.50s; shared classifier and candidate safety match HEAD",
+  "issue_11_mixed_symbol_score_scope": {
+    "disposition": "BOUNDED_OFFLINE_FAIL_CLOSED_GUARD_VERIFIED; full Issue 11 remains open.",
+    "limits": "Does not prove candidate exact option/futures dependency health, captured/live parity, or complete Issue 11/campaign acceptance.",
+    "mutation": "scripts/verify_issues_7_11_issue11_mixed_symbol_mutation.py requires the exact ranked_candidate_count==0 assertion and AssertionError; pool-symbol trust mutant killed; checkout hashes unchanged.",
+    "repair": "core/ranking_orchestrator.py passes an explicit symbol only for nonempty, homogeneous, nonblank score symbols matching the pool symbol; otherwise it retains aggregate feed hold.",
+    "reproduction": "New integration test failed before fix: mixed NIFTY/BANKNIFTY score report returned 2 ranks using NIFTY explicit-symbol scope.",
+    "root_cause": "The ranking orchestrator scoped every score by CandidatePoolReport.symbol without proving all generator-returned candidates shared that symbol.",
+    "safety": {
+      "allowed_for_live_execution": false,
+      "append": false,
+      "broker_api_called": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "test": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_ranking_orchestrator.py: 12 passed, 1 warning in 2.85s."
+  },
+  "issue_11_persisted_snapshot_contract": {
+    "authority": "read-only=true; is_order_action=false; broker_api_called=false; broker/order/paper/live authority unchanged",
+    "broad_regression_attempt": {
+      "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q --ignore=tests/test_upstox_daily_live_capture.py --ignore=tests/trade_truth/test_raw_tick_expected_separation.py -k 'not test_v5_verifier_deep_primitive_validation'",
+      "exclusions": [
+        "tests/test_upstox_daily_live_capture.py: upstox_client dependency unavailable",
+        "tests/trade_truth/test_raw_tick_expected_separation.py: scans large external stitched capture",
+        "test_v5_verifier_deep_primitive_validation: capture-backed test stalled in a prior run"
+      ],
+      "prior_loaded_attempt": "A loaded run had two 60-second git-history search timeouts; both focused tests and a subsequent isolated broad run passed.",
+      "result": "8671 passed, 9 skipped, 29 deselected, 1474 warnings in 902.81s; exit code 0",
+      "status": "PASS_WITH_EXPLICIT_EXCLUSIONS"
+    },
+    "files": [
+      "core/feed_health_truth.py",
+      "config/feed_runtime_reliability.py",
+      "tests/test_feed_truth_snapshot_ranking_contract.py",
+      "tests/test_feed_runtime_reliability_config.py"
+    ],
+    "focused_command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/behavior/feed/test_feed_truth_no_room_for_error_matrix.py tests/test_edge43_feed_health_truth.py tests/test_edge_80_no_trade_oracle.py tests/test_feed_truth_snapshot_ranking_contract.py tests/test_pr_feed_03_feed_hold_gate.py tests/test_pr_feed_04_feed_recovery_warmup_gate.py tests/test_pr_feed_20r_feed_fault_replay_tests.py tests/test_ranking_orchestrator.py tests/test_edge45_symbol_execution_safety.py",
+    "focused_result": "143 passed, 1 deselected, 1 warning in 4.47s across integration, artifact loader, config, feed classifier, ranking, runtime status and integrity tests",
+    "gsd_plan": "artifacts/issues_7_11/GSD_ISSUE11_PERSISTED_FEED_TRUTH_PLAN.md",
+    "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_issue11_persisted_feed_truth_contract.md",
+    "independent_verifier": "BOUNDED_PASS: source-label, empty/transport-only, timestamp-age/config, explicit-symbol scope, and malformed-age probes; independent focused suite 41 passed, 1 deselected, 1 warning.",
+    "limit": "Offline classifier/ranking contract only; no live parity; candidate-level identity isolation remains UNKNOWN.",
+    "loader_origin_followup": {
+      "attack": "Canonical file payload stripped all snapshot markers and injected feed_ok=true, ws_connected=true, and fresh legacy LTP age; the loader previously allowed one rank.",
+      "gsd_plan": "artifacts/issues_7_11/GSD_ISSUE11_LOADER_ORIGIN_PLAN.md",
+      "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_issue11_loader_origin.md",
+      "limit": "Path marker identifies loader path only; it does not authenticate bytes, prove freshness beyond existing age gate, or establish candidate-level isolation/live parity.",
+      "mutation": "python3 scripts/verify_issues_7_11_issue11_loader_origin_mutations.py killed remove_canonical_loader_origin; checkout hashes unchanged.",
+      "regression": "tests/test_feed_truth_snapshot_ranking_contract.py exercises real loader-to-ranking path; 341-test focused campaign run and broad rerun pass.",
+      "repair": "Canonical feed_truth_latest.json loader overwrites reserved loader-origin metadata; classifier then requires the persisted snapshot contract and fails closed on missing/unsupported source."
+    },
+    "mutation": "Recognized-source identifier was temporarily mutated; producer-snapshot assertions failed closed (1 failed, 19 passed); mutation was restored and exact focused suite rerun successfully.",
+    "new_config_key": {
+      "default": 3.0,
+      "name": "FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC",
+      "purpose": "Maximum consumer age for persisted producer-time feed freshness, aligned with the existing FEED_RECOVERY_MAX_GAP_SEC"
+    },
+    "repair": "classifier recognizes snapshot signature independent of label; validates exact source/components, finite nonfuture generated_epoch under FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC=3.0 default; exact finite nonnegative numeric ages; absent/opaque authority holds; compatibility requires explicit top-level feed_ok, complete scoped symbol health, or finite LTP age plus supplied SLA",
+    "reproduction": "Pre-fix serialized output from build_feed_truth_snapshot with feed_fresh=false and ws_connected=true ranked one eligible score; absent and malformed feed_fresh also ranked it",
+    "rollout": "Offline only; no runtime rollout authorized. Before any future deployment, measure writer/consumer cadence and ensure it fits the 3-second default; explicit environment override only from measured cadence, retaining fail-closed behavior."
+  },
+  "issue_9_11_event_time_attack": {
+    "finding": "read-only observer used quote-book ts_epoch to measure LTP age and asserted is_executable_quote=true",
+    "repair": "derive age only from finite, nonfuture last_price_ts_epoch; observer executable quote remains false",
+    "result": "covered by latest focused set; stale/missing/future event timestamp attacks remain stale/unknown",
+    "test": "tests/test_kite_read_only_observation_runtime.py::test_run_observation_dispatches_native_pulse_to_shadow_registry"
+  },
+  "issue_9_latest_current_source_recheck": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/core/test_market_session_runtime_bridge.py tests/core/test_market_session_store.py tests/test_primary_runtime_c1_c2_integration.py tests/test_market_session_state.py",
+    "limits": "Offline regression only; no actual managed-service restart or captured/live parity.",
+    "mutation": "Issue 9 3/3 current-source targeted mutants killed; checkout hashes unchanged",
+    "result": "40 passed, 1 warning in 10.98s"
+  },
+  "issue_9_meg_shadow_session_isolation": {
+    "broad_regression": "Exact current-source broad offline regression passed 8740 tests, 9 skipped, 29 deselected, 1474 warnings in 910.84s; exit 0.",
+    "disposition": "BOUNDED_OFFLINE_OBSERVER_DATE_BOUNDARY_REPAIR_VERIFIED; EXTERNAL_RUNTIME_PARITY_UNKNOWN",
+    "feed_smoke": "Post-MEG .github/workflows/feed-smoke.yml path gate passed: 18 passed, 5 deselected, 1 warning in 216.45s; isolated /tmp paths; synthetic only.",
+    "independent_review": "Fresh read-only reviewer found no P1/P2 issue; confirmed IST normalization, persistence-before-read ordering, buffer preservation, and exact projection-only mutation. Runtime ingress canonicalizes source event times to IST.",
+    "limits": "Read-only observer offline proof only. Fresh independent review, exact-current-source broad regression, and post-change Feed Smoke are pending; managed-service and captured/live parity remain UNKNOWN.",
+    "mutation": "scripts/verify_issues_7_11_issue9_meg_session_mutation.py removes only the output date predicate; exact timestamp-set assertion fails and source/test hashes are unchanged.",
+    "red_reproduction": "With two completed 2026-09-07 bars and a 2026-09-08 cutoff, the pre-fix shadow reader returned both prior-date bars.",
+    "repair": "The observer output is filtered by the requested as_of Asia/Kolkata calendar date. The shadow buffer and persistence behavior are unchanged.",
+    "root_cause": "The MEG completed-bar helper returned raw process-local shadow rows after the configured persistence helper skipped a mismatched session date.",
+    "safety": {
+      "allowed_for_live_execution": false,
+      "append": false,
+      "broker_api_called": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "tests": "pytest -q tests/test_market_event_graph_live_ohlc_buffer.py tests/test_market_event_graph_live_runtime_bridge.py: 45 passed, 1 warning in 1.86s."
+  },
+  "issue_9_mutation_verification": {
+    "baseline": "2 passed, 1 warning in 1.44s",
+    "gsd_plan": "artifacts/issues_7_11/GSD_ISSUE9_MUTATION_PLAN.md",
+    "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_issue9_mutation_contract.md",
+    "limit": "Two Issue 9 guards only; no process-kill crash test, running-service restart, or captured/live parity.",
+    "mutants": [
+      "remove_event_time_completion_cutoff",
+      "remove_immutable_duplicate_hash_guard"
+    ],
+    "mutation_result": "2/2 targeted source mutants killed in temporary copies; checkout hashes unchanged",
+    "result_artifact": "artifacts/issues_7_11/ISSUE9_MUTATION_RESULTS_20261003.md",
+    "source_sha256": "50e89cfd40dbfe052773eda008fec23a4dabcebf9c877b4582e4f09341791551",
+    "test_sha256": "95250a1e1496e2206ca0a0c1b3f6e809f9b89496f7fcaf64f29534884c05709b"
+  },
+  "issue_9_primary_runtime_integration": {
+    "command": "PYTHONPATH=. pytest -q tests/core/test_market_session_runtime_bridge.py::test_normal_trusted_tick_restart_path_hydrates_c1_from_durable_bars",
+    "limit": "offline integration fixture; no running-service restart or captured/live parity",
+    "proof": "trusted source-time ticks finalized immutable completed rows; process-local bars were cleared; the exact same-date completed rows restored; C1 consumed them from a fresh MarketSessionStore; current feed freshness was independently required",
+    "result": "1 passed, 1 warning",
+    "test": "tests/core/test_market_session_runtime_bridge.py::test_normal_trusted_tick_restart_path_hydrates_c1_from_durable_bars"
+  },
+  "issue_9_runtime_bridge_verification": {
+    "certification_command": "PYTHONPATH=. python3 scripts/certify_market_session_memory.py --output /tmp/issues_7_11_market_session_memory_certification.json",
+    "certification_result": "10/10 gates passed",
+    "focused_command": "pytest -q tests/core/test_market_session_runtime_bridge.py tests/core/test_market_session_store.py tests/test_c1_c2_regime_decoupling.py tests/test_primary_runtime_c1_c2_integration.py tests/test_market_event_graph_live_ohlc_buffer.py tests/test_candidate_feed_dependencies.py tests/test_edge45_symbol_execution_safety.py",
+    "focused_result": "85 passed, 1 warning in 3.31s",
+    "gsd_plan": "artifacts/issues_7_11/GSD_ISSUE9_RUNTIME_BRIDGE_PLAN.md",
+    "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_issue9_runtime_bridge.md",
+    "limit": "Offline deterministic proof only. Captured/live-session bar parity, process restart in the actual running service, and C2 captured signal-bar semantics remain unverified.",
+    "proof": "Explicit runtime bridge installation attaches the singleton OHLC buffer to the existing durable store; finalized same-session bars survive a fresh store instance; C1/C2 consumes explicit-symbol persisted memory; incomplete/gapped/wrong-symbol/wrong-date history blocks; stale current time-sanity cannot be overridden by persisted history; empty memory emits no synthetic candidate; source digest registry validates.",
+    "restart_attack": {
+      "limit": "Offline integration only; no actual service restart or captured/live parity.",
+      "proof": "15 exact completed 1m closes survive reopen; repeated identical current-minute event adds no extra history; an older bucket is rejected as REJECTED_LATE_BUCKET; 5m/15m derived history reappears from durable 1m rows; integrity passes.",
+      "result": "1 passed; store/runtime bridge modules: 26 passed, 1 warning",
+      "test": "tests/core/test_market_session_runtime_bridge.py::test_completed_history_survives_duplicate_and_late_tick_attack_after_restart"
+    },
+    "volume_authority_attack": {
+      "focused_command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/core/test_canonical_strategy_input_truth.py tests/test_c1_c2_regime_decoupling.py tests/test_primary_runtime_c1_c2_integration.py tests/test_market_data_index_quote_cache.py tests/core/test_market_session_runtime_bridge.py tests/core/test_market_session_store.py tests/analytics/test_issues_7_11_eod_row_parity.py",
+      "focused_result": "97 passed, 1 warning in 2.53s",
+      "gsd_plan": "artifacts/issues_7_11/GSD_ISSUE9_VOLUME_AUTHORITY_PLAN.md",
+      "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_issue9_volume_authority.md",
+      "limit": "Offline deterministic proof only; broader regression after this source change is pending.",
+      "proof": "Absent, malformed, non-finite, and negative volume remain null with completeness false after durable restart; explicit zero remains zero with completeness true; valid LTP is still accepted; persisted integrity passes."
+    }
+  },
+  "issue_9_same_process_session_isolation": {
+    "disposition": "BOUNDED_OFFLINE_SESSION_BOUNDARY_REPAIR_VERIFIED; ISSUE_9_EXTERNAL_RUNTIME_PARITY_REMAINS_UNKNOWN",
+    "feed_smoke": "Updated .github/workflows/feed-smoke.yml path-triggered command passed: 18 passed, 5 deselected, 1 warning in 214.14s, isolated /tmp paths; synthetic only.",
+    "independent_review": "Fresh read-only review found no P1/P2 issue; its P3 timezone-coverage finding was addressed with three direct tests.",
+    "limits": "Offline repository path only. Actual managed-service restart, deployment storage-path parity, captured/live strategy parity, and full campaign acceptance remain UNKNOWN/open.",
+    "mutation": "scripts/verify_issues_7_11_issue9_session_isolation_mutation.py removes only the local-row session filter; the exact expected timestamp-set assertion fails. Checkout source/test hashes unchanged.",
+    "red_reproduction": "Before repair, a same-process 2026-09-07 to 2026-09-08 scenario returned three prior-session rows in the D+1 completed-bar view.",
+    "repair": "core/market_session_memory_contract.py filters local and durable runtime merge rows by normalized Asia/Kolkata session date matching as_of. The local buffer is not cleared and explicit prior-date store queries remain available.",
+    "root_cause": "The durable bridge merged prior-date process-local OhlcBuffer rows into an as_of-date-scoped durable session view.",
+    "safety": {
+      "allowed_for_live_execution": false,
+      "append": false,
+      "broker_api_called": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "tests": "pytest -q tests/core/test_market_session_runtime_bridge.py tests/core/test_market_session_store.py: 33 passed, 1 warning in 8.29s. Coverage includes same-process rollover, aware UTC to IST date mapping, naive-as-IST semantics, retained explicit historical access, and fresh-reopen 5-minute derivation from canonical 1-minute rows."
+  },
+  "issue_status": {
+    "10": "PARTIAL_OFFLINE_ROUTE_EOD_PARITY_AND_COOPERATIVE_WRITER_SERIALIZATION_VERIFIED; FAILED_APPEND_NEVER_TRUNCATES; MALFORMED_INTERLEAVED_ROW_SURFACED_AND_REJECTED; FOREIGN_ROW_SALVAGE_AND_CAPTURED_LIVE_PARITY_UNKNOWN",
+    "11": "PARTIAL_OFFLINE_PERSISTED_FEED_TRUTH_OBSERVER_AND_CAS_SPOT_DEPENDENCY_VERIFIED; GENERIC_CANDIDATE_ISOLATION_CAUSE_AND_CAPTURED_LIVE_PARITY_UNKNOWN",
+    "7": "UNKNOWN_T1_SOURCE_AND_MANIFEST_AUTHORITY_NOT_ESTABLISHED",
+    "8": "UNKNOWN_NO_VERIFIED_PRIOR_CAS_SOURCE_INTERVAL",
+    "9": "OFFLINE_PRIMARY_RUNTIME_RESTART_PATH_VERIFIED; RUNNING_SERVICE_AND_CAPTURED_LIVE_PARITY_UNKNOWN"
+  },
+  "issues_1_6_protection_regression": {
+    "artifact": "artifacts/issues_7_11/ISSUES_1_6_PROTECTION.md",
+    "limit": "scoped preservation suite, not live resolution; empty-row launch metadata, partial captured recovery map, live option counts, production-rate soak and live PID ownership remain unverified",
+    "result": "221 passed, 1 warning in 24.16s",
+    "scope": "launch-plan metadata/recovery/token counts, feed/depth queue accounting, interval alignment and governed single-instance behavior"
+  },
+  "issues_7_11_offline_repair_verified": false,
+  "latest_broad_offline_regression_20261004": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q --ignore=tests/test_upstox_daily_live_capture.py --ignore=tests/trade_truth/test_raw_tick_expected_separation.py -k 'not test_v5_verifier_deep_primitive_validation'",
+    "exclusions": [
+      "tests/test_upstox_daily_live_capture.py (Upstox dependency unavailable)",
+      "tests/trade_truth/test_raw_tick_expected_separation.py (large external stitched-capture scan)",
+      "test_v5_verifier_deep_primitive_validation (prior capture-backed stall)"
+    ],
+    "repository_head": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+    "result": "8740 passed, 9 skipped, 29 deselected, 1474 warnings in 910.84s; exit code 0.",
+    "scope_limit": "Exact current runtime source including both primary and MEG session-date filters. The three explicit exclusions remain. Offline regression only; does not establish external source authority, captured/live parity, or campaign acceptance."
+  },
+  "latest_broad_regression": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q --ignore=tests/test_upstox_daily_live_capture.py --ignore=tests/trade_truth/test_raw_tick_expected_separation.py -k 'not test_v5_verifier_deep_primitive_validation'",
+    "exclusions": [
+      "tests/test_upstox_daily_live_capture.py (Upstox dependency unavailable)",
+      "tests/trade_truth/test_raw_tick_expected_separation.py (large external stitched-capture scan)",
+      "test_v5_verifier_deep_primitive_validation (previous capture-backed stall)"
+    ],
+    "final_test_delta": "After broad pytest collection began, the interleaved-append test gained an assertion routing malformed bytes through the actual advisory consumer. The exact final focused suite reran afterward: 53 passed, 1 warning in 10.25s; the full suite did not include this final assertion.",
+    "final_test_source_sha256": "daf1ed330feca4dfcb80740874fba1c2f4bf1d9bc403eb06f375e63a689127a2",
+    "repository_sha": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+    "result": "8724 passed, 9 skipped, 29 deselected, 1474 warnings in 966.72s; exit code 0",
+    "runtime_source_sha256": "2c7812f9e51b704ea90ac00672dc0cd694c714f81f7fb1511e1055e749e1d142",
+    "scope_limit": "Broad offline run covers final runtime source but preceded the final test-only advisory parse-error assertion; that assertion is covered by exact final focused suite and mutation rerun. Not remote CI, live/captured parity, external writer inventory, source authority, or campaign-wide independent certification.",
+    "test_source_during_broad_sha256": "ee853744375d7fceb45d2dca9c77f0266479e158e5087913655efd61622d2159",
+    "worktree_branch": "ram/issues-7-11-graph-repair"
+  },
+  "latest_campaign_graph_integrity": "167 unique nodes, 185 edges, zero dangling endpoints; graph JSON reparsed after Issue 10 TOCTOU repair",
+  "latest_changed_test_files_rerun": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/core/test_market_session_runtime_bridge.py tests/core/test_market_session_store.py",
+    "result": "33 passed, 1 warning in 8.29s."
+  },
+  "latest_continuation_verification": {
+    "broad_current_source": "8680 passed, 9 skipped, 29 deselected, 1474 warnings in 1090.56s; exit code 0 after Issue 11 CAS spot gate and production-equivalent fixture update",
+    "broad_regression_current_source": "8650 passed, 9 skipped, 29 deselected, 1474 warnings in 871.60s; exact command/exclusions recorded in latest_broad_regression",
+    "campaign_acceptance": "OPEN; implementation_valid remains false; generic candidate-level isolation, Scenarios B/E, campaign-wide mutation closure, captured/live authority, initiating transport/auth cause, and full-scope independent verification remain incomplete.",
+    "captured_corpus_recheck": {
+      "artifact": "artifacts/issues_7_11/CAPTURE_CORPUS_RECHECK_20261003.md",
+      "disposition": "Issues 7/8 remain UNKNOWN; no reconstruction from OHLC or derived row identifiers",
+      "index_parquet": {
+        "authority_limit": "Index OHLCV/OI only; not prior exact NIFTY futures identity/close or verified 200-session ancestry",
+        "path": "/Volumes/TradeBotData/live market capture/2026-10-01/indices_1m_20261001.parquet",
+        "rows": 1500,
+        "sha256": "98701ad9ea24647d45204db19c65440625c8b02c3a50cab852815397d84cc80a"
+      },
+      "session_cas_heritage": "EMPTY; process_gap=UNKNOWN/NO_VERIFIED_PRIOR_RUN_INTERVAL; no inherited references; 09:15 and 10:00 attempts BLOCKED with null prices and source-event/time lineage",
+      "stitched_tick_parquet": {
+        "authority_limit": "No original source event ID, source payload hash, or distinct receive timestamp; insufficient for Issue 8 source-event-bound recovery",
+        "path": "/Volumes/TradeBotData/live market capture/2026-10-01/upstox_full_ticks_20261001_stitched.parquet",
+        "rows": 3796552,
+        "schema": [
+          "ts",
+          "token",
+          "symbol",
+          "ltp",
+          "bid",
+          "ask",
+          "vol",
+          "oi",
+          "depth"
+        ],
+        "sha256": "c09998bf1807d4d8bc28bd3de5d4d56748269b30eabc5653ad4e8b2b8c4c5d1c"
+      }
+    },
+    "captured_issue11_recovery_audit": {
+      "artifact": "artifacts/issues_7_11/CAPTURE_CORPUS_RECHECK_20261003.md",
+      "candidate_decision_ledgers": "all four empty",
+      "disposition": "Captured saved blocker state is narrowed to terminal recovery/auth blockers; initiating event and local candidate isolation remain UNKNOWN. Preserve fail-closed global recovery/auth behavior.",
+      "fourth_run_state": "AUTH_BLOCKED with websocket disconnected and missing LTP/depth ages",
+      "runs_reviewed": 4,
+      "three_run_state": "feed health blockers include global_feed_unhealthy and runtime_state_unsafe; paired canonical runtime state RECOVERY_BLOCKED/RESTART_REQUIRED with WS1006_PROCESS_RESTART_REQUIRED and RECOVERY_BLOCKED; websocket flag true; one additionally has OPTION_TICKS_UNVERIFIED and NO_SUBSCRIBED_OPTIONS"
+    },
+    "focused_combined_run": {
+      "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_cas_primitive_producer.py tests/paper_shadow/test_issue11_scenarios_cd.py tests/test_market_heritage_graph.py::test_scenario_a_verified_t1_clean_boot_reaches_shadow_evaluators",
+      "result": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_cas_primitive_producer.py tests/paper_shadow/test_issue11_scenarios_cd.py tests/test_market_heritage_graph.py::test_scenario_a_verified_t1_clean_boot_reaches_shadow_evaluators: 56 passed, 1 warning in 1.67s"
+    },
+    "focused_command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_cas_primitive_producer.py tests/paper_shadow/test_t1_scenario_f_missing_manifest.py tests/paper_shadow/test_t1_prerequisites_authority.py tests/test_market_heritage_graph.py tests/paper_shadow/test_strategy_shadow_adapters.py",
+    "focused_issue7_8_scenario_regression": {
+      "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_cas_primitive_producer.py tests/paper_shadow/test_issue11_scenarios_cd.py tests/test_market_heritage_graph.py::test_scenario_a_verified_t1_clean_boot_reaches_shadow_evaluators tests/paper_shadow/test_t1_scenario_f_missing_manifest.py tests/paper_shadow/test_t1_prerequisites_authority.py tests/core/test_market_session_store.py",
+      "limit": "Focused offline set only; Scenario A store is not consumed by adapters; B/E and candidate-level C/D remain incomplete",
+      "result": "82 passed, 1 warning in 2.73s"
+    },
+    "focused_result": "140 passed, 1 warning in 14.19s",
+    "fresh_independent_verification": {
+      "checks": [
+        "independent adversarial token probes: valid positive integer passes; bool/float/string/zero/negative rejected at capture, persisted-row, recomputed event payload/hash/ID, and expected-token boundaries",
+        "Scenario A test matches bounded contract: actual pinned loader/registry/adapter dispatch plus one persisted/read synthetic bar; no adapter store-consumption claim",
+        "final graph has 114 unique nodes, 116 edges, and zero dangling endpoints; new Issue 11 evidence node remains DATA_VERIFIED_LIMITED",
+        "Issues 1-6 protection evidence remains 221 passed; test-only Scenario A addendum did not alter those paths"
+      ],
+      "remaining": "Scenario B/E, candidate-level C/D, broad mutation campaign, and captured/live parity remain incomplete",
+      "report": "artifacts/issues_7_11/INDEPENDENT_VERIFICATION.md",
+      "scope_limit": "Independent verifier checked claim bounds and graph/verdict structure; external data hashes/schema were inspected by executor and remain evidence-source claims rather than independently rehashed by verifier",
+      "status": "BOUNDED_PASS_FOR_REVIEWED_GUARDS_AND_ARTIFACT_STRUCTURE; CAMPAIGN_ACCEPTANCE_OPEN"
+    },
+    "issue11_cas_focused_result": "176 passed, 1 deselected, 1 warning in 3.16s; required spot gate mutant killed",
+    "issue11_cas_gate_mutation": "1/1 killed; checkout source/test hashes unchanged",
+    "issue11_scenarios_cd": {
+      "contract": "docs/agent_reviews/issues_7_11_hermes_scenarios_cd.md",
+      "limit": "Observer-only boundary. Does not establish real candidate evaluation, candidate-level isolation, executable eligibility, or captured/live behavior",
+      "plan": "artifacts/issues_7_11/GSD_SCENARIOS_CD_PLAN.md",
+      "proves": "Actual feed-health producer envelope composed with actual shadow snapshot builder; stale option leaves option observer snapshot degraded, healthy spot observer snapshot remains healthy only with exact fresh quote and healthy spot domain; degraded spot domain and disconnected shared transport remain degraded",
+      "result": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/paper_shadow/test_issue11_scenarios_cd.py: 3 passed, 1 warning; actual producer read_only=true, is_order_action=false, append=false; no broker/paper/live grant fields",
+      "test": "tests/paper_shadow/test_issue11_scenarios_cd.py"
+    },
+    "issue8_malformed_event_id": {
+      "contract": "docs/agent_reviews/issues_7_11_hermes_issue8_event_id_type.md",
+      "files": [
+        "core/cas_primitive_producer.py",
+        "tests/test_cas_primitive_producer.py"
+      ],
+      "limit": "This is an offline boundary repair only; historical CAS predecessor/source-event authority remains UNKNOWN",
+      "plan": "artifacts/issues_7_11/GSD_ISSUE8_EVENT_ID_TYPE_PLAN.md",
+      "result": "Non-empty string validation added at ingestion and verification boundaries; missing/empty/integer/boolean/object event IDs fail closed without exception"
+    },
+    "issue8_numeric_token_identity": {
+      "contract": "docs/agent_reviews/issues_7_11_hermes_issue8_numeric_token.md",
+      "finding": "Independent reviewer reproduced True == 1 allowing a boolean token to pass after hashes were recomputed",
+      "limit": "Internal repository identity validation only; no external source authentication or historical recovery proof",
+      "mutation_result": "python3 scripts/verify_issues_7_11_issue8_mutations.py: 6/6 targeted Issue 8 mutants killed (missing expected-token wildcard, NIFTY identity guard removal, bool at capture/persisted row/event payload, and source-event ID type guard removal)",
+      "plan": "artifacts/issues_7_11/GSD_ISSUE8_NUMERIC_TOKEN_PLAN.md",
+      "repair": "Strict positive exact-integer checks at configured token, source tick, event payload, and persisted row boundaries; missing expected token no longer acts as wildcard",
+      "result": "CAS producer suite: 52 passed, 1 warning in 1.49s; committed tests cover bool/float/string/zero/negative/missing tokens at each boundary"
+    },
+    "issue8_persisted_identity": {
+      "contract": "docs/agent_reviews/issues_7_11_hermes_issue8_identity.md",
+      "limit": "Repository consistency validation only; no external authenticity or historical restart/source-interval proof",
+      "plan": "artifacts/issues_7_11/GSD_ISSUE8_IDENTITY_PLAN.md",
+      "repair": "Persisted verifier now requires underlying_symbol == NIFTY; existing token and payload bindings remain",
+      "reproduction": "Before repair, verify_primitive accepted a BANKNIFTY row after recomputing event payload hash, source-event ID suffix, and record hash",
+      "result": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_cas_primitive_producer.py: 31 passed, 1 warning in 1.80s",
+      "test": "tests/test_cas_primitive_producer.py::test_primitive_verifier_rejects_self_consistent_wrong_underlying_identity"
+    },
+    "issues_1_6_preservation": {
+      "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_kite_depth_ws_stability.py tests/test_depth_subscription_tokens.py tests/test_market_event_graph_live_observation_registry.py tests/test_market_event_graph_live_launch_plan.py tests/test_depth_persistence_batching.py tests/test_depth_store_accounting.py tests/test_market_event_graph_live_runtime_bridge.py tests/test_governed_morning_orchestrator.py tests/test_feed_recovery_coordinator.py tests/test_check_option_pipeline_health.py tests/test_subscription_truth_contract.py tests/test_pulse_issues_and_feed_consistency.py",
+      "result": "221 passed, 1 warning in 25.72s"
+    },
+    "repository_sha": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+    "scenario_a": {
+      "contract": "docs/agent_reviews/issues_7_11_hermes_scenario_a.md",
+      "hermes_addendum": "docs/agent_reviews/issues_7_11_hermes_scenario_a_completed_bar_addendum.md",
+      "limit": "Fixture-only: adapters do not consume the store; captured feed/directory health, actual T-1 authority, candidate eligibility, and live clean boot remain UNKNOWN",
+      "plan": "artifacts/issues_7_11/GSD_SCENARIO_A_COMPLETED_BAR_PLAN.md",
+      "result": "19 passed, 1 warning in focused Scenario A plus market-session-store suite; one synthetic 09:15 bar persisted and read through a fresh MarketSessionStore at 09:16 with integrity PASS; actual loader/registry dispatched pulse into all three actual shadow adapter methods",
+      "test": "tests/test_market_heritage_graph.py::test_scenario_a_verified_t1_clean_boot_reaches_shadow_evaluators"
+    },
+    "scenario_a_completed_bar_verification": {
+      "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_market_heritage_graph.py::test_scenario_a_verified_t1_clean_boot_reaches_shadow_evaluators tests/core/test_market_session_store.py",
+      "limit": "The shadow adapters do not consume the store in this fixture; offline coexistence only",
+      "proof": "A synthetic 09:15 NIFTY bar was persisted, reopened from a fresh MarketSessionStore, read at the 09:16 completion cutoff, and passed integrity before actual healthy registry pulse dispatch reached all three adapters",
+      "result": "19 passed, 1 warning in 1.90s"
+    },
+    "scenario_f": {
+      "contract": "docs/agent_reviews/issues_7_11_hermes_scenario_f.md",
+      "limit": "Offline negative path only; Issue 7 T-1 source authority remains UNKNOWN",
+      "plan": "artifacts/issues_7_11/GSD_SCENARIO_F_MISSING_T1_PLAN.md",
+      "result": "2 tests passed within focused command; actual loader and registry retained BLOCKED state, null prerequisites, all three adapters disabled, closed authority and zero order counters",
+      "test": "tests/paper_shadow/test_t1_scenario_f_missing_manifest.py"
+    },
+    "scenario_statuses": {
+      "A": "PASS_OFFLINE_SYNTHETIC_WIRING_ONLY",
+      "B": "UNKNOWN_SOURCE_EVENT_AUTHORITY; NOT_COMPOSED",
+      "C": "PASS_OFFLINE_OBSERVER_BOUNDARY_ONLY",
+      "D": "PASS_OFFLINE_OBSERVER_BOUNDARY_ONLY",
+      "E": "INCOMPLETE_DEPENDS_ON_UNVERIFIED_CAS_AND_CANDIDATE_ISOLATION",
+      "F": "PASS_OFFLINE_NEGATIVE_PATH"
+    }
+  },
+  "latest_current_source_broad_regression": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q --ignore=tests/test_upstox_daily_live_capture.py --ignore=tests/trade_truth/test_raw_tick_expected_separation.py -k 'not test_v5_verifier_deep_primitive_validation'",
+    "exclusions": [
+      "tests/test_upstox_daily_live_capture.py (Upstox dependency unavailable)",
+      "tests/trade_truth/test_raw_tick_expected_separation.py (large external stitched-capture scan)",
+      "test_v5_verifier_deep_primitive_validation (prior capture-backed stall)"
+    ],
+    "repository_sha": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+    "result": "8709 passed, 9 skipped, 29 deselected, 1474 warnings in 768.59s; exit code 0",
+    "scope_limit": "Exact current worktree broad offline regression only; not source-authority, captured/live, or whole-campaign independent certification."
+  },
+  "latest_fix_regression": {
+    "command": "pytest -q tests/test_candidate_feed_dependencies.py tests/test_edge45_symbol_execution_safety.py tests/paper_shadow/test_strategy_shadow_adapters.py tests/replay/test_governed_market_replay.py tests/core/test_runtime_snapshot_producer.py tests/test_kite_read_only_observation_runtime.py",
+    "finding": "Post-contract-correction shadow, replay, observer, feed-health and candidate-safety regression passed; shared classifier/candidate exceptions were removed and candidate-level fault isolation remains unclaimed.",
+    "result": "116 passed, 1 skipped, 1 warning in 7.50s"
+  },
+  "latest_focused_campaign_tests": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/core/test_market_session_store.py tests/core/test_market_session_runtime_bridge.py tests/core/test_runtime_snapshot_producer.py tests/analytics/test_issues_7_11_eod_row_parity.py tests/test_cas_primitive_producer.py tests/test_market_heritage_graph.py tests/paper_shadow/test_issue11_scenarios_cd.py tests/paper_shadow/test_t1_scenario_f_missing_manifest.py tests/paper_shadow/test_t1_prerequisites_authority.py tests/core/test_token_coverage_threshold.py tests/test_feed_truth_snapshot_ranking_contract.py tests/test_edge43_feed_health_truth.py tests/test_pr_feed_03_feed_hold_gate.py tests/test_pr_feed_04_feed_recovery_warmup_gate.py tests/test_pr_feed_20r_feed_fault_replay_tests.py tests/test_ranking_orchestrator.py tests/test_edge45_symbol_execution_safety.py tests/test_candidate_feed_dependencies.py tests/test_kite_read_only_observation_runtime.py tests/test_market_event_graph_live_ohlc_buffer.py tests/test_market_event_graph_live_runtime_bridge.py tests/replay/test_replay_fidelity_hardening.py",
+    "result": "341 passed, 1 warning in 13.44s",
+    "scope_limit": "Focused offline campaign coverage only; all captured/live and unresolved source-authority gates remain open."
+  },
+  "latest_focused_run": {
+    "command_record": "artifacts/issues_7_11/repair_ledger.jsonl",
+    "result": "143 passed, 1 deselected, 1 warning in 4.47s",
+    "scope": "Issue 11 persisted snapshot and artifact loader; config; candidate ranking; canonical feed classification; runtime overlay/integrity compatibility and integration regressions"
+  },
+  "latest_mutation_rerun": {
+    "checkout_integrity": "All harnesses reported unchanged checkout hashes. After final Issue 10 source/test update, both Issue 10 writer-lock and rollback mutants were rerun and killed; hashes match the final files.",
+    "focused_issue9_regression": "40 passed, 1 warning in 10.98s: tests/core/test_market_session_runtime_bridge.py tests/core/test_market_session_store.py tests/test_primary_runtime_c1_c2_integration.py tests/test_market_session_state.py",
+    "issue10_final_focused_result": "53 passed, 1 warning in 10.25s",
+    "limitations": "Targeted mutation set is not the prompt-wide mutation matrix. Does not establish captured source authority, managed-service restart parity, generic Issue 11 candidate isolation, external-writer atomicity, or campaign acceptance.",
+    "repository_sha": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+    "results": {
+      "issue10_external_append_rollback": "1/1 destructive truncate mutant killed; final source/test hashes unchanged",
+      "issue10_reader": "2/2",
+      "issue10_shared_writer": "1/1",
+      "issue10_shared_writer_lock": "1/1; final source rerun, killed",
+      "issue11_cas_spot_gate": "1/1",
+      "issue11_loader_origin": "1/1",
+      "issue11_registry_identity": "2/2",
+      "issue11_transport": "1/1",
+      "issue7": "5/5",
+      "issue8": "6/6",
+      "issue9": "3/3"
+    },
+    "scope": "Fresh current-worktree run of every available targeted Issues 7-11 mutation harness, including the new Issue 10 uncoordinated-append rollback mutant; sequential temporary-copy mutants.",
+    "status": "PASS_BOUNDED",
+    "targeted_mutants_killed": 23,
+    "targeted_mutants_total": 23
+  },
+  "live_verified": false,
+  "market_session_memory_certification": "10/10 gates passed",
+  "new_config_keys": [
+    "FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC (default 3.0; runtime reliability config)"
+  ],
+  "post_attack_focused_suite": "106 passed, 1 warning in 4.32s, including malformed epoch corruption test",
+  "pr_scoped_focused_regression_20261004": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/core/test_market_session_runtime_bridge.py tests/core/test_market_session_store.py tests/test_market_event_graph_live_ohlc_buffer.py tests/test_c1_c2_regime_decoupling.py tests/test_market_data_warm_seed.py tests/test_market_heritage_graph.py tests/test_issues_7_11_scenario_b_restart.py tests/core/test_runtime_snapshot_producer.py tests/core/test_issue11_cas_dependency_adversarial.py tests/test_read_only_consumer_cycle.py tests/test_cas_primitive_producer.py tests/test_candidate_feed_dependencies.py tests/test_kite_read_only_observation_runtime.py tests/test_feed_truth_snapshot_ranking_contract.py tests/test_ranking_orchestrator.py tests/test_pr_feed_03_feed_hold_gate.py tests/test_edge43_feed_health_truth.py tests/test_feed_runtime_states.py tests/paper_shadow/test_issue11_scenarios_cd.py tests/paper_shadow/test_t1_scenario_f_missing_manifest.py tests/analytics/test_issues_7_11_eod_row_parity.py tests/test_expiry_selection.py tests/test_market_session_state.py tests/test_market_event_graph_live_session_preflight.py tests/test_v23_production_equivalent_harness.py",
+    "repository_head_before_commit": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+    "result": "459 passed in 40.60s; exit code 0",
+    "scope": "Clean PR-scoped source and tests; two unrelated prospective-truth reports excluded. Offline only."
+  },
+  "pr_scoped_mutation_rerun_20261004": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH python3 sequentially ran scripts/verify_issues_7_11*.py",
+    "result": "15 harnesses exited 0; 27/27 targeted mutants killed (Issue 7 5, Issue 8 6, Issue 9 5, Issue 10 4, Issue 11 7).",
+    "scope_limit": "Targeted checked-in harnesses only; not the complete prompt mutation matrix or full campaign acceptance."
+  },
+  "pr_worktree_scope_20261004": {
+    "base_sha": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+    "branch": "ram/issues-7-11-campaign",
+    "excluded_from_pr": [
+      "TRADE_TRUTH_PROSPECTIVE_PREFLIGHT_RESULTS.json",
+      "TRADE_TRUTH_PROSPECTIVE_VERIFICATION_REPORT.json",
+      "untracked <MagicMock ...> test artifacts"
+    ],
+    "overlap": "Open PR #957 touches feed/token readiness paths; this campaign PR is based on current main and remains unmerged.",
+    "verdict": "Partial offline implementation only; campaign acceptance remains false."
+  },
+  "previous_broad_attempt": {
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q --ignore=tests/test_upstox_daily_live_capture.py --ignore=tests/trade_truth/test_raw_tick_expected_separation.py -k 'not test_v5_verifier_deep_primitive_validation'",
+    "progress": "about 28%",
+    "reason": "superseded by latest_broad_regression; stopped after event-time attack found observer using quote-book timestamp for LTP freshness",
+    "status": "INTERRUPTED_NOT_A_PASS"
+  },
+  "reason": "Both primary runtime and MEG observer same-process session-date leaks were reproduced and repaired offline. Exact current-source broad suite passed 8740 tests (9 skipped, 29 deselected); primary Issue 9 bridge/store tests passed 33, MEG buffer/runtime bridge tests passed 45, and both root-specific date-filter mutants were killed. Post-MEG Feed Smoke passed 18 tests (5 deselected). Overall campaign acceptance remains false: historical Issues 7/8 source lineage, Issue 9 managed-service/captured-live parity, Issue 10 external-writer/deployment proof, Issue 11 exact dynamic candidate identity and initiating cause, full mutation closure, remote CI, and full-scope independent certification remain unresolved.",
+  "replay_health_authority_fix": {
+    "capture_probe": "100 events; feed_ok=None; websocket_ok=None; session_health=UNKNOWN; receipt authority UNAVAILABLE; option age None; zero causality violations; zero observations without T-1 inputs",
+    "focused_command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/replay",
+    "focused_result": "14 passed, 1 skipped, 1 warning in 3.65s",
+    "gsd_plan": "artifacts/issues_7_11/GSD_CAPTURE_REPLAY_PLAN.md",
+    "hermes_contract": "docs/agent_reviews/issues_7_11_hermes_capture_replay.md",
+    "limit": "Historical source authority only; no live health, Issue 7/8 source authority, Issue 11 candidate isolation, or captured global-latch cause established."
+  },
+  "repository_head_current": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+  "repository_sha_start": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+  "scenario_b_mid_session_restart": {
+    "attacks": "cross-date, corrupt and conflicting heritage; stale/mismatched exact NIFTY spot identity; pre-cutoff CAS; incomplete/future bar cutoffs",
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_issues_7_11_scenario_b_restart.py",
+    "composition": "Fresh SQLite store and OHLC buffer restore 359 same-session deterministic_test bars; verified same-day CAS heritage flows through actual runtime snapshot producer and read-only CAS evaluator as INHERITED_VERIFIED at 15:14; actual C1 evaluator preserves C1_OUT_OF_WINDOW.",
+    "contract": "docs/agent_reviews/issues_7_11_hermes_scenario_b_restart.md",
+    "limits": "Synthetic fixture and injected current-health evidence only; no actual service restart, historical source authority, provider/feed-health wiring, or captured/live parity. Scenario B is bounded offline composition, not campaign completion.",
+    "plan": "artifacts/issues_7_11/GSD_SCENARIO_B_RESTART_PLAN.md",
+    "result": "4 passed, 1 warning in 3.38s; combined direct regression 201 passed, 1 warning in 8.66s",
+    "safety": {
+      "allowed_for_live_execution": false,
+      "append": false,
+      "broker_api_called": false,
+      "broker_order_calls": 0,
+      "is_order_action": false,
+      "live_authorized": false,
+      "paper_authorized": false,
+      "read_only": true
+    },
+    "test": "tests/test_issues_7_11_scenario_b_restart.py"
+  },
+  "scenario_e_closed_authority_metadata_verification": {
+    "limits": "Broad exact-current-worktree offline regression now passed with three exclusions; mutation coverage remains limited to a representative PASS marker and is not exhaustive per field/output; source authority, live parity, candidate isolation, and campaign acceptance remain open.",
+    "source_audit": "Bounded independent read-only pass: every _evaluate_cas return and readiness/artifact output includes exact closed-authority fields; completion-failure branch emits no receipt/artifact.",
+    "success_path_mutation": "Temporary-copy removal of is_order_action from the authority tuple was killed by the PASS-path test with KeyError; checkout files unchanged.",
+    "tests": "219 passed in adjacent B/E regression; 15 passed in direct CAS/restart tests after no-retry receipt assertion."
+  },
+  "scenario_e_restart_stale_advisory": {
+    "attacks": "Stale required spot after restart; exact authority omissions on pending/malformed paths; valid-empty ledger; supporting Issue 10/11 gate mutants also killed. Successful PASS result/readiness/artifact authority omissions; exact tuple is now asserted on all three outputs. Temporary-copy removal of is_order_action from the authority tuple was killed by a PASS-path assertion.",
+    "broad_current_source_regression": {
+      "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q --ignore=tests/test_upstox_daily_live_capture.py --ignore=tests/trade_truth/test_raw_tick_expected_separation.py -k 'not test_v5_verifier_deep_primitive_validation'",
+      "exclusions": [
+        "tests/test_upstox_daily_live_capture.py (Upstox dependency unavailable)",
+        "tests/trade_truth/test_raw_tick_expected_separation.py (large external stitched-capture scan)",
+        "test_v5_verifier_deep_primitive_validation (prior capture-backed stall)"
+      ],
+      "exit_code": 0,
+      "repository_sha": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+      "result": "8709 passed, 9 skipped, 29 deselected, 1474 warnings in 768.59s; exit code 0",
+      "scope_limit": "Exact current worktree broad offline regression only; not source-authority, captured/live, or whole-campaign independent certification."
+    },
+    "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q tests/test_issues_7_11_scenario_b_restart.py tests/core/test_market_session_runtime_bridge.py tests/core/test_market_session_store.py tests/core/test_runtime_snapshot_producer.py tests/test_market_heritage_graph.py tests/test_cas_primitive_producer.py tests/test_read_only_consumer_cycle.py tests/test_primary_runtime_c1_c2_integration.py tests/test_c1_c2_regime_decoupling.py tests/test_kite_read_only_observation_runtime.py tests/analytics/test_issues_7_11_eod_row_parity.py",
+    "contract": "docs/agent_reviews/issues_7_11_hermes_scenario_e.md",
+    "independent_verification": "Fresh read-only source audit covered every _evaluate_cas return, readiness receipt branch, success artifact, and updated Hermes/GSD scope; bounded PASS for metadata repair. Completion-failure tests then gained explicit no-readiness/no-artifact assertions and passed focused tests.",
+    "limits": "Offline synthetic composition only. No captured source authority, actual service restart, generic candidate-level isolation, captured/live parity, or full campaign mutation closure. The bounded independent source audit did not independently rerun tests; the broad suite is executor-run and has three exclusions.",
+    "mutation": "Temporary-copy mutant omitted is_order_action from _closed_cas_authority; Scenario E failed with KeyError at exact authority assertion; checkout source/test unchanged.",
+    "plan": "artifacts/issues_7_11/GSD_SCENARIO_E_PLAN.md",
+    "production_change": "core/read_only_consumer_cycle.py adds the complete closed-authority tuple to every returned CAS state, readiness receipt, and advisory artifact; evaluation decisions/reasons are unchanged.",
+    "proof": "After fresh-store restart, 359 deterministic_test bars are visible to persisted memory; actual runtime producer blocks CAS on stale required NIFTY spot; actual evaluator writes no CAS artifact; actual advisory projection reads the explicit valid-empty ledger with zero rows and exact source path. Missing-input and malformed-input PENDING outputs and readiness receipts explicitly carry the complete closed-authority tuple. Successful PASS result, readiness receipt, and CAS artifact each assert the exact closed-authority tuple; the existing artifact broker/order authority fields remain backward compatible.",
+    "result": "Adjacent B/E producer/store/heritage/observer/advisory/CAS regression: 219 passed, 1 warning in 10.63s. Exact CAS/restart tests after no-retry receipt assertion: 15 passed, 1 warning in 3.68s. Exact-current-source broad offline rerun: 8709 passed, 9 skipped, 29 deselected, 1474 warnings in 768.59s; three exclusions.",
+    "safety": {
+      "allowed_for_live_execution": false,
+      "broker_api_called": false,
+      "broker_order_calls": 0,
+      "is_order_action": false,
+      "live_authorized": false,
+      "paper_authorized": false,
+      "read_only": true
+    },
+    "scope": [
+      "core/read_only_consumer_cycle.py",
+      "tests/test_issues_7_11_scenario_b_restart.py",
+      "docs/agent_reviews/issues_7_11_hermes_scenario_e.md",
+      "artifacts/issues_7_11/GSD_SCENARIO_E_PLAN.md",
+      "tests/test_read_only_consumer_cycle.py"
+    ],
+    "supporting_mutation_checks": {
+      "issue10": "python3 scripts/verify_issues_7_11_issue10_writer_mutation.py: remove_exclusive_candidate_log_lock mutant killed; checkout hashes unchanged",
+      "issue11": "python3 scripts/verify_issues_7_11_issue11_cas_dependency_mutation.py: remove_required_nifty_spot_gate mutant killed; checkout hashes unchanged",
+      "scope_limit": "Supporting guards checked separately; not a Scenario E-specific mutation campaign or campaign-wide mutation closure."
+    },
+    "test": "tests/test_issues_7_11_scenario_b_restart.py::test_scenario_e_restart_keeps_stale_required_spot_blocked_and_projects_valid_empty_advisory"
+  },
+  "scenario_statuses": {
+    "B": "PASS_OFFLINE_SYNTHETIC_COMPOSITION; HISTORICAL_CAS_AUTHORITY_AND_LIVE_PARITY_UNKNOWN",
+    "C": "PASS_OFFLINE_CAS_ADVISORY_COMPOSITION; GENERIC_CANDIDATE_ISOLATION_UNKNOWN",
+    "D": "PASS_OFFLINE_CAS_FAIL_CLOSED_COMPOSITION; GENERIC_CANDIDATE_ISOLATION_UNKNOWN",
+    "E": "PASS_OFFLINE_SYNTHETIC_COMPOSITION; GENERIC_CANDIDATE_ISOLATION_AND_CAPTURED/LIVE_PARITY_UNKNOWN"
+  },
+  "structural_edge_certified": false,
+  "token_coverage_and_dynamic_budget_tests": "5 passed; 1 warning",
+  "token_coverage_regression": "pytest -q tests/core/test_token_coverage_threshold.py: 2 passed, 1 warning in 1.44s"
+}

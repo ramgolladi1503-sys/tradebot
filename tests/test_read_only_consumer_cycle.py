@@ -7,6 +7,15 @@ from core.cas_primitive_producer import CASPrimitiveStore, build_cas_input
 from datetime import datetime, timezone
 
 SHA = "a" * 40
+CAS_CLOSED_AUTHORITY = {
+    "read_only": True,
+    "is_order_action": False,
+    "broker_api_called": False,
+    "allowed_for_live_execution": False,
+    "paper_authorized": False,
+    "live_authorized": False,
+    "append": False,
+}
 
 def ranked(*, cycle_id="s:1:x", session_id="s", source_sha=SHA, candidates=None):
     return {"cycle_provenance": {"cycle_id": cycle_id, "session_id": session_id, "source_sha": source_sha, "session_date": "2026-08-27"}, "reports": [{"candidate_pool": {"regime": {"primary_regime": "RANGE"}, "candidates": list(candidates or [])}}]}
@@ -40,12 +49,19 @@ def test_cas_uses_short_horizon_causal_input_as_advisory(tmp_path):
     result = _evaluate_cas(runtime_outputs={"cas_short_horizon_inputs": {"symbol": "NIFTY", "morning_return": -0.01, "observation_timestamp": "2026-08-31T15:14:00+00:00", "signal_input_09_15": 100, "signal_input_10_00": 99}}, output_root=tmp_path, session_id="s", source_sha=SHA, now=datetime(2026, 8, 31, 15, 14, tzinfo=timezone.utc))
     assert result["verdict"] == "PASS"
     assert result["decision"]["execution_status"] == "advisory_only"
-    assert (tmp_path / "cas_v2_artifact.json").exists()
+    readiness = json.loads((tmp_path / "cas_readiness_latest.json").read_text())
+    artifact = json.loads((tmp_path / "cas_v2_artifact.json").read_text())
+    assert {key: result[key] for key in CAS_CLOSED_AUTHORITY} == CAS_CLOSED_AUTHORITY
+    assert {key: readiness[key] for key in CAS_CLOSED_AUTHORITY} == CAS_CLOSED_AUTHORITY
+    assert {key: artifact[key] for key in CAS_CLOSED_AUTHORITY} == CAS_CLOSED_AUTHORITY
 
 def test_cas_rejects_stale_entry_without_writing_artifact(tmp_path):
     result = _evaluate_cas(runtime_outputs={"cas_short_horizon_inputs": {"symbol": "NIFTY", "morning_return": -0.01, "observation_timestamp": "2026-08-31T15:14:00+00:00", "received_timestamp": "2026-08-31T15:14:02.001000+00:00"}}, output_root=tmp_path, session_id="s", source_sha=SHA, now=datetime(2026, 8, 31, 15, 14, tzinfo=timezone.utc))
     assert result["verdict"] == "PENDING"
     assert "late" in result["reason"]
+    readiness = json.loads((tmp_path / "cas_readiness_latest.json").read_text())
+    assert {key: result[key] for key in CAS_CLOSED_AUTHORITY} == CAS_CLOSED_AUTHORITY
+    assert {key: readiness[key] for key in CAS_CLOSED_AUTHORITY} == CAS_CLOSED_AUTHORITY
     assert not (tmp_path / "cas_v2_artifact.json").exists()
 
 def test_real_producer_input_reaches_real_cas_evaluator(tmp_path):
@@ -68,7 +84,12 @@ def test_real_producer_input_reaches_real_cas_evaluator(tmp_path):
                            session_id="s", source_sha=SHA, now=datetime(2026, 8, 31, 15, 14, tzinfo=timezone.utc))
     assert result["verdict"] == "PASS"
     assert result["decision"]["direction"] == "DOWN"
-    assert json.loads((tmp_path / "cas_readiness_latest.json").read_text())["cycle_id"] == "s:1:x"
+    readiness = json.loads((tmp_path / "cas_readiness_latest.json").read_text())
+    artifact = json.loads((tmp_path / "cas_v2_artifact.json").read_text())
+    assert readiness["cycle_id"] == "s:1:x"
+    assert {key: result[key] for key in CAS_CLOSED_AUTHORITY} == CAS_CLOSED_AUTHORITY
+    assert {key: readiness[key] for key in CAS_CLOSED_AUTHORITY} == CAS_CLOSED_AUTHORITY
+    assert {key: artifact[key] for key in CAS_CLOSED_AUTHORITY} == CAS_CLOSED_AUTHORITY
 
 
 def test_completed_cas_source_event_pair_is_not_evaluated_again_after_restart(tmp_path, monkeypatch):
@@ -116,7 +137,75 @@ def test_completed_cas_source_event_pair_is_not_evaluated_again_after_restart(tm
 
     assert second["verdict"] == "PENDING"
     assert second["reason"] == "DUPLICATE_CAS_EVALUATION"
+    closed_authority = CAS_CLOSED_AUTHORITY
+    assert {key: second[key] for key in closed_authority} == closed_authority
     assert eval_calls["count"] == 1
     assert not (second_root / "cas_v2_artifact.json").exists()
     readiness = json.loads((second_root / "cas_readiness_latest.json").read_text())
     assert readiness["cas_invoked"] is False
+    assert {key: readiness[key] for key in closed_authority} == closed_authority
+
+
+@pytest.mark.parametrize("completion_mode", ["raise", "blocked"])
+def test_cas_completion_failure_returns_closed_authority_without_artifact(
+    tmp_path, monkeypatch, completion_mode,
+):
+    from core.cas_evaluation_ledger import CASEvaluationLedger
+    from core.cas_primitive_producer import SPEC_SHA
+
+    session_identity = {
+        "trading_date": "2026-08-31", "venue": "NSE",
+        "calendar_id": "fixture-calendar", "calendar_version": "v1",
+    }
+    events = ["d" * 64, "e" * 64]
+    identity = hashlib.sha256(json.dumps({
+        "strategy_id": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1",
+        "spec_sha": SPEC_SHA,
+        "source_sha": SHA,
+        "session_identity": session_identity,
+        "source_event_sha256s": sorted(events),
+    }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    raw = {
+        "strategy_id": "CAS_MORNING_REVERSAL_SHORT_HORIZON_V1",
+        "session_id": "run-a", "source_sha": SHA, "cycle_id": "run-a:1",
+        "symbol": "NIFTY", "morning_return": -0.01,
+        "observation_timestamp": "2026-08-31T15:14:00+00:00",
+        "received_timestamp": "2026-08-31T15:14:00+00:00",
+        "signal_input_09_15": 100.0, "signal_input_10_00": 99.0,
+        "source_event_sha256s": events, "session_identity": session_identity,
+        "evaluation_identity_sha256": identity,
+    }
+
+    def fail_completion(self, **_kwargs):
+        if completion_mode == "raise":
+            raise OSError("injected_completion_receipt_failure")
+        return {"status": "BLOCKED", "reason": "injected_completion_receipt_block"}
+
+    monkeypatch.setattr(CASEvaluationLedger, "complete", fail_completion)
+    output_root = tmp_path / completion_mode
+    result = _evaluate_cas(
+        runtime_outputs={"cas_short_horizon_inputs": raw},
+        output_root=output_root,
+        session_id="run-a",
+        source_sha=SHA,
+        now=datetime(2026, 8, 31, 15, 14, tzinfo=timezone.utc),
+        evaluation_ledger_root=tmp_path / "shared-ledger",
+    )
+
+    closed_authority = {
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+        "paper_authorized": False,
+        "live_authorized": False,
+        "append": False,
+    }
+    assert result["verdict"] == "PENDING"
+    assert {key: result[key] for key in closed_authority} == closed_authority
+    if completion_mode == "raise":
+        assert result["reason"] == "CAS_EVALUATION_RECEIPT_WRITE_FAILED:OSError"
+    else:
+        assert result["reason"] == "injected_completion_receipt_block"
+    assert not (output_root / "cas_readiness_latest.json").exists()
+    assert not (output_root / "cas_v2_artifact.json").exists()

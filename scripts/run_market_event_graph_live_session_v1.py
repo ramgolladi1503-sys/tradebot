@@ -27,17 +27,13 @@ from core.market_event_graph_live_launch_plan import (
 )
 from core.market_event_graph_live_observation_registry import load_observation_registry
 from core.daily_instrument_authority import validate_authority
+from core.market_calendar import (
+    NSE_FNO_2026_HOLIDAYS,
+    NSE_FNO_HOLIDAY_SOURCE,
+    NSE_FNO_HOLIDAY_SOURCE_BY_DATE,
+)
 from core.market_session_state import derive_market_session_policy
 from core.session_calendar import is_open
-
-NSE_FNO_2026_HOLIDAYS = frozenset({
-    date(2026, 1, 26), date(2026, 3, 3), date(2026, 3, 26),
-    date(2026, 3, 31), date(2026, 4, 3), date(2026, 4, 14),
-    date(2026, 5, 1), date(2026, 5, 28), date(2026, 6, 26),
-    date(2026, 9, 14), date(2026, 10, 2), date(2026, 10, 20),
-    date(2026, 11, 10), date(2026, 11, 24), date(2026, 12, 25),
-})
-NSE_FNO_HOLIDAY_SOURCE = "https://nsearchives.nseindia.com/content/circulars/FAOP71777.pdf"
 
 
 def validate_nse_session_day(session_date: date, *, segment: str = "NSE_FNO") -> dict[str, Any]:
@@ -47,7 +43,9 @@ def validate_nse_session_day(session_date: date, *, segment: str = "NSE_FNO") ->
     return {
         "session_date": session_date.isoformat(),
         "segment": segment,
-        "official_source": NSE_FNO_HOLIDAY_SOURCE,
+        "official_source": NSE_FNO_HOLIDAY_SOURCE_BY_DATE.get(
+            session_date, NSE_FNO_HOLIDAY_SOURCE
+        ),
         "listed_as_trading_holiday": listed_as_holiday,
         "session_day_allowed": session_date.weekday() < 5 and not listed_as_holiday,
         "verification_errors": [],

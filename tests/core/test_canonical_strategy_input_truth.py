@@ -184,7 +184,11 @@ def test_fetch_live_market_data_excludes_forming_bar_from_indicators(monkeypatch
 
         monkeypatch.setattr("core.market_data.now_ist", lambda: now_ist_value)
         monkeypatch.setattr("core.market_data.now_utc_epoch", lambda: now_utc_epoch_value)
-        monkeypatch.setattr("core.market_data.get_ltp", lambda sym: 100.0)
+        def _fresh_ltp(sym):
+            market_data._DATA_CACHE.setdefault(sym, {})
+            market_data._DATA_CACHE[sym].update({"ltp_source": "live", "ltp_ts_epoch": now_utc_epoch_value})
+            return 100.0
+        monkeypatch.setattr("core.market_data.get_ltp", _fresh_ltp)
         # Mock depth store to avoid network boundaries
         monkeypatch.setattr("core.market_data.depth_store.get", lambda sym: {})
 

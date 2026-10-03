@@ -183,7 +183,14 @@ def build_ranked_opportunity_report(
     hard_downgrade = apply_hard_downgrades(classification)
     scoring = score_opportunities(normalization.candidates, hard_downgrade)
     directional_balance = analyze_directional_balance(scoring)
-    ranking = _rank_with_feed_hold(scoring, directional_balance, feed_health, cycle_context=cycle_context)
+    scoped_symbol = _homogeneous_scoring_symbol(scoring, candidate_pool.symbol)
+    ranking = _rank_with_feed_hold(
+        scoring,
+        directional_balance,
+        feed_health,
+        symbol=scoped_symbol,
+        cycle_context=cycle_context,
+    )
     flow_summary = build_candidate_flow_summary(candidate_pool, classification, scoring, ranking)
 
     top_rank = ranking.ranks[0] if ranking.ranks else None
@@ -311,13 +318,25 @@ def _rank_with_feed_hold(
     directional_balance: DirectionalBalanceReport,
     feed_health: FeedHealthTruthDecision | Mapping[str, Any] | None,
     *,
+    symbol: str | None = None,
     cycle_context: RuntimeCycleContext | None = None,
 ) -> CandidateRankingReport:
     if feed_health is None and cycle_context is not None and cycle_context.feed_truth is not None:
         feed_health = cycle_context.feed_truth
     if feed_health is None:
         return rank_candidates(scoring, directional_balance)
-    return apply_feed_hold_to_ranking(scoring, feed_health, directional_balance)
+    return apply_feed_hold_to_ranking(scoring, feed_health, directional_balance, symbol=symbol)
+
+
+def _homogeneous_scoring_symbol(scoring: OpportunityScoreReport, pool_symbol: str | None) -> str | None:
+    """Return a scope key only for canonical, homogeneous symbol identities."""
+    if not isinstance(pool_symbol, str) or not pool_symbol or pool_symbol != pool_symbol.strip().upper() or not scoring.scores:
+        return None
+    for record in scoring.scores:
+        symbol = getattr(record, "symbol", None)
+        if not isinstance(symbol, str) or not symbol or symbol != symbol.strip().upper() or symbol != pool_symbol:
+            return None
+    return pool_symbol
 
 
 def _pipeline_stage_order(feed_health: FeedHealthTruthDecision | Mapping[str, Any] | None) -> tuple[str, ...]:

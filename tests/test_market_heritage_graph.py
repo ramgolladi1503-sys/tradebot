@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from core.market_calendar import IN_HOLIDAYS
 
 from core.market_heritage_graph import (
     MAX_NODE_BYTES,
@@ -413,6 +414,57 @@ def test_previous_eligible_session_skips_calendar_gaps_without_date_arithmetic()
         calendar_id="NSE-HIST", calendar_version="v4", venue="NSE", instrument_id="NIFTY50-SPOT")
     assert result["status"] == "RESOLVED"
     assert result["trading_date"] == "2026-09-25"
+
+
+@pytest.mark.parametrize(
+    "target_date,calendar_rows,expected_prior",
+    [
+        (
+            "2026-09-28",  # Monday; weekend dates are not eligible sessions.
+            [("2026-09-25", True), ("2026-09-26", False), ("2026-09-27", False)],
+            "2026-09-25",
+        ),
+        (
+            "2026-03-04",  # Wednesday after the authoritative NSE holiday on Mar 3.
+            [("2026-03-02", True), ("2026-03-03", False)],
+            "2026-03-02",
+        ),
+    ],
+    ids=["monday_after_weekend", "wednesday_after_exchange_holiday"],
+)
+def test_previous_eligible_session_skips_weekends_and_exchange_holidays(
+    target_date, calendar_rows, expected_prior,
+):
+    if expected_prior == "2026-03-02":
+        assert date.fromisoformat("2026-03-03") in IN_HOLIDAYS
+        assert date.fromisoformat(target_date) not in IN_HOLIDAYS
+    target = {
+        "trading_date": target_date,
+        "calendar_id": "NSE-FNO-HISTORICAL",
+        "calendar_version": "2026-v1",
+        "venue": "NSE",
+        "instrument_id": "NIFTY_FUTURES_CALENDAR_SCOPE",
+    }
+    sessions = [
+        {
+            **target,
+            "trading_date": trading_date,
+            "eligible": eligible,
+            "verified": True,
+        }
+        for trading_date, eligible in calendar_rows
+    ]
+    result = resolve_previous_eligible_session(
+        target_session=target,
+        eligible_sessions=sessions,
+        calendar_id=target["calendar_id"],
+        calendar_version=target["calendar_version"],
+        venue=target["venue"],
+        instrument_id=target["instrument_id"],
+    )
+
+    assert result["status"] == "RESOLVED"
+    assert result["trading_date"] == expected_prior
 
 
 def test_previous_session_blocks_missing_calendar_and_ambiguous_identity():
@@ -850,6 +902,148 @@ def test_runtime_prerequisite_loader_requires_pinned_manifest_and_calendar_ances
         decision_epoch=100, required_fields=required, target_instruments=instruments)
     assert unpinned["opening_drive_prev_close_1529"] is None
     assert unpinned["heritage_verification"]["reason"] == "PINNED_HERITAGE_MANIFEST_REQUIRED"
+
+
+def test_scenario_a_verified_t1_clean_boot_reaches_shadow_evaluators(tmp_path):
+    """Synthetic verified T-1 wiring reaches real shadow adapters without a trade claim."""
+    import hashlib
+    from types import SimpleNamespace
+
+    from core.market_session_store import MarketSessionStore
+    from core.paper_shadow.strategy_shadow_adapter import StrategyShadowAdapterRegistry
+    from core.candidate_audits.intraday_opening_drive import CANDIDATE_ID as OPENING_DRIVE_ID
+    from core.candidate_audits.nifty_overnight_drift import CANDIDATE_S1_ID, CANDIDATE_S4_ID
+
+    manifest_path, target, required, instruments = _publish_t1_manifest(tmp_path / "t1")
+    manifest_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    loaded = load_verified_t1_prerequisites(
+        manifest_path=manifest_path,
+        expected_manifest_sha256=manifest_sha,
+        approved_root=tmp_path / "t1",
+        target_session=target,
+        decision_epoch=100,
+        required_fields=required,
+        target_instruments=instruments,
+    )
+    verification = loaded.pop("heritage_verification")
+    target_expiry_from_launch_plan = "2026-10-06"
+    assert verification["status"] == "VERIFIED"
+    assert {key: value["status"] for key, value in verification["strategy_readiness"].items()} == {
+        OPENING_DRIVE_ID: "READY",
+        CANDIDATE_S1_ID: "READY",
+        CANDIDATE_S4_ID: "READY",
+    }
+
+    evidence_root = tmp_path / "observer"
+    registry = StrategyShadowAdapterRegistry(
+        session_id="SCENARIO_A_FIXTURE",
+        source_sha="a" * 40,
+        evidence_root=evidence_root,
+        opening_drive_prev_contract_key=loaded["opening_drive_prev_contract_key"],
+        opening_drive_prev_close_1529=loaded["opening_drive_prev_close_1529"],
+        opening_drive_target_expiry=target_expiry_from_launch_plan,
+        overnight_prev_daily_close=loaded["overnight_prev_daily_close"],
+        overnight_prev_sma200=loaded["overnight_prev_sma200"],
+        prerequisite_verification=verification,
+    )
+    expected = {OPENING_DRIVE_ID, CANDIDATE_S1_ID, CANDIDATE_S4_ID}
+    assert set(registry.adapters) == expected
+    assert registry.disabled_strategies == {}
+    opening_drive_adapter = registry.adapters[OPENING_DRIVE_ID]
+    assert opening_drive_adapter.prev_futures_contract_key == loaded["opening_drive_prev_contract_key"]
+    assert opening_drive_adapter.prev_close_1529 == loaded["opening_drive_prev_close_1529"]
+    assert opening_drive_adapter.target_expiry == target_expiry_from_launch_plan
+    for strategy_id in (CANDIDATE_S1_ID, CANDIDATE_S4_ID):
+        overnight_adapter = registry.adapters[strategy_id]
+        assert overnight_adapter.prev_daily_close == loaded["overnight_prev_daily_close"]
+        assert overnight_adapter.prev_sma200 == loaded["overnight_prev_sma200"]
+
+    pulse_time = datetime.fromisoformat("2026-09-29T09:16:00+05:30")
+    clean_store_path = tmp_path / "clean-session.sqlite"
+    store_reports = tmp_path / "store-reports"
+    writer = MarketSessionStore(
+        session_date=target["trading_date"],
+        db_path=clean_store_path,
+        report_root=store_reports,
+    )
+    bar_timestamp = pulse_time - timedelta(minutes=1)
+    persisted = writer.persist_completed_bar(
+        "NIFTY",
+        {
+            "ts": bar_timestamp,
+            "open": 24999.0,
+            "high": 25002.0,
+            "low": 24998.0,
+            "close": 25000.0,
+            "volume": 10.0,
+            "bar_provenance": {"source_type": "deterministic_test"},
+        },
+        completed_as_of=pulse_time,
+    )
+    assert persisted["status"] == "INSERTED"
+    assert persisted["persisted"] is True
+
+    reopened_store = MarketSessionStore(
+        session_date=target["trading_date"],
+        db_path=clean_store_path,
+        report_root=store_reports,
+    )
+    assert reopened_store.verify_integrity(target["trading_date"], ["NIFTY"])["status"] == "PASS"
+    completed_bars = reopened_store.get_bars(
+        "NIFTY", as_of=pulse_time, timeframe="1m", session_date=target["trading_date"]
+    )
+    assert len(completed_bars) == 1
+    assert completed_bars[0]["ts"] == bar_timestamp
+    assert completed_bars[0]["bar_provenance"] == {"source_type": "deterministic_test"}
+
+    invoked = set()
+    for strategy_id, adapter in registry.adapters.items():
+        original = adapter.on_market_pulse
+
+        def observe(pulse_id, snapshot, *, _strategy_id=strategy_id, _original=original):
+            invoked.add(_strategy_id)
+            return _original(pulse_id, snapshot)
+
+        adapter.on_market_pulse = observe
+
+    epoch = pulse_time.timestamp()
+    feed_truth = {
+        "feed_ok": True,
+        "websocket_ok": True,
+        "context": {"session_id": "SCENARIO_A_FIXTURE"},
+        "symbols": [
+            {"symbol": "NIFTY", "instrument_type": "INDEX", "instrument_token": 256265,
+             "feed_ok": True, "last_tick_age_sec": 0.25, "source_timestamp_epoch": epoch},
+            {"symbol": "NIFTY-SEP-FUT", "instrument_type": "FUT", "segment": "NFO-FUT",
+             "instrument_token": 999001, "contract_key": "NIFTY-SEP-FUT", "underlying": "NIFTY",
+             "feed_ok": True, "last_tick_age_sec": 0.25, "source_timestamp_epoch": epoch},
+        ],
+    }
+    market_snapshot = {"symbols": {
+        "NIFTY": {
+            "symbol": "NIFTY", "instrument_type": "INDEX", "instrument_token": 256265,
+            "ltp": 25000.0,
+            "quote_truth": {"symbol": "NIFTY", "instrument_token": 256265,
+                            "is_fresh": True, "ltp": 25000.0},
+            "feed_health": {"underlying_quote_age_sec": 0.25},
+        },
+        "NIFTY-SEP-FUT": {
+            "symbol": "NIFTY-SEP-FUT", "instrument_type": "FUT", "segment": "NFO-FUT",
+            "instrument_token": 999001, "selected_futures_contract_key": "NIFTY-SEP-FUT",
+            "underlying": "NIFTY", "ltp": 25001.0,
+        },
+    }}
+    registry.on_pulse(SimpleNamespace(pulse_id="SCENARIO_A_HEALTHY", timestamp_epoch=epoch),
+                      market_snapshot, feed_truth)
+    assert invoked == expected
+
+    registry_report = json.loads((evidence_root / "registry.json").read_text(encoding="utf-8"))
+    assert registry_report["read_only"] is True
+    assert registry_report["broker_write_authority"] is False
+    assert registry_report["order_authority"] is False
+    assert registry_report["paper_authorized"] is False
+    assert registry_report["live_authorized"] is False
+    assert registry.orders_placed == registry.orders_modified == registry.orders_cancelled == 0
 
 
 def test_runtime_prerequisite_loader_rejects_incomplete_target_session_identity(tmp_path):

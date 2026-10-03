@@ -61,6 +61,10 @@ from core.orchestrator_helpers import (
     _perf_ms as _orchestrator_perf_ms,
     freeze_cycle_feed_truth_payload as _freeze_cycle_feed_truth_payload,
 )
+from core.feed_health_truth import (
+    FEED_TRUTH_CANONICAL_LOADER_ORIGIN,
+    FEED_TRUTH_LOADER_ORIGIN_KEY,
+)
 
 
 from config import config as cfg
@@ -112,7 +116,7 @@ from core import risk_halt
 from core.decision_logger import log_decision, update_execution, update_outcome
 from core.risk_utils import to_pct
 from core.feed_runtime import build_canonical_feed_truth_state
-from core.time_utils import now_ist, now_utc_epoch, is_market_open_ist
+from core.time_utils import now_ist, now_utc_epoch, is_market_open_ist, normalize_epoch_seconds
 from core.meta_model import MetaModel
 from core.decision_trace import decision_config_snapshot
 from core.reports.daily_audit import build_daily_audit, write_daily_audit_placeholder
@@ -270,7 +274,6 @@ from core.strategy_family_contract import (
     resolve_legacy_gate_allowed_families as _resolve_legacy_gate_allowed_families,
 )
 from core.market_session_store import (
-    MarketMemorySnapshot as _MarketMemorySnapshot,
     market_session_store as _global_market_session_store,
 )
 from core.observability import generate_trace_id as _generate_trace_id
@@ -369,52 +372,47 @@ def _evaluate_c1_c2_for_symbol(
     if sym_norm not in {"NIFTY", "BANKNIFTY"}:
         return [], []
 
-    # 1. Obtain market memory snapshot
-    mem: _MarketMemorySnapshot | None = None
+    # Durable bars provide history; this cycle's explicit time-sanity result
+    # alone supplies freshness. Persisted history must never make a stale feed fresh.
     try:
-        mem = _global_market_session_store.get_market_memory(
+        time_sanity = market_data.get("time_sanity")
+        ltp_epoch = normalize_epoch_seconds(
+            time_sanity.get("ltp_ts_epoch") if isinstance(time_sanity, dict)
+            else market_data.get("ltp_ts_epoch")
+        )
+        cutoff_epoch = normalize_epoch_seconds(market_data.get("timestamp"))
+        max_ltp_age_sec = float(getattr(
+            cfg,
+            "OFFHOURS_MAX_LTP_AGE_SEC" if bool(market_data.get("offhours_mode")) else "MAX_LTP_AGE_SEC",
+            900 if bool(market_data.get("offhours_mode")) else 8,
+        ))
+        ltp_age_sec = (
+            float(cutoff_epoch) - float(ltp_epoch)
+            if cutoff_epoch is not None and ltp_epoch is not None
+            else None
+        )
+        freshness = 1.0 if (
+            market_data.get("valid") is True
+            and isinstance(time_sanity, dict)
+            and time_sanity.get("ok") is True
+            and str(market_data.get("ltp_source") or "").strip().lower() in {"live", "tick_store"}
+            and ltp_age_sec is not None
+            and 0.0 <= ltp_age_sec <= max_ltp_age_sec
+        ) else 0.0
+        if _global_market_session_store is None:
+            raise RuntimeError("market_session_store_disabled")
+        mem = _global_market_session_store.get_persisted_market_memory(
+            sym_norm,
             as_of_timestamp=ts_str,
+            freshness_watermark=freshness,
             trace_id=trace_id,
         )
-    except Exception:
-        mem = None
-
-    if mem is None or mem.rolling_1m_bars_count <= 0:
-        # Synthesize causal snapshot from market_data
-        try:
-            curr_price = float(market_data.get("spot", market_data.get("ltp", market_data.get("close", 0.0))) or 0.0)
-            open_price = float(market_data.get("session_open", market_data.get("open", curr_price)) or curr_price)
-            high_price = max(open_price, curr_price, float(market_data.get("high", curr_price) or curr_price))
-            low_price = min(open_price, curr_price, float(market_data.get("low", curr_price) or curr_price))
-            r15m = float(market_data.get("rolling_15m_return_bps", market_data.get("return_15m_bps", 0.0)) or 0.0)
-            dist_open = float(market_data.get("distance_from_session_open_bps", market_data.get("distance_from_open_bps", 0.0)) or 0.0)
-            bars_count = int(market_data.get("ohlc_bars_count", market_data.get("bars_count", 30)) or 30)
-            freshness = 1.0 if not bool(market_data.get("is_stale", False)) else 0.0
-
-            mem = _MarketMemorySnapshot(
-                as_of_timestamp=ts_str,
-                symbol=sym_norm,
-                current_price=curr_price,
-                session_open=open_price,
-                session_high=high_price,
-                session_low=low_price,
-                session_close=curr_price,
-                bar_index=max(0, bars_count - 1),
-                rolling_1m_bars_count=bars_count,
-                derived_5m_bars_count=bars_count // 5,
-                derived_15m_bars_count=bars_count // 15,
-                rolling_15m_return_bps=r15m,
-                distance_from_session_open_bps=dist_open,
-                rolling_15m_range_bps=10.0,
-                realized_vol_15m=5.0,
-                freshness_watermark=freshness,
-                persistence_watermark=1.0,
-                trace_id=trace_id,
-            )
-        except Exception:
-            mem = None
-
-    if mem is None:
+    except Exception as exc:
+        logger.debug(
+            "c1_c2_market_memory_unavailable symbol=%s reason=%s",
+            sym_norm,
+            f"{type(exc).__name__}:{exc}",
+        )
         return [], []
 
     eval_results: list[_EvaluatorResult] = []
@@ -942,7 +940,11 @@ def _read_json_dict(path: Path) -> dict:
 
 def _load_cycle_feed_truth_payload(path: Path | None = None) -> Mapping[str, Any]:
     target = path or (logs_dir() / "feed_truth_latest.json")
-    return _freeze_cycle_feed_truth_payload(_read_json_dict(target))
+    payload = _read_json_dict(target)
+    if target.name == "feed_truth_latest.json":
+        # This records where the loader read from; it does not authenticate payload bytes.
+        payload[FEED_TRUTH_LOADER_ORIGIN_KEY] = FEED_TRUTH_CANONICAL_LOADER_ORIGIN
+    return _freeze_cycle_feed_truth_payload(payload)
 
 
 def _safe_float(value):
@@ -5006,6 +5008,14 @@ class Orchestrator:
                 feature_timing["refresh_decay_report_ms"] = _perf_ms(t0)
 
                 t0 = time.perf_counter()
+                try:
+                    from core.market_session_memory_contract import install as install_market_session_memory
+
+                    memory_status = install_market_session_memory()
+                    if memory_status.get("status") != "PERSISTENCE_READY":
+                        logger.warning("market_session_memory_bridge_not_ready status=%s", memory_status.get("status"))
+                except Exception as exc:
+                    logger.exception("market_session_memory_bridge_install_failed error=%s", exc)
                 live_market_data = fetch_live_market_data()
                 feature_timing["fetch_live_market_data_ms"] = _perf_ms(t0)
 

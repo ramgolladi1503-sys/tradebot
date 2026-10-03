@@ -12,6 +12,13 @@ def test_choose_expiry_prefers_nearest_available_non_holiday(monkeypatch):
     assert chosen == date(2030, 1, 30)
 
 
+def test_nearest_expiry_skips_nse_fno_exchange_holiday():
+    chosen = market_calendar.choose_nearest_available_expiry(
+        [date(2026, 3, 3), date(2026, 3, 4)], today=date(2026, 3, 3)
+    )
+    assert chosen == date(2026, 3, 4)
+
+
 def test_weekday_fallback_mapping_uses_tuesday_for_nse_and_thursday_for_sensex(monkeypatch):
     monkeypatch.setattr(market_calendar, "IN_HOLIDAYS", set())
     monkeypatch.setattr(cfg, "EXPIRY_WEEKDAY_BY_SYMBOL", {}, raising=False)

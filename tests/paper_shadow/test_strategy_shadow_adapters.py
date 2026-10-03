@@ -706,6 +706,289 @@ def test_bar_timestamp_provenance():
     assert snaps[0].receipt_timestamp_ist == pulse_time
 
 
+def test_snapshot_builder_unwraps_runtime_truth_and_isolates_explicit_spot_health():
+    from core.paper_shadow.strategy_shadow_adapter import StrategyMarketSnapshotBuilder
+
+    pulse_time = datetime(2026, 9, 22, 9, 21, 0, tzinfo=IST_TZ)
+    runtime_truth = {
+        "feed_ok": False,
+        "feed_health_truth": {
+            "feed_ok": False,
+            "websocket_ok": True,
+            "symbols": [{"symbol": "NIFTY", "feed_ok": False, "reasons": ["option_ticks_stale"]}],
+            "domains": {
+                "index_spot": {"state": "HEALTHY"},
+                "index_options": {"state": "DEGRADED"},
+            },
+            "context": {
+                "feed_ok_scope": "symbol_aggregate",
+                "global_feed_blocked": False,
+                "runtime_state": "RUNNING",
+                "feed_state": "LIVE",
+            },
+        },
+    }
+    market_snapshot = {
+        "symbols": {
+            "NIFTY": {
+                "spot": 25000.0,
+                "ltp": 25000.0,
+                "quote_truth": {
+                    "symbol": "NIFTY",
+                    "instrument_token": 256265,
+                    "is_fresh": True,
+                    "ltp": 25000.0,
+                },
+                "feed_health": {"underlying_quote_age_sec": 0.4, "status": "HEALTHY"},
+            }
+        }
+    }
+
+    snapshots = StrategyMarketSnapshotBuilder.build_snapshots(
+        pulse_id="wrapped-runtime-truth",
+        timestamp_ist=pulse_time,
+        market_snapshot=market_snapshot,
+        feed_health_truth=runtime_truth,
+    )
+
+    assert len(snapshots) == 1
+    assert snapshots[0].instrument_class == "INDEX_SPOT"
+    assert snapshots[0].instrument_key == "256265"
+    assert snapshots[0].feed_health == "HEALTHY"
+
+
+def test_snapshot_builder_accepts_actual_runtime_snapshot_truth_payload():
+    from core.paper_shadow.strategy_shadow_adapter import StrategyMarketSnapshotBuilder
+    from core.runtime_snapshot_stages import build_feed_health_truth_latest_payload
+
+    runtime_truth, _decision = build_feed_health_truth_latest_payload({
+        "feed_ok": False,
+        "feed_ok_scope": "symbol_aggregate",
+        "global_feed_blocked": False,
+        "ws_connected": True,
+        "effective_ws_connected": True,
+        "runtime_state": "RUNNING",
+        "option_feed_block_reason_by_symbol": {"NIFTY": "STALE"},
+        "option_last_tick_age_by_symbol": {"NIFTY": 900.0},
+        "subscribed_option_tokens_count": 0,
+        "domain_health_by_domain": {
+            "INDEX_SPOT": {"state": "HEALTHY"},
+            "INDEX_OPTIONS": {"state": "DEGRADED"},
+        },
+    })
+    market_snapshot = {
+        "symbols": {
+            "NIFTY": {
+                "spot": 25000.0,
+                "ltp": 25000.0,
+                "quote_truth": {
+                    "symbol": "NIFTY",
+                    "instrument_token": 256265,
+                    "is_fresh": True,
+                },
+                "feed_health": {"underlying_quote_age_sec": 0.4},
+            }
+        }
+    }
+
+    snapshots = StrategyMarketSnapshotBuilder.build_snapshots(
+        pulse_id="runtime-producer-envelope",
+        timestamp_ist=datetime(2026, 9, 22, 9, 21, 0, tzinfo=IST_TZ),
+        market_snapshot=market_snapshot,
+        feed_health_truth=runtime_truth,
+    )
+
+    assert runtime_truth["feed_ok"] is False
+    assert runtime_truth["feed_health_truth"]["context"]["feed_ok_scope"] == "symbol_aggregate"
+    assert len(snapshots) == 1
+    assert snapshots[0].instrument_key == "256265"
+    assert snapshots[0].feed_health == "HEALTHY"
+
+
+def test_snapshot_builder_keeps_wrapped_global_feed_block_and_unknown_spot_closed():
+    from core.paper_shadow.strategy_shadow_adapter import StrategyMarketSnapshotBuilder
+
+    now = datetime(2026, 9, 22, 9, 21, 0, tzinfo=IST_TZ)
+    base_truth = {
+        "feed_ok": False,
+        "feed_health_truth": {
+            "feed_ok": False,
+            "websocket_ok": True,
+            "symbols": [{"symbol": "NIFTY", "feed_ok": False}],
+            "domains": {"index_spot": {"state": "HEALTHY"}},
+            "context": {
+                "feed_ok_scope": "symbol_aggregate",
+                "global_feed_blocked": True,
+                "runtime_state": "RUNNING",
+                "feed_state": "LIVE",
+            },
+        },
+    }
+    market_snapshot = {
+        "symbols": {
+            "NIFTY": {
+                "quote_truth": {"symbol": "NIFTY", "instrument_token": 256265, "is_fresh": True},
+                "feed_health": {"underlying_quote_age_sec": 0.4},
+            }
+        }
+    }
+
+    blocked = StrategyMarketSnapshotBuilder.build_snapshots(
+        pulse_id="global-block",
+        timestamp_ist=now,
+        market_snapshot=market_snapshot,
+        feed_health_truth=base_truth,
+    )
+    assert len(blocked) == 1
+    assert blocked[0].feed_health == "DEGRADED"
+
+    base_truth["feed_health_truth"]["context"]["global_feed_blocked"] = False
+    base_truth["feed_health_truth"]["domains"]["index_spot"]["state"] = "UNKNOWN"
+    unknown = StrategyMarketSnapshotBuilder.build_snapshots(
+        pulse_id="unknown-spot",
+        timestamp_ist=now,
+        market_snapshot=market_snapshot,
+        feed_health_truth=base_truth,
+    )
+    assert len(unknown) == 1
+    assert unknown[0].feed_health == "DEGRADED"
+
+    base_truth["feed_health_truth"]["domains"]["index_spot"]["state"] = "HEALTHY"
+    base_truth["feed_health_truth"]["websocket_ok"] = False
+    disconnected = StrategyMarketSnapshotBuilder.build_snapshots(
+        pulse_id="disconnected-websocket",
+        timestamp_ist=now,
+        market_snapshot=market_snapshot,
+        feed_health_truth=base_truth,
+    )
+    assert len(disconnected) == 1
+    assert disconnected[0].feed_health == "DEGRADED"
+
+    base_truth["feed_health_truth"]["websocket_ok"] = True
+    base_truth["feed_health_truth"]["context"]["runtime_state"] = "STOPPED"
+    unsafe_runtime = StrategyMarketSnapshotBuilder.build_snapshots(
+        pulse_id="unsafe-runtime-state",
+        timestamp_ist=now,
+        market_snapshot=market_snapshot,
+        feed_health_truth=base_truth,
+    )
+    assert len(unsafe_runtime) == 1
+    assert unsafe_runtime[0].feed_health == "DEGRADED"
+
+
+def test_snapshot_builder_does_not_invent_wrapped_spot_quote_identity():
+    from core.paper_shadow.strategy_shadow_adapter import StrategyMarketSnapshotBuilder
+
+    snapshots = StrategyMarketSnapshotBuilder.build_snapshots(
+        pulse_id="missing-quote-identity",
+        timestamp_ist=datetime(2026, 9, 22, 9, 21, 0, tzinfo=IST_TZ),
+        market_snapshot={},
+        feed_health_truth={
+            "feed_ok": True,
+            "feed_health_truth": {
+                "feed_ok": True,
+                "websocket_ok": True,
+                "symbols": [{"symbol": "NIFTY", "feed_ok": True}],
+                "domains": {"index_spot": {"state": "HEALTHY"}},
+                "context": {"global_feed_blocked": False},
+            },
+        },
+    )
+
+    assert snapshots == []
+
+
+def test_snapshot_builder_rejects_spot_quote_token_mismatch():
+    from core.paper_shadow.strategy_shadow_adapter import StrategyMarketSnapshotBuilder
+
+    snapshots = StrategyMarketSnapshotBuilder.build_snapshots(
+        pulse_id="quote-token-mismatch",
+        timestamp_ist=datetime(2026, 9, 22, 9, 21, 0, tzinfo=IST_TZ),
+        market_snapshot={
+            "symbols": {
+                "NIFTY": {
+                    "instrument_token": 999,
+                    "quote_truth": {"symbol": "NIFTY", "instrument_token": 256265, "is_fresh": True},
+                    "feed_health": {"underlying_quote_age_sec": 0.4},
+                }
+            }
+        },
+        feed_health_truth={
+            "feed_ok": False,
+            "feed_health_truth": {
+                "feed_ok": False,
+                "websocket_ok": True,
+                "symbols": [{"symbol": "NIFTY", "feed_ok": False}],
+                "domains": {"index_spot": {"state": "HEALTHY"}},
+                "context": {"feed_ok_scope": "symbol_aggregate", "global_feed_blocked": False},
+            },
+        },
+    )
+
+    assert snapshots == []
+
+
+@pytest.mark.parametrize("bad_token", [True, False, "256265.0", "0256265", 256265.0, 0, -1])
+def test_snapshot_builder_rejects_noncanonical_spot_quote_tokens(bad_token):
+    from core.paper_shadow.strategy_shadow_adapter import StrategyMarketSnapshotBuilder
+
+    snapshots = StrategyMarketSnapshotBuilder.build_snapshots(
+        pulse_id="invalid-quote-token",
+        timestamp_ist=datetime(2026, 9, 22, 9, 21, 0, tzinfo=IST_TZ),
+        market_snapshot={
+            "symbols": {
+                "NIFTY": {
+                    "quote_truth": {"symbol": "NIFTY", "instrument_token": bad_token, "is_fresh": True},
+                    "feed_health": {"underlying_quote_age_sec": 0.4},
+                }
+            }
+        },
+        feed_health_truth={
+            "feed_ok": True,
+            "feed_health_truth": {
+                "feed_ok": True,
+                "websocket_ok": True,
+                "symbols": [{"symbol": "NIFTY", "feed_ok": True}],
+                "domains": {"index_spot": {"state": "HEALTHY"}},
+                "context": {"feed_ok_scope": "symbol_aggregate", "global_feed_blocked": False},
+            },
+        },
+    )
+
+    assert snapshots == []
+
+
+@pytest.mark.parametrize("bad_feed_ok", ["false", 1, "true", 0])
+def test_snapshot_builder_requires_boolean_runtime_feed_status(bad_feed_ok):
+    from core.paper_shadow.strategy_shadow_adapter import StrategyMarketSnapshotBuilder
+
+    snapshots = StrategyMarketSnapshotBuilder.build_snapshots(
+        pulse_id="malformed-runtime-feed-status",
+        timestamp_ist=datetime(2026, 9, 22, 9, 21, 0, tzinfo=IST_TZ),
+        market_snapshot={
+            "symbols": {
+                "NIFTY": {
+                    "quote_truth": {"symbol": "NIFTY", "instrument_token": 256265, "is_fresh": True},
+                    "feed_health": {"underlying_quote_age_sec": 0.4},
+                }
+            }
+        },
+        feed_health_truth={
+            "feed_ok": True,
+            "feed_health_truth": {
+                "feed_ok": bad_feed_ok,
+                "websocket_ok": True,
+                "symbols": [{"symbol": "NIFTY", "feed_ok": True}],
+                "domains": {"index_spot": {"state": "HEALTHY"}},
+                "context": {"global_feed_blocked": False},
+            },
+        },
+    )
+
+    assert len(snapshots) == 1
+    assert snapshots[0].feed_health == "DEGRADED"
+
+
 def test_level1_depth_finite_and_quantities():
     """Prove that Level1Depth rejects non-finite values and missing/zero quantities."""
     import math

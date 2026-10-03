@@ -1,0 +1,37 @@
+{
+  "repository_sha": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+  "baseline_before_campaign": {
+    "focused_issue_9_10_tests": "49 passed (Hermes Stage 1 baseline)",
+    "full_suite": "not run before prior edits; prior campaign artifact includes earlier completed results"
+  },
+  "current_campaign": [
+    {
+      "scope": "Issues 9/10/11 producer and observer integration",
+      "command": "pytest -q tests/core/test_runtime_snapshot_producer.py tests/test_kite_read_only_observation_runtime.py tests/test_market_event_graph_live_runtime_bridge.py",
+      "result": "54 passed, 1 warning",
+      "status": "PASS"
+    },
+    {
+      "scope": "Issues 7-11, telemetry, persistence, heritage, feed safety, token coverage/budget",
+      "command": "pytest -q tests/core/test_market_session_store.py tests/test_market_event_graph_live_ohlc_buffer.py tests/test_market_event_graph_live_runtime_bridge.py tests/test_candle_pipeline_diagnostics.py tests/test_kite_read_only_observation_runtime.py tests/core/test_runtime_snapshot_producer.py tests/test_runtime_snapshot_producer_tail.py tests/test_telemetry_streams.py tests/test_decision_telemetry.py tests/test_readiness_decision_consistency.py tests/test_orchestrator_strategy_gate_once.py tests/analytics/test_session_store_ingestion.py tests/core/test_canonical_strategy_input_truth.py tests/test_market_heritage_graph.py tests/paper_shadow/test_t1_prerequisites_authority.py tests/test_edge43_feed_health_truth.py tests/test_edge45_symbol_execution_safety.py tests/core/test_token_coverage_threshold.py tests/test_pr_feed_10_subscription_budget_policy.py tests/test_pr_feed_05_exact_option_token_freshness_gate.py",
+      "result": "279 passed, 1 warning",
+      "status": "PASS"
+    },
+    {
+      "scope": "repository suite excluding unavailable Upstox integration module",
+      "command": "PATH=/tmp/tradebot-test-python-bin:$PATH pytest -q --ignore=tests/test_upstox_daily_live_capture.py",
+      "result": "8571 passed, 9 skipped, 28 deselected, 1474 warnings in 923.50s",
+      "status": "PASS"
+    },
+    {
+      "scope": "Issue 9 persisted timestamp identity, MEG restore, dependency registry and symbol safety after fresh verifier attack",
+      "command": "pytest -q tests/core/test_market_session_store.py tests/test_market_event_graph_live_ohlc_buffer.py tests/test_market_event_graph_live_runtime_bridge.py tests/test_kite_read_only_observation_runtime.py tests/test_candidate_feed_dependencies.py tests/test_edge45_symbol_execution_safety.py",
+      "result": "106 passed, 1 warning in 4.32s (includes nonnumeric epoch corruption neighbor attack)",
+      "status": "PASS"
+    }
+  ],
+  "known_environment_limits": [
+    "tests/test_upstox_daily_live_capture.py was excluded because upstox_client is unavailable; all other collected repository tests passed"
+  ],
+  "scope_limit": "Offline tests do not prove live runtime behavior or execution viability."
+}

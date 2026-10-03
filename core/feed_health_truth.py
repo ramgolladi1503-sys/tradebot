@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import math
+import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
+
+from config import feed_runtime_reliability as reliability_cfg
 
 GLOBAL_FEED_UNHEALTHY_REASON = "global_feed_unhealthy"
 WEBSOCKET_DISCONNECTED_REASON = "websocket_disconnected"
@@ -26,6 +30,9 @@ FEED_HEALTH_DOMAINS = (
     "STOCK_OPTIONS",
 )
 _DOMAIN_HEALTH_STATES = {"HEALTHY", "DEGRADED", "UNHEALTHY", "UNKNOWN"}
+_RUNTIME_FEED_TRUTH_SNAPSHOT_SOURCE = "runtime_feed_truth_snapshot_v1"
+FEED_TRUTH_LOADER_ORIGIN_KEY = "feed_truth_loader_origin"
+FEED_TRUTH_CANONICAL_LOADER_ORIGIN = "canonical_feed_truth_latest_path"
 
 
 @dataclass(frozen=True)
@@ -71,6 +78,17 @@ def _safe_float(value: Any) -> float | None:
         return float(value)
     except Exception:
         return None
+
+
+def _safe_age(value: Any) -> float | None:
+    """Accept only finite, nonnegative JSON numeric age values."""
+    if type(value) not in (int, float):
+        return None
+    try:
+        age = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return age if math.isfinite(age) and age >= 0.0 else None
 
 
 def _safe_non_negative_float(value: Any, default: float) -> float:
@@ -189,10 +207,12 @@ def classify_symbol_feed_truth(
     reasons: list[str] = []
     block_reason_raw = _symbol_value(payload, normalized, "option_feed_block_reason_by_symbol")
     block_reason = _normalize_reason(block_reason_raw)
-    option_age = _safe_float(_symbol_value(payload, normalized, "option_last_tick_age_by_symbol"))
+    option_age = _safe_age(_symbol_value(payload, normalized, "option_last_tick_age_by_symbol"))
     symbol_feed_ok = _bool_or_none(
         _symbol_value(payload, normalized, "symbol_feed_ok_by_symbol", "feed_ok_by_symbol")
     )
+    underlying_identity = _symbol_value(payload, normalized, "underlying_feed_identity_by_symbol")
+    feed_session_identity = _mapping(payload.get("feed_session_identity"))
     symbol_evidence_present = any(
         normalized in {_normalize_symbol(key) for key in (payload.get(field) or {})}
         for field in (
@@ -223,7 +243,13 @@ def classify_symbol_feed_truth(
         reasons=tuple(reasons),
         option_feed_block_reason=None if block_reason in _OPTION_OK_CODES else block_reason.lower(),
         option_last_tick_age_sec=option_age,
-        context={"symbol_feed_ok": symbol_feed_ok, "max_option_tick_age_sec": max_option_tick_age_sec},
+        context={
+            "symbol_feed_ok": symbol_feed_ok,
+            "max_option_tick_age_sec": max_option_tick_age_sec,
+            "underlying_feed_identity": underlying_identity if isinstance(underlying_identity, dict) else None,
+            "feed_session_identity": feed_session_identity or None,
+            "observation_epoch": _safe_age(payload.get("ts_epoch")),
+        },
     )
 
 
@@ -253,11 +279,82 @@ def classify_feed_health_truth(
     max_ltp_age = _safe_non_negative_float(max_ltp_age_sec, 2.5) if max_ltp_age_sec is not None else None
     max_depth_age = _safe_non_negative_float(max_depth_age_sec, 6.0) if max_depth_age_sec is not None else None
     global_feed_ok = _bool_or_none(payload.get("feed_ok"))
+    global_feed_ok_source = "feed_ok" if global_feed_ok is not None else None
+    snapshot_feed_fresh: bool | None = None
+    snapshot_freshness_reasons: list[str] = []
+    snapshot_age_sec: float | None = None
+    snapshot_source = payload.get("source")
+    snapshot_signature_present = (
+        payload.get(FEED_TRUTH_LOADER_ORIGIN_KEY) == FEED_TRUTH_CANONICAL_LOADER_ORIGIN
+        or "feed_fresh" in payload
+        or payload.get("writer") == "feed_truth.canonical"
+        or any(
+            key in payload
+            for key in (
+                "market_closed_detected",
+                "underlying_tick_fresh",
+                "option_tick_fresh",
+                "selected_contract_quote_fresh",
+            )
+        )
+    )
+    is_runtime_snapshot = (
+        snapshot_signature_present
+        or (
+            isinstance(snapshot_source, str)
+            and snapshot_source.startswith("runtime_feed_truth_snapshot_")
+        )
+    )
+    if is_runtime_snapshot and snapshot_source != _RUNTIME_FEED_TRUTH_SNAPSHOT_SOURCE:
+        _append_unique(snapshot_freshness_reasons, "persisted_feed_truth_source_unsupported")
+    if is_runtime_snapshot:
+        raw_snapshot_fresh = payload.get("feed_fresh")
+        if isinstance(raw_snapshot_fresh, bool):
+            snapshot_feed_fresh = raw_snapshot_fresh
+            if not snapshot_feed_fresh:
+                _append_unique(snapshot_freshness_reasons, "persisted_feed_truth_stale")
+        else:
+            _append_unique(snapshot_freshness_reasons, "persisted_feed_truth_freshness_unknown")
+        snapshot_components = (
+            payload.get("ws_connected"),
+            payload.get("market_closed_detected"),
+            payload.get("underlying_tick_fresh"),
+            payload.get("option_tick_fresh"),
+        )
+        if not all(isinstance(value, bool) for value in snapshot_components):
+            _append_unique(snapshot_freshness_reasons, "persisted_feed_truth_components_unknown")
+        elif snapshot_feed_fresh is True and snapshot_components != (True, False, True, True):
+            _append_unique(snapshot_freshness_reasons, "persisted_feed_truth_components_inconsistent")
+        raw_generated_epoch = payload.get("generated_epoch")
+        try:
+            generated_epoch = (
+                float(raw_generated_epoch)
+                if type(raw_generated_epoch) in (int, float)
+                else float("nan")
+            )
+        except (TypeError, ValueError, OverflowError):
+            generated_epoch = float("nan")
+        if not math.isfinite(generated_epoch):
+            _append_unique(snapshot_freshness_reasons, "persisted_feed_truth_snapshot_time_unknown")
+        else:
+            snapshot_age_sec = time.time() - generated_epoch
+            if snapshot_age_sec < 0:
+                _append_unique(snapshot_freshness_reasons, "persisted_feed_truth_snapshot_time_invalid")
+            try:
+                max_snapshot_age_sec = float(
+                    getattr(reliability_cfg, "FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC", 3.0)
+                )
+            except (TypeError, ValueError, OverflowError):
+                max_snapshot_age_sec = float("nan")
+            if not math.isfinite(max_snapshot_age_sec) or max_snapshot_age_sec <= 0:
+                _append_unique(snapshot_freshness_reasons, "persisted_feed_truth_max_age_config_invalid")
+            elif snapshot_age_sec > max_snapshot_age_sec:
+                _append_unique(snapshot_freshness_reasons, "persisted_feed_truth_snapshot_stale")
     websocket_ok = _global_websocket_ok(payload)
     runtime_state = _runtime_state(payload)
     feed_state = _feed_state(payload)
-    last_tick_age = _safe_float(payload.get("last_tick_age_sec"))
-    last_depth_age = _safe_float(payload.get("last_depth_age_sec"))
+    last_tick_age = _safe_age(payload.get("last_tick_age_sec"))
+    last_depth_age = _safe_age(payload.get("last_depth_age_sec"))
     requested_symbols = tuple(_normalize_symbol(symbol) for symbol in symbols if _normalize_symbol(symbol))
     symbol_names = _symbols_from_payload(payload, requested_symbols)
     symbol_truths = tuple(
@@ -272,7 +369,15 @@ def classify_feed_health_truth(
     domains = _domain_health(payload)
     required_domain_names = tuple(dict.fromkeys(_normalize_state(item) for item in required_domains if _normalize_state(item)))
 
-    reasons: list[str] = []
+    reasons: list[str] = list(snapshot_freshness_reasons)
+    has_explicit_global_ltp_freshness = last_tick_age is not None and max_ltp_age is not None
+    if (
+        global_feed_ok is None
+        and not symbol_names
+        and not is_runtime_snapshot
+        and not has_explicit_global_ltp_freshness
+    ):
+        _append_unique(reasons, "feed_health_authority_missing")
     # ``feed_ok`` is an aggregate across monitored symbols in current runtime
     # artifacts. When a consumer supplies explicit dependencies, its false
     # value may be caused by an unrelated illiquid symbol. Hard transport and
@@ -390,6 +495,10 @@ def classify_feed_health_truth(
                 truth.symbol for truth in monitored_truths if not truth.feed_ok
             ],
             "aggregate_feed_ok": global_feed_ok,
+            "aggregate_feed_ok_source": global_feed_ok_source,
+            "runtime_snapshot_feed_fresh": snapshot_feed_fresh,
+            "runtime_snapshot_source": snapshot_source if is_runtime_snapshot else None,
+            "runtime_snapshot_age_sec": snapshot_age_sec,
             "global_feed_blocked": payload.get("global_feed_blocked") is True,
             "feed_ok_scope": "symbol_aggregate" if aggregate_is_symbol_scoped else "global_or_unknown",
             "max_option_tick_age_sec": max_option_age,

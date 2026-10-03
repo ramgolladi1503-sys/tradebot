@@ -1,0 +1,2389 @@
+{
+  "edges": [
+    {
+      "from": "I10_ATTACK",
+      "to": "I10_REGRESSION_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I10_CALLEE",
+      "to": "I10_PERSISTED_ARTIFACT",
+      "type": "PERSISTS_TO"
+    },
+    {
+      "from": "I10_CALLER",
+      "to": "I10_FUNCTION_OR_CLASS",
+      "type": "CALLS"
+    },
+    {
+      "from": "I10_CALLER",
+      "to": "I10_PERSISTED_ARTIFACT",
+      "type": "CONSUMES"
+    },
+    {
+      "from": "I10_CANONICAL_WRITER_LOCK",
+      "to": "I10_CALLEE",
+      "type": "SERIALIZES"
+    },
+    {
+      "from": "I10_CANONICAL_WRITER_LOCK",
+      "to": "I10_MULTI_PROCESS_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I10_CANONICAL_WRITER_LOCK",
+      "to": "I10_WRITER_LOCK_MUTATION",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I10_CONFIG",
+      "to": "I10_RUNTIME_STATE",
+      "type": "CONFIGURES"
+    },
+    {
+      "from": "I10_EVIDENCE",
+      "to": "I10_SYMPTOM",
+      "type": "PRODUCES"
+    },
+    {
+      "from": "I10_FUNCTION_OR_CLASS",
+      "to": "I10_CALLEE",
+      "type": "CALLS"
+    },
+    {
+      "from": "I10_FUNCTION_OR_CLASS",
+      "to": "I10_PERSISTED_ARTIFACT",
+      "type": "FALLS_BACK_TO"
+    },
+    {
+      "from": "I10_MULTIWRITER_UNKNOWN",
+      "to": "I10_CANONICAL_WRITER_LOCK",
+      "type": "LIMITS_TO_COOPERATING_CALLERS"
+    },
+    {
+      "from": "I10_MULTIWRITER_UNKNOWN",
+      "to": "I10_VERIFIER",
+      "type": "LIMITS"
+    },
+    {
+      "from": "I10_MULTI_PROCESS_TEST",
+      "to": "I10_VERIFIER",
+      "type": "SUPPORTS_OFFLINE_VERIFICATION"
+    },
+    {
+      "from": "I10_MUTATION",
+      "to": "I10_REPRO_TEST",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I10_MUTATION",
+      "to": "I10_REPRO_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I10_PATCH",
+      "to": "I10_ATTACK",
+      "type": "ISOLATES"
+    },
+    {
+      "from": "I10_PATCH",
+      "to": "I10_MUTATION",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I10_PATCH",
+      "to": "I10_PERSISTED_ARTIFACT",
+      "type": "CONFIGURES"
+    },
+    {
+      "from": "I10_PATCH",
+      "to": "I10_REPRO_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I10_PERSISTED_ARTIFACT",
+      "to": "I10_FUNCTION_OR_CLASS",
+      "type": "CONSUMES"
+    },
+    {
+      "from": "I10_PERSISTED_ARTIFACT",
+      "to": "I10_FUNCTION_OR_CLASS",
+      "type": "RESTORES_FROM"
+    },
+    {
+      "from": "I10_ROOT_CAUSE",
+      "to": "I10_PATCH",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I10_RUNTIME_STATE",
+      "to": "I10_CALLER",
+      "type": "CALLS"
+    },
+    {
+      "from": "I10_SAFETY_INVARIANT",
+      "to": "I10_RUNTIME_STATE",
+      "type": "GATES"
+    },
+    {
+      "from": "I10_SINGLE_INSTANCE_GUARD",
+      "to": "I10_MULTIWRITER_UNKNOWN",
+      "type": "DOES_NOT_PROVE_ALL_WRITERS"
+    },
+    {
+      "from": "I10_SINGLE_INSTANCE_GUARD",
+      "to": "I10_RUNTIME_STATE",
+      "type": "GUARDS_NORMAL_ENTRY_POINT"
+    },
+    {
+      "from": "I10_SOURCE_FILE",
+      "to": "I8_9_10_11_SCENARIO_E_RESTART_STALE_ADVISORY_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I10_STRATEGY_DEPENDENCY",
+      "to": "I10_FUNCTION_OR_CLASS",
+      "type": "CONSUMES"
+    },
+    {
+      "from": "I10_SYMPTOM",
+      "to": "I10_RUNTIME_STATE",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "I10_VERIFIER",
+      "to": "I10_PATCH",
+      "type": "CAN_REGRESS"
+    },
+    {
+      "from": "I10_WRITER_LOCK_MUTATION",
+      "to": "I10_MULTI_PROCESS_TEST",
+      "type": "ATTACKS"
+    },
+    {
+      "from": "I11_ATTACK",
+      "to": "I11_REGRESSION_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_BOOK_TIME_LTP_ATTACK",
+      "to": "I11_EVENT_TIME_OBSERVER_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_CALLEE",
+      "to": "I11_PERSISTED_ARTIFACT",
+      "type": "PERSISTS_TO"
+    },
+    {
+      "from": "I11_CALLER",
+      "to": "I11_FUNCTION_OR_CLASS",
+      "type": "CALLS"
+    },
+    {
+      "from": "I11_CAS_INPUT_CONSUMER",
+      "to": "I11_CAS_SPOT_GATE",
+      "type": "GATED_BY"
+    },
+    {
+      "from": "I11_CAS_INPUT_CONSUMER",
+      "to": "I11_IDENTITY_HEALTH_PRODUCER_GAP",
+      "type": "LACKS_IDENTITY_HEALTH_BINDING"
+    },
+    {
+      "from": "I11_CAS_SCENARIO_CD_TEST",
+      "to": "I11_CANDIDATE_EVALUATOR_UNKNOWN",
+      "type": "BOUNDED_CAS_PATH_ONLY"
+    },
+    {
+      "from": "I11_CAS_SPOT_GATE",
+      "to": "I11_CAS_GATE_MUTATION",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_CAS_SPOT_GATE",
+      "to": "I11_CAS_SCENARIO_CD_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_CAS_SPOT_GATE",
+      "to": "I8_9_10_11_SCENARIO_E_RESTART_STALE_ADVISORY_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_CAS_TRANSPORT_CONSISTENCY",
+      "to": "I11_CAS_TRANSPORT_MUTATION",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_CAS_TRANSPORT_CONSISTENCY",
+      "to": "I11_CAS_TRANSPORT_REGRESSION",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_CONFIG",
+      "to": "I11_RUNTIME_STATE",
+      "type": "CONFIGURES"
+    },
+    {
+      "from": "I11_EVENT_TIME_OBSERVER_TEST",
+      "to": "I11_VERIFIER",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_EVIDENCE",
+      "to": "I11_CAPTURED_RECOVERY_BLOCKER_AUDIT",
+      "type": "REFINED_BY"
+    },
+    {
+      "from": "I11_EVIDENCE",
+      "to": "I11_SYMPTOM",
+      "type": "PRODUCES"
+    },
+    {
+      "from": "I11_FUNCTION_OR_CLASS",
+      "to": "I11_CALLEE",
+      "type": "CALLS"
+    },
+    {
+      "from": "I11_IDENTITY_HEALTH_PRODUCER_GAP",
+      "to": "I11_CANDIDATE_EVALUATOR_UNKNOWN",
+      "type": "LEAVES_UNPROVEN"
+    },
+    {
+      "from": "I11_LOADER_ORIGIN_ATTACK",
+      "to": "I11_LOADER_ORIGIN_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_LOADER_ORIGIN_PATCH",
+      "to": "I11_LOADER_ORIGIN_TEST",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_LOADER_ORIGIN_TEST",
+      "to": "I11_LOADER_ORIGIN_MUTATION",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I11_LOADER_ORIGIN_VERIFIER",
+      "to": "I11_LOADER_ORIGIN_PATCH",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_MUTATION",
+      "to": "I11_REPRO_TEST",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I11_PATCH",
+      "to": "I11_ATTACK",
+      "type": "ISOLATES"
+    },
+    {
+      "from": "I11_PATCH",
+      "to": "I11_BOOK_TIME_LTP_ATTACK",
+      "type": "ISOLATES"
+    },
+    {
+      "from": "I11_PATCH",
+      "to": "I11_REPRO_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_ARTIFACT",
+      "to": "I11_FUNCTION_OR_CLASS",
+      "type": "RESTORES_FROM"
+    },
+    {
+      "from": "I11_ROOT_CAUSE",
+      "to": "I11_PATCH",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_RUNTIME_STATE",
+      "to": "I11_CALLER",
+      "type": "CALLS"
+    },
+    {
+      "from": "I11_SAFETY_INVARIANT",
+      "to": "I11_RUNTIME_STATE",
+      "type": "GATES"
+    },
+    {
+      "from": "I11_SCENARIOS_CD_CONTRACT_TEST",
+      "to": "I11_CANDIDATE_EVALUATOR_UNKNOWN",
+      "type": "DOES_NOT_COVER"
+    },
+    {
+      "from": "I11_SCENARIOS_CD_CONTRACT_TEST",
+      "to": "I11_VERIFIER",
+      "type": "VERIFIES_OBSERVER_BOUNDARY_ONLY"
+    },
+    {
+      "from": "I11_SCENARIO_C_ATTACK",
+      "to": "I11_SCENARIOS_CD_CONTRACT_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_SCENARIO_D_ATTACK",
+      "to": "I11_SCENARIOS_CD_CONTRACT_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_STRATEGY_DEPENDENCY",
+      "to": "I11_FUNCTION_OR_CLASS",
+      "type": "CONSUMES"
+    },
+    {
+      "from": "I11_SYMPTOM",
+      "to": "I11_RUNTIME_STATE",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "I11_VERIFIER",
+      "to": "I11_PATCH",
+      "type": "CAN_REGRESS"
+    },
+    {
+      "from": "I7_ATTACK",
+      "to": "I7_REGRESSION_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I7_CALLEE",
+      "to": "I7_PERSISTED_ARTIFACT",
+      "type": "PERSISTS_TO"
+    },
+    {
+      "from": "I7_CALLER",
+      "to": "I7_FUNCTION_OR_CLASS",
+      "type": "CALLS"
+    },
+    {
+      "from": "I7_CONFIG",
+      "to": "I7_RUNTIME_STATE",
+      "type": "CONFIGURES"
+    },
+    {
+      "from": "I7_EVIDENCE",
+      "to": "I7_SYMPTOM",
+      "type": "PRODUCES"
+    },
+    {
+      "from": "I7_FUNCTION_OR_CLASS",
+      "to": "I7_CALLEE",
+      "type": "CALLS"
+    },
+    {
+      "from": "I7_LEGACY_VALUE_ATTACK",
+      "to": "I7_SCENARIO_F_TEST",
+      "type": "ATTACKED_BY"
+    },
+    {
+      "from": "I7_MUTATION",
+      "to": "I7_REPRO_TEST",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I7_PATCH",
+      "to": "I7_ATTACK",
+      "type": "ISOLATES"
+    },
+    {
+      "from": "I7_PATCH",
+      "to": "I7_REPRO_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I7_PERSISTED_ARTIFACT",
+      "to": "I7_FUNCTION_OR_CLASS",
+      "type": "RESTORES_FROM"
+    },
+    {
+      "from": "I7_ROOT_CAUSE",
+      "to": "I7_PATCH",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I7_RUNTIME_STATE",
+      "to": "I7_CALLER",
+      "type": "CALLS"
+    },
+    {
+      "from": "I7_SAFETY_INVARIANT",
+      "to": "I7_RUNTIME_STATE",
+      "type": "GATES"
+    },
+    {
+      "from": "I7_SCENARIO_A_TEST",
+      "to": "I7_SCENARIO_A_COMPLETED_BAR_STORE",
+      "type": "VERIFIED_WITH"
+    },
+    {
+      "from": "I7_SCENARIO_A_TEST",
+      "to": "I7_VERIFIER",
+      "type": "VERIFIES_POSITIVE_FIXTURE_PATH"
+    },
+    {
+      "from": "I7_SCENARIO_F_TEST",
+      "to": "I7_VERIFIER",
+      "type": "VERIFIES_NEGATIVE_PATH"
+    },
+    {
+      "from": "I7_STRATEGY_DEPENDENCY",
+      "to": "I7_FUNCTION_OR_CLASS",
+      "type": "CONSUMES"
+    },
+    {
+      "from": "I7_SYMPTOM",
+      "to": "I7_RUNTIME_STATE",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "I7_VERIFIER",
+      "to": "I7_PATCH",
+      "type": "CAN_REGRESS"
+    },
+    {
+      "from": "I8_9_10_11_SCENARIO_E_STALE_SPOT_ATTACK",
+      "to": "I8_9_10_11_SCENARIO_E_RESTART_STALE_ADVISORY_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I8_9_SCENARIO_B_RESTART_ATTACKS",
+      "to": "I8_9_SCENARIO_B_RESTART_COMPOSITION_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I8_ATTACK",
+      "to": "I8_REGRESSION_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I8_BOOL_TOKEN_REPRO",
+      "to": "I8_STRICT_TOKEN_PATCH",
+      "type": "ROOT_CAUSE_PROVED_BY"
+    },
+    {
+      "from": "I8_CALLEE",
+      "to": "I8_PERSISTED_ARTIFACT",
+      "type": "PERSISTS_TO"
+    },
+    {
+      "from": "I8_CALLER",
+      "to": "I8_FUNCTION_OR_CLASS",
+      "type": "CALLS"
+    },
+    {
+      "from": "I8_CONFIG",
+      "to": "I8_RUNTIME_STATE",
+      "type": "CONFIGURES"
+    },
+    {
+      "from": "I8_EVENT_ID_PATCH",
+      "to": "I8_EVENT_ID_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I8_EVENT_ID_PATCH",
+      "to": "I8_ROOT_CAUSE",
+      "type": "MITIGATES_INPUT_VALIDATION_DEFECT_ONLY"
+    },
+    {
+      "from": "I8_EVIDENCE",
+      "to": "I8_SYMPTOM",
+      "type": "PRODUCES"
+    },
+    {
+      "from": "I8_FIXED_SYMBOL_VERIFIER",
+      "to": "I8_WRONG_SYMBOL_ATTACK_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I8_FUNCTION_OR_CLASS",
+      "to": "I8_CALLEE",
+      "type": "CALLS"
+    },
+    {
+      "from": "I8_MUTATION",
+      "to": "I8_REPRO_TEST",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I8_MUTATION",
+      "to": "I8_STRICT_TOKEN_TEST",
+      "type": "VERIFIED_BY"
+    },
+    {
+      "from": "I8_PATCH",
+      "to": "I8_ATTACK",
+      "type": "ISOLATES"
+    },
+    {
+      "from": "I8_PATCH",
+      "to": "I8_REPRO_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I8_PERSISTED_ARTIFACT",
+      "to": "I8_FUNCTION_OR_CLASS",
+      "type": "RESTORES_FROM"
+    },
+    {
+      "from": "I8_ROOT_CAUSE",
+      "to": "I8_PATCH",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I8_RUNTIME_STATE",
+      "to": "I8_CALLER",
+      "type": "CALLS"
+    },
+    {
+      "from": "I8_SAFETY_INVARIANT",
+      "to": "I8_RUNTIME_STATE",
+      "type": "GATES"
+    },
+    {
+      "from": "I8_SOURCE_FILE",
+      "to": "I8_9_10_11_SCENARIO_E_RESTART_STALE_ADVISORY_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I8_SOURCE_FILE",
+      "to": "I8_9_SCENARIO_B_RESTART_COMPOSITION_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I8_STRATEGY_DEPENDENCY",
+      "to": "I8_FUNCTION_OR_CLASS",
+      "type": "CONSUMES"
+    },
+    {
+      "from": "I8_STRICT_TOKEN_PATCH",
+      "to": "I8_STRICT_TOKEN_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I8_STRICT_TOKEN_TEST",
+      "to": "I8_VERIFIER",
+      "type": "VERIFIES"
+    },
+    {
+      "from": "I8_SYMPTOM",
+      "to": "I8_RUNTIME_STATE",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "I8_VERIFIER",
+      "to": "I8_PATCH",
+      "type": "CAN_REGRESS"
+    },
+    {
+      "from": "I8_WRONG_SYMBOL_ATTACK_TEST",
+      "to": "I8_VERIFIER",
+      "type": "VERIFIES"
+    },
+    {
+      "from": "I8_WRONG_SYMBOL_REPRO",
+      "to": "I8_FIXED_SYMBOL_VERIFIER",
+      "type": "ROOT_CAUSE_PROVED_BY"
+    },
+    {
+      "from": "I9_ATTACK",
+      "to": "I9_REGRESSION_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_CALLEE",
+      "to": "I9_PERSISTED_ARTIFACT",
+      "type": "PERSISTS_TO"
+    },
+    {
+      "from": "I9_CALLER",
+      "to": "I9_FUNCTION_OR_CLASS",
+      "type": "CALLS"
+    },
+    {
+      "from": "I9_CONFIG",
+      "to": "I9_RUNTIME_STATE",
+      "type": "CONFIGURES"
+    },
+    {
+      "from": "I9_CUTOFF_CODE_MUTATION",
+      "to": "I9_REGRESSION_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_DEDUPE_CODE_MUTATION",
+      "to": "I9_REGRESSION_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_EPOCH_REPAIR_TEST",
+      "to": "I9_PATCH",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I9_EPOCH_TAMPER_ATTACK",
+      "to": "I9_EPOCH_REPAIR_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_EPOCH_TYPE_ATTACK",
+      "to": "I9_EPOCH_REPAIR_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_EPOCH_VERIFIER",
+      "to": "I9_EPOCH_REPAIR_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_EVIDENCE",
+      "to": "I9_SYMPTOM",
+      "type": "PRODUCES"
+    },
+    {
+      "from": "I9_FUNCTION_OR_CLASS",
+      "to": "I9_CALLEE",
+      "type": "CALLS"
+    },
+    {
+      "from": "I9_MUTATION",
+      "to": "I9_REPRO_TEST",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I9_PATCH",
+      "to": "I9_ATTACK",
+      "type": "ISOLATES"
+    },
+    {
+      "from": "I9_PATCH",
+      "to": "I9_PRIMARY_RUNTIME_RESTART_ATTACK",
+      "type": "ISOLATES"
+    },
+    {
+      "from": "I9_PATCH",
+      "to": "I9_REPRO_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_PATCH",
+      "to": "I9_RUNTIME_STATE",
+      "type": "SHARES_STATE_WITH"
+    },
+    {
+      "from": "I9_PATCH",
+      "to": "I9_SAFETY_INVARIANT",
+      "type": "ISOLATES"
+    },
+    {
+      "from": "I9_PERSISTED_ARTIFACT",
+      "to": "I9_CUTOFF_CODE_MUTATION",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I9_PERSISTED_ARTIFACT",
+      "to": "I9_DEDUPE_CODE_MUTATION",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I9_PERSISTED_ARTIFACT",
+      "to": "I9_EPOCH_TAMPER_ATTACK",
+      "type": "INVALIDATES"
+    },
+    {
+      "from": "I9_PERSISTED_ARTIFACT",
+      "to": "I9_FUNCTION_OR_CLASS",
+      "type": "RESTORES_FROM"
+    },
+    {
+      "from": "I9_PRIMARY_RUNTIME_RESTART_ATTACK",
+      "to": "I9_PRIMARY_RUNTIME_RESTART_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_PRIMARY_RUNTIME_RESTART_TEST",
+      "to": "I9_VERIFIER",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I9_ROOT_CAUSE",
+      "to": "I9_PATCH",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I9_RUNTIME_STATE",
+      "to": "I9_CALLER",
+      "type": "CALLS"
+    },
+    {
+      "from": "I9_SAFETY_INVARIANT",
+      "to": "I9_RUNTIME_STATE",
+      "type": "GATES"
+    },
+    {
+      "from": "I9_SOURCE_FILE",
+      "to": "I8_9_10_11_SCENARIO_E_RESTART_STALE_ADVISORY_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_SOURCE_FILE",
+      "to": "I8_9_SCENARIO_B_RESTART_COMPOSITION_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_STRATEGY_DEPENDENCY",
+      "to": "I9_FUNCTION_OR_CLASS",
+      "type": "CONSUMES"
+    },
+    {
+      "from": "I9_SYMPTOM",
+      "to": "I9_RUNTIME_STATE",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "I9_VERIFIER",
+      "to": "I9_PATCH",
+      "type": "CAN_REGRESS"
+    },
+    {
+      "from": "I7_FUTURES_ACQUISITION_REPORT_RECHECK_20261003",
+      "to": "I7_PERSISTED_ARTIFACT",
+      "type": "SUPPORTS"
+    },
+    {
+      "from": "I9_HERMES_CRASH_CONTRACT_20261003",
+      "to": "I9_PROCESS_DEATH_TEST_20261003",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I9_PROCESS_DEATH_ATTACK_20261003",
+      "to": "I9_PROCESS_DEATH_TEST_20261003",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_PROCESS_DEATH_TEST_20261003",
+      "to": "I9_PERSISTED_ARTIFACT",
+      "type": "PROTECTS"
+    },
+    {
+      "from": "I9_GSD_CRASH_PLAN_20261003",
+      "to": "I9_PROCESS_DEATH_TEST_20261003",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_PROCESS_DEATH_MUTATION_20261003",
+      "to": "I9_PROCESS_DEATH_TEST_20261003",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I9_FRESH_PROCESS_RESTART_TEST_20261003",
+      "to": "I9_PERSISTED_ARTIFACT",
+      "type": "RESTORES_FROM"
+    },
+    {
+      "from": "I9_FRESH_PROCESS_RESTART_TEST_20261003",
+      "to": "I9_FRESH_PROCESS_RESTART_EVIDENCE_20261003",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_FRESH_PROCESS_RESTART_EVIDENCE_20261003",
+      "to": "I9_SAFETY_INVARIANT",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I7_CALENDAR_EDGE_TESTS_20261003",
+      "to": "I7_MUTATION",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I7_CALENDAR_ARITHMETIC_MUTATION_20261003",
+      "to": "I7_CALENDAR_EDGE_TESTS_20261003",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I7_HOLIDAY_CALENDAR_SPLIT_20261003",
+      "to": "I7_HOLIDAY_ALIGNMENT_PATCH_20261003",
+      "type": "CAUSES"
+    },
+    {
+      "from": "I7_HOLIDAY_ALIGNMENT_PATCH_20261003",
+      "to": "I7_HOLIDAY_ALIGNMENT_REGRESSION_20261003",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I7_HOLIDAY_ALIGNMENT_REGRESSION_20261003",
+      "to": "I7_PATCH",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_REGISTRY_EMPTY_IDENTITY_DEFECT_20261003",
+      "to": "I11_REGISTRY_IDENTITY_COVERAGE_TEST_20261003",
+      "type": "ROOT_CAUSE_PROVED_BY"
+    },
+    {
+      "from": "I11_REGISTRY_IDENTITY_COVERAGE_PATCH_20261003",
+      "to": "I11_REGISTRY_IDENTITY_COVERAGE_TEST_20261003",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_REGISTRY_IDENTITY_COVERAGE_MUTATION_20261003",
+      "to": "I11_REGISTRY_IDENTITY_COVERAGE_TEST_20261003",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I11_REGISTRY_IDENTITY_COVERAGE_TEST_20261003",
+      "to": "I11_SAFETY_INVARIANT",
+      "type": "PROTECTS"
+    },
+    {
+      "from": "I11_REGISTRY_IDENTITY_COVERAGE_INDEPENDENT_REVIEW_20261003",
+      "to": "I11_REGISTRY_IDENTITY_COVERAGE_PATCH_20261003",
+      "type": "REVIEWS"
+    },
+    {
+      "from": "I11_REGISTRY_IDENTITY_COVERAGE_INDEPENDENT_REVIEW_20261003",
+      "to": "I11_REGISTRY_IDENTITY_COVERAGE_TEST_20261003",
+      "type": "INDEPENDENTLY_CHECKS"
+    },
+    {
+      "from": "ISSUES_7_11_CURRENT_SOURCE_MUTATION_REATTACK_20261003",
+      "to": "I7_HOLIDAY_ALIGNMENT_REGRESSION_20261003",
+      "type": "RERUNS_MUTATION_FAMILY"
+    },
+    {
+      "from": "ISSUES_7_11_CURRENT_SOURCE_MUTATION_REATTACK_20261003",
+      "to": "I9_PROCESS_DEATH_MUTATION_20261003",
+      "type": "RERUNS_MUTATION_FAMILY"
+    },
+    {
+      "from": "ISSUES_7_11_CURRENT_SOURCE_MUTATION_REATTACK_20261003",
+      "to": "I10_WRITER_LOCK_MUTATION",
+      "type": "RERUNS_MUTATION_FAMILY"
+    },
+    {
+      "from": "ISSUES_7_11_CURRENT_SOURCE_MUTATION_REATTACK_20261003",
+      "to": "I11_REGISTRY_IDENTITY_COVERAGE_MUTATION_20261003",
+      "type": "RERUNS_MUTATION_FAMILY"
+    },
+    {
+      "from": "I10_EXTERNAL_APPEND_ROLLBACK_DEFECT_20261003",
+      "to": "I10_EXTERNAL_APPEND_ROLLBACK_PATCH_20261003",
+      "type": "CAUSES_REPAIR"
+    },
+    {
+      "from": "I10_EXTERNAL_APPEND_ROLLBACK_PATCH_20261003",
+      "to": "I10_EXTERNAL_APPEND_ROLLBACK_TEST_20261003",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I10_EXTERNAL_APPEND_ROLLBACK_MUTATION_20261003",
+      "to": "I10_EXTERNAL_APPEND_ROLLBACK_TEST_20261003",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I10_EXTERNAL_APPEND_ROLLBACK_TEST_20261003",
+      "to": "I10_SAFETY_INVARIANT",
+      "type": "PROTECTS"
+    },
+    {
+      "from": "I7_CANONICAL_FUTURES_CORPUS_NO_TARGET_ROW_20261003",
+      "to": "I7_CANONICAL_FUTURES_SOURCE_AUTHORITY_LIMIT_20261003",
+      "type": "BOUNDED_BY"
+    },
+    {
+      "from": "I7_CANONICAL_FUTURES_CORPUS_NO_TARGET_ROW_20261003",
+      "to": "I7_SAFETY_INVARIANT",
+      "type": "PRESERVES_FAIL_CLOSED_T1"
+    },
+    {
+      "from": "I7_CANONICAL_FUTURES_SOURCE_AUTHORITY_LIMIT_20261003",
+      "to": "I7_SAFETY_INVARIANT",
+      "type": "PRESERVES_UNKNOWN"
+    },
+    {
+      "from": "ISSUES_7_11_CURRENT_SOURCE_BROAD_REGRESSION_20261004",
+      "to": "I10_EXTERNAL_APPEND_ROLLBACK_TEST_20261003",
+      "type": "INCLUDED_IN_REGRESSION"
+    },
+    {
+      "from": "I10_ROLLBACK_TOCTOU_VERIFIER_ATTACK_20261004",
+      "to": "I10_EXTERNAL_APPEND_ROLLBACK_PATCH_20261003",
+      "type": "CAUSES_REPAIR"
+    },
+    {
+      "from": "I10_EXTERNAL_APPEND_ROLLBACK_TEST_20261003",
+      "to": "I10_NO_TRUNCATE_INDEPENDENT_REVIEW_20261004",
+      "type": "INDEPENDENTLY_VERIFIED_BY"
+    },
+    {
+      "from": "I10_NO_TRUNCATE_INDEPENDENT_REVIEW_20261004",
+      "to": "I10_SAFETY_INVARIANT",
+      "type": "PROTECTS"
+    },
+    {
+      "from": "I11_MIXED_SYMBOL_POOL_ROOT_20261004",
+      "to": "I11_MIXED_SYMBOL_POOL_REPRO_20261004",
+      "type": "REPRODUCED_BY"
+    },
+    {
+      "from": "I11_MIXED_SYMBOL_POOL_REPRO_20261004",
+      "to": "I11_SYMBOL_SCOPE_BOUNDED_REPAIR_20261004",
+      "type": "REPAIRED_BY"
+    },
+    {
+      "from": "I11_SYMBOL_SCOPE_BOUNDED_REPAIR_20261004",
+      "to": "I11_MIXED_SYMBOL_POOL_MUTATION_20261004",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I11_SYMBOL_SCOPE_BOUNDED_REPAIR_20261004",
+      "to": "I11_EXACT_DYNAMIC_CANDIDATE_IDENTITY_20261004",
+      "type": "LIMITED_BY"
+    },
+    {
+      "from": "I7_ADAPTER_INPUT_WIRING_20261004",
+      "to": "I7_ADAPTER_INPUT_MUTATION_20261004",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I7_ADAPTER_INPUT_WIRING_20261004",
+      "to": "I7_TARGET_DATE_SOURCE_AUTHORITY_20261004",
+      "type": "DOES_NOT_ESTABLISH"
+    },
+    {
+      "from": "I7_TARGET_EXPIRY_INPUT_REVIEW_20261004",
+      "to": "I7_ADAPTER_INPUT_WIRING_20261004",
+      "type": "REVIEWED_BY"
+    },
+    {
+      "from": "I7_ADAPTER_MUTATION_PREDICATE_REVIEW_20261004",
+      "to": "I7_ADAPTER_INPUT_MUTATION_20261004",
+      "type": "REPAIRED_BY"
+    },
+    {
+      "from": "I11_MIXED_MUTATION_PREDICATE_REVIEW_20261004",
+      "to": "I11_MIXED_SYMBOL_POOL_MUTATION_20261004",
+      "type": "REPAIRED_BY"
+    },
+    {
+      "from": "I9_SYMPTOM",
+      "to": "I9_SAME_PROCESS_CROSS_DATE_REPRO_20261004",
+      "type": "PRODUCES"
+    },
+    {
+      "from": "I9_SAME_PROCESS_CROSS_DATE_REPRO_20261004",
+      "to": "I9_LOCAL_BUFFER_SESSION_LEAK_20261004",
+      "type": "ROOT_CAUSE_PROVED_BY"
+    },
+    {
+      "from": "I9_LOCAL_BUFFER_SESSION_LEAK_20261004",
+      "to": "I9_IST_SESSION_DATE_FILTER_20261004",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I9_IST_SESSION_DATE_FILTER_20261004",
+      "to": "I9_SAME_PROCESS_ROLLOVER_TEST_20261004",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_IST_SESSION_DATE_FILTER_20261004",
+      "to": "I9_SESSION_DATE_MUTATION_20261004",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I9_SESSION_DATE_INDEPENDENT_REVIEW_20261004",
+      "to": "I9_IST_SESSION_DATE_FILTER_20261004",
+      "type": "VERIFIES"
+    },
+    {
+      "from": "I9_SAME_PROCESS_ROLLOVER_TEST_20261004",
+      "to": "I9_IST_SESSION_DATE_FILTER_20261004",
+      "type": "CAN_REGRESS"
+    },
+    {
+      "from": "I9_SYMPTOM",
+      "to": "I9_MEG_SESSION_LEAK_REPRO_20261004",
+      "type": "PRODUCES"
+    },
+    {
+      "from": "I9_MEG_SESSION_LEAK_REPRO_20261004",
+      "to": "I9_MEG_SESSION_LEAK_ROOT_20261004",
+      "type": "ROOT_CAUSE_PROVED_BY"
+    },
+    {
+      "from": "I9_MEG_SESSION_LEAK_ROOT_20261004",
+      "to": "I9_MEG_SESSION_READ_FILTER_20261004",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I9_MEG_SESSION_READ_FILTER_20261004",
+      "to": "I9_MEG_SESSION_READ_TEST_20261004",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I9_MEG_SESSION_READ_FILTER_20261004",
+      "to": "I9_MEG_SESSION_READ_MUTATION_20261004",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I9_MEG_SESSION_READ_INDEPENDENT_REVIEW_20261004",
+      "to": "I9_MEG_SESSION_READ_FILTER_20261004",
+      "type": "VERIFIES"
+    },
+    {
+      "from": "I9_MEG_SESSION_READ_TEST_20261004",
+      "to": "I9_MEG_SESSION_READ_FILTER_20261004",
+      "type": "CAN_REGRESS"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "I10_ATTACK",
+      "issue": 10,
+      "ref": "incomplete final record omitted until newline completion; invalid UTF-8 rejected; populated desk fallback remains compatible",
+      "status": "PASS_PARTIAL",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I10_CALLEE",
+      "issue": 10,
+      "ref": "canonical suggestions reader and reject-shadow JSONL writer",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CALLEE"
+    },
+    {
+      "id": "I10_CALLER",
+      "issue": 10,
+      "ref": "runtime snapshot/latest advisory readers",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CALLER"
+    },
+    {
+      "id": "I10_CANONICAL_WRITER_LOCK",
+      "issue": 10,
+      "ref": "_append_candidate_decision_rows uses flock LOCK_EX across batch write/flush and rolls partial batch back under lock",
+      "status": "IMPLEMENTED_OFFLINE",
+      "type": "PATCH"
+    },
+    {
+      "id": "I10_CONFIG",
+      "issue": 10,
+      "ref": "SUGGESTIONS_LOG_PATH and DESK_ID select primary/fallback paths",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CONFIG"
+    },
+    {
+      "id": "I10_EVIDENCE",
+      "issue": 10,
+      "ref": "four artifacts had zero advisory rows and missing DEFAULT fallback; three runs separately cite feed blocks",
+      "status": "DATA_VERIFIED",
+      "type": "EVIDENCE"
+    },
+    {
+      "id": "I10_FUNCTION_OR_CLASS",
+      "issue": 10,
+      "ref": "_build_advisory_latest_payload(candidate_decisions_path); _read_advisory_source; observer snapshot callsite",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "FUNCTION_OR_CLASS"
+    },
+    {
+      "id": "I10_MULTIWRITER_UNKNOWN",
+      "issue": 10,
+      "ref": "Cooperating canonical callers are serialized and tested. External writer bypass and captured/deployment parity remain UNKNOWN.",
+      "status": "UNKNOWN",
+      "type": "RUNTIME_STATE"
+    },
+    {
+      "id": "I10_MULTI_PROCESS_TEST",
+      "issue": 10,
+      "ref": "tests/test_kite_read_only_observation_runtime.py::test_candidate_decision_batches_are_serialized_across_processes; two subprocesses, 64 valid rows, batches contiguous",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I10_MUTATION",
+      "issue": 10,
+      "ref": "Existing reader mutants 2/2 killed plus remove_exclusive_candidate_log_lock mutant killed by intended multiprocess regression; checkout hashes unchanged. External writer bypass remains unverified.",
+      "status": "PASS_PARTIAL",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I10_PATCH",
+      "issue": 10,
+      "ref": "Both in-repository candidate-decision appenders route through core.locked_jsonl.append_jsonl_batch; complete batch locked/flushed and failed write truncated to prior offset.",
+      "status": "IMPLEMENTED_OFFLINE",
+      "type": "PATCH"
+    },
+    {
+      "id": "I10_PERSISTED_ARTIFACT",
+      "issue": 10,
+      "ref": "observer output_root/candidate_decisions.jsonl is now explicitly selected; desk fallback remains default without override",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "PERSISTED_ARTIFACT"
+    },
+    {
+      "id": "I10_REGRESSION_TEST",
+      "issue": 10,
+      "ref": "42 tests pass across observer, reject-shadow, advisory producer, and EOD parity; broad current-tree suite 8672 passed, 9 skipped, 29 deselected; targeted lock-removal mutant killed.",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I10_REPRO_TEST",
+      "issue": 10,
+      "ref": "Run-local path/fallback/state/partial-tail tests plus forced-chunk two-process append; 64 valid rows, exact per-batch index sets, and contiguous batches.",
+      "status": "PASS",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I10_ROOT_CAUSE",
+      "issue": 10,
+      "ref": "observer writer used run-local output_root while snapshot reader used global desk fallback; source-state collapse also hid missing/empty/error",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "ROOT_CAUSE"
+    },
+    {
+      "id": "I10_RUNTIME_STATE",
+      "issue": 10,
+      "ref": "Observer and reject_shadow candidate-decision writers converge on one locked JSONL utility; three observer launch/composition paths share run_observation.",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "RUNTIME_STATE"
+    },
+    {
+      "id": "I10_SAFETY_INVARIANT",
+      "issue": 10,
+      "ref": "missing input is not a valid zero-candidate report; preserve fallback order and row conversion",
+      "status": "PROTECTED",
+      "type": "SAFETY_INVARIANT"
+    },
+    {
+      "id": "I10_SINGLE_INSTANCE_GUARD",
+      "issue": 10,
+      "ref": "main.py lifetime InstanceLock covers only its normal PAPER/LIVE entry; observer scripts/pipeline call the canonical runtime without that guard.",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "RUNTIME_GUARD"
+    },
+    {
+      "id": "I10_SOURCE_FILE",
+      "issue": 10,
+      "ref": "core/kite_read_only_observation_runtime.py; core/reject_shadow.py; core/locked_jsonl.py; runtime snapshot reader and EOD consumer.",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "SOURCE_FILE"
+    },
+    {
+      "id": "I10_STRATEGY_DEPENDENCY",
+      "issue": 10,
+      "ref": "advisory/EOD readers consume suggestions primary then desk decision fallback",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "STRATEGY_DEPENDENCY"
+    },
+    {
+      "id": "I10_SYMPTOM",
+      "issue": 10,
+      "ref": "missing/empty/unreadable advisory input appears as zero rows",
+      "status": "DATA_VERIFIED",
+      "type": "SYMPTOM"
+    },
+    {
+      "id": "I10_VERIFIER",
+      "issue": 10,
+      "ref": "Offline source route/EOD parity and cooperating two-writer serialization verified; external bypass and captured/live parity remain UNKNOWN.",
+      "status": "PASS_PARTIAL",
+      "type": "VERIFIER"
+    },
+    {
+      "id": "I10_WRITER_LOCK_MUTATION",
+      "issue": 10,
+      "ref": "scripts/verify_issues_7_11_issue10_writer_mutation.py removes LOCK_EX in a temporary helper copy; multiprocess regression fails as intended; source/test hashes unchanged",
+      "status": "PASS_OFFLINE",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I11_ATTACK",
+      "issue": 11,
+      "ref": "stale option on spot-only path; required option and transport blockers; newer quote-book timestamp with stale/missing/future LTP timestamp; quote remains non-executable",
+      "status": "PASS",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I11_BOOK_TIME_LTP_ATTACK",
+      "issue": 11,
+      "ref": "quote-book ts_epoch is current while last_price_ts_epoch is 60 seconds old; missing and future trade times also attacked",
+      "status": "PASS",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I11_CALLEE",
+      "issue": 11,
+      "ref": "StrategyMarketSnapshotBuilder read-only observer consumer",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CALLEE"
+    },
+    {
+      "id": "I11_CALLER",
+      "issue": 11,
+      "ref": "read-only observer runtime passes wrapped feed truth and market snapshot",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CALLER"
+    },
+    {
+      "id": "I11_CANDIDATE_EVALUATOR_UNKNOWN",
+      "issue": 11,
+      "ref": "Generic candidate feed-health registry isolation and original live candidate/evaluator continuation remain UNKNOWN; CAS-local fresh NIFTY gate has bounded offline Scenario C/D proof",
+      "status": "UNKNOWN",
+      "type": "STRATEGY_DEPENDENCY"
+    },
+    {
+      "id": "I11_CAPTURED_RECOVERY_BLOCKER_AUDIT",
+      "issue": 11,
+      "ref": "CAPTURE_CORPUS_RECHECK_20261003.md: four run-matched health/runtime pairs; three RECOVERY_BLOCKED with WS1006_PROCESS_RESTART_REQUIRED, one AUTH_BLOCKED; candidate decision ledgers empty",
+      "status": "DATA_VERIFIED_LIMITED",
+      "type": "CAPTURED_EVIDENCE"
+    },
+    {
+      "id": "I11_CAS_GATE_MUTATION",
+      "issue": 11,
+      "ref": "scripts/verify_issues_7_11_issue11_cas_dependency_mutation.py removes required spot gate in isolated copy; stale spot scenario fails as expected; source/test hashes unchanged",
+      "status": "PASS_OFFLINE",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I11_CAS_INPUT_CONSUMER",
+      "issue": 11,
+      "ref": "runtime_snapshot_producer requires exact fresh, non-executable NIFTY spot evidence and matching token before bridging verified CAS primitives; actual _evaluate_cas remains advisory-only",
+      "status": "IMPLEMENTED_OFFLINE",
+      "type": "CALLER"
+    },
+    {
+      "id": "I11_CAS_SCENARIO_CD_TEST",
+      "issue": 11,
+      "ref": "Actual runtime snapshot producer to actual _evaluate_cas: fresh NIFTY + stale unrelated option passes ADVISORY_ONLY; stale/malformed/token-mismatched spot blocks input and evaluator artifact",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I11_CAS_SPOT_GATE",
+      "issue": 11,
+      "ref": "Hermes contract: exact NIFTY identity/token, non-executable fresh quote, HEALTHY status, finite bounded age, recent aware snapshot, and authoritative effective websocket state when present; stale unrelated options do not veto spot-only advisory",
+      "status": "IMPLEMENTED_OFFLINE",
+      "type": "PATCH"
+    },
+    {
+      "id": "I11_CAS_TRANSPORT_CONSISTENCY",
+      "issue": 11,
+      "ref": "effective_ws_connected exact true is authoritative when present; legacy ws_connected exact true is accepted only when the effective field is absent",
+      "status": "IMPLEMENTED_OFFLINE",
+      "type": "PATCH"
+    },
+    {
+      "id": "I11_CAS_TRANSPORT_MUTATION",
+      "issue": 11,
+      "ref": "scripts/verify_issues_7_11_issue11_transport_mutation.py restores old OR behavior in isolated copy; contradiction regression fails as expected and checkout hashes are unchanged",
+      "status": "PASS_OFFLINE",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I11_CAS_TRANSPORT_REGRESSION",
+      "issue": 11,
+      "ref": "Contradictory effective=false and legacy=true blocks actual producer-to-evaluator path; legacy-only exact true remains compatible",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I11_CONFIG",
+      "issue": 11,
+      "ref": "observer quote/domain evidence and explicit aggregate/global flags",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CONFIG"
+    },
+    {
+      "id": "I11_EVENT_TIME_OBSERVER_TEST",
+      "issue": 11,
+      "ref": "tests/test_kite_read_only_observation_runtime.py::test_run_observation_dispatches_native_pulse_to_shadow_registry; stale quote stays stale and non-executable",
+      "status": "PASS",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I11_EVIDENCE",
+      "issue": 11,
+      "ref": "Oct. 1 run-matched feed/runtime artifacts: three sessions show global_feed_unhealthy/runtime_state_unsafe and canonical RECOVERY_BLOCKED/WS1006_PROCESS_RESTART_REQUIRED; fourth AUTH_BLOCKED; all four candidate_decisions ledgers empty",
+      "status": "DATA_VERIFIED",
+      "type": "EVIDENCE"
+    },
+    {
+      "id": "I11_FUNCTION_OR_CLASS",
+      "issue": 11,
+      "ref": "StrategyMarketSnapshotBuilder; _index_ltp_age_sec; read-only observer composition",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "FUNCTION_OR_CLASS"
+    },
+    {
+      "id": "I11_IDENTITY_HEALTH_PRODUCER_GAP",
+      "issue": 11,
+      "ref": "Repository search found no producer of feed_health_by_identity/required_feed_identities for candidate dependencies; exact current candidate health binding is absent",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "ROOT_CAUSE"
+    },
+    {
+      "id": "I11_LOADER_ORIGIN_ATTACK",
+      "issue": 11,
+      "ref": "canonical feed_truth_latest.json markers stripped and legacy feed_ok=true/ws_connected=true/fresh age injected; pre-fix loader-to-ranking returned one rank",
+      "status": "PASS",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I11_LOADER_ORIGIN_MUTATION",
+      "issue": 11,
+      "ref": "scripts/verify_issues_7_11_issue11_loader_origin_mutations.py; remove_canonical_loader_origin mutant killed; checkout hashes unchanged",
+      "status": "PASS_PARTIAL",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I11_LOADER_ORIGIN_PATCH",
+      "issue": 11,
+      "ref": "core/orchestrator.py overwrites reserved loader-origin marker for canonical feed_truth_latest.json; core/feed_health_truth.py requires snapshot contract without synthesizing source",
+      "status": "IMPLEMENTED_OFFLINE",
+      "type": "PATCH"
+    },
+    {
+      "id": "I11_LOADER_ORIGIN_TEST",
+      "issue": 11,
+      "ref": "tests/test_feed_truth_snapshot_ranking_contract.py real loader-to-ranking marker-stripping regression; blocks rank after repair",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I11_LOADER_ORIGIN_VERIFIER",
+      "issue": 11,
+      "ref": "offline bounded review confirmed path marker is overwritten and does not authenticate artifact bytes; candidate isolation/live parity remain UNKNOWN",
+      "status": "PASS_PARTIAL",
+      "type": "VERIFIER"
+    },
+    {
+      "id": "I11_MUTATION",
+      "issue": 11,
+      "ref": "snapshot-recognition and canonical loader-origin mutants killed; candidate-isolation and campaign-wide mutations remain open",
+      "status": "PASS_PARTIAL",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I11_PATCH",
+      "issue": 11,
+      "ref": "exact-join wrapped shadow inputs; compute observer LTP freshness from last_price_ts_epoch and keep executable quote false; shared classifier/candidate safety unchanged",
+      "status": "IMPLEMENTED",
+      "type": "PATCH"
+    },
+    {
+      "id": "I11_PERSISTED_ARTIFACT",
+      "issue": 11,
+      "ref": "per-symbol option age/blocker maps and domain_health_by_domain",
+      "status": "DATA_VERIFIED",
+      "type": "PERSISTED_ARTIFACT"
+    },
+    {
+      "id": "I11_REGRESSION_TEST",
+      "issue": 11,
+      "ref": "post-contract-correction focused run: 116 passed, 1 skipped; observer integration asserts stale event-time quote remains stale and non-executable",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I11_REPRO_TEST",
+      "issue": 11,
+      "ref": "actual wrapped observer health payload lacked market identity join; observer emitted no exact spot shadow snapshot",
+      "status": "PASS",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I11_ROOT_CAUSE",
+      "issue": 11,
+      "ref": "Observer consumer normalization and LTP event-time defects reproduced; captured latest blocker state is recovery/auth-global (3/4 terminal WS1006 recovery blocked, 1/4 auth/websocket blocked); initiating failure and candidate-level local coupling remain UNKNOWN",
+      "status": "PARTIAL",
+      "type": "ROOT_CAUSE"
+    },
+    {
+      "id": "I11_RUNTIME_STATE",
+      "issue": 11,
+      "ref": "read-only shadow snapshot feed-health normalization",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "RUNTIME_STATE"
+    },
+    {
+      "id": "I11_SAFETY_INVARIANT",
+      "issue": 11,
+      "ref": "global transport and required-domain health remain fail-closed",
+      "status": "PROTECTED",
+      "type": "SAFETY_INVARIANT"
+    },
+    {
+      "id": "I11_SCENARIOS_CD_CONTRACT_TEST",
+      "issue": 11,
+      "ref": "PASS_OFFLINE_LIMITED at observer snapshot boundary only; candidate/evaluator continuation intentionally unproven.",
+      "status": "PASS_OFFLINE_LIMITED",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I11_SCENARIO_C_ATTACK",
+      "issue": 11,
+      "ref": "one secondary option stale while NIFTY spot domain/quote remain healthy; option observer snapshot degraded, spot-only observer snapshot healthy",
+      "status": "PASS_OFFLINE_LIMITED",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I11_SCENARIO_D_ATTACK",
+      "issue": 11,
+      "ref": "required INDEX_SPOT domain degraded or shared websocket disconnected; NIFTY observer snapshot remains degraded",
+      "status": "PASS_OFFLINE_LIMITED",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I11_SOURCE_FILE",
+      "issue": 11,
+      "ref": "core/paper_shadow/strategy_shadow_adapter.py; core/kite_read_only_observation_runtime.py",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "SOURCE_FILE"
+    },
+    {
+      "id": "I11_STRATEGY_DEPENDENCY",
+      "issue": 11,
+      "ref": "UNKNOWN: CAS advisory requires exact NIFTY spot source-event primitives; no producer binds current candidate identity health into cas_short_horizon_inputs. Observer snapshot health is not candidate/evaluator proof.",
+      "status": "UNKNOWN",
+      "type": "STRATEGY_DEPENDENCY"
+    },
+    {
+      "id": "I11_SYMPTOM",
+      "issue": 11,
+      "ref": "wrapped observer consumer may omit an exact spot shadow snapshot despite valid market quote identity",
+      "status": "HYPOTHESIS",
+      "type": "SYMPTOM"
+    },
+    {
+      "id": "I11_VERIFIER",
+      "issue": 11,
+      "ref": "Bounded offline observer and persisted-loader checks pass; exact candidate identity-health composition, initiating transport/auth event, and live behavior remain UNKNOWN.",
+      "status": "PASS_PARTIAL",
+      "type": "VERIFIER"
+    },
+    {
+      "id": "I7_ATTACK",
+      "issue": 7,
+      "ref": "wrong-date/holiday/partial-field source attacks require authoritative source",
+      "status": "NOT_RUN",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I7_CALLEE",
+      "issue": 7,
+      "ref": "manifest verifier and strategy prerequisite gate",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CALLEE"
+    },
+    {
+      "id": "I7_CALLER",
+      "issue": 7,
+      "ref": "observer startup/pre-session validation",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CALLER"
+    },
+    {
+      "id": "I7_CONFIG",
+      "issue": 7,
+      "ref": "launch plan lacks heritage_manifest_path and SHA",
+      "status": "DATA_VERIFIED",
+      "type": "CONFIG"
+    },
+    {
+      "id": "I7_EVIDENCE",
+      "issue": 7,
+      "ref": "three strategies disabled fail-closed for absent T-1 prerequisites",
+      "status": "DATA_VERIFIED",
+      "type": "EVIDENCE"
+    },
+    {
+      "id": "I7_FUNCTION_OR_CLASS",
+      "issue": 7,
+      "ref": "verified heritage loader and launch-plan validator",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "FUNCTION_OR_CLASS"
+    },
+    {
+      "id": "I7_LEGACY_VALUE_ATTACK",
+      "issue": 7,
+      "ref": "unverified legacy numeric values injected with BLOCKED readiness; registry kept all three dependent adapters disabled",
+      "status": "PASS_OFFLINE",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I7_MUTATION",
+      "issue": 7,
+      "ref": "5/5 targeted assembler and calendar mutants killed by scripts/verify_issues_7_11_issue7_mutations.py; external source authority/staging mutations remain open",
+      "status": "PASS_PARTIAL",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I7_PATCH",
+      "issue": 7,
+      "ref": "2026 NSE F&O holiday omissions aligned across core.market_calendar and live preflight; T-1 data/source staging remains unimplemented/UNKNOWN",
+      "status": "PATCHED_PARTIAL",
+      "type": "PATCH"
+    },
+    {
+      "id": "I7_PERSISTED_ARTIFACT",
+      "issue": 7,
+      "ref": "no authoritative staged T-1 manifest found in captured run",
+      "status": "UNKNOWN",
+      "type": "PERSISTED_ARTIFACT"
+    },
+    {
+      "id": "I7_REGRESSION_TEST",
+      "issue": 7,
+      "ref": "Scenario F: tests/paper_shadow/test_t1_scenario_f_missing_manifest.py; missing pinned source and legacy-value injection both remain blocked (2 tests, included in 140-test focused run)",
+      "status": "PARTIAL",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I7_REPRO_TEST",
+      "issue": 7,
+      "ref": "loader rejects absent pinned manifest; captured launch replay unavailable",
+      "status": "PARTIAL",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I7_ROOT_CAUSE",
+      "issue": 7,
+      "ref": "cause of valid source not staged or attached cannot be established",
+      "status": "UNKNOWN",
+      "type": "ROOT_CAUSE"
+    },
+    {
+      "id": "I7_RUNTIME_STATE",
+      "issue": 7,
+      "ref": "observer launch runtime requires pinned verified heritage",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "RUNTIME_STATE"
+    },
+    {
+      "id": "I7_SAFETY_INVARIANT",
+      "issue": 7,
+      "ref": "missing, stale, wrong-date or unverifiable T-1 data stays fail-closed",
+      "status": "PROTECTED",
+      "type": "SAFETY_INVARIANT"
+    },
+    {
+      "id": "I7_SCENARIO_A_COMPLETED_BAR_STORE",
+      "issue": 7,
+      "ref": "tests/test_market_heritage_graph.py::test_scenario_a_verified_t1_clean_boot_reaches_shadow_evaluators persists one synthetic 09:15 bar, reopens it at 09:16, and verifies integrity before healthy registry dispatch; adapter store consumption is not claimed",
+      "status": "PASS_OFFLINE_LIMITED",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I7_SCENARIO_A_TEST",
+      "issue": 7,
+      "ref": "tests/test_market_heritage_graph.py::test_scenario_a_verified_t1_clean_boot_reaches_shadow_evaluators; synthetic pinned T-1 → actual registry → healthy pulse dispatch",
+      "status": "PASS_OFFLINE_LIMITED",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I7_SCENARIO_F_TEST",
+      "issue": 7,
+      "ref": "tests/paper_shadow/test_t1_scenario_f_missing_manifest.py",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I7_SOURCE_FILE",
+      "issue": 7,
+      "ref": "core/market_heritage_graph.py; core/kite_read_only_observation_runtime.py",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "SOURCE_FILE"
+    },
+    {
+      "id": "I7_STRATEGY_DEPENDENCY",
+      "issue": 7,
+      "ref": "T-1 futures/overnight prerequisite consumers",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "STRATEGY_DEPENDENCY"
+    },
+    {
+      "id": "I7_SYMPTOM",
+      "issue": 7,
+      "ref": "prerequisite starvation",
+      "status": "DATA_VERIFIED",
+      "type": "SYMPTOM"
+    },
+    {
+      "id": "I7_VERIFIER",
+      "issue": 7,
+      "ref": "Scenario F negative path verified offline; T-1 source/manifest authority and positive admission remain UNKNOWN",
+      "status": "PARTIAL",
+      "type": "VERIFIER"
+    },
+    {
+      "id": "I8_9_10_11_SCENARIO_E_RESTART_STALE_ADVISORY_TEST",
+      "issue": "8-11",
+      "ref": "tests/test_issues_7_11_scenario_b_restart.py::test_scenario_e_restart_keeps_stale_required_spot_blocked_and_projects_valid_empty_advisory; restores 359 deterministic_test bars, blocks CAS on stale required NIFTY, reads exact valid-empty ledger, and exact-asserts closed authority on gate plus missing/malformed pending states and receipts. Independent focused rerun passed; authority omission mutant killed in isolated temp copy.",
+      "status": "PASS_OFFLINE_SYNTHETIC",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I8_9_10_11_SCENARIO_E_STALE_SPOT_ATTACK",
+      "issue": "8-11",
+      "ref": "After restart, stale current NIFTY spot remains blocked despite restored completed bars; no CAS artifact is emitted; valid-empty ledger remains zero rows.",
+      "status": "PASS_OFFLINE",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I8_9_SCENARIO_B_RESTART_ATTACKS",
+      "issue": 8,
+      "ref": "Scenario B rejects cross-date/corrupt/conflicting heritage, stale/mismatched NIFTY spot, pre-cutoff CAS evaluation and incomplete/future completed-bar rows; CAS authority fields remain closed.",
+      "status": "PASS_OFFLINE",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I8_9_SCENARIO_B_RESTART_COMPOSITION_TEST",
+      "issue": 8,
+      "ref": "tests/test_issues_7_11_scenario_b_restart.py: four tests compose reopened deterministic_test completed-bar memory, verified same-day CAS heritage, actual runtime snapshot producer and read-only CAS evaluator; C1 retains C1_OUT_OF_WINDOW at 15:14. Synthetic fixture only; no live or historical authority.",
+      "status": "PASS_OFFLINE_SYNTHETIC",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I8_ATTACK",
+      "issue": 8,
+      "ref": "non-string source-event IDs and rehashed BANKNIFTY row with internally consistent payload/ID/record hashes rejected offline; corrupt/ambiguous parent attacks remain not run",
+      "status": "PARTIAL",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I8_BOOL_TOKEN_REPRO",
+      "issue": 8,
+      "ref": "independent verifier reproduced True == 1 token equality bypass after event and record hashes were recomputed",
+      "status": "REPRODUCED",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I8_CALLEE",
+      "issue": 8,
+      "ref": "primitive window/capture verifier",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CALLEE"
+    },
+    {
+      "id": "I8_CALLER",
+      "issue": 8,
+      "ref": "observer CAS tick sink",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CALLER"
+    },
+    {
+      "id": "I8_CONFIG",
+      "issue": 8,
+      "ref": "parent_session_id null in captured heritage",
+      "status": "DATA_VERIFIED",
+      "type": "CONFIG"
+    },
+    {
+      "id": "I8_EVENT_ID_PATCH",
+      "issue": 8,
+      "ref": "core/cas_primitive_producer.py requires a non-empty string before source-event suffix binding",
+      "status": "PATCHED_OFFLINE",
+      "type": "PATCH"
+    },
+    {
+      "id": "I8_EVENT_ID_TEST",
+      "issue": 8,
+      "ref": "tests/test_cas_primitive_producer.py malformed missing/empty/integer/boolean/object IDs blocked or rejected without raising",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I8_EVIDENCE",
+      "issue": 8,
+      "ref": "CAS heritage EMPTY; process gap UNKNOWN; 09:15 and 10:00 captures expired",
+      "status": "DATA_VERIFIED",
+      "type": "EVIDENCE"
+    },
+    {
+      "id": "I8_FIXED_SYMBOL_VERIFIER",
+      "issue": 8,
+      "ref": "core/cas_primitive_producer.py rejects persisted row underlying_symbol != NIFTY",
+      "status": "PATCHED_OFFLINE",
+      "type": "PATCH"
+    },
+    {
+      "id": "I8_FUNCTION_OR_CLASS",
+      "issue": 8,
+      "ref": "CASPrimitiveStore.capture and heritage verification",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "FUNCTION_OR_CLASS"
+    },
+    {
+      "id": "I8_MUTATION",
+      "issue": 8,
+      "ref": "6/6 targeted identity/type source mutants killed; parent/time/provenance and historical source-authority mutations remain open",
+      "status": "PASS_PARTIAL",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I8_PATCH",
+      "issue": 8,
+      "ref": "no reconstruction source authority",
+      "status": "NOT_IMPLEMENTED",
+      "type": "PATCH"
+    },
+    {
+      "id": "I8_PERSISTED_ARTIFACT",
+      "issue": 8,
+      "ref": "no verified prior source-event interval identified",
+      "status": "UNKNOWN",
+      "type": "PERSISTED_ARTIFACT"
+    },
+    {
+      "id": "I8_REGRESSION_TEST",
+      "issue": 8,
+      "ref": "tests/test_cas_primitive_producer.py covers malformed event-ID types and self-consistent wrong-underlying mutation; historical restart proof remains absent",
+      "status": "PARTIAL",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I8_REPRO_TEST",
+      "issue": 8,
+      "ref": "existing tests cover primitive windows, no crash/restart predecessor replay",
+      "status": "PARTIAL",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I8_ROOT_CAUSE",
+      "issue": 8,
+      "ref": "cannot prove valid primitive existed or was recoverable",
+      "status": "UNKNOWN",
+      "type": "ROOT_CAUSE"
+    },
+    {
+      "id": "I8_RUNTIME_STATE",
+      "issue": 8,
+      "ref": "CAS observer writes a per-run primitive store",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "RUNTIME_STATE"
+    },
+    {
+      "id": "I8_SAFETY_INVARIANT",
+      "issue": 8,
+      "ref": "no future leakage; no bar-to-tick synthesis",
+      "status": "PROTECTED",
+      "type": "SAFETY_INVARIANT"
+    },
+    {
+      "id": "I8_SOURCE_FILE",
+      "issue": 8,
+      "ref": "CASPrimitiveStore and core/market_heritage_graph.py",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "SOURCE_FILE"
+    },
+    {
+      "id": "I8_STRATEGY_DEPENDENCY",
+      "issue": 8,
+      "ref": "CAS evaluations require causal source ticks and parent heritage",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "STRATEGY_DEPENDENCY"
+    },
+    {
+      "id": "I8_STRICT_TOKEN_PATCH",
+      "issue": 8,
+      "ref": "core/cas_primitive_producer.py requires exact positive integer configured, tick, event-payload, and persisted-row tokens; missing expected token is not a wildcard",
+      "status": "PATCHED_OFFLINE",
+      "type": "PATCH"
+    },
+    {
+      "id": "I8_STRICT_TOKEN_TEST",
+      "issue": 8,
+      "ref": "tests/test_cas_primitive_producer.py rejects bool/float/string/zero/negative/missing token at capture, event payload, persisted row, and expected-token boundaries",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I8_SYMPTOM",
+      "issue": 8,
+      "ref": "same-day restart has no verified primitive heritage",
+      "status": "DATA_VERIFIED",
+      "type": "SYMPTOM"
+    },
+    {
+      "id": "I8_VERIFIER",
+      "issue": 8,
+      "ref": "UNKNOWN preserved",
+      "status": "PARTIAL",
+      "type": "VERIFIER"
+    },
+    {
+      "id": "I8_WRONG_SYMBOL_ATTACK_TEST",
+      "issue": 8,
+      "ref": "test_primitive_verifier_rejects_self_consistent_wrong_underlying_identity",
+      "status": "PASS_OFFLINE",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I8_WRONG_SYMBOL_REPRO",
+      "issue": 8,
+      "ref": "before repair verify_primitive accepted a BANKNIFTY row after all hashes and event-ID suffix were recomputed",
+      "status": "REPRODUCED",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I9_ATTACK",
+      "issue": 9,
+      "ref": "incomplete, cross-date, duplicate, conflict, aborted insert, replay, late-tick, shifted-epoch and malformed-epoch cases",
+      "status": "PASS_PARTIAL",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I9_CALLEE",
+      "issue": 9,
+      "ref": "SQLite WAL immutable row store and OhlcBuffer completed-bar view",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CALLEE"
+    },
+    {
+      "id": "I9_CALLER",
+      "issue": 9,
+      "ref": "orchestrator installs memory bridge before market-data cycle; fetch path ingests trusted LTP; C1/C2 reads durable memory",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CALLER"
+    },
+    {
+      "id": "I9_CONFIG",
+      "issue": 9,
+      "ref": "session_date plus governed output_root.parent store path",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "CONFIG"
+    },
+    {
+      "id": "I9_CUTOFF_CODE_MUTATION",
+      "issue": 9,
+      "ref": "scripts/verify_issues_7_11_issue9_mutations.py mutates the persisted completion-cutoff guard in a temporary source copy; designated behavior test fails by assertion",
+      "status": "PASS",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I9_DEDUPE_CODE_MUTATION",
+      "issue": 9,
+      "ref": "scripts/verify_issues_7_11_issue9_mutations.py mutates immutable duplicate row-hash comparison in a temporary source copy; designated behavior test fails by assertion",
+      "status": "PASS",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I9_EPOCH_REPAIR_TEST",
+      "issue": 9,
+      "ref": "MarketSessionStore._load and verify_integrity compare persisted epoch to normalized ts_ist epoch; 105 focused tests pass",
+      "status": "PASS",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I9_EPOCH_TAMPER_ATTACK",
+      "issue": 9,
+      "ref": "tests/core/test_market_session_store.py::test_store_rejects_tampered_epoch_even_when_row_hash_is_unchanged; earlier/later ts_epoch sabotage",
+      "status": "PASS",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I9_EPOCH_TYPE_ATTACK",
+      "issue": 9,
+      "ref": "tests/core/test_market_session_store.py::test_store_reports_malformed_persisted_epoch_as_corruption; SQLite ts_epoch set to nonnumeric TEXT",
+      "status": "PASS",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I9_EPOCH_VERIFIER",
+      "issue": 9,
+      "ref": "fresh gsd-code-reviewer reproduced early as-of inclusion before patch; post-patch focused verifier suite green",
+      "status": "PASS_PARTIAL",
+      "type": "VERIFIER"
+    },
+    {
+      "id": "I9_EVIDENCE",
+      "issue": 9,
+      "ref": "three traces mark completed bars COMPLETED_IN_MEMORY/no_external_store",
+      "status": "DATA_VERIFIED",
+      "type": "EVIDENCE"
+    },
+    {
+      "id": "I9_FUNCTION_OR_CLASS",
+      "issue": 9,
+      "ref": "trusted LTP ingestion; patched singleton OhlcBuffer completion/persistence; MarketSessionStore restart read; _evaluate_c1_c2_for_symbol",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "FUNCTION_OR_CLASS"
+    },
+    {
+      "id": "I9_MUTATION",
+      "issue": 9,
+      "ref": "2/2 targeted source mutants killed: completion cutoff and immutable duplicate-hash guards; process-kill crash and campaign-wide mutations remain open",
+      "status": "PASS_PARTIAL",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I9_PATCH",
+      "issue": 9,
+      "ref": "existing session store wired to primary singleton and MEG observer; completion cutoff, source-time checks, warm restore, timestamp identity integrity; no tick-callback DB I/O",
+      "status": "IMPLEMENTED",
+      "type": "PATCH"
+    },
+    {
+      "id": "I9_PERSISTED_ARTIFACT",
+      "issue": 9,
+      "ref": "market_session_bars keyed by session_date/symbol/timeframe/epoch",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "PERSISTED_ARTIFACT"
+    },
+    {
+      "id": "I9_PRIMARY_RUNTIME_RESTART_ATTACK",
+      "issue": 9,
+      "ref": "cleared process-local singleton after trusted event-time ticks and requested completed bars at causal cutoff",
+      "status": "PASS",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I9_PRIMARY_RUNTIME_RESTART_TEST",
+      "issue": 9,
+      "ref": "tests/core/test_market_session_runtime_bridge.py::test_normal_trusted_tick_restart_path_hydrates_c1_from_durable_bars; 1 passed",
+      "status": "PASS",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I9_REGRESSION_TEST",
+      "issue": 9,
+      "ref": "368-test focused campaign run plus primary trusted-tick restart integration and 10/10 store certification",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I9_REPRO_TEST",
+      "issue": 9,
+      "ref": "tests/core/test_market_session_store.py and tests/test_market_event_graph_live_ohlc_buffer.py",
+      "status": "PASS",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I9_ROOT_CAUSE",
+      "issue": 9,
+      "ref": "primary and MEG completed candles were process-local without canonical same-session persistence/warm restore wiring",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "ROOT_CAUSE"
+    },
+    {
+      "id": "I9_RUNTIME_STATE",
+      "issue": 9,
+      "ref": "read-only observer starts lifecycle after store configuration",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "RUNTIME_STATE"
+    },
+    {
+      "id": "I9_SAFETY_INVARIANT",
+      "issue": 9,
+      "ref": "same-date, event-time-complete, nullable-volume, immutable provenance; recovered rows do not prove current feed",
+      "status": "PROTECTED",
+      "type": "SAFETY_INVARIANT"
+    },
+    {
+      "id": "I9_SOURCE_FILE",
+      "issue": 9,
+      "ref": "core/market_session_store.py; core/market_session_memory_contract.py; core/ohlc_buffer.py; core/market_data.py; core/orchestrator.py; MEG observer bridge",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "SOURCE_FILE"
+    },
+    {
+      "id": "I9_STRATEGY_DEPENDENCY",
+      "issue": 9,
+      "ref": "C1/C2 durable memory reader receives exact same-symbol completed session bars",
+      "status": "OFFLINE_PATH_VERIFIED",
+      "type": "STRATEGY_DEPENDENCY"
+    },
+    {
+      "id": "I9_SYMPTOM",
+      "issue": 9,
+      "ref": "MEG shadow loses usable completed bars on restart",
+      "status": "DATA_VERIFIED",
+      "type": "SYMPTOM"
+    },
+    {
+      "id": "I9_VERIFIER",
+      "issue": 9,
+      "ref": "same-agent fresh continuation verified primary offline path; running-service restart and captured/live parity remain UNKNOWN",
+      "status": "PASS_PARTIAL",
+      "type": "VERIFIER"
+    },
+    {
+      "id": "I7_FUTURES_ACQUISITION_REPORT_RECHECK_20261003",
+      "issue": 7,
+      "ref": "Hash-pinned acquisition report claims 506423 futures rows / 516 sessions through 2026-08-25 but SOURCE_SHA is UNKNOWN, payload absent in acquisition directory, and target 2026-09-30 is outside range; see CAPTURE_CORPUS_RECHECK_20261003.md",
+      "status": "DATA_VERIFIED_LIMITED",
+      "type": "EVIDENCE"
+    },
+    {
+      "id": "I9_PROCESS_DEATH_TEST_20261003",
+      "issue": 9,
+      "ref": "tests/core/test_market_session_store.py::test_process_death_before_store_context_commit_rolls_back_insert; subprocess asserts uncommitted row exists before os._exit(73), then fresh store sees no row and SQLite integrity_check=ok",
+      "status": "PASS_OFFLINE",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I9_PROCESS_DEATH_ATTACK_20261003",
+      "issue": 9,
+      "ref": "Abrupt child-process exit after real persist_completed_bar INSERT and before SQLite connection context __exit__/commit",
+      "status": "PASS_BOUNDED",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I9_HERMES_CRASH_CONTRACT_20261003",
+      "issue": 9,
+      "ref": "docs/agent_reviews/issues_7_11_hermes_issue9_crash_consistency.md",
+      "status": "DEFINED",
+      "type": "SAFETY_INVARIANT"
+    },
+    {
+      "id": "I9_GSD_CRASH_PLAN_20261003",
+      "issue": 9,
+      "ref": "artifacts/issues_7_11/GSD_ISSUE9_CRASH_CONSISTENCY_PLAN.md; full test_market_session_store.py passed 19 tests",
+      "status": "EXECUTED",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I9_PROCESS_DEATH_MUTATION_20261003",
+      "issue": 9,
+      "ref": "scripts/verify_issues_7_11_issue9_mutations.py: early-commit mutant causes test_process_death_before_store_context_commit_rolls_back_insert to fail; runner reports 3/3 killed and unchanged checkout source/test hashes",
+      "status": "KILLED",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I9_FRESH_PROCESS_RESTART_TEST_20261003",
+      "issue": 9,
+      "ref": "tests/core/test_market_session_runtime_bridge.py::test_fresh_interpreter_restart_restores_completed_bars_and_evaluates_c1; writer and reader are independent interpreters using temporary DB/DATA_ROOT",
+      "status": "PASS_OFFLINE",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I9_FRESH_PROCESS_RESTART_EVIDENCE_20261003",
+      "issue": 9,
+      "ref": "Focused 1 passed; bridge/store regression 29 passed; 30 exact completed bars restored and actual C1 returned C1_QUALIFIED under fresh synthetic cycle evidence",
+      "status": "PASS_BOUNDED_OFFLINE",
+      "type": "EVIDENCE"
+    },
+    {
+      "id": "I7_CALENDAR_EDGE_TESTS_20261003",
+      "issue": 7,
+      "ref": "tests/test_market_heritage_graph.py::test_previous_eligible_session_skips_weekends_and_exchange_holidays; Monday resolves Friday and post-holiday Wednesday resolves Monday from explicit verified eligible-session records",
+      "status": "PASS_OFFLINE",
+      "type": "REPRO_TEST"
+    },
+    {
+      "id": "I7_CALENDAR_ARITHMETIC_MUTATION_20261003",
+      "issue": 7,
+      "ref": "scripts/verify_issues_7_11_issue7_mutations.py replaces latest eligible date with target-minus-one-calendar-day; both calendar edge cases fail under mutant",
+      "status": "KILLED",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I7_HOLIDAY_CALENDAR_SPLIT_20261003",
+      "issue": 7,
+      "ref": "Preflight NSE F&O set and core.market_calendar.IN_HOLIDAYS differed; set comparison found five missing 2026 F&O dates, including March 3; official amendment adds Jan 15.",
+      "status": "REPOSITORY_VERIFIED",
+      "type": "ROOT_CAUSE"
+    },
+    {
+      "id": "I7_HOLIDAY_ALIGNMENT_PATCH_20261003",
+      "issue": 7,
+      "ref": "core.market_calendar centralizes versioned NSE F&O dates; scripts/run_market_event_graph_live_session_v1.py imports the canonical dates and per-date source URL.",
+      "status": "PATCHED",
+      "type": "PATCH"
+    },
+    {
+      "id": "I7_HOLIDAY_ALIGNMENT_REGRESSION_20261003",
+      "issue": 7,
+      "ref": "81 passed across session state, preflight, expiry, and market heritage tests; March 3 closed, holidays unified, expiry excludes March 3.",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I11_REGISTRY_EMPTY_IDENTITY_DEFECT_20261003",
+      "issue": 11,
+      "ref": "Verified INDEX_OPTIONS with required_identities=() and separately identity=\"\" with a matching healthy map key passed validation/resolver eligibility before repair.",
+      "status": "REPRODUCED_FAIL_OPEN",
+      "type": "ROOT_CAUSE"
+    },
+    {
+      "id": "I11_REGISTRY_IDENTITY_COVERAGE_PATCH_20261003",
+      "issue": 11,
+      "ref": "core/candidate_feed_dependencies.py: validator and execution_eligible require exact required-domain coverage and nonempty trimmed string identities; dynamic None remains unresolved.",
+      "status": "PATCHED_FAIL_CLOSED",
+      "type": "PATCH"
+    },
+    {
+      "id": "I11_REGISTRY_IDENTITY_COVERAGE_TEST_20261003",
+      "issue": 11,
+      "ref": "tests/test_candidate_feed_dependencies.py rejects empty-domain coverage plus empty, whitespace-only, and padded identities; focused dependency/safety/isolation/ranking suite 61 passed.",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I11_REGISTRY_IDENTITY_COVERAGE_MUTATION_20261003",
+      "issue": 11,
+      "ref": "scripts/verify_issues_7_11_issue11_registry_identity_mutation.py kills separate validator and execution_eligible mutants using named assertion sentinels; checkout hashes unchanged.",
+      "status": "KILLED",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I11_REGISTRY_IDENTITY_COVERAGE_INDEPENDENT_REVIEW_20261003",
+      "issue": 11,
+      "ref": "Read-only scoped re-review: empty, whitespace-only, leading/trailing padded identities fail closed; 16 reviewer-run tests passed; both named-sentinel mutants killed; no blocker in requested files. Whole Issue 11/campaign remains open.",
+      "status": "PASS_BOUNDED_SCOPE",
+      "type": "INDEPENDENT_VERIFICATION"
+    },
+    {
+      "id": "ISSUES_7_11_CURRENT_SOURCE_MUTATION_REATTACK_20261003",
+      "issue": "7-11",
+      "ref": "Sequential current-worktree reattack: all currently available targeted mutation harnesses killed 23/23; Issue 9 focused regression 40 passed and final Issue 10 focused suite 53 passed. Bounded offline evidence only; campaign gates remain open.",
+      "status": "PASS_BOUNDED",
+      "type": "MUTATION_CAMPAIGN_RECHECK"
+    },
+    {
+      "id": "I10_EXTERNAL_APPEND_ROLLBACK_DEFECT_20261003",
+      "issue": 10,
+      "ref": "Unconditional rollback could truncate a non-cooperating writer append made after this batch partial write and before failure.",
+      "status": "REPRODUCED_DATA_LOSS_RISK",
+      "type": "ROOT_CAUSE"
+    },
+    {
+      "id": "I10_EXTERNAL_APPEND_ROLLBACK_PATCH_20261003",
+      "issue": 10,
+      "ref": "core/locked_jsonl.py never truncates after append failure; it logs and propagates the original write error. A partial tail may remain; traced advisory consumer reports parse_error and admits no malformed row.",
+      "status": "PATCHED_FAIL_SAFE_NO_INPLACE_TRUNCATE",
+      "type": "PATCH"
+    },
+    {
+      "id": "I10_EXTERNAL_APPEND_ROLLBACK_TEST_20261003",
+      "issue": 10,
+      "ref": "Final focused Issue 10 suite 53 passed; covers foreign-byte preservation, no-truncate assertion, PARTIAL-tail reporting, malformed interleaved bytes rejected by advisory consumer, original exception propagation, and cooperating writer serialization.",
+      "status": "PASS_OFFLINE",
+      "type": "REGRESSION_TEST"
+    },
+    {
+      "id": "I10_EXTERNAL_APPEND_ROLLBACK_MUTATION_20261003",
+      "issue": 10,
+      "ref": "Temporary destructive ftruncate(fd, 0) mutant killed by designated foreign-append regression; checkout hashes unchanged.",
+      "status": "KILLED",
+      "type": "MUTATION"
+    },
+    {
+      "id": "I7_CANONICAL_FUTURES_CORPUS_NO_TARGET_ROW_20261003",
+      "issue": 7,
+      "ref": "PyArrow exact-date query: repo registered aligned Parquet 185681 rows, SHA 2311981231d3fb847a216c9165ef73c3e7b788ab354d6de493ab1a5edb32e7a9, max session 2026-07-28; zero 2026-09-30 rows. Repaired V2 copy 185680 rows, SHA 0108b00bcf62f2b42621fb3b3919b69d3faf6bc362776232c1faff8131107f9a, same max date, zero target rows.",
+      "status": "DATA_VERIFIED_NO_TARGET_ROW",
+      "type": "SOURCE_COVERAGE"
+    },
+    {
+      "id": "I7_CANONICAL_FUTURES_SOURCE_AUTHORITY_LIMIT_20261003",
+      "issue": 7,
+      "ref": "Repo file hash matches V3 source registry, but registry verdict is legacy provenance partial; V3 quality reports one invalid OHLC row and limited volume/OI semantics. Bounded named-payload audit only.",
+      "status": "UNKNOWN_PRESERVED",
+      "type": "AUTHORITY_LIMIT"
+    },
+    {
+      "id": "ISSUES_7_11_CURRENT_SOURCE_BROAD_REGRESSION_20261004",
+      "issue": "7-11",
+      "ref": "Current isolated worktree broad pytest: 8724 passed, 9 skipped, 29 deselected, 1474 warnings in 985.62s; exit 0; three declared exclusions. Offline only; campaign gates remain open.",
+      "status": "PASS_BOUNDED",
+      "type": "BROAD_REGRESSION"
+    },
+    {
+      "id": "I10_ROLLBACK_TOCTOU_VERIFIER_ATTACK_20261004",
+      "issue": 10,
+      "ref": "Fresh reviewer found the prior fstat-then-ftruncate guard still raced with a bypass append between size check and truncation. This invalidated the prior protection claim.",
+      "status": "REPRODUCED_BY_INDEPENDENT_REVIEW",
+      "type": "ATTACK"
+    },
+    {
+      "id": "I10_NO_TRUNCATE_INDEPENDENT_REVIEW_20261004",
+      "issue": 10,
+      "ref": "Independent reviewer confirmed no post-failure truncate window remains and verified that malformed concatenated bytes produce parse_error and zero advisory rows. Bypass row salvage remains unverified.",
+      "status": "BOUNDED_PASS",
+      "type": "VERIFIER"
+    },
+    {
+      "id": "I11_SYMBOL_SCOPE_BOUNDED_REPAIR_20261004",
+      "issue": 11,
+      "type": "PATCH",
+      "status": "PARTIALLY_REPAIRED_OFFLINE",
+      "ref": "core/feed_hold_gate.py plus runtime per-symbol underlier evidence. Scopes only explicit homogeneous score symbols and exact healthy target underlier; exact candidate contract dependency remains UNKNOWN."
+    },
+    {
+      "id": "I11_MIXED_SYMBOL_POOL_ROOT_20261004",
+      "issue": 11,
+      "type": "ROOT_CAUSE",
+      "status": "REPOSITORY_VERIFIED",
+      "ref": "CandidatePoolReport.symbol was used to scope a score set containing all generator-returned candidate symbols; mixed symbols were not rejected."
+    },
+    {
+      "id": "I11_MIXED_SYMBOL_POOL_REPRO_20261004",
+      "issue": 11,
+      "type": "REPRO_TEST",
+      "status": "REPRODUCED_RED_THEN_PASS",
+      "ref": "tests/test_ranking_orchestrator.py mixed-symbol test reproduced 2 ranks under NIFTY scope before guard; now aggregate held."
+    },
+    {
+      "id": "I11_MIXED_SYMBOL_POOL_MUTATION_20261004",
+      "issue": 11,
+      "type": "MUTATION",
+      "status": "KILLED_OFFLINE",
+      "ref": "scripts/verify_issues_7_11_issue11_mixed_symbol_mutation.py trust-pool-symbol mutant killed; checkout hashes unchanged."
+    },
+    {
+      "id": "I11_EXACT_DYNAMIC_CANDIDATE_IDENTITY_20261004",
+      "issue": 11,
+      "type": "STRATEGY_DEPENDENCY",
+      "status": "UNKNOWN",
+      "ref": "No exact candidate-to-option/futures token/contract current-session health join exists in ranking path; registry dynamic entries deliberately unresolved."
+    },
+    {
+      "id": "I7_ADAPTER_INPUT_WIRING_20261004",
+      "issue": 7,
+      "type": "REGRESSION_TEST",
+      "status": "PASS_OFFLINE_SYNTHETIC",
+      "ref": "Scenario A asserts verified loader values match actual adapter fields for Opening Drive and both Overnight Drift adapters; test-only, no historical source authority."
+    },
+    {
+      "id": "I7_ADAPTER_INPUT_MUTATION_20261004",
+      "issue": 7,
+      "type": "MUTATION",
+      "status": "KILLED_OFFLINE",
+      "ref": "scripts/verify_issues_7_11_issue7_adapter_input_mutation.py deliberate prior-close miswire mutant killed; checkout hashes unchanged."
+    },
+    {
+      "id": "I7_TARGET_DATE_SOURCE_AUTHORITY_20261004",
+      "issue": 7,
+      "type": "EVIDENCE",
+      "status": "UNKNOWN",
+      "ref": "Inspected 2026-09-30 capture is options/index only and does not bind source events/receive time or exact target futures bar; synthetic test is not data authority."
+    },
+    {
+      "id": "I7_TARGET_EXPIRY_INPUT_REVIEW_20261004",
+      "issue": 7,
+      "type": "VERIFIER",
+      "status": "REVIEW_FINDING_REPAIRED",
+      "ref": "Independent verifier noted opening_drive_target_expiry was passed from the launch plan, not a T-1 loader output; Scenario A now asserts a nonempty synthetic launch-plan expiry reaches the actual adapter."
+    },
+    {
+      "id": "I7_ADAPTER_MUTATION_PREDICATE_REVIEW_20261004",
+      "issue": 7,
+      "type": "ATTACK",
+      "status": "HARNESS_DEFECT_REPAIRED",
+      "ref": "Independent verifier found generic 1-failure kill predicate could overstate mutation evidence. Harness now requires the exact target_expiry assertion and AssertionError; mutated field is target_expiry."
+    },
+    {
+      "id": "I11_MIXED_MUTATION_PREDICATE_REVIEW_20261004",
+      "issue": 11,
+      "type": "ATTACK",
+      "status": "HARNESS_DEFECT_REPAIRED",
+      "ref": "Independent verifier found generic failure predicate could overstate mutation evidence. Harness now requires report.ranked_candidate_count==0 assertion and AssertionError."
+    },
+    {
+      "id": "I9_SAME_PROCESS_CROSS_DATE_REPRO_20261004",
+      "issue": 9,
+      "type": "REPRO_TEST",
+      "status": "RED_REPRODUCED",
+      "ref": "tests/core/test_market_session_runtime_bridge.py::test_same_process_session_rollover_excludes_prior_date_bars_from_runtime_view; before patch, completed runtime view returned 2026-09-07 bars at a 2026-09-08 cutoff."
+    },
+    {
+      "id": "I9_LOCAL_BUFFER_SESSION_LEAK_20261004",
+      "issue": 9,
+      "type": "ROOT_CAUSE",
+      "status": "REPOSITORY_VERIFIED",
+      "ref": "market_session_memory_contract.get_completed_bars merged unfiltered original_completed local rows with date-scoped durable rows; prior-date process-local tail entered current-session C1/C2 history."
+    },
+    {
+      "id": "I9_IST_SESSION_DATE_FILTER_20261004",
+      "issue": 9,
+      "type": "PATCH",
+      "status": "PATCHED_OFFLINE",
+      "ref": "core/market_session_memory_contract.py::_is_same_ist_session_date filters local and durable rows to as_of IST date before merge; underlying OHLC buffer and explicit historical store queries remain unchanged."
+    },
+    {
+      "id": "I9_SAME_PROCESS_ROLLOVER_TEST_20261004",
+      "issue": 9,
+      "type": "REGRESSION_TEST",
+      "status": "PASS_OFFLINE",
+      "ref": "Same-process D to D+1 regression asserts runtime completed view contains only current date and explicit date query retains prior-session stored bars."
+    },
+    {
+      "id": "I9_SESSION_DATE_MUTATION_20261004",
+      "issue": 9,
+      "type": "MUTATION",
+      "status": "KILLED_OFFLINE",
+      "ref": "scripts/verify_issues_7_11_issue9_session_isolation_mutation.py changes date predicate to accept all bars; exact timestamp-set assertion fails; checkout hashes unchanged."
+    },
+    {
+      "id": "I9_SESSION_DATE_INDEPENDENT_REVIEW_20261004",
+      "issue": 9,
+      "type": "VERIFIER",
+      "status": "PASS_BOUNDED_NO_P1_P2_P3_COVERAGE_CLOSED",
+      "ref": "Fresh independent read-only review found no P1/P2 issue; confirmed IST conversion, same-date ordering/deduplication and exact local-filter mutation. Follow-up naive/aware UTC cases passed; the identified P3 coverage gap is closed."
+    },
+    {
+      "id": "I9_MEG_SESSION_LEAK_REPRO_20261004",
+      "issue": 9,
+      "type": "REPRO_TEST",
+      "status": "RED_REPRODUCED",
+      "ref": "tests/test_market_event_graph_live_ohlc_buffer.py::test_shadow_completed_bar_view_excludes_prior_ist_session_rows; with store disabled, D+1 read returned two prior-date bars."
+    },
+    {
+      "id": "I9_MEG_SESSION_LEAK_ROOT_20261004",
+      "issue": 9,
+      "type": "ROOT_CAUSE",
+      "status": "REPOSITORY_VERIFIED",
+      "ref": "get_live_source_shadow_completed_bars returned raw completed shadow buffer rows after persistence skip without constraining rows to the requested IST date."
+    },
+    {
+      "id": "I9_MEG_SESSION_READ_FILTER_20261004",
+      "issue": 9,
+      "type": "PATCH",
+      "status": "PATCHED_OFFLINE",
+      "ref": "core/market_event_graph_live_ohlc_buffer.py filters returned completed shadow bars by normalized as_of IST date; buffer and persistence are not altered."
+    },
+    {
+      "id": "I9_MEG_SESSION_READ_TEST_20261004",
+      "issue": 9,
+      "type": "REGRESSION_TEST",
+      "status": "PASS_OFFLINE",
+      "ref": "D-to-D+1 observer test asserts exact current-date timestamps and proves shadow buffer remains unchanged."
+    },
+    {
+      "id": "I9_MEG_SESSION_READ_MUTATION_20261004",
+      "issue": 9,
+      "type": "MUTATION",
+      "status": "KILLED_OFFLINE",
+      "ref": "scripts/verify_issues_7_11_issue9_meg_session_mutation.py removes only output date predicate; exact timestamp-set assertion fails; source/test hashes unchanged."
+    },
+    {
+      "id": "I9_MEG_SESSION_READ_INDEPENDENT_REVIEW_20261004",
+      "issue": 9,
+      "type": "VERIFIER",
+      "status": "PASS_BOUNDED_NO_P1_P2",
+      "ref": "Fresh independent review found no P1/P2 issue; confirmed IST conversion, persistence-before-read ordering, unchanged buffer, and exact projection-only mutation. Runtime ingress canonicalizes to IST."
+    }
+  ],
+  "repository_sha": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+  "safety": {
+    "broker_write_authority": false,
+    "historical_53_hardcoded": false,
+    "live_authorized": false,
+    "order_authority": false,
+    "orders_cancelled": 0,
+    "orders_modified": 0,
+    "orders_placed": 0,
+    "paper_authorized": false,
+    "strategy_semantics_changed": false
+  },
+  "schema_version": 1
+}

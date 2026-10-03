@@ -66,8 +66,8 @@ class ReplayEvent:
     available_timestamp_ist: datetime
     symbol_data: Mapping[str, Any]
     session_id: str = "REPLAY_SESSION"
-    feed_ok: bool = True
-    websocket_ok: bool = True
+    feed_ok: Optional[bool] = True
+    websocket_ok: Optional[bool] = True
     session_health: str = "NORMAL"
 
     def __post_init__(self):
@@ -463,7 +463,9 @@ class ParquetBarReplaySource:
                 "bar_timestamp_epoch": dt_ist.timestamp(),
                 "bar_timestamp_ist": dt_ist.isoformat(),
                 "exchange_timestamp": available_ts.isoformat(),
-                "option_last_tick_age_sec": 0.05,
+                "option_last_tick_age_sec": None,
+                "feed_health_authority": "UNAVAILABLE",
+                "session_health_authority": "UNAVAILABLE",
             }
 
             yield ReplayEvent(
@@ -471,9 +473,9 @@ class ParquetBarReplaySource:
                 available_timestamp_ist=available_ts,
                 symbol_data=sym_data,
                 session_id=dt_ist.strftime("%Y-%m-%d"),
-                feed_ok=True,
-                websocket_ok=True,
-                session_health="NORMAL",
+                feed_ok=None,
+                websocket_ok=None,
+                session_health="UNKNOWN",
             )
 
 
@@ -575,6 +577,8 @@ class UpstoxTickReplaySource:
                     "option_last_tick_age_sec": None,
                     "receipt_timestamp_authority": "UNAVAILABLE",
                     "depth_quantity_authority": "RECORDED" if (bid_qty is not None and ask_qty is not None) else "UNAVAILABLE",
+                    "feed_health_authority": "UNAVAILABLE",
+                    "session_health_authority": "UNAVAILABLE",
                 }
 
                 # Use a recorded local receipt timestamp only when the dataset actually has one.
@@ -599,9 +603,9 @@ class UpstoxTickReplaySource:
                     available_timestamp_ist=available_dt,
                     symbol_data=sym_data,
                     session_id=dt_ist.strftime("%Y-%m-%d"),
-                    feed_ok=True,
-                    websocket_ok=True,
-                    session_health="NORMAL",
+                    feed_ok=None,
+                    websocket_ok=None,
+                    session_health="UNKNOWN",
                 )
                 yielded_count += 1
                 if self.max_events and yielded_count >= self.max_events:

@@ -51,16 +51,23 @@ def run_certification(output: Path | None = None) -> dict:
         store = MarketSessionStore(db_path=db_path, report_root=report_root)
         day = datetime(2026, 9, 7, 9, 15, tzinfo=IST)
         for i in range(30):
-            store.persist_completed_bar("NIFTY", _bar(day + timedelta(minutes=i), 25000.0 + i))
+            store.persist_completed_bar(
+                "NIFTY", _bar(day + timedelta(minutes=i), 25000.0 + i),
+                completed_as_of=day + timedelta(minutes=i + 1),
+            )
         gates: list[dict] = []
 
         def immutable_gate():
             original = _bar(day, 25000.0)
-            duplicate = store.persist_completed_bar("NIFTY", original)
+            duplicate = store.persist_completed_bar(
+                "NIFTY", original, completed_as_of=day + timedelta(minutes=1)
+            )
             assert duplicate["status"] == "EXISTS"
             mutated = dict(original); mutated["close"] = float(original["close"]) + 10.0; mutated["high"] = float(mutated["close"]) + 1.0
             try:
-                store.persist_completed_bar("NIFTY", mutated)
+                store.persist_completed_bar(
+                    "NIFTY", mutated, completed_as_of=day + timedelta(minutes=1)
+                )
             except SessionMemoryConflict:
                 return {"duplicate_status": duplicate["status"], "mutation_rejected": True}
             raise AssertionError("completed-bar mutation was not rejected")
@@ -92,7 +99,11 @@ def run_certification(output: Path | None = None) -> dict:
         def missing_minute_gate():
             symbol = "BANKNIFTY"
             for i in range(10):
-                if i != 2: store.persist_completed_bar(symbol, _bar(day + timedelta(minutes=i), 51000.0 + i))
+                if i != 2:
+                    store.persist_completed_bar(
+                        symbol, _bar(day + timedelta(minutes=i), 51000.0 + i),
+                        completed_as_of=day + timedelta(minutes=i + 1),
+                    )
             context = store.build_context(symbol, as_of=day + timedelta(minutes=10))
             five = store.get_bars(symbol, as_of=day + timedelta(minutes=10), timeframe="5m")
             assert context["missing_1m_bars"] == 1 and context["coverage_pct"] == 90.0 and len(five) == 1

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import math
 import os
 import sys
 import threading
@@ -24,6 +25,8 @@ from core.read_only_live_evidence import (
     write_json_atomic,
 )
 from core.read_only_broker_api_ledger import ReadOnlyBrokerApiLedger
+from core.locked_jsonl import append_jsonl_batch
+from core.time_utils import normalize_epoch_seconds
 
 
 UNSAFE_IMPORT_PREFIXES = (
@@ -39,6 +42,29 @@ WRITE_METHODS = frozenset({
     "place_order", "modify_order", "cancel_order", "exit_order", "exit_position",
     "basket_order", "create_gtt", "modify_gtt", "delete_gtt", "submit_fill",
 })
+
+
+def _index_ltp_age_sec(quote: Mapping[str, Any] | None, *, as_of_epoch: Any) -> float | None:
+    """Compute LTP age from its own provider event timestamp, never book time."""
+    if not isinstance(quote, Mapping):
+        return None
+    try:
+        price = float(quote.get("last_price"))
+        event_epoch = normalize_epoch_seconds(quote.get("last_price_ts_epoch"))
+        cutoff_epoch = normalize_epoch_seconds(as_of_epoch)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if (
+        not math.isfinite(price)
+        or price <= 0
+        or event_epoch is None
+        or cutoff_epoch is None
+    ):
+        return None
+    age = float(cutoff_epoch) - float(event_epoch)
+    if not math.isfinite(age) or age < 0:
+        return None
+    return age
 
 
 def safe_environment(base: Mapping[str, str] | None = None) -> dict[str, str]:
@@ -209,11 +235,11 @@ def resolve_cas_underlying_token(
 def _measured_meg_facts(*, bridge: Any, result: Any) -> dict[str, Any]:
     contract, _ = bridge._load_universe_contract()
     symbols = [contract.index_symbol, *contract.constituent_symbols] if contract is not None else []
-    from core.market_event_graph_live_ohlc_buffer import shadow_ohlc_buffer
+    from core.market_event_graph_live_ohlc_buffer import get_live_source_shadow_completed_bars
 
     now = datetime.now(timezone.utc)
     completed = {
-        symbol: shadow_ohlc_buffer.get_completed_bars(symbol, as_of=now)
+        symbol: get_live_source_shadow_completed_bars(symbol, as_of=now)
         for symbol in symbols
     }
     audit = dict(getattr(result, "audit", {}) or {})
@@ -658,6 +684,28 @@ def _run_observation_impl(*, launch_plan: Mapping[str, Any], output_root: Path, 
                     and tick.get("timestamp_epoch") is not None
                     and float(tick["timestamp_epoch"]) >= target):
                 cas_store.capture(name, target, tick, capture_timestamp_ist=datetime.now(timezone.utc).isoformat())
+
+    # Persist only the isolated MEG shadow bars. The database is scoped to the
+    # governed trading-date directory so a later same-day process can restore
+    # completed bars without reading another session or touching strategy OHLC.
+    from core.market_session_store import MarketSessionStore
+    from core.market_event_graph_live_ohlc_buffer import configure_live_source_session_store
+    bar_store_path = output_root.parent / "market_session_memory.sqlite"
+    assert_same_device(storage_authority, bar_store_path)
+    bar_store = MarketSessionStore(
+        db_path=bar_store_path,
+        report_root=output_root.parent / "market_session_memory_reports",
+    )
+    token_symbols = getattr(kite_depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {})
+    bar_symbols = {"NIFTY"}
+    if isinstance(token_symbols, Mapping):
+        bar_symbols.update(str(value).strip().upper() for value in token_symbols.values() if str(value).strip())
+    configure_live_source_session_store(
+        bar_store,
+        session_date=session_date,
+        symbols=tuple(sorted(bar_symbols)),
+        restore_as_of=datetime.now(timezone.utc),
+    )
     lifecycle.start(tokens, tick_sink=cas_tick_sink)
     previous_feed_live = False
 
@@ -751,17 +799,19 @@ def _run_observation_impl(*, launch_plan: Mapping[str, Any], output_root: Path, 
             from core.session_calendar import is_open as is_session_open
             from core.market_quote_resolver import get_index_quote_snapshot
             from core.market_snapshot_builder import build_market_snapshot, build_symbol_market_snapshot
-            from core.market_event_graph_live_ohlc_buffer import shadow_ohlc_buffer
+            from core.market_event_graph_live_ohlc_buffer import get_live_source_shadow_completed_bars
 
             cycle_cutoff = datetime.now(timezone.utc)
             now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
             active_market_open = is_session_open(now_ist, segment="NSE_FNO")
             nifty_quote = get_index_quote_snapshot("NIFTY")
             nifty_ltp = nifty_quote.get("last_price")
-            nifty_ts_epoch = nifty_quote.get("ts_epoch")
-            nifty_quote_age_sec = max(0.0, cycle_cutoff.timestamp() - float(nifty_ts_epoch)) if nifty_ts_epoch is not None else None
+            nifty_quote_age_sec = _index_ltp_age_sec(
+                nifty_quote,
+                as_of_epoch=cycle_cutoff.timestamp(),
+            )
 
-            nifty_completed_bars = shadow_ohlc_buffer.get_completed_bars("NIFTY", as_of=cycle_cutoff)
+            nifty_completed_bars = get_live_source_shadow_completed_bars("NIFTY", as_of=cycle_cutoff)
             latest_bar = nifty_completed_bars[-1] if nifty_completed_bars else {}
 
             symbols_payload = {}
@@ -784,7 +834,7 @@ def _run_observation_impl(*, launch_plan: Mapping[str, Any], output_root: Path, 
                         "instrument_token": cas_token,
                         "ltp": float(nifty_ltp),
                         "is_fresh": bool(nifty_quote_age_sec is not None and nifty_quote_age_sec <= 2.5),
-                        "is_executable_quote": True,
+                        "is_executable_quote": False,
                         "source": str(nifty_quote.get("source") or "tick_store"),
                     },
                 )
@@ -805,6 +855,7 @@ def _run_observation_impl(*, launch_plan: Mapping[str, Any], output_root: Path, 
                 inherited_cas_references=inherited_cas_references,
                 trading_session_identity=target_session,
                 cas_primitive_path=cas_store.path,
+                candidate_decisions_path=output_root / "candidate_decisions.jsonl",
             )
             from core.market_snapshot_store import write_market_snapshot_atomic
             write_market_snapshot_atomic(
@@ -944,9 +995,10 @@ def _run_observation_impl(*, launch_plan: Mapping[str, Any], output_root: Path, 
             with (output_root / "executable_pool.jsonl").open("a", encoding="utf-8") as ep_file:
                 for excand in strat_result.executable_candidates:
                     ep_file.write(json.dumps(excand.to_dict(), sort_keys=True) + "\n")
-            with (output_root / "candidate_decisions.jsonl").open("a", encoding="utf-8") as cd_file:
-                for dec in shadow_decisions.selected_candidates:
-                    cd_file.write(json.dumps(dec.to_dict(), sort_keys=True) + "\n")
+            append_jsonl_batch(
+                output_root / "candidate_decisions.jsonl",
+                (dec.to_dict() for dec in shadow_decisions.selected_candidates),
+            )
             with (output_root / "trade_truth_stream.jsonl").open("a", encoding="utf-8") as tt_file:
                 tt_file.write(json.dumps(trade_truth_record.to_dict(), sort_keys=True) + "\n")
             with (output_root / "causal_observation_lineage.jsonl").open("a", encoding="utf-8") as lineage_file:

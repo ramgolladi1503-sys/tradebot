@@ -61,7 +61,8 @@ def build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
     path = canonical_suggestions_log_path()
     rows: list[dict[str, Any]] = []
     notes: list[str] = []
-    for raw_line in tail_jsonl_rows(path, limit=limit):
+    source_rows, source_state = _read_advisory_source(path, limit=limit)
+    for raw_line in source_rows:
         try:
             payload = json.loads(raw_line)
         except Exception as exc:
@@ -86,17 +87,18 @@ def build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
             log_advisory_schema_error("runtime_snapshot_producer", payload, exc)
             notes.append(f"schema_error:{exc}")
     if rows:
-        return {"rows": rows, "row_count": int(len(rows)), "source_path": str(path), "notes": notes}
+        return {"rows": rows, "row_count": int(len(rows)), "source_path": str(path), "source_state": "ROWS", "notes": notes}
     if not bool(getattr(cfg, "RUNTIME_SNAPSHOT_ADVISORY_FALLBACK_CANDIDATE_DECISIONS_ENABLE", True)):
-        return {"rows": rows, "row_count": int(len(rows)), "source_path": str(path), "notes": notes}
+        return {"rows": rows, "row_count": int(len(rows)), "source_path": str(path), "source_state": source_state, "notes": notes}
 
     fallback_path = _candidate_decisions_log_path()
-    fallback_rows: list[dict[str, Any]] = []
-    fallback_notes: list[str] = []
-    for raw_line in tail_jsonl_rows(
+    fallback_source_rows, fallback_state = _read_advisory_source(
         fallback_path,
         limit=max(1, int(getattr(cfg, "RUNTIME_SNAPSHOT_ADVISORY_FALLBACK_CANDIDATE_DECISIONS_LIMIT", limit))),
-    ):
+    )
+    fallback_rows: list[dict[str, Any]] = []
+    fallback_notes: list[str] = []
+    for raw_line in fallback_source_rows:
         try:
             payload = json.loads(raw_line)
         except Exception as exc:
@@ -129,7 +131,31 @@ def build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
             fallback_notes.append(f"fallback_schema_error:{exc}")
     notes.append(f"fallback_source:{fallback_path}")
     notes.extend(fallback_notes)
-    return {"rows": fallback_rows, "row_count": int(len(fallback_rows)), "source_path": str(fallback_path), "notes": notes}
+    return {
+        "rows": fallback_rows,
+        "row_count": int(len(fallback_rows)),
+        "source_path": str(fallback_path),
+        "source_state": "ROWS" if fallback_rows else fallback_state,
+        "primary_source_state": source_state,
+        "notes": notes,
+    }
+
+
+def _read_advisory_source(path: Path, *, limit: int) -> tuple[list[str], str]:
+    """Read bounded JSONL tail and distinguish unavailable input from valid empty input."""
+    try:
+        if not path.exists():
+            return [], "MISSING"
+        if not path.is_file():
+            return [], "READ_ERROR"
+        rows = tail_jsonl_rows(path, limit=limit)
+        if rows:
+            return rows, "PRESENT"
+        if path.stat().st_size == 0 or not path.read_text(encoding="utf-8").strip():
+            return [], "EMPTY"
+        return [], "READ_ERROR"
+    except OSError:
+        return [], "READ_ERROR"
 
 
 def _candidate_decisions_log_path() -> Path:

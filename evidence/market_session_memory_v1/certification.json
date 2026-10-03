@@ -1,0 +1,93 @@
+{
+  "certification": "MARKET_SESSION_MEMORY_V1",
+  "failed": 0,
+  "gate_count": 10,
+  "gates": [
+    {
+      "evidence": {
+        "duplicate_status": "EXISTS",
+        "mutation_rejected": true
+      },
+      "gate": "immutable_completed_bar",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "15m": 2,
+        "15m_before_second_close": 1,
+        "1m": 30,
+        "5m": 6
+      },
+      "gate": "future_safe_timeframe_derivation",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "persist_status": "INSERTED",
+        "recovered_bars": 2
+      },
+      "gate": "restart_read_through",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "coverage_pct": 90.0,
+        "derived_5m_bars": 1,
+        "missing": 1
+      },
+      "gate": "gap_detection_and_derived_bar_rejection",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "durable_rows": 0,
+        "status": "SKIPPED_REPLAY_FIXTURE"
+      },
+      "gate": "replay_isolation",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "five_min_seed_rows": 5,
+        "mislabelled_as_1m": 0
+      },
+      "gate": "historical_seed_resolution_guard",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "hash_file_exists": true,
+        "integrity": "PASS",
+        "manifest_hash": "62d2096cb40268dc3088d5049c6dff2076b6d41983aced770e78e90e5b4d4d42",
+        "seal_verified": "PASS"
+      },
+      "gate": "session_seal_integrity",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "early_rows": 10,
+        "future_rows_in_early": 0,
+        "later_rows": 30
+      },
+      "gate": "asof_future_negative_control",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "conflicting_feature_rejected": true
+      },
+      "gate": "immutable_feature_snapshot",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "conflicting_seal_rejected": true
+      },
+      "gate": "immutable_session_seal",
+      "status": "PASS"
+    }
+  ],
+  "passed": 10,
+  "status": "PASS"
+}

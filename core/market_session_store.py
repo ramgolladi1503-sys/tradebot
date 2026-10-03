@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sqlite3
 import threading
@@ -76,7 +77,8 @@ def _normalize(symbol: str, bar: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("symbol_missing")
     ts = _dt(bar.get("ts") or bar.get("date")).replace(second=0, microsecond=0)
     o, h, l, c = (_num(bar.get(k)) for k in ("open", "high", "low", "close"))
-    v = _num(bar.get("volume", 0) or 0)
+    raw_volume = bar.get("volume", 0)
+    v = None if raw_volume is None else _num(raw_volume or 0)
     if min(o, h, l, c) <= 0:
         raise ValueError("non_positive_ohlc")
     if h < max(o, l, c):
@@ -269,6 +271,97 @@ class MarketSessionStore:
             trace_id=current_bar.trace_id if include_trace_context else "",
         )
 
+    def get_persisted_market_memory(
+        self,
+        symbol: str,
+        *,
+        as_of_timestamp: Any,
+        freshness_watermark: float,
+        trace_id: str = "",
+    ) -> MarketMemorySnapshot:
+        """Build causal strategy memory from verified, completed durable bars.
+
+        Unlike ``get_market_memory`` this path is symbol-scoped and restart-safe.
+        It never infers current feed freshness from historical persistence.
+        Missing session-open history, minute gaps, and bad freshness inputs fail
+        closed so downstream evaluators cannot consume fabricated memory.
+        """
+        when = _dt(as_of_timestamp)
+        sym = str(symbol or "").strip().upper()
+        if not sym:
+            raise ValueError("market_memory_symbol_missing")
+        if freshness_watermark not in (0, 1, 0.0, 1.0):
+            raise ValueError("market_memory_freshness_invalid")
+
+        bars = self.get_bars(sym, as_of=when, timeframe="1m", session_date=when.date().isoformat())
+        if not bars:
+            raise ValueError("memory_store_empty")
+
+        session_open = _open(when.date().isoformat())
+        session_close = _close(when.date().isoformat())
+        completed_until = min(when, session_close)
+        expected_count = max(0, int((completed_until - session_open).total_seconds() // 60))
+        timestamps = [_dt(row["ts"]) for row in bars]
+        for index, stamp in enumerate(timestamps):
+            expected = session_open + timedelta(minutes=index)
+            if stamp != expected:
+                raise ValueError("market_memory_minute_gap")
+            if stamp + timedelta(minutes=1) > when:
+                raise ValueError("market_memory_incomplete_bar")
+        if expected_count <= 0 or len(bars) != expected_count:
+            raise ValueError("market_memory_session_history_incomplete")
+
+        current = bars[-1]
+        n_bars = len(bars)
+        current_close = float(current["close"])
+        first_open = float(bars[0]["open"])
+        if first_open <= 0 or current_close <= 0:
+            raise ValueError("market_memory_price_invalid")
+
+        rolling_return = 0.0
+        if n_bars > 15:
+            base = float(bars[-16]["close"])
+            if base <= 0:
+                raise ValueError("market_memory_base_price_invalid")
+            rolling_return = (current_close - base) / base * 10000.0
+        distance_open = (current_close - first_open) / first_open * 10000.0
+        recent = bars[-15:]
+        range_bps = (max(float(row["high"]) for row in recent) - min(float(row["low"]) for row in recent)) / first_open * 10000.0
+        returns = [
+            (float(recent[i]["close"]) - float(recent[i - 1]["close"]))
+            / float(recent[i - 1]["close"])
+            * 10000.0
+            for i in range(1, len(recent))
+        ]
+        if any(float(recent[i - 1]["close"]) <= 0 for i in range(1, len(recent))):
+            raise ValueError("market_memory_return_base_invalid")
+        if returns:
+            mean_return = sum(returns) / len(returns)
+            realized_vol = (sum((value - mean_return) ** 2 for value in returns) / len(returns)) ** 0.5
+        else:
+            realized_vol = 0.0
+
+        return MarketMemorySnapshot(
+            as_of_timestamp=when.isoformat(),
+            symbol=sym,
+            current_price=current_close,
+            session_open=first_open,
+            session_high=max(float(row["high"]) for row in bars),
+            session_low=min(float(row["low"]) for row in bars),
+            session_close=current_close,
+            bar_index=n_bars - 1,
+            rolling_1m_bars_count=n_bars,
+            derived_5m_bars_count=n_bars // 5,
+            derived_15m_bars_count=n_bars // 15,
+            rolling_15m_return_bps=rolling_return,
+            distance_from_session_open_bps=distance_open,
+            rolling_15m_range_bps=range_bps,
+            realized_vol_15m=realized_vol,
+            freshness_watermark=float(freshness_watermark),
+            persistence_watermark=1.0,
+            trace_id=str(trace_id or ""),
+        )
+
     def to_dataframe(self) -> pd.DataFrame:
         """Render complete timeline as pandas DataFrame."""
         records = []
@@ -341,7 +434,7 @@ class MarketSessionStore:
             CREATE TABLE IF NOT EXISTS market_session_bars(
               session_date TEXT NOT NULL, symbol TEXT NOT NULL, timeframe TEXT NOT NULL,
               ts_epoch REAL NOT NULL, ts_ist TEXT NOT NULL, open REAL NOT NULL,
-              high REAL NOT NULL, low REAL NOT NULL, close REAL NOT NULL, volume REAL NOT NULL,
+              high REAL NOT NULL, low REAL NOT NULL, close REAL NOT NULL, volume REAL,
               provenance_json TEXT NOT NULL, row_hash TEXT NOT NULL, persisted_at_epoch REAL NOT NULL,
               PRIMARY KEY(session_date,symbol,timeframe,ts_epoch));
             CREATE INDEX IF NOT EXISTS idx_market_session_bars_lookup
@@ -354,24 +447,63 @@ class MarketSessionStore:
               session_date TEXT PRIMARY KEY, sealed_at_epoch REAL NOT NULL,
               manifest_json TEXT NOT NULL, manifest_hash TEXT NOT NULL);
             """)
+            volume_column = next(
+                (row for row in conn.execute("PRAGMA table_info(market_session_bars)").fetchall() if row["name"] == "volume"),
+                None,
+            )
+            if volume_column is not None and int(volume_column["notnull"]):
+                # Older schemas forced unknown volume to zero. Rebuild atomically
+                # so warm-start never upgrades missing volume into observed zero.
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    conn.execute("ALTER TABLE market_session_bars RENAME TO market_session_bars_notnull_v1")
+                    conn.execute("""CREATE TABLE market_session_bars(
+                      session_date TEXT NOT NULL, symbol TEXT NOT NULL, timeframe TEXT NOT NULL,
+                      ts_epoch REAL NOT NULL, ts_ist TEXT NOT NULL, open REAL NOT NULL,
+                      high REAL NOT NULL, low REAL NOT NULL, close REAL NOT NULL, volume REAL,
+                      provenance_json TEXT NOT NULL, row_hash TEXT NOT NULL, persisted_at_epoch REAL NOT NULL,
+                      PRIMARY KEY(session_date,symbol,timeframe,ts_epoch))""")
+                    conn.execute("""INSERT INTO market_session_bars
+                      (session_date,symbol,timeframe,ts_epoch,ts_ist,open,high,low,close,volume,provenance_json,row_hash,persisted_at_epoch)
+                      SELECT session_date,symbol,timeframe,ts_epoch,ts_ist,open,high,low,close,volume,provenance_json,row_hash,persisted_at_epoch
+                      FROM market_session_bars_notnull_v1""")
+                    conn.execute("DROP TABLE market_session_bars_notnull_v1")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_market_session_bars_lookup ON market_session_bars(session_date,symbol,timeframe,ts_epoch)")
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
 
-    def persist_completed_bar(self, symbol: str, bar: dict[str, Any]) -> dict[str, Any]:
+    def persist_completed_bar(
+        self, symbol: str, bar: dict[str, Any], *, completed_as_of: Any
+    ) -> dict[str, Any]:
         row = _normalize(symbol, bar)
         ts = _dt(row["ts_ist"])
+        cutoff = _dt(completed_as_of)
+        if cutoff.date().isoformat() != row["session_date"]:
+            return {"status": "SKIPPED_CROSS_SESSION_CUTOFF", "persisted": False, "row_hash": row["row_hash"]}
+        if ts + timedelta(minutes=1) > cutoff:
+            return {"status": "SKIPPED_INCOMPLETE", "persisted": False, "row_hash": row["row_hash"]}
         if ts.time() < SESSION_OPEN or ts.time() >= SESSION_CLOSE:
             return {"status": "SKIPPED_OUTSIDE_SESSION", "persisted": False, "row_hash": row["row_hash"]}
         key = (row["session_date"], row["symbol"])
         with self._lock, self._conn() as conn:
-            old = conn.execute("SELECT row_hash FROM market_session_bars WHERE session_date=? AND symbol=? AND timeframe='1m' AND ts_epoch=?", (row["session_date"], row["symbol"], row["ts_epoch"])).fetchone()
-            if old:
+            try:
+                conn.execute("INSERT INTO market_session_bars VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (
+                    row["session_date"], row["symbol"], "1m", row["ts_epoch"], row["ts_ist"],
+                    row["open"], row["high"], row["low"], row["close"], row["volume"],
+                    _json(row["provenance"]), row["row_hash"], float(now_utc_epoch())))
+            except sqlite3.IntegrityError as exc:
+                old = conn.execute(
+                    "SELECT row_hash FROM market_session_bars WHERE session_date=? AND symbol=? AND timeframe='1m' AND ts_epoch=?",
+                    (row["session_date"], row["symbol"], row["ts_epoch"]),
+                ).fetchone()
+                if old is None:
+                    raise
                 if str(old["row_hash"]) != row["row_hash"]:
                     self._conflicts += 1
-                    raise SessionMemoryConflict(f"immutable_bar_conflict:{row['session_date']}:{row['symbol']}:{row['ts_ist']}")
+                    raise SessionMemoryConflict(f"immutable_bar_conflict:{row['session_date']}:{row['symbol']}:{row['ts_ist']}") from exc
                 return {"status": "EXISTS", "persisted": True, "row_hash": row["row_hash"]}
-            conn.execute("INSERT INTO market_session_bars VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (
-                row["session_date"], row["symbol"], "1m", row["ts_epoch"], row["ts_ist"],
-                row["open"], row["high"], row["low"], row["close"], row["volume"],
-                _json(row["provenance"]), row["row_hash"], float(now_utc_epoch())))
         if key in self._cache:
             cached = dict(row); cached["ts"] = ts; cached["bar_provenance"] = dict(row["provenance"])
             self._cache[key].append(cached); self._cache[key].sort(key=lambda r: r["ts_epoch"])
@@ -388,13 +520,43 @@ class MarketSessionStore:
             for r in rows:
                 try: prov = json.loads(r["provenance_json"] or "{}")
                 except Exception: prov = {}
+                try:
+                    stored_epoch = float(r["ts_epoch"])
+                except (TypeError, ValueError, OverflowError) as exc:
+                    raise SessionMemoryConflict(
+                        f"persisted_bar_timestamp_invalid:{key[0]}:{key[1]}:{r['ts_ist']}"
+                    ) from exc
                 out.append({
                     "schema_version": SCHEMA_VERSION, "session_date": r["session_date"],
-                    "symbol": r["symbol"], "timeframe": "1m", "ts_epoch": float(r["ts_epoch"]),
+                    "symbol": r["symbol"], "timeframe": "1m", "ts_epoch": stored_epoch,
                     "ts_ist": r["ts_ist"], "ts": _dt(r["ts_ist"]), "open": float(r["open"]),
                     "high": float(r["high"]), "low": float(r["low"]), "close": float(r["close"]),
-                    "volume": float(r["volume"]), "provenance": prov, "bar_provenance": prov,
+                "volume": None if r["volume"] is None else float(r["volume"]), "provenance": prov, "bar_provenance": prov,
                     "row_hash": r["row_hash"]})
+                try:
+                    normalized = _normalize(symbol, {
+                        "ts": out[-1]["ts"],
+                        "open": out[-1]["open"],
+                        "high": out[-1]["high"],
+                        "low": out[-1]["low"],
+                        "close": out[-1]["close"],
+                        "volume": out[-1]["volume"],
+                        "bar_provenance": prov,
+                    })
+                except (TypeError, ValueError, OverflowError) as exc:
+                    raise SessionMemoryConflict(
+                        f"persisted_bar_schema_invalid:{key[0]}:{key[1]}:{r['ts_ist']}"
+                    ) from exc
+                if not math.isclose(
+                    stored_epoch, float(normalized["ts_epoch"]), rel_tol=0.0, abs_tol=1e-6
+                ):
+                    raise SessionMemoryConflict(
+                        f"persisted_bar_timestamp_mismatch:{key[0]}:{key[1]}:{r['ts_ist']}"
+                    )
+                if (out[-1]["session_date"] != key[0]
+                        or out[-1]["symbol"] != key[1]
+                        or normalized["row_hash"] != str(r["row_hash"])):
+                    raise SessionMemoryConflict(f"persisted_bar_hash_or_identity_mismatch:{key[0]}:{key[1]}")
             self._cache[key] = out; self._loaded.add(key)
             return [dict(r) for r in out]
 
@@ -424,7 +586,8 @@ class MarketSessionStore:
                 "ts_epoch": float(start.timestamp()), "ts_ist": start.isoformat(),
                 "open": float(group[0]["open"]), "high": max(float(r["high"]) for r in group),
                 "low": min(float(r["low"]) for r in group), "close": float(group[-1]["close"]),
-                "volume": sum(float(r["volume"]) for r in group), "constituent_1m_bars": minutes})
+                "volume": (None if any(r.get("volume") is None for r in group)
+                           else sum(float(r["volume"]) for r in group)), "constituent_1m_bars": minutes})
         return out
 
     def get_bars(self, symbol: str, *, as_of: Any, timeframe: str = "1m", session_date: str | None = None) -> list[dict[str, Any]]:
@@ -496,7 +659,11 @@ class MarketSessionStore:
             sym = str(r["symbol"]).upper()
             if wanted and sym not in wanted: continue
             counts[sym] += 1
-            epoch = float(r["ts_epoch"])
+            try:
+                epoch = float(r["ts_epoch"])
+            except (TypeError, ValueError, OverflowError):
+                failures.append(f"invalid_epoch:{sym}:{r['ts_ist']}")
+                continue
             if sym in last:
                 delta = epoch - last[sym]
                 if delta <= 0: failures.append(f"non_monotonic:{sym}:{r['ts_ist']}")
@@ -510,6 +677,8 @@ class MarketSessionStore:
                 if stamped.time() < SESSION_OPEN or stamped.time() >= SESSION_CLOSE:
                     failures.append(f"outside_session:{sym}:{r['ts_ist']}")
                 check = _normalize(sym, {"ts": r["ts_ist"], "open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"], "volume": r["volume"], "bar_provenance": prov})
+                if not math.isclose(epoch, float(check["ts_epoch"]), rel_tol=0.0, abs_tol=1e-6):
+                    failures.append(f"timestamp_epoch_mismatch:{sym}:{r['ts_ist']}")
                 if check["row_hash"] != r["row_hash"]: failures.append(f"hash_mismatch:{sym}:{r['ts_ist']}")
             except Exception as exc: failures.append(f"invalid_row:{sym}:{r['ts_ist']}:{type(exc).__name__}")
         return {"status": "PASS" if not failures else "FAIL", "session_date": day, "symbols": dict(sorted(counts.items())), "failures": failures, "conflicts_seen_this_process": self._conflicts}

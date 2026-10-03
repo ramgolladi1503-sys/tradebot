@@ -51,11 +51,18 @@ def _valid_tick(tick: dict, target_epoch: float, expected_token: int | None = No
     event_payload = tick.get("source_event_payload")
     try:
         event_hash = hashlib.sha256(json.dumps(event_payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest() if isinstance(event_payload, dict) else None
-        event_bound = (bool(tick.get("source_event_id")) and event_hash is not None
+        source_event_id = tick.get("source_event_id")
+        tick_token = tick.get("instrument_token")
+        payload_token = event_payload.get("instrument_token") if isinstance(event_payload, dict) else None
+        expected_token_valid = type(expected_token) is int and expected_token > 0
+        event_bound = (isinstance(source_event_id, str) and bool(source_event_id) and event_hash is not None
+                       and expected_token_valid
+                       and type(tick_token) is int and tick_token > 0
+                       and type(payload_token) is int and payload_token > 0
                        and event_hash == tick.get("source_event_sha256")
-                       and (expected_token is None or tick.get("instrument_token") == expected_token)
-                       and (expected_token is None or tick.get("source_event_id", "").endswith(f":{expected_token}:{event_hash[:16]}"))
-                       and event_payload.get("instrument_token") == tick.get("instrument_token")
+                       and (expected_token is None or tick_token == expected_token)
+                       and (expected_token is None or source_event_id.endswith(f":{expected_token}:{event_hash[:16]}"))
+                       and payload_token == tick_token
                        and event_payload.get("underlying_symbol") == tick.get("underlying_symbol")
                        and float(event_payload.get("last_price")) == price
                        and event_payload.get("source_timestamp_epoch") == source
@@ -135,7 +142,11 @@ def verify_primitive(row: dict, *, session_id: str, source_sha: str, underlying_
     try:
         if not isinstance(row, dict): return False,"shape"
         if row.get("record_sha256") != _hash(row): return False,"hash"
-        if row.get("session_id") != session_id or row.get("source_sha") != source_sha or row.get("underlying_token") != underlying_token: return False,"identity"
+        row_token = row.get("underlying_token")
+        if (type(underlying_token) is not int or underlying_token <= 0
+                or type(row_token) is not int or row_token != underlying_token
+                or row.get("session_id") != session_id or row.get("source_sha") != source_sha): return False,"identity"
+        if row.get("underlying_symbol") != "NIFTY": return False,"identity"
         if row.get("capture_status") != "CAPTURED" or not row.get("captured_live_prospectively") or not row.get("immutable"): return False,"status"
         if row.get("timestamp_authority") not in ELIGIBLE_AUTHORITIES or not row.get("freshness_pass"): return False,"authority"
         if row.get("timestamp_epoch") is None or row.get("source_timestamp_epoch") is None or row.get("receive_timestamp_epoch") is None or row.get("target_timestamp_epoch") is None: return False,"missing_timestamp_binding"
@@ -150,17 +161,19 @@ def verify_primitive(row: dict, *, session_id: str, source_sha: str, underlying_
         if (expected_lateness < 0 or expected_lateness > 2000
                 or row.get("lateness_ms") != expected_lateness): return False,"window"
         if row.get("timestamp_source_field") is None or row.get("timestamp_fallback_used") is not False: return False,"timestamp_authority_metadata"
-        if not row.get("source_event_id") or not _valid_sha256(row.get("source_event_sha256")): return False,"source_event_binding_missing"
+        source_event_id = row.get("source_event_id")
+        if not isinstance(source_event_id, str) or not source_event_id or not _valid_sha256(row.get("source_event_sha256")): return False,"source_event_binding_missing"
         event_payload = row.get("source_event_payload")
         if not isinstance(event_payload, dict): return False,"source_event_payload_missing"
         event_hash = hashlib.sha256(json.dumps(event_payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
         if event_hash != row.get("source_event_sha256"): return False,"source_event_hash_mismatch"
-        if (event_payload.get("instrument_token") != underlying_token
+        event_token = event_payload.get("instrument_token")
+        if (type(event_token) is not int or event_token <= 0 or event_token != underlying_token
                 or event_payload.get("underlying_symbol") != row.get("underlying_symbol")
                 or float(event_payload.get("last_price")) != float(row["price"])
                 or float(event_payload.get("source_timestamp_epoch")) != source
                 or event_payload.get("source_timestamp_field") != row.get("timestamp_source_field")
-                or not row.get("source_event_id", "").endswith(f":{underlying_token}:{event_hash[:16]}")):
+                or not source_event_id.endswith(f":{underlying_token}:{event_hash[:16]}")):
             return False,"source_event_binding_invalid"
         if row.get("price_field") != "last_price" or not math.isfinite(float(row["price"])) or float(row["price"]) <= 0: return False,"price"
         return True,"ok"

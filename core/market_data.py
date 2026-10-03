@@ -50,9 +50,11 @@ except Exception:
 
 from collections import deque
 from pathlib import Path
+from typing import Any
 
 _DATA_CACHE = {}
 _SYMBOL_TO_TOKEN_CACHE = {}
+_USE_QUOTE_EVENT_TIME_FOR_LTP = object()
 
 _INDEX_TRADINGSYMBOL_ALIASES = {
     "NIFTY": ("NIFTY", "NIFTY 50"),
@@ -463,6 +465,7 @@ def update_index_quote_snapshot(
     book_source: str | None = None,
     volume=None,
     last_price_source: str | None = None,
+    last_price_ts_epoch: Any = _USE_QUOTE_EVENT_TIME_FOR_LTP,
 ):
     """
     Update index quote cache from live sources (WS/REST) in a uniform structure:
@@ -471,11 +474,15 @@ def update_index_quote_snapshot(
     sym = str(symbol or "").upper()
     if not sym:
         return
-    ts = float(ts_epoch) if isinstance(ts_epoch, (int, float)) else now_utc_epoch()
+    ts = _extract_quote_epoch(ts_epoch)
+    observed_ltp_epoch = (
+        ts if last_price_ts_epoch is _USE_QUOTE_EVENT_TIME_FOR_LTP
+        else _extract_quote_epoch(last_price_ts_epoch)
+    )
     def _valid_price(value):
         try:
             p = float(value)
-            if p > 0:
+            if math.isfinite(p) and p > 0:
                 return p
         except Exception:
             return None
@@ -504,7 +511,7 @@ def update_index_quote_snapshot(
         prev_ts = float(prev.get("ts_epoch") or 0.0)
     except Exception:
         prev_ts = 0.0
-    if prev_ts and ts < prev_ts:
+    if prev_ts and ts is not None and ts < prev_ts:
         return
     resolved_bid = _valid_price(bid)
     if resolved_bid is None:
@@ -512,9 +519,15 @@ def update_index_quote_snapshot(
     resolved_ask = _valid_price(ask)
     if resolved_ask is None:
         resolved_ask = _valid_price(prev.get("ask"))
-    resolved_last_price = _valid_price(ltp)
+    observed_last_price = _valid_price(ltp)
+    resolved_last_price = observed_last_price
     if resolved_last_price is None:
         resolved_last_price = _valid_price(prev.get("last_price"))
+    cached_last_price_epoch = _extract_quote_epoch(prev.get("last_price_ts_epoch"))
+    last_price_event_epoch = (
+        observed_ltp_epoch if observed_last_price is not None
+        else cached_last_price_epoch
+    )
     resolved_mid = _valid_price(mid)
     if resolved_mid is None and resolved_bid is not None and resolved_ask is not None:
         resolved_mid = (resolved_bid + resolved_ask) / 2.0
@@ -531,6 +544,7 @@ def update_index_quote_snapshot(
         "ask": resolved_ask,
         "mid": resolved_mid,
         "last_price": resolved_last_price,
+        "last_price_ts_epoch": last_price_event_epoch,
         "volume": resolved_volume,
         "ts_epoch": ts,
         "source": str(source or "unknown"),
@@ -538,17 +552,13 @@ def update_index_quote_snapshot(
         "last_price_source": resolved_last_price_source,
     }
     cache["index_quote"] = snap
-    if resolved_last_price is not None:
+    if last_price_event_epoch is not None and observed_last_price is not None:
         cache["last_ltp"] = float(resolved_last_price)
         cache["ltp_source"] = "live"
-        cache["ltp_ts_epoch"] = ts
-    elif resolved_mid is not None:
-        try:
-            cache["last_ltp"] = float(resolved_mid)
-            cache["ltp_source"] = "live"
-            cache["ltp_ts_epoch"] = ts
-        except Exception:
-            pass
+        cache["ltp_ts_epoch"] = last_price_event_epoch
+    elif observed_last_price is not None:
+        cache["ltp_source"] = "untimestamped_live"
+        cache["ltp_ts_epoch"] = None
 
 
 def get_index_quote_snapshot(symbol: str) -> dict:
@@ -567,6 +577,7 @@ def get_index_quote_snapshot(symbol: str) -> dict:
                     return {
                         "last_price": tick.get("ltp"),
                         "ts_epoch": tick.get("ts_epoch"),
+                        "last_price_ts_epoch": tick.get("ts_epoch"),
                         "source": "tick_store"
                     }
         except Exception:
@@ -767,7 +778,7 @@ def _synthesize_index_bid_ask(
 ) -> tuple[float | None, float | None, float | None]:
     try:
         mid = float(mid_price)
-        if mid <= 0:
+        if not math.isfinite(mid) or mid <= 0:
             return None, None, None
         if spread_bps is not None:
             spread = float(mid) * (abs(float(spread_bps)) / 10000.0)
@@ -813,7 +824,7 @@ def resolve_index_quote(
     def _as_price(value):
         try:
             p = float(value)
-            if p > 0:
+            if math.isfinite(p) and p > 0:
                 return p
         except Exception:
             return None
@@ -877,7 +888,18 @@ def resolve_index_quote(
         if ltp_age_sec is None:
             age_ok = not ctx.require_live_quotes
         else:
-            age_ok = float(max(0.0, ltp_age_sec)) <= max_ltp_age
+            try:
+                age_value = float(ltp_age_sec)
+                age_limit = float(max_ltp_age)
+                age_ok = (
+                    math.isfinite(age_value)
+                    and age_value >= 0.0
+                    and math.isfinite(age_limit)
+                    and age_limit >= 0.0
+                    and age_value <= age_limit
+                )
+            except (TypeError, ValueError, OverflowError):
+                age_ok = False
         if not age_ok:
             return {
                 "bid": None,
@@ -920,11 +942,34 @@ def resolve_index_quote(
     }
 
 
-def _extract_quote_epoch(raw_ts, fallback_epoch: float) -> float:
+def _extract_quote_epoch(raw_ts, fallback_epoch: float | None = None) -> float | None:
+    """Return provider event time; never replace a missing event time with receive time."""
     normalized = normalize_epoch_seconds(raw_ts)
-    if normalized is not None:
-        return float(normalized)
-    return float(fallback_epoch)
+    if normalized is None or not math.isfinite(float(normalized)) or float(normalized) <= 0:
+        return None
+    return float(normalized)
+
+
+def _prefer_index_quote_ltp(
+    current_ltp: Any,
+    current_source: str,
+    current_ts_epoch: Any,
+    quote: dict[str, Any],
+) -> tuple[Any, str, Any]:
+    """Use a quote-cache LTP only when its own provider event time is present."""
+    source = str(current_source or "").strip().lower()
+    if source not in {"live", "tick_store"} or not isinstance(quote, dict):
+        return current_ltp, current_source, current_ts_epoch
+    quote_ltp = quote.get("last_price")
+    try:
+        quote_price = float(quote_ltp)
+    except (TypeError, ValueError, OverflowError):
+        return current_ltp, current_source, current_ts_epoch
+    quote_event_epoch = _extract_quote_epoch(quote.get("last_price_ts_epoch"))
+    if not math.isfinite(quote_price) or quote_price <= 0 or quote_event_epoch is None:
+        return current_ltp, current_source, current_ts_epoch
+    quote_source = "tick_store" if str(quote.get("source") or "").lower() == "tick_store" else "live"
+    return quote_price, quote_source, quote_event_epoch
 
 
 def _refresh_index_quote_from_rest(symbol: str, force: bool = False) -> bool:
@@ -995,18 +1040,19 @@ def _refresh_index_quote_from_rest(symbol: str, force: bool = False) -> bool:
             if bid <= 0 or ask <= 0:
                 continue
             last_price = q.get("last_price")
-            ts_epoch = _extract_quote_epoch(
-                q.get("timestamp") or q.get("last_trade_time"),
-                fallback_epoch=now_epoch,
-            )
+            quote_ts_epoch = _extract_quote_epoch(q.get("timestamp"))
+            last_trade_ts_epoch = _extract_quote_epoch(q.get("last_trade_time"))
+            if quote_ts_epoch is None and last_trade_ts_epoch is None:
+                continue
             update_index_quote_snapshot(
                 symbol=sym,
                 bid=bid,
                 ask=ask,
                 mid=(bid + ask) / 2.0,
-                ts_epoch=ts_epoch,
+                ts_epoch=quote_ts_epoch,
                 source="rest_quote",
                 ltp=last_price,
+                last_price_ts_epoch=last_trade_ts_epoch,
             )
             return True
         except Exception:
@@ -1912,11 +1958,15 @@ def get_ltp(symbol: str):
     ws_quote = get_index_quote_snapshot(symbol)
     if ws_quote:
         try:
+            cache = _DATA_CACHE.get(symbol, {}) or {}
             ws_price = ws_quote.get("last_price")
+            ltp_event_epoch = normalize_epoch_seconds(
+                ws_quote.get("last_price_ts_epoch")
+                if ws_quote.get("last_price") is not None
+                else cache.get("ltp_ts_epoch")
+            )
             if ws_price is None:
-                ws_price = ws_quote.get("mid")
-            if ws_price is None:
-                ws_price = (_DATA_CACHE.get(symbol, {}) or {}).get("last_ltp")
+                ws_price = cache.get("last_ltp")
             if ws_price is not None and float(ws_price) > 0:
                 if _is_implausible_index_ltp(symbol, ws_price):
                     _append_live_quote_error(
@@ -1932,8 +1982,13 @@ def get_ltp(symbol: str):
                 else:
                     _save_cached_ltp(symbol, float(ws_price))
                     cache = _DATA_CACHE.setdefault(symbol, {})
-                    cache["ltp_source"] = "live"
-                    cache["ltp_ts_epoch"] = float(ws_quote.get("ts_epoch") or now_utc_epoch())
+                    cache["ltp_ts_epoch"] = ltp_event_epoch
+                    if ws_quote.get("source") == "tick_store":
+                        cache["ltp_source"] = "tick_store" if ltp_event_epoch is not None else "untimestamped_live"
+                    elif ws_quote.get("last_price") is not None:
+                        cache["ltp_source"] = "live" if ltp_event_epoch is not None else "untimestamped_live"
+                    elif ltp_event_epoch is None:
+                        cache["ltp_source"] = "untimestamped_live"
                     return float(ws_price)
         except Exception:
             pass
@@ -1961,8 +2016,8 @@ def get_ltp(symbol: str):
                             continue
                         _save_cached_ltp(symbol, price)
                         cache = _DATA_CACHE.setdefault(symbol, {})
-                        cache["ltp_source"] = "live"
-                        cache["ltp_ts_epoch"] = now_utc_epoch()
+                        cache["ltp_ts_epoch"] = _extract_quote_epoch(data.get(ksym, {}).get("last_trade_time"))
+                        cache["ltp_source"] = "live" if cache["ltp_ts_epoch"] is not None else "untimestamped_live"
                         return price
                 except Exception as e:
                     failures.append(f"{ksym}:{e}")
@@ -1985,8 +2040,8 @@ def get_ltp(symbol: str):
                 if price:
                     _save_cached_ltp(symbol, price)
                     cache = _DATA_CACHE.setdefault(symbol, {})
-                    cache["ltp_source"] = "live"
-                    cache["ltp_ts_epoch"] = now_utc_epoch()
+                    cache["ltp_ts_epoch"] = _extract_quote_epoch(data.get(ksym, {}).get("last_trade_time"))
+                    cache["ltp_source"] = "live" if cache["ltp_ts_epoch"] is not None else "untimestamped_live"
                     return price
             except Exception as e:
                 if require_live_quotes:
@@ -2526,6 +2581,72 @@ def _option_chain_health(symbol: str, chain: list, ltp: float, require_live_quot
         "timestamp": now_ist().isoformat(),
     }
 
+def _ingest_trusted_ltp_tick(
+    *,
+    buffer,
+    symbol: str,
+    price: float,
+    volume: float | None,
+    ltp_source: str,
+    ltp_ts_epoch: Any,
+    cycle_cutoff: datetime,
+    market_open: bool,
+    max_ltp_age_sec: float,
+    provenance: dict[str, Any],
+) -> dict[str, Any]:
+    """Ingest only trusted, source-timestamped LTP observations into OHLC."""
+    source = str(ltp_source or "").strip().lower()
+    if source not in {"live", "tick_store"}:
+        return {"accepted": False, "status": "UNTRUSTED_LTP_SOURCE", "symbol": symbol}
+    try:
+        price_value = float(price)
+    except (TypeError, ValueError, OverflowError):
+        return {"accepted": False, "status": "INVALID_LTP_PRICE", "symbol": symbol}
+    if not math.isfinite(price_value) or price_value <= 0:
+        return {"accepted": False, "status": "INVALID_LTP_PRICE", "symbol": symbol}
+    try:
+        age_limit = float(max_ltp_age_sec)
+    except (TypeError, ValueError, OverflowError):
+        return {"accepted": False, "status": "INVALID_LTP_AGE_LIMIT", "symbol": symbol}
+    if not math.isfinite(age_limit) or age_limit < 0:
+        return {"accepted": False, "status": "INVALID_LTP_AGE_LIMIT", "symbol": symbol}
+    source_epoch = normalize_epoch_seconds(ltp_ts_epoch)
+    if source_epoch is None:
+        return {"accepted": False, "status": "LTP_SOURCE_TIMESTAMP_MISSING", "symbol": symbol}
+    if not math.isfinite(float(source_epoch)) or float(source_epoch) <= 0:
+        return {"accepted": False, "status": "LTP_SOURCE_TIMESTAMP_INVALID", "symbol": symbol}
+    cutoff_epoch = float(cycle_cutoff.timestamp())
+    if float(source_epoch) > cutoff_epoch:
+        return {"accepted": False, "status": "LTP_SOURCE_TIMESTAMP_FUTURE", "symbol": symbol}
+    age_sec = compute_age_sec(source_epoch, cutoff_epoch)
+    if age_sec is None or age_sec > age_limit:
+        return {"accepted": False, "status": "LTP_SOURCE_TIMESTAMP_STALE", "symbol": symbol}
+
+    event_time = datetime.fromtimestamp(
+        float(source_epoch), tz=timezone.utc
+    ).astimezone(cycle_cutoff.tzinfo)
+    valid_volume = None
+    volume_complete = False
+    if volume is not None:
+        try:
+            candidate_volume = float(volume)
+            if math.isfinite(candidate_volume) and candidate_volume >= 0:
+                valid_volume = candidate_volume
+                volume_complete = True
+        except (TypeError, ValueError, OverflowError):
+            pass
+    provenance_payload = dict(provenance or {})
+    provenance_payload["source_type"] = "tick_store_live" if source == "tick_store" else "live_websocket"
+    provenance_payload["volume_observation_complete"] = volume_complete
+    return buffer.update_tick(
+        symbol,
+        price_value,
+        volume=valid_volume,
+        ts=event_time,
+        provenance=provenance_payload,
+    )
+
+
 def fetch_live_market_data(*, allow_history_seed: bool = True):
     """
     Returns a list of market snapshots for symbols in config.
@@ -2620,7 +2741,9 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         require_live_quotes = bool(market_ctx.require_live_quotes and getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
         ltp = get_ltp(symbol)
         ltp_source = _DATA_CACHE.get(symbol, {}).get("ltp_source", "none")
-        ltp_ts_epoch = _DATA_CACHE.get(symbol, {}).get("ltp_ts_epoch")
+        ltp_ts_epoch = _extract_quote_epoch(_DATA_CACHE.get(symbol, {}).get("ltp_ts_epoch"))
+        if str(ltp_source or "").strip().lower() in {"live", "tick_store"} and ltp_ts_epoch is None:
+            ltp_source = "untimestamped_live"
         use_sub = getattr(cfg, "DEPTH_WS_USE_SUBPROCESS", False) or getattr(cfg, "FEED_USE_SUBPROCESS", False)
         if use_sub or ltp_ts_epoch is None:
             try:
@@ -2628,10 +2751,10 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 token = get_token_for_symbol(symbol)
                 if token:
                     tick = get_last_tick(token)
-                    if tick and tick.get("ltp"):
-                        if ltp is None or ltp <= 0:
-                            ltp = tick.get("ltp")
-                        ltp_ts_epoch = tick.get("ts_epoch")
+                    tick_event_epoch = _extract_quote_epoch(tick.get("ts_epoch")) if isinstance(tick, dict) else None
+                    if tick and tick.get("ltp") and tick_event_epoch is not None:
+                        ltp = tick.get("ltp")
+                        ltp_ts_epoch = tick_event_epoch
                         ltp_source = "tick_store"
             except Exception:
                 pass
@@ -2678,33 +2801,40 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 }
             )
             continue
+        feed_identity = {}
         try:
-            if ltp and ltp > 0:
-                live_source_type = "tick_store_live" if str(ltp_source) == "tick_store" else ("live_websocket" if str(ltp_source) == "live" else "unknown")
-                feed_identity = {}
-                try:
-                    from core.kite_depth_ws import get_current_feed_session_identity
+            from core.kite_depth_ws import get_current_feed_session_identity
 
-                    feed_identity = dict(get_current_feed_session_identity() or {})
-                except Exception:
-                    feed_identity = {}
-                ohlc_buffer.update_tick(
-                    symbol,
-                    ltp,
-                    volume=None,
-                    ts=cycle_cutoff,
-                    provenance={
-                        "source_type": live_source_type,
-                        "live_feed_session_id": str(feed_identity.get("feed_session_id") or ""),
-                        "reconnect_generation": feed_identity.get("reconnect_generation"),
-                        "historical_seed": False,
-                        "replay_fixture": False,
-                        "non_live_fallback": False,
-                        "recovered_synthetic": False,
-                    },
-                )
+            feed_identity = dict(get_current_feed_session_identity() or {})
         except Exception:
-            pass
+            feed_identity = {}
+        ltp_age_limit = getattr(
+            cfg,
+            "OFFHOURS_MAX_LTP_AGE_SEC" if offhours_mode else "MAX_LTP_AGE_SEC",
+            900 if offhours_mode else 8,
+        )
+        try:
+            _ingest_trusted_ltp_tick(
+                buffer=ohlc_buffer,
+                symbol=symbol,
+                price=ltp,
+                volume=None,
+                ltp_source=ltp_source,
+                ltp_ts_epoch=ltp_ts_epoch,
+                cycle_cutoff=cycle_cutoff,
+                market_open=bool(market_ctx.is_market_open),
+                max_ltp_age_sec=float(ltp_age_limit),
+                provenance={
+                    "live_feed_session_id": str(feed_identity.get("feed_session_id") or ""),
+                    "reconnect_generation": feed_identity.get("reconnect_generation"),
+                    "historical_seed": False,
+                    "replay_fixture": False,
+                    "non_live_fallback": False,
+                    "recovered_synthetic": False,
+                },
+            )
+        except Exception as exc:
+            logger.warning("trusted_ohlc_tick_ingest_failed symbol=%s error=%s", symbol, type(exc).__name__)
         vwap = ltp
         cross_feat = {}
         cross_quality = {}
@@ -2992,12 +3122,10 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 mid = ws_quote.get("mid")
                 if mid is None and bid is not None and ask is not None:
                     mid = (float(bid) + float(ask)) / 2.0
-                quote_ts_epoch = float(ws_quote.get("ts_epoch")) if ws_quote.get("ts_epoch") is not None else None
-                if ltp_source == "live" and ws_quote.get("last_price") is not None:
-                    try:
-                        ltp = float(ws_quote.get("last_price"))
-                    except Exception:
-                        pass
+                quote_ts_epoch = _extract_quote_epoch(ws_quote.get("ts_epoch"))
+                ltp, ltp_source, ltp_ts_epoch = _prefer_index_quote_ltp(
+                    ltp, ltp_source, ltp_ts_epoch, ws_quote
+                )
                 if quote_ts_epoch is not None:
                     quote_ts = datetime.fromtimestamp(float(quote_ts_epoch), tz=timezone.utc).isoformat().replace("+00:00", "Z")
                     quote_age_sec = compute_age_sec(quote_ts_epoch, cycle_cutoff_epoch)
@@ -3018,18 +3146,14 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                     mid = ws_quote.get("mid")
                     if mid is None and bid is not None and ask is not None:
                         mid = (float(bid) + float(ask)) / 2.0
-                    quote_ts_epoch = float(ws_quote.get("ts_epoch")) if ws_quote.get("ts_epoch") is not None else None
+                    quote_ts_epoch = _extract_quote_epoch(ws_quote.get("ts_epoch"))
                     quote_source = str(ws_quote.get("source") or "rest_quote")
-                    if ltp_source == "live" and ws_quote.get("last_price") is not None:
-                        try:
-                            ltp = float(ws_quote.get("last_price"))
-                        except Exception:
-                            pass
+                    ltp, ltp_source, ltp_ts_epoch = _prefer_index_quote_ltp(
+                        ltp, ltp_source, ltp_ts_epoch, ws_quote
+                    )
                     if quote_ts_epoch is not None:
                         quote_ts = datetime.fromtimestamp(float(quote_ts_epoch), tz=timezone.utc).isoformat().replace("+00:00", "Z")
                         quote_age_sec = compute_age_sec(quote_ts_epoch, cycle_cutoff_epoch)
-                        if ltp_source == "live":
-                            ltp_ts_epoch = quote_ts_epoch
                     if bid and ask:
                         quote_ok = True
                         quote_source = "depth"
@@ -3074,6 +3198,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 ts_epoch=quote_ts_epoch,
                 source=quote_source,
                 ltp=ltp,
+                last_price_ts_epoch=ltp_ts_epoch,
             )
         if is_index(symbol):
             _maybe_log_index_bidask_missing(

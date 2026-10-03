@@ -801,15 +801,49 @@ class StrategyMarketSnapshotBuilder:
         if not isinstance(feed_health_truth, Mapping):
             return snapshots
 
-        symbols_data = feed_health_truth.get("symbols", [])
+        # Runtime snapshot production wraps the classifier decision under
+        # `feed_health_truth`; older callers pass the decision directly.
+        source_health = feed_health_truth.get("feed_health_truth")
+        wrapped_runtime_truth = isinstance(source_health, Mapping)
+        health_payload = source_health if wrapped_runtime_truth else feed_health_truth
+        symbols_data = health_payload.get("symbols", [])
         if not isinstance(symbols_data, list):
             return snapshots
 
-        context = feed_health_truth.get("context", {}) if isinstance(feed_health_truth.get("context"), Mapping) else {}
+        context = health_payload.get("context", {}) if isinstance(health_payload.get("context"), Mapping) else {}
         session_id = str(context.get("session_id") or "UNKNOWN_SESSION")
-        feed_ok = bool(feed_health_truth.get("feed_ok", False))
-        websocket_ok = bool(feed_health_truth.get("websocket_ok", False))
+        if wrapped_runtime_truth:
+            feed_ok = health_payload.get("feed_ok") is True
+        else:
+            feed_ok = bool(health_payload.get("feed_ok", feed_health_truth.get("feed_ok", False)))
+        websocket_ok = health_payload.get("websocket_ok", feed_health_truth.get("websocket_ok")) is True
         feed_health_status = "HEALTHY" if (feed_ok and websocket_ok) else "DEGRADED"
+        snapshot_symbols = market_snapshot.get("symbols", {}) if isinstance(market_snapshot, Mapping) else {}
+        snapshot_symbols = snapshot_symbols if isinstance(snapshot_symbols, Mapping) else {}
+        domains = health_payload.get("domains", {}) if isinstance(health_payload.get("domains"), Mapping) else {}
+        spot_domain = domains.get("index_spot", {}) if isinstance(domains.get("index_spot"), Mapping) else {}
+        runtime_state = str(context.get("runtime_state") or "").strip().upper()
+        feed_state = str(context.get("feed_state") or "").strip().upper()
+        unsafe_global_state = (
+            runtime_state not in {"", "RUNNING", "LIVE", "HEALTHY", "OK", "DEGRADED_LOCAL", "VERIFYING_RECOVERY"}
+            or feed_state not in {"", "LIVE", "RUNNING", "HEALTHY", "OK", "DEGRADED_LOCAL", "VERIFYING_RECOVERY"}
+        )
+        global_blocked = context.get("global_feed_blocked") is not False or not websocket_ok or unsafe_global_state
+        spot_scope_proven = (
+            wrapped_runtime_truth
+            and context.get("feed_ok_scope") == "symbol_aggregate"
+            and context.get("global_feed_blocked") is False
+            and websocket_ok
+            and not unsafe_global_state
+            and str(spot_domain.get("state") or "").strip().upper() == "HEALTHY"
+        )
+
+        def canonical_positive_token(value: Any) -> str | None:
+            if type(value) is int and value > 0:
+                return str(value)
+            if isinstance(value, str) and value.isascii() and value.isdigit() and value[0] != "0":
+                return value
+            return None
 
         # Parse session health if present
         session_health_raw = str(context.get("session_health") or context.get("session_state") or "NORMAL").upper()
@@ -821,6 +855,25 @@ class StrategyMarketSnapshotBuilder:
             if not isinstance(sym, Mapping):
                 continue
             symbol_name = str(sym.get("symbol") or "")
+            market_symbol = next(
+                (str(key).strip().upper() for key in snapshot_symbols
+                 if str(key).strip().upper() == symbol_name.strip().upper()),
+                None,
+            )
+            market_row = snapshot_symbols.get(market_symbol, {}) if market_symbol is not None else {}
+            market_row_present = market_symbol is not None and isinstance(market_row, Mapping)
+            if isinstance(market_row, Mapping):
+                # The classifier summary carries health; the canonical market
+                # snapshot carries instrument/quote metadata. Exact-symbol
+                # joining preserves both without guessing contracts.
+                sym = {
+                    **dict(market_row),
+                    **{key: value for key, value in dict(sym).items() if value is not None},
+                }
+                symbol_name = str(sym.get("symbol") or market_symbol or "")
+                quote_truth = sym.get("quote_truth") if isinstance(sym.get("quote_truth"), Mapping) else {}
+                if sym.get("instrument_token") is None and quote_truth.get("instrument_token") is not None:
+                    sym["instrument_token"] = quote_truth.get("instrument_token")
             instrument_type = str(sym.get("instrument_type") or "").upper()
             segment = str(sym.get("segment") or "").upper()
             token = str(sym.get("instrument_token") or "")
@@ -835,6 +888,38 @@ class StrategyMarketSnapshotBuilder:
                 inst_class = "INDEX_SPOT"
             else:
                 continue  # Skip unclassified instrument fail-closed without guessing
+
+            snapshot_feed_health = feed_health_status
+            if wrapped_runtime_truth and inst_class == "INDEX_SPOT":
+                quote_truth = sym.get("quote_truth") if isinstance(sym.get("quote_truth"), Mapping) else {}
+                quote_token = quote_truth.get("instrument_token")
+                quote_fresh = quote_truth.get("is_fresh") is True
+                quote_token_identity = canonical_positive_token(quote_token)
+                snapshot_token_value = canonical_positive_token(sym.get("instrument_token"))
+                token_identity_conflict = (
+                    sym.get("instrument_token") is not None
+                    and snapshot_token_value != quote_token_identity
+                )
+                exact_quote_identity = (
+                    str(quote_truth.get("symbol") or "").strip().upper() == symbol_name.strip().upper()
+                    and quote_token_identity is not None
+                )
+                if not market_row_present or not exact_quote_identity or token_identity_conflict:
+                    continue
+                sym["instrument_token"] = quote_token_identity
+                spot_quote_proven = exact_quote_identity and quote_fresh
+                if global_blocked:
+                    snapshot_feed_health = "DEGRADED"
+                elif feed_ok and websocket_ok:
+                    snapshot_feed_health = (
+                        "HEALTHY"
+                        if spot_quote_proven and str(spot_domain.get("state") or "").strip().upper() == "HEALTHY"
+                        else "DEGRADED"
+                    )
+                elif spot_scope_proven and spot_quote_proven:
+                    snapshot_feed_health = "HEALTHY"
+                else:
+                    snapshot_feed_health = "DEGRADED"
 
             # Derive depth (strictly non-synthetic quantities, math.isfinite check)
             depth = None
@@ -898,6 +983,9 @@ class StrategyMarketSnapshotBuilder:
                 raw_age_sec = sym.get("last_tick_age_sec")
             if raw_age_sec is None:
                 raw_age_sec = sym.get("age_sec")
+            if inst_class == "INDEX_SPOT":
+                spot_feed = sym.get("feed_health") if isinstance(sym.get("feed_health"), Mapping) else {}
+                raw_age_sec = spot_feed.get("underlying_quote_age_sec", raw_age_sec)
 
             age_ms = float(raw_age_sec) * 1000.0 if raw_age_sec is not None else None
 
@@ -931,7 +1019,7 @@ class StrategyMarketSnapshotBuilder:
                 source_timestamp_ist=source_ts,
                 receipt_timestamp_ist=timestamp_ist,
                 age_ms=age_ms,
-                feed_health=feed_health_status,
+                feed_health=snapshot_feed_health,
                 session_health=session_health_status,
                 l1_depth=depth,
                 last_completed_1m_bar=bar,
