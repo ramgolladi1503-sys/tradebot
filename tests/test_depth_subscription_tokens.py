@@ -516,3 +516,83 @@ def test_build_depth_subscription_tokens_fallback_preserves_symbols_argument(mon
     assert calls == [["NIFTY"]]
     assert tokens == [101]
     assert resolution == [{"symbol": "NIFTY", "count": 1}]
+
+
+def _install_synthetic_observation_registry(monkeypatch, ctx):
+    from types import SimpleNamespace
+    from core import market_event_graph_live_observation_registry as registry_mod
+
+    constituent_symbols = [f"STOCK{i:02d}" for i in range(1, 51)]
+    constituent_tokens = [700000 + i for i in range(1, 51)]
+    token_by_symbol = {
+        "NIFTY": ctx["index_tokens"]["NIFTY"],
+        **dict(zip(constituent_symbols, constituent_tokens)),
+    }
+    registry = SimpleNamespace(
+        all_tokens=tuple(token_by_symbol.values()),
+        token_by_symbol=token_by_symbol,
+        canonical_sha256="unit-test-meg-universe",
+    )
+    monkeypatch.setattr(ws, "load_observation_registry", lambda force=False: registry)
+    monkeypatch.setattr(registry_mod, "load_observation_registry", lambda force=False: registry)
+    return token_by_symbol
+
+
+def test_observation_tokens_keep_cash_identity_in_both_subscription_builders(monkeypatch):
+    from core import depth_subscription_engine as engine
+
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
+    token_by_symbol = _install_synthetic_observation_registry(monkeypatch, ctx)
+    requested_symbols = [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX",
+        *sorted(set(token_by_symbol) - {"NIFTY"}),
+    ]
+
+    for builder in (ws.build_subscription_tokens, engine.build_subscription_tokens):
+        tokens, resolution = builder(
+            symbols=requested_symbols,
+            max_tokens=123,
+        )
+
+        assert len(tokens) == 123, f"builder={builder.__module__}.{builder.__name__}"
+        assert len(set(tokens)) == 123
+        assert {row["symbol"] for row in resolution} == {"NIFTY", "BANKNIFTY", "SENSEX"}
+        assert {call["symbol"] for call in ctx["calls"]} == {"NIFTY", "BANKNIFTY", "SENSEX"}
+        for symbol, token in token_by_symbol.items():
+            assert token in ws._UNDERLYING_TOKENS
+            assert ws._UNDERLYING_TOKEN_TO_SYMBOL[token] == symbol
+            assert ws._TOKEN_TO_SYMBOL[token] == symbol
+
+
+def test_blocked_observation_merge_does_not_publish_cash_identity(monkeypatch):
+    from core import depth_subscription_engine as engine
+
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
+    token_by_symbol = _install_synthetic_observation_registry(monkeypatch, ctx)
+    constituent_tokens = set(token_by_symbol.values()) - {ctx["index_tokens"]["NIFTY"]}
+    requested_symbols = [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX",
+        *sorted(set(token_by_symbol) - {"NIFTY"}),
+    ]
+    monkeypatch.setattr(
+        ws,
+        "build_observation_subscription_merge",
+        lambda **_kwargs: {
+            "ok": False,
+            "reason": ws.BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET,
+            "tokens": [],
+            "missing_or_pruned_observation_tokens": sorted(constituent_tokens),
+        },
+    )
+
+    for builder in (ws.build_subscription_tokens, engine.build_subscription_tokens):
+        builder(symbols=requested_symbols, max_tokens=123)
+        assert constituent_tokens.isdisjoint(ws._UNDERLYING_TOKENS)
+        assert constituent_tokens.isdisjoint(ws._UNDERLYING_TOKEN_TO_SYMBOL)
+        assert constituent_tokens.isdisjoint(ws._TOKEN_TO_SYMBOL)

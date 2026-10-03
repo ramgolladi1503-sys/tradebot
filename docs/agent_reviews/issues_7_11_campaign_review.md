@@ -2,11 +2,11 @@
 
 ## Agent Work Contract
 
-`source_agent: hermes + gsd`; actions: `DESIGN_ARCHITECTURE`, `DEFINE_CONTRACT`, `MAP_WORKFLOW`, `CREATE_ACCEPTANCE_GATES`, `PLAN_PR`, `GENERATE_TESTS`, `GENERATE_PATCH`, `FIX_TEST_FAILURE`, `UPDATE_DOCS`. Scope is the offline Issues 7–11 reliability repair and its evidence bundle in this PR. No order, broker, paper/live authority, credentials, or production data mutation is permitted.
+`source_agent: hermes + gsd`; actions: `DESIGN_ARCHITECTURE`, `DEFINE_CONTRACT`, `MAP_WORKFLOW`, `CREATE_ACCEPTANCE_GATES`, `PLAN_PR`, `GENERATE_TESTS`, `GENERATE_PATCH`, `FIX_TEST_FAILURE`, `UPDATE_DOCS`. Scope is the offline Issues 7–11 reliability repair, its evidence bundle, and the MEG observation-token identity boundary in this PR. No order, broker, paper/live authority, credentials, or production data mutation is permitted.
 
 ## Scope Guard
 
-Changed high-risk paths are `config/feed_runtime_reliability.py`, `core/feed_health_truth.py`, `core/feed_hold_gate.py`, and `core/orchestrator.py`. Changes preserve global feed, freshness, recovery, risk and kill-switch gates; there is no broker/order API call, strategy-threshold change, token-universe change, or live-mode change. The config addition `FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC` bounds persisted feed-truth age (default 3 seconds); missing or invalid authority fails closed. PR #936 is excluded. PR818 is outside this review's local acceptance evidence, per the user's instruction.
+Changed high-risk paths also include `core/depth_subscription_engine.py` and `core/kite_depth_ws.py`. In governed MEG mode, both builders restrict option-resolution inputs to configured index products and classify registry observation tokens as cash/underlying identities only after a successful merge. The 123-token topology and budget, option counts, feed/freshness/recovery gates, risk and kill switches remain unchanged. There is no broker/order API call, strategy-threshold change, or live-mode change. The config addition `FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC` bounds persisted feed-truth age (default 3 seconds); missing or invalid authority fails closed. PR #936 is excluded. PR782 and PR818 checks are excluded as directed; their failures are not treated as passing evidence.
 
 ## Grill Me Review
 
@@ -26,7 +26,7 @@ Offline tests and mutation probes cover the repaired contracts. They do not esta
 
 ## High-Risk Path Review
 
-High-risk feed/orchestrator paths were changed narrowly to classify persisted feed truth and preserve fail-closed ranking holds. Reviewed invariants: stale or invalid snapshots hold; freshness age is bounded; global/transport blockers remain effective; unknown candidate identity does not grant selective unholding; ranking remains read-only. Exact behavior proof is in the focused feed-truth/ranking tests listed in the PR body. This review does not certify live execution.
+High-risk feed/orchestrator paths were changed narrowly to classify persisted feed truth and preserve fail-closed ranking holds. The depth subscription builders now preserve the separate production-option and cash-observation identities: governed MEG constituent symbols are not option-resolution inputs, and observation tokens enter underlying maps only after the registry merge succeeds. Reviewed invariants: stale or invalid snapshots hold; freshness age is bounded; global/transport blockers remain effective; unknown candidate identity does not grant selective unholding; ranking remains read-only; blocked observation merges do not publish constituent identity. Exact behavior proof is in `tests/test_depth_subscription_tokens.py` and the focused feed-truth/ranking tests listed in the PR body. This review does not certify live execution.
 
 ## Acceptance Proof
 
