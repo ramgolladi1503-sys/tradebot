@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from core.market_calendar import IN_HOLIDAYS
+from core.market_calendar import NSE_FNO_2026_HOLIDAYS
 
 from core.market_heritage_graph import (
     MAX_NODE_BYTES,
@@ -436,8 +436,8 @@ def test_previous_eligible_session_skips_weekends_and_exchange_holidays(
     target_date, calendar_rows, expected_prior,
 ):
     if expected_prior == "2026-03-02":
-        assert date.fromisoformat("2026-03-03") in IN_HOLIDAYS
-        assert date.fromisoformat(target_date) not in IN_HOLIDAYS
+        assert date.fromisoformat("2026-03-03") in NSE_FNO_2026_HOLIDAYS
+        assert date.fromisoformat(target_date) not in NSE_FNO_2026_HOLIDAYS
     target = {
         "trading_date": target_date,
         "calendar_id": "NSE-FNO-HISTORICAL",

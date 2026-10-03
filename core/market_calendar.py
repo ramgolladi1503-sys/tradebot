@@ -80,6 +80,18 @@ def _default_weekly_expiry_weekday(symbol: str | None) -> int:
     sym = str(symbol or "NIFTY").upper()
     return 3 if sym == "SENSEX" else 1
 
+
+def _is_nse_fno_holiday(day: date) -> bool:
+    """Return exchange holiday membership using the authoritative calendar when known.
+
+    ``IN_HOLIDAYS`` contains general India holidays, which are not equivalent
+    to NSE F&O trading closures (for example, March 4, 2026). Preserve the
+    legacy calendar for years without an explicit exchange calendar.
+    """
+    if day.year == 2026:
+        return day in NSE_FNO_2026_HOLIDAYS
+    return day in IN_HOLIDAYS
+
 def _weekly_expiry_weekday(symbol: str | None):
     sym = (symbol or "NIFTY").upper()
     exp_map = getattr(cfg, "EXPIRY_WEEKDAY_BY_SYMBOL", {}) or {}
@@ -101,13 +113,13 @@ def choose_nearest_available_expiry(available_expiries, today: date | None = Non
     if not normalized:
         return None
     ref = today or now_ist().date()
-    non_holiday_future = [d for d in normalized if d >= ref and d not in IN_HOLIDAYS]
+    non_holiday_future = [d for d in normalized if d >= ref and not _is_nse_fno_holiday(d)]
     if non_holiday_future:
         return non_holiday_future[0]
-    non_holiday_any = [d for d in normalized if d not in IN_HOLIDAYS]
+    non_holiday_any = [d for d in normalized if not _is_nse_fno_holiday(d)]
     if non_holiday_any:
         return non_holiday_any[0]
-    return normalized[0]
+    return None
 
 def next_expiry(symbol: str | None = None):
     """
@@ -117,7 +129,7 @@ def next_expiry(symbol: str | None = None):
     weekday = _weekly_expiry_weekday(symbol)
     for i in range(1, 15):
         candidate = today + timedelta(days=i)
-        if candidate.weekday() == weekday and candidate not in IN_HOLIDAYS:
+        if candidate.weekday() == weekday and not _is_nse_fno_holiday(candidate):
             return candidate
     return None
 
@@ -139,7 +151,7 @@ def next_monthly_expiry():
         d = last_day
         while d.weekday() != 3:  # Thursday
             d -= timedelta(days=1)
-        if d >= today and d not in IN_HOLIDAYS:
+        if d >= today and not _is_nse_fno_holiday(d):
             return d
         # move to next month
         if month == 12:
@@ -177,11 +189,11 @@ def next_expiry_after(start_date, expiry_type="WEEKLY", symbol: str | None = Non
         d = last_day
         while d.weekday() != 3:
             d -= timedelta(days=1)
-        return d if d not in IN_HOLIDAYS else None
+        return d if not _is_nse_fno_holiday(d) else None
     weekday = _weekly_expiry_weekday(symbol)
     for i in range(1, 15):
         candidate = start_date + timedelta(days=i)
-        if candidate.weekday() == weekday and candidate not in IN_HOLIDAYS:
+        if candidate.weekday() == weekday and not _is_nse_fno_holiday(candidate):
             return candidate
     return None
 
