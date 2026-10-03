@@ -14,7 +14,7 @@ The stale PR branch includes superseded token-budget and feed-evidence edits. Th
 
 ## Hermes Review
 
-The governing design is `pr948_hermes_cash_observation_contract.md`. It separates option product symbols from cash observations and requires exact registry identity after successful union construction.
+The governing design is `docs/contracts/pr948_hermes_cash_observation_contract.md`. It separates option product symbols from cash observations and requires exact registry identity after successful union construction.
 
 ## GSD Review
 
