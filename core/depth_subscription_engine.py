@@ -357,8 +357,37 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     ws = _ws_module()
     conf = _cfg(ws)
     symbols_l = [str(s).upper() for s in list(symbols or list(getattr(conf, "SYMBOLS", []) or []))]
+    if _cfg_bool(conf, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False):
+        index_symbols = {
+            str(symbol).strip().upper()
+            for symbol in (getattr(ws, "_INDEX_SYMBOLS", None) or {"NIFTY", "BANKNIFTY", "SENSEX"})
+        }
+        symbols_l = [symbol for symbol in symbols_l if symbol in index_symbols]
+        if not symbols_l:
+            raise ValueError("MEG subscription requires at least one configured index option symbol")
     if max_tokens is None:
         max_tokens = _cfg_int(conf, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123)
+    if _cfg_bool(conf, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False):
+        try:
+            requested_budget = int(max_tokens)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("MEG subscription budget must be a positive integer") from exc
+        governed_budget = int(getattr(ws, "_GOVERNED_FEED_SUBSCRIPTION_BUDGET", 123))
+        if requested_budget <= 0 or governed_budget <= 0:
+            raise ValueError("MEG subscription budget must be a positive integer")
+        max_tokens = min(requested_budget, governed_budget)
+        if requested_budget > max_tokens:
+            try:
+                ws._log_ws(
+                    "FEED_SUBSCRIPTION_BUDGET_CAPPED",
+                    {
+                        "requested_budget": requested_budget,
+                        "effective_budget": max_tokens,
+                        "governed_budget": governed_budget,
+                    },
+                )
+            except Exception:
+                pass
     around_default = _cfg_int(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6)
     around_by_symbol = dict(getattr(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {})
     step_map = dict(getattr(conf, "STRIKE_STEP_BY_SYMBOL", {}) or {})
@@ -537,18 +566,51 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             "configured_budget": max_tokens,
             "launch_plan_sha256": str(getattr(observation_registry, "canonical_sha256", "") or ""),
         }
-        ws.activate_market_event_graph_launch_plan(plan)
+        observation_identity: dict[int, str] = {}
+        identity_error = None
         if bool(merge.get("ok")):
+            final_union = {int(token) for token in list(merge.get("tokens") or [])}
+            observation_tokens = set(observation_token_list)
+            try:
+                for symbol, token in dict(observation_registry.token_by_symbol).items():
+                    token_i = int(token)
+                    symbol_u = str(symbol).strip().upper()
+                    current_symbol = token_to_symbol.get(token_i)
+                    if (
+                        token_i <= 0
+                        or token_i not in observation_tokens
+                        or token_i not in final_union
+                        or not symbol_u
+                        or (current_symbol and str(current_symbol).upper() not in {symbol_u, "STICKY"})
+                        or (token_i in observation_identity and observation_identity[token_i] != symbol_u)
+                    ):
+                        identity_error = "observation_identity_conflicts_with_final_subscription"
+                        break
+                    observation_identity[token_i] = symbol_u
+            except (TypeError, ValueError, OverflowError):
+                identity_error = "observation_identity_invalid"
+            if identity_error is None and set(observation_identity) != observation_tokens:
+                identity_error = "observation_identity_does_not_cover_registry"
+            if identity_error:
+                plan["ok"] = False
+                plan["verdict"] = "BLOCKED_OBSERVATION_IDENTITY_INVALID"
+                plan["identity_error"] = identity_error
+        ws.activate_market_event_graph_launch_plan(plan)
+        if bool(merge.get("ok")) and identity_error is None:
             tokens = [int(token) for token in list(merge.get("tokens") or [])]
-            for symbol, token in dict(observation_registry.token_by_symbol).items():
-                token_to_symbol[int(token)] = str(symbol).upper()
-                ws._TOKEN_TO_SYMBOL[int(token)] = str(symbol).upper()
+            for token_i, symbol_u in observation_identity.items():
+                token_to_symbol[token_i] = symbol_u
+                ws._TOKEN_TO_SYMBOL[token_i] = symbol_u
+                underlying_tokens.add(token_i)
+                underlying_map[token_i] = symbol_u
+            ws._UNDERLYING_TOKENS = set(underlying_tokens)
+            ws._UNDERLYING_TOKEN_TO_SYMBOL = dict(underlying_map)
         else:
             try:
                 ws._log_ws(
                     "MARKET_EVENT_GRAPH_OBSERVATION_PLAN_BLOCKED",
                     {
-                        "reason": str(merge.get("reason") or ws.BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET),
+                        "reason": str(identity_error or merge.get("reason") or ws.BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET),
                         "production_token_count": len(tokens),
                         "observation_token_count": len(observation_token_list),
                         "configured_budget": max_tokens,

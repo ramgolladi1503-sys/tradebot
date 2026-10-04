@@ -6264,7 +6264,11 @@ def _build_subscription_tokens_impl(
     global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING, _TOKEN_TO_SYMBOL, _LAST_ATM_BY_SYMBOL
     global _LAST_DESIRED_TOKENS
     global _LAST_OPTION_COUNTS_BY_SYMBOL, _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL
-    symbols = list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))
+    symbols = [str(symbol).strip().upper() for symbol in list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))]
+    if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
+        symbols = [symbol for symbol in symbols if symbol in _INDEX_SYMBOLS]
+        if not symbols:
+            raise ValueError("MEG subscription requires at least one configured index option symbol")
     # Keep the production option universe limited to cfg.SYMBOLS (the three
     # index products).  MARKET_EVENT_GRAPH constituents are cash observation
     # tokens and are merged separately by the observation subscription plan;
@@ -6616,12 +6620,37 @@ def _build_subscription_tokens_impl(
             observation_tokens=observation_token_list,
             budget=max_tokens,
         )
+        observation_identity: dict[int, str] = {}
+        identity_error = None
+        if bool(merge.get("ok")):
+            final_union = {int(token) for token in list(merge.get("tokens") or [])}
+            observation_tokens = set(observation_token_list)
+            try:
+                for symbol, token in dict(observation_registry.token_by_symbol).items():
+                    token_i = int(token)
+                    symbol_u = str(symbol).strip().upper()
+                    current_symbol = token_to_symbol.get(token_i)
+                    if (
+                        token_i <= 0
+                        or token_i not in observation_tokens
+                        or token_i not in final_union
+                        or not symbol_u
+                        or (current_symbol and str(current_symbol).upper() not in {symbol_u, "STICKY"})
+                        or (token_i in observation_identity and observation_identity[token_i] != symbol_u)
+                    ):
+                        identity_error = "observation_identity_conflicts_with_final_subscription"
+                        break
+                    observation_identity[token_i] = symbol_u
+            except (TypeError, ValueError, OverflowError):
+                identity_error = "observation_identity_invalid"
+            if identity_error is None and set(observation_identity) != observation_tokens:
+                identity_error = "observation_identity_does_not_cover_registry"
         _set_observation_plan_state(
-            enabled=bool(merge.get("ok")),
+            enabled=bool(merge.get("ok")) and identity_error is None,
             verdict=(
                 "PASS_LIVE_SOURCE_PRESESSION_READINESS"
-                if bool(merge.get("ok"))
-                else str(merge.get("reason") or BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET)
+                if bool(merge.get("ok")) and identity_error is None
+                else str(identity_error or merge.get("reason") or BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET)
             ),
             production_tokens=[int(token) for token in tokens],
             observation_tokens=observation_token_list,
@@ -6632,15 +6661,21 @@ def _build_subscription_tokens_impl(
             configured_budget=max_tokens,
             plan_sha=str(getattr(observation_registry, "canonical_sha256", "") or ""),
         )
-        if bool(merge.get("ok")):
+        if bool(merge.get("ok")) and identity_error is None:
             tokens = [int(token) for token in list(merge.get("tokens") or [])]
-            for symbol, token in dict(observation_registry.token_by_symbol).items():
-                _TOKEN_TO_SYMBOL[int(token)] = str(symbol).upper()
+            for token_i, symbol_u in observation_identity.items():
+                token_to_symbol[token_i] = symbol_u
+                _TOKEN_TO_SYMBOL[token_i] = symbol_u
+                _UNDERLYING_TOKENS.add(token_i)
+                _UNDERLYING_TOKEN_TO_SYMBOL[token_i] = symbol_u
+                if token_i not in underlying_tokens:
+                    underlying_tokens.append(token_i)
+                underlying_token_to_symbol[token_i] = symbol_u
         else:
             _log_ws(
                 "MARKET_EVENT_GRAPH_OBSERVATION_PLAN_BLOCKED",
                 {
-                    "reason": str(merge.get("reason") or BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET),
+                    "reason": str(identity_error or merge.get("reason") or BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET),
                     "production_token_count": len(tokens),
                     "observation_token_count": len(observation_token_list),
                     "configured_budget": max_tokens,
