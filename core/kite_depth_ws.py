@@ -6264,10 +6264,7 @@ def _build_subscription_tokens_impl(
     global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING, _TOKEN_TO_SYMBOL, _LAST_ATM_BY_SYMBOL
     global _LAST_DESIRED_TOKENS
     global _LAST_OPTION_COUNTS_BY_SYMBOL, _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL
-    requested_symbols = [str(symbol).upper() for symbol in list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))]
-    symbols = list(requested_symbols)
-    if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
-        symbols = [symbol for symbol in requested_symbols if symbol in _INDEX_SYMBOLS]
+    symbols = list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))
     # Keep the production option universe limited to cfg.SYMBOLS (the three
     # index products).  MARKET_EVENT_GRAPH constituents are cash observation
     # tokens and are merged separately by the observation subscription plan;
@@ -6637,20 +6634,8 @@ def _build_subscription_tokens_impl(
         )
         if bool(merge.get("ok")):
             tokens = [int(token) for token in list(merge.get("tokens") or [])]
-            active_token_set = set(tokens)
-            registry_token_set = set(observation_token_list)
             for symbol, token in dict(observation_registry.token_by_symbol).items():
-                token_i = int(token)
-                if token_i not in active_token_set or token_i not in registry_token_set:
-                    continue
-                symbol_u = str(symbol).upper()
-                token_to_symbol[token_i] = symbol_u
-                if token_i not in underlying_tokens:
-                    underlying_tokens.append(token_i)
-                underlying_token_to_symbol[token_i] = symbol_u
-            _TOKEN_TO_SYMBOL = dict(token_to_symbol)
-            _UNDERLYING_TOKENS = set(underlying_tokens)
-            _UNDERLYING_TOKEN_TO_SYMBOL = dict(underlying_token_to_symbol)
+                _TOKEN_TO_SYMBOL[int(token)] = str(symbol).upper()
         else:
             _log_ws(
                 "MARKET_EVENT_GRAPH_OBSERVATION_PLAN_BLOCKED",

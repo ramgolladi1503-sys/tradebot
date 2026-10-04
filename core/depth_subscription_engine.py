@@ -356,14 +356,7 @@ def _resolve_known_tokens(ws: Any) -> set[int]:
 def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None = None) -> tuple[list[int], list[dict[str, Any]]]:
     ws = _ws_module()
     conf = _cfg(ws)
-    requested_symbols_l = [str(s).upper() for s in list(symbols or list(getattr(conf, "SYMBOLS", []) or []))]
-    symbols_l = list(requested_symbols_l)
-    if _cfg_bool(conf, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False):
-        index_symbols = {
-            str(symbol).upper()
-            for symbol in getattr(ws, "_INDEX_SYMBOLS", {"NIFTY", "BANKNIFTY", "SENSEX"})
-        }
-        symbols_l = [symbol for symbol in requested_symbols_l if symbol in index_symbols]
+    symbols_l = [str(s).upper() for s in list(symbols or list(getattr(conf, "SYMBOLS", []) or []))]
     if max_tokens is None:
         max_tokens = _cfg_int(conf, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123)
     around_default = _cfg_int(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6)
@@ -547,19 +540,9 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         ws.activate_market_event_graph_launch_plan(plan)
         if bool(merge.get("ok")):
             tokens = [int(token) for token in list(merge.get("tokens") or [])]
-            active_token_set = set(tokens)
-            registry_token_set = set(observation_token_list)
             for symbol, token in dict(observation_registry.token_by_symbol).items():
-                token_i = int(token)
-                if token_i not in active_token_set or token_i not in registry_token_set:
-                    continue
-                symbol_u = str(symbol).upper()
-                token_to_symbol[token_i] = symbol_u
-                underlying_tokens.add(token_i)
-                underlying_map[token_i] = symbol_u
-            ws._TOKEN_TO_SYMBOL = dict(token_to_symbol)
-            ws._UNDERLYING_TOKENS = set(underlying_tokens)
-            ws._UNDERLYING_TOKEN_TO_SYMBOL = dict(underlying_map)
+                token_to_symbol[int(token)] = str(symbol).upper()
+                ws._TOKEN_TO_SYMBOL[int(token)] = str(symbol).upper()
         else:
             try:
                 ws._log_ws(
