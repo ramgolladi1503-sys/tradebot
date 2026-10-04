@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
+import core.candidate_feed_dependencies as dependency_registry
 from core.candidate_feed_dependencies import (
     PARTIAL_DECLARATION,
     REGISTRY_ENTRIES,
     UNKNOWN_BLOCKED,
+    VERIFIED_DECLARATION,
     CandidateFeedDependencySpec,
     resolve_candidate_dependencies,
     validate_registry_entries,
@@ -81,6 +85,76 @@ def test_duplicate_malformed_and_stale_digest_registry_entries_fail_closed():
     assert "REGISTRY_AUTHORITY_STATUS_INVALID" in malformed
     assert "REGISTRY_REQUIRED_DOMAIN_INVALID" in malformed_schema
     assert "REGISTRY_SOURCE_DIGEST_MISMATCH" in stale
+
+
+def test_verified_candidate_missing_required_domain_identity_fails_closed(monkeypatch):
+    digest = "a" * 64
+    entry = CandidateFeedDependencySpec(
+        candidate_id="TEST_EMPTY_REQUIRED_IDENTITY",
+        authority_status=VERIFIED_DECLARATION,
+        required_domains=("INDEX_OPTIONS",),
+        required_identities=(),
+        source_sha256=(("core/read_only_strategy_registry.py", digest),),
+        execution_scope="EXECUTION",
+    )
+    monkeypatch.setattr(dependency_registry, "_current_source_digest", lambda _path: digest)
+    assert entry.execution_eligible is False, "eligibility_coverage_assertion"
+
+    errors = validate_registry_entries((entry,))
+    assert "REGISTRY_REQUIRED_DOMAIN_IDENTITY_COVERAGE_MISMATCH" in errors, "registry_coverage_assertion"
+
+    monkeypatch.setattr(dependency_registry, "REGISTRY_ENTRIES", (entry,))
+    result = resolve_candidate_dependencies(
+        entry.candidate_id,
+        caller_required_domains=("INDEX_OPTIONS",),
+        identity_health_by_identity={},
+    )
+    assert result.status == UNKNOWN_BLOCKED
+    assert result.execution_eligible is False
+    assert result.reason == (
+        "CANDIDATE_FEED_DEPENDENCY_REGISTRY_INVALID:"
+        "REGISTRY_REQUIRED_DOMAIN_IDENTITY_COVERAGE_MISMATCH"
+    ), "resolver_coverage_assertion"
+
+
+@pytest.mark.parametrize("identity", ["", "   ", " INDEX_OPTIONS"])
+def test_verified_candidate_empty_or_noncanonical_identity_fails_closed(monkeypatch, identity):
+    digest = "b" * 64
+    entry = CandidateFeedDependencySpec(
+        candidate_id="TEST_NONCANONICAL_REQUIRED_IDENTITY",
+        authority_status=VERIFIED_DECLARATION,
+        required_domains=("INDEX_OPTIONS",),
+        required_identities=(("INDEX_OPTIONS", identity),),
+        source_sha256=(("core/read_only_strategy_registry.py", digest),),
+        execution_scope="EXECUTION",
+    )
+    monkeypatch.setattr(dependency_registry, "_current_source_digest", lambda _path: digest)
+    assert entry.execution_eligible is False
+    errors = validate_registry_entries((entry,))
+    assert "REGISTRY_REQUIRED_IDENTITY_VALUE_INVALID" in errors
+
+    monkeypatch.setattr(dependency_registry, "REGISTRY_ENTRIES", (entry,))
+    result = resolve_candidate_dependencies(
+        entry.candidate_id,
+        caller_required_domains=("INDEX_OPTIONS",),
+        identity_health_by_identity={identity: {"domain": "INDEX_OPTIONS", "state": "HEALTHY"}},
+    )
+    assert result.status == UNKNOWN_BLOCKED
+    assert result.execution_eligible is False
+    assert "REGISTRY_REQUIRED_IDENTITY_VALUE_INVALID" in result.reason
+
+
+def test_registry_rejects_identity_domains_not_declared_as_required():
+    entry = replace(
+        REGISTRY_ENTRIES[0],
+        required_domains=("INDEX_SPOT",),
+        required_identities=(
+            ("INDEX_SPOT", "NIFTY"),
+            ("INDEX_OPTIONS", "NIFTY26OCT25000CE"),
+        ),
+    )
+    errors = validate_registry_entries((entry,))
+    assert "REGISTRY_REQUIRED_DOMAIN_IDENTITY_COVERAGE_MISMATCH" in errors
 
 
 def test_registry_spec_is_frozen_and_unknown_optional_inputs_are_not_invented():

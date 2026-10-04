@@ -1,5 +1,6 @@
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
+import math
 from config import config as cfg
 from core.time_utils import IST_TZ, now_ist
 
@@ -9,7 +10,11 @@ class OhlcBuffer:
         self._bars = defaultdict(lambda: deque(maxlen=getattr(cfg, "OHLC_BUFFER_MAX_BARS", 500)))
 
     def update_tick(self, symbol, price, volume=None, ts=None, provenance=None):
-        if price is None:
+        try:
+            price_value = float(price)
+        except (TypeError, ValueError, OverflowError):
+            price_value = None
+        if price_value is None or not math.isfinite(price_value) or price_value <= 0:
             return {
                 "accepted": False,
                 "status": "INVALID_TICK",
@@ -54,9 +59,9 @@ class OhlcBuffer:
                     return provenance_status
                 if volume_incomplete:
                     bar["volume"] = None
-                bar["high"] = max(bar["high"], price)
-                bar["low"] = min(bar["low"], price)
-                bar["close"] = price
+                bar["high"] = max(bar["high"], price_value)
+                bar["low"] = min(bar["low"], price_value)
+                bar["close"] = price_value
                 if volume is not None and bar.get("volume") is not None:
                     bar["volume"] += volume or 0
                 if explicit_volume_quality:
@@ -94,10 +99,10 @@ class OhlcBuffer:
                     )
                 row = {
                     "ts": bucket,
-                    "open": price,
-                    "high": price,
-                    "low": price,
-                    "close": price,
+                    "open": price_value,
+                    "high": price_value,
+                    "low": price_value,
+                    "close": price_value,
                     "volume": volume if volume is not None else 0,
                 }
                 if isinstance(provenance, dict) and "volume_observation_complete" in provenance:
@@ -160,10 +165,11 @@ class OhlcBuffer:
                         emit_candle_pipeline_event(
                             symbol=str(symbol), timeframe="1m",
                             stage="T5_BAR_PERSISTED", source_event_ts=as_of,
-                            bar_ts=ts, bar_state="COMPLETED_IN_MEMORY",
+                            bar_ts=ts,
+                            bar_state=("COMPLETED_DURABLE" if bool((bar.get("bar_provenance") or {}).get("durable_persisted")) else "COMPLETED_IN_MEMORY"),
                             bar_count=len(completed_bars),
                             producer="core.ohlc_buffer.get_completed_bars",
-                            reason="in_memory_buffer_observed;no_external_store",
+                            reason=("verified_session_store_row" if bool((bar.get("bar_provenance") or {}).get("durable_persisted")) else "in_memory_buffer_observed;no_external_store"),
                         )
                 last_ts = ts
             return completed_bars

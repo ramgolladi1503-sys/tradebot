@@ -1,15 +1,29 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+import pytest
 
 from config import config as cfg
 from core.ohlc_buffer import OhlcBuffer
 from core.market_event_graph_live_ohlc_buffer import (
+    configure_live_source_session_store,
     record_live_source_shadow_tick,
     reset_live_source_shadow_buffer,
     shadow_ohlc_buffer,
 )
+from core.market_session_store import MarketSessionStore
+from core.market_event_graph_live_ohlc_buffer import get_live_source_shadow_completed_bars
+
+
+@pytest.fixture(autouse=True)
+def _clear_session_bar_store():
+    configure_live_source_session_store(None, session_date=None)
+    yield
+    configure_live_source_session_store(None, session_date=None)
 
 
 def test_shadow_buffer_disabled_mode_mutates_no_state(monkeypatch):
+    configure_live_source_session_store(None, session_date=None)
     reset_live_source_shadow_buffer()
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)
 
@@ -38,7 +52,36 @@ def test_ohlc_buffer_without_volume_quality_keeps_legacy_accumulation():
     assert "volume_observation_complete" not in bar["bar_provenance"]
 
 
+def test_shadow_completed_bar_view_excludes_prior_ist_session_rows():
+    configure_live_source_session_store(None, session_date=None)
+    reset_live_source_shadow_buffer()
+    ist = ZoneInfo("Asia/Kolkata")
+    prior_open = datetime(2026, 9, 7, 9, 15, tzinfo=ist)
+    current_open = datetime(2026, 9, 8, 9, 15, tzinfo=ist)
+    for event_time, price in (
+        (prior_open, 25000.0),
+        (prior_open + timedelta(minutes=1), 25001.0),
+        (current_open, 25100.0),
+        (current_open + timedelta(minutes=1), 25101.0),
+    ):
+        assert shadow_ohlc_buffer.update_tick(
+            "NIFTY",
+            price,
+            ts=event_time,
+            provenance={"source_type": "deterministic_test"},
+        )["accepted"] is True
+
+    bars_before_read = shadow_ohlc_buffer.get_bars("NIFTY")
+    completed = get_live_source_shadow_completed_bars(
+        "NIFTY", as_of=current_open + timedelta(minutes=1)
+    )
+
+    assert [bar["ts"] for bar in completed] == [current_open]
+    assert shadow_ohlc_buffer.get_bars("NIFTY") == bars_before_read
+
+
 def test_shadow_buffer_accepts_only_new_raw_ticks(monkeypatch):
+    configure_live_source_session_store(None, session_date=None)
     reset_live_source_shadow_buffer()
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     identity = {"feed_session_id": "session-1", "reconnect_generation": 7}
@@ -78,6 +121,7 @@ def test_shadow_buffer_accepts_only_new_raw_ticks(monkeypatch):
 
 
 def test_shadow_volume_uses_cumulative_deltas_and_marks_baseline_incomplete(monkeypatch):
+    configure_live_source_session_store(None, session_date=None)
     reset_live_source_shadow_buffer()
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     identity = {"feed_session_id": "session-1", "reconnect_generation": 7}
@@ -103,6 +147,7 @@ def test_shadow_volume_uses_cumulative_deltas_and_marks_baseline_incomplete(monk
 
 
 def test_shadow_volume_counts_deltas_only_after_a_complete_baseline(monkeypatch):
+    configure_live_source_session_store(None, session_date=None)
     reset_live_source_shadow_buffer()
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     identity = {"feed_session_id": "session-1", "reconnect_generation": 7}
@@ -412,3 +457,168 @@ def test_shadow_buffer_historical_seed_behavior_remains_unchanged():
     assert "universe_hash" not in provenance
     assert "symbol" not in provenance
     assert "packet_kind" not in provenance
+
+
+def test_shadow_buffer_persists_completed_bar_and_restores_same_session_only(tmp_path, monkeypatch):
+    reset_live_source_shadow_buffer()
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    persisted_events = []
+    monkeypatch.setattr(
+        "core.candle_pipeline_diagnostics.emit_candle_pipeline_event",
+        lambda **event: persisted_events.append(event),
+    )
+    session_date = "2026-10-02"
+    db_path = tmp_path / "session.sqlite"
+    store = MarketSessionStore(db_path=db_path, report_root=tmp_path / "reports")
+    start = datetime(2026, 10, 2, 9, 15, tzinfo=ZoneInfo("Asia/Kolkata"))
+    configure_live_source_session_store(
+        store, session_date=session_date, symbols=("NIFTY",), restore_as_of=start,
+    )
+    identity = {"feed_session_id": "capture-1", "feed_epoch": 0, "reconnect_generation": 1}
+    capture = {
+        "provider": "kite", "token_domain": "kite_instrument_token",
+        "universe_hash": "fba078a4cd7aeb520432b05071a5ac4078e164b809fec0eb80503cb7fe562371",
+    }
+    args = dict(symbol="NIFTY", instrument_token=256265, source_type="live_websocket", **capture)
+
+    first = record_live_source_shadow_tick(
+        **args, price=25000, source_tick_epoch=(start + timedelta(seconds=10)).timestamp(),
+        feed_identity=identity, cumulative_volume=100,
+    )
+    same_minute = record_live_source_shadow_tick(
+        **args, price=25001, source_tick_epoch=(start + timedelta(seconds=20)).timestamp(),
+        feed_identity=identity, cumulative_volume=105,
+    )
+    next_minute = record_live_source_shadow_tick(
+        **args, price=25002, source_tick_epoch=(start + timedelta(minutes=1)).timestamp(),
+        feed_identity=identity, cumulative_volume=110,
+    )
+    assert first["accepted"] and same_minute["accepted"] and next_minute["accepted"]
+    # The WebSocket callback only updates memory; persistence is performed by
+    # the observer's completed-bar read path, outside the tick callback.
+    assert store.get_bars(
+        "NIFTY", as_of=start + timedelta(minutes=1), timeframe="1m", session_date=session_date,
+    ) == []
+    get_live_source_shadow_completed_bars("NIFTY", as_of=start + timedelta(minutes=1))
+    durable_event = next(
+        event for event in reversed(persisted_events)
+        if event.get("producer") == "core.market_event_graph_live_ohlc_buffer"
+    )
+    assert durable_event["bar_state"] == "COMPLETED_DURABLE"
+    assert durable_event["details"]["persistence_latency_ms"] >= 0
+    persisted = store.get_bars(
+        "NIFTY", as_of=start + timedelta(minutes=1), timeframe="1m", session_date=session_date,
+    )
+    assert len(persisted) == 1
+    assert persisted[0]["volume"] is None
+    assert persisted[0]["bar_provenance"]["durable_persisted"] is True
+
+    reopened = MarketSessionStore(db_path=db_path, report_root=tmp_path / "reports")
+    configure_live_source_session_store(
+        reopened, session_date=session_date, symbols=("NIFTY",),
+        restore_as_of=start + timedelta(minutes=1, seconds=30),
+    )
+    second_identity = {"feed_session_id": "capture-2", "feed_epoch": 1, "reconnect_generation": 1}
+    restarted = record_live_source_shadow_tick(
+        **args, price=25003, source_tick_epoch=(start + timedelta(minutes=1, seconds=30)).timestamp(),
+        feed_identity=second_identity, cumulative_volume=5,
+    )
+    assert restarted["accepted"] is True
+    bars = shadow_ohlc_buffer.get_bars("NIFTY")
+    recovered = [bar for bar in bars if bar["ts"] == start]
+    assert len(recovered) == 1
+    assert recovered[0]["volume"] is None
+    assert recovered[0]["bar_provenance"]["recovered_completed_bar"] is True
+    assert recovered[0]["bar_provenance"]["live_feed_session_id"] == "capture-1"
+    assert all(bar["ts"].date().isoformat() == session_date for bar in bars)
+    from core.market_event_graph_live_runtime_bridge import _bar_has_live_provenance
+    accepted, reason = _bar_has_live_provenance(
+        recovered[0], expected_symbol="NIFTY", expected_token=256265,
+        subscription={"feed_session_id": "capture-2", "feed_epoch": 1},
+    )
+    assert accepted is False
+    assert reason == "FEED_SESSION_ID_MISMATCH"
+
+    # The event-time completion cutoff durably closes the current 09:16 bar.
+    get_live_source_shadow_completed_bars("NIFTY", as_of=start + timedelta(minutes=2))
+    late_tick = record_live_source_shadow_tick(
+        **args, price=25004, source_tick_epoch=(start + timedelta(minutes=1, seconds=45)).timestamp(),
+        feed_identity=second_identity, cumulative_volume=7,
+    )
+    assert late_tick["status"] == "LATE_TICK_AFTER_DURABLE_FINALIZATION"
+    assert len(reopened.get_bars(
+        "NIFTY", as_of=start + timedelta(minutes=2), timeframe="1m", session_date=session_date,
+    )) == 2
+
+
+def test_shadow_buffer_rejects_replay_fixture_persistence(tmp_path, monkeypatch):
+    reset_live_source_shadow_buffer()
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    start = datetime(2026, 10, 2, 9, 15, tzinfo=ZoneInfo("Asia/Kolkata"))
+    store = MarketSessionStore(db_path=tmp_path / "session.sqlite", report_root=tmp_path / "reports")
+    configure_live_source_session_store(
+        store, session_date="2026-10-02", symbols=("NIFTY",), restore_as_of=start,
+    )
+    identity = {"feed_session_id": "test-feed", "feed_epoch": 0, "reconnect_generation": 1}
+    capture = {
+        "provider": "kite", "token_domain": "kite_instrument_token",
+        "universe_hash": "fba078a4cd7aeb520432b05071a5ac4078e164b809fec0eb80503cb7fe562371",
+    }
+    args = dict(symbol="NIFTY", instrument_token=256265, source_type="deterministic_test", feed_identity=identity, **capture)
+    assert record_live_source_shadow_tick(
+        **args, price=25000, source_tick_epoch=(start + timedelta(seconds=1)).timestamp(), cumulative_volume=100,
+    )["accepted"] is True
+    assert record_live_source_shadow_tick(
+        **args, price=25001, source_tick_epoch=(start + timedelta(minutes=1)).timestamp(), cumulative_volume=101,
+    )["accepted"] is True
+    assert store.get_bars("NIFTY", as_of=start + timedelta(minutes=2), session_date="2026-10-02") == []
+
+
+def test_shadow_buffer_restore_is_trading_date_scoped(tmp_path, monkeypatch):
+    reset_live_source_shadow_buffer()
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    start = datetime(2026, 10, 2, 9, 15, tzinfo=ZoneInfo("Asia/Kolkata"))
+    db_path = tmp_path / "session.sqlite"
+    store = MarketSessionStore(db_path=db_path, report_root=tmp_path / "reports")
+    store.persist_completed_bar("NIFTY", {
+        "ts": start, "open": 25000.0, "high": 25001.0, "low": 24999.0,
+        "close": 25000.5, "volume": None,
+        "bar_provenance": {"source_type": "live_websocket", "live_feed_session_id": "prior"},
+    }, completed_as_of=start + timedelta(minutes=1))
+    next_day = datetime(2026, 10, 3, 9, 15, tzinfo=ZoneInfo("Asia/Kolkata"))
+    capture = {
+        "symbol": "NIFTY", "instrument_token": 256265, "source_type": "live_websocket",
+        "provider": "kite", "token_domain": "kite_instrument_token",
+        "universe_hash": "fba078a4cd7aeb520432b05071a5ac4078e164b809fec0eb80503cb7fe562371",
+        "feed_identity": {"feed_session_id": "next-day", "feed_epoch": 2, "reconnect_generation": 1},
+    }
+    configure_live_source_session_store(
+        store, session_date="2026-10-03", symbols=("NIFTY",), restore_as_of=next_day,
+    )
+    result = record_live_source_shadow_tick(
+        **capture, price=25010.0, source_tick_epoch=(next_day + timedelta(seconds=1)).timestamp(),
+    )
+    assert result["accepted"] is True
+    assert [bar["ts"].date().isoformat() for bar in shadow_ohlc_buffer.get_bars("NIFTY")] == ["2026-10-03"]
+
+
+def test_shadow_buffer_rejects_tick_outside_configured_store_session(tmp_path, monkeypatch):
+    reset_live_source_shadow_buffer()
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    session_start = datetime(2026, 10, 2, 9, 15, tzinfo=ZoneInfo("Asia/Kolkata"))
+    store = MarketSessionStore(db_path=tmp_path / "session.sqlite", report_root=tmp_path / "reports")
+    configure_live_source_session_store(
+        store, session_date="2026-10-02", symbols=("NIFTY",), restore_as_of=session_start,
+    )
+
+    result = record_live_source_shadow_tick(
+        symbol="NIFTY", instrument_token=256265, price=25010.0,
+        source_tick_epoch=(session_start + timedelta(days=1, seconds=1)).timestamp(),
+        source_type="live_websocket", provider="kite", token_domain="kite_instrument_token",
+        universe_hash="fba078a4cd7aeb520432b05071a5ac4078e164b809fec0eb80503cb7fe562371",
+        feed_identity={"feed_session_id": "next-day", "feed_epoch": 2, "reconnect_generation": 1},
+    )
+
+    assert result["accepted"] is False
+    assert result["status"] == "SESSION_DATE_MISMATCH"
+    assert shadow_ohlc_buffer.get_bars("NIFTY") == []

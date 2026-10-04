@@ -550,6 +550,8 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
     assert logs_path / "feed_health_duration_latest.json" in captured_paths
     assert captured_payloads[logs_path / "feed_runtime_latest.json"]["ws_connected"] is True
     payload = captured_payloads[logs_path / "feed_runtime_latest.json"]
+    assert payload["underlying_feed_identity_by_symbol"]["NIFTY"]["status"] in {"UNKNOWN", "UNHEALTHY"}
+    assert payload["feed_session_identity"]["observed_epoch"] == 200.0
     assert payload["snapshot_hash"] == truth_hash_from_mapping(
         payload,
         exclude_keys=(
@@ -563,6 +565,64 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
     assert payload["feed_ok"] is False
     assert payload["execution_feed_ready"] is True
     assert (logs_path / "feed_runtime_latest.json").exists()
+
+
+def test_underlying_identity_health_requires_active_current_generation_tick(monkeypatch):
+    import time
+
+    now_epoch = time.time()
+    token = 256265
+    identity = {
+        "provider": "kite",
+        "token_domain": "kite_instrument_token",
+        "feed_session_id": "session-test-identity",
+        "feed_epoch": 17,
+        "reconnect_generation": 4,
+        "connection_start_epoch": now_epoch - 10,
+    }
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {token: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {token}, raising=False)
+    monkeypatch.setattr(depth_ws, "_INDEX_SYMBOLS", {"NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_TOKENS", [token], raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {token: now_epoch - 0.4}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_PAYLOAD_TS_BY_TOKEN", {token: now_epoch - 0.5}, raising=False)
+    monkeypatch.setattr(depth_ws, "_SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS", {token}, raising=False)
+    monkeypatch.setattr(depth_ws, "get_current_feed_session_identity", lambda: identity)
+    monkeypatch.setattr(cfg, "LTP_SLA_SECONDS", 2.5, raising=False)
+    lifecycle_proof = depth_ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": token})
+    assert lifecycle_proof["token_lifecycle"][str(token)]["latest_callback_receipt_epoch"] == now_epoch - 0.4
+    assert lifecycle_proof["subscription_request_succeeded_symbols"] == ["NIFTY"]
+
+    healthy = depth_ws._underlying_feed_identity_by_symbol(
+        now_epoch=now_epoch,
+        ws_connected=True,
+        session_identity={**identity, "observed_epoch": now_epoch},
+    )["NIFTY"]
+    stale = depth_ws._underlying_feed_identity_by_symbol(
+        now_epoch=now_epoch + 5.0,
+        ws_connected=True,
+        session_identity={**identity, "observed_epoch": now_epoch + 5.0},
+    )["NIFTY"]
+    monkeypatch.setattr(
+        depth_ws,
+        "get_current_feed_session_identity",
+        lambda: {**identity, "feed_session_id": "newer-session"},
+    )
+    old_session = depth_ws._underlying_feed_identity_by_symbol(
+        now_epoch=now_epoch,
+        ws_connected=True,
+        session_identity={**identity, "observed_epoch": now_epoch},
+    )["NIFTY"]
+
+    assert healthy["status"] == "HEALTHY", healthy
+    assert healthy["instrument_token"] == token
+    assert healthy["active_subscription"] is True
+    assert healthy["feed_session_id"] == identity["feed_session_id"]
+    assert healthy["feed_epoch"] == identity["feed_epoch"]
+    assert healthy["reconnect_generation"] == identity["reconnect_generation"]
+    assert stale["status"] == "UNHEALTHY"
+    assert stale["age_sec"] > stale["max_age_sec"]
+    assert old_session["status"] == "UNHEALTHY"
 
 
 def test_persist_runtime_snapshot_uses_latest_option_tick_for_symbol_freshness(monkeypatch, tmp_path):

@@ -11,9 +11,21 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from core.market_session_store import market_session_store
+from core.time_utils import IST_TZ
 
 _INSTALLED = False
 _SEALED_DAYS: set[str] = set()
+_INSTALL_STATUS: dict[str, Any] = {}
+
+
+def _is_same_ist_session_date(bar: dict[str, Any], as_of: datetime) -> bool:
+    """Keep runtime candle views bounded to the local market session date."""
+    ts = bar.get("ts") if isinstance(bar, dict) else None
+    if not isinstance(ts, datetime):
+        return False
+    cutoff = as_of.replace(tzinfo=IST_TZ) if as_of.tzinfo is None else as_of.astimezone(IST_TZ)
+    bar_time = ts.replace(tzinfo=IST_TZ) if ts.tzinfo is None else ts.astimezone(IST_TZ)
+    return bar_time.date() == cutoff.date()
 
 
 def _same_minute_resolution(bars: list[dict], idx: int) -> bool:
@@ -31,7 +43,10 @@ def _same_minute_resolution(bars: list[dict], idx: int) -> bool:
     return False
 
 
-def _persist(buffer, symbol: str, bar: dict, *, allow_historical_seed: bool = False) -> dict:
+def _persist(
+    buffer, symbol: str, bar: dict, *, completed_as_of: datetime,
+    allow_historical_seed: bool = False,
+) -> dict:
     store = getattr(buffer, "_session_store", None)
     if store is None:
         return {"persisted": False, "status": "NO_SESSION_STORE"}
@@ -47,7 +62,7 @@ def _persist(buffer, symbol: str, bar: dict, *, allow_historical_seed: bool = Fa
     elif source not in {"live_websocket", "tick_store_live", "deterministic_test"}:
         return {"persisted": False, "status": f"SKIPPED_UNTRUSTED_SOURCE:{source}"}
     try:
-        result = store.persist_completed_bar(symbol, bar)
+        result = store.persist_completed_bar(symbol, bar, completed_as_of=completed_as_of)
         return {"persisted": bool(result.get("persisted")), "status": str(result.get("status") or "UNKNOWN")}
     except Exception as exc:
         raise RuntimeError(f"session_memory_persist_failed:{type(exc).__name__}:{exc}") from exc
@@ -60,7 +75,10 @@ def _install_ohlc_contract() -> None:
         return
     cls = getattr(module, "OhlcBuffer", None)
     global_buffer = getattr(module, "ohlc_buffer", None)
-    if cls is None or global_buffer is None or getattr(cls, "_market_session_memory_v1", False):
+    if cls is None or global_buffer is None:
+        return
+    if getattr(cls, "_market_session_memory_v1", False):
+        global_buffer._session_store = market_session_store
         return
 
     original_init = cls.__init__
@@ -81,7 +99,9 @@ def _install_ohlc_contract() -> None:
             except Exception:
                 prior = None
             if prior is not None:
-                persisted = _persist(self, symbol, prior)
+                persisted = _persist(
+                    self, symbol, prior, completed_as_of=result.get("incoming_bucket")
+                )
                 result = dict(result)
                 result["session_memory_persisted"] = bool(persisted["persisted"])
                 result["session_memory_status"] = persisted["status"]
@@ -93,6 +113,7 @@ def _install_ohlc_contract() -> None:
         if store is None or not isinstance(as_of, datetime) or int(interval_seconds) != 60:
             return local
         try:
+            local = [dict(row) for row in local if _is_same_ist_session_date(row, as_of)]
             source_bars = list(self._bars.get(symbol, []))
             for idx, bar in enumerate(source_bars):
                 ts = bar.get("ts")
@@ -100,8 +121,12 @@ def _install_ohlc_contract() -> None:
                     continue
                 prov = dict(bar.get("bar_provenance") or {})
                 is_hist = bool(prov.get("historical_seed")) or str(prov.get("source_type") or "").lower() == "historical_seed"
-                _persist(self, symbol, bar, allow_historical_seed=(is_hist and _same_minute_resolution(source_bars, idx)))
+                _persist(
+                    self, symbol, bar, completed_as_of=as_of,
+                    allow_historical_seed=(is_hist and _same_minute_resolution(source_bars, idx)),
+                )
             durable = store.get_bars(symbol, as_of=as_of, timeframe="1m")
+            durable = [dict(row) for row in durable if _is_same_ist_session_date(row, as_of)]
             merged = {}
             for row in durable:
                 merged[row.get("ts")] = dict(row)
@@ -220,10 +245,28 @@ def store_seal(session_date: str, *, symbols=None, cfg=None):
     return market_session_store.seal_session(str(session_date), configured)
 
 
-def install() -> None:
-    global _INSTALLED
+def install() -> dict[str, Any]:
+    """Explicitly install the runtime bridge and report its authority state."""
+    global _INSTALLED, _INSTALL_STATUS
     if _INSTALLED:
-        return
+        return dict(_INSTALL_STATUS)
     _install_ohlc_contract()
     _install_market_data_contract()
+    try:
+        from core import ohlc_buffer as module
+        buffer = getattr(module, "ohlc_buffer", None)
+        connected = buffer is not None and getattr(buffer, "_session_store", None) is market_session_store
+    except Exception:
+        connected = False
+    _INSTALL_STATUS = {
+        "installed": True,
+        "store_enabled": market_session_store is not None,
+        "buffer_connected": bool(connected),
+        "status": (
+            "PERSISTENCE_READY" if market_session_store is not None and connected
+            else "PERSISTENCE_DISABLED" if market_session_store is None
+            else "PERSISTENCE_BRIDGE_UNAVAILABLE"
+        ),
+    }
     _INSTALLED = True
+    return dict(_INSTALL_STATUS)

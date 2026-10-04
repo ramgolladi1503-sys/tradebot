@@ -22,7 +22,10 @@ from typing import Any, Callable, Mapping, Sequence
 from config import config as cfg
 from config import feed_runtime_reliability as reliability_cfg
 from core.market_data import get_token_for_symbol
-from core.market_event_graph_live_ohlc_buffer import shadow_ohlc_buffer
+from core.market_event_graph_live_ohlc_buffer import (
+    get_live_source_shadow_completed_bars,
+    shadow_ohlc_buffer,
+)
 from core.market_event_graph_live_source import (
     LiveCapturedMetadataExporter,
     build_live_captured_metadata_row,
@@ -567,7 +570,7 @@ class LiveSourceRuntimeBridge:
         )
 
     def _completed_bar_for(self, symbol: str, *, cycle_cutoff: datetime) -> dict[str, Any] | None:
-        bars = shadow_ohlc_buffer.get_completed_bars(symbol, as_of=cycle_cutoff)
+        bars = get_live_source_shadow_completed_bars(symbol, as_of=cycle_cutoff)
         if not bars:
             return None
         latest = dict(bars[-1])

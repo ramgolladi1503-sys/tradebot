@@ -50,6 +50,7 @@ class ControlledRuntimeHarness:
         monkeypatch.setattr(producer, "_build_advisory_latest_payload", lambda limit=200: {"rows": [], "row_count": 0, "source_path": "", "notes": []})
         monkeypatch.setattr(producer, "read_market_snapshot", lambda _: self.market_snapshot)
         monkeypatch.setattr(producer, "now_ist", lambda: datetime(2026, 9, 5, 15, 14, tzinfo=timezone.utc))
+        monkeypatch.setattr(producer.time, "time", lambda: datetime(2026, 9, 5, 15, 14, tzinfo=timezone.utc).timestamp())
         monkeypatch.setattr(producer, "MARKET_SNAPSHOT_PATH", self.runtime_root / "market.json")
         monkeypatch.setattr(producer, "ADVISORY_LATEST_PATH", self.runtime_root / "advisory.json")
         monkeypatch.setattr(producer, "FEED_RUNTIME_LATEST_PATH", self.logs / "feed_runtime_latest.json")
@@ -73,9 +74,14 @@ class ControlledRuntimeHarness:
 
     def start_preopen(self):
         self.market_snapshot = build_market_snapshot(
-            generated_at="2026-09-05T10:01:00+05:30",
+            generated_at="2026-09-05T15:14:00+00:00",
             market_open=True,
-            symbols_payload={"NIFTY": build_symbol_market_snapshot(spot=25000.0, ltp=25001.0)},
+            symbols_payload={"NIFTY": build_symbol_market_snapshot(
+                spot=25000.0, ltp=25001.0,
+                feed_health={"status": "HEALTHY", "underlying_quote_age_sec": 0.5},
+                quote_truth={"symbol": "NIFTY", "instrument_token": 1,
+                             "is_fresh": True, "is_executable_quote": False},
+            )},
             warnings=[], compute_ms=1.0, loop_id=self.session_id,
         )
         (self.logs / "feed_runtime_latest.json").write_text(json.dumps({

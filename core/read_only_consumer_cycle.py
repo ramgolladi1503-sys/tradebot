@@ -67,6 +67,19 @@ def _risk_halt_evidence() -> dict[str, Any]:
     }
 
 
+def _closed_cas_authority() -> dict[str, bool]:
+    """Make non-authorizing status explicit on CAS readiness receipts."""
+    return {
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+        "paper_authorized": False,
+        "live_authorized": False,
+        "append": False,
+    }
+
+
 def run_consumer_cycle(
     *, runtime_outputs: Mapping[str, Any], output_root: str | Path,
     session_id: str, source_sha: str, cycle_context: Mapping[str, Any] | None = None,
@@ -486,9 +499,12 @@ def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
             "source_sha": source_sha, "cycle_id": "", "readiness_state": "PENDING",
             "cas_short_horizon_inputs_present": False, "cas_invoked": False,
             "execution_status": "advisory_only", "broker_write_authority": False,
-            "order_authority": False, **halt,
+            "order_authority": False, **_closed_cas_authority(), **halt,
         })
-        return _state("PENDING", reason="short_horizon_inputs_missing", freeze_boundary=boundary.isoformat())
+        return _state(
+            "PENDING", reason="short_horizon_inputs_missing",
+            freeze_boundary=boundary.isoformat(), **_closed_cas_authority(),
+        )
     try:
         evaluation_ledger = None
         evaluation_claim = None
@@ -534,11 +550,13 @@ def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
                     "evaluation_identity_sha256": evaluation_identity,
                     "execution_status": "advisory_only",
                     "broker_write_authority": False, "order_authority": False,
+                    **_closed_cas_authority(),
                     **_risk_halt_evidence(),
                 })
                 return _state("PENDING", reason=reason,
                     evaluation_identity_sha256=evaluation_identity,
-                    duplicate_receipt=(evaluation_claim.get("receipt") or {}).get("receipt_sha256"))
+                    duplicate_receipt=(evaluation_claim.get("receipt") or {}).get("receipt_sha256"),
+                    **_closed_cas_authority())
         decision = evaluate(session_id=session_id, symbol=str(raw["symbol"]),
                             morning_return=float(raw["morning_return"]),
                             observation_timestamp=datetime.fromisoformat(str(raw["observation_timestamp"])),
@@ -556,9 +574,10 @@ def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
             "readiness_state": "BLOCKED" if halt["risk_halt"] is True else "PENDING",
             "cas_short_horizon_inputs_present": True, "cas_invoked": False,
             "cas_rejection_reason": str(exc), "execution_status": "advisory_only",
-            "broker_write_authority": False, "order_authority": False, **halt,
+            "broker_write_authority": False, "order_authority": False,
+            **_closed_cas_authority(), **halt,
         })
-        return _state("PENDING", reason=str(exc))
+        return _state("PENDING", reason=str(exc), **_closed_cas_authority())
     if evaluation_ledger is not None and evaluation_claim is not None:
         try:
             completed = evaluation_ledger.complete(
@@ -568,18 +587,26 @@ def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
                 source_sha=source_sha, source_event_sha256s=event_hashes,
                 decision=decision, completed_epoch=now.timestamp())
         except (OSError, TypeError, ValueError, TimeoutError) as exc:
-            return _state("PENDING", reason=f"CAS_EVALUATION_RECEIPT_WRITE_FAILED:{type(exc).__name__}")
+            return _state(
+                "PENDING",
+                reason=f"CAS_EVALUATION_RECEIPT_WRITE_FAILED:{type(exc).__name__}",
+                **_closed_cas_authority(),
+            )
         if completed.get("status") != "COMPLETED":
             evaluation_ledger.release_claim(evaluation_identity_sha256=str(evaluation_identity),
                 run_id=session_id, claim_generation=int(evaluation_claim["claim_generation"]))
-            return _state("PENDING", reason=str(completed.get("reason") or "CAS_EVALUATION_RECEIPT_BLOCKED"))
+            return _state(
+                "PENDING",
+                reason=str(completed.get("reason") or "CAS_EVALUATION_RECEIPT_BLOCKED"),
+                **_closed_cas_authority(),
+            )
     destination = output_root / "cas_v2_artifact.json"
     payload = {"schema_version": 1, "cas_spec_id": STRATEGY_ID, "session_id": session_id,
                "source_sha": source_sha, "decision": decision,
                "read_only": True, "execution_status": "advisory_only",
                "broker_write_authority": False, "order_authority": False,
-               "paper_authorized": False, "live_execution_authorized": False,
-               "broker_order_calls": 0}
+               "live_execution_authorized": False, "broker_order_calls": 0,
+               **_closed_cas_authority()}
     decision = payload["decision"]
     halt = _risk_halt_evidence()
     _write_bounded_json(output_root / "cas_readiness_latest.json", {
@@ -590,7 +617,8 @@ def _evaluate_cas(*, runtime_outputs: Mapping[str, Any], output_root: Path,
         "primitive_0915_price": raw.get("signal_input_09_15"), "primitive_1000_price": raw.get("signal_input_10_00"),
         "cas_short_horizon_inputs_present": True, "cas_invoked": True,
         "execution_status": "advisory_only", "broker_write_authority": False,
-        "order_authority": False, **halt,
+        "order_authority": False, **_closed_cas_authority(), **halt,
     })
     _write_bounded_json(destination, payload)
-    return _state("PASS", freeze_boundary=boundary.isoformat(), decision=payload["decision"])
+    return _state("PASS", freeze_boundary=boundary.isoformat(),
+                  decision=payload["decision"], **_closed_cas_authority())

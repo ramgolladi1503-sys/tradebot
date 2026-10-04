@@ -252,6 +252,8 @@ def test_get_ltp_index_uses_exchange_qualified_mapping(monkeypatch, tmp_path):
 
     price = md.get_ltp("NIFTY")
     assert price == 25000.0
+    assert md._DATA_CACHE["NIFTY"].get("ltp_source") == "untimestamped_live"
+    assert md._DATA_CACHE["NIFTY"].get("ltp_ts_epoch") is None
     assert stub.calls == [["NSE:NIFTY 50"]]
     req_log = Path(md.cfg.LOGS_ROOT) / "index_quote_requests.jsonl"
     assert req_log.exists()
@@ -300,6 +302,228 @@ def test_update_index_quote_snapshot_latest_ltp_used(monkeypatch):
     assert isinstance(first_ts, float)
     assert isinstance(second_ts, float)
     assert second_ts > first_ts
+
+
+def test_untimestamped_index_quote_does_not_become_fresh_live_ltp(monkeypatch):
+    monkeypatch.setattr(md.cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "FEED_USE_SUBPROCESS", False, raising=False)
+    md._DATA_CACHE.clear()
+    md.update_index_quote_snapshot(
+        symbol="NIFTY", bid=24999.0, ask=25001.0, ltp=25000.0,
+        ts_epoch=None, source="ws",
+    )
+    cache = md._DATA_CACHE["NIFTY"]
+    assert cache.get("ltp_source") == "untimestamped_live"
+    assert cache.get("ltp_ts_epoch") is None
+    assert md.get_index_quote_snapshot("NIFTY")["ts_epoch"] is None
+
+
+def test_quote_epoch_missing_remains_missing():
+    assert md._extract_quote_epoch(None, fallback_epoch=1234.0) is None
+    assert md._extract_quote_epoch("not-a-time", fallback_epoch=1234.0) is None
+    assert md._extract_quote_epoch(float("nan")) is None
+    assert md._extract_quote_epoch(float("inf")) is None
+
+
+def test_rest_book_timestamp_cannot_replace_ltp_event_timestamp():
+    event_epoch = 1790832600.0
+    later_book_epoch = event_epoch + 60.0
+    result = md._prefer_index_quote_ltp(
+        25000.0,
+        "live",
+        event_epoch,
+        {
+            "last_price": 25010.0,
+            "last_price_ts_epoch": event_epoch,
+            "ts_epoch": later_book_epoch,
+            "source": "rest_quote",
+        },
+    )
+    assert result == (25010.0, "live", event_epoch)
+
+    missing_ltt = md._prefer_index_quote_ltp(
+        25000.0,
+        "live",
+        event_epoch,
+        {
+            "last_price": 25010.0,
+            "last_price_ts_epoch": None,
+            "ts_epoch": later_book_epoch,
+            "source": "rest_quote",
+        },
+    )
+    assert missing_ltt == (25000.0, "live", event_epoch)
+
+
+def test_fetch_rest_depth_does_not_refresh_stale_ltp_with_book_time(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    md._DATA_CACHE.clear()
+    fixed_now = md.now_ist().replace(hour=10, minute=0, second=0, microsecond=0)
+    fixed_epoch = fixed_now.timestamp()
+    stale_ltp_epoch = fixed_epoch - 60.0
+    observed_sanity = {}
+
+    monkeypatch.setattr(md.cfg, "SYMBOLS", ["NIFTY"], raising=False)
+    monkeypatch.setattr(md.cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(md.cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
+    monkeypatch.setattr(md.cfg, "INDEX_REQUIRE_DEPTH_LIVE", True, raising=False)
+    monkeypatch.setattr(md, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
+    monkeypatch.setattr(md, "_NEWS_CAL", _DummyNewsCal(), raising=False)
+    monkeypatch.setattr(md, "_NEWS_TEXT", _DummyNewsText(), raising=False)
+    monkeypatch.setattr(md, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(md, "fetch_option_chain", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(md, "now_utc_epoch", lambda: fixed_epoch)
+    monkeypatch.setattr(md, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(md, "is_open", lambda now_dt=None, segment="NSE_FNO": True)
+
+    def _fake_get_ltp(sym: str):
+        cache = md._DATA_CACHE.setdefault(sym, {})
+        cache["ltp_source"] = "live"
+        cache["ltp_ts_epoch"] = stale_ltp_epoch
+        return 25000.0
+
+    def _rest_depth_with_unstamped_ltp(symbol, force=False):
+        md.update_index_quote_snapshot(
+            symbol=symbol,
+            bid=25009.0,
+            ask=25011.0,
+            mid=25010.0,
+            ts_epoch=fixed_epoch,
+            source="rest_quote",
+            ltp=25010.0,
+            last_price_ts_epoch=None,
+        )
+        return True
+
+    def _capture_sanity(**kwargs):
+        observed_sanity.update(kwargs)
+        return {"ok": False, "reasons": ["LTP_STALE"]}
+
+    monkeypatch.setattr(md, "get_ltp", _fake_get_ltp)
+    monkeypatch.setattr(md, "_refresh_index_quote_from_rest", _rest_depth_with_unstamped_ltp)
+    monkeypatch.setattr(md, "check_market_data_time_sanity", _capture_sanity)
+
+    md.fetch_live_market_data()
+
+    assert observed_sanity["ltp_ts_epoch"] == stale_ltp_epoch
+    assert observed_sanity["now_epoch"] == fixed_epoch
+
+
+def test_nan_ltp_timestamp_cannot_enable_synthetic_quote_or_live_cache():
+    md._DATA_CACHE.clear()
+    md.update_index_quote_snapshot(
+        symbol="NIFTY", ltp=25000.0, ts_epoch=float("nan"), source="ws",
+    )
+    assert md._DATA_CACHE["NIFTY"].get("ltp_source") == "untimestamped_live"
+    assert md._DATA_CACHE["NIFTY"].get("ltp_ts_epoch") is None
+    resolved = md.resolve_index_quote(
+        symbol="NIFTY", mode="PAPER", ltp=25000.0, depth=None,
+        market_open=True, ltp_age_sec=float("nan"),
+    )
+    assert resolved["quote_ok"] is False
+    assert resolved["quote_source"] == "stale_ltp"
+    invalid_price = md.resolve_index_quote(
+        symbol="NIFTY", mode="PAPER", ltp=float("inf"), depth=None,
+        market_open=True, ltp_age_sec=0.0,
+    )
+    assert invalid_price["quote_ok"] is False
+
+
+def test_get_ltp_does_not_promote_untimestamped_websocket_price_to_live(monkeypatch):
+    md._DATA_CACHE.clear()
+    md._LAST_GOOD_LTP.clear()
+    monkeypatch.setattr(md.cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "FEED_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "KITE_USE_API", False, raising=False)
+    monkeypatch.setattr(md.cfg, "ALLOW_STALE_LTP", False, raising=False)
+    monkeypatch.setattr(md, "_refresh_index_quote_from_rest", lambda *_args, **_kwargs: False)
+    md.update_index_quote_snapshot(
+        symbol="NIFTY", bid=24999.0, ask=25001.0, mid=25000.0,
+        ts_epoch=None, source="ws", ltp=25000.0,
+    )
+    assert md.get_ltp("NIFTY") == 25000.0
+    assert md._DATA_CACHE["NIFTY"].get("ltp_source") == "untimestamped_live"
+    assert md._DATA_CACHE["NIFTY"].get("ltp_ts_epoch") is None
+
+
+def test_new_quote_book_timestamp_does_not_refresh_previous_ltp(monkeypatch):
+    md._DATA_CACHE.clear()
+    md._LAST_GOOD_LTP.clear()
+    monkeypatch.setattr(md.cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "FEED_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "KITE_USE_API", False, raising=False)
+    monkeypatch.setattr(md.cfg, "ALLOW_STALE_LTP", False, raising=False)
+    monkeypatch.setattr(md, "_refresh_index_quote_from_rest", lambda *_args, **_kwargs: False)
+    event_1100 = 1790832600.0
+    event_1101 = event_1100 + 60.0
+    md.update_index_quote_snapshot(
+        symbol="NIFTY", bid=24999.0, ask=25001.0, mid=25000.0,
+        ltp=25000.0, ts_epoch=event_1100, source="ws",
+    )
+    md.update_index_quote_snapshot(
+        symbol="NIFTY", bid=24998.0, ask=25000.0, mid=24999.0,
+        ltp=None, ts_epoch=event_1101, source="rest_quote",
+    )
+
+    snapshot = md.get_index_quote_snapshot("NIFTY")
+    assert snapshot["ts_epoch"] == event_1101
+    assert snapshot["last_price"] == 25000.0
+    assert snapshot["last_price_ts_epoch"] == event_1100
+
+    price = md.get_ltp("NIFTY")
+    assert price == 25000.0
+    assert md._DATA_CACHE["NIFTY"]["ltp_source"] == "live"
+    assert md._DATA_CACHE["NIFTY"]["ltp_ts_epoch"] == event_1100
+
+    from datetime import datetime, timezone
+    from core.ohlc_buffer import OhlcBuffer
+    result = md._ingest_trusted_ltp_tick(
+        buffer=OhlcBuffer(), symbol="STALE_CACHED_LTP", price=price, volume=None,
+        ltp_source=md._DATA_CACHE["NIFTY"]["ltp_source"],
+        ltp_ts_epoch=md._DATA_CACHE["NIFTY"]["ltp_ts_epoch"],
+        cycle_cutoff=datetime.fromtimestamp(event_1101, tz=timezone.utc),
+        market_open=True, max_ltp_age_sec=8.0, provenance={},
+    )
+    assert result["accepted"] is False
+    assert result["status"] == "LTP_SOURCE_TIMESTAMP_STALE"
+
+
+def test_new_ltp_without_timestamp_cannot_inherit_previous_ltp_timestamp(monkeypatch):
+    md._DATA_CACHE.clear()
+    md._LAST_GOOD_LTP.clear()
+    monkeypatch.setattr(md.cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "FEED_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "KITE_USE_API", False, raising=False)
+    monkeypatch.setattr(md.cfg, "ALLOW_STALE_LTP", False, raising=False)
+    monkeypatch.setattr(md, "_refresh_index_quote_from_rest", lambda *_args, **_kwargs: False)
+    prior_epoch = 1790832600.0
+    md.update_index_quote_snapshot(
+        symbol="NIFTY", bid=24999.0, ask=25001.0, mid=25000.0,
+        ltp=25000.0, ts_epoch=prior_epoch, source="ws",
+    )
+    md.update_index_quote_snapshot(
+        symbol="NIFTY", bid=24999.0, ask=25001.0, mid=25000.0,
+        ltp=25010.0, ts_epoch=None, source="ws",
+    )
+
+    snapshot = md.get_index_quote_snapshot("NIFTY")
+    assert snapshot["last_price"] == 25010.0
+    assert snapshot["last_price_ts_epoch"] is None
+    price = md.get_ltp("NIFTY")
+    assert price == 25010.0
+    assert md._DATA_CACHE["NIFTY"]["ltp_source"] == "untimestamped_live"
+    assert md._DATA_CACHE["NIFTY"]["ltp_ts_epoch"] is None
+    from datetime import datetime, timezone
+    from core.ohlc_buffer import OhlcBuffer
+    result = md._ingest_trusted_ltp_tick(
+        buffer=OhlcBuffer(), symbol="UNSTAMPED_NEW_LTP", price=price, volume=None,
+        ltp_source=md._DATA_CACHE["NIFTY"]["ltp_source"],
+        ltp_ts_epoch=md._DATA_CACHE["NIFTY"]["ltp_ts_epoch"],
+        cycle_cutoff=datetime.fromtimestamp(prior_epoch + 1.0, tz=timezone.utc),
+        market_open=True, max_ltp_age_sec=8.0, provenance={},
+    )
+    assert result["accepted"] is False
+    assert result["status"] == "UNTRUSTED_LTP_SOURCE"
 
 
 def test_index_bidask_missing_log_rate_limited(monkeypatch, tmp_path):
@@ -354,6 +578,32 @@ def test_refresh_index_quote_from_rest_populates_bid_ask(monkeypatch):
     assert snap["ask"] == 25000.6
     assert snap["last_price"] == 25000.25
     assert snap["ts_epoch"] == 1710000000.0
+
+
+def test_refresh_index_quote_from_rest_rejects_missing_provider_event_time(monkeypatch):
+    md._DATA_CACHE.clear()
+    md._INDEX_REST_QUOTE_REFRESH_TS.clear()
+    monkeypatch.setattr(md.cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "FEED_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "KITE_USE_API", True, raising=False)
+
+    class _StubKite:
+        def quote(self, keys):
+            return {
+                keys[0]: {
+                    "last_price": 25000.0,
+                    "depth": {
+                        "buy": [{"price": 24999.0}],
+                        "sell": [{"price": 25001.0}],
+                    },
+                }
+            }
+
+    monkeypatch.setattr(md.kite_client, "ensure", lambda: None)
+    monkeypatch.setattr(md.kite_client, "kite", _StubKite())
+    assert md._refresh_index_quote_from_rest("NIFTY", force=True) is False
+    assert md.get_index_quote_snapshot("NIFTY") == {}
+    assert md._DATA_CACHE.get("NIFTY", {}).get("ltp_ts_epoch") is None
 
 
 def test_index_depth_missing_synthesizes_quote(monkeypatch, tmp_path):

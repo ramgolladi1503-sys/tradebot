@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import time
+from dataclasses import replace
 
 from core.feed_health_truth import FeedHealthTruthDecision
+from core.feed_health_truth import classify_feed_health_truth
 from core.feed_hold_gate import FEED_HOLD_BLOCKER
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
@@ -10,8 +13,10 @@ from core.runtime_cycle_context import RuntimeCycleContext, StageTiming
 from core.ranking_orchestrator import (
     FEED_HOLD_PIPELINE_STAGE_ORDER,
     PIPELINE_STAGE_ORDER,
+    _homogeneous_scoring_symbol,
     build_ranked_opportunity_report,
 )
+from core.runtime_snapshot_stages import build_feed_health_truth_latest_payload
 
 
 def _regime(primary="TREND_UP", **scores):
@@ -261,6 +266,138 @@ def test_ranked_pipeline_uses_cycle_context_feed_truth_and_exposes_stage_timings
     assert report.metadata["stage_timings"][0]["stage"] == "feed_health_truth"
     assert report.metadata["stage_timings"][0]["elapsed_ms"] == 1.25
     assert report.ranked_candidate_count == 1
+
+
+def test_ranked_pipeline_scopes_explicit_cycle_health_to_report_symbol():
+    observed_epoch = time.time()
+    session_identity = {
+        "provider": "kite",
+        "token_domain": "kite_instrument_token",
+        "feed_session_id": "session-test",
+        "feed_epoch": 9,
+        "reconnect_generation": 3,
+        "observed_epoch": observed_epoch,
+    }
+    runtime_feed = {
+            "ts_epoch": observed_epoch,
+            "feed_session_identity": session_identity,
+            "underlying_feed_identity_by_symbol": {
+                symbol: {
+                    "status": "HEALTHY",
+                    "symbol": symbol,
+                    "identity_domain": "INDEX_SPOT",
+                    "instrument_token": token,
+                    "feed_session_id": "session-test",
+                    "feed_epoch": 9,
+                    "reconnect_generation": 3,
+                    "active_subscription": True,
+                    "subscription_succeeded": True,
+                    "receipt_epoch": observed_epoch - 0.3,
+                    "age_sec": 0.3,
+                    "max_age_sec": 2.5,
+                    "generated_epoch": observed_epoch,
+                }
+                for symbol, token in (("NIFTY", 256265), ("BANKNIFTY", 260105))
+            },
+            "feed_ok": False,
+            "feed_ok_scope": "symbol_aggregate",
+            "global_feed_blocked": False,
+            "effective_ws_connected": True,
+            "runtime_state": "RUNNING",
+            "state_machine": {"state": "LIVE"},
+            "last_tick_age_sec": 0.4,
+            "last_depth_age_sec": 1.0,
+            "option_feed_block_reason_by_symbol": {
+                "NIFTY": "OK",
+                "BANKNIFTY": "SUBSCRIPTION_FAILED",
+            },
+            "option_last_tick_age_by_symbol": {"NIFTY": 0.3, "BANKNIFTY": 0.2},
+        }
+    _feed_truth_payload, cycle_truth = build_feed_health_truth_latest_payload(runtime_feed)
+    assert cycle_truth.feed_ok is False
+    cycle_context = RuntimeCycleContext(cycle_id="mixed-cycle", feed_truth=cycle_truth.to_payload())
+
+    report = build_ranked_opportunity_report(
+        _context(symbol="NIFTY"),
+        _regime(primary="TREND_UP", TREND_UP=0.8),
+        candidate_generators=[_generator(_candidate("clean", direction="BUY_CALL"))],
+        include_strategy_id_in_normalization_key=True,
+        cycle_context=cycle_context,
+    )
+
+    assert report.ranked_candidate_count == 1
+    assert report.executable_rank_count == 1
+    assert FEED_HOLD_BLOCKER not in report.blockers
+    assert report.read_only is True
+    assert report.is_order_action is False
+    assert report.append is False
+
+
+def test_mixed_symbol_candidate_pool_cannot_use_context_symbol_health_scope():
+    observed_epoch = time.time()
+    session_identity = {
+        "provider": "kite", "token_domain": "kite_instrument_token",
+        "feed_session_id": "session-test", "feed_epoch": 9,
+        "reconnect_generation": 3, "observed_epoch": observed_epoch,
+    }
+    runtime_feed = {
+        "ts_epoch": observed_epoch,
+        "feed_session_identity": session_identity,
+        "underlying_feed_identity_by_symbol": {
+            symbol: {
+                "status": "HEALTHY", "symbol": symbol, "identity_domain": "INDEX_SPOT",
+                "instrument_token": token, "feed_session_id": "session-test",
+                "feed_epoch": 9, "reconnect_generation": 3,
+                "active_subscription": True, "subscription_succeeded": True,
+                "receipt_epoch": observed_epoch - 0.3, "age_sec": 0.3,
+                "max_age_sec": 2.5, "generated_epoch": observed_epoch,
+            }
+            for symbol, token in (("NIFTY", 256265), ("BANKNIFTY", 260105))
+        },
+        "feed_ok": False, "feed_ok_scope": "symbol_aggregate", "global_feed_blocked": False,
+        "effective_ws_connected": True, "runtime_state": "RUNNING",
+        "state_machine": {"state": "LIVE"}, "last_tick_age_sec": 0.4,
+        "last_depth_age_sec": 1.0,
+        "option_feed_block_reason_by_symbol": {"NIFTY": "OK", "BANKNIFTY": "SUBSCRIPTION_FAILED"},
+        "option_last_tick_age_by_symbol": {"NIFTY": 0.3, "BANKNIFTY": 0.2},
+    }
+    _, cycle_truth = build_feed_health_truth_latest_payload(runtime_feed)
+    banknifty_candidate = replace(_candidate("banknifty", direction="BUY_CALL"), symbol="BANKNIFTY")
+
+    report = build_ranked_opportunity_report(
+        _context(symbol="NIFTY"),
+        _regime(primary="TREND_UP", TREND_UP=0.8),
+        candidate_generators=[_generator(_candidate("nifty"), banknifty_candidate)],
+        include_strategy_id_in_normalization_key=True,
+        cycle_context=RuntimeCycleContext(cycle_id="mixed-symbol", feed_truth=cycle_truth.to_payload()),
+    )
+
+    assert report.candidate_pool.symbol == "NIFTY"
+    assert {score.symbol for score in report.scoring.scores} == {"NIFTY", "BANKNIFTY"}
+    assert report.ranked_candidate_count == 0
+    assert FEED_HOLD_BLOCKER in report.blockers
+    assert report.ranking.metadata["feed_hold_scope"] == "global_or_unknown"
+
+
+def test_homogeneous_scope_requires_nonempty_canonical_exact_symbol_identities():
+    class Score:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+    class Scores:
+        def __init__(self, *symbols):
+            self.scores = tuple(Score(symbol) for symbol in symbols)
+
+    assert _homogeneous_scoring_symbol(Scores("NIFTY", "NIFTY"), "NIFTY") == "NIFTY"
+    assert _homogeneous_scoring_symbol(Scores(), "NIFTY") is None
+    assert _homogeneous_scoring_symbol(Scores(""), "NIFTY") is None
+    assert _homogeneous_scoring_symbol(Scores("   "), "NIFTY") is None
+    assert _homogeneous_scoring_symbol(Scores(None), "NIFTY") is None
+    assert _homogeneous_scoring_symbol(Scores(["NIFTY"]), "NIFTY") is None
+    assert _homogeneous_scoring_symbol(Scores(" nifty"), "NIFTY") is None
+    assert _homogeneous_scoring_symbol(Scores("NIFTY "), "NIFTY") is None
+    assert _homogeneous_scoring_symbol(Scores("BANKNIFTY"), "NIFTY") is None
+    assert _homogeneous_scoring_symbol(Scores("NIFTY"), " nifty ") is None
 
 
 def test_ranked_pipeline_global_no_trade_suppresses_directional_candidates():

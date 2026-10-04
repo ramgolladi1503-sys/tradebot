@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 import pytest
 
@@ -31,11 +32,43 @@ from core.observability.production_bridge import (
     get_production_candidate_ledger,
     get_production_strategy_tracker,
 )
+import core.orchestrator as _orchestrator
 from core.orchestrator import _evaluate_c1_c2_for_symbol
 from core.runtime_candidate_starvation_trace import build_candidate_starvation_trace_payload
 
 
-def test_c1_qualifies_and_decouples_from_regime():
+def _install_snapshot_source(monkeypatch, market_data):
+    market_data.setdefault("timestamp", datetime.fromisoformat("2026-09-11 11:00:00+05:30").timestamp())
+    market_data.setdefault("ltp_source", "live")
+    market_data.setdefault("time_sanity", {"ok": True, "ltp_ts_epoch": market_data["timestamp"]})
+    market_data["time_sanity"].setdefault("ltp_ts_epoch", market_data["timestamp"])
+    class SnapshotSource:
+        def get_persisted_market_memory(self, symbol, *, as_of_timestamp, freshness_watermark, trace_id):
+            return MarketMemorySnapshot(
+                as_of_timestamp=as_of_timestamp,
+                symbol=symbol,
+                current_price=float(market_data["spot"]),
+                session_open=float(market_data.get("session_open", 23400.0)),
+                session_high=float(market_data["spot"]),
+                session_low=float(market_data.get("session_open", 23400.0)),
+                session_close=float(market_data["spot"]),
+                bar_index=int(market_data["ohlc_bars_count"]) - 1,
+                rolling_1m_bars_count=int(market_data["ohlc_bars_count"]),
+                derived_5m_bars_count=int(market_data["ohlc_bars_count"]) // 5,
+                derived_15m_bars_count=int(market_data["ohlc_bars_count"]) // 15,
+                rolling_15m_return_bps=float(market_data.get("rolling_15m_return_bps", 10.0)),
+                distance_from_session_open_bps=float(market_data["distance_from_session_open_bps"]),
+                rolling_15m_range_bps=10.0,
+                realized_vol_15m=5.0,
+                freshness_watermark=freshness_watermark,
+                persistence_watermark=1.0,
+                trace_id=trace_id,
+            )
+
+    monkeypatch.setattr(_orchestrator, "_global_market_session_store", SnapshotSource())
+
+
+def test_c1_qualifies_and_decouples_from_regime(monkeypatch):
     """Test 1: When C1 impulse > 50 bps, helper qualifies C1 regardless of regime."""
     market_data = {
         "symbol": "NIFTY",
@@ -46,7 +79,11 @@ def test_c1_qualifies_and_decouples_from_regime():
         "regime": "REGIME_UNSTABLE",
         "unstable_reasons": ["ENTROPY_HIGH", "MARGINAL_PROBABILITY"],
         "is_stale": False,
+        "valid": True,
+        "time_sanity": {"ok": True},
+        "ltp_source": "live",
     }
+    _install_snapshot_source(monkeypatch, market_data)
     t_id = generate_trace_id(seed="c1_test_decouple")
     eval_results, qualified = _evaluate_c1_c2_for_symbol(
         market_data=market_data,
@@ -66,7 +103,7 @@ def test_c1_qualifies_and_decouples_from_regime():
     assert qualified[0].broker_write_authority is False
 
 
-def test_c1_below_threshold_produces_legitimate_no_setup():
+def test_c1_below_threshold_produces_legitimate_no_setup(monkeypatch):
     """Test 2: When C1 impulse < 50 bps, candidate count is 0 and classified as NO_MARKET_SETUP."""
     market_data = {
         "symbol": "NIFTY",
@@ -77,7 +114,11 @@ def test_c1_below_threshold_produces_legitimate_no_setup():
         "regime": "REGIME_UNSTABLE",
         "unstable_reasons": ["ENTROPY_HIGH"],
         "is_stale": False,
+        "valid": True,
+        "time_sanity": {"ok": True},
+        "ltp_source": "live",
     }
+    _install_snapshot_source(monkeypatch, market_data)
     t_id = generate_trace_id(seed="c1_below_thresh")
     eval_results, qualified = _evaluate_c1_c2_for_symbol(
         market_data=market_data,
@@ -94,7 +135,7 @@ def test_c1_below_threshold_produces_legitimate_no_setup():
     assert c1_res.attribution.evaluation_status == "EVALUATED_NO_SIGNAL"
 
 
-def test_c2_qualifies_at_1512_under_regime_unstable():
+def test_c2_qualifies_at_1512_under_regime_unstable(monkeypatch):
     """Test 3: At 15:12 IST, C2 with trend >= +50 bps qualifies even if regime is UNSTABLE."""
     market_data = {
         "symbol": "NIFTY",
@@ -106,8 +147,14 @@ def test_c2_qualifies_at_1512_under_regime_unstable():
         "regime": "REGIME_UNSTABLE",
         "unstable_reasons": ["ENTROPY_HIGH"],
         "is_stale": False,
+        "valid": True,
+        "time_sanity": {"ok": True},
+        "ltp_source": "live",
     }
+    _install_snapshot_source(monkeypatch, market_data)
     t_id = generate_trace_id(seed="c2_at_1512")
+    market_data["timestamp"] = datetime.fromisoformat("2026-09-11 15:12:00+05:30").timestamp()
+    market_data["time_sanity"]["ltp_ts_epoch"] = market_data["timestamp"]
     eval_results, qualified = _evaluate_c1_c2_for_symbol(
         market_data=market_data,
         sym="NIFTY",
@@ -121,6 +168,46 @@ def test_c2_qualifies_at_1512_under_regime_unstable():
     c2_cand = next(c for c in qualified if c.candidate_id == "ENTRY_E3_OVERNIGHT_TREND_1512_SIGNAL_1514_ENTRY_OPEN_EXIT")
     assert c2_cand.trace_id == t_id
     assert c2_cand.is_order_action is False
+
+
+def test_missing_durable_memory_does_not_synthesize_a_candidate(monkeypatch):
+    class EmptySource:
+        def get_persisted_market_memory(self, *args, **kwargs):
+            raise ValueError("memory_store_empty")
+
+    monkeypatch.setattr(_orchestrator, "_global_market_session_store", EmptySource())
+    results, candidates = _evaluate_c1_c2_for_symbol(
+        market_data={
+            "symbol": "NIFTY", "spot": 23500.0,
+            "rolling_15m_return_bps": 90.0,
+            "distance_from_session_open_bps": 90.0,
+            "ohlc_bars_count": 300,
+            "valid": True, "time_sanity": {"ok": True}, "ltp_source": "live",
+        },
+        sym="NIFTY", trace_id="no-memory-test", ts_str="2026-09-11 11:00:00+05:30",
+    )
+    assert results == []
+    assert candidates == []
+
+
+def test_persisted_history_does_not_override_stale_current_feed(monkeypatch):
+    market_data = {
+        "symbol": "NIFTY", "spot": 23500.0,
+        "rolling_15m_return_bps": 90.0,
+        "distance_from_session_open_bps": 90.0,
+        "ohlc_bars_count": 300,
+        "valid": False, "time_sanity": {"ok": False},
+        "ltp_source": "live",
+    }
+    _install_snapshot_source(monkeypatch, market_data)
+    results, candidates = _evaluate_c1_c2_for_symbol(
+        market_data=market_data,
+        sym="NIFTY", trace_id="stale-feed-test", ts_str="2026-09-11 11:00:00+05:30",
+    )
+    c1 = next(result for result in results if result.strategy_id == "C1_INTRADAY_15M_IMPULSE")
+    assert c1.reason_code == C1ReasonCode.C1_STALE_MEMORY.value
+    assert not c1.qualified
+    assert candidates == []
 
 
 def test_starvation_payload_reflects_raw_candidates_when_gate_blocks():

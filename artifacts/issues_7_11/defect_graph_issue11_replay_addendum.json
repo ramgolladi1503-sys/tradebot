@@ -1,0 +1,524 @@
+{
+  "schema_version": 1,
+  "repository_sha": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+  "campaign": "Issues 7\u201311",
+  "supplements": "artifacts/issues_7_11/defect_graph.json",
+  "nodes": [
+    {
+      "id": "I11_CAPTURE_20261001",
+      "issue": 11,
+      "type": "EVIDENCE",
+      "status": "DATA_VERIFIED",
+      "ref": "/Volumes/TradeBotData/live market capture/2026-10-01/upstox_full_ticks_20261001_stitched.parquet; sha256=c09998bf1807d4d8bc28bd3de5d4d56748269b30eabc5653ad4e8b2b8c4c5d1c; schema has no receipt, websocket, subscription-transition, or source-event identity fields"
+    },
+    {
+      "id": "I11_REPLAY_SOURCE",
+      "issue": 11,
+      "type": "SOURCE_FILE",
+      "status": "REPOSITORY_VERIFIED",
+      "ref": "core/replay/governed_market_replay.py::UpstoxTickReplaySource.stream_events and ParquetBarReplaySource.stream_events"
+    },
+    {
+      "id": "I11_REPLAY_FALSE_HEALTH",
+      "issue": 11,
+      "type": "SYMPTOM",
+      "status": "REPAIRED_OFFLINE",
+      "ref": "Parquet sources previously emitted feed_ok=true, websocket_ok=true, session_health=NORMAL without captured authority; bar source also emitted option_last_tick_age_sec=0.05"
+    },
+    {
+      "id": "I11_REPLAY_ROOT",
+      "issue": 11,
+      "type": "ROOT_CAUSE",
+      "status": "REPOSITORY_VERIFIED",
+      "ref": "Historical parquet source hard-coded healthy transport/session metadata instead of preserving missing health authority as UNKNOWN"
+    },
+    {
+      "id": "I11_REPLAY_PATCH",
+      "issue": 11,
+      "type": "PATCH",
+      "status": "IMPLEMENTED",
+      "ref": "Parquet-backed events now use unknown feed/websocket/session health; OHLCV bars have no fabricated option tick age; hand-constructed ReplayEvent defaults unchanged"
+    },
+    {
+      "id": "I11_REPLAY_NEGATIVE_TEST",
+      "issue": 11,
+      "type": "REGRESSION_TEST",
+      "status": "PASS",
+      "ref": "tests/replay/test_replay_fidelity_hardening.py: absent receipt, recorded receipt without transport evidence, malformed receipt, and bar-source freshness assertions"
+    },
+    {
+      "id": "I11_REPLAY_ATTACK",
+      "issue": 11,
+      "type": "ATTACK",
+      "status": "DETECTED",
+      "ref": "Three assertions failed before patch: absent/recorded receipt both inherited healthy flags; OHLCV bars carried a fabricated 50 ms option age"
+    },
+    {
+      "id": "I11_REPLAY_VERIFIER",
+      "issue": 11,
+      "type": "VERIFIER",
+      "status": "PASS_OFFLINE",
+      "ref": "pytest -q tests/replay: 14 passed, 1 skipped; post-fix 100-event Oct. 1 replay had unknown health, zero observations without T-1, zero causality violations, and closed order/broker authority"
+    },
+    {
+      "id": "I11_CANDIDATE_WIDE_HOLD",
+      "issue": 11,
+      "type": "SYMPTOM",
+      "status": "PARTIALLY_REPAIRED_OFFLINE",
+      "ref": "Cross-symbol aggregate hold is isolated for explicit certified symbol_aggregate truth only after exact same-cycle target underlying token/session/epoch/reconnect/subscription/receipt-age/SLA validation; dynamic same-symbol option dependency remains UNKNOWN."
+    },
+    {
+      "id": "I11_FEED_HOLD_FUNCTION",
+      "issue": 11,
+      "type": "FUNCTION_OR_CLASS",
+      "status": "REPOSITORY_VERIFIED",
+      "ref": "core/feed_hold_gate.py::apply_feed_hold_to_ranking"
+    },
+    {
+      "id": "I11_CANDIDATE_HOLD_ROOT",
+      "issue": 11,
+      "type": "ROOT_CAUSE",
+      "status": "REPOSITORY_VERIFIED",
+      "ref": "Feed hold is decided once from aggregate FeedHealthTruthDecision and zeros the entire score set without symbol/domain partitioning"
+    },
+    {
+      "id": "I11_CANDIDATE_SCOPE_EVIDENCE_GAP",
+      "issue": 11,
+      "type": "EVIDENCE",
+      "status": "PARTIALLY_REDUCED_REMAINS_UNKNOWN",
+      "ref": "Bounded underlier identity is now emitted from existing subscription lifecycle evidence, but OpportunityScoreRecord still lacks exact required option/futures contract dependency identity and full identity-health join."
+    },
+    {
+      "id": "I11_PERSISTED_FEED_TRUTH_PRODUCER",
+      "issue": 11,
+      "type": "FUNCTION_OR_CLASS",
+      "status": "REPOSITORY_VERIFIED",
+      "ref": "core/runtime_feed_truth_snapshot.py::build_feed_truth_snapshot emits source=runtime_feed_truth_snapshot_v1 and aggregate feed_fresh; generated JSON lacks the legacy feed_ok field"
+    },
+    {
+      "id": "I11_PERSISTED_FEED_TRUTH_CONSUMER",
+      "issue": 11,
+      "type": "FUNCTION_OR_CLASS",
+      "status": "REPOSITORY_VERIFIED",
+      "ref": "core/orchestrator.py::_load_cycle_feed_truth_payload loads the artifact; core.feed_hold_gate.apply_feed_hold_to_ranking calls core.feed_health_truth.classify_feed_health_truth"
+    },
+    {
+      "id": "I11_PERSISTED_STALE_FAIL_OPEN",
+      "issue": 11,
+      "type": "SYMPTOM",
+      "status": "REPRODUCED_OFFLINE",
+      "ref": "At d125143, actual producer JSON with feed_fresh=false and ws_connected=true yielded rank_count=1; missing or non-boolean feed_fresh also yielded rank_count=1"
+    },
+    {
+      "id": "I11_PERSISTED_CONTRACT_ROOT",
+      "issue": 11,
+      "type": "ROOT_CAUSE",
+      "status": "REPOSITORY_VERIFIED",
+      "ref": "Persisted freshness format was unrecognized; source-label mutation and empty/transport-only input bypassed first repairs; producer-time freshness could age after write"
+    },
+    {
+      "id": "I11_PERSISTED_FEED_HERMES_CONTRACT",
+      "issue": 11,
+      "type": "EVIDENCE",
+      "status": "CONTRACTED",
+      "ref": "docs/agent_reviews/issues_7_11_hermes_issue11_persisted_feed_truth_contract.md; stale/unknown aggregate freshness must hold ranking, existing global blockers remain, no candidate isolation"
+    },
+    {
+      "id": "I11_PERSISTED_FEED_PATCH",
+      "issue": 11,
+      "type": "PATCH",
+      "status": "IMPLEMENTED_OFFLINE",
+      "ref": "Classifier recognizes snapshot signature independent of label, validates source/components and finite nonfuture generated_epoch under FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC=3.0 default; exact finite nonnegative numeric LTP/depth/option age parsing rejects bool/string/negative/nonfinite; absent authority blocks; explicit top-level feed_ok, scoped symbol health and caller-SLA-bound LTP input remain compatible"
+    },
+    {
+      "id": "I11_PERSISTED_FEED_TEST",
+      "issue": 11,
+      "type": "REGRESSION_TEST",
+      "status": "PASS_OFFLINE",
+      "ref": "tests/test_feed_truth_snapshot_ranking_contract.py covers serialized producer output, healthy/stale inputs, malformed/missing components, unsupported/arbitrary/missing source labels, contradictory aggregate/components, empty/transport-only mapping, websocket contradiction, and global block"
+    },
+    {
+      "id": "I11_PERSISTED_FEED_MUTATION",
+      "issue": 11,
+      "type": "MUTATION",
+      "status": "KILLED",
+      "ref": "Temporarily mutated the recognized source identifier; stale and malformed freshness assertions failed (2 failed, 2 passed); restored source identifier and reran focused suites"
+    },
+    {
+      "id": "I11_PERSISTED_FEED_INDEPENDENT_VERIFIER",
+      "issue": 11,
+      "type": "VERIFIER",
+      "status": "BOUNDED_PASS_OFFLINE; BROAD_REGRESSION_PASS",
+      "ref": "Independent suite: 41 passed, 1 deselected, 1 warning. Exact-current-source broad run: 8670 passed, 9 skipped, 29 deselected, 1474 warnings; three explicit exclusions. Candidate isolation and live parity remain unknown."
+    },
+    {
+      "id": "I11_PERSISTED_FEED_VERSION_ATTACK",
+      "issue": 11,
+      "type": "ATTACK",
+      "status": "DETECTED_AND_REPAIRED",
+      "ref": "Independent review changed source to runtime_feed_truth_snapshot_v2 with feed_fresh=false; first patch ranked. Classifier now fails closed for unsupported runtime snapshot versions; dedicated regression passes"
+    },
+    {
+      "id": "I11_PERSISTED_FEED_COMPONENT_ATTACK",
+      "issue": 11,
+      "type": "ATTACK",
+      "status": "DETECTED_AND_REPAIRED",
+      "ref": "Independent review set feed_fresh=true with underlying_tick_fresh=false and option_tick_fresh=false; first patch ranked. V1 component consistency is now validated and regression passes"
+    },
+    {
+      "id": "I11_PERSISTED_FEED_LABEL_STRIP_ATTACK",
+      "issue": 11,
+      "type": "ATTACK",
+      "status": "DETECTED_AND_REPAIRED",
+      "ref": "Independent review changed source to other while feed_fresh=false; second iteration caught version family only. Snapshot signature now also detects arbitrary/missing source; regressions cover both"
+    },
+    {
+      "id": "I11_MISSING_FEED_AUTHORITY_ATTACK",
+      "issue": 11,
+      "type": "ATTACK",
+      "status": "DETECTED_AND_REPAIRED",
+      "ref": "Empty, ws_connected-only and effective_ws_connected-only mappings previously resulted in feed_ok=true; classifier now adds feed_health_authority_missing unless explicit global decision, symbol evidence, or versioned snapshot contract exists"
+    },
+    {
+      "id": "I11_PERSISTED_FEED_TIME_ATTACK",
+      "issue": 11,
+      "type": "ATTACK",
+      "status": "DETECTED_AND_REPAIRED",
+      "ref": "A valid feed_fresh=true snapshot aged after producer write. generated_epoch is now required, finite, nonfuture, and within configurable FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC (default 3.0); stale/missing/malformed/future probes are covered"
+    },
+    {
+      "id": "I11_LEGACY_LTP_SLA_COMPAT",
+      "issue": 11,
+      "type": "REGRESSION_TEST",
+      "status": "PASS_FOCUSED",
+      "ref": "Existing runtime overlay and runtime integrity inputs carry finite last_tick_age_sec and caller-supplied max_ltp_age_sec. This explicit SLA-bounded evidence remains compatible; nested hysteresis-only health does not."
+    },
+    {
+      "id": "I11_MALFORMED_AGE_ATTACK",
+      "issue": 11,
+      "type": "ATTACK",
+      "status": "PASS_FOCUSED",
+      "ref": "Boolean, negative, nonfinite and string last_tick_age_sec values no longer pass SLA-bound authority; same strict parser applies to option and depth ages"
+    },
+    {
+      "id": "I11_SYMBOL_UNDERLYING_IDENTITY_PRODUCER",
+      "issue": 11,
+      "type": "FUNCTION_OR_CLASS",
+      "status": "PATCHED_OFFLINE",
+      "ref": "core/kite_depth_ws.py::_underlying_feed_identity_by_symbol emits per-underlying token, current session/epoch/reconnect, subscription, callback receipt age and configured LTP SLA; no subscription or broker action."
+    },
+    {
+      "id": "I11_SYMBOL_SCOPE_CONSUMER",
+      "issue": 11,
+      "type": "PATCHED_OFFLINE",
+      "status": "PATCHED_OFFLINE",
+      "ref": "core/feed_hold_gate.py::_scope_certified_symbol_truth scopes only certified symbol_aggregate decisions with valid target option and exact healthy same-cycle underlying identity; all uncertain/global/persisted conditions retain aggregate hold."
+    },
+    {
+      "id": "I11_SYMBOL_SCOPE_REGRESSION",
+      "issue": 11,
+      "type": "REGRESSION_TEST",
+      "status": "PASS_OFFLINE",
+      "ref": "tests/test_pr_feed_03_feed_hold_gate.py; tests/test_feed_runtime_states.py; tests/test_edge43_feed_health_truth.py; tests/test_ranking_orchestrator.py; tests/test_feed_truth_snapshot_ranking_contract.py: 87 passed, 1 warning."
+    },
+    {
+      "id": "I11_SYMBOL_SCOPE_MUTATION",
+      "issue": 11,
+      "type": "ATTACK",
+      "status": "KILLED_OFFLINE",
+      "ref": "scripts/verify_issues_7_11_issue11_symbol_scope_mutation.py: forced-all-symbols-healthy mutant killed; source/test hashes unchanged."
+    },
+    {
+      "id": "I11_SYMBOL_SCOPE_LIMIT",
+      "issue": 11,
+      "type": "EVIDENCE",
+      "status": "UNKNOWN",
+      "ref": "No exact dynamic same-symbol option/futures dependency identity, initiating transport/auth cause, captured/live parity, or full Issue 11 acceptance established."
+    },
+    {
+      "id": "I11_MIXED_SYMBOL_POOL_ROOT",
+      "issue": 11,
+      "type": "ROOT_CAUSE",
+      "status": "REPOSITORY_VERIFIED",
+      "ref": "core/ranking_orchestrator.py passed CandidatePoolReport.symbol as feed scope although its score report includes all generator-returned candidate symbols; pool construction did not enforce homogeneous candidate symbols."
+    },
+    {
+      "id": "I11_MIXED_SYMBOL_SCOPE_REPRO",
+      "issue": 11,
+      "type": "REPRO_TEST",
+      "status": "REPRODUCED_RED_THEN_PASS",
+      "ref": "tests/test_ranking_orchestrator.py::test_mixed_symbol_candidate_pool_cannot_use_context_symbol_health_scope failed pre-fix with 2 ranks under NIFTY scope; after guard, aggregate feed hold returns zero ranks."
+    },
+    {
+      "id": "I11_MIXED_SYMBOL_SCOPE_PATCH",
+      "issue": 11,
+      "type": "PATCH",
+      "status": "IMPLEMENTED_OFFLINE",
+      "ref": "core/ranking_orchestrator.py::_homogeneous_scoring_symbol passes explicit symbol scope only for a nonempty score report whose every symbol exactly matches the pool symbol; otherwise aggregate path remains."
+    },
+    {
+      "id": "I11_MIXED_SYMBOL_SCOPE_MUTANT",
+      "issue": 11,
+      "type": "MUTATION",
+      "status": "KILLED_OFFLINE",
+      "ref": "scripts/verify_issues_7_11_issue11_mixed_symbol_mutation.py replaces the homogeneity check with trust_pool_symbol; mixed-symbol regression failed; checkout hashes unchanged."
+    },
+    {
+      "id": "I11_MIXED_SYMBOL_SCOPE_VERIFIER",
+      "issue": 11,
+      "type": "VERIFIER",
+      "status": "BOUNDED_EXECUTOR_REVIEW",
+      "ref": "Fresh read-only MAP traced candidate generators to scoring and identified pool-vs-score symbol mismatch before patch. Full independent campaign verification remains open."
+    },
+    {
+      "id": "I7_VERIFIED_ADAPTER_INPUT_ASSERTIONS",
+      "issue": 7,
+      "type": "REGRESSION_TEST",
+      "status": "PASS_OFFLINE_SYNTHETIC",
+      "ref": "tests/test_market_heritage_graph.py::test_scenario_a_verified_t1_clean_boot_reaches_shadow_evaluators now compares pinned loader output with actual opening-drive and both overnight adapter input fields before pulse dispatch."
+    },
+    {
+      "id": "I7_ADAPTER_INPUT_MUTATION",
+      "issue": 7,
+      "type": "MUTATION",
+      "status": "KILLED_OFFLINE",
+      "ref": "scripts/verify_issues_7_11_issue7_adapter_input_mutation.py misroutes prev_close_1529 to None in a temporary copy; Scenario A fails; checkout hashes unchanged."
+    },
+    {
+      "id": "I7_SOURCE_AUTHORITY_LIMIT",
+      "issue": 7,
+      "type": "EVIDENCE",
+      "status": "UNKNOWN",
+      "ref": "Synthetic adapter-input equality proves wiring only. Named Sep. 30 source/futures payload and source-event lineage remain unavailable; no captured historical T-1 authority established."
+    },
+    {
+      "id": "I7_TARGET_EXPIRY_INPUT_REVIEW_20261004",
+      "issue": 7,
+      "type": "VERIFIER",
+      "status": "REVIEW_FINDING_REPAIRED",
+      "ref": "Independent verifier noted opening_drive_target_expiry was passed from the launch plan, not a T-1 loader output; Scenario A now asserts a nonempty synthetic launch-plan expiry reaches the actual adapter."
+    },
+    {
+      "id": "I7_ADAPTER_MUTATION_PREDICATE_REVIEW_20261004",
+      "issue": 7,
+      "type": "ATTACK",
+      "status": "HARNESS_DEFECT_REPAIRED",
+      "ref": "Independent verifier found generic 1-failure kill predicate could overstate mutation evidence. Harness now requires the exact target_expiry assertion and AssertionError; mutated field is target_expiry."
+    },
+    {
+      "id": "I11_MIXED_MUTATION_PREDICATE_REVIEW_20261004",
+      "issue": 11,
+      "type": "ATTACK",
+      "status": "HARNESS_DEFECT_REPAIRED",
+      "ref": "Independent verifier found generic failure predicate could overstate mutation evidence. Harness now requires report.ranked_candidate_count==0 assertion and AssertionError."
+    }
+  ],
+  "edges": [
+    {
+      "from": "I11_CAPTURE_20261001",
+      "to": "I11_REPLAY_FALSE_HEALTH",
+      "type": "REPRODUCES"
+    },
+    {
+      "from": "I11_REPLAY_SOURCE",
+      "to": "I11_REPLAY_FALSE_HEALTH",
+      "type": "PRODUCES"
+    },
+    {
+      "from": "I11_REPLAY_FALSE_HEALTH",
+      "to": "I11_REPLAY_ROOT",
+      "type": "CAUSED_BY"
+    },
+    {
+      "from": "I11_REPLAY_ROOT",
+      "to": "I11_REPLAY_PATCH",
+      "type": "REPAIRED_BY"
+    },
+    {
+      "from": "I11_REPLAY_PATCH",
+      "to": "I11_REPLAY_NEGATIVE_TEST",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_REPLAY_ATTACK",
+      "to": "I11_REPLAY_NEGATIVE_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_REPLAY_VERIFIER",
+      "to": "I11_REPLAY_PATCH",
+      "type": "VERIFIES"
+    },
+    {
+      "from": "I11_FEED_HOLD_FUNCTION",
+      "to": "I11_CANDIDATE_WIDE_HOLD",
+      "type": "PRODUCES"
+    },
+    {
+      "from": "I11_CANDIDATE_WIDE_HOLD",
+      "to": "I11_CANDIDATE_HOLD_ROOT",
+      "type": "CAUSED_BY"
+    },
+    {
+      "from": "I11_CANDIDATE_HOLD_ROOT",
+      "to": "I11_CANDIDATE_SCOPE_EVIDENCE_GAP",
+      "type": "BLOCKED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_TRUTH_PRODUCER",
+      "to": "I11_PERSISTED_STALE_FAIL_OPEN",
+      "type": "PRODUCES"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_TRUTH_CONSUMER",
+      "to": "I11_PERSISTED_STALE_FAIL_OPEN",
+      "type": "CONSUMES"
+    },
+    {
+      "from": "I11_PERSISTED_STALE_FAIL_OPEN",
+      "to": "I11_PERSISTED_CONTRACT_ROOT",
+      "type": "CAUSED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_CONTRACT_ROOT",
+      "to": "I11_PERSISTED_FEED_HERMES_CONTRACT",
+      "type": "CONSTRAINED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_CONTRACT_ROOT",
+      "to": "I11_PERSISTED_FEED_PATCH",
+      "type": "REPAIRED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_PATCH",
+      "to": "I11_PERSISTED_FEED_TEST",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_MUTATION",
+      "to": "I11_PERSISTED_FEED_TEST",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_INDEPENDENT_VERIFIER",
+      "to": "I11_PERSISTED_FEED_PATCH",
+      "type": "VERIFIES"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_VERSION_ATTACK",
+      "to": "I11_PERSISTED_FEED_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_COMPONENT_ATTACK",
+      "to": "I11_PERSISTED_FEED_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_PATCH",
+      "to": "I11_PERSISTED_FEED_VERSION_ATTACK",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_PATCH",
+      "to": "I11_PERSISTED_FEED_COMPONENT_ATTACK",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_LABEL_STRIP_ATTACK",
+      "to": "I11_PERSISTED_FEED_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_MISSING_FEED_AUTHORITY_ATTACK",
+      "to": "I11_PERSISTED_FEED_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_PATCH",
+      "to": "I11_PERSISTED_FEED_LABEL_STRIP_ATTACK",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_PATCH",
+      "to": "I11_MISSING_FEED_AUTHORITY_ATTACK",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_PERSISTED_FEED_TIME_ATTACK",
+      "to": "I11_PERSISTED_FEED_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_LEGACY_LTP_SLA_COMPAT",
+      "to": "I11_PERSISTED_FEED_PATCH",
+      "type": "PROTECTED_BY"
+    },
+    {
+      "from": "I11_MALFORMED_AGE_ATTACK",
+      "to": "I11_PERSISTED_FEED_TEST",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_SYMBOL_UNDERLYING_IDENTITY_PRODUCER",
+      "to": "I11_SYMBOL_SCOPE_CONSUMER",
+      "type": "REQUIRED_BY"
+    },
+    {
+      "from": "I11_SYMBOL_SCOPE_CONSUMER",
+      "to": "I11_SYMBOL_SCOPE_REGRESSION",
+      "type": "TESTED_BY"
+    },
+    {
+      "from": "I11_SYMBOL_SCOPE_MUTATION",
+      "to": "I11_SYMBOL_SCOPE_REGRESSION",
+      "type": "ATTACKS"
+    },
+    {
+      "from": "I11_SYMBOL_SCOPE_LIMIT",
+      "to": "I11_CANDIDATE_SCOPE_EVIDENCE_GAP",
+      "type": "REMAINS_OPEN"
+    },
+    {
+      "from": "I11_MIXED_SYMBOL_POOL_ROOT",
+      "to": "I11_MIXED_SYMBOL_SCOPE_REPRO",
+      "type": "REPRODUCED_BY"
+    },
+    {
+      "from": "I11_MIXED_SYMBOL_SCOPE_REPRO",
+      "to": "I11_MIXED_SYMBOL_SCOPE_PATCH",
+      "type": "REPAIRED_BY"
+    },
+    {
+      "from": "I11_MIXED_SYMBOL_SCOPE_PATCH",
+      "to": "I11_MIXED_SYMBOL_SCOPE_MUTANT",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I11_MIXED_SYMBOL_SCOPE_PATCH",
+      "to": "I11_MIXED_SYMBOL_SCOPE_VERIFIER",
+      "type": "REVIEWED_BY"
+    },
+    {
+      "from": "I7_VERIFIED_ADAPTER_INPUT_ASSERTIONS",
+      "to": "I7_ADAPTER_INPUT_MUTATION",
+      "type": "MUTATED_BY"
+    },
+    {
+      "from": "I7_VERIFIED_ADAPTER_INPUT_ASSERTIONS",
+      "to": "I7_SOURCE_AUTHORITY_LIMIT",
+      "type": "DOES_NOT_PROVE"
+    }
+  ],
+  "safety": {
+    "read_only": true,
+    "is_order_action": false,
+    "broker_api_called": false,
+    "broker_write_authority": false,
+    "order_authority": false,
+    "allowed_for_live_execution": false,
+    "orders_placed": 0,
+    "orders_modified": 0,
+    "orders_cancelled": 0
+  }
+}

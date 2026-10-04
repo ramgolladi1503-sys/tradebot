@@ -112,6 +112,91 @@ def test_event_payload_hash_binds_price_token_and_source_time(tmp_path):
     tampered["record_sha256"] = producer._hash(tampered)
     assert verify_primitive(tampered,session_id="s",source_sha="x",underlying_token=1) == (False,"source_event_hash_mismatch")
 
+def test_primitive_verifier_rejects_self_consistent_wrong_underlying_identity(tmp_path):
+    import core.cas_primitive_producer as producer
+
+    store = CASPrimitiveStore(tmp_path / "wrong-underlying.json", session_id="s", source_sha="x", underlying_token=1)
+    row = store.capture("0915", 100, tick(100, 100.5), capture_timestamp_ist="x")
+    payload = {**row["source_event_payload"], "underlying_symbol": "BANKNIFTY"}
+    event_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+    forged = {
+        **row,
+        "underlying_symbol": "BANKNIFTY",
+        "source_event_payload": payload,
+        "source_event_sha256": event_hash,
+        "source_event_id": f"feed:s:1:1:{event_hash[:16]}",
+    }
+    forged["record_sha256"] = producer._hash(forged)
+
+    assert verify_primitive(forged, session_id="s", source_sha="x", underlying_token=1) == (False, "identity")
+
+@pytest.mark.parametrize("bad_token", [True, 1.0, "1", 0, -1])
+def test_capture_rejects_self_consistent_malformed_instrument_tokens(tmp_path, bad_token):
+    valid_tick = tick(100, 100.5)
+    payload = {**valid_tick["source_event_payload"], "instrument_token": bad_token}
+    event_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+    malformed = {
+        **valid_tick,
+        "instrument_token": bad_token,
+        "source_event_payload": payload,
+        "source_event_sha256": event_hash,
+        "source_event_id": f"feed:s:1:1:{event_hash[:16]}",
+    }
+
+    store = CASPrimitiveStore(tmp_path / "bad-token.json", session_id="s", source_sha="x", underlying_token=1)
+    row = store.capture("0915", 100, malformed, capture_timestamp_ist="x")
+
+    assert row["capture_status"] == "BLOCKED"
+    assert row["price"] is None
+
+@pytest.mark.parametrize("bad_token", [True, 1.0, "1", 0, -1])
+def test_verifier_rejects_self_consistent_malformed_event_tokens(tmp_path, bad_token):
+    import core.cas_primitive_producer as producer
+
+    store = CASPrimitiveStore(tmp_path / "bad-event-token.json", session_id="s", source_sha="x", underlying_token=1)
+    row = store.capture("0915", 100, tick(100, 100.5), capture_timestamp_ist="x")
+    payload = {**row["source_event_payload"], "instrument_token": bad_token}
+    event_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+    malformed = {
+        **row,
+        "source_event_payload": payload,
+        "source_event_sha256": event_hash,
+        "source_event_id": f"feed:s:1:1:{event_hash[:16]}",
+    }
+    malformed["record_sha256"] = producer._hash(malformed)
+
+    valid, reason = verify_primitive(malformed, session_id="s", source_sha="x", underlying_token=1)
+
+    assert valid is False
+    assert reason == "source_event_binding_invalid"
+
+@pytest.mark.parametrize("bad_token", [True, 1.0, "1", 0, -1])
+def test_verifier_rejects_malformed_persisted_row_tokens(tmp_path, bad_token):
+    import core.cas_primitive_producer as producer
+
+    store = CASPrimitiveStore(tmp_path / "bad-row-token.json", session_id="s", source_sha="x", underlying_token=1)
+    row = store.capture("0915", 100, tick(100, 100.5), capture_timestamp_ist="x")
+    malformed = {**row, "underlying_token": bad_token}
+    malformed["record_sha256"] = producer._hash(malformed)
+
+    assert verify_primitive(malformed, session_id="s", source_sha="x", underlying_token=1) == (False, "identity")
+
+@pytest.mark.parametrize("bad_expected_token", [True, 1.0, "1", 0, -1])
+def test_verifier_rejects_malformed_expected_token(tmp_path, bad_expected_token):
+    store = CASPrimitiveStore(tmp_path / "expected-token.json", session_id="s", source_sha="x", underlying_token=1)
+    row = store.capture("0915", 100, tick(100, 100.5), capture_timestamp_ist="x")
+
+    assert verify_primitive(row, session_id="s", source_sha="x", underlying_token=bad_expected_token) == (False, "identity")
+
+def test_capture_with_missing_expected_token_never_persists_captured_primitive(tmp_path):
+    store = CASPrimitiveStore(tmp_path / "missing-config-token.json", session_id="s", source_sha="x", underlying_token=None)
+
+    row = store.capture("0915", 100, tick(100, 100.5), capture_timestamp_ist="x")
+
+    assert row["capture_status"] == "BLOCKED"
+    assert row["price"] is None
+    assert verify_primitive(row, session_id="s", source_sha="x", underlying_token=None) == (False, "identity")
+
 def test_blocked_attempt_does_not_prevent_later_valid_same_run_capture(tmp_path):
     p=tmp_path/"cas.json"; s=CASPrimitiveStore(p,session_id="s",source_sha="x",underlying_token=1)
     blocked=s.capture("0915",100,{**tick(100,101.0),"timestamp_authority":"UNKNOWN"},capture_timestamp_ist="first")
@@ -162,6 +247,31 @@ def test_missing_target_and_malformed_input_fail_closed(tmp_path):
     assert build_cas_input({"0915":a,"1000":{}},session_id="s",source_sha="x",cycle_id="c") is None
     malformed = {**a, "record_sha256": "0" * 64, "price": "not-a-number"}
     assert verify_primitive(malformed,session_id="s",source_sha="x",underlying_token=1)[0] is False
+
+@pytest.mark.parametrize("bad_id", [None, "", 17, True, object()])
+def test_malformed_source_event_ids_block_capture_without_raising(tmp_path, bad_id):
+    store = CASPrimitiveStore(tmp_path / "bad-event-id.json", session_id="s", source_sha="x", underlying_token=1)
+    malformed_tick = {**tick(100, 100.5), "source_event_id": bad_id}
+
+    row = store.capture("0915", 100, malformed_tick, capture_timestamp_ist="x")
+
+    assert row["capture_status"] == "BLOCKED"
+    assert row["source_event_id"] is None
+    assert not verify_primitive(row, session_id="s", source_sha="x", underlying_token=1)[0]
+
+@pytest.mark.parametrize("bad_id", [None, "", 17, True, object()])
+def test_primitive_verifier_rejects_malformed_source_event_ids_without_raising(tmp_path, bad_id):
+    import core.cas_primitive_producer as producer
+
+    store = CASPrimitiveStore(tmp_path / "valid-event-id.json", session_id="s", source_sha="x", underlying_token=1)
+    row = store.capture("0915", 100, tick(100, 100.5), capture_timestamp_ist="x")
+    malformed = {**row, "source_event_id": bad_id}
+    malformed["record_sha256"] = producer._hash(malformed)
+
+    valid, reason = verify_primitive(malformed, session_id="s", source_sha="x", underlying_token=1)
+
+    assert valid is False
+    assert reason == "source_event_binding_missing"
 
 def test_restart_and_corruption_are_detectable(tmp_path):
     p=tmp_path/"cas.json"; s=CASPrimitiveStore(p,session_id="s",source_sha="x",underlying_token=1)

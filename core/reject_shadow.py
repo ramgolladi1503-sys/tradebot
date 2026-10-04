@@ -23,6 +23,7 @@ from core.audit_log import append_event
 from core.persistence_state_compression import should_write_persistent_state, record_written_state
 from config import config as cfg
 from core.runtime_paths import DB_ROOT, LOGS_ROOT
+from core.locked_jsonl import append_jsonl_batch
 from core.time_utils import now_utc_epoch
 
 
@@ -503,9 +504,7 @@ def record_candidate_decision(event: dict, *, desk: str | None = None) -> dict:
     # JSONL trace for quick operator inspection.
     try:
         path = _decision_log_path(desk_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(decision_event, ensure_ascii=True) + "\n")
+        append_jsonl_batch(path, (decision_event,), ensure_ascii=True)
     except Exception:
         pass
 

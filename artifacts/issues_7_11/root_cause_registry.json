@@ -1,0 +1,91 @@
+{
+  "repository_sha": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95",
+  "issues": {
+    "7": {
+      "status": "UNKNOWN",
+      "root_cause": "T1_SOURCE_AUTHORITY_UNAVAILABLE",
+      "evidence_class": "REPOSITORY_VERIFIED_AND_UNKNOWN_DATA",
+      "evidence": [
+        "docs/research/candidates/INTRADAY_OPENING_DRIVE_V1/FROZEN_SPEC.json",
+        "docs/research/candidates/S1_MOMENTUM_OVERNIGHT_V1/FROZEN_SPEC.json",
+        "core/market_heritage_graph.py:load_verified_t1_prerequisites",
+        "scripts/generate_t1_prerequisites.py"
+      ],
+      "disposition": "No October 1 prior-session futures identity/15:29 close or pinned 200-session NIFTY daily chain/calendar was proven. Existing research corpus is not runtime prerequisite authority; values and staging were not fabricated."
+    },
+    "8": {
+      "status": "UNKNOWN",
+      "root_cause": "NO_VERIFIED_PRIOR_CAS_SOURCE_INTERVAL",
+      "evidence_class": "REPOSITORY_VERIFIED_AND_UNKNOWN_DATA",
+      "evidence": [
+        "core/cas_primitive_producer.py",
+        "core/market_heritage_graph.py:load_same_session_cas_references",
+        "core/market_heritage_graph.py:index_legacy_session_runs",
+        "core/tick_store.py"
+      ],
+      "disposition": "Legacy CAS files lack capture-time/source-event authority; tick-store DB rows do not preserve exact source-event payload/hash binding. No verified October 1 post-crash primitive interval was found.",
+      "verified_repository_findings": [
+        {
+          "finding": "NON_STRING_SOURCE_EVENT_ID_EXCEPTION",
+          "status": "PATCHED_OFFLINE",
+          "evidence": "core/cas_primitive_producer.py and tests/test_cas_primitive_producer.py; malformed types now reject without raising"
+        },
+        {
+          "finding": "PERSISTED_CAS_SYMBOL_NOT_ENFORCED",
+          "status": "PATCHED_OFFLINE",
+          "evidence": "self-consistent BANKNIFTY row and malformed token identities previously passed; verifier now enforces NIFTY plus exact positive integer token identity"
+        },
+        {
+          "finding": "HISTORICAL_RESTART_SOURCE_INTERVAL",
+          "status": "UNKNOWN",
+          "evidence": "no authorized exact source-event-bound October 1 predecessor interval"
+        },
+        {
+          "finding": "EXPECTED_CAS_TOKEN_MISSING",
+          "status": "PATCHED_OFFLINE",
+          "evidence": "independent review showed a None expected token could store a CAPTURED row; None is no longer a wildcard"
+        }
+      ]
+    },
+    "9": {
+      "status": "OFFLINE_RUNTIME_PATH_VERIFIED_LIVE_PARITY_UNKNOWN",
+      "root_cause": "COMPLETED_BARS_WERE_PROCESS_LOCAL_WITHOUT_CANONICAL_STORE_WIRING",
+      "evidence_class": "DATA_VERIFIED_AND_REPOSITORY_VERIFIED; CAPTURED_LIVE_PARITY_UNKNOWN",
+      "evidence": [
+        "core/market_event_graph_live_ohlc_buffer.py",
+        "core/kite_read_only_observation_runtime.py",
+        "core/market_session_store.py",
+        "core/market_session_memory_contract.py",
+        "core/market_data.py::_ingest_trusted_ltp_tick",
+        "core/orchestrator.py::_evaluate_c1_c2_for_symbol",
+        "tests/core/test_market_session_runtime_bridge.py::test_normal_trusted_tick_restart_path_hydrates_c1_from_durable_bars",
+        "tests/core/test_market_session_store.py::test_store_rejects_tampered_epoch_even_when_row_hash_is_unchanged"
+      ],
+      "disposition": "The primary runtime singleton buffer persists completed trusted source-time bars to the existing session store and restores same-session history after process-local state is cleared. Integrated offline proof reaches C1 through the durable memory reader; independent current-feed freshness remains required. Captured/live process-restart parity remains unknown, and OHLC is not promoted to CAS source-event authority."
+    },
+    "10": {
+      "status": "PARTIAL_REPAIR_VERIFIED_OFFLINE",
+      "root_cause": "OBSERVER_WRITER_AND_ADVISORY_READER_USED_DIFFERENT_PATHS; INPUT_STATES_COLLAPSED",
+      "evidence_class": "DATA_VERIFIED_AND_REPOSITORY_VERIFIED",
+      "evidence": [
+        "core/kite_read_only_observation_runtime.py:produce_and_store_runtime_snapshots call",
+        "core/runtime_snapshot_producer.py:_build_advisory_latest_payload",
+        "core/runtime_snapshot_producer.py:_read_advisory_source",
+        "core/reject_shadow.py:_decision_log_path"
+      ],
+      "disposition": "Observer now supplies its run-local ledger; absent override retains desk fallback. Missing, empty, read-error, and partial-tail states remain distinguishable. Offline EOD parity verifies the same path, SHA-256, and accepted rows at advisory and EOD readers. Upstream zero-candidate causality is not attributed to advisory routing; captured/live parity is unknown."
+    },
+    "11": {
+      "status": "PARTIAL_READ_ONLY_OBSERVER_CONSUMER_REPAIR; SHARED_CLASSIFIER_AND_CANDIDATE_AUTHORITY_UNCHANGED",
+      "root_cause": "OBSERVER_ENVELOPE_AND_QUOTE_IDENTITY_WERE_NOT_JOINED; CAPTURED_GLOBAL_BLOCK_CAUSE_UNKNOWN",
+      "evidence_class": "REPOSITORY_VERIFIED; CAPTURED_GLOBAL_CAUSE_UNKNOWN",
+      "evidence": [
+        "core/feed_health_truth.py:classify_feed_health_truth",
+        "core/kite_depth_ws.py:_build_feed_domain_health_payload",
+        "core/paper_shadow/strategy_shadow_adapter.py:StrategyMarketSnapshotBuilder.build_snapshots",
+        "core/symbol_execution_safety.py"
+      ],
+      "disposition": "The read-only StrategyMarketSnapshotBuilder unwraps the known runtime envelope and exact-joins spot quote identity; explicit fresh quote/domain evidence can support a shadow-only INDEX_SPOT snapshot when shared aggregate feed_ok is false, but global blockers remain unconditional. Shared feed classification and symbol execution safety retain their baseline semantics. Candidate authority is not widened. Captured global_feed_blocked cause and live isolation remain UNKNOWN."
+    }
+  }
+}

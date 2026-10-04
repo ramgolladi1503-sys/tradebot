@@ -11,6 +11,7 @@ from core.candidate_audits.intraday_opening_drive import IST_TZ, CANDIDATE_ID as
 from core.replay.governed_market_replay import (
     DualReplayReconciler,
     GovernedMarketReplayEngine,
+    ParquetBarReplaySource,
     ReplayEvent,
     ReplayMode,
     UpstoxTickReplaySource,
@@ -39,6 +40,11 @@ def test_upstox_loader_never_fabricates_depth_qty_or_latency(tmp_path: Path):
     assert d["option_last_tick_age_sec"] is None
     assert d["receipt_timestamp_authority"] == "UNAVAILABLE"
     assert d["depth_quantity_authority"] == "UNAVAILABLE"
+    assert events[0].feed_ok is None
+    assert events[0].websocket_ok is None
+    assert events[0].session_health == "UNKNOWN"
+    assert d["feed_health_authority"] == "UNAVAILABLE"
+    assert d["session_health_authority"] == "UNAVAILABLE"
 
 
 def test_upstox_loader_uses_recorded_receipt_latency_when_present(tmp_path: Path):
@@ -62,6 +68,62 @@ def test_upstox_loader_uses_recorded_receipt_latency_when_present(tmp_path: Path
     assert ev.symbol_data["ask_qty"] == 13
     assert ev.symbol_data["receipt_timestamp_authority"] == "RECORDED"
     assert ev.symbol_data["option_last_tick_age_sec"] == pytest.approx(0.275, abs=1e-6)
+    assert ev.feed_ok is None
+    assert ev.websocket_ok is None
+    assert ev.session_health == "UNKNOWN"
+    assert ev.symbol_data["feed_health_authority"] == "UNAVAILABLE"
+    assert ev.symbol_data["session_health_authority"] == "UNAVAILABLE"
+
+
+def test_malformed_recorded_receipt_timestamp_cannot_create_freshness(tmp_path: Path):
+    src = datetime(2026, 9, 22, 9, 22, 5, tzinfo=IST_TZ)
+    p = tmp_path / "malformed-receipt.parquet"
+    pd.DataFrame([{
+        "ts": src.timestamp(),
+        "received_epoch": "not-an-epoch",
+        "token": "x",
+        "symbol": "NIFTY 25050 CE 24 SEP 26",
+        "ltp": 121.0,
+        "bid": 120.0,
+        "ask": 122.0,
+        "depth": "{}",
+    }]).to_parquet(p, index=False)
+
+    event = list(UpstoxTickReplaySource(p).stream_events())[0]
+
+    assert event.available_timestamp_ist == src
+    assert event.symbol_data["receipt_timestamp_authority"] == "UNAVAILABLE"
+    assert event.symbol_data["option_last_tick_age_sec"] is None
+    assert event.feed_ok is None
+    assert event.websocket_ok is None
+    assert event.session_health == "UNKNOWN"
+
+
+def test_parquet_bar_replay_does_not_fabricate_quote_freshness_or_transport_health(tmp_path: Path):
+    start = datetime(2026, 9, 22, 9, 15, 0, tzinfo=IST_TZ)
+    p = tmp_path / "bars.parquet"
+    pd.DataFrame([{
+        "symbol": "NIFTY 50",
+        "timestamp": start,
+        "open": 25000.0,
+        "high": 25010.0,
+        "low": 24990.0,
+        "close": 25005.0,
+        "volume": 100,
+    }]).to_parquet(p, index=False)
+
+    events = list(ParquetBarReplaySource(p, symbol="NIFTY 50").stream_events())
+
+    assert len(events) == 1
+    event = events[0]
+    assert event.event_timestamp_ist == start
+    assert event.available_timestamp_ist == start + timedelta(seconds=60)
+    assert event.symbol_data["option_last_tick_age_sec"] is None
+    assert event.feed_ok is None
+    assert event.websocket_ok is None
+    assert event.session_health == "UNKNOWN"
+    assert event.symbol_data["feed_health_authority"] == "UNAVAILABLE"
+    assert event.symbol_data["session_health_authority"] == "UNAVAILABLE"
 
 
 def test_opening_drive_capability_blocks_manual_priming_when_primitives_missing():

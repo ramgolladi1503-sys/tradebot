@@ -1,0 +1,325 @@
+{
+  "patches": [
+    {
+      "cross_issue_risk": [
+        "Issue8 CAS reconstruction must not consume restored bars",
+        "candidate dependency source hash must match exact store bytes"
+      ],
+      "direct_callers": [
+        "kite_depth_ws.on_ticks -> record_live_source_shadow_tick",
+        "LiveSourceRuntimeBridge._completed_bar_for",
+        "kite_read_only_observation_runtime._measured_meg_facts"
+      ],
+      "existing_tests": [
+        "tests/test_market_event_graph_live_ohlc_buffer.py",
+        "tests/core/test_market_session_store.py",
+        "tests/test_market_event_graph_live_runtime_bridge.py"
+      ],
+      "expected_change_surface": [
+        "MEG isolated shadow buffer and existing MarketSessionStore"
+      ],
+      "must_not_change_surface": [
+        "production strategy OHLC global buffer",
+        "strategy rules",
+        "order/broker authority",
+        "configured token universe"
+      ],
+      "new_tests": [
+        "event-time incomplete rejection",
+        "cross-session cutoff rejection",
+        "startup warm restore",
+        "callback does not write SQLite",
+        "concurrent idempotent write",
+        "aborted insert",
+        "late tick rejection",
+        "replay exclusion"
+      ],
+      "node": "Issue9 MEG shadow persistence and restore",
+      "observability_change_surface": [
+        "T5_BAR_PERSISTED source event and persistence latency"
+      ],
+      "rollback_surface": [
+        "disable store binding and remove observer warm restore; preserve old schema migration compatibility"
+      ],
+      "runtime_artifacts_changed": [
+        "same-date SQLite market_session_bars rows",
+        "T5_BAR_PERSISTED diagnostic with row hash and latency"
+      ],
+      "safety_invariants_touched": [
+        "event-time completion",
+        "session date",
+        "volume unknown preserved",
+        "historical provenance cannot prove current feed"
+      ],
+      "transitive_consumers": [
+        "read-only MEG evidence",
+        "observer NIFTY facts",
+        "separate C1/C2 memory remains unlinked"
+      ]
+    },
+    {
+      "cross_issue_risk": [
+        "does not override upstream feed-health blocks or create candidates"
+      ],
+      "direct_callers": [
+        "runtime_snapshot_producer._build_advisory_latest_payload",
+        "runtime_snapshot_stages.build_advisory_latest_payload"
+      ],
+      "existing_tests": [
+        "tests/core/test_runtime_snapshot_producer.py",
+        "tests/test_runtime_snapshot_producer_tail.py"
+      ],
+      "expected_change_surface": [
+        "source metadata only"
+      ],
+      "must_not_change_surface": [
+        "writer path, fallback order, row conversion, ranking, feed gates"
+      ],
+      "new_tests": [
+        "missing/empty/read error/truncated line/populated fallback"
+      ],
+      "node": "Issue10 advisory source state",
+      "observability_change_surface": [
+        "source state and source path"
+      ],
+      "rollback_surface": [
+        "remove metadata fields and bounded source-state reader"
+      ],
+      "runtime_artifacts_changed": [
+        "additive source_state and primary_source_state fields"
+      ],
+      "safety_invariants_touched": [
+        "missing telemetry is not valid empty candidate set"
+      ],
+      "transitive_consumers": [
+        "runtime snapshots",
+        "advisory/EOD readers"
+      ]
+    },
+    {
+      "cross_issue_risk": [
+        "candidate-level fault isolation remains unverified; no candidate authority change is included"
+      ],
+      "direct_callers": [
+        "read-only observer StrategyMarketSnapshotBuilder"
+      ],
+      "existing_tests": [
+        "tests/test_edge43_feed_health_truth.py",
+        "tests/test_edge45_symbol_execution_safety.py",
+        "feed recovery tests"
+      ],
+      "expected_change_surface": [
+        "read-only shadow snapshot envelope unwrapping and exact quote identity join"
+      ],
+      "must_not_change_surface": [
+        "global_feed_blocked producer, websocket recovery, risk, candidate ranking, quote execution gate, shared classifier"
+      ],
+      "new_tests": [
+        "wrapped observer payload plus exact fresh spot quote",
+        "stale/missing/future LTP event timestamp remains non-executable",
+        "global transport and unsafe runtime remain blocked"
+      ],
+      "node": "Issue11 read-only observer snapshot normalization",
+      "observability_change_surface": [
+        "shadow snapshot health and quote truth only"
+      ],
+      "rollback_surface": "revert shadow consumer envelope join and observer event-time repair",
+      "runtime_artifacts_changed": [
+        "read-only shadow snapshot health and quote identity fields"
+      ],
+      "safety_invariants_touched": [
+        "required option domains still block",
+        "global transport remains unconditional blocker"
+      ],
+      "transitive_consumers": [
+        "strategy-shadow observers only"
+      ]
+    },
+    {
+      "cross_issue_risk": [
+        "incorrect pin would invalidate registry or bless wrong bytes"
+      ],
+      "direct_callers": [
+        "resolve_candidate_dependencies"
+      ],
+      "existing_tests": [
+        "tests/test_edge45_symbol_execution_safety.py"
+      ],
+      "expected_change_surface": [
+        "one sha256 source pin"
+      ],
+      "must_not_change_surface": [
+        "candidate authority_status, execution_scope, dependency identities"
+      ],
+      "new_tests": [
+        "exact edited source digest and partial authority remains ineligible"
+      ],
+      "node": "Candidate dependency digest refresh",
+      "observability_change_surface": [
+        "none"
+      ],
+      "rollback_surface": [
+        "restore the prior pin only with a byte-matching rollback source"
+      ],
+      "runtime_artifacts_changed": [
+        "source digest metadata"
+      ],
+      "safety_invariants_touched": [
+        "exact source integrity; incomplete authority remains blocked"
+      ],
+      "transitive_consumers": [
+        "candidate execution-safety boundary"
+      ]
+    },
+    {
+      "cross_issue_risk": [
+        "do not fabricate T-1 or change strategy prerequisites"
+      ],
+      "direct_callers": [
+        "observer startup",
+        "heritage verifier"
+      ],
+      "existing_tests": [
+        "existing heritage/T1 unit tests"
+      ],
+      "expected_change_surface": [],
+      "must_not_change_surface": [
+        "strategy eligibility, thresholds, broker calls"
+      ],
+      "new_tests": [
+        "calendar/source contract tests pending authoritative source"
+      ],
+      "node": "Issue7 prerequisite staging",
+      "observability_change_surface": [],
+      "rollback_surface": "no patch",
+      "runtime_artifacts_changed": [],
+      "safety_invariants_touched": [
+        "wrong-date/stale/missing T-1 remains fail-closed"
+      ],
+      "transitive_consumers": [
+        "T-1-dependent strategy gates"
+      ]
+    },
+    {
+      "cross_issue_risk": [
+        "do not synthesize ticks/primitives from OHLC"
+      ],
+      "direct_callers": [
+        "CAS primitive producer/store"
+      ],
+      "existing_tests": [
+        "CAS/heritage unit tests"
+      ],
+      "expected_change_surface": [],
+      "must_not_change_surface": [
+        "causal authority, session boundary, strategy semantics"
+      ],
+      "new_tests": [
+        "restart/corrupt/ambiguous-parent replay pending valid evidence"
+      ],
+      "node": "Issue8 CAS heritage recovery",
+      "observability_change_surface": [],
+      "rollback_surface": "no patch",
+      "runtime_artifacts_changed": [],
+      "safety_invariants_touched": [
+        "causal timestamps, source event identity, immutable parent"
+      ],
+      "transitive_consumers": [
+        "same-day causal evaluations"
+      ]
+    },
+    {
+      "cross_issue_risk": [
+        "only aggregate ranking truth; candidate-level isolation and captured/live parity remain UNKNOWN"
+      ],
+      "direct_callers": [
+        "core/orchestrator.py::_load_cycle_feed_truth_payload",
+        "core.feed_hold_gate.apply_feed_hold_to_ranking",
+        "core.feed_health_truth.classify_feed_health_truth"
+      ],
+      "existing_tests": [
+        "feed health, ranking, runtime overlay/integrity compatibility"
+      ],
+      "expected_change_surface": [
+        "persisted runtime feed-truth snapshot validation and explicit legacy feed-health evidence"
+      ],
+      "must_not_change_surface": [
+        "broker/order/risk/kill-switch authority, strategy thresholds, token universe, candidate-level authority, live execution"
+      ],
+      "new_tests": [
+        "actual serialized producer and loader contract; source/component/timestamp/config/age attacks; empty and transport-only authority"
+      ],
+      "node": "Issue11 persisted aggregate ranking truth",
+      "observability_change_surface": [
+        "explicit fail-closed aggregate health classification"
+      ],
+      "rollback_surface": "revert persisted snapshot classifier contract and config only with matching Hermes contract revision; preserve existing global blockers",
+      "runtime_artifacts_changed": [
+        "ranking hold decision from persisted feed_truth_latest.json; additive config FEED_TRUTH_SNAPSHOT_MAX_AGE_SEC"
+      ],
+      "safety_invariants_touched": [
+        "stale, malformed, contradictory, unsupported, or missing feed authority fails closed; global blockers remain unconditional"
+      ],
+      "transitive_consumers": [
+        "candidate ranking aggregate feed hold; no candidate dependency isolation"
+      ]
+    },
+    {
+      "cross_issue_risk": [
+        "Issue10 telemetry/EOD malformed-row visibility",
+        "no change to Issues7-9/11 semantics"
+      ],
+      "direct_callers": [
+        "core/kite_read_only_observation_runtime._append_candidate_decision_rows",
+        "core/reject_shadow candidate-decision append callsite"
+      ],
+      "existing_tests": [
+        "tests/test_kite_read_only_observation_runtime.py::test_candidate_decision_batches_are_serialized_across_processes",
+        "tests/core/test_runtime_snapshot_producer.py advisory parsing/state tests",
+        "tests/analytics/test_issues_7_11_eod_row_parity.py"
+      ],
+      "expected_change_surface": [
+        "core/locked_jsonl.py append failure handling only",
+        "tests for failed append and advisory parse error",
+        "Hermes/GSD contract and evidence artifacts"
+      ],
+      "must_not_change_surface": [
+        "append success bytes/schema",
+        "cooperating flock serialization",
+        "decision generation/ranking",
+        "route/path choice",
+        "strategy/feed/risk semantics",
+        "broker/order authority",
+        "token universe",
+        "Issues 1-6 behavior"
+      ],
+      "new_tests": [
+        "tests/test_kite_read_only_observation_runtime.py::test_failed_batch_preserves_interleaved_noncooperating_append",
+        "tests/test_kite_read_only_observation_runtime.py::test_failed_batch_without_interleaved_append_retains_partial_and_reader_reports_it",
+        "tests/test_kite_read_only_observation_runtime.py::test_failed_batch_never_attempts_destructive_truncate_and_preserves_original_error"
+      ],
+      "node": "Issue10 failed-append no-truncate policy after independent TOCTOU finding",
+      "observability_change_surface": [
+        "log failed batch bytes and explicit in-place rollback skipped diagnostic",
+        "actual advisory parse_error note and zero admitted rows for malformed interleaving"
+      ],
+      "rollback_surface": [
+        "revert only the isolated helper failure-handler change under a new Hermes contract; restoring ftruncate is not safe"
+      ],
+      "runtime_artifacts_changed": [
+        "on failed append, incomplete bytes may remain; no truncate; error diagnostic logged"
+      ],
+      "safety_invariants_touched": [
+        "no destructive deletion of bytes by failure cleanup",
+        "malformed JSONL not admitted as advisory row",
+        "original append error propagated"
+      ],
+      "transitive_consumers": [
+        "core/runtime_snapshot_producer._read_advisory_source",
+        "core/runtime_snapshot_producer._build_advisory_latest_payload",
+        "EOD analytics candidate-decision reader"
+      ]
+    }
+  ],
+  "repository_sha": "d1251433d76b8ea70e3cd3fc042fbb2f342e8c95"
+}

@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -13,6 +15,195 @@ from core.kite_read_only_observation_runtime import (
     safe_environment,
     write_authority_snapshot,
 )
+
+
+def test_index_ltp_age_uses_trade_event_time_not_newer_book_time():
+    from core.kite_read_only_observation_runtime import _index_ltp_age_sec
+
+    now = 1_790_000_000.0
+    stale_trade = _index_ltp_age_sec(
+        {
+            "last_price": 25000.0,
+            "ts_epoch": now,
+            "last_price_ts_epoch": now - 60.0,
+        },
+        as_of_epoch=now,
+    )
+    missing_trade_time = _index_ltp_age_sec(
+        {"last_price": 25000.0, "ts_epoch": now, "last_price_ts_epoch": None},
+        as_of_epoch=now,
+    )
+    future_trade_time = _index_ltp_age_sec(
+        {"last_price": 25000.0, "ts_epoch": now, "last_price_ts_epoch": now + 1.0},
+        as_of_epoch=now,
+    )
+
+    assert stale_trade == 60.0
+    assert missing_trade_time is None
+    assert future_trade_time is None
+
+
+def test_candidate_decision_batches_are_serialized_across_processes(tmp_path):
+    output = tmp_path / "candidate_decisions.jsonl"
+    worker = """\
+import os
+import time
+from pathlib import Path
+import core.locked_jsonl as locked_jsonl
+
+real_write = locked_jsonl.os.write
+def chunked_write(fd, data):
+    data = bytes(data)
+    written = real_write(fd, data[:1024])
+    time.sleep(0.0005)
+    return written
+
+locked_jsonl.os.write = chunked_write
+while not Path(os.environ['ISSUE10_START']).exists():
+    time.sleep(0.001)
+batch = os.environ['ISSUE10_BATCH']
+rows = [{'batch': batch, 'index': i, 'payload': 'x' * 8192} for i in range(32)]
+locked_jsonl.append_jsonl_batch(Path(os.environ['ISSUE10_PATH']), rows)
+"""
+    start = tmp_path / "start-writers"
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", worker],
+            cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "ISSUE10_BATCH": batch, "ISSUE10_PATH": str(output),
+                 "ISSUE10_START": str(start)},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for batch in ("A", "B")
+    ]
+    start.write_text("go\n", encoding="utf-8")
+    try:
+        for process in processes:
+            stdout, stderr = process.communicate(timeout=20)
+            assert process.returncode == 0, f"writer failed: {stdout}\n{stderr}"
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+
+    try:
+        rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+    except json.JSONDecodeError as exc:
+        pytest.fail(f"concurrent writers produced invalid JSONL: {exc}")
+    assert len(rows) == 64
+    assert {row["batch"] for row in rows} == {"A", "B"}
+    assert all(len(row["payload"]) == 8192 for row in rows)
+    assert {row["batch"]: {item["index"] for item in rows if item["batch"] == row["batch"]}
+            for row in rows} == {"A": set(range(32)), "B": set(range(32))}
+    batches = [row["batch"] for row in rows]
+    transition = next((i for i in range(1, len(batches)) if batches[i] != batches[i - 1]), len(batches))
+    assert set(batches[:transition]) in ({"A"}, {"B"})
+    assert set(batches[transition:]) in (set(), {"A"}, {"B"})
+
+
+def test_failed_batch_preserves_interleaved_noncooperating_append(tmp_path, monkeypatch, caplog):
+    import core.locked_jsonl as locked_jsonl
+
+    output = tmp_path / "candidate_decisions.jsonl"
+    real_write = os.write
+    real_open = os.open
+    injected = False
+
+    def interleave_external_append(fd, data):
+        nonlocal injected
+        if not injected:
+            injected = True
+            real_write(fd, bytes(data[:5]))
+            external_fd = real_open(output, os.O_WRONLY | os.O_APPEND)
+            try:
+                real_write(external_fd, b'{"writer":"external"}\n')
+            finally:
+                os.close(external_fd)
+            raise OSError("injected_batch_write_failure")
+        return real_write(fd, data)
+
+    monkeypatch.setattr(locked_jsonl.os, "write", interleave_external_append)
+    with pytest.raises(OSError, match="injected_batch_write_failure"):
+        locked_jsonl.append_jsonl_batch(output, ({"writer": "cooperating"},))
+
+    raw = output.read_bytes()
+    assert raw.endswith(b'{"writer":"external"}\n')
+    assert raw.startswith(b'{"wri')
+    assert b"cooperating" not in raw
+    assert "in-place rollback skipped to preserve concurrent bytes" in caplog.text
+
+    import core.runtime_snapshot_producer as producer
+
+    monkeypatch.setattr(producer, "canonical_suggestions_log_path", lambda: output)
+    monkeypatch.setattr(
+        producer.cfg,
+        "RUNTIME_SNAPSHOT_ADVISORY_FALLBACK_CANDIDATE_DECISIONS_ENABLE",
+        False,
+        raising=False,
+    )
+    advisory = producer._build_advisory_latest_payload()
+    assert advisory["row_count"] == 0
+    assert any(note.startswith("parse_error:") for note in advisory["notes"])
+
+
+def test_failed_batch_without_interleaved_append_retains_partial_and_reader_reports_it(tmp_path, monkeypatch):
+    import core.locked_jsonl as locked_jsonl
+
+    output = tmp_path / "candidate_decisions.jsonl"
+    real_write = os.write
+    calls = 0
+
+    def fail_after_partial_write(fd, data):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return real_write(fd, bytes(data[:5]))
+        raise OSError("injected_batch_write_failure")
+
+    monkeypatch.setattr(locked_jsonl.os, "write", fail_after_partial_write)
+    with pytest.raises(OSError, match="injected_batch_write_failure"):
+        locked_jsonl.append_jsonl_batch(output, ({"writer": "cooperating"},))
+
+    assert output.read_bytes() == b'{"wri'
+    from core.runtime_snapshot_producer import _read_advisory_source
+
+    rows, state = _read_advisory_source(output, limit=10)
+    assert rows == []
+    assert state == "PARTIAL"
+
+
+def test_failed_batch_never_attempts_destructive_truncate_and_preserves_original_error(
+    tmp_path, monkeypatch, caplog
+):
+    import core.locked_jsonl as locked_jsonl
+
+    output = tmp_path / "candidate_decisions.jsonl"
+    real_write = os.write
+    calls = 0
+
+    def fail_after_partial_write(fd, data):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return real_write(fd, bytes(data[:5]))
+        raise OSError("original_append_failure")
+
+    truncate_calls = []
+
+    def track_truncate(_fd, _length):
+        truncate_calls.append(True)
+        raise AssertionError("append failure path must not truncate shared JSONL")
+
+    monkeypatch.setattr(locked_jsonl.os, "write", fail_after_partial_write)
+    monkeypatch.setattr(locked_jsonl.os, "ftruncate", track_truncate)
+    with pytest.raises(OSError, match="original_append_failure"):
+        locked_jsonl.append_jsonl_batch(output, ({"writer": "cooperating"},))
+
+    assert truncate_calls == []
+    assert "in-place rollback skipped to preserve concurrent bytes" in caplog.text
 
 
 _FORBIDDEN_OBSERVER_PREFIXES = (
@@ -265,6 +456,7 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     from core.ai_reliability_agent.pr763_session import discover_live_semantics
     from core.market_event_graph_live_runtime_bridge import LiveSourceRuntimeBridge
     from core.market_event_graph_live_source import LiveCapturedMetadataExporter
+    shadow.configure_live_source_session_store(None, session_date=None)
 
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", "runtime/reference/market_event_graph/nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json")
@@ -391,6 +583,7 @@ def test_run_observation_dispatches_native_pulse_to_shadow_registry(
     import core.runtime_storage_authority as rsa
     import core.paper_shadow.strategy_shadow_adapter as shadow_mod
     import core.market_heritage_graph as heritage_mod
+    import core.market_quote_resolver as quote_resolver
 
     observed = {"shadow_pulses": 0, "shutdowns": 0}
 
@@ -439,7 +632,23 @@ def test_run_observation_dispatches_native_pulse_to_shadow_registry(
         },
         "market_snapshot": {"market_open": True},
     }
-    monkeypatch.setattr(snapshots, "produce_and_store_runtime_snapshots", lambda **_: snap)
+    quote_now = __import__("time").time()
+    monkeypatch.setattr(
+        quote_resolver,
+        "get_index_quote_snapshot",
+        lambda _symbol: {
+            "last_price": 25000.0,
+            "ts_epoch": quote_now,
+            "last_price_ts_epoch": quote_now - 60.0,
+            "source": "rest_quote",
+        },
+    )
+
+    def capture_snapshot(**kwargs):
+        observed["current_market_snapshot"] = kwargs.get("market_snapshot")
+        return snap
+
+    monkeypatch.setattr(snapshots, "produce_and_store_runtime_snapshots", capture_snapshot)
 
     governed_root = Path(tempfile.mkdtemp(prefix="tradebot-shadow-runtime-", dir=str(tmp_path)))
     fake_authority = rsa.StorageAuthority(
@@ -470,6 +679,10 @@ def test_run_observation_dispatches_native_pulse_to_shadow_registry(
 
     assert observed["shadow_pulses"] >= 1
     assert observed["shutdowns"] == 1
+    nifty_market_row = observed["current_market_snapshot"]["symbols"]["NIFTY"]
+    assert nifty_market_row["feed_health"]["status"] == "STALE"
+    assert nifty_market_row["quote_truth"]["is_fresh"] is False
+    assert nifty_market_row["quote_truth"]["is_executable_quote"] is False
     assert observed["registry_kwargs"]["source_sha"] == "2" * 40
     assert observed["registry_kwargs"]["prerequisite_verification"]["status"] == "VERIFIED"
     identity = json.loads((governed_root / "out" / "process_identity.json").read_text())
@@ -526,10 +739,10 @@ def test_shadow_registry_shutdown_failure_is_propagated(
     monkeypatch.setattr(
         snapshots,
         "produce_and_store_runtime_snapshots",
-        lambda **_: {
+        lambda **kwargs: (observed.update({"snapshot_kwargs": kwargs}) or {
             "feed_health_truth_latest": {"feed_ok": False, "websocket_ok": False, "context": {}, "symbols": []},
             "market_snapshot": {"market_open": False},
-        },
+        }),
     )
 
     governed_root = Path(tempfile.mkdtemp(prefix="tradebot-shadow-seal-", dir=str(tmp_path)))
@@ -561,5 +774,6 @@ def test_shadow_registry_shutdown_failure_is_propagated(
     assert observed["heritage_kwargs"]["expected_manifest_sha256"] is None
     assert observed["registry_kwargs"]["opening_drive_prev_close_1529"] is None
     assert observed["registry_kwargs"]["overnight_prev_sma200"] is None
+    assert observed["snapshot_kwargs"]["candidate_decisions_path"] == governed_root / "out" / "candidate_decisions.jsonl"
     assert marker.is_file()
     assert "synthetic_shadow_seal_failure" in marker.read_text()

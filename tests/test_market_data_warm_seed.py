@@ -8,6 +8,14 @@ from core.indicators_live import compute_indicators
 from core.option_liquidity_cache import clear_option_liquidity_cache, update_option_liquidity_cache
 
 
+@pytest.fixture(autouse=True)
+def _isolate_warm_seed_from_durable_session_store(monkeypatch):
+    """These tests cover historical seeding, not process-wide persistence state."""
+    buffer = market_data.ohlc_buffer
+    monkeypatch.setattr(buffer, "_session_store", None, raising=False)
+    yield
+
+
 def _build_hist_rows(count: int, base_price: float = 100.0, step_minutes: int = 1):
     now = market_data.now_ist().replace(second=0, microsecond=0)
     rows = []
@@ -203,7 +211,9 @@ def test_fetch_live_market_data_preserves_unknown_volume_as_none(tmp_path, monke
     rows = market_data.fetch_live_market_data()
     snap = next(r for r in rows if r.get("instrument") == "OPT" and r.get("symbol") == symbol)
     assert snap["volume"] is None
-    assert market_data.ohlc_buffer.get_bars(symbol)[-1]["volume"] == 0
+    live_bar = market_data.ohlc_buffer.get_bars(symbol)[-1]
+    assert live_bar["volume"] is None
+    assert live_bar["bar_provenance"]["volume_observation_complete"] is False
 
 
 def test_hydrate_live_option_chain_liquidity_preserves_cached_values_for_incomplete_update() -> None:
