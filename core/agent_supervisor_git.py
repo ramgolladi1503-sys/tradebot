@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from typing import Any, Iterator, Mapping
@@ -179,6 +180,10 @@ def _safe_environment(isolated_home: Path, execution_root: Path) -> dict[str, st
             "PYTHONUNBUFFERED": "1",
         }
     )
+    interpreter_dir = str(Path(sys.executable).resolve().parent)
+    path_entries = [entry for entry in env.get("PATH", "").split(os.pathsep) if entry]
+    if interpreter_dir not in path_entries:
+        env["PATH"] = os.pathsep.join([interpreter_dir, *path_entries])
     return env
 
 

@@ -107,7 +107,13 @@ def build_feed_truth_snapshot(
     if not depth_fresh:
         stale_reasons.append("depth_stale_or_missing")
 
-    feed_fresh = bool(ws_connected is True and (not market_closed_detected) and underlying_tick_fresh and option_tick_fresh)
+    feed_fresh = bool(
+        ws_connected is True
+        and (not market_closed_detected)
+        and underlying_tick_fresh
+        and option_tick_fresh
+        and depth_fresh
+    )
 
     payload = {
         "schema_version": RUNTIME_FEED_TRUTH_SNAPSHOT_SCHEMA_VERSION,

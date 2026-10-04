@@ -29,7 +29,10 @@ def _offline_inputs(tmp_path: Path, *, plan_session: str = "2026-09-30") -> list
     plan = build_launch_plan(
         session_date=plan_session,
         production_tokens=[256265],
-        production_resolution=[{"index_token": 256265}],
+        production_resolution=[{
+            "symbol": "NIFTY", "index_token": 256265, "tokens": [256265],
+            "option_count": 0, "final_option_count": 0, "option_min_required": 1,
+        }],
         sticky_tokens=[],
         observation_tokens=list(range(1000, 1051)),
         budget=100,
@@ -37,6 +40,8 @@ def _offline_inputs(tmp_path: Path, *, plan_session: str = "2026-09-30") -> list
         universe_sha256="synthetic-universe-sha",
         configuration={},
         broker_metadata_called=False,
+        # The launch plan is a topology fixture: no options are included, so
+        # the read-only entrypoint must retain the downstream health block.
     )
     plan_path = tmp_path / "launch-plan.json"
     write_launch_plan(plan_path, plan)
