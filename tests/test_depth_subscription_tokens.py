@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date
 from types import SimpleNamespace
 
+import pytest
+
 from config import config as cfg
 from core import kite_depth_ws as ws
 from core.market_event_graph_live_launch_plan import build_launch_plan
@@ -376,6 +378,81 @@ def test_production_only_subscription_builder_excludes_observation_ids(monkeypat
         {int(token) for row in resolution for token in row["tokens"]}
     )
     assert ctx["index_tokens"]["NIFTY"] in production_tokens
+
+
+def test_meg_builder_filters_cash_symbols_and_publishes_only_merged_identities(monkeypatch):
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    cash_symbols = [f"CASH{i:02d}" for i in range(50)]
+    cash_tokens = list(range(8_200_000, 8_200_050))
+    registry_tokens = [ctx["index_tokens"]["NIFTY"], *cash_tokens]
+    registry = SimpleNamespace(
+        all_tokens=registry_tokens,
+        token_by_symbol={
+            "NIFTY": ctx["index_tokens"]["NIFTY"],
+            **dict(zip(cash_symbols, cash_tokens)),
+        },
+        canonical_sha256="synthetic-registry-sha",
+    )
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123, raising=False)
+    monkeypatch.setattr(ws, "_load_observation_registry_for_subscription", lambda: registry)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {}, raising=False)
+    original_merge = ws.build_observation_subscription_merge
+
+    symbols = ["NIFTY", "BANKNIFTY", "SENSEX", *cash_symbols]
+    tokens, resolution = ws._build_subscription_tokens_impl(symbols, max_tokens=150)
+
+    assert len(tokens) == 123
+    assert len(set(tokens)) == 123
+    assert {call["symbol"] for call in ctx["calls"]} == {"NIFTY", "BANKNIFTY", "SENSEX"}
+    assert {row["symbol"] for row in resolution} == {"NIFTY", "BANKNIFTY", "SENSEX"}
+    assert set(registry_tokens).issubset(ws._UNDERLYING_TOKENS)
+    expected_identity = {int(token): symbol for symbol, token in registry.token_by_symbol.items()}
+    assert all(ws._UNDERLYING_TOKEN_TO_SYMBOL[token] == symbol for token, symbol in expected_identity.items())
+    assert all(ws._TOKEN_TO_SYMBOL[token] == symbol for token, symbol in expected_identity.items())
+
+    # A failed observation merge must not claim cash-token identity or readiness.
+    monkeypatch.setattr(
+        ws,
+        "build_observation_subscription_merge",
+        lambda **_kwargs: {
+            "ok": False,
+            "tokens": [],
+            "reason": "synthetic_blocked_merge",
+            "missing_or_pruned_observation_tokens": registry_tokens,
+        },
+    )
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {}, raising=False)
+    ws._build_subscription_tokens_impl(symbols, max_tokens=123)
+    assert set(cash_tokens).isdisjoint(ws._UNDERLYING_TOKENS)
+    assert set(cash_tokens).isdisjoint(ws._UNDERLYING_TOKEN_TO_SYMBOL)
+    assert all(token not in ws._TOKEN_TO_SYMBOL for token in cash_tokens)
+    assert ws._observation_state_payload()["enabled"] is False
+
+    # A successful token union with incomplete registry identity is also blocked.
+    monkeypatch.setattr(ws, "build_observation_subscription_merge", original_merge)
+    incomplete_registry = SimpleNamespace(
+        all_tokens=registry_tokens,
+        token_by_symbol={
+            "NIFTY": ctx["index_tokens"]["NIFTY"],
+            **dict(zip(cash_symbols[:-1], cash_tokens[:-1])),
+        },
+        canonical_sha256="incomplete-registry-sha",
+    )
+    monkeypatch.setattr(ws, "_load_observation_registry_for_subscription", lambda: incomplete_registry)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {}, raising=False)
+    ws._build_subscription_tokens_impl(symbols, max_tokens=123)
+    assert set(cash_tokens).isdisjoint(ws._UNDERLYING_TOKENS)
+    assert set(cash_tokens).isdisjoint(ws._UNDERLYING_TOKEN_TO_SYMBOL)
+    assert ws._observation_state_payload()["enabled"] is False
+    with pytest.raises(ValueError, match="at least one configured index option symbol"):
+        ws._build_subscription_tokens_impl(cash_symbols, max_tokens=123)
 
 
 def test_degraded_coverage_blocks_until_fresh_option_tick_proves_recovery(monkeypatch):
