@@ -13,6 +13,7 @@ import time
 from typing import Any, Mapping
 
 from config import config as cfg
+from core.market_session_store import SESSION_CLOSE, SESSION_OPEN
 from core.ohlc_buffer import OhlcBuffer
 from core.time_utils import IST_TZ
 
@@ -139,6 +140,22 @@ def persist_completed_live_source_shadow_bars(*, as_of: datetime, symbol: str | 
                 current_symbol, durable_bar, completed_as_of=cutoff
             )
             if stored.get("persisted") is not True:
+                if stored.get("status") == "SKIPPED_OUTSIDE_SESSION":
+                    result["skipped"] += 1
+                    from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
+                    emit_candle_pipeline_event(
+                        symbol=current_symbol, timeframe="1m",
+                        stage="T5_BAR_SKIPPED_OUTSIDE_SESSION",
+                        source_event_ts=cutoff, bucket_start=ts,
+                        bucket_end=ts + timedelta(seconds=60), bar_ts=ts,
+                        bar_state="SKIPPED", bar_count=len(bars),
+                        feed_session_id=provenance.get("live_feed_session_id"),
+                        instrument_token=provenance.get("instrument_token"),
+                        producer="core.market_event_graph_live_ohlc_buffer",
+                        reason="OUTSIDE_REGULAR_SESSION",
+                        details={"store_status": stored.get("status")},
+                    )
+                    continue
                 raise RuntimeError(f"COMPLETED_BAR_PERSISTENCE_FAILED:{stored.get('status')}")
             bar["bar_provenance"] = {
                 **durable_bar["bar_provenance"],
@@ -169,11 +186,18 @@ def get_live_source_shadow_completed_bars(symbol: str, *, as_of: datetime) -> li
         persist_completed_live_source_shadow_bars(as_of=as_of, symbol=symbol)
         cutoff = as_of.astimezone(IST_TZ) if as_of.tzinfo is not None else as_of.replace(tzinfo=IST_TZ)
         bars = shadow_ohlc_buffer.get_completed_bars(symbol, as_of=as_of)
-        return [
-            bar for bar in bars
-            if isinstance(bar.get("ts"), datetime)
-            and (bar["ts"].astimezone(IST_TZ) if bar["ts"].tzinfo is not None else bar["ts"].replace(tzinfo=IST_TZ)).date() == cutoff.date()
-        ]
+        completed = []
+        for bar in bars:
+            bar_ts = bar.get("ts")
+            if not isinstance(bar_ts, datetime):
+                continue
+            local_bar_ts = bar_ts.astimezone(IST_TZ) if bar_ts.tzinfo is not None else bar_ts.replace(tzinfo=IST_TZ)
+            if (
+                local_bar_ts.date() == cutoff.date()
+                and SESSION_OPEN <= local_bar_ts.time() < SESSION_CLOSE
+            ):
+                completed.append(bar)
+        return completed
     except Exception as exc:
         from core.candle_pipeline_diagnostics import emit_candle_pipeline_event
         emit_candle_pipeline_event(

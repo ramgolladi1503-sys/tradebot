@@ -5,16 +5,16 @@
 - `source_agent`: grill_me -> hermes -> gsd
 - `action`: `CRITIQUE_SCOPE`, `DESIGN_ARCHITECTURE`, `DEFINE_CONTRACT`, `PLAN_PR`, `GENERATE_TESTS`, `GENERATE_PATCH`, `FIX_TEST_FAILURE`
 - `title`: Preserve feed truth and persistence drain accounting
-- `scope`: Correct source-vs-receipt freshness evidence, per-symbol option diagnostics, recovery classification, tick post-commit accounting, persistence failure telemetry, and shared-deadline drain reporting.
-- `requested_paths`: `core/feed/runtime_store.py`, `core/feed_forensics.py`, `core/kite_depth_ws.py`, `core/kite_read_only_observation_runtime.py`, `core/tick_store.py`, and focused tests.
+- `scope`: Correct source-vs-receipt freshness evidence, per-symbol option diagnostics, recovery classification, tick post-commit accounting, persistence failure telemetry, shared-deadline drain reporting, and expected out-of-session MEG bar handling.
+- `requested_paths`: `core/feed/runtime_store.py`, `core/feed_forensics.py`, `core/kite_depth_ws.py`, `core/kite_read_only_observation_runtime.py`, `core/tick_store.py`, `core/market_event_graph_live_ohlc_buffer.py`, and focused tests.
 - `allowed_paths`: Those production modules, focused tests, and this review record.
 - `forbidden_paths`: Broker/order/execution actions, credentials, live configuration, risk/freshness gate weakening, strategy thresholds, dashboard work, runtime restarts, and unrelated files.
-- `expected_tests`: Focused feed, forensic, tick-store, runtime-store, and lifecycle tests; hosted exact-head CI.
+- `expected_tests`: Focused feed, forensic, tick-store, runtime-store, lifecycle, MEG session-boundary, and fail-closed persistence tests; hosted exact-head CI.
 - `acceptance_proof`: Explicit tests for fresh source and receipt timestamps, no duplicate retry after durable commit, unique-row accounting, redacted failure categories, latest recovery outcome, and a single monotonic shutdown deadline. Execution readiness remains fail-closed.
 
 ## Scope Guard
 
-This PR repairs evidence and persistence lifecycle correctness from the 2026-10-05 observation. It keeps global recovery and execution readiness gates authoritative. Per-symbol measurements no longer get rewritten to hide what was observed. A durable insert is not retried because a later WAL checkpoint failed. Shutdown is incomplete when its shared deadline expires or accepted rows do not reconcile. No broker/order authority is introduced.
+This PR repairs evidence and persistence lifecycle correctness from the 2026-10-05 observation. It keeps global recovery and execution readiness gates authoritative. Per-symbol measurements no longer get rewritten to hide what was observed. A durable insert is not retried because a later WAL checkpoint failed. Shutdown is incomplete when its shared deadline expires or accepted rows do not reconcile. A completed MEG bar rejected specifically as outside the regular session is counted and omitted from MEG input; all other unexpected persistence failures remain fatal. No broker/order authority is introduced.
 
 ## Grill Me Review
 
@@ -30,6 +30,8 @@ The same session has no verified prior-run interval. Its process start is 09:19 
 
 The recorded MEG traversal rejection reasons include `SNAPSHOT_STALE` (181), `INDEX_INTERVAL_MISALIGNED` (54), `SNAPSHOT_SOURCE_TICK_STALE` (20), `BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION` (13), and `MISSING_POST_REQUEST_TICK` (7). These point to stale or misaligned inputs and incomplete live-consumer coverage, but the preserved events do not establish a single common cause. The zero-length candidate and executable pool artifacts confirm no candidate output was produced.
 
+The short first session started its WebSocket at 09:00 IST. Its first completed pre-open bars were correctly rejected by `MarketSessionStore` as `SKIPPED_OUTSIDE_SESSION`, but the MEG caller promoted that expected status to `COMPLETED_BAR_PERSISTENCE_FAILED` and terminated the observer. The updated path treats only that status as a counted skip, emits a read-only `T5_BAR_SKIPPED_OUTSIDE_SESSION` event, and filters all non-session bars from the MEG completed-bar view. Database and other unexpected persistence failures continue to raise.
+
 The feed log shows the reconnect path did run: 50 authenticated connections and 50 option verification successes, alongside 57 recovery timeouts whose recorded reason is an unclean peer TCP close, 20 full feed restart attempts, 9 restart verifications, and 3 `FEED_RECOVERED` events. A restart-storm trip occurred at 15:26 IST and subsequent recovery attempts were blocked by the breaker. The final state is `RECOVERY_BLOCKED` with `WS1006_PROCESS_RESTART_REQUIRED`; successful authentication/resubscription was therefore intermittent transport recovery, not durable feed recovery. The provider/network cause of the repeated unclean closes is not established by this local log.
 
 ## Hermes Review
@@ -38,22 +40,23 @@ Contracts: raw source time and callback receipt time are distinct authorities; b
 
 ## GSD Review
 
-Implementation is limited to the five listed runtime modules, six focused test files, and this review artifact. No configuration key or default is added. Storage exceptions are classified by safe category/type and omit exception messages, tick values, tokens, credentials, and row payloads. The tick checkpoint degradation remains visible and does not relax readiness.
+Implementation is limited to the six listed runtime modules, focused test files, and this review artifact. No configuration key or default is added. Storage exceptions are classified by safe category/type and omit exception messages, tick values, tokens, credentials, and row payloads. The tick checkpoint degradation remains visible and does not relax readiness. The MEG skip event contains only the stable outside-session reason, bar identity already permitted in candle diagnostics, and store status.
 
 ## QA / Safety Review
 
 ### High-Risk Path Review
 
-`core/kite_depth_ws.py` and `core/feed/runtime_store.py` are feed paths. The changes preserve fail-closed global execution readiness and do not change broker adapters, order behavior, strategy thresholds, freshness thresholds, kill switches, or live-mode configuration. `core/kite_read_only_observation_runtime.py` only tightens shutdown budget accounting. `core/tick_store.py` prevents replay after a durable commit and reports failures without payload data. No live process was restarted or modified; no broker or order API was called.
+`core/kite_depth_ws.py`, `core/feed/runtime_store.py`, and `core/market_event_graph_live_ohlc_buffer.py` are protected live-data paths. The changes preserve fail-closed global execution readiness and do not change broker adapters, order behavior, strategy thresholds, freshness thresholds, kill switches, or live-mode configuration. `core/kite_read_only_observation_runtime.py` only tightens shutdown budget accounting. `core/tick_store.py` prevents replay after a durable commit and reports failures without payload data. The MEG path now excludes pre-open and post-close bars while retaining its hard failure on unexpected persistence states. No live process was restarted or modified; no broker or order API was called.
 
 - Focused feed/persistence/lifecycle tests: 160 passed.
 - Feed health/recovery/readiness and persistence-bound tests: 86 passed.
+- Live MEG OHLC/session-store tests after out-of-session skip repair: 43 passed.
 - `git diff --check`: passed.
 - Exact-head hosted CI: not yet green. The PR818 frozen-live-flow policy rejects the protected production changes and reports base drift from its pinned baseline. The PR782 focused-contracts gate also rejects changed files outside its designated scope. This evidence is from the live check logs; neither gate is waived or bypassed.
 
 ## Acceptance Proof
 
-The local tests prove that a fresh receipt cannot mask stale, missing, future, or non-finite source time; checkpoint failure after commit does not enqueue duplicate rows; failure events contain only redacted categories/types; retry attempts do not inflate unique pending/in-flight accounting; status `PROGRESS` is not classified as recovered; and shutdown recomputes each worker budget from one monotonic deadline while requiring tick/depth/runtime accounting to reconcile. Hosted acceptance still requires every required exact-head check to pass under the repository's protected live-flow policy.
+The local tests prove that a fresh receipt cannot mask stale, missing, future, or non-finite source time; checkpoint failure after commit does not enqueue duplicate rows; failure events contain only redacted categories/types; retry attempts do not inflate unique pending/in-flight accounting; status `PROGRESS` is not classified as recovered; shutdown recomputes each worker budget from one monotonic deadline while requiring tick/depth/runtime accounting to reconcile; pre-open/post-close bars are explicitly skipped and excluded from MEG output; and unexpected persistence failures remain fatal. Hosted acceptance still requires every required exact-head check to pass under the repository's protected live-flow policy.
 
 ## Runtime Proof Required After Merge
 
@@ -61,7 +64,7 @@ A future read-only observation must verify that the new source/receipt fields ag
 
 ## What This PR Does Not Prove
 
-It does not prove how many duplicate tick rows were committed during the observed session, identify the depth persistence throughput bottleneck, prove sustainable depth-write throughput, recover the 2026-10-05 session, certify MEG source-bar progress, establish a strategy edge, prove live readiness, or authorize paper/live orders. The PR818 protected-surface check remains an independent required policy gate.
+It does not prove how many duplicate tick rows were committed during the observed session, identify the depth persistence throughput bottleneck, prove sustainable depth-write throughput, recover the 2026-10-05 session, certify MEG source-bar progress after these changes, establish a strategy edge, prove live readiness, or authorize paper/live orders. The PR818 protected-surface check remains an independent required policy gate.
 
 ## Human Approval
 
