@@ -84,6 +84,18 @@ git diff --check
 
 All completed successfully. One earlier combined command used `python` and stopped because that executable is unavailable on this host; rerun with `python3` succeeded. Tests exercise successful full lifecycle and blocked cases, including unknown state/role, invalid jumps, missing requirements, self-approval, unresolved severe defects, missing/failed CI, valid UAT N/A, stale phase evidence, duplicate IDs, evidence/contract tampering, serialization, and forbidden broker/order imports.
 
+Repository-wide diagnostic, run after the targeted suite:
+
+```text
+PYTHONPATH=. pytest -q
+collection stopped: tests/test_upstox_daily_live_capture.py imports missing upstox_client
+
+PYTHONPATH=. pytest -q --ignore=tests/test_upstox_daily_live_capture.py
+8785 passed, 9 skipped, 28 deselected, 7 failed
+```
+
+All seven failures were in `tests/test_strategy_live_shadow.py`, whose subprocess tests invoke the unavailable `python` command. Re-running that file with a temporary PATH alias from `python` to the active `python3` interpreter produced `7 passed`. This was diagnostic only; no package was installed and no source/test was altered for the workaround. The excluded Upstox module was not verified because its third-party package is missing and that dependency is not listed in the inspected requirements files. The full repository suite therefore has no green result.
+
 ## UAT
 
 - Normal feature path through `DONE`: covered by deterministic integration test; all transitions require explicit evidence.
