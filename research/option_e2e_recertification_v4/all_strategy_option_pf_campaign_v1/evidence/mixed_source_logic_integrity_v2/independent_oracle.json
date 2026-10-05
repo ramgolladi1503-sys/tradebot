@@ -1,0 +1,809 @@
+{
+  "blocker_count": 553,
+  "blocker_counts": {
+    "ENTRY_OR_EXIT_TIMING_UNAVAILABLE": 2,
+    "EXACT_ATM_CONTRACT_UNAVAILABLE": 356,
+    "EXPIRY_UNIVERSE_COVERAGE_MISSING": 94,
+    "SAME_SESSION_OPTION_AUTHORITY_MISSING": 101
+  },
+  "exact_atm_trade_count": 216,
+  "holdout_blocker_count": 0,
+  "holdout_trade_count": 0,
+  "independent_metric_rows": [
+    {
+      "expectancy": -405.6133482142858,
+      "gross_loss_abs": 5597.93203125,
+      "gross_profit": 2758.6385937499995,
+      "losses": 4,
+      "net": -2839.2934375000004,
+      "normalization": "one_lot_rupee",
+      "partition": "development",
+      "profit_factor": 0.4927960143764025,
+      "strategy_id": "EVENT_VOLATILITY_EXPANSION",
+      "trades": 7,
+      "win_rate": 0.42857142857142855,
+      "wins": 3,
+      "zeros": 0
+    },
+    {
+      "expectancy": 1.2132714285714263,
+      "gross_loss_abs": 74.63909375,
+      "gross_profit": 83.13199374999999,
+      "losses": 4,
+      "net": 8.492899999999985,
+      "normalization": "per_option_unit",
+      "partition": "development",
+      "profit_factor": 1.1137862154174398,
+      "strategy_id": "EVENT_VOLATILITY_EXPANSION",
+      "trades": 7,
+      "win_rate": 0.42857142857142855,
+      "wins": 3,
+      "zeros": 0
+    },
+    {
+      "expectancy": 0.6564104982580544,
+      "gross_loss_abs": 82.7289103923648,
+      "gross_profit": 87.32378388017118,
+      "losses": 4,
+      "net": 4.594873487806381,
+      "normalization": "net_return_pct",
+      "partition": "development",
+      "profit_factor": 1.0555413272822514,
+      "strategy_id": "EVENT_VOLATILITY_EXPANSION",
+      "trades": 7,
+      "win_rate": 0.42857142857142855,
+      "wins": 3,
+      "zeros": 0
+    },
+    {
+      "expectancy": -195.2793749999998,
+      "gross_loss_abs": 195.2793749999998,
+      "gross_profit": 0,
+      "losses": 1,
+      "net": -195.2793749999998,
+      "normalization": "one_lot_rupee",
+      "partition": "validation",
+      "profit_factor": 0.0,
+      "strategy_id": "EVENT_VOLATILITY_EXPANSION",
+      "trades": 1,
+      "win_rate": 0.0,
+      "wins": 0,
+      "zeros": 0
+    },
+    {
+      "expectancy": -2.603724999999997,
+      "gross_loss_abs": 2.603724999999997,
+      "gross_profit": 0,
+      "losses": 1,
+      "net": -2.603724999999997,
+      "normalization": "per_option_unit",
+      "partition": "validation",
+      "profit_factor": 0.0,
+      "strategy_id": "EVENT_VOLATILITY_EXPANSION",
+      "trades": 1,
+      "win_rate": 0.0,
+      "wins": 0,
+      "zeros": 0
+    },
+    {
+      "expectancy": -4.734045454545449,
+      "gross_loss_abs": 4.734045454545449,
+      "gross_profit": 0,
+      "losses": 1,
+      "net": -4.734045454545449,
+      "normalization": "net_return_pct",
+      "partition": "validation",
+      "profit_factor": 0.0,
+      "strategy_id": "EVENT_VOLATILITY_EXPANSION",
+      "trades": 1,
+      "win_rate": 0.0,
+      "wins": 0,
+      "zeros": 0
+    },
+    {
+      "expectancy": 236.61734375,
+      "gross_loss_abs": 31.67124999999985,
+      "gross_profit": 741.5232812499999,
+      "losses": 1,
+      "net": 709.85203125,
+      "normalization": "one_lot_rupee",
+      "partition": "development",
+      "profit_factor": 23.413135927694782,
+      "strategy_id": "EXHAUSTION_REVERSAL",
+      "trades": 3,
+      "win_rate": 0.6666666666666666,
+      "wins": 2,
+      "zeros": 0
+    },
+    {
+      "expectancy": 3.3092479166666675,
+      "gross_loss_abs": 1.2668499999999945,
+      "gross_profit": 11.194593749999997,
+      "losses": 1,
+      "net": 9.927743750000003,
+      "normalization": "per_option_unit",
+      "partition": "development",
+      "profit_factor": 8.836558195524368,
+      "strategy_id": "EXHAUSTION_REVERSAL",
+      "trades": 3,
+      "win_rate": 0.6666666666666666,
+      "wins": 2,
+      "zeros": 0
+    },
+    {
+      "expectancy": 12.954939401698205,
+      "gross_loss_abs": 0.7567801672640347,
+      "gross_profit": 39.62159837235865,
+      "losses": 1,
+      "net": 38.864818205094615,
+      "normalization": "net_return_pct",
+      "partition": "development",
+      "profit_factor": 52.35549250134482,
+      "strategy_id": "EXHAUSTION_REVERSAL",
+      "trades": 3,
+      "win_rate": 0.6666666666666666,
+      "wins": 2,
+      "zeros": 0
+    },
+    {
+      "expectancy": -44.04007979910716,
+      "gross_loss_abs": 22505.222250000003,
+      "gross_profit": 20038.977781250003,
+      "losses": 34,
+      "net": -2466.244468750001,
+      "normalization": "one_lot_rupee",
+      "partition": "development",
+      "profit_factor": 0.8904145695006411,
+      "strategy_id": "LATE_DAY_MOMENTUM",
+      "trades": 56,
+      "win_rate": 0.39285714285714285,
+      "wins": 22,
+      "zeros": 0
+    },
+    {
+      "expectancy": -0.7149000669642861,
+      "gross_loss_abs": 403.02746750000006,
+      "gross_profit": 362.99306375000003,
+      "losses": 34,
+      "net": -40.034403750000024,
+      "normalization": "per_option_unit",
+      "partition": "development",
+      "profit_factor": 0.9006658181430276,
+      "strategy_id": "LATE_DAY_MOMENTUM",
+      "trades": 56,
+      "win_rate": 0.39285714285714285,
+      "wins": 22,
+      "zeros": 0
+    },
+    {
+      "expectancy": -0.38457915618015226,
+      "gross_loss_abs": 433.87786049592376,
+      "gross_profit": 412.3414277498352,
+      "losses": 34,
+      "net": -21.536432746088526,
+      "normalization": "net_return_pct",
+      "partition": "development",
+      "profit_factor": 0.950362913835999,
+      "strategy_id": "LATE_DAY_MOMENTUM",
+      "trades": 56,
+      "win_rate": 0.39285714285714285,
+      "wins": 22,
+      "zeros": 0
+    },
+    {
+      "expectancy": -17.550059895833257,
+      "gross_loss_abs": 9473.273906249999,
+      "gross_profit": 9157.372828125,
+      "losses": 10,
+      "net": -315.90107812499866,
+      "normalization": "one_lot_rupee",
+      "partition": "validation",
+      "profit_factor": 0.9666534419619618,
+      "strategy_id": "LATE_DAY_MOMENTUM",
+      "trades": 18,
+      "win_rate": 0.4444444444444444,
+      "wins": 8,
+      "zeros": 0
+    },
+    {
+      "expectancy": 0.1369796875000014,
+      "gross_loss_abs": 134.91966874999997,
+      "gross_profit": 137.385303125,
+      "losses": 10,
+      "net": 2.465634375000025,
+      "normalization": "per_option_unit",
+      "partition": "validation",
+      "profit_factor": 1.01827483270485,
+      "strategy_id": "LATE_DAY_MOMENTUM",
+      "trades": 18,
+      "win_rate": 0.4444444444444444,
+      "wins": 8,
+      "zeros": 0
+    },
+    {
+      "expectancy": 0.4052424683404848,
+      "gross_loss_abs": 132.71519124744188,
+      "gross_profit": 140.0095556775706,
+      "losses": 10,
+      "net": 7.294364430128726,
+      "normalization": "net_return_pct",
+      "partition": "validation",
+      "profit_factor": 1.0549625431841385,
+      "strategy_id": "LATE_DAY_MOMENTUM",
+      "trades": 18,
+      "win_rate": 0.4444444444444444,
+      "wins": 8,
+      "zeros": 0
+    },
+    {
+      "expectancy": -145.3954074218751,
+      "gross_loss_abs": 20617.82190625,
+      "gross_profit": 14802.005609374997,
+      "losses": 23,
+      "net": -5815.816296875004,
+      "normalization": "one_lot_rupee",
+      "partition": "development",
+      "profit_factor": 0.7179228570641586,
+      "strategy_id": "MEAN_REVERSION_EXTENSION",
+      "trades": 40,
+      "win_rate": 0.425,
+      "wins": 17,
+      "zeros": 0
+    },
+    {
+      "expectancy": -2.809278578125002,
+      "gross_loss_abs": 358.18790125000004,
+      "gross_profit": 245.81675812499998,
+      "losses": 23,
+      "net": -112.37114312500009,
+      "normalization": "per_option_unit",
+      "partition": "development",
+      "profit_factor": 0.6862787862659556,
+      "strategy_id": "MEAN_REVERSION_EXTENSION",
+      "trades": 40,
+      "win_rate": 0.425,
+      "wins": 17,
+      "zeros": 0
+    },
+    {
+      "expectancy": -3.874793153799606,
+      "gross_loss_abs": 379.72456833171435,
+      "gross_profit": 224.7328421797301,
+      "losses": 23,
+      "net": -154.99172615198424,
+      "normalization": "net_return_pct",
+      "partition": "development",
+      "profit_factor": 0.5918311874500868,
+      "strategy_id": "MEAN_REVERSION_EXTENSION",
+      "trades": 40,
+      "win_rate": 0.425,
+      "wins": 17,
+      "zeros": 0
+    },
+    {
+      "expectancy": -377.1009950520832,
+      "gross_loss_abs": 9271.6521125,
+      "gross_profit": 4746.440171875001,
+      "losses": 6,
+      "net": -4525.2119406249985,
+      "normalization": "one_lot_rupee",
+      "partition": "validation",
+      "profit_factor": 0.5119303565624375,
+      "strategy_id": "MEAN_REVERSION_EXTENSION",
+      "trades": 12,
+      "win_rate": 0.5,
+      "wins": 6,
+      "zeros": 0
+    },
+    {
+      "expectancy": -5.949770156249997,
+      "gross_loss_abs": 138.6692575,
+      "gross_profit": 67.27201562500002,
+      "losses": 6,
+      "net": -71.39724187499996,
+      "normalization": "per_option_unit",
+      "partition": "validation",
+      "profit_factor": 0.4851256640283087,
+      "strategy_id": "MEAN_REVERSION_EXTENSION",
+      "trades": 12,
+      "win_rate": 0.5,
+      "wins": 6,
+      "zeros": 0
+    },
+    {
+      "expectancy": -2.986752173860584,
+      "gross_loss_abs": 113.29043817194066,
+      "gross_profit": 77.44941208561366,
+      "losses": 6,
+      "net": -35.841026086327005,
+      "normalization": "net_return_pct",
+      "partition": "validation",
+      "profit_factor": 0.6836359125742708,
+      "strategy_id": "MEAN_REVERSION_EXTENSION",
+      "trades": 12,
+      "win_rate": 0.5,
+      "wins": 6,
+      "zeros": 0
+    },
+    {
+      "expectancy": 239.6381833639705,
+      "gross_loss_abs": 38476.17409375,
+      "gross_profit": 54771.5705625,
+      "losses": 33,
+      "net": 16295.396468749996,
+      "normalization": "one_lot_rupee",
+      "partition": "development",
+      "profit_factor": 1.4235191479549156,
+      "strategy_id": "OPENING_DRIVE",
+      "trades": 68,
+      "win_rate": 0.5147058823529411,
+      "wins": 35,
+      "zeros": 0
+    },
+    {
+      "expectancy": 3.3270262316176464,
+      "gross_loss_abs": 706.19572125,
+      "gross_profit": 932.433505,
+      "losses": 33,
+      "net": 226.23778374999995,
+      "normalization": "per_option_unit",
+      "partition": "development",
+      "profit_factor": 1.3203613062814206,
+      "strategy_id": "OPENING_DRIVE",
+      "trades": 68,
+      "win_rate": 0.5147058823529411,
+      "wins": 35,
+      "zeros": 0
+    },
+    {
+      "expectancy": 3.9092352321119166,
+      "gross_loss_abs": 553.0435984256862,
+      "gross_profit": 818.8715942092966,
+      "losses": 33,
+      "net": 265.82799578361033,
+      "normalization": "net_return_pct",
+      "partition": "development",
+      "profit_factor": 1.4806637244158072,
+      "strategy_id": "OPENING_DRIVE",
+      "trades": 68,
+      "win_rate": 0.5147058823529411,
+      "wins": 35,
+      "zeros": 0
+    },
+    {
+      "expectancy": -679.9964392045454,
+      "gross_loss_abs": 10163.661081249998,
+      "gross_profit": 2683.700249999999,
+      "losses": 9,
+      "net": -7479.9608312499995,
+      "normalization": "one_lot_rupee",
+      "partition": "validation",
+      "profit_factor": 0.2640485774315035,
+      "strategy_id": "OPENING_DRIVE",
+      "trades": 11,
+      "win_rate": 0.18181818181818182,
+      "wins": 2,
+      "zeros": 0
+    },
+    {
+      "expectancy": -10.549627386363635,
+      "gross_loss_abs": 155.26670124999995,
+      "gross_profit": 39.22079999999998,
+      "losses": 9,
+      "net": -116.04590124999999,
+      "normalization": "per_option_unit",
+      "partition": "validation",
+      "profit_factor": 0.2526027775707639,
+      "strategy_id": "OPENING_DRIVE",
+      "trades": 11,
+      "win_rate": 0.18181818181818182,
+      "wins": 2,
+      "zeros": 0
+    },
+    {
+      "expectancy": -6.7960056766196395,
+      "gross_loss_abs": 104.2209643792609,
+      "gross_profit": 29.464901936444875,
+      "losses": 9,
+      "net": -74.75606244281603,
+      "normalization": "net_return_pct",
+      "partition": "validation",
+      "profit_factor": 0.28271569076277075,
+      "strategy_id": "OPENING_DRIVE",
+      "trades": 11,
+      "win_rate": 0.18181818181818182,
+      "wins": 2,
+      "zeros": 0
+    }
+  ],
+  "independent_wfa_survivors": [],
+  "intent_count": 769,
+  "maximum_earliest_entry_to_entry_seconds_observed": 0.0,
+  "maximum_signal_to_entry_seconds_observed": 60.0,
+  "minimum_partition_trades": 30,
+  "primary_helper_reused": false,
+  "primary_metric_comparison": [
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "EVENT_VOLATILITY_EXPANSION",
+        "development",
+        "one_lot_rupee"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "EVENT_VOLATILITY_EXPANSION",
+        "development",
+        "per_option_unit"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "EVENT_VOLATILITY_EXPANSION",
+        "development",
+        "net_return_pct"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "EVENT_VOLATILITY_EXPANSION",
+        "validation",
+        "one_lot_rupee"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "EVENT_VOLATILITY_EXPANSION",
+        "validation",
+        "per_option_unit"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "EVENT_VOLATILITY_EXPANSION",
+        "validation",
+        "net_return_pct"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "EXHAUSTION_REVERSAL",
+        "development",
+        "one_lot_rupee"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "EXHAUSTION_REVERSAL",
+        "development",
+        "per_option_unit"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "EXHAUSTION_REVERSAL",
+        "development",
+        "net_return_pct"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "LATE_DAY_MOMENTUM",
+        "development",
+        "one_lot_rupee"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "LATE_DAY_MOMENTUM",
+        "development",
+        "per_option_unit"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "LATE_DAY_MOMENTUM",
+        "development",
+        "net_return_pct"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "LATE_DAY_MOMENTUM",
+        "validation",
+        "one_lot_rupee"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "LATE_DAY_MOMENTUM",
+        "validation",
+        "per_option_unit"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "LATE_DAY_MOMENTUM",
+        "validation",
+        "net_return_pct"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "MEAN_REVERSION_EXTENSION",
+        "development",
+        "one_lot_rupee"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "MEAN_REVERSION_EXTENSION",
+        "development",
+        "per_option_unit"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "MEAN_REVERSION_EXTENSION",
+        "development",
+        "net_return_pct"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "MEAN_REVERSION_EXTENSION",
+        "validation",
+        "one_lot_rupee"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "MEAN_REVERSION_EXTENSION",
+        "validation",
+        "per_option_unit"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "MEAN_REVERSION_EXTENSION",
+        "validation",
+        "net_return_pct"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "OPENING_DRIVE",
+        "development",
+        "one_lot_rupee"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "OPENING_DRIVE",
+        "development",
+        "per_option_unit"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "OPENING_DRIVE",
+        "development",
+        "net_return_pct"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "OPENING_DRIVE",
+        "validation",
+        "one_lot_rupee"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "OPENING_DRIVE",
+        "validation",
+        "per_option_unit"
+      ]
+    },
+    {
+      "all_pass": true,
+      "checks": {
+        "expectancy": true,
+        "net": true,
+        "profit_factor": true,
+        "trades": true
+      },
+      "key": [
+        "OPENING_DRIVE",
+        "validation",
+        "net_return_pct"
+      ]
+    }
+  ],
+  "reconciled": true,
+  "schema_version": "pr718_mixed_source_logic_integrity_independent_oracle_v1",
+  "trade_count": 216,
+  "verdict": "PASS_INDEPENDENT_ORACLE"
+}
