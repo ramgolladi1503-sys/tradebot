@@ -18,6 +18,10 @@ acceptance_proof: targeted behavioral tests and source-scope review
 
 Risk findings applied: hashes detect content changes but do not authenticate the author or the truth of a referenced test/approval/CI event; caller-supplied identities and external evidence remain an explicit trust boundary. Acceptance evidence is bound to a deterministic work-item contract hash so later scope edits invalidate it. Stale phase evidence, self-approval, missing references, and unknown states fail closed.
 
+## Grill Me Review
+
+The adversarial review found an evidence-authenticity boundary: caller-provided names and unsigned hashes cannot prove identity or prove that linked test/approval/CI artifacts are genuine. The implementation keeps those limits explicit, does not claim external verification, rejects self-approval and stale evidence, and introduces no broker/order/runtime path. No unresolved blocking issue remains within the offline package scope.
+
 ### Stage 1 — Hermes
 
 ```text
@@ -33,6 +37,10 @@ acceptance_proof: deterministic JSON round-trip, hashed evidence/history, explic
 ```
 
 The package is intentionally offline and has no persistence service. `Evidence.author` is a caller claim, not an authenticated identity. `content_hash` and history hash chains detect accidental or unsophisticated edits; they are not signatures and must not be represented as proof that referenced artifacts are genuine. CI status is accepted only as explicit input from a trusted integration caller; this implementation does not query or authenticate GitHub CI.
+
+## Hermes Review
+
+The architecture contract is a pure, deterministic state/evidence/defect engine with explicit transition allowlists and gate results. External identity, artifact authenticity, repository CI lookup, distributed locking, and runtime enforcement remain outside the trust boundary. Scope changes invalidate prior acceptance proofs; unsupported state transitions and missing evidence fail closed. No unresolved architectural blocker remains for this offline scope.
 
 ### Stage 2 — GSD
 
@@ -73,6 +81,10 @@ Targeted suite:
 PYTHONPATH=. pytest -q tests/delivery/test_delivery_orchestrator.py
 25 passed
 ```
+
+## GSD Review
+
+Implementation follows the scoped contract in `core/delivery/`, with behavioral tests in `tests/delivery/test_delivery_orchestrator.py`. The targeted suite passes. The documented repository-wide run is not green because this host lacks `upstox_client` and the `python` executable; the temporary executable alias was used only to diagnose the seven subprocess failures. No production runtime integration or trading action was added. No unresolved implementation blocker remains in the scoped targeted suite.
 
 Additional checks:
 
@@ -143,4 +155,4 @@ None for trading runtime: no runtime wiring was added. A future trusted caller i
 
 ## Human Approval
 
-No merge or remote mutation was performed. PR #961 was observed OPEN; implementation is on a local branch based on its governance branch. The session retains a previously stated explicit no-push/no-merge preference, so the branch has not been pushed and no PR has been opened for this implementation.
+The user explicitly approved pushing this branch and opening a PR after reviewing the concrete scope. PR #963 was opened against `governance/permanent-delivery-organization`, stacking on open PR #961. No merge was performed or authorized. The implementation remains offline and does not perform trading actions.
