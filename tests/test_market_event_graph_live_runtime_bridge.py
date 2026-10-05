@@ -22,6 +22,14 @@ from core.market_event_graph_live_runtime_bridge import (
 )
 from core.market_event_graph_live_source import LiveCapturedMetadataExporter, load_validated_live_jsonl
 from core.feed.feed_epoch import _reset_feed_epoch_for_tests
+from core.time_utils import IST_TZ
+
+
+_SESSION_START_EPOCH = datetime(2026, 7, 30, 10, 0, tzinfo=IST_TZ).timestamp()
+
+
+def _session_epoch(offset: float) -> float:
+    return _SESSION_START_EPOCH + float(offset)
 
 
 @pytest.fixture(autouse=True)
@@ -162,7 +170,11 @@ def _bar(ts_epoch: float, symbol: str, close: float = 100.0, *, token: int | Non
     }
 
 
-def _install_bars(monkeypatch, *, contract_payload, index_epoch=60.0, constituent_epoch=60.0, missing_symbol=None, provenance=None, last_tick_by_symbol=None):
+def _install_bars(monkeypatch, *, contract_payload, index_epoch=None, constituent_epoch=None, missing_symbol=None, provenance=None, last_tick_by_symbol=None):
+    if index_epoch is None:
+        index_epoch = _session_epoch(60.0)
+    if constituent_epoch is None:
+        constituent_epoch = _session_epoch(60.0)
     token_by_symbol = {
         str(contract_payload["index_symbol"]).upper(): int(contract_payload["index_instrument_token"]),
         **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in contract_payload["constituents"]},
@@ -194,7 +206,7 @@ def test_bridge_is_disabled_by_default(monkeypatch, tmp_path):
     output_path = tmp_path / "captured_metadata.jsonl"
     bridge = LiveSourceRuntimeBridge(exporter=LiveCapturedMetadataExporter(output_path), universe_contract=_contract())
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(120.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(120.0), tz=timezone.utc))
 
     assert result.attempted is False
     assert result.exported is False
@@ -213,22 +225,22 @@ def test_real_exporter_persists_exactly_one_valid_live_row(monkeypatch, tmp_path
         subscription_evidence_provider=_evidence,
     )
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.exported is True
     stored_rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     (stored_row,) = stored_rows
     assert stored_row["source_kind"] == "LIVE_CAPTURED_METADATA"
-    assert stored_row["session_date"] == "1970-01-01"
-    assert stored_row["interval_end"] == "1970-01-01T05:32:00+05:30"
+    assert stored_row["session_date"] == "2026-07-30"
+    assert stored_row["interval_end"] == "2026-07-30T10:02:00+05:30"
     assert tuple(stored_row["expected_constituent_symbols"]) == _symbols()
     assert stored_row["read_only"] is True
     assert stored_row["is_order_action"] is False
     assert stored_row["broker_api_called"] is False
     assert stored_row["allowed_for_live_execution"] is False
-    assert stored_row["source_bar_end_epoch"] == 120.0
-    assert stored_row["index_source_bar_end_epoch"] == 120.0
-    assert stored_row["observed_at_epoch"] == pytest.approx(130.0, abs=0.01)
+    assert stored_row["source_bar_end_epoch"] == _session_epoch(120.0)
+    assert stored_row["index_source_bar_end_epoch"] == _session_epoch(120.0)
+    assert stored_row["observed_at_epoch"] == pytest.approx(_session_epoch(130.0), abs=0.01)
     assert stored_row["live_universe"]["version"] == "2026-07-30.test"
     assert stored_row["universe_hash"] == contract_payload["canonical_sha256"]
     (validated_row,) = load_validated_live_jsonl(output_path)
@@ -251,7 +263,7 @@ def test_bridge_waits_for_late_completed_bar_within_grace(monkeypatch, tmp_path)
             return []
         if symbol == delayed:
             return [_bar(
-                60.0,
+                _session_epoch(60.0),
                 delayed,
                 token=1000,
                 universe_hash=contract_payload["canonical_sha256"],
@@ -265,8 +277,8 @@ def test_bridge_waits_for_late_completed_bar_within_grace(monkeypatch, tmp_path)
                     "provider": "kite",
                     "token_domain": "kite_instrument_token",
                     "universe_hash": contract_payload["canonical_sha256"],
-                    "first_live_tick_epoch": 61.0,
-                    "last_live_tick_epoch": 120.0,
+                    "first_live_tick_epoch": _session_epoch(61.0),
+                    "last_live_tick_epoch": _session_epoch(120.0),
                     "historical_seed": False,
                     "replay_fixture": False,
                     "non_live_fallback": False,
@@ -281,7 +293,7 @@ def test_bridge_waits_for_late_completed_bar_within_grace(monkeypatch, tmp_path)
         universe_contract=contract_payload,
         subscription_evidence_provider=_evidence,
     )
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.exported is True
     assert result.latency_ms["snapshot_assembly"] >= 650
@@ -301,7 +313,7 @@ def test_permanently_missing_bar_times_out_without_synthesis(monkeypatch, tmp_pa
         subscription_evidence_provider=_evidence,
     )
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(140.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(140.0), tz=timezone.utc))
 
     assert result.exported is False
     assert result.reason == "SNAPSHOT_TIMED_OUT"
@@ -322,7 +334,7 @@ def test_bridge_rejects_snapshot_over_freshness_cap(monkeypatch, tmp_path):
         subscription_evidence_provider=_evidence,
     )
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.exported is False
     assert result.reason == "SNAPSHOT_STALE"
@@ -334,7 +346,7 @@ def test_no_explicit_live_universe_contract_exports_nothing(monkeypatch, tmp_pat
     output_path = tmp_path / "captured_metadata.jsonl"
     bridge = LiveSourceRuntimeBridge(exporter=LiveCapturedMetadataExporter(output_path))
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(120.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(120.0), tz=timezone.utc))
 
     assert result.reason == LIVE_UNIVERSE_NOT_CONFIGURED
     assert result.exported is False
@@ -363,7 +375,7 @@ def test_two_symbol_self_declared_universe_is_blocked(monkeypatch, tmp_path):
     small = _contract(constituents=[{"symbol": "AAA", "instrument_token": 10}, {"symbol": "BBB", "instrument_token": 11}])
     bridge = LiveSourceRuntimeBridge(exporter=LiveCapturedMetadataExporter(tmp_path / "out.jsonl"), universe_contract=small)
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(120.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(120.0), tz=timezone.utc))
 
     assert result.reason == BLOCKED_BY_AUTHORITATIVE_LIVE_UNIVERSE
     assert result.exported is False
@@ -385,7 +397,7 @@ def test_exact_identity_mismatch_is_rejected_even_when_counts_match(monkeypatch,
         subscription_evidence_provider=mismatched_evidence,
     )
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.reason == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION
     assert result.exported is False
@@ -408,7 +420,7 @@ def test_duplicate_or_extra_subscription_identity_is_rejected(monkeypatch, tmp_p
         subscription_evidence_provider=duplicated_evidence,
     )
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.reason == BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION
     assert result.exported is False
@@ -423,7 +435,7 @@ def test_rejection_ledger_is_durable_and_separate_from_accepted_rows(monkeypatch
     output_path = tmp_path / "accepted.jsonl"
     bridge = LiveSourceRuntimeBridge(exporter=LiveCapturedMetadataExporter(output_path), universe_contract=_contract())
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.reason == "SUBSCRIPTION_REQUEST_FAILED"
     assert output_path.exists() is False
@@ -460,7 +472,7 @@ def test_default_subscription_provider_reads_feed_lifecycle_snapshot(monkeypatch
     monkeypatch.setattr("core.kite_depth_ws.market_event_graph_subscription_evidence_for_tokens", provider)
     bridge = LiveSourceRuntimeBridge(exporter=LiveCapturedMetadataExporter(tmp_path / "out.jsonl"), universe_contract=contract_payload)
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.exported is True
     assert result.audit["subscription_evidence"]["subscription_evidence_id"] == "feed-proof"
@@ -485,7 +497,7 @@ def test_post_mode_full_lifecycle_truth_overrides_pre_mode_full_timestamp(monkey
         universe_contract=contract_payload,
         subscription_evidence_provider=provider,
     )
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.exported is True
 
@@ -495,7 +507,7 @@ def test_token_resolution_without_callback_proof_is_rejected(monkeypatch, tmp_pa
     contract_payload = _contract()
     bridge = LiveSourceRuntimeBridge(exporter=LiveCapturedMetadataExporter(tmp_path / "out.jsonl"), universe_contract=contract_payload)
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.reason == "SUBSCRIPTION_REQUEST_FAILED"
     assert result.exported is False
@@ -511,10 +523,56 @@ def test_missing_live_tick_provenance_is_rejected(monkeypatch, tmp_path):
         subscription_evidence_provider=_evidence,
     )
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.reason == LIVE_BAR_PROVENANCE_UNPROVEN
     assert result.exported is False
+
+
+def test_subscription_epoch_mismatch_keeps_specific_reason(monkeypatch):
+    from core.market_event_graph_live_runtime_bridge import _bar_has_live_provenance
+
+    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.current_feed_epoch", lambda: 0)
+    bar = {
+        "bar_provenance": {
+            "source_type": "live_websocket",
+            "live_feed_session_id": "session-1",
+            "feed_epoch": 0,
+            "first_live_tick_epoch": 10.0,
+            "last_live_tick_epoch": 20.0,
+        }
+    }
+
+    accepted, reason = _bar_has_live_provenance(
+        bar,
+        subscription={"feed_session_id": "session-1", "feed_epoch": 1},
+    )
+
+    assert accepted is False
+    assert reason == "FEED_EPOCH_MISMATCH"
+
+
+def test_current_global_epoch_guard_still_rejects_stale_bar(monkeypatch):
+    from core.market_event_graph_live_runtime_bridge import _bar_has_live_provenance
+
+    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.current_feed_epoch", lambda: 1)
+    bar = {
+        "bar_provenance": {
+            "source_type": "live_websocket",
+            "live_feed_session_id": "session-1",
+            "feed_epoch": 0,
+            "first_live_tick_epoch": 10.0,
+            "last_live_tick_epoch": 20.0,
+        }
+    }
+
+    accepted, reason = _bar_has_live_provenance(
+        bar,
+        subscription={"feed_session_id": "session-1", "feed_epoch": 0},
+    )
+
+    assert accepted is False
+    assert reason == LIVE_BAR_PROVENANCE_UNPROVEN
 
 
 def test_history_seeded_and_fallback_bars_are_rejected(monkeypatch, tmp_path):
@@ -544,7 +602,7 @@ def test_history_seeded_and_fallback_bars_are_rejected(monkeypatch, tmp_path):
         subscription_evidence_provider=_evidence,
     )
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.reason == LIVE_BAR_PROVENANCE_UNPROVEN
     assert result.exported is False
@@ -568,7 +626,7 @@ def test_reconnect_generation_stale_bar_is_diagnostic_only(monkeypatch, tmp_path
         subscription_evidence_provider=generation_two_evidence,
     )
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.exported is True
     assert result.reason == "OK"
@@ -584,7 +642,7 @@ def test_live_provenance_with_kite_contract_is_accepted(monkeypatch, tmp_path):
         subscription_evidence_provider=_evidence,
     )
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.exported is True
     assert result.reason == "OK"
@@ -593,9 +651,9 @@ def test_live_provenance_with_kite_contract_is_accepted(monkeypatch, tmp_path):
 @pytest.mark.parametrize(
     ("symbol", "tick_epoch", "expected_reason"),
     [
-        ("NIFTY_00", 100.0, "SNAPSHOT_SOURCE_TICK_STALE"),
-        ("NIFTY", 121.0, "SNAPSHOT_SOURCE_TICK_FUTURE"),
-        ("NIFTY", 131.0, "SNAPSHOT_SOURCE_TICK_FUTURE"),
+        ("NIFTY_00", _session_epoch(100.0), "SNAPSHOT_SOURCE_TICK_STALE"),
+        ("NIFTY", _session_epoch(121.0), "SNAPSHOT_SOURCE_TICK_FUTURE"),
+        ("NIFTY", _session_epoch(131.0), "SNAPSHOT_SOURCE_TICK_FUTURE"),
         ("NIFTY_00", float("nan"), "SNAPSHOT_SOURCE_TICK_INVALID"),
     ],
 )
@@ -617,27 +675,27 @@ def test_bridge_rejects_aligned_bars_with_stale_or_future_source_tick(
         subscription_evidence_provider=_evidence,
     )
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(130.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(130.0), tz=timezone.utc))
 
     assert result.exported is False
     assert result.reason == expected_reason
     assert result.rejected_identities == (symbol,)
     failure = result.audit["diagnostic_context"]["source_tick_freshness"]["failures"][0]
     assert failure["symbol"] == symbol
-    assert failure["source_bar_end_epoch"] == 120.0
+    assert failure["source_bar_end_epoch"] == _session_epoch(120.0)
     if expected_reason == "SNAPSHOT_SOURCE_TICK_INVALID":
         assert failure["last_live_tick_epoch"] is None
     else:
         assert failure["last_live_tick_epoch"] == tick_epoch
     expected_age = (
-        130.0 - tick_epoch if expected_reason != "SNAPSHOT_SOURCE_TICK_INVALID" else None
+        _session_epoch(130.0) - tick_epoch if expected_reason != "SNAPSHOT_SOURCE_TICK_INVALID" else None
     )
     if expected_age is None:
         assert failure["tick_age_sec"] is None
         assert failure["last_live_tick_epoch"] is None
     else:
         assert failure["tick_age_sec"] == pytest.approx(expected_age, abs=0.001)
-    assert failure["observed_at_epoch"] == pytest.approx(130.0, abs=0.001)
+    assert failure["observed_at_epoch"] == pytest.approx(_session_epoch(130.0), abs=0.001)
     assert failure["max_age_sec"] == 15.0
     assert failure["reason"] == expected_reason
     rejection = json.loads((tmp_path / "rejections.jsonl").read_text().splitlines()[0])
@@ -651,26 +709,26 @@ def test_bridge_rejects_aligned_bars_with_stale_or_future_source_tick(
 def test_index_constituent_source_interval_mismatch_is_rejected(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     contract_payload = _contract()
-    _install_bars(monkeypatch, contract_payload=contract_payload, index_epoch=120.0, constituent_epoch=60.0)
+    _install_bars(monkeypatch, contract_payload=contract_payload, index_epoch=_session_epoch(120.0), constituent_epoch=_session_epoch(60.0))
     bridge = LiveSourceRuntimeBridge(
         exporter=LiveCapturedMetadataExporter(tmp_path / "out.jsonl"),
         universe_contract=contract_payload,
         subscription_evidence_provider=_evidence,
     )
 
-    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(190.0, tz=timezone.utc))
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(190.0), tz=timezone.utc))
 
     assert result.reason == INDEX_INTERVAL_MISALIGNED
     assert result.exported is False
     mismatch = result.audit["diagnostic_context"]["bar_interval_mismatch"]
     assert mismatch["index_symbol"] == "NIFTY"
-    assert mismatch["index_bar_end_epoch"] == 180.0
+    assert mismatch["index_bar_end_epoch"] == _session_epoch(180.0)
     assert mismatch["constituent_symbol"] == "NIFTY_00"
-    assert mismatch["constituent_bar_end_epoch"] == 120.0
+    assert mismatch["constituent_bar_end_epoch"] == _session_epoch(120.0)
     assert mismatch["bar_interval_delta_seconds"] == -60.0
-    assert mismatch["cycle_cutoff_epoch"] == pytest.approx(190.0, abs=0.01)
-    assert mismatch["index_last_live_tick_epoch"] == 180.0
-    assert mismatch["constituent_last_live_tick_epoch"] == 120.0
+    assert mismatch["cycle_cutoff_epoch"] == pytest.approx(_session_epoch(190.0), abs=0.01)
+    assert mismatch["index_last_live_tick_epoch"] == _session_epoch(180.0)
+    assert mismatch["constituent_last_live_tick_epoch"] == _session_epoch(120.0)
     rejection = json.loads((tmp_path / "rejections.jsonl").read_text().splitlines()[0])
     assert rejection["reason"] == INDEX_INTERVAL_MISALIGNED
     assert rejection["diagnostic_context"]["bar_interval_mismatch"] == mismatch
@@ -679,11 +737,11 @@ def test_index_constituent_source_interval_mismatch_is_rejected(monkeypatch, tmp
 def test_source_tick_at_freshness_limit_is_accepted():
     bar = {
         "symbol": "NIFTY",
-        "source_bar_end_epoch": 120.0,
-        "bar_provenance": {"last_live_tick_epoch": 115.0},
+        "source_bar_end_epoch": _session_epoch(120.0),
+        "bar_provenance": {"last_live_tick_epoch": _session_epoch(115.0)},
     }
     context, symbols, reason = _source_tick_freshness_failure(
-        {"observed_at_epoch": 130.0, "index_bar": bar, "constituent_bars": []},
+        {"observed_at_epoch": _session_epoch(130.0), "index_bar": bar, "constituent_bars": []},
         max_age_sec=15.0,
     )
 

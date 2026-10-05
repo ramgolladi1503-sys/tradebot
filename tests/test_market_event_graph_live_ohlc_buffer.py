@@ -551,6 +551,107 @@ def test_shadow_buffer_persists_completed_bar_and_restores_same_session_only(tmp
     )) == 2
 
 
+@pytest.mark.parametrize(
+    ("first_tick", "next_tick", "expected_bar"),
+    (
+        (
+            datetime(2026, 10, 5, 9, 14, 10, tzinfo=ZoneInfo("Asia/Kolkata")),
+            datetime(2026, 10, 5, 9, 15, 10, tzinfo=ZoneInfo("Asia/Kolkata")),
+            datetime(2026, 10, 5, 9, 15, tzinfo=ZoneInfo("Asia/Kolkata")),
+        ),
+        (
+            datetime(2026, 10, 5, 15, 29, 10, tzinfo=ZoneInfo("Asia/Kolkata")),
+            datetime(2026, 10, 5, 15, 30, 10, tzinfo=ZoneInfo("Asia/Kolkata")),
+            datetime(2026, 10, 5, 15, 29, tzinfo=ZoneInfo("Asia/Kolkata")),
+        ),
+    ),
+)
+def test_out_of_session_completed_bar_is_skipped_without_ending_observation(
+    tmp_path, monkeypatch, first_tick, next_tick, expected_bar,
+):
+    reset_live_source_shadow_buffer()
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    events = []
+    monkeypatch.setattr(
+        "core.candle_pipeline_diagnostics.emit_candle_pipeline_event",
+        lambda **event: events.append(event),
+    )
+    session_date = "2026-10-05"
+    store = MarketSessionStore(db_path=tmp_path / "session.sqlite", report_root=tmp_path / "reports")
+    configure_live_source_session_store(
+        store,
+        session_date=session_date,
+        symbols=("NIFTY",),
+        restore_as_of=first_tick,
+    )
+    identity = {"feed_session_id": "session-1", "feed_epoch": 0, "reconnect_generation": 1}
+    capture = {
+        "symbol": "NIFTY",
+        "instrument_token": 256265,
+        "source_type": "live_websocket",
+        "provider": "kite",
+        "token_domain": "kite_instrument_token",
+        "universe_hash": "fba078a4cd7aeb520432b05071a5ac4078e164b809fec0eb80503cb7fe562371",
+        "feed_identity": identity,
+    }
+    assert record_live_source_shadow_tick(
+        **capture, price=25000.0, source_tick_epoch=first_tick.timestamp(),
+    )["accepted"] is True
+    assert record_live_source_shadow_tick(
+        **capture, price=25001.0, source_tick_epoch=next_tick.timestamp(),
+    )["accepted"] is True
+
+    cutoff = next_tick + timedelta(seconds=60)
+    completed = get_live_source_shadow_completed_bars("NIFTY", as_of=cutoff)
+    durable = store.get_bars(
+        "NIFTY", as_of=cutoff, timeframe="1m", session_date=session_date,
+    )
+
+    assert [bar["ts"] for bar in completed] == [expected_bar]
+    assert [bar["ts"] for bar in durable] == [expected_bar]
+    skipped = [event for event in events if event.get("stage") == "T5_BAR_SKIPPED_OUTSIDE_SESSION"]
+    assert len(skipped) == 1
+    assert skipped[0]["reason"] == "OUTSIDE_REGULAR_SESSION"
+    assert skipped[0]["bar_state"] == "SKIPPED"
+
+
+def test_unexpected_completed_bar_persistence_failure_still_fails_closed(monkeypatch):
+    reset_live_source_shadow_buffer()
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    start = datetime(2026, 10, 5, 9, 15, 10, tzinfo=ZoneInfo("Asia/Kolkata"))
+
+    class FailingStore:
+        def get_bars(self, *args, **kwargs):
+            return []
+
+        def persist_completed_bar(self, *args, **kwargs):
+            return {"status": "WRITE_FAILED", "persisted": False}
+
+    configure_live_source_session_store(
+        FailingStore(), session_date="2026-10-05", symbols=("NIFTY",), restore_as_of=start,
+    )
+    capture = {
+        "symbol": "NIFTY",
+        "instrument_token": 256265,
+        "source_type": "live_websocket",
+        "provider": "kite",
+        "token_domain": "kite_instrument_token",
+        "universe_hash": "fba078a4cd7aeb520432b05071a5ac4078e164b809fec0eb80503cb7fe562371",
+        "feed_identity": {"feed_session_id": "session-1", "feed_epoch": 0, "reconnect_generation": 1},
+    }
+    assert record_live_source_shadow_tick(
+        **capture, price=25000.0, source_tick_epoch=start.timestamp(),
+    )["accepted"] is True
+    assert record_live_source_shadow_tick(
+        **capture, price=25001.0, source_tick_epoch=(start + timedelta(minutes=1)).timestamp(),
+    )["accepted"] is True
+
+    with pytest.raises(RuntimeError, match="COMPLETED_BAR_PERSISTENCE_FAILED:WRITE_FAILED"):
+        get_live_source_shadow_completed_bars(
+            "NIFTY", as_of=start + timedelta(minutes=2),
+        )
+
+
 def test_shadow_buffer_rejects_replay_fixture_persistence(tmp_path, monkeypatch):
     reset_live_source_shadow_buffer()
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)

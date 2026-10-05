@@ -585,12 +585,20 @@ def test_underlying_identity_health_requires_active_current_generation_tick(monk
     monkeypatch.setattr(depth_ws, "_INDEX_SYMBOLS", {"NIFTY"}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_TOKENS", [token], raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {token: now_epoch - 0.4}, raising=False)
+    monkeypatch.setattr(
+        depth_ws,
+        "_LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN",
+        {token: now_epoch - 0.4},
+        raising=False,
+    )
     monkeypatch.setattr(depth_ws, "_LAST_PAYLOAD_TS_BY_TOKEN", {token: now_epoch - 0.5}, raising=False)
     monkeypatch.setattr(depth_ws, "_SUBSCRIPTION_REQUEST_SUCCEEDED_TOKENS", {token}, raising=False)
     monkeypatch.setattr(depth_ws, "get_current_feed_session_identity", lambda: identity)
     monkeypatch.setattr(cfg, "LTP_SLA_SECONDS", 2.5, raising=False)
     lifecycle_proof = depth_ws.market_event_graph_subscription_evidence_for_tokens({"NIFTY": token})
-    assert lifecycle_proof["token_lifecycle"][str(token)]["latest_callback_receipt_epoch"] == now_epoch - 0.4
+    lifecycle = lifecycle_proof["token_lifecycle"][str(token)]
+    assert lifecycle["latest_callback_receipt_epoch"] == now_epoch - 0.4
+    assert lifecycle["latest_message_epoch"] == now_epoch - 0.4
     assert lifecycle_proof["subscription_request_succeeded_symbols"] == ["NIFTY"]
 
     healthy = depth_ws._underlying_feed_identity_by_symbol(
@@ -805,8 +813,11 @@ def test_recovery_blocked_snapshot_sets_executable_false_everywhere(monkeypatch,
         assert payload["process_restart_required"] is True
         assert payload["ws_reconnect_allowed"] is False
         assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
-        assert payload["option_feed_block_reason_by_symbol"]["NIFTY"] == "NO_LIVE_OPTION_FEED"
-        assert payload["option_active_blockers_by_symbol"]["NIFTY"] == ["NO_LIVE_OPTION_FEED"]
+        assert payload["option_feed_block_reason_by_symbol"]["NIFTY"] == "OK"
+        assert payload["option_active_blockers_by_symbol"]["NIFTY"] == []
+        # The global terminal recovery blocker still blocks all candidate paths.
+        assert payload["feed_truth_allows_executable_candidates"] is False
+        assert payload["feed_truth_allows_live_selection"] is False
 
     assert payloads[0]["option_feed_block_reason_by_symbol"] == payloads[1]["option_feed_block_reason_by_symbol"] == payloads[2]["option_feed_block_reason_by_symbol"]
     assert payloads[0]["feed_truth_allows_executable_candidates"] == payloads[1]["feed_truth_allows_executable_candidates"] == payloads[2]["feed_truth_allows_executable_candidates"]
