@@ -4,13 +4,37 @@ about: Propose a Tradebot improvement
 labels: enhancement
 ---
 
-## Feature summary
+## Work hierarchy
 
-Describe the feature in one or two sentences.
+- Type: FEATURE / STORY / TASK
+- Parent Epic:
+- Parent Feature:
+- Proposed Work Item ID:
+- Priority:
 
-## Problem it solves
+## Business goal
 
-What exact pain point does this remove?
+Why does this matter to the TradeBot product?
+
+## Current behavior
+
+What exact pain point or limitation exists now?
+
+## Expected behavior
+
+Describe how the system should behave after this feature exists.
+
+## In scope
+
+-
+
+## Out of scope
+
+-
+
+## Dependencies
+
+-
 
 ## Area affected
 
@@ -26,17 +50,35 @@ What exact pain point does this remove?
 - [ ] CI / release process
 - [ ] Documentation
 
-## Proposed behavior
-
-Describe how the system should behave after this feature exists.
-
 ## Acceptance criteria
 
-- [ ] Behavior is testable offline or in paper mode
+- [ ] Behavior is testable offline or in paper mode where applicable
 - [ ] Failure state is visible to the operator
-- [ ] Logs/dashboard fields are clear
 - [ ] Does not weaken risk controls
 - [ ] Does not hide stale feed, stale LTP, or contract-resolution failures
+- [ ] Acceptance criteria are measurable and traceable
+
+Additional criteria:
+
+- [ ]
+
+## Architecture / safety impact
+
+- Existing infrastructure to reuse:
+- High-risk paths potentially affected:
+- Broker/order impact:
+- LIVE/PAPER/SIM impact:
+- Data/evidence impact:
+
+## QA attack plan
+
+List how QA should try to break this feature, not merely confirm the happy path.
+
+-
+
+## UAT expectation
+
+What business behavior proves the feature is acceptable?
 
 ## Validation plan
 
@@ -45,7 +87,7 @@ PYTHONPATH=. pytest -q
 PYTHONPATH=. python -m core.health_gate --desk DEFAULT --strict
 ```
 
-Add any targeted tests or scripts needed.
+Add targeted tests/scripts as required.
 
 ## Tradeoff / risk
 
