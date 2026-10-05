@@ -56,12 +56,27 @@ def test_watchdog_only_stall(tmp_path):
 
 
 def test_reconnect_success_precedes_other_classification(tmp_path):
-    _write(tmp_path, _callback(), {"event_type": "RECOVERY_SUCCEEDED", "receipt_epoch": 11.0})
+    _write(tmp_path, _callback(), {"event_type": "RECOVERY_SUCCEEDED", "receipt_epoch": 11.0, "status": "RECOVERED"})
     assert classify_session(tmp_path)["classification"] == "RECONNECT_TRIGGERED_AND_RECOVERED"
+
+
+def test_resubscribe_progress_is_not_misreported_as_recovered(tmp_path):
+    _write(tmp_path, _callback(), {"event_type": "RECOVERY_SUCCEEDED", "receipt_epoch": 11.0, "status": "PROGRESS"})
+    assert classify_session(tmp_path)["classification"] == "RECONNECT_TRIGGERED_RECOVERY_UNVERIFIED"
 
 
 def test_reconnect_failure(tmp_path):
     _write(tmp_path, _callback(), {"event_type": "RECOVERY_FAILED", "receipt_epoch": 11.0})
+    assert classify_session(tmp_path)["classification"] == "RECONNECT_TRIGGERED_AND_FAILED"
+
+
+def test_later_recovery_failure_supersedes_earlier_success(tmp_path):
+    _write(
+        tmp_path,
+        _callback(),
+        {"event_type": "RECOVERY_SUCCEEDED", "receipt_epoch": 11.0, "status": "RECOVERED"},
+        {"event_type": "RECOVERY_FAILED", "receipt_epoch": 12.0, "status": "FAILED"},
+    )
     assert classify_session(tmp_path)["classification"] == "RECONNECT_TRIGGERED_AND_FAILED"
 
 

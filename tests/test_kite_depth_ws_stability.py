@@ -217,6 +217,7 @@ def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
     _patch_common(monkeypatch)
     callbacks = []
     shadow_ticks = []
+    forensic_events = []
     monkeypatch.setattr(ws, "record_fd_trace", lambda *args, **kwargs: None)
     monkeypatch.setattr(ws.feed_evidence, "callback", lambda count, **kwargs: callbacks.append((count, kwargs.get("rows"))))
     monkeypatch.setattr(ws.feed_evidence, "normalized", lambda *args, **kwargs: None)
@@ -245,6 +246,20 @@ def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
     monkeypatch.setattr(ws, "now_utc_epoch", lambda: 1234.5)
     monkeypatch.setattr(ws, "_SCHEMA_LOG_TS", 0.0, raising=False)
     monkeypatch.setattr(ws, "_FEED_ON_TICKS_ROW_SEQ", 0, raising=False)
+    monkeypatch.setattr(ws, "append_feed_forensic_event", lambda event_type, **kwargs: forensic_events.append((event_type, kwargs)))
+    monkeypatch.setattr(ws.depth_store, "persistence_state", lambda: {
+        "worker_alive": True,
+        "enqueued": 14,
+        "persisted": 10,
+        "queue_depth": 3,
+        "in_flight": 1,
+        "rejected": 0,
+        "queue_rejected": 0,
+        "failures": 0,
+        "provenance_write_failures": 0,
+        "accounting_invariant_ok": True,
+        "unaccounted_remainder": 0,
+    })
     monkeypatch.setattr(ws, "load_observation_registry", lambda **kwargs: type("Registry", (), {
         "all_tokens": [101], "canonical_sha256": "universe-hash",
         "observation_identity": lambda self, token: {"symbol": "NIFTY", "instrument_class": "INDEX"},
@@ -278,6 +293,14 @@ def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
     assert callbacks[0][1][0]["_audit_source_row_index"] == 7
     assert len(shadow_ticks) == 1
     assert shadow_ticks[0]["cumulative_volume"] == 1.0
+    depth_progress = next(kwargs for event_type, kwargs in forensic_events if event_type == "DEPTH_PERSISTENCE_PROGRESS")
+    assert depth_progress["status"] == "HEALTHY"
+    assert depth_progress["enqueue_count"] == 14
+    assert depth_progress["flush_count"] == 10
+    assert depth_progress["queue_depth"] == 3
+    assert depth_progress["in_flight"] == 1
+    assert depth_progress["worker_alive"] is True
+    assert depth_progress["accounting_invariant_ok"] is True
 
 
 def test_on_ticks_855_row_batches_preserve_tick_depth_observation_when_snapshot_coalesces(monkeypatch):

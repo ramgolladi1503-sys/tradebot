@@ -68,12 +68,21 @@ def classify_session(root: Path) -> dict[str, Any]:
     depth = last("DEPTH_PERSISTENCE_PROGRESS")
     runtime = last("RUNTIME_PERSISTENCE_PROGRESS")
     watchdog = last("FEED_WATCHDOG")
-    recovery_success = last("RECOVERY_SUCCEEDED")
-    recovery_failed = last("RECOVERY_FAILED")
-    if recovery_success:
-        classification = "RECONNECT_TRIGGERED_AND_RECOVERED"
-    elif recovery_failed:
+    recovery_outcomes = [
+        row for row in rows
+        if row.get("event_type") in {"RECOVERY_SUCCEEDED", "RECOVERY_FAILED"}
+    ]
+    latest_recovery_outcome = recovery_outcomes[-1] if recovery_outcomes else None
+    if latest_recovery_outcome and latest_recovery_outcome.get("event_type") == "RECOVERY_FAILED":
         classification = "RECONNECT_TRIGGERED_AND_FAILED"
+    elif (
+        latest_recovery_outcome
+        and latest_recovery_outcome.get("event_type") == "RECOVERY_SUCCEEDED"
+        and str(latest_recovery_outcome.get("status") or "").strip().upper() == "RECOVERED"
+    ):
+        classification = "RECONNECT_TRIGGERED_AND_RECOVERED"
+    elif latest_recovery_outcome:
+        classification = "RECONNECT_TRIGGERED_RECOVERY_UNVERIFIED"
     elif not callback:
         classification = "UNKNOWN"
     elif tick and tick.get("status") == "STALLED":
