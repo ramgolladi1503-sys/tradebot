@@ -20,7 +20,7 @@ Risk findings applied: hashes detect content changes but do not authenticate the
 
 ## Grill Me Review
 
-The adversarial review found an evidence-authenticity boundary: caller-provided names and unsigned hashes cannot prove identity or prove that linked test/approval/CI artifacts are genuine. The implementation keeps those limits explicit, does not claim external verification, rejects self-approval and stale evidence, and introduces no broker/order/runtime path. No unresolved blocking issue remains within the offline package scope.
+The adversarial review found an evidence-authenticity boundary: caller-provided names and unsigned hashes cannot prove identity or prove that linked test/approval/CI artifacts are genuine. The implementation keeps those limits explicit, does not claim external verification, rejects self-approval and stale evidence, and introduces no broker/order/runtime path. No open blocking concern remains within the offline package scope.
 
 ### Stage 1 — Hermes
 
@@ -40,7 +40,7 @@ The package is intentionally offline and has no persistence service. `Evidence.a
 
 ## Hermes Review
 
-The architecture contract is a pure, deterministic state/evidence/defect engine with explicit transition allowlists and gate results. External identity, artifact authenticity, repository CI lookup, distributed locking, and runtime enforcement remain outside the trust boundary. Scope changes invalidate prior acceptance proofs; unsupported state transitions and missing evidence fail closed. No unresolved architectural blocker remains for this offline scope.
+The architecture contract is a pure, deterministic state/evidence/defect engine with explicit transition allowlists and gate results. External identity, artifact authenticity, repository CI lookup, distributed locking, and runtime enforcement remain outside the trust boundary. Scope changes invalidate prior acceptance proofs; unsupported state transitions and missing evidence fail closed. No architecture blocking concern remains for this offline scope.
 
 ### Stage 2 — GSD
 
@@ -84,7 +84,7 @@ PYTHONPATH=. pytest -q tests/delivery/test_delivery_orchestrator.py
 
 ## GSD Review
 
-Implementation follows the scoped contract in `core/delivery/`, with behavioral tests in `tests/delivery/test_delivery_orchestrator.py`. The targeted suite passes. The documented repository-wide run is not green because this host lacks `upstox_client` and the `python` executable; the temporary executable alias was used only to diagnose the seven subprocess failures. No production runtime integration or trading action was added. No unresolved implementation blocker remains in the scoped targeted suite.
+Implementation follows the scoped contract in `core/delivery/`, with behavioral tests in `tests/delivery/test_delivery_orchestrator.py`. The targeted suite passes. The documented repository-wide run is not green because this host lacks `upstox_client` and the `python` executable; the temporary executable alias was used only to diagnose the seven subprocess failures. No production runtime integration or trading action was added. No implementation blocking concern remains in the scoped targeted suite.
 
 Additional checks:
 
