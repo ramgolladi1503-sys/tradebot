@@ -1,0 +1,32 @@
+name: NIFTY Option Edge Archive Probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/nifty-direction-magnitude-option-edge-v1
+    paths:
+      - '.github/workflows/nifty_option_edge_archive_probe.yml'
+      - 'scripts/probe_nifty_option_edge_archive.py'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install probe dependencies
+        run: pip install 'pandas<3.0' pyarrow
+      - name: Probe exact tracked replay archive
+        run: python scripts/probe_nifty_option_edge_archive.py --archive runtime/upstox_candidate_replay.zip --output /tmp/nifty_archive_probe.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nifty-option-edge-archive-probe
+          path: /tmp/nifty_archive_probe.json
+          retention-days: 3
