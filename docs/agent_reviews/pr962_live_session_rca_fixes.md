@@ -24,6 +24,12 @@ The preserved depth rejection log contains 183,085 records; all are `QUEUE_REJEC
 
 The 4,334-row tick residual is confirmed, while the old `in_flight_rows` value counts retries and overstates unique work. The 18.98-million-ms runtime writer lag used an enqueue timestamp retained through coalescing and is not evidence of a continuous five-hour stall. The PR improves future evidence and corrects these counters; it does not claim the observed feed was healthy.
 
+### Adjacent Readiness Findings (Not Fixed by This PR)
+
+The same session has no verified prior-run interval. Its process start is 09:19 IST, after the 09:15 primitive's two-second admissibility window; the persisted primitive is terminally `BLOCKED`/`EXPIRED_NO_CURRENT_CAPTURE`. The 10:00 primitive is also `BLOCKED`, but its source timestamp and rejected-field reason were not preserved, so its specific cause remains unknown. All 8,348 strategy observations are `UNKNOWN` with `CAS_PRIMITIVE_0915_INVALID`; the candidate and executable pools are empty. This is fail-closed behavior and does not imply an edge. Repair requires a separately scoped pre-session readiness and diagnostic change; this PR does not alter the CAS or strategy contract.
+
+The recorded MEG traversal rejection reasons include `SNAPSHOT_STALE` (181), `INDEX_INTERVAL_MISALIGNED` (54), `SNAPSHOT_SOURCE_TICK_STALE` (20), `BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION` (13), and `MISSING_POST_REQUEST_TICK` (7). These point to stale or misaligned inputs and incomplete live-consumer coverage, but the preserved events do not establish a single common cause. The zero-length candidate and executable pool artifacts confirm no candidate output was produced.
+
 ## Hermes Review
 
 Contracts: raw source time and callback receipt time are distinct authorities; both must be finite, non-future, fresh, and identity-matched for underlying health. A successful recovery classification requires the latest recovery outcome to explicitly be `RECOVERED`. Durable tick rows are accounted exactly once even if checkpoint maintenance degrades. Persistence drain completion requires reconciled accepted/committed/queued/in-flight counts within one shared monotonic deadline. Unknown, incomplete, or stale evidence remains blocked.
