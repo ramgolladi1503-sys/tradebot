@@ -267,7 +267,12 @@ def test_lifecycle_shutdown_is_idempotent_and_rejects_late_start(monkeypatch):
     monkeypatch.setattr(runtime_store, "shutdown_runtime_persistence", lambda **_: {"complete": True, "queue_depth": 0, "worker_alive": False})
     monkeypatch.setattr(runtime_store, "runtime_persistence_state", lambda: {"worker_alive": False, "pending": 0})
     monkeypatch.setattr(tick_store, "shutdown_persistence_worker", lambda **_: {"complete": True})
-    monkeypatch.setattr(tick_store, "get_persistence_worker_state", lambda: {"worker_join_completed": True, "queue_depth_at_shutdown": 0})
+    monkeypatch.setattr(tick_store, "get_persistence_worker_state", lambda: {
+        "worker_join_completed": True,
+        "queue_depth_at_shutdown": 0,
+        "pending_writes_at_shutdown": 0,
+        "accounting_invariant_ok": False,
+    })
     monkeypatch.setattr(depth_store.depth_store, "shutdown_persistence", lambda **_: {"complete": True})
     monkeypatch.setattr(depth_store.depth_store, "persistence_state", lambda: {"worker_alive": False, "queue_depth": 0})
     monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.flush_live_source_bridge", lambda: {"flushed": True})
@@ -298,7 +303,12 @@ def test_lifecycle_drain_report_uses_real_persistence_shutdown_apis(monkeypatch)
     monkeypatch.setattr(runtime_store, "shutdown_runtime_persistence", lambda **_: {"complete": True, "queue_depth": 0, "worker_alive": False})
     monkeypatch.setattr(runtime_store, "runtime_persistence_state", lambda: {"worker_alive": False, "pending": 0})
     monkeypatch.setattr(tick_store, "shutdown_persistence_worker", lambda **_: {"complete": True})
-    monkeypatch.setattr(tick_store, "get_persistence_worker_state", lambda: {"worker_join_completed": True, "queue_depth_at_shutdown": 0})
+    monkeypatch.setattr(tick_store, "get_persistence_worker_state", lambda: {
+        "worker_join_completed": True,
+        "queue_depth_at_shutdown": 0,
+        "pending_writes_at_shutdown": 0,
+        "accounting_invariant_ok": False,
+    })
     monkeypatch.setattr(depth_store.depth_store, "shutdown_persistence", lambda **_: {"complete": True})
     monkeypatch.setattr(depth_store.depth_store, "persistence_state", lambda: {"worker_alive": False, "queue_depth": 0})
     monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.flush_live_source_bridge", lambda: {"flushed": True})
@@ -306,12 +316,74 @@ def test_lifecycle_drain_report_uses_real_persistence_shutdown_apis(monkeypatch)
     lifecycle = ObservationLifecycle(Feed())
     lifecycle.start([256265])
     report = lifecycle.shutdown()
-    assert report["shutdown_drain_complete"] is True
+    assert report["shutdown_drain_complete"] is False
     assert report["feed_close_requested"] is True
     assert report["meg_bridge_flush"]["flushed"] is True
     assert report["broker_api_called"] is False
     assert report["broker_api_call_count"] == 0
     assert report["broker_api_measurement_scope"] == "UNMEASURED_NO_ACTIVE_OBSERVER_LEDGER"
+
+
+def test_lifecycle_recomputes_each_store_budget_from_one_deadline(monkeypatch):
+    from types import SimpleNamespace
+    import core.kite_read_only_observation_runtime as lifecycle_module
+    import core.tick_store as tick_store
+    import core.depth_store as depth_store
+    import core.feed.runtime_store as runtime_store
+
+    class FakeClock:
+        now = 0.0
+
+        def monotonic(self):
+            self.now += 0.1
+            return self.now
+
+        @staticmethod
+        def sleep(_seconds):
+            return None
+
+    class Feed:
+        def start_depth_ws(self, tokens, **kwargs):
+            return True
+
+        def stop_depth_ws(self, **kwargs):
+            return None
+
+    clock = FakeClock()
+    monkeypatch.setattr(lifecycle_module, "time", SimpleNamespace(monotonic=clock.monotonic, sleep=clock.sleep))
+    monkeypatch.setattr(runtime_store, "runtime_persistence_state", lambda: {"worker_alive": False, "pending": 0})
+    monkeypatch.setattr(tick_store, "pending_tick_count", lambda: 0)
+    monkeypatch.setattr(tick_store, "shutdown_persistence_worker", lambda **_: {"complete": True})
+    monkeypatch.setattr(tick_store, "get_persistence_worker_state", lambda: {
+        "worker_join_completed": True,
+        "queue_depth_at_shutdown": 0,
+        "pending_writes_at_shutdown": 0,
+        "accounting_invariant_ok": True,
+    })
+    monkeypatch.setattr(depth_store.depth_store, "shutdown_persistence", lambda **_: {"complete": True})
+    monkeypatch.setattr(depth_store.depth_store, "persistence_state", lambda: {"worker_alive": False, "queue_depth": 0})
+    monkeypatch.setattr(runtime_store, "shutdown_runtime_persistence", lambda **_: {"complete": True})
+    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.flush_live_source_bridge", lambda: {"flushed": True})
+    passed_budgets = []
+
+    def record_budget(**kwargs):
+        passed_budgets.append(kwargs["deadline_seconds"])
+        return {"complete": True}
+
+    monkeypatch.setattr(tick_store, "shutdown_persistence_worker", record_budget)
+    monkeypatch.setattr(depth_store.depth_store, "shutdown_persistence", record_budget)
+    monkeypatch.setattr(runtime_store, "shutdown_runtime_persistence", record_budget)
+
+    lifecycle = ObservationLifecycle(Feed(), drain_deadline_seconds=1.0)
+    lifecycle.start([256265])
+    report = lifecycle.shutdown()
+
+    assert len(passed_budgets) == 3
+    assert passed_budgets[0] > passed_budgets[1] > passed_budgets[2] > 0
+    assert report["shutdown_drain_deadline_expired"] is False
+    assert report["shutdown_drain_complete"] is True
+    assert report["read_only"] is True
+    assert report["is_order_action"] is False
 
 
 def test_safe_environment_overwrites_inherited_live_values():
@@ -448,7 +520,9 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     import importlib
     import json
     import time
+    from datetime import datetime
     from config import config as cfg
+    from core.time_utils import IST_TZ
 
     feed = importlib.import_module("core.kite_depth_ws")
     bridge_mod = importlib.import_module("core.market_event_graph_live_runtime_bridge")
@@ -507,7 +581,12 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     # Align synthetic ticks to the last five seconds of each completed minute.
     # The bridge cutoff then lands at the last bar boundary, so the newest
     # completed bar has a five-second source tick age.
-    base = float(int(time.time() // 60) * 60 - 180)
+    # Keep synthetic source bars inside the regular session even when CI runs
+    # after close; use the same local date so session identity remains stable.
+    session_cutoff = datetime.now(IST_TZ).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
+    base = float(session_cutoff.timestamp() - 180)
 
     class FakeClient:
         _active_api_key = "api-key"

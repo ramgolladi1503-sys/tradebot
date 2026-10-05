@@ -329,3 +329,36 @@ def test_855_runtime_identities_coalesce_and_drain_to_sqlite_without_rejection(t
     assert state["queue_depth"] == 0
     assert state["in_flight"] == 0
     assert state["accounting_invariant_ok"] is True
+
+
+def test_runtime_persistence_reports_oldest_pending_age_separately_from_service_wait(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(feed_runtime_store, "time", SimpleNamespace(monotonic=lambda: 110.0))
+    feed_runtime_store._RUNTIME_ENQUEUED = 1
+    feed_runtime_store._RUNTIME_PERSISTED = 0
+    feed_runtime_store._RUNTIME_WRITER_LAG_MS = 25.0
+    feed_runtime_store._RUNTIME_LAST_SERVICE_WAIT_MS = 25.0
+    feed_runtime_store._RUNTIME_MAX_SERVICE_WAIT_MS = 40.0
+    feed_runtime_store._RUNTIME_PENDING = {("pending",): ({}, 109.0, 100.0)}
+
+    state = feed_runtime_store.runtime_persistence_state()
+
+    assert state["writer_lag_ms"] == 25.0
+    assert state["writer_lag_semantics"] == "last_service_wait_ms; compatibility alias"
+    assert state["last_service_wait_ms"] == 25.0
+    assert state["max_service_wait_ms"] == 40.0
+    assert state["oldest_pending_age_ms"] == 10000.0
+    assert state["pending"] == 1
+    assert state["unaccounted_remainder"] == 0
+    assert state["accounting_invariant_ok"] is True
+
+
+def test_runtime_shutdown_result_includes_pending_and_accounting_fields():
+    result = feed_runtime_store.shutdown_runtime_persistence(deadline_seconds=1.0)
+
+    assert result["complete"] is True
+    assert result["pending"] == 0
+    assert result["in_flight"] == 0
+    assert result["accounting_invariant_ok"] is True
+    assert "oldest_pending_age_ms" in result

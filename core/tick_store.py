@@ -62,6 +62,7 @@ _AUDIT_COUNTERS = {
 }
 _WRITE_ENQUEUE_COUNT = 0
 _WRITE_FLUSH_COUNT = 0
+_WRITE_IN_FLIGHT_ROWS = 0
 
 
 @dataclass(frozen=True)
@@ -77,9 +78,12 @@ class ShutdownResult:
     rows_dequeued: int
     rows_committed: int
     committed_batches: int
+    dequeue_attempts: int
     queue_depth: int
     in_flight_rows: int
     pending_writes: int
+    pending_unique_rows: int
+    accounting_invariant_ok: bool
     writes_rejected_after_shutdown: int
     worker_alive: bool
     worker_daemon: bool
@@ -624,12 +628,25 @@ def record_tick_epoch(ts_epoch):
     _tick_window.append(ts_val)
 
 
+def _tick_store_failure_category(exc: Exception) -> str:
+    """Classify storage failures without writing exception text or row data."""
+    if isinstance(exc, sqlite3.IntegrityError):
+        return "SQLITE_INTEGRITY_ERROR"
+    if isinstance(exc, sqlite3.OperationalError):
+        return "SQLITE_OPERATIONAL_ERROR"
+    if isinstance(exc, sqlite3.DatabaseError):
+        return "SQLITE_DATABASE_ERROR"
+    if isinstance(exc, sqlite3.Error):
+        return "SQLITE_ERROR"
+    return "PERSISTENCE_EXCEPTION"
+
+
 def _write_rows(
     rows: list[tuple],
     *,
     worker_owned: bool = False,
 ) -> bool:
-    global _WRITE_FLUSH_COUNT
+    committed = False
     if not rows:
         return True
     try:
@@ -668,10 +685,34 @@ def _write_rows(
                 rows,
             )
             conn.commit()
-            checkpoint = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        with _WRITE_QUEUE_LOCK:
+            _AUDIT_COUNTERS["committed_batches"] += 1
+        committed = True
+        try:
+            with _conn() as conn:
+                checkpoint = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
             if checkpoint and int(checkpoint[0] or 0) != 0:
                 raise StorageBoundViolation("SQLITE_WAL_CHECKPOINT_BUSY")
-        _AUDIT_COUNTERS["committed_batches"] += 1
+        except Exception as exc:
+            # The INSERT transaction has committed. Returning failure here would
+            # requeue the same rows and insert duplicates on the next flush.
+            # Keep checkpoint trouble visible and fail closed for readiness,
+            # while reporting the committed batch as successful to the queue.
+            reason = "SQLITE_WAL_CHECKPOINT_BUSY" if isinstance(exc, StorageBoundViolation) else "SQLITE_WAL_CHECKPOINT_ERROR"
+            record_degradation("tick", reason)
+            try:
+                _ERROR_LOGGER.write(
+                    {
+                        "ts_epoch": time.time(),
+                        "event": "TICK_STORE_CHECKPOINT_DEGRADED",
+                        "row_count": len(rows),
+                        "error": reason,
+                        "committed": True,
+                        "wal_limit_bytes": MAX_SQLITE_WAL_BYTES,
+                    }
+                )
+            except Exception:
+                pass
         if worker_owned and _async_db_writes_enabled() and _REPLAY_PRESSURE_POST_COMMIT_HOOK is not None:
             try:
                 _REPLAY_PRESSURE_POST_COMMIT_HOOK(
@@ -698,17 +739,36 @@ def _write_rows(
                 collector.persisted_row(row[1], row[5], row[2], row[3], row[4])
         except Exception:
             pass
-        _WRITE_FLUSH_COUNT += len(rows)
         return True
     except StorageBoundViolation as exc:
         _AUDIT_COUNTERS["worker_failures"] += 1
         record_degradation("tick", "TICK_STORAGE_BOUND_REJECTED")
         try:
-            _ERROR_LOGGER.write({"ts_epoch": time.time(), "event": "TICK_STORAGE_BOUND_REJECTED", "row_count": len(rows), "error": str(exc)})
+            _ERROR_LOGGER.write({"ts_epoch": time.time(), "event": "TICK_STORAGE_BOUND_REJECTED", "row_count": len(rows), "failure_category": "STORAGE_BOUND_REJECTION", "exception_type": type(exc).__name__})
         except Exception:
             pass
         return False
     except Exception as exc:
+        if committed:
+            # Any failure after the durable commit must not cause the caller to
+            # replay inserts. Surface degradation and preserve exactly-once
+            # queue accounting for this committed batch.
+            record_degradation("tick", "TICK_STORE_POST_COMMIT_ERROR")
+            try:
+                _ERROR_LOGGER.write(
+                    {
+                        "ts_epoch": time.time(),
+                        "event": "TICK_STORE_POST_COMMIT_ERROR",
+                        "row_count": len(rows),
+                        "failure_category": "POST_COMMIT_PERSISTENCE_ERROR",
+                        "exception_type": type(exc).__name__,
+                        "committed": True,
+                        "wal_limit_bytes": MAX_SQLITE_WAL_BYTES,
+                    }
+                )
+            except Exception:
+                pass
+            return True
         _AUDIT_COUNTERS["worker_failures"] += 1
         try:
             _ERROR_LOGGER.write(
@@ -716,7 +776,8 @@ def _write_rows(
                     "ts_epoch": time.time(),
                     "event": "TICK_STORE_ERROR",
                     "row_count": len(rows),
-                    "error": str(exc),
+                    "failure_category": _tick_store_failure_category(exc),
+                    "exception_type": type(exc).__name__,
                 }
             )
         except Exception:
@@ -725,22 +786,28 @@ def _write_rows(
 
 
 def _flush_pending_ticks(max_rows: int | None = None, *, worker_owned: bool = False) -> int:
-    global _FLUSH_COUNT, _QUEUE_HIGH_WATER
+    global _FLUSH_COUNT, _QUEUE_HIGH_WATER, _WRITE_IN_FLIGHT_ROWS, _WRITE_FLUSH_COUNT
     batch_limit = max_rows if max_rows is not None else _flush_batch_size()
     rows: list[tuple] = []
     with _WRITE_QUEUE_LOCK:
         while _WRITE_QUEUE and len(rows) < batch_limit:
             rows.append(_WRITE_QUEUE.popleft())
+        _WRITE_IN_FLIGHT_ROWS += len(rows)
+        _AUDIT_COUNTERS["rows_dequeued"] += len(rows)
+        if rows:
+            _FLUSH_COUNT += 1
         _QUEUE_HIGH_WATER = max(_QUEUE_HIGH_WATER, len(_WRITE_QUEUE))
     if not rows:
         return 0
-    _FLUSH_COUNT += 1
-    _AUDIT_COUNTERS["rows_dequeued"] += len(rows)
     if _write_rows(rows, worker_owned=worker_owned):
+        with _WRITE_QUEUE_LOCK:
+            _WRITE_FLUSH_COUNT += len(rows)
+            _WRITE_IN_FLIGHT_ROWS = max(0, _WRITE_IN_FLIGHT_ROWS - len(rows))
         return len(rows)
     with _WRITE_QUEUE_LOCK:
         for row in reversed(rows):
             _WRITE_QUEUE.appendleft(row)
+        _WRITE_IN_FLIGHT_ROWS = max(0, _WRITE_IN_FLIGHT_ROWS - len(rows))
     return 0
 
 
@@ -761,7 +828,7 @@ def reset_audit_counters() -> None:
     global _ACCEPTING_WRITES, _SHUTDOWN_STARTED_MONOTONIC_NS, _SHUTDOWN_FINISHED_MONOTONIC_NS
     global _SHUTDOWN_STATE, _SHUTDOWN_RESULT, _INITIAL_SHUTDOWN_RESULT, _CLEANUP_SHUTDOWN_RESULT
     global _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS
-    global _WRITE_ENQUEUE_COUNT, _WRITE_FLUSH_COUNT, _QUEUE_HIGH_WATER, _FLUSH_COUNT
+    global _WRITE_ENQUEUE_COUNT, _WRITE_FLUSH_COUNT, _WRITE_IN_FLIGHT_ROWS, _QUEUE_HIGH_WATER, _FLUSH_COUNT
     global _INIT_DONE, _INIT_DB_PATH
     global _FLUSH_THREAD_JOIN_COMPLETED, _FLUSH_THREAD_TERMINATED
     for key in _AUDIT_COUNTERS:
@@ -776,6 +843,7 @@ def reset_audit_counters() -> None:
     _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS = None
     _WRITE_ENQUEUE_COUNT = 0
     _WRITE_FLUSH_COUNT = 0
+    _WRITE_IN_FLIGHT_ROWS = 0
     _QUEUE_HIGH_WATER = 0
     _FLUSH_COUNT = 0
     _INIT_DONE = False
@@ -881,6 +949,17 @@ def _snapshot_shutdown_result(
     thread: threading.Thread | None,
 ) -> dict[str, Any]:
     worker_alive = bool(thread is not None and thread.is_alive())
+    with _WRITE_QUEUE_LOCK:
+        queue_depth = len(_WRITE_QUEUE)
+        enqueued_rows = _WRITE_ENQUEUE_COUNT
+        committed_rows = _WRITE_FLUSH_COUNT
+        in_flight_rows = _WRITE_IN_FLIGHT_ROWS
+        dequeue_attempts = _FLUSH_COUNT
+        pending_unique_rows = max(0, enqueued_rows - committed_rows)
+        accounting_invariant_ok = (
+            enqueued_rows == committed_rows + queue_depth + in_flight_rows
+        )
+        queue_counter_snapshot = dict(_AUDIT_COUNTERS)
     result = ShutdownResult(
         status=status,
         deadline_seconds=deadline_seconds,
@@ -889,19 +968,22 @@ def _snapshot_shutdown_result(
         shutdown_finished_monotonic_ns=shutdown_finished_monotonic_ns,
         drain_duration_ns=drain_duration_ns,
         join_duration_ns=join_duration_ns,
-        rows_enqueued=_AUDIT_COUNTERS["rows_enqueued"],
-        rows_dequeued=_AUDIT_COUNTERS["rows_dequeued"],
-        rows_committed=_WRITE_FLUSH_COUNT,
+        rows_enqueued=queue_counter_snapshot["rows_enqueued"],
+        rows_dequeued=queue_counter_snapshot["rows_dequeued"],
+        rows_committed=committed_rows,
         committed_batches=_AUDIT_COUNTERS["committed_batches"],
-        queue_depth=write_queue_depth(),
-        in_flight_rows=max(0, _AUDIT_COUNTERS["rows_dequeued"] - _WRITE_FLUSH_COUNT),
-        pending_writes=max(0, _WRITE_ENQUEUE_COUNT - _WRITE_FLUSH_COUNT),
-        writes_rejected_after_shutdown=_AUDIT_COUNTERS["writes_rejected_after_shutdown"],
+        dequeue_attempts=dequeue_attempts,
+        queue_depth=queue_depth,
+        in_flight_rows=in_flight_rows,
+        pending_writes=pending_unique_rows,
+        pending_unique_rows=pending_unique_rows,
+        accounting_invariant_ok=accounting_invariant_ok,
+        writes_rejected_after_shutdown=queue_counter_snapshot["writes_rejected_after_shutdown"],
         worker_alive=worker_alive,
         worker_daemon=bool(thread.daemon) if thread is not None else False,
         worker_join_completed=not worker_alive,
         worker_terminated=not worker_alive,
-        worker_failures=_AUDIT_COUNTERS["worker_failures"],
+        worker_failures=queue_counter_snapshot["worker_failures"],
         final_flush_attempted=final_flush_attempted,
         final_flush_completed=final_flush_completed,
         shutdown_state=shutdown_state or status,
@@ -945,7 +1027,7 @@ def _shutdown_flush_thread(*, deadline_seconds: float | None = None) -> dict[str
         join_duration_ns = 0
 
     worker_alive_after_join = bool(thread is not None and thread.is_alive())
-    deadline_expired = bool(deadline_ns is not None and time.monotonic_ns() >= deadline_ns and worker_alive_after_join)
+    deadline_expired = bool(deadline_ns is not None and time.monotonic_ns() >= deadline_ns)
     final_flush_attempted = False
     final_flush_completed = False
     status = "COMPLETE_DRAIN"
@@ -956,17 +1038,22 @@ def _shutdown_flush_thread(*, deadline_seconds: float | None = None) -> dict[str
         status = "INCOMPLETE_DRAIN_TIMEOUT"
         _SHUTDOWN_STATE = status
     else:
-        if not worker_alive_after_join and pending_tick_count() > 0:
+        if (
+            not worker_alive_after_join
+            and pending_tick_count() > 0
+            and (deadline_ns is None or time.monotonic_ns() < deadline_ns)
+        ):
             final_flush_attempted = True
             if _FLUSH_LOCK.acquire(blocking=False):
                 try:
-                    while _flush_pending_ticks(worker_owned=True) > 0:
-                        pass
+                    while pending_tick_count() > 0 and (deadline_ns is None or time.monotonic_ns() < deadline_ns):
+                        if _flush_pending_ticks(worker_owned=True) <= 0:
+                            break
                     final_flush_completed = pending_tick_count() == 0
                 finally:
                     _FLUSH_LOCK.release()
         queue_depth = pending_tick_count()
-        in_flight_rows = max(0, _AUDIT_COUNTERS["rows_dequeued"] - _WRITE_FLUSH_COUNT)
+        in_flight_rows = _WRITE_IN_FLIGHT_ROWS
         pending_writes = max(0, _WRITE_ENQUEUE_COUNT - _WRITE_FLUSH_COUNT)
         if (
             _AUDIT_COUNTERS["worker_failures"] > 0
@@ -974,6 +1061,7 @@ def _shutdown_flush_thread(*, deadline_seconds: float | None = None) -> dict[str
             or in_flight_rows > 0
             or pending_writes > 0
             or worker_alive_after_join
+            or (deadline_expired and (queue_depth > 0 or in_flight_rows > 0))
         ):
             status = "WORKER_FAILURE" if _AUDIT_COUNTERS["worker_failures"] > 0 else "INCOMPLETE_DRAIN_TIMEOUT"
             if status == "INCOMPLETE_DRAIN_TIMEOUT":
@@ -1016,14 +1104,26 @@ def write_queue_depth() -> int:
 
 
 def write_enqueue_count() -> int:
-    return _WRITE_ENQUEUE_COUNT
+    with _WRITE_QUEUE_LOCK:
+        return _WRITE_ENQUEUE_COUNT
 
 
 def write_flush_count() -> int:
-    return _WRITE_FLUSH_COUNT
+    with _WRITE_QUEUE_LOCK:
+        return _WRITE_FLUSH_COUNT
 
 
 def get_persistence_worker_state() -> dict[str, Any]:
+    with _WRITE_QUEUE_LOCK:
+        queue_depth = len(_WRITE_QUEUE)
+        enqueued_rows = _WRITE_ENQUEUE_COUNT
+        committed_rows = _WRITE_FLUSH_COUNT
+        in_flight_rows = _WRITE_IN_FLIGHT_ROWS
+        queue_counters = dict(_AUDIT_COUNTERS)
+        dequeue_attempts = _FLUSH_COUNT
+        accounting_invariant_ok = (
+            enqueued_rows == committed_rows + queue_depth + in_flight_rows
+        )
     return {
         "worker_started": _AUDIT_COUNTERS["worker_started"],
         "worker_start_count": _AUDIT_COUNTERS["worker_started"],
@@ -1032,7 +1132,7 @@ def get_persistence_worker_state() -> dict[str, Any]:
         "worker_daemon": bool(_FLUSH_THREAD.daemon) if _FLUSH_THREAD is not None else None,
         "worker_terminated": _FLUSH_THREAD_TERMINATED,
         "worker_join_completed": _FLUSH_THREAD_JOIN_COMPLETED,
-        "worker_failures": _AUDIT_COUNTERS["worker_failures"],
+        "worker_failures": queue_counters["worker_failures"],
         "shutdown_state": _SHUTDOWN_STATE,
         "shutdown_started_monotonic_ns": _SHUTDOWN_STARTED_MONOTONIC_NS,
         "shutdown_finished_monotonic_ns": _SHUTDOWN_FINISHED_MONOTONIC_NS,
@@ -1040,14 +1140,18 @@ def get_persistence_worker_state() -> dict[str, Any]:
         "cleanup_shutdown_result": _CLEANUP_SHUTDOWN_RESULT,
         "writes_rejected_after_shutdown": _AUDIT_COUNTERS["writes_rejected_after_shutdown"],
         "last_accepted_enqueue_monotonic_ns": _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS,
-        "rows_enqueued": _AUDIT_COUNTERS["rows_enqueued"],
-        "rows_dequeued": _AUDIT_COUNTERS["rows_dequeued"],
+        "rows_enqueued": queue_counters["rows_enqueued"],
+        "rows_dequeued": queue_counters["rows_dequeued"],
+        "dequeue_attempts": dequeue_attempts,
         "committed_batches": _AUDIT_COUNTERS["committed_batches"],
-        "committed_rows": _WRITE_FLUSH_COUNT,
+        "committed_rows": committed_rows,
         "queue_depth_initial": 0,
         "queue_depth_high_water": _QUEUE_HIGH_WATER,
-        "queue_depth_at_shutdown": write_queue_depth(),
-        "pending_writes_at_shutdown": max(0, _WRITE_ENQUEUE_COUNT - _WRITE_FLUSH_COUNT),
+        "queue_depth_at_shutdown": queue_depth,
+        "pending_writes_at_shutdown": max(0, enqueued_rows - committed_rows),
+        "pending_unique_rows_at_shutdown": max(0, enqueued_rows - committed_rows),
+        "in_flight_rows_at_shutdown": in_flight_rows,
+        "accounting_invariant_ok": accounting_invariant_ok,
         "flush_count": _FLUSH_COUNT,
         "batch_size": _flush_batch_size(),
         "flush_interval": _flush_interval_sec(),

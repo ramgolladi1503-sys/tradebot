@@ -684,7 +684,10 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "first_post_mode_full_epoch": _FIRST_POST_MODE_FULL_EPOCH_BY_TOKEN.get(token_int),
             "mode_request_succeeded_epoch": _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
             "first_callback_receipt_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
-            "latest_callback_receipt_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
+            "latest_callback_receipt_epoch": _coerce_epoch(
+                _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN.get(token_int)
+            ),
+            "latest_message_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
             "first_source_tick_epoch": _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.get(token_int),
             "latest_source_tick_epoch": _coerce_epoch(_LAST_PAYLOAD_TS_BY_TOKEN.get(token_int)),
             "first_post_mode_full_receipt_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
@@ -2151,7 +2154,10 @@ def market_event_graph_subscription_evidence_for_tokens(token_by_symbol: Mapping
             "first_post_mode_full_epoch": _FIRST_POST_MODE_FULL_EPOCH_BY_TOKEN.get(token_int),
             "mode_request_succeeded_epoch": _MODE_REQUEST_SUCCEEDED_EPOCH_BY_TOKEN.get(token_int),
             "first_callback_receipt_epoch": _FIRST_LIVE_TICK_EPOCH_BY_TOKEN.get(token_int),
-            "latest_callback_receipt_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
+            "latest_callback_receipt_epoch": _coerce_epoch(
+                _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN.get(token_int)
+            ),
+            "latest_message_epoch": _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int)),
             "first_source_tick_epoch": _FIRST_SOURCE_TICK_EPOCH_BY_TOKEN.get(token_int),
             "latest_source_tick_epoch": _coerce_epoch(_LAST_PAYLOAD_TS_BY_TOKEN.get(token_int)),
             "first_post_mode_full_receipt_epoch": _FIRST_FULL_PAYLOAD_EPOCH_BY_TOKEN.get(token_int),
@@ -4869,7 +4875,11 @@ def _option_runtime_state(
             feed_freshness_sec=option_sla_sec,
             min_required_count=min_required,
         )
-        active_codes = [str(record.code) for record in active_records]
+        active_codes = [
+            str(record.code)
+            for record in active_records
+            if str(record.code).strip().upper() not in {"", "OK", "NONE", "HEALTHY", "FRESH"}
+        ]
         active_blockers_by_symbol[symbol] = active_codes
         blocker_records_by_symbol[symbol] = [record.to_payload() for record in active_records]
         top_code = top_active_code(active_records)
@@ -5109,8 +5119,18 @@ def _underlying_feed_identity_by_symbol(
         lifecycle = lifecycle if isinstance(lifecycle, dict) else {}
         receipt_epoch = _coerce_epoch(lifecycle.get("latest_callback_receipt_epoch"))
         source_epoch = _coerce_epoch(lifecycle.get("latest_source_tick_epoch"))
-        age_sec = float(now_epoch) - receipt_epoch if receipt_epoch is not None else None
-        age_valid = age_sec is not None and math.isfinite(age_sec) and age_sec >= 0.0
+        receipt_age_sec = float(now_epoch) - receipt_epoch if receipt_epoch is not None else None
+        receipt_age_valid = (
+            receipt_age_sec is not None
+            and math.isfinite(receipt_age_sec)
+            and receipt_age_sec >= 0.0
+        )
+        source_age_sec = float(now_epoch) - source_epoch if source_epoch is not None else None
+        source_age_valid = (
+            source_age_sec is not None
+            and math.isfinite(source_age_sec)
+            and source_age_sec >= 0.0
+        )
         active_subscription = token in active_tokens and symbol in succeeded
         current_identity = (
             str(session_identity.get("feed_session_id") or ""),
@@ -5138,13 +5158,23 @@ def _underlying_feed_identity_by_symbol(
             and session_is_current
             and active_subscription
             and identity_matches
-            and age_valid
+            and receipt_age_valid
+            and source_age_valid
             and math.isfinite(sla_sec)
             and sla_sec > 0.0
-            and age_sec <= sla_sec
+            and receipt_age_sec <= sla_sec
+            and source_age_sec <= sla_sec
+        )
+        status = "HEALTHY" if healthy else (
+            "UNHEALTHY"
+            if receipt_age_valid
+            or source_age_valid
+            or not active_subscription
+            or not session_is_current
+            else "UNKNOWN"
         )
         rows[symbol] = {
-            "status": "HEALTHY" if healthy else "UNHEALTHY" if age_valid or not active_subscription or not session_is_current else "UNKNOWN",
+            "status": status,
             "reason": "underlying_feed_fresh" if healthy else "underlying_feed_evidence_invalid_or_stale",
             "symbol": symbol,
             "identity_domain": domain,
@@ -5156,7 +5186,14 @@ def _underlying_feed_identity_by_symbol(
             "subscription_succeeded": symbol in succeeded,
             "receipt_epoch": receipt_epoch,
             "source_epoch": source_epoch,
-            "age_sec": age_sec if age_valid else None,
+            "receipt_age_sec": receipt_age_sec if receipt_age_valid else None,
+            "source_age_sec": (
+                source_age_sec
+                if source_age_sec is not None and math.isfinite(source_age_sec)
+                else None
+            ),
+            # Backward-compatible alias: age_sec has always represented callback receipt age.
+            "age_sec": receipt_age_sec if receipt_age_valid else None,
             "max_age_sec": sla_sec if math.isfinite(sla_sec) and sla_sec > 0.0 else None,
             "generated_epoch": float(now_epoch),
         }
@@ -5680,13 +5717,10 @@ def _persist_runtime_snapshot_row(
     )
     option_feed_block_reason_by_symbol = dict(option_state.get("feed_block_reason_by_symbol") or {})
     option_active_blockers_by_symbol = dict(option_state.get("active_blockers_by_symbol") or {})
-    if effective_state_text == "RECOVERY_BLOCKED" or normalized_blocked_reason == "ws1006_process_restart_required":
-        for symbol in list(option_feed_block_reason_by_symbol.keys()):
-            option_feed_block_reason_by_symbol[symbol] = "NO_LIVE_OPTION_FEED"
-            blockers = list(option_active_blockers_by_symbol.get(symbol) or [])
-            if "NO_LIVE_OPTION_FEED" not in blockers:
-                blockers.insert(0, "NO_LIVE_OPTION_FEED")
-            option_active_blockers_by_symbol[symbol] = blockers
+    # Keep measured per-symbol option evidence truthful. A terminal/global
+    # recovery blocker is represented by canonical_feed_truth and the global
+    # readiness fields below; rewriting healthy option rows as
+    # NO_LIVE_OPTION_FEED makes the diagnostic contradict the observed ticks.
     restart_verify = _restart_verify_overlay_payload()
     disconnected_code_value = disconnected_code if disconnected_code is not None else _LAST_DISCONNECTED_CODE
     disconnected_reason_value = disconnected_reason if disconnected_reason is not None else _LAST_DISCONNECTED_REASON
@@ -8011,12 +8045,30 @@ def on_ticks(ws, ticks):
             queue_depth=write_queue_depth(), worker_alive=None,
             latest_persisted_tick_epoch=_LAST_WS_TICK_EPOCH,
         )
+        depth_persistence = depth_store.persistence_state()
+        depth_worker_alive = depth_persistence.get("worker_alive") is True
+        depth_healthy = (
+            depth_worker_alive
+            and int(depth_persistence.get("failures", 0) or 0) == 0
+            and int(depth_persistence.get("depth_rejected_count", depth_persistence.get("rejected", 0)) or 0) == 0
+            and depth_persistence.get("accounting_invariant_ok") is True
+        )
         append_feed_forensic_event(
             "DEPTH_PERSISTENCE_PROGRESS", receipt_epoch=now_epoch,
             feed_session_id=identity.get("feed_session_id"),
             reconnect_generation=identity.get("reconnect_generation"),
-            enqueue_count=None, flush_count=None, queue_depth=None,
-            worker_alive=None, latest_persisted_depth_epoch=None,
+            status="HEALTHY" if depth_healthy else "DEGRADED",
+            enqueue_count=depth_persistence.get("enqueued"),
+            flush_count=depth_persistence.get("persisted"),
+            queue_depth=depth_persistence.get("queue_depth"),
+            in_flight=depth_persistence.get("in_flight"),
+            worker_alive=depth_worker_alive,
+            rejected_count=depth_persistence.get("rejected"),
+            queue_rejected_count=depth_persistence.get("queue_rejected"),
+            persistence_failures=depth_persistence.get("failures"),
+            provenance_write_failures=depth_persistence.get("provenance_write_failures"),
+            accounting_invariant_ok=depth_persistence.get("accounting_invariant_ok"),
+            unaccounted_remainder=depth_persistence.get("unaccounted_remainder"),
         )
         append_feed_forensic_event(
             "RUNTIME_PERSISTENCE_PROGRESS", receipt_epoch=now_epoch,

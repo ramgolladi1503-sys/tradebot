@@ -856,11 +856,6 @@ def _bar_has_live_provenance(
         return False, LIVE_BAR_PROVENANCE_UNPROVEN
     if not str(prov.get("live_feed_session_id") or "").strip():
         return False, LIVE_BAR_PROVENANCE_UNPROVEN
-    try:
-        if int(prov.get("feed_epoch")) != int(current_feed_epoch()):
-            return False, LIVE_BAR_PROVENANCE_UNPROVEN
-    except Exception:
-        return False, LIVE_BAR_PROVENANCE_UNPROVEN
     if bool(prov.get("historical_seed")) or bool(prov.get("replay_fixture")):
         return False, LIVE_BAR_PROVENANCE_UNPROVEN
     if bool(prov.get("non_live_fallback")) or bool(prov.get("recovered_synthetic")):
@@ -882,6 +877,11 @@ def _bar_has_live_provenance(
                 return False, "FEED_EPOCH_MISMATCH"
         except Exception:
             return False, "FEED_EPOCH_MISMATCH"
+    try:
+        if int(prov.get("feed_epoch")) != int(current_feed_epoch()):
+            return False, LIVE_BAR_PROVENANCE_UNPROVEN
+    except Exception:
+        return False, LIVE_BAR_PROVENANCE_UNPROVEN
     if expected_symbol is not None and str(prov.get("symbol") or bar.get("symbol") or "").upper() != str(expected_symbol).upper():
         return False, BAR_SYMBOL_MISMATCH
     if expected_token is not None:

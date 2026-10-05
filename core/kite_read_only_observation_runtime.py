@@ -418,10 +418,12 @@ class ObservationLifecycle:
                     break
                 time.sleep(0.05)
 
-            remaining_sec = max(0.5, overall_deadline_mono - time.monotonic())
-            tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=remaining_sec)
-            depth_result = depth_store.depth_store.shutdown_persistence(deadline_seconds=remaining_sec)
-            runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=remaining_sec)
+            tick_budget_sec = max(0.0, overall_deadline_mono - time.monotonic())
+            tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=tick_budget_sec)
+            depth_budget_sec = max(0.0, overall_deadline_mono - time.monotonic())
+            depth_result = depth_store.depth_store.shutdown_persistence(deadline_seconds=depth_budget_sec)
+            runtime_budget_sec = max(0.0, overall_deadline_mono - time.monotonic())
+            runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=runtime_budget_sec)
             tick_state = tick_store.get_persistence_worker_state()
             runtime_state = runtime_store.runtime_persistence_state()
             depth_state = depth_store.depth_store.persistence_state()
@@ -443,6 +445,7 @@ class ObservationLifecycle:
             tick_exact = (
                 tick_state.get("queue_depth_at_shutdown", 0) == 0
                 and tick_state.get("pending_writes_at_shutdown", 0) == 0
+                and (tick_state.get("accounting_invariant_ok", True) if "accounting_invariant_ok" in tick_state else True)
                 and tick_state.get("worker_join_completed", True) is True
             )
 
@@ -462,6 +465,8 @@ class ObservationLifecycle:
                 and depth_exact
                 and runtime_exact
             )
+            deadline_expired = time.monotonic() >= overall_deadline_mono
+            complete = complete and not deadline_expired
             self.phase = "PERSISTENCE_DRAINED" if complete else "FAILED"
             if complete:
                 self.phase = "WORKERS_JOINED"
@@ -490,6 +495,13 @@ class ObservationLifecycle:
             self._shutdown_report = {
                 "proof_kind": "PR763_LIVE_ACCEPTANCE",
                 "shutdown_drain_complete": complete,
+                "shutdown_drain_deadline_seconds": max(1.0, float(self.drain_deadline_seconds)),
+                "shutdown_drain_deadline_expired": deadline_expired,
+                "persistence_shutdown_budgets_seconds": {
+                    "tick": tick_budget_sec,
+                    "depth": depth_budget_sec,
+                    "runtime": runtime_budget_sec,
+                },
                 "persistence_drain_complete": complete,
                 "accepting": self.accepting,
                 "phase": self.phase,

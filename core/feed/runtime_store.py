@@ -48,6 +48,9 @@ _RUNTIME_COALESCED = 0
 _RUNTIME_HIGH_WATERMARK = 0
 _RUNTIME_IN_FLIGHT = 0
 _RUNTIME_WRITER_LAG_MS = 0.0
+_RUNTIME_LAST_SERVICE_WAIT_MS = 0.0
+_RUNTIME_MAX_SERVICE_WAIT_MS = 0.0
+_RUNTIME_IN_FLIGHT_STARTED_AT: float | None = None
 _RUNTIME_PENDING: dict[tuple[Any, ...], tuple[dict[str, Any], float, float]] = {}
 _RUNTIME_LAST_TICK_SNAPSHOT_AT: float | None = None
 _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY: tuple[Any, ...] | None = None
@@ -266,9 +269,9 @@ def canonicalize_feed_runtime_snapshot_truth(payload: dict[str, Any]) -> dict[st
             for reason in list(option_active_blockers_by_symbol.get(symbol) or [])
             if reason not in {"", "OK", "LIVE", "FRESH", "NONE"}
         ]
-        if not active_reasons:
+        if not active_reasons and reason_text not in {"OK", "LIVE", "FRESH", "NONE"}:
             active_reasons = [reason_text]
-        elif reason_text not in active_reasons:
+        elif active_reasons and reason_text not in active_reasons and reason_text not in {"OK", "LIVE", "FRESH", "NONE"}:
             active_reasons.insert(0, reason_text)
         normalized_active_blockers_by_symbol[symbol] = list(dict.fromkeys(active_reasons))
 
@@ -546,6 +549,7 @@ def _write_runtime_snapshot_sync(payload: dict[str, Any]) -> bool:
 def _runtime_write_loop() -> None:
     global _RUNTIME_FAILURES, _RUNTIME_DEGRADED, _RUNTIME_PERSISTED
     global _RUNTIME_IN_FLIGHT, _RUNTIME_WRITER_LAG_MS
+    global _RUNTIME_LAST_SERVICE_WAIT_MS, _RUNTIME_MAX_SERVICE_WAIT_MS, _RUNTIME_IN_FLIGHT_STARTED_AT
     while not _RUNTIME_STOP.is_set() or not _RUNTIME_WRITE_QUEUE.empty():
         try:
             identity = _RUNTIME_WRITE_QUEUE.get(timeout=0.1)
@@ -558,11 +562,18 @@ def _runtime_write_loop() -> None:
                 continue
             payload, requested_at, enqueued_at = pending
             _RUNTIME_IN_FLIGHT += 1
-            _RUNTIME_WRITER_LAG_MS = max(0.0, (time.monotonic() - enqueued_at) * 1000.0)
+            service_wait_ms = max(0.0, (time.monotonic() - enqueued_at) * 1000.0)
+            _RUNTIME_LAST_SERVICE_WAIT_MS = service_wait_ms
+            _RUNTIME_MAX_SERVICE_WAIT_MS = max(_RUNTIME_MAX_SERVICE_WAIT_MS, service_wait_ms)
+            # Backward-compatible alias: this is the most recent service wait,
+            # not the age of the current oldest pending write.
+            _RUNTIME_WRITER_LAG_MS = service_wait_ms
+            _RUNTIME_IN_FLIGHT_STARTED_AT = time.monotonic()
         try:
             if not _write_runtime_snapshot_sync(payload):
                 with _RUNTIME_LOCK:
                     _RUNTIME_IN_FLIGHT -= 1
+                    _RUNTIME_IN_FLIGHT_STARTED_AT = None
                     _RUNTIME_FAILURES += 1
                     _RUNTIME_DEGRADED = True
                     record_degradation("runtime", "RUNTIME_PERSISTENCE_FAILURE")
@@ -570,10 +581,12 @@ def _runtime_write_loop() -> None:
             else:
                 with _RUNTIME_LOCK:
                     _RUNTIME_IN_FLIGHT -= 1
+                    _RUNTIME_IN_FLIGHT_STARTED_AT = None
                     _RUNTIME_PERSISTED += 1
         except Exception:
             with _RUNTIME_LOCK:
                 _RUNTIME_IN_FLIGHT -= 1
+                _RUNTIME_IN_FLIGHT_STARTED_AT = None
                 _RUNTIME_FAILURES += 1
                 _RUNTIME_DEGRADED = True
                 record_degradation("runtime", "RUNTIME_PERSISTENCE_FAILURE")
@@ -699,11 +712,15 @@ def shutdown_runtime_persistence(deadline_seconds: float | None = None) -> dict:
     worker = _RUNTIME_WORKER
     if worker is not None:
         worker.join(max(0.0, deadline - time.monotonic()))
-    with _RUNTIME_LOCK:
-        state = {"queue_depth": _RUNTIME_WRITE_QUEUE.qsize(), "worker_alive": bool(worker and worker.is_alive()),
-                 "enqueued": _RUNTIME_ENQUEUED, "rejected": _RUNTIME_REJECTED,
-                 "failures": _RUNTIME_FAILURES, "durability_degraded": _RUNTIME_DEGRADED}
-    state["complete"] = state["queue_depth"] == 0 and not state["worker_alive"]
+    state = runtime_persistence_state()
+    state["complete"] = (
+        state["queue_depth"] == 0
+        and state["pending"] == 0
+        and state["in_flight"] == 0
+        and state["accounting_invariant_ok"]
+        and not state["worker_alive"]
+    )
+    state["deadline_expired"] = time.monotonic() >= deadline
     return state
 
 
@@ -714,6 +731,7 @@ def reset_runtime_persistence_for_tests() -> None:
     global _RUNTIME_PERSISTED, _RUNTIME_SHUTDOWN, _RUNTIME_REQUESTED
     global _RUNTIME_COALESCED, _RUNTIME_HIGH_WATERMARK, _RUNTIME_IN_FLIGHT
     global _RUNTIME_WRITER_LAG_MS, _RUNTIME_PENDING
+    global _RUNTIME_LAST_SERVICE_WAIT_MS, _RUNTIME_MAX_SERVICE_WAIT_MS, _RUNTIME_IN_FLIGHT_STARTED_AT
     global _RUNTIME_LAST_TICK_SNAPSHOT_AT, _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY
     global _RUNTIME_PRODUCER_REQUESTED, _RUNTIME_PRODUCER_COALESCED
     global _RUNTIME_PRODUCER_LAST_TICK_AT, _RUNTIME_PRODUCER_LAST_TICK_IDENTITY
@@ -736,6 +754,9 @@ def reset_runtime_persistence_for_tests() -> None:
         _RUNTIME_HIGH_WATERMARK = 0
         _RUNTIME_IN_FLIGHT = 0
         _RUNTIME_WRITER_LAG_MS = 0.0
+        _RUNTIME_LAST_SERVICE_WAIT_MS = 0.0
+        _RUNTIME_MAX_SERVICE_WAIT_MS = 0.0
+        _RUNTIME_IN_FLIGHT_STARTED_AT = None
         _RUNTIME_PENDING = {}
         _RUNTIME_LAST_TICK_SNAPSHOT_AT = None
         _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY = None
@@ -748,8 +769,18 @@ def reset_runtime_persistence_for_tests() -> None:
 
 def runtime_persistence_state() -> dict:
     with _RUNTIME_LOCK:
+        now_monotonic = time.monotonic()
         pending = len(_RUNTIME_PENDING)
         queue_depth = _RUNTIME_WRITE_QUEUE.qsize()
+        oldest_pending_age_ms = max(
+            (max(0.0, now_monotonic - entry[2]) * 1000.0 for entry in _RUNTIME_PENDING.values()),
+            default=0.0,
+        )
+        in_flight_age_ms = (
+            max(0.0, now_monotonic - _RUNTIME_IN_FLIGHT_STARTED_AT) * 1000.0
+            if _RUNTIME_IN_FLIGHT_STARTED_AT is not None
+            else 0.0
+        )
         unaccounted = _RUNTIME_ENQUEUED - (_RUNTIME_PERSISTED + _RUNTIME_IN_FLIGHT + pending + _RUNTIME_FAILURES)
         return {
             "requested": _RUNTIME_REQUESTED,
@@ -767,6 +798,11 @@ def runtime_persistence_state() -> dict:
             "rejected": _RUNTIME_REJECTED,
             "queue_high_watermark": _RUNTIME_HIGH_WATERMARK,
             "writer_lag_ms": _RUNTIME_WRITER_LAG_MS,
+            "writer_lag_semantics": "last_service_wait_ms; compatibility alias",
+            "last_service_wait_ms": _RUNTIME_LAST_SERVICE_WAIT_MS,
+            "max_service_wait_ms": _RUNTIME_MAX_SERVICE_WAIT_MS,
+            "oldest_pending_age_ms": oldest_pending_age_ms,
+            "in_flight_age_ms": in_flight_age_ms,
             "tick_snapshot_interval_sec": float(getattr(reliability_cfg, "FEED_RUNTIME_SNAPSHOT_INTERVAL_SEC", 0.5)),
             "last_tick_snapshot_identity": _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY,
             "durability_degraded": _RUNTIME_DEGRADED,
