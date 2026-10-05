@@ -1,0 +1,93 @@
+name: Aixion Trade Intelligence Evidence Kernel
+
+on:
+  pull_request:
+    paths:
+      - "aixion_trade_intelligence/**"
+      - "scripts/generate_offline_fixture.py"
+      - "scripts/build_trade_intelligence_session_contract.py"
+      - "scripts/run_tradebot_intelligence_observer.py"
+      - "scripts/import_upstox_parquet.py"
+      - "scripts/finalize_trade_intelligence_session.py"
+      - "tests/test_aixion_*.py"
+      - "docs/architecture/aixion_trade_intelligence_v1.md"
+      - "docs/runbooks/aixion_trade_intelligence_live_canary.md"
+      - "docs/agent_reviews/aixion_trade_intelligence_evidence_kernel_v1.md"
+      - "research/aixion_trade_intelligence_v1/**"
+      - ".github/workflows/aixion-trade-intelligence-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-kernel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install focused test dependency
+        run: python -m pip install --disable-pip-version-check pytest
+
+      - name: Compile
+        run: |
+          python -m compileall -q \
+            aixion_trade_intelligence \
+            scripts/build_trade_intelligence_session_contract.py \
+            scripts/finalize_trade_intelligence_session.py \
+            scripts/generate_offline_fixture.py \
+            scripts/import_upstox_parquet.py \
+            scripts/run_tradebot_intelligence_observer.py \
+            tests/test_aixion_*.py
+
+      - name: Focused tests
+        env:
+          PYTHONPATH: .
+        run: pytest -q -o addopts='' tests/test_aixion_*.py
+
+      - name: Deterministic fixture certification
+        env:
+          PYTHONPATH: .
+        run: |
+          python scripts/generate_offline_fixture.py --output /tmp/aixion_events.jsonl
+          python -m aixion_trade_intelligence certify \
+            --events /tmp/aixion_events.jsonl \
+            --output-dir /tmp/aixion_report
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload=json.loads(Path('/tmp/aixion_report/certification.json').read_text())
+          assert payload['verdict']=='PIPELINE_OFFLINE_CERTIFIED'
+          assert payload['pipeline_certified'] is True
+          assert payload['strategy_edge_certified'] is False
+          assert not payload['analysis_errors']
+          assert all(row['passed'] for row in payload['checks'])
+          PY
+
+      - name: Forbidden production-surface guard
+        shell: bash
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE_SHA" ]; then
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          changed="$(git diff --name-only "$BASE_SHA"...HEAD)"
+          printf '%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -E '^(strategies/|core/(orchestrator|broker|order|risk|execution_engine)|config/|dashboard/)'; then
+            echo "Forbidden production surface changed"
+            exit 1
+          fi
+
+      - name: Upload offline proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: aixion-trade-intelligence-offline-proof
+          path: /tmp/aixion_report
+          if-no-files-found: error
