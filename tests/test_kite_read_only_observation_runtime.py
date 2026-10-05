@@ -520,7 +520,9 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     import importlib
     import json
     import time
+    from datetime import datetime
     from config import config as cfg
+    from core.time_utils import IST_TZ
 
     feed = importlib.import_module("core.kite_depth_ws")
     bridge_mod = importlib.import_module("core.market_event_graph_live_runtime_bridge")
@@ -579,7 +581,12 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     # Align synthetic ticks to the last five seconds of each completed minute.
     # The bridge cutoff then lands at the last bar boundary, so the newest
     # completed bar has a five-second source tick age.
-    base = float(int(time.time() // 60) * 60 - 180)
+    # Keep synthetic source bars inside the regular session even when CI runs
+    # after close; use the same local date so session identity remains stable.
+    session_cutoff = datetime.now(IST_TZ).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
+    base = float(session_cutoff.timestamp() - 180)
 
     class FakeClient:
         _active_api_key = "api-key"
