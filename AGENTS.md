@@ -4,6 +4,44 @@ This repository is a trading system. Agent-assisted work is allowed only when it
 
 These rules apply to GSD, Hermes, Grill Me, Codex, ChatGPT, Claude, Gemini, and any other human- or AI-assisted coding workflow.
 
+## Permanent TradeBot Delivery Organization
+
+TradeBot is the product. Every new engineering or research request must enter through the permanent delivery organization documented under `docs/tradebot_delivery/`.
+
+Canonical lifecycle:
+
+```text
+Product -> Epic -> Feature -> Story / Bug / Task
+-> Business Analysis
+-> Product Owner acceptance criteria
+-> Architecture
+-> Development
+-> QA defect/fix/retest loop
+-> Senior QA
+-> UAT
+-> Product Acceptance
+-> Release
+-> Production Verification
+```
+
+The mandatory entrypoint is:
+
+`.agents/workflows/tradebot-delivery-orchestrator.md`
+
+The mandatory role-separation rule is:
+
+`.agents/rules/tradebot-role-separation.md`
+
+No role may approve its own work. No required gate may be skipped merely to accelerate delivery. Existing Hermes -> GSD remains mandatory inside the Architecture -> Development portion of this broader lifecycle.
+
+Required delivery references:
+
+- `docs/tradebot_delivery/ORGANIZATION.md`
+- `docs/tradebot_delivery/DELIVERY_LIFECYCLE.md`
+- `docs/tradebot_delivery/WORK_ITEM_TEMPLATE.md`
+- `docs/tradebot_delivery/QA_PLAYBOOK.md`
+- `docs/tradebot_delivery/RELEASE_GATES.md`
+
 ## Non-Negotiable Trading Safety Rules
 
 Agents must never:
