@@ -1,3 +1,11 @@
+## Work item / delivery state
+
+- Work Item ID:
+- Parent Epic / Feature:
+- Current delivery state:
+- Acting role:
+- Next allowed transition:
+
 ## Summary
 
 Describe exactly what changed.
@@ -5,6 +13,27 @@ Describe exactly what changed.
 ## Why this is needed
 
 Describe the bug, risk, feature, or cleanup this PR addresses.
+
+## Requirement and architecture traceability
+
+- [ ] Work item satisfies `docs/tradebot_delivery/WORK_ITEM_TEMPLATE.md`
+- [ ] Business goal and acceptance criteria are explicit
+- [ ] Architecture review completed
+- [ ] Existing infrastructure reused where appropriate
+- [ ] Scope exclusions documented
+- [ ] No role is self-approving its own work
+
+## QA / UAT / product acceptance
+
+- [ ] Developer self-validation complete
+- [ ] QA adversarial pass complete
+- [ ] Reported defects were fixed and retested
+- [ ] QA performed a new adversarial pass after fixes
+- [ ] Senior QA complete
+- [ ] UAT complete or documented not applicable
+- [ ] Product Owner acceptance complete
+
+Evidence / defect references:
 
 ## Agent review evidence
 
@@ -106,6 +135,19 @@ streamlit run dashboard/streamlit_app.py
 
 Results / screenshots / logs:
 
+## Release gates
+
+- [ ] REQUIREMENT_READY
+- [ ] DESIGN_READY
+- [ ] DEV_VERIFIED
+- [ ] QA_PASSED
+- [ ] SENIOR_QA passed
+- [ ] UAT passed / N/A with evidence
+- [ ] PRODUCT_ACCEPTED
+- [ ] RELEASE_READY
+- [ ] CI_GREEN
+- [ ] MERGE_APPROVED
+
 ## Checklist
 
 - [ ] Branch is based on latest `main`
@@ -120,3 +162,4 @@ Results / screenshots / logs:
 - [ ] Portfolio CI passes
 - [ ] All conversations are resolved
 - [ ] Release checklist reviewed for runtime-sensitive changes
+- [ ] Rollback/known limitations documented where applicable
