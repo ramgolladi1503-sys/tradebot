@@ -1,0 +1,50 @@
+name: VWAP Failed Discovery Hypothesis V1
+
+on:
+  pull_request:
+    paths:
+      - "research/vwap_failed_discovery_hypothesis_v1/**"
+      - "tests/research/test_vwap_failed_discovery_hypothesis_v1.py"
+      - "tests/research/test_vwap_failed_discovery_corpus_runner_v1.py"
+      - "docs/agent_reviews/vwap_failed_discovery_hypothesis_v1.md"
+      - ".github/workflows/vwap-failed-discovery-hypothesis-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          lfs: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install pytest
+      - name: Compile hypothesis code
+        run: >-
+          python -m py_compile
+          research/vwap_failed_discovery_hypothesis_v1/detector.py
+          research/vwap_failed_discovery_hypothesis_v1/evaluation.py
+          research/vwap_failed_discovery_hypothesis_v1/run_corpus.py
+          tests/research/test_vwap_failed_discovery_hypothesis_v1.py
+          tests/research/test_vwap_failed_discovery_corpus_runner_v1.py
+      - name: Focused hypothesis and runner invariants
+        run: >-
+          pytest -q -o addopts=''
+          tests/research/test_vwap_failed_discovery_hypothesis_v1.py
+          tests/research/test_vwap_failed_discovery_corpus_runner_v1.py
+      - name: Reject strategy/execution contamination
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RniE 'option_selection|strike_selection|position_sizing|broker_api|place_order|submit_order|risk_fraction|profit_target|stop_loss' research/vwap_failed_discovery_hypothesis_v1/*.py; then
+            echo 'Strategy/execution contamination detected in hypothesis code' >&2
+            exit 1
+          fi
