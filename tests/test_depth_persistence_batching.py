@@ -9,6 +9,7 @@ import pytest
 from core.trade_store import insert_depth_snapshots_batch, insert_depth_snapshot, _conn
 from core.depth_store import DepthStore
 from config import config as cfg
+from core import tick_store
 
 
 def test_insert_depth_snapshots_batch(tmp_path, monkeypatch):
@@ -224,3 +225,75 @@ def test_depth_store_overload_rejects_visibly_and_preserves_accounting(tmp_path,
     rejection_rows = [json.loads(line) for line in rejection_file.read_text().splitlines() if line.strip()]
     assert len(rejection_rows) == 1
     assert rejection_rows[0]["reason_code"] == "QUEUE_REJECTED"
+
+
+def test_tick_passive_checkpoint_and_depth_writer_progress_with_pinned_reader(tmp_path, monkeypatch):
+    """A pinned WAL reader degrades checkpoint progress without starving depth writes."""
+    db_file = tmp_path / "shared_tick_depth.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_file), raising=False)
+    monkeypatch.setenv("TRADE_DB_PATH", str(db_file))
+    monkeypatch.setattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", True, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 25, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_PRUNE_INTERVAL_SEC", 3600.0, raising=False)
+
+    tick_store.reset_audit_counters()
+    tick_store._INIT_DONE = False
+    tick_store._INIT_DB_PATH = None
+    tick_store.init_ticks()
+    tick_row = (
+        "2026-10-05T09:15:00Z", 7654321, 250.5, 10, 2, 1_791_185_700.0,
+        "2026-10-05T09:15:00Z", "RECEIPT", "exchange_timestamp",
+        1_791_185_700.0, 1_791_185_700.0, False,
+    )
+    degraded = []
+    monkeypatch.setattr(tick_store, "record_degradation", lambda *args, **kwargs: degraded.append((args, kwargs)))
+    monkeypatch.setattr(tick_store._ERROR_LOGGER, "write", lambda _payload: True)
+
+    assert tick_store._write_rows([tick_row]) is True
+    reader = sqlite3.connect(db_file, timeout=2.0)
+    reader.execute("PRAGMA journal_mode=WAL")
+    reader.execute("BEGIN")
+    reader.execute("SELECT COUNT(*) FROM ticks").fetchone()
+
+    tick_result = []
+    tick_done = threading.Event()
+
+    def write_tick():
+        try:
+            tick_result.append(tick_store._write_rows([tuple([*tick_row[:5], tick_row[5] + 1.0, *tick_row[6:]])]))
+        finally:
+            tick_done.set()
+
+    depth_store = DepthStore()
+    sample_depth = {"buy": [{"price": 100.0, "quantity": 10}], "sell": [{"price": 101.0, "quantity": 9}]}
+    try:
+        tick_thread = threading.Thread(target=write_tick, name="test-tick-writer")
+        tick_thread.start()
+        assert tick_done.wait(timeout=3.0), "PASSIVE tick writer blocked behind pinned reader"
+        assert tick_result == [True]
+
+        for i in range(100):
+            depth_store.update(800000 + i, sample_depth)
+        depth_state = depth_store.shutdown_persistence(deadline_seconds=5.0)
+        assert depth_state["complete"] is True
+        assert depth_state["enqueued"] == 100
+        assert depth_state["persisted"] == 100
+        assert depth_state["rejected"] == 0
+        assert depth_state["failures"] == 0
+        assert depth_state["accounting_invariant_ok"] is True
+        assert depth_state["unaccounted_remainder"] == 0
+
+        tick_state = tick_store.get_persistence_worker_state()
+        assert tick_state["wal_checkpoint_mode"] == "PASSIVE"
+        assert tick_state["wal_checkpoint_incomplete"] == 1
+        assert tick_state["wal_checkpoint_pending_frames_max"] > 0
+        assert degraded == [(('tick', 'SQLITE_WAL_CHECKPOINT_BUSY'), {})]
+    finally:
+        reader.rollback()
+        reader.close()
+        # Ensure background resources are released even if an assertion fails.
+        if 'tick_thread' in locals():
+            tick_thread.join(timeout=3.0)
+        if not depth_store.persistence_state()["shutdown"]:
+            depth_store.shutdown_persistence(deadline_seconds=5.0)
