@@ -26,6 +26,7 @@ def test_checkpoint_busy_after_commit_consumes_batch_once(tmp_path, monkeypatch)
 
     checkpoint_errors = []
     degraded = []
+    checkpoint_sql = []
     real_conn_context = tick_store._conn
 
     class CheckpointBusyConnection:
@@ -34,6 +35,7 @@ def test_checkpoint_busy_after_commit_consumes_batch_once(tmp_path, monkeypatch)
 
         def execute(self, sql, *args, **kwargs):
             if sql.strip().upper().startswith("PRAGMA WAL_CHECKPOINT"):
+                checkpoint_sql.append(sql.strip())
                 class BusyResult:
                     @staticmethod
                     def fetchone():
@@ -75,6 +77,60 @@ def test_checkpoint_busy_after_commit_consumes_batch_once(tmp_path, monkeypatch)
     event = next(item for item in checkpoint_errors if item["event"] == "TICK_STORE_CHECKPOINT_DEGRADED")
     assert event["committed"] is True
     assert event["wal_limit_bytes"] == tick_store.MAX_SQLITE_WAL_BYTES
+    assert event["checkpoint_mode"] == "PASSIVE"
+    assert checkpoint_sql == ["PRAGMA wal_checkpoint(PASSIVE)"]
+
+
+def test_passive_checkpoint_does_not_block_behind_reader_and_keeps_degradation_visible(tmp_path, monkeypatch):
+    db_path = tmp_path / "ticks_reader.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", True, raising=False)
+    tick_store.reset_audit_counters()
+    tick_store._INIT_DONE = False
+    tick_store._INIT_DB_PATH = None
+    tick_store.init_ticks()
+
+    def _row(token, epoch):
+        timestamp = f"2026-10-05T09:15:{token:02d}Z"
+        return (
+            timestamp, token, 250.5, 10, 2, epoch, timestamp, "RECEIPT",
+            "exchange_timestamp", epoch, epoch, False,
+        )
+
+    degraded = []
+    events = []
+    monkeypatch.setattr(tick_store, "record_degradation", lambda *args, **kwargs: degraded.append((args, kwargs)))
+    monkeypatch.setattr(tick_store._ERROR_LOGGER, "write", lambda payload: events.append(payload))
+
+    # Establish a durable baseline before an external reader pins its WAL snapshot.
+    assert tick_store._write_rows([_row(1, 1_791_185_700.0)]) is True
+    reader = sqlite3.connect(db_path, timeout=30.0)
+    reader.execute("PRAGMA journal_mode=WAL")
+    reader.execute("BEGIN")
+    reader.execute("SELECT COUNT(*) FROM ticks").fetchone()
+    try:
+        started = tick_store.time.monotonic()
+        assert tick_store._write_rows([_row(2, 1_791_185_701.0)]) is True
+        elapsed = tick_store.time.monotonic() - started
+    finally:
+        reader.rollback()
+        reader.close()
+
+    assert elapsed < 2.0
+    assert tick_store.get_audit_counters()["wal_checkpoint_attempts"] == 2
+    assert tick_store.get_audit_counters()["wal_checkpoint_incomplete"] == 1
+    worker_state = tick_store.get_persistence_worker_state()
+    assert worker_state["wal_checkpoint_mode"] == "PASSIVE"
+    assert worker_state["wal_checkpoint_incomplete"] == 1
+    assert worker_state["wal_checkpoint_pending_frames_max"] > 0
+    assert degraded == [(('tick', 'SQLITE_WAL_CHECKPOINT_BUSY'), {})]
+    event = next(item for item in events if item["event"] == "TICK_STORE_CHECKPOINT_DEGRADED")
+    assert event["committed"] is True
+    assert event["checkpoint_mode"] == "PASSIVE"
+    assert event["wal_pending_frames"] > 0
+
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM ticks").fetchone()[0] == 2
 
 
 def test_precommit_failure_is_categorized_without_exception_payload(monkeypatch):

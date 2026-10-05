@@ -59,6 +59,12 @@ _AUDIT_COUNTERS = {
     "worker_failures": 0,
     "writes_rejected_after_shutdown": 0,
     "writes_rejected_queue_full": 0,
+    "wal_checkpoint_attempts": 0,
+    "wal_checkpoint_incomplete": 0,
+    "wal_checkpoint_errors": 0,
+    "wal_checkpoint_duration_ms_total": 0.0,
+    "wal_checkpoint_duration_ms_max": 0.0,
+    "wal_checkpoint_pending_frames_max": 0,
 }
 _WRITE_ENQUEUE_COUNT = 0
 _WRITE_FLUSH_COUNT = 0
@@ -688,31 +694,66 @@ def _write_rows(
         with _WRITE_QUEUE_LOCK:
             _AUDIT_COUNTERS["committed_batches"] += 1
         committed = True
+        checkpoint_started_ns = time.monotonic_ns()
+        checkpoint = None
+        checkpoint_error = False
+        checkpoint_incomplete = False
+        pending_frames = 0
         try:
             with _conn() as conn:
-                checkpoint = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
-            if checkpoint and int(checkpoint[0] or 0) != 0:
+                checkpoint = conn.execute("PRAGMA wal_checkpoint(PASSIVE)").fetchone()
+            if checkpoint is None or len(checkpoint) < 3:
+                raise RuntimeError("SQLITE_WAL_CHECKPOINT_RESULT_UNAVAILABLE")
+            checkpoint_busy, log_frames, checkpointed_frames = (
+                int(value or 0) for value in checkpoint[:3]
+            )
+            pending_frames = max(0, log_frames - checkpointed_frames)
+            if checkpoint_busy != 0 or pending_frames > 0:
+                checkpoint_incomplete = True
                 raise StorageBoundViolation("SQLITE_WAL_CHECKPOINT_BUSY")
         except Exception as exc:
             # The INSERT transaction has committed. Returning failure here would
             # requeue the same rows and insert duplicates on the next flush.
-            # Keep checkpoint trouble visible and fail closed for readiness,
-            # while reporting the committed batch as successful to the queue.
+            # PASSIVE never waits for readers. Keep incomplete checkpoint progress
+            # visible and fail closed for readiness while reporting the committed
+            # batch as successful to the queue.
             reason = "SQLITE_WAL_CHECKPOINT_BUSY" if isinstance(exc, StorageBoundViolation) else "SQLITE_WAL_CHECKPOINT_ERROR"
             record_degradation("tick", reason)
-            try:
-                _ERROR_LOGGER.write(
-                    {
-                        "ts_epoch": time.time(),
-                        "event": "TICK_STORE_CHECKPOINT_DEGRADED",
-                        "row_count": len(rows),
-                        "error": reason,
-                        "committed": True,
-                        "wal_limit_bytes": MAX_SQLITE_WAL_BYTES,
-                    }
+            checkpoint_error = not checkpoint_incomplete
+        finally:
+            checkpoint_duration_ms = max(0.0, (time.monotonic_ns() - checkpoint_started_ns) / 1_000_000.0)
+            with _WRITE_QUEUE_LOCK:
+                _AUDIT_COUNTERS["wal_checkpoint_attempts"] += 1
+                _AUDIT_COUNTERS["wal_checkpoint_duration_ms_total"] += checkpoint_duration_ms
+                _AUDIT_COUNTERS["wal_checkpoint_duration_ms_max"] = max(
+                    float(_AUDIT_COUNTERS["wal_checkpoint_duration_ms_max"]), checkpoint_duration_ms
                 )
-            except Exception:
-                pass
+                _AUDIT_COUNTERS["wal_checkpoint_pending_frames_max"] = max(
+                    int(_AUDIT_COUNTERS["wal_checkpoint_pending_frames_max"]), pending_frames
+                )
+                if checkpoint_incomplete:
+                    _AUDIT_COUNTERS["wal_checkpoint_incomplete"] += 1
+                if checkpoint_error:
+                    _AUDIT_COUNTERS["wal_checkpoint_errors"] += 1
+            if checkpoint_error or checkpoint_incomplete:
+                try:
+                    _ERROR_LOGGER.write(
+                        {
+                            "ts_epoch": time.time(),
+                            "event": "TICK_STORE_CHECKPOINT_DEGRADED",
+                            "row_count": len(rows),
+                            "error": "SQLITE_WAL_CHECKPOINT_BUSY" if checkpoint_incomplete else "SQLITE_WAL_CHECKPOINT_ERROR",
+                            "checkpoint_mode": "PASSIVE",
+                            "checkpoint_duration_ms": checkpoint_duration_ms,
+                            "wal_log_frames": int(checkpoint[1] or 0) if checkpoint and len(checkpoint) >= 3 else None,
+                            "wal_checkpointed_frames": int(checkpoint[2] or 0) if checkpoint and len(checkpoint) >= 3 else None,
+                            "wal_pending_frames": pending_frames if checkpoint and len(checkpoint) >= 3 else None,
+                            "committed": True,
+                            "wal_limit_bytes": MAX_SQLITE_WAL_BYTES,
+                        }
+                    )
+                except Exception:
+                    pass
         if worker_owned and _async_db_writes_enabled() and _REPLAY_PRESSURE_POST_COMMIT_HOOK is not None:
             try:
                 _REPLAY_PRESSURE_POST_COMMIT_HOOK(
@@ -820,8 +861,9 @@ def pending_tick_count() -> int:
         return len(_WRITE_QUEUE)
 
 
-def get_audit_counters() -> dict[str, int]:
-    return dict(_AUDIT_COUNTERS)
+def get_audit_counters() -> dict[str, int | float]:
+    with _WRITE_QUEUE_LOCK:
+        return dict(_AUDIT_COUNTERS)
 
 
 def reset_audit_counters() -> None:
@@ -1144,6 +1186,13 @@ def get_persistence_worker_state() -> dict[str, Any]:
         "rows_dequeued": queue_counters["rows_dequeued"],
         "dequeue_attempts": dequeue_attempts,
         "committed_batches": _AUDIT_COUNTERS["committed_batches"],
+        "wal_checkpoint_mode": "PASSIVE",
+        "wal_checkpoint_attempts": queue_counters["wal_checkpoint_attempts"],
+        "wal_checkpoint_incomplete": queue_counters["wal_checkpoint_incomplete"],
+        "wal_checkpoint_errors": queue_counters["wal_checkpoint_errors"],
+        "wal_checkpoint_duration_ms_total": queue_counters["wal_checkpoint_duration_ms_total"],
+        "wal_checkpoint_duration_ms_max": queue_counters["wal_checkpoint_duration_ms_max"],
+        "wal_checkpoint_pending_frames_max": queue_counters["wal_checkpoint_pending_frames_max"],
         "committed_rows": committed_rows,
         "queue_depth_initial": 0,
         "queue_depth_high_water": _QUEUE_HIGH_WATER,
