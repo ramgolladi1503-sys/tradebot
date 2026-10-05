@@ -40,7 +40,7 @@ Contracts: raw source time and callback receipt time are distinct authorities; b
 
 ## GSD Review
 
-Implementation is limited to the six listed runtime modules, focused test files, and this review artifact. No configuration key or default is added. Storage exceptions are classified by safe category/type and omit exception messages, tick values, tokens, credentials, and row payloads. The tick checkpoint degradation remains visible and does not relax readiness. The MEG skip event contains only the stable outside-session reason, bar identity already permitted in candle diagnostics, and store status.
+Implementation is limited to the listed runtime modules, focused test files, and this review artifact. No configuration key or default is added. Storage exceptions are classified by safe category/type and omit exception messages, tick values, tokens, credentials, and row payloads. The tick checkpoint degradation remains visible and does not relax readiness. The MEG skip event contains only the stable outside-session reason, bar identity already permitted in candle diagnostics, and store status.
 
 ## QA / Safety Review
 
@@ -51,13 +51,13 @@ Implementation is limited to the six listed runtime modules, focused test files,
 - Focused feed/persistence/lifecycle tests: 160 passed.
 - Feed health/recovery/readiness and persistence-bound tests: 86 passed.
 - Live MEG OHLC/session-store tests after out-of-session skip repair: 43 passed.
-- Current touched-component suite, including runtime bridge provenance ordering: 198 passed.
+- Current touched-component suite, including runtime bridge provenance ordering and explicit global-epoch fail-closed assertions: 200 passed.
 - `git diff --check`: passed.
 - Exact-head hosted CI at `be5622412eb3baa0e3e1ffde06f2cf2ad1c33082`: not green. The PR818 frozen-live-flow policy rejects the protected production changes and reports base drift from its pinned baseline. The PR782 focused-contracts gate also rejects changed files outside its designated scope. The corrected candidate requires a new exact-head CI run; neither gate is waived or bypassed.
 
 ## Acceptance Proof
 
-The local tests prove that a fresh receipt cannot mask stale, missing, future, or non-finite source time; checkpoint failure after commit does not enqueue duplicate rows; failure events contain only redacted categories/types; retry attempts do not inflate unique pending/in-flight accounting; status `PROGRESS` is not classified as recovered; shutdown recomputes each worker budget from one monotonic deadline while requiring tick/depth/runtime accounting to reconcile; pre-open/post-close bars are explicitly skipped and excluded from MEG output; unexpected persistence failures remain fatal; and subscription session/epoch mismatches retain their specific rejection reason before the global epoch guard rejects stale bars. Hosted acceptance still requires every required exact-head check to pass under the repository's protected live-flow policy.
+The local tests prove that a fresh receipt cannot mask stale, missing, future, or non-finite source time; checkpoint failure after commit does not enqueue duplicate rows; failure events contain only redacted categories/types; retry attempts do not inflate unique pending/in-flight accounting; status `PROGRESS` is not classified as recovered; shutdown recomputes each worker budget from one monotonic deadline while requiring tick/depth/runtime accounting to reconcile; pre-open/post-close bars are explicitly skipped and excluded from MEG output; unexpected persistence failures remain fatal; subscription session/epoch mismatches retain their specific rejection reason; and a matching but globally stale feed epoch is still rejected. Hosted acceptance still requires every required exact-head check to pass under the repository's protected live-flow policy.
 
 ## Runtime Proof Required After Merge
 

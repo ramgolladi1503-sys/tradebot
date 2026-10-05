@@ -529,6 +529,52 @@ def test_missing_live_tick_provenance_is_rejected(monkeypatch, tmp_path):
     assert result.exported is False
 
 
+def test_subscription_epoch_mismatch_keeps_specific_reason(monkeypatch):
+    from core.market_event_graph_live_runtime_bridge import _bar_has_live_provenance
+
+    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.current_feed_epoch", lambda: 0)
+    bar = {
+        "bar_provenance": {
+            "source_type": "live_websocket",
+            "live_feed_session_id": "session-1",
+            "feed_epoch": 0,
+            "first_live_tick_epoch": 10.0,
+            "last_live_tick_epoch": 20.0,
+        }
+    }
+
+    accepted, reason = _bar_has_live_provenance(
+        bar,
+        subscription={"feed_session_id": "session-1", "feed_epoch": 1},
+    )
+
+    assert accepted is False
+    assert reason == "FEED_EPOCH_MISMATCH"
+
+
+def test_current_global_epoch_guard_still_rejects_stale_bar(monkeypatch):
+    from core.market_event_graph_live_runtime_bridge import _bar_has_live_provenance
+
+    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.current_feed_epoch", lambda: 1)
+    bar = {
+        "bar_provenance": {
+            "source_type": "live_websocket",
+            "live_feed_session_id": "session-1",
+            "feed_epoch": 0,
+            "first_live_tick_epoch": 10.0,
+            "last_live_tick_epoch": 20.0,
+        }
+    }
+
+    accepted, reason = _bar_has_live_provenance(
+        bar,
+        subscription={"feed_session_id": "session-1", "feed_epoch": 0},
+    )
+
+    assert accepted is False
+    assert reason == LIVE_BAR_PROVENANCE_UNPROVEN
+
+
 def test_history_seeded_and_fallback_bars_are_rejected(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
     blocked_provenance = {
