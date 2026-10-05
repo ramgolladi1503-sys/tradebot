@@ -18,7 +18,11 @@ This PR repairs evidence and persistence lifecycle correctness from the 2026-10-
 
 ## Grill Me Review
 
-The live capture does not contain `tick_store_errors.jsonl`; the 80 tick worker failures therefore have no proven underlying SQLite or storage cause. The 4,334-row residual is confirmed, while the old `in_flight_rows` value counts retries and overstates unique work. The 18.98-million-ms runtime writer lag used an enqueue timestamp retained through coalescing and is not evidence of a continuous five-hour stall. This PR improves future evidence and corrects these counters; it does not invent the missing cause or claim the observed feed was healthy.
+The preserved `logs/tick_store_errors.jsonl` contains 82 records: two schema confirmations and 80 `TICK_STORAGE_BOUND_REJECTED` records. All 80 rejection records name `SQLITE_WAL_CHECKPOINT_BUSY`, each for a 1,000-row batch. The durable tick insert happened before the checkpoint; the prior path treated the subsequent busy checkpoint as an unsuccessful insert, so retrying could write the batch again. The PR changes post-commit checkpoint failure to degraded-but-committed accounting, preventing this retry/duplicate hazard while keeping the degradation visible. The log alone does not prove how many duplicate rows were ultimately created.
+
+The preserved depth rejection log contains 183,085 records; all are `QUEUE_REJECTED` at queue depth 65,536. The first is at 09:33:49 IST and the last at 15:30:02 IST. Captured shutdown accounting reports zero depth DB failures and zero lock skips, while 47,245 rows were persisted and 65,536 remained queued. This confirms sustained producer/service-rate imbalance and queue saturation. It does not identify why the persistence worker's service rate was insufficient; do not attribute this to SQLite lock contention from the available evidence.
+
+The 4,334-row tick residual is confirmed, while the old `in_flight_rows` value counts retries and overstates unique work. The 18.98-million-ms runtime writer lag used an enqueue timestamp retained through coalescing and is not evidence of a continuous five-hour stall. The PR improves future evidence and corrects these counters; it does not claim the observed feed was healthy.
 
 ## Hermes Review
 
@@ -37,7 +41,7 @@ Implementation is limited to the five listed runtime modules, six focused test f
 - Focused feed/persistence/lifecycle tests: 160 passed.
 - Feed health/recovery/readiness and persistence-bound tests: 86 passed.
 - `git diff --check`: passed.
-- Exact-head hosted CI: not yet green; PR818 frozen-live-flow policy currently rejects changes under its protected production surface, and review evidence was initially missing. The review-evidence requirement is addressed by this file. The freeze policy is not waived or bypassed here.
+- Exact-head hosted CI: not yet green. The PR818 frozen-live-flow policy rejects the protected production changes and reports base drift from its pinned baseline. The PR782 focused-contracts gate also rejects changed files outside its designated scope. This evidence is from the live check logs; neither gate is waived or bypassed.
 
 ## Acceptance Proof
 
@@ -49,7 +53,7 @@ A future read-only observation must verify that the new source/receipt fields ag
 
 ## What This PR Does Not Prove
 
-It does not identify the missing 80 tick-store failure causes, prove sustainable depth-write throughput, recover the 2026-10-05 session, certify MEG source-bar progress, establish a strategy edge, prove live readiness, or authorize paper/live orders. The PR818 protected-surface check remains an independent required policy gate.
+It does not prove how many duplicate tick rows were committed during the observed session, identify the depth persistence throughput bottleneck, prove sustainable depth-write throughput, recover the 2026-10-05 session, certify MEG source-bar progress, establish a strategy edge, prove live readiness, or authorize paper/live orders. The PR818 protected-surface check remains an independent required policy gate.
 
 ## Human Approval
 
