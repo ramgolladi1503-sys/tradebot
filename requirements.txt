@@ -21,3 +21,4 @@ upstox-python-sdk
 protobuf
 websockets
 zstandard
+PyYAML
