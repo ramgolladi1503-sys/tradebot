@@ -134,6 +134,12 @@ def test_invalid_or_unknown_transition_fails_closed(target):
     assert o.item.current_state == DeliveryState.BACKLOG
 
 
+def test_product_acceptance_cannot_skip_uat():
+    o = prepared_for_dev()
+    with pytest.raises(GovernanceError, match="invalid transition"):
+        transition(o, DeliveryState.PRODUCT_ACCEPTED, R.PRODUCT_OWNER, "po")
+
+
 def test_unknown_role_is_rejected():
     o = DeliveryOrchestrator(make_item())
     with pytest.raises(GovernanceError, match="unknown workflow state or role"):
@@ -229,6 +235,35 @@ def test_qa_retest_and_new_adversarial_pass_required_after_fix():
     assert o.item.defects[0].status == DefectStatus.CLOSED
 
 
+def test_qa_cannot_reuse_evidence_from_before_a_new_development_cycle():
+    o = prepared_for_dev()
+    dev0 = add(o, "dev0", EvidenceType.DEV_TEST_EVIDENCE, R.BACKEND_DEVELOPER, "dev",
+               timestamp="2026-01-01T01:03:00+00:00")
+    transition(o, DeliveryState.DEV_VERIFIED, R.BACKEND_DEVELOPER, "dev", (dev0.evidence_id,), 3)
+    transition(o, DeliveryState.QA_IN_PROGRESS, R.QA_ENGINEER, "qa", minute=4)
+    stale = add(o, "old-qa", EvidenceType.QA_EVIDENCE, R.QA_ENGINEER, "qa",
+                timestamp="2026-01-01T01:05:00+00:00")
+    failed = add(o, "qa-fail", EvidenceType.QA_EVIDENCE, R.QA_ENGINEER, "qa",
+                 EvidenceStatus.FAIL, timestamp="2026-01-01T01:05:30+00:00")
+    defect_e = add(o, "defect-e", EvidenceType.DEFECT_EVIDENCE, R.QA_ENGINEER, "qa",
+                   timestamp="2026-01-01T01:05:20+00:00")
+    defect = Defect("D-STALE", o.item.work_item_id, DefectSeverity.S4, "minor defect",
+                    ("reproduce",), "expected", "actual", (defect_e.evidence_id,))
+    o.add_defect(defect, actor_role=R.QA_ENGINEER, actor="qa",
+                 timestamp="2026-01-01T01:05:40+00:00", reason="logged for fix")
+    transition(o, DeliveryState.QA_FAILED, R.QA_ENGINEER, "qa",
+               (failed.evidence_id, defect_e.evidence_id), 6)
+    transition(o, DeliveryState.IN_DEVELOPMENT, R.BACKEND_DEVELOPER, "dev", minute=7)
+    dev1 = add(o, "dev1", EvidenceType.DEV_TEST_EVIDENCE, R.BACKEND_DEVELOPER, "dev",
+               timestamp="2026-01-01T01:08:00+00:00")
+    transition(o, DeliveryState.DEV_VERIFIED, R.BACKEND_DEVELOPER, "dev", (dev1.evidence_id,), 9)
+    transition(o, DeliveryState.QA_IN_PROGRESS, R.QA_ENGINEER, "qa", minute=10)
+    current_qa = add(o, "late-old-qa", EvidenceType.QA_EVIDENCE, R.QA_ENGINEER, "qa",
+                     timestamp=stale.timestamp)
+    with pytest.raises(GovernanceError, match="stale lifecycle evidence"):
+        transition(o, DeliveryState.QA_PASSED, R.QA_ENGINEER, "qa", (current_qa.evidence_id,), 11)
+
+
 def test_ci_missing_or_red_checks_do_not_allow_green():
     o, _ = ready_for_pr_open()
     gaps, _ = o._lifecycle_gaps(include_ci=True)
@@ -254,6 +289,26 @@ def test_merge_approval_cannot_select_superseded_release_evidence():
         transition(o, DeliveryState.MERGE_APPROVED, R.RELEASE_MANAGER, "rm", (release.evidence_id,), 14)
     assert o.item.current_state == DeliveryState.CI_GREEN
     assert failed_release.status == EvidenceStatus.FAIL
+
+
+def test_merge_approval_is_removed_when_latest_ci_result_turns_red():
+    o, release = ready_for_pr_open()
+    ci_green = add(o, "ci-green", EvidenceType.CI_EVIDENCE, R.RELEASE_MANAGER, "rm",
+                   checks=(("unit", "SUCCESS"), ("lint", "SUCCESS")),
+                   timestamp="2026-01-01T01:12:00+00:00")
+    transition(o, DeliveryState.CI_GREEN, R.RELEASE_MANAGER, "rm",
+               (ci_green.evidence_id,), 12)
+    ci_red = add(o, "ci-red", EvidenceType.CI_EVIDENCE, R.RELEASE_MANAGER, "rm",
+                 EvidenceStatus.FAIL,
+                 checks=(("unit", "SUCCESS"), ("lint", "FAILURE")),
+                 timestamp="2026-01-01T01:13:00+00:00")
+    assert "MERGE_APPROVED" not in o.allowed_next_states()
+    with pytest.raises(GovernanceError, match="merge gates blocked"):
+        transition(o, DeliveryState.MERGE_APPROVED, R.RELEASE_MANAGER, "rm",
+                   (release.evidence_id,), 14)
+    transition(o, DeliveryState.CI_FAILED, R.RELEASE_MANAGER, "rm",
+               (ci_red.evidence_id,), 15)
+    assert o.item.current_state == DeliveryState.CI_FAILED
 
 
 def test_na_without_reason_and_reference_is_rejected():
@@ -292,6 +347,16 @@ def test_evidence_hash_detects_mutation_and_wrong_work_item():
         o.add_evidence(replace(e, evidence_id="other", work_item_id="OTHER", content_hash=""))
     changed_contract = replace(o.item, business_goal="a different requirement")
     assert DeliveryOrchestrator(changed_contract).contract_drift is False  # No recorded transition yet.
+
+
+def test_duplicate_evidence_ids_are_rejected():
+    o = DeliveryOrchestrator(make_item())
+    add(o, "req", EvidenceType.REQUIREMENT_EVIDENCE, R.BUSINESS_ANALYST, "ba")
+    duplicate = Evidence("req", o.item.work_item_id, EvidenceType.REQUIREMENT_EVIDENCE,
+                         R.BUSINESS_ANALYST, "ba", "2026-01-01T00:01:00+00:00",
+                         EvidenceStatus.PASS, "duplicate", ("evidence://duplicate",))
+    with pytest.raises(GovernanceError, match="unique"):
+        o.add_evidence(duplicate)
 
 
 def test_scope_change_invalidates_prior_proofs_and_requires_requirement_block_reentry():

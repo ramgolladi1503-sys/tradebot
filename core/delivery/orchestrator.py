@@ -38,7 +38,7 @@ EVIDENCE_STATES = {
     EvidenceType.SENIOR_QA_EVIDENCE: {S.QA_PASSED, S.SENIOR_QA},
     EvidenceType.UAT_EVIDENCE: {S.UAT},
     EvidenceType.PRODUCT_ACCEPTANCE_EVIDENCE: {S.UAT},
-    EvidenceType.CI_EVIDENCE: {S.PR_OPEN},
+    EvidenceType.CI_EVIDENCE: {S.PR_OPEN, S.CI_GREEN},
     EvidenceType.RELEASE_EVIDENCE: {S.PRODUCT_ACCEPTED, S.RELEASE_BLOCKED,
                                     S.RELEASE_READY, S.CI_GREEN, S.MERGE_APPROVED},
     EvidenceType.PRODUCTION_VERIFICATION_EVIDENCE: {S.MERGED, S.PRODUCTION_VERIFIED},
@@ -203,6 +203,10 @@ class DeliveryOrchestrator:
         allowed = set(ALLOWED_TRANSITIONS.get(self.item.current_state, set()))
         if self.contract_drift:
             allowed &= {S.BLOCKED_REQUIREMENT}
+        if self.item.current_state == S.CI_GREEN:
+            gaps, _ = self._lifecycle_gaps(include_ci=True)
+            if gaps or unresolved_required(self.item.defects):
+                allowed.discard(S.MERGE_APPROVED)
         return tuple(sorted(s.value for s in allowed))
 
     def readiness(self) -> dict:
@@ -430,7 +434,8 @@ class DeliveryOrchestrator:
         elif (source, target) == (S.RELEASE_READY, S.RELEASE_BLOCKED):
             if not reason_has_release_blocker(selected):
                 raise GovernanceError("release block requires explicit failed/blocked RELEASE_EVIDENCE")
-        elif (source, target) in {(S.PR_OPEN, S.CI_GREEN), (S.PR_OPEN, S.CI_FAILED)}:
+        elif (source, target) in {(S.PR_OPEN, S.CI_GREEN), (S.PR_OPEN, S.CI_FAILED),
+                                  (S.CI_GREEN, S.CI_FAILED)}:
             ci = self._require(selected, EvidenceType.CI_EVIDENCE,
                                EvidenceStatus.PASS if target == S.CI_GREEN else EvidenceStatus.FAIL,
                                {DeliveryRole.RELEASE_MANAGER})

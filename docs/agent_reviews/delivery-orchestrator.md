@@ -71,7 +71,7 @@ Targeted suite:
 
 ```text
 PYTHONPATH=. pytest -q tests/delivery/test_delivery_orchestrator.py
-21 passed
+25 passed
 ```
 
 Additional checks:
@@ -82,13 +82,13 @@ python3 -m core.delivery.cli --help
 git diff --check
 ```
 
-All completed successfully. One earlier combined command used `python` and stopped because that executable is unavailable on this host; rerun with `python3` succeeded. Tests exercise successful full lifecycle and blocked cases, including unknown state/role, invalid jumps, missing requirements, self-approval, unresolved severe defects, missing/failed CI, valid UAT N/A, evidence/contract tampering, serialization, and forbidden broker/order imports.
+All completed successfully. One earlier combined command used `python` and stopped because that executable is unavailable on this host; rerun with `python3` succeeded. Tests exercise successful full lifecycle and blocked cases, including unknown state/role, invalid jumps, missing requirements, self-approval, unresolved severe defects, missing/failed CI, valid UAT N/A, stale phase evidence, duplicate IDs, evidence/contract tampering, serialization, and forbidden broker/order imports.
 
 ## UAT
 
 - Normal feature path through `DONE`: covered by deterministic integration test; all transitions require explicit evidence.
 - QA defect loop: covered through `QA_FAILED -> IN_DEVELOPMENT -> DEV_VERIFIED -> QA_IN_PROGRESS`, developer fix, retest, and new adversarial pass.
-- Red/missing CI: full synthetic lifecycle reaches `PR_OPEN`; missing checks and cancelled required checks are rejected before `CI_GREEN`. No real repository PR or remote CI was used.
+- Red/missing CI: full synthetic lifecycle reaches `PR_OPEN`; missing checks and cancelled required checks are rejected before `CI_GREEN`. A new failing CI result after `CI_GREEN` removes `MERGE_APPROVED` from the allowed-next list and blocks merge approval. No real repository PR or remote CI was used.
 - Developer attempts QA pass: rejected by author separation test.
 - Missing acceptance criteria: rejected before `REQUIREMENT_READY`.
 - Documented UAT N/A: accepted and reported as `NOT_APPLICABLE`.
