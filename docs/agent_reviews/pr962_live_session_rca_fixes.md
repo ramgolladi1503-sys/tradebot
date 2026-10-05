@@ -5,12 +5,12 @@
 - `source_agent`: grill_me -> hermes -> gsd
 - `action`: `CRITIQUE_SCOPE`, `DESIGN_ARCHITECTURE`, `DEFINE_CONTRACT`, `PLAN_PR`, `GENERATE_TESTS`, `GENERATE_PATCH`, `FIX_TEST_FAILURE`
 - `title`: Preserve feed truth and persistence drain accounting
-- `scope`: Correct source-vs-receipt freshness evidence, per-symbol option diagnostics, recovery classification, tick post-commit accounting, persistence failure telemetry, shared-deadline drain reporting, and expected out-of-session MEG bar handling.
-- `requested_paths`: `core/feed/runtime_store.py`, `core/feed_forensics.py`, `core/kite_depth_ws.py`, `core/kite_read_only_observation_runtime.py`, `core/tick_store.py`, `core/market_event_graph_live_ohlc_buffer.py`, and focused tests.
+- `scope`: Correct source-vs-receipt freshness evidence, per-symbol option diagnostics, recovery classification, tick post-commit accounting, persistence failure telemetry, shared-deadline drain reporting, expected out-of-session MEG bar handling, and preserve specific session/epoch provenance rejection diagnostics while retaining the global epoch guard.
+- `requested_paths`: `core/feed/runtime_store.py`, `core/feed_forensics.py`, `core/kite_depth_ws.py`, `core/kite_read_only_observation_runtime.py`, `core/tick_store.py`, `core/market_event_graph_live_ohlc_buffer.py`, `core/market_event_graph_live_runtime_bridge.py`, and focused tests.
 - `allowed_paths`: Those production modules, focused tests, and this review record.
 - `forbidden_paths`: Broker/order/execution actions, credentials, live configuration, risk/freshness gate weakening, strategy thresholds, dashboard work, runtime restarts, and unrelated files.
 - `expected_tests`: Focused feed, forensic, tick-store, runtime-store, lifecycle, MEG session-boundary, and fail-closed persistence tests; hosted exact-head CI.
-- `acceptance_proof`: Explicit tests for fresh source and receipt timestamps, no duplicate retry after durable commit, unique-row accounting, redacted failure categories, latest recovery outcome, and a single monotonic shutdown deadline. Execution readiness remains fail-closed.
+- `acceptance_proof`: Explicit tests for fresh source and receipt timestamps, no duplicate retry after durable commit, unique-row accounting, redacted failure categories, latest recovery outcome, a single monotonic shutdown deadline, and specific session/epoch mismatch diagnostics without relaxing global epoch validation. Execution readiness remains fail-closed.
 
 ## Scope Guard
 
@@ -51,12 +51,13 @@ Implementation is limited to the six listed runtime modules, focused test files,
 - Focused feed/persistence/lifecycle tests: 160 passed.
 - Feed health/recovery/readiness and persistence-bound tests: 86 passed.
 - Live MEG OHLC/session-store tests after out-of-session skip repair: 43 passed.
+- Current touched-component suite, including runtime bridge provenance ordering: 198 passed.
 - `git diff --check`: passed.
-- Exact-head hosted CI: not yet green. The PR818 frozen-live-flow policy rejects the protected production changes and reports base drift from its pinned baseline. The PR782 focused-contracts gate also rejects changed files outside its designated scope. This evidence is from the live check logs; neither gate is waived or bypassed.
+- Exact-head hosted CI at `be5622412eb3baa0e3e1ffde06f2cf2ad1c33082`: not green. The PR818 frozen-live-flow policy rejects the protected production changes and reports base drift from its pinned baseline. The PR782 focused-contracts gate also rejects changed files outside its designated scope. The corrected candidate requires a new exact-head CI run; neither gate is waived or bypassed.
 
 ## Acceptance Proof
 
-The local tests prove that a fresh receipt cannot mask stale, missing, future, or non-finite source time; checkpoint failure after commit does not enqueue duplicate rows; failure events contain only redacted categories/types; retry attempts do not inflate unique pending/in-flight accounting; status `PROGRESS` is not classified as recovered; shutdown recomputes each worker budget from one monotonic deadline while requiring tick/depth/runtime accounting to reconcile; pre-open/post-close bars are explicitly skipped and excluded from MEG output; and unexpected persistence failures remain fatal. Hosted acceptance still requires every required exact-head check to pass under the repository's protected live-flow policy.
+The local tests prove that a fresh receipt cannot mask stale, missing, future, or non-finite source time; checkpoint failure after commit does not enqueue duplicate rows; failure events contain only redacted categories/types; retry attempts do not inflate unique pending/in-flight accounting; status `PROGRESS` is not classified as recovered; shutdown recomputes each worker budget from one monotonic deadline while requiring tick/depth/runtime accounting to reconcile; pre-open/post-close bars are explicitly skipped and excluded from MEG output; unexpected persistence failures remain fatal; and subscription session/epoch mismatches retain their specific rejection reason before the global epoch guard rejects stale bars. Hosted acceptance still requires every required exact-head check to pass under the repository's protected live-flow policy.
 
 ## Runtime Proof Required After Merge
 
