@@ -1,0 +1,14 @@
+{
+  "manifest_metadata": {
+    "schema_version": 1,
+    "generated_at_utc": "2026-10-06T16:27:12.818894+00:00",
+    "compilation_host_hash": "09582dffbba1a768"
+  },
+  "artifact_checksums": {
+    "calibrated_regime_matrix.json_sha256": "a675feefee136cfba3e4865c7495257e28d3132f4c3d2fb14f1402d78a5bdeb3",
+    "scaler.npz_sha256": "7c7562cbad7253782f03bfa88fccce7e0d4914f524d6486607a0467f462c4aad",
+    "regime_model_weights.npz_sha256": "7c7562cbad7253782f03bfa88fccce7e0d4914f524d6486607a0467f462c4aad",
+    "calibrator.npz_sha256": "7c7562cbad7253782f03bfa88fccce7e0d4914f524d6486607a0467f462c4aad",
+    "outcome_model.npz_sha256": "7c7562cbad7253782f03bfa88fccce7e0d4914f524d6486607a0467f462c4aad"
+  }
+}
