@@ -153,6 +153,32 @@ def test_future_latest_tick_uses_eligible_prior_tick(tmp_path):
     assert {row["selected_tick_receipt_timestamp"] for row in rows} == {19.0}
 
 
+def test_prior_cycle_used_tick_does_not_prevent_fresh_tick_selection(tmp_path):
+    root = tmp_path / "prior_used"; root.mkdir()
+    evidence1 = _multi_cycle_evidence(1)
+    for item in evidence1["token_lifecycle"].values():
+        item["first_post_request_tick_id"] = "prior-tick-" + str(item["instrument_token"])
+        item["first_post_request_tick_epoch"] = 15.0
+    # In cycle 1, only the prior tick is within cutoff 18.0
+    append_meg_cycle_primitives(root, session_id="s1", producer_commit_sha="c1",
+                                cycle_id="cycle-1", accepted=True,
+                                subscription_evidence=evidence1, cycle_cutoff_epoch=18.0)
+    # In cycle 2, latest tick is at 22.0, but cutoff is 25.0
+    evidence2 = _multi_cycle_evidence(2)
+    for item in evidence2["token_lifecycle"].values():
+        # Keep same first_post_request_tick_id which was consumed in cycle 1
+        item["first_post_request_tick_id"] = "prior-tick-" + str(item["instrument_token"])
+        item["first_post_request_tick_epoch"] = 15.0
+    append_meg_cycle_primitives(root, session_id="s1", producer_commit_sha="c1",
+                                cycle_id="cycle-2", accepted=True,
+                                subscription_evidence=evidence2, cycle_cutoff_epoch=25.0)
+    rows = [json.loads(line) for line in (root / "meg_selected_tick_events.jsonl").read_text().splitlines()]
+    assert len(rows) == 102
+    cycle2_rows = [r for r in rows if r["cycle_id"] == "cycle-2"]
+    assert len(cycle2_rows) == 51
+    assert {r["selected_tick_receipt_timestamp"] for r in cycle2_rows} == {22.0}
+
+
 def test_real_observation_persistence_path_seals_and_verifies(tmp_path):
     root = tmp_path / "session"; root.mkdir()
     source = root / "source.jsonl"
