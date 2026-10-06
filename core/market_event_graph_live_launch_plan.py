@@ -140,6 +140,13 @@ def build_launch_plan(
     universe_sha256: str,
     configuration: Mapping[str, Any],
     broker_metadata_called: bool,
+    heritage_manifest_path: str | Path | None = None,
+    heritage_manifest_sha256: str | None = None,
+    venue: str = "NSE",
+    calendar_id: str = "NSE-HIST",
+    calendar_version: str = "v4",
+    selected_futures_contract_key: str | None = None,
+    target_expiry: str | None = None,
 ) -> dict[str, Any]:
     production_input = _strict_token_list(production_tokens)
     observation_input = _strict_token_list(observation_tokens)
@@ -183,6 +190,13 @@ def build_launch_plan(
         "universe_sha256": str(universe_sha256),
         "configuration_fingerprint": config_fingerprint,
         "broker_metadata_called": bool(broker_metadata_called),
+        "heritage_manifest_path": str(heritage_manifest_path) if heritage_manifest_path is not None else None,
+        "heritage_manifest_sha256": str(heritage_manifest_sha256) if heritage_manifest_sha256 is not None else None,
+        "venue": str(venue),
+        "calendar_id": str(calendar_id),
+        "calendar_version": str(calendar_version),
+        "selected_futures_contract_key": str(selected_futures_contract_key) if selected_futures_contract_key is not None else None,
+        "target_expiry": str(target_expiry) if target_expiry is not None else None,
     }
     plan_sha = _sha(basis)
     complete_union = set(basis["final_union_tokens"]) == set(production) | set(observation)
@@ -242,6 +256,8 @@ def load_launch_plan(path: Path) -> dict[str, Any]:
             "observation_exclusive_tokens", "final_union_tokens", "configured_budget",
             "missing_observation_tokens", "production_resolution", "master_sha256", "universe_sha256",
             "configuration_fingerprint", "broker_metadata_called",
+            "heritage_manifest_path", "heritage_manifest_sha256", "venue", "calendar_id",
+            "calendar_version", "selected_futures_contract_key", "target_expiry",
         )
         if key in raw
     }

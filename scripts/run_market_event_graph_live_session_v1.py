@@ -282,6 +282,10 @@ def _build_production_launch_plan(
     registry: Any,
     master_sha: str,
     broker_metadata_called: bool,
+    heritage_manifest_path: Path | str | None = None,
+    heritage_manifest_sha256: str | None = None,
+    selected_futures_contract_key: str | None = None,
+    target_expiry: str | None = None,
 ) -> dict[str, Any]:
     from core import kite_depth_ws
 
@@ -338,6 +342,13 @@ def _build_production_launch_plan(
             "min_option_tokens": getattr(cfg, "MIN_OPTION_TOKENS", None),
         },
         broker_metadata_called=True,
+        heritage_manifest_path=heritage_manifest_path,
+        heritage_manifest_sha256=heritage_manifest_sha256,
+        venue="NSE",
+        calendar_id="NSE-HIST",
+        calendar_version="v4",
+        selected_futures_contract_key=selected_futures_contract_key,
+        target_expiry=target_expiry,
     )
 
 
@@ -350,6 +361,7 @@ def main() -> int:
     parser.add_argument("--static-preflight-only", action="store_true")
     parser.add_argument("--launch-preflight-only", action="store_true")
     parser.add_argument("--authority-artifact", type=Path, default=None)
+    parser.add_argument("--heritage-manifest", type=Path, default=None)
     args = parser.parse_args()
 
     session_date = _validate_session_date(args.session_date)
@@ -376,11 +388,32 @@ def main() -> int:
         print(json.dumps(static_preflight, sort_keys=True))
         return 0 if bool(static_preflight.get("ok")) else 2
 
+    heritage_manifest_path = None
+    heritage_manifest_sha256 = None
+    selected_futures_key = None
+    target_expiry = None
+    if args.heritage_manifest is not None and args.heritage_manifest.is_file():
+        heritage_manifest_path = args.heritage_manifest.resolve()
+        heritage_manifest_sha256 = _sha256(heritage_manifest_path)
+        try:
+            manifest_doc = json.loads(heritage_manifest_path.read_text(encoding="utf-8"))
+            for node in manifest_doc.get("nodes", []):
+                payload = node.get("payload", {})
+                if payload.get("field") == "opening_drive_prev_contract_key":
+                    selected_futures_key = payload.get("value")
+                    break
+        except Exception:
+            pass
+
     launch_plan = _build_production_launch_plan(
         session_date=session_date,
         registry=registry,
         master_sha=master_sha,
         broker_metadata_called=broker_metadata_called,
+        heritage_manifest_path=heritage_manifest_path,
+        heritage_manifest_sha256=heritage_manifest_sha256,
+        selected_futures_contract_key=selected_futures_key,
+        target_expiry=target_expiry,
     )
     if args.launch_preflight_only:
         print(json.dumps(launch_plan, sort_keys=True))
