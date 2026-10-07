@@ -233,4 +233,4 @@ class SentinelLiveSidecarAdvisor:
 
 if __name__ == "__main__":
     advisor = SentinelLiveSidecarAdvisor()
-    advisor.run_live_advisory_loop("2026-10-06")
+    advisor.run_live_advisory_loop()
