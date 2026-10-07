@@ -67,7 +67,23 @@ class SentinelLiveFeedAdvisor:
         
         if self.or_high > -1e8 and self.or_low < 1e8:
             self.shock_active = False
-            print(f"🔓 [OPENING RANGE CALIBRATED] OR High: {self.or_high:.2f} | OR Low: {self.or_low:.2f} | Width: {self.or_high - self.or_low:.2f} pts")
+            or_width = self.or_high - self.or_low
+            print(f"🔓 [OPENING RANGE CALIBRATED] OR High: {self.or_high:.2f} | OR Low: {self.or_low:.2f} | Width: {or_width:.2f} pts")
+            
+            # Query Institutional Session Memory Bank for matching historical days
+            try:
+                from core.session_regime_memory import find_similar_sessions
+                # Approximate morning efficiency ratio
+                disp = abs(float(candles[-1][4]) - float(candles[0][1]))
+                tot_p = sum(abs(float(candles[k][4]) - float(candles[k-1][4])) for k in range(1, len(candles)))
+                approx_ker = disp / max(0.1, tot_p)
+                matches = find_similar_sessions(current_ker=approx_ker, current_or_width=or_width, top_k=1)
+                if matches:
+                    m = matches[0]
+                    print(f"🧠 [REGIME MEMORY RETRIEVAL] Matching Historical Session: {m['date']} (Regime: {m['classified_regime']}, KER: {m['ker_efficiency_ratio']})")
+                    print(f"   💡 Historical Lesson: {m['key_lesson']}")
+            except Exception as e:
+                pass
 
     def run_loop(self):
         print("🛰️ [SENTINEL LIVE FEED ADVISOR ONLINE] Polling live completed 1m candles...")
