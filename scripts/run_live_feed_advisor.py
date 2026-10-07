@@ -17,9 +17,16 @@ from pathlib import Path
 import pandas as pd
 
 from core.model_manifest_generator import SentinelManifestLock
-from core.model_manifest_generator import SentinelManifestLock
 from core.dynamic_slippage_model import DynamicOptionSlippageModel
 from core.expiry_calendar import get_days_to_expiry, is_holiday
+from core.active_position_manager import (
+    ActivePositionManager,
+    STATE_STANDBY,
+    STATE_IN_FLIGHT,
+    STATE_TRAIL_LOCK,
+    STATE_EXIT_PENDING,
+    STATE_LIQUIDATED
+)
 
 class SentinelLiveFeedAdvisor:
     def __init__(self, artifacts_dir: str = "artifacts", ticker: str = "NIFTY"):
@@ -32,12 +39,13 @@ class SentinelLiveFeedAdvisor:
 
         self.ticker = ticker.upper()
         self.slippage = DynamicOptionSlippageModel(base_brokerage_pts=0.40)
+        self.apm = ActivePositionManager()
         self.spread_threshold = 0.04
         self.or_high = -1e9
         self.or_low = 1e9
         self.shock_active = True
         self.last_evaluated_bar = None
-        self.position = None
+        self.session_ker = None
 
         # Expiry Calendar State Check:
         # TUESDAY = NIFTY (0-DTE), THURSDAY = SENSEX (0-DTE)
@@ -143,8 +151,30 @@ class SentinelLiveFeedAdvisor:
                 )
                 spread_ratio = fric.bid_ask_spread / premium_est
 
-                # Causal Setup Detection
-                # Wick calculation
+                # Calculate session KER on the fly
+                disp = abs(c - float(candles[0][1]))
+                tot_p = max(0.1, sum(abs(float(candles[k][4]) - float(candles[k-1][4])) for k in range(1, len(candles))))
+                self.session_ker = disp / tot_p
+
+                # 1. Evaluate Active In-Flight Position Lifecycle
+                if self.apm.state in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK}:
+                    apm_state, trade_summary = self.apm.evaluate_bar(
+                        bar_open=o,
+                        bar_high=h,
+                        bar_low=l,
+                        bar_close=c,
+                        bar_time_str=bar_time_str
+                    )
+                    if apm_state == STATE_LIQUIDATED:
+                        pnl = trade_summary.get("pnl_pts", 0.0)
+                        pnl_emoji = "🟢" if pnl > 0 else "🔴"
+                        print(f"🔔 [POSITION EXITED] Reason: {trade_summary.get('exit_reason')} | Exit: {trade_summary.get('exit_price'):.1f} | PnL: {pnl_emoji} {pnl:+.1f} pts")
+                    elif self.apm.payload:
+                        p = self.apm.payload
+                        trailed_tag = " [TRAIL LOCKED +4]" if p.trail_locked else ""
+                        print(f"🛡️ [IN-FLIGHT POSITION] {p.strike_contract} | Entry: {p.entry_price:.1f} | Current SL: {p.current_sl:.1f}{trailed_tag} | Target: {p.target_price:.1f}")
+
+                # 2. Causal Setup Detection (Only if FLAT / STANDBY / LIQUIDATED)
                 total_range = max(0.1, h - l)
                 upper_wick = h - max(o, c)
                 lower_wick = min(o, c) - l
@@ -157,20 +187,56 @@ class SentinelLiveFeedAdvisor:
                 signal_display = "WAIT"
                 target_pts = 18.0
                 sl_pts = 12.0
+                entry_dir = None
+                contract_choice = None
+
+                # Dynamic Session Phase Variance Decay (SPVD) Energy Gate Check
+                can_enter_energy, e_atr_rem, req_energy = self.apm.check_session_energy_gate(
+                    current_time=btime,
+                    daily_norm_atr=120.0,
+                    target_pts=target_pts,
+                    buffer_multiplier=1.5,
+                    session_ker=self.session_ker
+                )
 
                 if c > self.or_high:
+                    entry_dir = "CE"
+                    contract_choice = ce_contract
                     signal_display = f"🎯 [BUY {ce_contract}] @ Breakout > {self.or_high:.1f} | Target: +{target_pts}pts | SL: -{sl_pts}pts"
                 elif c < self.or_low:
+                    entry_dir = "PE"
+                    contract_choice = pe_contract
                     signal_display = f"🎯 [BUY {pe_contract}] @ Breakdown < {self.or_low:.1f} | Target: +{target_pts}pts | SL: -{sl_pts}pts"
                 elif lower_wick >= 6.0 and (lower_wick / total_range) >= 0.40:
+                    entry_dir = "CE"
+                    contract_choice = ce_contract
                     signal_display = f"🎯 [BUY {ce_contract}] @ Bullish Wick Rejection | Target: +{target_pts}pts | SL: -{sl_pts}pts"
                 elif upper_wick >= 6.0 and (upper_wick / total_range) >= 0.40:
+                    entry_dir = "PE"
+                    contract_choice = pe_contract
                     signal_display = f"🎯 [BUY {pe_contract}] @ Bearish Wick Rejection | Target: +{target_pts}pts | SL: -{sl_pts}pts"
 
-                if spread_ratio > self.spread_threshold:
+                # Gate Vetoes
+                if not can_enter_energy and entry_dir:
+                    signal_display = f"🚫 [ENERGY GATE VETO] {signal_display} -> SUPPRESSED (Remaining ATR {e_atr_rem:.1f} < Required {req_energy:.1f})"
+                elif spread_ratio > self.spread_threshold and entry_dir:
                     signal_display = f"🚨 [SPREAD VETO] {signal_display} -> SUPPRESSED (>4.0% spread)"
+                elif entry_dir and self.apm.state in {STATE_STANDBY, STATE_LIQUIDATED}:
+                    # Arm and Enter new in-flight trade
+                    pos_id = f"TRADE_{btime.strftime('%H%M')}_{entry_dir}"
+                    self.apm.arm_and_enter(
+                        position_id=pos_id,
+                        direction=entry_dir,
+                        contract=contract_choice,
+                        entry_price=c,
+                        entry_time_str=bar_time_str,
+                        sl_pts=sl_pts,
+                        tp_pts=target_pts,
+                        friction_drag_pts=fric.total_drag_pts
+                    )
+                    print(f"🚀 [NEW POSITION OPENED] {pos_id} | {contract_choice} @ {c:.2f} | SL: {c - sl_pts if entry_dir == 'CE' else c + sl_pts:.1f} | TP: {c + target_pts if entry_dir == 'CE' else c - target_pts:.1f}")
 
-                print(f"📊 [{btime.strftime('%H:%M:%S')}] Spot: {c:.2f} (H:{h:.2f} L:{l:.2f}) | Drag: {fric.total_drag_pts:.2f}pts ({spread_ratio*100:.1f}%)")
+                print(f"📊 [{btime.strftime('%H:%M:%S')}] Spot: {c:.2f} (H:{h:.2f} L:{l:.2f}) | Drag: {fric.total_drag_pts:.2f}pts ({spread_ratio*100:.1f}%) | KER: {self.session_ker:.3f}")
                 if "BUY" in signal_display:
                     print(f"   {signal_display}")
                 else:

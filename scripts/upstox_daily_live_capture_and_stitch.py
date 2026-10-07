@@ -39,6 +39,8 @@ import upstox_client
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -120,11 +122,11 @@ def fetch_instruments() -> pd.DataFrame:
 def get_underlying_prices(access_token: str = None) -> dict[str, float]:
     import requests
     token = access_token or get_access_token()
-    keys = ["NSE_INDEX|Nifty 50", "NSE_INDEX|Nifty Bank", "BSE_INDEX|SENSEX"]
+    keys = ["NSE_INDEX|Nifty 50", "NSE_INDEX|Nifty Bank", "BSE_INDEX|SENSEX", "NSE_INDEX|India VIX"]
     encoded_keys = ",".join([urllib.parse.quote(k) for k in keys])
     headers = {"accept": "application/json", "Api-Version": "2.0", "Authorization": f"Bearer {token}"}
     url = f"https://api.upstox.com/v2/market-quote/quotes?instrument_key={encoded_keys}"
-    fallback_prices = {"NIFTY": 24500.0, "BANKNIFTY": 52200.0, "SENSEX": 80000.0}
+    fallback_prices = {"NIFTY": 24500.0, "BANKNIFTY": 52200.0, "SENSEX": 80000.0, "INDIA_VIX": 14.0}
 
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -133,7 +135,8 @@ def get_underlying_prices(access_token: str = None) -> dict[str, float]:
             nifty = data.get("NSE_INDEX:Nifty 50", {}).get("last_price") or fallback_prices["NIFTY"]
             banknifty = data.get("NSE_INDEX:Nifty Bank", {}).get("last_price") or fallback_prices["BANKNIFTY"]
             sensex = data.get("BSE_INDEX:SENSEX", {}).get("last_price") or fallback_prices["SENSEX"]
-            return {"NIFTY": float(nifty), "BANKNIFTY": float(banknifty), "SENSEX": float(sensex)}
+            vix = data.get("NSE_INDEX:India VIX", {}).get("last_price") or fallback_prices["INDIA_VIX"]
+            return {"NIFTY": float(nifty), "BANKNIFTY": float(banknifty), "SENSEX": float(sensex), "INDIA_VIX": float(vix)}
     except Exception as e:
         logger.warning(f"Error fetching underlying prices: {e}")
     return fallback_prices
@@ -144,6 +147,7 @@ def get_options_subscriptions(df_inst: pd.DataFrame, underlying_prices: dict[str
         subs["NSE_INDEX|Nifty 50"] = "NIFTY 50"
         subs["NSE_INDEX|Nifty Bank"] = "NIFTY BANK"
         subs["BSE_INDEX|SENSEX"] = "SENSEX"
+        subs["NSE_INDEX|India VIX"] = "INDIA VIX"
         return subs
 
     configs = {
@@ -170,12 +174,20 @@ def get_options_subscriptions(df_inst: pd.DataFrame, underlying_prices: dict[str
         df_exp = df_sym[df_sym["expiry_date"] == nearest_expiry]
         df_strikes = df_exp[df_exp["strike_price"].isin(strikes)]
 
-        for _, row in df_strikes.iterrows():
-            subs[row["instrument_key"]] = row["trading_symbol"]
+        # Subscribe Near-Month Index Futures (FUTIDX) for real volume confirmation
+        df_fut = df_inst[(df_inst["name"] == cfg["name"]) & (df_inst["instrument_type"] == "FUTIDX")].copy()
+        if not df_fut.empty:
+            df_fut["expiry_date"] = pd.to_datetime(df_fut["expiry"], unit="ms")
+            df_fut_active = df_fut[df_fut["expiry_date"] >= today_date]
+            if not df_fut_active.empty:
+                nearest_fut = df_fut_active.sort_values("expiry_date").iloc[0]
+                subs[nearest_fut["instrument_key"]] = nearest_fut["trading_symbol"]
+                logger.info(f"Subscribed near-month Futures: {nearest_fut['trading_symbol']} ({nearest_fut['instrument_key']})")
 
     subs["NSE_INDEX|Nifty 50"] = "NIFTY 50"
     subs["NSE_INDEX|Nifty Bank"] = "NIFTY BANK"
     subs["BSE_INDEX|SENSEX"] = "SENSEX"
+    subs["NSE_INDEX|India VIX"] = "INDIA VIX"
     return subs
 
 def format_depth(market_level) -> str:
@@ -189,43 +201,116 @@ def format_depth(market_level) -> str:
 # ----------------- POST MARKET STITCHING -----------------
 def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Path):
     logger.info("=== STARTING AUTOMATIC POST-MARKET STITCHING ===")
-    chunks_dir = data_dir / "chunks"
-    chunk_files = sorted(glob.glob(str(chunks_dir / "*.parquet")))
+    
+    # Gather chunks from primary and fallback directories if present
+    possible_chunk_dirs = [
+        PRIMARY_BASE_DIR / date_str / "chunks",
+        FALLBACK_BASE_DIR / date_str / "chunks",
+        data_dir / "chunks"
+    ]
+    
+    chunk_files = []
+    for cd in possible_chunk_dirs:
+        if cd.exists():
+            chunk_files.extend(glob.glob(str(cd / "*.parquet")))
+    chunk_files = sorted(list(set(chunk_files)))
+
+    out_file = data_dir / f"upstox_full_ticks_{date_compact}_stitched.parquet"
+    summary_file = data_dir / f"stitching_summary_{date_compact}.json"
+
+    # If master stitched file exists and there are new chunks, merge them seamlessly
+    if out_file.exists() and out_file.stat().st_size > 0:
+        if not chunk_files:
+            logger.info(f"[✓] Master stitched file already exists: {out_file.name} ({out_file.stat().st_size / (1024*1024):.2f} MB) and no new chunks to merge.")
+            return
+        logger.info(f"Existing master stitched file found ({out_file.name}). Merging with {len(chunk_files)} new chunks...")
+        chunk_files = [str(out_file)] + [cf for cf in chunk_files if cf != str(out_file)]
 
     if not chunk_files:
-        logger.warning(f"No chunk files found in {chunks_dir} to stitch.")
+        logger.warning(f"No chunk files found to stitch.")
         return
 
-    logger.info(f"Reading {len(chunk_files)} chunks...")
-    dfs = []
+    temp_out = data_dir / f"upstox_full_ticks_{date_compact}_stitched.parquet.tmp"
+    if temp_out.exists():
+        temp_out.unlink()
+
+    schema = pa.schema([
+        ("ts", pa.float64()),
+        ("token", pa.string()),
+        ("symbol", pa.string()),
+        ("ltp", pa.float64()),
+        ("bid", pa.float64()),
+        ("ask", pa.float64()),
+        ("vol", pa.float64()),
+        ("oi", pa.float64()),
+        ("depth", pa.string())
+    ])
+
+    writer = pq.ParquetWriter(temp_out, schema, compression="snappy")
+    total_ticks = 0
+    symbols = set()
+    valid_chunks = 0
+    skipped_chunks = 0
+
     for cf in chunk_files:
         try:
-            dfs.append(pd.read_parquet(cf))
+            df = pd.read_parquet(cf)
+            if df.empty:
+                continue
+            df["ts"] = df["ts"].astype(float)
+            df["token"] = df["token"].astype(str)
+            df["symbol"] = df["symbol"].astype(str)
+            df["ltp"] = df["ltp"].astype(float)
+            df["bid"] = df["bid"].astype(float)
+            df["ask"] = df["ask"].astype(float)
+            df["vol"] = df["vol"].astype(float)
+            df["oi"] = df["oi"].astype(float)
+            df["depth"] = df["depth"].astype(str)
+
+            symbols.update(df["symbol"].unique())
+            total_ticks += len(df)
+            valid_chunks += 1
+
+            table = pa.Table.from_pandas(df, schema=schema)
+            writer.write_table(table)
         except Exception as e:
+            skipped_chunks += 1
             logger.warning(f"Error reading chunk {cf}: {e}")
 
-    if dfs:
-        df_all = pd.concat(dfs, ignore_index=True).sort_values("ts").reset_index(drop=True)
-        initial_count = len(df_all)
-        df_all = df_all.drop_duplicates(subset=["ts", "token"]).reset_index(drop=True)
-        final_count = len(df_all)
+    writer.close()
 
-        out_file = data_dir / f"upstox_full_ticks_{date_compact}_stitched.parquet"
-        table = pa.Table.from_pandas(df_all)
-        pq.write_table(table, out_file, compression="snappy")
-        logger.info(f"[✓] Stitched master saved: {out_file.name} ({final_count:,} ticks, {out_file.stat().st_size / (1024*1024):.2f} MB)")
+    if temp_out.exists():
+        temp_out.replace(out_file)
+        logger.info(f"[✓] Stitched master saved: {out_file.name} ({total_ticks:,} ticks, {out_file.stat().st_size / (1024*1024):.2f} MB)")
 
         summary = {
             "date": date_str,
             "total_chunks": len(chunk_files),
-            "total_ticks": final_count,
-            "duplicates_removed": initial_count - final_count,
-            "unique_tokens": df_all["symbol"].nunique(),
+            "valid_chunks": valid_chunks,
+            "skipped_chunks": skipped_chunks,
+            "total_ticks": total_ticks,
+            "unique_tokens": len(symbols),
             "file_path": str(out_file),
             "stitched_at_utc": datetime.now(timezone.utc).isoformat()
         }
         with open(data_dir / f"stitching_summary_{date_compact}.json", "w") as f:
             json.dump(summary, f, indent=2)
+
+        # Safe post-stitching cleanup: remove raw chunks if master file is verified
+        if out_file.exists() and out_file.stat().st_size > 0 and total_ticks > 0 and valid_chunks > 0:
+            logger.info(f"Master file verified ({total_ticks:,} ticks). Pruning raw chunks...")
+            for cf in chunk_files:
+                try:
+                    Path(cf).unlink(missing_ok=True)
+                except Exception as e:
+                    logger.warning(f"Could not remove chunk file {cf}: {e}")
+            for cd in possible_chunk_dirs:
+                if cd.exists():
+                    try:
+                        cd.rmdir()
+                        logger.info(f"[✓] Successfully pruned chunks directory: {cd}")
+                    except Exception as e:
+                        logger.debug(f"Could not remove chunks directory {cd}: {e}")
 
     # Fetch 1m historical index candles
     try:
@@ -321,7 +406,11 @@ def main():
             tick_buffer = []
 
         now_dt = datetime.now()
-        chunk_file = chunks_dir / f"chunk_{today_compact}_{int(now_dt.timestamp() * 1000)}.parquet"
+        current_data_dir = get_today_data_dir()
+        current_chunks_dir = current_data_dir / "chunks"
+        current_chunks_dir.mkdir(parents=True, exist_ok=True)
+        
+        chunk_file = current_chunks_dir / f"chunk_{today_compact}_{int(now_dt.timestamp() * 1000)}.parquet"
         df = pd.DataFrame(to_flush)
         df["ts"] = df["ts"].astype(float)
         df["token"] = df["token"].astype(str)
@@ -336,7 +425,7 @@ def main():
         try:
             table = pa.Table.from_pandas(df, schema=schema)
             pq.write_table(table, chunk_file, compression="snappy")
-            logger.info(f"Flushed {len(df)} ticks to {chunk_file.name}")
+            logger.info(f"Flushed {len(df)} ticks to {chunk_file.name} in {current_chunks_dir}")
         except Exception as e:
             logger.error(f"Failed to write parquet chunk: {e}")
 
@@ -453,7 +542,7 @@ def main():
                         latest_spot = float(t.get("ltp", 0.0))
                         break
             if not latest_spot:
-                latest_spot = underlying_prices.get("NIFTY", 0.0)
+                latest_spot = prices.get("NIFTY", 0.0)
 
             if latest_spot > 0:
                 try:

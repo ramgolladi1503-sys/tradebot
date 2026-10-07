@@ -1,0 +1,214 @@
+"""Comprehensive Unit Tests for ActivePositionManager.
+
+Proves:
+- Gate 1: Intrabar Pessimism Proof (SL hit first if both TP and SL are touched in the same bar)
+- Gate 2: Ratchet Monotonicity Proof (SL never regresses on high/low price fluctuations)
+- Gate 3: State Recovery Proof (Mid-flight process crash / restart triggers fail-closed EXIT_PENDING)
+- Gate 4: Session Phase Variance Decay (SPVD) Energy Gate Proof (Session depletion rejection)
+- 15-Minute Time Exit Invariant Proof
+"""
+
+import pytest
+import os
+import json
+from datetime import time as dtime
+from pathlib import Path
+
+from core.active_position_manager import (
+    ActivePositionManager,
+    STATE_STANDBY,
+    STATE_ARMED,
+    STATE_IN_FLIGHT,
+    STATE_TRAIL_LOCK,
+    STATE_EXIT_PENDING,
+    STATE_LIQUIDATED
+)
+
+
+@pytest.fixture
+def tmp_wal(tmp_path):
+    return str(tmp_path / "sentinel_apm_wal.json")
+
+
+def test_gate1_intrabar_pessimism_sl_collision(tmp_wal):
+    """Gate 1: Prove that when a single bar spans both TP and SL, SL hits chronologically first."""
+    apm = ActivePositionManager(wal_path=tmp_wal)
+    
+    # Enter CE trade at 22,700 with SL 22,688 (-12) and TP 22,718 (+18)
+    ok = apm.arm_and_enter(
+        position_id="TEST_001",
+        direction="CE",
+        contract="NIFTY 22700 CE",
+        entry_price=22700.0,
+        entry_time_str="2026-10-07T10:00:00",
+        sl_pts=12.0,
+        tp_pts=18.0
+    )
+    assert ok is True
+    assert apm.state == STATE_IN_FLIGHT
+
+    # Simulate an extreme 35-point bar: Low = 22680 (below SL), High = 22720 (above TP)
+    st, summary = apm.evaluate_bar(
+        bar_open=22700.0,
+        bar_high=22720.0,
+        bar_low=22680.0,
+        bar_close=22710.0,
+        bar_time_str="2026-10-07T10:01:00"
+    )
+
+    # Pessimistic Intrabar Resolution MUST force SL hit
+    assert st == STATE_LIQUIDATED
+    assert summary["exit_reason"] == "PESSIMISTIC_INTRABAR_SL_COLLISION"
+    assert summary["exit_price"] == 22688.0
+    assert summary["pnl_pts"] == -12.0
+
+
+def test_gate2_ratchet_monotonicity_proof(tmp_wal):
+    """Gate 2: Trailing stop ratchet must lock at +4 pts after +8 pts gain and never regress."""
+    apm = ActivePositionManager(wal_path=tmp_wal)
+    apm.arm_and_enter(
+        position_id="TEST_002",
+        direction="CE",
+        contract="NIFTY 22700 CE",
+        entry_price=22700.0,
+        entry_time_str="2026-10-07T10:00:00",
+        sl_pts=12.0,
+        tp_pts=18.0
+    )
+
+    # Bar 1: Price reaches +8.5 pts (High = 22708.5). Ratchet locks to 22704 (+4 pts)
+    st, payload = apm.evaluate_bar(
+        bar_open=22700.0,
+        bar_high=22708.5,
+        bar_low=22699.0,
+        bar_close=22707.0,
+        bar_time_str="2026-10-07T10:01:00"
+    )
+    assert st == STATE_TRAIL_LOCK
+    assert payload["trail_locked"] is True
+    assert payload["current_sl"] == 22704.0
+
+    # Bar 2: Price pulls back to 22705 (above 22704). Current SL MUST NOT regress downwards
+    st2, payload2 = apm.evaluate_bar(
+        bar_open=22707.0,
+        bar_high=22707.5,
+        bar_low=22704.5,
+        bar_close=22705.0,
+        bar_time_str="2026-10-07T10:02:00"
+    )
+    assert st2 == STATE_TRAIL_LOCK
+    assert payload2["current_sl"] == 22704.0
+
+    # Bar 3: Price drops below trailed SL (Low = 22703.0) -> Triggers Trailing Stop Exit with locked profit
+    st3, summary = apm.evaluate_bar(
+        bar_open=22705.0,
+        bar_high=22706.0,
+        bar_low=22703.0,
+        bar_close=22703.5,
+        bar_time_str="2026-10-07T10:03:00"
+    )
+    assert st3 == STATE_LIQUIDATED
+    assert summary["exit_reason"] == "TRAILING_STOP_HIT"
+    assert summary["exit_price"] == 22704.0
+    assert summary["pnl_pts"] == +4.0
+
+
+def test_gate3_crash_recovery_fail_closed_proof(tmp_wal):
+    """Gate 3: Process hard kill / restart during in-flight trade forces fail-closed recovery."""
+    apm = ActivePositionManager(wal_path=tmp_wal)
+    apm.arm_and_enter(
+        position_id="TEST_003",
+        direction="PE",
+        contract="NIFTY 22700 PE",
+        entry_price=22700.0,
+        entry_time_str="2026-10-07T10:00:00",
+        sl_pts=12.0,
+        tp_pts=18.0
+    )
+    assert apm.state == STATE_IN_FLIGHT
+
+    # Simulate abrupt crash: Re-instantiate a fresh APM loading the persisted WAL
+    rebooted_apm = ActivePositionManager(wal_path=tmp_wal)
+    
+    # Must immediately detect orphaned state and force fail-closed EXIT_PENDING
+    assert rebooted_apm.state == STATE_EXIT_PENDING
+    assert rebooted_apm.payload.exit_reason == "CRASH_RECOVERY_FAIL_CLOSED"
+
+    # Completes fail-closed liquidation
+    final_st, summary = rebooted_apm.liquidate()
+    assert final_st == STATE_LIQUIDATED
+    assert rebooted_apm.payload is None
+
+
+def test_gate4_energy_gate_spvd_proof(tmp_wal):
+    """Gate 4: Session Phase Variance Decay correctly gates trades when remaining energy is depleted."""
+    apm = ActivePositionManager(wal_path=tmp_wal)
+
+    # 1. Early morning 10:00 AM (Lots of energy remaining) -> Allowed
+    can_enter_morning, e_atr_morn, req_morn = apm.check_session_energy_gate(
+        current_time=dtime(10, 0),
+        daily_norm_atr=120.0,
+        target_pts=18.0,
+        buffer_multiplier=1.5
+    )
+    assert can_enter_morning is True
+    assert e_atr_morn > req_morn
+
+    # 2. Final 15 minutes of session (15:15 PM) -> Exhausted & Rejected
+    can_enter_close, e_atr_close, req_close = apm.check_session_energy_gate(
+        current_time=dtime(15, 15),
+        daily_norm_atr=120.0,
+        target_pts=18.0,
+        buffer_multiplier=1.5
+    )
+    assert can_enter_close is False
+    assert e_atr_close < req_close
+
+    # 3. Afternoon 14:00 PM on a severe RANGE day (e.g., today Oct 7 with KER = 0.0463)
+    # The low directional efficiency collapses expected variance -> Rejected
+    can_enter_range, e_atr_range, req_range = apm.check_session_energy_gate(
+        current_time=dtime(14, 0),
+        daily_norm_atr=120.0,
+        target_pts=18.0,
+        buffer_multiplier=1.5,
+        session_ker=0.0463
+    )
+    assert can_enter_range is False
+    assert e_atr_range < req_range
+
+
+def test_15_minute_time_exit_proof(tmp_wal):
+    """Verify that a trade held for >= 15 minutes is exited at market close of the 15th bar."""
+    apm = ActivePositionManager(wal_path=tmp_wal)
+    apm.arm_and_enter(
+        position_id="TEST_005",
+        direction="CE",
+        contract="NIFTY 22700 CE",
+        entry_price=22700.0,
+        entry_time_str="2026-10-07T10:00:00",
+        sl_pts=12.0,
+        tp_pts=18.0
+    )
+
+    # Bar at 10:14:00 (14 minutes) -> Still in flight
+    st, _ = apm.evaluate_bar(
+        bar_open=22701.0,
+        bar_high=22704.0,
+        bar_low=22698.0,
+        bar_close=22702.0,
+        bar_time_str="2026-10-07T10:14:00"
+    )
+    assert st == STATE_IN_FLIGHT
+
+    # Bar at 10:15:00 (15 minutes exactly) -> Hits 15m time exit ceiling
+    st2, summary = apm.evaluate_bar(
+        bar_open=22702.0,
+        bar_high=22705.0,
+        bar_low=22701.0,
+        bar_close=22703.5,
+        bar_time_str="2026-10-07T10:15:00"
+    )
+    assert st2 == STATE_LIQUIDATED
+    assert summary["exit_reason"] == "TIME_EXIT_15M"
+    assert summary["exit_price"] == 22703.5
+    assert summary["pnl_pts"] == +3.5
