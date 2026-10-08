@@ -50,6 +50,17 @@ class PositionPayload:
     exit_reason: Optional[str] = None
     exit_time: Optional[str] = None
     pnl_pts: Optional[float] = None
+    # Real Traded Option Strike Fields (100% empirical read from WebSocket stream)
+    opt_symbol: Optional[str] = None
+    opt_token: Optional[str] = None
+    opt_entry_ltp: Optional[float] = None
+    opt_current_ltp: Optional[float] = None
+    opt_target_pts: Optional[float] = None
+    opt_sl_pts: Optional[float] = None
+    opt_exit_ltp: Optional[float] = None
+    opt_pnl_pts: Optional[float] = None
+    opt_bid: Optional[float] = None
+    opt_ask: Optional[float] = None
 
 
 class ActivePositionManager:
@@ -158,7 +169,8 @@ class ActivePositionManager:
         entry_time_str: str,
         sl_pts: float = 12.0,
         tp_pts: float = 18.0,
-        friction_drag_pts: float = 0.80
+        friction_drag_pts: float = 0.80,
+        opt_quote: Optional[Dict[str, Any]] = None
     ) -> bool:
         """Arms and executes entry into IN_FLIGHT state with monotonic SL and TP targets."""
         if self.state not in {STATE_STANDBY, STATE_LIQUIDATED}:
@@ -178,6 +190,13 @@ class ActivePositionManager:
             target = entry_price - eff_tp
             initial_sl = entry_price + eff_sl
 
+        # Real option quote fields
+        opt_symbol = opt_quote.get("symbol") if opt_quote else None
+        opt_token = opt_quote.get("token") if opt_quote else None
+        opt_entry_ltp = opt_quote.get("ltp") if opt_quote else None
+        opt_bid = opt_quote.get("bid") if opt_quote else None
+        opt_ask = opt_quote.get("ask") if opt_quote else None
+
         self.payload = PositionPayload(
             position_id=position_id,
             direction=direction,
@@ -188,7 +207,13 @@ class ActivePositionManager:
             initial_sl=initial_sl,
             target_price=target,
             max_hold_minutes=15,
-            trail_locked=False
+            trail_locked=False,
+            opt_symbol=opt_symbol,
+            opt_token=opt_token,
+            opt_entry_ltp=opt_entry_ltp,
+            opt_current_ltp=opt_entry_ltp,
+            opt_bid=opt_bid,
+            opt_ask=opt_ask
         )
 
         self._transition_to(STATE_IN_FLIGHT)
@@ -200,7 +225,8 @@ class ActivePositionManager:
         bar_high: float,
         bar_low: float,
         bar_close: float,
-        bar_time_str: str
+        bar_time_str: str,
+        current_opt_ltp: Optional[float] = None
     ) -> Tuple[str, Optional[Dict[str, Any]]]:
         """Evaluates completed bar against active position.
         
@@ -208,12 +234,16 @@ class ActivePositionManager:
         - Pessimistic Intrabar Resolution (SL wins if both SL and TP hit in same bar)
         - Monotonic Ratchet (+8 pts move locks +4 pts trailing stop)
         - Invariant 3.2: 15-Minute Theta Horizon Exit
+        - Empirical Option Strike PnL calculation from real WebSocket ticks
         """
         if self.state not in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK}:
             return self.state, None
 
         p = self.payload
         is_ce = (p.direction == "CE")
+
+        if current_opt_ltp is not None:
+            p.opt_current_ltp = current_opt_ltp
 
         # 1. Check Intrabar Hits
         if is_ce:
@@ -225,31 +255,30 @@ class ActivePositionManager:
             hit_sl = bar_high >= p.current_sl
             gain = p.entry_price - bar_low
 
-        # Pessimistic Resolution Rule: If both hit, SL wins chronologically
-        if hit_tp and hit_sl:
-            p.exit_price = p.current_sl
-            p.exit_reason = "PESSIMISTIC_INTRABAR_SL_COLLISION"
+        # Helper to compute empirical option strike PnL
+        def _record_exit(exit_reason: str, exit_spot: float):
+            p.exit_price = exit_spot
+            p.exit_reason = exit_reason
             p.exit_time = bar_time_str
             p.pnl_pts = (p.exit_price - p.entry_price) if is_ce else (p.entry_price - p.exit_price)
+            if p.opt_entry_ltp is not None and p.opt_current_ltp is not None:
+                p.opt_exit_ltp = p.opt_current_ltp
+                p.opt_pnl_pts = round(p.opt_exit_ltp - p.opt_entry_ltp, 2)
             self._transition_to(STATE_EXIT_PENDING)
+
+        # Pessimistic Resolution Rule: If both hit, SL wins chronologically
+        if hit_tp and hit_sl:
+            _record_exit("PESSIMISTIC_INTRABAR_SL_COLLISION", p.current_sl)
             return self.liquidate()
 
         # Regular Target Hit
         if hit_tp:
-            p.exit_price = p.target_price
-            p.exit_reason = "TARGET_HIT"
-            p.exit_time = bar_time_str
-            p.pnl_pts = (p.exit_price - p.entry_price) if is_ce else (p.entry_price - p.exit_price)
-            self._transition_to(STATE_EXIT_PENDING)
+            _record_exit("TARGET_HIT", p.target_price)
             return self.liquidate()
 
         # Regular Stop Loss Hit
         if hit_sl:
-            p.exit_price = p.current_sl
-            p.exit_reason = "TRAILING_STOP_HIT" if p.trail_locked else "STOP_LOSS_HIT"
-            p.exit_time = bar_time_str
-            p.pnl_pts = (p.exit_price - p.entry_price) if is_ce else (p.entry_price - p.exit_price)
-            self._transition_to(STATE_EXIT_PENDING)
+            _record_exit("TRAILING_STOP_HIT" if p.trail_locked else "STOP_LOSS_HIT", p.current_sl)
             return self.liquidate()
 
         # 2. Monotonic Trailing Ratchet (+8 pts move locks +4 pts profit)
@@ -272,6 +301,9 @@ class ActivePositionManager:
                 p.exit_reason = f"TIME_EXIT_{int(held_minutes)}M"
                 p.exit_time = bar_time_str
                 p.pnl_pts = (p.exit_price - p.entry_price) if is_ce else (p.entry_price - p.exit_price)
+                if p.opt_entry_ltp is not None and p.opt_current_ltp is not None:
+                    p.opt_exit_ltp = p.opt_current_ltp
+                    p.opt_pnl_pts = round(p.opt_exit_ltp - p.opt_entry_ltp, 2)
                 self._transition_to(STATE_EXIT_PENDING)
                 return self.liquidate()
         except Exception:

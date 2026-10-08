@@ -14,6 +14,7 @@ import json
 import urllib.request
 from datetime import datetime, time as dtime
 from pathlib import Path
+from typing import Optional, Dict, Any
 import pandas as pd
 
 from core.model_manifest_generator import SentinelManifestLock
@@ -70,6 +71,39 @@ class SentinelLiveFeedAdvisor:
             data = json.loads(resp.read().decode())
             candles = data.get("data", {}).get("candles", [])
             return sorted(candles, key=lambda x: x[0])
+
+    def resolve_real_option_quote(self, strike: int, opt_type: str) -> Optional[dict]:
+        """Reads the exact real-time option LTP, Bid, Ask, Volume, and OI from the live chunk stream."""
+        import glob
+        today_date_str = datetime.now().strftime("%Y-%m-%d")
+        chunk_patterns = [
+            f".runtime/market_data/{today_date_str}/chunks/*.parquet",
+            f"runtime/market_data/{today_date_str}/chunks/*.parquet"
+        ]
+        chunks = []
+        for pat in chunk_patterns:
+            chunks.extend(glob.glob(pat))
+        if not chunks:
+            return None
+        latest_chunk = sorted(chunks)[-1]
+        try:
+            df = pd.read_parquet(latest_chunk)
+            pattern = f"NIFTY {strike} {opt_type}"
+            matches = df[df["symbol"].str.startswith(pattern, na=False)]
+            if not matches.empty:
+                last_row = matches.iloc[-1]
+                return {
+                    "symbol": str(last_row["symbol"]),
+                    "token": str(last_row["token"]),
+                    "ltp": float(last_row["ltp"]),
+                    "bid": float(last_row["bid"]),
+                    "ask": float(last_row["ask"]),
+                    "vol": float(last_row["vol"]),
+                    "oi": float(last_row["oi"]),
+                }
+        except Exception:
+            pass
+        return None
 
     def emit_and_append_audit_log(self, payload: dict):
         """Asynchronous Append-Only JSONL Logging Sink. Dumps multi-variable metrics with zero latency."""
@@ -198,21 +232,39 @@ class SentinelLiveFeedAdvisor:
 
                 # 1. Evaluate Active In-Flight Position Lifecycle
                 if self.apm.state in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK}:
+                    # Read current live option LTP if contract token/strike is known
+                    cur_opt_quote = None
+                    if self.apm.payload and self.apm.payload.strike_contract:
+                        try:
+                            # Parse strike from payload contract name e.g. "NIFTY 22250 PE [ITM]"
+                            parts = self.apm.payload.strike_contract.split()
+                            pos_strike = int(parts[1])
+                            pos_type = parts[2]
+                            cur_opt_quote = self.resolve_real_option_quote(pos_strike, pos_type)
+                        except Exception:
+                            pass
+
+                    cur_opt_ltp = cur_opt_quote.get("ltp") if cur_opt_quote else None
+
                     apm_state, trade_summary = self.apm.evaluate_bar(
                         bar_open=o,
                         bar_high=h,
                         bar_low=l,
                         bar_close=c,
-                        bar_time_str=bar_time_str
+                        bar_time_str=bar_time_str,
+                        current_opt_ltp=cur_opt_ltp
                     )
                     if apm_state == STATE_LIQUIDATED:
                         pnl = trade_summary.get("pnl_pts", 0.0)
+                        opt_pnl = trade_summary.get("opt_pnl_pts")
                         pnl_emoji = "🟢" if pnl > 0 else "🔴"
-                        print(f"🔔 [POSITION EXITED] Reason: {trade_summary.get('exit_reason')} | Exit: {trade_summary.get('exit_price'):.1f} | PnL: {pnl_emoji} {pnl:+.1f} pts")
+                        opt_pnl_str = f" | Option PnL: {opt_pnl:+.2f} pts" if opt_pnl is not None else ""
+                        print(f"🔔 [POSITION EXITED] Reason: {trade_summary.get('exit_reason')} | Exit Spot: {trade_summary.get('exit_price'):.1f} | Spot PnL: {pnl_emoji} {pnl:+.1f} pts{opt_pnl_str}")
                     elif self.apm.payload:
                         p = self.apm.payload
                         trailed_tag = " [TRAIL LOCKED +4]" if p.trail_locked else ""
-                        print(f"🛡️ [IN-FLIGHT POSITION] {p.strike_contract} | Entry: {p.entry_price:.1f} | Current SL: {p.current_sl:.1f}{trailed_tag} | Target: {p.target_price:.1f}")
+                        opt_live_str = f" | Option LTP: ₹{p.opt_current_ltp:.2f} (Entry: ₹{p.opt_entry_ltp:.2f})" if p.opt_entry_ltp else ""
+                        print(f"🛡️ [IN-FLIGHT POSITION] {p.strike_contract} | Entry Spot: {p.entry_price:.1f} | Current SL: {p.current_sl:.1f}{trailed_tag}{opt_live_str}")
 
                 # 2. Causal Setup Detection (Only if FLAT / STANDBY / LIQUIDATED)
                 total_range = max(0.1, h - l)
@@ -235,6 +287,7 @@ class SentinelLiveFeedAdvisor:
 
                 entry_dir = None
                 contract_choice = None
+                chosen_strike = None
 
                 # Dynamic Session Phase Variance Decay (SPVD) Energy Gate Check
                 can_enter_energy, e_atr_rem, req_energy = self.apm.check_session_energy_gate(
@@ -248,18 +301,22 @@ class SentinelLiveFeedAdvisor:
                 if c > self.or_high:
                     entry_dir = "CE"
                     contract_choice = ce_contract
+                    chosen_strike = ce_itm_strike
                     signal_display = f"🎯 [BUY {ce_contract}] @ Breakout > {self.or_high:.1f} | Target: +{target_pts}pts | Vol-SL: -{sl_pts}pts (ATR:{atr_1m:.1f})"
                 elif c < self.or_low:
                     entry_dir = "PE"
                     contract_choice = pe_contract
+                    chosen_strike = pe_itm_strike
                     signal_display = f"🎯 [BUY {pe_contract}] @ Breakdown < {self.or_low:.1f} | Target: +{target_pts}pts | Vol-SL: -{sl_pts}pts (ATR:{atr_1m:.1f})"
                 elif lower_wick >= 6.0 and (lower_wick / total_range) >= 0.40:
                     entry_dir = "CE"
                     contract_choice = ce_contract
+                    chosen_strike = ce_itm_strike
                     signal_display = f"🎯 [BUY {ce_contract}] @ Bullish Wick Rejection | Target: +{target_pts}pts | Vol-SL: -{sl_pts}pts"
                 elif upper_wick >= 6.0 and (upper_wick / total_range) >= 0.40:
                     entry_dir = "PE"
                     contract_choice = pe_contract
+                    chosen_strike = pe_itm_strike
                     signal_display = f"🎯 [BUY {pe_contract}] @ Bearish Wick Rejection | Target: +{target_pts}pts | Vol-SL: -{sl_pts}pts"
 
                 # Gate Vetoes
@@ -271,7 +328,8 @@ class SentinelLiveFeedAdvisor:
                     signal_display = f"🚨 [SPREAD VETO] {signal_display} -> SUPPRESSED (>4.0% spread)"
                     risk_flag = "VETO_SPREAD_EXPANDED"
                 elif entry_dir and self.apm.state in {STATE_STANDBY, STATE_LIQUIDATED}:
-                    # Arm and Enter new in-flight trade
+                    # Read real option quote at entry
+                    opt_q = self.resolve_real_option_quote(chosen_strike, entry_dir)
                     pos_id = f"TRADE_{btime.strftime('%H%M')}_{entry_dir}"
                     self.apm.arm_and_enter(
                         position_id=pos_id,
@@ -281,10 +339,12 @@ class SentinelLiveFeedAdvisor:
                         entry_time_str=bar_time_str,
                         sl_pts=sl_pts,
                         tp_pts=target_pts,
-                        friction_drag_pts=fric.total_drag_pts
+                        friction_drag_pts=fric.total_drag_pts,
+                        opt_quote=opt_q
                     )
                     risk_flag = "EXECUTED_IN_FLIGHT"
-                    print(f"🚀 [NEW POSITION OPENED] {pos_id} | {contract_choice} @ {c:.2f} | SL: {c - sl_pts if entry_dir == 'CE' else c + sl_pts:.1f} | TP: {c + target_pts if entry_dir == 'CE' else c - target_pts:.1f}")
+                    opt_quote_str = f" | Option LTP: ₹{opt_q['ltp']:.2f} (Bid: ₹{opt_q['bid']:.2f} Ask: ₹{opt_q['ask']:.2f})" if opt_q else ""
+                    print(f"🚀 [NEW POSITION OPENED] {pos_id} | {contract_choice} @ Spot {c:.2f} | SL: {c - sl_pts if entry_dir == 'CE' else c + sl_pts:.1f} | TP: {c + target_pts if entry_dir == 'CE' else c - target_pts:.1f}{opt_quote_str}")
 
                 # Emit Append-Only JSONL Audit Row with zero latency
                 self.emit_and_append_audit_log({
