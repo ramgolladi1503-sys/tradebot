@@ -1,0 +1,62 @@
+version: 1
+task_id: TBD
+project: tradebot
+objective: TBD
+why_now: TBD
+
+inputs:
+  required_files:
+    - .aixion/project.yaml
+    - .aixion/context.md
+    - AGENTS.md
+  optional_files: []
+  evidence_refs: []
+
+scope:
+  allowed_paths: []
+  forbidden_paths:
+    - .env
+    - "*.env"
+    - credentials.py
+    - "runtime/live*"
+    - "logs/broker*"
+    - "secrets*"
+  allowed_tools: []
+  network: false
+
+constraints:
+  - no broker calls
+  - no order actions
+  - no weakening safety gates
+  - no unrelated edits
+  - preserve SIM/PAPER/LIVE separation
+  - do not fabricate market or execution evidence
+
+acceptance:
+  - TBD
+
+verification:
+  commands:
+    - pytest -q
+  require_health_gate_if_safety_sensitive: true
+  artifacts: []
+
+stop_conditions:
+  - acceptance criteria pass
+  - required evidence is unavailable
+  - requested work exceeds allowed paths
+  - task requires broker/runtime mutation
+  - destructive or high-risk action needs approval
+
+output:
+  summary_max_words: 250
+  must_report:
+    - what_changed
+    - why_it_moves_safety_stability_or_readiness_forward
+    - what_did_not_change
+    - tests_run
+    - remaining_failure_modes
+  persist:
+    - decisions
+    - failures
+    - evidence

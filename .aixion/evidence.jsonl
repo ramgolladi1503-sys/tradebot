@@ -1,0 +1,1 @@
+{"id":"AIXION-TB-E001","date":"2026-09-18","kind":"bootstrap","claim":"TradeBot has explicit agent safety rules, CI/test gates, deterministic health checks, and repository-local evidence/RAG workflows that can serve as the harness verification layer.","sources":["AGENTS.md","README.md","docs/RELEASE_CHECKLIST.md"],"status":"verified-from-repo"}
