@@ -236,7 +236,7 @@ def test_runner_mode_hwm_trailing_proof(tmp_wal):
     assert apm.state == STATE_IN_FLIGHT
     assert apm.payload.is_runner_mode is True
     assert apm.payload.half_booked is False
-    assert apm.payload.max_hold_minutes == 45
+    assert apm.payload.max_hold_minutes == 25
 
     # Bar 1: Spot drops to 22380 (below target 22385). Option surges to 135.0.
     # ATR_1m = 10.0. Option cushion = max(12.0, 1.2 * 10.0) = 12.0.

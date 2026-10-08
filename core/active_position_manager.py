@@ -212,7 +212,7 @@ class ActivePositionManager:
             current_sl=initial_sl,
             initial_sl=initial_sl,
             target_price=target,
-            max_hold_minutes=15 if not is_runner_mode else 45,
+            max_hold_minutes=15 if not is_runner_mode else 25,
             trail_locked=False,
             opt_symbol=opt_symbol,
             opt_token=opt_token,

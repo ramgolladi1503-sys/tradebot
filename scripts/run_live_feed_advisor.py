@@ -49,6 +49,8 @@ class SentinelLiveFeedAdvisor:
         self.session_ker = None
         self.ewma_ker = 0.5
         self.ker_persistence_count = 0
+        self.last_exit_price = None
+        self.last_exit_direction = None
 
         # Append-Only Audit Sink Setup
         today_str = datetime.now().strftime("%Y%m%d")
@@ -260,6 +262,8 @@ class SentinelLiveFeedAdvisor:
                         opt_pnl = trade_summary.get("opt_pnl_pts")
                         pnl_emoji = "🟢" if pnl > 0 else "🔴"
                         opt_pnl_str = f" | Option PnL: {opt_pnl:+.2f} pts" if opt_pnl is not None else ""
+                        self.last_exit_price = trade_summary.get("exit_price")
+                        self.last_exit_direction = trade_summary.get("direction")
                         print(f"🔔 [POSITION EXITED] Reason: {trade_summary.get('exit_reason')} | Exit Spot: {trade_summary.get('exit_price'):.1f} | Spot PnL: {pnl_emoji} {pnl:+.1f} pts{opt_pnl_str}")
                     elif self.apm.payload:
                         p = self.apm.payload
@@ -332,11 +336,25 @@ class SentinelLiveFeedAdvisor:
                 # new trend breakout entries pay peak IV and risk mean-reversion whipsaw.
                 atr_extension_exhausted = (session_range > 2.5 * 120.0)
 
+                # Re-Entry Displacement Gate: Enforce that re-entering in the same direction
+                # requires price to displace at least 1.0 * ATR_1m past the previous exit price.
+                # Prevents taking back-to-back losing micro-scalps into the same stall zone.
+                insufficient_displacement = False
+                if self.last_exit_price is not None and self.last_exit_direction == entry_dir:
+                    min_disp_pts = max(8.0, 1.0 * atr_1m)
+                    if entry_dir == "PE" and (self.last_exit_price - c) < min_disp_pts:
+                        insufficient_displacement = True
+                    elif entry_dir == "CE" and (c - self.last_exit_price) < min_disp_pts:
+                        insufficient_displacement = True
+
                 # Gate Vetoes
                 risk_flag = "NORMAL"
                 if not can_enter_energy and entry_dir:
                     signal_display = f"🚫 [ENERGY GATE VETO] {signal_display} -> SUPPRESSED (Remaining ATR {e_atr_rem:.1f} < Required {req_energy:.1f})"
                     risk_flag = "VETO_ENERGY_DEPLETED"
+                elif insufficient_displacement and entry_dir:
+                    signal_display = f"🛑 [DISPLACEMENT VETO] {signal_display} -> SUPPRESSED (Re-entry requires >= {max(8.0, 1.0 * atr_1m):.1f}pts progress from prior exit {self.last_exit_price:.1f})"
+                    risk_flag = "VETO_INSUFFICIENT_DISPLACEMENT"
                 elif atr_extension_exhausted and entry_dir and ("Breakout" in signal_display or "Breakdown" in signal_display):
                     signal_display = f"🛑 [ATR EXTENSION VETO] {signal_display} -> SUPPRESSED (Session Range {session_range:.1f}pts > 300.0pts Exhaustion Cap)"
                     risk_flag = "VETO_ATR_EXTENSION_EXHAUSTED"
