@@ -347,9 +347,30 @@ class SentinelLiveFeedAdvisor:
                     elif entry_dir == "CE" and (c - self.last_exit_price) < min_disp_pts:
                         insufficient_displacement = True
 
+                # Dynamic Regime Classification: Gear 1 (Range Scalper) vs Gear 2 (Trend Expansion)
+                current_gear = "GEAR_2_TREND" if (self.ewma_ker >= 0.35 and (self.or_high - self.or_low) >= 70.0) else "GEAR_1_RANGE"
+
+                # Gear 1 Range Day: Enforce Lunch Dead-Zone Freeze (11:00 AM - 13:30 PM)
+                in_lunch_dead_zone = (current_gear == "GEAR_1_RANGE" and dtime(11, 0) <= btime <= dtime(13, 30))
+
+                # Gear Invariants:
+                # On Gear 2 Trend days: strictly FORBID wick-reversion fading against the macro drift
+                is_counter_trend_fade = False
+                if current_gear == "GEAR_2_TREND":
+                    if c < self.or_low and entry_dir == "CE":
+                        is_counter_trend_fade = True
+                    elif c > self.or_high and entry_dir == "PE":
+                        is_counter_trend_fade = True
+
                 # Gate Vetoes
                 risk_flag = "NORMAL"
-                if not can_enter_energy and entry_dir:
+                if in_lunch_dead_zone and entry_dir:
+                    signal_display = f"☕ [LUNCH FREEZE VETO] {signal_display} -> SUPPRESSED (Gear 1 Range Dead-Zone 11:00-13:30 PM)"
+                    risk_flag = "VETO_LUNCH_DEAD_ZONE"
+                elif is_counter_trend_fade and entry_dir:
+                    signal_display = f"🚫 [TREND PURITY VETO] {signal_display} -> SUPPRESSED (Forbid counter-trend fades on Gear 2 Trend day)"
+                    risk_flag = "VETO_COUNTER_TREND_FADE"
+                elif not can_enter_energy and entry_dir:
                     signal_display = f"🚫 [ENERGY GATE VETO] {signal_display} -> SUPPRESSED (Remaining ATR {e_atr_rem:.1f} < Required {req_energy:.1f})"
                     risk_flag = "VETO_ENERGY_DEPLETED"
                 elif insufficient_displacement and entry_dir:
@@ -365,8 +386,9 @@ class SentinelLiveFeedAdvisor:
                     # Read real option quote at entry
                     opt_q = self.resolve_real_option_quote(chosen_strike, entry_dir)
                     pos_id = f"TRADE_{btime.strftime('%H%M')}_{entry_dir}"
-                    # Activate 50% target book + 50% runner mode when directional efficiency EWMA_KER > 0.35
-                    is_runner = (self.ewma_ker > 0.35)
+                    # In Gear 2 Trend: activate 50% runner mode + -20% Option Native Stop
+                    is_runner = (current_gear == "GEAR_2_TREND")
+                    opt_sl_pct = 0.20 if (current_gear == "GEAR_2_TREND") else None
                     self.apm.arm_and_enter(
                         position_id=pos_id,
                         direction=entry_dir,
@@ -377,11 +399,13 @@ class SentinelLiveFeedAdvisor:
                         tp_pts=target_pts,
                         friction_drag_pts=fric.total_drag_pts,
                         opt_quote=opt_q,
-                        is_runner_mode=is_runner
+                        is_runner_mode=is_runner,
+                        session_gear=current_gear,
+                        opt_stop_loss_pct=opt_sl_pct
                     )
                     risk_flag = "EXECUTED_IN_FLIGHT"
                     opt_quote_str = f" | Option LTP: ₹{opt_q['ltp']:.2f} (Bid: ₹{opt_q['bid']:.2f} Ask: ₹{opt_q['ask']:.2f})" if opt_q else ""
-                    runner_tag = " [RUNNER 50/50 ACTIVE]" if is_runner else ""
+                    runner_tag = f" [{current_gear} | RUNNER 50/50 | OPT-SL -20%]" if is_runner else f" [{current_gear} | SCALP 15M]"
                     print(f"🚀 [NEW POSITION OPENED] {pos_id} | {contract_choice} @ Spot {c:.2f} | SL: {c - sl_pts if entry_dir == 'CE' else c + sl_pts:.1f} | TP: {c + target_pts if entry_dir == 'CE' else c - target_pts:.1f}{runner_tag}{opt_quote_str}")
 
                 # Emit Append-Only JSONL Audit Row with zero latency

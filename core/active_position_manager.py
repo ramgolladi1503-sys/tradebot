@@ -61,11 +61,14 @@ class PositionPayload:
     opt_pnl_pts: Optional[float] = None
     opt_bid: Optional[float] = None
     opt_ask: Optional[float] = None
-    # 50% Book / 50% Runner Architecture & VWAP-Filtered Option HWM
     is_runner_mode: bool = False
     half_booked: bool = False
     opt_peak_hwm: Optional[float] = None
     runner_trailing_sl: Optional[float] = None
+    # Gear 1 vs Gear 2 Architecture Fields
+    session_gear: str = "GEAR_1_RANGE"  # "GEAR_1_RANGE" or "GEAR_2_TREND"
+    opt_stop_loss_pct: Optional[float] = None  # e.g. 0.20 for -20% option stop
+    opt_initial_sl: Optional[float] = None
 
 
 class ActivePositionManager:
@@ -176,7 +179,9 @@ class ActivePositionManager:
         tp_pts: float = 18.0,
         friction_drag_pts: float = 0.80,
         opt_quote: Optional[Dict[str, Any]] = None,
-        is_runner_mode: bool = False
+        is_runner_mode: bool = False,
+        session_gear: str = "GEAR_1_RANGE",
+        opt_stop_loss_pct: Optional[float] = None
     ) -> bool:
         """Arms and executes entry into IN_FLIGHT state with monotonic SL and TP targets."""
         if self.state not in {STATE_STANDBY, STATE_LIQUIDATED}:
@@ -203,6 +208,18 @@ class ActivePositionManager:
         opt_bid = opt_quote.get("bid") if opt_quote else None
         opt_ask = opt_quote.get("ask") if opt_quote else None
 
+        # If in GEAR_2_TREND, compute option native stop (e.g. entry_ltp * (1 - 0.20))
+        opt_initial_sl = None
+        if opt_entry_ltp is not None and opt_stop_loss_pct is not None:
+            opt_initial_sl = round(opt_entry_ltp * (1.0 - opt_stop_loss_pct), 2)
+
+        # In GEAR_2_TREND, max_hold_minutes is extended to 360 (end of day)
+        hold_horizon = 15
+        if session_gear == "GEAR_2_TREND":
+            hold_horizon = 360
+        elif is_runner_mode:
+            hold_horizon = 25
+
         self.payload = PositionPayload(
             position_id=position_id,
             direction=direction,
@@ -212,7 +229,7 @@ class ActivePositionManager:
             current_sl=initial_sl,
             initial_sl=initial_sl,
             target_price=target,
-            max_hold_minutes=15 if not is_runner_mode else 25,
+            max_hold_minutes=hold_horizon,
             trail_locked=False,
             opt_symbol=opt_symbol,
             opt_token=opt_token,
@@ -223,7 +240,10 @@ class ActivePositionManager:
             is_runner_mode=is_runner_mode,
             half_booked=False,
             opt_peak_hwm=opt_entry_ltp,
-            runner_trailing_sl=None
+            runner_trailing_sl=None,
+            session_gear=session_gear,
+            opt_stop_loss_pct=opt_stop_loss_pct,
+            opt_initial_sl=opt_initial_sl
         )
 
         self._transition_to(STATE_IN_FLIGHT)
@@ -317,13 +337,36 @@ class ActivePositionManager:
             _record_exit("TARGET_HIT", p.target_price)
             return self.liquidate()
 
-        # Regular Stop Loss Hit
-        if hit_sl:
+        # In GEAR_2_TREND: Stop loss is evaluated natively on Option Contract Price (e.g. -20% of premium).
+        # This prevents 15-20 pt spot counter-wicks from stopping out a macro trend position.
+        hit_opt_sl = False
+        if p.session_gear == "GEAR_2_TREND" and p.opt_initial_sl is not None and p.opt_current_ltp is not None:
+            if p.opt_current_ltp <= p.opt_initial_sl and not p.trail_locked:
+                hit_opt_sl = True
+
+        # In GEAR_1_RANGE: Stop loss is evaluated on spot index price
+        if p.session_gear == "GEAR_1_RANGE" and hit_sl:
             _record_exit("TRAILING_STOP_HIT" if p.trail_locked else "STOP_LOSS_HIT", p.current_sl)
             return self.liquidate()
+        elif p.session_gear == "GEAR_2_TREND" and hit_opt_sl:
+            _record_exit("OPTION_NATIVE_STOP_LOSS_HIT", bar_close)
+            return self.liquidate()
+        elif p.session_gear == "GEAR_2_TREND" and p.trail_locked and hit_sl:
+            # Once trail locked, spot stop also acts as a hard backstop
+            _record_exit("TRAILING_STOP_HIT", p.current_sl)
+            return self.liquidate()
+
+        # Invariant: Breakeven Lock at +12.0 Spot Points Gain (Snaps SL to entry + 1.0 pt)
+        if gain >= 12.0 and not p.trail_locked:
+            be_sl = (p.entry_price + 1.0) if is_ce else (p.entry_price - 1.0)
+            if (is_ce and be_sl > p.current_sl) or (not is_ce and be_sl < p.current_sl):
+                p.current_sl = be_sl
+                p.trail_locked = True
+                if self.state == STATE_IN_FLIGHT:
+                    self._transition_to(STATE_TRAIL_LOCK)
 
         # 2. Monotonic Trailing Ratchet (+8 pts move locks +4 pts profit)
-        if gain >= 8.0 and not p.trail_locked:
+        elif gain >= 8.0 and not p.trail_locked:
             new_sl = (p.entry_price + 4.0) if is_ce else (p.entry_price - 4.0)
             # Invariant 1.1: Compare-And-Swap monotonicity check
             if (is_ce and new_sl > p.current_sl) or (not is_ce and new_sl < p.current_sl):

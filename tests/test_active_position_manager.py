@@ -288,3 +288,92 @@ def test_runner_mode_hwm_trailing_proof(tmp_wal):
     assert summary["opt_exit_ltp"] == 147.0
     assert summary["opt_pnl_pts"] == 27.0  # 147.0 - 120.0
 
+
+def test_gear2_option_native_stop_proof(tmp_wal):
+    """Verify that in GEAR_2_TREND mode:
+    1. Spot counter-wicks do NOT trigger premature stop-outs if the option premium holds.
+    2. The position is stopped out if and only if the option premium drops below the -20% option SL.
+    """
+    apm = ActivePositionManager(wal_path=tmp_wal)
+    apm.arm_and_enter(
+        position_id="TEST_GEAR2_001",
+        direction="PE",
+        contract="NIFTY 22450 PE [ITM]",
+        entry_price=22400.0,
+        entry_time_str="2026-10-08T10:00:00",
+        sl_pts=12.0,  # Spot SL would be 22412.0
+        tp_pts=15.0,
+        is_runner_mode=True,
+        session_gear="GEAR_2_TREND",
+        opt_stop_loss_pct=0.20,
+        opt_quote={"symbol": "NIFTY24OCT22450PE", "token": "12345", "ltp": 100.0, "bid": 99.5, "ask": 100.5}
+    )
+    assert apm.state == STATE_IN_FLIGHT
+    assert apm.payload.session_gear == "GEAR_2_TREND"
+    assert apm.payload.opt_initial_sl == 80.0  # 100.0 * (1 - 0.20)
+    assert apm.payload.max_hold_minutes == 360
+
+    # Bar 1: Spot counter-bounces to 22415.0 (breaching the 12pt spot SL of 22412.0).
+    # BUT option IV holds the premium at 88.0 (above 80.0).
+    # In GEAR_2_TREND, the trade MUST NOT be stopped out by spot noise!
+    st1, p1 = apm.evaluate_bar(
+        bar_open=22400.0,
+        bar_high=22415.0,
+        bar_low=22398.0,
+        bar_close=22410.0,
+        bar_time_str="2026-10-08T10:01:00",
+        current_opt_ltp=88.0,
+        atr_1m=12.0
+    )
+    assert st1 == STATE_IN_FLIGHT  # Survived the spot noise collision!
+
+    # Bar 2: Option premium actually drops below 80.0 (e.g. to 78.0).
+    # Now it triggers OPTION_NATIVE_STOP_LOSS_HIT.
+    st2, summary = apm.evaluate_bar(
+        bar_open=22410.0,
+        bar_high=22418.0,
+        bar_low=22405.0,
+        bar_close=22416.0,
+        bar_time_str="2026-10-08T10:02:00",
+        current_opt_ltp=78.0,
+        atr_1m=12.0
+    )
+    assert st2 == STATE_LIQUIDATED
+    assert summary["exit_reason"] == "OPTION_NATIVE_STOP_LOSS_HIT"
+    assert summary["opt_exit_ltp"] == 78.0
+    assert summary["opt_pnl_pts"] == -22.0
+
+
+def test_breakeven_lock_proof(tmp_wal):
+    """Verify that when spot price moves favorably by +12.0 points,
+    Stop Loss automatically snaps to Breakeven (+1.0 point profit) to guard against trend stalls.
+    """
+    apm = ActivePositionManager(wal_path=tmp_wal)
+    apm.arm_and_enter(
+        position_id="TEST_BE_001",
+        direction="CE",
+        contract="NIFTY 22400 CE [ITM]",
+        entry_price=22400.0,
+        entry_time_str="2026-10-08T10:00:00",
+        sl_pts=14.0,  # Initial SL = 22386.0
+        tp_pts=25.0,
+        session_gear="GEAR_1_RANGE"
+    )
+    assert apm.state == STATE_IN_FLIGHT
+    assert apm.payload.current_sl == 22386.0
+
+    # Bar 1: Price rallies to 22412.5 (+12.5 pts).
+    # Breakeven lock triggers: new SL = 22401.0 (entry + 1.0).
+    st1, p1 = apm.evaluate_bar(
+        bar_open=22400.0,
+        bar_high=22412.5,
+        bar_low=22399.0,
+        bar_close=22411.0,
+        bar_time_str="2026-10-08T10:01:00",
+        current_opt_ltp=110.0
+    )
+    assert st1 == STATE_TRAIL_LOCK
+    assert apm.payload.trail_locked is True
+    assert apm.payload.current_sl == 22401.0
+
+
