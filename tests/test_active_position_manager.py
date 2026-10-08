@@ -212,3 +212,79 @@ def test_15_minute_time_exit_proof(tmp_wal):
     assert summary["exit_reason"] == "TIME_EXIT_15M"
     assert summary["exit_price"] == 22703.5
     assert summary["pnl_pts"] == +3.5
+
+
+def test_runner_mode_hwm_trailing_proof(tmp_wal):
+    """Verify that when is_runner_mode=True, the position:
+    1. Books 50% upon reaching target_price, transitions to STATE_TRAIL_LOCK, locks Spot SL at +4 pts, and initializes Option HWM SL.
+    2. Continues trailing the second half with peak option High-Watermark (HWM).
+    3. Liquidates when option price breaches the ratcheted HWM trailing stop.
+    """
+    apm = ActivePositionManager(wal_path=tmp_wal)
+    # Enter PE trade at Spot 22,400 with target +15.0 pts (at 22,385) and option LTP 120.0
+    apm.arm_and_enter(
+        position_id="TEST_RUNNER_001",
+        direction="PE",
+        contract="NIFTY 22450 PE [ITM]",
+        entry_price=22400.0,
+        entry_time_str="2026-10-08T10:00:00",
+        sl_pts=14.0,
+        tp_pts=15.0,
+        is_runner_mode=True,
+        opt_quote={"symbol": "NIFTY24OCT22450PE", "token": "12345", "ltp": 120.0, "bid": 119.5, "ask": 120.5}
+    )
+    assert apm.state == STATE_IN_FLIGHT
+    assert apm.payload.is_runner_mode is True
+    assert apm.payload.half_booked is False
+    assert apm.payload.max_hold_minutes == 45
+
+    # Bar 1: Spot drops to 22380 (below target 22385). Option surges to 135.0.
+    # ATR_1m = 10.0. Option cushion = max(12.0, 1.2 * 10.0) = 12.0.
+    # Should book 50%, lock trail, and set runner_trailing_sl = 135.0 - 12.0 = 123.0
+    st1, p1 = apm.evaluate_bar(
+        bar_open=22400.0,
+        bar_high=22401.0,
+        bar_low=22380.0,
+        bar_close=22382.0,
+        bar_time_str="2026-10-08T10:01:00",
+        current_opt_ltp=135.0,
+        atr_1m=10.0
+    )
+    assert st1 == STATE_TRAIL_LOCK
+    assert apm.payload.half_booked is True
+    assert apm.payload.trail_locked is True
+    assert apm.payload.current_sl == 22396.0  # entry_price (22400) - 4.0 for PE
+    assert apm.payload.opt_peak_hwm == 135.0
+    assert apm.payload.runner_trailing_sl == 123.0
+
+    # Bar 2: Spot extends downwards to 22350. Option surges to peak 160.0.
+    # Trailing SL should ratchet up to 160.0 - 12.0 = 148.0.
+    st2, p2 = apm.evaluate_bar(
+        bar_open=22382.0,
+        bar_high=22383.0,
+        bar_low=22350.0,
+        bar_close=22355.0,
+        bar_time_str="2026-10-08T10:02:00",
+        current_opt_ltp=160.0,
+        atr_1m=10.0
+    )
+    assert st2 == STATE_TRAIL_LOCK
+    assert apm.payload.opt_peak_hwm == 160.0
+    assert apm.payload.runner_trailing_sl == 148.0
+
+    # Bar 3: Option pulls back to 147.0 (breaches trailing SL 148.0).
+    # Position should liquidate with RUNNER_HWM_TRAILING_EXIT.
+    st3, summary = apm.evaluate_bar(
+        bar_open=22355.0,
+        bar_high=22365.0,
+        bar_low=22350.0,
+        bar_close=22362.0,
+        bar_time_str="2026-10-08T10:03:00",
+        current_opt_ltp=147.0,
+        atr_1m=10.0
+    )
+    assert st3 == STATE_LIQUIDATED
+    assert summary["exit_reason"] == "RUNNER_HWM_TRAILING_EXIT"
+    assert summary["opt_exit_ltp"] == 147.0
+    assert summary["opt_pnl_pts"] == 27.0  # 147.0 - 120.0
+

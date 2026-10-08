@@ -252,7 +252,8 @@ class SentinelLiveFeedAdvisor:
                         bar_low=l,
                         bar_close=c,
                         bar_time_str=bar_time_str,
-                        current_opt_ltp=cur_opt_ltp
+                        current_opt_ltp=cur_opt_ltp,
+                        atr_1m=atr_1m
                     )
                     if apm_state == STATE_LIQUIDATED:
                         pnl = trade_summary.get("pnl_pts", 0.0)
@@ -262,7 +263,11 @@ class SentinelLiveFeedAdvisor:
                         print(f"🔔 [POSITION EXITED] Reason: {trade_summary.get('exit_reason')} | Exit Spot: {trade_summary.get('exit_price'):.1f} | Spot PnL: {pnl_emoji} {pnl:+.1f} pts{opt_pnl_str}")
                     elif self.apm.payload:
                         p = self.apm.payload
-                        trailed_tag = " [TRAIL LOCKED +4]" if p.trail_locked else ""
+                        trailed_tag = ""
+                        if p.half_booked:
+                            trailed_tag = f" [RUNNER 50% TRAIL | Opt HWM: ₹{p.opt_peak_hwm:.2f} | Opt Trail SL: ₹{p.runner_trailing_sl:.2f}]"
+                        elif p.trail_locked:
+                            trailed_tag = " [TRAIL LOCKED +4]"
                         opt_live_str = f" | Option LTP: ₹{p.opt_current_ltp:.2f} (Entry: ₹{p.opt_entry_ltp:.2f})" if p.opt_entry_ltp else ""
                         print(f"🛡️ [IN-FLIGHT POSITION] {p.strike_contract} | Entry Spot: {p.entry_price:.1f} | Current SL: {p.current_sl:.1f}{trailed_tag}{opt_live_str}")
 
@@ -319,11 +324,22 @@ class SentinelLiveFeedAdvisor:
                     chosen_strike = pe_itm_strike
                     signal_display = f"🎯 [BUY {pe_contract}] @ Bearish Wick Rejection | Target: +{target_pts}pts | Vol-SL: -{sl_pts}pts"
 
+                # Calculate cumulative session high and low to detect Macro Trend Exhaustion
+                session_high = max(float(b[2]) for b in candles)
+                session_low = min(float(b[3]) for b in candles)
+                session_range = session_high - session_low
+                # Macro ATR Extension Cap: If session has already moved > 2.5x 20d ATR (300 pts),
+                # new trend breakout entries pay peak IV and risk mean-reversion whipsaw.
+                atr_extension_exhausted = (session_range > 2.5 * 120.0)
+
                 # Gate Vetoes
                 risk_flag = "NORMAL"
                 if not can_enter_energy and entry_dir:
                     signal_display = f"🚫 [ENERGY GATE VETO] {signal_display} -> SUPPRESSED (Remaining ATR {e_atr_rem:.1f} < Required {req_energy:.1f})"
                     risk_flag = "VETO_ENERGY_DEPLETED"
+                elif atr_extension_exhausted and entry_dir and ("Breakout" in signal_display or "Breakdown" in signal_display):
+                    signal_display = f"🛑 [ATR EXTENSION VETO] {signal_display} -> SUPPRESSED (Session Range {session_range:.1f}pts > 300.0pts Exhaustion Cap)"
+                    risk_flag = "VETO_ATR_EXTENSION_EXHAUSTED"
                 elif spread_ratio > self.spread_threshold and entry_dir:
                     signal_display = f"🚨 [SPREAD VETO] {signal_display} -> SUPPRESSED (>4.0% spread)"
                     risk_flag = "VETO_SPREAD_EXPANDED"
@@ -331,6 +347,8 @@ class SentinelLiveFeedAdvisor:
                     # Read real option quote at entry
                     opt_q = self.resolve_real_option_quote(chosen_strike, entry_dir)
                     pos_id = f"TRADE_{btime.strftime('%H%M')}_{entry_dir}"
+                    # Activate 50% target book + 50% runner mode when directional efficiency EWMA_KER > 0.35
+                    is_runner = (self.ewma_ker > 0.35)
                     self.apm.arm_and_enter(
                         position_id=pos_id,
                         direction=entry_dir,
@@ -340,11 +358,13 @@ class SentinelLiveFeedAdvisor:
                         sl_pts=sl_pts,
                         tp_pts=target_pts,
                         friction_drag_pts=fric.total_drag_pts,
-                        opt_quote=opt_q
+                        opt_quote=opt_q,
+                        is_runner_mode=is_runner
                     )
                     risk_flag = "EXECUTED_IN_FLIGHT"
                     opt_quote_str = f" | Option LTP: ₹{opt_q['ltp']:.2f} (Bid: ₹{opt_q['bid']:.2f} Ask: ₹{opt_q['ask']:.2f})" if opt_q else ""
-                    print(f"🚀 [NEW POSITION OPENED] {pos_id} | {contract_choice} @ Spot {c:.2f} | SL: {c - sl_pts if entry_dir == 'CE' else c + sl_pts:.1f} | TP: {c + target_pts if entry_dir == 'CE' else c - target_pts:.1f}{opt_quote_str}")
+                    runner_tag = " [RUNNER 50/50 ACTIVE]" if is_runner else ""
+                    print(f"🚀 [NEW POSITION OPENED] {pos_id} | {contract_choice} @ Spot {c:.2f} | SL: {c - sl_pts if entry_dir == 'CE' else c + sl_pts:.1f} | TP: {c + target_pts if entry_dir == 'CE' else c - target_pts:.1f}{runner_tag}{opt_quote_str}")
 
                 # Emit Append-Only JSONL Audit Row with zero latency
                 self.emit_and_append_audit_log({

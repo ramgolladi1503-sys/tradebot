@@ -61,6 +61,11 @@ class PositionPayload:
     opt_pnl_pts: Optional[float] = None
     opt_bid: Optional[float] = None
     opt_ask: Optional[float] = None
+    # 50% Book / 50% Runner Architecture & VWAP-Filtered Option HWM
+    is_runner_mode: bool = False
+    half_booked: bool = False
+    opt_peak_hwm: Optional[float] = None
+    runner_trailing_sl: Optional[float] = None
 
 
 class ActivePositionManager:
@@ -170,7 +175,8 @@ class ActivePositionManager:
         sl_pts: float = 12.0,
         tp_pts: float = 18.0,
         friction_drag_pts: float = 0.80,
-        opt_quote: Optional[Dict[str, Any]] = None
+        opt_quote: Optional[Dict[str, Any]] = None,
+        is_runner_mode: bool = False
     ) -> bool:
         """Arms and executes entry into IN_FLIGHT state with monotonic SL and TP targets."""
         if self.state not in {STATE_STANDBY, STATE_LIQUIDATED}:
@@ -206,14 +212,18 @@ class ActivePositionManager:
             current_sl=initial_sl,
             initial_sl=initial_sl,
             target_price=target,
-            max_hold_minutes=15,
+            max_hold_minutes=15 if not is_runner_mode else 45,
             trail_locked=False,
             opt_symbol=opt_symbol,
             opt_token=opt_token,
             opt_entry_ltp=opt_entry_ltp,
             opt_current_ltp=opt_entry_ltp,
             opt_bid=opt_bid,
-            opt_ask=opt_ask
+            opt_ask=opt_ask,
+            is_runner_mode=is_runner_mode,
+            half_booked=False,
+            opt_peak_hwm=opt_entry_ltp,
+            runner_trailing_sl=None
         )
 
         self._transition_to(STATE_IN_FLIGHT)
@@ -226,15 +236,17 @@ class ActivePositionManager:
         bar_low: float,
         bar_close: float,
         bar_time_str: str,
-        current_opt_ltp: Optional[float] = None
+        current_opt_ltp: Optional[float] = None,
+        atr_1m: float = 10.0
     ) -> Tuple[str, Optional[Dict[str, Any]]]:
         """Evaluates completed bar against active position.
         
         Enforces:
         - Pessimistic Intrabar Resolution (SL wins if both SL and TP hit in same bar)
         - Monotonic Ratchet (+8 pts move locks +4 pts trailing stop)
-        - Invariant 3.2: 15-Minute Theta Horizon Exit
+        - Invariant 3.2: 15-Minute Theta Horizon Exit (extended to 45m for runners)
         - Empirical Option Strike PnL calculation from real WebSocket ticks
+        - 50% Fixed Target Book + 50% Runner Trailed via Option High-Watermark (HWM)
         """
         if self.state not in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK}:
             return self.state, None
@@ -244,6 +256,9 @@ class ActivePositionManager:
 
         if current_opt_ltp is not None:
             p.opt_current_ltp = current_opt_ltp
+            # Update peak option high-watermark
+            if p.opt_peak_hwm is None or current_opt_ltp > p.opt_peak_hwm:
+                p.opt_peak_hwm = current_opt_ltp
 
         # 1. Check Intrabar Hits
         if is_ce:
@@ -266,13 +281,39 @@ class ActivePositionManager:
                 p.opt_pnl_pts = round(p.opt_exit_ltp - p.opt_entry_ltp, 2)
             self._transition_to(STATE_EXIT_PENDING)
 
+        # 2. Runner Mode Logic: Book 50% at Target, Trail Remaining 50% via Option HWM
+        if p.is_runner_mode and hit_tp and not p.half_booked:
+            p.half_booked = True
+            p.trail_locked = True
+            # Lock Spot SL to entry + 4.0 pts
+            p.current_sl = (p.entry_price + 4.0) if is_ce else (p.entry_price - 4.0)
+            # Set Option Runner Trailing Stop: Peak Premium - max(12.0, 1.2 * ATR)
+            opt_cushion = max(12.0, 1.2 * atr_1m)
+            p.runner_trailing_sl = (p.opt_peak_hwm - opt_cushion) if p.opt_peak_hwm else None
+            self._transition_to(STATE_TRAIL_LOCK)
+            self._persist_wal_atomic()
+            return self.state, asdict(p)
+
+        # If in Runner Trailing Mode, check if Option Price hit the HWM trailing stop
+        if p.is_runner_mode and p.half_booked and p.runner_trailing_sl is not None:
+            # Ratchet trailing stop upward as peak HWM expands (monotonic non-decreasing)
+            opt_cushion = max(12.0, 1.2 * atr_1m)
+            new_opt_sl = (p.opt_peak_hwm - opt_cushion) if p.opt_peak_hwm else p.runner_trailing_sl
+            if new_opt_sl > p.runner_trailing_sl:
+                p.runner_trailing_sl = new_opt_sl
+
+            # Check if live option price breached the HWM trailing stop
+            if p.opt_current_ltp is not None and p.opt_current_ltp <= p.runner_trailing_sl:
+                _record_exit("RUNNER_HWM_TRAILING_EXIT", bar_close)
+                return self.liquidate()
+
         # Pessimistic Resolution Rule: If both hit, SL wins chronologically
         if hit_tp and hit_sl:
             _record_exit("PESSIMISTIC_INTRABAR_SL_COLLISION", p.current_sl)
             return self.liquidate()
 
-        # Regular Target Hit
-        if hit_tp:
+        # Regular Target Hit (Full exit if not runner mode)
+        if hit_tp and not p.is_runner_mode:
             _record_exit("TARGET_HIT", p.target_price)
             return self.liquidate()
 
