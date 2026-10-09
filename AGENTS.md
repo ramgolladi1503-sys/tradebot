@@ -6,7 +6,7 @@ These rules apply to GSD, Hermes, Grill Me, Codex, ChatGPT, Claude, Gemini, and 
 
 ## Permanent TradeBot Delivery Organization
 
-TradeBot is the product. Every new engineering or research request must enter through the permanent delivery organization documented under `docs/tradebot_delivery/`.
+TradeBot is the product. Every TradeBot repository task must enter through the permanent delivery organization documented under `docs/tradebot_delivery/`. This applies to questions, PR lookups, engineering, research, documentation, review, planning, troubleshooting, and read-only investigation; do not treat a task as exempt because it is small or informational.
 
 Canonical lifecycle:
 
@@ -27,6 +27,10 @@ Product -> Epic -> Feature -> Story / Bug / Task
 The mandatory entrypoint is:
 
 `.agents/workflows/tradebot-delivery-orchestrator.md`
+
+Before substantive work on any TradeBot task, load and invoke this workflow and assemble its eight distinct real role subagents using the available collaboration mechanism: Business Analyst, Product Owner, Grill Me, Hermes, GSD, QA, Senior QA, and Technical & Quant Analyst. The coordinator does not count as a role, role labels do not substitute for delegated agents, and one agent may not fill multiple seats. Assignments must include the required agent task contract below. Dispatch at most three child agents concurrently, retry a transient creation failure once, and do no dependent work while the required roster is incomplete. Report an unavailable role as `UNSATISFIED`; do not claim completion or readiness from partial outputs. Apply the workflow's read-only and scope gates to all tasks.
+
+Separate agent instances produce separately attributed work; this does not prove independent cognition. Require distinct evidence and review questions, and describe the outputs as separately produced. Neither agents, PO, Hermes, QA, nor team consensus grant human authorization or permit forbidden broker, order, LIVE, or risk actions. Explicit human authorization remains required wherever repository rules require it.
 
 The mandatory role-separation rule is:
 
@@ -120,6 +124,36 @@ LIVE_CONFIG_CHANGE
 ORDER_ACTION
 RISK_BYPASS
 ```
+
+### Technical & Quant Analyst
+
+Purpose: separately review technical behavior and applicable quantitative/research claims, ask evidence-specific challenge questions, and verify evidence-backed closure. This role is review-only and cannot implement its findings.
+
+Every task packet for this role must use the schema-supported `source_agent: codex` and one supported action per assignment from:
+
+```text
+REVIEW_PR
+```
+
+The packet must also include the standard required fields: `title`, `scope`, `requested_paths`, `allowed_paths`, `forbidden_paths`, `expected_tests`, and `acceptance_proof`.
+
+Forbidden actions:
+
+```text
+GENERATE_PATCH
+PLACE_ORDER
+MODIFY_ORDER
+CANCEL_ORDER
+EXIT_ORDER
+ENABLE_LIVE
+DISABLE_RISK_GATE
+DISABLE_KILL_SWITCH
+DISABLE_FEED_FRESHNESS_GATE
+CHANGE_BROKER_CONFIG
+CHANGE_CREDENTIALS
+```
+
+The role also must not call broker APIs or bypass live-execution controls; those prohibitions apply even where no corresponding action enum exists.
 
 ### GSD
 
