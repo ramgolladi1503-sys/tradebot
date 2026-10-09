@@ -43,6 +43,21 @@ Release Manager marks `MERGE_APPROVED`.
 ### G9 Production verification gate
 Post-merge/runtime verification passes where applicable.
 
+## Claim-level evidence gates
+
+Material work items also carry the four claim-level evidence dimensions defined in
+[`governance/evidence/POLICY.md`](../../governance/evidence/POLICY.md). These are
+named `G1_SOURCE`, `G2_CORRECTNESS`, `G3_ADVERSARIAL`, and `G4_INDEPENDENT` in the
+evidence record so they are not confused with delivery lifecycle gates G0-G9.
+
+The existing Product Owner/BA/Architect, Developer, QA/Senior QA, UAT, and
+Release Manager roles own these checks. Work-item evidence is recorded in the
+existing `core.delivery` contract and hash chain. The report-only CI workflow
+validates registry and path coverage but cannot approve a claim or merge. During
+migration, missing legacy evidence remains `UNVERIFIED`; `NOT_APPLICABLE` needs
+a reason and reference and is not a pass. Developers cannot author their own
+independent G2/G3/G4 evidence.
+
 ## Runtime-sensitive minimum checks
 
 Use relevant checks from the repository PR template and any targeted tests required by the story.
@@ -57,6 +72,9 @@ A green engineering release does not imply:
 - statistical validity
 
 Research claims require their own evidence and governance.
+Profitability and predictive-validity claims remain subject to the separate
+research validation and certification controls. A green evidence workflow or
+passing unit suite does not establish a trading edge or live readiness.
 
 ## Stop conditions
 

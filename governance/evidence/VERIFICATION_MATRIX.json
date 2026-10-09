@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "report_only": true,
+  "material_path_prefixes": [
+    "core/",
+    "strategies/",
+    "research/",
+    "scripts/research/",
+    "config/",
+    "data/",
+    "governance/evidence/",
+    "tests/governance/",
+    "tools/verify_evidence.py",
+    "docs/tradebot_delivery/",
+    ".agents/workflows/tradebot-delivery-orchestrator.md",
+    ".github/workflows/evidence-gates.yml"
+  ],
+  "gates": {
+    "G1_SOURCE": {
+      "evidence_type": "SOURCE_VERIFICATION_EVIDENCE",
+      "allowed_roles": ["PRODUCT_OWNER", "BUSINESS_ANALYST", "SOLUTION_ARCHITECT", "SYSTEM_ARCHITECT", "QUANT_RESEARCH_ARCHITECT"]
+    },
+    "G2_CORRECTNESS": {
+      "evidence_type": "CORRECTNESS_VERIFICATION_EVIDENCE",
+      "allowed_roles": ["QA_ENGINEER", "SENIOR_QA"]
+    },
+    "G3_ADVERSARIAL": {
+      "evidence_type": "ADVERSARIAL_VERIFICATION_EVIDENCE",
+      "allowed_roles": ["QA_ENGINEER", "SENIOR_QA"]
+    },
+    "G4_INDEPENDENT": {
+      "evidence_type": "INDEPENDENT_EVIDENCE",
+      "allowed_roles": ["QUANT_RESEARCH_ARCHITECT", "UAT_REVIEWER", "RELEASE_MANAGER", "PRODUCTION_SRE"]
+    }
+  },
+  "claim_kinds_requiring_research_certification": ["predictive_validity", "profitability"],
+  "limitations": [
+    "A report-only result is not merge approval.",
+    "Passing tests do not establish a trading edge or profitability.",
+    "Source existence and record hashes do not authenticate source authority or reviewer identity."
+  ]
+}

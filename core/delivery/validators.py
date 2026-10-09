@@ -5,6 +5,7 @@ from typing import Any
 
 from .defects import validate_defect
 from .evidence import canonical_json, sha256_json, validate_timestamp, verify_evidence_hash
+from .evidence_standard import GATES, validate_evidence_standard_record
 from .models import (DeliveryState, Defect, DefectHistoryEntry, DefectSeverity, DefectStatus, Evidence,
                      EvidenceStatus, EvidenceType, StateHistoryEntry, WorkItem,
                      WorkItemType, WORK_ITEM_FIELDS)
@@ -169,6 +170,9 @@ def validate_work_item(item: WorkItem, *, complete: bool = False) -> None:
             DeliveryRole(e.role)
         except ValueError as exc:
             raise ValueError("unknown evidence role") from exc
+        for expected_type, allowed_roles in GATES.values():
+            if e.evidence_type == expected_type and e.role not in allowed_roles:
+                raise ValueError(f"{expected_type.value} has an unauthorized delivery role")
         validate_timestamp(e.timestamp)
         if any(not isinstance(check, (tuple, list)) or len(check) != 2
                or not all(isinstance(part, str) and part.strip() for part in check)
@@ -257,6 +261,9 @@ def validate_work_item(item: WorkItem, *, complete: bool = False) -> None:
             raise ValueError("parent_epic is required for non-EPIC work")
         if item.type in {WorkItemType.STORY, WorkItemType.BUG, WorkItemType.TASK} and not item.parent_feature.strip():
             raise ValueError("parent_feature is required for STORY/BUG/TASK")
+    if not isinstance(item.extensions, dict):
+        raise ValueError("work-item extensions must be an object")
+    validate_evidence_standard_record(item, contract_hash=work_item_contract_hash(item))
 
 
 def work_item_to_dict(item: WorkItem) -> dict[str, Any]:

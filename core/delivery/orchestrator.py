@@ -7,6 +7,7 @@ from typing import Iterable
 from .defects import unresolved_required, validate_defect
 from .evidence import seal_evidence, sha256_json, validate_timestamp
 from .gates import GateName, GateStatus, evaluate_gate
+from .evidence_standard import summarize_evidence_standard
 from .models import (Defect, DefectHistoryEntry, DeliveryState, Evidence, EvidenceStatus,
                      EvidenceType, StateHistoryEntry, WorkItem)
 from .roles import DeliveryRole
@@ -23,6 +24,11 @@ DEV_ROLES = {DeliveryRole.BACKEND_DEVELOPER, DeliveryRole.DATA_QUANT_DEVELOPER,
              DeliveryRole.INTEGRATION_DEVELOPER, DeliveryRole.UI_DEVELOPER}
 
 EVIDENCE_STATES = {
+    EvidenceType.SOURCE_VERIFICATION_EVIDENCE: {S.BACKLOG, S.REQUIREMENT_READY, S.DESIGN_READY},
+    EvidenceType.CORRECTNESS_VERIFICATION_EVIDENCE: {S.DEV_VERIFIED, S.QA_IN_PROGRESS, S.QA_PASSED},
+    EvidenceType.ADVERSARIAL_VERIFICATION_EVIDENCE: {S.QA_IN_PROGRESS, S.QA_PASSED, S.SENIOR_QA},
+    EvidenceType.INDEPENDENT_EVIDENCE: {S.UAT, S.PRODUCT_ACCEPTED, S.RELEASE_READY, S.CI_GREEN,
+                                        S.PRODUCTION_VERIFIED},
     EvidenceType.REQUIREMENT_EVIDENCE: {
         S.BACKLOG, S.BLOCKED_REQUIREMENT, S.REQUIREMENT_READY, S.DESIGN_READY,
         S.IN_DEVELOPMENT, S.FAILED_VERIFICATION, S.DEV_VERIFIED, S.QA_IN_PROGRESS,
@@ -220,6 +226,7 @@ class DeliveryOrchestrator:
                 "missing_evidence": missing,
                 "unresolved_defects": [d.defect_id for d in unresolved_required(self.item.defects)],
                 "invalid_role_approvals": invalid,
+                "evidence_standard": summarize_evidence_standard(self.item),
                 "contract_drift": self.contract_drift,
                 "current_state": self.item.current_state.value,
                 "allowed_next_states": self.allowed_next_states()}
@@ -228,6 +235,13 @@ class DeliveryOrchestrator:
         current_contract = work_item_contract_hash(self.item)
         all_evidence = tuple(e for e in self.item.evidence if e.work_item_hash == current_contract)
         cycle = self._current_cycle_evidence()
+        standard_summary = summarize_evidence_standard(self.item)
+        evidence_gate_keys = {
+            GateName.EVIDENCE_G1_SOURCE: "G1_SOURCE",
+            GateName.EVIDENCE_G2_CORRECTNESS: "G2_CORRECTNESS",
+            GateName.EVIDENCE_G3_ADVERSARIAL: "G3_ADVERSARIAL",
+            GateName.EVIDENCE_G4_INDEPENDENT: "G4_INDEPENDENT",
+        }
         results = []
         for gate in GateName:
             if gate == GateName.G8_MERGE:
@@ -236,12 +250,32 @@ class DeliveryOrchestrator:
                 results.append({"gate": gate.value,
                                 "status": GateStatus.PASS.value if event else GateStatus.BLOCKED.value,
                                 "reason": "merge approval recorded" if event else "merge approval transition not recorded",
-                                "evidence_ids": list(event.evidence_ids) if event else []})
+                                "evidence_ids": list(event.evidence_ids) if event else [],
+                                "blocking": True})
+                continue
+            if gate in evidence_gate_keys:
+                gate_key = evidence_gate_keys[gate]
+                claim_statuses = [row["gate_statuses"][gate_key]
+                                  for row in standard_summary["claims"]]
+                if standard_summary["status"] == "NOT_APPLICABLE":
+                    status = GateStatus.NOT_APPLICABLE
+                elif not claim_statuses or "BLOCKED" in claim_statuses:
+                    status = GateStatus.BLOCKED
+                elif "FAIL" in claim_statuses:
+                    status = GateStatus.FAIL
+                elif "NOT_APPLICABLE" in claim_statuses:
+                    status = GateStatus.BLOCKED
+                else:
+                    status = GateStatus.PASS
+                results.append({"gate": gate.value, "status": status.value,
+                                "reason": "claim-linked evidence status; informational in report-only v1",
+                                "evidence_ids": [], "blocking": False})
                 continue
             proof = all_evidence if gate in {GateName.G0_REQUIREMENT, GateName.G1_ARCHITECTURE} else cycle
             result = evaluate_gate(gate, proof, self.item.required_ci_checks)
             results.append({"gate": result.gate, "status": result.status.value,
-                            "reason": result.reason, "evidence_ids": list(result.evidence_ids)})
+                            "reason": result.reason, "evidence_ids": list(result.evidence_ids),
+                            "blocking": not gate.value.startswith("EVIDENCE_G")})
         return results
 
     def transition(self, target: DeliveryState | str, *, acting_role: DeliveryRole | str,

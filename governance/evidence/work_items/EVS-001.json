@@ -1,0 +1,55 @@
+{
+  "work_item_id": "EVS-001",
+  "type": "TASK",
+  "parent_epic": "TRADEBOT-GOVERNANCE",
+  "parent_feature": "EVIDENCE-STANDARD",
+  "title": "Introduce report-only Evidence and Verification Standard",
+  "schema_version": 1,
+  "current_state": "BACKLOG",
+  "priority": "P1",
+  "business_goal": "Make material claims traceable to sources, correctness checks, adversarial review, and independent outcome evidence.",
+  "current_behavior": "Delivery work items already retain hash-sealed evidence, but do not identify these four claim-level evidence dimensions.",
+  "expected_behavior": "New work items can record claim-level evidence gates; CI reports coverage without treating the report as merge or trading authority.",
+  "in_scope": ["core/delivery evidence contract", "offline verifier", "report-only pull request workflow", "governance documentation"],
+  "out_of_scope": ["live runtime", "broker or order APIs", "risk thresholds", "strategy certification", "legacy subsystem certification"],
+  "dependencies": ["existing core.delivery work item and evidence model"],
+  "acceptance_criteria": ["Negative tests reject malformed and self-approved claims", "PR report is bound to the exact candidate SHA", "Legacy inventory remains UNVERIFIED and critical-component backfill is explicitly deferred", "Seeded missing, stale, mismatched, and contradictory evidence plus covered and uncovered material paths produce expected findings; define an owned process for recording finding counts, focused CI duration, and reviewer effort, and preserve the baseline as pending until a reviewed PR supplies measurements", "The evidence policy names an owner and maintenance process for expanding material path coverage; report-only findings remain informational while focused contract test failures fail CI"],
+  "safety_constraints": ["read_only=true", "is_order_action=false", "broker_api_called=false", "allowed_for_live_execution=false", "append=false for read-only evidence/contracts"],
+  "architecture_impact": "Extends existing offline delivery evidence; does not add runtime wiring or a second ledger.",
+  "allowed_paths": ["core/delivery/", "governance/evidence/", "tools/verify_evidence.py", "tests/governance/", "tests/delivery/", ".github/workflows/evidence-gates.yml", "docs/tradebot_delivery/", ".agents/workflows/tradebot-delivery-orchestrator.md"],
+  "forbidden_paths": ["main.py", "run_live.sh", "config/", "credentials.py", "core/execution", "core/broker", "core/order", "core/risk", "core/feed", "strategies/", ".env", "runtime/live/"],
+  "expected_tests": ["pytest -q tests/governance/test_evidence_contract.py", "pytest -q tests/delivery"],
+  "qa_attack_plan": ["missing evidence", "wrong gate type or role", "self-review", "stale SHA", "source path traversal", "contradictory status", "nonblocking report-only mode"],
+  "uat_criteria": ["Review report accurately distinguishes UNVERIFIED from VERIFIED and does not imply strategy or live readiness."],
+  "release_gates": ["G1_SOURCE", "G2_CORRECTNESS", "G3_ADVERSARIAL", "G4_INDEPENDENT", "report-only CI"],
+  "rollback_plan": "Remove the report-only workflow and the additive evidence-standard extension while preserving existing delivery evidence records.",
+  "evidence_refs": [],
+  "acting_role": "BACKEND_DEVELOPER",
+  "state_history": [],
+  "defect_history": [],
+  "evidence": [],
+  "defects": [],
+  "required_ci_checks": [],
+  "extensions": {
+    "evidence_standard": {
+      "schema_version": 1,
+      "enforcement_mode": "REPORT_ONLY",
+      "applicability": "REQUIRED",
+      "applicability_reason": "This governance work changes a material delivery contract.",
+      "assessed_paths": ["core/delivery/models.py", "core/delivery/gates.py", "core/delivery/orchestrator.py", "core/delivery/validators.py", "core/delivery/evidence_standard.py", "governance/evidence/POLICY.md", "governance/evidence/ADOPTION_BASELINE.json", "governance/evidence/SOURCE_REGISTRY.json", "governance/evidence/CLAIM_REGISTRY.json", "governance/evidence/VERIFICATION_MATRIX.json", "governance/evidence/templates/evidence_record.json", "governance/evidence/templates/decision_record.md", "governance/evidence/work_items/EVS-001.json", "tools/verify_evidence.py", "tests/governance/test_evidence_contract.py", "docs/tradebot_delivery/RELEASE_GATES.md", "docs/tradebot_delivery/WORK_ITEM_TEMPLATE.md", ".agents/workflows/tradebot-delivery-orchestrator.md", ".github/workflows/evidence-gates.yml"],
+      "subject_commit_sha": null,
+      "claims": [
+        {
+          "claim_id": "EVIDENCE_STANDARD_IMPLEMENTATION",
+          "statement": "The package detects missing, contradictory, stale, or self-approved evidence and reports material PR coverage.",
+          "claim_kind": "implementation",
+          "status": "UNVERIFIED",
+          "source_ids": ["TRADEBOT_DELIVERY_ORGANIZATION", "TRADEBOT_DELIVERY_LIFECYCLE", "TRADEBOT_QA_PLAYBOOK"],
+          "assumptions": [{"assumption_id": "A1", "statement": "The report is informational until false-positive behavior is reviewed.", "classification": "THEORETICAL_ASSUMPTION", "source_ids": ["TRADEBOT_RELEASE_GATES"]}],
+          "gate_evidence": {},
+          "limitation": "No independent reviewer has yet accepted the end-to-end result; passing local tests alone cannot upgrade this claim."
+        }
+      ]
+    }
+  }
+}

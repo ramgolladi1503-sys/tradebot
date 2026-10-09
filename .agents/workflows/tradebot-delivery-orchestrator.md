@@ -131,6 +131,14 @@ Any defect causes:
 
 After retest, QA performs a new adversarial pass.
 
+For material claims, record the claim-level G1 source and assumptions, G2
+correctness, G3 adversarial comparison, and G4 independent evidence in the
+existing work-item evidence contract. Follow the evidence record in
+`governance/evidence/POLICY.md`. G2/G3/G4 reviewer identities must be distinct
+from the developer and from one another. The report-only CI artifact is a
+coverage diagnostic and never substitutes for QA, UAT, product acceptance, or
+research certification.
+
 ## 7. Technical & Quant Analyst challenge and closure
 
 After development and QA retest, the Technical & Quant Analyst, as a separately assigned reviewer, examines the changed behavior and raises specific, task-tailored questions. Mark individual checklist items `NOT_APPLICABLE` with a reason when they do not fit the change; do not omit applicable checks or invent quantitative claims for non-quantitative work.

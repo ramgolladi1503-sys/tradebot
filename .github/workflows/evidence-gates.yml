@@ -1,0 +1,69 @@
+name: Evidence Standard (report only)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-standard:
+    name: Validate evidence coverage (informational)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact pull request head and base history
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch exact base object
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch --no-tags origin "$BASE_SHA"
+
+      - name: Install focused test runner
+        run: python -m pip install pytest
+
+      - name: Run report-only evidence validation
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          started=$SECONDS
+          python tools/verify_evidence.py \
+            --base-ref "$BASE_SHA" \
+            --candidate-ref "$HEAD_SHA" \
+            --candidate-sha "$HEAD_SHA" \
+            --output evidence-standard-report.json \
+            --summary-output "$GITHUB_STEP_SUMMARY" \
+            --mode report-only
+          duration=$((SECONDS - started))
+          printf '\nVerifier duration: %s seconds.\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run focused evidence contract tests
+        run: |
+          started=$SECONDS
+          if python -m pytest -q tests/governance/test_evidence_contract.py tests/delivery; then
+            test_status=0
+          else
+            test_status=$?
+          fi
+          duration=$((SECONDS - started))
+          printf '\nFocused test duration: %s seconds (exit=%s).\n' "$duration" "$test_status" >> "$GITHUB_STEP_SUMMARY"
+          exit "$test_status"
+
+      - name: Upload exact-head report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-standard-${{ github.event.pull_request.head.sha }}
+          path: evidence-standard-report.json
+          if-no-files-found: warn
+          retention-days: 30

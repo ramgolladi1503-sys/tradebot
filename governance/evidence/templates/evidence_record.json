@@ -1,0 +1,34 @@
+{
+  "work_item_id": "<EPIC-FEATURE-STORY-OR-BUG-ID>",
+  "extensions": {
+    "evidence_standard": {
+      "schema_version": 1,
+      "enforcement_mode": "REPORT_ONLY",
+      "applicability": "REQUIRED",
+      "applicability_reason": "<why the four gates apply>",
+      "evidence_refs": [],
+      "assessed_paths": ["<repository-relative-path-or-prefix/>"],
+      "subject_commit_sha": null,
+      "claims": [
+        {
+          "claim_id": "<registered-claim-id>",
+          "statement": "<bounded claim being evaluated>",
+          "claim_kind": "implementation",
+          "status": "UNVERIFIED",
+          "source_ids": ["<registered-source-id>"],
+          "evidence_refs": [],
+          "assumptions": [
+            {
+              "assumption_id": "A1",
+              "statement": "<assumption or published fact>",
+              "classification": "PUBLISHED_FACT",
+              "source_ids": ["<registered-source-id>"]
+            }
+          ],
+          "gate_evidence": {},
+          "limitation": "Evidence is incomplete until all required independent gates are supported."
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "registry_scope": "bounded legacy inventory for the first report-only milestone",
+  "claims": [
+    {
+      "claim_id": "EVIDENCE_STANDARD_IMPLEMENTATION",
+      "statement": "The package detects missing, contradictory, stale, or self-approved evidence and reports material PR coverage.",
+      "claim_kind": "implementation",
+      "scope_paths": ["core/delivery/", "governance/evidence/", "tools/verify_evidence.py", "tests/governance/", "docs/tradebot_delivery/", ".agents/workflows/", ".github/workflows/evidence-gates.yml"],
+      "status": "UNVERIFIED",
+      "source_ids": ["TRADEBOT_DELIVERY_ORGANIZATION", "TRADEBOT_DELIVERY_LIFECYCLE", "TRADEBOT_QA_PLAYBOOK"],
+      "evidence_refs": [],
+      "limitation": "Implementation tests and the report-only workflow do not replace independent QA/Senior QA review."
+    },
+    {
+      "claim_id": "LEGACY_MARKET_DATA_CONTRACTS",
+      "statement": "Market-data correctness and freshness claims have not been comprehensively reviewed under this standard.",
+      "claim_kind": "data_contract",
+      "scope_paths": ["core/feed/", "scripts/"],
+      "status": "UNVERIFIED",
+      "source_ids": ["TRADEBOT_DELIVERY_LIFECYCLE", "TRADEBOT_QA_PLAYBOOK"],
+      "evidence_refs": [],
+      "limitation": "This inventory does not invalidate existing evidence; no package-wide independent audit was performed for this milestone."
+    },
+    {
+      "claim_id": "LEGACY_REPLAY_PROVENANCE",
+      "statement": "Historical replay and data-provenance claims have not been comprehensively reviewed under this standard.",
+      "claim_kind": "implementation",
+      "scope_paths": ["core/analytics/", "research/"],
+      "status": "UNVERIFIED",
+      "source_ids": ["TRADEBOT_DELIVERY_LIFECYCLE", "TRADEBOT_QA_PLAYBOOK"],
+      "evidence_refs": [],
+      "limitation": "No dataset-wide provenance or replay-validity certification is claimed here."
+    },
+    {
+      "claim_id": "LEGACY_STRATEGY_OUTCOMES",
+      "statement": "Existing strategy predictive-validity and profitability claims have not been comprehensively reviewed under this standard.",
+      "claim_kind": "predictive_validity",
+      "scope_paths": ["strategies/", "research/"],
+      "status": "UNVERIFIED",
+      "source_ids": ["TRADEBOT_RELEASE_GATES"],
+      "evidence_refs": [],
+      "limitation": "No profitability, predictive-validity, or strategy-certification conclusion is made by this inventory."
+    },
+    {
+      "claim_id": "LEGACY_RISK_AND_EXECUTION",
+      "statement": "Risk enforcement and execution-safety claims have not been comprehensively reviewed under this standard.",
+      "claim_kind": "operational_reliability",
+      "scope_paths": ["core/risk/", "core/execution/", "core/broker/"],
+      "status": "UNVERIFIED",
+      "source_ids": ["TRADEBOT_AGENT_RULES", "TRADEBOT_RELEASE_GATES"],
+      "evidence_refs": [],
+      "limitation": "This governance change does not inspect or certify live execution, broker, or risk behavior."
+    }
+  ]
+}
