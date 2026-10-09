@@ -58,10 +58,22 @@ structural errors. Explicit `UNVERIFIED` legacy claims remain warnings;
 `NOT_APPLICABLE` needs a reason and reference and is not a pass. Developers
 cannot author their own independent G2/G3/G4 evidence. Classic branch
 protection requires `repo-forensics-pr-gate`; the active main ruleset requires
-`unit_tests` and `health_gate`. Neither requires the evidence status, so this
-workflow can fail without blocking merge until an authorized ruleset update
-adds the exact stable `Enforce new material evidence coverage` status. The
-workflow cannot set that repository setting itself.
+`unit_tests` and `health_gate`. Neither requires the trusted status
+`Trusted base evidence coverage`, so it can fail without blocking merge until
+an authorized ruleset update adds that exact stable check. The ordinary
+`Candidate-code evidence diagnostics (untrusted)` job runs candidate code and
+is not an acceptable substitute for the trusted status. The workflow cannot
+set branch rules itself.
+
+The trusted workflow uses `pull_request_target` from the exact PR base and
+evaluates a separately materialized candidate archive as data. Candidate
+Python, tests, and workflow files are not run by that job; the report records
+both the verifier source SHA and candidate tree SHA. Because GitHub takes the
+`pull_request_target` definition from the PR base, the PR that first introduces
+this workflow cannot be protected by it. Its first trusted run is on a later
+PR whose base already contains the workflow. Until that rollout and the
+required-check setting are verified, repository-side enforcement is not a
+universal merge guarantee.
 
 This gate evaluates repository PR diffs. It does not observe or intercept every
 task request sent to Codex, ChatGPT, Claude, or other platforms. Until a verified

@@ -127,3 +127,96 @@ jobs:
             --config "$BASE_WORKSPACE/.gsd-forensics.yaml" \
             --changed-paths-file "$CHANGED_PATHS_FILE" \
             --out "$REPORT_FILE"
+
+  trusted-evidence-coverage:
+    if: github.event_name == 'pull_request_target'
+    name: Trusted base evidence coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the exact protected base commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python from the protected base workflow
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate event SHAs and prepare candidate as inert data
+        id: candidate
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "base/head SHA must be full lowercase commit IDs" >&2
+            exit 1
+          fi
+          if [[ ! "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "pull request number is unavailable or malformed" >&2
+            exit 1
+          fi
+          actual_base=$(git rev-parse HEAD)
+          if [[ "$actual_base" != "$BASE_SHA" ]]; then
+            echo "checkout HEAD $actual_base differs from event base $BASE_SHA" >&2
+            exit 1
+          fi
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "protected-base checkout is not clean; refusing to run verifier" >&2
+            exit 1
+          fi
+
+          candidate_root="$RUNNER_TEMP/trusted-evidence-candidate-$RUN_ID-$RUN_ATTEMPT"
+          if [[ -e "$candidate_root" ]]; then
+            echo "candidate data path already exists" >&2
+            exit 1
+          fi
+          pr_head_ref="refs/remotes/origin/trusted-evidence-pr-$PR_NUMBER"
+          git fetch --no-tags origin "+refs/pull/$PR_NUMBER/head:$pr_head_ref"
+          fetched_head=$(git rev-parse "$pr_head_ref")
+          if [[ "$fetched_head" != "$HEAD_SHA" ]]; then
+            echo "fetched PR head $fetched_head differs from event head $HEAD_SHA" >&2
+            exit 1
+          fi
+          mkdir "$candidate_root"
+          git archive --format=tar "$HEAD_SHA" | tar --no-same-owner -xf - -C "$candidate_root"
+          printf 'candidate_root=%s\n' "$candidate_root" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce candidate coverage with the base verifier
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CANDIDATE_ROOT: ${{ steps.candidate.outputs.candidate_root }}
+        run: |
+          set -euo pipefail
+          started=$SECONDS
+          python "$GITHUB_WORKSPACE/tools/verify_evidence.py" \
+            --base-ref "$BASE_SHA" \
+            --candidate-ref "$HEAD_SHA" \
+            --candidate-sha "$HEAD_SHA" \
+            --candidate-root "$CANDIDATE_ROOT" \
+            --candidate-root-sha "$HEAD_SHA" \
+            --verifier-source-sha "$BASE_SHA" \
+            --output trusted-base-evidence-report.json \
+            --summary-output "$GITHUB_STEP_SUMMARY" \
+            --mode enforce-new-material
+          duration=$((SECONDS - started))
+          printf '\nTrusted verifier duration: %s seconds.\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload trusted-base report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trusted-base-evidence-${{ github.event.pull_request.head.sha }}
+          path: trusted-base-evidence-report.json
+          if-no-files-found: warn
+          retention-days: 30

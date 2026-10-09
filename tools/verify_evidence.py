@@ -34,6 +34,7 @@ REQUIRED_MATERIAL_PATH_PREFIXES = frozenset({
     "governance/evidence/", "tests/governance/", "tools/verify_evidence.py",
     "docs/tradebot_delivery/", ".agents/workflows/tradebot-delivery-orchestrator.md",
     ".github/workflows/evidence-gates.yml",
+    ".github/workflows/frozen-head-exact-sha-certification.yml",
 })
 
 
@@ -58,8 +59,31 @@ def _git(*args: str, cwd: Path = ROOT) -> str:
     return proc.stdout.strip()
 
 
-def _candidate_file_matches(candidate_ref: str, rel_path: str, local_path: Path, *, cwd: Path) -> bool:
+def _safe_candidate_path(root: Path, rel_path: str) -> Path | None:
+    """Resolve a candidate path without following candidate-controlled symlinks."""
+    normalized = _normalize_repo_path(rel_path)
+    if normalized is None:
+        return None
+    root_resolved = root.resolve()
+    current = root
+    for part in normalized.split("/"):
+        current = current / part
+        if current.is_symlink():
+            return None
+    resolved = current.resolve()
+    try:
+        resolved.relative_to(root_resolved)
+    except ValueError:
+        return None
+    return current
+
+
+def _candidate_file_matches(candidate_ref: str, rel_path: str, local_path: Path, *, cwd: Path,
+                            tree_root: Path | None = None) -> bool:
     """Require parsed report inputs to be byte-identical to the candidate tree."""
+    safe_path = _safe_candidate_path(tree_root or cwd, rel_path)
+    if safe_path is None or safe_path != local_path or not local_path.is_file():
+        return False
     proc = subprocess.run(["git", "cat-file", "blob", f"{candidate_ref}:{rel_path}"],
                           cwd=cwd, check=False, capture_output=True)
     return proc.returncode == 0 and proc.stdout == local_path.read_bytes()
@@ -103,15 +127,15 @@ def _normalize_repo_path(path: str) -> str | None:
 def _local_source_exists(root: Path, locator: str) -> bool:
     if locator.startswith(("https://", "http://")):
         return True  # URL is recorded, but this offline check does not authenticate it.
-    rel = Path(locator)
-    if rel.is_absolute() or ".." in rel.parts:
-        return False
-    target = (root / rel).resolve()
-    try:
-        target.relative_to(root.resolve())
-    except ValueError:
-        return False
-    return target.is_file() and not (root / rel).is_symlink()
+    target = _safe_candidate_path(root, locator)
+    return target is not None and target.is_file()
+
+
+def _read_candidate_json(root: Path, rel_path: str) -> Any:
+    path = _safe_candidate_path(root, rel_path)
+    if path is None:
+        raise ValueError(f"candidate input is unsafe or traverses a symlink: {rel_path}")
+    return _read_json(path)
 
 
 def _path_matches(path: str, assessed_paths: list[str]) -> bool:
@@ -141,7 +165,17 @@ def _prefixes_overlap(first: str, second: str) -> bool:
 
 
 def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
-                 root: Path = ROOT) -> dict[str, Any]:
+                 root: Path = ROOT, candidate_root: Path | None = None,
+                 candidate_root_sha: str | None = None,
+                 verifier_source_sha: str | None = None) -> dict[str, Any]:
+    """Assess candidate-tree data with this checkout's verifier and delivery code.
+
+    ``root`` is the verifier's git checkout. ``candidate_root`` is a separately
+    materialized candidate tree whose files are read as data only; no Python
+    from that tree is imported or executed. This supports protected-base
+    verification without invoking Git checkout filters from candidate metadata.
+    """
+    candidate_tree = (candidate_root or root).resolve()
     findings: list[dict[str, str]] = []
 
     def finding(code: str, severity: str, detail: str, path: str = "") -> None:
@@ -157,59 +191,106 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
     except ValueError as exc:
         finding("CANDIDATE_REF_UNRESOLVED", "ERROR", str(exc))
 
-    verifier_rel = "tools/verify_evidence.py"
-    try:
-        if not _candidate_file_matches(candidate_ref, verifier_rel, root / verifier_rel, cwd=root):
-            finding("VERIFIER_NOT_AT_CANDIDATE", "ERROR",
-                    "running verifier bytes do not match the candidate commit", verifier_rel)
-    except OSError as exc:
-        finding("VERIFIER_NOT_AT_CANDIDATE", "ERROR", str(exc), verifier_rel)
-    for rel_path in _loaded_delivery_module_paths(root):
+    if candidate_root is None:
         try:
-            if not _candidate_file_matches(candidate_ref, rel_path, root / rel_path, cwd=root):
-                finding("VERIFIER_DEPENDENCY_NOT_AT_CANDIDATE", "ERROR",
-                        "loaded delivery validation code does not match the candidate commit", rel_path)
+            actual_candidate_root_sha = _git("rev-parse", "HEAD", cwd=candidate_tree)
+        except ValueError as exc:
+            actual_candidate_root_sha = ""
+            finding("CANDIDATE_ROOT_UNRESOLVED", "ERROR", str(exc))
+    else:
+        actual_candidate_root_sha = candidate_root_sha or ""
+        if candidate_root_sha is None:
+            finding("CANDIDATE_ROOT_SHA_REQUIRED", "ERROR",
+                    "a separate candidate root requires its verified source SHA")
+        elif not SHA_RE.fullmatch(candidate_root_sha):
+            finding("CANDIDATE_ROOT_SHA_INVALID", "ERROR",
+                    "candidate root SHA must be 40 lowercase hex characters")
+    if actual_candidate_root_sha and actual_candidate_root_sha != candidate_sha:
+        finding("CANDIDATE_ROOT_SHA_MISMATCH", "ERROR",
+                f"candidate root SHA is {actual_candidate_root_sha}, supplied candidate SHA is {candidate_sha}")
+    if candidate_root is None and actual_candidate_root_sha and not SHA_RE.fullmatch(actual_candidate_root_sha):
+        finding("CANDIDATE_ROOT_SHA_INVALID", "ERROR",
+                "candidate root SHA must be 40 lowercase hex characters")
+    if candidate_root is not None and verifier_source_sha is None:
+        finding("VERIFIER_SOURCE_SHA_REQUIRED", "ERROR",
+                "a separate candidate root requires an explicit verifier source SHA")
+
+    try:
+        actual_verifier_source_sha = _git("rev-parse", "HEAD", cwd=root)
+        if verifier_source_sha is not None and not SHA_RE.fullmatch(verifier_source_sha):
+            finding("VERIFIER_SOURCE_SHA_INVALID", "ERROR",
+                    "verifier source SHA must be 40 lowercase hex characters")
+        if verifier_source_sha is not None and actual_verifier_source_sha != verifier_source_sha:
+            finding("VERIFIER_SOURCE_SHA_MISMATCH", "ERROR",
+                    "verifier checkout HEAD does not match the declared verifier source SHA")
+    except ValueError as exc:
+        actual_verifier_source_sha = ""
+        finding("VERIFIER_SOURCE_UNRESOLVED", "ERROR", str(exc))
+
+    verifier_rel = "tools/verify_evidence.py"
+    # Candidate-mode diagnostics compare executable source with candidate
+    # bytes. Trusted-base mode deliberately runs protected code against
+    # candidate data and never loads candidate Python modules.
+    if candidate_root is None:
+        try:
+            if not _candidate_file_matches(candidate_ref, verifier_rel, root / verifier_rel,
+                                           cwd=root, tree_root=root):
+                finding("VERIFIER_NOT_AT_CANDIDATE", "ERROR",
+                        "running verifier bytes do not match the candidate commit", verifier_rel)
         except OSError as exc:
-            finding("VERIFIER_DEPENDENCY_NOT_AT_CANDIDATE", "ERROR", str(exc), rel_path)
+            finding("VERIFIER_NOT_AT_CANDIDATE", "ERROR", str(exc), verifier_rel)
+        for rel_path in _loaded_delivery_module_paths(root):
+            try:
+                if not _candidate_file_matches(candidate_ref, rel_path, root / rel_path,
+                                               cwd=root, tree_root=root):
+                    finding("VERIFIER_DEPENDENCY_NOT_AT_CANDIDATE", "ERROR",
+                            "loaded delivery validation code does not match the candidate commit", rel_path)
+            except OSError as exc:
+                finding("VERIFIER_DEPENDENCY_NOT_AT_CANDIDATE", "ERROR", str(exc), rel_path)
 
     sources: dict[str, dict[str, Any]] = {}
     claims: dict[str, dict[str, Any]] = {}
     configured_enforcement_stage = "UNKNOWN"
     try:
         source_registry_path = "governance/evidence/SOURCE_REGISTRY.json"
-        if not _candidate_file_matches(candidate_ref, source_registry_path, root / source_registry_path, cwd=root):
+        if not _candidate_file_matches(candidate_ref, source_registry_path,
+                                       candidate_tree / source_registry_path,
+                                       cwd=root, tree_root=candidate_tree):
             finding("EVIDENCE_INPUT_NOT_AT_CANDIDATE", "ERROR",
                     "source registry bytes do not match the candidate commit", source_registry_path)
-        source_registry = _read_json(root / source_registry_path)
+        source_registry = _read_candidate_json(candidate_tree, source_registry_path)
         sources = validate_source_registry(source_registry)
         for source_id, source in sources.items():
             locator = source["locator"]
-            if not _local_source_exists(root, locator):
+            if not _local_source_exists(candidate_tree, locator):
                 finding("SOURCE_LOCATOR_INVALID", "ERROR", f"source {source_id} has unsafe or missing locator {locator}")
             elif locator.startswith(("https://", "http://")):
                 finding("EXTERNAL_SOURCE_NOT_AUTHENTICATED", "UNVERIFIED",
                         f"offline validation cannot authenticate external source {source_id}")
-            elif not _candidate_file_matches(candidate_ref, locator, root / locator, cwd=root):
+            elif not _candidate_file_matches(candidate_ref, locator, candidate_tree / locator,
+                                             cwd=root, tree_root=candidate_tree):
                 finding("SOURCE_NOT_AT_CANDIDATE", "ERROR",
                         f"source {source_id} bytes do not match the candidate commit", locator)
     except (OSError, ValueError, TypeError) as exc:
         finding("SOURCE_REGISTRY_INVALID", "ERROR", str(exc))
     try:
         claims_path = "governance/evidence/CLAIM_REGISTRY.json"
-        if not _candidate_file_matches(candidate_ref, claims_path, root / claims_path, cwd=root):
+        if not _candidate_file_matches(candidate_ref, claims_path, candidate_tree / claims_path,
+                                       cwd=root, tree_root=candidate_tree):
             finding("EVIDENCE_INPUT_NOT_AT_CANDIDATE", "ERROR",
                     "claim registry bytes do not match the candidate commit", claims_path)
         claims = validate_claim_registry(
-            _read_json(root / claims_path), sources
+            _read_candidate_json(candidate_tree, claims_path), sources
         )
     except (OSError, ValueError, TypeError) as exc:
         finding("CLAIM_REGISTRY_INVALID", "ERROR", str(exc))
     try:
         matrix_path = "governance/evidence/VERIFICATION_MATRIX.json"
-        if not _candidate_file_matches(candidate_ref, matrix_path, root / matrix_path, cwd=root):
+        if not _candidate_file_matches(candidate_ref, matrix_path, candidate_tree / matrix_path,
+                                       cwd=root, tree_root=candidate_tree):
             finding("EVIDENCE_INPUT_NOT_AT_CANDIDATE", "ERROR",
                     "verification matrix bytes do not match the candidate commit", matrix_path)
-        matrix = _read_json(root / matrix_path)
+        matrix = _read_candidate_json(candidate_tree, matrix_path)
         if not isinstance(matrix, dict) or matrix.get("schema_version") != 1:
             raise ValueError("verification matrix must have schema_version=1")
         if matrix.get("enforcement_stage") not in {"REPORT_ONLY", "BLOCK_NEW_MATERIAL"}:
@@ -248,14 +329,27 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
         changed = []
         finding("DIFF_UNAVAILABLE", "ERROR", str(exc))
     material = [path for path in changed if _is_material(path, prefixes)]
-    record_paths = sorted((root / "governance/evidence/work_items").glob("*.json"))
+    records_dir = _safe_candidate_path(candidate_tree, "governance/evidence/work_items")
+    if records_dir is None or not records_dir.is_dir():
+        finding("WORK_ITEM_DIRECTORY_UNSAFE", "ERROR",
+                "candidate work-item directory is missing or traverses a symlink",
+                "governance/evidence/work_items")
+        record_paths = []
+    else:
+        record_paths = sorted(records_dir.glob("*.json"))
     records: list[tuple[str, Any, dict[str, Any]]] = []
     work_item_proofs: list[dict[str, Any]] = []
     changed_set = set(changed)
     for path in record_paths:
-        rel = path.relative_to(root).as_posix()
+        rel = path.relative_to(candidate_tree).as_posix()
+        safe_path = _safe_candidate_path(candidate_tree, rel)
+        if safe_path is None or safe_path != path:
+            finding("WORK_ITEM_INVALID", "ERROR",
+                    "candidate work-item record is unsafe or traverses a symlink", rel)
+            continue
         try:
-            if not _candidate_file_matches(candidate_ref, rel, path, cwd=root):
+            if not _candidate_file_matches(candidate_ref, rel, path, cwd=root,
+                                           tree_root=candidate_tree):
                 finding("EVIDENCE_INPUT_NOT_AT_CANDIDATE", "ERROR",
                         "work-item record bytes do not match the candidate commit", rel)
             payload = _read_json(path)
@@ -398,6 +492,8 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
         "mode": "REPORT_ONLY",
         "enforcement_stage": configured_enforcement_stage,
         "candidate_sha": candidate_sha,
+        "candidate_root_sha": actual_candidate_root_sha,
+        "verifier_source_sha": actual_verifier_source_sha,
         "base_ref": base_ref,
         "candidate_ref": candidate_ref,
         "changed_path_count": len(changed),
@@ -452,13 +548,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-ref", required=True)
     parser.add_argument("--candidate-ref", required=True)
     parser.add_argument("--candidate-sha", required=True)
+    parser.add_argument("--candidate-root", type=Path,
+                        help="read candidate files from this checkout without importing or executing its code")
+    parser.add_argument("--candidate-root-sha",
+                        help="verified exact commit SHA used to materialize a separate candidate root")
+    parser.add_argument("--verifier-source-sha",
+                        help="require this checkout's HEAD to equal the declared trusted verifier source SHA")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--summary-output", type=Path,
                         help="append a Markdown findings summary to this file")
     parser.add_argument("--mode", choices=("report-only", "enforce-new-material", "strict"), default="report-only")
     args = parser.parse_args(argv)
     report = build_report(base_ref=args.base_ref, candidate_ref=args.candidate_ref,
-                          candidate_sha=args.candidate_sha)
+                          candidate_sha=args.candidate_sha, candidate_root=args.candidate_root,
+                          candidate_root_sha=args.candidate_root_sha,
+                          verifier_source_sha=args.verifier_source_sha)
     report["mode"] = {"report-only": "REPORT_ONLY",
                       "enforce-new-material": "ENFORCE_NEW_MATERIAL",
                       "strict": "STRICT"}[args.mode]

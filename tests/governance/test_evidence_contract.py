@@ -331,6 +331,17 @@ def test_source_paths_cannot_escape_repository(tmp_path: Path):
     assert not _local_source_exists(tmp_path, str(tmp_path / "outside.md"))
 
 
+def test_candidate_paths_reject_symlinked_inputs(tmp_path: Path):
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    external = tmp_path / "external.json"
+    external.write_text('{"outside": true}')
+    (candidate / "registry.json").symlink_to(external)
+    assert evidence_tool._safe_candidate_path(candidate, "registry.json") is None
+    with pytest.raises(ValueError, match="symlink"):
+        evidence_tool._read_candidate_json(candidate, "registry.json")
+
+
 def test_path_matching_uses_directory_boundaries_and_preserves_hidden_paths():
     assert not _path_matches("core/secret2.py", ["core/secret"])
     assert _path_matches("core/secret/key.py", ["core/secret/"])
@@ -351,6 +362,8 @@ def test_registry_report_binds_exact_head_and_marks_legacy_unverified():
     head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     report = build_report(base_ref="HEAD", candidate_ref="HEAD", candidate_sha=head)
     assert report["candidate_sha"] == head
+    assert report["candidate_root_sha"] == head
+    assert report["verifier_source_sha"] == head
     assert report["enforcement_stage"] == "BLOCK_NEW_MATERIAL"
     assert report["work_items"][0]["candidate_sha"] == head
     assert report["work_items"][0]["record_sha256"]
@@ -359,6 +372,48 @@ def test_registry_report_binds_exact_head_and_marks_legacy_unverified():
     assert report["broker_api_called"] is False
     assert report["allowed_for_live_execution"] is False
     assert all(row["status"] == "UNVERIFIED" for row in report["legacy_inventory"])
+
+
+def test_separate_candidate_root_requires_and_records_trusted_verifier_source_sha():
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    report = build_report(base_ref="HEAD", candidate_ref="HEAD", candidate_sha=head,
+                          root=evidence_tool.ROOT, candidate_root=evidence_tool.ROOT,
+                          candidate_root_sha=head,
+                          verifier_source_sha=head)
+    assert report["candidate_root_sha"] == head
+    assert report["verifier_source_sha"] == head
+    assert not any(row["code"].startswith("VERIFIER_SOURCE_SHA_") for row in report["findings"])
+
+
+def test_separate_candidate_root_without_source_sha_fails_closed():
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    report = build_report(base_ref="HEAD", candidate_ref="HEAD", candidate_sha=head,
+                          root=evidence_tool.ROOT, candidate_root=evidence_tool.ROOT,
+                          verifier_source_sha=head)
+    assert any(row["code"] == "CANDIDATE_ROOT_SHA_REQUIRED" for row in report["findings"])
+
+
+def test_cli_passes_candidate_root_and_verifier_source_sha_to_report_builder(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    head = "a" * 40
+    candidate_root = tmp_path / "candidate-tree"
+    captured = {}
+
+    def fake_build_report(**kwargs):
+        captured.update(kwargs)
+        return {"candidate_sha": head, "enforcement_stage": "BLOCK_NEW_MATERIAL",
+                 "base_ref": head, "candidate_ref": head, "material_path_count": 0,
+                "finding_count": 0, "findings": []}
+
+    monkeypatch.setattr(evidence_tool, "build_report", fake_build_report)
+    report_path = tmp_path / "report.json"
+    assert main(["--base-ref", head, "--candidate-ref", head, "--candidate-sha", head,
+                 "--candidate-root", str(candidate_root), "--verifier-source-sha", head,
+                 "--candidate-root-sha", head,
+                 "--output", str(report_path), "--mode", "enforce-new-material"]) == 0
+    assert captured["candidate_root"] == candidate_root
+    assert captured["candidate_root_sha"] == head
+    assert captured["verifier_source_sha"] == head
 
 
 @pytest.mark.parametrize(("rel_path", "expected_code"), [
@@ -375,10 +430,10 @@ def test_report_rejects_worktree_inputs_that_differ_from_candidate_tree(
     head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     candidate_match = evidence_tool._candidate_file_matches
 
-    def candidate_match_except_target(candidate_ref, path, local_path, *, cwd):
+    def candidate_match_except_target(candidate_ref, path, local_path, *, cwd, **kwargs):
         if path == rel_path:
             return False
-        return candidate_match(candidate_ref, path, local_path, cwd=cwd)
+        return candidate_match(candidate_ref, path, local_path, cwd=cwd, **kwargs)
 
     monkeypatch.setattr(evidence_tool, "_candidate_file_matches", candidate_match_except_target)
     report = build_report(base_ref="HEAD", candidate_ref="HEAD", candidate_sha=head)
@@ -634,6 +689,7 @@ EXPECTED_REQUIRED_MATERIAL_PREFIXES = (
     "governance/evidence/", "tests/governance/", "tools/verify_evidence.py",
     "docs/tradebot_delivery/", ".agents/workflows/tradebot-delivery-orchestrator.md",
     ".github/workflows/evidence-gates.yml",
+    ".github/workflows/frozen-head-exact-sha-certification.yml",
 )
 
 

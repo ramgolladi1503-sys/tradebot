@@ -14,7 +14,8 @@
     "tools/verify_evidence.py",
     "docs/tradebot_delivery/",
     ".agents/workflows/tradebot-delivery-orchestrator.md",
-    ".github/workflows/evidence-gates.yml"
+    ".github/workflows/evidence-gates.yml",
+    ".github/workflows/frozen-head-exact-sha-certification.yml"
   ],
   "gates": {
     "G1_SOURCE": {
