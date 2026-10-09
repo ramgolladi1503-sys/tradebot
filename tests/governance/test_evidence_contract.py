@@ -14,7 +14,9 @@ from core.delivery.evidence_standard import (
     validate_source_registry,
     validate_subject_commit,
 )
-from core.delivery.models import Evidence, EvidenceStatus, EvidenceType, WorkItem, WorkItemType
+from core.delivery.models import (DeliveryState, Evidence, EvidenceStatus, EvidenceType,
+                                  WorkItem, WorkItemType)
+from core.delivery.orchestrator import DeliveryOrchestrator
 from core.delivery.roles import DeliveryRole
 from core.delivery.validators import validate_work_item
 from core.delivery.validators import work_item_contract_hash
@@ -96,6 +98,103 @@ def _item(*, status: str = "VERIFIED", authors: dict[str, str] | None = None,
         )
         sealed.append(seal_evidence(evidence, contract_hash, len(sealed) + 1, previous_hash))
     return replace(item, evidence=tuple(sealed))
+
+
+def _complete_lifecycle_item(candidate_sha: str, *, include_lifecycle_evidence: bool) -> WorkItem:
+    """Build a test-only complete work item using the production delivery API."""
+    standard = _standard(status="UNVERIFIED", subject_sha=candidate_sha)
+    standard["assessed_paths"] = ["core/delivery/"]
+    standard["claims"][0]["gate_evidence"] = {}
+    item = WorkItem(
+        work_item_id="TASK-COMPLETE-TEST", type=WorkItemType.TASK,
+        parent_epic="EPIC-TEST", parent_feature="FEATURE-TEST", title="Lifecycle verifier fixture",
+        priority="P1", business_goal="Verify lifecycle evidence enforcement",
+        current_behavior="Verifier accepts incomplete work items",
+        expected_behavior="Verifier requires completed lifecycle evidence",
+        in_scope=("core/delivery/",), out_of_scope=("trading runtime",),
+        acceptance_criteria=("incomplete lifecycle evidence is blocked",),
+        safety_constraints=("read-only verification", "no trading actions"),
+        architecture_impact="offline governance test fixture",
+        allowed_paths=("core/delivery/",), forbidden_paths=("core/broker/",),
+        expected_tests=("tests/governance/test_evidence_contract.py",),
+        qa_attack_plan=("missing roles", "missing stage evidence"),
+        uat_criteria=("missing evidence remains blocked",),
+        release_gates=("required delivery evidence is present",),
+        rollback_plan="Remove the offline verifier rule.", required_ci_checks=("unit",),
+        extensions={"evidence_standard": standard},
+    )
+    orchestrator = DeliveryOrchestrator(item)
+    if not include_lifecycle_evidence:
+        return item
+
+    def stamp(minute: int) -> str:
+        return f"2026-02-01T00:{minute:02d}:00+00:00"
+
+    def evidence(evidence_id: str, kind: EvidenceType, role: DeliveryRole, author: str,
+                 minute: int) -> Evidence:
+        candidate = Evidence(evidence_id, orchestrator.item.work_item_id, kind, role, author,
+                             stamp(minute), EvidenceStatus.PASS, f"{evidence_id} test evidence",
+                             (f"test-artifact://{evidence_id}",))
+        orchestrator.add_evidence(candidate)
+        return orchestrator.item.evidence[-1]
+
+    def transition(target: DeliveryState, role: DeliveryRole, actor: str, minute: int,
+                   evidence_ids: tuple[str, ...] = ()) -> None:
+        orchestrator.transition(target, acting_role=role, actor=actor, timestamp=stamp(minute),
+                                reason=f"test fixture evidence for {target.value}",
+                                evidence_ids=evidence_ids)
+
+    req_ba = evidence("req-ba", EvidenceType.REQUIREMENT_EVIDENCE,
+                      DeliveryRole.BUSINESS_ANALYST, "ba", 0)
+    transition(DeliveryState.REQUIREMENT_READY, DeliveryRole.BUSINESS_ANALYST, "ba", 1,
+               (req_ba.evidence_id,))
+    req_po = evidence("req-po", EvidenceType.REQUIREMENT_EVIDENCE,
+                      DeliveryRole.PRODUCT_OWNER, "po", 2)
+    architecture = evidence("architecture", EvidenceType.ARCHITECTURE_EVIDENCE,
+                            DeliveryRole.SYSTEM_ARCHITECT, "architect", 3)
+    transition(DeliveryState.DESIGN_READY, DeliveryRole.SYSTEM_ARCHITECT, "architect", 4,
+               (req_ba.evidence_id, req_po.evidence_id, architecture.evidence_id))
+    transition(DeliveryState.IN_DEVELOPMENT, DeliveryRole.BACKEND_DEVELOPER, "dev", 5)
+    dev = evidence("dev-tests", EvidenceType.DEV_TEST_EVIDENCE,
+                   DeliveryRole.BACKEND_DEVELOPER, "dev", 6)
+    transition(DeliveryState.DEV_VERIFIED, DeliveryRole.BACKEND_DEVELOPER, "dev", 7,
+               (dev.evidence_id,))
+    transition(DeliveryState.QA_IN_PROGRESS, DeliveryRole.QA_ENGINEER, "qa", 8)
+    qa = evidence("qa", EvidenceType.QA_EVIDENCE, DeliveryRole.QA_ENGINEER, "qa", 9)
+    transition(DeliveryState.QA_PASSED, DeliveryRole.QA_ENGINEER, "qa", 10, (qa.evidence_id,))
+    senior = evidence("senior-qa", EvidenceType.SENIOR_QA_EVIDENCE,
+                      DeliveryRole.SENIOR_QA, "senior", 11)
+    transition(DeliveryState.SENIOR_QA, DeliveryRole.SENIOR_QA, "senior", 12,
+               (senior.evidence_id,))
+    transition(DeliveryState.UAT, DeliveryRole.SENIOR_QA, "senior", 13, (senior.evidence_id,))
+    uat = evidence("uat", EvidenceType.UAT_EVIDENCE, DeliveryRole.UAT_REVIEWER, "uat", 14)
+    product = evidence("product", EvidenceType.PRODUCT_ACCEPTANCE_EVIDENCE,
+                       DeliveryRole.PRODUCT_OWNER, "po", 15)
+    transition(DeliveryState.PRODUCT_ACCEPTED, DeliveryRole.PRODUCT_OWNER, "po", 16,
+               (uat.evidence_id, product.evidence_id))
+    release = evidence("release", EvidenceType.RELEASE_EVIDENCE,
+                       DeliveryRole.RELEASE_MANAGER, "release", 17)
+    transition(DeliveryState.RELEASE_READY, DeliveryRole.RELEASE_MANAGER, "release", 18,
+               (release.evidence_id,))
+    return orchestrator.item
+
+
+def _patch_current_material_record(monkeypatch, item: WorkItem, candidate_sha: str) -> None:
+    monkeypatch.setattr(evidence_tool, "changed_paths",
+                        lambda *args, **kwargs: ["core/delivery/models.py"])
+    monkeypatch.setattr(evidence_tool, "_candidate_file_matches", lambda *args, **kwargs: True)
+    monkeypatch.setattr(evidence_tool, "work_item_from_dict", lambda payload: item)
+    monkeypatch.setattr(evidence_tool, "validate_source_registry", lambda registry: {
+        "TEST-SOURCE": {"status": "VERIFIED", "locator": "governance/evidence/POLICY.md"}
+    })
+    standard = item.extensions["evidence_standard"]
+    monkeypatch.setattr(evidence_tool, "validate_claim_registry", lambda registry, sources: {
+        claim["claim_id"]: {"claim_kind": claim["claim_kind"], "statement": claim["statement"],
+                            "status": claim["status"], "source_ids": claim["source_ids"],
+                            "scope_paths": ["core/delivery/"],
+                            "limitation": claim.get("limitation", "")}
+        for claim in standard["claims"]
+    })
 
 
 def test_existing_delivery_model_validates_four_gate_work_item():
@@ -252,6 +351,7 @@ def test_registry_report_binds_exact_head_and_marks_legacy_unverified():
     head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     report = build_report(base_ref="HEAD", candidate_ref="HEAD", candidate_sha=head)
     assert report["candidate_sha"] == head
+    assert report["enforcement_stage"] == "BLOCK_NEW_MATERIAL"
     assert report["work_items"][0]["candidate_sha"] == head
     assert report["work_items"][0]["record_sha256"]
     assert report["read_only"] is True
@@ -319,6 +419,259 @@ def test_report_only_mode_does_not_convert_findings_to_ci_failure(tmp_path: Path
     assert report["finding_count"] > 0
     assert any(row["code"] == "MATERIAL_CHANGE_WITHOUT_RECORD" for row in report["findings"])
     assert main([*common, "--mode", "strict"]) == 1
+
+
+def test_enforce_new_material_blocks_missing_coverage_but_preserves_report_only(tmp_path: Path, monkeypatch):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    monkeypatch.setattr(evidence_tool, "changed_paths", lambda *args, **kwargs: ["core/delivery/models.py"])
+    monkeypatch.setattr(evidence_tool, "_candidate_file_matches", lambda *args, **kwargs: True)
+    report_path = tmp_path / "report.json"
+    common = ["--base-ref", "HEAD", "--candidate-ref", "HEAD", "--candidate-sha", head,
+              "--output", str(report_path)]
+
+    assert main([*common, "--mode", "report-only"]) == 0
+    report_only = json.loads(report_path.read_text())
+    assert report_only["blocking_finding_count"] >= 1
+    assert any(row["code"] == "MATERIAL_CHANGE_WITHOUT_RECORD" for row in report_only["findings"])
+
+    assert main([*common, "--mode", "enforce-new-material"]) == 1
+    enforced = json.loads(report_path.read_text())
+    assert enforced["mode"] == "ENFORCE_NEW_MATERIAL"
+    assert enforced["blocking_finding_count"] >= 1
+    assert any(row["code"] == "MATERIAL_CHANGE_WITHOUT_RECORD" for row in enforced["findings"])
+
+
+def test_enforce_new_material_allows_explicit_unverified_claim_warning(tmp_path: Path, monkeypatch):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    monkeypatch.setattr(evidence_tool, "changed_paths", lambda *args, **kwargs: [])
+    monkeypatch.setattr(evidence_tool, "_candidate_file_matches", lambda *args, **kwargs: True)
+    item = _complete_lifecycle_item(head, include_lifecycle_evidence=True)
+    standard = dict(item.extensions["evidence_standard"], subject_commit_sha=head)
+    item = replace(item, extensions={"evidence_standard": standard})
+    monkeypatch.setattr(evidence_tool, "work_item_from_dict", lambda payload: item)
+    monkeypatch.setattr(evidence_tool, "validate_source_registry", lambda registry: {
+        "TEST-SOURCE": {"status": "VERIFIED", "locator": "governance/evidence/POLICY.md"}
+    })
+    standard_claim = standard["claims"][0]
+    monkeypatch.setattr(evidence_tool, "validate_claim_registry", lambda registry, sources: {
+        standard_claim["claim_id"]: {"claim_kind": standard_claim["claim_kind"],
+                                     "statement": standard_claim["statement"],
+                                     "status": "UNVERIFIED", "source_ids": ["TEST-SOURCE"],
+                                     "scope_paths": standard["assessed_paths"],
+                                     "limitation": "Independent evidence remains pending."}
+    })
+    report_path = tmp_path / "report.json"
+    common = ["--base-ref", "HEAD", "--candidate-ref", "HEAD", "--candidate-sha", head,
+              "--output", str(report_path), "--mode", "enforce-new-material"]
+
+    assert main(common) == 0
+    report = json.loads(report_path.read_text())
+    assert any(row["code"] == "CLAIM_UNVERIFIED" and row["severity"] == "UNVERIFIED"
+               for row in report["findings"])
+    assert report["blocking_finding_count"] == 0
+
+
+def test_current_material_record_requires_complete_definition_of_ready(tmp_path: Path, monkeypatch):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    base = _item(status="UNVERIFIED")
+    standard = dict(base.extensions["evidence_standard"], subject_commit_sha=head,
+                    assessed_paths=["core/delivery/"])
+    standard["claims"][0]["gate_evidence"] = {}
+    item = replace(base, evidence=(), extensions={"evidence_standard": standard})
+    _patch_current_material_record(monkeypatch, item, head)
+    report_path = tmp_path / "report.json"
+
+    exit_code = main(["--base-ref", "HEAD", "--candidate-ref", "HEAD", "--candidate-sha", head,
+                      "--output", str(report_path), "--mode", "enforce-new-material"])
+    report = json.loads(report_path.read_text())
+    finding = next(row for row in report["findings"] if row["code"] == "WORK_ITEM_DOR_INCOMPLETE")
+    assert finding["severity"] == "ERROR"
+    assert exit_code == 1
+
+
+def test_current_material_record_requires_lifecycle_roles_and_stage_evidence(tmp_path: Path, monkeypatch):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    item = _complete_lifecycle_item(head, include_lifecycle_evidence=False)
+    _patch_current_material_record(monkeypatch, item, head)
+    report_path = tmp_path / "report.json"
+
+    exit_code = main(["--base-ref", "HEAD", "--candidate-ref", "HEAD", "--candidate-sha", head,
+                      "--output", str(report_path), "--mode", "enforce-new-material"])
+    report = json.loads(report_path.read_text())
+    finding = next(row for row in report["findings"]
+                   if row["code"] == "WORK_ITEM_LIFECYCLE_INCOMPLETE")
+    assert finding["severity"] == "ERROR"
+    assert "G0_REQUIREMENT:BLOCKED" in finding["detail"]
+    assert "G3_QA:BLOCKED" in finding["detail"]
+    assert exit_code == 1
+
+
+def test_current_material_record_requires_lifecycle_state_history(tmp_path: Path, monkeypatch):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    complete = _complete_lifecycle_item(head, include_lifecycle_evidence=True)
+    # Keep otherwise complete, sealed role evidence while stripping the
+    # transition record. This models a forged evidence-only work item.
+    backlog = replace(complete, current_state=DeliveryState.BACKLOG, state_history=())
+    _patch_current_material_record(monkeypatch, backlog, head)
+    report_path = tmp_path / "report.json"
+
+    exit_code = main(["--base-ref", "HEAD", "--candidate-ref", "HEAD", "--candidate-sha", head,
+                      "--output", str(report_path), "--mode", "enforce-new-material"])
+    report = json.loads(report_path.read_text())
+    codes = {row["code"] for row in report["findings"]}
+    assert "WORK_ITEM_LIFECYCLE_STATE_INCOMPLETE" in codes
+    assert "WORK_ITEM_LIFECYCLE_HISTORY_INCOMPLETE" in codes
+    assert exit_code == 1
+
+
+def test_current_material_record_accepts_complete_lifecycle_but_keeps_claim_unverified(
+        tmp_path: Path, monkeypatch):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    item = _complete_lifecycle_item(head, include_lifecycle_evidence=True)
+    _patch_current_material_record(monkeypatch, item, head)
+    report_path = tmp_path / "report.json"
+
+    exit_code = main(["--base-ref", "HEAD", "--candidate-ref", "HEAD", "--candidate-sha", head,
+                      "--output", str(report_path), "--mode", "enforce-new-material"])
+    report = json.loads(report_path.read_text())
+    assert not any(row["code"].startswith("WORK_ITEM_") for row in report["findings"])
+    assert any(row["code"] == "CLAIM_UNVERIFIED" and row["severity"] == "UNVERIFIED"
+               for row in report["findings"])
+    assert exit_code == 0
+
+
+def test_enforce_new_material_blocks_structural_errors(tmp_path: Path, monkeypatch):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    monkeypatch.setattr(evidence_tool, "build_report", lambda **kwargs: {
+        "candidate_sha": head,
+        "enforcement_stage": "BLOCK_NEW_MATERIAL",
+        "base_ref": "HEAD",
+        "candidate_ref": "HEAD",
+        "material_path_count": 0,
+        "finding_count": 2,
+        "findings": [
+            {"severity": "UNVERIFIED", "code": "CLAIM_UNVERIFIED", "path": "", "detail": "Claim is unresolved."},
+            {"severity": "ERROR", "code": "CLAIM_REGISTRY_INVALID", "path": "", "detail": "Malformed registry."},
+        ],
+    })
+    report_path = tmp_path / "report.json"
+    assert main(["--base-ref", "HEAD", "--candidate-ref", "HEAD", "--candidate-sha", head,
+                 "--output", str(report_path), "--mode", "enforce-new-material"]) == 1
+    report = json.loads(report_path.read_text())
+    assert report["blocking_finding_count"] == 1
+
+
+def test_enforce_new_material_blocks_claim_statement_mismatch(tmp_path: Path, monkeypatch):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    monkeypatch.setattr(evidence_tool, "build_report", lambda **kwargs: {
+        "candidate_sha": head,
+        "enforcement_stage": "BLOCK_NEW_MATERIAL",
+        "base_ref": "HEAD",
+        "candidate_ref": "HEAD",
+        "material_path_count": 1,
+        "finding_count": 1,
+        "findings": [{"severity": "ERROR", "code": "CLAIM_STATEMENT_MISMATCH",
+                      "path": "governance/evidence/work_items/TASK-TEST.json",
+                      "detail": "Claim statement differs from the registered statement."}],
+    })
+    report_path = tmp_path / "report.json"
+
+    exit_code = main(["--base-ref", "HEAD", "--candidate-ref", "HEAD", "--candidate-sha", head,
+                      "--output", str(report_path), "--mode", "enforce-new-material"])
+    report = json.loads(report_path.read_text())
+    mismatch = next(row for row in report["findings"]
+                    if row["code"] == "CLAIM_STATEMENT_MISMATCH")
+    assert mismatch["severity"] == "ERROR"
+    assert report["blocking_finding_count"] == 1
+    assert exit_code == 1
+
+
+def test_enforce_new_material_fails_when_candidate_matrix_stage_is_not_blocking(
+        tmp_path: Path, monkeypatch):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    monkeypatch.setattr(evidence_tool, "build_report", lambda **kwargs: {
+        "candidate_sha": head,
+        "enforcement_stage": "REPORT_ONLY",
+        "material_path_count": 0,
+        "finding_count": 0,
+        "findings": [],
+    })
+    report_path = tmp_path / "report.json"
+    assert main(["--base-ref", "HEAD", "--candidate-ref", "HEAD", "--candidate-sha", head,
+                 "--output", str(report_path), "--mode", "enforce-new-material"]) == 1
+    report = json.loads(report_path.read_text())
+    assert report["enforcement_stage"] == "REPORT_ONLY"
+    assert report["mode"] == "ENFORCE_NEW_MATERIAL"
+    assert report["findings"][0]["code"] == "ENFORCEMENT_STAGE_MISMATCH"
+
+
+def test_report_rejects_inconsistent_matrix_report_only_flag(monkeypatch):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    read_json = evidence_tool._read_json
+
+    def read_matrix_with_inconsistent_flag(path):
+        payload = read_json(path)
+        if Path(path).name == "VERIFICATION_MATRIX.json":
+            payload["report_only"] = True
+            payload["enforcement_stage"] = "BLOCK_NEW_MATERIAL"
+        return payload
+
+    monkeypatch.setattr(evidence_tool, "_read_json", read_matrix_with_inconsistent_flag)
+    monkeypatch.setattr(evidence_tool, "_candidate_file_matches", lambda *args, **kwargs: True)
+    monkeypatch.setattr(evidence_tool, "changed_paths", lambda *args, **kwargs: [])
+    report = build_report(base_ref="HEAD", candidate_ref="HEAD", candidate_sha=head)
+    assert any(row["code"] == "VERIFICATION_MATRIX_INVALID"
+               and "report_only must be true exactly" in row["detail"]
+               for row in report["findings"])
+
+
+EXPECTED_REQUIRED_MATERIAL_PREFIXES = (
+    "core/", "strategies/", "research/", "scripts/research/", "config/", "data/",
+    "governance/evidence/", "tests/governance/", "tools/verify_evidence.py",
+    "docs/tradebot_delivery/", ".agents/workflows/tradebot-delivery-orchestrator.md",
+    ".github/workflows/evidence-gates.yml",
+)
+
+
+def test_required_material_prefixes_match_frozen_policy():
+    assert evidence_tool.REQUIRED_MATERIAL_PATH_PREFIXES == frozenset(EXPECTED_REQUIRED_MATERIAL_PREFIXES)
+
+
+@pytest.mark.parametrize("removed_prefix", EXPECTED_REQUIRED_MATERIAL_PREFIXES)
+def test_report_rejects_candidate_matrix_removing_required_material_prefix(
+        monkeypatch, removed_prefix):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    read_json = evidence_tool._read_json
+
+    def read_matrix_without_required_prefix(path):
+        payload = read_json(path)
+        if Path(path).name == "VERIFICATION_MATRIX.json":
+            payload["material_path_prefixes"].remove(removed_prefix)
+        return payload
+
+    monkeypatch.setattr(evidence_tool, "_read_json", read_matrix_without_required_prefix)
+    monkeypatch.setattr(evidence_tool, "_candidate_file_matches", lambda *args, **kwargs: True)
+    monkeypatch.setattr(evidence_tool, "changed_paths", lambda *args, **kwargs: ["strategies/example.py"])
+    report = build_report(base_ref="HEAD", candidate_ref="HEAD", candidate_sha=head)
+
+    assert any(row["code"] == "VERIFICATION_MATRIX_INVALID"
+               and "removes required material path prefixes" in row["detail"]
+               for row in report["findings"])
+
+
+def test_summary_marks_strict_and_blocking_findings_accurately():
+    strict_report = {"candidate_sha": SUBJECT_SHA, "material_path_count": 1,
+                     "finding_count": 2, "mode": "STRICT", "blocking_finding_count": 2,
+                     "findings": [
+                         {"severity": "BLOCKING", "code": "MATERIAL_CHANGE_WITHOUT_RECORD",
+                          "path": "core/example.py", "detail": "No current record."},
+                         {"severity": "UNVERIFIED", "code": "CLAIM_UNVERIFIED",
+                          "path": "record.json", "detail": "Claim remains unverified."},
+                     ]}
+    summary = render_summary(strict_report)
+    assert "strict enforcement" in summary
+    assert "blocking findings: 2" in summary
+    assert "| BLOCKING | MATERIAL_CHANGE_WITHOUT_RECORD |" in summary
 
 
 def test_report_summary_surfaces_findings_without_claiming_approval(tmp_path: Path):

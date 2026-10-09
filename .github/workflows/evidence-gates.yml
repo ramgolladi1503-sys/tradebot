@@ -1,4 +1,4 @@
-name: Evidence Standard (report only)
+name: Evidence Standard
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   evidence-standard:
-    name: Validate evidence coverage (informational)
+    name: Enforce new material evidence coverage
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact pull request head and base history
@@ -31,7 +31,7 @@ jobs:
       - name: Install focused test runner
         run: python -m pip install pytest
 
-      - name: Run report-only evidence validation
+      - name: Enforce evidence coverage for new material changes
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -43,7 +43,7 @@ jobs:
             --candidate-sha "$HEAD_SHA" \
             --output evidence-standard-report.json \
             --summary-output "$GITHUB_STEP_SUMMARY" \
-            --mode report-only
+            --mode enforce-new-material
           duration=$((SECONDS - started))
           printf '\nVerifier duration: %s seconds.\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
 

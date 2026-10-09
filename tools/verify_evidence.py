@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline, report-only-first verifier for the TradeBot evidence standard."""
+"""Offline evidence verifier with report-only and staged enforcement modes."""
 from __future__ import annotations
 
 import argparse
@@ -21,10 +21,20 @@ from core.delivery.evidence_standard import (
     validate_subject_commit,
 )
 from core.delivery.validators import work_item_from_dict
-from core.delivery.validators import work_item_contract_hash
+from core.delivery.validators import validate_work_item, work_item_contract_hash
+from core.delivery.orchestrator import DeliveryOrchestrator
 
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+# Candidate policy may add governed paths, but it may not remove these minimum
+# material roots. The trusted-base CI integration must still run this verifier
+# from protected code before this invariant can resist a PR changing this file.
+REQUIRED_MATERIAL_PATH_PREFIXES = frozenset({
+    "core/", "strategies/", "research/", "scripts/research/", "config/", "data/",
+    "governance/evidence/", "tests/governance/", "tools/verify_evidence.py",
+    "docs/tradebot_delivery/", ".agents/workflows/tradebot-delivery-orchestrator.md",
+    ".github/workflows/evidence-gates.yml",
+})
 
 
 def _unique_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -164,6 +174,7 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
 
     sources: dict[str, dict[str, Any]] = {}
     claims: dict[str, dict[str, Any]] = {}
+    configured_enforcement_stage = "UNKNOWN"
     try:
         source_registry_path = "governance/evidence/SOURCE_REGISTRY.json"
         if not _candidate_file_matches(candidate_ref, source_registry_path, root / source_registry_path, cwd=root):
@@ -201,11 +212,19 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
         matrix = _read_json(root / matrix_path)
         if not isinstance(matrix, dict) or matrix.get("schema_version") != 1:
             raise ValueError("verification matrix must have schema_version=1")
-        if matrix.get("report_only") is not True:
-            raise ValueError("v1 verification matrix must keep report_only=true")
+        if matrix.get("enforcement_stage") not in {"REPORT_ONLY", "BLOCK_NEW_MATERIAL"}:
+            raise ValueError("verification matrix enforcement_stage is unsupported")
+        expected_report_only = matrix["enforcement_stage"] == "REPORT_ONLY"
+        if not isinstance(matrix.get("report_only"), bool) or matrix["report_only"] != expected_report_only:
+            raise ValueError("verification matrix report_only must be true exactly when enforcement_stage is REPORT_ONLY")
+        configured_enforcement_stage = matrix["enforcement_stage"]
         prefixes = matrix.get("material_path_prefixes")
         if not isinstance(prefixes, list) or not prefixes or any(not isinstance(x, str) or not x for x in prefixes):
             raise ValueError("verification matrix material_path_prefixes must be non-empty strings")
+        missing_prefixes = REQUIRED_MATERIAL_PATH_PREFIXES - set(prefixes)
+        if missing_prefixes:
+            raise ValueError("verification matrix removes required material path prefixes: "
+                             + ", ".join(sorted(missing_prefixes)))
         matrix_gates = matrix.get("gates")
         expected_gates = {
             name: {"evidence_type": evidence_type.value,
@@ -249,6 +268,42 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
                 validate_subject_commit(standard, candidate_sha)
             except ValueError as exc:
                 finding("SUBJECT_SHA_INVALID", "ERROR", str(exc), rel)
+            if record_is_current:
+                try:
+                    validate_work_item(item, complete=True)
+                except ValueError as exc:
+                    finding("WORK_ITEM_DOR_INCOMPLETE", "ERROR",
+                            f"current material work item fails Definition of Ready validation: {exc}", rel)
+                if item.current_state.value not in {"RELEASE_READY", "PR_OPEN", "CI_GREEN"}:
+                    finding("WORK_ITEM_LIFECYCLE_STATE_INCOMPLETE", "ERROR",
+                            "current material work item must reach RELEASE_READY or a later pre-merge state; "
+                            f"found {item.current_state.value}", rel)
+                required_lifecycle_states = {
+                    "REQUIREMENT_READY", "DESIGN_READY", "IN_DEVELOPMENT", "DEV_VERIFIED",
+                    "QA_IN_PROGRESS", "QA_PASSED", "SENIOR_QA", "UAT", "PRODUCT_ACCEPTED",
+                    "RELEASE_READY",
+                }
+                traversed_states = {entry.to_state for entry in item.state_history}
+                missing_states = sorted(required_lifecycle_states - traversed_states)
+                if missing_states:
+                    finding("WORK_ITEM_LIFECYCLE_HISTORY_INCOMPLETE", "ERROR",
+                            "current material work item state history does not traverse required lifecycle states: "
+                            + ", ".join(missing_states), rel)
+                try:
+                    lifecycle_missing, lifecycle_invalid = DeliveryOrchestrator(item)._lifecycle_gaps(
+                        include_ci=False
+                    )
+                    if lifecycle_missing:
+                        finding("WORK_ITEM_LIFECYCLE_INCOMPLETE", "ERROR",
+                                "current work item is missing required lifecycle evidence: "
+                                + ", ".join(lifecycle_missing), rel)
+                    if lifecycle_invalid:
+                        finding("WORK_ITEM_ROLE_COVERAGE_INVALID", "ERROR",
+                                "current work item has invalid role separation/evidence: "
+                                + ", ".join(lifecycle_invalid), rel)
+                except (ValueError, TypeError, AttributeError) as exc:
+                    finding("WORK_ITEM_LIFECYCLE_INVALID", "ERROR",
+                            f"cannot validate current work-item lifecycle evidence: {exc}", rel)
             records.append((rel, item, standard))
             work_item_proofs.append({
                 "work_item_id": item.work_item_id,
@@ -334,13 +389,14 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
             if any(_path_matches(path, [scope]) for scope in claim_scopes):
                 covering.append(row)
         if not covering:
-            finding("MATERIAL_CHANGE_WITHOUT_RECORD", "UNVERIFIED",
+            finding("MATERIAL_CHANGE_WITHOUT_RECORD", "BLOCKING",
                     "material change has no current work item evidence record covering this path", path)
 
     findings.sort(key=lambda row: (row["severity"], row["code"], row["path"], row["detail"]))
     report = {
         "schema_version": 1,
         "mode": "REPORT_ONLY",
+        "enforcement_stage": configured_enforcement_stage,
         "candidate_sha": candidate_sha,
         "base_ref": base_ref,
         "candidate_ref": candidate_ref,
@@ -360,7 +416,7 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
         "broker_api_called": False,
         "allowed_for_live_execution": False,
         "append": False,
-        "authority": "informational evidence coverage report; not merge approval, research certification, or runtime readiness",
+        "authority": "evidence coverage validation only; not merge approval, research certification, or runtime readiness",
     }
     payload = json.dumps(report, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     report["report_sha256"] = hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -368,12 +424,17 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
 
 
 def render_summary(report: dict[str, Any]) -> str:
-    """Render findings for a CI step summary without implying approval."""
-    lines = ["## Evidence coverage report (informational)", "",
+    """Render evidence findings and enforcement outcome without implying readiness."""
+    blocking_count = report.get("blocking_finding_count", 0)
+    mode = report.get("mode", "REPORT_ONLY")
+    label = {"ENFORCE_NEW_MATERIAL": "blocking enforcement",
+             "STRICT": "strict enforcement"}.get(mode, "informational, report only")
+    count_label = "Potential blocking findings" if mode == "REPORT_ONLY" else "Blocking findings"
+    lines = [f"## Evidence coverage report ({label})", "",
              f"Candidate: `{report['candidate_sha']}`  ",
              f"Changed material paths: {report['material_path_count']}  ",
-             f"Findings: {report['finding_count']}  ",
-             "This report is nonblocking and does not establish merge, research, or runtime readiness.", ""]
+             f"Findings: {report['finding_count']} ({count_label.lower()}: {blocking_count})  ",
+             "Passing this evidence check does not establish merge, research, or runtime readiness.", ""]
     findings = report.get("findings", [])
     if findings:
         lines.extend(["| Severity | Code | Path | Detail |", "|---|---|---|---|"])
@@ -394,11 +455,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--summary-output", type=Path,
                         help="append a Markdown findings summary to this file")
-    parser.add_argument("--mode", choices=("report-only", "strict"), default="report-only")
+    parser.add_argument("--mode", choices=("report-only", "enforce-new-material", "strict"), default="report-only")
     args = parser.parse_args(argv)
     report = build_report(base_ref=args.base_ref, candidate_ref=args.candidate_ref,
                           candidate_sha=args.candidate_sha)
-    report["mode"] = "REPORT_ONLY" if args.mode == "report-only" else "STRICT"
+    report["mode"] = {"report-only": "REPORT_ONLY",
+                      "enforce-new-material": "ENFORCE_NEW_MATERIAL",
+                      "strict": "STRICT"}[args.mode]
+    if (args.mode == "enforce-new-material"
+            and report.get("enforcement_stage") != "BLOCK_NEW_MATERIAL"):
+        report["findings"].append({
+            "severity": "ERROR",
+            "code": "ENFORCEMENT_STAGE_MISMATCH",
+            "path": "governance/evidence/VERIFICATION_MATRIX.json",
+            "detail": "enforce-new-material mode requires candidate matrix enforcement_stage=BLOCK_NEW_MATERIAL",
+        })
+        report["finding_count"] = len(report["findings"])
+    if args.mode == "strict":
+        blocking = list(report["findings"])
+    else:
+        blocking = [finding for finding in report["findings"]
+                    if finding["severity"] in {"ERROR", "BLOCKING"}]
+    report["blocking_finding_count"] = len(blocking)
     report.pop("report_sha256", None)
     payload = json.dumps(report, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     report["report_sha256"] = hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -417,8 +495,10 @@ def main(argv: list[str] | None = None) -> int:
     errors = [finding for finding in report["findings"] if finding["severity"] == "ERROR"]
     if args.mode == "strict" and report["findings"]:
         return 1
-    # Report-only suppresses policy findings while preserving every finding in
-    # the artifact. Invalid registry data is visible but does not block rollout.
+    if args.mode in {"enforce-new-material", "strict"} and blocking:
+        return 1
+    # Report-only suppresses all policy findings. Enforcement blocks structural
+    # errors and uncovered material changes while preserving UNVERIFIED claims.
     print(f"Evidence report: candidate={report['candidate_sha']} findings={report['finding_count']} errors={len(errors)} mode={report['mode']}")
     return 0
 

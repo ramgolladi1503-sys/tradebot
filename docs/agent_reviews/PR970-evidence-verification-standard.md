@@ -1,5 +1,21 @@
 # PR970 Evidence Verification Standard Review
 
+## Enforcement follow-up
+
+The verifier now has an `enforce-new-material` mode: structural `ERROR`/`BLOCKING` findings and material paths without a current covering work item fail the command, while explicit `UNVERIFIED` claim findings remain warnings. For current material records it also requires complete Definition of Ready fields, G0/G1/G2/G3/G4/G5/G7 lifecycle evidence, distinct lifecycle role authors where the existing orchestrator checks them, traversal of required state-history stages, and a pre-merge state of `RELEASE_READY`, `PR_OPEN`, or `CI_GREEN`. G6 is omitted because this check runs within PR CI and cannot require its own completed result in advance. PR CI invokes this mode against exact base/head refs and uploads the resulting report. Report-only remains available for diagnosis; strict mode retains its all-findings-block behavior.
+
+The candidate matrix is checked against a required material-prefix set, and regression tests remove each required prefix in turn. This closes that specific bypass only when the verifier containing the check is trusted. The current candidate PR still supplies its own workflow, verifier, and policy; it can propose weakening those controls together. The independent audit found an existing trusted-base exact-SHA workflow pattern, but `main` does not yet contain a trusted evidence workflow. This PR cannot make a newly added base-authoritative workflow execute for itself. A controlled bootstrap followed by a required stable check is still necessary.
+
+This provides a repository PR-diff check only; it is not yet an independently trusted merge gate. It does not intercept every request sent through Codex, ChatGPT, Claude, or another platform. The intake audit found only downstream PR-time automation; Codex prompts, GitHub issues, local/CLI/MCP work, manual Actions, and other platform requests lack a common fail-closed intake hook. Universal task coverage is `UNSATISFIED`. Live branch protection requires only `repo-forensics-pr-gate`, so `Enforce new material evidence coverage` is not required. This work does not mutate external repository settings. The check grants no merge, research, or runtime authority.
+
+## Post-development verification and dispositions
+
+- Focused validation after verifier lifecycle and required-prefix hardening: `python -m pytest -q tests/governance/test_evidence_contract.py tests/delivery` — 80 passed, with two existing pandas dependency compatibility warnings. `git diff --check` and governance JSON parsing passed.
+- QA verified uncovered material paths, explicit `UNVERIFIED` warning behavior, lifecycle evidence/state-history blocking, complete lifecycle record acceptance without upgrading the claim, and required-prefix deletion detection. A frozen expected-prefix tuple independently asserts the implementation allowlist. This test suite validates the current candidate implementation; it does not make candidate-controlled code trusted.
+- Technical & Quant review: `NOT_APPLICABLE` for quantitative validity. Integrity hashes and declared roles do not authenticate identities or prove independent cognition.
+- Senior QA: candidate-controlled verifier/workflow/policy, unrequired branch status, and missing universal task intake remain blockers to merge-enforcement or “every task” claims.
+- Branch protection readback: strict=true; required context remains only `repo-forensics-pr-gate`.
+
 ## Agent Work Contract
 
 - Work item: `EVS-001`, report-only Evidence & Verification Standard.

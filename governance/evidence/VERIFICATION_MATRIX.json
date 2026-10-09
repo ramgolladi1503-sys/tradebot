@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
-  "report_only": true,
+  "report_only": false,
+  "enforcement_stage": "BLOCK_NEW_MATERIAL",
   "material_path_prefixes": [
     "core/",
     "strategies/",
@@ -35,7 +36,7 @@
   },
   "claim_kinds_requiring_research_certification": ["predictive_validity", "profitability"],
   "limitations": [
-    "A report-only result is not merge approval.",
+    "A passing evidence check is not merge approval, research certification, or runtime readiness; branch protection must separately require its status to block merges.",
     "Passing tests do not establish a trading edge or profitability.",
     "Source existence and record hashes do not authenticate source authority or reviewer identity."
   ]

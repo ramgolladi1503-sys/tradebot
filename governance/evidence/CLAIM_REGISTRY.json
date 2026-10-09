@@ -1,16 +1,16 @@
 {
   "schema_version": 1,
-  "registry_scope": "bounded legacy inventory for the first report-only milestone",
+  "registry_scope": "bounded legacy inventory for the evidence enforcement milestone",
   "claims": [
     {
       "claim_id": "EVIDENCE_STANDARD_IMPLEMENTATION",
-      "statement": "The package detects missing, contradictory, stale, or self-approved evidence and reports material PR coverage.",
+      "statement": "The package detects missing, contradictory, stale, or self-approved evidence and blocks uncovered new material PR paths.",
       "claim_kind": "implementation",
       "scope_paths": ["core/delivery/", "governance/evidence/", "tools/verify_evidence.py", "tests/governance/", "docs/tradebot_delivery/", ".agents/workflows/", ".github/workflows/evidence-gates.yml"],
       "status": "UNVERIFIED",
       "source_ids": ["TRADEBOT_DELIVERY_ORGANIZATION", "TRADEBOT_DELIVERY_LIFECYCLE", "TRADEBOT_QA_PLAYBOOK"],
       "evidence_refs": [],
-      "limitation": "Implementation tests and the report-only workflow do not replace independent QA/Senior QA review."
+      "limitation": "Implementation tests and the blocking PR workflow do not replace independent QA/Senior QA review; task platforms are not universally intercepted and branch protection must separately require the check."
     },
     {
       "claim_id": "LEGACY_MARKET_DATA_CONTRACTS",

@@ -52,11 +52,21 @@ evidence record so they are not confused with delivery lifecycle gates G0-G9.
 
 The existing Product Owner/BA/Architect, Developer, QA/Senior QA, UAT, and
 Release Manager roles own these checks. Work-item evidence is recorded in the
-existing `core.delivery` contract and hash chain. The report-only CI workflow
-validates registry and path coverage but cannot approve a claim or merge. During
-migration, missing legacy evidence remains `UNVERIFIED`; `NOT_APPLICABLE` needs
-a reason and reference and is not a pass. Developers cannot author their own
-independent G2/G3/G4 evidence.
+existing `core.delivery` contract and hash chain. The PR evidence workflow
+blocks new material changes without a current covering work item and blocks
+structural errors. Explicit `UNVERIFIED` legacy claims remain warnings;
+`NOT_APPLICABLE` needs a reason and reference and is not a pass. Developers
+cannot author their own independent G2/G3/G4 evidence. Current branch
+protection requires only `repo-forensics-pr-gate`, so this workflow can fail
+but cannot block merge until an authorized ruleset update adds the exact stable
+`Enforce new material evidence coverage` status. The workflow cannot set that
+repository setting itself.
+
+This gate evaluates repository PR diffs. It does not observe or intercept every
+task request sent to Codex, ChatGPT, Claude, or other platforms. Until a verified
+task-intake integration exists for each platform, universal per-request
+compliance remains `UNSATISFIED`. Do not claim that repository CI alone
+guarantees every request followed the delivery lifecycle.
 
 ## Runtime-sensitive minimum checks
 

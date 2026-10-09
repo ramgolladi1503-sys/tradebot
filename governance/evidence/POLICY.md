@@ -1,10 +1,10 @@
-# TradeBot Evidence and Verification Standard (report-only v1)
+# TradeBot Evidence and Verification Standard
 
 ## Purpose and scope
 
 This standard makes material engineering, mathematical, data, risk, research, and operational claims traceable through the existing Epic → Feature → Story/Bug/Task delivery lifecycle. It extends `core.delivery` work items and its append-only evidence records; it does not create another ledger, workflow state machine, runtime service, or trading authority.
 
-The first rollout is **report-only**. Missing or incomplete legacy evidence is reported as `UNVERIFIED`; it is not silently upgraded and does not make CI claim that a check passed. A later change may make narrowly scoped checks blocking only after reviewing report results and false positives.
+The repository PR gate blocks new material changes that lack a current work-item evidence record and blocks structural validation errors. Explicit `UNVERIFIED` legacy and current claims remain warnings; they are never upgraded by this gate. This is repository-side PR enforcement only. It cannot intercept every request sent through Codex, ChatGPT, Claude, or another task platform. Universal task-intake enforcement remains `UNSATISFIED` until each platform has a verified integration that creates or links a work item before substantive work.
 
 ## Four evidence gates
 
@@ -40,15 +40,15 @@ Use the existing role definitions in `docs/tradebot_delivery/ORGANIZATION.md`. D
 
 The existing Product Owner + BA, Architecture + Developer, QA + Senior QA, UAT + Release Manager workflow owns the corresponding gates. An independent reviewer must not approve their own implementation. No delivery transition, merge approval, strategy certification, or execution permission is created by an evidence report.
 
-## Report-only CI and staged rollout
+## Per-claim report mode and material-path enforcement
 
-The PR workflow runs with `contents: read`, calculates changed paths against the PR base, checks material scopes and committed work-item records, emits a JSON artifact bound to the PR head SHA, and reports findings without blocking the PR. `--mode strict` is available for future opt-in enforcement; this workflow uses `--mode report-only`.
+Per-claim evidence assessment remains report-only: declaring a claim `UNVERIFIED` is visible but is not itself a blocking error. Separately, the PR workflow runs with `contents: read`, calculates changed paths against the exact PR base and head, checks material scopes and committed work-item records, emits a JSON artifact bound to the PR head SHA, and fails on structural `ERROR` findings, explicit `BLOCKING` findings, or `MATERIAL_CHANGE_WITHOUT_RECORD`. The verifier reads `enforcement_stage` from the candidate matrix; `--mode enforce-new-material` fails closed unless that candidate declares `BLOCK_NEW_MATERIAL`. `--mode report-only` remains available for local diagnosis, and `--mode strict` blocks on any finding. The currently inspected branch-protection rules require only `repo-forensics-pr-gate`; they do not require the evidence status. Therefore this patch can fail its workflow job, but cannot block a merge until an authorized ruleset update adds the exact stable status `Enforce new material evidence coverage` as required. This change does not mutate those external settings.
 
-The Delivery Orchestrator owns the material path prefix matrix and must review it whenever a governed path is added, moved, or renamed. Changes to `VERIFICATION_MATRIX.json` require a matching coverage test and Evidence Standard review. The report-only workflow writes findings to both its JSON artifact and GitHub step summary; focused contract test failures still fail that workflow job. Record finding counts and focused CI durations from the exact-head report and summary, and have each reviewer record active review minutes. The capture protocol and initial pending state live in `ADOPTION_BASELINE.json`; the numeric baseline stays pending until a reviewed PR supplies measurements.
+The Delivery Orchestrator owns the material path prefix matrix and must review it whenever a governed path is added, moved, or renamed. Changes to `VERIFICATION_MATRIX.json` require a matching coverage test and Evidence Standard review. The evidence workflow writes findings and blocking counts to both its JSON artifact and GitHub step summary; focused contract test failures also fail that workflow job. Record finding counts and focused CI durations from the exact-head report and summary, and have each reviewer record active review minutes. The capture protocol and initial pending state live in `ADOPTION_BASELINE.json`; the numeric baseline stays pending until a reviewed PR supplies measurements.
 
 1. Audit current claims and retain `UNVERIFIED` where evidence has not been migrated.
-2. Add records to new material work items and backfill the highest-risk inventory first.
-3. Review report findings and false positives before proposing any blocking rule.
+2. Add current records to every new material PR change; uncovered paths fail the evidence check.
+3. Confirm branch protection requires this exact stable check name; repository code cannot enforce its own branch-protection setting.
 4. Certify critical subsystems independently. Installing this package is not certification.
 
 The critical-component backfill remains deferred; the current legacy inventory is intentionally bounded and every listed legacy claim remains `UNVERIFIED` until its own evidence is accepted.
@@ -58,5 +58,7 @@ The critical-component backfill remains deferred; the current legacy inventory i
 - Legacy coverage is a bounded inventory, not a complete audit of every formula, algorithm, feed contract, risk rule, or performance claim.
 - The workflow cannot determine whether an argument is scientifically persuasive or a source is authoritative.
 - A local hash chain proves content integrity only, not author identity or external provenance.
-- The initial CI report is informational and is not a merge-readiness signal.
+- The CI check covers governed repository PR diffs only; it is not a task-platform intake interceptor.
+- Until each task platform is integrated, a request that cannot be linked to a durable work item is `UNSATISFIED` for universal process compliance.
+- Branch protection must require the evidence check separately; a workflow existing in the repository does not prove the setting is active.
 - This standard does not change runtime behavior, risk limits, kill switches, feed freshness, buy-only execution rules, broker integrations, or strategy thresholds.
