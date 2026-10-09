@@ -25,9 +25,11 @@ TOKEN_SCAN_EXCLUDED_DIRS: frozenset[str] = frozenset(
         "htmlcov",
         "logs",
         "node_modules",
+        "research",
         "runtime",
         "venv",
         ".venv",
+        "worktrees",
     }
 )
 
