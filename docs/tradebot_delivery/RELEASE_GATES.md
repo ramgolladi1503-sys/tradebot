@@ -56,11 +56,12 @@ existing `core.delivery` contract and hash chain. The PR evidence workflow
 blocks new material changes without a current covering work item and blocks
 structural errors. Explicit `UNVERIFIED` legacy claims remain warnings;
 `NOT_APPLICABLE` needs a reason and reference and is not a pass. Developers
-cannot author their own independent G2/G3/G4 evidence. Current branch
-protection requires only `repo-forensics-pr-gate`, so this workflow can fail
-but cannot block merge until an authorized ruleset update adds the exact stable
-`Enforce new material evidence coverage` status. The workflow cannot set that
-repository setting itself.
+cannot author their own independent G2/G3/G4 evidence. Classic branch
+protection requires `repo-forensics-pr-gate`; the active main ruleset requires
+`unit_tests` and `health_gate`. Neither requires the evidence status, so this
+workflow can fail without blocking merge until an authorized ruleset update
+adds the exact stable `Enforce new material evidence coverage` status. The
+workflow cannot set that repository setting itself.
 
 This gate evaluates repository PR diffs. It does not observe or intercept every
 task request sent to Codex, ChatGPT, Claude, or other platforms. Until a verified

@@ -494,8 +494,14 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     errors = [finding for finding in report["findings"] if finding["severity"] == "ERROR"]
     if args.mode == "strict" and report["findings"]:
+        print(f"Evidence verification blocked: {report['blocking_finding_count']} finding(s).")
+        for item in blocking:
+            print(f"{item['severity']} {item['code']} {item.get('path', '')}: {item['detail']}")
         return 1
     if args.mode in {"enforce-new-material", "strict"} and blocking:
+        print(f"Evidence verification blocked: {report['blocking_finding_count']} finding(s).")
+        for item in blocking:
+            print(f"{item['severity']} {item['code']} {item.get('path', '')}: {item['detail']}")
         return 1
     # Report-only suppresses all policy findings. Enforcement blocks structural
     # errors and uncovered material changes while preserving UNVERIFIED claims.

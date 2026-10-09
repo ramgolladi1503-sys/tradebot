@@ -489,7 +489,8 @@ def test_current_material_record_requires_complete_definition_of_ready(tmp_path:
     assert exit_code == 1
 
 
-def test_current_material_record_requires_lifecycle_roles_and_stage_evidence(tmp_path: Path, monkeypatch):
+def test_current_material_record_requires_lifecycle_roles_and_stage_evidence(
+        tmp_path: Path, monkeypatch, capsys):
     head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     item = _complete_lifecycle_item(head, include_lifecycle_evidence=False)
     _patch_current_material_record(monkeypatch, item, head)
@@ -503,6 +504,9 @@ def test_current_material_record_requires_lifecycle_roles_and_stage_evidence(tmp
     assert finding["severity"] == "ERROR"
     assert "G0_REQUIREMENT:BLOCKED" in finding["detail"]
     assert "G3_QA:BLOCKED" in finding["detail"]
+    output = capsys.readouterr().out
+    assert "Evidence verification blocked" in output
+    assert "WORK_ITEM_LIFECYCLE_INCOMPLETE" in output
     assert exit_code == 1
 
 

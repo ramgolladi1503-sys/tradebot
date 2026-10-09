@@ -10,7 +10,7 @@
       "status": "UNVERIFIED",
       "source_ids": ["TRADEBOT_DELIVERY_ORGANIZATION", "TRADEBOT_DELIVERY_LIFECYCLE", "TRADEBOT_QA_PLAYBOOK"],
       "evidence_refs": [],
-      "limitation": "Implementation tests and the blocking PR workflow do not replace independent QA/Senior QA review; task platforms are not universally intercepted and branch protection must separately require the check."
+      "limitation": "Implementation tests and the blocking PR workflow do not replace independent QA/Senior QA review; task platforms are not universally intercepted and classic protection and the active ruleset do not require this check; an authorized ruleset update must add it."
     },
     {
       "claim_id": "LEGACY_MARKET_DATA_CONTRACTS",
