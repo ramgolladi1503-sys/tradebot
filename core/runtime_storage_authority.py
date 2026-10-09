@@ -48,14 +48,22 @@ def assert_same_device(authority: StorageAuthority, *paths: Path) -> None:
             raise StorageAuthorityError(f"RUNTIME_STORAGE_AUTHORITY_LOST:path_stat:{type(exc).__name__}") from exc
 
 
-def _mounted_paths() -> tuple[str, ...]:
+def _mounted_paths(volume: Path | None = None) -> tuple[str, ...]:
     if os.name != "posix":
         return ()
     try:
         output = os.popen("mount").read()
     except OSError:
         return ()
-    return tuple(line for line in output.splitlines() if " on /Volumes/TradeBotData " in line)
+    target = str(volume.resolve(strict=False)) if volume is not None else "/Volumes/TradeBotData"
+    return tuple(line for line in output.splitlines() if f" on {target} " in line or line.endswith(f" on {target}"))
+
+
+def _probe_mount(volume: Path) -> bool:
+    try:
+        return bool(_mounted_paths(volume))
+    except TypeError:
+        return bool(_mounted_paths())
 
 
 def establish(*, volume: Path, runtime_root: Path) -> StorageAuthority:
@@ -66,7 +74,7 @@ def establish(*, volume: Path, runtime_root: Path) -> StorageAuthority:
     """
     volume = Path(volume).expanduser()
     runtime_root = Path(runtime_root).expanduser()
-    if not volume.is_dir() or not _mounted_paths():
+    if not volume.is_dir() or not _probe_mount(volume):
         raise StorageAuthorityError("RUNTIME_STORAGE_AUTHORITY_LOST:mount_absent")
     try:
         volume_real = volume.resolve(strict=True)
@@ -122,7 +130,7 @@ def bind_environment(authority: StorageAuthority, *, local_db_root: Path | None 
 def revalidate(authority: StorageAuthority) -> None:
     """Recheck an established authority without creating or falling back."""
     try:
-        if not authority.volume.is_dir() or not _mounted_paths():
+        if not authority.volume.is_dir() or not _probe_mount(authority.volume):
             raise StorageAuthorityError("RUNTIME_STORAGE_AUTHORITY_LOST:mount_absent")
         volume = authority.volume.resolve(strict=True)
         runtime = authority.runtime_root.resolve(strict=True)

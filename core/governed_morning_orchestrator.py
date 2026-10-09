@@ -443,7 +443,7 @@ class GovernedMorningOrchestrator:
                 ["git", "rev-parse", "HEAD"], cwd=str(self.repo_root), text=True
             ).strip()
             dirty = subprocess.check_output(
-                ["git", "status", "--porcelain"], cwd=str(self.repo_root), text=True
+                ["git", "status", "--porcelain", "--untracked-files=no"], cwd=str(self.repo_root), text=True
             ).strip()
         except subprocess.SubprocessError as exc:
             self.emit("RELEASE", "FAIL", f"Git inspection failed: {exc}")
