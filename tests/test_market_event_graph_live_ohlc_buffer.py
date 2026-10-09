@@ -723,3 +723,41 @@ def test_shadow_buffer_rejects_tick_outside_configured_store_session(tmp_path, m
     assert result["accepted"] is False
     assert result["status"] == "SESSION_DATE_MISMATCH"
     assert shadow_ohlc_buffer.get_bars("NIFTY") == []
+
+
+def test_shadow_buffer_deduplicates_already_persisted_bars_across_provenance_shift(tmp_path, monkeypatch):
+    reset_live_source_shadow_buffer()
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    ist = ZoneInfo("Asia/Kolkata")
+    base = datetime(2026, 10, 2, 9, 15, tzinfo=ist)
+    store = MarketSessionStore(db_path=tmp_path / "dedup.sqlite", report_root=tmp_path / "reports")
+    configure_live_source_session_store(
+        store, session_date="2026-10-02", symbols=("NIFTY",), restore_as_of=base,
+    )
+
+    capture = {
+        "symbol": "NIFTY", "instrument_token": 256265, "source_type": "live_websocket",
+        "provider": "kite", "token_domain": "kite_instrument_token",
+        "universe_hash": "fba078a4cd7aeb520432b05071a5ac4078e164b809fec0eb80503cb7fe562371",
+        "feed_identity": {"feed_session_id": "sess-1", "feed_epoch": 1, "reconnect_generation": 1},
+    }
+    record_live_source_shadow_tick(**capture, price=25000.0, source_tick_epoch=(base + timedelta(seconds=10)).timestamp())
+    # Advance to next minute to complete the first bar
+    record_live_source_shadow_tick(**capture, price=25050.0, source_tick_epoch=(base + timedelta(seconds=70)).timestamp())
+
+    cutoff = base + timedelta(minutes=2)
+    # First persist
+    res1 = get_live_source_shadow_completed_bars("NIFTY", as_of=cutoff)
+    assert len(res1) == 2
+
+    # Simulate in-memory bar provenance change (e.g. metadata shift or re-fetch)
+    bars = shadow_ohlc_buffer.get_bars("NIFTY")
+    assert len(bars) >= 2
+    # Clear durable_persisted flag to simulate object re-creation with different provenance
+    bars[0]["bar_provenance"]["durable_persisted"] = False
+    bars[0]["bar_provenance"]["volume_cumulative_day_value"] = 999999.0
+
+    # Second persist must not crash with SessionMemoryConflict, but safely detect already durable
+    res2 = get_live_source_shadow_completed_bars("NIFTY", as_of=cutoff)
+    assert len(res2) == 2
+
