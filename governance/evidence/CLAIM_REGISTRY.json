@@ -4,9 +4,9 @@
   "claims": [
     {
       "claim_id": "EVIDENCE_STANDARD_IMPLEMENTATION",
-      "statement": "The package detects missing, contradictory, stale, or self-approved evidence and blocks uncovered new material PR paths.",
+      "statement": "The package detects missing, contradictory, stale, or self-approved evidence, blocks uncovered new material PR paths, and blocks unclassified changed paths.",
       "claim_kind": "implementation",
-      "scope_paths": ["core/delivery/", "governance/evidence/", "tools/verify_evidence.py", "tests/governance/", "docs/tradebot_delivery/", ".agents/workflows/", ".github/workflows/evidence-gates.yml", ".github/workflows/frozen-head-exact-sha-certification.yml"],
+      "scope_paths": ["core/delivery/", "governance/evidence/", "tools/verify_evidence.py", "tests/governance/", "tests/delivery/", "docs/tradebot_delivery/", "docs/agent_reviews/", ".agents/workflows/", ".github/workflows/evidence-gates.yml", ".github/workflows/frozen-head-exact-sha-certification.yml", ".github/workflows/ci.yml", ".github/workflows/tests.yml"],
       "status": "UNVERIFIED",
       "source_ids": ["TRADEBOT_DELIVERY_ORGANIZATION", "TRADEBOT_DELIVERY_LIFECYCLE", "TRADEBOT_QA_PLAYBOOK"],
       "evidence_refs": [],

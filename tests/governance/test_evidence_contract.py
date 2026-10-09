@@ -684,39 +684,148 @@ def test_report_rejects_inconsistent_matrix_report_only_flag(monkeypatch):
                for row in report["findings"])
 
 
-EXPECTED_REQUIRED_MATERIAL_PREFIXES = (
+def test_required_material_prefixes_are_frozen_in_matrix_data():
+    matrix = json.loads((evidence_tool.ROOT / "governance/evidence/VERIFICATION_MATRIX.json").read_text())
+    assert matrix["protected_material_path_prefixes"]
+    assert set(matrix["protected_material_path_prefixes"]) <= set(matrix["material_path_prefixes"])
+    assert matrix["trusted_non_material_exemptions"] == []
+
+
+@pytest.mark.parametrize("removed_prefix", [
     "core/", "strategies/", "research/", "scripts/research/", "config/", "data/",
-    "governance/evidence/", "tests/governance/", "tools/verify_evidence.py",
-    "docs/tradebot_delivery/", ".agents/workflows/tradebot-delivery-orchestrator.md",
+    "governance/evidence/", "tests/governance/", "tests/delivery/",
+    "tools/verify_evidence.py", "docs/tradebot_delivery/", "docs/agent_reviews/",
+    ".agents/workflows/tradebot-delivery-orchestrator.md",
     ".github/workflows/evidence-gates.yml",
     ".github/workflows/frozen-head-exact-sha-certification.yml",
-)
-
-
-def test_required_material_prefixes_match_frozen_policy():
-    assert evidence_tool.REQUIRED_MATERIAL_PATH_PREFIXES == frozenset(EXPECTED_REQUIRED_MATERIAL_PREFIXES)
-
-
-@pytest.mark.parametrize("removed_prefix", EXPECTED_REQUIRED_MATERIAL_PREFIXES)
+    ".github/workflows/ci.yml", ".github/workflows/tests.yml",
+])
 def test_report_rejects_candidate_matrix_removing_required_material_prefix(
         monkeypatch, removed_prefix):
     head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    read_json = evidence_tool._read_json
+    read_candidate_json = evidence_tool._read_candidate_json
 
-    def read_matrix_without_required_prefix(path):
-        payload = read_json(path)
-        if Path(path).name == "VERIFICATION_MATRIX.json":
+    def read_matrix_without_required_prefix(root, path):
+        payload = read_candidate_json(root, path)
+        if path == evidence_tool.MATRIX_PATH:
             payload["material_path_prefixes"].remove(removed_prefix)
         return payload
 
-    monkeypatch.setattr(evidence_tool, "_read_json", read_matrix_without_required_prefix)
+    monkeypatch.setattr(evidence_tool, "_read_candidate_json", read_matrix_without_required_prefix)
     monkeypatch.setattr(evidence_tool, "_candidate_file_matches", lambda *args, **kwargs: True)
     monkeypatch.setattr(evidence_tool, "changed_paths", lambda *args, **kwargs: ["strategies/example.py"])
     report = build_report(base_ref="HEAD", candidate_ref="HEAD", candidate_sha=head)
 
     assert any(row["code"] == "VERIFICATION_MATRIX_INVALID"
-               and "removes required material path prefixes" in row["detail"]
+               and "removes trusted protected material path prefixes" in row["detail"]
                for row in report["findings"])
+
+
+@pytest.mark.parametrize("candidate_change", [
+    lambda matrix: matrix["protected_material_path_prefixes"].pop(),
+    lambda matrix: matrix["protected_material_path_prefixes"].append("untrusted/") ,
+    lambda matrix: matrix["trusted_non_material_exemptions"].append(
+        {"path": "unknown/", "rationale": "Candidate self-exemption", "owner": "candidate"}
+    ),
+])
+def test_candidate_matrix_cannot_change_trusted_path_policy(
+        monkeypatch, candidate_change):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    read_candidate_json = evidence_tool._read_candidate_json
+
+    def candidate_policy_changed(root, path):
+        payload = read_candidate_json(root, path)
+        if path == evidence_tool.MATRIX_PATH:
+            candidate_change(payload)
+        return payload
+
+    monkeypatch.setattr(evidence_tool, "_read_candidate_json", candidate_policy_changed)
+    monkeypatch.setattr(evidence_tool, "_candidate_file_matches", lambda *args, **kwargs: True)
+    monkeypatch.setattr(evidence_tool, "changed_paths", lambda *args, **kwargs: ["unknown/new_file.py"])
+    report = build_report(base_ref="HEAD", candidate_ref="HEAD", candidate_sha=head)
+
+    assert any(row["code"] == "VERIFICATION_MATRIX_INVALID" for row in report["findings"])
+    assert any(row["code"] == "UNCLASSIFIED_CHANGED_PATH"
+               and row["severity"] == "BLOCKING" for row in report["findings"])
+
+
+def test_unclassified_changed_path_blocks_enforcement_but_unverified_claim_stays_nonblocking(
+        tmp_path: Path, monkeypatch):
+    head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    monkeypatch.setattr(evidence_tool, "changed_paths", lambda *args, **kwargs: [
+        "unknown/new_file.py", "governance/evidence/work_items/EVS-001.json",
+    ])
+    monkeypatch.setattr(evidence_tool, "_candidate_file_matches", lambda *args, **kwargs: True)
+    report_path = tmp_path / "report.json"
+    result = main(["--base-ref", "HEAD", "--candidate-ref", "HEAD", "--candidate-sha", head,
+                   "--output", str(report_path), "--mode", "enforce-new-material"])
+    report = json.loads(report_path.read_text())
+    assert result == 1
+    assert report["unclassified_paths"] == ["unknown/new_file.py"]
+    assert any(row["code"] == "UNCLASSIFIED_CHANGED_PATH" and row["severity"] == "BLOCKING"
+               for row in report["findings"])
+    assert any(row["code"] == "CLAIM_UNVERIFIED" and row["severity"] == "UNVERIFIED"
+               for row in report["findings"])
+
+
+def test_trusted_non_material_exemption_requires_rationale_owner_and_no_material_overlap():
+    valid = [{"path": "generated/reports/", "rationale": "Generated report output is non-source data.",
+              "owner": "Release Manager"}]
+    exemptions = evidence_tool._validate_trusted_exemptions(valid, ["core/"], ["core/"])
+    assert _path_matches("generated/reports/daily.json", [exemptions[0]["path"]])
+
+    with pytest.raises(ValueError, match="rationale"):
+        evidence_tool._validate_trusted_exemptions(
+            [{"path": "generated/", "rationale": " ", "owner": "Release Manager"}], [], [])
+    with pytest.raises(ValueError, match="owner"):
+        evidence_tool._validate_trusted_exemptions(
+            [{"path": "generated/", "rationale": "Generated output.", "owner": ""}], [], [])
+    with pytest.raises(ValueError, match="overlaps"):
+        evidence_tool._validate_trusted_exemptions(
+            [{"path": "core/", "rationale": "Not material.", "owner": "Release Manager"}],
+            ["core/"], ["core/"])
+
+
+def test_candidate_root_cannot_supply_or_change_trusted_path_exemptions(tmp_path: Path):
+    trusted_matrix = json.loads((evidence_tool.ROOT / evidence_tool.MATRIX_PATH).read_text())
+    trusted_exemption = {"path": "generated/reports/", "rationale": "Generated output only.",
+                         "owner": "Release Manager"}
+    trusted_matrix["trusted_non_material_exemptions"] = [trusted_exemption]
+    trusted_root = tmp_path / "trusted-base"
+    trusted_matrix_path = trusted_root / evidence_tool.MATRIX_PATH
+    trusted_matrix_path.parent.mkdir(parents=True)
+    trusted_matrix_path.write_text(json.dumps(trusted_matrix))
+
+    protected, material, exemptions = evidence_tool._trusted_material_policy(
+        trusted_root, dict(trusted_matrix)
+    )
+    assert exemptions == [trusted_exemption]
+    assert not evidence_tool._is_material("generated/reports/daily.json", material)
+    assert _path_matches("generated/reports/daily.json", [row["path"] for row in exemptions])
+
+    candidate_matrix = dict(trusted_matrix)
+    candidate_matrix["trusted_non_material_exemptions"] = [
+        {"path": "unknown/", "rationale": "Candidate self-exemption.", "owner": "candidate"}
+    ]
+    with pytest.raises(ValueError, match="candidate cannot add"):
+        evidence_tool._trusted_material_policy(trusted_root, candidate_matrix)
+
+
+def test_current_pr_paths_are_material_and_assessed_by_evs_001():
+    matrix = json.loads((evidence_tool.ROOT / "governance/evidence/VERIFICATION_MATRIX.json").read_text())
+    registry = json.loads((evidence_tool.ROOT / "governance/evidence/CLAIM_REGISTRY.json").read_text())
+    item = json.loads((evidence_tool.ROOT / "governance/evidence/work_items/EVS-001.json").read_text())
+    claim = next(row for row in registry["claims"] if row["claim_id"] == "EVIDENCE_STANDARD_IMPLEMENTATION")
+    path_examples = (
+        ".github/workflows/ci.yml", ".github/workflows/tests.yml",
+        "tests/delivery/test_delivery_orchestrator.py",
+        "docs/agent_reviews/ci_test_tiering_feed_soak_separation.md",
+    )
+    assessed = item["extensions"]["evidence_standard"]["assessed_paths"]
+    for path in path_examples:
+        assert evidence_tool._path_matches(path, matrix["material_path_prefixes"])
+        assert evidence_tool._path_matches(path, assessed)
+        assert evidence_tool._path_matches(path, claim["scope_paths"])
 
 
 def test_summary_marks_strict_and_blocking_findings_accurately():

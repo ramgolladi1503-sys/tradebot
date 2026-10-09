@@ -26,16 +26,7 @@ from core.delivery.orchestrator import DeliveryOrchestrator
 
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-# Candidate policy may add governed paths, but it may not remove these minimum
-# material roots. The trusted-base CI integration must still run this verifier
-# from protected code before this invariant can resist a PR changing this file.
-REQUIRED_MATERIAL_PATH_PREFIXES = frozenset({
-    "core/", "strategies/", "research/", "scripts/research/", "config/", "data/",
-    "governance/evidence/", "tests/governance/", "tools/verify_evidence.py",
-    "docs/tradebot_delivery/", ".agents/workflows/tradebot-delivery-orchestrator.md",
-    ".github/workflows/evidence-gates.yml",
-    ".github/workflows/frozen-head-exact-sha-certification.yml",
-})
+MATRIX_PATH = "governance/evidence/VERIFICATION_MATRIX.json"
 
 
 def _unique_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -164,6 +155,98 @@ def _prefixes_overlap(first: str, second: str) -> bool:
             or (b_dir and a.startswith(b + "/")))
 
 
+def _normalize_policy_path(value: Any) -> str | None:
+    if not isinstance(value, str) or not value or value != value.strip():
+        return None
+    is_directory = value.endswith("/")
+    normalized = _normalize_repo_path(value.rstrip("/"))
+    if normalized is None or any(character in normalized for character in "*?[]"):
+        return None
+    return normalized + ("/" if is_directory else "")
+
+
+def _validate_prefixes(value: Any, label: str) -> list[str]:
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"{label} must be a non-empty list of repository paths")
+    normalized: list[str] = []
+    for raw in value:
+        path = _normalize_policy_path(raw)
+        if path is None:
+            raise ValueError(f"{label} contains an invalid repository path: {raw!r}")
+        if path in normalized:
+            raise ValueError(f"{label} contains a duplicate repository path: {path}")
+        normalized.append(path)
+    return normalized
+
+
+def _validate_trusted_exemptions(value: Any, protected_prefixes: list[str],
+                                 material_prefixes: list[str]) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        raise ValueError("trusted_non_material_exemptions must be a list")
+    validated: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for entry in value:
+        if not isinstance(entry, dict):
+            raise ValueError("trusted non-material exemptions must be objects")
+        path = _normalize_policy_path(entry.get("path"))
+        rationale = entry.get("rationale")
+        owner = entry.get("owner")
+        if path is None:
+            raise ValueError("trusted non-material exemption path is invalid")
+        if not isinstance(rationale, str) or not rationale.strip():
+            raise ValueError(f"trusted non-material exemption {path} requires a non-empty rationale")
+        if not isinstance(owner, str) or not owner.strip():
+            raise ValueError(f"trusted non-material exemption {path} requires a non-empty owner")
+        if path in seen:
+            raise ValueError(f"duplicate trusted non-material exemption: {path}")
+        if any(_prefixes_overlap(path, prefix)
+               for prefix in [*protected_prefixes, *material_prefixes]):
+            raise ValueError(f"trusted non-material exemption overlaps a protected material path: {path}")
+        seen.add(path)
+        validated.append({"path": path, "rationale": rationale.strip(), "owner": owner.strip()})
+    return validated
+
+
+def _trusted_material_policy(root: Path, candidate_matrix: dict[str, Any]
+                             ) -> tuple[list[str], list[str], list[dict[str, str]]]:
+    """Load enforcement floors and exemptions only from the verifier checkout.
+
+    In the trusted workflow, ``root`` is checked out at the protected PR base;
+    ``candidate_matrix`` is read from the separately materialized PR tree.
+    Candidate policy must preserve that base policy exactly.
+    """
+    trusted_matrix = _read_json(root / MATRIX_PATH)
+    if not isinstance(trusted_matrix, dict):
+        raise ValueError("verifier-base verification matrix must be an object")
+    trusted_prefixes = _validate_prefixes(
+        trusted_matrix.get("protected_material_path_prefixes"),
+        "trusted protected_material_path_prefixes",
+    )
+    candidate_protected = _validate_prefixes(
+        candidate_matrix.get("protected_material_path_prefixes"),
+        "candidate protected_material_path_prefixes",
+    )
+    if candidate_protected != trusted_prefixes:
+        raise ValueError("candidate protected_material_path_prefixes must exactly preserve verifier-base policy")
+
+    material_prefixes = _validate_prefixes(
+        candidate_matrix.get("material_path_prefixes"), "candidate material_path_prefixes"
+    )
+    missing = set(trusted_prefixes) - set(material_prefixes)
+    if missing:
+        raise ValueError("candidate matrix removes trusted protected material path prefixes: "
+                         + ", ".join(sorted(missing)))
+
+    trusted_exemptions = _validate_trusted_exemptions(
+        trusted_matrix.get("trusted_non_material_exemptions"),
+        trusted_prefixes, material_prefixes,
+    )
+    candidate_exemptions = candidate_matrix.get("trusted_non_material_exemptions")
+    if candidate_exemptions != trusted_matrix.get("trusted_non_material_exemptions"):
+        raise ValueError("candidate cannot add, remove, or change verifier-base non-material exemptions")
+    return trusted_prefixes, material_prefixes, trusted_exemptions
+
+
 def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
                  root: Path = ROOT, candidate_root: Path | None = None,
                  candidate_root_sha: str | None = None,
@@ -251,6 +334,8 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
     sources: dict[str, dict[str, Any]] = {}
     claims: dict[str, dict[str, Any]] = {}
     configured_enforcement_stage = "UNKNOWN"
+    prefixes: list[str] = []
+    trusted_exemptions: list[dict[str, str]] = []
     try:
         source_registry_path = "governance/evidence/SOURCE_REGISTRY.json"
         if not _candidate_file_matches(candidate_ref, source_registry_path,
@@ -285,7 +370,7 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
     except (OSError, ValueError, TypeError) as exc:
         finding("CLAIM_REGISTRY_INVALID", "ERROR", str(exc))
     try:
-        matrix_path = "governance/evidence/VERIFICATION_MATRIX.json"
+        matrix_path = MATRIX_PATH
         if not _candidate_file_matches(candidate_ref, matrix_path, candidate_tree / matrix_path,
                                        cwd=root, tree_root=candidate_tree):
             finding("EVIDENCE_INPUT_NOT_AT_CANDIDATE", "ERROR",
@@ -299,13 +384,7 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
         if not isinstance(matrix.get("report_only"), bool) or matrix["report_only"] != expected_report_only:
             raise ValueError("verification matrix report_only must be true exactly when enforcement_stage is REPORT_ONLY")
         configured_enforcement_stage = matrix["enforcement_stage"]
-        prefixes = matrix.get("material_path_prefixes")
-        if not isinstance(prefixes, list) or not prefixes or any(not isinstance(x, str) or not x for x in prefixes):
-            raise ValueError("verification matrix material_path_prefixes must be non-empty strings")
-        missing_prefixes = REQUIRED_MATERIAL_PATH_PREFIXES - set(prefixes)
-        if missing_prefixes:
-            raise ValueError("verification matrix removes required material path prefixes: "
-                             + ", ".join(sorted(missing_prefixes)))
+        _, prefixes, trusted_exemptions = _trusted_material_policy(root, matrix)
         matrix_gates = matrix.get("gates")
         expected_gates = {
             name: {"evidence_type": evidence_type.value,
@@ -329,6 +408,15 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
         changed = []
         finding("DIFF_UNAVAILABLE", "ERROR", str(exc))
     material = [path for path in changed if _is_material(path, prefixes)]
+    exempted = [path for path in changed if any(
+        _path_matches(path, [exemption["path"]]) for exemption in trusted_exemptions
+    )]
+    classified = set(material) | set(exempted)
+    unclassified = [path for path in changed if path not in classified]
+    for path in unclassified:
+        finding("UNCLASSIFIED_CHANGED_PATH", "BLOCKING",
+                "changed path is neither in candidate material scopes nor a verifier-base exemption; "
+                "classify it as material or add a reviewed verifier-base exemption", path)
     records_dir = _safe_candidate_path(candidate_tree, "governance/evidence/work_items")
     if records_dir is None or not records_dir.is_dir():
         finding("WORK_ITEM_DIRECTORY_UNSAFE", "ERROR",
@@ -499,6 +587,9 @@ def build_report(*, base_ref: str, candidate_ref: str, candidate_sha: str,
         "changed_path_count": len(changed),
         "material_path_count": len(material),
         "material_paths": material,
+        "trusted_non_material_exemptions": trusted_exemptions,
+        "exempted_paths": exempted,
+        "unclassified_paths": unclassified,
         "legacy_inventory": [
             {"claim_id": claim_id, "status": claim["status"],
              "scope_paths": claim["scope_paths"], "limitation": claim["limitation"]}

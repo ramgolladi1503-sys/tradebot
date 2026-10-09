@@ -2,6 +2,26 @@
   "schema_version": 1,
   "report_only": false,
   "enforcement_stage": "BLOCK_NEW_MATERIAL",
+  "protected_material_path_prefixes": [
+    "core/",
+    "strategies/",
+    "research/",
+    "scripts/research/",
+    "config/",
+    "data/",
+    "governance/evidence/",
+    "tests/governance/",
+    "tests/delivery/",
+    "tools/verify_evidence.py",
+    "docs/tradebot_delivery/",
+    "docs/agent_reviews/",
+    ".agents/workflows/tradebot-delivery-orchestrator.md",
+    ".github/workflows/evidence-gates.yml",
+    ".github/workflows/frozen-head-exact-sha-certification.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/tests.yml"
+  ],
+  "trusted_non_material_exemptions": [],
   "material_path_prefixes": [
     "core/",
     "strategies/",
@@ -11,11 +31,15 @@
     "data/",
     "governance/evidence/",
     "tests/governance/",
+    "tests/delivery/",
     "tools/verify_evidence.py",
     "docs/tradebot_delivery/",
+    "docs/agent_reviews/",
     ".agents/workflows/tradebot-delivery-orchestrator.md",
     ".github/workflows/evidence-gates.yml",
-    ".github/workflows/frozen-head-exact-sha-certification.yml"
+    ".github/workflows/frozen-head-exact-sha-certification.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/tests.yml"
   ],
   "gates": {
     "G1_SOURCE": {
