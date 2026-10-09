@@ -113,6 +113,41 @@ def test_gate2_ratchet_monotonicity_proof(tmp_wal):
     assert summary["pnl_pts"] == +4.0
 
 
+def test_runner_target_after_prior_ratchet_lock_does_not_self_transition(tmp_wal):
+    apm = ActivePositionManager(wal_path=tmp_wal)
+    assert apm.arm_and_enter(
+        position_id="TEST_RUNNER_TARGET_AFTER_RATCHET",
+        direction="CE",
+        contract="NIFTY 22700 CE",
+        entry_price=22700.0,
+        entry_time_str="2026-10-07T10:00:00",
+        sl_pts=12.0,
+        tp_pts=15.0,
+        is_runner_mode=True,
+    )
+
+    state, payload = apm.evaluate_bar(
+        bar_open=22700.0,
+        bar_high=22708.5,
+        bar_low=22699.0,
+        bar_close=22707.0,
+        bar_time_str="2026-10-07T10:01:00",
+    )
+    assert state == STATE_TRAIL_LOCK
+    assert payload["half_booked"] is False
+
+    state, payload = apm.evaluate_bar(
+        bar_open=22707.0,
+        bar_high=22716.0,
+        bar_low=22705.0,
+        bar_close=22715.0,
+        bar_time_str="2026-10-07T10:02:00",
+    )
+    assert state == STATE_TRAIL_LOCK
+    assert payload["half_booked"] is True
+    assert apm.payload.current_sl == 22704.0
+
+
 def test_gate3_crash_recovery_fail_closed_proof(tmp_wal):
     """Gate 3: Process hard kill / restart during in-flight trade forces fail-closed recovery."""
     apm = ActivePositionManager(wal_path=tmp_wal)
@@ -375,5 +410,4 @@ def test_breakeven_lock_proof(tmp_wal):
     assert st1 == STATE_TRAIL_LOCK
     assert apm.payload.trail_locked is True
     assert apm.payload.current_sl == 22401.0
-
 

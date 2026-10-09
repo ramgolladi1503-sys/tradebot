@@ -310,7 +310,16 @@ class ActivePositionManager:
             # Set Option Runner Trailing Stop: Peak Premium - max(12.0, 1.2 * ATR)
             opt_cushion = max(12.0, 1.2 * atr_1m)
             p.runner_trailing_sl = (p.opt_peak_hwm - opt_cushion) if p.opt_peak_hwm else None
-            self._transition_to(STATE_TRAIL_LOCK)
+            # The ratchet may already have moved the position to TRAIL_LOCK
+            # on an earlier bar. Do not attempt an illegal self-transition.
+            if self.state == STATE_IN_FLIGHT:
+                self._transition_to(STATE_TRAIL_LOCK)
+            elif self.state == STATE_TRAIL_LOCK:
+                pass
+            else:
+                raise ValueError(
+                    f"Cannot book runner target while position is in {self.state}"
+                )
             self._persist_wal_atomic()
             return self.state, asdict(p)
 
