@@ -65,7 +65,8 @@ def main() -> int:
         raise SystemExit("KITE_ACCESS_TOKEN_MISSING")
     from core.runtime_storage_authority import StorageAuthorityError, establish, bind_environment
     try:
-        storage = establish(volume=Path("/Volumes/TradeBotData"), runtime_root=args.output_root)
+        vol = Path("/Volumes/TradeBot") if Path("/Volumes/TradeBot").is_dir() else Path("/Volumes/TradeBotData")
+    storage = establish(volume=vol, runtime_root=args.output_root)
     except StorageAuthorityError as exc:
         raise SystemExit(str(exc))
     bind_environment(storage)

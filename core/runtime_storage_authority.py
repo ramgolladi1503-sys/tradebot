@@ -73,6 +73,8 @@ def establish(*, volume: Path, runtime_root: Path) -> StorageAuthority:
     runtime directory after the mount itself has been positively established.
     """
     volume = Path(volume).expanduser()
+    if volume == Path("/Volumes/TradeBotData") and not volume.is_dir() and Path("/Volumes/TradeBot").is_dir():
+        volume = Path("/Volumes/TradeBot")
     runtime_root = Path(runtime_root).expanduser()
     if not volume.is_dir() or not _probe_mount(volume):
         raise StorageAuthorityError("RUNTIME_STORAGE_AUTHORITY_LOST:mount_absent")
