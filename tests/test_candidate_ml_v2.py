@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from core.analytics import candidate_ml_v2 as mod
+from core.analytics.candidate_ml_v2 import certification as certification_mod
 
 
 def make_dataset(rows_per_session=30, sessions=14):
@@ -70,6 +71,136 @@ def test_dataset_and_purged_walk_forward_are_chronological():
     for train_idx,test_idx in splits:
         assert train_idx.max()<test_idx.min()
         assert train_idx.size>0 and test_idx.size>0
+        assert df.iloc[train_idx]["session_date"].nunique() >= 4
+
+
+def test_purged_walk_forward_removes_training_labels_crossing_test_boundary():
+    df = make_dataset(rows_per_session=6, sessions=12)
+    df["outcome_ts_epoch_ms"] = df["decision_ts_epoch_ms"] + 60_000
+    # One training observation has a multi-session label horizon. Fixed-row
+    # purging alone cannot guarantee its label is known before the test fold.
+    df.loc[0, "outcome_ts_epoch_ms"] = int(df.loc[18, "decision_ts_epoch_ms"])
+    splits = mod.purged_walk_forward_splits(
+        df, n_splits=3, purge_rows=0, min_train_sessions=3
+    )
+    for train_idx, test_idx in splits:
+        first_test = int(df.iloc[test_idx]["decision_ts_epoch_ms"].min())
+        assert (df.iloc[train_idx]["outcome_ts_epoch_ms"] < first_test).all()
+    assert 0 not in splits[0][0]
+
+
+def test_purged_walk_forward_applies_explicit_time_embargo():
+    df = make_dataset(rows_per_session=6, sessions=12)
+    df["outcome_ts_epoch_ms"] = df["decision_ts_epoch_ms"] + 60_000
+    first_test = int(df.loc[18, "decision_ts_epoch_ms"])
+    df.loc[16, "decision_ts_epoch_ms"] = first_test - 10 * 60_000
+    df.loc[16, "feature_cutoff_ts_epoch_ms"] = first_test - 10 * 60_000
+    df.loc[16, "outcome_ts_epoch_ms"] = first_test - 9 * 60_000
+    df.loc[17, "decision_ts_epoch_ms"] = first_test - 2 * 60_000
+    df.loc[17, "feature_cutoff_ts_epoch_ms"] = first_test - 2 * 60_000
+    df.loc[17, "outcome_ts_epoch_ms"] = first_test - 60_000
+    df = df.sort_values("decision_ts_epoch_ms", kind="stable").reset_index(drop=True)
+    boundary_inside_id = "e17"
+    boundary_outside_id = "e16"
+    embargo = 5 * 60_000
+    splits = mod.purged_walk_forward_splits(
+        df, n_splits=3, purge_rows=0, min_train_sessions=3, embargo_ms=embargo
+    )
+    train_idx, test_idx = splits[0]
+    first_test = int(df.iloc[test_idx]["decision_ts_epoch_ms"].min())
+    training_ids = set(df.iloc[train_idx]["event_id"])
+    assert df.loc[df["event_id"] == boundary_inside_id, "outcome_ts_epoch_ms"].iloc[0] >= first_test - embargo
+    assert boundary_inside_id not in training_ids
+    assert boundary_outside_id in training_ids
+    assert (df.iloc[train_idx]["outcome_ts_epoch_ms"] < first_test - embargo).all()
+
+
+def test_ablation_training_obeys_label_purge_and_embargo(monkeypatch):
+    df = make_dataset(rows_per_session=6, sessions=12)
+    validation_start = int(df.loc[36, "decision_ts_epoch_ms"])
+    df.loc[34, "decision_ts_epoch_ms"] = validation_start - 10 * 60_000
+    df.loc[34, "feature_cutoff_ts_epoch_ms"] = validation_start - 10 * 60_000
+    df.loc[34, "outcome_ts_epoch_ms"] = validation_start - 9 * 60_000
+    df.loc[35, "decision_ts_epoch_ms"] = validation_start - 2 * 60_000
+    df.loc[35, "feature_cutoff_ts_epoch_ms"] = validation_start - 2 * 60_000
+    df.loc[35, "outcome_ts_epoch_ms"] = validation_start - 60_000
+    df = df.sort_values("decision_ts_epoch_ms", kind="stable").reset_index(drop=True)
+    observed_train_ids = []
+    monkeypatch.setattr(certification_mod, "feature_columns", lambda frame: ["synthetic_feature"])
+
+    def fake_nested_model(train, _config, *, features, embargo_ms):
+        assert embargo_ms == 5 * 60_000
+        observed_train_ids.extend(train["event_id"].tolist())
+        return object()
+
+    monkeypatch.setattr(certification_mod, "_nested_model", fake_nested_model)
+    monkeypatch.setattr(certification_mod, "_score_frame", lambda _bundle, frame: frame)
+    monkeypatch.setattr(certification_mod, "_fold_metrics", lambda _frame: {"lift_r": 0.0})
+    certification_mod._ablation_report(
+        df,
+        mod.CandidateMLConfig(purge_rows=1),
+        certification_mod.CandidateMLCertificationConfig(embargo_ms=5 * 60_000),
+        supported_train_sessions=6,
+    )
+    assert "e35" not in observed_train_ids
+    assert "e34" not in observed_train_ids
+    assert "e33" in observed_train_ids
+
+
+@pytest.mark.parametrize("kwargs", [{"embargo_ms": -1}, {"purge_rows": -1}])
+def test_purged_walk_forward_rejects_negative_gap_controls(kwargs):
+    with pytest.raises(ValueError, match="purge_and_embargo_must_be_nonnegative"):
+        mod.purged_walk_forward_splits(make_dataset(), **kwargs)
+
+
+def test_purged_walk_forward_fails_closed_if_temporal_purge_removes_train_sessions():
+    df = make_dataset(rows_per_session=6, sessions=12)
+    first_test_start = int(df.loc[18, "decision_ts_epoch_ms"])
+    df.loc[df["session_date"].isin({df.loc[6, "session_date"], df.loc[12, "session_date"]}), "outcome_ts_epoch_ms"] = first_test_start
+    with pytest.raises(ValueError, match="insufficient_train_sessions_after_purge"):
+        mod.purged_walk_forward_splits(
+            df, n_splits=3, purge_rows=0, min_train_sessions=3
+        )
+
+
+def test_nested_chronological_split_purges_unresolved_labels_and_embargo():
+    df = make_dataset(rows_per_session=20, sessions=8)
+    validation_start = int(df.loc[120, "decision_ts_epoch_ms"])
+    df.loc[118, "decision_ts_epoch_ms"] = validation_start - 10 * 60_000
+    df.loc[118, "feature_cutoff_ts_epoch_ms"] = validation_start - 10 * 60_000
+    df.loc[118, "outcome_ts_epoch_ms"] = validation_start - 9 * 60_000
+    df.loc[119, "decision_ts_epoch_ms"] = validation_start - 2 * 60_000
+    df.loc[119, "feature_cutoff_ts_epoch_ms"] = validation_start - 2 * 60_000
+    df.loc[119, "outcome_ts_epoch_ms"] = validation_start - 60_000
+    df = df.sort_values("decision_ts_epoch_ms", kind="stable").reset_index(drop=True)
+    train, validation = mod.chronological_split(
+        df,
+        mod.CandidateMLConfig(
+            min_train_rows=20, min_validation_rows=20,
+            purge_rows=0, validation_fraction=0.25,
+        ),
+        embargo_ms=5 * 60_000,
+    )
+    assert "e119" not in set(train["event_id"])
+    assert "e118" in set(train["event_id"])
+    assert validation["session_date"].nunique() == 2
+
+
+def test_nested_model_forwards_certification_embargo(monkeypatch):
+    df = make_dataset(rows_per_session=20, sessions=8)
+    observed = {}
+    monkeypatch.setattr(certification_mod, "feature_columns", lambda _frame: ["x"])
+
+    def fake_split(frame, config, *, embargo_ms):
+        observed["embargo_ms"] = embargo_ms
+        return frame.iloc[:-20].copy(), frame.iloc[-20:].copy()
+
+    monkeypatch.setattr(certification_mod, "chronological_split", fake_split)
+    monkeypatch.setattr(certification_mod, "_fit_unit", lambda *args: object())
+    certification_mod._nested_model(
+        df, mod.CandidateMLConfig(), embargo_ms=1234
+    )
+    assert observed["embargo_ms"] == 1234
 
 
 def test_fit_predict_calibration_abstention_and_manifest(tmp_path):

@@ -223,7 +223,14 @@ def feature_columns(df: pd.DataFrame) -> list[str]:
     )
 
 
-def chronological_split(df: pd.DataFrame, config: CandidateMLConfig) -> tuple[pd.DataFrame, pd.DataFrame]:
+def chronological_split(
+    df: pd.DataFrame,
+    config: CandidateMLConfig,
+    *,
+    embargo_ms: int = 0,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if embargo_ms < 0:
+        raise ValueError("chronological_embargo_ms_negative")
     validate_candidate_dataset(df)
     sessions = list(dict.fromkeys(df["session_date"].astype(str).tolist()))
     if len(sessions) < 5:
@@ -231,6 +238,10 @@ def chronological_split(df: pd.DataFrame, config: CandidateMLConfig) -> tuple[pd
     validation_sessions = max(1, int(math.ceil(len(sessions) * config.validation_fraction)))
     train = df[df["session_date"].astype(str).isin(set(sessions[:-validation_sessions]))].copy()
     validation = df[df["session_date"].astype(str).isin(set(sessions[-validation_sessions:]))].copy()
+    validation_start = int(validation["decision_ts_epoch_ms"].min())
+    train = train[
+        train["outcome_ts_epoch_ms"] < validation_start - embargo_ms
+    ].copy()
     if config.purge_rows:
         train = train.iloc[: max(0, len(train) - config.purge_rows)].copy()
     if len(train) < config.min_train_rows:
@@ -246,7 +257,10 @@ def purged_walk_forward_splits(
     n_splits: int = 5,
     purge_rows: int = 5,
     min_train_sessions: int = 3,
+    embargo_ms: int = 0,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
+    if purge_rows < 0 or embargo_ms < 0:
+        raise ValueError("purge_and_embargo_must_be_nonnegative")
     validate_candidate_dataset(df)
     sessions = list(dict.fromkeys(df["session_date"].astype(str).tolist()))
     if len(sessions) < min_train_sessions + n_splits:
@@ -259,12 +273,27 @@ def purged_walk_forward_splits(
         first_test = sessions.index(str(block[0]))
         train_idx = np.flatnonzero(df["session_date"].astype(str).isin(set(sessions[:first_test])).to_numpy())
         test_idx = np.flatnonzero(df["session_date"].astype(str).isin(set(str(item) for item in block)).to_numpy())
+        test_start = int(df.iloc[test_idx]["decision_ts_epoch_ms"].min())
+        # Outcome intervals are label information windows. A training sample
+        # whose outcome is not resolved before the test boundary leaks across
+        # the fold even if a fixed row-count purge happens to be configured.
+        train_idx = train_idx[
+            df.iloc[train_idx]["outcome_ts_epoch_ms"].to_numpy(dtype=np.int64)
+            < test_start - embargo_ms
+        ]
         if purge_rows and len(train_idx):
             train_idx = train_idx[: max(0, len(train_idx) - purge_rows)]
         if len(train_idx) and len(test_idx):
+            surviving_sessions = int(
+                df.iloc[train_idx]["session_date"].astype(str).nunique()
+            )
+            if surviving_sessions < min_train_sessions:
+                continue
             splits.append((train_idx, test_idx))
     if not splits:
         raise ValueError("no_valid_walk_forward_splits")
+    if len(splits) != n_splits:
+        raise ValueError("insufficient_train_sessions_after_purge")
     return splits
 
 

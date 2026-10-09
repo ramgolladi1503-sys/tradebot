@@ -1,0 +1,341 @@
+{
+  "evidence": {
+    "allowed_read_paths": [
+      "inline synthetic test fixtures only"
+    ],
+    "independent_review": {
+      "findings": 2,
+      "reviewer": "read-only adversarial subagent",
+      "status": "two findings remediated; CI and end-to-end acceptance remain blocked"
+    },
+    "independent_review_node_g": {
+      "findings_corrected": 4,
+      "reviewer": "read-only GSD code reviewer",
+      "status": "final follow-up review found no remaining issue within scoped files"
+    },
+    "input_scope": "Inline synthetic fixtures only; no protected outcomes, runtime artifacts, broker APIs, or order actions accessed",
+    "last_remote_ci": {
+      "commit": "32b26a1e582a098486abbf3642323d310b16218c",
+      "conclusion": "mixed_blocked",
+      "focused_candidate_ml_v2": "success",
+      "real_market_corpus_pilot": "failure",
+      "reason": "Git LFS budget exhausted before corpus validation/training",
+      "run_id": 36313532028,
+      "separate_merge_checks": "base-authority/live-flow/deploy checks failed; unit_tests pending at recorded snapshot"
+    },
+    "last_remote_ci_snapshot_utc": "2026-09-27T10:46:43Z",
+    "market_corpus_training_ran": false,
+    "patch_parent_sha": "35d46108c05ccd11bfd66fdfd4f453f15690c120",
+    "patch_scope_verified": true,
+    "protected_data_materialized": false,
+    "protected_outcomes_read": false,
+    "remote_ci": {
+      "blocking_checks": [
+        "code-excellence-base-authority",
+        "pr818-live-flow-freeze-target",
+        "real_market_corpus_pilot",
+        "Netlify Header rules",
+        "Netlify Pages changed",
+        "Netlify Redirect rules",
+        "Netlify Deploy Preview"
+      ],
+      "commit": "32b26a1e582a098486abbf3642323d310b16218c",
+      "default_unit_tests": "pending_at_snapshot",
+      "focused_candidate_ml_v2": "success",
+      "interpretation": "Focused synthetic/replay-lane checks passed, but real-corpus pilot did not materialize files and performed no training. Required CI and authority checks are not green.",
+      "other_blocking_checks": [
+        "code-excellence-base-authority",
+        "pr818-live-flow-freeze-target",
+        "Netlify deploy preview checks"
+      ],
+      "real_market_corpus_failure": "Git LFS repository budget exhausted; selected corpus objects unavailable",
+      "real_market_corpus_pilot": "failure_before_training",
+      "replay_ledger_proxy_training": "success",
+      "run_id": 36313532028,
+      "unit_tests": "pending_at_latest_snapshot",
+      "verify": "success"
+    },
+    "remote_ci_snapshot_note": "gh pr checks refreshed after verify completed; unit_tests remain pending at this snapshot",
+    "source_sha256": {
+      "BASELINE_AND_SAFETY_MAP.md": "5a93f175088ff30b9651b920b67ae27f75009652af70851b2d46bf06117663c2",
+      "core/analytics/candidate_ml_v2/certification.py": "455abaff6c85336439f6da2de361986f8d73b33dd0c406a32d4643f2ba3234f2",
+      "core/analytics/candidate_ml_v2/dataset.py": "b651a14545ee00b18fd99f1a5d65081107700cd0ee7c29f5787449fe0a0a7bb4",
+      "core/indicators_live.py": "bce5db52e9386e8f46e21c23237285f1f43697669dbe5ff48d466df6aa6aad89",
+      "core/research_pipeline.py": "594c9a2e05a74f994777d586c2678c2ad62fb2bbbb3f75d842df38ae7d978b30",
+      "docs/agent_reviews/pr936-verification-gateway-20260927.md": "70f994b72b9f1cb1ce87b4809d375ef732c55a56ad33452c9df69b3e354ce9b3",
+      "docs/research/PR936_MONTE_CARLO_RESAMPLING_CONTRACT.md": "0684ddcd0e7fc7de240cbee02bf502c6b6b3718bc0bfb3b5da7a68eec6c421e3",
+      "docs/research/PR936_PURGED_EMBARGO_CONTRACT.md": "c2879aa54d575b86138c9dcabd2e725c6a41a9b09bcac0f723d1163a91119fac",
+      "docs/research/PR936_REGIME_SELECTION_GOVERNANCE_CONTRACT.md": "732c553188e07e7915e113ed79facd2f2347829b6782888e6fbc049fce26b11a",
+      "docs/research/htf_range_expansion_deepdive_timeline.md": "64ef6c3f9193b22a4b66da84f1df9a27964dcee6b22197b6b0e7b69eaf9f262e",
+      "docs/research/strategy_deepdive_checklist.md": "c107a211b67e527b3bb04387eb6195cb98d540a84a15a75a15344ca0ef616f7e",
+      "docs/research/strategy_research_playbook.md": "47ac638394b91396a310ff7dfd06ee65c2fbf3f81f74ba7eb88ba48b1159ca68",
+      "research/verification_gateway/ACCEPTANCE_TEST_LOG_20260927.txt": "4ce9d59d8e6ef52508588601d381ef2e5535e1c424537f849123cb11df81a8e6",
+      "research/verification_gateway/DEPENDENCY_ADOPTION_DECISIONS.md": "7bbecf2a87970b3ab6ed61341f1c13fb8a1aca13337d2897783ac15d8a4976f5",
+      "research/verification_gateway/ENTRYPOINT_STATIC_INVENTORY_20260927.md": "3b2b49e76902fa5b625c7f236baed97cb5b5e97e846a074895602622d4ffc8ca",
+      "research/verification_gateway/FINAL_CONTROLLED_DISCOVERY_READINESS.md": "d1cb47c3b057e2f31b29f2128d625fe797ff316bbc54f50f9c13fdc977e55f1a",
+      "research/verification_gateway/HERMES_ARCHITECTURE_CONTRACT.md": "836b63f73cd971b362abbd978e7021b7956d3720af941cac841c3d1d8635b3e5",
+      "research/verification_gateway/README.md": "621df92eda58a2f5509f942fd654642eaa753beefa949458998f1fef908fd7bb",
+      "research/verification_gateway/REMOTE_CI_STATUS_20260927.md": "a5b8b105fee677ef2482cc376ae5cc132af82c894370fc4cfeafaddea6343fe5",
+      "research/verification_gateway/contracts.py": "7b7cbeb9ae7c45dded432bc2000a974ae9b8c578e1cfb8b24fbf634ffb6c7fbc",
+      "research/verification_gateway/data_checks.py": "9bd258ed0b02109e840b30cd364bb9b4cd0a02ae41e900bcac753e68fa401e05",
+      "research/verification_gateway/reference_execution.py": "e1ceca6fd07bdfa05bd8c771c509928479719e9ff2fc6306a1698bed60773d50",
+      "research/verification_gateway/reference_math.py": "44e5a6d43ef734db898689bfbe18ac9aef3637ea6d634e4e3d1d5a4bb1328a3d",
+      "research/verification_gateway/registry_bridge.py": "f693e1111f4d2a1373e265f3106b974d9b1c369f7672e5434e7d431fa274dc52",
+      "research/verification_gateway/requirements-verification-lock-py312-macos-arm64.txt": "a55cc60832852ed1485e2ee7a34c27d73a76bac193181a8319a5ea3a39949614",
+      "research/verification_gateway/requirements-verification.txt": "c40f92619065d71ed74286e3a3af5bd33217721aedaf82aeaf03d8adc8057927",
+      "tests/research/test_verification_gateway_contracts.py": "0620e9d346da4fd88b333fcb5ebebe1ab6404effa66f20550c37e8aa53a2c059",
+      "tests/research/test_verification_gateway_data.py": "18b0cdec59216210b9ab426c32197d3027236494246884f6087c79079a91670f",
+      "tests/research/test_verification_gateway_reference_execution.py": "1641cf41478a54fcb127768d349e3a633be9a517da0179e35209bbb3fab155ee",
+      "tests/research/test_verification_gateway_reference_math.py": "7aac4ff3c3b76ea33c418c0d886c11d96c628a62ef924e0f28c28fb3b66627bd",
+      "tests/research/test_verification_gateway_registry_bridge.py": "25dada6a87a9ee475e347eaee3a74fc175185588df40a8814f260e9a01184f5e",
+      "tests/test_candidate_ml_v2.py": "092a6a37920e4ddbbb70451f7b036a20809eb3428d81ed506c2f301c466312f4",
+      "tests/test_research_pipeline_monte_carlo.py": "f2f8011c4b595c8254871fe735c530d39b2c1836d5720828afdfe7bd117b0c90"
+    },
+    "synthetic_input_manifest": {
+      "external_data_read": false,
+      "kind": "inline fixtures",
+      "market_quotes_read": false,
+      "protected_outcomes_read": false
+    },
+    "test_runs": [
+      {
+        "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/research/test_verification_gateway_contracts.py tests/research/test_verification_gateway_data.py tests/research/test_verification_gateway_reference_math.py tests/research/test_verification_gateway_reference_execution.py tests/research/test_verification_gateway_registry_bridge.py",
+        "result": "52 passed, 1 warning"
+      },
+      {
+        "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/test_research_pipeline_monte_carlo.py",
+        "result": "9 passed, 1 warning"
+      },
+      {
+        "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/test_candidate_ml_v2.py -k 'purged_walk_forward or nested_chronological or nested_model_forwards or ablation_training'",
+        "result": "9 passed, 6 deselected, 1 warning"
+      },
+      {
+        "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/test_candidate_ml_v2.py",
+        "result": "15 passed, 1 warning in 19.50s"
+      },
+      {
+        "command": "/tmp/pr936-verification-venv/bin/python -m pytest -q -c /dev/null tests/analytics tests/test_candidate_ml_v2.py tests/test_candidate_ml_v2_replay_ledger.py tests/test_candidate_ml_v2_provenance.py tests/test_candidate_ml_v2_historical_options.py tests/test_candidate_ml_v2_corpus_loader.py tests/test_candidate_ml_v2_market_corpus.py tests/test_analytics_schema_store.py",
+        "result": "86 passed, 4237 warnings in 24.51s; tests use synthetic fixtures or temporary directories"
+      }
+    ]
+  },
+  "next_action": "Resume only after LFS budget is restored or an authorized equivalent source is provided; authorize protected CI/root dependency integration; obtain owner-reviewed complete research-entrypoint graph and OS-enforced outcome denial; reconcile inherited frozen-path PR scope through its governing process. Preserve BLOCKED_WITH_EXACT_DEPENDENCY.",
+  "nodes": [
+    {
+      "blockers": [
+        "OS-enforced protected-data isolation not verified",
+        "Canonical local checkout intentionally excluded due dirty state"
+      ],
+      "id": "A",
+      "outputs": [
+        "BASELINE_AND_SAFETY_MAP.md"
+      ],
+      "owner": "GSD",
+      "prerequisites": [],
+      "status": "PARTIAL"
+    },
+    {
+      "blockers": [
+        "Cross-platform lock/compatibility not verified",
+        "External engine/license audit not complete"
+      ],
+      "id": "B",
+      "outputs": [
+        "research/verification_gateway/requirements-verification.txt",
+        "research/verification_gateway/requirements-verification-lock-py312-macos-arm64.txt"
+      ],
+      "owner": "GSD",
+      "prerequisites": [
+        "A"
+      ],
+      "status": "PARTIAL"
+    },
+    {
+      "blockers": [
+        "Independent source-review evidence producer absent",
+        "CLI extract/review/freeze/inspect absent"
+      ],
+      "id": "C",
+      "outputs": [
+        "research/verification_gateway/contracts.py",
+        "research/verification_gateway/HERMES_ARCHITECTURE_CONTRACT.md"
+      ],
+      "owner": "GSD",
+      "prerequisites": [
+        "A",
+        "B"
+      ],
+      "status": "PARTIAL",
+      "tests": [
+        "20 focused gateway tests pass in disposable Python 3.12 venv"
+      ]
+    },
+    {
+      "blockers": [
+        "No strategy-level entry/exit translation comparison",
+        "Authoritative historical #1/#17 source fixtures unavailable"
+      ],
+      "id": "D",
+      "outputs": [
+        "research/verification_gateway/reference_math.py",
+        "tests/research/test_verification_gateway_reference_math.py"
+      ],
+      "owner": "GSD",
+      "prerequisites": [
+        "C"
+      ],
+      "status": "PARTIAL",
+      "tests": [
+        "7 synthetic independent EMA oracle tests pass, including 1e-12 prefix comparison with pure core indicator calculation"
+      ]
+    },
+    {
+      "blockers": [
+        "PIT source authority and instrument/contract eligibility rules absent"
+      ],
+      "id": "E",
+      "outputs": [
+        "research/verification_gateway/data_checks.py"
+      ],
+      "owner": "GSD",
+      "prerequisites": [
+        "C"
+      ],
+      "status": "PARTIAL",
+      "tests": [
+        "10 synthetic shape, timestamp, contract-identity and authority-separation tests pass"
+      ]
+    },
+    {
+      "blockers": [
+        "No parity comparison to TradeBot's production research backtest",
+        "Historical quote authority remains absent"
+      ],
+      "id": "F",
+      "outputs": [
+        "research/verification_gateway/reference_execution.py",
+        "tests/research/test_verification_gateway_reference_execution.py"
+      ],
+      "owner": "GSD",
+      "prerequisites": [
+        "C",
+        "E"
+      ],
+      "status": "PARTIAL",
+      "tests": [
+        "12 synthetic quote replay acceptance tests pass"
+      ]
+    },
+    {
+      "blockers": [
+        "Individual historical regime-filtered trial families and their complete selection denominator are not reconciled; the HTF narrative has no authenticated source artifacts or independent prospective evidence"
+      ],
+      "id": "G",
+      "outputs": [
+        "core/analytics/candidate_ml_v2/certification.py",
+        "core/analytics/candidate_ml_v2/dataset.py",
+        "core/research_pipeline.py",
+        "docs/research/PR936_MONTE_CARLO_RESAMPLING_CONTRACT.md",
+        "docs/research/PR936_PURGED_EMBARGO_CONTRACT.md",
+        "docs/research/PR936_REGIME_SELECTION_GOVERNANCE_CONTRACT.md",
+        "docs/research/htf_range_expansion_deepdive_timeline.md",
+        "docs/research/strategy_deepdive_checklist.md",
+        "docs/research/strategy_research_playbook.md",
+        "tests/test_candidate_ml_v2.py",
+        "tests/test_research_pipeline_monte_carlo.py"
+      ],
+      "owner": "GSD",
+      "prerequisites": [
+        "A",
+        "B",
+        "E"
+      ],
+      "status": "PARTIAL",
+      "tests": [
+        "9 seeded synthetic Monte Carlo regression tests pass",
+        "Synthetic boundary, embargo, nested split, ablation and minimum-session purge regressions pass",
+        "Full candidate_ml_v2 test module: 15 pass",
+        "Offline analytics/candidate_ml_v2 suite: 86 pass",
+        "Independent read-only review: no remaining scoped findings",
+        "Static regime-governance review corrected outcome-selected regime restrictions to exposed child hypotheses; no historical outcome data accessed"
+      ]
+    },
+    {
+      "blockers": [
+        "Static candidate scan is not a complete owner-reviewed call graph",
+        "Official research entrypoints are not routed through one gateway",
+        "Direct outcome filesystem access is not OS restricted"
+      ],
+      "id": "H",
+      "outputs": [
+        "research/verification_gateway/ENTRYPOINT_STATIC_INVENTORY_20260927.md"
+      ],
+      "owner": "GSD",
+      "prerequisites": [
+        "C",
+        "D",
+        "E",
+        "F",
+        "G"
+      ],
+      "status": "NOT_STARTED"
+    },
+    {
+      "blockers": [
+        "OS-denied protected access, API bypass, production parity, clean CI not tested"
+      ],
+      "id": "I",
+      "outputs": [
+        "research/verification_gateway/ENTRYPOINT_STATIC_INVENTORY_20260927.md",
+        "research/verification_gateway/ACCEPTANCE_TEST_LOG_20260927.txt",
+        "research/verification_gateway/REMOTE_CI_STATUS_20260927.md"
+      ],
+      "owner": "GSD",
+      "prerequisites": [
+        "H"
+      ],
+      "status": "PARTIAL",
+      "tests": [
+        "52 gateway contract/data/registry/math/execution tests pass",
+        "9 synthetic Monte Carlo regression tests pass"
+      ]
+    },
+    {
+      "blockers": [
+        "Remote CI run 36310696255 failed collecting 5 gateway modules: missing pydantic",
+        "CI and root dependency files are protected and unchanged",
+        "No end-to-end integration PR or controlled-discovery evidence",
+        "Independent review identified and remediated two input/replay findings; remote CI dependency integration remains unavailable under the current protected-path scope"
+      ],
+      "id": "J",
+      "outputs": [
+        "research/verification_gateway/REMOTE_CI_STATUS_20260927.md"
+      ],
+      "owner": "GSD",
+      "prerequisites": [
+        "I"
+      ],
+      "status": "BLOCKED"
+    }
+  ],
+  "repository": {
+    "base_sha": "0f95e60335ddcadbe397e5ca837946ed8b1cdec7",
+    "checkout": "/Users/madhuram/.codex/worktrees/pr936-verification-gateway/tradebot",
+    "pr": 936,
+    "pr_head_sha_at_start": "35d46108c05ccd11bfd66fdfd4f453f15690c120",
+    "remote": "https://github.com/ramgolladi1503-sys/tradebot"
+  },
+  "safety": {
+    "allowed_for_live_execution": false,
+    "append": false,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "source_agent": "hermes_then_gsd",
+  "task_id": "tradebot-pr936-reuse-first-verification-gateway-20260927",
+  "verdict": "BLOCKED_WITH_EXACT_DEPENDENCY",
+  "verification_signoff": null
+}
