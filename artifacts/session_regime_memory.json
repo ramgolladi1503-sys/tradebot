@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "sessions": {
+    "2026-10-07": {
+      "date": "2026-10-07",
+      "recorded_at": "2026-10-07T19:52:42.053713",
+      "open": 22690.45,
+      "close": 22603.05,
+      "day_high": 22717.65,
+      "day_low": 22546.3,
+      "total_day_range": 171.35,
+      "or_high": 22692.95,
+      "or_low": 22585.05,
+      "or_width": 107.9,
+      "total_path_distance": 1887.0,
+      "ker_efficiency_ratio": 0.0463,
+      "classified_regime": "RANGE",
+      "rejection_wick_win_rate": 0.833,
+      "breakout_win_rate": 0.167,
+      "key_lesson": "Wide OR (107.9pt) with low efficiency ratio (KER=0.046). Rejection wicks generated +50.9 pts. Breakouts failed in afternoon chop. Cut off new breakout entries past 13:45 PM on low-KER days."
+    }
+  }
+}

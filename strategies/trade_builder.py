@@ -494,16 +494,21 @@ class TradeBuilder:
             return candidate
         data = dict(market_data or {})
         out = dict(candidate)
+        raw_dir = out.get("direction")
+        if raw_dir is None or isinstance(raw_dir, bool) or not isinstance(raw_dir, str):
+            return None
+        direction_map = {
+            "BUY_CALL": "CE",
+            "BUY_PUT": "PE",
+            "CE": "CE",
+            "PE": "PE",
+        }
+        if raw_dir not in direction_map:
+            return None
+        opt_type = direction_map[raw_dir]
         symbol = str(out.get("symbol") or data.get("symbol") or "").strip().upper()
         if not symbol:
             return out
-        direction = str(out.get("direction") or "").strip().upper()
-        if "PUT" in direction or direction.endswith("PE"):
-            opt_type = "PE"
-        elif "CALL" in direction or direction.endswith("CE"):
-            opt_type = "CE"
-        else:
-            opt_type = "CE"
         spot = (
             self._coerce_positive_float(data.get("underlying_spot"))
             or self._coerce_positive_float(data.get("ltp"))

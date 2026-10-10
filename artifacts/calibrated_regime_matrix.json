@@ -1,0 +1,41 @@
+{
+  "RANGE": {
+    "count": 3064,
+    "percentage": 45.7,
+    "efficiency_ratio_max": 0.28,
+    "action": "MICRO_SCALP_BOTH_WAYS",
+    "optimal_target_pts": 23.2,
+    "optimal_stop_loss_pts": 15.8,
+    "rules": "Buy dips at lower boundary/VWAP floor; Fade rips at upper boundary; Lock profits quickly.",
+    "optimal_rejection_wick_pts": 6.0,
+    "optimal_vwap_buffer_pts": -4.0,
+    "optimal_profit_lock_trigger_pts": 8.0
+  },
+  "TRENDING_UP": {
+    "count": 430,
+    "percentage": 6.4,
+    "efficiency_ratio_min": 0.45,
+    "action": "PULLBACK_LONG_ONLY",
+    "optimal_target_pts": 60.9,
+    "optimal_stop_loss_pts": 23.0,
+    "rules": "Buy pullbacks to VWAP; Strictly forbid shorting/fading; Trail stops."
+  },
+  "TRENDING_DOWN": {
+    "count": 398,
+    "percentage": 5.9,
+    "efficiency_ratio_min": 0.45,
+    "action": "BREAKDOWN_SHORT_ONLY",
+    "optimal_target_pts": 56.4,
+    "optimal_stop_loss_pts": 27.2,
+    "rules": "Sell rallies to VWAP; Strictly forbid buying dips; Trail stops."
+  },
+  "VOLATILE_SHOCK": {
+    "count": 1098,
+    "percentage": 16.4,
+    "min_bar_range_pts": 28.0,
+    "action": "STAND_ASIDE_100_PERCENT_CASH",
+    "optimal_target_pts": 0.0,
+    "optimal_stop_loss_pts": 0.0,
+    "rules": "Enforce mandatory stand-aside; Vega shock & erratic wicks destroy capital."
+  }
+}
