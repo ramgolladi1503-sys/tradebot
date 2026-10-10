@@ -11,6 +11,7 @@ import textwrap
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github/workflows"
 INVENTORY = ROOT / "governance/evidence/ENTRYPOINT_INVENTORY.json"
+WORKFLOW_DOC = ROOT / "docs/AGENT_WORKFLOW.md"
 FREEZE_WORKFLOW = WORKFLOWS / "repo-forensics-pr-gate.yml"
 REVIEWED_BASE_DISPATCH_PATHS = frozenset({
     ".github/workflows/agentic-qa-evidence-auditor.yml",
@@ -641,6 +642,17 @@ def test_inventory_covers_active_dispatch_workflows_and_both_retired_triggers():
     assert inventory["repository_gaps"]["branch_protection_requires_evidence_gate"] == "UNSATISFIED"
     assert inventory["repository_gaps"]["authenticated_human_identity_approval"] == "UNSATISFIED"
     assert _inventory_errors(inventory) == []
+
+
+def test_workflow_document_active_dispatch_count_matches_inventory():
+    inventory = json.loads(INVENTORY.read_text(encoding="utf-8"))
+    documentation = WORKFLOW_DOC.read_text(encoding="utf-8")
+    match = re.search(
+        r"workflow inventory records each of the (\d+) active `workflow_dispatch` workflows",
+        documentation,
+    )
+    assert match is not None
+    assert int(match.group(1)) == len(inventory["active_workflow_dispatch_entrypoints"])
 
 
 def test_workflow_evidence_is_exact_and_code_excellence_multiline_paths_are_parsed():

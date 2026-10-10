@@ -292,10 +292,12 @@ implemented and independently verified.
 
 These local checks do not intercept direct Codex, ChatGPT, Claude, Gemini,
 GitHub issue/comment, Actions, MCP, or other platform requests. The current
-workflow inventory records each of the 18 active `workflow_dispatch` workflows
-as `UNSATISFIED` for pre-work admission. The retired PR818 auto-write workflow
-is recorded separately; PR823 is merged. Universal intake and branch-protection
-enforcement remain `UNSATISFIED`.
+workflow inventory records each of the 17 active `workflow_dispatch` workflows
+as `UNSATISFIED` for pre-work admission. Two retired triggers are recorded
+separately: the PR818 test-repair workflow was retired after its change merged
+in PR823, and the frozen-head certification workflow's caller-selectable manual
+trigger was removed while its PR-time checks were retained. Universal intake
+and branch-protection enforcement remain `UNSATISFIED`.
 
 Accepted output continues to expose:
 
