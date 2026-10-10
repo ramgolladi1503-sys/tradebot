@@ -30,7 +30,12 @@ from core.active_position_manager import (
 )
 
 class SentinelLiveFeedAdvisor:
-    def __init__(self, artifacts_dir: str = "artifacts", ticker: str = "NIFTY"):
+    def __init__(
+        self,
+        artifacts_dir: str = "artifacts",
+        ticker: str = "NIFTY",
+        target_expiry: Optional[str] = None
+    ):
         self.lock_mgr = SentinelManifestLock(artifact_directory=artifacts_dir)
         if not self.lock_mgr.verify_manifest_or_fail_closed():
             raise SystemExit("ABORT: Model manifest verification failed.")
@@ -39,6 +44,7 @@ class SentinelLiveFeedAdvisor:
             self.calib = json.load(f)
 
         self.ticker = ticker.upper()
+        self.target_expiry = str(target_expiry).strip().upper() if target_expiry else None
         self.slippage = DynamicOptionSlippageModel(base_brokerage_pts=0.40)
         self.apm = ActivePositionManager()
         self.spread_threshold = 0.04
@@ -74,9 +80,24 @@ class SentinelLiveFeedAdvisor:
             candles = data.get("data", {}).get("candles", [])
             return sorted(candles, key=lambda x: x[0])
 
-    def resolve_real_option_quote(self, strike: int, opt_type: str) -> Optional[dict]:
-        """Reads the exact real-time option LTP, Bid, Ask, Volume, and OI from the live chunk stream."""
+    def resolve_real_option_quote(
+        self,
+        strike: int,
+        opt_type: str,
+        expiry: Optional[str] = None
+    ) -> Optional[dict]:
+        """Reads the exact real-time option LTP, Bid, Ask, Volume, and OI from the live chunk stream.
+        
+        Requires an explicit expiry date string (e.g. '13 OCT 26' or '2026-10-13').
+        Fails closed (returns None) if expiry is missing, no match is found,
+        or multiple ambiguous contracts match the criteria.
+        """
         import glob
+        target_expiry = (expiry or getattr(self, "target_expiry", None))
+        if not target_expiry:
+            # Expiry is absent: fail closed
+            return None
+
         today_date_str = datetime.now().strftime("%Y-%m-%d")
         chunk_patterns = [
             f".runtime/market_data/{today_date_str}/chunks/*.parquet",
@@ -90,22 +111,76 @@ class SentinelLiveFeedAdvisor:
         latest_chunk = sorted(chunks)[-1]
         try:
             df = pd.read_parquet(latest_chunk)
-            pattern = f"NIFTY {strike} {opt_type}"
-            matches = df[df["symbol"].str.startswith(pattern, na=False)]
-            if not matches.empty:
-                last_row = matches.iloc[-1]
-                return {
-                    "symbol": str(last_row["symbol"]),
-                    "token": str(last_row["token"]),
-                    "ltp": float(last_row["ltp"]),
-                    "bid": float(last_row["bid"]),
-                    "ask": float(last_row["ask"]),
-                    "vol": float(last_row["vol"]),
-                    "oi": float(last_row["oi"]),
-                }
+            return self.resolve_quote_from_dataframe(
+                df=df,
+                strike=strike,
+                opt_type=opt_type,
+                expiry=target_expiry
+            )
         except Exception:
-            pass
-        return None
+            return None
+
+    def resolve_quote_from_dataframe(
+        self,
+        df: pd.DataFrame,
+        strike: int,
+        opt_type: str,
+        expiry: Optional[str] = None
+    ) -> Optional[dict]:
+        """Pure, deterministic extraction of option quote from a tick DataFrame.
+        
+        Strictly requires an explicit expiry string (via argument or self.target_expiry).
+        Fails closed on missing expiry, zero matches, or multiple ambiguous contract symbols.
+        """
+        target_expiry = (expiry or getattr(self, "target_expiry", None))
+        if not target_expiry or not str(target_expiry).strip():
+            return None
+
+        exp_str = str(target_expiry).strip().upper()
+        ticker = getattr(self, "ticker", "NIFTY").upper()
+        
+        # Check if canonical symbol format e.g. "NIFTY 22400 CE 13 OCT 26"
+        exact_symbol = f"{ticker} {strike} {opt_type} {exp_str}"
+        matches = df[df["symbol"] == exact_symbol]
+        
+        if matches.empty:
+            # If not exact symbol, check if symbol starts with prefix AND contains the exact expiry token
+            prefix = f"{ticker} {strike} {opt_type}"
+            prefix_matches = df[
+                df["symbol"].str.startswith(prefix, na=False) &
+                df["symbol"].str.contains(exp_str, na=False, regex=False)
+            ]
+            unique_symbols = prefix_matches["symbol"].unique()
+            if len(unique_symbols) == 1:
+                matches = prefix_matches
+            else:
+                # Zero or multiple ambiguous symbols: fail closed
+                return None
+
+        # Confirm unique contract symbol identity
+        if matches["symbol"].nunique() != 1:
+            return None
+
+        # Sort by timestamp and extract the latest quote row
+        sort_col = "ts" if "ts" in matches.columns else matches.columns[0]
+        last_row = matches.sort_values(sort_col, kind="stable").iloc[-1]
+        
+        tok = str(last_row["token"]).strip() if pd.notna(last_row["token"]) else ""
+        if not tok:
+            return None
+
+        res = {
+            "symbol": str(last_row["symbol"]),
+            "token": tok,
+            "ltp": float(last_row["ltp"]),
+            "bid": float(last_row["bid"]),
+            "ask": float(last_row["ask"]),
+            "vol": float(last_row["vol"]),
+            "oi": float(last_row["oi"]),
+        }
+        if "ts" in last_row:
+            res["timestamp"] = float(last_row["ts"])
+        return res
 
     def emit_and_append_audit_log(self, payload: dict):
         """Asynchronous Append-Only JSONL Logging Sink. Dumps multi-variable metrics with zero latency."""
@@ -383,30 +458,34 @@ class SentinelLiveFeedAdvisor:
                     signal_display = f"🚨 [SPREAD VETO] {signal_display} -> SUPPRESSED (>4.0% spread)"
                     risk_flag = "VETO_SPREAD_EXPANDED"
                 elif entry_dir and self.apm.state in {STATE_STANDBY, STATE_LIQUIDATED}:
-                    # Read real option quote at entry
+                    # Read real option quote at entry using explicit target expiry
                     opt_q = self.resolve_real_option_quote(chosen_strike, entry_dir)
-                    pos_id = f"TRADE_{btime.strftime('%H%M')}_{entry_dir}"
-                    # In Gear 2 Trend: activate 50% runner mode + -20% Option Native Stop
-                    is_runner = (current_gear == "GEAR_2_TREND")
-                    opt_sl_pct = 0.20 if (current_gear == "GEAR_2_TREND") else None
-                    self.apm.arm_and_enter(
-                        position_id=pos_id,
-                        direction=entry_dir,
-                        contract=contract_choice,
-                        entry_price=c,
-                        entry_time_str=bar_time_str,
-                        sl_pts=sl_pts,
-                        tp_pts=target_pts,
-                        friction_drag_pts=fric.total_drag_pts,
-                        opt_quote=opt_q,
-                        is_runner_mode=is_runner,
-                        session_gear=current_gear,
-                        opt_stop_loss_pct=opt_sl_pct
-                    )
-                    risk_flag = "EXECUTED_IN_FLIGHT"
-                    opt_quote_str = f" | Option LTP: ₹{opt_q['ltp']:.2f} (Bid: ₹{opt_q['bid']:.2f} Ask: ₹{opt_q['ask']:.2f})" if opt_q else ""
-                    runner_tag = f" [{current_gear} | RUNNER 50/50 | OPT-SL -20%]" if is_runner else f" [{current_gear} | SCALP 15M]"
-                    print(f"🚀 [NEW POSITION OPENED] {pos_id} | {contract_choice} @ Spot {c:.2f} | SL: {c - sl_pts if entry_dir == 'CE' else c + sl_pts:.1f} | TP: {c + target_pts if entry_dir == 'CE' else c - target_pts:.1f}{runner_tag}{opt_quote_str}")
+                    if not opt_q:
+                        signal_display = f"🛑 [QUOTE VETO] {signal_display} -> SUPPRESSED (Unresolved or ambiguous exact option quote)"
+                        risk_flag = "VETO_UNRESOLVED_OPTION_QUOTE"
+                    else:
+                        pos_id = f"TRADE_{btime.strftime('%H%M')}_{entry_dir}"
+                        # In Gear 2 Trend: activate 50% runner mode + -20% Option Native Stop
+                        is_runner = (current_gear == "GEAR_2_TREND")
+                        opt_sl_pct = 0.20 if (current_gear == "GEAR_2_TREND") else None
+                        self.apm.arm_and_enter(
+                            position_id=pos_id,
+                            direction=entry_dir,
+                            contract=contract_choice,
+                            entry_price=c,
+                            entry_time_str=bar_time_str,
+                            sl_pts=sl_pts,
+                            tp_pts=target_pts,
+                            friction_drag_pts=fric.total_drag_pts,
+                            opt_quote=opt_q,
+                            is_runner_mode=is_runner,
+                            session_gear=current_gear,
+                            opt_stop_loss_pct=opt_sl_pct
+                        )
+                        risk_flag = "EXECUTED_IN_FLIGHT"
+                        opt_quote_str = f" | Option LTP: ₹{opt_q['ltp']:.2f} (Bid: ₹{opt_q['bid']:.2f} Ask: ₹{opt_q['ask']:.2f})"
+                        runner_tag = f" [{current_gear} | RUNNER 50/50 | OPT-SL -20%]" if is_runner else f" [{current_gear} | SCALP 15M]"
+                        print(f"🚀 [NEW POSITION OPENED] {pos_id} | {contract_choice} @ Spot {c:.2f} | SL: {c - sl_pts if entry_dir == 'CE' else c + sl_pts:.1f} | TP: {c + target_pts if entry_dir == 'CE' else c - target_pts:.1f}{runner_tag}{opt_quote_str}")
 
                 # Emit Append-Only JSONL Audit Row with zero latency
                 self.emit_and_append_audit_log({
