@@ -20,6 +20,8 @@
         ".github/workflows/ci.yml",
         ".github/workflows/tests.yml",
         "core/agent_admission.py",
+        "core/agent_supervisor_claims.py",
+        "core/agent_supervisor_git.py",
         "scripts/submit_agent_work.py",
         "scripts/agent_supervisor.py",
         "tests/test_agent_admission.py",

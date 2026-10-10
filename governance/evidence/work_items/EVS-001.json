@@ -232,6 +232,7 @@
           "tests/test_agent_supervisor.py",
           "docs/AGENT_WORKFLOW.md",
           "docs/AGENT_SUPERVISOR.md",
+          "governance/evidence/CLAIM_REGISTRY.json",
           "governance/evidence/work_items/EVS-001.json"
         ],
         "allowed_paths": [
@@ -241,6 +242,7 @@
           "tests/test_agent_supervisor.py",
           "docs/AGENT_WORKFLOW.md",
           "docs/AGENT_SUPERVISOR.md",
+          "governance/evidence/CLAIM_REGISTRY.json",
           "governance/evidence/work_items/EVS-001.json"
         ],
         "forbidden_paths": [
