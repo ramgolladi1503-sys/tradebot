@@ -140,7 +140,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Set up Python from the protected base workflow
         uses: actions/setup-python@v5
@@ -152,17 +152,12 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -euo pipefail
           if [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "base/head SHA must be full lowercase commit IDs" >&2
-            exit 1
-          fi
-          if [[ ! "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
-            echo "pull request number is unavailable or malformed" >&2
             exit 1
           fi
           actual_base=$(git rev-parse HEAD)
@@ -180,13 +175,13 @@ jobs:
             echo "candidate data path already exists" >&2
             exit 1
           fi
-          pr_head_ref="refs/remotes/origin/trusted-evidence-pr-$PR_NUMBER"
-          git fetch --no-tags origin "+refs/pull/$PR_NUMBER/head:$pr_head_ref"
-          fetched_head=$(git rev-parse "$pr_head_ref")
+          git fetch --no-tags origin "$HEAD_SHA"
+          fetched_head=$(git rev-parse FETCH_HEAD)
           if [[ "$fetched_head" != "$HEAD_SHA" ]]; then
-            echo "fetched PR head $fetched_head differs from event head $HEAD_SHA" >&2
+            echo "fetched candidate $fetched_head differs from event head $HEAD_SHA" >&2
             exit 1
           fi
+          git cat-file -e "$fetched_head^{commit}"
           mkdir "$candidate_root"
           git archive --format=tar "$HEAD_SHA" | tar --no-same-owner -xf - -C "$candidate_root"
           printf 'candidate_root=%s\n' "$candidate_root" >> "$GITHUB_OUTPUT"

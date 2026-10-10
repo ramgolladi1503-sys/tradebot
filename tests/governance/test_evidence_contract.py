@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
+import textwrap
 from dataclasses import replace
 from pathlib import Path
 
@@ -851,6 +855,239 @@ def test_report_summary_surfaces_findings_without_claiming_approval(tmp_path: Pa
     assert "informational" in summary
     assert "MATERIAL_CHANGE_WITHOUT_RECORD" in summary
     assert "does not establish merge, research, or runtime readiness" in summary
+
+
+def test_cli_keeps_candidate_finding_text_only_in_explicit_report_file(
+        tmp_path: Path, monkeypatch, capsys):
+    marker = "CANDIDATE_SECRET_MARKER_7f91a2"
+    head = "c" * 40
+    monkeypatch.setattr(evidence_tool, "build_report", lambda **kwargs: {
+        "candidate_sha": head,
+        "candidate_root_sha": head,
+        "verifier_source_sha": head,
+        "base_ref": "base",
+        "candidate_ref": "candidate",
+        "enforcement_stage": "BLOCK_NEW_MATERIAL",
+        "changed_path_count": 1,
+        "material_path_count": 1,
+        "material_paths": [marker],
+        "trusted_non_material_exemptions": [],
+        "exempted_paths": [],
+        "unclassified_paths": [],
+        "legacy_inventory": [],
+        "work_items": [],
+        "finding_count": 1,
+        "findings": [{"severity": "BLOCKING", "code": "TEST_BLOCK",
+                      "path": marker, "detail": marker}],
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+        "append": False,
+        "authority": "test only",
+    })
+    report_path = tmp_path / "report.json"
+    summary_path = tmp_path / "summary.md"
+
+    exit_code = main(["--base-ref", "base", "--candidate-ref", "candidate",
+                      "--candidate-sha", head, "--output", str(report_path),
+                      "--summary-output", str(summary_path),
+                      "--mode", "enforce-new-material"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert marker not in captured.out
+    assert marker not in captured.err
+    assert marker not in summary_path.read_text()
+    stored = json.loads(report_path.read_text())
+    assert stored["findings"][0]["path"] == marker
+    assert stored["findings"][0]["detail"] == marker
+    assert marker in stored["material_paths"]
+
+
+def test_cli_without_output_never_writes_candidate_finding_text_to_stdout(monkeypatch, capsys):
+    marker = "CANDIDATE_SECRET_MARKER_DEFAULT_STDOUT_4a82"
+    head = "d" * 40
+    monkeypatch.setattr(evidence_tool, "build_report", lambda **kwargs: {
+        "candidate_sha": head,
+        "candidate_root_sha": head,
+        "verifier_source_sha": head,
+        "base_ref": "base",
+        "candidate_ref": "candidate",
+        "enforcement_stage": "BLOCK_NEW_MATERIAL",
+        "changed_path_count": 1,
+        "material_path_count": 1,
+        "material_paths": [marker],
+        "trusted_non_material_exemptions": [],
+        "exempted_paths": [],
+        "unclassified_paths": [],
+        "legacy_inventory": [],
+        "work_items": [],
+        "finding_count": 1,
+        "findings": [{"severity": "BLOCKING", "code": "TEST_BLOCK",
+                      "path": marker, "detail": marker}],
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+        "append": False,
+        "authority": "test only",
+    })
+
+    exit_code = main(["--base-ref", "base", "--candidate-ref", "candidate",
+                      "--candidate-sha", head, "--mode", "enforce-new-material"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert marker not in captured.out
+    assert marker not in captured.err
+    assert "Full structured evidence report omitted; pass --output <path> to retain it." in captured.out
+    assert "Evidence verification blocked: 1 finding(s)." in captured.out
+    assert "BLOCKING TEST_BLOCK" in captured.out
+
+
+def _trusted_candidate_prep_script() -> str:
+    workflow_path = evidence_tool.ROOT / ".github/workflows/frozen-head-exact-sha-certification.yml"
+    lines = workflow_path.read_text().splitlines()
+    step_line = lines.index("      - name: Validate event SHAs and prepare candidate as inert data")
+    run_line = next(index for index in range(step_line + 1, len(lines))
+                    if lines[index].strip() == "run: |")
+    run_indent = len(lines[run_line]) - len(lines[run_line].lstrip())
+    body = []
+    for line in lines[run_line + 1:]:
+        if line.strip() and len(line) - len(line.lstrip()) <= run_indent:
+            break
+        body.append(line)
+    return textwrap.dedent("\n".join(body)).strip() + "\n"
+
+
+def test_trusted_evidence_workflow_does_not_persist_checkout_credentials():
+    workflow_path = evidence_tool.ROOT / ".github/workflows/frozen-head-exact-sha-certification.yml"
+    workflow = workflow_path.read_text()
+    trusted_job = workflow.split("  trusted-evidence-coverage:", 1)[1]
+    checkout_step = trusted_job.split("      - name: Set up Python from the protected base workflow", 1)[0]
+
+    assert "persist-credentials: false" in checkout_step
+
+
+def _git(cwd: Path, *args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=cwd, text=True, stderr=subprocess.PIPE).strip()
+
+
+def _trusted_git_fixture(tmp_path: Path, *, fake_fetch_head: bool = False) -> dict[str, str | Path]:
+    bare = tmp_path / "origin.git"
+    seed = tmp_path / "seed"
+    trusted = tmp_path / "trusted"
+    bare.mkdir()
+    seed.mkdir()
+    subprocess.run(["git", "init", "--bare", "--quiet", str(bare)], check=True)
+    subprocess.run(["git", "init", "--quiet"], cwd=seed, check=True)
+    _git(seed, "config", "user.name", "Evidence Test")
+    _git(seed, "config", "user.email", "evidence-test@example.invalid")
+    (seed / "base.txt").write_text("protected base\n")
+    _git(seed, "add", "base.txt")
+    _git(seed, "commit", "--quiet", "-m", "protected base")
+    base_sha = _git(seed, "rev-parse", "HEAD")
+    _git(seed, "remote", "add", "origin", str(bare))
+    _git(seed, "push", "--quiet", "origin", f"{base_sha}:refs/heads/main")
+
+    execution_marker = tmp_path / "candidate-was-executed"
+    candidate_script = seed / "candidate_payload.sh"
+    candidate_script.write_text(f"#!/bin/sh\ntouch '{execution_marker}'\n")
+    candidate_script.chmod(0o755)
+    _git(seed, "add", "candidate_payload.sh")
+    _git(seed, "commit", "--quiet", "-m", "candidate payload")
+    candidate_sha = _git(seed, "rev-parse", "HEAD")
+    _git(seed, "push", "--quiet", "origin", f"{candidate_sha}:refs/pull/42/head")
+    subprocess.run(["git", "clone", "--quiet", "--branch", "main", str(bare), str(trusted)],
+                   check=True)
+
+    runner_temp = tmp_path / "runner-temp"
+    runner_temp.mkdir()
+    github_output = tmp_path / "github-output"
+    git_log = tmp_path / "git-invocations.log"
+    env = {
+        "BASE_SHA": base_sha,
+        "HEAD_SHA": candidate_sha,
+        "RUN_ID": "test-run",
+        "RUN_ATTEMPT": "1",
+        "RUNNER_TEMP": str(runner_temp),
+        "GITHUB_OUTPUT": str(github_output),
+    }
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    shim = bin_dir / "git"
+    shim.write_text("#!/bin/bash\n"
+                    "printf '%s\\n' \"$*\" >> \"$GIT_LOG\"\n"
+                    "if [[ \"$1\" == fetch && \"$2\" == --no-tags && \"$3\" == origin && \"$4\" == \"$HEAD_SHA\" ]]; then\n"
+                    "  hidden_head=$(\"$REAL_GIT\" --git-dir \"$ORIGIN_BARE\" rev-parse refs/pull/42/head) || exit 1\n"
+                    "  [[ \"$hidden_head\" == \"$4\" ]] || exit 1\n"
+                    "  exec \"$REAL_GIT\" fetch --no-tags origin +refs/pull/42/head:refs/remotes/origin/test-candidate\n"
+                    "fi\n"
+                    "if [[ \"$1 $2\" == 'rev-parse FETCH_HEAD' && -n \"${FAKE_FETCH_HEAD_SHA:-}\" ]]; then\n"
+                    "  printf '%s\\n' \"$FAKE_FETCH_HEAD_SHA\"\n"
+                    "  exit 0\n"
+                    "fi\n"
+                    "exec \"$REAL_GIT\" \"$@\"\n")
+    shim.chmod(0o755)
+    env.update({"PATH": f"{bin_dir}:{os.environ['PATH']}",
+                "REAL_GIT": shutil.which("git") or "git",
+                "GIT_LOG": str(git_log),
+                "ORIGIN_BARE": str(bare),
+                "FAKE_FETCH_HEAD_SHA": "e" * 40 if fake_fetch_head else ""})
+    return {"trusted": trusted, "base_sha": base_sha, "candidate_sha": candidate_sha,
+            "execution_marker": execution_marker, "runner_temp": runner_temp,
+            "github_output": github_output, "git_log": git_log, "env": env}
+
+
+def _run_candidate_prep(fixture: dict[str, str | Path], *, overrides: dict[str, str] | None = None):
+    env = os.environ.copy()
+    env.update(fixture["env"])
+    if overrides:
+        env.update(overrides)
+    return subprocess.run(["bash", "-euo", "pipefail", "-c", _trusted_candidate_prep_script()],
+                          cwd=fixture["trusted"], env=env, text=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+
+
+def test_trusted_candidate_prep_materializes_exact_hidden_head_without_execution(tmp_path: Path):
+    fixture = _trusted_git_fixture(tmp_path)
+    result = _run_candidate_prep(fixture)
+
+    assert result.returncode == 0, result.stderr
+    output_line = Path(fixture["github_output"]).read_text().strip()
+    assert output_line.startswith("candidate_root=")
+    candidate_root = Path(output_line.removeprefix("candidate_root="))
+    assert candidate_root == Path(fixture["runner_temp"]) / "trusted-evidence-candidate-test-run-1"
+    materialized_script = candidate_root / "candidate_payload.sh"
+    assert materialized_script.read_text().startswith("#!/bin/sh\n")
+    assert materialized_script.read_text() == (Path(fixture["trusted"]).parent / "seed" /
+                                                 "candidate_payload.sh").read_text()
+    assert _git(Path(fixture["trusted"]), "rev-parse", "HEAD") == fixture["base_sha"]
+    assert not Path(fixture["execution_marker"]).exists()
+    git_calls = Path(fixture["git_log"]).read_text()
+    assert f"fetch --no-tags origin {fixture['candidate_sha']}" in git_calls
+    assert "archive --format=tar" in git_calls
+
+
+@pytest.mark.parametrize("failure,overrides", [
+    ("malformed_sha", {"HEAD_SHA": "not-a-full-commit-id"}),
+    ("base_mismatch", {"BASE_SHA": "f" * 40}),
+    ("fetched_head_mismatch", {}),
+])
+def test_trusted_candidate_prep_fails_closed_before_archive_or_output(
+        tmp_path: Path, failure: str, overrides: dict[str, str]):
+    fixture = _trusted_git_fixture(tmp_path, fake_fetch_head=(failure == "fetched_head_mismatch"))
+    result = _run_candidate_prep(fixture, overrides=overrides)
+
+    assert result.returncode != 0
+    assert not Path(fixture["github_output"]).exists()
+    assert not (Path(fixture["runner_temp"]) /
+                "trusted-evidence-candidate-test-run-1").exists()
+    assert not Path(fixture["execution_marker"]).exists()
+    git_log_path = Path(fixture["git_log"])
+    if git_log_path.exists():
+        assert "archive" not in git_log_path.read_text()
 
 
 def test_report_detects_candidate_sha_mismatch():

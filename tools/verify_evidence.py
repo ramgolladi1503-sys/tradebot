@@ -624,11 +624,11 @@ def render_summary(report: dict[str, Any]) -> str:
              "Passing this evidence check does not establish merge, research, or runtime readiness.", ""]
     findings = report.get("findings", [])
     if findings:
-        lines.extend(["| Severity | Code | Path | Detail |", "|---|---|---|---|"])
+        # Paths and details can originate in candidate-controlled evidence. Keep
+        # those values in the explicit JSON report, not a GitHub step summary.
+        lines.extend(["| Severity | Code |", "|---|---|"])
         for row in findings:
-            escape = lambda value: str(value).replace("|", "\\|").replace("\n", " ")
-            lines.append("| " + " | ".join(escape(row.get(key, ""))
-                                               for key in ("severity", "code", "path", "detail")) + " |")
+            lines.append(f"| {row.get('severity', '')} | {row.get('code', '')} |")
     else:
         lines.append("No findings were emitted for this candidate.")
     return "\n".join(lines) + "\n"
@@ -645,7 +645,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="verified exact commit SHA used to materialize a separate candidate root")
     parser.add_argument("--verifier-source-sha",
                         help="require this checkout's HEAD to equal the declared trusted verifier source SHA")
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=Path,
+                        help="write the full structured report here; stdout otherwise contains safe summary metadata")
     parser.add_argument("--summary-output", type=Path,
                         help="append a Markdown findings summary to this file")
     parser.add_argument("--mode", choices=("report-only", "enforce-new-material", "strict"), default="report-only")
@@ -680,7 +681,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             args.output.write_text(serialized, encoding="utf-8")
         else:
-            sys.stdout.write(serialized)
+            print("Full structured evidence report omitted; pass --output <path> to retain it.")
         if args.summary_output:
             with args.summary_output.open("a", encoding="utf-8") as summary_file:
                 summary_file.write(render_summary(report))
@@ -691,12 +692,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.mode == "strict" and report["findings"]:
         print(f"Evidence verification blocked: {report['blocking_finding_count']} finding(s).")
         for item in blocking:
-            print(f"{item['severity']} {item['code']} {item.get('path', '')}: {item['detail']}")
+            print(f"{item['severity']} {item['code']}")
         return 1
     if args.mode in {"enforce-new-material", "strict"} and blocking:
         print(f"Evidence verification blocked: {report['blocking_finding_count']} finding(s).")
         for item in blocking:
-            print(f"{item['severity']} {item['code']} {item.get('path', '')}: {item['detail']}")
+            print(f"{item['severity']} {item['code']}")
         return 1
     # Report-only suppresses all policy findings. Enforcement blocks structural
     # errors and uncovered material changes while preserving UNVERIFIED claims.
