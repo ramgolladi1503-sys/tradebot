@@ -16,8 +16,16 @@
     "core/broker"
   ],
   "requires_human_approval": false,
+  "expected_tests": ["PYTHONPATH=. pytest -q tests/test_agent_scope_guard.py"],
+  "acceptance_proof": ["Forbidden paths and actions are blocked by behavior tests."],
   "metadata": {
     "project": "tradebot",
-    "sample": true
+    "sample": true,
+    "delivery_work_item": {
+      "work_item_id": "<committed-item-id>",
+      "path": "governance/evidence/work_items/<item>.json",
+      "sha256": "<sha256-of-committed-json-bytes>",
+      "task_contract_id": "<task-contract-id-in-the-item>"
+    }
   }
 }

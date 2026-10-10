@@ -73,7 +73,7 @@ core/agent_evidence.py
 Decision:
 
 ```text
-WAITING_HUMAN_APPROVAL
+BLOCKED_PENDING_AUTHENTICATED_APPROVAL
 ```
 
 ### HIGH Risk
@@ -95,10 +95,13 @@ strategies/*
 Decision:
 
 ```text
-WAITING_HUMAN_APPROVAL
+BLOCKED_PENDING_AUTHENTICATED_APPROVAL
 ```
 
-High risk does not mean forbidden. It means narrow scope, explicit human approval, and strong tests are mandatory.
+Medium/high risk is blocked at the current local CLIs. Caller-provided
+`--approve` and `--approved-by` values do not authenticate a human. A future
+authenticated approval integration must be independently reviewed before this
+work can be admitted.
 
 ### BLOCKED
 
@@ -225,9 +228,25 @@ Grill Me output must be rejected if it:
 3. Does not identify concrete risks.
 4. Suggests broad unscoped rewrites.
 
-## Local JSON Work Request Shape
+## Local CLI admission requirement
 
-Future local CLI/API work should accept payloads shaped like:
+The supported local entrypoints are `scripts/submit_agent_work.py` and the
+`preflight`/`claim` commands in `scripts/agent_supervisor.py`. Before either
+entrypoint accepts work, the payload must reference a committed canonical item
+under `governance/evidence/work_items/` and one exact task contract stored in
+that item. Admission checks the tracked `HEAD` blob, the clean work-item path,
+its SHA-256, full delivery schema, task contract ID, source/action/title/scope,
+and exact requested/allowed/forbidden paths. A missing, dirty, stale, malformed,
+or mismatched record blocks.
+
+To prepare a task, create or update its delivery item and task contract, pass
+the ordinary delivery review gates, commit it, then place its path, ID, task
+contract ID, and SHA-256 in `metadata.delivery_work_item`. The hash is of the
+exact committed JSON bytes. If the task contract changes, recommit it and
+update the reference. Do not create lifecycle evidence or move delivery states
+to get admission.
+
+The supported payload shape includes:
 
 ```json
 {
@@ -239,26 +258,52 @@ Future local CLI/API work should accept payloads shaped like:
   "requested_paths": ["tests/test_agent_scope_guard.py"],
   "forbidden_paths": ["credentials.py", ".env", "core/broker", "core/execution"],
   "requires_human_approval": false,
+  "expected_tests": ["PYTHONPATH=. pytest -q tests/test_agent_scope_guard.py"],
+  "acceptance_proof": ["Unsafe paths and actions are blocked."],
   "metadata": {
-    "project": "tradebot"
+    "project": "tradebot",
+    "delivery_work_item": {
+      "work_item_id": "<committed-item-id>",
+      "path": "governance/evidence/work_items/<item>.json",
+      "sha256": "<sha256-of-committed-json-bytes>",
+      "task_contract_id": "<task-contract-id-in-the-item>"
+    }
   }
 }
 ```
 
-## Local CLI Acceptance Target
+The delivery item must embed the matching task contract fields. The payload is
+not admitted merely because its caller supplied plausible fields or a hash.
+The hash binds bytes and identity; it does not authenticate who authored or
+approved the record.
 
-A later PR may add:
+## Local CLI behavior
 
 ```bash
 PYTHONPATH=. python scripts/submit_agent_work.py --payload docs/samples/gsd-agent-work.json
 ```
 
-Expected output must include:
+The CLI writes audit evidence for the submitted request and admission decision.
+If evidence writing fails, the request is rejected. `--no-evidence` is a
+diagnostic mode and cannot return accepted. The `--approve` and `--approved-by`
+arguments are caller assertions, not authenticated identity. Medium/high-risk
+patch work remains blocked until a real authenticated approval integration is
+implemented and independently verified.
+
+These local checks do not intercept direct Codex, ChatGPT, Claude, Gemini,
+GitHub issue/comment, Actions, MCP, or other platform requests. The current
+workflow inventory records each of the 18 active `workflow_dispatch` workflows
+as `UNSATISFIED` for pre-work admission. The retired PR818 auto-write workflow
+is recorded separately; PR823 is merged. Universal intake and branch-protection
+enforcement remain `UNSATISFIED`.
+
+Accepted output continues to expose:
 
 ```text
 scope_decision
 approval_decision
-evidence
+admission_decision
+evidence_result
 read_only=true
 is_order_action=false
 broker_api_called=false

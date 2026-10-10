@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The supervisor turns an already-approved Tradebot engineering task into a local,
+The supervisor turns a scoped Tradebot engineering task into a local,
 auditable workflow:
 
 ```text
@@ -27,6 +27,13 @@ The supervisor exists to stop four recurring failure modes:
 A task contract names an absolute worktree path, isolated branch, and base ref.
 Preflight fails when the path is not the repository root, the branch differs,
 the worktree is dirty, or the task targets `main`/`master` directly.
+
+Before `preflight` or `claim` can accept work, the payload must reference an
+exact committed canonical delivery item and task contract. The supervisor
+checks that the item is tracked at the worktree's `HEAD`, unchanged on disk,
+matches the supplied SHA-256 and ID, passes complete schema validation, and
+authorizes the exact request title, scope, action, and path lists. Missing,
+dirty, stale, malformed, or scope-mismatched work items block admission.
 
 ### Exclusive ownership
 
@@ -98,14 +105,13 @@ it. The existing fields still go through `agent_work_contract`,
 {
   "schema_version": 1,
   "source_agent": "codex",
-  "action": "GENERATE_PATCH",
-  "title": "Harden reconnect resource verification",
-  "scope": "Add one deterministic verifier without changing feed runtime behavior.",
+  "action": "GENERATE_TESTS",
+  "title": "Add local admission tests",
+  "scope": "Prove the local task admission contract.",
   "requested_paths": [
-    "scripts/verify_feed_reconnect_resources.py",
-    "tests/test_feed_reconnect_resource_verifier.py"
+    "tests/test_agent_admission.py"
   ],
-  "allowed_paths": ["scripts/", "tests/"],
+  "allowed_paths": ["tests/"],
   "forbidden_paths": [
     ".env",
     "credentials.py",
@@ -115,19 +121,28 @@ it. The existing fields still go through `agent_work_contract`,
     "core/risk",
     "strategies/"
   ],
-  "requires_human_approval": true,
-  "metadata": {"project": "tradebot"},
+  "requires_human_approval": false,
+  "expected_tests": ["PYTHONPATH=. pytest -q tests/test_agent_admission.py"],
+  "acceptance_proof": ["Committed task contract matches before acceptance."],
+  "metadata": {
+    "project": "tradebot",
+    "delivery_work_item": {
+      "work_item_id": "<committed-item-id>",
+      "path": "governance/evidence/work_items/<item>.json",
+      "sha256": "<sha256-of-committed-json-bytes>",
+      "task_contract_id": "<task-contract-id-in-the-item>"
+    }
+  },
   "supervisor": {
     "schema_version": 1,
-    "task_id": "feed-reconnect-resource-verifier",
+    "task_id": "local-admission-tests",
     "implementer": "codex",
     "reviewer": "antigravity",
     "worktree_path": "/absolute/path/to/tradebot-feed-reconnect-resource-verifier",
-    "branch": "agent/feed-reconnect-resource-verifier",
+    "branch": "agent/local-admission-tests",
     "base_ref": "main",
     "ownership_paths": [
-      "scripts/verify_feed_reconnect_resources.py",
-      "tests/test_feed_reconnect_resource_verifier.py"
+      "tests/test_agent_admission.py"
     ],
     "frozen_paths": [
       "core/feed_manager.py",
@@ -141,15 +156,14 @@ it. The existing fields still go through `agent_work_contract`,
           "python",
           "-m",
           "pytest",
-          "tests/test_feed_reconnect_resource_verifier.py",
+          "tests/test_agent_admission.py",
           "-q"
         ],
         "timeout_seconds": 900
       }
     ],
     "required_artifacts": [
-      "scripts/verify_feed_reconnect_resources.py",
-      "tests/test_feed_reconnect_resource_verifier.py"
+      "tests/test_agent_admission.py"
     ],
     "require_clean_worktree": true,
     "require_committed_head": true
@@ -175,23 +189,21 @@ git worktree add \
 
 ### 2. Preflight the contract
 
-Docs/tests-only work may pass without explicit approval. Medium/high-risk patch
-scope requires `--approve` and an approver identity.
+The committed item reference is mandatory. Docs/tests-only work may pass
+without an authenticated approval. Medium/high-risk patch scope is blocked:
+`--approve` and `--approved-by` are caller assertions and never authenticate
+the human approving the work.
 
 ```bash
 PYTHONPATH=. python scripts/agent_supervisor.py preflight \
-  --contract docs/samples/codex-supervisor-task.json \
-  --approve \
-  --approved-by ram
+  --contract docs/samples/codex-supervisor-task.json
 ```
 
 ### 3. Claim file ownership
 
 ```bash
 PYTHONPATH=. python scripts/agent_supervisor.py claim \
-  --contract docs/samples/codex-supervisor-task.json \
-  --approve \
-  --approved-by ram
+  --contract docs/samples/codex-supervisor-task.json
 ```
 
 Do not start the implementation agent unless the result is
@@ -275,6 +287,9 @@ abandoned or broken tasks and is explicitly recorded as a forced release.
 The current implementation validates reproduction structure but cannot prove
 which external model executed the commands. Treat reviewer identity and the
 reported exit code as auditable assertions, not cryptographic authentication.
+The local admission helper also does not provide universal platform intake,
+branch protection, or authenticated human approval. Those gaps remain
+`UNSATISFIED` and must not be inferred from a successful local preflight.
 
 ## States
 

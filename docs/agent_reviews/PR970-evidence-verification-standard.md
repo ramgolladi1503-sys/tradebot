@@ -1,5 +1,55 @@
 # PR970 Evidence Verification Standard Review
 
+## Local admission and frozen-base false-positive follow-up
+
+This scoped follow-up adds fail-closed work-item admission to the existing
+`submit_agent_work.py` and supervisor `preflight`/`claim` CLIs. Each request
+must identify a committed canonical delivery item and embedded task contract;
+the admission helper verifies the tracked HEAD bytes, exact SHA-256, item ID,
+complete delivery schema, task-contract ID, and exact source/action/title/scope/
+requested/allowed/forbidden path lists. Missing, deleted, dirty, stale,
+malformed, and mismatched work items block. Accepted submissions require
+successful evidence persistence; `--no-evidence` cannot return accepted.
+
+Caller-supplied `--approve`/`--approved-by` values are not authentication.
+Medium/high-risk patch work stays blocked until a real authenticated human
+approval mechanism exists. The local checks cover only these two entrypoints.
+The inventory lists 18 active `workflow_dispatch` workflows, all
+`UNSATISFIED` for pre-work admission, plus the retired PR818 auto-write
+workflow. PR #823 is recorded as merged on 2026-08-15. Universal platform
+intake, direct GitHub dispatch trust, branch protection, and authenticated
+human approval remain `UNSATISFIED`.
+
+The supervisor resolves the repository relative to caller-selected
+`supervisor.worktree_path`; it does not authenticate that repository as the
+intended TradeBot project. A committed work-item hash protects bytes but does
+not authenticate the item author, reviewer roles, caller identity, or approval.
+There is no authenticated project-identity or human-approval guarantee in this
+implementation. These are residual authority limits, not evidence of admission.
+
+The CI correction removes only the stale `PR818_FROZEN_MAIN_BASELINE` fetch and
+comparison from old pinned baseline `9f1e74c` to PR base `32e6d77`. That
+comparison failed because 16 protected paths had already drifted before this
+PR, while the exact PR base-to-head protected-path delta at `ab7769d` was empty.
+The change therefore removes detection of pre-existing drift on main. It
+preserves the trusted `pull_request_target` job, exact head/base fetch,
+`frozen_production` and `governance` arrays, fail-closed base-to-head delta
+comparison, and exact bootstrap exception. It does not weaken detection of a
+protected change introduced by the PR and does not prove that main matches the
+older baseline.
+
+The PR818 auto-write workflow is deleted because its completed test-only repair
+was merged in PR #823; no other workflow-dispatch workflow is retired. No branch
+settings, credentials, runtime, broker, order, risk, feed, live, or strategy
+paths are changed. EVS-001's lifecycle history, evidence, and state remain
+unchanged; the task contract is recorded in its existing extensions.
+
+Acceptance proof for this follow-up is limited to focused behavior tests,
+governance inventory checks, workflow YAML parsing, shell execution against a
+synthetic drifted base and protected PR delta, and `git diff --check`. No hosted
+exact-head result, PR merge, branch-protection proof, authenticated identity,
+or universal intake coverage is claimed here.
+
 ## Enforcement follow-up
 
 The verifier now has an `enforce-new-material` mode: structural `ERROR`/`BLOCKING` findings and material paths without a current covering work item fail the command, while explicit `UNVERIFIED` claim findings remain warnings. For current material records it also requires complete Definition of Ready fields, G0/G1/G2/G3/G4/G5/G7 lifecycle evidence, distinct lifecycle role authors where the existing orchestrator checks them, traversal of required state-history stages, and a pre-merge state of `RELEASE_READY`, `PR_OPEN`, or `CI_GREEN`. G6 is omitted because this check runs within PR CI and cannot require its own completed result in advance. PR CI invokes this mode against exact base/head refs and uploads the resulting report. Report-only remains available for diagnosis; strict mode retains its all-findings-block behavior.

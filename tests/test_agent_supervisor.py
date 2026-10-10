@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from pathlib import Path
 import subprocess
@@ -18,6 +19,9 @@ from core.agent_supervisor import (
     validate_contract_shape,
     verify_contract,
 )
+from scripts.agent_supervisor import main as supervisor_cli_main
+from core.delivery.models import WorkItem, WorkItemType
+from core.delivery.validators import work_item_to_dict
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -76,10 +80,58 @@ def _payload(repo: Path, **supervisor_overrides):
         "requested_paths": ["tests/test_feature.py"],
         "allowed_paths": ["tests/"],
         "forbidden_paths": [".env", "credentials.py", "core/broker"],
+        "expected_tests": ["PYTHONPATH=. pytest -q tests/test_feature.py"],
+        "acceptance_proof": ["The committed item and scope match before claim."],
         "requires_human_approval": False,
         "metadata": {"project": "tradebot"},
         "supervisor": supervisor,
     }
+
+
+def _admitted_payload(repo: Path, *, request_overrides=None, **supervisor_overrides):
+    payload = _payload(repo, **supervisor_overrides)
+    payload.update(request_overrides or {})
+    spec = {key: payload[key] for key in (
+        "source_agent", "action", "title", "scope", "requested_paths", "allowed_paths",
+        "forbidden_paths", "expected_tests", "acceptance_proof",
+    )}
+    spec["task_contract_id"] = "SUPERVISOR-TEST-1"
+    item = WorkItem(
+        work_item_id="SUPERVISOR-TEST-1",
+        type=WorkItemType.TASK,
+        parent_epic="LOCAL-EPIC",
+        parent_feature="LOCAL-FEATURE",
+        title=payload["title"],
+        priority="P2",
+        business_goal="Safely admit local supervisor work.",
+        current_behavior="Supervisor accepts unbound contract files.",
+        expected_behavior=payload["scope"],
+        in_scope=("local supervisor admission",),
+        out_of_scope=("trading runtime",),
+        acceptance_criteria=tuple(payload["acceptance_proof"]),
+        safety_constraints=("No broker calls", "No live execution"),
+        architecture_impact="Local CLI admission only.",
+        allowed_paths=tuple(payload["allowed_paths"]),
+        forbidden_paths=tuple(payload["forbidden_paths"]),
+        expected_tests=tuple(payload["expected_tests"]),
+        qa_attack_plan=("missing item", "caller approval flags"),
+        uat_criteria=("Mismatched task contract is blocked.",),
+        release_gates=("Focused tests pass.",),
+        rollback_plan="Remove local admission gate.",
+        extensions={"agent_task_contracts": [spec]},
+    )
+    item_path = repo / "governance/evidence/work_items/SUPERVISOR-TEST-1.json"
+    item_path.parent.mkdir(parents=True)
+    item_path.write_text(json.dumps(work_item_to_dict(item), indent=2) + "\n", encoding="utf-8")
+    _git(repo, "add", str(item_path.relative_to(repo)))
+    _git(repo, "commit", "-m", "add canonical supervisor task")
+    payload["metadata"]["delivery_work_item"] = {
+        "work_item_id": item.work_item_id,
+        "path": str(item_path.relative_to(repo)),
+        "sha256": hashlib.sha256(item_path.read_bytes()).hexdigest(),
+        "task_contract_id": spec["task_contract_id"],
+    }
+    return payload
 
 
 def _commit_test(repo: Path, *, passing: bool = True, credentials_must_be_absent: bool = False) -> str:
@@ -405,3 +457,57 @@ def test_load_contract_file(tmp_path: Path):
     payload_path.write_text(json.dumps({"task_id": "demo-task"}), encoding="utf-8")
 
     assert load_contract_file(payload_path) == {"task_id": "demo-task"}
+
+
+def test_supervisor_cli_admission_accepts_committed_contract_and_claims(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    payload = _admitted_payload(repo)
+    contract_path = tmp_path / "supervisor.json"
+    contract_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    preflight_code = supervisor_cli_main(["preflight", "--contract", str(contract_path)])
+    preflight = json.loads(capsys.readouterr().out)
+    assert preflight_code == 0
+    assert preflight["accepted"] is True
+
+    claim_code = supervisor_cli_main(["claim", "--contract", str(contract_path)])
+    claim = json.loads(capsys.readouterr().out)
+    assert claim_code == 0
+    assert claim["accepted"] is True
+
+
+def test_supervisor_cli_blocks_missing_item_and_unauthenticated_approval(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    payload = _payload(repo)
+    contract_path = tmp_path / "supervisor.json"
+    contract_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    code = supervisor_cli_main([
+        "claim", "--contract", str(contract_path), "--approve", "--approved-by", "caller"
+    ])
+    result = json.loads(capsys.readouterr().out)
+    assert code != 0
+    assert result["accepted"] is False
+    assert "WORK_ITEM_REFERENCE_REQUIRED" in result["blockers"]
+
+    risky = _admitted_payload(
+        repo,
+        request_overrides={
+            "action": "GENERATE_PATCH",
+            "title": "Patch risk control",
+            "scope": "Modify a risk-control file.",
+            "requested_paths": ["core/risk/position_sizing.py"],
+            "allowed_paths": ["core/risk/"],
+            "acceptance_proof": ["Risk boundary remains intact."],
+        },
+        ownership_paths=["core/risk/position_sizing.py"],
+        required_artifacts=["core/risk/position_sizing.py"],
+    )
+    contract_path.write_text(json.dumps(risky), encoding="utf-8")
+    code = supervisor_cli_main([
+        "preflight", "--contract", str(contract_path), "--approve", "--approved-by", "caller"
+    ])
+    result = json.loads(capsys.readouterr().out)
+    assert code != 0
+    assert result["accepted"] is False
+    assert "HUMAN_APPROVAL_REQUIRED" in result["blockers"]

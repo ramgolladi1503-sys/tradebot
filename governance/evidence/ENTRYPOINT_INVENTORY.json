@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "reviewed_base_sha": "32e6d77130b748b6644e93376fe948b3cd7b9eb9",
+  "inventory_scope": "Repository workflow_dispatch paths at the reviewed PR base; this inventory does not imply task admission or trust.",
+  "active_workflow_dispatch_entrypoints": [
+    {
+      "path": ".github/workflows/agentic-qa-evidence-auditor.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/agentic-research-integration.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/ai-reliability-pr763-certification.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/candidate-ml-v2.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/cas-closing-auction-shadow-v1.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/code-excellence-gates.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/feed-resource-soak.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/frozen-head-exact-sha-certification.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/loop-handoff-gate.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/market_story_engine_v1.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/meg-shadow-system-certification.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/portfolio-ci.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/pr782-remaining-evidence-contracts.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/prospective-market-evidence-v1.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/subscription-reconciliation-postclose-v1.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/tradebot-mcp.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/upstox_offline_v3_repair.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    },
+    {
+      "path": ".github/workflows/upstox_v3_depth_capture_contract.yml",
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null
+    }
+  ],
+  "retired_workflow_dispatch_entrypoints": [
+    {
+      "path": ".github/workflows/pr818-apply-safe-test-contract-repairs.yml",
+      "status": "RETIRED",
+      "reason": "Retired after its test-only repair was merged by PR #823.",
+      "evidence": {
+        "pull_request": "https://github.com/ramgolladi1503-sys/tradebot/pull/823",
+        "merged_at": "2026-08-15T17:32:29Z"
+      }
+    }
+  ],
+  "other_intake_surfaces": [
+    {
+      "surface": "GitHub issues and issue comments",
+      "prework_admission": "UNSATISFIED"
+    },
+    {
+      "surface": "Codex, ChatGPT, Claude, Gemini direct task prompts",
+      "prework_admission": "UNSATISFIED"
+    },
+    {
+      "surface": "External MCP and local CLI entrypoints outside the two implemented TradeBot CLIs",
+      "prework_admission": "UNSATISFIED"
+    }
+  ],
+  "repository_gaps": {
+    "universal_platform_intake": "UNSATISFIED",
+    "branch_protection_requires_evidence_gate": "UNSATISFIED",
+    "authenticated_human_identity_approval": "UNSATISFIED",
+    "workflow_dispatch_trust_or_prework_gate": "UNSATISFIED"
+  },
+  "limitations": [
+    "The two local CLIs validate a committed canonical work item before accepting or claiming work.",
+    "Supervisor admission resolves the repository relative to the caller-selected supervisor.worktree_path; it does not authenticate project or repository identity.",
+    "A committed local work item hash protects content integrity only. It does not authenticate the item author, reviewer roles, caller identity, or human approval; no authenticated project identity or approval guarantee exists.",
+    "GitHub workflow_dispatch entrypoints are inventoried but not intercepted before dispatch.",
+    "A successful local check is not proof of universal task admission, branch protection, or authenticated human approval."
+  ]
+}

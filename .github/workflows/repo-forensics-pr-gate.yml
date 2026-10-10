@@ -36,7 +36,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Run baseline-aware repo-forensics gate
+      - name: Run repo-forensics gate
         run: python scripts/run_repo_forensics_pr_gate.py --repo . --config .gsd-forensics.yaml
 
       - name: Upload PR gate report
@@ -54,12 +54,6 @@ jobs:
     timeout-minutes: 10
     env:
       PR818_FROZEN_LIVE_SHA: d7dc45e7c5c76247e7d1b8abd40ec7682fac2f9b
-      # Advanced after the governed PR876 shutdown-boundary repair was merged
-      # into protected main. The protected path set below remains unchanged.
-      # Advanced after the governed PR876 shutdown-boundary repair and PR880
-      # integration were merged into protected main. The protected path set
-      # and fail-closed comparison remain unchanged.
-      PR818_FROZEN_MAIN_BASELINE: 9f1e74c3524b331ebab7f8340ddc056146ac036a
     steps:
       - name: Checkout trusted protected main only
         uses: actions/checkout@v4
@@ -78,7 +72,6 @@ jobs:
           set -euo pipefail
           git fetch --no-tags --depth=1 origin "$PR_HEAD"
           git fetch --no-tags --depth=1 origin "$PR_BASE"
-          git fetch --no-tags --depth=1 origin "$PR818_FROZEN_MAIN_BASELINE"
 
           frozen_production=(
             requirements.txt
@@ -122,13 +115,6 @@ jobs:
             .github/workflows/frozen-head-candidate-safety-tests.yml
           )
 
-          base_drift="$(git diff --name-only "$PR818_FROZEN_MAIN_BASELINE" "$PR_BASE" -- "${frozen_production[@]}")"
-          if [[ -n "$base_drift" ]]; then
-            echo 'PR818_FROZEN_MAIN_BASELINE_DRIFT'
-            printf '%s\n' "$base_drift"
-            exit 1
-          fi
-
           pr_drift="$(git diff --name-only "$PR_BASE" "$PR_HEAD" -- "${frozen_production[@]}" "${governance[@]}")"
           if [[ -n "$pr_drift" ]]; then
             if [[ "$PR_HEAD_REF" == 'governance/freeze-pr818-live-flow-finalize-v1' ]] && [[ "$pr_drift" == '.github/workflows/repo-forensics-pr-gate.yml' ]]; then
@@ -136,7 +122,6 @@ jobs:
             else
               echo 'PR818_FROZEN_LIVE_FLOW_VIOLATION'
               echo "Frozen live-reviewed SHA: $PR818_FROZEN_LIVE_SHA"
-              echo "Frozen integrated baseline: $PR818_FROZEN_MAIN_BASELINE"
               printf '%s\n' "$pr_drift"
               echo 'Use a separate governed live-flow recertification for intentional production changes.'
               exit 1

@@ -1,17 +1,13 @@
 {
   "schema_version": 1,
   "source_agent": "codex",
-  "action": "GENERATE_PATCH",
-  "title": "Harden reconnect resource verification",
-  "scope": "Add one deterministic verifier without changing feed runtime behavior.",
+  "action": "GENERATE_TESTS",
+  "title": "Add local admission tests",
+  "scope": "Prove the local task admission contract.",
   "requested_paths": [
-    "scripts/verify_feed_reconnect_resources.py",
-    "tests/test_feed_reconnect_resource_verifier.py"
+    "tests/test_agent_admission.py"
   ],
-  "allowed_paths": [
-    "scripts/",
-    "tests/"
-  ],
+  "allowed_paths": ["tests/"],
   "forbidden_paths": [
     ".env",
     "credentials.py",
@@ -21,9 +17,17 @@
     "core/risk",
     "strategies/"
   ],
-  "requires_human_approval": true,
+  "requires_human_approval": false,
+  "expected_tests": ["PYTHONPATH=. pytest -q tests/test_agent_admission.py"],
+  "acceptance_proof": ["Committed task contract matches before acceptance."],
   "metadata": {
-    "project": "tradebot"
+    "project": "tradebot",
+    "delivery_work_item": {
+      "work_item_id": "<committed-item-id>",
+      "path": "governance/evidence/work_items/<item>.json",
+      "sha256": "<sha256-of-committed-json-bytes>",
+      "task_contract_id": "<task-contract-id-in-the-item>"
+    }
   },
   "supervisor": {
     "schema_version": 1,
@@ -33,10 +37,7 @@
     "worktree_path": "/absolute/path/to/tradebot-feed-reconnect-resource-verifier",
     "branch": "agent/feed-reconnect-resource-verifier",
     "base_ref": "main",
-    "ownership_paths": [
-      "scripts/verify_feed_reconnect_resources.py",
-      "tests/test_feed_reconnect_resource_verifier.py"
-    ],
+    "ownership_paths": ["tests/test_agent_admission.py"],
     "frozen_paths": [
       "core/feed_manager.py",
       "core/risk_manager.py",
@@ -55,10 +56,7 @@
         "timeout_seconds": 900
       }
     ],
-    "required_artifacts": [
-      "scripts/verify_feed_reconnect_resources.py",
-      "tests/test_feed_reconnect_resource_verifier.py"
-    ],
+    "required_artifacts": ["tests/test_agent_admission.py"],
     "require_clean_worktree": true,
     "require_committed_head": true
   }
