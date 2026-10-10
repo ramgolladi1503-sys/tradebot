@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from core.agent_approval import approve_agent_scope
+from core.agent_admission import admit_agent_work
 from core.agent_evidence import write_agent_evidence
 from core.agent_scope_guard import assess_agent_scope
 from core.agent_work_contract import (
@@ -46,37 +47,50 @@ def _load_payload(path: str | Path) -> dict[str, Any]:
 def submit_agent_work_payload(
     payload: Mapping[str, Any],
     *,
+    repository_root: str | Path | None = None,
     human_approved: bool = False,
     approved_by: str | None = None,
     write_evidence: bool = True,
     evidence_root: str | Path | None = None,
 ) -> tuple[int, dict[str, Any]]:
+    root = Path(repository_root) if repository_root is not None else Path.cwd()
+    admission_decision = admit_agent_work(payload, repository_root=root)
     request = normalize_agent_work_request(payload)
     contract_decision = validate_agent_work_contract(request)
     scope_decision = assess_agent_scope(request, contract_decision=contract_decision)
+    # CLI-supplied identity strings and booleans are not authenticated approval.
     approval_decision = approve_agent_scope(
         scope_decision,
-        human_approved=human_approved,
-        approved_by=approved_by,
+        human_approved=False,
+        approved_by=None,
     )
 
     evidence_result = None
+    evidence_error = None
     if write_evidence:
-        evidence_result = write_agent_evidence(
-            request=request,
-            scope_decision=scope_decision,
-            approval_decision=approval_decision,
-            root_dir=evidence_root,
-        )
+        try:
+            evidence_result = write_agent_evidence(
+                request={
+                    "agent_work_request": request.to_dict(),
+                    "admission_decision": admission_decision.to_dict(),
+                },
+                scope_decision=scope_decision,
+                approval_decision=approval_decision,
+                root_dir=evidence_root,
+            )
+        except Exception as exc:
+            evidence_error = f"{type(exc).__name__}:{exc}"
 
     result = {
         "request": request.to_dict(),
         "contract_decision": contract_decision.to_dict(),
         "scope_decision": scope_decision.to_dict(),
         "approval_decision": approval_decision.to_dict(),
+        "admission_decision": admission_decision.to_dict(),
         "evidence_result": evidence_result.to_dict()
         if evidence_result is not None
         else None,
+        "evidence_error": evidence_error,
         "safety": {
             "read_only": True,
             "is_order_action": False,
@@ -90,10 +104,15 @@ def submit_agent_work_payload(
         },
     }
 
+    if not admission_decision.accepted:
+        return CLI_CONTRACT_OR_SCOPE_BLOCKED, result
     if not contract_decision.accepted or not scope_decision.accepted:
         return CLI_CONTRACT_OR_SCOPE_BLOCKED, result
     if not approval_decision.approved:
         return CLI_APPROVAL_REJECTED, result
+    if not write_evidence or evidence_result is None:
+        result["acceptance_blocker"] = "EVIDENCE_PERSISTENCE_REQUIRED"
+        return CLI_CONTRACT_OR_SCOPE_BLOCKED, result
     return CLI_OK, result
 
 
@@ -107,12 +126,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--approve",
         action="store_true",
-        help="Mark the request as human-approved for patch work.",
+        help="Unauthenticated caller assertion; never authorizes medium/high-risk work.",
     )
     parser.add_argument(
         "--approved-by",
         default=None,
-        help="Approver id required when --approve is used.",
+        help="Unverified caller-supplied label; never treated as authenticated identity.",
     )
     parser.add_argument(
         "--evidence-root",

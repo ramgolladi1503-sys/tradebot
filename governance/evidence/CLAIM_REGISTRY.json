@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "registry_scope": "bounded legacy inventory for the evidence enforcement milestone",
+  "claims": [
+    {
+      "claim_id": "EVIDENCE_STANDARD_IMPLEMENTATION",
+      "statement": "The package detects missing, contradictory, stale, or self-approved evidence, blocks uncovered new material PR paths, and blocks unclassified changed paths.",
+      "claim_kind": "implementation",
+      "scope_paths": [
+        "core/delivery/",
+        "governance/evidence/",
+        "tools/verify_evidence.py",
+        "tests/governance/",
+        "tests/delivery/",
+        "docs/tradebot_delivery/",
+        "docs/agent_reviews/",
+        ".agents/workflows/",
+        ".github/workflows/evidence-gates.yml",
+        ".github/workflows/frozen-head-exact-sha-certification.yml",
+        ".github/workflows/ci.yml",
+        ".github/workflows/tests.yml",
+        "core/agent_admission.py",
+        "core/agent_supervisor_claims.py",
+        "core/agent_supervisor_git.py",
+        "scripts/submit_agent_work.py",
+        "scripts/agent_supervisor.py",
+        "tests/test_agent_admission.py",
+        "tests/test_submit_agent_work.py",
+        "tests/test_agent_supervisor.py",
+        "tests/test_frozen_head_exact_sha_workflow.py",
+        "tests/governance/test_task_entrypoint_inventory.py",
+        ".github/workflows/repo-forensics-pr-gate.yml",
+        "docs/AGENT_WORKFLOW.md",
+        "docs/AGENT_SUPERVISOR.md",
+        "docs/samples/gsd-agent-work.json",
+        "docs/samples/codex-supervisor-task.json",
+        ".github/workflows/pr818-apply-safe-test-contract-repairs.yml",
+        ".github/workflows/rag-ci.yml"
+      ],
+      "status": "UNVERIFIED",
+      "source_ids": [
+        "TRADEBOT_DELIVERY_ORGANIZATION",
+        "TRADEBOT_DELIVERY_LIFECYCLE",
+        "TRADEBOT_QA_PLAYBOOK"
+      ],
+      "evidence_refs": [],
+      "limitation": "Implementation tests and the blocking PR workflow do not replace independent QA/Senior QA review; task platforms are not universally intercepted and classic protection and the active ruleset do not require this check; an authorized ruleset update must add it."
+    },
+    {
+      "claim_id": "LEGACY_MARKET_DATA_CONTRACTS",
+      "statement": "Market-data correctness and freshness claims have not been comprehensively reviewed under this standard.",
+      "claim_kind": "data_contract",
+      "scope_paths": [
+        "core/feed/",
+        "scripts/"
+      ],
+      "status": "UNVERIFIED",
+      "source_ids": [
+        "TRADEBOT_DELIVERY_LIFECYCLE",
+        "TRADEBOT_QA_PLAYBOOK"
+      ],
+      "evidence_refs": [],
+      "limitation": "This inventory does not invalidate existing evidence; no package-wide independent audit was performed for this milestone."
+    },
+    {
+      "claim_id": "LEGACY_REPLAY_PROVENANCE",
+      "statement": "Historical replay and data-provenance claims have not been comprehensively reviewed under this standard.",
+      "claim_kind": "implementation",
+      "scope_paths": [
+        "core/analytics/",
+        "research/"
+      ],
+      "status": "UNVERIFIED",
+      "source_ids": [
+        "TRADEBOT_DELIVERY_LIFECYCLE",
+        "TRADEBOT_QA_PLAYBOOK"
+      ],
+      "evidence_refs": [],
+      "limitation": "No dataset-wide provenance or replay-validity certification is claimed here."
+    },
+    {
+      "claim_id": "LEGACY_STRATEGY_OUTCOMES",
+      "statement": "Existing strategy predictive-validity and profitability claims have not been comprehensively reviewed under this standard.",
+      "claim_kind": "predictive_validity",
+      "scope_paths": [
+        "strategies/",
+        "research/"
+      ],
+      "status": "UNVERIFIED",
+      "source_ids": [
+        "TRADEBOT_RELEASE_GATES"
+      ],
+      "evidence_refs": [],
+      "limitation": "No profitability, predictive-validity, or strategy-certification conclusion is made by this inventory."
+    },
+    {
+      "claim_id": "LEGACY_RISK_AND_EXECUTION",
+      "statement": "Risk enforcement and execution-safety claims have not been comprehensively reviewed under this standard.",
+      "claim_kind": "operational_reliability",
+      "scope_paths": [
+        "core/risk/",
+        "core/execution/",
+        "core/broker/"
+      ],
+      "status": "UNVERIFIED",
+      "source_ids": [
+        "TRADEBOT_AGENT_RULES",
+        "TRADEBOT_RELEASE_GATES"
+      ],
+      "evidence_refs": [],
+      "limitation": "This governance change does not inspect or certify live execution, broker, or risk behavior."
+    }
+  ]
+}

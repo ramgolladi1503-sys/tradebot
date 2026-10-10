@@ -2,18 +2,8 @@ name: Frozen Candidate Exact-SHA Certification
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        required: true
-        type: string
-      candidate_sha:
-        required: true
-        type: string
-      base_sha:
-        required: true
-        type: string
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review, edited]
 
 permissions:
   contents: read
@@ -28,9 +18,9 @@ jobs:
           fetch-depth: 0
       - name: Fetch independent base and candidate refs
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           git fetch --no-tags origin \
             +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
@@ -44,7 +34,7 @@ jobs:
           echo "SYNTHETIC_MERGE_REF_USED_AS_AUTHORITY=false"
 
   agent-review-base-authority:
-    if: ${{ !startsWith(github.head_ref, 'ci/') }}
+    if: ${{ !startsWith(github.head_ref, 'ci/') && !(github.event.action == 'edited' && !contains(toJSON(github.event.changes), '"base"') && (contains(toJSON(github.event.changes), '"title"') || contains(toJSON(github.event.changes), '"body"'))) }}
     needs: exact-sha-identity
     runs-on: ubuntu-latest
     steps:
@@ -53,16 +43,16 @@ jobs:
           fetch-depth: 0
       - name: Validate base-authoritative exact-SHA manifest
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           test -n "$BASE_SHA"
           git fetch --no-tags origin "$BASE_SHA" +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
           python scripts/validate_frozen_head_bridge.py --pr-number "$PR_NUMBER" --candidate-sha "$HEAD_SHA" --base-sha "$BASE_SHA"
 
   runtime-authority-base-authority:
-    if: ${{ !startsWith(github.head_ref, 'ci/') }}
+    if: ${{ !startsWith(github.head_ref, 'ci/') && !(github.event.action == 'edited' && !contains(toJSON(github.event.changes), '"base"') && (contains(toJSON(github.event.changes), '"title"') || contains(toJSON(github.event.changes), '"body"'))) }}
     needs: exact-sha-identity
     runs-on: ubuntu-latest
     steps:
@@ -71,9 +61,9 @@ jobs:
           fetch-depth: 0
       - name: Validate current-base scope policy
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           test -n "$BASE_SHA"
           git fetch --no-tags origin "$BASE_SHA" +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
@@ -94,7 +84,7 @@ jobs:
           PY
 
   code-excellence-base-authority:
-    if: ${{ !startsWith(github.head_ref, 'ci/') }}
+    if: ${{ !startsWith(github.head_ref, 'ci/') && !(github.event.action == 'edited' && !contains(toJSON(github.event.changes), '"base"') && (contains(toJSON(github.event.changes), '"title"') || contains(toJSON(github.event.changes), '"body"'))) }}
     needs: exact-sha-identity
     runs-on: ubuntu-latest
     steps:
@@ -103,9 +93,9 @@ jobs:
           fetch-depth: 0
       - name: Run trusted CE code against exact candidate tree
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           test -n "$BASE_SHA"
           git fetch --no-tags origin "$BASE_SHA" +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
@@ -127,3 +117,92 @@ jobs:
             --config "$BASE_WORKSPACE/.gsd-forensics.yaml" \
             --changed-paths-file "$CHANGED_PATHS_FILE" \
             --out "$REPORT_FILE"
+
+  trusted-evidence-coverage:
+    needs: exact-sha-identity
+    if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && !(github.event.action == 'edited' && !contains(toJSON(github.event.changes), '"base"') && (contains(toJSON(github.event.changes), '"title"') || contains(toJSON(github.event.changes), '"body"'))) }}
+    name: Trusted base evidence coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the exact protected base commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python from the protected base workflow
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate event SHAs and prepare candidate as inert data
+        id: candidate
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "base/head SHA must be full lowercase commit IDs" >&2
+            exit 1
+          fi
+          actual_base=$(git rev-parse HEAD)
+          if [[ "$actual_base" != "$BASE_SHA" ]]; then
+            echo "checkout HEAD $actual_base differs from event base $BASE_SHA" >&2
+            exit 1
+          fi
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "protected-base checkout is not clean; refusing to run verifier" >&2
+            exit 1
+          fi
+
+          candidate_root="$RUNNER_TEMP/trusted-evidence-candidate-$RUN_ID-$RUN_ATTEMPT"
+          if [[ -e "$candidate_root" ]]; then
+            echo "candidate data path already exists" >&2
+            exit 1
+          fi
+          git fetch --no-tags origin "$HEAD_SHA"
+          fetched_head=$(git rev-parse FETCH_HEAD)
+          if [[ "$fetched_head" != "$HEAD_SHA" ]]; then
+            echo "fetched candidate $fetched_head differs from event head $HEAD_SHA" >&2
+            exit 1
+          fi
+          git cat-file -e "$fetched_head^{commit}"
+          mkdir "$candidate_root"
+          git archive --format=tar "$HEAD_SHA" | tar --no-same-owner -xf - -C "$candidate_root"
+          printf 'candidate_root=%s\n' "$candidate_root" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce candidate coverage with the base verifier
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CANDIDATE_ROOT: ${{ steps.candidate.outputs.candidate_root }}
+        run: |
+          set -euo pipefail
+          started=$SECONDS
+          python "$GITHUB_WORKSPACE/tools/verify_evidence.py" \
+            --base-ref "$BASE_SHA" \
+            --candidate-ref "$HEAD_SHA" \
+            --candidate-sha "$HEAD_SHA" \
+            --candidate-root "$CANDIDATE_ROOT" \
+            --candidate-root-sha "$HEAD_SHA" \
+            --verifier-source-sha "$BASE_SHA" \
+            --output trusted-base-evidence-report.json \
+            --summary-output "$GITHUB_STEP_SUMMARY" \
+            --mode enforce-new-material
+          duration=$((SECONDS - started))
+          printf '\nTrusted verifier duration: %s seconds.\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload trusted-base report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trusted-base-evidence-${{ github.event.pull_request.head.sha }}
+          path: trusted-base-evidence-report.json
+          if-no-files-found: warn
+          retention-days: 30

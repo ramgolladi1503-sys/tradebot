@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "source_id": "TRADEBOT_DELIVERY_ORGANIZATION",
+      "locator": "docs/tradebot_delivery/ORGANIZATION.md",
+      "source_type": "repository_policy",
+      "authority": "TradeBot delivery role and separation-of-duties policy",
+      "status": "VERIFIED",
+      "limitations": "Verifies the local policy document exists; does not prove role identity or policy execution."
+    },
+    {
+      "source_id": "TRADEBOT_DELIVERY_LIFECYCLE",
+      "locator": "docs/tradebot_delivery/DELIVERY_LIFECYCLE.md",
+      "source_type": "repository_policy",
+      "authority": "TradeBot work-item lifecycle and transition policy",
+      "status": "VERIFIED",
+      "limitations": "Verifies the local policy document exists; does not prove every work item followed it."
+    },
+    {
+      "source_id": "TRADEBOT_QA_PLAYBOOK",
+      "locator": "docs/tradebot_delivery/QA_PLAYBOOK.md",
+      "source_type": "repository_policy",
+      "authority": "TradeBot QA and adversarial test policy",
+      "status": "VERIFIED",
+      "limitations": "Verifies the local policy document exists; does not prove a specific test was adequate."
+    },
+    {
+      "source_id": "TRADEBOT_RELEASE_GATES",
+      "locator": "docs/tradebot_delivery/RELEASE_GATES.md",
+      "source_type": "repository_policy",
+      "authority": "TradeBot release and research-claim boundaries",
+      "status": "VERIFIED",
+      "limitations": "Verifies the local policy document exists; does not assert a release gate passed."
+    },
+    {
+      "source_id": "TRADEBOT_AGENT_RULES",
+      "locator": "AGENTS.md",
+      "source_type": "repository_policy",
+      "authority": "TradeBot agent safety constraints",
+      "status": "VERIFIED",
+      "limitations": "Local policy reference only; this registry cannot prove compliance by itself."
+    }
+  ]
+}

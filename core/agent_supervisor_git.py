@@ -50,7 +50,6 @@ def _common_git_dir(worktree: Path) -> Path:
 
 def _claims_paths(worktree: Path) -> tuple[Path, Path]:
     root = _common_git_dir(worktree) / "agent-supervisor"
-    root.mkdir(parents=True, exist_ok=True)
     return root / "claims.json", root / "claims.lock"
 
 

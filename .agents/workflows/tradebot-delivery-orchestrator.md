@@ -23,6 +23,8 @@ Use the collaboration/subagent mechanism to create actual agents. Each seat must
 
 Use only source/action pairs supported by `core/agent_scope_guard.py`'s `SOURCE_ALLOWED_ACTIONS` mapping:
 
+Before treating a repository implementation task as governed, create or link its durable work item and make the evidence workflow pass for material paths. The repository PR gate can enforce changed code and committed records; it cannot intercept every chat or task-platform request. If the task arrived without a platform intake integration that creates/links the record, report universal task-intake compliance as `UNSATISFIED` and do not claim that the workflow ran automatically for every request. Branch protection must independently require the stable evidence workflow status for merge enforcement.
+
 | Role | `source_agent` | Allowed `action` value(s) |
 | --- | --- | --- |
 | Business Analyst | `codex` | `PLAN_PR` |
@@ -130,6 +132,16 @@ Any defect causes:
 `QA_FAILED -> Development fix -> DEV_VERIFIED -> QA_IN_PROGRESS`
 
 After retest, QA performs a new adversarial pass.
+
+For material claims, record the claim-level G1 source and assumptions, G2
+correctness, G3 adversarial comparison, and G4 independent evidence in the
+existing work-item evidence contract. Follow the evidence record in
+`governance/evidence/POLICY.md`. G2/G3/G4 reviewer identities must be distinct
+from the developer and from one another. The PR evidence CI check blocks
+uncovered new material paths and structural errors; its report remains a
+coverage record and never substitutes for QA, UAT, product acceptance, or
+research certification. The check still cannot guarantee task-platform intake
+or block merges until repository branch protection requires its status.
 
 ## 7. Technical & Quant Analyst challenge and closure
 

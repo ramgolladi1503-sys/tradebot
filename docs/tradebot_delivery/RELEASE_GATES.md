@@ -43,6 +43,44 @@ Release Manager marks `MERGE_APPROVED`.
 ### G9 Production verification gate
 Post-merge/runtime verification passes where applicable.
 
+## Claim-level evidence gates
+
+Material work items also carry the four claim-level evidence dimensions defined in
+[`governance/evidence/POLICY.md`](../../governance/evidence/POLICY.md). These are
+named `G1_SOURCE`, `G2_CORRECTNESS`, `G3_ADVERSARIAL`, and `G4_INDEPENDENT` in the
+evidence record so they are not confused with delivery lifecycle gates G0-G9.
+
+The existing Product Owner/BA/Architect, Developer, QA/Senior QA, UAT, and
+Release Manager roles own these checks. Work-item evidence is recorded in the
+existing `core.delivery` contract and hash chain. The PR evidence workflow
+blocks new material changes without a current covering work item and blocks
+structural errors. Explicit `UNVERIFIED` legacy claims remain warnings;
+`NOT_APPLICABLE` needs a reason and reference and is not a pass. Developers
+cannot author their own independent G2/G3/G4 evidence. Classic branch
+protection requires `repo-forensics-pr-gate`; the active main ruleset requires
+`unit_tests` and `health_gate`. Neither requires the trusted status
+`Trusted base evidence coverage`, so it can fail without blocking merge until
+an authorized ruleset update adds that exact stable check. The ordinary
+`Candidate-code evidence diagnostics (untrusted)` job runs candidate code and
+is not an acceptable substitute for the trusted status. The workflow cannot
+set branch rules itself.
+
+The trusted workflow uses `pull_request_target` from the exact PR base and
+evaluates a separately materialized candidate archive as data. Candidate
+Python, tests, and workflow files are not run by that job; the report records
+both the verifier source SHA and candidate tree SHA. Because GitHub takes the
+`pull_request_target` definition from the PR base, the PR that first introduces
+this workflow cannot be protected by it. Its first trusted run is on a later
+PR whose base already contains the workflow. Until that rollout and the
+required-check setting are verified, repository-side enforcement is not a
+universal merge guarantee.
+
+This gate evaluates repository PR diffs. It does not observe or intercept every
+task request sent to Codex, ChatGPT, Claude, or other platforms. Until a verified
+task-intake integration exists for each platform, universal per-request
+compliance remains `UNSATISFIED`. Do not claim that repository CI alone
+guarantees every request followed the delivery lifecycle.
+
 ## Runtime-sensitive minimum checks
 
 Use relevant checks from the repository PR template and any targeted tests required by the story.
@@ -57,6 +95,9 @@ A green engineering release does not imply:
 - statistical validity
 
 Research claims require their own evidence and governance.
+Profitability and predictive-validity claims remain subject to the separate
+research validation and certification controls. A green evidence workflow or
+passing unit suite does not establish a trading edge or live readiness.
 
 ## Stop conditions
 

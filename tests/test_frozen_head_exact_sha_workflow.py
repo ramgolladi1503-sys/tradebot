@@ -5,10 +5,38 @@ WORKFLOW = Path(".github/workflows/frozen-head-exact-sha-certification.yml")
 VALIDATOR = Path("scripts/validate_frozen_head_bridge.py")
 
 
-def test_base_authority_uses_event_base_or_dispatch_base_input():
+def test_base_authority_uses_pull_request_event_base_only():
     text = WORKFLOW.read_text()
-    assert "BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}" in text
-    assert "base_sha:" in text
+    assert "BASE_SHA: ${{ github.event.pull_request.base.sha }}" in text
+    assert "inputs." not in text
+    assert "workflow_dispatch:" not in text
+    assert "pull_request_target:" in text
+    assert "branches: [main]" in text
+    assert "types: [opened, reopened, synchronize, ready_for_review, edited]" in text
+    assert "trusted-evidence-coverage:" in text
+    trusted_job = text.split("  trusted-evidence-coverage:", 1)[1]
+    trusted_condition = next(
+        line.strip() for line in trusted_job.splitlines()
+        if line.strip().startswith("if:")
+    )
+    assert trusted_condition.startswith(
+        "if: ${{ github.event_name == 'pull_request_target' "
+        "&& github.event.pull_request.base.ref == 'main' && !("
+    )
+    assert "github.event.action == 'edited'" in trusted_condition
+    assert "!contains(toJSON(github.event.changes), '\"base\"')" in trusted_condition
+    assert "contains(toJSON(github.event.changes), '\"title\"')" in trusted_condition
+    assert "contains(toJSON(github.event.changes), '\"body\"')" in trusted_condition
+    for job in (
+        "exact-sha-identity",
+        "agent-review-base-authority",
+        "runtime-authority-base-authority",
+        "code-excellence-base-authority",
+        "trusted-evidence-coverage",
+    ):
+        assert f"  {job}:" in text
+    assert "permissions:\n  contents: read\n  pull-requests: read" in text
+    assert "    permissions:\n      contents: read" in text
     assert 'git fetch --no-tags origin "$BASE_SHA"' in text
     assert 'git diff --check "$BASE_SHA" "$HEAD_SHA"' in text
 

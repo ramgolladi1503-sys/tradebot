@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "report_only": false,
+  "enforcement_stage": "BLOCK_NEW_MATERIAL",
+  "protected_material_path_prefixes": [
+    "core/",
+    "strategies/",
+    "research/",
+    "scripts/research/",
+    "config/",
+    "data/",
+    "governance/evidence/",
+    "tests/governance/",
+    "tests/delivery/",
+    "tools/verify_evidence.py",
+    "docs/tradebot_delivery/",
+    "docs/agent_reviews/",
+    ".agents/workflows/tradebot-delivery-orchestrator.md",
+    ".github/workflows/evidence-gates.yml",
+    ".github/workflows/frozen-head-exact-sha-certification.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/tests.yml",
+    "scripts/submit_agent_work.py",
+    "scripts/agent_supervisor.py",
+    "tests/test_agent_admission.py",
+    "tests/test_submit_agent_work.py",
+    "tests/test_agent_supervisor.py",
+    "docs/AGENT_WORKFLOW.md",
+    "docs/AGENT_SUPERVISOR.md",
+    "docs/samples/gsd-agent-work.json",
+    "docs/samples/codex-supervisor-task.json",
+    ".github/workflows/repo-forensics-pr-gate.yml",
+    ".github/workflows/pr818-apply-safe-test-contract-repairs.yml",
+    ".github/workflows/rag-ci.yml"
+  ],
+  "trusted_non_material_exemptions": [],
+  "material_path_prefixes": [
+    "core/",
+    "strategies/",
+    "research/",
+    "scripts/research/",
+    "config/",
+    "data/",
+    "governance/evidence/",
+    "tests/governance/",
+    "tests/delivery/",
+    "tools/verify_evidence.py",
+    "docs/tradebot_delivery/",
+    "docs/agent_reviews/",
+    ".agents/workflows/tradebot-delivery-orchestrator.md",
+    ".github/workflows/evidence-gates.yml",
+    ".github/workflows/frozen-head-exact-sha-certification.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/tests.yml",
+    "scripts/submit_agent_work.py",
+    "scripts/agent_supervisor.py",
+    "tests/test_agent_admission.py",
+    "tests/test_submit_agent_work.py",
+    "tests/test_agent_supervisor.py",
+    "tests/test_frozen_head_exact_sha_workflow.py",
+    "docs/AGENT_WORKFLOW.md",
+    "docs/AGENT_SUPERVISOR.md",
+    "docs/samples/gsd-agent-work.json",
+    "docs/samples/codex-supervisor-task.json",
+    ".github/workflows/repo-forensics-pr-gate.yml",
+    ".github/workflows/pr818-apply-safe-test-contract-repairs.yml",
+    ".github/workflows/rag-ci.yml"
+  ],
+  "gates": {
+    "G1_SOURCE": {
+      "evidence_type": "SOURCE_VERIFICATION_EVIDENCE",
+      "allowed_roles": [
+        "PRODUCT_OWNER",
+        "BUSINESS_ANALYST",
+        "SOLUTION_ARCHITECT",
+        "SYSTEM_ARCHITECT",
+        "QUANT_RESEARCH_ARCHITECT"
+      ]
+    },
+    "G2_CORRECTNESS": {
+      "evidence_type": "CORRECTNESS_VERIFICATION_EVIDENCE",
+      "allowed_roles": [
+        "QA_ENGINEER",
+        "SENIOR_QA"
+      ]
+    },
+    "G3_ADVERSARIAL": {
+      "evidence_type": "ADVERSARIAL_VERIFICATION_EVIDENCE",
+      "allowed_roles": [
+        "QA_ENGINEER",
+        "SENIOR_QA"
+      ]
+    },
+    "G4_INDEPENDENT": {
+      "evidence_type": "INDEPENDENT_EVIDENCE",
+      "allowed_roles": [
+        "QUANT_RESEARCH_ARCHITECT",
+        "UAT_REVIEWER",
+        "RELEASE_MANAGER",
+        "PRODUCTION_SRE"
+      ]
+    }
+  },
+  "claim_kinds_requiring_research_certification": [
+    "predictive_validity",
+    "profitability"
+  ],
+  "limitations": [
+    "A passing evidence check is not merge approval, research certification, or runtime readiness; branch protection must separately require its status to block merges.",
+    "Passing tests do not establish a trading edge or profitability.",
+    "Source existence and record hashes do not authenticate source authority or reviewer identity."
+  ]
+}

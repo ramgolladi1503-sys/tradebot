@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "work_item_id": "EVS-001",
+  "status": "PENDING_FIRST_REVIEWED_PR",
+  "owner": "Delivery Orchestrator",
+  "capture_protocol": {
+    "finding_counts": "Copy total and severity counts from the exact-head JSON report after CI completes.",
+    "ci_duration_seconds": "Copy verifier and focused-test durations from the GitHub step summary.",
+    "reviewer_effort_minutes": "Each reviewer records their active review minutes after completing the assigned review; use UNKNOWN until supplied.",
+    "false_positive_disposition": "Record every report finding disposition after review; do not classify an unreviewed finding as false positive."
+  },
+  "baseline": {
+    "candidate_sha": null,
+    "report_findings_total": null,
+    "report_findings_by_severity": null,
+    "verifier_duration_seconds": null,
+    "focused_test_duration_seconds": null,
+    "reviewer_effort_minutes": "UNKNOWN",
+    "false_positive_count": null,
+    "evidence_artifact": null,
+    "limitations": "No reviewed pull request has supplied these baseline measurements yet."
+  }
+}

@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Sequence
 
+from core.agent_admission import admit_agent_work
 from core.agent_supervisor import (
     claim_contract,
     get_contract_status,
@@ -34,8 +35,16 @@ def _parser() -> argparse.ArgumentParser:
         choices=("preflight", "claim", "verify", "review", "release", "status"),
     )
     parser.add_argument("--contract", required=True, help="Path to a supervisor task JSON file.")
-    parser.add_argument("--approve", action="store_true", help="Human-approve patch scope.")
-    parser.add_argument("--approved-by", default=None, help="Approver id used with --approve.")
+    parser.add_argument(
+        "--approve",
+        action="store_true",
+        help="Unauthenticated caller assertion; never authorizes medium/high-risk work.",
+    )
+    parser.add_argument(
+        "--approved-by",
+        default=None,
+        help="Unverified caller-supplied label; never treated as authenticated identity.",
+    )
     parser.add_argument("--review", default=None, help="Independent review JSON for the review command.")
     parser.add_argument("--force", action="store_true", help="Force release an unfinished claim.")
     return parser
@@ -53,17 +62,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         payload = load_contract_file(args.contract)
         contract = normalize_supervisor_contract(payload)
+        admission = None
+        if args.command != "status":
+            admission = admit_agent_work(payload, repository_root=contract.worktree_path)
+            if not admission.accepted:
+                print(json.dumps({
+                    "state": f"{args.command.upper()}_BLOCKED",
+                    "accepted": False,
+                    "task_id": contract.task_id,
+                    "blockers": list(admission.blockers),
+                    "details": {"admission_decision": admission.to_dict()},
+                    "safety": {
+                        "read_only_from_trading_runtime": True,
+                        "is_order_action": False,
+                        "broker_api_called": False,
+                        "live_mode_touched": False,
+                        "allowed_for_live_execution": False,
+                    },
+                }, indent=2, sort_keys=True))
+                return CLI_BLOCKED
         if args.command == "preflight":
             result = preflight_contract(
                 contract,
-                human_approved=bool(args.approve),
-                approved_by=args.approved_by,
+                human_approved=False,
+                approved_by=None,
             )
         elif args.command == "claim":
             result = claim_contract(
                 contract,
-                human_approved=bool(args.approve),
-                approved_by=args.approved_by,
+                human_approved=False,
+                approved_by=None,
             )
         elif args.command == "verify":
             result = verify_contract(contract)
@@ -75,7 +103,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = release_contract(contract, force=bool(args.force))
         else:
             result = get_contract_status(contract)
-        print(json.dumps(result.to_dict(), indent=2, sort_keys=True, default=str))
+        output = result.to_dict()
+        if admission is not None:
+            output.setdefault("details", {})["admission_decision"] = admission.to_dict()
+        elif args.command == "status":
+            output.setdefault("details", {})["admission_decision"] = {
+                "state": "NOT_CHECKED_READ_ONLY_STATUS",
+                "accepted": None,
+                "reason": "status_does_not_authorize_or_admit_work",
+            }
+        print(json.dumps(output, indent=2, sort_keys=True, default=str))
         return CLI_OK if result.accepted else CLI_BLOCKED
     except Exception as exc:
         error = {

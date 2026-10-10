@@ -47,7 +47,7 @@ The test ownership contract is explicit:
 - nightly/manual soak: 50-100-cycle resource checks;
 - weekly/manual certification: 1000-cycle proofs.
 
-Existing required `ci` and `tests` workflow/job names are preserved to avoid silently breaking branch protection.
+At the time of this review, both ordinary workflow names were preserved because branch-protection context usage had not been verified.
 
 ## GSD Review
 
@@ -95,9 +95,16 @@ Observe the first unrelated pull request and confirm its ordinary `ci` and `test
 - It does not prove live or paper broker feed correctness.
 - It does not replace the existing 1000-cycle certification evidence.
 - It does not prove every non-feed test completes within 15 minutes forever.
-- It does not consolidate the two historical ordinary workflows into one because their check names may be referenced by branch protection.
+- It does not change which deterministic tests, feed smoke tests, soak tests, or certification tests are selected.
 - It does not change reconnect, persistence, descriptor, or websocket behavior.
 
 ## Human Approval
 
 Human approval is required before merge. Reviewers should verify the repository branch-protection contexts still appear, the ordinary jobs finish without collecting feed-resource profiles, and the dedicated smoke workflow passes.
+
+
+## CI Duplicate-Run Cleanup (2026-10-10)
+
+A live readback of the repository rules showed that required checks are the generic `unit_tests` and `health_gate` contexts plus `repo-forensics-pr-gate`; it did not require a second copy from the `tests` workflow. The `ci` workflow remains the sole producer of the two generic checks. The `tests` workflow now runs only PR gitleaks. `ci` runs on pull requests and pushes to `main`, avoiding a second full suite for the same feature-branch commit delivered through both `push` and `pull_request`. The pytest JUnit failure artifact remains in `ci`.
+
+This workflow edit does not remove the required test or health checks, the gitleaks scan, or the dedicated feed smoke/soak/certification tiers. Validation required after the change: inspect the new PR run and confirm one `unit_tests`, one dependent `health_gate`, one gitleaks job, and `repo-forensics-pr-gate`; also confirm failure artifacts remain available when pytest fails.

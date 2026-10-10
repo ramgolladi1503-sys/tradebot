@@ -116,6 +116,13 @@ def test_complete_lifecycle_requires_evidence_at_every_gate_and_appends_audit():
     gate_statuses = {g["gate"]: g["status"] for g in o.gate_results()}
     assert gate_statuses["G8_MERGE"] == "PASS"
     assert gate_statuses["G9_PRODUCTION_VERIFY"] == "PASS"
+    evidence_gates = [g for g in o.gate_results() if g["gate"].startswith("EVIDENCE_G")]
+    assert len(evidence_gates) == 4
+    assert all(g["status"] == "BLOCKED" and g["blocking"] is False for g in evidence_gates)
+    readiness = o.readiness()
+    assert readiness["ready"] is True
+    assert readiness["evidence_standard"]["mode"] == "REPORT_ONLY"
+    assert readiness["evidence_standard"]["blocking"] is False
     validate_work_item(work_item_from_dict(work_item_to_dict(o.item)))
 
 

@@ -107,3 +107,17 @@ What must happen after completion?
 - Logs/reports:
 - Agent review evidence:
 - PR:
+
+## Claim-level Evidence Standard
+
+For material work, add the `extensions.evidence_standard` object from
+[`governance/evidence/templates/evidence_record.json`](../../governance/evidence/templates/evidence_record.json)
+to the canonical work-item JSON. Register each claim and source in
+`governance/evidence/CLAIM_REGISTRY.json` and
+`governance/evidence/SOURCE_REGISTRY.json`. Use `UNVERIFIED` until G1 source,
+G2 correctness, G3 adversarial, and G4 independent evidence are linked to the
+existing hash-sealed delivery evidence records.
+
+For a justified non-applicable work item, set `applicability` to
+`NOT_APPLICABLE`, provide `applicability_reason`, and leave claims empty. This
+status is not equivalent to a verified result.

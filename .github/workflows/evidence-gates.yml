@@ -1,0 +1,55 @@
+name: Evidence Diagnostics (Advisory)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-evidence-diagnostics:
+    if: ${{ !(github.event.action == 'edited' && !contains(toJSON(github.event.changes), '"base"') && (contains(toJSON(github.event.changes), '"title"') || contains(toJSON(github.event.changes), '"body"'))) }}
+    name: Candidate-code evidence diagnostics (untrusted)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact pull request head and base history
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch exact base object
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch --no-tags origin "$BASE_SHA"
+
+      - name: Run advisory candidate-code diagnostics (untrusted; not merge evidence)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          started=$SECONDS
+          python tools/verify_evidence.py \
+            --base-ref "$BASE_SHA" \
+            --candidate-ref "$HEAD_SHA" \
+            --candidate-sha "$HEAD_SHA" \
+            --output evidence-standard-report.json \
+            --summary-output "$GITHUB_STEP_SUMMARY" \
+            --mode report-only
+          duration=$((SECONDS - started))
+          printf '\nVerifier duration: %s seconds.\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload exact-head report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: untrusted-evidence-diagnostics-${{ github.event.pull_request.head.sha }}
+          path: evidence-standard-report.json
+          if-no-files-found: warn
+          retention-days: 30
