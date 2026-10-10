@@ -30,6 +30,42 @@ from core.active_position_manager import (
     STATE_LIQUIDATED
 )
 
+
+def _normalize_expiry_label(value: Any) -> Optional[str]:
+    """Normalize an explicit date or NSE-style instrument expiry label."""
+    if value is None:
+        return None
+    text = str(value).strip().upper()
+    if not text:
+        return None
+    for fmt in ("%d %b %y", "%Y-%m-%d", "%d-%b-%Y", "%d %b %Y"):
+        try:
+            return datetime.strptime(text, fmt).strftime("%d %b %y").upper()
+        except ValueError:
+            continue
+    return None
+
+
+def _unique_capture_expiry(symbols: pd.Series, contract_prefix: str) -> Optional[str]:
+    """Read the exact expiry label from one uniquely represented captured contract set.
+
+    The capture's symbols originate from the instrument master used to select the
+    subscribed contracts. For NSE index options, current NSE specifications set
+    Tuesday expiry, adjusted to the previous trading day for a Tuesday holiday.
+    This uses the contract's published expiry instead of reconstructing dates.
+    """
+    prefix = f"{contract_prefix} "
+    expiries = set()
+    for value in symbols.dropna().astype(str).unique():
+        symbol = value.strip()
+        if not symbol.startswith(prefix):
+            continue
+        expiry = _normalize_expiry_label(symbol[len(prefix):])
+        if expiry is None:
+            return None
+        expiries.add(expiry)
+    return next(iter(expiries)) if len(expiries) == 1 else None
+
 class SentinelLiveFeedAdvisor:
     def __init__(
         self,
@@ -152,17 +188,13 @@ class SentinelLiveFeedAdvisor:
     ) -> Optional[dict]:
         """Reads the exact real-time option LTP, Bid, Ask, Volume, and OI from the live chunk stream.
         
-        Requires an explicit expiry date string (e.g. '13 OCT 26' or '2026-10-13').
-        Fails closed (returns None) if expiry is missing, no match is found,
-        or multiple ambiguous contracts match the criteria.
+        Uses the explicit expiry when provided. Otherwise it derives the expiry only
+        when the filtered capture contains one canonical instrument-master contract
+        expiry for the requested ticker/strike/type. Missing or ambiguous identity
+        fails closed.
         Filters out ticks whose local capture timestamp exceeds decision_cutoff_epoch.
         """
         import glob
-        target_expiry = (expiry or getattr(self, "target_expiry", None))
-        if not target_expiry:
-            # Expiry is absent: fail closed
-            return None
-
         today_date_str = datetime.now().strftime("%Y-%m-%d")
         chunk_patterns = [
             f".runtime/market_data/{today_date_str}/chunks/*.parquet",
@@ -180,7 +212,7 @@ class SentinelLiveFeedAdvisor:
                 df=df,
                 strike=strike,
                 opt_type=opt_type,
-                expiry=target_expiry,
+                expiry=expiry,
                 decision_cutoff_epoch=decision_cutoff_epoch
             )
         except Exception:
@@ -196,14 +228,12 @@ class SentinelLiveFeedAdvisor:
     ) -> Optional[dict]:
         """Pure, deterministic extraction of option quote from a tick DataFrame.
         
-        Strictly requires an explicit expiry string (via argument or self.target_expiry).
-        Fails closed on missing expiry, zero matches, or multiple ambiguous contract symbols.
+        Uses an explicit expiry when configured, otherwise requires one unique expiry
+        in the captured canonical contract symbols. Fails closed on ambiguity.
         Filters out ticks whose local capture timestamp exceeds decision_cutoff_epoch.
         """
-        target_expiry = expiry or getattr(self, "target_expiry", None)
         ticker = getattr(self, "ticker", "NIFTY").upper()
-        if not target_expiry or not str(target_expiry).strip():
-            return None
+        explicit_expiry = expiry if expiry is not None else getattr(self, "target_expiry", None)
 
         try:
             if "ts" not in df.columns:
@@ -224,11 +254,26 @@ class SentinelLiveFeedAdvisor:
             if df.empty:
                 return None
 
-        if "symbol" not in df.columns or "token" not in df.columns:
+        if not {"symbol", "token"}.issubset(df.columns):
             return None
+
         prefix = f"{ticker} {strike} {opt_type}"
-        exp_str = str(target_expiry).strip().upper()
-        # Require canonical exact symbol match: e.g. "NIFTY 22400 CE 13 OCT 26"
+
+        # Captured symbols carry the actual expiry from the subscribed instrument
+        # master contract (e.g. "NIFTY 22400 CE 13 OCT 26"). Never infer it from
+        # a weekday because NSE holiday adjustments are contract-specific.
+        if explicit_expiry is not None:
+            exp_str = _normalize_expiry_label(explicit_expiry)
+            if exp_str is None:
+                return None
+            expiry_source = "EXPLICIT_EXPIRY_ARGUMENT"
+        else:
+            exp_str = _unique_capture_expiry(df["symbol"], prefix)
+            expiry_source = "CAPTURED_INSTRUMENT_MASTER_SYMBOL"
+        if exp_str is None:
+            return None
+
+        # Require canonical exact symbol match.
         exact_symbol = f"{prefix} {exp_str}"
         matches = df[df["symbol"] == exact_symbol]
 
@@ -283,6 +328,8 @@ class SentinelLiveFeedAdvisor:
             "vol": volume,
             "oi": open_interest,
             "timestamp": capture_timestamp,
+            "expiry": exp_str,
+            "expiry_source": expiry_source,
         }
         return res
 
@@ -340,6 +387,8 @@ class SentinelLiveFeedAdvisor:
             option_candidate = {
                 "contract": str(opt_q.get("symbol")),
                 "token": str(opt_q.get("token")),
+                "expiry": opt_q.get("expiry"),
+                "expiry_source": opt_q.get("expiry_source"),
                 "direction": entry_dir,
                 "strike": chosen_strike,
                 "source_capture_ts": opt_q.get("timestamp"),

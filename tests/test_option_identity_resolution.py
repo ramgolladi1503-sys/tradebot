@@ -43,12 +43,52 @@ def route_synthetic_capture(monkeypatch, frame):
     monkeypatch.setattr(pd, "read_parquet", lambda _path: frame.copy())
 
 
-def test_missing_expiry_fails_closed(advisor):
+def test_expiry_is_resolved_from_unique_captured_contract_symbol(advisor):
     advisor.target_expiry = None
-    frame = pd.DataFrame([quote_row()])
+    frame = pd.DataFrame([
+        quote_row(ts=1728445795.0),
+        quote_row(ts=1728445800.0, ltp=183.0),
+    ])
+
+    result = advisor.resolve_quote_from_dataframe(frame, 22400, "CE")
+
+    assert result["expiry"] == "13 OCT 26"
+    assert result["expiry_source"] == "CAPTURED_INSTRUMENT_MASTER_SYMBOL"
+    assert result["ltp"] == 183.0
+
+
+def test_missing_or_ambiguous_captured_expiry_fails_closed(advisor):
+    advisor.target_expiry = None
+    missing = pd.DataFrame([quote_row(symbol="NIFTY 22400 CE")])
+    ambiguous = pd.DataFrame([
+        quote_row(),
+        quote_row(symbol="NIFTY 22400 CE 20 OCT 26", token="NSE_FO|44605"),
+    ])
+    malformed = pd.DataFrame([
+        quote_row(),
+        quote_row(symbol="NIFTY 22400 CE 13 OCT 26 EXTRA", token="NSE_FO|44605"),
+    ])
+
+    assert advisor.resolve_quote_from_dataframe(missing, 22400, "CE") is None
+    assert advisor.resolve_quote_from_dataframe(ambiguous, 22400, "CE") is None
+    assert advisor.resolve_quote_from_dataframe(malformed, 22400, "CE") is None
+    assert advisor.resolve_quote_from_dataframe(missing, 22400, "CE", expiry="   ") is None
+
+
+@pytest.mark.parametrize("missing_column", ["symbol", "token"])
+def test_missing_contract_identity_columns_fail_closed(advisor, missing_column):
+    frame = pd.DataFrame([quote_row()]).drop(columns=[missing_column])
 
     assert advisor.resolve_quote_from_dataframe(frame, 22400, "CE") is None
-    assert advisor.resolve_quote_from_dataframe(frame, 22400, "CE", expiry="   ") is None
+
+
+def test_explicit_iso_expiry_normalizes_to_instrument_master_label(advisor):
+    frame = pd.DataFrame([quote_row()])
+
+    result = advisor.resolve_quote_from_dataframe(frame, 22400, "CE", expiry="2026-10-13")
+
+    assert result["expiry"] == "13 OCT 26"
+    assert result["expiry_source"] == "EXPLICIT_EXPIRY_ARGUMENT"
 
 
 def test_explicit_expiry_resolves_exact_identity_and_token(advisor):
@@ -126,6 +166,7 @@ def test_conflicting_tokens_for_exact_symbol_fail_closed(advisor):
 
 
 def test_live_resolver_and_candidate_evaluation_use_same_production_path(advisor, monkeypatch):
+    advisor.target_expiry = None
     cutoff = 1728445860.0
     route_synthetic_capture(monkeypatch, pd.DataFrame([quote_row(ts=cutoff - 5)]))
 
@@ -146,6 +187,8 @@ def test_live_resolver_and_candidate_evaluation_use_same_production_path(advisor
 
     assert result["candidate_status"] == "CAPTURE_RECEIVE_TIME_REPLAY_ONLY"
     assert result["option_candidate"]["contract"] == "NIFTY 22400 CE 13 OCT 26"
+    assert result["option_candidate"]["expiry"] == "13 OCT 26"
+    assert result["option_candidate"]["expiry_source"] == "CAPTURED_INSTRUMENT_MASTER_SYMBOL"
     assert result["option_candidate"]["source_capture_ts"] <= cutoff
     assert result["option_candidate"]["capture_time_basis"] == "WEBSOCKET_ON_MESSAGE_CALLBACK_TIME"
     assert result["option_candidate"]["receive_time_verified"] is True
