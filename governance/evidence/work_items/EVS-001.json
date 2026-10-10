@@ -247,7 +247,8 @@
           "core/order",
           "core/risk",
           "core/feed",
-          "strategies/"
+          "strategies/",
+          "broker/order/credential/risk/feed/strategy/live runtime paths"
         ],
         "expected_tests": [
           "PYTHONPATH=. pytest -q tests/test_agent_supervisor.py"
