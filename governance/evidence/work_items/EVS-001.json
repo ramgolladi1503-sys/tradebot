@@ -70,6 +70,7 @@
     "tests/test_submit_agent_work.py",
     "scripts/agent_supervisor.py",
     "tests/test_agent_supervisor.py",
+    "tests/test_frozen_head_exact_sha_workflow.py",
     "docs/AGENT_WORKFLOW.md",
     "docs/AGENT_SUPERVISOR.md",
     "docs/samples/gsd-agent-work.json",
@@ -174,6 +175,7 @@
         "tests/test_submit_agent_work.py",
         "scripts/agent_supervisor.py",
         "tests/test_agent_supervisor.py",
+        "tests/test_frozen_head_exact_sha_workflow.py",
         "docs/AGENT_WORKFLOW.md",
         "docs/AGENT_SUPERVISOR.md",
         "docs/samples/gsd-agent-work.json",
@@ -555,6 +557,51 @@
         ],
         "acceptance_proof": "Workflow has a main-only pull_request_target branch filter and the trusted job independently requires base.ref == main. Regression tests preserve the five existing jobs and read-only permissions. All pull_request_target activity types remain for main PRs. Inventory/policy/review docs explicitly state non-main target PRs no longer receive these jobs and remain unverified; active intake and dispatch trust gaps remain UNSATISFIED.",
         "source_evidence_policy": "The prior non-main PR814 certification document is historical evidence of previous behavior, not proof that the target branch was protected. This restriction is fail-closed; it does not establish trusted certification coverage on non-main branches."
+      },
+      {
+        "task_contract_id": "EVS-EXACT-HEAD-MATERIAL-PATH-COVERAGE-2026-10",
+        "source_agent": "gsd",
+        "action": "GENERATE_PATCH",
+        "title": "Classify the exact-head workflow regression path",
+        "scope": "Correct the fail-closed verifier finding for tests/test_frozen_head_exact_sha_workflow.py by classifying that exact file as candidate material and covering it in EVS-001 allowed paths, assessed paths, and the EVIDENCE_STANDARD_IMPLEMENTATION claim. Keep the verifier-base protected path floor unchanged, preserve unknown-path blocking and trusted-exemption rules, and do not advance EVS-001 lifecycle state or fabricate evidence. Record that the trusted check is not yet required by branch protection and arbitrary platform intake remains UNSATISFIED.",
+        "requested_paths": [
+          "governance/evidence/VERIFICATION_MATRIX.json",
+          "governance/evidence/CLAIM_REGISTRY.json",
+          "governance/evidence/work_items/EVS-001.json",
+          "tests/governance/test_evidence_contract.py",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md"
+        ],
+        "allowed_paths": [
+          "governance/evidence/VERIFICATION_MATRIX.json",
+          "governance/evidence/CLAIM_REGISTRY.json",
+          "governance/evidence/work_items/EVS-001.json",
+          "tests/governance/test_evidence_contract.py",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md"
+        ],
+        "forbidden_paths": [
+          "all paths outside the five allowed paths",
+          "main.py",
+          "run_live.sh",
+          "config/",
+          "credentials.py",
+          ".env",
+          "runtime/live/",
+          "core/execution",
+          "core/broker",
+          "core/order",
+          "core/risk",
+          "core/feed",
+          "strategies/",
+          "branch-protection settings and external repository mutations"
+        ],
+        "expected_tests": [
+          "PYTHONPATH=. pytest -q tests/governance/test_evidence_contract.py",
+          "Run tools/verify_evidence.py in enforce-new-material mode against the exact candidate tree and inspect classified-path findings",
+          "Parse all governance JSON",
+          "git diff --check"
+        ],
+        "acceptance_proof": "The exact test path is material and is covered by EVS-001 allowed_paths, assessed_paths, and EVIDENCE_STANDARD_IMPLEMENTATION scope_paths; a regression test pins this mapping. The verifier no longer reports UNCLASSIFIED_CHANGED_PATH or MATERIAL_CHANGE_WITHOUT_RECORD for this test path. Existing incomplete EVS-001 lifecycle findings remain blocking, its state/history/evidence stay unchanged, and external intake/branch-protection gaps remain UNSATISFIED.",
+        "source_evidence_policy": "The exact candidate verifier report at 16cf67bc0ce7eb14a0ec2645ecc32dda5472987c is the source for the missing-path finding. The follow-up run must bind verifier source, candidate root, and candidate SHA and report remaining blockers without promoting claims or lifecycle state."
       }
     ]
   }

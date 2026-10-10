@@ -161,6 +161,13 @@ The user authorized implementing the attached proposal and opening a draft PR. T
 - QA remediation: the evidence scanner now records dash-prefixed inline `- run:` steps as declared code execution, alongside block-form `run:` keys. The `cas-closing-auction-shadow-v1.yml` inline test command is now captured; because the invoked test/script behavior is not established by that YAML line, its external mutation status is `UNKNOWN`. An independent literal fixture asserts this behavior.
 - Validation: earlier inventory cycle `PYTHONPATH=. pytest -q tests/governance/test_task_entrypoint_inventory.py` — 9 passed; final seven-file focused suite `PYTHONPATH=. pytest -q tests/test_frozen_head_exact_sha_workflow.py tests/governance/test_task_entrypoint_inventory.py tests/governance/test_evidence_contract.py` — 95 passed; JSON/YAML parsing and `git diff --check` passed.
 
+## Exact-candidate evidence coverage recheck
+
+- Running `enforce-new-material` on the exact candidate `16cf67bc0ce7eb14a0ec2645ecc32dda5472987c` found that `tests/test_frozen_head_exact_sha_workflow.py` was absent from the material matrix, EVS-001 assessed/allowed paths, and the implementation claim scope. This was a genuine fail-closed coverage finding, not a reason to suppress the gate.
+- Added that exact test path as candidate material and included it in the current work item, assessment, and claim scope. The protected-base prefix floor is unchanged; unknown paths still block, and the candidate cannot create trusted non-material exemptions. A regression assertion covers the material, allowed, assessed, and claimed path mapping.
+- Recorded the narrow correction in EVS-001 task contract `EVS-EXACT-HEAD-MATERIAL-PATH-COVERAGE-2026-10`; its allowed paths exclude runtime and external repository settings.
+- EVS-001 remains `BACKLOG` with empty lifecycle history/evidence. Exact-candidate enforcement therefore remains blocked on its incomplete lifecycle evidence and state. No lifecycle evidence or claim verification was fabricated. The trusted workflow still cannot exercise itself until its base workflow is present; branch protection still does not require its status, and those gaps remain `UNSATISFIED`.
+
 ## Privileged manual dispatch retirement
 
 - Removed `workflow_dispatch` and its `pr_number`, `candidate_sha`, and `base_sha` caller inputs from `.github/workflows/frozen-head-exact-sha-certification.yml`; removed corresponding input fallbacks from job environments. The workflow now runs only on its existing `pull_request_target` events. Exact-SHA identity, base-authoritative validation, read-only permissions, trusted evidence coverage, and PR status jobs are retained.

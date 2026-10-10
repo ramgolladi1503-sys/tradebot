@@ -825,6 +825,7 @@ def test_current_pr_paths_are_material_and_assessed_by_evs_001():
         ".github/workflows/ci.yml", ".github/workflows/tests.yml",
         ".github/workflows/rag-ci.yml",
         "tests/delivery/test_delivery_orchestrator.py",
+        "tests/test_frozen_head_exact_sha_workflow.py",
         "docs/agent_reviews/ci_test_tiering_feed_soak_separation.md",
     )
     assessed = item["extensions"]["evidence_standard"]["assessed_paths"]
@@ -832,6 +833,9 @@ def test_current_pr_paths_are_material_and_assessed_by_evs_001():
         assert evidence_tool._path_matches(path, matrix["material_path_prefixes"])
         assert evidence_tool._path_matches(path, assessed)
         assert evidence_tool._path_matches(path, claim["scope_paths"])
+    assert evidence_tool._path_matches(
+        "tests/test_frozen_head_exact_sha_workflow.py", item["allowed_paths"]
+    )
 
 
 def test_summary_marks_strict_and_blocking_findings_accurately():
