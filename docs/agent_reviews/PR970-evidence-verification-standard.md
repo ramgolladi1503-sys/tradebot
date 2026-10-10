@@ -179,3 +179,37 @@ The user authorized implementing the attached proposal and opening a draft PR. T
 - Inventory now contains 17 active dispatch paths with accepted counts 10 validation/diagnostic, 6 certification/research, and 1 unknown. Frozen-head manual dispatch is recorded as retired with the prior workflow SHA-256 and source location. Existing admissions remain `UNSATISFIED`; no external intake support or required branch-protection gate is claimed.
 - Regression coverage verifies the retired trigger and caller input fallbacks are absent; `pull_request_target` stays restricted to `main` with all existing event types, five jobs, and read-only permissions; and exact inventory parity and the 10/6/1 mapping hold. `PYTHONPATH=. pytest -q tests/test_frozen_head_exact_sha_workflow.py tests/governance/test_task_entrypoint_inventory.py` — 13 passed. `PYTHONPATH=. pytest -q tests/governance/test_evidence_contract.py` — 82 passed. JSON/YAML parsing and `git diff --check` passed.
 - No job/check definition or required-status configuration was removed for PRs targeting `main`; the workflow intentionally provides no checks for non-main-target PRs until their base authority is verified. No branch settings, runtime, broker/order, risk, feed, credentials, or strategy paths changed.
+
+## One-time bootstrap merge boundary
+
+This PR implements the evidence-verification lifecycle and its trusted-base
+workflow, but its own base cannot yet use that workflow as trusted authority.
+That bootstrap limitation does not make EVS-001 complete. EVS-001 remains
+`REQUIREMENT_READY` with incomplete lifecycle evidence; no missing stage is
+implied passed by this implementation.
+
+There is no candidate-code exception, verifier bypass, or reusable merge
+waiver. If the repository owner chooses to merge this bootstrap PR, that is a
+one-time external repository decision. The decision must be recorded outside
+the candidate-controlled checks and pinned to repository
+`ramgolladi1503-sys/tradebot`, PR #970, base
+`32e6d77130b748b6644e93376fe948b3cd7b9eb9`, and the exact final head SHA. It
+must cite the exact required-check run IDs/results, resolve pending checks,
+disposition any failed check based on its actual cause, and include an
+independent human review. Any base or head change invalidates that disposition
+and requires a fresh decision. It applies only to this bootstrap merge and
+does not change required checks or authorize future PRs.
+
+At the observed head `914d2b816b0a0ec52cd405be1cb6bbabf6e0c018`, this
+disposition is `PENDING / NOT AUTHORIZED FOR MERGE`: PR #970 is draft and
+`UNSTABLE`, has no approving human review, `pr818-live-flow-freeze-target`
+has a failed run, and Netlify preview statuses are pending. Required checks
+`repo-forensics-pr-gate`, `unit_tests`, and `health_gate` passed at that
+observed head, but those passes do not resolve the other conditions. This is
+a time-bound status snapshot; it is not an approval or a merge authorization.
+
+After merge, a later PR based on a commit that contains the trusted workflow
+must exercise it. The repository owner must separately require the trusted
+status in branch protection and verify that setting before treating it as a
+merge gate. Until then, verifier output remains diagnostic and EVS-001 stays
+incomplete.
