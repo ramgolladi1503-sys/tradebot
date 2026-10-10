@@ -216,6 +216,45 @@
     },
     "agent_task_contracts": [
       {
+        "task_contract_id": "EVS-SUPERVISOR-MUTATION-ADMISSION-2026-10",
+        "source_agent": "gsd",
+        "action": "GENERATE_PATCH",
+        "title": "Require canonical admission for supervisor state transitions",
+        "scope": "Require exact committed canonical delivery work-item/task-contract admission before every state-mutating local supervisor command (preflight, claim, verify, review, release including --force); retain status as read-only and make no universal intake/authenticated approval claim.",
+        "requested_paths": [
+          "scripts/agent_supervisor.py",
+          "tests/test_agent_supervisor.py",
+          "docs/AGENT_WORKFLOW.md",
+          "docs/AGENT_SUPERVISOR.md",
+          "governance/evidence/work_items/EVS-001.json"
+        ],
+        "allowed_paths": [
+          "scripts/agent_supervisor.py",
+          "tests/test_agent_supervisor.py",
+          "docs/AGENT_WORKFLOW.md",
+          "docs/AGENT_SUPERVISOR.md",
+          "governance/evidence/work_items/EVS-001.json"
+        ],
+        "forbidden_paths": [
+          "main.py",
+          "run_live.sh",
+          "config/",
+          "credentials.py",
+          ".env",
+          "runtime/live/",
+          "core/execution",
+          "core/broker",
+          "core/order",
+          "core/risk",
+          "core/feed",
+          "strategies/"
+        ],
+        "expected_tests": [
+          "PYTHONPATH=. pytest -q tests/test_agent_supervisor.py"
+        ],
+        "acceptance_proof": "Each mutation command blocks missing/dirty/stale/mismatched admission before any state mutation; valid canonical admission still permits normal command state logic; --force cannot bypass admission; status remains read-only and is not reported as admitted."
+      },
+      {
         "task_contract_id": "EVS-LOCAL-ADMISSION-PR818-FREEZE-2026-10",
         "source_agent": "gsd",
         "action": "GENERATE_PATCH",
