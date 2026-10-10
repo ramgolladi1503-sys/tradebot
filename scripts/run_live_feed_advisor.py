@@ -13,10 +13,14 @@ import time
 import json
 import math
 import urllib.request
-from datetime import datetime, time as dtime
+from datetime import date, datetime, time as dtime
 from pathlib import Path
 from typing import Optional, Dict, Any
 import pandas as pd
+from core.nse_fo_contract_master import (
+    NSEContractMasterError,
+    load_verified_capture_authority,
+)
 
 from core.model_manifest_generator import SentinelManifestLock
 from core.dynamic_slippage_model import DynamicOptionSlippageModel
@@ -45,26 +49,6 @@ def _normalize_expiry_label(value: Any) -> Optional[str]:
             continue
     return None
 
-
-def _unique_capture_expiry(symbols: pd.Series, contract_prefix: str) -> Optional[str]:
-    """Read the exact expiry label from one uniquely represented captured contract set.
-
-    The capture's symbols originate from the instrument master used to select the
-    subscribed contracts. For NSE index options, current NSE specifications set
-    Tuesday expiry, adjusted to the previous trading day for a Tuesday holiday.
-    This uses the contract's published expiry instead of reconstructing dates.
-    """
-    prefix = f"{contract_prefix} "
-    expiries = set()
-    for value in symbols.dropna().astype(str).unique():
-        symbol = value.strip()
-        if not symbol.startswith(prefix):
-            continue
-        expiry = _normalize_expiry_label(symbol[len(prefix):])
-        if expiry is None:
-            return None
-        expiries.add(expiry)
-    return next(iter(expiries)) if len(expiries) == 1 else None
 
 class SentinelLiveFeedAdvisor:
     def __init__(
@@ -122,7 +106,12 @@ class SentinelLiveFeedAdvisor:
 
         # Check for input capture parquet sources (chunks and full parquets) and hash them via streaming reads
         data_artifacts = {}
-        for root_dir in [Path(".runtime/market_data"), Path("runtime/market_data"), Path("/Volumes/TradeBot/live market capture")]:
+        for root_dir in [
+            Path(".runtime/market_data"),
+            Path("runtime/market_data"),
+            Path("/Volumes/TradeBot/live market capture"),
+            Path("/Volumes/TradeBotData/live market capture"),
+        ]:
             date_dir = root_dir / datetime.now().strftime("%Y-%m-%d")
             if date_dir.exists():
                 candidate_files = list(date_dir.glob("chunks/*.parquet")) + list(date_dir.glob("*.parquet"))
@@ -186,36 +175,57 @@ class SentinelLiveFeedAdvisor:
         expiry: Optional[str] = None,
         decision_cutoff_epoch: Optional[float] = None
     ) -> Optional[dict]:
-        """Reads the exact real-time option LTP, Bid, Ask, Volume, and OI from the live chunk stream.
-        
-        Uses the explicit expiry when provided. Otherwise it derives the expiry only
-        when the filtered capture contains one canonical instrument-master contract
-        expiry for the requested ticker/strike/type. Missing or ambiguous identity
-        fails closed.
-        Filters out ticks whose local capture timestamp exceeds decision_cutoff_epoch.
-        """
+        """Resolve a quote only from ticks bound to a re-verified NSE/Upstox manifest."""
         import glob
-        today_date_str = datetime.now().strftime("%Y-%m-%d")
+        from zoneinfo import ZoneInfo
+        today_date_str = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
         chunk_patterns = [
             f".runtime/market_data/{today_date_str}/chunks/*.parquet",
-            f"runtime/market_data/{today_date_str}/chunks/*.parquet"
+            f"runtime/market_data/{today_date_str}/chunks/*.parquet",
+            f"/Volumes/TradeBot/live market capture/{today_date_str}/chunks/*.parquet",
+            f"/Volumes/TradeBotData/live market capture/{today_date_str}/chunks/*.parquet",
         ]
         chunks = []
         for pat in chunk_patterns:
             chunks.extend(glob.glob(pat))
         if not chunks:
             return None
-        latest_chunk = sorted(chunks)[-1]
         try:
-            df = pd.read_parquet(latest_chunk)
+            capture_dirs: dict[Path, list[str]] = {}
+            for chunk in set(chunks):
+                capture_dirs.setdefault(Path(chunk).parent.parent, []).append(chunk)
+            newest_chunk_names = {
+                capture_dir: max(Path(chunk).name for chunk in values)
+                for capture_dir, values in capture_dirs.items()
+            }
+            newest_name = max(newest_chunk_names.values())
+            newest_dirs = [path for path, name in newest_chunk_names.items() if name == newest_name]
+            if len(newest_dirs) != 1:
+                return None
+            daily_dir = newest_dirs[0]
+            same_capture_chunks = capture_dirs[daily_dir]
+            latest_chunk = max(same_capture_chunks, key=lambda value: Path(value).name)
+            frames = [pd.read_parquet(path) for path in sorted(same_capture_chunks)]
+            if not frames:
+                return None
+            df = pd.concat(frames, ignore_index=True)
+            authority_hashes = (
+                df["contract_authority_manifest_sha256"].dropna().astype(str).str.strip().unique().tolist()
+                if "contract_authority_manifest_sha256" in df.columns else []
+            )
+            authority_hashes = [value for value in authority_hashes if value]
+            if len(authority_hashes) != 1:
+                return None
+            authority = load_verified_capture_authority(Path(latest_chunk).parent.parent, authority_hashes[0])
             return self.resolve_quote_from_dataframe(
                 df=df,
                 strike=strike,
                 opt_type=opt_type,
                 expiry=expiry,
-                decision_cutoff_epoch=decision_cutoff_epoch
+                decision_cutoff_epoch=decision_cutoff_epoch,
+                contract_authority=authority,
             )
-        except Exception:
+        except (OSError, ValueError, NSEContractMasterError):
             return None
 
     def resolve_quote_from_dataframe(
@@ -224,16 +234,16 @@ class SentinelLiveFeedAdvisor:
         strike: int,
         opt_type: str,
         expiry: Optional[str] = None,
-        decision_cutoff_epoch: Optional[float] = None
+        decision_cutoff_epoch: Optional[float] = None,
+        contract_authority=None,
     ) -> Optional[dict]:
-        """Pure, deterministic extraction of option quote from a tick DataFrame.
-        
-        Uses an explicit expiry when configured, otherwise requires one unique expiry
-        in the captured canonical contract symbols. Fails closed on ambiguity.
-        Filters out ticks whose local capture timestamp exceeds decision_cutoff_epoch.
-        """
+        """Extract a quote only when token, symbol, contract tuple, and source hashes bind."""
         ticker = getattr(self, "ticker", "NIFTY").upper()
         explicit_expiry = expiry if expiry is not None else getattr(self, "target_expiry", None)
+        if contract_authority is None:
+            contract_authority = getattr(self, "contract_authority", None)
+        if contract_authority is None:
+            return None
 
         try:
             if "ts" not in df.columns:
@@ -254,46 +264,95 @@ class SentinelLiveFeedAdvisor:
             if df.empty:
                 return None
 
-        if not {"symbol", "token"}.issubset(df.columns):
+        required = {"symbol", "token", "contract_authority_manifest_sha256"}
+        if not required.issubset(df.columns):
+            return None
+        frame_hashes = df["contract_authority_manifest_sha256"].dropna().astype(str).str.strip().unique().tolist()
+        frame_hashes = [value for value in frame_hashes if value]
+        if frame_hashes != [contract_authority.manifest_sha256]:
+            return None
+        df = df.loc[
+            df["contract_authority_manifest_sha256"].fillna("").astype(str).str.strip()
+            == contract_authority.manifest_sha256
+        ].copy()
+        if df.empty:
             return None
 
-        prefix = f"{ticker} {strike} {opt_type}"
-
-        # Captured symbols carry the actual expiry from the subscribed instrument
-        # master contract (e.g. "NIFTY 22400 CE 13 OCT 26"). Never infer it from
-        # a weekday because NSE holiday adjustments are contract-specific.
-        if explicit_expiry is not None:
-            exp_str = _normalize_expiry_label(explicit_expiry)
-            if exp_str is None:
+        expected_symbol = None
+        expected_entry = None
+        for instrument_key, entry in contract_authority.selected_by_instrument_key.items():
+            try:
+                entry_expiry = date.fromisoformat(str(entry.get("expiry")))
+                entry_matches_request = (
+                    entry.get("underlying") == ticker
+                    and entry.get("option_type") == str(opt_type).upper()
+                    and float(entry.get("strike")) == float(strike)
+                    and (
+                        explicit_expiry is None
+                        or _normalize_expiry_label(explicit_expiry)
+                        == _normalize_expiry_label(entry_expiry.isoformat())
+                    )
+                )
+            except (TypeError, ValueError, OverflowError):
                 return None
-            expiry_source = "EXPLICIT_EXPIRY_ARGUMENT"
-        else:
-            exp_str = _unique_capture_expiry(df["symbol"], prefix)
-            expiry_source = "CAPTURED_INSTRUMENT_MASTER_SYMBOL"
+            if entry_matches_request:
+                if expected_entry is not None:
+                    return None
+                expected_entry = entry
+                expected_symbol = str(entry.get("upstox_trading_symbol", ""))
+        if expected_entry is None or not expected_symbol:
+            return None
+        same_symbol_rows = df.loc[df["symbol"].astype(str).str.strip() == expected_symbol]
+        same_symbol_tokens = same_symbol_rows["token"].dropna().astype(str).str.strip().unique().tolist()
+        if same_symbol_rows.empty or same_symbol_tokens != [str(expected_entry.get("upstox_instrument_key", ""))]:
+            return None
+
+        matches = []
+        contract_entry = None
+        for _, row in df.iterrows():
+            token = str(row.get("token", "")).strip()
+            symbol = str(row.get("symbol", "")).strip()
+            entry = contract_authority.selected_by_instrument_key.get(token)
+            if entry is None or entry.get("upstox_trading_symbol") != symbol:
+                continue
+            if entry.get("underlying") != ticker or entry.get("option_type") != str(opt_type).upper():
+                continue
+            try:
+                if float(entry.get("strike")) != float(strike):
+                    continue
+                resolved_expiry = date.fromisoformat(str(entry.get("expiry")))
+                if explicit_expiry is not None:
+                    normalized_expiry = _normalize_expiry_label(explicit_expiry)
+                    if normalized_expiry is None:
+                        return None
+                    if _normalize_expiry_label(resolved_expiry.isoformat()) != normalized_expiry:
+                        continue
+                verified_entry = contract_authority.verify_candidate(
+                    instrument_key=token,
+                    symbol=symbol,
+                    underlying=ticker,
+                    expiry=resolved_expiry,
+                    strike=strike,
+                    option_type=opt_type,
+                )
+            except (TypeError, ValueError, OverflowError):
+                return None
+            if verified_entry is None:
+                continue
+            matches.append(row)
+            contract_entry = verified_entry
+
+        if not matches or contract_entry is None:
+            return None
+        matches = pd.DataFrame(matches)
+        exp_str = _normalize_expiry_label(contract_entry.get("expiry"))
         if exp_str is None:
             return None
 
-        # Require canonical exact symbol match.
-        exact_symbol = f"{prefix} {exp_str}"
-        matches = df[df["symbol"] == exact_symbol]
-
-        if matches.empty:
-            return None
-
-        # Confirm unique contract symbol identity
-        if matches["symbol"].nunique() != 1:
-            return None
-
-        # Confirm token presence and unique token identity across the matched symbol
-        tokens = matches["token"].dropna().astype(str).str.strip().unique()
-        tokens = [t for t in tokens if t]
-        if len(tokens) != 1:
-            # Missing token or multiple conflicting/duplicate tokens for same symbol: fail closed
-            return None
-
         # Sort by timestamp and extract the latest quote row
-        sort_col = "ts" if "ts" in matches.columns else matches.columns[0]
-        last_row = matches.sort_values(sort_col, kind="stable").iloc[-1]
+        if matches["token"].astype(str).str.strip().nunique() != 1:
+            return None
+        last_row = matches.sort_values("ts", kind="stable").iloc[-1]
         
         tok = str(last_row["token"]).strip() if pd.notna(last_row["token"]) else ""
         if not tok:
@@ -329,7 +388,21 @@ class SentinelLiveFeedAdvisor:
             "oi": open_interest,
             "timestamp": capture_timestamp,
             "expiry": exp_str,
-            "expiry_source": expiry_source,
+            "expiry_source": "NSE_FO_MII_CONTRACT_MASTER",
+            "contract_key": contract_entry["contract_key"],
+            "contract_authority_manifest_sha256": contract_authority.manifest_sha256,
+            "nse_contract_id": contract_entry["nse_instrument_id"],
+            "nse_contract_file": contract_authority.nse_metadata["artifact_filename"],
+            "nse_contract_source": contract_authority.nse_metadata["file_url"],
+            "nse_contract_trading_date": contract_authority.nse_metadata["trading_date"],
+            "nse_report_current_date": contract_authority.nse_metadata["report_current_date"],
+            "nse_report_future_date": contract_authority.nse_metadata["report_future_date"],
+            "nse_contract_schema_version": contract_authority.nse_metadata["schema_version"],
+            "nse_contract_file_sha256": contract_authority.nse_metadata["file_sha256"],
+            "upstox_master_file": contract_authority.upstox_metadata["artifact_filename"],
+            "upstox_master_source": contract_authority.upstox_metadata["source_url"],
+            "upstox_master_downloaded_at_utc": contract_authority.upstox_metadata["downloaded_at_utc"],
+            "upstox_master_sha256": contract_authority.upstox_metadata["sha256"],
         }
         return res
 
@@ -389,6 +462,20 @@ class SentinelLiveFeedAdvisor:
                 "token": str(opt_q.get("token")),
                 "expiry": opt_q.get("expiry"),
                 "expiry_source": opt_q.get("expiry_source"),
+                "contract_key": opt_q.get("contract_key"),
+                "contract_authority_manifest_sha256": opt_q.get("contract_authority_manifest_sha256"),
+                "nse_contract_id": opt_q.get("nse_contract_id"),
+                "nse_contract_file": opt_q.get("nse_contract_file"),
+                "nse_contract_source": opt_q.get("nse_contract_source"),
+                "nse_contract_trading_date": opt_q.get("nse_contract_trading_date"),
+                "nse_report_current_date": opt_q.get("nse_report_current_date"),
+                "nse_report_future_date": opt_q.get("nse_report_future_date"),
+                "nse_contract_schema_version": opt_q.get("nse_contract_schema_version"),
+                "nse_contract_file_sha256": opt_q.get("nse_contract_file_sha256"),
+                "upstox_master_file": opt_q.get("upstox_master_file"),
+                "upstox_master_source": opt_q.get("upstox_master_source"),
+                "upstox_master_downloaded_at_utc": opt_q.get("upstox_master_downloaded_at_utc"),
+                "upstox_master_sha256": opt_q.get("upstox_master_sha256"),
                 "direction": entry_dir,
                 "strike": chosen_strike,
                 "source_capture_ts": opt_q.get("timestamp"),
