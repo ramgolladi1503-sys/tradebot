@@ -2,6 +2,8 @@ name: TradeBot RAG CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "core/tradebot_rag.py"
       - "core/tradebot_rag_operations.py"

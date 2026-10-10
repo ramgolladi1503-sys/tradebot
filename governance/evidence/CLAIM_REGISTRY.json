@@ -31,7 +31,8 @@
         "docs/AGENT_SUPERVISOR.md",
         "docs/samples/gsd-agent-work.json",
         "docs/samples/codex-supervisor-task.json",
-        ".github/workflows/pr818-apply-safe-test-contract-repairs.yml"
+        ".github/workflows/pr818-apply-safe-test-contract-repairs.yml",
+        ".github/workflows/rag-ci.yml"
       ],
       "status": "UNVERIFIED",
       "source_ids": [

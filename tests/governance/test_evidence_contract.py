@@ -703,6 +703,7 @@ def test_required_material_prefixes_are_frozen_in_matrix_data():
     ".github/workflows/evidence-gates.yml",
     ".github/workflows/frozen-head-exact-sha-certification.yml",
     ".github/workflows/ci.yml", ".github/workflows/tests.yml",
+    ".github/workflows/rag-ci.yml",
 ])
 def test_report_rejects_candidate_matrix_removing_required_material_prefix(
         monkeypatch, removed_prefix):
@@ -822,6 +823,7 @@ def test_current_pr_paths_are_material_and_assessed_by_evs_001():
     claim = next(row for row in registry["claims"] if row["claim_id"] == "EVIDENCE_STANDARD_IMPLEMENTATION")
     path_examples = (
         ".github/workflows/ci.yml", ".github/workflows/tests.yml",
+        ".github/workflows/rag-ci.yml",
         "tests/delivery/test_delivery_orchestrator.py",
         "docs/agent_reviews/ci_test_tiering_feed_soak_separation.md",
     )
@@ -989,6 +991,45 @@ def test_evidence_workflows_rerun_when_pr_is_edited(workflow_relpath: str, event
 
     assert event_types is not None
     assert {"opened", "reopened", "synchronize", "ready_for_review", "edited"} <= event_types
+
+
+def test_rag_ci_runs_branch_pushes_only_on_main_and_preserves_pr_contract():
+    workflow = (evidence_tool.ROOT / ".github/workflows/rag-ci.yml").read_text(encoding="utf-8")
+    lines = workflow.splitlines()
+    push_line = lines.index("  push:")
+    pull_request_line = lines.index("  pull_request:")
+    push_block = lines[push_line + 1:pull_request_line]
+    pull_request_block = lines[pull_request_line + 1:]
+
+    def paths_from(block: list[str]) -> list[str]:
+        paths_line = block.index("    paths:")
+        result = []
+        for line in block[paths_line + 1:]:
+            if not line.startswith("      - "):
+                break
+            result.append(line.removeprefix("      - ").strip("\"'"))
+        return result
+
+    assert "    branches:" in push_block
+    assert "      - main" in push_block
+    assert paths_from(push_block) == paths_from(pull_request_block)
+    assert paths_from(pull_request_block) == [
+        "core/tradebot_rag.py",
+        "core/tradebot_rag_operations.py",
+        "scripts/tradebot_rag.py",
+        "dashboard/tradebot_rag_app.py",
+        "tests/test_tradebot_rag.py",
+        "tests/test_tradebot_rag_operations.py",
+        "rag/**",
+        "docs/**",
+        "research/**",
+        "README.md",
+        ".github/workflows/rag-ci.yml",
+    ]
+    assert "  retrieval_contract:\n" in workflow
+    assert "permissions:\n  contents: read\n" in workflow
+    assert "cancel-in-progress: true" in workflow
+    assert "if-no-files-found: error" in workflow
 
 
 def _git(cwd: Path, *args: str) -> str:

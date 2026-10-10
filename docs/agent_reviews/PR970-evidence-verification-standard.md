@@ -76,6 +76,15 @@ This provides a base-authoritative repository PR-diff check for later PRs only; 
 - Retained active settings as read back: classic protection requires `repo-forensics-pr-gate`; the active main ruleset requires `unit_tests` and `health_gate`, not `Trusted base evidence coverage`. Universal task-intake coverage remains `UNSATISFIED`.
 - Bootstrap limitation: this PR cannot cause its newly added base workflow to execute for itself. A later PR whose base already includes the workflow is required to exercise the trusted check. A required-check ruleset update and readback are also still required; neither is performed here.
 
+## RAG CI duplicate-run follow-up
+
+- Restricted `.github/workflows/rag-ci.yml` push-triggered runs to `main`. Feature-branch pushes already receive the same path-filtered RAG job through `pull_request`, so running the push workflow for those branches duplicated CI work.
+- Kept the push and pull-request path filters identical. The `pull_request` event, retrieval contract job, read-only `contents` permission, concurrency cancellation, test/evaluation steps, and required evidence artifact behavior are unchanged. Main branch pushes remain covered.
+- Added a regression that verifies the `main` push restriction, matching event path filters, and core job/permission/failure invariants. Registered the workflow as protected material and included it in the existing evidence claim and EVS-001 assessed paths.
+- This change does not alter CodeQL, the PR818 freeze workflow, security checks, or required-check configuration. It adds no config keys and suppresses no checks or statuses.
+- RAG validation now runs for matching pull requests and matching pushes to `main`. A standalone non-main branch with no open PR intentionally has no RAG-specific check until a PR opens, so it loses early RAG-specific feedback. No branch-protection required-check consumer currently depends on this RAG workflow. Technical & Quant accepted this tradeoff with no further change requested. This trigger shape follows the existing `ci.yml` and `portfolio-ci.yml` main-push/PR precedent.
+- Validation: `PYTHONPATH=. pytest -q tests/governance/test_evidence_contract.py -k rag_ci`, changed JSON/workflow YAML parsing, and `git diff --check`. No commit or push is part of this follow-up.
+
 ## Post-development verification and dispositions
 
 - Focused validation after verifier lifecycle and required-prefix hardening: `python -m pytest -q tests/governance/test_evidence_contract.py tests/delivery` — 80 passed, with two existing pandas dependency compatibility warnings. `git diff --check` and governance JSON parsing passed.

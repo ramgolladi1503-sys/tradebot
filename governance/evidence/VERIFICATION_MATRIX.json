@@ -30,7 +30,8 @@
     "docs/samples/gsd-agent-work.json",
     "docs/samples/codex-supervisor-task.json",
     ".github/workflows/repo-forensics-pr-gate.yml",
-    ".github/workflows/pr818-apply-safe-test-contract-repairs.yml"
+    ".github/workflows/pr818-apply-safe-test-contract-repairs.yml",
+    ".github/workflows/rag-ci.yml"
   ],
   "trusted_non_material_exemptions": [],
   "material_path_prefixes": [
@@ -61,7 +62,8 @@
     "docs/samples/gsd-agent-work.json",
     "docs/samples/codex-supervisor-task.json",
     ".github/workflows/repo-forensics-pr-gate.yml",
-    ".github/workflows/pr818-apply-safe-test-contract-repairs.yml"
+    ".github/workflows/pr818-apply-safe-test-contract-repairs.yml",
+    ".github/workflows/rag-ci.yml"
   ],
   "gates": {
     "G1_SOURCE": {

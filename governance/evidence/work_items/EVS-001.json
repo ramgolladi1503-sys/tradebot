@@ -182,7 +182,8 @@
         "governance/evidence/ENTRYPOINT_INVENTORY.json",
         "tests/governance/test_task_entrypoint_inventory.py",
         "docs/agent_reviews/PR970-evidence-verification-standard.md",
-        ".github/workflows/repo-forensics-pr-gate.yml"
+        ".github/workflows/repo-forensics-pr-gate.yml",
+        ".github/workflows/rag-ci.yml"
       ],
       "subject_commit_sha": null,
       "claims": [
@@ -334,6 +335,58 @@
           "Both pull_request and pull_request_target evidence workflows include the edited activity type, and regression tests enforce this contract.",
           "Trusted evidence coverage remains base-authoritative and candidate-data-only; no candidate code or checkout filters are executed.",
           "The change does not claim a hosted trusted-base run on the current PR, required-check branch protection, universal platform intake, direct workflow_dispatch admission, or authenticated approval."
+        ]
+      },
+      {
+        "task_contract_id": "EVS-RAG-CI-MAIN-PUSH-DEDUP-2026-10",
+        "source_agent": "gsd",
+        "action": "GENERATE_PATCH",
+        "title": "Remove duplicate RAG CI run on PR branch pushes",
+        "scope": "Restrict the RAG CI push trigger to main while preserving pull-request events and path filters, the job, permissions, concurrency, and fail-closed behavior. Add a regression contract and classify all changed files as material. Do not alter CodeQL, PR818 freeze, security, or required-check behavior.",
+        "requested_paths": [
+          ".github/workflows/rag-ci.yml",
+          "tests/governance/test_evidence_contract.py",
+          "governance/evidence/VERIFICATION_MATRIX.json",
+          "governance/evidence/CLAIM_REGISTRY.json",
+          "governance/evidence/work_items/EVS-001.json",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md"
+        ],
+        "allowed_paths": [
+          ".github/workflows/rag-ci.yml",
+          "tests/governance/test_evidence_contract.py",
+          "governance/evidence/VERIFICATION_MATRIX.json",
+          "governance/evidence/CLAIM_REGISTRY.json",
+          "governance/evidence/work_items/EVS-001.json",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md"
+        ],
+        "forbidden_paths": [
+          "main.py",
+          "run_live.sh",
+          "config/",
+          "credentials.py",
+          ".env",
+          "runtime/live/",
+          "core/execution",
+          "core/broker",
+          "core/order",
+          "core/risk",
+          "core/feed",
+          "strategies/",
+          ".github/workflows/frozen-head-exact-sha-certification.yml",
+          ".github/workflows/repo-forensics-pr-gate.yml",
+          "CodeQL/security/required-check suppression or bypass"
+        ],
+        "expected_tests": [
+          "PYTHONPATH=. pytest -q tests/governance/test_evidence_contract.py -k rag_ci",
+          "Parse changed governance JSON and workflow YAML.",
+          "git diff --check"
+        ],
+        "acceptance_proof": [
+          "Push trigger is restricted to branches: [main]; main pushes remain covered.",
+          "Pull-request trigger and all existing path filters remain unchanged.",
+          "RAG CI job, read-only permissions, concurrency cancellation, and fail-closed artifact behavior remain unchanged.",
+          "No action/status suppression or new configuration keys are introduced.",
+          "No CodeQL, PR818 freeze, security gate, or required-check behavior is changed."
         ]
       }
     ]
