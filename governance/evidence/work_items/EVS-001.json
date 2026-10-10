@@ -5,7 +5,7 @@
   "parent_feature": "EVIDENCE-STANDARD",
   "title": "Introduce Evidence and Verification Standard with material PR enforcement",
   "schema_version": 1,
-  "current_state": "BACKLOG",
+  "current_state": "BLOCKED_REQUIREMENT",
   "priority": "P1",
   "business_goal": "Make material claims traceable to sources, correctness checks, adversarial review, and independent outcome evidence.",
   "current_behavior": "Delivery work items already retain hash-sealed evidence, but do not identify these four claim-level evidence dimensions.",
@@ -134,10 +134,46 @@
   ],
   "rollback_plan": "Revert the reviewed verifier and workflow enforcement commit to restore report-only behavior while preserving existing delivery evidence records. Do not modify external branch protection through this change.",
   "evidence_refs": [],
-  "acting_role": "BACKEND_DEVELOPER",
-  "state_history": [],
+  "acting_role": "BUSINESS_ANALYST",
+  "state_history": [
+    {
+      "from_state": "BACKLOG",
+      "to_state": "BLOCKED_REQUIREMENT",
+      "acting_role": "BUSINESS_ANALYST",
+      "actor": "/root/ba_evs_lifecycle (AI Business Analyst role; identity not authenticated)",
+      "timestamp": "2026-10-10T16:00:01+05:30",
+      "reason": "G0 cannot be approved by this unauthenticated AI role review; preserve the explicit block.",
+      "evidence_ids": [
+        "EVS-001-G0-BA-BLOCKED-20261010"
+      ],
+      "contract_hash": "8ce3814842967ba89e2a21081be6169ad81d7a5aa1c408ee9b9693be0bcf4af1",
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "entry_hash": "200cdf88590c21c920c025680f715d88785605024c846b389aa262b356ef7a33"
+    }
+  ],
   "defect_history": [],
-  "evidence": [],
+  "evidence": [
+    {
+      "evidence_id": "EVS-001-G0-BA-BLOCKED-20261010",
+      "work_item_id": "EVS-001",
+      "evidence_type": "REQUIREMENT_EVIDENCE",
+      "role": "BUSINESS_ANALYST",
+      "author": "/root/ba_evs_lifecycle (AI Business Analyst role; identity not authenticated)",
+      "timestamp": "2026-10-10T16:00:00+05:30",
+      "status": "BLOCKED",
+      "summary": "G0 review finds the Definition of Ready fields populated, but does not authorize REQUIREMENT_READY: this AI role review is not authenticated human BA approval. No requirement-stage evidence or lifecycle history was previously recorded. The adoption baseline remains pending and external intake, authenticated identity, and branch-protection limitations remain explicit.",
+      "references": [
+        "git:be18bf7619b5eb19f864e1bf7cf908b28e93c5a1",
+        "governance/evidence/work_items/EVS-001.json",
+        "docs/agent_reviews/PR970-evidence-verification-standard.md"
+      ],
+      "content_hash": "6e012961c891a92d2ef2127547185947cf2c1a323933107633804b5c52dbf173",
+      "check_results": [],
+      "work_item_hash": "8ce3814842967ba89e2a21081be6169ad81d7a5aa1c408ee9b9693be0bcf4af1",
+      "sequence": 1,
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
   "defects": [],
   "required_ci_checks": [],
   "extensions": {
@@ -274,11 +310,11 @@
         "requested_paths": [
           "core/agent_admission.py",
           "tests/test_agent_admission.py",
-        "scripts/submit_agent_work.py",
-        "tests/test_submit_agent_work.py",
-        "core/agent_supervisor_claims.py",
-        "core/agent_supervisor_git.py",
-        "scripts/agent_supervisor.py",
+          "scripts/submit_agent_work.py",
+          "tests/test_submit_agent_work.py",
+          "core/agent_supervisor_claims.py",
+          "core/agent_supervisor_git.py",
+          "scripts/agent_supervisor.py",
           "tests/test_agent_supervisor.py",
           "docs/AGENT_WORKFLOW.md",
           "docs/AGENT_SUPERVISOR.md",
