@@ -388,6 +388,173 @@
           "No action/status suppression or new configuration keys are introduced.",
           "No CodeQL, PR818 freeze, security gate, or required-check behavior is changed."
         ]
+      },
+      {
+        "task_contract_id": "EVS-DISPATCH-CLASSIFICATION-DRIFT-2026-10",
+        "source_agent": "gsd",
+        "action": "GENERATE_PATCH",
+        "title": "Correct dispatch inventory taxonomy and bind evidence to YAML",
+        "scope": "Revise the workflow_dispatch inventory so purpose is classified only as TASK_INTAKE, VALIDATION_DIAGNOSTIC, CERTIFICATION_RESEARCH, or UNKNOWN; review_status is independently REVIEWED or UNREVIEWED; and artifact uploads, local workspace writes, external network/API activity, external mutation, secret references, and permissions each carry DECLARED, NOT_DECLARED_IN_YAML, or UNKNOWN plus exact source evidence. No absence in YAML may be presented as safe or effect-free. Keep Code Excellence and frozen-head as UNKNOWN+UNREVIEWED and all 18 prework admissions UNSATISFIED. Correct Code Excellence artifact upload to all four exact paths. Tests regenerate and compare cited line text and values against every workflow, including multiline upload paths; test taxonomy/effect orthogonality and missing/invalid evidence, hash drift, path drift, and admission invariants. Do not edit workflows or implement dispatch admission.",
+        "requested_paths": [
+          "governance/evidence/ENTRYPOINT_INVENTORY.json",
+          "tests/governance/test_task_entrypoint_inventory.py",
+          "governance/evidence/POLICY.md",
+          "governance/evidence/work_items/EVS-001.json",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md"
+        ],
+        "allowed_paths": [
+          "governance/evidence/ENTRYPOINT_INVENTORY.json",
+          "tests/governance/test_task_entrypoint_inventory.py",
+          "governance/evidence/POLICY.md",
+          "governance/evidence/work_items/EVS-001.json",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md"
+        ],
+        "forbidden_paths": [
+          "all paths outside the five allowed paths",
+          "runtime",
+          "broker",
+          "order",
+          "risk",
+          "feed",
+          "credentials",
+          "live",
+          "strategies",
+          "GitHub workflow definitions",
+          "branch settings",
+          "external repository mutations"
+        ],
+        "expected_tests": [
+          "PYTHONPATH=. pytest -q tests/governance/test_task_entrypoint_inventory.py",
+          "PYTHONPATH=. pytest -q tests/governance/test_evidence_contract.py",
+          "Parse governance JSON",
+          "git diff --check"
+        ],
+        "acceptance_proof": "All 18 active paths have exact approved purpose enum values and independent review status; every effect category is orthogonally represented with an allowed status and exact YAML citations or explicit UNKNOWN. Generated evidence matches exact workflow bytes/line text/values; Code Excellence artifact list has all four declared paths at lines 154-157. Two uncertainty cases remain UNKNOWN+UNREVIEWED. Every active prework admission and external intake, workflow dispatch trust, branch-protection, and authenticated human identity gap remains UNSATISFIED. EVS-001 remains BACKLOG with no fabricated lifecycle history or evidence. No workflow definition is modified.",
+        "source_evidence_policy": "Mechanical YAML-derived evidence is byte/line bound. Purpose mapping is role-reviewed under the Product Owner accepted mapping but is not authenticated natural-person attestation. Invoked-code behavior, effective permissions, and platform semantics remain UNKNOWN."
+      },
+      {
+        "task_contract_id": "EVS-INLINE-RUN-EVIDENCE-2026-10",
+        "source_agent": "gsd",
+        "action": "GENERATE_PATCH",
+        "title": "Fix inline workflow run evidence false negative",
+        "scope": "Update the workflow YAML evidence scanner to recognize both block-form run keys and dash-prefixed inline '- run:' step syntax. Add an independent regression fixture with literal expected code-execution evidence and ensure arbitrary invoked script behavior leaves external mutation UNKNOWN. Refresh the exact source-bound inventory evidence affected by the scanner correction. Preserve the accepted 10 validation/6 certification-research/2 unknown taxonomy, all UNSATISFIED admission and repository gap states, and existing unknown classifications. Do not change workflow definitions or lifecycle state/history/evidence.",
+        "requested_paths": [
+          "governance/evidence/ENTRYPOINT_INVENTORY.json",
+          "tests/governance/test_task_entrypoint_inventory.py",
+          "governance/evidence/POLICY.md",
+          "governance/evidence/work_items/EVS-001.json",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md"
+        ],
+        "allowed_paths": [
+          "governance/evidence/ENTRYPOINT_INVENTORY.json",
+          "tests/governance/test_task_entrypoint_inventory.py",
+          "governance/evidence/POLICY.md",
+          "governance/evidence/work_items/EVS-001.json",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md"
+        ],
+        "forbidden_paths": [
+          "all paths outside the five allowed paths",
+          "runtime/broker/order/risk/feed/credentials/live/strategies",
+          "GitHub workflow definitions",
+          "branch settings",
+          "external repository mutations"
+        ],
+        "expected_tests": [
+          "PYTHONPATH=. pytest -q tests/governance/test_task_entrypoint_inventory.py",
+          "PYTHONPATH=. pytest -q tests/governance/test_evidence_contract.py",
+          "Parse governance JSON",
+          "git diff --check"
+        ],
+        "acceptance_proof": "A literal fixture proves '- run: ./scripts/may-mutate.sh' is recorded as DECLARED candidate code execution and leaves external_mutation UNKNOWN. All active inventory evidence matches source workflow bytes and cited line values; approved 10/6/2 purpose counts and UNSATISFIED states remain unchanged. No workflow definition or lifecycle record is changed.",
+        "source_evidence_policy": "Inline YAML evidence records the declared command only; it does not establish invoked-script behavior, external mutation, platform dispatch semantics, or safety."
+      },
+      {
+        "task_contract_id": "EVS-RETIRE-PRIVILEGED-MANUAL-CERT-DISPATCH-2026-10",
+        "source_agent": "gsd",
+        "action": "GENERATE_PATCH",
+        "title": "Retire unsafe manual dispatch from frozen-head certification",
+        "scope": "Remove only the workflow_dispatch trigger and caller-controlled input fallbacks from the privileged frozen-head certification workflow. Preserve every pull_request_target event, job, permission, exact-SHA check, base-authoritative verifier behavior, and PR status behavior. Record the retired trigger with source hash and reason, update the active 10/6/1 purpose inventory, and add regression coverage proving the manual entrypoint stays absent while PR triggers remain. Keep universal intake, branch-protection, authenticated approval, and remaining workflow dispatch admission gaps UNSATISFIED. Do not suppress or delete CodeQL or other CI checks. The trusted PR gate also runs only for PRs targeting the branch whose protection was verified (main), enforced by both the event branch filter and trusted-job condition; tests pin this boundary, all existing jobs, and permissions.",
+        "requested_paths": [
+          ".github/workflows/frozen-head-exact-sha-certification.yml",
+          "governance/evidence/ENTRYPOINT_INVENTORY.json",
+          "governance/evidence/POLICY.md",
+          "governance/evidence/work_items/EVS-001.json",
+          "tests/governance/test_task_entrypoint_inventory.py",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md",
+          "tests/test_frozen_head_exact_sha_workflow.py"
+        ],
+        "allowed_paths": [
+          ".github/workflows/frozen-head-exact-sha-certification.yml",
+          "governance/evidence/ENTRYPOINT_INVENTORY.json",
+          "governance/evidence/POLICY.md",
+          "governance/evidence/work_items/EVS-001.json",
+          "tests/governance/test_task_entrypoint_inventory.py",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md",
+          "tests/test_frozen_head_exact_sha_workflow.py"
+        ],
+        "forbidden_paths": [
+          "all paths outside the seven allowed paths",
+          "main.py",
+          "run_live.sh",
+          "config/",
+          "credentials.py",
+          ".env",
+          "runtime/live/",
+          "core/execution",
+          "core/broker",
+          "core/order",
+          "core/risk",
+          "core/feed",
+          "strategies/",
+          "branch protection or other repository settings",
+          "external repository mutations"
+        ],
+        "expected_tests": [
+          "PYTHONPATH=. pytest -q tests/governance/test_task_entrypoint_inventory.py",
+          "Parse governance JSON and workflow YAML",
+          "git diff --check",
+          "PYTHONPATH=. pytest -q tests/test_frozen_head_exact_sha_workflow.py"
+        ],
+        "acceptance_proof": "The active dispatch scanner finds 17 paths and inventory parity passes; 10/6/1 mapping matches all active paths; retired entry records the prior exact workflow hash and trigger; tests prove no workflow_dispatch or caller-input fallback remains while pull_request_target event types and the trusted evidence job remain. All active admissions and repository-level external trust gaps remain UNSATISFIED. No status check is disabled or suppressed. Tests also require the main target branch, the defense-in-depth trusted-job base.ref condition, all five existing jobs, and read-only permissions.",
+        "source_evidence_policy": "Retirement evidence binds to the reviewed prior workflow bytes and documents the absence of a supported manual operator workflow. It does not authenticate a human, prove universal intake, alter branch protection, or prove the CodeQL alert has cleared until hosted analysis reruns."
+      },
+      {
+        "task_contract_id": "EVS-TRUST-PR-BASE-BRANCH-SCOPE-2026-10",
+        "source_agent": "gsd",
+        "action": "GENERATE_PATCH",
+        "title": "Limit privileged base-authoritative certification to protected main",
+        "scope": "Close the trust gap where pull_request_target could load workflow and verifier code from a PR base branch whose protection was not verified. Restrict the entire workflow trigger to pull requests targeting main, add a defense-in-depth main-ref condition to trusted-evidence-coverage, and test the branch boundary, all five existing jobs, and read-only permissions. Preserve every current pull_request_target activity type for main-target PRs. Explicitly document that all jobs/statuses in this workflow no longer run for non-main-target PRs, despite prior PR814 support evidence; non-main branches remain outside verified trusted certification coverage until their branch protection and safe verifier authority are separately established. Do not delete any required status or claim non-main certification remains covered.",
+        "requested_paths": [
+          ".github/workflows/frozen-head-exact-sha-certification.yml",
+          "tests/test_frozen_head_exact_sha_workflow.py",
+          "governance/evidence/ENTRYPOINT_INVENTORY.json",
+          "governance/evidence/POLICY.md",
+          "governance/evidence/work_items/EVS-001.json",
+          "tests/governance/test_task_entrypoint_inventory.py",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md"
+        ],
+        "allowed_paths": [
+          ".github/workflows/frozen-head-exact-sha-certification.yml",
+          "tests/test_frozen_head_exact_sha_workflow.py",
+          "governance/evidence/ENTRYPOINT_INVENTORY.json",
+          "governance/evidence/POLICY.md",
+          "governance/evidence/work_items/EVS-001.json",
+          "tests/governance/test_task_entrypoint_inventory.py",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md"
+        ],
+        "forbidden_paths": [
+          "all paths outside these seven allowed paths",
+          "runtime/broker/order/risk/feed/credentials/live/strategies",
+          "branch protection settings or external repository changes"
+        ],
+        "expected_tests": [
+          "PYTHONPATH=. pytest -q tests/test_frozen_head_exact_sha_workflow.py",
+          "PYTHONPATH=. pytest -q tests/governance/test_task_entrypoint_inventory.py",
+          "Parse workflow YAML and governance JSON",
+          "git diff --check"
+        ],
+        "acceptance_proof": "Workflow has a main-only pull_request_target branch filter and the trusted job independently requires base.ref == main. Regression tests preserve the five existing jobs and read-only permissions. All pull_request_target activity types remain for main PRs. Inventory/policy/review docs explicitly state non-main target PRs no longer receive these jobs and remain unverified; active intake and dispatch trust gaps remain UNSATISFIED.",
+        "source_evidence_policy": "The prior non-main PR814 certification document is historical evidence of previous behavior, not proof that the target branch was protected. This restriction is fail-closed; it does not establish trusted certification coverage on non-main branches."
       }
     ]
   }

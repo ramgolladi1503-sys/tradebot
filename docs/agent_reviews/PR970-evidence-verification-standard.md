@@ -14,11 +14,12 @@ successful evidence persistence; `--no-evidence` cannot return accepted.
 Caller-supplied `--approve`/`--approved-by` values are not authentication.
 Medium/high-risk patch work stays blocked until a real authenticated human
 approval mechanism exists. The local checks cover only these two entrypoints.
-The inventory lists 18 active `workflow_dispatch` workflows, all
-`UNSATISFIED` for pre-work admission, plus the retired PR818 auto-write
-workflow. PR #823 is recorded as merged on 2026-08-15. Universal platform
-intake, direct GitHub dispatch trust, branch protection, and authenticated
-human approval remain `UNSATISFIED`.
+The inventory now lists 17 active `workflow_dispatch` workflows, all
+`UNSATISFIED` for pre-work admission, plus two retired triggers: the PR818
+auto-write workflow and frozen-head certification manual dispatch. PR #823 is
+recorded as merged on 2026-08-15. Universal platform intake, direct GitHub
+dispatch trust, branch protection, and authenticated human approval remain
+`UNSATISFIED`.
 
 The supervisor resolves the repository relative to caller-selected
 `supervisor.worktree_path`; it does not authenticate that repository as the
@@ -38,8 +39,10 @@ comparison, and exact bootstrap exception. It does not weaken detection of a
 protected change introduced by the PR and does not prove that main matches the
 older baseline.
 
-The PR818 auto-write workflow is deleted because its completed test-only repair
-was merged in PR #823; no other workflow-dispatch workflow is retired. No branch
+The initial PR818 follow-up deleted its auto-write workflow because its
+test-only repair was merged in PR #823; at that point no other
+workflow-dispatch workflow was retired. The later frozen-head manual-trigger
+retirement is documented below. No branch
 settings, credentials, runtime, broker, order, risk, feed, live, or strategy
 paths are changed. EVS-001's lifecycle history, evidence, and state remain
 unchanged; the task contract is recorded in its existing extensions.
@@ -81,10 +84,10 @@ This provides a base-authoritative repository PR-diff check for later PRs only; 
 - Restricted `.github/workflows/rag-ci.yml` push-triggered runs to `main`. For a feature branch with an open PR, the same path-filtered RAG job ran on both the `push` and `pull_request` events for the exact same SHA; removing the branch push trigger avoids that duplicate.
 - Kept the push and pull-request path filters identical. The `pull_request` event, retrieval contract job, concurrency cancellation, test/evaluation steps, and required evidence artifact behavior are unchanged. The GitHub token remains limited to `contents: read`; local workspace/artifact writes remain part of the job. Main branch pushes remain covered.
 - Added a regression that verifies the `main` push restriction, matching event path filters, and core job/permission/failure invariants. Registered the workflow as protected material and included it in the existing evidence claim and EVS-001 assessed paths.
-- This change does not alter CodeQL, the PR818 freeze workflow, security checks, or required-check configuration. It adds no config keys and suppresses no checks or statuses.
+- No CI status check or required-check configuration is suppressed or removed. This change addresses the CodeQL source finding by removing the caller-selected dispatch route; the finding remains open until exact-head hosted CodeQL confirms the result.
 - RAG validation now runs for matching pull requests and matching pushes to `main`. A standalone non-main branch with no open PR intentionally has no RAG-specific check until a PR opens, so it loses early RAG-specific feedback. Live branch-settings readback: classic branch protection requires `repo-forensics-pr-gate`; active ruleset `16156361` requires `unit_tests` and `health_gate`; none requires RAG CI. Technical & Quant accepted this tradeoff with no further change requested. This trigger shape follows the existing `ci.yml` and `portfolio-ci.yml` main-push/PR precedent.
 - Exact hosted RAG proof: commit `98098cdd8f744f4156ea6446c8f8a1b60dfadf7c` ran RAG workflow run `38016905886` for the `pull_request` event; the full job passed in 1m58s. No feature-branch `push` run occurred for that SHA. One local governance suite passed: `PYTHONPATH=. pytest -q tests/governance/test_evidence_contract.py` — 82 passed. Changed JSON/workflow YAML parsing and `git diff --check` also passed.
-- Other PR checks remain failing and are not treated as harmless: CodeQL reports a high cache-poisoning alert at `.github/workflows/frozen-head-exact-sha-certification.yml` lines 189–210; `PR818_FROZEN_MAIN_BASELINE_DRIFT` fails because the protected-base workflow still compares frozen baseline `9f1e74...` to PR base `32e6d77...`. The candidate removes that stale baseline-to-PR-base comparison, but this PR's `pull_request_target` run uses the protected base workflow, so the fix cannot affect its own run until the change is on `main`. No gates were suppressed.
+- At the prior hosted head, CodeQL reported a high cache-poisoning alert on the frozen-head workflow and `PR818_FROZEN_MAIN_BASELINE_DRIFT` failed because the protected-base workflow compared frozen baseline `9f1e74...` to PR base `32e6d77...`. This candidate removes the stale baseline-to-PR-base comparison, but its own `pull_request_target` run uses the protected base workflow, so that fix cannot affect its run until the change is on `main`. The manual dispatch remediation below also requires exact-head hosted CodeQL rerun; the alert is not claimed resolved here.
 
 ## Post-development verification and dispositions
 
@@ -147,3 +150,23 @@ No runtime proof is claimed or needed to validate this PR's documented, offline 
 ## Human Approval
 
 The user authorized implementing the attached proposal and opening a draft PR. This authorization does not approve merge, deployment, credential changes, runtime changes, or live trading actions. No merge was performed or requested.
+
+## Manual workflow entrypoint taxonomy and evidence remediation
+
+- The inventory now separates primary purpose from effects. Its exact purpose enum is `TASK_INTAKE`, `VALIDATION_DIAGNOSTIC`, `CERTIFICATION_RESEARCH`, and `UNKNOWN`; `review_status` independently records `REVIEWED` or `UNREVIEWED`. The Product Owner accepted the corrected mapping: 10 validation/diagnostic, 6 certification/research, 1 active unknown, and no task-intake workflow identified from YAML. The frozen-head manual trigger accounted for the removed second unknown classification. `ai-reliability-pr763-certification.yml` is validation/diagnostic; `feed-resource-soak.yml` and `prospective-market-evidence-v1.yml` are certification/research. Code Excellence remains `UNKNOWN`/`UNREVIEWED`; frozen-head manual dispatch is retired and is no longer part of the active purpose mapping.
+- Effect declarations are orthogonal and use `DECLARED`, `NOT_DECLARED_IN_YAML`, or `UNKNOWN` with source evidence for artifact upload paths, local workspace writes, external network/API activity, external mutation, secret references, and permissions. `NOT_DECLARED_IN_YAML` is only a source scan result and is never represented as safety or absence. Invoked script/action behavior, effective permissions, runtime side effects, and GitHub dispatch/ref semantics remain unknown unless separately verified.
+- Each classification cites exact YAML line text and the source file's SHA-256. Regression tests regenerate selected-ref and effect evidence from every active workflow and compare it to the inventory; the Code Excellence multiline artifact path is expanded to its four exact output paths from lines 153–157. Any workflow-byte drift, missing or invalid evidence, unlisted dispatch trigger, or admission-state promotion fails the focused suite.
+- All 17 active workflows remain `prework_admission=UNSATISFIED`. Arbitrary platform intake, dispatch trust, branch-protection requirement, and authenticated human identity remain `UNSATISFIED`. This change inventories and detects drift; it does not intercept or admit workflow dispatches. The frozen-head workflow trigger changed; no branch setting changed.
+- Sixteen of the 17 active purpose mappings are marked `REVIEWED` against the Product Owner accepted mapping. This is role-based review evidence only: no natural-person identity or human signoff is authenticated by the inventory, and the PO class review does not authenticate the PO's identity. The one active `UNKNOWN` entry remains `UNREVIEWED`. EVS-001 remains `BACKLOG` with empty lifecycle history/evidence; only its task-contract extension was revised.
+- QA remediation: the evidence scanner now records dash-prefixed inline `- run:` steps as declared code execution, alongside block-form `run:` keys. The `cas-closing-auction-shadow-v1.yml` inline test command is now captured; because the invoked test/script behavior is not established by that YAML line, its external mutation status is `UNKNOWN`. An independent literal fixture asserts this behavior.
+- Validation: `PYTHONPATH=. pytest -q tests/governance/test_task_entrypoint_inventory.py` — 9 passed in 22.13s; `PYTHONPATH=. pytest -q tests/governance/test_evidence_contract.py` — 82 passed in 60.21s; both governance JSON files parse with `python -m json.tool`; `git diff --check` passed.
+
+## Privileged manual dispatch retirement
+
+- Removed `workflow_dispatch` and its `pr_number`, `candidate_sha`, and `base_sha` caller inputs from `.github/workflows/frozen-head-exact-sha-certification.yml`; removed corresponding input fallbacks from job environments. The workflow now runs only on its existing `pull_request_target` events. Exact-SHA identity, base-authoritative validation, read-only permissions, trusted evidence coverage, and PR status jobs are retained.
+- Restricted the entire `pull_request_target` workflow to PRs targeting `main`, with a defense-in-depth `base.ref == 'main'` condition on trusted evidence coverage. This was required because the workflow and verifier use code from the PR base SHA, while only `main` branch protection has been verified. The existing event types and all five jobs remain for main-target PRs.
+- This deliberately retires the previously documented non-main-target certification path from PR814 (`frozen_head_validator_non_main_base_v1.md`). All five workflow jobs/statuses stop running for non-main-target PRs. That is a real coverage reduction for those targets; their branch protection and verifier authority are not verified, so this PR does not claim trusted certification coverage there. The historical PR814 document records prior behavior, not proof of protected target authority.
+- The Actions UI no longer offers manual dispatch for frozen-head certification. Product Owner review found no documented operator/runbook use for that route. CodeQL reported a high untrusted-ref execution finding on this privileged workflow; retiring the caller-selected route is the scoped remediation. CodeQL must still rerun on an exact hosted head before claiming the finding is cleared.
+- Inventory now contains 17 active dispatch paths with accepted counts 10 validation/diagnostic, 6 certification/research, and 1 unknown. Frozen-head manual dispatch is recorded as retired with the prior workflow SHA-256 and source location. Existing admissions remain `UNSATISFIED`; no external intake support or required branch-protection gate is claimed.
+- Regression coverage verifies the retired trigger and caller input fallbacks are absent; `pull_request_target` stays restricted to `main` with all existing event types, five jobs, and read-only permissions; and exact inventory parity and the 10/6/1 mapping hold. `PYTHONPATH=. pytest -q tests/test_frozen_head_exact_sha_workflow.py tests/governance/test_task_entrypoint_inventory.py` — 13 passed. `PYTHONPATH=. pytest -q tests/governance/test_evidence_contract.py` — 82 passed. JSON/YAML parsing and `git diff --check` passed.
+- No job/check definition or required-status configuration was removed for PRs targeting `main`; the workflow intentionally provides no checks for non-main-target PRs until their base authority is verified. No branch settings, runtime, broker/order, risk, feed, credentials, or strategy paths changed.

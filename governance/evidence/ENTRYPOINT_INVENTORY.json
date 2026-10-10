@@ -1,99 +1,5 @@
 {
-  "schema_version": 1,
   "reviewed_base_sha": "32e6d77130b748b6644e93376fe948b3cd7b9eb9",
-  "inventory_scope": "Repository workflow_dispatch paths at the reviewed PR base; this inventory does not imply task admission or trust.",
-  "active_workflow_dispatch_entrypoints": [
-    {
-      "path": ".github/workflows/agentic-qa-evidence-auditor.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/agentic-research-integration.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/ai-reliability-pr763-certification.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/candidate-ml-v2.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/cas-closing-auction-shadow-v1.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/code-excellence-gates.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/feed-resource-soak.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/frozen-head-exact-sha-certification.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/loop-handoff-gate.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/market_story_engine_v1.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/meg-shadow-system-certification.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/portfolio-ci.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/pr782-remaining-evidence-contracts.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/prospective-market-evidence-v1.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/subscription-reconciliation-postclose-v1.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/tradebot-mcp.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/upstox_offline_v3_repair.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    },
-    {
-      "path": ".github/workflows/upstox_v3_depth_capture_contract.yml",
-      "prework_admission": "UNSATISFIED",
-      "admission_mechanism": null
-    }
-  ],
   "retired_workflow_dispatch_entrypoints": [
     {
       "path": ".github/workflows/pr818-apply-safe-test-contract-repairs.yml",
@@ -102,6 +8,16 @@
       "evidence": {
         "pull_request": "https://github.com/ramgolladi1503-sys/tradebot/pull/823",
         "merged_at": "2026-08-15T17:32:29Z"
+      }
+    },
+    {
+      "path": ".github/workflows/frozen-head-exact-sha-certification.yml",
+      "status": "RETIRED",
+      "reason": "Removed the caller-selectable manual trigger because this privileged workflow is defined and verified as a PR-time certification check; no supported manual-dispatch use was identified. The trigger accepted caller-provided PR and SHA identifiers and created a CodeQL untrusted-ref execution finding. Existing pull_request_target checks are retained.",
+      "evidence": {
+        "retired_trigger": "workflow_dispatch",
+        "workflow_sha256": "8d3e077658a21ebf9c812e3ec2235f4cb52249b4e38686e2f82117a32fdf641e",
+        "source": ".github/workflows/frozen-head-exact-sha-certification.yml at exact pre-follow-up candidate commit efe4dee8c73acae1d8ab5c10a8ad5db8b2ff2bb0; workflow_dispatch declaration and manual inputs at lines 6-16"
       }
     }
   ],
@@ -125,11 +41,3050 @@
     "authenticated_human_identity_approval": "UNSATISFIED",
     "workflow_dispatch_trust_or_prework_gate": "UNSATISFIED"
   },
+  "schema_version": 3,
+  "inventory_scope": "All active workflow_dispatch paths in this candidate checkout. Purpose, review status, selected-ref uncertainty, exact workflow bytes, and orthogonal YAML-declared effects are recorded. Retired triggers are retained with their reason and source evidence. Inventory does not admit or intercept dispatches.",
+  "classification_schema": {
+    "purpose_class_values": [
+      "TASK_INTAKE",
+      "VALIDATION_DIAGNOSTIC",
+      "CERTIFICATION_RESEARCH",
+      "UNKNOWN"
+    ],
+    "purpose_class_rule": "Classify by primary workflow purpose. Task intake means YAML accepts/submits substantive work requests; validation/diagnostic means it primarily checks code or evidence; certification/research means it primarily runs research evaluation or certification. Effects such as artifact generation never determine purpose class.",
+    "review_status_values": [
+      "REVIEWED",
+      "UNREVIEWED"
+    ],
+    "effect_status_values": [
+      "DECLARED",
+      "NOT_DECLARED_IN_YAML",
+      "UNKNOWN"
+    ],
+    "effect_status_rule": "NOT_DECLARED_IN_YAML records only that this YAML scan found no declaration; it never proves absence, safety, or read-only behavior. UNKNOWN preserves behavior not provable from YAML, including invoked-code behavior and effective permissions.",
+    "hash_binding": "source_evidence.workflow_sha256 is SHA-256 over exact workflow bytes; line references and effect values are mechanically checked against those bytes.",
+    "human_attestation": "No natural-person identity or human approval is authenticated by this inventory. REVIEWED reflects the Product Owner accepted purpose mapping, not authenticated human signoff.",
+    "accepted_purpose_counts": {
+      "VALIDATION_DIAGNOSTIC": 10,
+      "CERTIFICATION_RESEARCH": 6,
+      "UNKNOWN": 1
+    }
+  },
+  "active_workflow_dispatch_entrypoints": [
+    {
+      "path": ".github/workflows/agentic-qa-evidence-auditor.yml",
+      "purpose_class": "VALIDATION_DIAGNOSTIC",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Runs QA regression tests and authority-boundary checks.",
+      "purpose_evidence": [
+        {
+          "line": 39,
+          "text": "- name: Run Agentic QA regression suite"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 28,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 34,
+            "text": "run: python -m pip install --upgrade pytest"
+          },
+          {
+            "line": 36,
+            "text": "run: |"
+          },
+          {
+            "line": 40,
+            "text": "run: PYTHONPATH=. pytest -q -o addopts='' tests/agentic_qa"
+          },
+          {
+            "line": 42,
+            "text": "run: |"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "uploads": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 28,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 28,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 29,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 34,
+              "text": "run: python -m pip install --upgrade pytest"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "UNKNOWN",
+          "evidence": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 16,
+              "text": "permissions:"
+            },
+            {
+              "line": 17,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "f2206dbb40c0f5476304909a6ee7e03ebd901358ecceafae469c6cf0cfb374da",
+        "workflow_dispatch": [
+          {
+            "line": 14,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/agentic-research-integration.yml",
+      "purpose_class": "CERTIFICATION_RESEARCH",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Runs AI certification research tests and deterministic evaluation.",
+      "purpose_evidence": [
+        {
+          "line": 38,
+          "text": "- name: Run complete certification suite"
+        },
+        {
+          "line": 49,
+          "text": "- name: Run deterministic agent evaluation"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 29,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          },
+          {
+            "line": 104,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 35,
+            "text": "run: |"
+          },
+          {
+            "line": 39,
+            "text": "run: PYTHONPATH=. pytest -q -o addopts='' tests/ai_certification"
+          },
+          {
+            "line": 41,
+            "text": "run: |"
+          },
+          {
+            "line": 50,
+            "text": "run: |"
+          },
+          {
+            "line": 55,
+            "text": "run: |"
+          },
+          {
+            "line": 110,
+            "text": "run: |"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "DECLARED",
+          "uploads": [
+            {
+              "upload_line": 92,
+              "upload_text": "- uses: actions/upload-artifact@v4",
+              "paths": [
+                ".runtime/ai_certification/evals/deterministic.json"
+              ],
+              "path_evidence": [
+                {
+                  "line": 95,
+                  "text": "path: .runtime/ai_certification/evals/deterministic.json"
+                }
+              ]
+            },
+            {
+              "upload_line": 124,
+              "upload_text": "- uses: actions/upload-artifact@v4",
+              "paths": [
+                ".runtime/ai_certification/evals/gemini.json"
+              ],
+              "path_evidence": [
+                {
+                  "line": 127,
+                  "text": "path: .runtime/ai_certification/evals/gemini.json"
+                }
+              ]
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 29,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 53,
+              "text": "--output .runtime/ai_certification/evals/deterministic.json"
+            },
+            {
+              "line": 104,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 111,
+              "text": "mkdir -p .runtime/ai_certification/evals"
+            },
+            {
+              "line": 114,
+              "text": "> .runtime/ai_certification/evals/gemini.json"
+            },
+            {
+              "line": 123,
+              "text": "--output .runtime/ai_certification/evals/gemini.json"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 29,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 30,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 92,
+              "text": "- uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 104,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 105,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 124,
+              "text": "- uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 36,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 37,
+              "text": "pip install -r requirements.txt"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 92,
+              "text": "- uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            },
+            {
+              "line": 124,
+              "text": "- uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 102,
+              "text": "GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}"
+            }
+          ],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 16,
+              "text": "permissions:"
+            },
+            {
+              "line": 17,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "110ef12cdce041f3b39106add1b71e9fafe3b76c24727983bf28f54c1b1e7918",
+        "workflow_dispatch": [
+          {
+            "line": 14,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/ai-reliability-pr763-certification.yml",
+      "purpose_class": "VALIDATION_DIAGNOSTIC",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Runs focused component/evidence tests, checks existing runtime-authority evidence, and verifies sidecar scope; the primary dispatch purpose is validation.",
+      "purpose_evidence": [
+        {
+          "line": 104,
+          "text": "- name: Run focused component and evidence proof"
+        },
+        {
+          "line": 107,
+          "text": "- name: Verify read-only sidecar scope"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 30,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 41,
+            "text": "run: |"
+          },
+          {
+            "line": 48,
+            "text": "run: |"
+          },
+          {
+            "line": 60,
+            "text": "run: |"
+          },
+          {
+            "line": 96,
+            "text": "run: |"
+          },
+          {
+            "line": 105,
+            "text": "run: pytest -q -o addopts='' tests/test_ai_reliability*.py"
+          },
+          {
+            "line": 108,
+            "text": "run: |"
+          },
+          {
+            "line": 156,
+            "text": "run: |"
+          },
+          {
+            "line": 165,
+            "text": "run: git diff --check \"$RELIABILITY_BASE_SHA\" HEAD"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "uploads": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 30,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 56,
+              "text": "echo \"RELIABILITY_BASE_SHA=$BASE_SHA\" >> \"$GITHUB_ENV\""
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 30,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 35,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 42,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 43,
+              "text": "python -m pip install \\"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "UNKNOWN",
+          "evidence": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 17,
+              "text": "permissions:"
+            },
+            {
+              "line": 18,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "1d1de093c3e654c6eaf93dc512fc6c70e4f7b60b39a8560cb70e9648995fc543",
+        "workflow_dispatch": [
+          {
+            "line": 15,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/candidate-ml-v2.yml",
+      "purpose_class": "CERTIFICATION_RESEARCH",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Trains and evaluates candidate models on replay-ledger and historical corpora.",
+      "purpose_evidence": [
+        {
+          "line": 66,
+          "text": "- name: Train historical replay ledger selector"
+        },
+        {
+          "line": 158,
+          "text": "- name: Audit and train real corpus lane"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 27,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          },
+          {
+            "line": 57,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          },
+          {
+            "line": 87,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 33,
+            "text": "run: |"
+          },
+          {
+            "line": 37,
+            "text": "run: |"
+          },
+          {
+            "line": 48,
+            "text": "run: pytest -q tests/test_candidate_ml_v2*.py"
+          },
+          {
+            "line": 63,
+            "text": "run: |"
+          },
+          {
+            "line": 67,
+            "text": "run: |"
+          },
+          {
+            "line": 72,
+            "text": "run: cat .runtime/candidate_ml_replay_ledger/replay_ledger_training_report.json"
+          },
+          {
+            "line": 91,
+            "text": "run: |"
+          },
+          {
+            "line": 155,
+            "text": "run: |"
+          },
+          {
+            "line": 159,
+            "text": "run: |"
+          },
+          {
+            "line": 168,
+            "text": "run: cat .runtime/candidate_ml_market_corpus/output/market_corpus_training_report.json"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "DECLARED",
+          "uploads": [
+            {
+              "upload_line": 73,
+              "upload_text": "- uses: actions/upload-artifact@v4",
+              "paths": [
+                ".runtime/candidate_ml_replay_ledger/"
+              ],
+              "path_evidence": [
+                {
+                  "line": 77,
+                  "text": "path: .runtime/candidate_ml_replay_ledger/"
+                }
+              ]
+            },
+            {
+              "upload_line": 169,
+              "upload_text": "- uses: actions/upload-artifact@v4",
+              "paths": [
+                ".runtime/candidate_ml_market_corpus/"
+              ],
+              "path_evidence": [
+                {
+                  "line": 173,
+                  "text": "path: .runtime/candidate_ml_market_corpus/"
+                }
+              ]
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 27,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 57,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 70,
+              "text": "--output-root .runtime/candidate_ml_replay_ledger"
+            },
+            {
+              "line": 87,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 92,
+              "text": "git lfs install --local"
+            },
+            {
+              "line": 128,
+              "text": "git lfs pull --include=\"$include_paths\" --exclude=\"\""
+            },
+            {
+              "line": 163,
+              "text": "--output-root .runtime/candidate_ml_market_corpus/output \\"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 27,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 28,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 57,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 58,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 73,
+              "text": "- uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 87,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 150,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 169,
+              "text": "- uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 34,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 35,
+              "text": "python -m pip install pytest numpy pandas scikit-learn joblib pyarrow"
+            },
+            {
+              "line": 64,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 65,
+              "text": "python -m pip install numpy pandas scikit-learn joblib pyarrow"
+            },
+            {
+              "line": 92,
+              "text": "git lfs install --local"
+            },
+            {
+              "line": 128,
+              "text": "git lfs pull --include=\"$include_paths\" --exclude=\"\""
+            },
+            {
+              "line": 156,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 157,
+              "text": "python -m pip install numpy pandas scikit-learn joblib pyarrow"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 73,
+              "text": "- uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            },
+            {
+              "line": 169,
+              "text": "- uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 19,
+              "text": "permissions:"
+            },
+            {
+              "line": 20,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "1feae98214fb73296ff3e30b6990135f45655083384dc95a1a0b37d54e75c7b6",
+        "workflow_dispatch": [
+          {
+            "line": 17,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/cas-closing-auction-shadow-v1.yml",
+      "purpose_class": "VALIDATION_DIAGNOSTIC",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Runs semantic contract tests; it does not invoke a separate research run.",
+      "purpose_evidence": [
+        {
+          "line": 27,
+          "text": "- run: pytest -q tests/research/test_cas_closing_auction_shadow_v1.py"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 21,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 25,
+            "text": "- run: pip install numpy pandas pyarrow pytest"
+          },
+          {
+            "line": 26,
+            "text": "- run: python -m py_compile scripts/run_cas_closing_auction_shadow_v1.py"
+          },
+          {
+            "line": 27,
+            "text": "- run: pytest -q tests/research/test_cas_closing_auction_shadow_v1.py"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "uploads": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 21,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 21,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 22,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 25,
+              "text": "- run: pip install numpy pandas pyarrow pytest"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "UNKNOWN",
+          "evidence": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 13,
+              "text": "permissions:"
+            },
+            {
+              "line": 14,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "4bec8ceba46fd1dcf0b17a7c7ac0457b4be50d06ac67923211ddffe2cf49ff72",
+        "workflow_dispatch": [
+          {
+            "line": 11,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/code-excellence-gates.yml",
+      "purpose_class": "UNKNOWN",
+      "review_status": "UNREVIEWED",
+      "classification_rationale": "Dispatch behavior depends on pull_request context and PR_NUMBER, which is not established for workflow_dispatch.",
+      "purpose_evidence": [
+        {
+          "line": 13,
+          "text": "PR_NUMBER: ${{ github.event.pull_request.number }}"
+        },
+        {
+          "line": 4,
+          "text": "pull_request_target:"
+        }
+      ],
+      "review_basis": "Uncertainty unresolved; no purpose review claimed.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 25,
+            "text": "uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 30,
+            "text": "run: |"
+          },
+          {
+            "line": 45,
+            "text": "run: |"
+          },
+          {
+            "line": 117,
+            "text": "run: |"
+          },
+          {
+            "line": 125,
+            "text": "run: |"
+          },
+          {
+            "line": 134,
+            "text": "run: |"
+          },
+          {
+            "line": 141,
+            "text": "run: |"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "DECLARED",
+          "uploads": [
+            {
+              "upload_line": 149,
+              "upload_text": "uses: actions/upload-artifact@v4",
+              "paths": [
+                "docs/code_excellence/reports/post_live_paths.txt",
+                "docs/code_excellence/reports/changed_paths.txt",
+                "docs/code_excellence/reports/unified_ce_gate_latest.md",
+                "docs/code_excellence/reports/unified_agent_elite_latest.md"
+              ],
+              "path_evidence": [
+                {
+                  "line": 153,
+                  "text": "path: |"
+                },
+                {
+                  "line": 154,
+                  "text": "docs/code_excellence/reports/post_live_paths.txt"
+                },
+                {
+                  "line": 155,
+                  "text": "docs/code_excellence/reports/changed_paths.txt"
+                },
+                {
+                  "line": 156,
+                  "text": "docs/code_excellence/reports/unified_ce_gate_latest.md"
+                },
+                {
+                  "line": 157,
+                  "text": "docs/code_excellence/reports/unified_agent_elite_latest.md"
+                }
+              ]
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 25,
+              "text": "uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 53,
+              "text": "mkdir -p docs/code_excellence/reports"
+            },
+            {
+              "line": 57,
+              "text": "git diff --name-only \"$LIVE_TESTED_SHA\"...HEAD > docs/code_excellence/reports/post_live_paths.txt"
+            },
+            {
+              "line": 103,
+              "text": "> docs/code_excellence/reports/changed_paths.txt"
+            },
+            {
+              "line": 106,
+              "text": "git diff --name-only \"$MERGE_BASE\" \"$CANDIDATE_REF\" > docs/code_excellence/reports/changed_paths.txt"
+            },
+            {
+              "line": 122,
+              "text": "GIT_LFS_SKIP_SMUDGE=1 git worktree add --detach \"$RUNNER_TEMP/pr-candidate\" \"$CANDIDATE_REF\""
+            },
+            {
+              "line": 130,
+              "text": "--out docs/code_excellence/reports/unified_ce_gate_latest.md"
+            },
+            {
+              "line": 136,
+              "text": "git worktree remove --force \"$RUNNER_TEMP/pr-candidate\""
+            },
+            {
+              "line": 143,
+              "text": "--out docs/code_excellence/reports/unified_agent_elite_latest.md \\"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 25,
+              "text": "uses: actions/checkout@v4"
+            },
+            {
+              "line": 38,
+              "text": "uses: actions/setup-python@v5"
+            },
+            {
+              "line": 149,
+              "text": "uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 46,
+              "text": "git fetch --no-tags --prune origin \\"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 149,
+              "text": "uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 9,
+              "text": "permissions:"
+            },
+            {
+              "line": 10,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "e311e4c71937a340b3eebcc867e47b35825b3732681233f84fb26fcfbf35c568",
+        "workflow_dispatch": [
+          {
+            "line": 7,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/feed-resource-soak.yml",
+      "purpose_class": "CERTIFICATION_RESEARCH",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Runs a feed-evidence tier including the scheduled 1000-cycle certification tier; the accepted primary purpose is feed reliability certification, with log artifacts recorded separately.",
+      "purpose_evidence": [
+        {
+          "line": 139,
+          "text": "- name: Run 1000-cycle certification tier"
+        },
+        {
+          "line": 149,
+          "text": "- name: Upload certification log"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 38,
+            "text": "uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          },
+          {
+            "line": 82,
+            "text": "uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          },
+          {
+            "line": 126,
+            "text": "uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 47,
+            "text": "run: |"
+          },
+          {
+            "line": 53,
+            "text": "run: |"
+          },
+          {
+            "line": 91,
+            "text": "run: |"
+          },
+          {
+            "line": 97,
+            "text": "run: |"
+          },
+          {
+            "line": 135,
+            "text": "run: |"
+          },
+          {
+            "line": 141,
+            "text": "run: |"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "DECLARED",
+          "uploads": [
+            {
+              "upload_line": 63,
+              "upload_text": "uses: actions/upload-artifact@v4",
+              "paths": [
+                ".runtime/ci/feed-smoke.log"
+              ],
+              "path_evidence": [
+                {
+                  "line": 67,
+                  "text": "path: .runtime/ci/feed-smoke.log"
+                }
+              ]
+            },
+            {
+              "upload_line": 107,
+              "upload_text": "uses: actions/upload-artifact@v4",
+              "paths": [
+                ".runtime/ci/feed-soak.log"
+              ],
+              "path_evidence": [
+                {
+                  "line": 111,
+                  "text": "path: .runtime/ci/feed-soak.log"
+                }
+              ]
+            },
+            {
+              "upload_line": 151,
+              "upload_text": "uses: actions/upload-artifact@v4",
+              "paths": [
+                ".runtime/ci/feed-certification.log"
+              ],
+              "path_evidence": [
+                {
+                  "line": 155,
+                  "text": "path: .runtime/ci/feed-certification.log"
+                }
+              ]
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 38,
+              "text": "uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 55,
+              "text": "mkdir -p .runtime/ci"
+            },
+            {
+              "line": 59,
+              "text": "--durations=20 | tee .runtime/ci/feed-smoke.log"
+            },
+            {
+              "line": 70,
+              "text": "if: >-"
+            },
+            {
+              "line": 82,
+              "text": "uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 99,
+              "text": "mkdir -p .runtime/ci"
+            },
+            {
+              "line": 103,
+              "text": "--durations=20 | tee .runtime/ci/feed-soak.log"
+            },
+            {
+              "line": 114,
+              "text": "if: >-"
+            },
+            {
+              "line": 126,
+              "text": "uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 143,
+              "text": "mkdir -p .runtime/ci"
+            },
+            {
+              "line": 147,
+              "text": "--durations=20 | tee .runtime/ci/feed-certification.log"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 38,
+              "text": "uses: actions/checkout@v4"
+            },
+            {
+              "line": 41,
+              "text": "uses: actions/setup-python@v5"
+            },
+            {
+              "line": 63,
+              "text": "uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 82,
+              "text": "uses: actions/checkout@v4"
+            },
+            {
+              "line": 85,
+              "text": "uses: actions/setup-python@v5"
+            },
+            {
+              "line": 107,
+              "text": "uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 126,
+              "text": "uses: actions/checkout@v4"
+            },
+            {
+              "line": 129,
+              "text": "uses: actions/setup-python@v5"
+            },
+            {
+              "line": 151,
+              "text": "uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 48,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 49,
+              "text": "pip install -r requirements.txt"
+            },
+            {
+              "line": 92,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 93,
+              "text": "pip install -r requirements.txt"
+            },
+            {
+              "line": 136,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 137,
+              "text": "pip install -r requirements.txt"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 63,
+              "text": "uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            },
+            {
+              "line": 107,
+              "text": "uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            },
+            {
+              "line": 151,
+              "text": "uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 19,
+              "text": "permissions:"
+            },
+            {
+              "line": 20,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "037d63dfc8767ed215360e6502a65c29143be92ba89d58d5878f8ec06341ac6b",
+        "workflow_dispatch": [
+          {
+            "line": 4,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": [
+          {
+            "name": "tier",
+            "line": 6,
+            "text": "tier:"
+          }
+        ]
+      }
+    },
+    {
+      "path": ".github/workflows/loop-handoff-gate.yml",
+      "purpose_class": "VALIDATION_DIAGNOSTIC",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Checks committed loop task contracts and framework tests.",
+      "purpose_evidence": [
+        {
+          "line": 42,
+          "text": "- name: Validate committed loop tasks"
+        },
+        {
+          "line": 39,
+          "text": "- name: Run loop framework tests"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 24,
+            "text": "uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 34,
+            "text": "run: python -m pip install --disable-pip-version-check pytest"
+          },
+          {
+            "line": 37,
+            "text": "run: python -m compileall -q scripts/loop tests/loop"
+          },
+          {
+            "line": 40,
+            "text": "run: pytest -q tests/loop"
+          },
+          {
+            "line": 44,
+            "text": "run: |"
+          },
+          {
+            "line": 65,
+            "text": "run: git diff --check"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "DECLARED",
+          "uploads": [
+            {
+              "upload_line": 69,
+              "upload_text": "uses: actions/upload-artifact@v4",
+              "paths": [
+                ".loop-ci/"
+              ],
+              "path_evidence": [
+                {
+                  "line": 72,
+                  "text": "path: .loop-ci/"
+                }
+              ]
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 24,
+              "text": "uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 46,
+              "text": "mkdir -p .loop-ci/contexts"
+            },
+            {
+              "line": 47,
+              "text": ": > .loop-ci/validation.txt"
+            },
+            {
+              "line": 52,
+              "text": "echo \"VALIDATE $task_dir\" | tee -a .loop-ci/validation.txt"
+            },
+            {
+              "line": 53,
+              "text": "python3 scripts/loop/validate_task.py \"$task_dir\" --json | tee -a .loop-ci/validation.txt"
+            },
+            {
+              "line": 57,
+              "text": "--output \".loop-ci/contexts/${safe_name}.md\" \\"
+            },
+            {
+              "line": 61,
+              "text": "echo \"No committed loop task contracts found.\" | tee -a .loop-ci/validation.txt"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 24,
+              "text": "uses: actions/checkout@v4"
+            },
+            {
+              "line": 29,
+              "text": "uses: actions/setup-python@v5"
+            },
+            {
+              "line": 69,
+              "text": "uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 34,
+              "text": "run: python -m pip install --disable-pip-version-check pytest"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 69,
+              "text": "uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 16,
+              "text": "permissions:"
+            },
+            {
+              "line": 17,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "303b761db8908f1b92b41972b8a24f219a58555087d1d6f89fb169325546cc44",
+        "workflow_dispatch": [
+          {
+            "line": 14,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/market_story_engine_v1.yml",
+      "purpose_class": "CERTIFICATION_RESEARCH",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Generates and independently audits deterministic research certification output.",
+      "purpose_evidence": [
+        {
+          "line": 36,
+          "text": "- name: Generate deterministic robustness certification"
+        },
+        {
+          "line": 41,
+          "text": "- name: Independent audit"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 20,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 25,
+            "text": "run: python -m pip install pandas numpy pytest pyarrow"
+          },
+          {
+            "line": 27,
+            "text": "run: >-"
+          },
+          {
+            "line": 33,
+            "text": "run: >-"
+          },
+          {
+            "line": 37,
+            "text": "run: >-"
+          },
+          {
+            "line": 42,
+            "text": "run: >-"
+          },
+          {
+            "line": 47,
+            "text": "run: |"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "DECLARED",
+          "uploads": [
+            {
+              "upload_line": 60,
+              "upload_text": "- uses: actions/upload-artifact@v4",
+              "paths": [
+                "evidence/"
+              ],
+              "path_evidence": [
+                {
+                  "line": 63,
+                  "text": "path: evidence/"
+                }
+              ]
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 20,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 27,
+              "text": "run: >-"
+            },
+            {
+              "line": 33,
+              "text": "run: >-"
+            },
+            {
+              "line": 37,
+              "text": "run: >-"
+            },
+            {
+              "line": 40,
+              "text": "--output-dir evidence/market_story_engine_v1"
+            },
+            {
+              "line": 42,
+              "text": "run: >-"
+            },
+            {
+              "line": 45,
+              "text": "--output evidence/market_story_engine_v1/oracle_report.json"
+            },
+            {
+              "line": 50,
+              "text": "--output-dir evidence/market_story_engine_v1_second"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 20,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 21,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 60,
+              "text": "- uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 25,
+              "text": "run: python -m pip install pandas numpy pytest pyarrow"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 60,
+              "text": "- uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 13,
+              "text": "permissions:"
+            },
+            {
+              "line": 14,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "dba8158ea8827d312c8754778d169742668b10b627416ecb946fde35648010a4",
+        "workflow_dispatch": [
+          {
+            "line": 11,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/meg-shadow-system-certification.yml",
+      "purpose_class": "CERTIFICATION_RESEARCH",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Performs offline system certification and assembles a pending certificate.",
+      "purpose_evidence": [
+        {
+          "line": 273,
+          "text": "- name: Run same-SHA offline certification"
+        },
+        {
+          "line": 280,
+          "text": "- name: Assemble truthful pending certificate"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 43,
+            "text": "- uses: actions/checkout@v4",
+            "ref": {
+              "line": 45,
+              "text": "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+              "expression": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+            },
+            "default_ref_not_explicit": false
+          },
+          {
+            "line": 108,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 54,
+            "text": "run: |"
+          },
+          {
+            "line": 119,
+            "text": "run: |"
+          },
+          {
+            "line": 125,
+            "text": "run: |"
+          },
+          {
+            "line": 132,
+            "text": "run: |"
+          },
+          {
+            "line": 143,
+            "text": "run: |"
+          },
+          {
+            "line": 185,
+            "text": "run: |"
+          },
+          {
+            "line": 258,
+            "text": "run: |"
+          },
+          {
+            "line": 274,
+            "text": "run: |"
+          },
+          {
+            "line": 281,
+            "text": "run: |"
+          },
+          {
+            "line": 300,
+            "text": "run: |"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "DECLARED",
+          "uploads": [
+            {
+              "upload_line": 334,
+              "upload_text": "uses: actions/upload-artifact@v4",
+              "paths": [
+                ".runtime/meg-shadow-certification"
+              ],
+              "path_evidence": [
+                {
+                  "line": 337,
+                  "text": "path: .runtime/meg-shadow-certification"
+                }
+              ]
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 43,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 56,
+              "text": "echo \"applicable=true\" >> \"$GITHUB_OUTPUT\""
+            },
+            {
+              "line": 108,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 120,
+              "text": "mkdir -p .runtime/meg-shadow-certification"
+            },
+            {
+              "line": 122,
+              "text": "> .runtime/meg-shadow-certification/workflow_identity.txt"
+            },
+            {
+              "line": 277,
+              "text": "--output-dir .runtime/meg-shadow-certification \\"
+            },
+            {
+              "line": 284,
+              "text": "--output-dir .runtime/meg-shadow-certification/final"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 43,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 108,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 113,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 334,
+              "text": "uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 126,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 127,
+              "text": "python -m pip install \\"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 334,
+              "text": "uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 32,
+              "text": "permissions:"
+            },
+            {
+              "line": 33,
+              "text": "contents: read"
+            },
+            {
+              "line": 38,
+              "text": "permissions:"
+            },
+            {
+              "line": 39,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "eddeee51c735252027f620191a25c1acf0282254acfa65de51183448af3d3d27",
+        "workflow_dispatch": [
+          {
+            "line": 30,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/portfolio-ci.yml",
+      "purpose_class": "VALIDATION_DIAGNOSTIC",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Runs offline repository and runtime-health validation.",
+      "purpose_evidence": [
+        {
+          "line": 52,
+          "text": "- name: Run real offline runtime health, contract-resolution, and stale-feed tests"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 17,
+            "text": "uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 20,
+            "text": "run: |"
+          },
+          {
+            "line": 34,
+            "text": "run: |"
+          },
+          {
+            "line": 48,
+            "text": "run: |"
+          },
+          {
+            "line": 53,
+            "text": "run: pytest -q tests/test_runtime_health_eval.py tests/test_contract_resolution_guard.py tests/test_stale_feed_simulator.py"
+          },
+          {
+            "line": 56,
+            "text": "run: |"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "DECLARED",
+          "uploads": [
+            {
+              "upload_line": 83,
+              "upload_text": "uses: actions/upload-artifact@v4",
+              "paths": [
+                "reports/portfolio-ci-report.md"
+              ],
+              "path_evidence": [
+                {
+                  "line": 86,
+                  "text": "path: reports/portfolio-ci-report.md"
+                }
+              ]
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 17,
+              "text": "uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 57,
+              "text": "mkdir -p reports"
+            },
+            {
+              "line": 58,
+              "text": "cat > reports/portfolio-ci-report.md <<'REPORT'"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 17,
+              "text": "uses: actions/checkout@v4"
+            },
+            {
+              "line": 43,
+              "text": "uses: actions/setup-python@v5"
+            },
+            {
+              "line": 83,
+              "text": "uses: actions/upload-artifact@v4"
+            },
+            {
+              "line": 49,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 50,
+              "text": "python -m pip install pytest"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 83,
+              "text": "uses: actions/upload-artifact@v4",
+              "target": "GitHub Actions artifact store"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "declarations": [],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "1c5da556eebcd50ae278e7527284ef94fb16ef3312f8c7d52609fc472e5e0f78",
+        "workflow_dispatch": [
+          {
+            "line": 8,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/pr782-remaining-evidence-contracts.yml",
+      "purpose_class": "VALIDATION_DIAGNOSTIC",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Checks evidence contracts and protected runtime scope.",
+      "purpose_evidence": [
+        {
+          "line": 59,
+          "text": "- name: Run focused evidence contracts"
+        },
+        {
+          "line": 71,
+          "text": "- name: Verify protected runtime scope"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 35,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 46,
+            "text": "run: |"
+          },
+          {
+            "line": 51,
+            "text": "run: |"
+          },
+          {
+            "line": 60,
+            "text": "run: |"
+          },
+          {
+            "line": 66,
+            "text": "run: |"
+          },
+          {
+            "line": 75,
+            "text": "run: |"
+          },
+          {
+            "line": 202,
+            "text": "run: |"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "uploads": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 35,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 35,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 40,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 47,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 48,
+              "text": "python -m pip install pytest pandas numpy pyarrow scikit-learn streamlit python-dotenv requests openai kiteconnect holidays"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "UNKNOWN",
+          "evidence": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 18,
+              "text": "permissions:"
+            },
+            {
+              "line": 19,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "50fbd06abc7935290c9eaf8eae138284e8663d8021aebf2c8df3f6f132af4cee",
+        "workflow_dispatch": [
+          {
+            "line": 16,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/prospective-market-evidence-v1.yml",
+      "purpose_class": "CERTIFICATION_RESEARCH",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Runs prospective market evidence adversarial and replay certification checks against the verified selected checkout.",
+      "purpose_evidence": [
+        {
+          "line": 41,
+          "text": "- name: Focused adversarial and replay tests"
+        },
+        {
+          "line": 29,
+          "text": "- name: Verify exact checkout"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 24,
+            "text": "- uses: actions/checkout@v4",
+            "ref": {
+              "line": 26,
+              "text": "ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+              "expression": "${{ github.event.pull_request.head.sha || github.sha }}"
+            },
+            "default_ref_not_explicit": false
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 30,
+            "text": "run: |"
+          },
+          {
+            "line": 38,
+            "text": "run: python -m pip install pytest"
+          },
+          {
+            "line": 40,
+            "text": "run: python -m py_compile core/prospective_market_evidence.py tests/test_prospective_market_evidence.py"
+          },
+          {
+            "line": 42,
+            "text": "run: pytest -q -o addopts='' tests/test_prospective_market_evidence.py"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "uploads": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 24,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 24,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 34,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 38,
+              "text": "run: python -m pip install pytest"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "UNKNOWN",
+          "evidence": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 12,
+              "text": "permissions:"
+            },
+            {
+              "line": 13,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "0042dd25d3a470c93ae9ac7a2ad86e788b598715b67fea0559c72409ede77dbf",
+        "workflow_dispatch": [
+          {
+            "line": 10,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/subscription-reconciliation-postclose-v1.yml",
+      "purpose_class": "VALIDATION_DIAGNOSTIC",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Verifies checkout identity and runs focused reconciliation tests.",
+      "purpose_evidence": [
+        {
+          "line": 35,
+          "text": "- name: Focused tests"
+        },
+        {
+          "line": 27,
+          "text": "- name: Verify exact checkout"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 22,
+            "text": "- uses: actions/checkout@v4",
+            "ref": {
+              "line": 24,
+              "text": "ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+              "expression": "${{ github.event.pull_request.head.sha || github.sha }}"
+            },
+            "default_ref_not_explicit": false
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 28,
+            "text": "run: test \"$(git rev-parse HEAD)\" = \"$EXPECTED_HEAD_SHA\""
+          },
+          {
+            "line": 32,
+            "text": "- run: python -m pip install pytest"
+          },
+          {
+            "line": 34,
+            "text": "run: python -m py_compile scripts/validate_subscription_reconciliation_postclose_v1.py tests/test_subscription_reconciliation_postclose_v1.py"
+          },
+          {
+            "line": 36,
+            "text": "run: pytest -q -o addopts='' tests/test_subscription_reconciliation_postclose_v1.py"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "uploads": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 22,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 22,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 29,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 32,
+              "text": "- run: python -m pip install pytest"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "UNKNOWN",
+          "evidence": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 12,
+              "text": "permissions:"
+            },
+            {
+              "line": 13,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "ac949652401f34b8f10dcbc755bcc3828f1bda3fd24150555c8df5320175dc0b",
+        "workflow_dispatch": [
+          {
+            "line": 10,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/tradebot-mcp.yml",
+      "purpose_class": "VALIDATION_DIAGNOSTIC",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Validates MCP server behavior; configuration generation is captured separately as an effect.",
+      "purpose_evidence": [
+        {
+          "line": 36,
+          "text": "- name: Run core and server tests"
+        },
+        {
+          "line": 44,
+          "text": "- name: Generate workspace MCP configuration for separate target"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 24,
+            "text": "uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 34,
+            "text": "run: python -m pip install -r requirements-mcp.txt"
+          },
+          {
+            "line": 37,
+            "text": "run: |"
+          },
+          {
+            "line": 42,
+            "text": "run: bash -n scripts/install_antigravity_mcp.sh"
+          },
+          {
+            "line": 51,
+            "text": "run: |"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "uploads": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 24,
+              "text": "uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 52,
+              "text": "mkdir -p runtime"
+            },
+            {
+              "line": 53,
+              "text": "mkdir -p \"$TRADEBOT_TARGET_ROOT/research\""
+            },
+            {
+              "line": 57,
+              "text": "python -m json.tool \"$TRADEBOT_TARGET_ROOT/.agents/mcp_config.json\" >/dev/null"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 24,
+              "text": "uses: actions/checkout@v4"
+            },
+            {
+              "line": 27,
+              "text": "uses: actions/setup-python@v5"
+            },
+            {
+              "line": 34,
+              "text": "run: python -m pip install -r requirements-mcp.txt"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "UNKNOWN",
+          "evidence": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 15,
+              "text": "permissions:"
+            },
+            {
+              "line": 16,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "e15ed06473af38aeafed492f078a5f055f43456adcda45edc7802cc8c7d43486",
+        "workflow_dispatch": [
+          {
+            "line": 13,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/upstox_offline_v3_repair.yml",
+      "purpose_class": "VALIDATION_DIAGNOSTIC",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Runs focused offline sequence and contract-authority checks.",
+      "purpose_evidence": [
+        {
+          "line": 52,
+          "text": "- name: Run sequence identity tests"
+        },
+        {
+          "line": 56,
+          "text": "- name: Run IST and contract-authority tests"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 32,
+            "text": "- uses: actions/checkout@v4",
+            "ref": null,
+            "default_ref_not_explicit": true
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 42,
+            "text": "run: |"
+          },
+          {
+            "line": 47,
+            "text": "run: |"
+          },
+          {
+            "line": 53,
+            "text": "run: |"
+          },
+          {
+            "line": 57,
+            "text": "run: |"
+          },
+          {
+            "line": 63,
+            "text": "run: |"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "uploads": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 32,
+              "text": "- uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 65,
+              "text": "git diff --name-only \"${BASE_SHA}\"...HEAD > /tmp/changed.txt"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 32,
+              "text": "- uses: actions/checkout@v4"
+            },
+            {
+              "line": 36,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 43,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 44,
+              "text": "python -m pip install pytest pandas numpy pyarrow zstandard"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "UNKNOWN",
+          "evidence": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 24,
+              "text": "permissions:"
+            },
+            {
+              "line": 25,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "cbd96b97dfdc8dee13984d891bc095ea71c8cde1a675e57213423d3841a31d34",
+        "workflow_dispatch": [
+          {
+            "line": 22,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    },
+    {
+      "path": ".github/workflows/upstox_v3_depth_capture_contract.yml",
+      "purpose_class": "VALIDATION_DIAGNOSTIC",
+      "review_status": "REVIEWED",
+      "classification_rationale": "Runs feed capture contract tests and scope checks.",
+      "purpose_evidence": [
+        {
+          "line": 137,
+          "text": "- name: Run focused deterministic tests"
+        },
+        {
+          "line": 144,
+          "text": "- name: Prove no strategy or execution surface changed"
+        }
+      ],
+      "review_basis": "Purpose mapping accepted by Product Owner; this record does not authenticate reviewer identity.",
+      "reviewer_identity_authenticated": false,
+      "prework_admission": "UNSATISFIED",
+      "admission_mechanism": null,
+      "selected_ref_authority": {
+        "dispatch_selected_ref_runtime_resolution": "UNKNOWN_FROM_YAML_PLATFORM_CONTEXT",
+        "dispatcher_identity": "UNKNOWN_FROM_YAML",
+        "checkout_ref_expressions": [
+          {
+            "line": 40,
+            "text": "uses: actions/checkout@v4",
+            "ref": {
+              "line": 43,
+              "text": "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+              "expression": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+            },
+            "default_ref_not_explicit": false
+          }
+        ]
+      },
+      "candidate_code_execution": {
+        "status": "DECLARED",
+        "evidence": [
+          {
+            "line": 48,
+            "text": "run: |"
+          },
+          {
+            "line": 63,
+            "text": "run: |"
+          },
+          {
+            "line": 123,
+            "text": "run: |"
+          },
+          {
+            "line": 129,
+            "text": "run: |"
+          },
+          {
+            "line": 138,
+            "text": "run: |"
+          },
+          {
+            "line": 147,
+            "text": "run: |"
+          }
+        ],
+        "interpretation": "Declared run steps execute workflow code; exact dispatch-ref runtime resolution is not established by YAML."
+      },
+      "effects": {
+        "artifact_uploads": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "uploads": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "local_workspace_writes": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 40,
+              "text": "uses: actions/checkout@v4",
+              "operation": "checkout action materializes repository content in the runner workspace"
+            },
+            {
+              "line": 57,
+              "text": "echo \"base_sha=${base_sha}\" >> \"$GITHUB_OUTPUT\""
+            },
+            {
+              "line": 66,
+              "text": "git diff --name-only \"${BASE_SHA}..HEAD\" > /tmp/changed.txt"
+            },
+            {
+              "line": 67,
+              "text": "cat > /tmp/allowed_scope.txt <<'EOF'"
+            },
+            {
+              "line": 76,
+              "text": "cat > /tmp/allowed_scope.txt <<'EOF'"
+            },
+            {
+              "line": 112,
+              "text": "printf '%s\\n' \"${forbidden}\" >&2"
+            },
+            {
+              "line": 113,
+              "text": "echo \"Forbidden unrelated file in Upstox V3 depth repair or approved infrastructure rollup\" >&2"
+            },
+            {
+              "line": 150,
+              "text": "echo \"Strategy, risk, execution, orchestrator or config surface changed\" >&2"
+            }
+          ],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_network_api_calls": {
+          "status": "DECLARED",
+          "evidence": [
+            {
+              "line": 40,
+              "text": "uses: actions/checkout@v4"
+            },
+            {
+              "line": 117,
+              "text": "- uses: actions/setup-python@v5"
+            },
+            {
+              "line": 53,
+              "text": "git fetch --no-tags origin main"
+            },
+            {
+              "line": 125,
+              "text": "python -m pip install --upgrade pip"
+            },
+            {
+              "line": 126,
+              "text": "python -m pip install pandas pyarrow pytest requests"
+            }
+          ],
+          "invoked_code_network_behavior": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "external_mutation": {
+          "status": "UNKNOWN",
+          "evidence": [],
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "secrets_exposure": {
+          "status": "NOT_DECLARED_IN_YAML",
+          "evidence": [],
+          "runtime_handling": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        },
+        "permissions": {
+          "status": "DECLARED",
+          "declarations": [
+            {
+              "line": 24,
+              "text": "permissions:"
+            },
+            {
+              "line": 25,
+              "text": "contents: read"
+            }
+          ],
+          "effective_permissions": "UNKNOWN",
+          "interpretation": "DECLARED records only a YAML declaration; NOT_DECLARED_IN_YAML records only a source scan with no matching declaration. Neither proves runtime behavior, absence of other effects, safety, or read-only behavior. Invoked code and platform effects may remain UNKNOWN."
+        }
+      },
+      "source_evidence": {
+        "workflow_sha256": "c8c154656cde375799f12cc61f30eeb85a53f4aa1a16f60cfd685fed0a0c98e1",
+        "workflow_dispatch": [
+          {
+            "line": 22,
+            "text": "workflow_dispatch:"
+          }
+        ],
+        "workflow_dispatch_inputs": []
+      }
+    }
+  ],
   "limitations": [
     "The two local CLIs validate a committed canonical work item before accepting or claiming work.",
     "Supervisor admission resolves the repository relative to the caller-selected supervisor.worktree_path; it does not authenticate project or repository identity.",
-    "A committed local work item hash protects content integrity only. It does not authenticate the item author, reviewer roles, caller identity, or human approval; no authenticated project identity or approval guarantee exists.",
-    "GitHub workflow_dispatch entrypoints are inventoried but not intercepted before dispatch.",
-    "A successful local check is not proof of universal task admission, branch protection, or authenticated human approval."
+    "A committed local work item hash protects content integrity only; it does not authenticate author, reviewer role, caller identity, or human approval.",
+    "All 17 active GitHub workflow_dispatch entrypoints remain UNSATISFIED for pre-work admission and are not intercepted before dispatch.",
+    "Purpose and effects are independent. NOT_DECLARED_IN_YAML is not proof of absent effects or safety; invoked scripts, actions, platform behavior, effective permissions, and undeclared side effects may remain UNKNOWN.",
+    "Workflow hashes and line evidence bind observations to workflow content but do not authenticate a human reviewer or establish scientific validity.",
+    "Universal task intake, branch protection, workflow dispatch trust, and authenticated human approval remain UNSATISFIED.",
+    "Frozen-head trusted evidence coverage is scoped to pull requests targeting main, the only target branch whose protection was read back; no trusted certification coverage is established for PRs to other target branches."
   ]
 }

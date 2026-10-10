@@ -5,10 +5,26 @@ WORKFLOW = Path(".github/workflows/frozen-head-exact-sha-certification.yml")
 VALIDATOR = Path("scripts/validate_frozen_head_bridge.py")
 
 
-def test_base_authority_uses_event_base_or_dispatch_base_input():
+def test_base_authority_uses_pull_request_event_base_only():
     text = WORKFLOW.read_text()
-    assert "BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}" in text
-    assert "base_sha:" in text
+    assert "BASE_SHA: ${{ github.event.pull_request.base.sha }}" in text
+    assert "inputs." not in text
+    assert "workflow_dispatch:" not in text
+    assert "pull_request_target:" in text
+    assert "branches: [main]" in text
+    assert "types: [opened, reopened, synchronize, ready_for_review, edited]" in text
+    assert "trusted-evidence-coverage:" in text
+    assert "if: github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main'" in text
+    for job in (
+        "exact-sha-identity",
+        "agent-review-base-authority",
+        "runtime-authority-base-authority",
+        "code-excellence-base-authority",
+        "trusted-evidence-coverage",
+    ):
+        assert f"  {job}:" in text
+    assert "permissions:\n  contents: read\n  pull-requests: read" in text
+    assert "    permissions:\n      contents: read" in text
     assert 'git fetch --no-tags origin "$BASE_SHA"' in text
     assert 'git diff --check "$BASE_SHA" "$HEAD_SHA"' in text
 

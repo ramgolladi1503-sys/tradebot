@@ -2,18 +2,8 @@ name: Frozen Candidate Exact-SHA Certification
 
 on:
   pull_request_target:
+    branches: [main]
     types: [opened, reopened, synchronize, ready_for_review, edited]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        required: true
-        type: string
-      candidate_sha:
-        required: true
-        type: string
-      base_sha:
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -28,9 +18,9 @@ jobs:
           fetch-depth: 0
       - name: Fetch independent base and candidate refs
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           git fetch --no-tags origin \
             +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
@@ -53,9 +43,9 @@ jobs:
           fetch-depth: 0
       - name: Validate base-authoritative exact-SHA manifest
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           test -n "$BASE_SHA"
           git fetch --no-tags origin "$BASE_SHA" +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
@@ -71,9 +61,9 @@ jobs:
           fetch-depth: 0
       - name: Validate current-base scope policy
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           test -n "$BASE_SHA"
           git fetch --no-tags origin "$BASE_SHA" +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
@@ -103,9 +93,9 @@ jobs:
           fetch-depth: 0
       - name: Run trusted CE code against exact candidate tree
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.candidate_sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           test -n "$BASE_SHA"
           git fetch --no-tags origin "$BASE_SHA" +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head
@@ -129,7 +119,7 @@ jobs:
             --out "$REPORT_FILE"
 
   trusted-evidence-coverage:
-    if: github.event_name == 'pull_request_target'
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main'
     name: Trusted base evidence coverage
     runs-on: ubuntu-latest
     permissions:
