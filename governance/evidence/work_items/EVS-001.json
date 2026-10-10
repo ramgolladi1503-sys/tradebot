@@ -188,7 +188,7 @@
       "claims": [
         {
           "claim_id": "EVIDENCE_STANDARD_IMPLEMENTATION",
-          "statement": "The package detects missing, contradictory, stale, or self-approved evidence, blocks uncovered material PR paths and unclassified changed paths, and validates committed task scope at the two supported local CLI admission points.",
+          "statement": "The package detects missing, contradictory, stale, or self-approved evidence, blocks uncovered new material PR paths, and blocks unclassified changed paths.",
           "claim_kind": "implementation",
           "status": "UNVERIFIED",
           "source_ids": [
