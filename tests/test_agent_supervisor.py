@@ -562,6 +562,7 @@ def test_supervisor_cli_gates_every_mutation_before_writes(tmp_path, capsys):
             if not common_dir.is_absolute():
                 common_dir = (repo / common_dir).resolve()
             assert not (common_dir / "agent-supervisor").exists()
+            assert not (repo / ".runtime/agent_supervisor/evidence").exists()
 
 
 def test_supervisor_cli_status_is_read_only_and_not_admitted(tmp_path, capsys):
@@ -585,6 +586,7 @@ def test_supervisor_cli_status_is_read_only_and_not_admitted(tmp_path, capsys):
     assert result["details"]["admission_decision"]["accepted"] is None
     assert _git(repo, "status", "--porcelain=v1") == before
     assert not claim_root.exists()
+    assert not (repo / ".runtime/agent_supervisor/evidence").exists()
 
 
 def test_supervisor_status_does_not_change_existing_claim_store(tmp_path):
