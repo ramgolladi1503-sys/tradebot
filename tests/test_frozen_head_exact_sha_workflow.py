@@ -14,7 +14,19 @@ def test_base_authority_uses_pull_request_event_base_only():
     assert "branches: [main]" in text
     assert "types: [opened, reopened, synchronize, ready_for_review, edited]" in text
     assert "trusted-evidence-coverage:" in text
-    assert "if: github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main'" in text
+    trusted_job = text.split("  trusted-evidence-coverage:", 1)[1]
+    trusted_condition = next(
+        line.strip() for line in trusted_job.splitlines()
+        if line.strip().startswith("if:")
+    )
+    assert trusted_condition.startswith(
+        "if: ${{ github.event_name == 'pull_request_target' "
+        "&& github.event.pull_request.base.ref == 'main' && !("
+    )
+    assert "github.event.action == 'edited'" in trusted_condition
+    assert "!contains(toJSON(github.event.changes), '\"base\"')" in trusted_condition
+    assert "contains(toJSON(github.event.changes), '\"title\"')" in trusted_condition
+    assert "contains(toJSON(github.event.changes), '\"body\"')" in trusted_condition
     for job in (
         "exact-sha-identity",
         "agent-review-base-authority",

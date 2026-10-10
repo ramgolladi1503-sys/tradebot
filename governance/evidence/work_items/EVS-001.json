@@ -298,11 +298,12 @@
         "source_agent": "gsd",
         "action": "GENERATE_PATCH",
         "title": "Refresh evidence checks when pull request base is edited",
-        "scope": "Include the edited pull-request activity in trusted base-authoritative evidence coverage and advisory diagnostics. Add regression coverage for both workflows and document that workflow_dispatch admission, universal task intake, branch protection, and authenticated human approval remain UNSATISFIED.",
+        "scope": "Include the edited pull-request activity in trusted base-authoritative evidence coverage and advisory diagnostics. Skip heavyweight jobs only when an edit is positively identified as title/body-only; keep exact base/head identity unconditional. Add regression coverage for both workflows and document that workflow_dispatch admission, universal task intake, branch protection, and authenticated human approval remain UNSATISFIED.",
         "requested_paths": [
           ".github/workflows/frozen-head-exact-sha-certification.yml",
           ".github/workflows/evidence-gates.yml",
           "tests/governance/test_evidence_contract.py",
+          "tests/test_frozen_head_exact_sha_workflow.py",
           "docs/agent_reviews/PR970-evidence-verification-standard.md",
           "governance/evidence/work_items/EVS-001.json"
         ],
@@ -310,6 +311,7 @@
           ".github/workflows/frozen-head-exact-sha-certification.yml",
           ".github/workflows/evidence-gates.yml",
           "tests/governance/test_evidence_contract.py",
+          "tests/test_frozen_head_exact_sha_workflow.py",
           "docs/agent_reviews/PR970-evidence-verification-standard.md",
           "governance/evidence/work_items/EVS-001.json"
         ],
@@ -330,11 +332,12 @@
         ],
         "expected_tests": [
           "PYTHONPATH=. pytest -q tests/governance/test_evidence_contract.py -k rerun_when_pr_is_edited",
+          "PYTHONPATH=. pytest -q tests/test_frozen_head_exact_sha_workflow.py -k base_authority_uses_pull_request_event_base_only",
           "Parse both workflow YAML files and verify shell blocks remain syntactically valid.",
           "git diff --check"
         ],
         "acceptance_proof": [
-          "Both pull_request and pull_request_target evidence workflows include the edited activity type, and regression tests enforce this contract.",
+          "Both pull_request and pull_request_target evidence workflows include the edited activity type; only positively identified title/body-only edits skip heavyweight jobs, and exact base/head identity remains unconditional.",
           "Trusted evidence coverage remains base-authoritative and candidate-data-only; no candidate code or checkout filters are executed.",
           "The change does not claim a hosted trusted-base run on the current PR, required-check branch protection, universal platform intake, direct workflow_dispatch admission, or authenticated approval."
         ]
