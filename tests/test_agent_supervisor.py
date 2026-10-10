@@ -88,14 +88,14 @@ def _payload(repo: Path, **supervisor_overrides):
     }
 
 
-def _admitted_payload(repo: Path, *, request_overrides=None, **supervisor_overrides):
+def _admitted_payload(repo: Path, *, request_overrides=None, task_contract_id="SUPERVISOR-TEST-1", **supervisor_overrides):
     payload = _payload(repo, **supervisor_overrides)
     payload.update(request_overrides or {})
     spec = {key: payload[key] for key in (
         "source_agent", "action", "title", "scope", "requested_paths", "allowed_paths",
         "forbidden_paths", "expected_tests", "acceptance_proof",
     )}
-    spec["task_contract_id"] = "SUPERVISOR-TEST-1"
+    spec["task_contract_id"] = task_contract_id
     item = WorkItem(
         work_item_id="SUPERVISOR-TEST-1",
         type=WorkItemType.TASK,
@@ -474,6 +474,7 @@ def test_supervisor_cli_admission_accepts_committed_contract_and_claims(tmp_path
     claim = json.loads(capsys.readouterr().out)
     assert claim_code == 0
     assert claim["accepted"] is True
+    assert claim["details"]["admission_decision"]["accepted"] is True
 
 
 def test_supervisor_cli_blocks_missing_item_and_unauthenticated_approval(tmp_path, capsys):
@@ -511,3 +512,142 @@ def test_supervisor_cli_blocks_missing_item_and_unauthenticated_approval(tmp_pat
     assert code != 0
     assert result["accepted"] is False
     assert "HUMAN_APPROVAL_REQUIRED" in result["blockers"]
+
+
+def test_supervisor_cli_gates_every_mutation_before_writes(tmp_path, capsys):
+    task_contract_id = "EVS-SUPERVISOR-MUTATION-ADMISSION-2026-10"
+    command_cases = (
+        ("preflight", []),
+        ("claim", []),
+        ("verify", []),
+        ("review", ["--review", "review.json"]),
+        ("release", []),
+        ("release", ["--force"]),
+    )
+    for command_index, (command, extra_args) in enumerate(command_cases):
+        for failure_index, failure in enumerate(("missing", "dirty", "stale", "mismatched")):
+            repo = _repo(tmp_path, name=f"mutation-{command_index}-{failure_index}")
+            payload = _admitted_payload(repo, task_contract_id=task_contract_id)
+            item_path = repo / payload["metadata"]["delivery_work_item"]["path"]
+            ref = payload["metadata"]["delivery_work_item"]
+            if failure == "missing":
+                payload["metadata"].pop("delivery_work_item")
+                expected_blocker = "WORK_ITEM_REFERENCE_REQUIRED"
+            elif failure == "dirty":
+                item_path.write_text(item_path.read_text(encoding="utf-8") + " ", encoding="utf-8")
+                expected_blocker = "WORK_ITEM_DIRTY"
+            elif failure == "stale":
+                item_path.write_text(item_path.read_text(encoding="utf-8") + " ", encoding="utf-8")
+                _git(repo, "update-index", "--assume-unchanged", str(item_path.relative_to(repo)))
+                expected_blocker = "WORK_ITEM_STALE"
+            else:
+                ref["sha256"] = "0" * 64
+                expected_blocker = "WORK_ITEM_HASH_MISMATCH"
+            contract_path = tmp_path / f"mutation-{command_index}-{failure_index}.json"
+            contract_path.write_text(json.dumps(payload), encoding="utf-8")
+            before = _git(repo, "status", "--porcelain=v1")
+            review_arg = str(tmp_path / "review.json") if command == "review" else None
+            if review_arg:
+                Path(review_arg).write_text("{}", encoding="utf-8")
+            argv = [command, "--contract", str(contract_path), *extra_args]
+            if command == "review":
+                argv[argv.index("review.json")] = review_arg
+            code = supervisor_cli_main(argv)
+            result = json.loads(capsys.readouterr().out)
+            assert code == 2
+            assert result["accepted"] is False
+            assert expected_blocker in result["blockers"]
+            assert _git(repo, "status", "--porcelain=v1") == before
+            common_dir = Path(_git(repo, "rev-parse", "--git-common-dir"))
+            if not common_dir.is_absolute():
+                common_dir = (repo / common_dir).resolve()
+            assert not (common_dir / "agent-supervisor").exists()
+
+
+def test_supervisor_cli_status_is_read_only_and_not_admitted(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    payload = _payload(repo)
+    contract_path = tmp_path / "status.json"
+    contract_path.write_text(json.dumps(payload), encoding="utf-8")
+    before = _git(repo, "status", "--porcelain=v1")
+    common_dir = Path(_git(repo, "rev-parse", "--git-common-dir"))
+    if not common_dir.is_absolute():
+        common_dir = (repo / common_dir).resolve()
+    claim_root = common_dir / "agent-supervisor"
+    assert not claim_root.exists()
+
+    code = supervisor_cli_main(["status", "--contract", str(contract_path)])
+
+    result = json.loads(capsys.readouterr().out)
+    assert code == 2  # Status reports the absent claim as blocked; it still performs no writes.
+    assert result["state"] == SupervisorState.STATUS.value
+    assert result["details"]["admission_decision"]["state"] == "NOT_CHECKED_READ_ONLY_STATUS"
+    assert result["details"]["admission_decision"]["accepted"] is None
+    assert _git(repo, "status", "--porcelain=v1") == before
+    assert not claim_root.exists()
+
+
+def test_supervisor_status_does_not_change_existing_claim_store(tmp_path):
+    repo = _repo(tmp_path)
+    contract = normalize_supervisor_contract(_payload(repo))
+    common_dir = Path(_git(repo, "rev-parse", "--git-common-dir"))
+    if not common_dir.is_absolute():
+        common_dir = (repo / common_dir).resolve()
+    claim_root = common_dir / "agent-supervisor"
+    claim_root.mkdir(parents=True)
+    claims_path = claim_root / "claims.json"
+    claims_path.write_text('{"schema_version": 1, "claims": {}}', encoding="utf-8")
+    before = {path.name: path.read_bytes() for path in claim_root.iterdir() if path.is_file()}
+
+    get_contract_status(contract)
+
+    after = {path.name: path.read_bytes() for path in claim_root.iterdir() if path.is_file()}
+    assert after == before
+    assert not (claim_root / "claims.lock").exists()
+
+
+def test_supervisor_claim_write_creates_claim_store(tmp_path):
+    repo = _repo(tmp_path)
+    payload = _payload(repo)
+    (repo / "tests/test_feature.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    _git(repo, "add", "tests/test_feature.py")
+    _git(repo, "commit", "-m", "add required test artifact")
+    contract = normalize_supervisor_contract(payload)
+    common_dir = Path(_git(repo, "rev-parse", "--git-common-dir"))
+    if not common_dir.is_absolute():
+        common_dir = (repo / common_dir).resolve()
+    claim_root = common_dir / "agent-supervisor"
+    assert not claim_root.exists()
+
+    result = claim_contract(contract, human_approved=True, approved_by="test-operator", enforce_tradebot_guard=False)
+
+    assert result.accepted is True
+    assert (claim_root / "claims.lock").exists()
+    assert (claim_root / "claims.json").exists()
+
+
+def test_supervisor_cli_admitted_mutations_reach_existing_state_logic(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    payload = _admitted_payload(repo, task_contract_id="EVS-SUPERVISOR-MUTATION-ADMISSION-2026-10")
+    contract_path = tmp_path / "admitted.json"
+    contract_path.write_text(json.dumps(payload), encoding="utf-8")
+    (repo / "tests/test_feature.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    _git(repo, "add", "tests/test_feature.py")
+    _git(repo, "commit", "-m", "add test artifact")
+
+    for command, extra_args in (("verify", []), ("review", ["--review", str(tmp_path / "review.json")]), ("release", ["--force"])):
+        if command == "verify":
+            code = supervisor_cli_main([command, "--contract", str(contract_path)])
+            result = json.loads(capsys.readouterr().out)
+            assert code == 2  # Existing state logic blocks before claim, after successful admission.
+            assert result["details"]["admission_decision"]["accepted"] is True
+            assert "ACTIVE_CLAIM_REQUIRED" in result["blockers"]
+            continue
+        if command == "review":
+            review_path = Path(extra_args[1])
+            review_path.write_text("{}", encoding="utf-8")
+        code = supervisor_cli_main([command, "--contract", str(contract_path), *extra_args])
+        result = json.loads(capsys.readouterr().out)
+        assert code == 2
+        assert result["details"]["admission_decision"]["accepted"] is True
+        assert result["state"] in {SupervisorState.REVIEW_BLOCKED.value, SupervisorState.RELEASE_BLOCKED.value}

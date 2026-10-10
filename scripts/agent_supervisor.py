@@ -62,11 +62,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         payload = load_contract_file(args.contract)
         contract = normalize_supervisor_contract(payload)
-        if args.command in {"preflight", "claim"}:
+        admission = None
+        if args.command != "status":
             admission = admit_agent_work(payload, repository_root=contract.worktree_path)
             if not admission.accepted:
                 print(json.dumps({
-                    "state": "PREFLIGHT_BLOCKED" if args.command == "preflight" else "CLAIM_BLOCKED",
+                    "state": f"{args.command.upper()}_BLOCKED",
                     "accepted": False,
                     "task_id": contract.task_id,
                     "blockers": list(admission.blockers),
@@ -102,7 +103,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = release_contract(contract, force=bool(args.force))
         else:
             result = get_contract_status(contract)
-        print(json.dumps(result.to_dict(), indent=2, sort_keys=True, default=str))
+        output = result.to_dict()
+        if admission is not None:
+            output.setdefault("details", {})["admission_decision"] = admission.to_dict()
+        elif args.command == "status":
+            output.setdefault("details", {})["admission_decision"] = {
+                "state": "NOT_CHECKED_READ_ONLY_STATUS",
+                "accepted": None,
+                "reason": "status_does_not_authorize_or_admit_work",
+            }
+        print(json.dumps(output, indent=2, sort_keys=True, default=str))
         return CLI_OK if result.accepted else CLI_BLOCKED
     except Exception as exc:
         error = {

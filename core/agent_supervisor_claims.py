@@ -54,6 +54,7 @@ def claim_contract(
 
     worktree = Path(contract.worktree_path)
     claims_path, lock_path = _claims_paths(worktree)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
     warnings: list[str] = list(preflight.warnings)
     with lock_path.open("a+", encoding="utf-8") as lock_handle:
         fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
@@ -162,6 +163,7 @@ def _update_claim_state(
     claim, claims_path, lock_path = _read_claim(contract)
     if claim is None:
         raise RuntimeError("claim_not_found")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("a+", encoding="utf-8") as lock_handle:
         fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
         store = _load_claim_store(claims_path)

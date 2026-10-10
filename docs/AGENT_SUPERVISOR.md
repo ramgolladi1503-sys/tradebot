@@ -28,12 +28,20 @@ A task contract names an absolute worktree path, isolated branch, and base ref.
 Preflight fails when the path is not the repository root, the branch differs,
 the worktree is dirty, or the task targets `main`/`master` directly.
 
-Before `preflight` or `claim` can accept work, the payload must reference an
-exact committed canonical delivery item and task contract. The supervisor
+Before any state-mutating command (`preflight`, `claim`, `verify`, `review`, or
+`release`, including `release --force`) proceeds, the payload must reference an
+exact committed canonical delivery item and task contract. Admission is
+rechecked on every invocation; a prior preflight or claim is not a reusable
+authorization token. The supervisor
 checks that the item is tracked at the worktree's `HEAD`, unchanged on disk,
 matches the supplied SHA-256 and ID, passes complete schema validation, and
 authorizes the exact request title, scope, action, and path lists. Missing,
 dirty, stale, malformed, or scope-mismatched work items block admission.
+
+`status` is read-only and deliberately does not run admission. Its output marks
+admission as not checked; status must not be treated as an admission or
+authorization decision. For admitted mutating commands, output includes the
+exact admission decision and binding details.
 
 ### Exclusive ownership
 
