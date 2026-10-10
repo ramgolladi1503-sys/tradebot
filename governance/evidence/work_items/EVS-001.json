@@ -223,6 +223,7 @@
         "scope": "Require exact committed canonical delivery work-item/task-contract admission before every state-mutating local supervisor command (preflight, claim, verify, review, release including --force); retain status as read-only and make no universal intake/authenticated approval claim.",
         "requested_paths": [
           "scripts/agent_supervisor.py",
+          "core/agent_supervisor_git.py",
           "tests/test_agent_supervisor.py",
           "docs/AGENT_WORKFLOW.md",
           "docs/AGENT_SUPERVISOR.md",
@@ -230,6 +231,7 @@
         ],
         "allowed_paths": [
           "scripts/agent_supervisor.py",
+          "core/agent_supervisor_git.py",
           "tests/test_agent_supervisor.py",
           "docs/AGENT_WORKFLOW.md",
           "docs/AGENT_SUPERVISOR.md",
