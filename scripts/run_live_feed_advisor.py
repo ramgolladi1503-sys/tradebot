@@ -11,6 +11,7 @@ Evaluates:
 
 import time
 import json
+import math
 import urllib.request
 from datetime import datetime, time as dtime
 from pathlib import Path
@@ -63,6 +64,68 @@ class SentinelLiveFeedAdvisor:
         self.audit_log_path = Path(f"runtime/audit/sentinel_execution_paths_{today_str}.jsonl")
         self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Generate unique run ID and write immutable startup manifest
+        import os, uuid, subprocess, hashlib
+        self.run_id = f"sentinel-{today_str}-{uuid.uuid4().hex[:8]}"
+        self.pid = os.getpid()
+        self.git_sha = "UNKNOWN"
+        self.dirty_worktree = None
+        provenance_errors = []
+        try:
+            sha_out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, timeout=2).decode().strip()
+            if sha_out:
+                self.git_sha = sha_out
+            diff_out = subprocess.check_output(["git", "status", "--porcelain"], stderr=subprocess.DEVNULL, timeout=2).decode().strip()
+            self.dirty_worktree = bool(diff_out)
+        except Exception as exc:
+            provenance_errors.append(f"git_provenance_error: {type(exc).__name__}: {exc}")
+
+        # Compute runtime config hash from calib
+        calib_bytes = json.dumps(self.calib, sort_keys=True).encode("utf-8")
+        self.config_hash = hashlib.sha256(calib_bytes).hexdigest()
+
+        # Check for input capture parquet sources (chunks and full parquets) and hash them via streaming reads
+        data_artifacts = {}
+        for root_dir in [Path(".runtime/market_data"), Path("runtime/market_data"), Path("/Volumes/TradeBot/live market capture")]:
+            date_dir = root_dir / datetime.now().strftime("%Y-%m-%d")
+            if date_dir.exists():
+                candidate_files = list(date_dir.glob("chunks/*.parquet")) + list(date_dir.glob("*.parquet"))
+                for pq_file in sorted(set(candidate_files)):
+                    try:
+                        hasher = hashlib.sha256()
+                        with open(pq_file, "rb") as pf:
+                            while chunk := pf.read(65536):
+                                hasher.update(chunk)
+                        data_artifacts[str(pq_file)] = hasher.hexdigest()
+                    except Exception as exc:
+                        data_artifacts[str(pq_file)] = f"HASH_ERROR: {type(exc).__name__}: {exc}"
+        if not data_artifacts:
+            data_artifacts["status"] = "SOURCE_PATHS_UNCONFIGURED_OR_ABSENT_AT_STARTUP"
+
+        # Emit startup manifest if not already present
+        self.manifest_path = Path(f"runtime/audit/sentinel_manifest_{self.run_id}.json")
+        try:
+            manifest_payload = {
+                "run_id": self.run_id,
+                "pid": self.pid,
+                "start_time_iso": datetime.now().isoformat(),
+                "git_sha": self.git_sha,
+                "dirty_worktree": self.dirty_worktree,
+                "provenance_errors": provenance_errors,
+                "config_hash": self.config_hash,
+                "ticker": self.ticker,
+                "target_expiry": self.target_expiry,
+                "execution_mode": "CAPTURE_RECEIVE_TIME_REPLAY_ONLY",
+                "receive_time_verified": True,
+                "exchange_event_time_verified": False,
+                "data_artifacts": data_artifacts,
+                "data_artifacts_scope": "best_effort_files_observed_at_startup_not_a_completeness_claim",
+            }
+            with open(self.manifest_path, "w", encoding="utf-8") as mf:
+                json.dump(manifest_payload, mf, indent=2)
+        except Exception as exc:
+            raise RuntimeError(f"Unable to write startup provenance manifest {self.manifest_path}: {exc}") from exc
+
         # Expiry Calendar State Check:
         # TUESDAY = NIFTY (0-DTE), THURSDAY = SENSEX (0-DTE)
         now_dt = datetime.now()
@@ -70,7 +133,7 @@ class SentinelLiveFeedAdvisor:
         self.is_expiry_day = (self.dte == 0)
         print(f"📅 [EXPIRY CALENDAR AUDIT] Asset: {self.ticker} | DTE: {self.dte} | Is Expiry Day (0-DTE): {self.is_expiry_day}")
         print(f"   (Schedule Rules: Tuesday = NIFTY Expiry, Thursday = SENSEX Expiry)")
-        print(f"📝 [AUDIT LOG SINK] Streaming to: {self.audit_log_path}")
+        print(f"📝 [AUDIT LOG SINK] Streaming to: {self.audit_log_path} (Run ID: {self.run_id})")
 
     def fetch_live_1m_candles(self) -> list:
         url = "https://api.upstox.com/v2/historical-candle/intraday/NSE_INDEX%7CNifty%2050/1minute"
@@ -84,13 +147,15 @@ class SentinelLiveFeedAdvisor:
         self,
         strike: int,
         opt_type: str,
-        expiry: Optional[str] = None
+        expiry: Optional[str] = None,
+        decision_cutoff_epoch: Optional[float] = None
     ) -> Optional[dict]:
         """Reads the exact real-time option LTP, Bid, Ask, Volume, and OI from the live chunk stream.
         
         Requires an explicit expiry date string (e.g. '13 OCT 26' or '2026-10-13').
         Fails closed (returns None) if expiry is missing, no match is found,
         or multiple ambiguous contracts match the criteria.
+        Filters out ticks whose local capture timestamp exceeds decision_cutoff_epoch.
         """
         import glob
         target_expiry = (expiry or getattr(self, "target_expiry", None))
@@ -115,7 +180,8 @@ class SentinelLiveFeedAdvisor:
                 df=df,
                 strike=strike,
                 opt_type=opt_type,
-                expiry=target_expiry
+                expiry=target_expiry,
+                decision_cutoff_epoch=decision_cutoff_epoch
             )
         except Exception:
             return None
@@ -125,40 +191,59 @@ class SentinelLiveFeedAdvisor:
         df: pd.DataFrame,
         strike: int,
         opt_type: str,
-        expiry: Optional[str] = None
+        expiry: Optional[str] = None,
+        decision_cutoff_epoch: Optional[float] = None
     ) -> Optional[dict]:
         """Pure, deterministic extraction of option quote from a tick DataFrame.
         
         Strictly requires an explicit expiry string (via argument or self.target_expiry).
         Fails closed on missing expiry, zero matches, or multiple ambiguous contract symbols.
+        Filters out ticks whose local capture timestamp exceeds decision_cutoff_epoch.
         """
-        target_expiry = (expiry or getattr(self, "target_expiry", None))
+        target_expiry = expiry or getattr(self, "target_expiry", None)
+        ticker = getattr(self, "ticker", "NIFTY").upper()
         if not target_expiry or not str(target_expiry).strip():
             return None
 
-        exp_str = str(target_expiry).strip().upper()
-        ticker = getattr(self, "ticker", "NIFTY").upper()
-        
-        # Check if canonical symbol format e.g. "NIFTY 22400 CE 13 OCT 26"
-        exact_symbol = f"{ticker} {strike} {opt_type} {exp_str}"
-        matches = df[df["symbol"] == exact_symbol]
-        
-        if matches.empty:
-            # If not exact symbol, check if symbol starts with prefix AND contains the exact expiry token
-            prefix = f"{ticker} {strike} {opt_type}"
-            prefix_matches = df[
-                df["symbol"].str.startswith(prefix, na=False) &
-                df["symbol"].str.contains(exp_str, na=False, regex=False)
-            ]
-            unique_symbols = prefix_matches["symbol"].unique()
-            if len(unique_symbols) == 1:
-                matches = prefix_matches
-            else:
-                # Zero or multiple ambiguous symbols: fail closed
+        try:
+            if "ts" not in df.columns:
                 return None
+            capture_ts = pd.to_numeric(df["ts"], errors="coerce")
+            if capture_ts.empty or capture_ts.isna().any() or not capture_ts.map(math.isfinite).all():
+                return None
+            df = df.copy()
+            df["ts"] = capture_ts
+            if decision_cutoff_epoch is not None:
+                cutoff = float(decision_cutoff_epoch)
+                if not math.isfinite(cutoff):
+                    return None
+                df = df.loc[df["ts"] <= cutoff].copy()
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if decision_cutoff_epoch is not None:
+            if df.empty:
+                return None
+
+        if "symbol" not in df.columns or "token" not in df.columns:
+            return None
+        prefix = f"{ticker} {strike} {opt_type}"
+        exp_str = str(target_expiry).strip().upper()
+        # Require canonical exact symbol match: e.g. "NIFTY 22400 CE 13 OCT 26"
+        exact_symbol = f"{prefix} {exp_str}"
+        matches = df[df["symbol"] == exact_symbol]
+
+        if matches.empty:
+            return None
 
         # Confirm unique contract symbol identity
         if matches["symbol"].nunique() != 1:
+            return None
+
+        # Confirm token presence and unique token identity across the matched symbol
+        tokens = matches["token"].dropna().astype(str).str.strip().unique()
+        tokens = [t for t in tokens if t]
+        if len(tokens) != 1:
+            # Missing token or multiple conflicting/duplicate tokens for same symbol: fail closed
             return None
 
         # Sort by timestamp and extract the latest quote row
@@ -169,24 +254,245 @@ class SentinelLiveFeedAdvisor:
         if not tok:
             return None
 
+        try:
+            ltp = float(last_row["ltp"])
+            bid = float(last_row["bid"])
+            ask = float(last_row["ask"])
+            volume = float(last_row["vol"])
+            open_interest = float(last_row["oi"])
+            capture_timestamp = float(last_row["ts"])
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return None
+
+        # Basic structural sanity check
+        if not all(math.isfinite(value) for value in (ltp, bid, ask, volume, open_interest, capture_timestamp)):
+            return None
+        if ltp <= 0 or bid <= 0 or ask <= 0:
+            return None
+
+        # Inverted / crossed book is structurally invalid
+        if bid > ask:
+            return None
+
         res = {
             "symbol": str(last_row["symbol"]),
             "token": tok,
-            "ltp": float(last_row["ltp"]),
-            "bid": float(last_row["bid"]),
-            "ask": float(last_row["ask"]),
-            "vol": float(last_row["vol"]),
-            "oi": float(last_row["oi"]),
+            "ltp": ltp,
+            "bid": bid,
+            "ask": ask,
+            "vol": volume,
+            "oi": open_interest,
+            "timestamp": capture_timestamp,
         }
-        if "ts" in last_row:
-            res["timestamp"] = float(last_row["ts"])
         return res
 
+    def evaluate_option_candidate(
+        self,
+        entry_dir: Optional[str],
+        chosen_strike: Optional[int],
+        contract_choice: Optional[str],
+        signal_display: str,
+        bar_close_cutoff_epoch: float,
+        spot_close: float,
+        bar_time_str: str,
+        sl_pts: float,
+        target_pts: float,
+        total_drag_pts: float,
+        current_gear: str,
+        btime: dtime
+    ) -> dict:
+        """Evaluates descriptive option candidate observation and preserves separate paper APM lifecycle.
+
+        1. If entry_dir is present:
+           - Resolves option quote at or before completed-bar boundary.
+           - If quote is uniquely resolved and uncrossed:
+             * Emits descriptive option_candidate observation (CAPTURE_RECEIVE_TIME_REPLAY_ONLY).
+             * If APM is in STANDBY/LIQUIDATED, executes existing paper position entry via arm_and_enter.
+           - If quote is missing, ambiguous, or crossed:
+             * Retains underlying directional signal in advisory.
+             * Emits candidate_status=NOT_EVALUABLE with explicit reason.
+             * Does NOT arm APM; APM state remains unchanged.
+        """
+        option_candidate = None
+        candidate_status = "NONE"
+        candidate_reason = None
+        risk_flag = "NORMAL"
+
+        if not entry_dir:
+            return {
+                "signal_display": signal_display,
+                "risk_flag": risk_flag,
+                "candidate_status": candidate_status,
+                "candidate_reason": candidate_reason,
+                "option_candidate": option_candidate,
+            }
+
+        # Resolve captured option quote at the completed-bar boundary.
+        opt_q = self.resolve_real_option_quote(
+            chosen_strike,
+            entry_dir,
+            decision_cutoff_epoch=bar_close_cutoff_epoch
+        )
+
+        if opt_q:
+            # Descriptive capture/receive-time observation only; exchange timestamp is unverified.
+            candidate_status = "CAPTURE_RECEIVE_TIME_REPLAY_ONLY"
+            option_candidate = {
+                "contract": str(opt_q.get("symbol")),
+                "token": str(opt_q.get("token")),
+                "direction": entry_dir,
+                "strike": chosen_strike,
+                "source_capture_ts": opt_q.get("timestamp"),
+                "capture_time_basis": "WEBSOCKET_ON_MESSAGE_CALLBACK_TIME",
+                "exchange_event_time_verified": False,
+                "observed_ltp": opt_q.get("ltp"),
+                "observed_bid": opt_q.get("bid"),
+                "observed_ask": opt_q.get("ask"),
+                "status": "CAPTURE_RECEIVE_TIME_REPLAY_ONLY",
+                "receive_time_verified": True,
+            }
+            signal_display = f"{signal_display} | [CAPTURE_RECEIVE_TIME_REPLAY_OBSERVATION] {opt_q.get('symbol')} LTP: ₹{opt_q.get('ltp'):.2f}"
+
+            # Preserve established separate paper APM state machine entry
+            if self.apm.state in {STATE_STANDBY, STATE_LIQUIDATED}:
+                pos_id = f"TRADE_{btime.strftime('%H%M')}_{entry_dir}"
+                is_runner = (current_gear == "GEAR_2_TREND")
+                opt_sl_pct = 0.20 if (current_gear == "GEAR_2_TREND") else None
+                self.apm.arm_and_enter(
+                    position_id=pos_id,
+                    direction=entry_dir,
+                    contract=contract_choice,
+                    entry_price=spot_close,
+                    entry_time_str=bar_time_str,
+                    sl_pts=sl_pts,
+                    tp_pts=target_pts,
+                    friction_drag_pts=total_drag_pts,
+                    opt_quote=opt_q,
+                    is_runner_mode=is_runner,
+                    session_gear=current_gear,
+                    opt_stop_loss_pct=opt_sl_pct
+                )
+                risk_flag = "EXECUTED_IN_FLIGHT"
+                opt_quote_str = f" | Option LTP: ₹{opt_q['ltp']:.2f} (Bid: ₹{opt_q['bid']:.2f} Ask: ₹{opt_q['ask']:.2f})"
+                runner_tag = f" [{current_gear} | RUNNER 50/50 | OPT-SL -20%]" if is_runner else f" [{current_gear} | SCALP 15M]"
+                print(f"🚀 [NEW POSITION OPENED] {pos_id} | {contract_choice} @ Spot {spot_close:.2f} | SL: {spot_close - sl_pts if entry_dir == 'CE' else spot_close + sl_pts:.1f} | TP: {spot_close + target_pts if entry_dir == 'CE' else spot_close - target_pts:.1f}{runner_tag}{opt_quote_str}")
+            else:
+                risk_flag = "OBSERVED_CAPTURE_RECEIVE_TIME_REPLAY"
+        else:
+            # Contract identity ambiguous or pre-boundary quote absent: keep directional signal, expose NOT_EVALUABLE
+            candidate_status = "NOT_EVALUABLE"
+            candidate_reason = "Unresolved contract identity or missing pre-boundary captured quote"
+            signal_display = f"{signal_display} -> OPTION_QUOTE_NOT_EVALUABLE ({candidate_reason})"
+            risk_flag = "VETO_OPTION_QUOTE_NOT_EVALUABLE"
+
+        return {
+            "signal_display": signal_display,
+            "risk_flag": risk_flag,
+            "candidate_status": candidate_status,
+            "candidate_reason": candidate_reason,
+            "option_candidate": option_candidate,
+        }
+
+    def evaluate_entry_gates(
+        self,
+        entry_dir: Optional[str],
+        signal_display: str,
+        in_lunch_dead_zone: bool,
+        is_counter_trend_fade: bool,
+        can_enter_energy: bool,
+        e_atr_rem: float,
+        req_energy: float,
+        insufficient_displacement: bool,
+        atr_1m: float,
+        atr_extension_exhausted: bool,
+        session_range: float,
+        spread_ratio: float,
+        chosen_strike: Optional[int],
+        contract_choice: Optional[str],
+        bar_close_cutoff_epoch: float,
+        spot_close: float,
+        bar_time_str: str,
+        sl_pts: float,
+        target_pts: float,
+        total_drag_pts: float,
+        current_gear: str,
+        btime: dtime
+    ) -> dict:
+        """Evaluates ordered risk gates and delegates to evaluate_option_candidate only if unvetoed.
+
+        Ordered veto precedence:
+        1. Lunch dead zone freeze
+        2. Trend purity / counter-trend fade
+        3. Energy depletion
+        4. Insufficient displacement re-entry
+        5. Macro ATR extension exhaustion
+        6. Spread expansion
+        7. If clear, evaluate option candidate and preserve paper APM lifecycle
+        """
+        risk_flag = "NORMAL"
+        option_candidate = None
+        candidate_status = "NONE"
+        candidate_reason = None
+
+        if in_lunch_dead_zone and entry_dir:
+            signal_display = f"☕ [LUNCH FREEZE VETO] {signal_display} -> SUPPRESSED (Gear 1 Range Dead-Zone 11:00-13:30 PM)"
+            risk_flag = "VETO_LUNCH_DEAD_ZONE"
+        elif is_counter_trend_fade and entry_dir:
+            signal_display = f"🚫 [TREND PURITY VETO] {signal_display} -> SUPPRESSED (Forbid counter-trend fades on Gear 2 Trend day)"
+            risk_flag = "VETO_COUNTER_TREND_FADE"
+        elif not can_enter_energy and entry_dir:
+            signal_display = f"🚫 [ENERGY GATE VETO] {signal_display} -> SUPPRESSED (Remaining ATR {e_atr_rem:.1f} < Required {req_energy:.1f})"
+            risk_flag = "VETO_ENERGY_DEPLETED"
+        elif insufficient_displacement and entry_dir:
+            signal_display = f"🛑 [DISPLACEMENT VETO] {signal_display} -> SUPPRESSED (Re-entry requires >= {max(8.0, 1.0 * atr_1m):.1f}pts progress from prior exit {self.last_exit_price:.1f})"
+            risk_flag = "VETO_INSUFFICIENT_DISPLACEMENT"
+        elif atr_extension_exhausted and entry_dir and ("Breakout" in signal_display or "Breakdown" in signal_display):
+            signal_display = f"🛑 [ATR EXTENSION VETO] {signal_display} -> SUPPRESSED (Session Range {session_range:.1f}pts > 300.0pts Exhaustion Cap)"
+            risk_flag = "VETO_ATR_EXTENSION_EXHAUSTED"
+        elif spread_ratio > self.spread_threshold and entry_dir:
+            signal_display = f"🚨 [SPREAD VETO] {signal_display} -> SUPPRESSED (>4.0% spread)"
+            risk_flag = "VETO_SPREAD_EXPANDED"
+        elif entry_dir:
+            eval_res = self.evaluate_option_candidate(
+                entry_dir=entry_dir,
+                chosen_strike=chosen_strike,
+                contract_choice=contract_choice,
+                signal_display=signal_display,
+                bar_close_cutoff_epoch=bar_close_cutoff_epoch,
+                spot_close=spot_close,
+                bar_time_str=bar_time_str,
+                sl_pts=sl_pts,
+                target_pts=target_pts,
+                total_drag_pts=total_drag_pts,
+                current_gear=current_gear,
+                btime=btime
+            )
+            signal_display = eval_res["signal_display"]
+            risk_flag = eval_res["risk_flag"]
+            candidate_status = eval_res["candidate_status"]
+            candidate_reason = eval_res["candidate_reason"]
+            option_candidate = eval_res["option_candidate"]
+
+        return {
+            "signal_display": signal_display,
+            "risk_flag": risk_flag,
+            "candidate_status": candidate_status,
+            "candidate_reason": candidate_reason,
+            "option_candidate": option_candidate,
+        }
+
     def emit_and_append_audit_log(self, payload: dict):
-        """Asynchronous Append-Only JSONL Logging Sink. Dumps multi-variable metrics with zero latency."""
+        """Append one advisory audit row with explicit non-execution safety claims."""
+        audit_row = dict(payload)
+        audit_row.update({
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+        })
         try:
             with open(self.audit_log_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(payload) + "\n")
+                f.write(json.dumps(audit_row) + "\n")
         except IOError as e:
             print(f"🚨 [AUDIT LOG ERROR] Failed to write row: {e}")
 
@@ -264,6 +570,7 @@ class SentinelLiveFeedAdvisor:
 
                 self.last_evaluated_bar = bar_time_str
                 bar_dt = datetime.fromisoformat(bar_time_str)
+                bar_close_cutoff_epoch = bar_dt.timestamp() + 60.0
                 btime = bar_dt.time()
                 o, h, l, c = float(closed_bar[1]), float(closed_bar[2]), float(closed_bar[3]), float(closed_bar[4])
 
@@ -437,59 +744,46 @@ class SentinelLiveFeedAdvisor:
                     elif c > self.or_high and entry_dir == "PE":
                         is_counter_trend_fade = True
 
-                # Gate Vetoes
-                risk_flag = "NORMAL"
-                if in_lunch_dead_zone and entry_dir:
-                    signal_display = f"☕ [LUNCH FREEZE VETO] {signal_display} -> SUPPRESSED (Gear 1 Range Dead-Zone 11:00-13:30 PM)"
-                    risk_flag = "VETO_LUNCH_DEAD_ZONE"
-                elif is_counter_trend_fade and entry_dir:
-                    signal_display = f"🚫 [TREND PURITY VETO] {signal_display} -> SUPPRESSED (Forbid counter-trend fades on Gear 2 Trend day)"
-                    risk_flag = "VETO_COUNTER_TREND_FADE"
-                elif not can_enter_energy and entry_dir:
-                    signal_display = f"🚫 [ENERGY GATE VETO] {signal_display} -> SUPPRESSED (Remaining ATR {e_atr_rem:.1f} < Required {req_energy:.1f})"
-                    risk_flag = "VETO_ENERGY_DEPLETED"
-                elif insufficient_displacement and entry_dir:
-                    signal_display = f"🛑 [DISPLACEMENT VETO] {signal_display} -> SUPPRESSED (Re-entry requires >= {max(8.0, 1.0 * atr_1m):.1f}pts progress from prior exit {self.last_exit_price:.1f})"
-                    risk_flag = "VETO_INSUFFICIENT_DISPLACEMENT"
-                elif atr_extension_exhausted and entry_dir and ("Breakout" in signal_display or "Breakdown" in signal_display):
-                    signal_display = f"🛑 [ATR EXTENSION VETO] {signal_display} -> SUPPRESSED (Session Range {session_range:.1f}pts > 300.0pts Exhaustion Cap)"
-                    risk_flag = "VETO_ATR_EXTENSION_EXHAUSTED"
-                elif spread_ratio > self.spread_threshold and entry_dir:
-                    signal_display = f"🚨 [SPREAD VETO] {signal_display} -> SUPPRESSED (>4.0% spread)"
-                    risk_flag = "VETO_SPREAD_EXPANDED"
-                elif entry_dir and self.apm.state in {STATE_STANDBY, STATE_LIQUIDATED}:
-                    # Read real option quote at entry using explicit target expiry
-                    opt_q = self.resolve_real_option_quote(chosen_strike, entry_dir)
-                    if not opt_q:
-                        signal_display = f"🛑 [QUOTE VETO] {signal_display} -> SUPPRESSED (Unresolved or ambiguous exact option quote)"
-                        risk_flag = "VETO_UNRESOLVED_OPTION_QUOTE"
-                    else:
-                        pos_id = f"TRADE_{btime.strftime('%H%M')}_{entry_dir}"
-                        # In Gear 2 Trend: activate 50% runner mode + -20% Option Native Stop
-                        is_runner = (current_gear == "GEAR_2_TREND")
-                        opt_sl_pct = 0.20 if (current_gear == "GEAR_2_TREND") else None
-                        self.apm.arm_and_enter(
-                            position_id=pos_id,
-                            direction=entry_dir,
-                            contract=contract_choice,
-                            entry_price=c,
-                            entry_time_str=bar_time_str,
-                            sl_pts=sl_pts,
-                            tp_pts=target_pts,
-                            friction_drag_pts=fric.total_drag_pts,
-                            opt_quote=opt_q,
-                            is_runner_mode=is_runner,
-                            session_gear=current_gear,
-                            opt_stop_loss_pct=opt_sl_pct
-                        )
-                        risk_flag = "EXECUTED_IN_FLIGHT"
-                        opt_quote_str = f" | Option LTP: ₹{opt_q['ltp']:.2f} (Bid: ₹{opt_q['bid']:.2f} Ask: ₹{opt_q['ask']:.2f})"
-                        runner_tag = f" [{current_gear} | RUNNER 50/50 | OPT-SL -20%]" if is_runner else f" [{current_gear} | SCALP 15M]"
-                        print(f"🚀 [NEW POSITION OPENED] {pos_id} | {contract_choice} @ Spot {c:.2f} | SL: {c - sl_pts if entry_dir == 'CE' else c + sl_pts:.1f} | TP: {c + target_pts if entry_dir == 'CE' else c - target_pts:.1f}{runner_tag}{opt_quote_str}")
+                # Evaluate ordered gate vetoes, candidate observation, and paper APM entry via production helper
+                gate_res = self.evaluate_entry_gates(
+                    entry_dir=entry_dir,
+                    signal_display=signal_display,
+                    in_lunch_dead_zone=in_lunch_dead_zone,
+                    is_counter_trend_fade=is_counter_trend_fade,
+                    can_enter_energy=can_enter_energy,
+                    e_atr_rem=e_atr_rem,
+                    req_energy=req_energy,
+                    insufficient_displacement=insufficient_displacement,
+                    atr_1m=atr_1m,
+                    atr_extension_exhausted=atr_extension_exhausted,
+                    session_range=session_range,
+                    spread_ratio=spread_ratio,
+                    chosen_strike=chosen_strike,
+                    contract_choice=contract_choice,
+                    bar_close_cutoff_epoch=bar_close_cutoff_epoch,
+                    spot_close=c,
+                    bar_time_str=bar_time_str,
+                    sl_pts=sl_pts,
+                    target_pts=target_pts,
+                    total_drag_pts=fric.total_drag_pts,
+                    current_gear=current_gear,
+                    btime=btime
+                )
+                signal_display = gate_res["signal_display"]
+                risk_flag = gate_res["risk_flag"]
+                candidate_status = gate_res["candidate_status"]
+                candidate_reason = gate_res["candidate_reason"]
+                option_candidate = gate_res["option_candidate"]
 
-                # Emit Append-Only JSONL Audit Row with zero latency
-                self.emit_and_append_audit_log({
+                # Emit Append-Only JSONL Audit Row with provenance and explicit replay labeling
+                audit_row = {
                     "timestamp": bar_time_str,
+                    "run_id": getattr(self, "run_id", "UNKNOWN"),
+                    "pid": getattr(self, "pid", None),
+                    "git_sha": getattr(self, "git_sha", "UNKNOWN"),
+                    "execution_mode": "CAPTURE_RECEIVE_TIME_REPLAY_ONLY",
+                    "receive_time_verified": True,
+                    "exchange_event_time_verified": False,
                     "spot_nifty": c,
                     "high": h,
                     "low": l,
@@ -500,8 +794,14 @@ class SentinelLiveFeedAdvisor:
                     "spread_ratio": round(spread_ratio, 4),
                     "advisory": signal_display,
                     "risk_flag": risk_flag,
-                    "apm_state": self.apm.state
-                })
+                    "apm_state": self.apm.state,
+                    "candidate_status": candidate_status,
+                }
+                if candidate_reason:
+                    audit_row["candidate_reason"] = candidate_reason
+                if option_candidate:
+                    audit_row["option_candidate"] = option_candidate
+                self.emit_and_append_audit_log(audit_row)
 
                 print(f"📊 [{btime.strftime('%H:%M:%S')}] Spot: {c:.2f} (H:{h:.2f} L:{l:.2f}) | ATR: {atr_1m:.1f} | Drag: {fric.total_drag_pts:.2f}pts | EWMA-KER: {self.ewma_ker:.3f}")
                 if "BUY" in signal_display:

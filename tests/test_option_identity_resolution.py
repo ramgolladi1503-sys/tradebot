@@ -1,152 +1,225 @@
-"""Focused behavior tests for option contract identity and expiry-aware resolution.
+"""Offline production-path tests for option identity, capture-time cutoffs, and audit output."""
 
-Tests prove:
-1. Same strike and option type across two expiries do not collide.
-2. Querying with an exact expiry resolves exclusively the intended contract.
-3. Missing expiry fails closed (returns None).
-4. Ambiguous duplicate symbols fail closed (returns None).
-5. Empty or missing matches fail closed (returns None).
-"""
+import glob
+import json
+from datetime import time as dtime
 
 import pandas as pd
 import pytest
 
+from core.active_position_manager import ActivePositionManager, STATE_IN_FLIGHT, STATE_STANDBY
 from scripts.run_live_feed_advisor import SentinelLiveFeedAdvisor
 
 
 @pytest.fixture
-def mock_advisor(monkeypatch):
-    """Instantiates SentinelLiveFeedAdvisor bypassing model manifest verification for unit tests."""
-    monkeypatch.setattr(
-        "core.model_manifest_generator.SentinelManifestLock.verify_manifest_or_fail_closed",
-        lambda self: True,
+def advisor(tmp_path):
+    """Build an advisor without constructor capture hashing or runtime WAL access."""
+    instance = SentinelLiveFeedAdvisor.__new__(SentinelLiveFeedAdvisor)
+    instance.ticker = "NIFTY"
+    instance.target_expiry = "13 OCT 26"
+    instance.apm = ActivePositionManager(wal_path=str(tmp_path / "apm-test-wal.json"))
+    instance.spread_threshold = 0.04
+    instance.last_exit_price = 22400.0
+    instance.audit_log_path = tmp_path / "audit.jsonl"
+    return instance
+
+
+def quote_row(*, ts=1728445800.0, symbol="NIFTY 22400 CE 13 OCT 26", token="NSE_FO|44598", ltp=182.5):
+    return {
+        "ts": ts,
+        "token": token,
+        "symbol": symbol,
+        "ltp": ltp,
+        "bid": ltp - 0.5,
+        "ask": ltp + 0.5,
+        "vol": 1500.0,
+        "oi": 60000.0,
+    }
+
+
+def route_synthetic_capture(monkeypatch, frame):
+    """Route the real file resolver to deterministic in-memory rows, without capture I/O."""
+    monkeypatch.setattr(glob, "glob", lambda pattern: ["synthetic-capture.parquet"])
+    monkeypatch.setattr(pd, "read_parquet", lambda _path: frame.copy())
+
+
+def test_missing_expiry_fails_closed(advisor):
+    advisor.target_expiry = None
+    frame = pd.DataFrame([quote_row()])
+
+    assert advisor.resolve_quote_from_dataframe(frame, 22400, "CE") is None
+    assert advisor.resolve_quote_from_dataframe(frame, 22400, "CE", expiry="   ") is None
+
+
+def test_explicit_expiry_resolves_exact_identity_and_token(advisor):
+    frame = pd.DataFrame([
+        quote_row(),
+        quote_row(symbol="NIFTY 22400 CE 20 OCT 26", token="NSE_FO|44605", ltp=210.5),
+        quote_row(symbol="NIFTY 22400 CE 13 OCT 26 EXTRA", token="NSE_FO|77777", ltp=190),
+    ])
+
+    result = advisor.resolve_quote_from_dataframe(frame, 22400, "CE", expiry="13 OCT 26")
+
+    assert result["symbol"] == "NIFTY 22400 CE 13 OCT 26"
+    assert result["token"] == "NSE_FO|44598"
+    assert result["ltp"] == 182.5
+
+
+def test_cutoff_filters_future_identity_and_token_before_uniqueness(advisor):
+    cutoff = 1728445800.0
+    frame = pd.DataFrame([
+        quote_row(ts=cutoff - 5, token="NSE_FO|44598", ltp=180),
+        quote_row(ts=cutoff + 1, token="NSE_FO|99999", ltp=190),
+        quote_row(ts=cutoff + 2, symbol="NIFTY 22400 CE 20 OCT 26", token="NSE_FO|44605"),
+    ])
+
+    result = advisor.resolve_quote_from_dataframe(
+        frame, 22400, "CE", expiry="13 OCT 26", decision_cutoff_epoch=cutoff
     )
-    # Provide a minimal mock calibration file path if needed
-    monkeypatch.setattr(
-        "builtins.open",
-        lambda f, *args, **kwargs: (
-            open(__file__, "r") if "calibrated_regime_matrix" not in str(f)
-            else type("MockFile", (), {"__enter__": lambda s: s, "__exit__": lambda *a: None, "read": lambda s: "{}"})()
-        ),
+
+    assert result is not None
+    assert result["token"] == "NSE_FO|44598"
+    assert result["timestamp"] == cutoff - 5
+
+
+@pytest.mark.parametrize(
+    "frame,cutoff",
+    [
+        (pd.DataFrame([{k: v for k, v in quote_row().items() if k != "ts"}]), 1728445800.0),
+        (pd.DataFrame([quote_row(ts="not-a-timestamp")]), 1728445800.0),
+        (pd.DataFrame([quote_row(ts=float("inf"))]), 1728445800.0),
+        (pd.DataFrame([quote_row(ts=1728445801.0)]), 1728445800.0),
+        (pd.DataFrame([quote_row()]), float("nan")),
+    ],
+)
+def test_cutoff_requires_valid_finite_capture_timestamps(advisor, frame, cutoff):
+    assert advisor.resolve_quote_from_dataframe(
+        frame, 22400, "CE", expiry="13 OCT 26", decision_cutoff_epoch=cutoff
+    ) is None
+
+
+def test_missing_capture_timestamp_without_cutoff_fails_closed(advisor):
+    frame = pd.DataFrame([{k: v for k, v in quote_row().items() if k != "ts"}])
+
+    assert advisor.resolve_quote_from_dataframe(frame, 22400, "CE", expiry="13 OCT 26") is None
+
+
+@pytest.mark.parametrize("field", ["ltp", "vol", "oi"])
+def test_nonfinite_quote_measurement_fails_closed(advisor, field):
+    row = quote_row()
+    row[field] = float("inf")
+
+    assert advisor.resolve_quote_from_dataframe(
+        pd.DataFrame([row]), 22400, "CE", expiry="13 OCT 26"
+    ) is None
+
+
+def test_conflicting_tokens_for_exact_symbol_fail_closed(advisor):
+    frame = pd.DataFrame([
+        quote_row(ts=1728445795.0, token="NSE_FO|44598"),
+        quote_row(ts=1728445799.0, token="NSE_FO|99999", ltp=183),
+    ])
+
+    assert advisor.resolve_quote_from_dataframe(
+        frame, 22400, "CE", expiry="13 OCT 26", decision_cutoff_epoch=1728445800.0
+    ) is None
+
+
+def test_live_resolver_and_candidate_evaluation_use_same_production_path(advisor, monkeypatch):
+    cutoff = 1728445860.0
+    route_synthetic_capture(monkeypatch, pd.DataFrame([quote_row(ts=cutoff - 5)]))
+
+    result = advisor.evaluate_option_candidate(
+        entry_dir="CE",
+        chosen_strike=22400,
+        contract_choice="NIFTY 22400 CE [ITM]",
+        signal_display="BUY NIFTY 22400 CE [ITM] @ Breakout",
+        bar_close_cutoff_epoch=cutoff,
+        spot_close=22441.20,
+        bar_time_str="2026-10-09T09:46:00+05:30",
+        sl_pts=30.0,
+        target_pts=60.0,
+        total_drag_pts=3.5,
+        current_gear="GEAR_2_TREND",
+        btime=dtime(9, 46),
     )
-    monkeypatch.setattr("json.load", lambda f: {})
-    advisor = SentinelLiveFeedAdvisor(artifacts_dir="artifacts", ticker="NIFTY")
-    return advisor
+
+    assert result["candidate_status"] == "CAPTURE_RECEIVE_TIME_REPLAY_ONLY"
+    assert result["option_candidate"]["contract"] == "NIFTY 22400 CE 13 OCT 26"
+    assert result["option_candidate"]["source_capture_ts"] <= cutoff
+    assert result["option_candidate"]["capture_time_basis"] == "WEBSOCKET_ON_MESSAGE_CALLBACK_TIME"
+    assert result["option_candidate"]["receive_time_verified"] is True
+    assert result["option_candidate"]["exchange_event_time_verified"] is False
+    assert advisor.apm.state == STATE_IN_FLIGHT
+    assert advisor.apm.payload.position_id == "TRADE_0946_CE"
 
 
-def test_missing_expiry_fails_closed(mock_advisor):
-    """Proves that querying without an explicit expiry returns None."""
-    df = pd.DataFrame([
-        {
-            "ts": 1728445800.0,
-            "token": "NSE_FO|44598",
-            "symbol": "NIFTY 22300 CE 13 OCT 26",
-            "ltp": 180.75,
-            "bid": 180.95,
-            "ask": 181.50,
-            "vol": 1000.0,
-            "oi": 50000.0,
-        }
-    ])
-    
-    # Neither instance target_expiry nor argument expiry provided
-    mock_advisor.target_expiry = None
-    res = mock_advisor.resolve_quote_from_dataframe(df, strike=22300, opt_type="CE", expiry=None)
-    assert res is None, "Missing expiry must fail closed"
-    
-    res_empty = mock_advisor.resolve_quote_from_dataframe(df, strike=22300, opt_type="CE", expiry="   ")
-    assert res_empty is None, "Whitespace expiry must fail closed"
+def test_unresolved_candidate_is_not_evaluable_and_does_not_arm(advisor, monkeypatch):
+    route_synthetic_capture(monkeypatch, pd.DataFrame([quote_row(ts=1728445861.0)]))
+
+    result = advisor.evaluate_option_candidate(
+        entry_dir="CE",
+        chosen_strike=22400,
+        contract_choice="NIFTY 22400 CE [ITM]",
+        signal_display="BUY NIFTY 22400 CE [ITM] @ Breakout",
+        bar_close_cutoff_epoch=1728445860.0,
+        spot_close=22441.20,
+        bar_time_str="2026-10-09T09:46:00+05:30",
+        sl_pts=30.0,
+        target_pts=60.0,
+        total_drag_pts=3.5,
+        current_gear="GEAR_2_TREND",
+        btime=dtime(9, 46),
+    )
+
+    assert result["candidate_status"] == "NOT_EVALUABLE"
+    assert "OPTION_QUOTE_NOT_EVALUABLE" in result["signal_display"]
+    assert result["option_candidate"] is None
+    assert advisor.apm.state == STATE_STANDBY
+    assert advisor.apm.payload is None
 
 
-def test_cross_expiry_collision_prevention(mock_advisor):
-    """Proves that identical strike/type across two distinct expiries cannot collide."""
-    df = pd.DataFrame([
-        {
-            "ts": 1728445800.0,
-            "token": "NSE_FO|44598",
-            "symbol": "NIFTY 22300 CE 13 OCT 26",
-            "ltp": 180.75,
-            "bid": 180.95,
-            "ask": 181.50,
-            "vol": 1000.0,
-            "oi": 50000.0,
-        },
-        {
-            "ts": 1728445800.0,
-            "token": "NSE_FO|44605",
-            "symbol": "NIFTY 22300 CE 20 OCT 26",
-            "ltp": 210.50,
-            "bid": 210.00,
-            "ask": 211.00,
-            "vol": 500.0,
-            "oi": 20000.0,
-        },
-    ])
+def test_ordered_atr_gate_prevents_resolver_and_apm_entry(advisor, monkeypatch):
+    def unexpected_resolution(*_args, **_kwargs):
+        pytest.fail("vetoed candidate must not invoke option resolver")
 
-    # Querying 13 OCT 26 must resolve Token 44598 exclusively
-    res_oct13 = mock_advisor.resolve_quote_from_dataframe(df, strike=22300, opt_type="CE", expiry="13 OCT 26")
-    assert res_oct13 is not None
-    assert res_oct13["token"] == "NSE_FO|44598"
-    assert res_oct13["symbol"] == "NIFTY 22300 CE 13 OCT 26"
-    assert res_oct13["ltp"] == 180.75
+    monkeypatch.setattr(advisor, "resolve_real_option_quote", unexpected_resolution)
+    result = advisor.evaluate_entry_gates(
+        entry_dir="CE",
+        signal_display="BUY NIFTY 22400 CE @ Breakout",
+        in_lunch_dead_zone=False,
+        is_counter_trend_fade=False,
+        can_enter_energy=True,
+        e_atr_rem=100.0,
+        req_energy=50.0,
+        insufficient_displacement=False,
+        atr_1m=15.0,
+        atr_extension_exhausted=True,
+        session_range=350.0,
+        spread_ratio=0.01,
+        chosen_strike=22400,
+        contract_choice="NIFTY 22400 CE [ITM]",
+        bar_close_cutoff_epoch=1728445860.0,
+        spot_close=22441.2,
+        bar_time_str="2026-10-09T09:46:00+05:30",
+        sl_pts=30.0,
+        target_pts=60.0,
+        total_drag_pts=3.5,
+        current_gear="GEAR_2_TREND",
+        btime=dtime(9, 46),
+    )
 
-    # Querying 20 OCT 26 must resolve Token 44605 exclusively
-    res_oct20 = mock_advisor.resolve_quote_from_dataframe(df, strike=22300, opt_type="CE", expiry="20 OCT 26")
-    assert res_oct20 is not None
-    assert res_oct20["token"] == "NSE_FO|44605"
-    assert res_oct20["symbol"] == "NIFTY 22300 CE 20 OCT 26"
-    assert res_oct20["ltp"] == 210.50
-
-    # Querying non-existent expiry 27 OCT 26 must return None
-    res_oct27 = mock_advisor.resolve_quote_from_dataframe(df, strike=22300, opt_type="CE", expiry="27 OCT 26")
-    assert res_oct27 is None
+    assert result["risk_flag"] == "VETO_ATR_EXTENSION_EXHAUSTED"
+    assert result["candidate_status"] == "NONE"
+    assert advisor.apm.state == STATE_STANDBY
 
 
-def test_ambiguous_multiple_matches_fail_closed(mock_advisor):
-    """Proves that multiple ambiguous contracts matching the criteria fail closed."""
-    df = pd.DataFrame([
-        {
-            "ts": 1728445800.0,
-            "token": "NSE_FO|11111",
-            "symbol": "NIFTY 22300 CE 13 OCT 26 W1",
-            "ltp": 180.0,
-            "bid": 179.0,
-            "ask": 181.0,
-            "vol": 100.0,
-            "oi": 1000.0,
-        },
-        {
-            "ts": 1728445800.0,
-            "token": "NSE_FO|22222",
-            "symbol": "NIFTY 22300 CE 13 OCT 26 W2",
-            "ltp": 182.0,
-            "bid": 181.0,
-            "ask": 183.0,
-            "vol": 200.0,
-            "oi": 2000.0,
-        },
-    ])
+def test_audit_emission_restores_append_and_safety_contract(advisor):
+    advisor.emit_and_append_audit_log({"timestamp": "2026-10-09T09:46:00+05:30", "risk_flag": "NORMAL"})
 
-    res = mock_advisor.resolve_quote_from_dataframe(df, strike=22300, opt_type="CE", expiry="13 OCT 26")
-    assert res is None, "Ambiguous multiple contract symbols matching same expiry must fail closed"
-
-
-def test_instance_target_expiry_propagation(mock_advisor):
-    """Proves that advisor instance target_expiry propagates when argument expiry is omitted."""
-    df = pd.DataFrame([
-        {
-            "ts": 1728445800.0,
-            "token": "NSE_FO|44598",
-            "symbol": "NIFTY 22300 CE 13 OCT 26",
-            "ltp": 180.75,
-            "bid": 180.95,
-            "ask": 181.50,
-            "vol": 1000.0,
-            "oi": 50000.0,
-        }
-    ])
-
-    mock_advisor.target_expiry = "13 OCT 26"
-    res = mock_advisor.resolve_quote_from_dataframe(df, strike=22300, opt_type="CE")
-    assert res is not None
-    assert res["token"] == "NSE_FO|44598"
+    row = json.loads(advisor.audit_log_path.read_text(encoding="utf-8"))
+    assert row["read_only"] is True
+    assert row["is_order_action"] is False
+    assert row["broker_api_called"] is False
+    assert row["allowed_for_live_execution"] is False
+    assert row["risk_flag"] == "NORMAL"
