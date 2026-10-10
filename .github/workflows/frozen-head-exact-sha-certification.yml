@@ -34,7 +34,7 @@ jobs:
           echo "SYNTHETIC_MERGE_REF_USED_AS_AUTHORITY=false"
 
   agent-review-base-authority:
-    if: ${{ !startsWith(github.head_ref, 'ci/') }}
+    if: ${{ !startsWith(github.head_ref, 'ci/') && !(github.event.action == 'edited' && !contains(toJSON(github.event.changes), '"base"') && (contains(toJSON(github.event.changes), '"title"') || contains(toJSON(github.event.changes), '"body"'))) }}
     needs: exact-sha-identity
     runs-on: ubuntu-latest
     steps:
@@ -52,7 +52,7 @@ jobs:
           python scripts/validate_frozen_head_bridge.py --pr-number "$PR_NUMBER" --candidate-sha "$HEAD_SHA" --base-sha "$BASE_SHA"
 
   runtime-authority-base-authority:
-    if: ${{ !startsWith(github.head_ref, 'ci/') }}
+    if: ${{ !startsWith(github.head_ref, 'ci/') && !(github.event.action == 'edited' && !contains(toJSON(github.event.changes), '"base"') && (contains(toJSON(github.event.changes), '"title"') || contains(toJSON(github.event.changes), '"body"'))) }}
     needs: exact-sha-identity
     runs-on: ubuntu-latest
     steps:
@@ -84,7 +84,7 @@ jobs:
           PY
 
   code-excellence-base-authority:
-    if: ${{ !startsWith(github.head_ref, 'ci/') }}
+    if: ${{ !startsWith(github.head_ref, 'ci/') && !(github.event.action == 'edited' && !contains(toJSON(github.event.changes), '"base"') && (contains(toJSON(github.event.changes), '"title"') || contains(toJSON(github.event.changes), '"body"'))) }}
     needs: exact-sha-identity
     runs-on: ubuntu-latest
     steps:
@@ -119,7 +119,8 @@ jobs:
             --out "$REPORT_FILE"
 
   trusted-evidence-coverage:
-    if: github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main'
+    needs: exact-sha-identity
+    if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && !(github.event.action == 'edited' && !contains(toJSON(github.event.changes), '"base"') && (contains(toJSON(github.event.changes), '"title"') || contains(toJSON(github.event.changes), '"body"'))) }}
     name: Trusted base evidence coverage
     runs-on: ubuntu-latest
     permissions:

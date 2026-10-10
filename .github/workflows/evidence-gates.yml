@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   candidate-evidence-diagnostics:
+    if: ${{ !(github.event.action == 'edited' && !contains(toJSON(github.event.changes), '"base"') && (contains(toJSON(github.event.changes), '"title"') || contains(toJSON(github.event.changes), '"body"'))) }}
     name: Candidate-code evidence diagnostics (untrusted)
     runs-on: ubuntu-latest
     steps:

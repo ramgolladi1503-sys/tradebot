@@ -996,6 +996,38 @@ def test_evidence_workflows_rerun_when_pr_is_edited(workflow_relpath: str, event
     assert event_types is not None
     assert {"opened", "reopened", "synchronize", "ready_for_review", "edited"} <= event_types
 
+    # Keep the trigger so base-ref edits still arrive. Suppress expensive work
+    # only when the payload positively identifies a title/body-only edit.
+    job_conditions = {
+        ".github/workflows/frozen-head-exact-sha-certification.yml": {
+            "agent-review-base-authority": "github.event.action == 'edited' && !contains(toJSON(github.event.changes), '\"base\"') && (contains(toJSON(github.event.changes), '\"title\"') || contains(toJSON(github.event.changes), '\"body\"'))",
+            "runtime-authority-base-authority": "github.event.action == 'edited' && !contains(toJSON(github.event.changes), '\"base\"') && (contains(toJSON(github.event.changes), '\"title\"') || contains(toJSON(github.event.changes), '\"body\"'))",
+            "code-excellence-base-authority": "github.event.action == 'edited' && !contains(toJSON(github.event.changes), '\"base\"') && (contains(toJSON(github.event.changes), '\"title\"') || contains(toJSON(github.event.changes), '\"body\"'))",
+            "trusted-evidence-coverage": "github.event.action == 'edited' && !contains(toJSON(github.event.changes), '\"base\"') && (contains(toJSON(github.event.changes), '\"title\"') || contains(toJSON(github.event.changes), '\"body\"'))",
+        },
+        ".github/workflows/evidence-gates.yml": {
+            "candidate-evidence-diagnostics": "github.event.action == 'edited' && !contains(toJSON(github.event.changes), '\"base\"') && (contains(toJSON(github.event.changes), '\"title\"') || contains(toJSON(github.event.changes), '\"body\"'))",
+        },
+    }[workflow_relpath]
+    lines = workflow.splitlines()
+    for job_name, expected_condition in job_conditions.items():
+        job_line = lines.index(f"  {job_name}:")
+        job_end = next(
+            (index for index in range(job_line + 1, len(lines))
+             if lines[index].startswith("  ") and not lines[index].startswith("    ")),
+            len(lines),
+        )
+        condition_line = next(line for line in lines[job_line + 1:job_end]
+                              if line.startswith("    if:"))
+        assert condition_line.startswith("    if: ${{ ")
+        assert f"!({expected_condition})" in condition_line
+
+    if workflow_relpath.endswith("frozen-head-exact-sha-certification.yml"):
+        identity_line = lines[lines.index("  exact-sha-identity:") + 1]
+        assert identity_line == "    runs-on: ubuntu-latest"
+        trusted_line = lines[lines.index("  trusted-evidence-coverage:") + 1]
+        assert trusted_line == "    needs: exact-sha-identity"
+
 
 def test_rag_ci_runs_branch_pushes_only_on_main_and_preserves_pr_contract():
     workflow = (evidence_tool.ROOT / ".github/workflows/rag-ci.yml").read_text(encoding="utf-8")
