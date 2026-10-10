@@ -65,6 +65,8 @@
     "docs/agent_reviews/",
     ".agents/workflows/tradebot-delivery-orchestrator.md",
     "core/agent_admission.py",
+    "core/agent_supervisor_claims.py",
+    "core/agent_supervisor_git.py",
     "tests/test_agent_admission.py",
     "scripts/submit_agent_work.py",
     "tests/test_submit_agent_work.py",
@@ -173,6 +175,8 @@
         "tests/test_agent_admission.py",
         "scripts/submit_agent_work.py",
         "tests/test_submit_agent_work.py",
+        "core/agent_supervisor_claims.py",
+        "core/agent_supervisor_git.py",
         "scripts/agent_supervisor.py",
         "tests/test_agent_supervisor.py",
         "tests/test_frozen_head_exact_sha_workflow.py",
@@ -220,9 +224,10 @@
         "source_agent": "gsd",
         "action": "GENERATE_PATCH",
         "title": "Require canonical admission for supervisor state transitions",
-        "scope": "Require exact committed canonical delivery work-item/task-contract admission before every state-mutating local supervisor command (preflight, claim, verify, review, release including --force); retain status as read-only and make no universal intake/authenticated approval claim.",
+        "scope": "Require exact committed canonical delivery work-item/task-contract admission before each supervisor operation requiring admission (preflight, claim, verify, review, release including --force); retain status as read-only and make no universal intake/authenticated approval claim.",
         "requested_paths": [
           "scripts/agent_supervisor.py",
+          "core/agent_supervisor_claims.py",
           "core/agent_supervisor_git.py",
           "tests/test_agent_supervisor.py",
           "docs/AGENT_WORKFLOW.md",
@@ -231,6 +236,7 @@
         ],
         "allowed_paths": [
           "scripts/agent_supervisor.py",
+          "core/agent_supervisor_claims.py",
           "core/agent_supervisor_git.py",
           "tests/test_agent_supervisor.py",
           "docs/AGENT_WORKFLOW.md",
@@ -255,7 +261,7 @@
         "expected_tests": [
           "PYTHONPATH=. pytest -q tests/test_agent_supervisor.py"
         ],
-        "acceptance_proof": "Each mutation command blocks missing/dirty/stale/mismatched admission before any state mutation; valid canonical admission still permits normal command state logic; --force cannot bypass admission; status remains read-only and is not reported as admitted."
+        "acceptance_proof": "Each admission-requiring command blocks missing/dirty/stale/mismatched admission before lifecycle or evidence changes; valid canonical admission still permits normal command state logic; --force cannot bypass admission; status remains read-only and is not reported as admitted."
       },
       {
         "task_contract_id": "EVS-LOCAL-ADMISSION-PR818-FREEZE-2026-10",
@@ -266,9 +272,11 @@
         "requested_paths": [
           "core/agent_admission.py",
           "tests/test_agent_admission.py",
-          "scripts/submit_agent_work.py",
-          "tests/test_submit_agent_work.py",
-          "scripts/agent_supervisor.py",
+        "scripts/submit_agent_work.py",
+        "tests/test_submit_agent_work.py",
+        "core/agent_supervisor_claims.py",
+        "core/agent_supervisor_git.py",
+        "scripts/agent_supervisor.py",
           "tests/test_agent_supervisor.py",
           "docs/AGENT_WORKFLOW.md",
           "docs/AGENT_SUPERVISOR.md",

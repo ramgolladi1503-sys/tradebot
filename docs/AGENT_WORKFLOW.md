@@ -231,8 +231,8 @@ Grill Me output must be rejected if it:
 ## Local CLI admission requirement
 
 The supported local entrypoints are `scripts/submit_agent_work.py` and the
-state-mutating `preflight`, `claim`, `verify`, `review`, and `release` commands
-in `scripts/agent_supervisor.py`. Before a mutating supervisor command proceeds,
+`preflight`, `claim`, `verify`, `review`, and `release` commands requiring
+admission in `scripts/agent_supervisor.py`. Before a supervisor command proceeds,
 the payload must reference a committed canonical item
 under `governance/evidence/work_items/` and one exact task contract stored in
 that item. Admission checks the tracked `HEAD` blob, the clean work-item path,
@@ -240,7 +240,7 @@ its SHA-256, full delivery schema, task contract ID, source/action/title/scope,
 and exact requested/allowed/forbidden paths. A missing, dirty, stale, malformed,
 or mismatched record blocks.
 
-Supervisor admission is repeated for each mutation command. A successful
+Supervisor admission is repeated for each command requiring admission. A successful
 preflight or claim is not a reusable authorization token. `status` is a
 read-only inspection command: it does not run admission and does not mean the
 task is admitted or authorized. Admission proves repository binding only; it

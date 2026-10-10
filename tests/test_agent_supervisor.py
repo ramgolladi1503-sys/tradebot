@@ -589,21 +589,32 @@ def test_supervisor_cli_status_is_read_only_and_not_admitted(tmp_path, capsys):
     assert not (repo / ".runtime/agent_supervisor/evidence").exists()
 
 
-def test_supervisor_status_does_not_change_existing_claim_store(tmp_path):
+def test_supervisor_status_does_not_change_existing_claim_store(tmp_path, capsys):
     repo = _repo(tmp_path)
-    contract = normalize_supervisor_contract(_payload(repo))
+    payload = _payload(repo)
+    contract = normalize_supervisor_contract(payload)
     common_dir = Path(_git(repo, "rev-parse", "--git-common-dir"))
     if not common_dir.is_absolute():
         common_dir = (repo / common_dir).resolve()
     claim_root = common_dir / "agent-supervisor"
     claim_root.mkdir(parents=True)
     claims_path = claim_root / "claims.json"
-    claims_path.write_text('{"schema_version": 1, "claims": {}}', encoding="utf-8")
+    claims_path.write_text(
+        '{"schema_version": 1, "claims": {"test-task": {"task_id": "test-task", "state": "ACTIVE"}}}',
+        encoding="utf-8",
+    )
     before = {path.name: path.read_bytes() for path in claim_root.iterdir() if path.is_file()}
 
-    get_contract_status(contract)
+    assert get_contract_status(contract).accepted is True
+    contract_path = tmp_path / "status-existing.json"
+    contract_path.write_text(json.dumps(payload), encoding="utf-8")
+    code = supervisor_cli_main(["status", "--contract", str(contract_path)])
+    result = json.loads(capsys.readouterr().out)
 
     after = {path.name: path.read_bytes() for path in claim_root.iterdir() if path.is_file()}
+    assert code == 0
+    assert result["accepted"] is True  # A claim was found; admission remains explicitly unchecked.
+    assert result["details"]["admission_decision"]["accepted"] is None
     assert after == before
     assert not (claim_root / "claims.lock").exists()
 
