@@ -4,9 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
-
-import yaml
-
+import textwrap
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github/workflows"
@@ -45,25 +43,188 @@ def _git(repo: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def _protected_script() -> str:
-    workflow = yaml.safe_load(FREEZE_WORKFLOW.read_text(encoding="utf-8"))
-    target = workflow["jobs"]["pr818-live-flow-freeze-target"]
-    step = next(step for step in target["steps"]
-                if step.get("name") == "Enforce frozen PR818 live-flow production surface")
-    return step["run"]
+def _strip_yaml_comment(line: str) -> str:
+    quote: str | None = None
+    escaped = False
+    for index, char in enumerate(line):
+        if escaped:
+            escaped = False
+        elif char == "\\" and quote:
+            escaped = True
+        elif quote:
+            if char == quote:
+                quote = None
+        elif char in {"'", '"'}:
+            quote = char
+        elif char == "#" and (index == 0 or line[index - 1].isspace()):
+            return line[:index]
+    return line
+
+
+def _yaml_key(text: str) -> str:
+    key = text.strip()
+    if len(key) >= 2 and key[0] == key[-1] and key[0] in {"'", '"'}:
+        key = key[1:-1]
+    if not key or any(not (char.isascii() and (char.isalnum() or char in "_-")) for char in key):
+        raise ValueError(f"unsupported YAML key syntax: {text!r}")
+    return key
+
+
+def _split_flow_entries(text: str) -> list[str]:
+    entries: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    pairs = {"[": "]", "{": "}", "(": ")"}
+    for index, char in enumerate(text):
+        if escaped:
+            escaped = False
+        elif char == "\\" and quote:
+            escaped = True
+        elif quote:
+            if char == quote:
+                quote = None
+        elif char in {"'", '"'}:
+            quote = char
+        elif char in pairs:
+            depth += 1
+        elif char in pairs.values():
+            depth -= 1
+            if depth < 0:
+                raise ValueError("unsupported unbalanced YAML flow syntax")
+        elif char == "," and depth == 0:
+            entries.append(text[start:index].strip())
+            start = index + 1
+    if quote or depth != 0:
+        raise ValueError("unsupported unbalanced YAML flow syntax")
+    tail = text[start:].strip()
+    if tail:
+        entries.append(tail)
+    elif entries and text.strip().endswith(","):
+        # YAML permits a trailing comma in flow collections.
+        pass
+    elif text.strip():
+        entries.append(tail)
+    return entries
+
+
+def _flow_event_key(entry: str) -> str:
+    quote: str | None = None
+    escaped = False
+    depth = 0
+    for index, char in enumerate(entry):
+        if escaped:
+            escaped = False
+        elif char == "\\" and quote:
+            escaped = True
+        elif quote:
+            if char == quote:
+                quote = None
+        elif char in {"'", '"'}:
+            quote = char
+        elif char in "[{(":
+            depth += 1
+        elif char in "]})":
+            depth -= 1
+        elif char == ":" and depth == 0:
+            return _yaml_key(entry[:index])
+    if quote or depth != 0:
+        raise ValueError("unsupported YAML flow entry syntax")
+    return _yaml_key(entry)
+
+
+def _block_event_names(lines: list[str], start: int) -> tuple[set[str], int]:
+    first = start
+    while first < len(lines):
+        content = _strip_yaml_comment(lines[first]).strip()
+        if content:
+            break
+        first += 1
+    if first >= len(lines) or not _strip_yaml_comment(lines[first]).strip():
+        raise ValueError("empty or unsupported top-level on event block")
+    first_line = _strip_yaml_comment(lines[first])
+    child_indent = len(first_line) - len(first_line.lstrip(" "))
+    if "\t" in first_line[:child_indent] or child_indent == 0:
+        raise ValueError("unsupported indentation in top-level on block")
+    sequence = first_line.lstrip().startswith("-")
+    names: set[str] = set()
+    index = first
+    while index < len(lines):
+        raw = _strip_yaml_comment(lines[index])
+        if not raw.strip():
+            index += 1
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        if indent == 0:
+            break
+        if "\t" in raw[:indent]:
+            raise ValueError("tabs are unsupported in top-level on block")
+        if indent < child_indent:
+            break
+        if indent > child_indent:
+            index += 1
+            continue
+        entry = raw[indent:].strip()
+        if sequence:
+            if not entry.startswith("-"):
+                raise ValueError("mixed mapping and sequence in top-level on block")
+            name = entry[1:].strip()
+            if not name or name.startswith(("{", "[", "&", "*", "!")):
+                raise ValueError("unsupported sequence event syntax")
+            names.add(_yaml_key(name))
+        else:
+            if entry.startswith("-") or ":" not in entry:
+                raise ValueError("unsupported mapping event syntax")
+            key, _value = entry.split(":", 1)
+            names.add(_yaml_key(key))
+        index += 1
+    if not names:
+        raise ValueError("unsupported empty top-level on block")
+    return names, index
 
 
 def _has_workflow_dispatch(yaml_text: str) -> bool:
-    """Read GitHub event syntax without YAML 1.1 coercing the `on` key."""
-    workflow = yaml.load(yaml_text, Loader=yaml.BaseLoader)
-    if not isinstance(workflow, dict):
+    """Parse the supported GitHub `on` trigger shapes using only stdlib code.
+
+    Unsupported syntax raises ValueError so inventory collection fails closed
+    instead of silently treating a dispatch workflow as absent.
+    """
+    lines = yaml_text.splitlines()
+    on_entries: list[tuple[int, str]] = []
+    for index, original in enumerate(lines):
+        raw = _strip_yaml_comment(original)
+        if not raw.strip():
+            continue
+        if raw.startswith((" ", "\t")):
+            continue
+        if raw.strip() in {"---", "..."}:
+            continue
+        if ":" not in raw:
+            raise ValueError("unsupported top-level YAML syntax")
+        key, value = raw.split(":", 1)
+        if _yaml_key(key) == "on":
+            on_entries.append((index, value))
+    if len(on_entries) > 1:
+        raise ValueError("duplicate top-level on keys are unsupported")
+    if not on_entries:
         return False
-    events = workflow.get("on")
-    if isinstance(events, dict):
-        return "workflow_dispatch" in events
-    if isinstance(events, (list, tuple)):
-        return "workflow_dispatch" in events
-    return events == "workflow_dispatch"
+
+    index, value = on_entries[0]
+    inline = value.strip()
+    if not inline:
+        names, _ = _block_event_names(lines, index + 1)
+        return "workflow_dispatch" in names
+    if inline.startswith("[") and inline.endswith("]"):
+        names = {_yaml_key(entry) for entry in _split_flow_entries(inline[1:-1])}
+        return "workflow_dispatch" in names
+    if inline.startswith("{") and inline.endswith("}"):
+        names = {_flow_event_key(entry) for entry in _split_flow_entries(inline[1:-1])}
+        return "workflow_dispatch" in names
+    if inline.startswith(("&", "*", "!", "|", ">", "[", "{")):
+        raise ValueError("unsupported top-level on event syntax")
+    scalar = _yaml_key(inline)
+    return scalar == "workflow_dispatch"
 
 
 def _active_dispatch_workflow_paths(directory: Path) -> set[str]:
@@ -73,6 +234,32 @@ def _active_dispatch_workflow_paths(directory: Path) -> set[str]:
         if path.is_file() and path.suffix in {".yml", ".yaml"}
         if _has_workflow_dispatch(path.read_text(encoding="utf-8"))
     }
+
+
+def _protected_script() -> str:
+    lines = FREEZE_WORKFLOW.read_text(encoding="utf-8").splitlines()
+    job_heading = "  pr818-live-flow-freeze-target:"
+    step_heading = "      - name: Enforce frozen PR818 live-flow production surface"
+    if lines.count(job_heading) != 1 or lines.count(step_heading) != 1:
+        raise ValueError("freeze workflow job/step is missing or ambiguous")
+    step = lines.index(step_heading)
+    run_index = next((index for index in range(step + 1, len(lines))
+                      if lines[index].strip() == "run: |"), None)
+    if run_index is None:
+        raise ValueError("freeze workflow run block is missing")
+    body: list[str] = []
+    content_indent: int | None = None
+    for line in lines[run_index + 1:]:
+        if line.strip():
+            indent = len(line) - len(line.lstrip(" "))
+            if content_indent is None:
+                content_indent = indent
+            if indent < content_indent:
+                break
+        body.append(line)
+    if content_indent is None or not any(line.strip() for line in body):
+        raise ValueError("freeze workflow run block is empty")
+    return textwrap.dedent("\n".join(body)).strip("\n")
 
 
 def _inventory_matches_active(inventory_paths: set[str], scanned_paths: set[str]) -> bool:
@@ -134,9 +321,33 @@ def test_dispatch_scanner_handles_event_shorthand_and_unlisted_workflow(tmp_path
     sequence_form = "name: sequence\non: [push, workflow_dispatch]\njobs: {}\n"
     inline_mapping_form = "name: mapping\non: {push: {}, workflow_dispatch: {}}\njobs: {}\n"
     mapping_form = "name: block mapping\non:\n  push:\n  workflow_dispatch:\njobs: {}\n"
+    scalar_form = "name: scalar\non: workflow_dispatch\njobs: {}\n"
+    quoted_scalar_form = "name: quoted scalar\non: 'workflow_dispatch'\njobs: {}\n"
+    quoted_sequence_form = 'name: quoted sequence\non: ["push", \'workflow_dispatch\']\njobs: {}\n'
+    non_dispatch_scalar = "name: another trigger\non: push\njobs: {}\n"
     assert _has_workflow_dispatch(sequence_form)
     assert _has_workflow_dispatch(inline_mapping_form)
     assert _has_workflow_dispatch(mapping_form)
+    assert _has_workflow_dispatch(scalar_form)
+    assert _has_workflow_dispatch(quoted_scalar_form)
+    assert _has_workflow_dispatch(quoted_sequence_form)
+    assert not _has_workflow_dispatch(non_dispatch_scalar)
+
+    for unsupported in (
+        "name: alias\non: *shared_events\njobs: {}\n",
+        "name: folded\non: |\n  workflow_dispatch\njobs: {}\n",
+        "name: malformed\non: [push, workflow_dispatch\njobs: {}\n",
+        "name: malformed scalar\non: workflow_dispatch: extra\njobs: {}\n",
+        "name: malformed sequence key\non: [workflow_dispatch: extra]\njobs: {}\n",
+        "name: malformed sequence token\non: [workflow_dispatch extra]\njobs: {}\n",
+        "name: duplicate on\non: push\non: workflow_dispatch\njobs: {}\n",
+    ):
+        try:
+            _has_workflow_dispatch(unsupported)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("unsupported trigger YAML must fail closed")
 
     new_workflow = tmp_path / "unlisted.yml"
     new_workflow.write_text(sequence_form, encoding="utf-8")
