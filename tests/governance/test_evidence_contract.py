@@ -970,6 +970,27 @@ def test_trusted_evidence_workflow_does_not_persist_checkout_credentials():
     assert "persist-credentials: false" in checkout_step
 
 
+@pytest.mark.parametrize(("workflow_relpath", "event_name"), [
+    (".github/workflows/frozen-head-exact-sha-certification.yml", "pull_request_target"),
+    (".github/workflows/evidence-gates.yml", "pull_request"),
+])
+def test_evidence_workflows_rerun_when_pr_is_edited(workflow_relpath: str, event_name: str):
+    workflow = (evidence_tool.ROOT / workflow_relpath).read_text(encoding="utf-8")
+    lines = workflow.splitlines()
+    event_line = lines.index(f"  {event_name}:")
+    event_types = None
+    for line in lines[event_line + 1:]:
+        if line.startswith("  ") and not line.startswith("    "):
+            break
+        if line.lstrip().startswith("types:"):
+            value = line.split("[", 1)[1].split("]", 1)[0]
+            event_types = {entry.strip().strip("'\"") for entry in value.split(",")}
+            break
+
+    assert event_types is not None
+    assert {"opened", "reopened", "synchronize", "ready_for_review", "edited"} <= event_types
+
+
 def _git(cwd: Path, *args: str) -> str:
     return subprocess.check_output(["git", *args], cwd=cwd, text=True, stderr=subprocess.PIPE).strip()
 

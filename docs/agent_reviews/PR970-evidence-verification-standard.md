@@ -70,6 +70,7 @@ This provides a base-authoritative repository PR-diff check for later PRs only; 
 ## Trusted-base implementation follow-up
 
 - Added `.github/workflows/frozen-head-exact-sha-certification.yml` with a read-only `pull_request_target` job named `Trusted base evidence coverage`. It checks event base/head SHAs, checks out the exact base, fetches the exact head, verifies both SHAs, materializes the candidate with `git archive`, and invokes only the base checkout's verifier. The candidate tree is data-only; the trusted job does not run candidate scripts, tests, or checkout filters.
+- Both trusted evidence coverage and advisory evidence diagnostics now also rerun for the `edited` pull-request event, so changing a PR's base target causes the base/head-bound evidence check to be refreshed. This can also rerun for title or body edits; it does not change the trust boundary or make the status required.
 - Renamed the ordinary `pull_request` job to `Candidate-code evidence diagnostics (untrusted)` so it cannot be mistaken for the trusted status.
 - Added `--candidate-root` and `--verifier-source-sha`. The verifier checks and records candidate-root HEAD and verifier-checkout HEAD in its report, and refuses separate-root operation without explicit verifier source SHA. Candidate-controlled symlink inputs fail closed.
 - Retained active settings as read back: classic protection requires `repo-forensics-pr-gate`; the active main ruleset requires `unit_tests` and `health_gate`, not `Trusted base evidence coverage`. Universal task-intake coverage remains `UNSATISFIED`.

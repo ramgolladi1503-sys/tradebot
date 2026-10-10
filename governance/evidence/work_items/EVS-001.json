@@ -289,6 +289,52 @@
           "The frozen PR818 workflow no longer compares old baseline to PR base, which removes detection of pre-existing drift on main; it still fails closed on protected base-to-head deltas and preserves its exact bootstrap exception.",
           "Universal platform intake, direct GitHub dispatch admission, branch protection, and authenticated human approval remain UNSATISFIED; EVS-001 lifecycle/evidence/status remains unchanged."
         ]
+      },
+      {
+        "task_contract_id": "EVS-TRUSTED-PR-EDIT-COVERAGE-2026-10",
+        "source_agent": "gsd",
+        "action": "GENERATE_PATCH",
+        "title": "Refresh evidence checks when pull request base is edited",
+        "scope": "Include the edited pull-request activity in trusted base-authoritative evidence coverage and advisory diagnostics. Add regression coverage for both workflows and document that workflow_dispatch admission, universal task intake, branch protection, and authenticated human approval remain UNSATISFIED.",
+        "requested_paths": [
+          ".github/workflows/frozen-head-exact-sha-certification.yml",
+          ".github/workflows/evidence-gates.yml",
+          "tests/governance/test_evidence_contract.py",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md",
+          "governance/evidence/work_items/EVS-001.json"
+        ],
+        "allowed_paths": [
+          ".github/workflows/frozen-head-exact-sha-certification.yml",
+          ".github/workflows/evidence-gates.yml",
+          "tests/governance/test_evidence_contract.py",
+          "docs/agent_reviews/PR970-evidence-verification-standard.md",
+          "governance/evidence/work_items/EVS-001.json"
+        ],
+        "forbidden_paths": [
+          "main.py",
+          "run_live.sh",
+          "config/",
+          "credentials.py",
+          ".env",
+          "runtime/live/",
+          "core/execution",
+          "core/broker",
+          "core/order",
+          "core/risk",
+          "core/feed",
+          "strategies/",
+          "broker/order/credential/risk/feed/strategy/live runtime paths"
+        ],
+        "expected_tests": [
+          "PYTHONPATH=. pytest -q tests/governance/test_evidence_contract.py -k rerun_when_pr_is_edited",
+          "Parse both workflow YAML files and verify shell blocks remain syntactically valid.",
+          "git diff --check"
+        ],
+        "acceptance_proof": [
+          "Both pull_request and pull_request_target evidence workflows include the edited activity type, and regression tests enforce this contract.",
+          "Trusted evidence coverage remains base-authoritative and candidate-data-only; no candidate code or checkout filters are executed.",
+          "The change does not claim a hosted trusted-base run on the current PR, required-check branch protection, universal platform intake, direct workflow_dispatch admission, or authenticated approval."
+        ]
       }
     ]
   }
