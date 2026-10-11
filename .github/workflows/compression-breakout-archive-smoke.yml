@@ -1,0 +1,97 @@
+name: Compression Breakout Archive Smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/compression-breakout-archive-smoke.yml"
+      - "scripts/run_tracked_archive_compression_smoke.py"
+      - "scripts/run_tracked_archive_compression_smoke_v2.py"
+      - "research/option_e2e_recertification_v4/compression_breakout_option_campaign_v1/**"
+      - "research/option_e2e_recertification_v4/option_candle_backtest_v1/**"
+      - "strategies/movement/compression_breakout.py"
+      - "runtime/upstox_candidate_replay.zip"
+
+permissions:
+  contents: read
+
+jobs:
+  tracked-archive-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas pyarrow numpy pydantic pyyaml python-dotenv
+
+      - name: Run tracked archive Compression smoke
+        id: smoke
+        shell: bash
+        run: |
+          output=/tmp/compression-breakout-archive-smoke
+          rm -rf "$output"
+          mkdir -p "$output"
+          python - <<'PY' >"$output/member_paths_20260709.txt"
+          import zipfile
+          with zipfile.ZipFile("runtime/upstox_candidate_replay.zip") as archive:
+              for name in sorted(archive.namelist()):
+                  if "20260709" in name and name.lower().endswith(".parquet"):
+                      print(name)
+          PY
+          python - <<'PY' >"$output/schema_probe.json"
+          import io
+          import json
+          import zipfile
+          import pyarrow.parquet as pq
+
+          members = [
+              "upstox_candidate_replay/20260709/underlying/NSE_INDEX|Nifty 50_20260709.parquet",
+              "upstox_candidate_replay/20260709/underlying/NIFTY 23500 CE 14 JUL 26.parquet",
+              "upstox_candidate_replay/20260709/underlying/NIFTY 23500 PE 14 JUL 26.parquet",
+          ]
+          result = {}
+          with zipfile.ZipFile("runtime/upstox_candidate_replay.zip") as archive:
+              for member in members:
+                  payload = archive.read(member)
+                  parquet = pq.ParquetFile(io.BytesIO(payload))
+                  table = parquet.read()
+                  frame = table.to_pandas().head(3)
+                  result[member] = {
+                      "size_bytes": len(payload),
+                      "row_count": parquet.metadata.num_rows,
+                      "row_group_count": parquet.metadata.num_row_groups,
+                      "schema": [str(field) for field in parquet.schema_arrow],
+                      "sample_rows": json.loads(frame.to_json(orient="records", date_format="iso")),
+                  }
+          print(json.dumps(result, sort_keys=True, indent=2))
+          PY
+          set +e
+          PYTHONPATH=.:scripts python scripts/run_tracked_archive_compression_smoke_v2.py \
+            --archive runtime/upstox_candidate_replay.zip \
+            --output-dir "$output" \
+            >"$output/run.log" 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" >"$output/exit_status.txt"
+          cat "$output/schema_probe.json"
+          cat "$output/run.log"
+          exit "$status"
+
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compression-breakout-archive-smoke
+          path: /tmp/compression-breakout-archive-smoke
+          if-no-files-found: error
+          retention-days: 30

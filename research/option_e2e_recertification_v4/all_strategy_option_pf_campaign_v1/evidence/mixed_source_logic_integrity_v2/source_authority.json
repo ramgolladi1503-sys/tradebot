@@ -1,0 +1,25 @@
+{
+  "canonical_intent_count": 769,
+  "canonical_intent_ledger_sha256": "c0b16f50008faa1d0b42082c3cabacc7d4328f13c201f22fb44c8805816b74f6",
+  "canonical_intent_status_counts": {
+    "RAW_CANDIDATE": 769
+  },
+  "code_sha256": {
+    "research/option_e2e_recertification_v4/expired_option_replay_v1/engine.py": "4273c7d364cd0314fd057704a483fe89a9378ab75539899af550ca6d7afafb47",
+    "research/option_e2e_recertification_v4/kite_underlying_directional_edge_campaign_v1/canonical_adapter.py": "46b09d1655068138ecfe23eb28493991aaa34038d35894061fba07fd811c640c",
+    "research/option_e2e_recertification_v4/kite_underlying_directional_edge_campaign_v1/underlying_corpus.py": "1fa48658c4fd81a8ea4e6a840c8d3adcc2745a5015c138546c61971420db497c",
+    "scripts/run_expired_option_contract_replay_v1.py": "ca4f8085775139a93a20c3b743f598e1a38a03329e1a6c485de60fb19714bd67",
+    "tests/research/option_e2e/test_canonical_underlying_adapter.py": "a35c0035dab5a09ce44cd968f13a09aee0a3f91175cde5e6942dba647d503cca",
+    "tests/research/option_e2e/test_expired_option_replay_authority_v1.py": "3dd37b910355fc046dd736ad60c3ade4862e9f1d316ab409ea8239e04eb76b13",
+    "tests/research/option_e2e/test_expired_option_replay_v1.py": "21ce007715c225b16385edd21cf1e791ddec7fe13a8a62b486ea0bf785837e62",
+    "tests/research/option_e2e/test_underlying_corpus_semantics_v1.py": "8c1f119f546ff91a99723c1c316fc5ff36f8af902b28a1ff3534748b7665cde4"
+  },
+  "external_full_blocker_ledger_sha256": "7f24aabe8207d69317f18bbfcaf0c4ba26dd18f6c92b1f32a40e4ccbe6ac0841",
+  "external_full_ledger_sha256": "aa49aa2b51349428f4fc80a3652d563d2e3ecec98aa5b75197ba575290179e9d",
+  "kite_archive_sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d",
+  "option_translation_rerun_completed": true,
+  "schema_version": "pr718_source_authority_v1",
+  "strategy_signal_note": "This integrity repair replays the frozen 769 canonical intents previously emitted by production strategy owners. It does not claim a new invocation of the owners because the retained source runtime lacks a parquet engine; the frozen intent ledger identity and callable source hashes remain the signal authority.",
+  "strategy_signal_regenerated_in_this_repair": false,
+  "upstox_archive_sha256": "4ece07d0b788d415a79f40c1245030cba361e886473a2e24ac299a1dcbb985d8"
+}
