@@ -96,6 +96,13 @@ def test_batch_replay_refuses_to_write_unresolved_outcomes_without_offline_loade
     assert not output_path.exists()
 
 
+def test_cli_requires_operator_to_explicitly_select_series_manifest():
+    args = replay_module._build_cli().parse_args(
+        ["--date", "2026-10-12", "--series-manifest", "/tmp/manifest.json"]
+    )
+    assert args.series_manifest == "/tmp/manifest.json"
+
+
 def _load_json(name: str):
     return json.loads((FIXTURES_DIR / name).read_text(encoding="utf-8"))
 
@@ -142,6 +149,9 @@ def test_outcome_replay_target_hit_first():
     assert row["trade_outcome"]["outcome"] == "hit_target"
     assert row["outcome_reason"] == "TARGET_FIRST"
     assert row["trade_outcome"]["ts_epoch_ms"] == row["resolution_ts_epoch_ms"]
+    assert row["trade_outcome"]["exec_feasible"] is False
+    assert row["trade_outcome"]["exec_feasible_flags"]["execution_feasibility_status"] == "UNASSESSED"
+    assert row["trade_outcome"]["exec_feasible_flags"]["outcome_path_observed"] is True
 
 
 def test_outcome_replay_stop_hit_first():
@@ -458,13 +468,23 @@ def test_outcome_replay_rejects_unsupported_interval(interval):
 
 def test_outcome_replay_requires_exact_source_bar_at_event_time():
     event = _horizon_event(reject_ts_epoch=1740723901000)
-    with pytest.raises(replay_module.IncompleteOutcomeWindowError, match="incomplete_outcome_window:truncated"):
+    loader_calls = []
+
+    def loader(*_args):
+        loader_calls.append(True)
+        return [_horizon_row(0)], "test_local_series"
+
+    with pytest.raises(
+        replay_module.IncompleteOutcomeWindowError,
+        match="incomplete_outcome_window:event_not_on_source_bar_boundary",
+    ):
         analyze_event_outcome(
             event,
             lookahead_minutes=3,
             candle_interval="minute",
-            series_loader=_series_loader_for([_horizon_row(0)]),
+            series_loader=loader,
         )
+    assert loader_calls == []
 
 
 def test_outcome_replay_anchors_multiminute_grid_to_exchange_session_bar():
@@ -479,6 +499,26 @@ def test_outcome_replay_anchors_multiminute_grid_to_exchange_session_bar():
         lookahead_minutes=4,
         candle_interval="2minute",
         series_loader=_series_loader_for(rows),
+    )
+
+    assert result["trade_outcome"]["outcome"] == "no_hit"
+    assert result["resolution_ts_epoch_ms"] == rows[-1]["time_ms"]
+
+
+def test_outcome_replay_uses_configured_nondefault_open_for_multiminute_grid(monkeypatch):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    monkeypatch.setattr(replay_module.cfg, "MARKET_OPEN_IST", "09:30")
+    start = int(datetime(2025, 2, 28, 9, 30, tzinfo=ZoneInfo("Asia/Kolkata")).timestamp() * 1000)
+    event = _horizon_event(reject_ts_epoch=start)
+    rows = [
+        {"time_ms": start, "high": 105.0, "low": 95.0, "ref_price": 100.0},
+        {"time_ms": start + 2 * 60_000, "high": 105.0, "low": 95.0, "ref_price": 100.0},
+    ]
+
+    result = analyze_event_outcome(
+        event, lookahead_minutes=4, candle_interval="2minute", series_loader=_series_loader_for(rows)
     )
 
     assert result["trade_outcome"]["outcome"] == "no_hit"
@@ -515,3 +555,196 @@ def test_batch_replay_preserves_existing_output_on_incomplete_horizon(tmp_path, 
         )
 
     assert output_path.read_bytes() == original_bytes
+
+
+def test_atomic_writer_preserves_previous_output_and_cleans_temp_on_write_error(tmp_path, monkeypatch):
+    output_path = tmp_path / "outcomes.jsonl"
+    previous = b'{"prior":"preserved"}\n'
+    output_path.write_bytes(previous)
+
+    def fail_serialization(*_args, **_kwargs):
+        raise OSError("simulated serialization failure")
+
+    monkeypatch.setattr(replay_module.json, "dumps", fail_serialization)
+    with pytest.raises(OSError, match="simulated serialization failure"):
+        replay_module._atomic_write_jsonl(output_path, [{"new": "row"}])
+
+    assert output_path.read_bytes() == previous
+    assert list(tmp_path.glob(".outcomes.jsonl.*.tmp")) == []
+
+
+def test_atomic_writer_uses_isolated_temps_for_concurrent_writers(tmp_path, monkeypatch):
+    import threading
+
+    output_path = tmp_path / "outcomes.jsonl"
+    barrier = threading.Barrier(2)
+    real_dumps = replay_module.json.dumps
+
+    def synchronized_dumps(*args, **kwargs):
+        barrier.wait(timeout=5)
+        return real_dumps(*args, **kwargs)
+
+    monkeypatch.setattr(replay_module.json, "dumps", synchronized_dumps)
+    failures = []
+
+    def write(value):
+        try:
+            replay_module._atomic_write_jsonl(output_path, [{"writer": value}])
+        except BaseException as exc:  # Propagate worker failures through assertion below.
+            failures.append(exc)
+
+    threads = [threading.Thread(target=write, args=(value,)) for value in ("a", "b")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert not failures
+    assert all(not thread.is_alive() for thread in threads)
+    result = json.loads(output_path.read_text(encoding="utf-8"))
+    assert result in ({"writer": "a"}, {"writer": "b"})
+    assert list(tmp_path.glob(".outcomes.jsonl.*.tmp")) == []
+
+
+def test_batch_cli_manifest_persists_operator_provenance_and_safety_contract(tmp_path, monkeypatch):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from tests.analytics.test_upstox_replay_source import _write_source
+
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    manifest_path, _, _ = _write_source(tmp_path)
+    event_ts = int(datetime(2026, 10, 12, 9, 15, tzinfo=ZoneInfo("Asia/Kolkata")).timestamp() * 1000)
+    candidate_row = {
+        "candidate_id": "candidate_manifest_batch",
+        "status": "REJECTED",
+        "reject_reason": "TEST_REJECT",
+        "ts_epoch_ms": event_ts,
+        "symbol": "NIFTY",
+        "expiry": "2026-10-29",
+        "strike": 25000,
+        "option_type": "CE",
+        "side": "BUY",
+        "entry_price": 100,
+        "target_price": 200,
+        "stop_loss": 50,
+    }
+    (session_dir / "candidate_journal.jsonl").write_text(json.dumps(candidate_row) + "\n", encoding="utf-8")
+    monkeypatch.setattr(replay_module, "discover_session_paths", lambda **_kwargs: [session_dir])
+    output_path = tmp_path / "outcomes.jsonl"
+
+    report = build_outcomes_for_date(
+        "2026-10-12", session_dir=session_dir, output_path=output_path,
+        lookahead_minutes=2, series_manifest=manifest_path,
+    )
+
+    row = json.loads(output_path.read_text(encoding="utf-8").splitlines()[0])
+    assert report["count"] == 1
+    assert report["series_provenance"]["dataset_id"] == "capture-2026-10-12-nifty-25000ce"
+    assert "file_sha256" not in report["series_provenance"]
+    assert "instrument_token" not in report["series_provenance"]
+    assert row["series_provenance"]["event_token_bound"] is False
+    assert row["series_provenance"]["identity_binding_mode"] == "STRUCTURED_CONTRACT_AND_HASHED_OPERATOR_MASTER"
+    assert row["series_provenance"]["provenance_status"] == "OPERATOR_SUPPLIED_UNVERIFIED"
+    assert row["series_provenance"]["source_authenticity_verified"] is False
+    assert row["series_provenance"]["instrument_token"] == "12345"
+    assert row["trade_outcome"]["exec_feasible"] is False
+    assert row["read_only"] is True
+    assert row["is_order_action"] is False
+    assert row["broker_api_called"] is False
+    assert row["allowed_for_live_execution"] is False
+
+
+def test_manifest_batch_failure_preserves_existing_output(tmp_path, monkeypatch):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from tests.analytics.test_upstox_replay_source import _write_source
+
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    manifest_path, _, source = _write_source(tmp_path)
+    source.write_text(source.read_text() + "\n", encoding="utf-8")
+    event = TradeIntentEvent(
+        trade_key="NIFTY|2026-10-29|25000|CE|BUY", event_id="evt_bad_manifest",
+        intent="rejected",
+        ts_epoch_ms=int(datetime(2026, 10, 12, 9, 15, tzinfo=ZoneInfo("Asia/Kolkata")).timestamp() * 1000),
+        symbol="NIFTY", expiry="2026-10-29", strike=25000, option_type="CE", side="BUY",
+        source="test", metrics_snapshot={"instrument_token": "12345", "entry": 100, "target": 200, "stop": 50},
+    )
+    monkeypatch.setattr(replay_module, "discover_session_paths", lambda **_kwargs: [session_dir])
+    monkeypatch.setattr(replay_module, "load_session_events", lambda **_kwargs: [event])
+    output_path = tmp_path / "outcomes.jsonl"
+    output_path.write_bytes(b"previous\n")
+
+    with pytest.raises(replay_module.IncompleteOutcomeWindowError, match="source_error:ReplaySourceError"):
+        build_outcomes_for_date(
+            "2026-10-12", session_dir=session_dir, output_path=output_path,
+            lookahead_minutes=2, series_manifest=manifest_path,
+        )
+    assert output_path.read_bytes() == b"previous\n"
+
+
+def test_multi_contract_batch_keeps_per_event_file_provenance(tmp_path, monkeypatch):
+    from datetime import datetime
+    import hashlib
+    from zoneinfo import ZoneInfo
+
+    from tests.analytics.test_upstox_replay_source import _write_source
+
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    manifest_path, manifest, _ = _write_source(tmp_path)
+    second_source = tmp_path / "option-25200.csv"
+    second_source.write_text(
+        "timestamp,open,high,low,close\n"
+        "2026-10-12T09:15:00+05:30,80,82,79,81\n"
+        "2026-10-12T09:16:00+05:30,81,83,80,82\n",
+        encoding="utf-8",
+    )
+    second_bytes = second_source.read_bytes()
+    master_path = tmp_path / "instrument_master.csv"
+    with master_path.open("a", encoding="utf-8") as handle:
+        handle.write("23456,NIFTY,2026-10-29,25200,CE\n")
+    master_bytes = master_path.read_bytes()
+    manifest["instrument_master"].update(
+        size_bytes=len(master_bytes), sha256=hashlib.sha256(master_bytes).hexdigest()
+    )
+    manifest["entries"].append(
+        {
+            "contract": {"underlying": "NIFTY", "expiry": "2026-10-29", "strike": 25200, "option_type": "CE"},
+            "instrument_token": "23456",
+            "path": second_source.name,
+            "format": "csv",
+            "size_bytes": len(second_bytes),
+            "sha256": hashlib.sha256(second_bytes).hexdigest(),
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    event_ts = int(datetime(2026, 10, 12, 9, 15, tzinfo=ZoneInfo("Asia/Kolkata")).timestamp() * 1000)
+    candidate_rows = [
+        {
+            "candidate_id": f"candidate-{strike}", "status": "REJECTED", "reject_reason": "TEST_REJECT",
+            "ts_epoch_ms": event_ts, "symbol": "NIFTY", "expiry": "2026-10-29", "strike": strike,
+            "option_type": "CE", "side": "BUY", "entry_price": 100, "target_price": 200, "stop_loss": 50,
+        }
+        for strike in (25000, 25200)
+    ]
+    journal = "\n".join(json.dumps(row) for row in candidate_rows) + "\n"
+    (session_dir / "candidate_journal.jsonl").write_text(journal, encoding="utf-8")
+    monkeypatch.setattr(replay_module, "discover_session_paths", lambda **_kwargs: [session_dir])
+    output_path = tmp_path / "outcomes.jsonl"
+
+    report = build_outcomes_for_date(
+        "2026-10-12", session_dir=session_dir, output_path=output_path,
+        lookahead_minutes=2, series_manifest=manifest_path,
+    )
+
+    rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+    source_receipts = report["series_sources"]
+    assert report["count"] == len(rows) == len(source_receipts) == 2
+    assert "file_sha256" not in report["series_provenance"]
+    assert {item["series_provenance"]["instrument_token"] for item in source_receipts} == {"12345", "23456"}
+    assert len({item["series_provenance"]["file_sha256"] for item in source_receipts}) == 2
+    assert {row["series_provenance"]["contract"]["strike"] for row in rows} == {25000.0, 25200.0}

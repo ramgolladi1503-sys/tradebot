@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import tempfile
 from typing import Any, Callable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
@@ -359,6 +360,19 @@ def analyze_event_outcome(
     side = _event_side(event_row)
     window_start_ms = int(event_ts_ms)
     window_end_ms = int(window_start_ms + replay_lookahead_min * 60 * 1000)
+    event_local = datetime.fromtimestamp(window_start_ms / 1000.0, tz=timezone.utc).astimezone(IST)
+    try:
+        configured_open = datetime.strptime(str(getattr(cfg, "MARKET_OPEN_IST", "")), "%H:%M").time()
+    except ValueError as exc:
+        raise IncompleteOutcomeWindowError("invalid_configured_market_session") from exc
+    session_anchor = event_local.replace(
+        hour=configured_open.hour, minute=configured_open.minute, second=0, microsecond=0
+    )
+    anchor_ms = int(session_anchor.astimezone(timezone.utc).timestamp() * 1000)
+    if window_start_ms < anchor_ms or (window_start_ms - anchor_ms) % interval_ms != 0:
+        # OHLC bars are interval-start observations. Do not round a sub-bar
+        # event backward into a bar that includes pre-event prices.
+        raise IncompleteOutcomeWindowError("event_not_on_source_bar_boundary")
 
     # The injected source contract is interval-start timestamps. Anchor the
     # grid to the event/source bar, not Unix epoch zero (exchange sessions can
@@ -460,8 +474,13 @@ def analyze_event_outcome(
         symbol=_event_symbol(event_row),
         mfe_points=(round(float(mfe_points), 6) if mfe_points is not None else None),
         mae_points=(round(float(mae_points), 6) if mae_points is not None else None),
-        exec_feasible=True,
-        exec_feasible_flags={"has_candle_data": True, "has_series_data": True},
+        exec_feasible=False,
+        exec_feasible_flags={
+            "has_candle_data": True,
+            "has_series_data": True,
+            "outcome_path_observed": True,
+            "execution_feasibility_status": "UNASSESSED",
+        },
         source="analytics_outcome_replay",
         reject_reason=reject_reason,
         reject_reasons=tuple(reason_codes),
@@ -470,10 +489,15 @@ def analyze_event_outcome(
     trade_outcome_payload = trade_outcome.to_dict()
     trade_outcome_payload["reason_codes"] = list(reason_codes)
     return {
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
         "event_ref_id": event_id,
         "trade_key": trade_key,
         "symbol": _event_symbol(event_row),
         "series_source": series_source,
+        "series_provenance": dict(getattr(loader, "provenance", {}) or {}),
         "outcome_reason": outcome_reason,
         "resolution_ts_epoch_ms": int(resolution_ts_ms),
         "target_points": abs(float(target - entry)),
@@ -512,11 +536,20 @@ def _parse_date_key(text: str) -> str:
 
 def _atomic_write_jsonl(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(dict(row), ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n")
-    tmp.replace(path)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(dict(row), ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        tmp.replace(path)
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def build_outcomes_for_date(
@@ -528,6 +561,7 @@ def build_outcomes_for_date(
     output_path: Path | None = None,
     session_dir: Path | str | None = None,
     series_loader: SeriesLoader | None = None,
+    series_manifest: Path | str | None = None,
 ) -> dict:
     date_key = _parse_date_key(date)
     normalized_scope = _norm_text(scope).lower() or "rejected"
@@ -546,6 +580,13 @@ def build_outcomes_for_date(
         for event in source_events
         if _to_day_key(int(event.ts_epoch_ms)) == date_key and _norm_text(event.intent).lower() == normalized_scope
     ]
+
+    if series_manifest is not None:
+        if series_loader is not None:
+            raise ValueError("provide_series_loader_or_manifest_not_both")
+        from .upstox_replay_source import OfflineOptionOHLCManifest
+
+        series_loader = OfflineOptionOHLCManifest(series_manifest)
 
     if events and series_loader is None:
         raise RuntimeError(
@@ -574,6 +615,10 @@ def build_outcomes_for_date(
             outcome_counts[out] += 1
 
     return {
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
         "date": date_key,
         "scope": normalized_scope,
         "lookahead_minutes": int(lookahead_minutes),
@@ -581,6 +626,15 @@ def build_outcomes_for_date(
         "count": len(rows),
         "outcome_counts": outcome_counts,
         "output_path": str(path),
+        "series_provenance": dict(getattr(series_loader, "manifest_provenance", {}) or {}),
+        "series_sources": [
+            {
+                "event_ref_id": row.get("event_ref_id"),
+                "series_source": row.get("series_source"),
+                "series_provenance": dict(row.get("series_provenance") or {}),
+            }
+            for row in rows
+        ],
     }
 
 
@@ -596,6 +650,11 @@ def _build_cli() -> argparse.ArgumentParser:
     parser.add_argument("--lookahead-min", type=int, default=30, help="Replay lookahead in minutes.")
     parser.add_argument("--candle-interval", default="minute", help="Candle interval label for replay.")
     parser.add_argument("--session-dir", default=None, help="Explicit session directory or root.")
+    parser.add_argument(
+        "--series-manifest",
+        default=None,
+        help="Explicit local option OHLC manifest (JSON); no implicit/network source is used.",
+    )
     return parser
 
 
@@ -607,6 +666,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         lookahead_minutes=int(args.lookahead_min),
         candle_interval=str(args.candle_interval),
         session_dir=args.session_dir,
+        series_manifest=args.series_manifest,
     )
     print(json.dumps(payload, ensure_ascii=True, sort_keys=True))
     return 0

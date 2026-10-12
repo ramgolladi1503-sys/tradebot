@@ -22,7 +22,7 @@ from .contracts import (
     CandidatePrediction,
     PredictionStatus,
 )
-from .dataset import chronological_split, feature_columns, safe_float, semantic_dataset_hash, text
+from .dataset import chronological_split, eligible_training_rows, feature_columns, safe_float, semantic_dataset_hash, text
 
 
 @dataclass
@@ -199,6 +199,9 @@ def _prediction(
 
 def fit_candidate_ml(df: pd.DataFrame, config: CandidateMLConfig | None = None) -> CandidateMLBundle:
     cfg = config or CandidateMLConfig()
+    df = eligible_training_rows(df)
+    if df.empty:
+        raise ValueError("candidate_dataset_no_eligible_training_labels")
     train, validation = chronological_split(df, cfg)
     features = feature_columns(train)
     if not features:
@@ -224,6 +227,12 @@ def _fit_unit(
     features: list[str],
     config: CandidateMLConfig,
 ) -> _ModelUnit:
+    train = eligible_training_rows(train)
+    validation = eligible_training_rows(validation)
+    if len(train) < config.min_train_rows:
+        raise ValueError("candidate_training_support_below_minimum")
+    if len(validation) < config.min_validation_rows:
+        raise ValueError("candidate_validation_support_below_minimum")
     X_train = train[features].replace([np.inf, -np.inf], np.nan).fillna(0.0)
     y_train = train["target"].astype(int).to_numpy()
     X_validation = validation[features].replace([np.inf, -np.inf], np.nan).fillna(0.0)

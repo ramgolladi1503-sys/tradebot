@@ -33,10 +33,15 @@ def classify_failure(
         out_type = outcome.get("outcome", "unknown")
         exec_feasible = outcome.get("exec_feasible", True)
         mfe = outcome.get("mfe_points") or 0.0
+        flags = outcome.get("exec_feasible_flags") or {}
     else:
         out_type = getattr(outcome, "outcome", "unknown")
         exec_feasible = getattr(outcome, "exec_feasible", True)
         mfe = getattr(outcome, "mfe_points", 0.0) or 0.0
+        flags = getattr(outcome, "exec_feasible_flags", {}) or {}
+
+    if isinstance(flags, dict) and str(flags.get("execution_feasibility_status", "")).upper() == "UNASSESSED":
+        return "unknown"
 
     if out_type == "hit_target":
         if not exec_feasible:
