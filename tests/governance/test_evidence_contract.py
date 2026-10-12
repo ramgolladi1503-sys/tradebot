@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import json
 import os
 import shutil
@@ -1200,16 +1201,93 @@ def test_trusted_candidate_prep_reports_dirty_paths_and_stops_before_fetch(
         (trusted / "unexpected\ncheckout.txt").write_text("private file contents must not be logged\n")
         expected_path = r"unexpected\\ncheckout.txt"
 
-    result = _run_candidate_prep(fixture)
+    secret_sentinel = "DIAGNOSTIC_SECRET_MUST_NOT_APPEAR"
+    result = _run_candidate_prep(
+        fixture, overrides={"DIAGNOSTIC_SECRET_SENTINEL": secret_sentinel}
+    )
 
     assert result.returncode != 0
     assert "protected-base checkout is not clean; refusing to run verifier" in result.stderr
     assert "dirty checkout status" in result.stderr
     assert expected_path in result.stderr
     assert "private file contents must not be logged" not in result.stderr
+    assert secret_sentinel not in result.stdout + result.stderr
     assert not Path(fixture["github_output"]).exists()
     assert not (Path(fixture["runner_temp"]) /
                 "trusted-evidence-candidate-test-run-1").exists()
+    git_calls = Path(fixture["git_log"]).read_text()
+    assert "fetch --no-tags" not in git_calls
+    assert "archive" not in git_calls
+
+
+def test_trusted_candidate_prep_bounds_dirty_path_diagnostics(tmp_path: Path):
+    fixture = _trusted_git_fixture(tmp_path)
+    trusted = Path(fixture["trusted"])
+    for index in range(22):
+        (trusted / f"dirty-{index:02d}.txt").write_text("ignored file contents\n")
+
+    result = _run_candidate_prep(fixture)
+
+    assert result.returncode != 0
+    diagnostic = result.stderr.split(
+        "dirty checkout status (first 20 rows; control characters escaped):\n", 1
+    )[1]
+    rows = diagnostic.splitlines()
+    assert len(rows) == 21
+    assert rows[-1] == "... 2 additional status rows omitted"
+    assert all(len(row) <= 512 for row in rows[:-1])
+    assert len(diagnostic.encode("ascii")) <= (20 * 512) + 128
+    assert "ignored file contents" not in result.stderr
+    assert not Path(fixture["github_output"]).exists()
+    git_calls = Path(fixture["git_log"]).read_text()
+    assert "fetch --no-tags" not in git_calls
+    assert "archive" not in git_calls
+
+
+def test_trusted_candidate_prep_truncates_each_dirty_status_row(tmp_path: Path):
+    fixture = _trusted_git_fixture(tmp_path)
+    trusted = Path(fixture["trusted"])
+    nested = trusted
+    for index in range(3):
+        nested = nested / (f"segment-{index}-" + ("x" * 180))
+    nested.mkdir(parents=True)
+    (nested / "dirty.txt").write_text("private contents\n")
+
+    result = _run_candidate_prep(fixture)
+
+    assert result.returncode != 0
+    diagnostic = result.stderr.split(
+        "dirty checkout status (first 20 rows; control characters escaped):\n", 1
+    )[1]
+    rows = diagnostic.splitlines()
+    assert len(rows) == 1
+    assert len(rows[0]) == 512
+    assert rows[0].endswith("... [truncated]")
+    assert "private contents" not in result.stderr
+
+
+def test_trusted_candidate_prep_escapes_non_utf8_paths(tmp_path: Path):
+    fixture = _trusted_git_fixture(tmp_path)
+    trusted = Path(fixture["trusted"])
+    _git(trusted, "config", "core.quotePath", "false")
+    invalid_path = os.fsencode(trusted) + b"/invalid-\xff-name.txt"
+    try:
+        fd = os.open(invalid_path, os.O_WRONLY | os.O_CREAT, 0o600)
+    except OSError as exc:
+        if exc.errno == errno.EILSEQ:
+            pytest.skip("filesystem rejects non-UTF-8 path bytes")
+        raise
+    try:
+        os.write(fd, b"private contents\n")
+    finally:
+        os.close(fd)
+
+    result = _run_candidate_prep(fixture)
+
+    assert result.returncode != 0
+    assert r"invalid-\\xff-name.txt" in result.stderr
+    assert "private contents" not in result.stderr
+    assert not Path(fixture["github_output"]).exists()
     git_calls = Path(fixture["git_log"]).read_text()
     assert "fetch --no-tags" not in git_calls
     assert "archive" not in git_calls
