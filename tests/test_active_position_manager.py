@@ -411,3 +411,49 @@ def test_breakeven_lock_proof(tmp_wal):
     assert apm.payload.trail_locked is True
     assert apm.payload.current_sl == 22401.0
 
+
+def test_real_time_sub_second_tick_defense_proof(tmp_wal):
+    """Invariant 5.1 Proof: Prove that APM evaluates live ticks in real time
+    for -20% Option SL, trailing stop ratchets, and targets without waiting for 1m bar closes.
+    """
+    apm = ActivePositionManager(wal_path=tmp_wal)
+    
+    # Arm PE position in GEAR_2_TREND with option entry 120.0 (opt_sl = 96.0)
+    ok = apm.arm_and_enter(
+        position_id="TEST_TICK_001",
+        direction="PE",
+        contract="NIFTY 22450 PE [ITM]",
+        entry_price=22400.0,
+        entry_time_str="2026-10-12T11:00:00",
+        sl_pts=12.0,
+        tp_pts=15.0,
+        opt_quote={"symbol": "NIFTY 22450 PE 13 OCT 26", "token": "44611", "ltp": 120.0, "bid": 119.8, "ask": 120.1},
+        session_gear="GEAR_2_TREND",
+        opt_stop_loss_pct=0.20
+    )
+    assert ok is True
+    assert apm.state == STATE_IN_FLIGHT
+    assert apm.payload.opt_initial_sl == 96.0
+
+    # Sub-second tick 1: Spot drops 8.5 pts (gain >= 8.0) -> Trailing ratchet locks immediately on tick
+    st1, p1 = apm.evaluate_tick(
+        current_spot=22391.5,
+        current_opt_ltp=125.0,
+        tick_time_str="2026-10-12T11:00:05"
+    )
+    assert st1 == STATE_TRAIL_LOCK
+    assert apm.payload.trail_locked is True
+    assert apm.payload.current_sl == 22396.0  # entry 22400 - 4.0
+
+    # Sub-second tick 2: Option crashes below 96.0 (e.g. 94.0) -> Option native stop loss triggers liquidation
+    apm.payload.trail_locked = False  # Reset trail lock to test native option SL trigger
+    st2, summary = apm.evaluate_tick(
+        current_spot=22405.0,
+        current_opt_ltp=95.0,
+        tick_time_str="2026-10-12T11:00:10"
+    )
+    assert st2 == STATE_LIQUIDATED
+    assert summary["exit_reason"] == "OPTION_NATIVE_STOP_LOSS_HIT"
+    assert summary["opt_exit_ltp"] == 95.0
+    assert summary["opt_pnl_pts"] == -25.0
+

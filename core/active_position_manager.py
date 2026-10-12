@@ -77,6 +77,8 @@ class ActivePositionManager:
         self.wal_path.parent.mkdir(parents=True, exist_ok=True)
         self.state = STATE_STANDBY
         self.payload: Optional[PositionPayload] = None
+        self.last_completed_trade: Optional[Dict[str, Any]] = None
+        self.trade_history: List[Dict[str, Any]] = []
         self._recover_state_or_fail_closed()
 
     def _persist_wal_atomic(self):
@@ -85,6 +87,8 @@ class ActivePositionManager:
         data = {
             "state": self.state,
             "payload": asdict(self.payload) if self.payload else None,
+            "last_completed_trade": self.last_completed_trade,
+            "trade_history": self.trade_history,
             "persisted_at": datetime.now().isoformat()
         }
         with open(tmp_path, "w") as f:
@@ -103,6 +107,8 @@ class ActivePositionManager:
                 data = json.load(f)
             saved_state = data.get("state", STATE_STANDBY)
             saved_payload = data.get("payload")
+            self.last_completed_trade = data.get("last_completed_trade")
+            self.trade_history = data.get("trade_history", [])
 
             if saved_payload:
                 self.payload = PositionPayload(**saved_payload)
@@ -248,6 +254,104 @@ class ActivePositionManager:
 
         self._transition_to(STATE_IN_FLIGHT)
         return True
+
+    def evaluate_tick(
+        self,
+        current_spot: float,
+        current_opt_ltp: Optional[float] = None,
+        tick_time_str: Optional[str] = None,
+        atr_1m: float = 10.0
+    ) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """Invariant 5.1: Real-Time Sub-Second Tick Trailing & Exit Defense.
+        
+        Evaluates sub-second ticks directly while in flight:
+        - Option Native Stop Loss (-20%): Evaluated immediately on live option tick.
+        - Spot Target Hit (+15 pts) / Trailing Stop breach.
+        - Monotonic Trail Ratchet (+8 pts spot gain locks +4 pts profit).
+        - Breakeven Lock (+12 pts spot gain locks +1 pt profit).
+        - Runner HWM Trailing Stop on Option LTP expansion.
+        """
+        if self.state not in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK}:
+            return self.state, None
+
+        p = self.payload
+        is_ce = (p.direction == "CE")
+
+        if current_opt_ltp is not None:
+            p.opt_current_ltp = current_opt_ltp
+            if p.opt_peak_hwm is None or current_opt_ltp > p.opt_peak_hwm:
+                p.opt_peak_hwm = current_opt_ltp
+
+        # Helper to execute liquidation on tick
+        def _record_tick_exit(reason: str, exit_spot: float):
+            p.exit_price = exit_spot
+            p.exit_reason = reason
+            p.exit_time = tick_time_str or datetime.now().isoformat()
+            p.pnl_pts = (p.exit_price - p.entry_price) if is_ce else (p.entry_price - p.exit_price)
+            if p.opt_entry_ltp is not None and p.opt_current_ltp is not None:
+                p.opt_exit_ltp = p.opt_current_ltp
+                p.opt_pnl_pts = round(p.opt_exit_ltp - p.opt_entry_ltp, 2)
+            self._transition_to(STATE_EXIT_PENDING)
+
+        # 1. Option Native Stop Loss (-20%)
+        if p.session_gear == "GEAR_2_TREND" and p.opt_initial_sl is not None and p.opt_current_ltp is not None:
+            if p.opt_current_ltp <= p.opt_initial_sl and not p.trail_locked:
+                _record_tick_exit("OPTION_NATIVE_STOP_LOSS_HIT", current_spot)
+                return self.liquidate()
+
+        # 2. Spot Stop Loss / Trailing Stop Hit
+        hit_spot_sl = (current_spot <= p.current_sl) if is_ce else (current_spot >= p.current_sl)
+        if hit_spot_sl:
+            if p.session_gear == "GEAR_1_RANGE" or p.trail_locked:
+                _record_tick_exit("TRAILING_STOP_HIT" if p.trail_locked else "STOP_LOSS_HIT", p.current_sl)
+                return self.liquidate()
+
+        # 3. Target Hit
+        hit_spot_tp = (current_spot >= p.target_price) if is_ce else (current_spot <= p.target_price)
+        if hit_spot_tp:
+            if not p.is_runner_mode:
+                _record_tick_exit("TARGET_HIT", p.target_price)
+                return self.liquidate()
+            elif not p.half_booked:
+                # 50% Booked; arm runner trailing mode
+                p.half_booked = True
+                p.current_sl = p.entry_price
+                opt_cushion = max(12.0, 1.2 * atr_1m)
+                p.runner_trailing_sl = (p.opt_peak_hwm - opt_cushion) if p.opt_peak_hwm else p.opt_entry_ltp
+                if self.state == STATE_IN_FLIGHT:
+                    self._transition_to(STATE_TRAIL_LOCK)
+                self._persist_wal_atomic()
+                return self.state, asdict(p)
+
+        # 4. Runner HWM Trailing Exit
+        if p.is_runner_mode and p.half_booked and p.runner_trailing_sl is not None:
+            opt_cushion = max(12.0, 1.2 * atr_1m)
+            new_opt_sl = (p.opt_peak_hwm - opt_cushion) if p.opt_peak_hwm else p.runner_trailing_sl
+            if new_opt_sl > p.runner_trailing_sl:
+                p.runner_trailing_sl = new_opt_sl
+            if p.opt_current_ltp is not None and p.opt_current_ltp <= p.runner_trailing_sl:
+                _record_tick_exit("RUNNER_HWM_TRAILING_EXIT", current_spot)
+                return self.liquidate()
+
+        # 5. Dynamic Ratchet Locks
+        gain = (current_spot - p.entry_price) if is_ce else (p.entry_price - current_spot)
+        if gain >= 12.0 and not p.trail_locked:
+            be_sl = (p.entry_price + 1.0) if is_ce else (p.entry_price - 1.0)
+            if (is_ce and be_sl > p.current_sl) or (not is_ce and be_sl < p.current_sl):
+                p.current_sl = be_sl
+                p.trail_locked = True
+                if self.state == STATE_IN_FLIGHT:
+                    self._transition_to(STATE_TRAIL_LOCK)
+        elif gain >= 8.0 and not p.trail_locked:
+            new_sl = (p.entry_price + 4.0) if is_ce else (p.entry_price - 4.0)
+            if (is_ce and new_sl > p.current_sl) or (not is_ce and new_sl < p.current_sl):
+                p.current_sl = new_sl
+                p.trail_locked = True
+                if self.state == STATE_IN_FLIGHT:
+                    self._transition_to(STATE_TRAIL_LOCK)
+
+        self._persist_wal_atomic()
+        return self.state, asdict(p)
 
     def evaluate_bar(
         self,
@@ -411,6 +515,10 @@ class ActivePositionManager:
             return self.state, asdict(self.payload) if self.payload else {}
         self._transition_to(STATE_LIQUIDATED)
         summary = asdict(self.payload) if self.payload else {}
+        # Preserve last completed trade and append to full trade history
+        self.last_completed_trade = summary
+        if summary:
+            self.trade_history.append(summary)
         # Clear payload for next trade
         self.payload = None
         self._persist_wal_atomic()

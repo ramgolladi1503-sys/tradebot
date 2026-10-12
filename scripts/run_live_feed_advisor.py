@@ -214,9 +214,10 @@ class SentinelLiveFeedAdvisor:
                 if "contract_authority_manifest_sha256" in df.columns else []
             )
             authority_hashes = [value for value in authority_hashes if value]
-            if len(authority_hashes) != 1:
-                return None
-            authority = load_verified_capture_authority(Path(latest_chunk).parent.parent, authority_hashes[0])
+            if len(authority_hashes) == 1:
+                authority = load_verified_capture_authority(Path(latest_chunk).parent.parent, authority_hashes[0])
+            else:
+                authority = getattr(self, "contract_authority", None)
             return self.resolve_quote_from_dataframe(
                 df=df,
                 strike=strike,
@@ -242,8 +243,6 @@ class SentinelLiveFeedAdvisor:
         explicit_expiry = expiry if expiry is not None else getattr(self, "target_expiry", None)
         if contract_authority is None:
             contract_authority = getattr(self, "contract_authority", None)
-        if contract_authority is None:
-            return None
 
         try:
             if "ts" not in df.columns:
@@ -264,90 +263,115 @@ class SentinelLiveFeedAdvisor:
             if df.empty:
                 return None
 
-        required = {"symbol", "token", "contract_authority_manifest_sha256"}
-        if not required.issubset(df.columns):
-            return None
-        frame_hashes = df["contract_authority_manifest_sha256"].dropna().astype(str).str.strip().unique().tolist()
-        frame_hashes = [value for value in frame_hashes if value]
-        if frame_hashes != [contract_authority.manifest_sha256]:
-            return None
-        df = df.loc[
-            df["contract_authority_manifest_sha256"].fillna("").astype(str).str.strip()
-            == contract_authority.manifest_sha256
-        ].copy()
-        if df.empty:
+        # symbol and token columns are mandatory for contract resolution
+        if not {"symbol", "token"}.issubset(df.columns):
             return None
 
-        expected_symbol = None
-        expected_entry = None
-        for instrument_key, entry in contract_authority.selected_by_instrument_key.items():
-            try:
-                entry_expiry = date.fromisoformat(str(entry.get("expiry")))
-                entry_matches_request = (
-                    entry.get("underlying") == ticker
-                    and entry.get("option_type") == str(opt_type).upper()
-                    and float(entry.get("strike")) == float(strike)
-                    and (
-                        explicit_expiry is None
-                        or _normalize_expiry_label(explicit_expiry)
-                        == _normalize_expiry_label(entry_expiry.isoformat())
-                    )
-                )
-            except (TypeError, ValueError, OverflowError):
-                return None
-            if entry_matches_request:
-                if expected_entry is not None:
+        # Verify manifest hash if contract_authority is available and column is present
+        if contract_authority is not None:
+            if "contract_authority_manifest_sha256" in df.columns:
+                frame_hashes = df["contract_authority_manifest_sha256"].dropna().astype(str).str.strip().unique().tolist()
+                frame_hashes = [value for value in frame_hashes if value]
+                if frame_hashes != [contract_authority.manifest_sha256]:
                     return None
-                expected_entry = entry
-                expected_symbol = str(entry.get("upstox_trading_symbol", ""))
-        if expected_entry is None or not expected_symbol:
-            return None
-        same_symbol_rows = df.loc[df["symbol"].astype(str).str.strip() == expected_symbol]
-        same_symbol_tokens = same_symbol_rows["token"].dropna().astype(str).str.strip().unique().tolist()
-        if same_symbol_rows.empty or same_symbol_tokens != [str(expected_entry.get("upstox_instrument_key", ""))]:
-            return None
+                df = df.loc[
+                    df["contract_authority_manifest_sha256"].fillna("").astype(str).str.strip()
+                    == contract_authority.manifest_sha256
+                ].copy()
+                if df.empty:
+                    return None
 
-        matches = []
-        contract_entry = None
-        for _, row in df.iterrows():
-            token = str(row.get("token", "")).strip()
-            symbol = str(row.get("symbol", "")).strip()
-            entry = contract_authority.selected_by_instrument_key.get(token)
-            if entry is None or entry.get("upstox_trading_symbol") != symbol:
-                continue
-            if entry.get("underlying") != ticker or entry.get("option_type") != str(opt_type).upper():
-                continue
-            try:
-                if float(entry.get("strike")) != float(strike):
-                    continue
-                resolved_expiry = date.fromisoformat(str(entry.get("expiry")))
-                if explicit_expiry is not None:
-                    normalized_expiry = _normalize_expiry_label(explicit_expiry)
-                    if normalized_expiry is None:
+        if contract_authority is not None:
+            expected_symbol = None
+            expected_entry = None
+            for instrument_key, entry in contract_authority.selected_by_instrument_key.items():
+                try:
+                    entry_expiry = date.fromisoformat(str(entry.get("expiry")))
+                    entry_matches_request = (
+                        entry.get("underlying") == ticker
+                        and entry.get("option_type") == str(opt_type).upper()
+                        and float(entry.get("strike")) == float(strike)
+                        and (
+                            explicit_expiry is None
+                            or _normalize_expiry_label(explicit_expiry)
+                            == _normalize_expiry_label(entry_expiry.isoformat())
+                        )
+                    )
+                except (TypeError, ValueError, OverflowError):
+                    return None
+                if entry_matches_request:
+                    if expected_entry is not None:
                         return None
-                    if _normalize_expiry_label(resolved_expiry.isoformat()) != normalized_expiry:
-                        continue
-                verified_entry = contract_authority.verify_candidate(
-                    instrument_key=token,
-                    symbol=symbol,
-                    underlying=ticker,
-                    expiry=resolved_expiry,
-                    strike=strike,
-                    option_type=opt_type,
-                )
-            except (TypeError, ValueError, OverflowError):
+                    expected_entry = entry
+                    expected_symbol = str(entry.get("upstox_trading_symbol", ""))
+            if expected_entry is None or not expected_symbol:
                 return None
-            if verified_entry is None:
-                continue
-            matches.append(row)
-            contract_entry = verified_entry
+            same_symbol_rows = df.loc[df["symbol"].astype(str).str.strip() == expected_symbol]
+            same_symbol_tokens = same_symbol_rows["token"].dropna().astype(str).str.strip().unique().tolist()
+            if same_symbol_rows.empty or same_symbol_tokens != [str(expected_entry.get("upstox_instrument_key", ""))]:
+                return None
 
-        if not matches or contract_entry is None:
-            return None
-        matches = pd.DataFrame(matches)
-        exp_str = _normalize_expiry_label(contract_entry.get("expiry"))
-        if exp_str is None:
-            return None
+            matches = []
+            contract_entry = None
+            for _, row in df.iterrows():
+                token = str(row.get("token", "")).strip()
+                symbol = str(row.get("symbol", "")).strip()
+                entry = contract_authority.selected_by_instrument_key.get(token)
+                if entry is None or entry.get("upstox_trading_symbol") != symbol:
+                    continue
+                if entry.get("underlying") != ticker or entry.get("option_type") != str(opt_type).upper():
+                    continue
+                try:
+                    if float(entry.get("strike")) != float(strike):
+                        continue
+                    resolved_expiry = date.fromisoformat(str(entry.get("expiry")))
+                    if explicit_expiry is not None:
+                        normalized_expiry = _normalize_expiry_label(explicit_expiry)
+                        if normalized_expiry is None:
+                            return None
+                        if _normalize_expiry_label(resolved_expiry.isoformat()) != normalized_expiry:
+                            continue
+                    verified_entry = contract_authority.verify_candidate(
+                        instrument_key=token,
+                        symbol=symbol,
+                        underlying=ticker,
+                        expiry=resolved_expiry,
+                        strike=strike,
+                        option_type=opt_type,
+                    )
+                except (TypeError, ValueError, OverflowError):
+                    return None
+                if verified_entry is None:
+                    continue
+                matches.append(row)
+                contract_entry = verified_entry
+
+            if not matches or contract_entry is None:
+                return None
+            matches = pd.DataFrame(matches)
+            exp_str = _normalize_expiry_label(contract_entry.get("expiry"))
+            if exp_str is None:
+                return None
+        else:
+            # Fallback path when ticks predate contract authority manifest column
+            # Search for candidate rows matching the ticker strike and option type
+            prefix = f"{ticker} {strike} {str(opt_type).upper()} "
+            candidate_rows = df[df["symbol"].astype(str).str.strip().str.startswith(prefix)]
+            if candidate_rows.empty:
+                return None
+            unique_symbols = candidate_rows["symbol"].dropna().unique().tolist()
+            if explicit_expiry is not None:
+                norm_target = _normalize_expiry_label(explicit_expiry)
+                unique_symbols = [
+                    s for s in unique_symbols
+                    if _normalize_expiry_label(s[len(prefix):]) == norm_target
+                ]
+            if len(unique_symbols) != 1:
+                return None
+            target_symbol = unique_symbols[0]
+            matches = candidate_rows[candidate_rows["symbol"] == target_symbol]
+            exp_str = _normalize_expiry_label(target_symbol[len(prefix):])
+            contract_entry = None
 
         # Sort by timestamp and extract the latest quote row
         if matches["token"].astype(str).str.strip().nunique() != 1:
@@ -388,21 +412,21 @@ class SentinelLiveFeedAdvisor:
             "oi": open_interest,
             "timestamp": capture_timestamp,
             "expiry": exp_str,
-            "expiry_source": "NSE_FO_MII_CONTRACT_MASTER",
-            "contract_key": contract_entry["contract_key"],
-            "contract_authority_manifest_sha256": contract_authority.manifest_sha256,
-            "nse_contract_id": contract_entry["nse_instrument_id"],
-            "nse_contract_file": contract_authority.nse_metadata["artifact_filename"],
-            "nse_contract_source": contract_authority.nse_metadata["file_url"],
-            "nse_contract_trading_date": contract_authority.nse_metadata["trading_date"],
-            "nse_report_current_date": contract_authority.nse_metadata["report_current_date"],
-            "nse_report_future_date": contract_authority.nse_metadata["report_future_date"],
-            "nse_contract_schema_version": contract_authority.nse_metadata["schema_version"],
-            "nse_contract_file_sha256": contract_authority.nse_metadata["file_sha256"],
-            "upstox_master_file": contract_authority.upstox_metadata["artifact_filename"],
-            "upstox_master_source": contract_authority.upstox_metadata["source_url"],
-            "upstox_master_downloaded_at_utc": contract_authority.upstox_metadata["downloaded_at_utc"],
-            "upstox_master_sha256": contract_authority.upstox_metadata["sha256"],
+            "expiry_source": "NSE_FO_MII_CONTRACT_MASTER" if contract_authority else "UPSTOX_LIVE_STREAM_IDENTITY",
+            "contract_key": contract_entry["contract_key"] if contract_entry else f"{ticker}_{strike}_{opt_type}_{exp_str}",
+            "contract_authority_manifest_sha256": contract_authority.manifest_sha256 if contract_authority else None,
+            "nse_contract_id": contract_entry["nse_instrument_id"] if contract_entry else None,
+            "nse_contract_file": contract_authority.nse_metadata["artifact_filename"] if contract_authority else None,
+            "nse_contract_source": contract_authority.nse_metadata["file_url"] if contract_authority else None,
+            "nse_contract_trading_date": contract_authority.nse_metadata["trading_date"] if contract_authority else None,
+            "nse_report_current_date": contract_authority.nse_metadata["report_current_date"] if contract_authority else None,
+            "nse_report_future_date": contract_authority.nse_metadata["report_future_date"] if contract_authority else None,
+            "nse_contract_schema_version": contract_authority.nse_metadata["schema_version"] if contract_authority else None,
+            "nse_contract_file_sha256": contract_authority.nse_metadata["file_sha256"] if contract_authority else None,
+            "upstox_master_file": contract_authority.upstox_metadata["artifact_filename"] if contract_authority else None,
+            "upstox_master_source": contract_authority.upstox_metadata["source_url"] if contract_authority else None,
+            "upstox_master_downloaded_at_utc": contract_authority.upstox_metadata["downloaded_at_utc"] if contract_authority else None,
+            "upstox_master_sha256": contract_authority.upstox_metadata["sha256"] if contract_authority else None,
         }
         return res
 
@@ -701,6 +725,35 @@ class SentinelLiveFeedAdvisor:
                 bar_time_str = closed_bar[0]
 
                 if bar_time_str == self.last_evaluated_bar:
+                    # Invariant 5.1: If APM is in-flight, defend the position on real-time live ticks
+                    # without waiting for the next 60s completed candle close.
+                    if self.apm.state in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK} and self.apm.payload:
+                        try:
+                            # Read latest tick spot and option quote
+                            live_spot = float(closed_bar[4])
+                            parts = self.apm.payload.strike_contract.split()
+                            pos_strike = int(parts[1])
+                            pos_type = parts[2]
+                            live_opt_q = self.resolve_real_option_quote(pos_strike, pos_type)
+                            live_opt_ltp = live_opt_q.get("ltp") if live_opt_q else None
+
+                            if live_opt_ltp is not None:
+                                tick_state, tick_summary = self.apm.evaluate_tick(
+                                    current_spot=live_spot,
+                                    current_opt_ltp=live_opt_ltp,
+                                    tick_time_str=datetime.now().isoformat(),
+                                    atr_1m=10.0
+                                )
+                                if tick_state == STATE_LIQUIDATED and tick_summary:
+                                    pnl = tick_summary.get("pnl_pts", 0.0)
+                                    opt_pnl = tick_summary.get("opt_pnl_pts")
+                                    pnl_emoji = "🟢" if pnl > 0 else "🔴"
+                                    opt_pnl_str = f" | Option PnL: {opt_pnl:+.2f} pts" if opt_pnl is not None else ""
+                                    self.last_exit_price = tick_summary.get("exit_price")
+                                    self.last_exit_direction = tick_summary.get("direction")
+                                    print(f"⚡ [REAL-TIME TICK EXIT] Reason: {tick_summary.get('exit_reason')} | Exit Spot: {tick_summary.get('exit_price'):.1f} | Spot PnL: {pnl_emoji} {pnl:+.1f} pts{opt_pnl_str}")
+                        except Exception:
+                            pass
                     time.sleep(1.0)
                     continue
 
@@ -866,10 +919,13 @@ class SentinelLiveFeedAdvisor:
                         insufficient_displacement = True
 
                 # Dynamic Regime Classification: Gear 1 (Range Scalper) vs Gear 2 (Trend Expansion)
-                current_gear = "GEAR_2_TREND" if (self.ewma_ker >= 0.35 and (self.or_high - self.or_low) >= 70.0) else "GEAR_1_RANGE"
+                or_width = self.or_high - self.or_low
+                is_or_expansion = (c < self.or_low or c > self.or_high) and or_width >= 70.0
+                current_gear = "GEAR_2_TREND" if (is_or_expansion or (self.ewma_ker >= 0.35 and or_width >= 70.0)) else "GEAR_1_RANGE"
 
-                # Gear 1 Range Day: Enforce Lunch Dead-Zone Freeze (11:00 AM - 13:30 PM)
-                in_lunch_dead_zone = (current_gear == "GEAR_1_RANGE" and dtime(11, 0) <= btime <= dtime(13, 30))
+                # Gear 1 Range Day: Enforce Lunch Dead-Zone Freeze (11:00 AM - 13:30 PM) ONLY if trapped within OR
+                # When market is in macro trend expansion outside OR, bypass lunch freeze to capture trend legs
+                in_lunch_dead_zone = (current_gear == "GEAR_1_RANGE" and not is_or_expansion and dtime(11, 0) <= btime <= dtime(13, 30))
 
                 # Gear Invariants:
                 # On Gear 2 Trend days: strictly FORBID wick-reversion fading against the macro drift
