@@ -12,6 +12,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
 from datetime import datetime, time as datetime_time
 from pathlib import Path
@@ -27,6 +28,92 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger("tick_collector")
+
+
+class _SynchronizedParquetBatchWriter:
+    """Serialize callback writes with shutdown and make storage failures terminal."""
+
+    def __init__(self, writer, *, batch_size, table_factory, log=logger):
+        self._writer = writer
+        self._batch_size = max(1, int(batch_size))
+        self._table_factory = table_factory
+        self._log = log
+        self._lock = threading.RLock()
+        self._buffer = []
+        self._accepting = True
+        self._closed = False
+        self._failed = False
+        self._failure = None
+        self._dropped_after_failure = 0
+
+    def add(self, records) -> bool:
+        with self._lock:
+            if not self._accepting or self._closed:
+                return False
+            if self._failed:
+                self._dropped_after_failure += len(records)
+                return False
+            self._buffer.extend(records)
+            if len(self._buffer) >= self._batch_size:
+                return self._flush_locked(force=False)
+            return True
+
+    def flush(self) -> bool:
+        with self._lock:
+            if self._closed:
+                return not self._failed
+            if self._failed:
+                return False
+            return self._flush_locked(force=True)
+
+    def _flush_locked(self, *, force: bool) -> bool:
+        if not self._buffer or (not force and len(self._buffer) < self._batch_size):
+            return True
+        try:
+            table = self._table_factory(self._buffer)
+            self._writer.write_table(table)
+        except Exception as exc:
+            self._failed = True
+            self._failure = exc
+            self._log.error("Parquet recording failed; stopping writes: %s: %s", type(exc).__name__, exc)
+            return False
+
+        flushed_count = len(self._buffer)
+        self._buffer.clear()
+        self._log.info("Flushed %d ticks to parquet.", flushed_count)
+        return True
+
+    def close(self) -> bool:
+        with self._lock:
+            if self._closed:
+                return not self._failed
+            # Prevent late callbacks from adding data before flushing and closing.
+            self._accepting = False
+            flush_ok = False if self._failed else self._flush_locked(force=True)
+            self._closed = True
+            try:
+                self._writer.close()
+            except Exception as exc:
+                self._failed = True
+                self._failure = self._failure or exc
+                self._log.error("Parquet writer close failed: %s: %s", type(exc).__name__, exc)
+                flush_ok = False
+            if self._dropped_after_failure:
+                self._log.error(
+                    "Dropped %d ticks after terminal parquet recording failure.",
+                    self._dropped_after_failure,
+                )
+            return flush_ok and not self._failed
+
+    @property
+    def failed(self) -> bool:
+        with self._lock:
+            return self._failed
+
+    @property
+    def closed(self) -> bool:
+        with self._lock:
+            return self._closed
 
 
 def get_target_tokens() -> dict[int, str]:
@@ -213,21 +300,12 @@ def main():
     ])
 
     writer = pq.ParquetWriter(out_file, schema)
-    tick_buffer = []
     BUFFER_SIZE = 5000
-
-    def flush_buffer():
-        nonlocal tick_buffer
-        if not tick_buffer:
-            return
-        try:
-            df = pd.DataFrame(tick_buffer)
-            table = pa.Table.from_pandas(df, schema=schema)
-            writer.write_table(table)
-            tick_buffer.clear()
-            logger.info(f"Flushed {len(df)} ticks to parquet.")
-        except Exception as e:
-            logger.error(f"Error flushing parquet: {e}")
+    batch_writer = _SynchronizedParquetBatchWriter(
+        writer,
+        batch_size=BUFFER_SIZE,
+        table_factory=lambda rows: pa.Table.from_pandas(pd.DataFrame(rows), schema=schema),
+    )
 
     kws = KiteTicker(API_KEY, ACCESS_TOKEN)
     stop_time = datetime_time(15, 45)
@@ -236,11 +314,7 @@ def main():
         now = datetime.now()
         if now.time() >= stop_time:
             logger.info("Observation cutoff (15:45 IST) reached. Shutting down tick collector.")
-            flush_buffer()
-            try:
-                writer.close()
-            except Exception:
-                pass
+            batch_writer.close()
             try:
                 ws.close()
             except Exception:
@@ -253,6 +327,7 @@ def main():
                 pass
             os._exit(0)
 
+        records = []
         for t in ticks:
             try:
                 record = {
@@ -268,12 +343,10 @@ def main():
                     if "depth" in t and t["depth"].get("sell") else None,
                     "vol": int(t.get("volume_traded", 0)),
                 }
-                tick_buffer.append(record)
-            except Exception as e:
+                records.append(record)
+            except Exception:
                 pass
-        
-        if len(tick_buffer) >= BUFFER_SIZE:
-            flush_buffer()
+        batch_writer.add(records)
 
     def on_connect(ws, response):
         logger.info("Connected to Kite WebSocket.")
@@ -294,11 +367,7 @@ def main():
 
     def handle_sigint(*args):
         logger.info("Shutting down collector due to signal...")
-        flush_buffer()
-        try:
-            writer.close()
-        except Exception:
-            pass
+        batch_writer.close()
         try:
             kws.close()
         except Exception:

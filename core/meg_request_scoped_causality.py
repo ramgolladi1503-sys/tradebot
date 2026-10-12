@@ -115,7 +115,14 @@ def append_meg_cycle_primitives(root: Path, *, session_id: str, producer_commit_
         eligible = [(tick_id, tick_epoch) for tick_id, tick_epoch in candidates
                     if tick_id and tick_epoch is not None and
                     (cycle_cutoff_epoch is None or float(tick_epoch) <= float(cycle_cutoff_epoch))]
-        tick_id, tick_epoch = max(eligible, key=lambda pair: float(pair[1])) if eligible else (None, None)
+        unused_eligible = [(tick_id, tick_epoch) for tick_id, tick_epoch in eligible
+                           if tick_id not in used_tick_ids]
+        if unused_eligible:
+            tick_id, tick_epoch = max(unused_eligible, key=lambda pair: float(pair[1]))
+        elif eligible:
+            tick_id, tick_epoch = max(eligible, key=lambda pair: float(pair[1]))
+        else:
+            tick_id, tick_epoch = None, None
         if accepted:
             if not tick_id or tick_epoch is None:
                 raise ValueError("missing_current_cycle_selected_tick")
