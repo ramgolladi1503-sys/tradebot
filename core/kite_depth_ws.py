@@ -12,6 +12,7 @@ import hashlib
 import re
 import atexit
 import sqlite3
+import queue
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -35,6 +36,16 @@ from core.market_session_state import PREMARKET, derive_market_session_policy
 from core.runtime_boot_identity import stamp_runtime_payload
 from core.feed.artifact_provenance import stamp_feed_runtime_provenance
 from core.feed.feed_epoch import advance_feed_epoch, current_feed_epoch
+from core.feed.tick_callback_coordinator import (
+    CallbackCoordinatorError,
+    CoordinatorFailed,
+    RejectionReason,
+    TickCallbackCoordinator,
+)
+from core.feed.tick_callback_transaction import (
+    CallbackPreparationError,
+    prepare_tick_callback,
+)
 from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.feed_runtime import build_canonical_feed_truth_state
 from core.feed_robustness_evidence import collector as feed_evidence
@@ -172,6 +183,185 @@ _LAST_MUTATION_RESULT = None
 _SOCKET_GENERATION = 0
 _SOCKET_GENERATION_LOCK = threading.RLock()
 _SOCKET_START_LOCK = threading.RLock()
+_SOCKET_LIFECYCLE_LOCK = threading.RLock()
+_CALLBACK_INGRESS_LOCK = threading.Lock()
+_CALLBACK_SEQUENCE = 0
+_CALLBACK_COORDINATOR = TickCallbackCoordinator(
+    max_pending=max(1, int(getattr(cfg, "DEPTH_WS_CALLBACK_QUEUE_MAX_PENDING", 64))),
+)
+_SOCKET_TRANSITION_LOCAL = threading.local()
+_DEFERRED_LIFECYCLE_QUEUE: queue.Queue = queue.Queue(
+    maxsize=max(1, int(getattr(cfg, "DEPTH_WS_CALLBACK_QUEUE_MAX_PENDING", 64)))
+)
+_DEFERRED_LIFECYCLE_THREAD: threading.Thread | None = None
+_DEFERRED_LIFECYCLE_LOCK = threading.Lock()
+_LAST_DEFERRED_LIFECYCLE_EVENT: threading.Event | None = None
+_CALLBACK_UNREADY_REASON = ""
+_CALLBACK_UNREADY_LOCK = threading.Lock()
+_PROCESS_RESTART_EVENT = None
+
+
+def set_process_restart_event(event) -> None:
+    """Install the parent-owned restart signal when running under supervisor."""
+    global _PROCESS_RESTART_EVENT
+    _PROCESS_RESTART_EVENT = event
+
+
+def _latch_callback_unready_state(reason: str) -> str:
+    """Set the process-lifetime callback unready latch without logging."""
+    global _CALLBACK_UNREADY_REASON, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+    message = str(reason or "callback_coordinator_failed")[:300]
+    with _CALLBACK_UNREADY_LOCK:
+        if not _CALLBACK_UNREADY_REASON:
+            _CALLBACK_UNREADY_REASON = message
+    _RUNTIME_STATE = "DEGRADED"
+    _LAST_RUNTIME_ERROR = _CALLBACK_UNREADY_REASON
+    return _CALLBACK_UNREADY_REASON
+
+
+def _mark_callback_coordinator_failed(
+    reason: str,
+    *,
+    detail: str = "",
+    event_name: str = "FEED_CALLBACK_COORDINATOR_FAILED",
+) -> None:
+    """Latch callback processing unready after owner failure; never fall back."""
+    message = _latch_callback_unready_state(reason)
+    restart_event = _PROCESS_RESTART_EVENT
+    if restart_event is not None:
+        try:
+            restart_event.set()
+        except Exception:
+            pass
+    # The callback latch is process-lifetime. Publish it through the existing
+    # runtime artifact contract so the subprocess supervisor can replace this
+    # child; otherwise same-process start/restart guards leave it degraded
+    # indefinitely. Keep the producer classified as callback-originated so
+    # snapshot queue pressure never triggers synchronous filesystem fallback.
+    try:
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source="on_ticks",
+            runtime_state="RESTART_REQUIRED",
+            last_error=message,
+            process_restart_required=True,
+        )
+    except Exception:
+        pass
+    try:
+        _log_ws(
+            event_name,
+            {"reason": message, "detail": str(detail or "")[:500], "feed_ready": False},
+        )
+    except Exception:
+        pass
+
+
+def _callback_transition_timeout_sec() -> float:
+    try:
+        value = float(getattr(cfg, "DEPTH_WS_CALLBACK_TRANSITION_TIMEOUT_SEC", 10.0))
+    except (TypeError, ValueError, OverflowError):
+        return 10.0
+    return value if math.isfinite(value) and value >= 0.0 else 10.0
+
+
+def _begin_socket_transition(reason: str):
+    """Stop callback admission and wait for all earlier owner work to drain.
+
+    A timeout leaves the coordinator's transition pending and admission closed.
+    Callers must return without changing the ticker or generation.
+    """
+    if _CALLBACK_COORDINATOR.is_owner_thread:
+        raise CallbackCoordinatorError("owner thread cannot synchronously wait for its own transition")
+    with _CALLBACK_INGRESS_LOCK:
+        admission = _CALLBACK_COORDINATOR.begin_transition()
+    if not admission.accepted or admission.transition is None:
+        if admission.reason is RejectionReason.TRANSITION_PENDING:
+            _log_ws(
+                "FEED_SOCKET_TRANSITION_BUSY",
+                {"reason": str(reason or ""), "result": "rejected_without_state_change"},
+            )
+            return None
+        _mark_callback_coordinator_failed(
+            "socket_transition_admission_rejected",
+            detail=f"reason={reason}; rejection={admission.reason}",
+        )
+        return None
+    barrier = admission.transition
+    try:
+        acknowledged = barrier.wait_ack(timeout=_callback_transition_timeout_sec())
+    except CallbackCoordinatorError as exc:
+        _mark_callback_coordinator_failed("socket_transition_barrier_failed", detail=str(exc))
+        return None
+    if not acknowledged:
+        cancelled = barrier.cancel()
+        _mark_callback_coordinator_failed(
+            "socket_transition_barrier_timeout",
+            detail=(
+                f"reason={reason}; timeout_sec={_callback_transition_timeout_sec()}; "
+                f"barrier_cancelled={cancelled}"
+            ),
+        )
+        return None
+    _SOCKET_TRANSITION_LOCAL.active = True
+    return barrier
+
+
+def _complete_socket_transition(barrier) -> None:
+    if barrier is None:
+        return
+    try:
+        barrier.complete()
+    finally:
+        _SOCKET_TRANSITION_LOCAL.active = False
+
+
+def _deferred_lifecycle_worker() -> None:
+    while True:
+        action, completion, description = _DEFERRED_LIFECYCLE_QUEUE.get()
+        try:
+            action()
+        except BaseException as exc:
+            _mark_callback_coordinator_failed(
+                "deferred_socket_lifecycle_failed",
+                detail=f"action={description}; error={type(exc).__name__}:{exc}",
+            )
+        finally:
+            completion.set()
+            _DEFERRED_LIFECYCLE_QUEUE.task_done()
+
+
+def _defer_socket_lifecycle(action, *, description: str) -> bool:
+    """Queue a reentrant lifecycle request behind the active callback task.
+
+    The original operation runs on a separate thread and reruns its own gates;
+    no restart/stop/start side effect occurs on the coordinator owner thread.
+    """
+    global _DEFERRED_LIFECYCLE_THREAD, _LAST_DEFERRED_LIFECYCLE_EVENT
+    completion = threading.Event()
+    with _DEFERRED_LIFECYCLE_LOCK:
+        try:
+            _DEFERRED_LIFECYCLE_QUEUE.put_nowait((action, completion, description))
+        except queue.Full:
+            _log_ws(
+                "FEED_LIFECYCLE_DEFERRED_QUEUE_FULL",
+                {"action": description, "result": "rejected", "feed_ready": False},
+            )
+            _mark_callback_coordinator_failed("deferred_lifecycle_queue_full", detail=description)
+            return False
+        _LAST_DEFERRED_LIFECYCLE_EVENT = completion
+        if _DEFERRED_LIFECYCLE_THREAD is None or not _DEFERRED_LIFECYCLE_THREAD.is_alive():
+            _DEFERRED_LIFECYCLE_THREAD = threading.Thread(
+                target=_deferred_lifecycle_worker,
+                name="feed-socket-lifecycle-owner",
+                daemon=True,
+            )
+            _DEFERRED_LIFECYCLE_THREAD.start()
+    _log_ws(
+        "FEED_LIFECYCLE_DEFERRED",
+        {"action": description, "result": "queued", "callback_sequence_pending": True},
+    )
+    return True
 
 
 def _current_socket_generation() -> int:
@@ -183,28 +373,46 @@ def _advance_socket_generation(
     *,
     restart_verification_reason: str | None = None,
     start_epoch: float | None = None,
-) -> int:
-    """Publish a new socket generation without nesting the ticker lock."""
+) -> int | None:
+    """Publish a generation only after prior callback work has drained."""
     global _SOCKET_GENERATION
-    with _SOCKET_GENERATION_LOCK:
-        _SOCKET_GENERATION += 1
-        socket_generation = int(_SOCKET_GENERATION)
-        _invalidate_feed_restart_verification_for_socket_advance(
-            socket_generation=socket_generation
+    if _CALLBACK_COORDINATOR.is_owner_thread:
+        _defer_socket_lifecycle(
+            lambda: _advance_socket_generation(
+                restart_verification_reason=restart_verification_reason,
+                start_epoch=start_epoch,
+            ),
+            description="advance_socket_generation",
         )
-    if restart_verification_reason is not None:
-        effective_start_epoch = (
-            float(start_epoch)
-            if start_epoch is not None
-            else float(_DEPTH_WS_START_EPOCH or 0.0)
-        )
-        _begin_feed_restart_verification(
-            reason=str(restart_verification_reason or ""),
-            start_epoch=effective_start_epoch,
-            now_epoch=float(now_utc_epoch()),
-            socket_generation=socket_generation,
-        )
-    return socket_generation
+        return None
+
+    owns_transition = not bool(getattr(_SOCKET_TRANSITION_LOCAL, "active", False))
+    barrier = _begin_socket_transition("advance_socket_generation") if owns_transition else None
+    if owns_transition and barrier is None:
+        raise CallbackCoordinatorError("socket generation was not advanced because its barrier was not acknowledged")
+    try:
+        with _SOCKET_GENERATION_LOCK:
+            _SOCKET_GENERATION += 1
+            socket_generation = int(_SOCKET_GENERATION)
+            _invalidate_feed_restart_verification_for_socket_advance(
+                socket_generation=socket_generation
+            )
+        if restart_verification_reason is not None:
+            effective_start_epoch = (
+                float(start_epoch)
+                if start_epoch is not None
+                else float(_DEPTH_WS_START_EPOCH or 0.0)
+            )
+            _begin_feed_restart_verification(
+                reason=str(restart_verification_reason or ""),
+                start_epoch=effective_start_epoch,
+                now_epoch=float(now_utc_epoch()),
+                socket_generation=socket_generation,
+            )
+        return socket_generation
+    finally:
+        if owns_transition:
+            _complete_socket_transition(barrier)
 
 _LAST_DESIRED_TOKENS: list[int] | None = None
 _INTENDED_TOKENS: list[int] | None = None
@@ -571,7 +779,7 @@ def _observation_packet_detail(
 ) -> dict[str, object]:
     parsed_mode = str(tick.get("mode") or "").strip().lower()
     has_exchange_timestamp = tick.get("exchange_timestamp") is not None
-    has_ohlc = isinstance(tick.get("ohlc"), dict)
+    has_ohlc = isinstance(tick.get("ohlc"), Mapping)
     has_change = tick.get("change") is not None
     detail = {
         "instrument_class": str(instrument_class or "UNKNOWN"),
@@ -7819,6 +8027,24 @@ def _schedule_restart_depth_ws(
     return True
 
 
+def _acquire_restart_lifecycle_lock(*, reason: str, path: str) -> bool:
+    """Wait briefly for an in-progress start/stop to finish before retrying."""
+    try:
+        wait_sec = float(getattr(cfg, "FEED_RESTART_LIFECYCLE_WAIT_SEC", 10.0))
+        if not math.isfinite(wait_sec):
+            wait_sec = 10.0
+    except (TypeError, ValueError, OverflowError):
+        wait_sec = 10.0
+    wait_sec = min(30.0, max(0.0, wait_sec))
+    if _SOCKET_LIFECYCLE_LOCK.acquire(timeout=wait_sec):
+        return True
+    _log_ws(
+        "FEED_RESTART_CONCURRENT_BLOCKED",
+        {"reason": reason, "path": path, "lifecycle_wait_sec": wait_sec},
+    )
+    return False
+
+
 def _should_ignore_restart_cooldown_for_ws_fault(*, code: int | None, reason_text: str | None) -> bool:
     """
     Only bypass the full-restart cooldown for hard websocket faults that leave the feed dead in practice.
@@ -7983,7 +8209,8 @@ def set_normalized_tick_sink(sink=None):
     _NORMALIZED_TICK_SINK = sink
 
 def on_ticks(ws, ticks, *, socket_generation: int | None = None):
-    """Serialize callback ingestion with socket cutover and reject retired sockets."""
+    """Prepare and admit one immutable batch; complete synchronously on its owner."""
+    global _CALLBACK_SEQUENCE
     if not ticks:
         return
     callback_socket_generation = (
@@ -7991,43 +8218,139 @@ def on_ticks(ws, ticks, *, socket_generation: int | None = None):
         if socket_generation is None
         else int(socket_generation)
     )
-    with _SOCKET_GENERATION_LOCK:
-        active_socket_generation = int(_SOCKET_GENERATION)
-        if callback_socket_generation != active_socket_generation:
-            _log_ws(
-                "FEED_OLD_GENERATION_CALLBACK_IGNORED",
-                {
-                    "socket_generation": callback_socket_generation,
-                    "active_generation": active_socket_generation,
-                    "callback": "on_ticks_delegate",
-                    "result": "ignored_before_ingest",
-                },
-            )
-            return
-        return _process_on_ticks(
-            ws,
-            ticks,
-            socket_generation=callback_socket_generation,
+    if _CALLBACK_COORDINATOR.is_owner_thread:
+        _log_ws(
+            "FEED_CALLBACK_REENTRANT_REJECTED",
+            {"socket_generation": callback_socket_generation, "callback": "on_ticks_delegate", "result": "rejected_without_fallback"},
         )
+        return
+
+    admission = None
+    sequence = None
+    active_socket_generation = None
+    preparation_error = None
+    # Serialize sequence assignment, preparation, generation revalidation,
+    # and FIFO admission without holding the generation lock while copying.
+    with _CALLBACK_INGRESS_LOCK:
+        with _SOCKET_GENERATION_LOCK:
+            active_socket_generation = int(_SOCKET_GENERATION)
+        if callback_socket_generation == active_socket_generation:
+            _CALLBACK_SEQUENCE += 1
+            sequence = int(_CALLBACK_SEQUENCE)
+            try:
+                envelope = prepare_tick_callback(
+                    ticks,
+                    socket_generation=callback_socket_generation,
+                    callback_sequence=sequence,
+                    receive_timestamp_epoch=float(now_utc_epoch()),
+                )
+            except CallbackPreparationError as exc:
+                preparation_error = exc
+                _latch_callback_unready_state("callback_batch_preparation_failed")
+            if preparation_error is None:
+                with _SOCKET_GENERATION_LOCK:
+                    active_socket_generation = int(_SOCKET_GENERATION)
+                if callback_socket_generation == active_socket_generation:
+                    admission = _CALLBACK_COORDINATOR.submit(
+                        lambda: _process_on_ticks(
+                            ws,
+                            envelope.ticks,
+                            socket_generation=envelope.socket_generation,
+                            callback_sequence=envelope.callback_sequence,
+                            callback_receive_epoch=envelope.receive_timestamp_epoch,
+                        )
+                    )
+                    if admission.reason is RejectionReason.FULL:
+                        _latch_callback_unready_state("callback_queue_full")
+    if preparation_error is not None:
+        exc = preparation_error
+        _log_ws(
+            "FEED_CALLBACK_BATCH_REJECTED",
+            {
+                "socket_generation": callback_socket_generation,
+                "callback_sequence": sequence,
+                "batch_size": len(ticks),
+                "reason": "immutable_preparation_failed",
+                "detail": str(exc)[:500],
+                "result": "rejected_without_publication",
+            },
+        )
+        _mark_callback_coordinator_failed(
+            "callback_batch_preparation_failed",
+            detail=f"sequence={sequence}; {type(exc).__name__}:{exc}",
+            event_name="FEED_CALLBACK_BATCH_REJECTED",
+        )
+        return
+
+    if sequence is None:
+        _log_ws(
+            "FEED_OLD_GENERATION_CALLBACK_IGNORED",
+            {"socket_generation": callback_socket_generation, "active_generation": active_socket_generation, "callback": "on_ticks_delegate", "result": "ignored_before_ingest"},
+        )
+        return
+    if admission is None or not admission.accepted:
+        reason = None if admission is None else admission.reason
+        event = (
+            "FEED_CALLBACK_COORDINATOR_FAILED"
+            if reason is RejectionReason.NOT_RUNNING
+            else "FEED_CALLBACK_QUEUE_SATURATED"
+            if reason is RejectionReason.FULL
+            else "FEED_CALLBACK_BATCH_REJECTED"
+        )
+        _log_ws(
+            event,
+            {
+                "socket_generation": callback_socket_generation,
+                "active_generation": active_socket_generation,
+                "callback_sequence": sequence,
+                "batch_size": len(ticks),
+                "reason": str(getattr(reason, "value", "generation_changed_during_prepare")),
+                "result": "rejected_without_publication",
+            },
+        )
+        if reason is RejectionReason.NOT_RUNNING:
+            _mark_callback_coordinator_failed("callback_admission_closed", detail=f"sequence={sequence}; reason={reason.value}")
+        elif reason is RejectionReason.FULL:
+            _mark_callback_coordinator_failed(
+                "callback_queue_full",
+                detail=f"sequence={sequence}; batch_size={len(ticks)}",
+                event_name="FEED_CALLBACK_QUEUE_SATURATED",
+            )
+        return
+
+    try:
+        # Keep the historical synchronous callback contract.
+        admission.handles[0].result()
+    except CoordinatorFailed as exc:
+        _mark_callback_coordinator_failed("callback_owner_task_failed", detail=f"sequence={sequence}; {type(exc).__name__}:{exc}")
+        raise
 
 
-def _process_on_ticks(ws, ticks, *, socket_generation: int):
+def _process_on_ticks(
+    ws,
+    ticks,
+    *,
+    socket_generation: int,
+    callback_sequence: int | None = None,
+    callback_receive_epoch: float | None = None,
+):
     global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _FEED_ON_TICKS_ROW_SEQ
     _ = ws
     if not ticks:
         return
     callback_socket_generation = int(socket_generation)
-    now_epoch = float(time.time())
+    callback_sequence = int(callback_sequence or 0)
+    now_epoch = float(callback_receive_epoch) if callback_receive_epoch is not None else float(time.time())
     record_fd_trace(
         "on_ticks.callback_entry",
         row_index=_FEED_ON_TICKS_ROW_SEQ + 1,
         queue_depth=write_queue_depth(),
         pending_writes=max(0, write_enqueue_count() - write_flush_count()),
         runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
-        extra={"tick_count": len(ticks or [])},
+        extra={"tick_count": len(ticks or []), "callback_sequence": callback_sequence, "socket_generation": callback_socket_generation},
     )
     try:
-        feed_evidence.callback(len(ticks or []), callback_epoch=float(time.time()), rows=ticks)
+        feed_evidence.callback(len(ticks or []), callback_epoch=now_epoch, rows=ticks)
     except Exception:
         pass
     try:
@@ -8036,14 +8359,17 @@ def _process_on_ticks(ws, ticks, *, socket_generation: int):
             "WS_CALLBACK", receipt_epoch=now_epoch,
             feed_session_id=identity.get("feed_session_id"),
             reconnect_generation=identity.get("reconnect_generation"),
-            callback_sequence=_FEED_ON_TICKS_ROW_SEQ + 1,
+            callback_sequence=callback_sequence,
+            socket_generation=callback_socket_generation,
             batch_size=len(ticks or []),
-            observed_token_count=len({int(row.get("instrument_token")) for row in ticks if isinstance(row, dict) and row.get("instrument_token") is not None}),
+            observed_token_count=len({int(row.get("instrument_token")) for row in ticks if isinstance(row, Mapping) and row.get("instrument_token") is not None}),
         )
         append_feed_forensic_event(
             "FULL_PACKET_PROGRESS", receipt_epoch=now_epoch,
             feed_session_id=identity.get("feed_session_id"),
             reconnect_generation=identity.get("reconnect_generation"),
+            callback_sequence=callback_sequence,
+            socket_generation=callback_socket_generation,
             full_packet_count=len(_FULL_PAYLOAD_OBSERVED_TOKENS),
             observed_token_count=len(_OBSERVATION_CALLBACK_COUNT_BY_TOKEN),
         )
@@ -8052,17 +8378,19 @@ def _process_on_ticks(ws, ticks, *, socket_generation: int):
     try:
         if not _should_throttle_ws_event("depth_ws_ticks", now_epoch=float(time.time()), cooldown_sec=5.0):
             logger.info(
-                "depth_ws_ticks count=%d sample_tokens=%s",
+                "depth_ws_ticks count=%d sample_tokens=%s callback_sequence=%d socket_generation=%d",
                 len(ticks or []),
                 [
                     t.get("instrument_token")
                     for t in list(ticks or [])[:5]
-                    if isinstance(t, dict)
+                    if isinstance(t, Mapping)
                 ],
+                callback_sequence,
+                callback_socket_generation,
             )
     except Exception:
         pass
-    now_epoch = float(now_utc_epoch())
+    # Freshness is tied to callback receipt, not time spent waiting in the owner queue.
     max_tick_epoch = None
     try:
         get_feed_health_monitor().on_ws_message(now_epoch=now_epoch)
@@ -8070,7 +8398,7 @@ def _process_on_ticks(ws, ticks, *, socket_generation: int):
         pass
     if ticks and (now_epoch - _SCHEMA_LOG_TS) >= 30.0:
         try:
-            sample = ticks[0] if isinstance(ticks[0], dict) else {}
+            sample = ticks[0] if isinstance(ticks[0], Mapping) else {}
             sample_keys = sorted(list(sample.keys()))
             ts_fields = [k for k in ("exchange_timestamp", "last_trade_time", "timestamp") if k in sample]
             _log_ws(
@@ -8093,7 +8421,7 @@ def _process_on_ticks(ws, ticks, *, socket_generation: int):
     observation_token_set = set(int(token) for token in (getattr(observation_registry, "all_tokens", []) or []))
     for t in ticks:
         _FEED_ON_TICKS_ROW_SEQ += 1
-        if not isinstance(t, dict):
+        if not isinstance(t, Mapping):
             continue
         payload_tick_epoch = _extract_tick_epoch(t)
         token_int = None
@@ -8105,7 +8433,7 @@ def _process_on_ticks(ws, ticks, *, socket_generation: int):
         if token_int is not None and payload_tick_epoch is not None:
             prev_payload = _coerce_epoch(_LAST_PAYLOAD_TS_BY_TOKEN.get(token_int))
             if prev_payload is not None and payload_tick_epoch < prev_payload:
-                _log_ws("FEED_TICK_DROPPED_OUT_OF_ORDER", {"token": token_int, "payload_epoch": payload_tick_epoch, "prev_epoch": prev_payload})
+                _log_ws("FEED_TICK_DROPPED_OUT_OF_ORDER", {"token": token_int, "payload_epoch": payload_tick_epoch, "prev_epoch": prev_payload, "callback_sequence": callback_sequence, "socket_generation": callback_socket_generation})
                 continue
             _LAST_PAYLOAD_TS_BY_TOKEN[token_int] = payload_tick_epoch
         freshness_tick_epoch = _normalized_tick_epoch(
@@ -8154,14 +8482,16 @@ def _process_on_ticks(ws, ticks, *, socket_generation: int):
         )
         symbol = (observation_identity or {}).get("symbol") or (_TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None)
         underlying_tick = _is_underlying_token(token_int)
-        if isinstance(depth, dict) and depth:
+        if isinstance(depth, Mapping) and depth:
             try:
-                depth = canonicalize_kite_depth(depth)
-                t["depth"] = depth
+                # Immutable callback snapshots encode sequences as tuples;
+                # restore only the protocol's required list container locally.
+                depth = canonicalize_kite_depth(
+                    {"buy": list(depth.get("buy") or ()), "sell": list(depth.get("sell") or ())}
+                )
             except KiteDepthProtocolViolation:
-                _log_ws("KITE_DEPTH_PROTOCOL_VIOLATION", {"instrument_token": token_int, "reason": "cardinality_or_field"})
+                _log_ws("KITE_DEPTH_PROTOCOL_VIOLATION", {"instrument_token": token_int, "reason": "cardinality_or_field", "callback_sequence": callback_sequence, "socket_generation": callback_socket_generation})
                 depth = None
-                t["depth"] = None
         has_depth = _depth_has_bid_ask(depth)
         tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
         tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None
@@ -8439,7 +8769,10 @@ def _process_on_ticks(ws, ticks, *, socket_generation: int):
             tick_epoch=_LAST_WS_TICK_EPOCH,
             reason="ws_ticks_flowing",
         )
-    if _reconnect_recovery_blocked_active():
+    if _CALLBACK_UNREADY_REASON:
+        _RUNTIME_STATE = "DEGRADED"
+        _LAST_RUNTIME_ERROR = str(_CALLBACK_UNREADY_REASON)
+    elif _reconnect_recovery_blocked_active():
         _RUNTIME_STATE = "RECOVERY_BLOCKED"
         _LAST_RUNTIME_ERROR = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "recovery_blocked"
     elif bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
@@ -8556,58 +8889,145 @@ def _register_on_ticks_callback(kws, generation_is_current, delegate=None, *, so
 
 
 def stop_depth_ws(reason: str = "manual_stop"):
+    """Serialize stop requests before they touch shared feed state."""
+    if _CALLBACK_COORDINATOR.is_owner_thread:
+        return _defer_socket_lifecycle(
+            lambda: stop_depth_ws(reason=reason),
+            description="stop_depth_ws",
+        )
+    with _SOCKET_LIFECYCLE_LOCK:
+        return _stop_depth_ws_impl(reason)
+
+
+def _stop_depth_ws_impl(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
     """
     global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
-    campaign_raw_diagnostics.shutdown()
-    _reset_feed_restart_verification(reason=f"stop_depth_ws:{reason}")
-    _reset_option_feed_verification(reason=f"stop_depth_ws:{reason}")
+    transition = _begin_socket_transition(f"stop_depth_ws:{reason}")
+    if transition is None:
+        return False
     watchdog_thread = None
     ticker_instance = None
     stop_timeout_sec = float(getattr(cfg, "DEPTH_WATCHDOG_STOP_TIMEOUT_SEC", 3.0))
-    with _KITE_TICKER_LOCK:
-        has_active_ticker = _KITE_TICKER is not None
-        has_active_watchdog = _WATCHDOG_THREAD is not None or _WATCHDOG_STOP is not None
-        if not has_active_ticker and not has_active_watchdog:
+    _SOCKET_START_LOCK.acquire()
+    try:
+        campaign_raw_diagnostics.shutdown()
+        _reset_feed_restart_verification(reason=f"stop_depth_ws:{reason}")
+        _reset_option_feed_verification(reason=f"stop_depth_ws:{reason}")
+        with _KITE_TICKER_LOCK:
+            has_active_ticker = _KITE_TICKER is not None
+            has_active_watchdog = _WATCHDOG_THREAD is not None or _WATCHDOG_STOP is not None
+            if not has_active_ticker and not has_active_watchdog:
+                _STOP_REQUESTED = True
+                _LAST_FEED_HEALTH_STATE = None
+                _RUNTIME_STATE = "STOPPED"
+                return True
+        # Retire callbacks before close/disconnect. The barrier above has
+        # already drained every callback admitted under the previous generation.
+        _advance_socket_generation()
+        with _KITE_TICKER_LOCK:
+            has_active_ticker = _KITE_TICKER is not None
+            has_active_watchdog = _WATCHDOG_THREAD is not None or _WATCHDOG_STOP is not None
+            if not has_active_ticker and not has_active_watchdog:
+                _STOP_REQUESTED = True
+                _LAST_FEED_HEALTH_STATE = None
+                _RUNTIME_STATE = "STOPPED"
+                _persist_runtime_snapshot_row(
+                    ws_connected=False,
+                    source=f"stop_depth_ws:{reason}",
+                    runtime_state="STOPPED",
+                    last_error=str(reason),
+                )
+                return True
             _STOP_REQUESTED = True
+            _log_ws("FEED_STOP", {"reason": reason})
+            if _WATCHDOG_STOP is not None:
+                _WATCHDOG_STOP.set()
+            watchdog_thread = _WATCHDOG_THREAD
+            _WATCHDOG_THREAD = None
+            _STALE_STRIKES = 0
             _LAST_FEED_HEALTH_STATE = None
+            _LAST_WS_TICK_EPOCH = 0.0
+            _LAST_MSG_TS_BY_TOKEN = {}
+            _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN = {}
+            _LAST_PAYLOAD_TS_BY_TOKEN = {}
+            _SYMBOL_LAST_OPTION_TICK_TS = {}
+            _LAST_FEED_TICK_LOG_MINUTE = None
             _RUNTIME_STATE = "STOPPED"
-            return
-        _STOP_REQUESTED = True
-        _log_ws("FEED_STOP", {"reason": reason})
-        if _WATCHDOG_STOP is not None:
-            _WATCHDOG_STOP.set()
-        watchdog_thread = _WATCHDOG_THREAD
-        _WATCHDOG_THREAD = None
-        _STALE_STRIKES = 0
-        _LAST_FEED_HEALTH_STATE = None
-        _LAST_WS_TICK_EPOCH = 0.0
-        _LAST_MSG_TS_BY_TOKEN = {}
-        _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN = {}
-        _LAST_PAYLOAD_TS_BY_TOKEN = {}
-        _SYMBOL_LAST_OPTION_TICK_TS = {}
-        _LAST_FEED_TICK_LOG_MINUTE = None
-        _RUNTIME_STATE = "STOPPED"
-        ticker_instance = _KITE_TICKER
-        _close_ticker_instance(ticker_instance)
-        _KITE_TICKER = None
-    _join_thread_safe(watchdog_thread, stop_timeout_sec)
-    _join_ticker_threads(ticker_instance, stop_timeout_sec)
-    _persist_runtime_snapshot_row(
-        ws_connected=False,
-        source=f"stop_depth_ws:{reason}",
-        runtime_state="STOPPED",
-        last_error=str(reason),
-    )
+            ticker_instance = _KITE_TICKER
+            _close_ticker_instance(ticker_instance)
+            _KITE_TICKER = None
+        _join_thread_safe(watchdog_thread, stop_timeout_sec)
+        _join_ticker_threads(ticker_instance, stop_timeout_sec)
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source=f"stop_depth_ws:{reason}",
+            runtime_state="STOPPED",
+            last_error=str(reason),
+        )
+        return True
+    finally:
+        try:
+            _SOCKET_START_LOCK.release()
+        finally:
+            _complete_socket_transition(transition)
 
 
 def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, force_full_restart: bool = False):
+    """Serialize a complete restart against direct start/stop requests."""
+    if _CALLBACK_COORDINATOR.is_owner_thread:
+        return _defer_socket_lifecycle(
+            lambda: restart_depth_ws(
+                reason=reason,
+                ignore_cooldown=ignore_cooldown,
+                force_full_restart=force_full_restart,
+            ),
+            description="restart_depth_ws",
+        )
+    with _CALLBACK_UNREADY_LOCK:
+        unready_reason = _CALLBACK_UNREADY_REASON
+    if unready_reason:
+        _log_ws(
+            "FEED_RESTART_BLOCKED_CALLBACK_UNREADY",
+            {"reason": unready_reason, "result": "process_restart_required"},
+        )
+        return False
+    return _restart_depth_ws_impl(
+        reason=reason,
+        ignore_cooldown=ignore_cooldown,
+        force_full_restart=force_full_restart,
+    )
+
+
+def _restart_depth_ws_impl(reason: str = "unknown", ignore_cooldown: bool = False, force_full_restart: bool = False):
     """
     Full restart: close existing ticker and recreate with last known tokens.
     Rate-limited to avoid restart storms.
     """
     global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _ACTIVE_AUTH_MODE
+
+    if _CALLBACK_COORDINATOR.is_owner_thread:
+        # The lifecycle runner reruns every restart guard on its own thread.
+        # The current callback is allowed to finish before a transition barrier
+        # can acknowledge, so the owner thread never waits on itself.
+        return _defer_socket_lifecycle(
+            lambda: restart_depth_ws(
+                reason=reason,
+                ignore_cooldown=ignore_cooldown,
+                force_full_restart=force_full_restart,
+            ),
+            description="restart_depth_ws",
+        )
+
+    with _CALLBACK_UNREADY_LOCK:
+        unready_reason = _CALLBACK_UNREADY_REASON
+    if unready_reason:
+        _log_ws(
+            "FEED_RESTART_BLOCKED_CALLBACK_UNREADY",
+            {"reason": unready_reason, "result": "process_restart_required"},
+        )
+        return False
 
     # The persistent breaker is the first gate: while open, repeated watchdog
     # calls must not emit per-attempt recovery diagnostics or perform resolution.
@@ -8680,7 +9100,13 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
             if not _RESTART_LOCK.acquire(blocking=False):
                 _log_ws("FEED_RESTART_CONCURRENT_BLOCKED", {"reason": reason, "path": "soft_resubscribe"})
                 return False
+            if not _acquire_restart_lifecycle_lock(reason=reason, path="soft_resubscribe"):
+                _RESTART_LOCK.release()
+                return False
             try:
+                with _CALLBACK_UNREADY_LOCK:
+                    if _CALLBACK_UNREADY_REASON:
+                        return False
                 if feed_breaker_tripped():
                     _log_breaker_blocked_restart(reason)
                     return False
@@ -8695,6 +9121,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
                 )
                 soft_ok = _soft_resubscribe_current(reason=reason)
             finally:
+                _SOCKET_LIFECYCLE_LOCK.release()
                 _RESTART_LOCK.release()
             if soft_ok:
                 try:
@@ -8740,7 +9167,13 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     if not _RESTART_LOCK.acquire(blocking=False):
         _log_ws("FEED_RESTART_CONCURRENT_BLOCKED", {"reason": reason})
         return False
+    if not _acquire_restart_lifecycle_lock(reason=reason, path="full_restart"):
+        _RESTART_LOCK.release()
+        return False
     try:
+        with _CALLBACK_UNREADY_LOCK:
+            if _CALLBACK_UNREADY_REASON:
+                return False
         if feed_breaker_tripped():
             _log_breaker_blocked_restart(reason)
             return False
@@ -8838,7 +9271,22 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
                 restart_attempted=True,
             )
 
-            stop_depth_ws(reason=f"restart:{reason}")
+            stopped = stop_depth_ws(reason=f"restart:{reason}")
+            if stopped is False:
+                _mark_callback_coordinator_failed(
+                    "restart_aborted_before_socket_replacement",
+                    detail=f"reason={reason}; stop_transition_failed",
+                )
+                return False
+
+            with _CALLBACK_UNREADY_LOCK:
+                callback_unready_reason = _CALLBACK_UNREADY_REASON
+            if callback_unready_reason:
+                _log_ws(
+                    "FEED_RESTART_BLOCKED_CALLBACK_UNREADY",
+                    {"reason": callback_unready_reason, "result": "process_restart_required"},
+                )
+                return False
 
             _STOP_REQUESTED = False
 
@@ -8902,7 +9350,10 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
                 pass
             return True
     finally:
-        _RESTART_LOCK.release()
+        try:
+            _SOCKET_LIFECYCLE_LOCK.release()
+        finally:
+            _RESTART_LOCK.release()
 
 
 
@@ -8916,7 +9367,74 @@ def start_depth_ws(
     auth_mode: str = "profile",
     restart_verification_reason: str | None = None,
 ) -> bool:
+    """Serialize lifecycle requests before startup can mutate feed state."""
+    if _CALLBACK_COORDINATOR.is_owner_thread:
+        token_snapshot = tuple(instrument_tokens or ())
+        return _defer_socket_lifecycle(
+            lambda: start_depth_ws(
+                token_snapshot,
+                profile_verified=profile_verified,
+                skip_lock=skip_lock,
+                skip_guard=skip_guard,
+                tick_sink=tick_sink,
+                auth_mode=auth_mode,
+                restart_verification_reason=restart_verification_reason,
+            ),
+            description="start_depth_ws",
+        )
+    with _CALLBACK_UNREADY_LOCK:
+        unready_reason = _CALLBACK_UNREADY_REASON
+    if unready_reason:
+        _log_ws(
+            "FEED_START_BLOCKED_CALLBACK_UNREADY",
+            {"reason": unready_reason, "result": "process_restart_required"},
+        )
+        return False
+    with _SOCKET_LIFECYCLE_LOCK:
+        return _start_depth_ws_impl(
+            instrument_tokens,
+            profile_verified=profile_verified,
+            skip_lock=skip_lock,
+            skip_guard=skip_guard,
+            tick_sink=tick_sink,
+            auth_mode=auth_mode,
+            restart_verification_reason=restart_verification_reason,
+        )
+
+
+def _start_depth_ws_impl(
+    instrument_tokens,
+    profile_verified=False,
+    skip_lock: bool = False,
+    skip_guard: bool = False,
+    tick_sink=None,
+    *,
+    auth_mode: str = "profile",
+    restart_verification_reason: str | None = None,
+) -> bool:
     global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION, _ACTIVE_AUTH_MODE
+    if _CALLBACK_COORDINATOR.is_owner_thread:
+        token_snapshot = tuple(instrument_tokens or ())
+        return _defer_socket_lifecycle(
+            lambda: start_depth_ws(
+                token_snapshot,
+                profile_verified=profile_verified,
+                skip_lock=skip_lock,
+                skip_guard=skip_guard,
+                tick_sink=tick_sink,
+                auth_mode=auth_mode,
+                restart_verification_reason=restart_verification_reason,
+            ),
+            description="start_depth_ws",
+        )
+    with _CALLBACK_UNREADY_LOCK:
+        unready_reason = _CALLBACK_UNREADY_REASON
+    if unready_reason:
+        _log_ws(
+            "FEED_START_BLOCKED_CALLBACK_UNREADY",
+            {"reason": unready_reason, "result": "process_restart_required"},
+        )
+        return False
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
         try:
@@ -8934,22 +9452,12 @@ def start_depth_ws(
             {"reconnect_blocked_reason": blocked_reason},
         )
         return False
-    _DEPTH_WS_START_EPOCH = float(now_utc_epoch())
-    _RUNTIME_STATE = "STARTING"
-    _LAST_RUNTIME_ERROR = ""
     canonical_plan_tokens = _active_launch_plan_tokens()
     if canonical_plan_tokens:
-        _INTENDED_TOKENS = sorted({int(token) for token in canonical_plan_tokens if int(token) > 0})
+        requested_intended_tokens = sorted({int(token) for token in canonical_plan_tokens if int(token) > 0})
     else:
-        _INTENDED_TOKENS = sorted({int(token) for token in (instrument_tokens or []) if int(token) > 0})
-    _INTENDED_TOKEN_COUNT = len(_INTENDED_TOKENS)
-    _persist_runtime_snapshot_row(
-        ws_connected=None,
-        source="start_depth_ws:starting",
-        runtime_state="STARTING",
-        last_error="",
-        intended_tokens_count=_INTENDED_TOKEN_COUNT,
-    )
+        requested_intended_tokens = sorted({int(token) for token in (instrument_tokens or []) if int(token) > 0})
+    requested_intended_count = len(requested_intended_tokens)
     if not skip_lock:
         if not _ensure_depth_ws_lock():
             _RUNTIME_STATE = "SUBSCRIBE_FAILED"
@@ -9016,7 +9524,6 @@ def start_depth_ws(
         logger.debug("kite_ws_paths_error err=%s:%s", type(exc).__name__, exc)
     if auth_mode not in {"profile", "read_only_observer"}:
         raise ValueError("KITE_AUTH_MODE_UNSUPPORTED")
-    _ACTIVE_AUTH_MODE = auth_mode
     auth_payload = get_kite_auth_health(
         force=True,
         **({"auth_mode": auth_mode} if auth_mode == "read_only_observer" else {}),
@@ -9107,25 +9614,14 @@ def start_depth_ws(
         )
         logger.error("depth_ws_no_instrument_tokens")
         return False
-    _LAST_TOKENS = list(tokens)
-    _STALE_STRIKES = 0
-    _WARMUP_PENDING = True
-    _STOP_REQUESTED = False
-    _LAST_WS_TICK_EPOCH = 0.0
-    _LAST_MSG_TS_BY_TOKEN = {}
-    _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN = {}
-    _LAST_PAYLOAD_TS_BY_TOKEN = {}
-    _SYMBOL_LAST_OPTION_TICK_TS = {}
-    _LAST_FEED_TICK_LOG_MINUTE = None
-    _LAST_FEED_HEALTH_STATE = None
-    _RUNTIME_STATE = "STARTING"
+    # Keep preparation local until the callback publication barrier succeeds.
+    # In-flight callbacks continue to see the old, internally consistent state.
     try:
         get_feed_health_monitor().set_reconnect_handler(
             lambda reason: restart_depth_ws(reason=f"feed_health:{reason}")
         )
     except Exception:
         pass
-    _clear_auth_required_latch()
     rebalance_cooldown_sec = float(getattr(cfg, "DEPTH_REBALANCE_COOLDOWN_SEC", 60.0))
     atm_shift_threshold_steps = float(getattr(cfg, "DEPTH_ATM_SHIFT_THRESHOLD_STEPS", 1))
     rebalance_state = {
@@ -9198,43 +9694,106 @@ def start_depth_ws(
         handshake_proof.get("profile_verified"),
     )
 
-    with _SOCKET_START_LOCK:
-        with _KITE_TICKER_LOCK:
-            if _KITE_TICKER is not None:
-                logger.info("kite_ws_existing_instance_detected_closing")
-                _log_ws("FEED_RECREATE_CLOSE_OLD", {"tokens": len(tokens)})
-                _close_ticker_instance(_KITE_TICKER)
-                _KITE_TICKER = None
-            if _WATCHDOG_STOP is not None:
-                _WATCHDOG_STOP.set()
-            _WATCHDOG_STOP = threading.Event()
-            kws = get_kite_ticker(api_key=api_key, access_token=access_token, debug=False)
-        socket_generation = _advance_socket_generation(
-            restart_verification_reason=restart_verification_reason,
-            start_epoch=float(_DEPTH_WS_START_EPOCH or 0.0),
-        )
+    with _CALLBACK_UNREADY_LOCK:
+        unready_reason = _CALLBACK_UNREADY_REASON
+    if unready_reason:
         _log_ws(
-            "FEED_SOCKET_GENERATION_STARTED",
-            {
-                "socket_generation": socket_generation,
-                "token_count": len(tokens),
-                "timestamp": float(now_utc_epoch()),
-                "result": "started",
-            },
+            "FEED_START_BLOCKED_CALLBACK_UNREADY",
+            {"reason": unready_reason, "result": "process_restart_required"},
         )
-        if hasattr(kws, "auto_reconnect"):
-            try:
-                kws.auto_reconnect = _use_native_reconnect()
-            except Exception:
-                pass
-        logger.info(
-            "kite_ws_created api_key_tail4=%s access_token_tail4=%s kite_id=%s",
-            api_key[-4:] if len(str(api_key or "")) >= 4 else api_key,
-            access_token[-4:] if len(str(access_token or "")) >= 4 else access_token,
-            id(kws),
+        return False
+    transition = _begin_socket_transition("start_depth_ws")
+    if transition is None:
+        return False
+    with _CALLBACK_UNREADY_LOCK:
+        unready_reason = _CALLBACK_UNREADY_REASON
+    if unready_reason:
+        _complete_socket_transition(transition)
+        _log_ws(
+            "FEED_START_BLOCKED_CALLBACK_UNREADY",
+            {"reason": unready_reason, "result": "process_restart_required"},
         )
-        with _KITE_TICKER_LOCK:
-            _KITE_TICKER = kws
+        return False
+    try:
+        _DEPTH_WS_START_EPOCH = float(now_utc_epoch())
+        _ACTIVE_AUTH_MODE = auth_mode
+        _INTENDED_TOKENS = list(requested_intended_tokens)
+        _INTENDED_TOKEN_COUNT = requested_intended_count
+        _LAST_TOKENS = list(tokens)
+        _STALE_STRIKES = 0
+        _WARMUP_PENDING = True
+        _STOP_REQUESTED = False
+        _LAST_WS_TICK_EPOCH = 0.0
+        _LAST_MSG_TS_BY_TOKEN = {}
+        _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN = {}
+        _LAST_PAYLOAD_TS_BY_TOKEN = {}
+        _SYMBOL_LAST_OPTION_TICK_TS = {}
+        _LAST_FEED_TICK_LOG_MINUTE = None
+        _LAST_FEED_HEALTH_STATE = None
+        _RUNTIME_STATE = "STARTING"
+        _LAST_RUNTIME_ERROR = ""
+        _clear_auth_required_latch()
+        _persist_runtime_snapshot_row(
+            ws_connected=None,
+            source="start_depth_ws:starting",
+            runtime_state="STARTING",
+            last_error="",
+            intended_tokens_count=_INTENDED_TOKEN_COUNT,
+        )
+        with _SOCKET_START_LOCK:
+            with _KITE_TICKER_LOCK:
+                if _KITE_TICKER is not None:
+                    logger.info("kite_ws_existing_instance_detected_closing")
+                    _log_ws("FEED_RECREATE_CLOSE_OLD", {"tokens": len(tokens)})
+                    _close_ticker_instance(_KITE_TICKER)
+                    _KITE_TICKER = None
+                if _WATCHDOG_STOP is not None:
+                    _WATCHDOG_STOP.set()
+                _WATCHDOG_STOP = threading.Event()
+            socket_generation = _advance_socket_generation(
+                restart_verification_reason=restart_verification_reason,
+                start_epoch=float(_DEPTH_WS_START_EPOCH or 0.0),
+            )
+            _log_ws(
+                "FEED_SOCKET_GENERATION_STARTED",
+                {
+                    "socket_generation": socket_generation,
+                    "token_count": len(tokens),
+                    "timestamp": float(now_utc_epoch()),
+                    "result": "started",
+                },
+            )
+            kws = get_kite_ticker(api_key=api_key, access_token=access_token, debug=False)
+            if hasattr(kws, "auto_reconnect"):
+                try:
+                    kws.auto_reconnect = _use_native_reconnect()
+                except Exception:
+                    pass
+            logger.info(
+                "kite_ws_created api_key_tail4=%s access_token_tail4=%s kite_id=%s",
+                api_key[-4:] if len(str(api_key or "")) >= 4 else api_key,
+                access_token[-4:] if len(str(access_token or "")) >= 4 else access_token,
+                id(kws),
+            )
+            with _KITE_TICKER_LOCK:
+                _KITE_TICKER = kws
+    except Exception as exc:
+        _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+        _LAST_RUNTIME_ERROR = f"socket_start_failed:{type(exc).__name__}"[:300]
+        _log_ws(
+            "FEED_SOCKET_START_FAILED",
+            {"error_type": type(exc).__name__, "socket_generation": _current_socket_generation()},
+        )
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source="start_depth_ws:socket_start_failed",
+            runtime_state=_RUNTIME_STATE,
+            last_error=_LAST_RUNTIME_ERROR,
+            intended_tokens_count=_INTENDED_TOKEN_COUNT,
+        )
+        raise
+    finally:
+        _complete_socket_transition(transition)
 
     handshake_soft_reset_used = False
     def _advance_completed_transition(kind: str, identity: int | str, metadata: dict[str, Any]) -> None:

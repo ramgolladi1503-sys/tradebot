@@ -379,7 +379,7 @@ def test_on_ticks_855_row_batches_preserve_tick_depth_observation_when_snapshot_
     monkeypatch.setattr(
         ws,
         "_enqueue_runtime_snapshot_with_direct_artifact",
-        lambda payload, direct_artifact_writer: snapshot_publications.append(payload) or True,
+        lambda payload, direct_artifact_writer, **kwargs: snapshot_publications.append(payload) or True,
     )
     batch = [
         {

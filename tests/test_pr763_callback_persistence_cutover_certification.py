@@ -463,6 +463,14 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
     monitored_root = Path(tmp_path).resolve()
     callback_ident = threading.get_ident()
     callback_active = False
+    callback_owner_ids = set()
+    original_process_on_ticks = depth_ws._process_on_ticks
+
+    def record_callback_owner(*args, **kwargs):
+        callback_owner_ids.add(threading.get_ident())
+        return original_process_on_ticks(*args, **kwargs)
+
+    monkeypatch.setattr(depth_ws, "_process_on_ticks", record_callback_owner)
     original_diag = depth_ws.campaign_raw_diagnostics
 
     # A prior test may have deliberately terminated the process-wide worker.
@@ -524,7 +532,7 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
 
     def tripwire(category, target, func):
         def wrapped(*args, **kwargs):
-            if threading.get_ident() == callback_ident:
+            if callback_active and threading.get_ident() in callback_owner_ids:
                 violations.append((category, target, threading.get_ident(), threading.current_thread().name))
             return func(*args, **kwargs)
         return wrapped
@@ -532,12 +540,12 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
     def record_sqlite(operation):
         entry = (operation, threading.get_ident(), threading.current_thread().name)
         sqlite_operations.append(entry)
-        if callback_active and threading.get_ident() == callback_ident:
+        if callback_active and threading.get_ident() in callback_owner_ids:
             violations.append(("sqlite_operation", operation, *entry[1:]))
 
     def observed_conn(factory, target):
         def wrapped(*args, **kwargs):
-            if callback_active and threading.get_ident() == callback_ident:
+            if callback_active and threading.get_ident() in callback_owner_ids:
                 violations.append(("sqlite_connection", target, threading.get_ident(), threading.current_thread().name))
             return _ObservedConnection(factory(*args, **kwargs), record_sqlite)
         return wrapped
@@ -556,7 +564,7 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
         def wrapped(path, *args, **kwargs):
             candidate = Path(os.path.abspath(os.fsdecode(path)))
             if (monitored_root == candidate or monitored_root in candidate.parents) and "runtime/logs" not in str(candidate):
-                if callback_active and threading.get_ident() == callback_ident:
+                if callback_active and threading.get_ident() in callback_owner_ids:
                     violations.append(("filesystem", operation, str(candidate), threading.get_ident(), threading.current_thread().name))
             return original(path, *args, **kwargs)
         return wrapped
@@ -567,14 +575,14 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
     real_open = builtins.open
     def builtin_open(path, *args, **kwargs):
         candidate = Path(os.path.abspath(os.fsdecode(path))) if isinstance(path, (str, bytes, os.PathLike)) else None
-        if candidate is not None and (monitored_root == candidate or monitored_root in candidate.parents) and "runtime/logs" not in str(candidate) and callback_active and threading.get_ident() == callback_ident:
+        if candidate is not None and (monitored_root == candidate or monitored_root in candidate.parents) and "runtime/logs" not in str(candidate) and callback_active and threading.get_ident() in callback_owner_ids:
             violations.append(("filesystem", "builtins.open", str(candidate), threading.get_ident(), threading.current_thread().name))
         return real_open(path, *args, **kwargs)
     monkeypatch.setattr(builtins, "open", builtin_open)
     real_os_stat, real_os_makedirs, real_os_fsync = os.stat, os.makedirs, os.fsync
     monkeypatch.setattr(os, "stat", filesystem_tripwire("os.stat", real_os_stat))
     monkeypatch.setattr(os, "makedirs", filesystem_tripwire("os.makedirs", real_os_makedirs))
-    monkeypatch.setattr(os, "fsync", lambda fd: (violations.append(("filesystem", "os.fsync", str(fd), threading.get_ident(), threading.current_thread().name)) if callback_active and threading.get_ident() == callback_ident else None) or real_os_fsync(fd))
+    monkeypatch.setattr(os, "fsync", lambda fd: (violations.append(("filesystem", "os.fsync", str(fd), threading.get_ident(), threading.current_thread().name)) if callback_active and threading.get_ident() in callback_owner_ids else None) or real_os_fsync(fd))
 
     original_tick = tick_enqueue
     if injection == "sqlite":
@@ -583,7 +591,7 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
             return original_tick(**kwargs)
         monkeypatch.setattr(depth_ws, "insert_tick", injected)
     elif injection and injection.startswith("sqlite_"):
-        raw = sqlite3.connect(str(tmp_path / "injected.db"))
+        raw = sqlite3.connect(str(tmp_path / "injected.db"), check_same_thread=False)
         injected_conn = _ObservedConnection(raw, record_sqlite)
         operation = injection.removeprefix("sqlite_")
         def injected(**kwargs):
@@ -842,7 +850,7 @@ def test_tripwire_detects_each_sqlite_operation(tmp_path, monkeypatch):
     )
     for operation in operations:
         _, _, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path / operation, "sqlite_" + operation)
-        assert any(v[0] == "sqlite_operation" and v[1] == operation.replace("_", ".", 1) for v in violations)
+        assert any(v[0] == "sqlite_operation" and v[1] == operation.replace("_", ".", 1) for v in violations), (operation, violations)
         runtime_store.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
 
 

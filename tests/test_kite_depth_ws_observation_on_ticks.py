@@ -269,7 +269,7 @@ def test_tick_snapshot_producer_gate_runs_before_expensive_collection(monkeypatc
     monkeypatch.setattr(
         ws,
         "_enqueue_runtime_snapshot_with_direct_artifact",
-        lambda payload, direct_artifact_writer: publications.append(payload) or True,
+        lambda payload, direct_artifact_writer, **kwargs: publications.append(payload) or True,
     )
 
     try:

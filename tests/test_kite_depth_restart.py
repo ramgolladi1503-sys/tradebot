@@ -59,6 +59,7 @@ def _reset_ws_runtime_state(monkeypatch):
         "_INTENDED_TOKEN_COUNT": 0,
         "_RUNTIME_STATE": "STOPPED",
         "_LAST_RUNTIME_ERROR": "",
+        "_CALLBACK_UNREADY_REASON": "",
         "_LAST_FULL_RESTART_EPOCH": 0.0,
         "_FULL_RESTARTS": [],
         "_FEED_HEALTH_DURATION_STATE": None,
@@ -94,6 +95,52 @@ def _reset_ws_runtime_state(monkeypatch):
 
     monkeypatch.setattr(ws.threading, "Thread", _NoopThread, raising=True)
     ws._reset_feed_restart_verification(reason="unit_test_reset")
+
+
+def test_socket_factory_failure_does_not_poison_callback_owner_and_retry_succeeds(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+
+    class _RestClient:
+        def profile(self):
+            return {"user_id": "ABCD1234"}
+
+    class _FakeTicker:
+        def connect(self, threaded=True):
+            assert threaded is True
+
+    calls = {"factory": 0}
+
+    def ticker_factory(**_kwargs):
+        calls["factory"] += 1
+        if calls["factory"] == 1:
+            raise RuntimeError("transient factory failure")
+        return _FakeTicker()
+
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "runtime.sqlite"), raising=False)
+    monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
+    monkeypatch.setattr(cfg, "KITE_API_KEY", "test_key", raising=False)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "KiteTicker", object(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_ticker", ticker_factory, raising=True)
+    monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=True)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: _RestClient(), raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
+    monkeypatch.setattr(ws, "_log_ws", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ws, "_persist_runtime_snapshot_row", lambda **_kwargs: None)
+    monkeypatch.setattr(ws.lifecycle, "register", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(RuntimeError, match="transient factory failure"):
+        ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+
+    assert ws._CALLBACK_UNREADY_REASON == ""
+    assert ws._RUNTIME_STATE == "SUBSCRIBE_FAILED"
+    assert ws._CALLBACK_COORDINATOR.state.value == "running"
+    assert ws.start_depth_ws([101], skip_lock=True, skip_guard=True) is True
+    assert calls["factory"] == 2
+    assert ws._CALLBACK_UNREADY_REASON == ""
 
 
 @pytest.mark.parametrize("state", ["PENDING", "FAILED"])
@@ -2096,7 +2143,7 @@ def test_socket_cutover_and_tick_callback_do_not_invert_locks(monkeypatch):
     start_results = []
     thread_errors = []
 
-    def fake_process(_ws, _ticks, *, socket_generation):
+    def fake_process(_ws, _ticks, *, socket_generation, callback_sequence=None, callback_receive_epoch=None):
         callback_entered_process.set()
         callback_results.append(ws._ws_connected_state())
 
@@ -2177,7 +2224,7 @@ def test_subscription_mutation_and_tick_callback_do_not_invert_locks(monkeypatch
 
     monkeypatch.setattr(ws, "_current_socket_generation", observed_generation_snapshot)
 
-    def fake_process(_ws, _ticks, *, socket_generation):
+    def fake_process(_ws, _ticks, *, socket_generation, callback_sequence=None, callback_receive_epoch=None):
         callback_holds_generation.set()
         if not allow_callback_health_check.wait(timeout=3.0):
             raise AssertionError("callback health check was not released")
