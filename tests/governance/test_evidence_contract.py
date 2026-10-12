@@ -973,8 +973,12 @@ def test_trusted_evidence_workflow_does_not_persist_checkout_credentials():
     workflow = workflow_path.read_text()
     trusted_job = workflow.split("  trusted-evidence-coverage:", 1)[1]
     checkout_step = trusted_job.split("      - name: Set up Python from the protected base workflow", 1)[0]
+    candidate_step = trusted_job.split(
+        "      - name: Validate event SHAs and prepare candidate as inert data", 1
+    )[1].split("      - name: Enforce candidate coverage with the base verifier", 1)[0]
 
     assert "persist-credentials: false" in checkout_step
+    assert "timeout-minutes: 15" in candidate_step
 
 
 @pytest.mark.parametrize(("workflow_relpath", "event_name"), [
@@ -1073,7 +1077,8 @@ def _git(cwd: Path, *args: str) -> str:
     return subprocess.check_output(["git", *args], cwd=cwd, text=True, stderr=subprocess.PIPE).strip()
 
 
-def _trusted_git_fixture(tmp_path: Path, *, fake_fetch_head: bool = False) -> dict[str, str | Path]:
+def _trusted_git_fixture(tmp_path: Path, *, fake_fetch_head: bool = False,
+                         long_status_path: bool = False) -> dict[str, str | Path]:
     bare = tmp_path / "origin.git"
     seed = tmp_path / "seed"
     trusted = tmp_path / "trusted"
@@ -1084,7 +1089,15 @@ def _trusted_git_fixture(tmp_path: Path, *, fake_fetch_head: bool = False) -> di
     _git(seed, "config", "user.name", "Evidence Test")
     _git(seed, "config", "user.email", "evidence-test@example.invalid")
     (seed / "base.txt").write_text("protected base\n")
+    if long_status_path:
+        nested = seed
+        for index in range(3):
+            nested = nested / (f"segment-{index}-" + ("x" * 180))
+        nested.mkdir(parents=True)
+        (nested / "tracked.txt").write_text("protected nested file\n")
     _git(seed, "add", "base.txt")
+    if long_status_path:
+        _git(seed, "add", "segment-0-*")
     _git(seed, "commit", "--quiet", "-m", "protected base")
     base_sha = _git(seed, "rev-parse", "HEAD")
     _git(seed, "remote", "add", "origin", str(bare))
@@ -1118,6 +1131,9 @@ def _trusted_git_fixture(tmp_path: Path, *, fake_fetch_head: bool = False) -> di
     shim = bin_dir / "git"
     shim.write_text("#!/bin/bash\n"
                     "printf '%s\\n' \"$*\" >> \"$GIT_LOG\"\n"
+                    "if [[ \"$1 $2\" == 'status --porcelain=v1' && -n \"${STATUS_PROBE_DELAY_SECONDS:-}\" ]]; then sleep \"$STATUS_PROBE_DELAY_SECONDS\"; fi\n"
+                    "if [[ \"$1 $2\" == 'status --porcelain=v1' && -n \"${STATUS_PROBE_STDERR_CONTROL:-}\" ]]; then printf 'unsafe\\001stderr\\033[31m\\n' >&2; exit 42; fi\n"
+                    "if [[ \"$1 $2\" == 'status --porcelain=v1' && -n \"${STATUS_PROBE_STDOUT_BYTES:-}\" ]]; then head -c \"$STATUS_PROBE_STDOUT_BYTES\" /dev/zero; exit 0; fi\n"
                     "if [[ \"$1\" == fetch && \"$2\" == --no-tags && \"$3\" == origin && \"$4\" == \"$HEAD_SHA\" ]]; then\n"
                     "  hidden_head=$(\"$REAL_GIT\" --git-dir \"$ORIGIN_BARE\" rev-parse refs/pull/42/head) || exit 1\n"
                     "  [[ \"$hidden_head\" == \"$4\" ]] || exit 1\n"
@@ -1220,6 +1236,90 @@ def test_trusted_candidate_prep_reports_dirty_paths_and_stops_before_fetch(
     assert "archive" not in git_calls
 
 
+def test_trusted_candidate_prep_collapses_nested_untracked_directory(tmp_path: Path):
+    fixture = _trusted_git_fixture(tmp_path)
+    nested = Path(fixture["trusted"]) / "new-tree" / "nested"
+    nested.mkdir(parents=True)
+    (nested / "payload.txt").write_text("private contents\n")
+
+    result = _run_candidate_prep(fixture)
+
+    assert result.returncode != 0
+    assert "new-tree/" in result.stderr
+    assert "nested/payload.txt" not in result.stderr
+    assert not Path(fixture["github_output"]).exists()
+    git_calls = Path(fixture["git_log"]).read_text()
+    assert "fetch --no-tags" not in git_calls
+    assert "archive" not in git_calls
+
+
+def test_trusted_candidate_prep_status_timeout_fails_closed_before_fetch_or_output(tmp_path: Path):
+    fixture = _trusted_git_fixture(tmp_path)
+
+    result = _run_candidate_prep(
+        fixture,
+        overrides={"TRUSTED_CHECKOUT_STATUS_TIMEOUT_SECONDS": "0.1",
+                   "STATUS_PROBE_DELAY_SECONDS": "2"},
+    )
+
+    assert result.returncode != 0
+    assert "git status timed out; refusing to run verifier" in result.stderr
+    assert not Path(fixture["github_output"]).exists()
+    assert not (Path(fixture["runner_temp"]) /
+                "trusted-evidence-candidate-test-run-1").exists()
+    git_calls = Path(fixture["git_log"]).read_text()
+    assert "fetch --no-tags" not in git_calls
+    assert "archive" not in git_calls
+
+
+def test_trusted_candidate_prep_status_error_suppresses_untrusted_stderr(tmp_path: Path):
+    fixture = _trusted_git_fixture(tmp_path)
+
+    result = _run_candidate_prep(fixture, overrides={"STATUS_PROBE_STDERR_CONTROL": "1"})
+
+    assert result.returncode != 0
+    assert "git status failed; refusing to run verifier" in result.stderr
+    assert "unsafe" not in result.stderr
+    assert "\\x01" not in result.stderr
+    assert "\\x1b" not in result.stderr
+    assert not Path(fixture["github_output"]).exists()
+    git_calls = Path(fixture["git_log"]).read_text()
+    assert "fetch --no-tags" not in git_calls
+    assert "archive" not in git_calls
+
+
+@pytest.mark.parametrize("invalid_timeout", ["not-a-number", "nan", "inf", "0", "-1", "301"])
+def test_trusted_candidate_prep_rejects_invalid_status_timeout(tmp_path: Path, invalid_timeout: str):
+    fixture = _trusted_git_fixture(tmp_path)
+
+    result = _run_candidate_prep(
+        fixture, overrides={"TRUSTED_CHECKOUT_STATUS_TIMEOUT_SECONDS": invalid_timeout}
+    )
+
+    assert result.returncode != 0
+    assert "invalid git status timeout; refusing to run verifier" in result.stderr
+    assert "git status --porcelain=v1" not in Path(fixture["git_log"]).read_text()
+    assert not Path(fixture["github_output"]).exists()
+    git_calls = Path(fixture["git_log"]).read_text()
+    assert "fetch --no-tags" not in git_calls
+    assert "archive" not in git_calls
+
+
+def test_trusted_candidate_prep_status_stdout_cap_fails_closed(tmp_path: Path):
+    fixture = _trusted_git_fixture(tmp_path)
+
+    result = _run_candidate_prep(fixture, overrides={"STATUS_PROBE_STDOUT_BYTES": str(1024 * 1024 + 1)})
+
+    assert result.returncode != 0
+    assert "git status output exceeded 1 MiB; refusing to run verifier" in result.stderr
+    assert not Path(fixture["github_output"]).exists()
+    assert not (Path(fixture["runner_temp"]) /
+                "trusted-evidence-candidate-test-run-1").exists()
+    git_calls = Path(fixture["git_log"]).read_text()
+    assert "fetch --no-tags" not in git_calls
+    assert "archive" not in git_calls
+
+
 def test_trusted_candidate_prep_bounds_dirty_path_diagnostics(tmp_path: Path):
     fixture = _trusted_git_fixture(tmp_path)
     trusted = Path(fixture["trusted"])
@@ -1245,13 +1345,12 @@ def test_trusted_candidate_prep_bounds_dirty_path_diagnostics(tmp_path: Path):
 
 
 def test_trusted_candidate_prep_truncates_each_dirty_status_row(tmp_path: Path):
-    fixture = _trusted_git_fixture(tmp_path)
+    fixture = _trusted_git_fixture(tmp_path, long_status_path=True)
     trusted = Path(fixture["trusted"])
     nested = trusted
     for index in range(3):
         nested = nested / (f"segment-{index}-" + ("x" * 180))
-    nested.mkdir(parents=True)
-    (nested / "dirty.txt").write_text("private contents\n")
+    (nested / "tracked.txt").write_text("private contents\n")
 
     result = _run_candidate_prep(fixture)
 

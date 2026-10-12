@@ -140,6 +140,7 @@ jobs:
 
       - name: Validate event SHAs and prepare candidate as inert data
         id: candidate
+        timeout-minutes: 15
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -156,22 +157,119 @@ jobs:
             echo "checkout HEAD $actual_base differs from event base $BASE_SHA" >&2
             exit 1
           fi
-          checkout_status=$(git status --porcelain=v1 --untracked-files=all)
-          if [[ -n "$checkout_status" ]]; then
-            echo "protected-base checkout is not clean; refusing to run verifier" >&2
-            echo "dirty checkout status (first 20 rows; control characters escaped):" >&2
-            printf '%s\n' "$checkout_status" | python3 -c '
+          checkout_status_file=$(mktemp "$RUNNER_TEMP/trusted-checkout-status.XXXXXX")
+          trap 'rm -f "$checkout_status_file"' EXIT
+          if python3 - "$checkout_status_file" <<'PY'
+          import math
+          import os
+          import selectors
+          import subprocess
+          import sys
+          import time
+
+          status_path = sys.argv[1]
+          raw_timeout = os.environ.get("TRUSTED_CHECKOUT_STATUS_TIMEOUT_SECONDS", "30")
+          try:
+              timeout = float(raw_timeout)
+          except (TypeError, ValueError):
+              print("invalid git status timeout; refusing to run verifier", file=sys.stderr)
+              sys.exit(2)
+          if not math.isfinite(timeout) or timeout <= 0 or timeout > 300:
+              print("invalid git status timeout; refusing to run verifier", file=sys.stderr)
+              sys.exit(2)
+
+          max_status_bytes = 1024 * 1024
+          process = None
+          try:
+              process = subprocess.Popen(
+                  ["git", "status", "--porcelain=v1"],
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.DEVNULL,
+              )
+              deadline = time.monotonic() + timeout
+              written = 0
+              with open(status_path, "wb") as status_output:
+                  with selectors.DefaultSelector() as selector:
+                      selector.register(process.stdout, selectors.EVENT_READ)
+                      while True:
+                          remaining = deadline - time.monotonic()
+                          if remaining <= 0:
+                              raise TimeoutError
+                          ready = selector.select(min(remaining, 0.25))
+                          if not ready:
+                              if process.poll() is not None:
+                                  break
+                              continue
+                          chunk = os.read(process.stdout.fileno(), 65536)
+                          if not chunk:
+                              break
+                          if written + len(chunk) > max_status_bytes:
+                              raise OverflowError
+                          status_output.write(chunk)
+                          written += len(chunk)
+              remaining = deadline - time.monotonic()
+              if remaining <= 0:
+                  raise TimeoutError
+              return_code = process.wait(timeout=remaining)
+              if return_code != 0:
+                  raise subprocess.CalledProcessError(return_code, "git status")
+          except TimeoutError:
+              if process is not None and process.poll() is None:
+                  process.kill()
+                  process.wait()
+              print("git status timed out; refusing to run verifier", file=sys.stderr)
+              sys.exit(2)
+          except OverflowError:
+              if process is not None and process.poll() is None:
+                  process.kill()
+                  process.wait()
+              print("git status output exceeded 1 MiB; refusing to run verifier", file=sys.stderr)
+              sys.exit(2)
+          except (OSError, subprocess.SubprocessError):
+              if process is not None and process.poll() is None:
+                  process.kill()
+                  process.wait()
+              print("git status failed; refusing to run verifier", file=sys.stderr)
+              sys.exit(2)
+
+          dirty = False
+          count = 0
+          with open(status_path, "rb") as status_input:
+              for row in status_input:
+                  row = row.rstrip(b"\r\n")
+                  if not row:
+                      continue
+                  dirty = True
+                  count += 1
+          if dirty:
+              sys.exit(1)
+          PY
+          then
+            :
+          else
+            status_result=$?
+            if [[ "$status_result" -eq 1 ]]; then
+              echo "protected-base checkout is not clean; refusing to run verifier" >&2
+              echo "dirty checkout status (first 20 rows; control characters escaped):" >&2
+              python3 - "$checkout_status_file" <<'PY'
           import sys
 
-          rows = sys.stdin.buffer.read().splitlines()
-          for row in rows[:20]:
-              rendered = ascii(row[:512].decode("utf-8", "backslashreplace"))
-              if len(rendered) > 512:
-                  rendered = rendered[:497] + "... [truncated]"
-              print(rendered, file=sys.stderr)
-          if len(rows) > 20:
-              print(f"... {len(rows) - 20} additional status rows omitted", file=sys.stderr)
-          '
+          count = 0
+          with open(sys.argv[1], "rb") as status_input:
+              for row in status_input:
+                  row = row.rstrip(b"\r\n")
+                  if not row:
+                      continue
+                  count += 1
+                  if count <= 20:
+                      rendered = ascii(row[:512].decode("utf-8", "backslashreplace"))
+                      if len(rendered) > 512:
+                          rendered = rendered[:497] + "... [truncated]"
+                      print(rendered, file=sys.stderr)
+          if count > 20:
+              print(f"... {count - 20} additional status rows omitted", file=sys.stderr)
+          PY
+            fi
             exit 1
           fi
 

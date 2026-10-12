@@ -17,15 +17,15 @@
 
 - PR: #972
 - Branch: `ram/trusted-base-dirty-checkout-diagnostics`
-- Scope: Print bounded, ASCII-safe Git status rows when protected-base checkout cleanliness fails; retain the current fail-closed stop before candidate fetch, archive, or verifier execution.
+- Scope: Run a bounded, fail-closed protected-base cleanliness probe; print bounded, ASCII-safe Git status rows on dirty checkout; retain the stop before candidate fetch, archive, or verifier execution.
 - Requested paths:
   - `.github/workflows/frozen-head-exact-sha-certification.yml`
   - `tests/governance/test_evidence_contract.py`
   - `docs/agent_reviews/pr972_trusted_base_dirty_checkout_diagnostics.md`
 - Allowed paths: the three requested paths above only.
 - Forbidden paths/behaviors: broker, order, execution, risk, strategy, credentials, secrets, live configuration, live runtime behavior, gate bypasses, candidate execution, or changes outside the allowed paths.
-- Expected tests: exercise the extracted workflow step on clean, dirty tracked, dirty untracked, excessive-row, oversized-row, and invalid-byte fixtures; prove dirty state prevents fetch/archive/output and that file contents/secrets are not logged.
-- Acceptance proof: local `tests/governance/test_evidence_contract.py` run, exact-head hosted CI, and agent-review evidence validation. Hosted CI for the hardened commit is pending until pushed.
+- Expected tests: exercise the extracted workflow step on clean, dirty tracked, dirty untracked, nested untracked directory, excessive-row, oversized-row, invalid-byte (where supported), timeout, invalid timeout, status-error/control-character stderr, and over-cap stdout fixtures; prove unsafe states prevent fetch/archive/output and that file contents/secrets are not logged.
+- Acceptance proof: focused local behavior tests and `git diff --check`; exact-head hosted CI and agent-review evidence validation are required after push. Existing hosted run executes the old protected-base workflow and cannot validate these unpushed changes.
 
 ## Scope Guard
 
@@ -33,7 +33,7 @@ Verdict: PASS
 
 - Full base/head SHA checks and exact protected-base HEAD comparison remain unchanged.
 - Dirty checkout remains a hard failure before candidate fetch, candidate archive, candidate-root creation, or `GITHUB_OUTPUT` write.
-- Diagnostics are status metadata only: no file contents or candidate payload are read.
+- Diagnostics are status metadata only: no file contents or candidate payload are read. Git status stdout is streamed to a runner temporary file with a 1 MiB hard cap; stderr is discarded. The probe timeout defaults to 30 seconds and accepts only finite values in `(0, 300]` from `TRUSTED_CHECKOUT_STATUS_TIMEOUT_SECONDS`. The complete candidate-preparation step has a 15-minute workflow timeout. Invalid timeout values, output overflow, Git errors, and timeouts fail closed before fetch/archive/output.
 - No credentials, secrets, broker APIs, orders, execution, risk gates, strategies, or live behavior are changed.
 - The gate is not waived, skipped, or reported as passing on dirty state.
 
@@ -47,7 +47,7 @@ No trading runtime, feed implementation, broker, execution, order, risk, strateg
 
 Verdict: PASS
 
-An independent read-only adversarial review confirmed the diff retains the fail-closed sequence, does not add a bypass or fake pass, and logs only status metadata before exiting. The review flagged missing explicit output-bound coverage; that gap was addressed with tests for 22 dirty rows and a long path. The diagnostic's root runner-side cause remains unknown until the updated workflow runs from protected `main` and emits the path rows.
+The final adversarial review confirmed streamed status output is capped at 1 MiB, the full candidate-preparation step has a 15-minute timeout, malformed or unbounded probe timeouts fail closed, Git stderr is suppressed, and dirty/error/timeout/overflow states stop before fetch/archive/output. The diagnostic's root runner-side cause remains unknown until the updated workflow runs from protected `main` and emits the path rows.
 
 ## Hermes Review
 
@@ -60,7 +60,7 @@ The acceptance invariants are:
 3. Status rows are escaped; file content, environment values, and secrets are not printed.
 4. Clean checkouts still validate exact SHAs, fetch the requested candidate SHA, and archive it as inert data.
 
-The check caps emitted diagnostics; `git status` output is still buffered before formatting, as it was for the prior boolean cleanliness check. This does not change gate behavior or introduce an unbounded log.
+The checker streams status output into a temporary file capped at 1 MiB instead of retaining it in shell memory. Git stderr is sent to `DEVNULL`, so subprocess diagnostics and control characters are never echoed. The checker prints at most 20 escaped rows, truncates each rendered row to 512 characters, and fails closed on invalid timeout, output overflow, timeout, or status-command errors before candidate preparation. The enclosing step also has a 15-minute limit.
 
 ## GSD Review
 
@@ -72,7 +72,7 @@ Implemented only the workflow diagnostic and behavioral tests, plus this require
 
 Verdict: PASS
 
-Independent QA re-review confirmed the fail-closed order and the rendered-output bounds. Tests now cover modified and untracked paths, newline escaping, 22 dirty entries, long-row truncation, content and environment-sentinel non-disclosure, no fetch/archive/output on dirty state, and a non-UTF-8 path where supported. The non-UTF-8 fixture is skipped only when the local filesystem rejects such a filename with `EILSEQ`.
+Independent QA re-review confirmed the fail-closed order and the rendered-output bounds. Tests cover modified and untracked paths, nested-directory collapsing, newline escaping, 22 dirty entries, long-row truncation, finite-timeout validation, timeout, status errors with control characters, stdout cap overflow, content and environment-sentinel non-disclosure, no fetch/archive/output on unsafe status, and a non-UTF-8 path where supported. The non-UTF-8 fixture is skipped only when the local filesystem rejects such a filename with `EILSEQ`.
 
 No live, broker, order, risk, credential, or strategy behavior is affected.
 
@@ -81,15 +81,15 @@ No live, broker, order, risk, credential, or strategy behavior is affected.
 Local validation on this worktree:
 
 ```bash
-python3 -m pytest -q -p no:cacheprovider -c /dev/null --confcutdir=tests/governance tests/governance/test_evidence_contract.py
+python3 -m pytest -q tests/governance/test_evidence_contract.py -k 'trusted_candidate_prep or trusted_evidence_workflow_does_not_persist_checkout_credentials'
 git diff --check
 ```
 
 Results:
 
-- Evidence-contract suite: 86 passed, 1 skipped (local macOS filesystem rejects non-UTF-8 path bytes).
+- Trusted-candidate-preparation focused tests: 19 passed, 1 skipped, 77 deselected. The skip is the existing non-UTF-8-path fixture on a filesystem that rejects that path.
 - `git diff --check`: passed.
-- Exact-head hosted CI for the hardened commit: pending; earlier PR #972 CI failed this mandatory evidence-file check before this packet existed and does not validate the hardened tests.
+- Exact-head hosted CI for the hardened commit: pending until pushed. The currently running trusted-base check was launched using the old protected-base workflow and is recorded UNVERIFIED for this patch; it is not a pass.
 
 ## Runtime Proof Required After Merge
 
@@ -104,4 +104,4 @@ After this PR is merged into protected `main`, rerun the trusted-base evidence c
 
 ## Human Approval
 
-Normal GitHub review and branch-protection requirements remain in force. No human approval or merge has been recorded for this PR.
+The user authorized merging PR #972 with its trusted-base check UNVERIFIED after all other required checks pass. This is not a check waiver or a pass claim. The repository's main-branch approval requirements were separately changed by explicit user authorization; the required status checks remain in force.
