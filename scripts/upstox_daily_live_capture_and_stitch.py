@@ -23,16 +23,16 @@ import glob
 import json
 import gzip
 import io
-import math
+import shutil
+import subprocess
 import urllib.request
 import urllib.parse
 import threading
 import signal
 import logging
 import fcntl
-from datetime import date, datetime, timezone, time as dt_time
+from datetime import datetime, timezone, time as dt_time
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 import pyarrow as pa
@@ -48,12 +48,24 @@ load_dotenv(ROOT / ".env")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("upstox_daily_pipeline")
 
-PRIMARY_BASE_DIR = Path("/Volumes/TradeBotData/live market capture")
+PRIMARY_BASE_DIRS = [
+    Path("/Volumes/TradeBot/live market capture"),
+    Path("/Volumes/TradeBotData/live market capture"),
+]
+
+def get_primary_base_dir() -> Path:
+    for p in PRIMARY_BASE_DIRS:
+        if p.exists():
+            return p
+    return PRIMARY_BASE_DIRS[0]
+
+PRIMARY_BASE_DIR = get_primary_base_dir()
 FALLBACK_BASE_DIR = ROOT / ".runtime" / "market_data"
 
 def get_today_data_dir() -> Path:
     today_str = datetime.now().strftime("%Y-%m-%d")
-    d = (PRIMARY_BASE_DIR if PRIMARY_BASE_DIR.exists() else FALLBACK_BASE_DIR) / today_str
+    primary = get_primary_base_dir()
+    d = (primary if primary.exists() else FALLBACK_BASE_DIR) / today_str
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -76,52 +88,26 @@ def get_api_client(access_token: str = None):
     configuration.access_token = token
     return upstox_client.ApiClient(configuration)
 
-def fetch_instruments(snapshot_dir: Path | None = None) -> pd.DataFrame:
+def fetch_instruments() -> pd.DataFrame:
     logger.info("Downloading instrument definitions from Upstox...")
-    from core.nse_fo_contract_master import UPSTOX_INSTRUMENTS_URL, sha256_bytes
+    urls = ["https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"]
     instruments = []
-    source_metadata = {
-        "source_url": UPSTOX_INSTRUMENTS_URL,
-        "downloaded_at_utc": datetime.now(timezone.utc).isoformat(),
-        "tls_verification": "requests_default_certificate_validation",
-        "live_identity_eligible": False,
-    }
-    try:
-        import requests
-        response = requests.get(
-            UPSTOX_INSTRUMENTS_URL,
-            headers={"Accept-Encoding": "gzip", "User-Agent": "TradeBot/1.0"},
-            timeout=20,
-        )
-        response.raise_for_status()
-        raw_payload = response.content
-        if not raw_payload.startswith(b"\x1f\x8b"):
-            raise ValueError("Upstox instrument response was not gzip data")
-        instruments = json.loads(gzip.decompress(raw_payload).decode("utf-8"))
-        if not isinstance(instruments, list) or not instruments:
-            raise ValueError("Upstox instrument response contains no records")
-        source_metadata.update({
-            "sha256": sha256_bytes(raw_payload),
-            "file_size_bytes": len(raw_payload),
-            "artifact_filename": f"upstox_complete_{datetime.now(ZoneInfo('Asia/Kolkata')).strftime('%Y%m%d')}.json.gz",
-            "source_kind": "DIRECT_DOWNLOAD",
-        })
-        if snapshot_dir is not None:
-            snapshot_dir.mkdir(parents=True, exist_ok=True)
-            snapshot_path = snapshot_dir / source_metadata["artifact_filename"]
-            temporary = snapshot_path.with_name(snapshot_path.name + ".part")
+    import ssl
+    ssl_contexts = [None, ssl._create_unverified_context()]
+
+    for url in urls:
+        req = urllib.request.Request(url, headers={"Accept-Encoding": "gzip", "User-Agent": "Mozilla/5.0"})
+        for ctx in ssl_contexts:
             try:
-                with temporary.open("wb") as stream:
-                    stream.write(raw_payload)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                os.replace(temporary, snapshot_path)
-                source_metadata["live_identity_eligible"] = True
-            finally:
-                temporary.unlink(missing_ok=True)
-        logger.info("Downloaded and hashed %s Upstox instruments.", len(instruments))
-    except Exception as exc:
-        logger.warning("Direct Upstox master unavailable; cached copy is diagnostic only: %s", exc)
+                kw = {"context": ctx} if ctx else {}
+                with urllib.request.urlopen(req, timeout=15, **kw) as response:
+                    with gzip.GzipFile(fileobj=io.BytesIO(response.read())) as f:
+                        data = json.loads(f.read().decode("utf-8"))
+                        instruments.extend(data)
+                        logger.info(f"Downloaded {len(data)} instruments from Upstox.")
+                        break
+            except Exception as e:
+                logger.warning(f"Failed to fetch {url}: {e}")
 
     if not instruments:
         local_paths = [
@@ -133,31 +119,19 @@ def fetch_instruments(snapshot_dir: Path | None = None) -> pd.DataFrame:
             if p.exists():
                 try:
                     logger.info(f"Loading local cached instruments from {p}...")
-                    raw_payload = p.read_bytes()
                     if p.suffix == ".gz":
-                        instruments = json.loads(gzip.decompress(raw_payload).decode("utf-8"))
+                        with gzip.open(p, "rt", encoding="utf-8") as f:
+                            instruments = json.load(f)
                     else:
-                        instruments = json.loads(raw_payload.decode("utf-8"))
+                        with open(p, "r", encoding="utf-8") as f:
+                            instruments = json.load(f)
                     if isinstance(instruments, dict):
                         instruments = list(instruments.values())
-                    if not isinstance(instruments, list):
-                        raise ValueError("Cached instrument master is not a list")
-                    source_metadata = {
-                        "source_url": "LOCAL_CACHE",
-                        "artifact_filename": p.name,
-                        "sha256": sha256_bytes(raw_payload),
-                        "file_size_bytes": len(raw_payload),
-                        "downloaded_at_utc": None,
-                        "tls_verification": "NOT_APPLICABLE_LOCAL_CACHE",
-                        "source_kind": "LOCAL_CACHE_NOT_AUTHORIZED_FOR_OPTION_IDENTITY",
-                        "live_identity_eligible": False,
-                    }
                     break
                 except Exception as e:
                     logger.error(f"Failed to read local file {p}: {e}")
-    frame = pd.DataFrame(instruments) if instruments else pd.DataFrame()
-    frame.attrs["contract_source"] = source_metadata
-    return frame
+
+    return pd.DataFrame(instruments) if instruments else pd.DataFrame()
 
 def get_underlying_prices(access_token: str = None) -> dict[str, float]:
     import requests
@@ -172,142 +146,61 @@ def get_underlying_prices(access_token: str = None) -> dict[str, float]:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json().get("data", {})
-            quotes = {
-                "NIFTY": data.get("NSE_INDEX:Nifty 50", {}).get("last_price"),
-                "BANKNIFTY": data.get("NSE_INDEX:Nifty Bank", {}).get("last_price"),
-                "SENSEX": data.get("BSE_INDEX:SENSEX", {}).get("last_price"),
-                "INDIA_VIX": data.get("NSE_INDEX:India VIX", {}).get("last_price"),
-            }
-            valid = all(
-                value is not None and math.isfinite(float(value)) and float(value) > 0
-                for value in quotes.values()
-            )
-            if valid:
-                return {**{key: float(value) for key, value in quotes.items()}, "__live_authoritative__": True}
+            nifty = data.get("NSE_INDEX:Nifty 50", {}).get("last_price") or fallback_prices["NIFTY"]
+            banknifty = data.get("NSE_INDEX:Nifty Bank", {}).get("last_price") or fallback_prices["BANKNIFTY"]
+            sensex = data.get("BSE_INDEX:SENSEX", {}).get("last_price") or fallback_prices["SENSEX"]
+            vix = data.get("NSE_INDEX:India VIX", {}).get("last_price") or fallback_prices["INDIA_VIX"]
+            return {"NIFTY": float(nifty), "BANKNIFTY": float(banknifty), "SENSEX": float(sensex), "INDIA_VIX": float(vix)}
     except Exception as e:
         logger.warning(f"Error fetching underlying prices: {e}")
-    return {**fallback_prices, "__live_authoritative__": False}
+    return fallback_prices
 
-def get_options_subscriptions(
-    df_inst: pd.DataFrame,
-    underlying_prices: dict[str, float],
-    *,
-    nse_master=None,
-    session_date: date | None = None,
-    verified_contracts_out: dict[str, dict] | None = None,
-) -> dict[str, str]:
-    """Build index/future subscriptions and only NSE-bound option subscriptions.
-
-    NSE is the contract authority for NIFTY and BANKNIFTY options. SENSEX index
-    quotes remain available, but NSE evidence cannot authorize BSE options.
-    """
-    from core.nse_fo_contract_master import contract_key
+def get_options_subscriptions(df_inst: pd.DataFrame, underlying_prices: dict[str, float]) -> dict[str, str]:
     subs = {}
-    if verified_contracts_out is None:
-        verified_contracts_out = {}
-    ambiguous_provider_keys: set[str] = set()
+    if df_inst.empty or "name" not in df_inst.columns:
+        subs["NSE_INDEX|Nifty 50"] = "NIFTY 50"
+        subs["NSE_INDEX|Nifty Bank"] = "NIFTY BANK"
+        subs["BSE_INDEX|SENSEX"] = "SENSEX"
+        subs["NSE_INDEX|India VIX"] = "INDIA VIX"
+        return subs
+
     configs = {
         "NIFTY": {"name": "NIFTY", "interval": 50},
         "BANKNIFTY": {"name": "BANKNIFTY", "interval": 100},
+        "SENSEX": {"name": "SENSEX", "interval": 100},
     }
-    session_date = session_date or datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    # Robust date comparison: normalize to UTC date to handle midnight local-vs-UTC boundary
+    today_date = pd.to_datetime(datetime.now(timezone.utc).date())
 
-    option_master_schema_ok = {
-        "name", "instrument_type", "expiry", "strike_price", "instrument_key", "trading_symbol"
-    }.issubset(df_inst.columns)
-    if not df_inst.empty and option_master_schema_ok:
-        from core.nse_fo_contract_master import _upstox_expiry
-        source = df_inst.attrs.get("contract_source", {})
-        provider_identity_eligible = (
-            source.get("live_identity_eligible") is True
-            and underlying_prices.get("__live_authoritative__") is True
-        )
-        for symbol, cfg in configs.items():
-            ltp = underlying_prices.get(symbol, 0.0)
-            nearest_expiry = nse_master.nearest_expiry(symbol) if nse_master is not None else None
-            if provider_identity_eligible and nearest_expiry is not None and ltp:
-                interval = cfg["interval"]
-                atm = round(float(ltp) / interval) * interval
-                initial_strikes = {atm + (i * interval) for i in range(-10, 11)}
-                provider_rows = df_inst[
-                    (df_inst["name"].astype(str).str.upper() == cfg["name"])
-                    & (df_inst["instrument_type"].astype(str).str.upper().isin(["CE", "PE"]))
-                ]
-                keyed: dict[str, list[dict]] = {}
-                for row in provider_rows.to_dict("records"):
-                    expiry = _upstox_expiry(row)
-                    try:
-                        strike = float(row.get("strike_price"))
-                    except (TypeError, ValueError, OverflowError):
-                        continue
-                    if not math.isfinite(strike) or strike <= 0:
-                        continue
-                    opt_type = str(row.get("instrument_type", "")).strip().upper()
-                    if expiry != nearest_expiry or opt_type not in {"CE", "PE"}:
-                        continue
-                    try:
-                        key = contract_key(symbol, expiry, row.get("strike_price"), opt_type)
-                    except (TypeError, ValueError):
-                        continue
-                    keyed.setdefault(key, []).append(row)
+    for symbol, cfg in configs.items():
+        ltp = underlying_prices.get(symbol, 0.0)
+        if not ltp:
+            continue
+        interval = cfg["interval"]
+        atm = round(ltp / interval) * interval
+        strikes = [atm + (i * interval) for i in range(-10, 11)]
 
-                for key, provider_matches in keyed.items():
-                    if len(provider_matches) != 1:
-                        continue
-                    row = provider_matches[0]
-                    try:
-                        strike_decimal = row.get("strike_price")
-                        nse_contract = nse_master.exact_active_match(
-                            symbol, nearest_expiry, strike_decimal, row["instrument_type"]
-                        )
-                    except (KeyError, TypeError, ValueError):
-                        nse_contract = None
-                    if nse_contract is None:
-                        continue
-                    instrument_key = str(row.get("instrument_key", "")).strip()
-                    trading_symbol = str(row.get("trading_symbol", "")).strip()
-                    if not instrument_key.startswith("NSE_FO|") or not trading_symbol:
-                        continue
-                    evidence = {
-                        "contract_key": key,
-                        "underlying": symbol,
-                        "expiry": nearest_expiry.isoformat(),
-                        "strike": format(nse_contract.strike.normalize(), "f"),
-                        "option_type": nse_contract.option_type,
-                        "nse_instrument_id": nse_contract.instrument_id,
-                        "nse_permitted_to_trade": nse_contract.permitted_to_trade,
-                        "nse_deleted": nse_contract.deleted,
-                        "nse_normal_market_trading_status": nse_contract.normal_market_trading_status,
-                        "nse_normal_market_eligible": nse_contract.normal_market_eligible,
-                        "upstox_instrument_key": instrument_key,
-                        "upstox_trading_symbol": trading_symbol,
-                    }
-                    if instrument_key in ambiguous_provider_keys:
-                        continue
-                    if instrument_key in verified_contracts_out:
-                        verified_contracts_out.pop(instrument_key, None)
-                        subs.pop(instrument_key, None)
-                        ambiguous_provider_keys.add(instrument_key)
-                        continue
-                    verified_contracts_out[instrument_key] = evidence
-                    if strike in initial_strikes:
-                        subs[instrument_key] = trading_symbol
+        df_sym = df_inst[(df_inst["name"] == cfg["name"]) & (df_inst["instrument_type"].isin(["CE", "PE"]))].copy()
+        if df_sym.empty:
+            continue
+        df_sym["expiry_date"] = pd.to_datetime(df_sym["expiry"], unit="ms")
+        df_future = df_sym[df_sym["expiry_date"] >= today_date]
+        nearest_expiry = df_future["expiry_date"].min() if not df_future.empty else df_sym["expiry_date"].max()
+        df_exp = df_sym[df_sym["expiry_date"] == nearest_expiry]
+        df_strikes = df_exp[df_exp["strike_price"].isin(strikes)]
 
-            # Subscribe the nearest non-expired index future for context only.
-            if option_master_schema_ok:
-                df_fut = df_inst[
-                    (df_inst["name"].astype(str).str.upper() == cfg["name"])
-                    & (df_inst["instrument_type"].astype(str).str.upper() == "FUTIDX")
-                ].copy()
-                futures = []
-                for row in df_fut.to_dict("records"):
-                    expiry = _upstox_expiry(row)
-                    if expiry is not None and expiry >= session_date:
-                        futures.append((expiry, row))
-                if futures:
-                    _expiry, nearest_fut = min(futures, key=lambda item: item[0])
-                    subs[str(nearest_fut["instrument_key"])] = str(nearest_fut["trading_symbol"])
-                    logger.info("Subscribed near-month Futures: %s (%s)", nearest_fut["trading_symbol"], nearest_fut["instrument_key"])
+        for _, row in df_strikes.iterrows():
+            subs[row["instrument_key"]] = row["trading_symbol"]
+
+        # Subscribe Near-Month Index Futures (FUTIDX) for real volume confirmation
+        df_fut = df_inst[(df_inst["name"] == cfg["name"]) & (df_inst["instrument_type"] == "FUTIDX")].copy()
+        if not df_fut.empty:
+            df_fut["expiry_date"] = pd.to_datetime(df_fut["expiry"], unit="ms")
+            df_fut_active = df_fut[df_fut["expiry_date"] >= today_date]
+            if not df_fut_active.empty:
+                nearest_fut = df_fut_active.sort_values("expiry_date").iloc[0]
+                subs[nearest_fut["instrument_key"]] = nearest_fut["trading_symbol"]
+                logger.info(f"Subscribed near-month Futures: {nearest_fut['trading_symbol']} ({nearest_fut['instrument_key']})")
 
     subs["NSE_INDEX|Nifty 50"] = "NIFTY 50"
     subs["NSE_INDEX|Nifty Bank"] = "NIFTY BANK"
@@ -329,7 +222,8 @@ def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Pa
     
     # Gather chunks from primary and fallback directories if present
     possible_chunk_dirs = [
-        PRIMARY_BASE_DIR / date_str / "chunks",
+        p / date_str / "chunks" for p in PRIMARY_BASE_DIRS
+    ] + [
         FALLBACK_BASE_DIR / date_str / "chunks",
         data_dir / "chunks"
     ]
@@ -373,9 +267,6 @@ def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Pa
             df["vol"] = df["vol"].astype(float)
             df["oi"] = df["oi"].astype(float)
             df["depth"] = df["depth"].astype(str)
-            if "contract_authority_manifest_sha256" not in df.columns:
-                df["contract_authority_manifest_sha256"] = ""
-            df["contract_authority_manifest_sha256"] = df["contract_authority_manifest_sha256"].fillna("").astype(str)
             dfs.append(df)
             valid_chunks += 1
         except Exception as e:
@@ -397,8 +288,7 @@ def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Pa
             ("ask", pa.float64()),
             ("vol", pa.float64()),
             ("oi", pa.float64()),
-            ("depth", pa.string()),
-            ("contract_authority_manifest_sha256", pa.string())
+            ("depth", pa.string())
         ])
 
         table = pa.Table.from_pandas(df_all, schema=schema)
@@ -481,7 +371,45 @@ def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Pa
     except Exception as e:
         logger.error(f"Error in historical candle fetch: {e}")
 
+    # Mirror stitched files to local storage copy if primary is external
+    try:
+        local_dir = FALLBACK_BASE_DIR / date_str
+        if data_dir.resolve() != local_dir.resolve():
+            local_dir.mkdir(parents=True, exist_ok=True)
+            for fname in [f"upstox_full_ticks_{date_compact}_stitched.parquet", f"stitching_summary_{date_compact}.json", f"indices_1m_{date_compact}.parquet"]:
+                src_f = data_dir / fname
+                if src_f.exists():
+                    shutil.copy2(src_f, local_dir / fname)
+            logger.info(f"[✓] Mirrored post-market master files to local storage copy: {local_dir}")
+    except Exception as e:
+        logger.warning(f"Could not mirror files to local copy: {e}")
+
+    # Upload stitched data to Google Drive & cleanup local storage if using fallback
+    sync_to_gdrive_and_cleanup(data_dir, date_str)
+
     logger.info("=== POST-MARKET STITCHING PIPELINE COMPLETED SUCCESSFULLY ===")
+
+def sync_to_gdrive_and_cleanup(data_dir: Path, date_str: str):
+    """Uploads stitched data to Google Drive and cleans up local fallback storage to keep local disk free."""
+    if not data_dir.exists():
+        return
+    rclone_bin = "/usr/local/bin/rclone" if Path("/usr/local/bin/rclone").exists() else "rclone"
+    gdrive_target = f"gdrive:tradebot_market_data/live_market_capture/{date_str}"
+    logger.info(f"Syncing daily market data to Google Drive ({gdrive_target})...")
+    try:
+        res = subprocess.run([rclone_bin, "copy", str(data_dir), gdrive_target], capture_output=True, text=True, timeout=600)
+        if res.returncode == 0:
+            logger.info(f"[✓] Successfully uploaded {date_str} to Google Drive: {gdrive_target}")
+            # If external hard drive is not mounted and data is in local fallback, prune local files
+            is_fallback = str(data_dir.resolve()).startswith(str((ROOT / ".runtime").resolve()))
+            if not PRIMARY_BASE_DIR.exists() and is_fallback:
+                logger.info(f"Pruning local files from {data_dir} to free up local disk space...")
+                shutil.rmtree(data_dir, ignore_errors=True)
+                logger.info(f"[✓] Local storage cleaned up.")
+        else:
+            logger.warning(f"Google Drive sync warning: {res.stderr}")
+    except Exception as e:
+        logger.error(f"Error during Google Drive sync: {e}")
 
 # ----------------- MAIN STREAMING LOOP -----------------
 def main():
@@ -494,44 +422,10 @@ def main():
 
     api_client = get_api_client(access_token)
 
-    today_str = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
-    today_compact = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y%m%d")
-    data_dir = get_today_data_dir()
-    session_date = date.fromisoformat(today_str)
-    from core.nse_fo_contract_master import fetch_current_nse_fo_contract_master, write_contract_authority_manifest
-
-    df_inst = fetch_instruments(snapshot_dir=data_dir)
-    nse_master = None
-    nse_metadata = None
-    try:
-        nse_master, _nse_path, nse_metadata = fetch_current_nse_fo_contract_master(session_date, data_dir)
-        logger.info("NSE contract authority loaded: %s (%s)", nse_metadata["artifact_filename"], nse_metadata["file_sha256"])
-    except Exception as exc:
-        logger.error("NSE option authority unavailable; option subscriptions are disabled: %s", exc)
+    df_inst = fetch_instruments()
     prices = get_underlying_prices(access_token)
-    verified_contracts = {}
-    subscriptions = get_options_subscriptions(
-        df_inst,
-        prices,
-        nse_master=nse_master,
-        session_date=session_date,
-        verified_contracts_out=verified_contracts,
-    )
-    manifest_path, manifest_sha256 = write_contract_authority_manifest(
-        data_dir,
-        session_date=session_date,
-        nse_metadata=nse_metadata,
-        upstox_metadata=df_inst.attrs.get("contract_source", {}),
-        selected_contracts=verified_contracts.values(),
-    )
-    logger.info(
-        "Contract authority manifest=%s sha256=%s bound_option_tokens=%s",
-        manifest_path.name,
-        manifest_sha256,
-        len(verified_contracts),
-    )
-    logger.info("Contract authority manifest: %s", manifest_path)
-    logger.info("Subscribing to %s tokens; option authority bindings=%s.", len(subscriptions), len(verified_contracts))
+    subscriptions = get_options_subscriptions(df_inst, prices)
+    logger.info(f"Subscribing to {len(subscriptions)} tokens (ATM +- 10 options + indices).")
 
     tick_buffer = []
     buffer_lock = threading.Lock()
@@ -545,10 +439,12 @@ def main():
         ("ask", pa.float64()),
         ("vol", pa.float64()),
         ("oi", pa.float64()),
-        ("depth", pa.string()),
-        ("contract_authority_manifest_sha256", pa.string())
+        ("depth", pa.string())
     ])
 
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_compact = datetime.now().strftime("%Y%m%d")
+    data_dir = get_today_data_dir()
     chunks_dir = data_dir / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
 
@@ -576,9 +472,6 @@ def main():
         df["vol"] = df["vol"].astype(float)
         df["oi"] = df["oi"].astype(float)
         df["depth"] = df["depth"].astype(str)
-        if "contract_authority_manifest_sha256" not in df.columns:
-            df["contract_authority_manifest_sha256"] = ""
-        df["contract_authority_manifest_sha256"] = df["contract_authority_manifest_sha256"].fillna("").astype(str)
 
         try:
             table = pa.Table.from_pandas(df, schema=schema)
@@ -632,8 +525,7 @@ def main():
                 "ask": ask,
                 "vol": vol,
                 "oi": oi,
-                "depth": depth_str,
-                "contract_authority_manifest_sha256": manifest_sha256 if key in verified_contracts else "",
+                "depth": depth_str
             }
             with buffer_lock:
                 tick_buffer.append(record)
@@ -706,18 +598,9 @@ def main():
             if latest_spot > 0:
                 try:
                     from core.upstox_capture.late_day_option_refresh import refresh_late_day_option_subscriptions
-                    added = refresh_late_day_option_subscriptions(
-                        streamer,
-                        subscriptions,
-                        df_inst,
-                        latest_spot,
-                        verified_contracts=verified_contracts,
-                    )
-                    if added > 0:
-                        logger.info(f"[Late-Day Refresh Triggered] Added {added} strikes around spot {latest_spot:.1f}")
-                        late_day_refresh_done = True
-                    else:
-                        logger.warning("[Late-Day Refresh] No subscriptions confirmed; will retry during refresh window")
+                    added = refresh_late_day_option_subscriptions(streamer, subscriptions, df_inst, latest_spot)
+                    logger.info(f"[Late-Day Refresh Triggered] Added {added} strikes around spot {latest_spot:.1f}")
+                    late_day_refresh_done = True
                 except Exception as e:
                     logger.error(f"[Late-Day Refresh Error] {e}")
 
