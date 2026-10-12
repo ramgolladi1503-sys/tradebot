@@ -60,3 +60,13 @@ def test_candidate_is_not_executed_by_base_authority_jobs():
     text = WORKFLOW.read_text()
     assert "python scripts/validate_frozen_head_bridge.py" in text
     assert "python scripts/research/" not in text
+
+
+def test_trusted_candidate_preparation_skips_lfs_smudge():
+    text = WORKFLOW.read_text()
+    candidate_step = text.split(
+        "      - name: Validate event SHAs and prepare candidate as inert data", 1
+    )[1].split("\n      - name:", 1)[0]
+
+    assert 'GIT_LFS_SKIP_SMUDGE: "1"' in candidate_step
+    assert 'git archive --format=tar "$HEAD_SHA"' in candidate_step
