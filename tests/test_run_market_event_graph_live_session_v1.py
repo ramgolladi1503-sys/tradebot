@@ -197,6 +197,53 @@ def test_session_orchestrator_launch_preflight_uses_production_builder_once(monk
         assert payload["allowed_for_live_execution"] is False
 
 
+def test_production_launch_plan_forwards_t1_heritage_environment_binding(monkeypatch, tmp_path):
+    """The session entrypoint hashes and round-trips configured heritage references."""
+    from scripts import run_market_event_graph_live_session_v1 as session
+
+    manifest_path = "/read-only/evidence/t1-heritage-manifest.json"
+    manifest_sha256 = "a" * 64
+    monkeypatch.setenv("TRADEBOT_T1_HERITAGE_MANIFEST_PATH", manifest_path)
+    monkeypatch.setenv("TRADEBOT_T1_HERITAGE_MANIFEST_SHA256", manifest_sha256)
+
+    from core import kite_depth_ws
+
+    monkeypatch.setattr(
+        kite_depth_ws,
+        "build_production_subscription_tokens",
+        lambda _symbols, *, max_tokens: (
+            [101, 102, 103],
+            [{
+                "symbol": "NIFTY", "index_token": 101, "tokens": [101, 102],
+                "option_count": 1, "final_option_count": 1, "option_min_required": 1,
+            }],
+        ),
+    )
+    monkeypatch.setattr(kite_depth_ws, "get_sticky_tokens", lambda: [103])
+    result = session._build_production_launch_plan(
+        session_date="2026-10-12",
+        registry=SimpleNamespace(
+            all_tokens=list(range(1000, 1051)), canonical_sha256="b" * 64
+        ),
+        master_sha="a" * 64,
+        broker_metadata_called=False,
+    )
+    path = tmp_path / "launch_plan.json"
+    session.write_launch_plan(path, result)
+    from core.market_event_graph_live_launch_plan import load_launch_plan
+    loaded = load_launch_plan(path)
+
+    assert loaded["ok"] is True
+    assert loaded["verdict"] == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+    assert loaded["heritage_manifest_path"] == manifest_path
+    assert loaded["heritage_manifest_sha256"] == manifest_sha256
+    assert loaded["t1_manifest_reference_status"] == "HERITAGE_MANIFEST_REFERENCE_CONFIGURED_UNVERIFIED"
+    assert loaded["read_only"] is True
+    assert loaded["is_order_action"] is False
+    assert loaded["broker_api_called"] is False
+    assert loaded["allowed_for_live_execution"] is False
+
+
 def test_session_orchestrator_allows_existing_session_directory_with_prior_runs(monkeypatch, tmp_path):
     """An existing session_date folder with prior run subdirectories must pass static preflight."""
     repo_root = Path(__file__).resolve().parents[1]

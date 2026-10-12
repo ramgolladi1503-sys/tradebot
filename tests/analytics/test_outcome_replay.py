@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import types
 from pathlib import Path
+
+import pytest
 
 from core.analytics import outcome_replay as replay_module
 from core.analytics.outcome_replay import analyze_event_outcome, build_outcomes_for_date, default_outcomes_path
@@ -58,10 +61,39 @@ def test_session_replay_uses_session_candidates_without_workspace_events(tmp_pat
     )
 
     result = build_outcomes_for_date(
-        "2026-10-01", session_dir=session_dir, output_path=tmp_path / "session-outcomes.jsonl"
+        "2026-10-01", session_dir=session_dir, output_path=tmp_path / "session-outcomes.jsonl",
+        series_loader=lambda *_args: ([], "fixture_loader"),
     )
     assert result["count"] == 1
     assert json.loads((tmp_path / "session-outcomes.jsonl").read_text().splitlines()[0])["event_ref_id"] == event.event_id
+
+
+def test_batch_replay_refuses_to_write_unresolved_outcomes_without_offline_loader(tmp_path, monkeypatch):
+    event = TradeIntentEvent(
+        trade_key="NIFTY|2026-10-08|25000|CE|BUY",
+        event_id="evt_missing_local_series",
+        intent="rejected",
+        ts_epoch_ms=1790841500000,
+        symbol="NIFTY",
+        side="BUY",
+        source="test",
+        reject_reason="FEED_STALE",
+        metrics_snapshot={"entry": 100, "target": 110, "stop": 95},
+    )
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    monkeypatch.setattr(replay_module, "discover_session_paths", lambda **_kwargs: [session_dir])
+    monkeypatch.setattr(replay_module, "load_session_events", lambda **_kwargs: [event])
+    output_path = tmp_path / "must-not-be-written.jsonl"
+
+    try:
+        build_outcomes_for_date("2026-10-01", session_dir=session_dir, output_path=output_path)
+    except RuntimeError as exc:
+        assert "OFFLINE_SERIES_LOADER_REQUIRED" in str(exc)
+    else:
+        raise AssertionError("batch replay must require an explicit offline series source")
+
+    assert not output_path.exists()
 
 
 def _load_json(name: str):
@@ -151,7 +183,7 @@ def test_outcome_replay_no_hit():
     }
     row = analyze_event_outcome(
         event,
-        lookahead_minutes=10,
+        lookahead_minutes=4,
         candle_interval="1minute",
         series_loader=_loader_from_candles(candles),
     )
@@ -159,7 +191,7 @@ def test_outcome_replay_no_hit():
     assert row["trade_outcome"]["ts_epoch_ms"] == row["resolution_ts_epoch_ms"]
 
 
-def test_outcome_replay_handles_gap_candles_missing_intervals():
+def test_outcome_replay_rejects_gap_candles_missing_intervals():
     candles = _load_json("candles_gap_missing_intervals.json")
     event = {
         "event_id": "evt_gap_series",
@@ -172,19 +204,16 @@ def test_outcome_replay_handles_gap_candles_missing_intervals():
         "reject_ts_epoch": 1740723900000,
         "reject_reason": "gap_series",
     }
-    row = analyze_event_outcome(
-        event,
-        lookahead_minutes=30,
-        candle_interval="1minute",
-        series_loader=_loader_from_candles(candles),
-    )
-    assert row["trade_outcome"]["outcome"] == "no_hit"
-    # For no-hit windows, replay should resolve at the latest observed point in range.
-    assert row["resolution_ts_epoch_ms"] == 1740724860000
-    assert row["trade_outcome"]["ts_epoch_ms"] == row["resolution_ts_epoch_ms"]
+    with pytest.raises(replay_module.IncompleteOutcomeWindowError, match="incomplete_outcome_window:gap"):
+        analyze_event_outcome(
+            event,
+            lookahead_minutes=30,
+            candle_interval="1minute",
+            series_loader=_loader_from_candles(candles),
+        )
 
 
-def test_outcome_replay_no_series_data_primary_reason():
+def test_outcome_replay_no_series_data_fails_closed():
     event = {
         "event_id": "evt_no_series",
         "trade_key": "NIFTY|2026-03-05|22500|CE|BUY",
@@ -202,21 +231,40 @@ def test_outcome_replay_no_series_data_primary_reason():
         del event_row, start_ms, end_ms, interval
         return [], "no_series_data"
 
-    row = analyze_event_outcome(
-        event,
-        lookahead_minutes=30,
-        candle_interval="1minute",
-        series_loader=_empty_loader,
-    )
+    with pytest.raises(replay_module.IncompleteOutcomeWindowError, match="incomplete_outcome_window:truncated"):
+        analyze_event_outcome(
+            event,
+            lookahead_minutes=30,
+            candle_interval="1minute",
+            series_loader=_empty_loader,
+        )
 
-    assert row["outcome_reason"] == "NO_SERIES_DATA"
-    assert row["trade_outcome"]["reject_reason"] == "NO_SERIES_DATA"
-    assert row["trade_outcome"]["exec_feasible_flags"]["has_candle_data"] is False
-    assert row["trade_outcome"]["exec_feasible_flags"]["has_series_data"] is False
-    assert row["series_source"] == "no_series_data"
-    assert row["trade_outcome"]["reason_codes"] == ["NO_SERIES_DATA"]
-    assert row["trade_outcome"]["reject_reasons"] == ["NO_SERIES_DATA"]
-    assert row["trade_outcome"]["primary_reject_reason"] == "NO_SERIES_DATA"
+
+def test_default_series_loader_never_falls_through_to_market_data(monkeypatch):
+    calls = []
+    market_data_stub = types.ModuleType("core.market_data")
+
+    def _forbidden(*_args, **_kwargs):
+        calls.append("market_data")
+        raise AssertionError("offline analytics must not call market-data loaders")
+
+    market_data_stub.get_candles = _forbidden
+    market_data_stub.get_option_candles_or_snapshots = _forbidden
+    monkeypatch.setitem(__import__("sys").modules, "core.market_data", market_data_stub)
+    event = {
+        "event_id": "evt_offline_only",
+        "trade_key": "NIFTY|2026-03-05|22500|CE|BUY",
+        "symbol": "NIFTY",
+        "side": "BUY",
+        "entry": 100.0,
+        "target": 110.0,
+        "stop": 95.0,
+        "reject_ts_epoch": 1740723900000,
+    }
+
+    assert calls == []
+    with pytest.raises(replay_module.IncompleteOutcomeWindowError, match="incomplete_outcome_window:truncated"):
+        analyze_event_outcome(event)
 
 
 def test_outcome_replay_series_data_keeps_strategy_reject_reason():
@@ -244,3 +292,226 @@ def test_outcome_replay_series_data_keeps_strategy_reject_reason():
     assert row["trade_outcome"]["reason_codes"] == ["premium_band_fail", "liquidity_hard_veto"]
     assert row["trade_outcome"]["reject_reasons"] == ["premium_band_fail", "liquidity_hard_veto"]
     assert row["trade_outcome"]["primary_reject_reason"] == "premium_band_fail"
+
+
+def _horizon_event(**overrides):
+    event = {
+        "event_id": "evt_horizon_contract",
+        "trade_key": "NIFTY|2026-03-05|22500|CE|BUY",
+        "symbol": "NIFTY",
+        "side": "BUY",
+        "entry": 100.0,
+        "target": 110.0,
+        "stop": 90.0,
+        "reject_ts_epoch": 1740723900000,
+    }
+    event.update(overrides)
+    return event
+
+
+def _series_loader_for(rows):
+    return lambda *_args: (rows, "test_local_series")
+
+
+def _horizon_row(offset_minutes, *, high=105.0, low=95.0):
+    return {
+        "time_ms": 1740723900000 + offset_minutes * 60_000,
+        "high": high,
+        "low": low,
+        "ref_price": 100.0,
+    }
+
+
+def test_outcome_replay_accepts_complete_no_hit_window():
+    rows = [_horizon_row(offset) for offset in range(3)]
+    result = analyze_event_outcome(
+        _horizon_event(),
+        lookahead_minutes=3,
+        candle_interval="1minute",
+        series_loader=_series_loader_for(rows),
+    )
+
+    assert result["trade_outcome"]["outcome"] == "no_hit"
+    assert result["resolution_ts_epoch_ms"] == rows[-1]["time_ms"]
+
+
+def test_outcome_replay_rejects_missing_event_timestamp_without_synthetic_outcome():
+    event = _horizon_event()
+    event.pop("reject_ts_epoch")
+
+    with pytest.raises(
+        replay_module.IncompleteOutcomeWindowError,
+        match="incomplete_outcome_window:missing_event_timestamp",
+    ):
+        analyze_event_outcome(
+            event,
+            lookahead_minutes=3,
+            candle_interval="1minute",
+            series_loader=_series_loader_for([_horizon_row(offset) for offset in range(3)]),
+        )
+
+
+def test_outcome_replay_rejects_missing_levels_instead_of_emitting_no_hit():
+    event = _horizon_event()
+    event.pop("target")
+
+    with pytest.raises(
+        replay_module.IncompleteOutcomeWindowError,
+        match="incomplete_outcome_window:missing_outcome_levels",
+    ):
+        analyze_event_outcome(
+            event,
+            lookahead_minutes=3,
+            candle_interval="1minute",
+            series_loader=_series_loader_for([_horizon_row(offset) for offset in range(3)]),
+        )
+
+
+@pytest.mark.parametrize(
+    ("first_bar", "later_bar", "expected"),
+    [
+        ({"high": 111.0, "low": 95.0}, {"high": 120.0, "low": 89.0}, "hit_target"),
+        ({"high": 105.0, "low": 89.0}, {"high": 111.0, "low": 80.0}, "hit_sl"),
+    ],
+)
+def test_first_touch_is_terminal_with_truncated_tail_and_later_opposite_hit(first_bar, later_bar, expected):
+    rows = [_horizon_row(0, **first_bar), _horizon_row(2, **later_bar)]
+    result = analyze_event_outcome(
+        _horizon_event(),
+        lookahead_minutes=3,
+        candle_interval="minute",
+        series_loader=_series_loader_for(rows),
+    )
+
+    assert result["trade_outcome"]["outcome"] == expected
+    assert result["resolution_ts_epoch_ms"] == rows[0]["time_ms"]
+
+
+def test_outcome_replay_blocks_same_candle_target_stop_ambiguity():
+    rows = [_horizon_row(0, high=111.0, low=89.0), _horizon_row(1), _horizon_row(2)]
+
+    with pytest.raises(
+        replay_module.IncompleteOutcomeWindowError,
+        match="incomplete_outcome_window:ambiguous_same_candle",
+    ):
+        analyze_event_outcome(
+            _horizon_event(),
+            lookahead_minutes=3,
+            candle_interval="minute",
+            series_loader=_series_loader_for(rows),
+        )
+
+
+def test_outcome_replay_accepts_recognized_multiminute_interval():
+    rows = [
+        {**_horizon_row(0), "time_ms": 1740723900000},
+        {**_horizon_row(5), "time_ms": 1740723900000 + 5 * 60_000},
+    ]
+    result = analyze_event_outcome(
+        _horizon_event(),
+        lookahead_minutes=10,
+        candle_interval="5minute",
+        series_loader=_series_loader_for(rows),
+    )
+
+    assert result["trade_outcome"]["outcome"] == "no_hit"
+    assert result["resolution_ts_epoch_ms"] == rows[-1]["time_ms"]
+
+
+def test_outcome_replay_rejects_truncated_no_hit_horizon():
+    rows = [_horizon_row(offset) for offset in range(2)]
+
+    with pytest.raises(replay_module.IncompleteOutcomeWindowError, match="incomplete_outcome_window:truncated"):
+        analyze_event_outcome(
+            _horizon_event(),
+            lookahead_minutes=3,
+            candle_interval="minute",
+            series_loader=_series_loader_for(rows),
+        )
+
+
+def test_outcome_replay_rejects_gap_before_later_hit():
+    rows = [
+        _horizon_row(0),
+        _horizon_row(2, high=111.0),
+    ]
+
+    with pytest.raises(replay_module.IncompleteOutcomeWindowError, match="incomplete_outcome_window:gap"):
+        analyze_event_outcome(
+            _horizon_event(),
+            lookahead_minutes=3,
+            candle_interval="minute",
+            series_loader=_series_loader_for(rows),
+        )
+
+
+@pytest.mark.parametrize("interval", ["daily", "5seconds", "2hour"])
+def test_outcome_replay_rejects_unsupported_interval(interval):
+    with pytest.raises(replay_module.IncompleteOutcomeWindowError, match="incomplete_outcome_window:unsupported_interval"):
+        analyze_event_outcome(
+            _horizon_event(),
+            lookahead_minutes=3,
+            candle_interval=interval,
+            series_loader=_series_loader_for([_horizon_row(0)]),
+        )
+
+
+def test_outcome_replay_requires_exact_source_bar_at_event_time():
+    event = _horizon_event(reject_ts_epoch=1740723901000)
+    with pytest.raises(replay_module.IncompleteOutcomeWindowError, match="incomplete_outcome_window:truncated"):
+        analyze_event_outcome(
+            event,
+            lookahead_minutes=3,
+            candle_interval="minute",
+            series_loader=_series_loader_for([_horizon_row(0)]),
+        )
+
+
+def test_outcome_replay_anchors_multiminute_grid_to_exchange_session_bar():
+    event = _horizon_event(reject_ts_epoch=1740714300000)  # 2025-02-28 09:15 IST
+    rows = [
+        {"time_ms": 1740714300000, "high": 105.0, "low": 95.0, "ref_price": 100.0},
+        {"time_ms": 1740714420000, "high": 105.0, "low": 95.0, "ref_price": 100.0},
+    ]
+
+    result = analyze_event_outcome(
+        event,
+        lookahead_minutes=4,
+        candle_interval="2minute",
+        series_loader=_series_loader_for(rows),
+    )
+
+    assert result["trade_outcome"]["outcome"] == "no_hit"
+    assert result["resolution_ts_epoch_ms"] == rows[-1]["time_ms"]
+
+
+def test_batch_replay_preserves_existing_output_on_incomplete_horizon(tmp_path, monkeypatch):
+    event = TradeIntentEvent(
+        trade_key="NIFTY|2026-03-05|22500|CE|BUY",
+        event_id="evt_horizon_batch",
+        intent="rejected",
+        ts_epoch_ms=1740723900000,
+        symbol="NIFTY",
+        side="BUY",
+        source="test",
+        reject_reason="test_horizon",
+        metrics_snapshot={"entry": 100.0, "target": 110.0, "stop": 90.0},
+    )
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    output_path = tmp_path / "outcomes.jsonl"
+    original_bytes = b'{"prior":"complete"}\n'
+    output_path.write_bytes(original_bytes)
+    monkeypatch.setattr(replay_module, "discover_session_paths", lambda **_kwargs: [session_dir])
+    monkeypatch.setattr(replay_module, "load_session_events", lambda **_kwargs: [event])
+
+    with pytest.raises(replay_module.IncompleteOutcomeWindowError, match="incomplete_outcome_window:truncated"):
+        build_outcomes_for_date(
+            replay_module._to_day_key(event.ts_epoch_ms),
+            session_dir=session_dir,
+            output_path=output_path,
+            lookahead_minutes=3,
+            series_loader=_series_loader_for([_horizon_row(0), _horizon_row(1)]),
+        )
+
+    assert output_path.read_bytes() == original_bytes

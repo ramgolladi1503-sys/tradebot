@@ -328,6 +328,10 @@ def _build_production_launch_plan(
         sticky_tokens = list(kite_depth_ws.get_sticky_tokens())
     except Exception:
         sticky_tokens = []
+    if heritage_manifest_path is None:
+        heritage_manifest_path = os.environ.get("TRADEBOT_T1_HERITAGE_MANIFEST_PATH")
+    if heritage_manifest_sha256 is None:
+        heritage_manifest_sha256 = os.environ.get("TRADEBOT_T1_HERITAGE_MANIFEST_SHA256")
     return build_launch_plan(
         session_date=session_date,
         production_tokens=production_tokens,

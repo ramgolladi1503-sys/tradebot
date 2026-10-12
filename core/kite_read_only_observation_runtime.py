@@ -327,8 +327,15 @@ def write_meg_wiring_evidence(
         cycle_cutoff_epoch=effective_cutoff_epoch,
     )
     payload.update(_measured_meg_facts(bridge=bridge, result=result))
-    payload["market_event_graph_traversal_count"] = int(payload.get("cumulative_session_export_count") or 0)
-    payload["market_event_graph_traversal"] = payload["market_event_graph_traversal_count"] > 0
+    cumulative_export_count = payload.get("cumulative_session_export_count")
+    payload["market_event_graph_traversal_count"] = (
+        int(cumulative_export_count) if cumulative_export_count is not None else None
+    )
+    payload["market_event_graph_traversal"] = (
+        payload["market_event_graph_traversal_count"] > 0
+        if payload["market_event_graph_traversal_count"] is not None
+        else None
+    )
     write_json_atomic(output_path, payload)
     return payload
 

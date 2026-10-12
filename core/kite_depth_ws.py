@@ -170,6 +170,41 @@ _PENDING_UNSUBSCRIBE_TOKENS = set()
 _PENDING_MODE_FULL_TOKENS = set()
 _LAST_MUTATION_RESULT = None
 _SOCKET_GENERATION = 0
+_SOCKET_GENERATION_LOCK = threading.RLock()
+_SOCKET_START_LOCK = threading.RLock()
+
+
+def _current_socket_generation() -> int:
+    with _SOCKET_GENERATION_LOCK:
+        return int(_SOCKET_GENERATION)
+
+
+def _advance_socket_generation(
+    *,
+    restart_verification_reason: str | None = None,
+    start_epoch: float | None = None,
+) -> int:
+    """Publish a new socket generation without nesting the ticker lock."""
+    global _SOCKET_GENERATION
+    with _SOCKET_GENERATION_LOCK:
+        _SOCKET_GENERATION += 1
+        socket_generation = int(_SOCKET_GENERATION)
+        _invalidate_feed_restart_verification_for_socket_advance(
+            socket_generation=socket_generation
+        )
+    if restart_verification_reason is not None:
+        effective_start_epoch = (
+            float(start_epoch)
+            if start_epoch is not None
+            else float(_DEPTH_WS_START_EPOCH or 0.0)
+        )
+        _begin_feed_restart_verification(
+            reason=str(restart_verification_reason or ""),
+            start_epoch=effective_start_epoch,
+            now_epoch=float(now_utc_epoch()),
+            socket_generation=socket_generation,
+        )
+    return socket_generation
 
 _LAST_DESIRED_TOKENS: list[int] | None = None
 _INTENDED_TOKENS: list[int] | None = None
@@ -817,11 +852,15 @@ _CORE_FEED_FRESH_QUORUM = float(getattr(cfg, "CORE_FEED_FRESH_QUORUM", 0.95) or 
 # Prevents treating a full restart as recovered unless connect + subscribe + fresh option ticks are observed.
 _RESTART_VERIFY_LOCK = threading.Lock()
 _FEED_RESTART_VERIFY_STATE: str = "IDLE"  # IDLE | PENDING | OK | FAILED
+_FEED_RESTART_VERIFY_GENERATION: int = 0
+_FEED_RESTART_VERIFY_SOCKET_GENERATION: int | None = None
+_LAST_RESTART_VERIFY_BLOCK_LOG_EPOCH: float = 0.0
 _FEED_RESTART_VERIFY_REASON: str = ""
 _FEED_RESTART_VERIFY_START_EPOCH: float = 0.0
 _FEED_RESTART_VERIFY_DEADLINE_EPOCH: float = 0.0
 _FEED_RESTART_VERIFY_CONNECT_EPOCH: float | None = None
 _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH: float | None = None
+_FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _FEED_RESTART_VERIFY_VERIFIED_EPOCH: float | None = None
 _FEED_RESTART_VERIFY_FAILURE_DETAIL: str = ""
 _FEED_RESTART_VERIFY_LAST_STAGE_EVENT: str = ""
@@ -1757,6 +1796,8 @@ _FEED_ON_TICKS_ROW_SEQ = 0
 _RESTART_LOCK = threading.RLock()
 _RESTART_ASYNC_LOCK = threading.Lock()
 _RESTART_ASYNC_THREAD = None
+_BREAKER_BLOCK_LOG_LOCK = threading.Lock()
+_LAST_BREAKER_BLOCK_LOG_EPOCH = 0.0
 _LAST_FULL_RESTART_EPOCH = 0.0
 _FULL_RESTARTS = []
 _STALE_STRIKES = 0
@@ -2487,6 +2528,31 @@ def _log_ws(event: str, extra: dict | None = None, *, throttle_key: str | None =
         _WS_LOGGER.info(json.dumps(payload, sort_keys=True, default=str))
     except Exception as exc:
         logger.error("depth_ws_log_error path=%s err=%s:%s", _LOG_PATH, type(exc).__name__, exc)
+
+
+def _log_breaker_blocked_restart(reason: str) -> None:
+    """Rate-limit breaker diagnostics per process; this is not a restart retry time.
+
+    A distinct breaker episode inside this diagnostic window may not receive a
+    separate blocked-event log entry.
+    """
+    global _LAST_BREAKER_BLOCK_LOG_EPOCH
+    now_epoch = float(now_utc_epoch())
+    try:
+        cooldown_sec = float(getattr(cfg, "FEED_RESTART_STORM_COOLDOWN_SEC", 900.0))
+    except (TypeError, ValueError):
+        cooldown_sec = 900.0
+    if not math.isfinite(cooldown_sec):
+        cooldown_sec = 900.0
+    cooldown_sec = max(1.0, cooldown_sec)
+    with _BREAKER_BLOCK_LOG_LOCK:
+        if now_epoch - float(_LAST_BREAKER_BLOCK_LOG_EPOCH) < cooldown_sec:
+            return
+        _LAST_BREAKER_BLOCK_LOG_EPOCH = now_epoch
+    _log_ws(
+        "FEED_RESTART_BLOCKED_BY_BREAKER",
+        {"reason": str(reason), "diagnostic_cooldown_sec": cooldown_sec},
+    )
 
 
 def _log_subscription_mutation_diagnostic(
@@ -3958,6 +4024,89 @@ def _restart_verification_enabled() -> bool:
     return bool(getattr(cfg, "FEED_RESTART_VERIFY_ENABLE", True))
 
 
+def _restart_verification_restart_block() -> dict[str, object] | None:
+    """Return the verifier evidence that currently forbids another restart."""
+    if not _restart_verification_enabled():
+        return None
+    with _RESTART_VERIFY_LOCK:
+        state = str(_FEED_RESTART_VERIFY_STATE or "IDLE").strip().upper()
+        if state not in {"PENDING", "FAILED"}:
+            return None
+        return {
+            "verification_state": state,
+            "verification_reason": str(_FEED_RESTART_VERIFY_REASON or ""),
+            "verification_failure_detail": str(_FEED_RESTART_VERIFY_FAILURE_DETAIL or ""),
+            "verification_deadline_epoch": _coerce_epoch(_FEED_RESTART_VERIFY_DEADLINE_EPOCH),
+        }
+
+
+def _restart_attempt_allowed_for_snapshot(
+    requested: bool | None,
+    *,
+    runtime_state: str,
+) -> bool:
+    """Do not publish restart eligibility while the verification gate blocks it."""
+    runtime_state_text = str(runtime_state or "").strip().upper()
+    if _restart_verification_restart_block() is not None or runtime_state_text in {
+        "RECOVERY_BLOCKED",
+        "RESTART_REQUIRED",
+        "RESTART_VERIFY_PENDING",
+        "RESTART_VERIFY_FAILED",
+        "STOPPED",
+        "AUTH_BLOCKED",
+        "IMPORT_MISSING",
+    }:
+        return False
+    if requested is not None:
+        return bool(requested)
+    return True
+
+
+def _restart_verification_block_event_due(*, now_epoch: float | None = None) -> bool:
+    global _LAST_RESTART_VERIFY_BLOCK_LOG_EPOCH
+    try:
+        cooldown = max(0.0, float(getattr(cfg, "FEED_RESTART_VERIFY_BLOCK_LOG_COOLDOWN_SEC", 30.0)))
+    except Exception:
+        cooldown = 30.0
+    now = float(now_epoch if now_epoch is not None else time.time())
+    with _RESTART_VERIFY_LOCK:
+        if (now - float(_LAST_RESTART_VERIFY_BLOCK_LOG_EPOCH or 0.0)) < cooldown:
+            return False
+        _LAST_RESTART_VERIFY_BLOCK_LOG_EPOCH = now
+        return True
+
+
+def _log_restart_verification_block(*, reason: str, detail: Mapping[str, object]) -> None:
+    _log_ws(
+        "FEED_RESTART_BLOCKED_BY_VERIFICATION",
+        {
+            "reason": str(reason or "unknown"),
+            **dict(detail),
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+        },
+    )
+
+
+def _watchdog_tick_restart_verification_while_blocked() -> None:
+    """Continue read-only verification polling without changing a recovery latch."""
+    try:
+        _tick_feed_restart_verification(now_epoch=float(now_utc_epoch()))
+    except Exception as exc:
+        _log_ws(
+            "FEED_RESTART_VERIFY_TICK_ERROR",
+            {
+                "error": f"{type(exc).__name__}:{exc}",
+                "read_only": True,
+                "is_order_action": False,
+                "broker_api_called": False,
+                "allowed_for_live_execution": False,
+            },
+        )
+
+
 def _restart_verification_require_market_open() -> bool:
     return bool(getattr(cfg, "FEED_RESTART_VERIFY_REQUIRE_MARKET_OPEN", True))
 
@@ -4011,28 +4160,80 @@ def _option_feed_verification_min_ticks_per_symbol() -> int:
 
 
 def _reset_feed_restart_verification(*, reason: str) -> None:
+    global _FEED_RESTART_VERIFY_GENERATION
+    global _FEED_RESTART_VERIFY_SOCKET_GENERATION
     global _FEED_RESTART_VERIFY_STATE
     global _FEED_RESTART_VERIFY_REASON
     global _FEED_RESTART_VERIFY_START_EPOCH
     global _FEED_RESTART_VERIFY_DEADLINE_EPOCH
     global _FEED_RESTART_VERIFY_CONNECT_EPOCH
     global _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH
+    global _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN
     global _FEED_RESTART_VERIFY_VERIFIED_EPOCH
     global _FEED_RESTART_VERIFY_FAILURE_DETAIL
     global _FEED_RESTART_VERIFY_LAST_STAGE_EVENT
     if not _restart_verification_enabled():
         return
     with _RESTART_VERIFY_LOCK:
+        _FEED_RESTART_VERIFY_GENERATION += 1
+        _FEED_RESTART_VERIFY_SOCKET_GENERATION = None
         _FEED_RESTART_VERIFY_STATE = "IDLE"
         _FEED_RESTART_VERIFY_REASON = str(reason or "")
         _FEED_RESTART_VERIFY_START_EPOCH = 0.0
         _FEED_RESTART_VERIFY_DEADLINE_EPOCH = 0.0
         _FEED_RESTART_VERIFY_CONNECT_EPOCH = None
         _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH = None
+        _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN = {}
         _FEED_RESTART_VERIFY_VERIFIED_EPOCH = None
         _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
         _FEED_RESTART_VERIFY_LAST_STAGE_EVENT = ""
     _clear_last_disconnected_info()
+
+
+def _invalidate_feed_restart_verification_for_socket_advance(*, socket_generation: int) -> None:
+    """Invalidate old socket evidence without reopening an active restart gate."""
+    global _FEED_RESTART_VERIFY_GENERATION
+    global _FEED_RESTART_VERIFY_SOCKET_GENERATION
+    global _FEED_RESTART_VERIFY_STATE
+    global _FEED_RESTART_VERIFY_REASON
+    global _FEED_RESTART_VERIFY_START_EPOCH
+    global _FEED_RESTART_VERIFY_DEADLINE_EPOCH
+    global _FEED_RESTART_VERIFY_CONNECT_EPOCH
+    global _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH
+    global _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN
+    global _FEED_RESTART_VERIFY_VERIFIED_EPOCH
+    global _FEED_RESTART_VERIFY_FAILURE_DETAIL
+    global _FEED_RESTART_VERIFY_LAST_STAGE_EVENT
+    if not _restart_verification_enabled():
+        return
+    now_epoch = float(now_utc_epoch())
+    with _RESTART_VERIFY_LOCK:
+        prior_state = str(_FEED_RESTART_VERIFY_STATE or "IDLE").strip().upper()
+        gate_was_active = prior_state in {"PENDING", "FAILED"}
+        _FEED_RESTART_VERIFY_GENERATION += 1
+        _FEED_RESTART_VERIFY_SOCKET_GENERATION = int(socket_generation)
+        _FEED_RESTART_VERIFY_STATE = "FAILED" if gate_was_active else "IDLE"
+        _FEED_RESTART_VERIFY_REASON = "socket_generation_advanced"
+        _FEED_RESTART_VERIFY_START_EPOCH = now_epoch
+        _FEED_RESTART_VERIFY_DEADLINE_EPOCH = now_epoch + float(_restart_verification_timeout_sec())
+        _FEED_RESTART_VERIFY_CONNECT_EPOCH = None
+        _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH = None
+        _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN = {}
+        _FEED_RESTART_VERIFY_VERIFIED_EPOCH = None
+        _FEED_RESTART_VERIFY_FAILURE_DETAIL = (
+            "socket_generation_changed_before_verification" if gate_was_active else ""
+        )
+        _FEED_RESTART_VERIFY_LAST_STAGE_EVENT = ""
+        generation = int(_FEED_RESTART_VERIFY_GENERATION)
+    _log_ws(
+        "FEED_RESTART_VERIFY_SOCKET_GENERATION_INVALIDATED",
+        {
+            "socket_generation": int(socket_generation),
+            "verification_generation": generation,
+            "prior_state": prior_state,
+            "result_state": "FAILED" if gate_was_active else "IDLE",
+        },
+    )
 
 
 def _reset_option_feed_verification(*, reason: str) -> None:
@@ -4296,13 +4497,18 @@ def _tick_option_feed_verification(*, now_epoch: float) -> None:
         )
 
 
-def _begin_feed_restart_verification(*, reason: str, start_epoch: float, now_epoch: float) -> None:
+def _begin_feed_restart_verification(
+    *, reason: str, start_epoch: float, now_epoch: float, socket_generation: int
+) -> None:
+    global _FEED_RESTART_VERIFY_GENERATION
+    global _FEED_RESTART_VERIFY_SOCKET_GENERATION
     global _FEED_RESTART_VERIFY_STATE
     global _FEED_RESTART_VERIFY_REASON
     global _FEED_RESTART_VERIFY_START_EPOCH
     global _FEED_RESTART_VERIFY_DEADLINE_EPOCH
     global _FEED_RESTART_VERIFY_CONNECT_EPOCH
     global _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH
+    global _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN
     global _FEED_RESTART_VERIFY_VERIFIED_EPOCH
     global _FEED_RESTART_VERIFY_FAILURE_DETAIL
     global _FEED_RESTART_VERIFY_LAST_STAGE_EVENT
@@ -4318,19 +4524,26 @@ def _begin_feed_restart_verification(*, reason: str, start_epoch: float, now_epo
         now_epoch_f = float(now_utc_epoch())
     deadline = now_epoch_f + float(_restart_verification_timeout_sec())
     with _RESTART_VERIFY_LOCK:
+        _FEED_RESTART_VERIFY_GENERATION += 1
+        _FEED_RESTART_VERIFY_SOCKET_GENERATION = int(socket_generation)
         _FEED_RESTART_VERIFY_STATE = "PENDING"
         _FEED_RESTART_VERIFY_REASON = str(reason or "")
         _FEED_RESTART_VERIFY_START_EPOCH = start_epoch_f
         _FEED_RESTART_VERIFY_DEADLINE_EPOCH = float(deadline)
         _FEED_RESTART_VERIFY_CONNECT_EPOCH = None
         _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH = None
+        _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN = {}
         _FEED_RESTART_VERIFY_VERIFIED_EPOCH = None
         _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
         _FEED_RESTART_VERIFY_LAST_STAGE_EVENT = ""
+        verification_generation = int(_FEED_RESTART_VERIFY_GENERATION)
+        expected_socket_generation = int(_FEED_RESTART_VERIFY_SOCKET_GENERATION)
     _log_ws(
         "FEED_RESTART_VERIFY_BEGIN",
         {
             "reason": str(reason or ""),
+            "verification_generation": verification_generation,
+            "socket_generation": expected_socket_generation,
             "start_epoch": start_epoch_f,
             "deadline_epoch": float(deadline),
             "timeout_sec": float(_restart_verification_timeout_sec()),
@@ -4338,28 +4551,82 @@ def _begin_feed_restart_verification(*, reason: str, start_epoch: float, now_epo
     )
 
 
-def _record_feed_restart_verify_connect(*, now_epoch: float) -> None:
+def _record_feed_restart_verify_connect(*, now_epoch: float, socket_generation: int) -> None:
     global _FEED_RESTART_VERIFY_CONNECT_EPOCH
     if not _restart_verification_enabled():
         return
-    with _RESTART_VERIFY_LOCK:
-        if _FEED_RESTART_VERIFY_STATE != "PENDING":
-            return
-        if _FEED_RESTART_VERIFY_CONNECT_EPOCH is not None:
-            return
-        _FEED_RESTART_VERIFY_CONNECT_EPOCH = float(now_epoch)
+    with _SOCKET_GENERATION_LOCK:
+        active_socket_generation = int(_SOCKET_GENERATION)
+        with _RESTART_VERIFY_LOCK:
+            if _FEED_RESTART_VERIFY_STATE not in {"PENDING", "FAILED"}:
+                return
+            expected_socket_generation = _FEED_RESTART_VERIFY_SOCKET_GENERATION
+            if int(socket_generation) != expected_socket_generation or int(socket_generation) != active_socket_generation:
+                _log_ws("FEED_RESTART_VERIFY_OLD_SOCKET_EVIDENCE_IGNORED", {
+                    "stage": "connect",
+                    "socket_generation": socket_generation,
+                    "expected_socket_generation": expected_socket_generation,
+                    "active_socket_generation": active_socket_generation,
+                    "verification_generation": int(_FEED_RESTART_VERIFY_GENERATION),
+                })
+                return
+            if _FEED_RESTART_VERIFY_CONNECT_EPOCH is not None:
+                return
+            _FEED_RESTART_VERIFY_CONNECT_EPOCH = float(now_epoch)
 
 
-def _record_feed_restart_verify_subscribe(*, now_epoch: float) -> None:
+def _record_feed_restart_verify_subscribe(*, now_epoch: float, socket_generation: int) -> None:
     global _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH
     if not _restart_verification_enabled():
         return
-    with _RESTART_VERIFY_LOCK:
-        if _FEED_RESTART_VERIFY_STATE != "PENDING":
-            return
-        if _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH is not None:
-            return
-        _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH = float(now_epoch)
+    with _SOCKET_GENERATION_LOCK:
+        active_socket_generation = int(_SOCKET_GENERATION)
+        with _RESTART_VERIFY_LOCK:
+            if _FEED_RESTART_VERIFY_STATE not in {"PENDING", "FAILED"}:
+                return
+            expected_socket_generation = _FEED_RESTART_VERIFY_SOCKET_GENERATION
+            if int(socket_generation) != expected_socket_generation or int(socket_generation) != active_socket_generation:
+                _log_ws("FEED_RESTART_VERIFY_OLD_SOCKET_EVIDENCE_IGNORED", {
+                    "stage": "subscribe",
+                    "socket_generation": socket_generation,
+                    "expected_socket_generation": expected_socket_generation,
+                    "active_socket_generation": active_socket_generation,
+                    "verification_generation": int(_FEED_RESTART_VERIFY_GENERATION),
+                })
+                return
+            if _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH is not None:
+                return
+            _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH = float(now_epoch)
+
+
+def _record_feed_restart_verify_tick(
+    *,
+    token: int,
+    receipt_epoch: float,
+    socket_generation: int,
+) -> None:
+    """Record recovery tick evidence only for the verifier's active socket."""
+    global _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN
+    if not _restart_verification_enabled():
+        return
+    token_int = int(token)
+    receipt = float(receipt_epoch)
+    with _SOCKET_GENERATION_LOCK:
+        active_socket_generation = int(_SOCKET_GENERATION)
+        with _RESTART_VERIFY_LOCK:
+            state = str(_FEED_RESTART_VERIFY_STATE or "IDLE").strip().upper()
+            expected_socket_generation = _FEED_RESTART_VERIFY_SOCKET_GENERATION
+            start_epoch = float(_FEED_RESTART_VERIFY_START_EPOCH or 0.0)
+            if (
+                state not in {"PENDING", "FAILED"}
+                or int(socket_generation) != active_socket_generation
+                or int(socket_generation) != expected_socket_generation
+                or receipt < start_epoch
+            ):
+                return
+            previous = _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN.get(token_int)
+            if previous is None or receipt > float(previous):
+                _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN[token_int] = receipt
 
 
 def _restart_verify_stage_event(stage: str) -> str:
@@ -4371,7 +4638,52 @@ def _restart_verify_should_block_runtime_state(state: str) -> bool:
     return str(state or "").strip().upper() in {"PENDING", "FAILED"}
 
 
+def _restart_verify_tick_evidence_snapshot() -> tuple[int | None, float, float | None, dict[int, float]]:
+    with _SOCKET_GENERATION_LOCK:
+        active_socket_generation = int(_SOCKET_GENERATION)
+        with _RESTART_VERIFY_LOCK:
+            expected_socket_generation = _FEED_RESTART_VERIFY_SOCKET_GENERATION
+            if expected_socket_generation != active_socket_generation:
+                return (
+                    expected_socket_generation,
+                    float(_FEED_RESTART_VERIFY_START_EPOCH or 0.0),
+                    _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH,
+                    {},
+                )
+            return (
+                expected_socket_generation,
+                float(_FEED_RESTART_VERIFY_START_EPOCH or 0.0),
+                _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH,
+                dict(_FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN),
+            )
+
+
+def _restart_verify_ticks_by_symbol(
+    *,
+    tick_epochs_by_token: Mapping[int, float],
+    after_epoch: float,
+    now_epoch: float,
+    max_age_sec: float,
+) -> dict[str, int]:
+    ticks_by_symbol: dict[str, int] = {}
+    for token_raw, receipt_raw in tick_epochs_by_token.items():
+        token = int(token_raw)
+        receipt_epoch = float(receipt_raw)
+        if (
+            token in _UNDERLYING_TOKENS
+            or receipt_epoch < float(after_epoch)
+            or receipt_epoch > float(now_epoch)
+            or float(now_epoch) - receipt_epoch > float(max_age_sec)
+        ):
+            continue
+        symbol = str(_TOKEN_TO_SYMBOL.get(token) or "").strip().upper()
+        if symbol:
+            ticks_by_symbol[symbol] = int(ticks_by_symbol.get(symbol, 0)) + 1
+    return ticks_by_symbol
+
+
 def _restart_verification_proof(now_epoch: float) -> tuple[bool, str, dict[str, object]]:
+    expected_socket_generation, verification_start_epoch, subscribe_epoch, tick_epochs_by_token = _restart_verify_tick_evidence_snapshot()
     ws_connected = _ws_connected_state()
     option_state = _option_runtime_state(
         now_epoch=float(now_epoch),
@@ -4381,7 +4693,13 @@ def _restart_verification_proof(now_epoch: float) -> tuple[bool, str, dict[str, 
         ws_connected=ws_connected,
     )
     subscribed_by_symbol = dict(option_state.get("subscribed_count_by_symbol") or {})
-    ticks_by_symbol = dict(option_state.get("ticks_received_count_by_symbol") or {})
+    max_ws_tick_age_sec = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", 5.0))
+    ticks_by_symbol = _restart_verify_ticks_by_symbol(
+        tick_epochs_by_token=tick_epochs_by_token,
+        after_epoch=float(subscribe_epoch if subscribe_epoch is not None else verification_start_epoch),
+        now_epoch=float(now_epoch),
+        max_age_sec=max_ws_tick_age_sec,
+    )
     block_reason_by_symbol = dict(option_state.get("feed_block_reason_by_symbol") or {})
     total_option_tokens = int(option_state.get("option_count") or 0)
 
@@ -4395,6 +4713,12 @@ def _restart_verification_proof(now_epoch: float) -> tuple[bool, str, dict[str, 
         required_symbols = sorted(set(str(sym or "").upper() for sym in subscribed_by_symbol.keys() if str(sym or "").strip()))
 
     min_ticks = int(_restart_verification_min_option_ticks_per_symbol())
+    last_ws_tick_epoch = max((float(epoch) for epoch in tick_epochs_by_token.values()), default=0.0)
+    last_ws_tick_age_sec = (
+        max(0.0, float(now_epoch) - last_ws_tick_epoch)
+        if last_ws_tick_epoch > 0.0
+        else None
+    )
 
     if _restart_verification_require_options() and total_option_tokens <= 0:
         return False, "no_subscribed_option_tokens", {
@@ -4429,6 +4753,14 @@ def _restart_verification_proof(now_epoch: float) -> tuple[bool, str, dict[str, 
                 "ticks_by_symbol": ticks_by_symbol,
                 "block_reason_by_symbol": block_reason_by_symbol,
             }
+    if last_ws_tick_age_sec is None or last_ws_tick_age_sec > max_ws_tick_age_sec:
+        return False, f"ws_tick_stale:{last_ws_tick_age_sec!s}", {
+            "required_symbols": required_symbols,
+            "last_ws_tick_age_sec": last_ws_tick_age_sec,
+            "max_ws_tick_age_sec": max_ws_tick_age_sec,
+            "socket_generation": expected_socket_generation,
+            "generation_bound_option_tick_count": sum(ticks_by_symbol.values()),
+        }
 
     return True, "ok", {
         "required_symbols": required_symbols,
@@ -4437,10 +4769,13 @@ def _restart_verification_proof(now_epoch: float) -> tuple[bool, str, dict[str, 
         "ticks_by_symbol": ticks_by_symbol,
         "block_reason_by_symbol": block_reason_by_symbol,
         "ws_connected": ws_connected,
+        "socket_generation": expected_socket_generation,
+        "generation_bound_option_tick_count": sum(ticks_by_symbol.values()),
     }
 
 
 def _restart_verification_live_recovery_proof(now_epoch: float) -> tuple[bool, str, dict[str, object]]:
+    expected_socket_generation, verification_start_epoch, subscribe_epoch, tick_epochs_by_token = _restart_verify_tick_evidence_snapshot()
     ws_connected = _ws_connected_state()
     option_state = _option_runtime_state(
         now_epoch=float(now_epoch),
@@ -4450,12 +4785,17 @@ def _restart_verification_live_recovery_proof(now_epoch: float) -> tuple[bool, s
         ws_connected=ws_connected,
     )
     subscribed_by_symbol = dict(option_state.get("subscribed_count_by_symbol") or {})
-    ticks_by_symbol = dict(option_state.get("ticks_received_count_by_symbol") or {})
+    max_ws_tick_age_sec = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", 5.0))
+    ticks_by_symbol = _restart_verify_ticks_by_symbol(
+        tick_epochs_by_token=tick_epochs_by_token,
+        after_epoch=float(subscribe_epoch if subscribe_epoch is not None else verification_start_epoch),
+        now_epoch=float(now_epoch),
+        max_age_sec=max_ws_tick_age_sec,
+    )
     block_reason_by_symbol = dict(option_state.get("feed_block_reason_by_symbol") or {})
     total_option_tokens = int(option_state.get("option_count") or 0)
-    last_ws_tick_epoch = float(_LAST_WS_TICK_EPOCH or 0.0)
+    last_ws_tick_epoch = max((float(epoch) for epoch in tick_epochs_by_token.values()), default=0.0)
     last_ws_tick_age_sec = max(0.0, float(now_epoch) - last_ws_tick_epoch) if last_ws_tick_epoch > 0.0 else None
-    max_ws_tick_age_sec = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", 5.0))
 
     required_symbols = [
         str(sym or "").upper()
@@ -4517,6 +4857,8 @@ def _restart_verification_live_recovery_proof(now_epoch: float) -> tuple[bool, s
         "block_reason_by_symbol": block_reason_by_symbol,
         "ws_connected": ws_connected,
         "last_ws_tick_age_sec": last_ws_tick_age_sec,
+        "socket_generation": expected_socket_generation,
+        "generation_bound_option_tick_count": sum(ticks_by_symbol.values()),
     }
 
 
@@ -4532,15 +4874,22 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
     if now_epoch_f <= 0.0:
         now_epoch_f = float(now_utc_epoch())
 
-    with _RESTART_VERIFY_LOCK:
-        state = str(_FEED_RESTART_VERIFY_STATE or "IDLE").strip().upper()
-        if state not in {"PENDING", "FAILED"}:
-            return
-        start_epoch = float(_FEED_RESTART_VERIFY_START_EPOCH or 0.0)
-        deadline = float(_FEED_RESTART_VERIFY_DEADLINE_EPOCH or 0.0)
-        connect_epoch = _FEED_RESTART_VERIFY_CONNECT_EPOCH
-        subscribe_epoch = _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH
-        reason = str(_FEED_RESTART_VERIFY_REASON or "")
+    with _SOCKET_GENERATION_LOCK:
+        active_socket_generation = int(_SOCKET_GENERATION)
+        with _RESTART_VERIFY_LOCK:
+            state = str(_FEED_RESTART_VERIFY_STATE or "IDLE").strip().upper()
+            if state not in {"PENDING", "FAILED"}:
+                return
+            generation = int(_FEED_RESTART_VERIFY_GENERATION)
+            expected_socket_generation = _FEED_RESTART_VERIFY_SOCKET_GENERATION
+            if expected_socket_generation != active_socket_generation:
+                return
+            start_epoch = float(_FEED_RESTART_VERIFY_START_EPOCH or 0.0)
+            deadline = float(_FEED_RESTART_VERIFY_DEADLINE_EPOCH or 0.0)
+            connect_epoch = _FEED_RESTART_VERIFY_CONNECT_EPOCH
+            subscribe_epoch = _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH
+            tick_evidence_by_token = dict(_FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN)
+            reason = str(_FEED_RESTART_VERIFY_REASON or "")
 
     stage = "WAITING_CONNECT"
     if connect_epoch is not None and float(connect_epoch) >= start_epoch:
@@ -4551,31 +4900,54 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
         stage = f"RECHECK_{stage}"
 
     stage_event = _restart_verify_stage_event(stage)
-    with _RESTART_VERIFY_LOCK:
-        if _FEED_RESTART_VERIFY_LAST_STAGE_EVENT != stage_event:
-            _FEED_RESTART_VERIFY_LAST_STAGE_EVENT = stage_event
-            _log_ws(
-                stage_event,
-                {
-                    "reason": reason,
-                    "start_epoch": start_epoch,
-                    "deadline_epoch": deadline,
-                    "now_epoch": now_epoch_f,
-                    "connect_epoch": connect_epoch,
-                    "subscribe_epoch": subscribe_epoch,
-                },
-            )
+    with _SOCKET_GENERATION_LOCK:
+        current_socket_generation = int(_SOCKET_GENERATION)
+        with _RESTART_VERIFY_LOCK:
+            if (
+                generation != _FEED_RESTART_VERIFY_GENERATION
+                or current_socket_generation != expected_socket_generation
+                or _FEED_RESTART_VERIFY_SOCKET_GENERATION != expected_socket_generation
+                or _FEED_RESTART_VERIFY_STATE != state
+                or _FEED_RESTART_VERIFY_CONNECT_EPOCH != connect_epoch
+                or _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH != subscribe_epoch
+                or _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN != tick_evidence_by_token
+            ):
+                return
+            if _FEED_RESTART_VERIFY_LAST_STAGE_EVENT != stage_event:
+                _FEED_RESTART_VERIFY_LAST_STAGE_EVENT = stage_event
+                _log_ws(
+                    stage_event,
+                    {
+                        "reason": reason,
+                        "start_epoch": start_epoch,
+                        "deadline_epoch": deadline,
+                        "now_epoch": now_epoch_f,
+                        "connect_epoch": connect_epoch,
+                        "subscribe_epoch": subscribe_epoch,
+                        "socket_generation": expected_socket_generation,
+                        "verification_generation": generation,
+                    },
+                )
 
     verified = False
     verify_detail = "unknown"
     verify_meta: dict[str, object] = {}
-    if state == "FAILED":
+    stages_proven = (
+        connect_epoch is not None
+        and subscribe_epoch is not None
+        and float(connect_epoch) >= start_epoch
+        and float(subscribe_epoch) >= float(connect_epoch)
+    )
+    if not stages_proven:
+        verified = False
+        verify_detail = "connect_subscribe_evidence_missing_or_out_of_order"
+    elif state == "FAILED":
         try:
             verified, verify_detail, verify_meta = _restart_verification_live_recovery_proof(now_epoch_f)
         except Exception as exc:
             verified = False
             verify_detail = f"live_recovery_exception:{type(exc).__name__}:{exc}"
-    elif subscribe_epoch is not None and float(subscribe_epoch) >= start_epoch:
+    else:
         try:
             verified, verify_detail, verify_meta = _restart_verification_proof(now_epoch_f)
         except Exception as exc:
@@ -4583,8 +4955,19 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
             verify_detail = f"proof_exception:{type(exc).__name__}:{exc}"
 
     if verified:
-        with _RESTART_VERIFY_LOCK:
-            if _FEED_RESTART_VERIFY_STATE in {"PENDING", "FAILED"}:
+        with _SOCKET_GENERATION_LOCK:
+            current_socket_generation = int(_SOCKET_GENERATION)
+            with _RESTART_VERIFY_LOCK:
+                if (
+                    generation != _FEED_RESTART_VERIFY_GENERATION
+                    or current_socket_generation != expected_socket_generation
+                    or _FEED_RESTART_VERIFY_SOCKET_GENERATION != expected_socket_generation
+                    or _FEED_RESTART_VERIFY_STATE != state
+                    or _FEED_RESTART_VERIFY_CONNECT_EPOCH != connect_epoch
+                    or _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH != subscribe_epoch
+                    or _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN != tick_evidence_by_token
+                ):
+                    return
                 _FEED_RESTART_VERIFY_STATE = "OK"
                 _FEED_RESTART_VERIFY_VERIFIED_EPOCH = float(now_epoch_f)
                 _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
@@ -4623,8 +5006,19 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
         return
 
     if deadline > 0.0 and now_epoch_f >= deadline:
-        with _RESTART_VERIFY_LOCK:
-            if _FEED_RESTART_VERIFY_STATE == "PENDING":
+        with _SOCKET_GENERATION_LOCK:
+            current_socket_generation = int(_SOCKET_GENERATION)
+            with _RESTART_VERIFY_LOCK:
+                if (
+                    generation != _FEED_RESTART_VERIFY_GENERATION
+                    or current_socket_generation != expected_socket_generation
+                    or _FEED_RESTART_VERIFY_SOCKET_GENERATION != expected_socket_generation
+                    or _FEED_RESTART_VERIFY_STATE != "PENDING"
+                    or _FEED_RESTART_VERIFY_CONNECT_EPOCH != connect_epoch
+                    or _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH != subscribe_epoch
+                    or _FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN != tick_evidence_by_token
+                ):
+                    return
                 _FEED_RESTART_VERIFY_STATE = "FAILED"
                 _FEED_RESTART_VERIFY_FAILURE_DETAIL = str(verify_detail or "timeout")
         _log_ws(
@@ -4660,45 +5054,18 @@ def _restart_verify_overlay_payload() -> dict[str, object]:
 
 def _effective_runtime_state_for_snapshot(runtime_state: str, *, now_epoch: float) -> tuple[str, str | None]:
     """Return (effective_runtime_state, failure_detail_override_or_none)."""
-    global _FEED_RESTART_VERIFY_STATE
-    global _FEED_RESTART_VERIFY_VERIFIED_EPOCH
-    global _FEED_RESTART_VERIFY_FAILURE_DETAIL
     runtime_state_text = str(runtime_state or "").strip().upper()
-    if runtime_state_text in {"RECOVERY_BLOCKED", "AUTH_BLOCKED", "IMPORT_MISSING"}:
-        return runtime_state_text, None
     if not _restart_verification_enabled():
         return runtime_state, None
     _tick_feed_restart_verification(now_epoch=float(now_epoch))
+    if runtime_state_text in {"RECOVERY_BLOCKED", "AUTH_BLOCKED", "IMPORT_MISSING"}:
+        return runtime_state_text, None
     with _RESTART_VERIFY_LOCK:
         state = str(_FEED_RESTART_VERIFY_STATE or "IDLE").strip().upper()
         detail = str(_FEED_RESTART_VERIFY_FAILURE_DETAIL or "").strip()
     if state == "PENDING":
         return "RESTART_VERIFY_PENDING", None
     if state == "FAILED":
-        try:
-            recovered, recover_detail, recover_meta = _restart_verification_live_recovery_proof(float(now_epoch))
-        except Exception as exc:
-            recovered = False
-            recover_detail = f"live_recovery_exception:{type(exc).__name__}:{exc}"
-            recover_meta = {}
-        if recovered:
-            with _RESTART_VERIFY_LOCK:
-                if _FEED_RESTART_VERIFY_STATE in {"PENDING", "FAILED"}:
-                    _FEED_RESTART_VERIFY_STATE = "OK"
-                    _FEED_RESTART_VERIFY_VERIFIED_EPOCH = float(now_epoch)
-                    _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
-            _log_ws(
-                "FEED_RESTART_VERIFIED_OK",
-                {
-                    "reason": "failed_state_live_recovery",
-                    "start_epoch": float(_FEED_RESTART_VERIFY_START_EPOCH or 0.0),
-                    "verified_epoch": float(now_epoch),
-                    "connect_epoch": _coerce_epoch(_FEED_RESTART_VERIFY_CONNECT_EPOCH),
-                    "subscribe_epoch": _coerce_epoch(_FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH),
-                    "meta": recover_meta,
-                },
-            )
-            return runtime_state, None
         return "RESTART_VERIFY_FAILED", (detail or "restart_verification_failed")
     return runtime_state, None
 
@@ -5409,7 +5776,10 @@ def _write_feed_runtime_snapshot(
                 "recovery_action": "process_restart_required",
                 "process_restart_required": True,
                 "recovery_blocked": True,
-                "restart_attempt_allowed": False if restart_attempt_allowed is None else bool(restart_attempt_allowed),
+                "restart_attempt_allowed": _restart_attempt_allowed_for_snapshot(
+                    restart_attempt_allowed,
+                    runtime_state=effective_state_text,
+                ),
                 "restart_attempted": False if restart_attempted is None else bool(restart_attempted),
                 "ws_reconnect_allowed": False,
                 "ws_reconnect_attempted": False,
@@ -5429,7 +5799,10 @@ def _write_feed_runtime_snapshot(
                 "recovery_blocked": bool(process_restart_required)
                 or str(effective_state_text).strip().upper() == "RECOVERY_BLOCKED"
                 or bool(str(restart_blocked_reason or "").strip()),
-                "restart_attempt_allowed": bool(restart_attempt_allowed) if restart_attempt_allowed is not None else (str(effective_state_text).strip().upper() not in {"STOPPED", "AUTH_BLOCKED", "IMPORT_MISSING"}),
+                "restart_attempt_allowed": _restart_attempt_allowed_for_snapshot(
+                    restart_attempt_allowed,
+                    runtime_state=effective_state_text,
+                ),
                 "restart_attempted": bool(restart_attempted) if restart_attempted is not None else bool(
                     disconnected_code_value is not None or str(disconnected_reason_value or "").strip()
                 ),
@@ -5582,14 +5955,15 @@ def _enqueue_runtime_snapshot_with_direct_artifact(
     payload: dict[str, Any],
     *,
     direct_artifact_writer,
+    allow_direct_artifact_fallback: bool = True,
 ) -> bool:
-    """Persist through the bounded store and avoid duplicate tick-path writes."""
+    """Persist through the bounded store with an explicit fallback policy."""
     accepted = write_feed_runtime_snapshot(payload)
     outcome = consume_runtime_snapshot_write_outcome()
     # Missing outcome means an older/test-injected writer; preserve its legacy
-    # direct artifact behavior. Queue rejection also retains direct fallback.
+    # direct artifact behavior only for callers that permit synchronous I/O.
     emit_direct = bool(outcome[1]) if outcome is not None and accepted else True
-    if emit_direct:
+    if emit_direct and allow_direct_artifact_fallback:
         direct_artifact_writer()
     return bool(accepted)
 
@@ -5809,7 +6183,10 @@ def _persist_runtime_snapshot_row(
                 "recovery_action": "process_restart_required",
                 "process_restart_required": True,
                 "recovery_blocked": True,
-                "restart_attempt_allowed": False if restart_attempt_allowed is None else bool(restart_attempt_allowed),
+                "restart_attempt_allowed": _restart_attempt_allowed_for_snapshot(
+                    restart_attempt_allowed,
+                    runtime_state=effective_state_text,
+                ),
                 "restart_attempted": False if restart_attempted is None else bool(restart_attempted),
                 "ws_reconnect_allowed": False,
                 "ws_reconnect_attempted": False,
@@ -5825,7 +6202,10 @@ def _persist_runtime_snapshot_row(
             {
                 "process_restart_required": bool(process_restart_required) if process_restart_required is not None else False,
                 "recovery_blocked": False,
-                "restart_attempt_allowed": bool(restart_attempt_allowed) if restart_attempt_allowed is not None else (state_text not in {"STOPPED", "AUTH_BLOCKED", "IMPORT_MISSING"}),
+                "restart_attempt_allowed": _restart_attempt_allowed_for_snapshot(
+                    restart_attempt_allowed,
+                    runtime_state=effective_state_text,
+                ),
                 "restart_attempted": bool(restart_attempted) if restart_attempted is not None else bool(
                     disconnected_code_value is not None or str(disconnected_reason_value or "").strip()
                 ),
@@ -5894,11 +6274,19 @@ def _persist_runtime_snapshot_row(
         ok = _enqueue_runtime_snapshot_with_direct_artifact(
             payload,
             direct_artifact_writer=_emit_direct_artifact,
+            # Callback ingestion holds the socket-generation lock. Queue
+            # rejection already marks runtime persistence degraded, so do not
+            # perform synchronous filesystem I/O on this critical path.
+            allow_direct_artifact_fallback=source != "on_ticks",
         )
     finally:
         clear_runtime_snapshot_producer_admission()
     if not ok:
-        _log_ws("FEED_RUNTIME_STORE_WRITE_ERROR", {"source": source})
+        # Tick-source rejection already sets the runtime persistence
+        # degradation latch. Avoid a synchronous rotating-file write while
+        # on_ticks holds the socket-generation lock.
+        if source != "on_ticks":
+            _log_ws("FEED_RUNTIME_STORE_WRITE_ERROR", {"source": source})
 
 
 def _run_db_tick_watchdog_cycle(
@@ -7212,86 +7600,88 @@ def ensure_subscribed_tokens(tokens: list[int], reason: str = "on_demand", symbo
     if not can_mutate:
         _log_ws("FEED_SUBSCRIBE_SKIPPED", {**guard_payload, "guard_reason": guard_reason, "token_count": len(tokens)})
         return False
-    with _KITE_TICKER_LOCK:
-        if _KITE_TICKER is None:
-            _log_ws("FEED_SUBSCRIBE_SKIPPED", {"reason": reason, "detail": "ws_not_running"})
-            return False
-        existing = set(int(t) for t in (_LAST_TOKENS or []))
-        new_tokens = [t for t in tokens if t not in existing]
-        if not new_tokens:
-            return True
-        try:
-            client_mode_before = _client_mode_for_token(_KITE_TICKER, 256265)
-            _record_ws_subscription_operation(
-                _KITE_TICKER,
-                new_tokens,
-                callsite="ensure_subscribed_tokens",
-                operation="subscribe",
-                reason=reason,
-                local_call_result="dispatched",
-                client_mode_before=client_mode_before,
-                socket_generation=int(_SOCKET_GENERATION),
-            )
-            _KITE_TICKER.subscribe(new_tokens)
-            _record_subscription_request_succeeded(new_tokens)
-            client_mode_after_subscribe = _client_mode_for_token(_KITE_TICKER, 256265)
-            _record_ws_subscription_operation(
-                _KITE_TICKER,
-                new_tokens,
-                callsite="ensure_subscribed_tokens",
-                operation="subscribe",
-                reason=reason,
-                local_call_result="succeeded",
-                client_mode_before=client_mode_before,
-                client_mode_after=client_mode_after_subscribe,
-                socket_generation=int(_SOCKET_GENERATION),
-            )
-            client_mode_before_mode = _client_mode_for_token(_KITE_TICKER, 256265)
-            _record_ws_subscription_operation(
-                _KITE_TICKER,
-                new_tokens,
-                callsite="ensure_subscribed_tokens",
-                operation="set_mode",
-                requested_mode="full",
-                reason=reason,
-                local_call_result="dispatched",
-                client_mode_before=client_mode_before_mode,
-                socket_generation=int(_SOCKET_GENERATION),
-            )
-            _KITE_TICKER.set_mode(_KITE_TICKER.MODE_FULL, new_tokens)
-            _record_mode_request_succeeded(new_tokens)
-            _record_ws_subscription_operation(
-                _KITE_TICKER,
-                new_tokens,
-                callsite="ensure_subscribed_tokens",
-                operation="set_mode",
-                requested_mode="full",
-                reason=reason,
-                local_call_result="succeeded",
-                client_mode_before=client_mode_before_mode,
-                client_mode_after=_client_mode_for_token(_KITE_TICKER, 256265),
-                socket_generation=int(_SOCKET_GENERATION),
-            )
-            _LAST_TOKENS = list(existing.union(set(new_tokens)))
-            if symbol:
-                for tok in new_tokens:
-                    _TOKEN_TO_SYMBOL.setdefault(int(tok), str(symbol))
-            _log_ws("FEED_SUBSCRIBE_OK", {"reason": reason, "tokens": len(new_tokens)})
-            return True
-        except Exception as exc:
-            _record_ws_subscription_operation(
-                _KITE_TICKER,
-                new_tokens,
-                callsite="ensure_subscribed_tokens",
-                operation="subscribe_or_set_mode",
-                requested_mode="full",
-                reason=reason,
-                local_call_result="exception",
-                exception_type=type(exc).__name__,
-                socket_generation=int(_SOCKET_GENERATION),
-            )
-            _log_ws("FEED_SUBSCRIBE_ERROR", {"reason": reason, "error": str(exc)})
-            return False
+    with _SOCKET_START_LOCK:
+        socket_generation = _current_socket_generation()
+        with _KITE_TICKER_LOCK:
+            if _KITE_TICKER is None:
+                _log_ws("FEED_SUBSCRIBE_SKIPPED", {"reason": reason, "detail": "ws_not_running"})
+                return False
+            existing = set(int(t) for t in (_LAST_TOKENS or []))
+            new_tokens = [t for t in tokens if t not in existing]
+            if not new_tokens:
+                return True
+            try:
+                client_mode_before = _client_mode_for_token(_KITE_TICKER, 256265)
+                _record_ws_subscription_operation(
+                    _KITE_TICKER,
+                    new_tokens,
+                    callsite="ensure_subscribed_tokens",
+                    operation="subscribe",
+                    reason=reason,
+                    local_call_result="dispatched",
+                    client_mode_before=client_mode_before,
+                    socket_generation=socket_generation,
+                )
+                _KITE_TICKER.subscribe(new_tokens)
+                _record_subscription_request_succeeded(new_tokens)
+                client_mode_after_subscribe = _client_mode_for_token(_KITE_TICKER, 256265)
+                _record_ws_subscription_operation(
+                    _KITE_TICKER,
+                    new_tokens,
+                    callsite="ensure_subscribed_tokens",
+                    operation="subscribe",
+                    reason=reason,
+                    local_call_result="succeeded",
+                    client_mode_before=client_mode_before,
+                    client_mode_after=client_mode_after_subscribe,
+                    socket_generation=int(_SOCKET_GENERATION),
+                )
+                client_mode_before_mode = _client_mode_for_token(_KITE_TICKER, 256265)
+                _record_ws_subscription_operation(
+                    _KITE_TICKER,
+                    new_tokens,
+                    callsite="ensure_subscribed_tokens",
+                    operation="set_mode",
+                    requested_mode="full",
+                    reason=reason,
+                    local_call_result="dispatched",
+                    client_mode_before=client_mode_before_mode,
+                    socket_generation=int(_SOCKET_GENERATION),
+                )
+                _KITE_TICKER.set_mode(_KITE_TICKER.MODE_FULL, new_tokens)
+                _record_mode_request_succeeded(new_tokens)
+                _record_ws_subscription_operation(
+                    _KITE_TICKER,
+                    new_tokens,
+                    callsite="ensure_subscribed_tokens",
+                    operation="set_mode",
+                    requested_mode="full",
+                    reason=reason,
+                    local_call_result="succeeded",
+                    client_mode_before=client_mode_before_mode,
+                    client_mode_after=_client_mode_for_token(_KITE_TICKER, 256265),
+                    socket_generation=int(_SOCKET_GENERATION),
+                )
+                _LAST_TOKENS = list(existing.union(set(new_tokens)))
+                if symbol:
+                    for tok in new_tokens:
+                        _TOKEN_TO_SYMBOL.setdefault(int(tok), str(symbol))
+                _log_ws("FEED_SUBSCRIBE_OK", {"reason": reason, "tokens": len(new_tokens)})
+                return True
+            except Exception as exc:
+                _record_ws_subscription_operation(
+                    _KITE_TICKER,
+                    new_tokens,
+                    callsite="ensure_subscribed_tokens",
+                    operation="subscribe_or_set_mode",
+                    requested_mode="full",
+                    reason=reason,
+                    local_call_result="exception",
+                    exception_type=type(exc).__name__,
+                    socket_generation=int(_SOCKET_GENERATION),
+                )
+                _log_ws("FEED_SUBSCRIBE_ERROR", {"reason": reason, "error": str(exc)})
+                return False
 
 
 def _ensure_depth_ws_lock() -> bool:
@@ -7370,6 +7760,14 @@ def _schedule_restart_depth_ws(
     if _reconnect_recovery_blocked_active() or _reactor_terminal_restart_block_active():
         blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or _reactor_not_restartable_block_reason()
         _emit_reconnect_recovery_blocked_snapshot(source=f"_schedule_restart_depth_ws:{source}", reason=blocked_reason)
+        return False
+    if feed_breaker_tripped():
+        _log_breaker_blocked_restart(reason)
+        return False
+    verification_block = _restart_verification_restart_block()
+    if verification_block is not None:
+        if _restart_verification_block_event_due():
+            _log_restart_verification_block(reason=reason, detail=verification_block)
         return False
 
     with _RESTART_ASYNC_LOCK:
@@ -7584,11 +7982,41 @@ def set_normalized_tick_sink(sink=None):
     global _NORMALIZED_TICK_SINK
     _NORMALIZED_TICK_SINK = sink
 
-def on_ticks(ws, ticks):
+def on_ticks(ws, ticks, *, socket_generation: int | None = None):
+    """Serialize callback ingestion with socket cutover and reject retired sockets."""
+    if not ticks:
+        return
+    callback_socket_generation = (
+        _current_socket_generation()
+        if socket_generation is None
+        else int(socket_generation)
+    )
+    with _SOCKET_GENERATION_LOCK:
+        active_socket_generation = int(_SOCKET_GENERATION)
+        if callback_socket_generation != active_socket_generation:
+            _log_ws(
+                "FEED_OLD_GENERATION_CALLBACK_IGNORED",
+                {
+                    "socket_generation": callback_socket_generation,
+                    "active_generation": active_socket_generation,
+                    "callback": "on_ticks_delegate",
+                    "result": "ignored_before_ingest",
+                },
+            )
+            return
+        return _process_on_ticks(
+            ws,
+            ticks,
+            socket_generation=callback_socket_generation,
+        )
+
+
+def _process_on_ticks(ws, ticks, *, socket_generation: int):
     global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _FEED_ON_TICKS_ROW_SEQ
     _ = ws
     if not ticks:
         return
+    callback_socket_generation = int(socket_generation)
     now_epoch = float(time.time())
     record_fd_trace(
         "on_ticks.callback_entry",
@@ -7692,6 +8120,13 @@ def on_ticks(ws, ticks):
         if token_int is not None:
             _LAST_MSG_TS_BY_TOKEN[int(token_int)] = float(freshness_tick_epoch)
             _record_ws_recovery_tick_receipt(token=int(token_int), receipt_epoch=float(now_epoch))
+            parsed_last_price = _safe_float(last_price)
+            if parsed_last_price is not None and math.isfinite(parsed_last_price) and parsed_last_price > 0.0:
+                _record_feed_restart_verify_tick(
+                    token=int(token_int),
+                    receipt_epoch=float(now_epoch),
+                    socket_generation=callback_socket_generation,
+                )
             _record_observation_callback_truth(
                 tick=t,
                 instrument_token=int(token_int),
@@ -8095,16 +8530,22 @@ def on_ticks(ws, ticks):
     )
 
 
-def _register_on_ticks_callback(kws, generation_is_current, delegate=None):
+def _register_on_ticks_callback(kws, generation_is_current, delegate=None, *, socket_generation: int | None = None):
     """Install the exact registered callback wrapper used by the live ticker."""
     callback_delegate = delegate or on_ticks
+    registered_socket_generation = (
+        _current_socket_generation() if socket_generation is None else int(socket_generation)
+    )
 
     def on_ticks_current(ws, ticks):
         if not generation_is_current("on_ticks"):
             return
         diagnostic_start = campaign_raw_diagnostics.on_ticks_entry(len(ticks or []))
         try:
-            callback_delegate(ws, ticks)
+            if callback_delegate is on_ticks:
+                callback_delegate(ws, ticks, socket_generation=registered_socket_generation)
+            else:
+                callback_delegate(ws, ticks)
         except Exception:
             campaign_raw_diagnostics.on_ticks_exit(diagnostic_start, exception=True)
             raise
@@ -8168,17 +8609,12 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     """
     global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _ACTIVE_AUTH_MODE
 
-    _log_ws("feed_restart_required", {"reason": reason})
-    try:
-        identity = get_current_feed_session_identity()
-        append_feed_forensic_event(
-            "RECOVERY_REQUESTED", feed_session_id=identity.get("feed_session_id"),
-            reconnect_generation=identity.get("reconnect_generation"), reason=reason,
-            old_feed_session_id=identity.get("feed_session_id"),
-            old_reconnect_generation=identity.get("reconnect_generation"),
-        )
-    except Exception:
-        pass
+    # The persistent breaker is the first gate: while open, repeated watchdog
+    # calls must not emit per-attempt recovery diagnostics or perform resolution.
+    if feed_breaker_tripped():
+        _log_breaker_blocked_restart(reason)
+        return False
+
     if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
         _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
         return False
@@ -8200,6 +8636,31 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         )
         return False
 
+    # An open breaker is an authoritative no-restart decision. Check it before
+    # token resolution, forensic writes, and per-attempt logging; keep the
+    # in-lock check below to cover a breaker trip racing this preflight.
+    if feed_breaker_tripped():
+        _log_breaker_blocked_restart(reason)
+        return False
+
+    verification_block = _restart_verification_restart_block()
+    if verification_block is not None:
+        if _restart_verification_block_event_due():
+            _log_restart_verification_block(reason=reason, detail=verification_block)
+        return False
+
+    _log_ws("feed_restart_required", {"reason": reason})
+    try:
+        identity = get_current_feed_session_identity()
+        append_feed_forensic_event(
+            "RECOVERY_REQUESTED", feed_session_id=identity.get("feed_session_id"),
+            reconnect_generation=identity.get("reconnect_generation"), reason=reason,
+            old_feed_session_id=identity.get("feed_session_id"),
+            old_reconnect_generation=identity.get("reconnect_generation"),
+        )
+    except Exception:
+        pass
+
     tokens, selection_payload = _resubscribe_token_selection()
     tokens = _normalize_positive_tokens(tokens)
     if not tokens:
@@ -8214,11 +8675,27 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         ws_connected = _ws_connected_state()
         soft_allowed, soft_reason = _soft_resubscribe_eligibility(reason=reason, now_epoch=now)
         if soft_allowed:
-            _log_ws(
-                "FEED_RESTART_SOFT_PATH",
-                {"reason": reason, "detail": "internal_reconnect_enabled", "ws_connected": True},
-            )
-            soft_ok = _soft_resubscribe_current(reason=reason)
+            # Serialize native subscription mutation against full restarts,
+            # which set verification PENDING while holding this same lock.
+            if not _RESTART_LOCK.acquire(blocking=False):
+                _log_ws("FEED_RESTART_CONCURRENT_BLOCKED", {"reason": reason, "path": "soft_resubscribe"})
+                return False
+            try:
+                if feed_breaker_tripped():
+                    _log_breaker_blocked_restart(reason)
+                    return False
+                verification_block = _restart_verification_restart_block()
+                if verification_block is not None:
+                    if _restart_verification_block_event_due():
+                        _log_restart_verification_block(reason=reason, detail=verification_block)
+                    return False
+                _log_ws(
+                    "FEED_RESTART_SOFT_PATH",
+                    {"reason": reason, "detail": "internal_reconnect_enabled", "ws_connected": True},
+                )
+                soft_ok = _soft_resubscribe_current(reason=reason)
+            finally:
+                _RESTART_LOCK.release()
             if soft_ok:
                 try:
                     append_feed_forensic_event("RECOVERY_SUCCEEDED", reason=reason,
@@ -8247,8 +8724,13 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     elif bool(force_full_restart) and _KITE_TICKER is not None:
         ws_connected = _ws_connected_state()
         _log_ws(
-            "FEED_RESTART_FORCE_FULL_PATH",
-            {"reason": reason, "detail": "forced_full_restart", "ws_connected": ws_connected},
+            "FEED_RESTART_FULL_PATH_REQUESTED",
+            {
+                "reason": reason,
+                "detail": "forced_full_restart_requested",
+                "ws_connected": ws_connected,
+                "restart_attempted": False,
+            },
         )
 
     cooldown = float(getattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 120))
@@ -8260,7 +8742,12 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         return False
     try:
         if feed_breaker_tripped():
-            _log_ws("FEED_RESTART_BLOCKED_BY_BREAKER", {"reason": reason})
+            _log_breaker_blocked_restart(reason)
+            return False
+        verification_block = _restart_verification_restart_block()
+        if verification_block is not None:
+            if _restart_verification_block_event_due():
+                _log_restart_verification_block(reason=reason, detail=verification_block)
             return False
         if not feed_restart_guard.allow_restart(now=now, reason=reason):
             _log_ws("FEED_RESTART_BREAKER_BLOCK", {"reason": reason})
@@ -8362,6 +8849,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
                     profile_verified=False,
                     skip_guard=True,
                     auth_mode=_ACTIVE_AUTH_MODE,
+                    restart_verification_reason=str(reason or ""),
                 )
             except Exception as exc:
                 _log_ws("feed_restart_failed", {"reason": reason, "error": str(exc)})
@@ -8412,18 +8900,22 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
                                            status="PROGRESS")
             except Exception:
                 pass
-            _begin_feed_restart_verification(
-                reason=str(reason or ""),
-                start_epoch=float(_DEPTH_WS_START_EPOCH or 0.0),
-                now_epoch=float(now),
-            )
             return True
     finally:
         _RESTART_LOCK.release()
 
 
 
-def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False, tick_sink=None, *, auth_mode: str = "profile") -> bool:
+def start_depth_ws(
+    instrument_tokens,
+    profile_verified=False,
+    skip_lock: bool = False,
+    skip_guard: bool = False,
+    tick_sink=None,
+    *,
+    auth_mode: str = "profile",
+    restart_verification_reason: str | None = None,
+) -> bool:
     global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS, _SYMBOL_LAST_OPTION_TICK_TS, _SOCKET_GENERATION, _ACTIVE_AUTH_MODE
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
@@ -8706,18 +9198,21 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         handshake_proof.get("profile_verified"),
     )
 
-    with _KITE_TICKER_LOCK:
-        if _KITE_TICKER is not None:
-            logger.info("kite_ws_existing_instance_detected_closing")
-            _log_ws("FEED_RECREATE_CLOSE_OLD", {"tokens": len(tokens)})
-            _close_ticker_instance(_KITE_TICKER)
-            _KITE_TICKER = None
-        if _WATCHDOG_STOP is not None:
-            _WATCHDOG_STOP.set()
-        _WATCHDOG_STOP = threading.Event()
-        kws = get_kite_ticker(api_key=api_key, access_token=access_token, debug=False)
-        _SOCKET_GENERATION += 1
-        socket_generation = int(_SOCKET_GENERATION)
+    with _SOCKET_START_LOCK:
+        with _KITE_TICKER_LOCK:
+            if _KITE_TICKER is not None:
+                logger.info("kite_ws_existing_instance_detected_closing")
+                _log_ws("FEED_RECREATE_CLOSE_OLD", {"tokens": len(tokens)})
+                _close_ticker_instance(_KITE_TICKER)
+                _KITE_TICKER = None
+            if _WATCHDOG_STOP is not None:
+                _WATCHDOG_STOP.set()
+            _WATCHDOG_STOP = threading.Event()
+            kws = get_kite_ticker(api_key=api_key, access_token=access_token, debug=False)
+        socket_generation = _advance_socket_generation(
+            restart_verification_reason=restart_verification_reason,
+            start_epoch=float(_DEPTH_WS_START_EPOCH or 0.0),
+        )
         _log_ws(
             "FEED_SOCKET_GENERATION_STARTED",
             {
@@ -8738,7 +9233,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             access_token[-4:] if len(str(access_token or "")) >= 4 else access_token,
             id(kws),
         )
-        _KITE_TICKER = kws
+        with _KITE_TICKER_LOCK:
+            _KITE_TICKER = kws
 
     handshake_soft_reset_used = False
     def _advance_completed_transition(kind: str, identity: int | str, metadata: dict[str, Any]) -> None:
@@ -9063,7 +9559,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 socket_generation=socket_generation,
             )
             _log_ws("FEED_MODE_FULL_CALLBACK_APPLIED", {**event_base, "result": "applied"})
-        _record_feed_restart_verify_subscribe(now_epoch=float(now_utc_epoch()))
+        _record_feed_restart_verify_subscribe(
+            now_epoch=float(now_utc_epoch()), socket_generation=socket_generation
+        )
         _LAST_TOKENS[:] = desired
         tokens[:] = desired
         logger.info(
@@ -9156,7 +9654,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     "live_authorized": False,
                 })
             _clear_last_disconnected_info()
-            _record_feed_restart_verify_connect(now_epoch=float(now_utc_epoch()))
+            _record_feed_restart_verify_connect(
+                now_epoch=float(now_utc_epoch()), socket_generation=socket_generation
+            )
             _log_ws("ws_connected", {"response": str(response), "ws_lifecycle_state": "CONNECTED"})
             _log_ws("FEED_CONNECT", {"tokens": len(tokens), "response": str(response)})
             logger.info(
@@ -9592,12 +10092,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 break
             if _reconnect_recovery_blocked_active():
                 blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
+                _watchdog_tick_restart_verification_while_blocked()
                 _emit_reconnect_recovery_blocked_snapshot(
                     source="watchdog:recovery_blocked",
                     reason=blocked_reason,
                 )
                 while not (_WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set()):
                     time.sleep(5.0)
+                    _watchdog_tick_restart_verification_while_blocked()
                     _emit_reconnect_recovery_blocked_snapshot(
                         source="watchdog:monitoring_fatal",
                         reason=blocked_reason,
@@ -9612,12 +10114,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 break
             if _reconnect_recovery_blocked_active():
                 blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
+                _watchdog_tick_restart_verification_while_blocked()
                 _emit_reconnect_recovery_blocked_snapshot(
                     source="watchdog:recovery_blocked_after_sleep",
                     reason=blocked_reason,
                 )
                 while not (_WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set()):
                     time.sleep(5.0)
+                    _watchdog_tick_restart_verification_while_blocked()
                     _emit_reconnect_recovery_blocked_snapshot(
                         source="watchdog:monitoring_fatal",
                         reason=blocked_reason,
@@ -10067,7 +10571,12 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     kws.on_message = on_message_current
     if tick_sink is not None:
         set_normalized_tick_sink(tick_sink)
-    _register_on_ticks_callback(kws, _generation_is_current, on_ticks)
+    _register_on_ticks_callback(
+        kws,
+        _generation_is_current,
+        on_ticks,
+        socket_generation=socket_generation,
+    )
     watchdog_thread = threading.Thread(target=_watchdog)
     try:
         watchdog_thread.name = "kite-depth-watchdog"

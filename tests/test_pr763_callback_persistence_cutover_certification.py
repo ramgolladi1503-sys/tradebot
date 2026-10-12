@@ -133,9 +133,75 @@ def test_callback_persistence_cutover_set_has_zero_unresolved_entries():
 
 
 def test_callback_reachable_sources_have_no_direct_persistence_calls():
-    source = inspect.getsource(depth_ws.on_ticks)
-    assert not _forbidden_calls(source)
-    assert "_persist_runtime_snapshot_row" in source
+    wrapper_source = inspect.getsource(depth_ws.on_ticks)
+    ingestion_source = inspect.getsource(depth_ws._process_on_ticks)
+    persist_source = inspect.getsource(depth_ws._persist_runtime_snapshot_row)
+    enqueue_source = inspect.getsource(depth_ws._enqueue_runtime_snapshot_with_direct_artifact)
+    assert "_process_on_ticks(" in wrapper_source
+    assert "_persist_runtime_snapshot_row(" in ingestion_source
+    assert '_enqueue_runtime_snapshot_with_direct_artifact(' in persist_source
+    assert "write_feed_runtime_snapshot(payload)" in enqueue_source
+    assert "direct_artifact_writer()" in enqueue_source
+    assert 'allow_direct_artifact_fallback=source != "on_ticks"' in persist_source
+    assert 'if source != "on_ticks":' in persist_source
+    assert not _forbidden_calls(wrapper_source)
+    assert not _forbidden_calls(ingestion_source)
+
+
+def test_callback_runtime_queue_rejection_skips_synchronous_artifact_fallback(monkeypatch):
+    calls = []
+    monkeypatch.setattr(depth_ws, "write_feed_runtime_snapshot", lambda _payload: False)
+    monkeypatch.setattr(runtime_store, "consume_runtime_snapshot_write_outcome", lambda: (False, False))
+
+    accepted = depth_ws._enqueue_runtime_snapshot_with_direct_artifact(
+        {"source": "on_ticks"},
+        direct_artifact_writer=lambda: calls.append("direct_write"),
+        allow_direct_artifact_fallback=False,
+    )
+
+    assert accepted is False
+    assert calls == []
+
+
+def test_non_callback_runtime_queue_rejection_preserves_legacy_artifact_fallback(monkeypatch):
+    calls = []
+    monkeypatch.setattr(depth_ws, "write_feed_runtime_snapshot", lambda _payload: False)
+    monkeypatch.setattr(runtime_store, "consume_runtime_snapshot_write_outcome", lambda: (False, False))
+
+    accepted = depth_ws._enqueue_runtime_snapshot_with_direct_artifact(
+        {"source": "watchdog"},
+        direct_artifact_writer=lambda: calls.append("direct_write"),
+    )
+
+    assert accepted is False
+    assert calls == ["direct_write"]
+
+
+def test_admitted_tick_queue_rejection_fails_closed_without_sync_file_log(monkeypatch):
+    durability.reset()
+    runtime_store.reset_runtime_persistence_for_tests()
+    runtime_store._RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=1)
+    runtime_store._RUNTIME_WORKER = None
+    monkeypatch.setattr(runtime_store, "_ensure_runtime_worker", lambda: None)
+    log_calls = []
+    monkeypatch.setattr(runtime_store.logger, "error", lambda *args, **kwargs: log_calls.append(args))
+    runtime_store._RUNTIME_WRITE_QUEUE.put_nowait("occupied")
+
+    depth_ws.mark_runtime_snapshot_producer_admitted()
+    accepted = runtime_store.write_runtime_snapshot(
+        {"source": "on_ticks", "run_id": "callback-queue-rejection-test"}
+    )
+    outcome = runtime_store.consume_runtime_snapshot_write_outcome()
+    runtime_store._RUNTIME_WRITE_QUEUE.get_nowait()
+    runtime_store._RUNTIME_WRITE_QUEUE.task_done()
+
+    assert accepted is False
+    assert outcome == (False, False)
+    assert log_calls == []
+    assert durability.snapshot()["persistence_durability_degraded"] is True
+    assert "runtime" in durability.snapshot()["degraded_authorities"]
+
+    runtime_store.reset_runtime_persistence_for_tests()
 
 
 def test_static_guard_detects_injected_forbidden_call():
@@ -363,6 +429,25 @@ def test_real_on_ticks_tripwire_exercises_all_enabled_campaign_hooks(monkeypatch
     assert duration_ms < 5000
 
 
+def test_registered_on_ticks_runtime_rejection_avoids_sync_artifact_and_error_log(tmp_path, monkeypatch):
+    durability.reset()
+    callback, counts, violations, _, runtime_mod, depth_store, _, _ = _run_registered_live_persistence_fixture(
+        monkeypatch,
+        tmp_path,
+        injection="runtime_reject",
+    )
+
+    assert callback is not None
+    assert counts["runtime"] >= 1
+    assert counts["runtime_error_logs"] == 0
+    assert [v for v in violations if v[0] == "filesystem"] == []
+    assert durability.snapshot()["persistence_durability_degraded"] is True
+    assert "runtime" in durability.snapshot()["degraded_authorities"]
+    runtime_mod.shutdown_runtime_persistence()
+    tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
+    depth_store.shutdown_persistence()
+
+
 def test_registered_callback_fixture_fails_when_enabled_hook_is_not_traversed():
     table = {"raw_truth": {"enabled": True, "count": 0}}
     missing = [name for name, row in table.items() if row["enabled"] and row["count"] == 0]
@@ -371,7 +456,7 @@ def test_registered_callback_fixture_fails_when_enabled_hook_is_not_traversed():
 
 def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=None):
     Path(tmp_path).mkdir(parents=True, exist_ok=True)
-    counts = {"tick": 0, "depth": 0, "runtime": 0, "raw": 0, "diagnostic": 0}
+    counts = {"tick": 0, "depth": 0, "runtime": 0, "raw": 0, "diagnostic": 0, "runtime_error_logs": 0}
     worker_ids = {}
     violations = []
     sqlite_operations = []
@@ -389,7 +474,10 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
         depth_ws.depth_store = depth_store_module.DepthStore()
 
     monkeypatch.setattr(depth_ws.cfg, "TRADE_DB_PATH", str(tmp_path / "trade.db"), raising=False)
-    monkeypatch.setattr(depth_ws, "_log_ws", lambda *args, **kwargs: None)
+    def log_ws(event, *args, **kwargs):
+        if event == "FEED_RUNTIME_STORE_WRITE_ERROR":
+            counts["runtime_error_logs"] += 1
+    monkeypatch.setattr(depth_ws, "_log_ws", log_ws)
     monkeypatch.setattr(depth_ws, "record_fd_trace", lambda *args, **kwargs: counts.__setitem__("diagnostic", counts["diagnostic"] + 1))
 
     real_insert = depth_ws.insert_tick
@@ -422,6 +510,10 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
     real_runtime = runtime_store.write_runtime_snapshot
     def runtime_enqueue(payload):
         counts["runtime"] += 1
+        if injection == "runtime_reject":
+            runtime_store._RUNTIME_WRITE_OUTCOME_LOCAL.value = (False, False)
+            durability.record_degradation("runtime", "RUNTIME_QUEUE_FULL")
+            return False
         return real_runtime(payload)
     monkeypatch.setattr(depth_ws, "write_feed_runtime_snapshot", runtime_enqueue)
     real_runtime_write = runtime_store._write_runtime_snapshot_sync

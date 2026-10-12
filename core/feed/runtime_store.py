@@ -687,7 +687,12 @@ def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
                 _RUNTIME_LAST_TICK_SNAPSHOT_AT = requested_at
                 _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY = identity
     if rejected:
-        logger.error("feed_runtime_snapshot_queue_full")
+        # The live tick producer runs inside the socket-generation critical
+        # section. Its queue rejection is already represented by the runtime
+        # counters and shared durability latch; avoid synchronous file-backed
+        # logging on that callback thread. Other producers retain the log.
+        if not producer_admitted:
+            logger.error("feed_runtime_snapshot_queue_full")
         return outcome(False, False)
     return outcome(True, True)
 

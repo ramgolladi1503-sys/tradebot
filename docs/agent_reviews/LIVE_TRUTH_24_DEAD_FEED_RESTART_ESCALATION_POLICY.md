@@ -116,7 +116,7 @@ Expected:
 ## Runtime Proof Required After Merge
 
 In a controlled PAPER run during market open (no orders):
-- Induce a no-tick condition (pause WS messages) and confirm watchdog emits `FEED_NO_TICKS_DETECTED` and a forced full restart is attempted (`FEED_RESTART_FORCE_FULL_PATH`).
+- Induce a no-tick condition (pause WS messages) and confirm watchdog emits `FEED_NO_TICKS_DETECTED` and the path request (`FEED_RESTART_FULL_PATH_REQUESTED`). Confirm `FEED_FULL_RESTART_BEGIN` separately before counting an actual restart attempt; request events can still be blocked by breaker, verification, or concurrency gates.
 - Induce a depth-stale condition and confirm watchdog attempts forced full restart.
 - Simulate missing option subscriptions during market open and confirm forced full restart attempt.
 - Confirm storm trip produces `FEED_RESTART_STORM_TRIP` and a risk halt file write.

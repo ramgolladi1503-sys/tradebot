@@ -19,6 +19,7 @@ from core.market_event_graph_live_runtime_bridge import (
     build_live_constituent_subscription_audit,
     canonical_live_universe_sha256,
     flush_live_source_bridge,
+    shadow_ohlc_buffer,
 )
 from core.market_event_graph_live_source import LiveCapturedMetadataExporter, load_validated_live_jsonl
 from core.feed.feed_epoch import _reset_feed_epoch_for_tests
@@ -319,7 +320,48 @@ def test_permanently_missing_bar_times_out_without_synthesis(monkeypatch, tmp_pa
     assert result.reason == "SNAPSHOT_TIMED_OUT"
     assert result.rejected_identities == (missing,)
     assert output.exists() is False
+    rejection = json.loads((tmp_path / "rejections.jsonl").read_text().splitlines()[-1])
+    assert rejection["reason"] == "SNAPSHOT_TIMED_OUT"
+    assert rejection["affected_identities"] == [missing]
+    assert rejection["diagnostic_context"]["missing_identities"] == [missing]
+    assert rejection["diagnostic_context"]["completion_grace_ms"] == 50
+    assert rejection["allowed_for_live_execution"] is False
     assert bridge.flush()["metrics"]["meg_timeout_count"] == 1
+
+
+def test_timeout_reports_missing_index_and_constituent_identities_without_admitting_snapshot(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True)
+    monkeypatch.setattr(reliability_cfg, "MEG_COMPLETION_GRACE_MS", 25)
+    contract_payload = _contract()
+    missing = {"NIFTY", "NIFTY_00", "NIFTY_03", "NIFTY_10"}
+    _install_bars(monkeypatch, contract_payload=contract_payload)
+    original = shadow_ohlc_buffer.get_completed_bars
+
+    def bars(symbol, as_of):
+        if str(symbol).upper() in missing:
+            return []
+        return original(symbol, as_of)
+
+    monkeypatch.setattr(shadow_ohlc_buffer, "get_completed_bars", bars)
+    output = tmp_path / "multi-missing.jsonl"
+    bridge = LiveSourceRuntimeBridge(
+        exporter=LiveCapturedMetadataExporter(output),
+        universe_contract=contract_payload,
+        subscription_evidence_provider=_evidence,
+    )
+
+    result = bridge.observe_cycle([], cycle_cutoff=datetime.fromtimestamp(_session_epoch(140.0), tz=timezone.utc))
+
+    assert result.exported is False
+    assert result.reason == "SNAPSHOT_TIMED_OUT"
+    assert set(result.rejected_identities) == missing
+    assert output.exists() is False
+    rejection = json.loads((tmp_path / "rejections.jsonl").read_text().splitlines()[-1])
+    assert set(rejection["diagnostic_context"]["missing_identities"]) == missing
+    assert set(
+        rejection["diagnostic_context"]["snapshot_completion"]["last_incomplete_audit"]["missing_identities"]
+    ) == missing
+    assert rejection["allowed_for_live_execution"] is False
 
 
 def test_bridge_rejects_snapshot_over_freshness_cap(monkeypatch, tmp_path):
@@ -338,6 +380,11 @@ def test_bridge_rejects_snapshot_over_freshness_cap(monkeypatch, tmp_path):
 
     assert result.exported is False
     assert result.reason == "SNAPSHOT_STALE"
+    rejection = json.loads((tmp_path / "rejections.jsonl").read_text().splitlines()[-1])
+    freshness = rejection["diagnostic_context"]
+    assert freshness["source_age_sec"] > freshness["max_age_sec"]
+    assert freshness["source_bar_end_epoch"] < freshness["observed_at_epoch"]
+    assert rejection["allowed_for_live_execution"] is False
 
 
 def test_no_explicit_live_universe_contract_exports_nothing(monkeypatch, tmp_path):
