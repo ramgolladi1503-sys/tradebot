@@ -1,1 +1,2 @@
 *.parquet filter=lfs diff=lfs merge=lfs -text
+runtime/strategy_validation/resolved_option_ticks_20260702.parquet -filter -diff -merge -text
