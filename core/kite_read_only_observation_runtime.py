@@ -562,8 +562,8 @@ def _bind_storage_environment_and_depth_store(
 
 
 def _run_observation_impl(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None, broker_api_ledger: ReadOnlyBrokerApiLedger) -> int:
-    from core.runtime_storage_authority import StorageAuthorityError, establish, revalidate
-    vol = Path("/Volumes/TradeBot") if Path("/Volumes/TradeBot").is_dir() else Path("/Volumes/TradeBotData")
+    from core.runtime_storage_authority import StorageAuthorityError, establish, revalidate, resolve_storage_volume
+    vol = resolve_storage_volume(output_root)
     storage_authority = establish(volume=vol, runtime_root=output_root)
     env = safe_environment()
     contract = safety_contract(env, child_command=[sys.executable, "-B", "core.kite_read_only_observation_runtime.py"])

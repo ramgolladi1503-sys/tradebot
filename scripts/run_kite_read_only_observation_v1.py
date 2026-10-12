@@ -63,9 +63,9 @@ def main() -> int:
         raise SystemExit("KITE_TOKEN_PATH_REQUIRED_FOR_OBSERVATION")
     if not args.token_path.is_file():
         raise SystemExit("KITE_ACCESS_TOKEN_MISSING")
-    from core.runtime_storage_authority import StorageAuthorityError, establish, bind_environment
+    from core.runtime_storage_authority import StorageAuthorityError, establish, bind_environment, resolve_storage_volume
     try:
-        vol = Path("/Volumes/TradeBot") if Path("/Volumes/TradeBot").is_dir() else Path("/Volumes/TradeBotData")
+        vol = resolve_storage_volume(args.output_root)
         storage = establish(volume=vol, runtime_root=args.output_root)
     except StorageAuthorityError as exc:
         raise SystemExit(str(exc))

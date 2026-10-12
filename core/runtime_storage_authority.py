@@ -66,6 +66,23 @@ def _probe_mount(volume: Path) -> bool:
         return bool(_mounted_paths())
 
 
+def resolve_storage_volume(runtime_root: Path | str | None = None) -> Path:
+    """Resolve the authoritative storage volume holding the runtime root.
+
+    Dynamically inspects parent directories under /Volumes, then probes
+    standard candidates (TradeBotFast, TradeBot, TradeBotData).
+    """
+    if runtime_root is not None:
+        p = Path(runtime_root).expanduser().resolve(strict=False)
+        for parent in [p] + list(p.parents):
+            if parent.parent == Path("/Volumes") and parent.is_dir():
+                return parent
+    for candidate in [Path("/Volumes/TradeBotFast"), Path("/Volumes/TradeBot"), Path("/Volumes/TradeBotData")]:
+        if candidate.is_dir():
+            return candidate
+    return Path("/Volumes/TradeBotData")
+
+
 def establish(*, volume: Path, runtime_root: Path) -> StorageAuthority:
     """Validate mount, realpath, device, writability, and same-device temp.
 
@@ -73,8 +90,8 @@ def establish(*, volume: Path, runtime_root: Path) -> StorageAuthority:
     runtime directory after the mount itself has been positively established.
     """
     volume = Path(volume).expanduser()
-    if volume == Path("/Volumes/TradeBotData") and not volume.is_dir() and Path("/Volumes/TradeBot").is_dir():
-        volume = Path("/Volumes/TradeBot")
+    if volume == Path("/Volumes/TradeBotData") and not volume.is_dir():
+        volume = resolve_storage_volume(runtime_root)
     runtime_root = Path(runtime_root).expanduser()
     if not volume.is_dir() or not _probe_mount(volume):
         raise StorageAuthorityError("RUNTIME_STORAGE_AUTHORITY_LOST:mount_absent")
