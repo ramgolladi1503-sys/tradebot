@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import time
 
 from config import config as cfg
 from core.feed.runtime_store import read_latest_runtime_snapshot, write_runtime_snapshot
@@ -66,6 +67,21 @@ def _reset_feed_runtime_state(monkeypatch):
 
 def _read_feed_runtime_payload(logs_path: Path) -> dict:
     return json.loads((logs_path / "feed_runtime_latest.json").read_text())
+
+
+def _wait_for_feed_runtime_artifact(path: Path, *, timeout_sec: float = 3.0) -> dict:
+    """Wait for callback-originated queued persistence with a bounded deadline."""
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        if path.is_file():
+            try:
+                return json.loads(path.read_text())
+            except (OSError, json.JSONDecodeError):
+                # Atomic replacement can briefly leave the artifact absent or
+                # incomplete to a concurrent reader; retry within the bound.
+                pass
+        time.sleep(0.01)
+    raise AssertionError(f"runtime artifact was not persisted within {timeout_sec}s: {path}")
 
 
 def test_runtime_store_roundtrip_with_state_fields(monkeypatch, tmp_path):
@@ -329,6 +345,15 @@ def test_persist_runtime_snapshot_row_normalizes_ws1006_recovery_blocked_state(m
 
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
     monkeypatch.setattr(depth_ws, "logs_dir", lambda: logs_path)
+    # Async canonical persistence resolves these paths from core.paths, not
+    # depth_ws.logs_dir. Redirect both outputs into this test's temp directory.
+    import core.paths as paths
+    monkeypatch.setattr(paths, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(runtime_store, "repo_root", lambda: tmp_path)
+    # The producer admission cadence is process-wide; isolate this explicit
+    # single-snapshot proof from callback tests that may have run just before it.
+    monkeypatch.setattr(runtime_store, "_RUNTIME_PRODUCER_LAST_TICK_AT", None, raising=False)
+    monkeypatch.setattr(runtime_store, "_RUNTIME_PRODUCER_LAST_TICK_IDENTITY", None, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_TOKENS", [1, 101], raising=False)
     monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {1}, raising=False)
     monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
@@ -355,7 +380,7 @@ def test_persist_runtime_snapshot_row_normalizes_ws1006_recovery_blocked_state(m
         last_error="",
     )
 
-    payload = json.loads((logs_path / "feed_runtime_latest.json").read_text())
+    payload = _wait_for_feed_runtime_artifact(logs_path / "feed_runtime_latest.json")
     assert payload["runtime_state"] == "RECOVERY_BLOCKED"
     assert payload["ws_connected"] is False
     assert payload["state_machine"]["state"] == "DOWN"

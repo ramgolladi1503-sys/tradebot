@@ -12,7 +12,9 @@ from core.market_event_graph_live_observation_registry import (
     build_observation_subscription_merge,
 )
 
-SCHEMA_VERSION = 1
+LEGACY_SCHEMA_VERSION = 1
+HERITAGE_SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 PASS_STATIC_LIVE_SOURCE_PREFLIGHT = "PASS_STATIC_LIVE_SOURCE_PREFLIGHT"
 PASS_LIVE_SOURCE_PRESESSION_READINESS = "PASS_LIVE_SOURCE_PRESESSION_READINESS"
 BLOCKED_BY_PRODUCTION_SUBSCRIPTION_PLAN_UNPROVEN = "BLOCKED_BY_PRODUCTION_SUBSCRIPTION_PLAN_UNPROVEN"
@@ -172,6 +174,24 @@ def build_launch_plan(
         budget=int(budget),
     )
     config_fingerprint = _sha(dict(configuration))
+    heritage_path = str(heritage_manifest_path).strip() if heritage_manifest_path is not None else None
+    heritage_sha = str(heritage_manifest_sha256).strip().lower() if heritage_manifest_sha256 is not None else None
+    heritage_binding_valid = (
+        (heritage_manifest_path is None and heritage_manifest_sha256 is None)
+        or (
+            bool(heritage_path)
+            and heritage_sha is not None
+            and len(heritage_sha) == 64
+            and all(char in "0123456789abcdef" for char in heritage_sha)
+        )
+    )
+    heritage_status = (
+        "BLOCKED_HERITAGE_MANIFEST_UNCONFIGURED"
+        if heritage_manifest_path is None and heritage_manifest_sha256 is None
+        else "HERITAGE_MANIFEST_REFERENCE_CONFIGURED_UNVERIFIED"
+        if heritage_binding_valid
+        else "BLOCKED_HERITAGE_BINDING_INVALID"
+    )
     basis = {
         "schema_version": SCHEMA_VERSION,
         "session_date": str(session_date),
@@ -190,8 +210,9 @@ def build_launch_plan(
         "universe_sha256": str(universe_sha256),
         "configuration_fingerprint": config_fingerprint,
         "broker_metadata_called": bool(broker_metadata_called),
-        "heritage_manifest_path": str(heritage_manifest_path) if heritage_manifest_path is not None else None,
-        "heritage_manifest_sha256": str(heritage_manifest_sha256) if heritage_manifest_sha256 is not None else None,
+        "heritage_manifest_path": heritage_path,
+        "heritage_manifest_sha256": heritage_sha,
+        "t1_manifest_reference_status": heritage_status,
         "venue": str(venue),
         "calendar_id": str(calendar_id),
         "calendar_version": str(calendar_version),
@@ -208,6 +229,7 @@ def build_launch_plan(
         and production_input is not None
         and observation_input is not None
         and sticky_input is not None
+        and heritage_binding_valid
     )
     if not merge["ok"]:
         verdict = str(merge["reason"])
@@ -247,20 +269,55 @@ def load_launch_plan(path: Path) -> dict[str, Any]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError(BLOCKED_BY_LAUNCH_PLAN_IDENTITY)
+    schema_version = raw.get("schema_version")
+    if type(schema_version) is not int or schema_version not in {LEGACY_SCHEMA_VERSION, HERITAGE_SCHEMA_VERSION, SCHEMA_VERSION}:
+        raise ValueError(BLOCKED_BY_LAUNCH_PLAN_IDENTITY)
     claimed = str(raw.get("launch_plan_sha256") or "")
-    basis = {
-        key: raw[key]
+    basis_keys = (
+        "schema_version", "session_date", "production_tokens", "production_underlying_tokens",
+        "production_option_tokens", "production_sticky_tokens", "observation_tokens", "overlap_tokens",
+        "observation_exclusive_tokens", "final_union_tokens", "configured_budget",
+        "missing_observation_tokens", "production_resolution", "master_sha256", "universe_sha256",
+        "configuration_fingerprint", "broker_metadata_called",
+    )
+    basis = {key: raw[key] for key in basis_keys if key in raw}
+    heritage_fields_present = any(
+        key in raw
         for key in (
-            "schema_version", "session_date", "production_tokens", "production_underlying_tokens",
-            "production_option_tokens", "production_sticky_tokens", "observation_tokens", "overlap_tokens",
-            "observation_exclusive_tokens", "final_union_tokens", "configured_budget",
-            "missing_observation_tokens", "production_resolution", "master_sha256", "universe_sha256",
-            "configuration_fingerprint", "broker_metadata_called",
-            "heritage_manifest_path", "heritage_manifest_sha256", "venue", "calendar_id",
-            "calendar_version", "selected_futures_contract_key", "target_expiry",
+            "heritage_manifest_path",
+            "heritage_manifest_sha256",
+            "t1_manifest_reference_status",
+            "t1_prerequisite_status",
         )
-        if key in raw
-    }
+    )
+    if schema_version >= HERITAGE_SCHEMA_VERSION:
+        if "t1_prerequisite_status" in raw:
+            raise ValueError(BLOCKED_BY_LAUNCH_PLAN_IDENTITY)
+        basis["heritage_manifest_path"] = raw.get("heritage_manifest_path")
+        basis["heritage_manifest_sha256"] = raw.get("heritage_manifest_sha256")
+        basis["t1_manifest_reference_status"] = raw.get("t1_manifest_reference_status")
+    elif heritage_fields_present:
+        # Schema v1 predates heritage references and must hash exactly its original basis.
+        raise ValueError(BLOCKED_BY_LAUNCH_PLAN_IDENTITY)
+    if schema_version == SCHEMA_VERSION:
+        metadata_keys = (
+            "venue", "calendar_id", "calendar_version",
+            "selected_futures_contract_key", "target_expiry",
+        )
+        if any(key not in raw for key in metadata_keys):
+            raise ValueError(BLOCKED_BY_LAUNCH_PLAN_IDENTITY)
+        if any(
+            not isinstance(raw[key], str) or not raw[key].strip()
+            for key in ("venue", "calendar_id", "calendar_version")
+        ):
+            raise ValueError(BLOCKED_BY_LAUNCH_PLAN_IDENTITY)
+        if any(
+            raw[key] is not None
+            and (not isinstance(raw[key], str) or not raw[key].strip())
+            for key in ("selected_futures_contract_key", "target_expiry")
+        ):
+            raise ValueError(BLOCKED_BY_LAUNCH_PLAN_IDENTITY)
+        basis.update({key: raw[key] for key in metadata_keys})
     if (
         claimed != _sha(basis)
         or raw.get("ok") is not True
@@ -272,6 +329,39 @@ def load_launch_plan(path: Path) -> dict[str, Any]:
         or raw.get("allowed_for_live_execution") is not False
     ):
         raise ValueError(BLOCKED_BY_LAUNCH_PLAN_IDENTITY)
+    heritage_path = raw.get("heritage_manifest_path")
+    heritage_sha = raw.get("heritage_manifest_sha256")
+    heritage_fields_present = schema_version >= HERITAGE_SCHEMA_VERSION
+    heritage_fields_present = heritage_fields_present or (
+        "heritage_manifest_path" in raw
+        or "heritage_manifest_sha256" in raw
+    )
+    if not (
+        not heritage_fields_present
+        or (heritage_path is None and heritage_sha is None)
+        or (
+            isinstance(heritage_path, str)
+            and bool(heritage_path.strip())
+            and isinstance(heritage_sha, str)
+            and len(heritage_sha) == 64
+            and all(char in "0123456789abcdef" for char in heritage_sha)
+        )
+    ):
+        raise ValueError(BLOCKED_BY_LAUNCH_PLAN_IDENTITY)
+    if heritage_fields_present:
+        expected_heritage_status = (
+            "BLOCKED_HERITAGE_MANIFEST_UNCONFIGURED"
+            if heritage_path is None and heritage_sha is None
+            else "HERITAGE_MANIFEST_REFERENCE_CONFIGURED_UNVERIFIED"
+            if isinstance(heritage_path, str)
+            and bool(heritage_path.strip())
+            and isinstance(heritage_sha, str)
+            and len(heritage_sha) == 64
+            and all(char in "0123456789abcdef" for char in heritage_sha)
+            else "BLOCKED_HERITAGE_BINDING_INVALID"
+        )
+        if raw.get("t1_manifest_reference_status") != expected_heritage_status:
+            raise ValueError(BLOCKED_BY_LAUNCH_PLAN_IDENTITY)
     production = _strict_token_list(raw.get("production_tokens"))
     observation = _strict_token_list(raw.get("observation_tokens"))
     sticky = _strict_token_list(raw.get("production_sticky_tokens"))

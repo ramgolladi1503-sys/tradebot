@@ -13,14 +13,18 @@ from core.feed.artifact_loader import load_current_feed_runtime
 logger = logging.getLogger(__name__)
 
 _WS_PROCESS: multiprocessing.Process | None = None
+_WS_PROCESS_RESTART_EVENT = None
 _LAST_TOKENS: list[int] = []
 _PROFILE_VERIFIED: bool = False
 _LAST_RESTART_TIME = 0.0
 
-def _run_in_child(tokens: list[int], profile_verified: bool) -> None:
+def _run_in_child(tokens: list[int], profile_verified: bool, restart_event=None) -> None:
     # Reset signal handlers in child to default so we can be terminated
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    from core.kite_depth_ws import set_process_restart_event
+
+    set_process_restart_event(restart_event)
     
     try:
         logger.info(f"Subprocess [PID {os.getpid()}] starting feed.")
@@ -31,7 +35,7 @@ def _run_in_child(tokens: list[int], profile_verified: bool) -> None:
         logger.info(f"Subprocess [PID {os.getpid()}] feed stopped.")
 
 def start_depth_ws_subprocess(tokens: list[int], profile_verified: bool = True) -> None:
-    global _WS_PROCESS, _LAST_TOKENS, _PROFILE_VERIFIED, _LAST_RESTART_TIME
+    global _WS_PROCESS, _WS_PROCESS_RESTART_EVENT, _LAST_TOKENS, _PROFILE_VERIFIED, _LAST_RESTART_TIME
     
     _LAST_TOKENS = list(tokens)
     _PROFILE_VERIFIED = profile_verified
@@ -41,9 +45,14 @@ def start_depth_ws_subprocess(tokens: list[int], profile_verified: bool = True) 
         stop_depth_ws_subprocess()
 
     logger.info("Spawning new Kite depth WS subprocess...")
-    _WS_PROCESS = multiprocessing.Process(
+    # The feed module owns a callback worker thread. A forked child would
+    # inherit coordinator state without its worker thread; spawn imports a
+    # fresh module instance and constructs a live coordinator in the child.
+    process_context = multiprocessing.get_context("spawn")
+    _WS_PROCESS_RESTART_EVENT = process_context.Event()
+    _WS_PROCESS = process_context.Process(
         target=_run_in_child,
-        args=(tokens, profile_verified),
+        args=(tokens, profile_verified, _WS_PROCESS_RESTART_EVENT),
         name="kite_depth_ws_subprocess",
     )
     _WS_PROCESS.daemon = True # We want it to be killed if main exits unexpectedly
@@ -52,7 +61,7 @@ def start_depth_ws_subprocess(tokens: list[int], profile_verified: bool = True) 
     logger.info(f"Subprocess spawned with PID {_WS_PROCESS.pid}")
 
 def stop_depth_ws_subprocess() -> None:
-    global _WS_PROCESS
+    global _WS_PROCESS, _WS_PROCESS_RESTART_EVENT
     if _WS_PROCESS is not None:
         if _WS_PROCESS.is_alive():
             logger.info(f"Terminating Kite depth WS subprocess PID {_WS_PROCESS.pid}...")
@@ -63,6 +72,7 @@ def stop_depth_ws_subprocess() -> None:
                 _WS_PROCESS.kill()
                 _WS_PROCESS.join()
         _WS_PROCESS = None
+        _WS_PROCESS_RESTART_EVENT = None
         logger.info("Kite depth WS subprocess stopped.")
 
 import atexit
@@ -83,20 +93,30 @@ def monitor_depth_ws_subprocess() -> None:
         needs_restart = True
         reason = "process_died"
     else:
+        restart_event = _WS_PROCESS_RESTART_EVENT
+        try:
+            if restart_event is not None and restart_event.is_set():
+                needs_restart = True
+                reason = "child_requested_process_restart"
+        except Exception as e:
+            logger.error(f"Failed to read feed subprocess restart signal: {e}")
         # Check health via JSON file
         try:
-            loaded = load_current_feed_runtime()
-            if not loaded.get("valid"):
-                needs_restart = True
-                reason = f"invalid_runtime_artifact:{loaded.get('reason_code') or 'INVALID_ARTIFACT'}"
+            if needs_restart:
                 snapshot = {}
             else:
-                snapshot = dict(loaded.get("payload") or {})
+                loaded = load_current_feed_runtime()
+                if not loaded.get("valid"):
+                    needs_restart = True
+                    reason = f"invalid_runtime_artifact:{loaded.get('reason_code') or 'INVALID_ARTIFACT'}"
+                    snapshot = {}
+                else:
+                    snapshot = dict(loaded.get("payload") or {})
             runtime_state = str(snapshot.get("runtime_state") or "").strip().upper()
             if not needs_restart and runtime_state in {"FEED_LIFECYCLE_FATAL", "RESTART_REQUIRED"}:
                 needs_restart = True
                 reason = f"fatal_state:{runtime_state}"
-            elif snapshot.get("process_restart_required"):
+            elif not needs_restart and snapshot.get("process_restart_required"):
                 needs_restart = True
                 reason = "process_restart_required_flag"
         except Exception as e:

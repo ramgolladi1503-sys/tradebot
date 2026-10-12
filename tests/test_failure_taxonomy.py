@@ -9,6 +9,16 @@ def test_classify_failure_execution_failure():
     outcome = {"outcome": "hit_target", "exec_feasible": False, "mfe_points": 20.0}
     assert classify_failure(outcome) == "execution_failure"
 
+
+def test_unassessed_execution_path_is_unknown_not_execution_failure():
+    outcome = {
+        "outcome": "hit_target",
+        "exec_feasible": False,
+        "mfe_points": 20.0,
+        "exec_feasible_flags": {"outcome_path_observed": True, "execution_feasibility_status": "UNASSESSED"},
+    }
+    assert classify_failure(outcome) == "unknown"
+
 def test_classify_failure_signal_failure_low_mfe():
     outcome = {"outcome": "hit_sl", "exec_feasible": True, "mfe_points": 5.0}
     assert classify_failure(outcome, volatility_mfe_threshold=10.0) == "signal_failure"

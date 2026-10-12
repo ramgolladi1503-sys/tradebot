@@ -687,7 +687,12 @@ def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
                 _RUNTIME_LAST_TICK_SNAPSHOT_AT = requested_at
                 _RUNTIME_LAST_TICK_SNAPSHOT_IDENTITY = identity
     if rejected:
-        logger.error("feed_runtime_snapshot_queue_full")
+        # The live tick producer runs inside the socket-generation critical
+        # section. Its queue rejection is already represented by the runtime
+        # counters and shared durability latch; avoid synchronous file-backed
+        # logging on that callback thread. Other producers retain the log.
+        if not producer_admitted:
+            logger.error("feed_runtime_snapshot_queue_full")
         return outcome(False, False)
     return outcome(True, True)
 
@@ -699,16 +704,22 @@ def consume_runtime_snapshot_write_outcome() -> tuple[bool, bool] | None:
     return value if isinstance(value, tuple) and len(value) == 2 else None
 
 
-def shutdown_runtime_persistence(deadline_seconds: float | None = None) -> dict:
+def request_runtime_persistence_shutdown() -> None:
+    """Close runtime-write admission and wake the worker without waiting."""
     global _RUNTIME_SHUTDOWN
     with _RUNTIME_LOCK:
         _RUNTIME_SHUTDOWN = True
+
+    _RUNTIME_STOP.set()
+
+
+def shutdown_runtime_persistence(deadline_seconds: float | None = None) -> dict:
+    request_runtime_persistence_shutdown()
     if deadline_seconds is None:
         deadline_seconds = getattr(cfg, "RUNTIME_PERSISTENCE_SHUTDOWN_DEADLINE_SEC", 10.0)
     deadline = time.monotonic() + max(0.0, float(deadline_seconds))
     while _RUNTIME_WRITE_QUEUE.unfinished_tasks and time.monotonic() < deadline:
         time.sleep(0.01)
-    _RUNTIME_STOP.set()
     worker = _RUNTIME_WORKER
     if worker is not None:
         worker.join(max(0.0, deadline - time.monotonic()))

@@ -48,14 +48,39 @@ def assert_same_device(authority: StorageAuthority, *paths: Path) -> None:
             raise StorageAuthorityError(f"RUNTIME_STORAGE_AUTHORITY_LOST:path_stat:{type(exc).__name__}") from exc
 
 
-def _mounted_paths() -> tuple[str, ...]:
+def _mounted_paths(volume: Path | None = None) -> tuple[str, ...]:
     if os.name != "posix":
         return ()
     try:
         output = os.popen("mount").read()
     except OSError:
         return ()
-    return tuple(line for line in output.splitlines() if " on /Volumes/TradeBotData " in line)
+    target = str(volume.resolve(strict=False)) if volume is not None else "/Volumes/TradeBotData"
+    return tuple(line for line in output.splitlines() if f" on {target} " in line or line.endswith(f" on {target}"))
+
+
+def _probe_mount(volume: Path) -> bool:
+    try:
+        return bool(_mounted_paths(volume))
+    except TypeError:
+        return bool(_mounted_paths())
+
+
+def resolve_storage_volume(runtime_root: Path | str | None = None) -> Path:
+    """Resolve the authoritative storage volume holding the runtime root.
+
+    Dynamically inspects parent directories under /Volumes, then probes
+    standard candidates (TradeBotFast, TradeBot, TradeBotData).
+    """
+    if runtime_root is not None:
+        p = Path(runtime_root).expanduser().resolve(strict=False)
+        for parent in [p] + list(p.parents):
+            if parent.parent == Path("/Volumes") and parent.is_dir():
+                return parent
+    for candidate in [Path("/Volumes/TradeBotFast"), Path("/Volumes/TradeBot"), Path("/Volumes/TradeBotData")]:
+        if candidate.is_dir():
+            return candidate
+    return Path("/Volumes/TradeBotData")
 
 
 def establish(*, volume: Path, runtime_root: Path) -> StorageAuthority:
@@ -65,8 +90,10 @@ def establish(*, volume: Path, runtime_root: Path) -> StorageAuthority:
     runtime directory after the mount itself has been positively established.
     """
     volume = Path(volume).expanduser()
+    if volume == Path("/Volumes/TradeBotData") and not volume.is_dir():
+        volume = resolve_storage_volume(runtime_root)
     runtime_root = Path(runtime_root).expanduser()
-    if not volume.is_dir() or not _mounted_paths():
+    if not volume.is_dir() or not _probe_mount(volume):
         raise StorageAuthorityError("RUNTIME_STORAGE_AUTHORITY_LOST:mount_absent")
     try:
         volume_real = volume.resolve(strict=True)
@@ -122,7 +149,7 @@ def bind_environment(authority: StorageAuthority, *, local_db_root: Path | None 
 def revalidate(authority: StorageAuthority) -> None:
     """Recheck an established authority without creating or falling back."""
     try:
-        if not authority.volume.is_dir() or not _mounted_paths():
+        if not authority.volume.is_dir() or not _probe_mount(authority.volume):
             raise StorageAuthorityError("RUNTIME_STORAGE_AUTHORITY_LOST:mount_absent")
         volume = authority.volume.resolve(strict=True)
         runtime = authority.runtime_root.resolve(strict=True)

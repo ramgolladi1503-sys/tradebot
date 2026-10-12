@@ -953,6 +953,11 @@ def _trade_outcome_from_row(row: dict, *, source: str) -> TradeOutcome | None:
             if key == "series_source":
                 continue
             flags[key] = v
+    if str(flags.get("execution_feasibility_status", "")).upper() in {
+        "UNASSESSED",
+        "ASSESSED_INFEASIBLE",
+    }:
+        exec_feasible = False
     reject_reason = _text(row.get("primary_reject_reason") or row.get("reject_reason") or row.get("reason")) or None
     reject_reasons: list[str] = []
     raw_reject_reasons = row.get("reject_reasons")

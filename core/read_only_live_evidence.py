@@ -24,6 +24,7 @@ from core.log_writer import get_jsonl_writer
 # read-only observer before it can seal its evidence.
 _LIVE_EVIDENCE_MAX_RECORD_BYTES = 2 * 1024 * 1024
 _LIVE_EVIDENCE_MAX_FILE_BYTES = 64 * 1024 * 1024
+_LIVE_EVIDENCE_BACKUP_COUNT = 3
 
 
 def _canonical_json(payload: Mapping[str, Any]) -> bytes:
@@ -49,6 +50,7 @@ def append_jsonl_record(path: Path, payload: Mapping[str, Any], *, hash_field: s
         path,
         max_record_bytes=_LIVE_EVIDENCE_MAX_RECORD_BYTES,
         max_file_bytes=_LIVE_EVIDENCE_MAX_FILE_BYTES,
+        backup_count=_LIVE_EVIDENCE_BACKUP_COUNT,
     ).write(row):
         raise OSError("bounded_jsonl_write_rejected")
     return row
@@ -69,6 +71,141 @@ def count_jsonl(path: Path) -> int:
         return 0
     with path.open("r", encoding="utf-8") as handle:
         return sum(1 for raw in handle if raw.strip())
+
+
+def _retained_jsonl_paths(path: Path) -> list[Path]:
+    return [path, *(path.with_name(f"{path.name}.{index}") for index in range(1, _LIVE_EVIDENCE_BACKUP_COUNT + 1))]
+
+
+def _valid_retained_evidence_row(
+    row: Mapping[str, Any],
+    *,
+    hash_field: str,
+    evidence_kind: str,
+    run_id: str,
+    session_date: str,
+) -> bool:
+    supplied_hash = row.get(hash_field)
+    if not isinstance(supplied_hash, str) or supplied_hash != semantic_sha256(row, exclude=(hash_field,)):
+        return False
+    if (
+        type(row.get("schema_version")) is not int
+        or row.get("schema_version") != 1
+        or row.get("proof_kind") != "PR763_LIVE_ACCEPTANCE"
+        or row.get("evidence_kind") != evidence_kind
+        or row.get("run_id") != str(run_id)
+        or row.get("session_date") != str(session_date)
+        or not isinstance(row.get("source_interval_identity"), str)
+        or not row.get("source_interval_identity")
+        or row.get("read_only") is not True
+        or row.get("is_order_action") is not False
+        or row.get("broker_api_called") is not False
+        or row.get("broker_write_authority") is not False
+        or row.get("order_authority") is not False
+        or row.get("allowed_for_live_execution") is not False
+        or row.get("allowed_for_paper_execution") is not False
+    ):
+        return False
+    if evidence_kind == "MEG_TRAVERSAL_EVENT":
+        exported = row.get("exported")
+        count = row.get("market_event_graph_traversal_count")
+        return (
+            isinstance(exported, bool)
+            and row.get("market_event_graph_traversal") is exported
+            and type(count) is int
+            and count == int(exported)
+        )
+    count = row.get("market_event_graph_traversal_count")
+    return (
+        row.get("market_event_graph_traversal") is True
+        and type(count) is int
+        and count == 1
+    )
+
+
+def _retained_jsonl_record_count(
+    path: Path,
+    *,
+    hash_field: str,
+    evidence_kind: str,
+    run_id: str,
+    session_date: str,
+) -> tuple[int, int, bool]:
+    retained_paths = [candidate for candidate in _retained_jsonl_paths(path) if candidate.is_file()]
+    count = 0
+    valid = True
+    for candidate in retained_paths:
+        try:
+            with candidate.open("r", encoding="utf-8") as handle:
+                for raw in handle:
+                    if not raw.strip():
+                        continue
+                    try:
+                        row = json.loads(raw)
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        valid = False
+                        continue
+                    if not isinstance(row, Mapping):
+                        valid = False
+                        continue
+                    if not _valid_retained_evidence_row(
+                        row,
+                        hash_field=hash_field,
+                        evidence_kind=evidence_kind,
+                        run_id=run_id,
+                        session_date=session_date,
+                    ):
+                        valid = False
+                        continue
+                    count += 1
+        except (OSError, UnicodeError):
+            valid = False
+    return count, len(retained_paths), valid
+
+
+def _retained_traversal_counts(
+    path: Path,
+    *,
+    run_id: str,
+    session_date: str,
+) -> tuple[int, int, int, bool]:
+    """Count only validated records still present in the bounded rotation ring."""
+    retained_paths = [candidate for candidate in _retained_jsonl_paths(path) if candidate.is_file()]
+    attempted = 0
+    rejected = 0
+    valid = True
+    for candidate in retained_paths:
+        try:
+            with candidate.open("r", encoding="utf-8") as handle:
+                for raw in handle:
+                    if not raw.strip():
+                        continue
+                    attempted += 1
+                    try:
+                        row = json.loads(raw)
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        valid = False
+                        rejected += 1
+                        continue
+                    if not isinstance(row, Mapping):
+                        valid = False
+                        rejected += 1
+                        continue
+                    if not _valid_retained_evidence_row(
+                        row,
+                        hash_field="event_sha256",
+                        evidence_kind="MEG_TRAVERSAL_EVENT",
+                        run_id=run_id,
+                        session_date=session_date,
+                    ):
+                        valid = False
+                        rejected += 1
+                        continue
+                    if not row["exported"]:
+                        rejected += 1
+        except (OSError, UnicodeError):
+            valid = False
+    return attempted, rejected, len(retained_paths), valid
 
 
 def _last_jsonl_mapping(path: Path) -> dict[str, Any] | None:
@@ -355,18 +492,56 @@ def persist_meg_cycle(
             hash_field="row_sha256",
         )
 
+    traversal_writer = get_jsonl_writer(
+        traversal_path,
+        max_record_bytes=_LIVE_EVIDENCE_MAX_RECORD_BYTES,
+        max_file_bytes=_LIVE_EVIDENCE_MAX_FILE_BYTES,
+        backup_count=_LIVE_EVIDENCE_BACKUP_COUNT,
+    )
+    with traversal_writer.locked():
+        retained_attempted, retained_rejected, retained_generations, traversal_valid = _retained_traversal_counts(
+            traversal_path,
+            run_id=run_id,
+            session_date=session_date,
+        )
+    export_writer = get_jsonl_writer(
+        export_ledger_path,
+        max_record_bytes=_LIVE_EVIDENCE_MAX_RECORD_BYTES,
+        max_file_bytes=_LIVE_EVIDENCE_MAX_FILE_BYTES,
+        backup_count=_LIVE_EVIDENCE_BACKUP_COUNT,
+    )
+    with export_writer.locked():
+        retained_exports, export_generations, exports_valid = _retained_jsonl_record_count(
+            export_ledger_path,
+            hash_field="row_sha256",
+            evidence_kind="MEG_LIVE_SOURCE_EXPORT",
+            run_id=run_id,
+            session_date=session_date,
+        )
+    # A bounded rotation ring has no durable high-water mark or sequence proof.
+    # Even an unbroken short ring cannot establish that older generations were
+    # never removed, so cumulative session totals must remain unknown.
+    traversal_complete = False
+    export_count_complete = False
     summary = {
         **traversal_row,
-        "attempted_cycle_count": count_jsonl(traversal_path),
-        "exported_cycle_count": count_jsonl(export_ledger_path),
-        "rejected_cycle_count": sum(
-            1
-            for raw in traversal_path.read_text(encoding="utf-8").splitlines()
-            if raw.strip() and not bool(json.loads(raw).get("exported"))
-        ),
+        "attempted_cycle_count": retained_attempted,
+        "exported_cycle_count": retained_exports,
+        "rejected_cycle_count": retained_rejected,
+        "traversal_count_scope": "retained_rotation_generations_only",
+        "retained_traversal_generation_count": retained_generations,
+        "retained_traversal_rows_valid": traversal_valid,
+        "cumulative_traversal_count_complete": traversal_complete,
+        "traversal_count_completeness_reason": "NO_DURABLE_ROTATION_CONTINUITY_PROOF",
+        "older_traversal_generations_may_have_been_rotated_out": True,
+        "export_count_scope": "retained_rotation_generations_only",
+        "retained_export_generation_count": export_generations,
+        "retained_export_rows_valid": exports_valid,
+        "cumulative_export_count_complete": export_count_complete,
+        "export_count_completeness_reason": "NO_DURABLE_ROTATION_CONTINUITY_PROOF",
         "last_reason": reason,
         "latest_cycle_exported": exported,
-        "cumulative_session_export_count": count_jsonl(export_ledger_path),
+        "cumulative_session_export_count": retained_exports if export_count_complete else None,
         "latest_export": export_row,
     }
     write_json_atomic(summary_path, summary)

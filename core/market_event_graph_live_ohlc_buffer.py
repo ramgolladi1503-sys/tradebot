@@ -23,13 +23,14 @@ _SESSION_DATE: str | None = None
 _SESSION_SYMBOLS: tuple[str, ...] = ("NIFTY",)
 _LAST_SOURCE_TICK_EPOCH_BY_TOKEN: dict[int, float] = {}
 _LAST_CUMULATIVE_VOLUME_BY_TOKEN: dict[int, tuple[str, float]] = {}
-_ACTIVE_CAPTURE_IDENTITY: dict[str, Any] | None = None
+_PERSISTED_BAR_KEYS: set[tuple[str, str, float]] = set()
 
 
 def reset_live_source_shadow_buffer() -> None:
     shadow_ohlc_buffer._bars.clear()
     _LAST_SOURCE_TICK_EPOCH_BY_TOKEN.clear()
     _LAST_CUMULATIVE_VOLUME_BY_TOKEN.clear()
+    _PERSISTED_BAR_KEYS.clear()
     global _ACTIVE_CAPTURE_IDENTITY
     _ACTIVE_CAPTURE_IDENTITY = None
 
@@ -97,6 +98,7 @@ def _restore_completed_bars(symbol: str, *, as_of: datetime) -> None:
                 raise ValueError("RESTORED_BAR_CONFLICTS_WITH_SHADOW_BUFFER")
             continue
         restored_by_ts[ts] = recovered
+        _PERSISTED_BAR_KEYS.add((str(symbol).upper(), "1m", float(ts.timestamp())))
     target.clear()
     target.extend(restored_by_ts[ts] for ts in sorted(restored_by_ts))
 
@@ -122,7 +124,8 @@ def persist_completed_live_source_shadow_bars(*, as_of: datetime, symbol: str | 
             if ts + timedelta(seconds=60) > cutoff:
                 continue
             provenance = dict(bar.get("bar_provenance") or {})
-            if provenance.get("durable_persisted") is True:
+            bar_key = (current_symbol, "1m", float(ts.timestamp()))
+            if provenance.get("durable_persisted") is True or bar_key in _PERSISTED_BAR_KEYS:
                 result["already_durable"] += 1
                 continue
             source_type = str(provenance.get("source_type") or "").strip().lower()
@@ -157,6 +160,8 @@ def persist_completed_live_source_shadow_bars(*, as_of: datetime, symbol: str | 
                     )
                     continue
                 raise RuntimeError(f"COMPLETED_BAR_PERSISTENCE_FAILED:{stored.get('status')}")
+            if stored.get("status") in {"INSERTED", "EXISTS"}:
+                _PERSISTED_BAR_KEYS.add(bar_key)
             bar["bar_provenance"] = {
                 **durable_bar["bar_provenance"],
                 "persistence_row_sha256": str(stored.get("row_hash") or ""),

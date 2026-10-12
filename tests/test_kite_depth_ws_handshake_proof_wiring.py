@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from core import kite_depth_ws
+
 
 def test_kite_depth_ws_wires_handshake_proof_events():
     source = Path("core/kite_depth_ws.py").read_text()
@@ -23,3 +25,25 @@ def test_kite_depth_ws_does_not_log_full_access_token_in_proof_logger():
     assert 'access_token_len' in proof_block
     assert 'access_token_has_internal_whitespace' in proof_block
     assert 'access_token=%s' not in proof_block
+
+
+def test_kite_ws_created_log_excludes_credential_fragments(caplog):
+    api_key = "api-key-secret-fragment"
+    access_token = "access-token-secret-fragment"
+
+    with caplog.at_level("INFO", logger=kite_depth_ws.logger.name):
+        kite_depth_ws._log_kite_ws_created(
+            ticker=object(),
+            api_key=api_key,
+            access_token=access_token,
+        )
+
+    created_records = [record.getMessage() for record in caplog.records if "kite_ws_created" in record.getMessage()]
+    assert len(created_records) == 1
+    message = created_records[0]
+    assert "api_key_present=True" in message
+    assert "access_token_present=True" in message
+    assert api_key not in message
+    assert access_token not in message
+    assert api_key[-4:] not in message
+    assert access_token[-4:] not in message

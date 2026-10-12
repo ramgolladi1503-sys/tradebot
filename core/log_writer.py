@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+from contextlib import contextmanager
 import json
 import logging
 from logging.handlers import RotatingFileHandler
@@ -40,6 +41,12 @@ class JsonlWriter:
     def close(self) -> None:
         with self._lock:
             self._close_noexcept()
+
+    @contextmanager
+    def locked(self):
+        """Serialize a related file-ring inspection with this writer's rotation."""
+        with self._lock:
+            yield
 
     def write(self, payload: dict) -> bool:
         now = time.time()

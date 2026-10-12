@@ -133,9 +133,75 @@ def test_callback_persistence_cutover_set_has_zero_unresolved_entries():
 
 
 def test_callback_reachable_sources_have_no_direct_persistence_calls():
-    source = inspect.getsource(depth_ws.on_ticks)
-    assert not _forbidden_calls(source)
-    assert "_persist_runtime_snapshot_row" in source
+    wrapper_source = inspect.getsource(depth_ws.on_ticks)
+    ingestion_source = inspect.getsource(depth_ws._process_on_ticks)
+    persist_source = inspect.getsource(depth_ws._persist_runtime_snapshot_row)
+    enqueue_source = inspect.getsource(depth_ws._enqueue_runtime_snapshot_with_direct_artifact)
+    assert "_process_on_ticks(" in wrapper_source
+    assert "_persist_runtime_snapshot_row(" in ingestion_source
+    assert '_enqueue_runtime_snapshot_with_direct_artifact(' in persist_source
+    assert "write_feed_runtime_snapshot(payload)" in enqueue_source
+    assert "direct_artifact_writer()" in enqueue_source
+    assert 'allow_direct_artifact_fallback=source != "on_ticks"' in persist_source
+    assert 'if source != "on_ticks":' in persist_source
+    assert not _forbidden_calls(wrapper_source)
+    assert not _forbidden_calls(ingestion_source)
+
+
+def test_callback_runtime_queue_rejection_skips_synchronous_artifact_fallback(monkeypatch):
+    calls = []
+    monkeypatch.setattr(depth_ws, "write_feed_runtime_snapshot", lambda _payload: False)
+    monkeypatch.setattr(runtime_store, "consume_runtime_snapshot_write_outcome", lambda: (False, False))
+
+    accepted = depth_ws._enqueue_runtime_snapshot_with_direct_artifact(
+        {"source": "on_ticks"},
+        direct_artifact_writer=lambda: calls.append("direct_write"),
+        allow_direct_artifact_fallback=False,
+    )
+
+    assert accepted is False
+    assert calls == []
+
+
+def test_non_callback_runtime_queue_rejection_preserves_legacy_artifact_fallback(monkeypatch):
+    calls = []
+    monkeypatch.setattr(depth_ws, "write_feed_runtime_snapshot", lambda _payload: False)
+    monkeypatch.setattr(runtime_store, "consume_runtime_snapshot_write_outcome", lambda: (False, False))
+
+    accepted = depth_ws._enqueue_runtime_snapshot_with_direct_artifact(
+        {"source": "watchdog"},
+        direct_artifact_writer=lambda: calls.append("direct_write"),
+    )
+
+    assert accepted is False
+    assert calls == ["direct_write"]
+
+
+def test_admitted_tick_queue_rejection_fails_closed_without_sync_file_log(monkeypatch):
+    durability.reset()
+    runtime_store.reset_runtime_persistence_for_tests()
+    runtime_store._RUNTIME_WRITE_QUEUE = queue.Queue(maxsize=1)
+    runtime_store._RUNTIME_WORKER = None
+    monkeypatch.setattr(runtime_store, "_ensure_runtime_worker", lambda: None)
+    log_calls = []
+    monkeypatch.setattr(runtime_store.logger, "error", lambda *args, **kwargs: log_calls.append(args))
+    runtime_store._RUNTIME_WRITE_QUEUE.put_nowait("occupied")
+
+    depth_ws.mark_runtime_snapshot_producer_admitted()
+    accepted = runtime_store.write_runtime_snapshot(
+        {"source": "on_ticks", "run_id": "callback-queue-rejection-test"}
+    )
+    outcome = runtime_store.consume_runtime_snapshot_write_outcome()
+    runtime_store._RUNTIME_WRITE_QUEUE.get_nowait()
+    runtime_store._RUNTIME_WRITE_QUEUE.task_done()
+
+    assert accepted is False
+    assert outcome == (False, False)
+    assert log_calls == []
+    assert durability.snapshot()["persistence_durability_degraded"] is True
+    assert "runtime" in durability.snapshot()["degraded_authorities"]
+
+    runtime_store.reset_runtime_persistence_for_tests()
 
 
 def test_static_guard_detects_injected_forbidden_call():
@@ -363,6 +429,25 @@ def test_real_on_ticks_tripwire_exercises_all_enabled_campaign_hooks(monkeypatch
     assert duration_ms < 5000
 
 
+def test_registered_on_ticks_runtime_rejection_avoids_sync_artifact_and_error_log(tmp_path, monkeypatch):
+    durability.reset()
+    callback, counts, violations, _, runtime_mod, depth_store, _, _ = _run_registered_live_persistence_fixture(
+        monkeypatch,
+        tmp_path,
+        injection="runtime_reject",
+    )
+
+    assert callback is not None
+    assert counts["runtime"] >= 1
+    assert counts["runtime_error_logs"] == 0
+    assert [v for v in violations if v[0] == "filesystem"] == []
+    assert durability.snapshot()["persistence_durability_degraded"] is True
+    assert "runtime" in durability.snapshot()["degraded_authorities"]
+    runtime_mod.shutdown_runtime_persistence()
+    tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
+    depth_store.shutdown_persistence()
+
+
 def test_registered_callback_fixture_fails_when_enabled_hook_is_not_traversed():
     table = {"raw_truth": {"enabled": True, "count": 0}}
     missing = [name for name, row in table.items() if row["enabled"] and row["count"] == 0]
@@ -371,13 +456,21 @@ def test_registered_callback_fixture_fails_when_enabled_hook_is_not_traversed():
 
 def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=None):
     Path(tmp_path).mkdir(parents=True, exist_ok=True)
-    counts = {"tick": 0, "depth": 0, "runtime": 0, "raw": 0, "diagnostic": 0}
+    counts = {"tick": 0, "depth": 0, "runtime": 0, "raw": 0, "diagnostic": 0, "runtime_error_logs": 0}
     worker_ids = {}
     violations = []
     sqlite_operations = []
     monitored_root = Path(tmp_path).resolve()
     callback_ident = threading.get_ident()
     callback_active = False
+    callback_owner_ids = set()
+    original_process_on_ticks = depth_ws._process_on_ticks
+
+    def record_callback_owner(*args, **kwargs):
+        callback_owner_ids.add(threading.get_ident())
+        return original_process_on_ticks(*args, **kwargs)
+
+    monkeypatch.setattr(depth_ws, "_process_on_ticks", record_callback_owner)
     original_diag = depth_ws.campaign_raw_diagnostics
 
     # A prior test may have deliberately terminated the process-wide worker.
@@ -389,7 +482,10 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
         depth_ws.depth_store = depth_store_module.DepthStore()
 
     monkeypatch.setattr(depth_ws.cfg, "TRADE_DB_PATH", str(tmp_path / "trade.db"), raising=False)
-    monkeypatch.setattr(depth_ws, "_log_ws", lambda *args, **kwargs: None)
+    def log_ws(event, *args, **kwargs):
+        if event == "FEED_RUNTIME_STORE_WRITE_ERROR":
+            counts["runtime_error_logs"] += 1
+    monkeypatch.setattr(depth_ws, "_log_ws", log_ws)
     monkeypatch.setattr(depth_ws, "record_fd_trace", lambda *args, **kwargs: counts.__setitem__("diagnostic", counts["diagnostic"] + 1))
 
     real_insert = depth_ws.insert_tick
@@ -422,6 +518,10 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
     real_runtime = runtime_store.write_runtime_snapshot
     def runtime_enqueue(payload):
         counts["runtime"] += 1
+        if injection == "runtime_reject":
+            runtime_store._RUNTIME_WRITE_OUTCOME_LOCAL.value = (False, False)
+            durability.record_degradation("runtime", "RUNTIME_QUEUE_FULL")
+            return False
         return real_runtime(payload)
     monkeypatch.setattr(depth_ws, "write_feed_runtime_snapshot", runtime_enqueue)
     real_runtime_write = runtime_store._write_runtime_snapshot_sync
@@ -432,7 +532,7 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
 
     def tripwire(category, target, func):
         def wrapped(*args, **kwargs):
-            if threading.get_ident() == callback_ident:
+            if callback_active and threading.get_ident() in callback_owner_ids:
                 violations.append((category, target, threading.get_ident(), threading.current_thread().name))
             return func(*args, **kwargs)
         return wrapped
@@ -440,12 +540,12 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
     def record_sqlite(operation):
         entry = (operation, threading.get_ident(), threading.current_thread().name)
         sqlite_operations.append(entry)
-        if callback_active and threading.get_ident() == callback_ident:
+        if callback_active and threading.get_ident() in callback_owner_ids:
             violations.append(("sqlite_operation", operation, *entry[1:]))
 
     def observed_conn(factory, target):
         def wrapped(*args, **kwargs):
-            if callback_active and threading.get_ident() == callback_ident:
+            if callback_active and threading.get_ident() in callback_owner_ids:
                 violations.append(("sqlite_connection", target, threading.get_ident(), threading.current_thread().name))
             return _ObservedConnection(factory(*args, **kwargs), record_sqlite)
         return wrapped
@@ -464,7 +564,7 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
         def wrapped(path, *args, **kwargs):
             candidate = Path(os.path.abspath(os.fsdecode(path)))
             if (monitored_root == candidate or monitored_root in candidate.parents) and "runtime/logs" not in str(candidate):
-                if callback_active and threading.get_ident() == callback_ident:
+                if callback_active and threading.get_ident() in callback_owner_ids:
                     violations.append(("filesystem", operation, str(candidate), threading.get_ident(), threading.current_thread().name))
             return original(path, *args, **kwargs)
         return wrapped
@@ -475,14 +575,14 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
     real_open = builtins.open
     def builtin_open(path, *args, **kwargs):
         candidate = Path(os.path.abspath(os.fsdecode(path))) if isinstance(path, (str, bytes, os.PathLike)) else None
-        if candidate is not None and (monitored_root == candidate or monitored_root in candidate.parents) and "runtime/logs" not in str(candidate) and callback_active and threading.get_ident() == callback_ident:
+        if candidate is not None and (monitored_root == candidate or monitored_root in candidate.parents) and "runtime/logs" not in str(candidate) and callback_active and threading.get_ident() in callback_owner_ids:
             violations.append(("filesystem", "builtins.open", str(candidate), threading.get_ident(), threading.current_thread().name))
         return real_open(path, *args, **kwargs)
     monkeypatch.setattr(builtins, "open", builtin_open)
     real_os_stat, real_os_makedirs, real_os_fsync = os.stat, os.makedirs, os.fsync
     monkeypatch.setattr(os, "stat", filesystem_tripwire("os.stat", real_os_stat))
     monkeypatch.setattr(os, "makedirs", filesystem_tripwire("os.makedirs", real_os_makedirs))
-    monkeypatch.setattr(os, "fsync", lambda fd: (violations.append(("filesystem", "os.fsync", str(fd), threading.get_ident(), threading.current_thread().name)) if callback_active and threading.get_ident() == callback_ident else None) or real_os_fsync(fd))
+    monkeypatch.setattr(os, "fsync", lambda fd: (violations.append(("filesystem", "os.fsync", str(fd), threading.get_ident(), threading.current_thread().name)) if callback_active and threading.get_ident() in callback_owner_ids else None) or real_os_fsync(fd))
 
     original_tick = tick_enqueue
     if injection == "sqlite":
@@ -491,7 +591,7 @@ def _run_registered_live_persistence_fixture(monkeypatch, tmp_path, injection=No
             return original_tick(**kwargs)
         monkeypatch.setattr(depth_ws, "insert_tick", injected)
     elif injection and injection.startswith("sqlite_"):
-        raw = sqlite3.connect(str(tmp_path / "injected.db"))
+        raw = sqlite3.connect(str(tmp_path / "injected.db"), check_same_thread=False)
         injected_conn = _ObservedConnection(raw, record_sqlite)
         operation = injection.removeprefix("sqlite_")
         def injected(**kwargs):
@@ -750,7 +850,7 @@ def test_tripwire_detects_each_sqlite_operation(tmp_path, monkeypatch):
     )
     for operation in operations:
         _, _, violations, _, runtime_store, depth_store, _, _ = _run_registered_live_persistence_fixture(monkeypatch, tmp_path / operation, "sqlite_" + operation)
-        assert any(v[0] == "sqlite_operation" and v[1] == operation.replace("_", ".", 1) for v in violations)
+        assert any(v[0] == "sqlite_operation" and v[1] == operation.replace("_", ".", 1) for v in violations), (operation, violations)
         runtime_store.shutdown_runtime_persistence(); tick_store.shutdown_persistence_worker(deadline_seconds=2.0); depth_store.shutdown_persistence()
 
 

@@ -2,7 +2,13 @@ import sqlite3
 import pytest
 
 from config import config as cfg
-from core.feed.runtime_store import _db_path, write_runtime_snapshot
+from core.feed.runtime_store import (
+    _db_path,
+    request_runtime_persistence_shutdown,
+    reset_runtime_persistence_for_tests,
+    shutdown_runtime_persistence,
+    write_runtime_snapshot,
+)
 from core.feed_debug import get_feed_debug
 from core.fs_utils import ensure_parent_dir
 
@@ -53,6 +59,33 @@ def test_feed_debug_uses_feed_runtime_row_when_present(monkeypatch, tmp_path):
     assert payload["ws_connected"] is True
     assert payload["ws_connected_source"] == "feed_runtime"
     assert payload["subscribed_tokens_count"] == 73
+
+
+def test_request_runtime_shutdown_closes_admission_and_drains_accepted_rows(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime" / "shutdown.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setenv("TRADE_DB_PATH", str(db_path))
+    reset_runtime_persistence_for_tests()
+    payload = {
+        "ts_epoch": 1_700_000_000.0,
+        "ws_connected": True,
+        "subscribed_tokens_count": 1,
+        "subscribed_tokens_sample": [9001],
+        "last_ws_tick_epoch": 1_700_000_000.0,
+        "source": "shutdown-test",
+    }
+    try:
+        assert write_runtime_snapshot(payload) is True
+        request_runtime_persistence_shutdown()
+        assert write_runtime_snapshot({**payload, "ts_epoch": payload["ts_epoch"] + 1}) is False
+        state = shutdown_runtime_persistence(deadline_seconds=5.0)
+        assert state["complete"] is True
+        assert state["enqueued"] == 1
+        assert state["persisted"] == 1
+        assert state["pending"] == 0
+        assert state["accounting_invariant_ok"] is True
+    finally:
+        reset_runtime_persistence_for_tests()
 
 
 def test_feed_debug_infers_connected_when_ticks_recent(monkeypatch, tmp_path):

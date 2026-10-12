@@ -72,6 +72,61 @@ def test_dataset_and_purged_walk_forward_are_chronological():
         assert train_idx.size>0 and test_idx.size>0
 
 
+def test_training_filters_unavailable_labels_before_split_and_nested_fit(monkeypatch):
+    from core.analytics.candidate_ml_v2 import certification, model
+
+    df = make_dataset(rows_per_session=20, sessions=10)
+    df["execution_feasibility_status"] = "ASSESSED_FEASIBLE"
+    df.loc[df.index[::7], "execution_feasibility_status"] = "UNASSESSED"
+    df.loc[df.index[3::11], "execution_feasibility_status"] = "ASSESSED_INFEASIBLE"
+    df.loc[df.index[5::13], "future_net_r"] = np.nan
+    cfg = mod.CandidateMLConfig(min_train_rows=80, min_validation_rows=25, min_strategy_rows=40, min_positive_rows=5, purge_rows=0)
+    original_fit = model._fit_unit
+    seen = []
+
+    def guarded_fit(train, validation, features, config):
+        for frame in (train, validation):
+            assert not frame["execution_feasibility_status"].isin(["UNASSESSED", "ASSESSED_INFEASIBLE"]).any()
+            assert pd.to_numeric(frame["future_net_r"], errors="coerce").notna().all()
+        seen.append((train.copy(), validation.copy()))
+        return original_fit(train, validation, features, config)
+
+    monkeypatch.setattr(model, "_fit_unit", guarded_fit)
+    # Nested module imported its own function reference, so guard it independently.
+    monkeypatch.setattr(certification, "_fit_unit", guarded_fit)
+    bundle = mod.fit_candidate_ml(df, cfg)
+    assert bundle.global_model is not None
+    nested = certification._nested_model(df, cfg)
+    assert nested.global_model is not None
+    assert len(seen) >= 2
+
+
+def test_filtering_below_support_fails_closed_without_lowering_minima():
+    df = make_dataset(rows_per_session=20, sessions=8)
+    df["execution_feasibility_status"] = "ASSESSED_FEASIBLE"
+    df.loc[:, "future_net_r"] = np.nan
+    cfg = mod.CandidateMLConfig(min_train_rows=80, min_validation_rows=25, min_strategy_rows=40, min_positive_rows=5, purge_rows=0)
+    with pytest.raises(ValueError, match="candidate_dataset_empty|candidate_dataset_no_eligible_training_labels"):
+        mod.fit_candidate_ml(df, cfg)
+
+    df["future_net_r"] = 1.0
+    df.loc[df.index[::2], "execution_feasibility_status"] = "UNASSESSED"
+    with pytest.raises(ValueError, match="candidate_training_support_below_minimum|candidate_validation_support_below_minimum|candidate_dataset_too_few_sessions"):
+        mod.fit_candidate_ml(df, cfg)
+
+
+def test_fit_unit_has_final_unavailable_label_guard():
+    from core.analytics.candidate_ml_v2.model import _fit_unit
+
+    df = make_dataset(rows_per_session=20, sessions=8)
+    df["execution_feasibility_status"] = "ASSESSED_FEASIBLE"
+    df.loc[df.index[0], "execution_feasibility_status"] = "UNASSESSED"
+    features = mod.feature_columns(df)
+    cfg = mod.CandidateMLConfig(min_train_rows=40, min_validation_rows=20, purge_rows=0)
+    with pytest.raises(ValueError, match="candidate_training_support_below_minimum"):
+        _fit_unit(df.iloc[:40], df.iloc[40:80], features, cfg)
+
+
 def test_fit_predict_calibration_abstention_and_manifest(tmp_path):
     df=make_dataset(rows_per_session=40,sessions=16)
     cfg=mod.CandidateMLConfig(min_train_rows=100,min_validation_rows=40,min_strategy_rows=120,

@@ -1033,6 +1033,15 @@ def _snapshot_shutdown_result(
     return result
 
 
+def request_persistence_shutdown() -> None:
+    """Close tick-write admission and wake the worker without waiting for drain."""
+    global _ACCEPTING_WRITES, _SHUTDOWN_STATE
+    with _WRITE_QUEUE_LOCK:
+        _ACCEPTING_WRITES = False
+    _SHUTDOWN_STATE = "DRAINING"
+    _FLUSH_THREAD_STOP.set()
+
+
 def _shutdown_flush_thread(*, deadline_seconds: float | None = None) -> dict[str, Any]:
     global _FLUSH_THREAD_JOIN_COMPLETED, _ACCEPTING_WRITES, _SHUTDOWN_STARTED_MONOTONIC_NS
     global _SHUTDOWN_FINISHED_MONOTONIC_NS, _SHUTDOWN_STATE, _SHUTDOWN_RESULT
@@ -1047,11 +1056,7 @@ def _shutdown_flush_thread(*, deadline_seconds: float | None = None) -> dict[str
 
     shutdown_started_monotonic_ns = time.monotonic_ns()
     _SHUTDOWN_STARTED_MONOTONIC_NS = shutdown_started_monotonic_ns
-    _SHUTDOWN_STATE = "STOP_ACCEPTING_WRITES"
-    with _WRITE_QUEUE_LOCK:
-        _ACCEPTING_WRITES = False
-    _SHUTDOWN_STATE = "DRAINING"
-    _FLUSH_THREAD_STOP.set()
+    request_persistence_shutdown()
 
     deadline_seconds = 2.0 if deadline_seconds is None else float(deadline_seconds)
     deadline_ns = None if deadline_seconds is None else shutdown_started_monotonic_ns + max(0, int(deadline_seconds * 1_000_000_000))

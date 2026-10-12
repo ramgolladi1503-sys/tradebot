@@ -19,6 +19,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+os.environ.setdefault("MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", "true")
+default_universe = REPO_ROOT / "runtime" / "reference" / "market_event_graph" / "nifty50_live_universe_kite_9fb8832853c27944_828c0c378e493972_fba078a4cd7aeb52.json"
+os.environ.setdefault("MARKET_EVENT_GRAPH_LIVE_UNIVERSE_PATH", str(default_universe))
 from config import config as cfg
 from config import feed_runtime_reliability as reliability_cfg
 from core.market_event_graph_live_launch_plan import (
@@ -325,6 +328,10 @@ def _build_production_launch_plan(
         sticky_tokens = list(kite_depth_ws.get_sticky_tokens())
     except Exception:
         sticky_tokens = []
+    if heritage_manifest_path is None:
+        heritage_manifest_path = os.environ.get("TRADEBOT_T1_HERITAGE_MANIFEST_PATH")
+    if heritage_manifest_sha256 is None:
+        heritage_manifest_sha256 = os.environ.get("TRADEBOT_T1_HERITAGE_MANIFEST_SHA256")
     return build_launch_plan(
         session_date=session_date,
         production_tokens=production_tokens,

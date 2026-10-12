@@ -103,7 +103,14 @@ def build_candidate_row(
             metrics[key] = value
 
     outcome_label = text(trade_outcome.get("outcome") or outcome.get("outcome")).lower()
+    feasibility_flags = trade_outcome.get("exec_feasible_flags")
+    if not isinstance(feasibility_flags, Mapping):
+        feasibility_flags = {}
+    feasibility_status = text(feasibility_flags.get("execution_feasibility_status")).upper() or "UNKNOWN"
     exec_feasible = bool(trade_outcome.get("exec_feasible", outcome.get("exec_feasible", False)))
+    feasibility_unavailable = feasibility_status in {"UNASSESSED", "ASSESSED_INFEASIBLE"}
+    if feasibility_unavailable:
+        exec_feasible = False
     target_hit = int(outcome_label == "hit_target" and exec_feasible)
     stop_hit = int(outcome_label == "hit_sl" and exec_feasible)
     mfe = safe_float(trade_outcome.get("mfe_points") or outcome.get("mfe_points"))
@@ -115,7 +122,9 @@ def build_candidate_row(
     reward_points = abs(target - entry) if entry is not None and target is not None else None
     risk_points = abs(entry - stop) if entry is not None and stop is not None else None
     reward_r = reward_points / risk_points if reward_points is not None and risk_points not in (None, 0) else 1.5
-    outcome_r = reward_r - friction_r if target_hit else (-1.0 - friction_r if stop_hit else -friction_r)
+    outcome_r = None if feasibility_unavailable else (
+        reward_r - friction_r if target_hit else (-1.0 - friction_r if stop_hit else -friction_r)
+    )
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -131,9 +140,10 @@ def build_candidate_row(
         "target": target_hit,
         "stop_hit": stop_hit,
         "exec_feasible": int(exec_feasible),
+        "execution_feasibility_status": feasibility_status,
         "future_mfe_points": mfe,
         "future_mae_points": mae,
-        "future_net_r": float(outcome_r),
+        "future_net_r": (float(outcome_r) if outcome_r is not None else None),
         "friction_r": float(friction_r),
         **metrics,
         **SAFETY_CONTRACT,
@@ -224,6 +234,7 @@ def feature_columns(df: pd.DataFrame) -> list[str]:
 
 
 def chronological_split(df: pd.DataFrame, config: CandidateMLConfig) -> tuple[pd.DataFrame, pd.DataFrame]:
+    df = eligible_training_rows(df)
     validate_candidate_dataset(df)
     sessions = list(dict.fromkeys(df["session_date"].astype(str).tolist()))
     if len(sessions) < 5:
@@ -238,6 +249,29 @@ def chronological_split(df: pd.DataFrame, config: CandidateMLConfig) -> tuple[pd
     if len(validation) < config.min_validation_rows:
         raise ValueError("candidate_validation_support_below_minimum")
     return train, validation
+
+
+def eligible_training_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only rows with an assessed execution label and finite net-R outcome.
+
+    Filtering preserves incoming chronological order. Legacy datasets without the
+    feasibility-status column remain eligible when they have a finite outcome.
+    """
+    if df.empty:
+        return df.copy()
+    eligible = pd.Series(True, index=df.index)
+    if "execution_feasibility_status" in df.columns:
+        unavailable = df["execution_feasibility_status"].fillna("UNKNOWN").astype(str).str.upper().isin(
+            {"UNASSESSED", "ASSESSED_INFEASIBLE"}
+        )
+        eligible &= ~unavailable
+    if "future_net_r" in df.columns:
+        numeric = pd.to_numeric(df["future_net_r"], errors="coerce")
+        eligible &= numeric.notna() & np.isfinite(numeric)
+    else:
+        # Datasets without an outcome column are not safe model-training inputs.
+        eligible &= False
+    return df.loc[eligible].copy()
 
 
 def purged_walk_forward_splits(

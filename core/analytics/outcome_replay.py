@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import tempfile
 from typing import Any, Callable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
@@ -19,6 +20,48 @@ from .store import discover_session_paths, load_session_events, load_trade_inten
 IST = ZoneInfo("Asia/Kolkata")
 SeriesRow = dict[str, Any]
 SeriesLoader = Callable[[dict[str, Any], int, int, str], tuple[list[SeriesRow], str]]
+
+
+class IncompleteOutcomeWindowError(ValueError):
+    """Raised when source rows cannot prove a contiguous requested replay window."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = str(reason or "unknown")
+        super().__init__(f"incomplete_outcome_window:{self.reason}")
+
+
+_MINUTE_INTERVALS = {
+    "minute": 1,
+    "1minute": 1,
+    "1min": 1,
+    "1m": 1,
+    "2minute": 2,
+    "2min": 2,
+    "2m": 2,
+    "3minute": 3,
+    "3min": 3,
+    "3m": 3,
+    "5minute": 5,
+    "5min": 5,
+    "5m": 5,
+    "10minute": 10,
+    "10min": 10,
+    "10m": 10,
+    "15minute": 15,
+    "15min": 15,
+    "15m": 15,
+    "30minute": 30,
+    "30min": 30,
+    "30m": 30,
+}
+
+
+def _interval_minutes(interval: str) -> int:
+    key = "".join(str(interval or "").lower().split())
+    try:
+        return _MINUTE_INTERVALS[key]
+    except KeyError as exc:
+        raise IncompleteOutcomeWindowError("unsupported_interval") from exc
 
 
 def _norm_text(value: Any) -> str:
@@ -273,81 +316,12 @@ def _resolve_underlying_symbol(event: Mapping[str, Any]) -> str:
 
 
 def _default_series_loader(event_row: dict[str, Any], start_ms: int, end_ms: int, interval: str) -> tuple[list[SeriesRow], str]:
-    try:
-        from core.market_data import get_candles, get_option_candles_or_snapshots
-    except Exception:
-        return [], "no_market_data_loader"
-
-    trade_row = {
-        "instrument_token": event_row.get("instrument_token") or event_row.get("token"),
-        "tradingsymbol": event_row.get("tradingsymbol"),
-        "symbol": event_row.get("symbol"),
-    }
-    option_rows: list[SeriesRow] = []
-    try:
-        option_df = get_option_candles_or_snapshots(trade_row, interval, int(start_ms), int(end_ms))
-        option_rows = _normalize_option_rows(_rows_from_table_like(option_df))
-    except Exception:
-        option_rows = []
-    if option_rows:
-        return option_rows, "option_mark_series"
-
-    symbol = _resolve_underlying_symbol(event_row)
-    candle_rows: list[SeriesRow] = []
-    try:
-        candle_df = get_candles(symbol, interval, int(start_ms), int(end_ms))
-        candle_rows = _normalize_ohlc_rows(_rows_from_table_like(candle_df))
-    except Exception:
-        candle_rows = []
-    if candle_rows:
-        return candle_rows, "instrument_candles"
-    return [], "no_series_data"
-
-
-def _empty_outcome_row(event: Mapping[str, Any], *, reason: str, series_source: str = "no_series_data") -> dict:
-    ts_ms = _event_ts_ms(event) or int(datetime.now(tz=timezone.utc).timestamp() * 1000.0)
-    trade_key = _event_trade_key(event, ts_ms)
-    event_id = _event_id(event, trade_key, ts_ms)
-    reject_reason, reason_codes = _build_reject_attribution(
-        event,
-        outcome_reason=reason,
-        has_candle_data=False,
-        series_source=series_source,
-    )
-    outcome = TradeOutcome(
-        trade_key=trade_key,
-        event_id=f"out_{event_id}",
-        outcome="no_hit",
-        ts_epoch_ms=int(ts_ms),
-        symbol=_event_symbol(event),
-        mfe_points=0.0,
-        mae_points=0.0,
-        exec_feasible=False,
-        exec_feasible_flags={"has_candle_data": False, "has_series_data": False},
-        source="analytics_outcome_replay",
-        reject_reason=reject_reason,
-        reject_reasons=tuple(reason_codes),
-        primary_reject_reason=reject_reason,
-    )
-    trade_outcome = outcome.to_dict()
-    trade_outcome["reason_codes"] = list(reason_codes)
-    entry = _event_price(event, "entry", "intended_entry", "entry_price", "mark")
-    target = _event_price(event, "target", "target_price")
-    stop = _event_price(event, "stop", "stop_price", "stop_loss")
-    target_points = abs(target - entry) if (entry is not None and target is not None) else None
-    stop_points = abs(entry - stop) if (entry is not None and stop is not None) else None
-    return {
-        "event_ref_id": event_id,
-        "trade_key": trade_key,
-        "symbol": _event_symbol(event),
-        "series_source": series_source,
-        "outcome_reason": reason,
-        "resolution_ts_epoch_ms": int(ts_ms),
-        "target_points": target_points,
-        "stop_points": stop_points,
-        "reason_codes": list(reason_codes),
-        "trade_outcome": trade_outcome,
-    }
+    # Analytics replay is an offline boundary. Callers that have a validated,
+    # session-local data source must inject it through ``series_loader``.
+    # ``core.market_data`` can fall through to Kite historical-data APIs, so it
+    # must never be imported implicitly by replay.
+    del event_row, start_ms, end_ms, interval
+    return [], "offline_series_loader_required"
 
 
 def analyze_event_outcome(
@@ -360,7 +334,11 @@ def analyze_event_outcome(
     event_row = event.to_dict() if isinstance(event, TradeIntentEvent) else dict(event or {})
     event_ts_ms = _event_ts_ms(event_row)
     if event_ts_ms is None:
-        return _empty_outcome_row(event_row, reason="MISSING_EVENT_TS")
+        raise IncompleteOutcomeWindowError("missing_event_timestamp")
+
+    interval_text = str(candle_interval or "minute")
+    interval_minutes = _interval_minutes(interval_text)
+    interval_ms = interval_minutes * 60 * 1000
 
     if isinstance(lookahead_minutes, Sequence) and not isinstance(lookahead_minutes, (str, bytes)):
         legacy_rows = _normalize_ohlc_rows(lookahead_minutes)
@@ -371,30 +349,48 @@ def analyze_event_outcome(
         replay_lookahead_min = 30
         loader = _legacy_loader
     else:
-        replay_lookahead_min = max(1, int(lookahead_minutes))
+        replay_lookahead_min = int(lookahead_minutes)
+        if replay_lookahead_min <= 0:
+            raise IncompleteOutcomeWindowError("invalid_horizon")
         loader = series_loader or _default_series_loader
+
+    if replay_lookahead_min % interval_minutes != 0:
+        raise IncompleteOutcomeWindowError("horizon_misaligned")
 
     side = _event_side(event_row)
     window_start_ms = int(event_ts_ms)
     window_end_ms = int(window_start_ms + replay_lookahead_min * 60 * 1000)
-
+    event_local = datetime.fromtimestamp(window_start_ms / 1000.0, tz=timezone.utc).astimezone(IST)
     try:
-        series_rows, series_source = loader(event_row, window_start_ms, window_end_ms, str(candle_interval or "minute"))
+        configured_open = datetime.strptime(str(getattr(cfg, "MARKET_OPEN_IST", "")), "%H:%M").time()
+    except ValueError as exc:
+        raise IncompleteOutcomeWindowError("invalid_configured_market_session") from exc
+    session_anchor = event_local.replace(
+        hour=configured_open.hour, minute=configured_open.minute, second=0, microsecond=0
+    )
+    anchor_ms = int(session_anchor.astimezone(timezone.utc).timestamp() * 1000)
+    if window_start_ms < anchor_ms or (window_start_ms - anchor_ms) % interval_ms != 0:
+        # OHLC bars are interval-start observations. Do not round a sub-bar
+        # event backward into a bar that includes pre-event prices.
+        raise IncompleteOutcomeWindowError("event_not_on_source_bar_boundary")
+
+    # The injected source contract is interval-start timestamps. Anchor the
+    # grid to the event/source bar, not Unix epoch zero (exchange sessions can
+    # open off that grid for multi-minute intervals). A source that cannot
+    # prove a bar exactly at the event timestamp is rejected below.
+    try:
+        series_rows, series_source = loader(event_row, window_start_ms, window_end_ms, interval_text)
     except Exception as exc:
-        return _empty_outcome_row(
-            event_row,
-            reason=f"SERIES_LOAD_ERROR:{type(exc).__name__}",
-            series_source="series_loader_error",
-        )
+        raise IncompleteOutcomeWindowError(f"source_error:{type(exc).__name__}") from exc
     series_rows = [row for row in list(series_rows or []) if _coerce_epoch_ms(row.get("time_ms")) is not None]
     series_rows = [
         row
         for row in series_rows
-        if window_start_ms <= int(_coerce_epoch_ms(row.get("time_ms")) or 0) <= window_end_ms
+        if window_start_ms <= int(_coerce_epoch_ms(row.get("time_ms")) or 0) < window_end_ms
     ]
     series_rows.sort(key=lambda r: int(_coerce_epoch_ms(r.get("time_ms")) or 0))
     if not series_rows:
-        return _empty_outcome_row(event_row, reason="NO_SERIES_DATA", series_source=series_source)
+        raise IncompleteOutcomeWindowError("truncated")
 
     entry = _event_price(event_row, "entry", "intended_entry", "entry_price", "mark")
     if entry is None:
@@ -402,20 +398,30 @@ def analyze_event_outcome(
     target = _event_price(event_row, "target", "target_price")
     stop = _event_price(event_row, "stop", "stop_price", "stop_loss")
     if entry is None or target is None or stop is None:
-        return _empty_outcome_row(event_row, reason="MISSING_LEVELS", series_source=series_source)
+        raise IncompleteOutcomeWindowError("missing_outcome_levels")
 
     outcome_label = "no_hit"
     outcome_reason = "WINDOW_EXHAUSTED"
-    resolution_ts_ms = int(_coerce_epoch_ms(series_rows[-1].get("time_ms")) or window_end_ms)
+    resolution_ts_ms = int(window_end_ms - interval_ms)
     mfe_points: float | None = None
     mae_points: float | None = None
+    row_index = 0
+    ambiguous_ts_ms: int | None = None
 
-    for row in series_rows:
+    for expected_ts_ms in range(window_start_ms, window_end_ms, interval_ms):
+        if row_index >= len(series_rows):
+            raise IncompleteOutcomeWindowError("truncated")
+        row = series_rows[row_index]
+        ts_ms = int(_coerce_epoch_ms(row.get("time_ms")) or 0)
+        if ts_ms != expected_ts_ms:
+            reason = "gap" if ts_ms > expected_ts_ms else "misaligned_or_duplicate"
+            raise IncompleteOutcomeWindowError(reason)
+        row_index += 1
+
         high = _safe_float(row.get("high"))
         low = _safe_float(row.get("low"))
-        ts_ms = int(_coerce_epoch_ms(row.get("time_ms")) or 0)
         if high is None or low is None or ts_ms <= 0:
-            continue
+            raise IncompleteOutcomeWindowError("invalid_bar")
 
         if side == "SELL":
             favorable = float(entry - low)
@@ -431,11 +437,11 @@ def analyze_event_outcome(
         mfe_points = favorable if mfe_points is None else max(mfe_points, favorable)
         mae_points = adverse if mae_points is None else min(mae_points, adverse)
 
+        if ambiguous_ts_ms is not None:
+            continue
         if target_hit and sl_hit:
-            outcome_label = "no_hit"
-            outcome_reason = "AMBIGUOUS_SAME_CANDLE"
-            resolution_ts_ms = ts_ms
-            break
+            ambiguous_ts_ms = ts_ms
+            continue
         if target_hit:
             outcome_label = "hit_target"
             outcome_reason = "TARGET_FIRST"
@@ -446,6 +452,11 @@ def analyze_event_outcome(
             outcome_reason = "SL_FIRST"
             resolution_ts_ms = ts_ms
             break
+
+    if ambiguous_ts_ms is not None:
+        raise IncompleteOutcomeWindowError("ambiguous_same_candle")
+    elif outcome_label == "no_hit" and row_index != len(series_rows):
+        raise IncompleteOutcomeWindowError("misaligned_or_duplicate")
 
     trade_key = _event_trade_key(event_row, event_ts_ms)
     event_id = _event_id(event_row, trade_key, event_ts_ms)
@@ -463,8 +474,13 @@ def analyze_event_outcome(
         symbol=_event_symbol(event_row),
         mfe_points=(round(float(mfe_points), 6) if mfe_points is not None else None),
         mae_points=(round(float(mae_points), 6) if mae_points is not None else None),
-        exec_feasible=True,
-        exec_feasible_flags={"has_candle_data": True, "has_series_data": True},
+        exec_feasible=False,
+        exec_feasible_flags={
+            "has_candle_data": True,
+            "has_series_data": True,
+            "outcome_path_observed": True,
+            "execution_feasibility_status": "UNASSESSED",
+        },
         source="analytics_outcome_replay",
         reject_reason=reject_reason,
         reject_reasons=tuple(reason_codes),
@@ -473,10 +489,15 @@ def analyze_event_outcome(
     trade_outcome_payload = trade_outcome.to_dict()
     trade_outcome_payload["reason_codes"] = list(reason_codes)
     return {
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
         "event_ref_id": event_id,
         "trade_key": trade_key,
         "symbol": _event_symbol(event_row),
         "series_source": series_source,
+        "series_provenance": dict(getattr(loader, "provenance", {}) or {}),
         "outcome_reason": outcome_reason,
         "resolution_ts_epoch_ms": int(resolution_ts_ms),
         "target_points": abs(float(target - entry)),
@@ -515,11 +536,20 @@ def _parse_date_key(text: str) -> str:
 
 def _atomic_write_jsonl(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(dict(row), ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n")
-    tmp.replace(path)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(dict(row), ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        tmp.replace(path)
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def build_outcomes_for_date(
@@ -530,6 +560,8 @@ def build_outcomes_for_date(
     candle_interval: str = "minute",
     output_path: Path | None = None,
     session_dir: Path | str | None = None,
+    series_loader: SeriesLoader | None = None,
+    series_manifest: Path | str | None = None,
 ) -> dict:
     date_key = _parse_date_key(date)
     normalized_scope = _norm_text(scope).lower() or "rejected"
@@ -549,11 +581,24 @@ def build_outcomes_for_date(
         if _to_day_key(int(event.ts_epoch_ms)) == date_key and _norm_text(event.intent).lower() == normalized_scope
     ]
 
+    if series_manifest is not None:
+        if series_loader is not None:
+            raise ValueError("provide_series_loader_or_manifest_not_both")
+        from .upstox_replay_source import OfflineOptionOHLCManifest
+
+        series_loader = OfflineOptionOHLCManifest(series_manifest)
+
+    if events and series_loader is None:
+        raise RuntimeError(
+            "OFFLINE_SERIES_LOADER_REQUIRED: refusing to write outcomes without an explicit local market-series source"
+        )
+
     rows = [
         analyze_event_outcome(
             event,
             lookahead_minutes=int(lookahead_minutes),
             candle_interval=str(candle_interval or "minute"),
+            series_loader=series_loader,
         )
         for event in events
     ]
@@ -570,6 +615,10 @@ def build_outcomes_for_date(
             outcome_counts[out] += 1
 
     return {
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
         "date": date_key,
         "scope": normalized_scope,
         "lookahead_minutes": int(lookahead_minutes),
@@ -577,6 +626,15 @@ def build_outcomes_for_date(
         "count": len(rows),
         "outcome_counts": outcome_counts,
         "output_path": str(path),
+        "series_provenance": dict(getattr(series_loader, "manifest_provenance", {}) or {}),
+        "series_sources": [
+            {
+                "event_ref_id": row.get("event_ref_id"),
+                "series_source": row.get("series_source"),
+                "series_provenance": dict(row.get("series_provenance") or {}),
+            }
+            for row in rows
+        ],
     }
 
 
@@ -592,6 +650,11 @@ def _build_cli() -> argparse.ArgumentParser:
     parser.add_argument("--lookahead-min", type=int, default=30, help="Replay lookahead in minutes.")
     parser.add_argument("--candle-interval", default="minute", help="Candle interval label for replay.")
     parser.add_argument("--session-dir", default=None, help="Explicit session directory or root.")
+    parser.add_argument(
+        "--series-manifest",
+        default=None,
+        help="Explicit local option OHLC manifest (JSON); no implicit/network source is used.",
+    )
     return parser
 
 
@@ -603,6 +666,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         lookahead_minutes=int(args.lookahead_min),
         candle_interval=str(args.candle_interval),
         session_dir=args.session_dir,
+        series_manifest=args.series_manifest,
     )
     print(json.dumps(payload, ensure_ascii=True, sort_keys=True))
     return 0

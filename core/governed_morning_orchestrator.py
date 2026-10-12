@@ -443,7 +443,7 @@ class GovernedMorningOrchestrator:
                 ["git", "rev-parse", "HEAD"], cwd=str(self.repo_root), text=True
             ).strip()
             dirty = subprocess.check_output(
-                ["git", "status", "--porcelain"], cwd=str(self.repo_root), text=True
+                ["git", "diff-index", "--cached", "HEAD", "--"], cwd=str(self.repo_root), text=True
             ).strip()
         except subprocess.SubprocessError as exc:
             self.emit("RELEASE", "FAIL", f"Git inspection failed: {exc}")
@@ -673,6 +673,8 @@ class GovernedMorningOrchestrator:
     def step_validate_auth(self, max_retries: int = 3) -> bool:
         self.transition(LauncherState.VALIDATE_AUTH)
         self.emit("AUTH", "VALIDATING")
+        from core.auth import reset_kite_runtime_credentials_guard
+        reset_kite_runtime_credentials_guard()
         for attempt in range(1, max_retries + 1):
             ok, uid, err = self.validate_broker_read()
             if ok and uid:

@@ -161,6 +161,27 @@ def test_shutdown_completes_and_rejects_writes_after_shutdown(monkeypatch, tmp_p
         tick_store.set_replay_pressure_read_flush_enabled(True)
 
 
+def test_request_shutdown_closes_admission_before_drain_wait(monkeypatch, tmp_path):
+    _setup_isolated_tick_store(monkeypatch, tmp_path)
+    try:
+        tick_store.set_replay_pressure_immediate_flush_enabled(False)
+        tick_store.set_replay_pressure_read_flush_enabled(False)
+        assert tick_store.insert_tick(time.time(), 9100, 91.0, 1, 1) is True
+        tick_store.request_persistence_shutdown()
+        assert tick_store.insert_tick(time.time(), 9101, 92.0, 1, 1) is False
+
+        result = tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
+        assert result["status"] == "COMPLETE_DRAIN"
+        assert result["rows_enqueued"] == 1
+        assert result["rows_committed"] == 1
+        assert result["pending_writes"] == 0
+        assert result["writes_rejected_after_shutdown"] == 1
+    finally:
+        tick_store.reset_audit_counters()
+        tick_store.set_replay_pressure_immediate_flush_enabled(True)
+        tick_store.set_replay_pressure_read_flush_enabled(True)
+
+
 def test_shutdown_times_out_then_completes_on_retry(monkeypatch, tmp_path):
     _setup_isolated_tick_store(monkeypatch, tmp_path)
     try:

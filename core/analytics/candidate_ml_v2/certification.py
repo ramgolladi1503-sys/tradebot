@@ -10,6 +10,7 @@ from sklearn.metrics import brier_score_loss, roc_auc_score
 from .contracts import SAFETY_CONTRACT, SCHEMA_VERSION, CandidateMLConfig, PredictionStatus
 from .dataset import (
     chronological_split,
+    eligible_training_rows,
     feature_columns,
     purged_walk_forward_splits,
     semantic_dataset_hash,
@@ -79,6 +80,9 @@ def _nested_model(
     *,
     features: Sequence[str] | None = None,
 ) -> CandidateMLBundle:
+    train_frame = eligible_training_rows(train_frame)
+    if train_frame.empty:
+        raise ValueError("candidate_dataset_no_eligible_training_labels")
     inner_train, inner_validation = chronological_split(train_frame, model_config)
     selected_features = list(features or feature_columns(inner_train))
     if not selected_features:
@@ -154,13 +158,34 @@ def _score_frame(bundle: CandidateMLBundle, frame: pd.DataFrame) -> pd.DataFrame
     rows: list[dict[str, Any]] = []
     for _, source in frame.iterrows():
         payload = source.to_dict()
+        feasibility_status = str(payload.get("execution_feasibility_status") or "UNKNOWN").upper()
+        raw_net_r = payload.get("future_net_r")
+        label_unavailable = feasibility_status in {"UNASSESSED", "ASSESSED_INFEASIBLE"}
+        if raw_net_r is None or pd.isna(raw_net_r):
+            label_unavailable = True
+        if label_unavailable:
+            rows.append(
+                {
+                    "event_id": str(payload.get("event_id") or ""),
+                    "session_date": str(payload.get("session_date") or ""),
+                    "target": 0,
+                    "future_net_r": np.nan,
+                    "execution_feasibility_status": feasibility_status,
+                    "ml_status": "LABEL_UNAVAILABLE",
+                    "probability": np.nan,
+                    "expected_value_r": np.nan,
+                    "selected": False,
+                }
+            )
+            continue
         prediction = bundle.predict(payload)
         rows.append(
             {
                 "event_id": str(payload.get("event_id") or ""),
                 "session_date": str(payload.get("session_date") or ""),
                 "target": int(payload.get("target") or 0),
-                "future_net_r": float(payload.get("future_net_r") or 0.0),
+                "future_net_r": float(raw_net_r),
+                "execution_feasibility_status": feasibility_status,
                 "ml_status": prediction.status.value,
                 "probability": prediction.probability,
                 "expected_value_r": prediction.expected_value_r,
@@ -171,7 +196,7 @@ def _score_frame(bundle: CandidateMLBundle, frame: pd.DataFrame) -> pd.DataFrame
 
 
 def _concentration(scored: pd.DataFrame) -> dict[str, float | None]:
-    selected = scored[scored["selected"]].copy()
+    selected = scored[scored["selected"]].dropna(subset=["future_net_r"]).copy()
     if selected.empty:
         return {
             "top_five_positive_contribution": None,
@@ -198,9 +223,10 @@ def _concentration(scored: pd.DataFrame) -> dict[str, float | None]:
 
 
 def _fold_metrics(scored: pd.DataFrame) -> dict[str, Any]:
-    selected = scored[scored["selected"]].copy()
+    labelled = scored.dropna(subset=["future_net_r"])
+    selected = scored[scored["selected"]].dropna(subset=["future_net_r"]).copy()
     probabilities = scored.dropna(subset=["probability"])
-    baseline_mean = float(scored["future_net_r"].mean()) if len(scored) else None
+    baseline_mean = float(labelled["future_net_r"].mean()) if len(labelled) else None
     selected_mean = float(selected["future_net_r"].mean()) if len(selected) else None
     lift = selected_mean - baseline_mean if selected_mean is not None and baseline_mean is not None else None
     ece = expected_calibration_error(
@@ -330,6 +356,7 @@ def certify_candidate_ml(
     model_config: CandidateMLConfig | None = None,
     certification_config: CandidateMLCertificationConfig | None = None,
 ) -> dict[str, Any]:
+    research_df = eligible_training_rows(research_df)
     validate_candidate_dataset(research_df)
     model_cfg = model_config or CandidateMLConfig()
     cert_cfg = certification_config or CandidateMLCertificationConfig()

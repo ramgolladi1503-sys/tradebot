@@ -430,14 +430,19 @@ class DepthStore:
         """Expose institutional-grade accounting invariant metrics."""
         return self.persistence_state()
 
-    def shutdown_persistence(self, deadline_seconds: float = 2.0) -> dict:
-        with self._persist_lock:
-            self._persist_shutdown = True
+    def request_persistence_shutdown(self) -> None:
+        """Close depth-write admission and wake the worker without waiting."""
+        with self._persist_admission_lock:
+            with self._persist_lock:
+                self._persist_shutdown = True
         self._persist_wakeup.set()
+        self._persist_stop.set()
+
+    def shutdown_persistence(self, deadline_seconds: float = 2.0) -> dict:
+        self.request_persistence_shutdown()
         deadline = time.monotonic() + max(0.0, float(deadline_seconds))
         while self._persist_queue.unfinished_tasks and time.monotonic() < deadline:
             time.sleep(0.01)
-        self._persist_stop.set()
         self._persist_thread.join(max(0.0, deadline - time.monotonic()))
         state = self.persistence_state()
         state["complete"] = state["queue_depth"] == 0 and not state["worker_alive"]

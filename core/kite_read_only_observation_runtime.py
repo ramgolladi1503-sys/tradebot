@@ -312,6 +312,11 @@ def write_meg_wiring_evidence(
         producer_commit=producer_commit,
     )
     from core.meg_request_scoped_causality import append_meg_cycle_primitives
+    effective_cutoff_epoch = (
+        max(float(cycle_cutoff_epoch), time.time())
+        if cycle_cutoff_epoch is not None
+        else None
+    )
     append_meg_cycle_primitives(
         output_path.parent,
         session_id=resolved_run_id,
@@ -319,11 +324,18 @@ def write_meg_wiring_evidence(
         cycle_id=str(payload.get("source_interval_identity") or f"{resolved_session}:{cycle_count}"),
         accepted=bool(getattr(result, "exported", False)),
         subscription_evidence=dict(payload.get("subscription_evidence") or {}),
-        cycle_cutoff_epoch=cycle_cutoff_epoch,
+        cycle_cutoff_epoch=effective_cutoff_epoch,
     )
     payload.update(_measured_meg_facts(bridge=bridge, result=result))
-    payload["market_event_graph_traversal_count"] = int(payload.get("cumulative_session_export_count") or 0)
-    payload["market_event_graph_traversal"] = payload["market_event_graph_traversal_count"] > 0
+    cumulative_export_count = payload.get("cumulative_session_export_count")
+    payload["market_event_graph_traversal_count"] = (
+        int(cumulative_export_count) if cumulative_export_count is not None else None
+    )
+    payload["market_event_graph_traversal"] = (
+        payload["market_event_graph_traversal_count"] > 0
+        if payload["market_event_graph_traversal_count"] is not None
+        else None
+    )
     write_json_atomic(output_path, payload)
     return payload
 
@@ -402,6 +414,12 @@ class ObservationLifecycle:
             import core.feed.runtime_store as runtime_store
             bridge_module = __import__("core.market_event_graph_live_runtime_bridge", fromlist=["flush_live_source_bridge"])
             self.phase = "IN_FLIGHT_CALLBACKS_SETTLED"
+            # Close every persistence admission and wake all drain workers before
+            # any bridge flush, queue polling, sleep, or worker join can consume
+            # the single shared shutdown deadline.
+            tick_store.request_persistence_shutdown()
+            depth_store.depth_store.request_persistence_shutdown()
+            runtime_store.request_runtime_persistence_shutdown()
             bridge_result = bridge_module.flush_live_source_bridge()
             self.phase = "MEG_FLUSHED"
             self.phase = "PERSISTENCE_DRAINING"
@@ -557,8 +575,9 @@ def _bind_storage_environment_and_depth_store(
 
 
 def _run_observation_impl(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None, broker_api_ledger: ReadOnlyBrokerApiLedger) -> int:
-    from core.runtime_storage_authority import StorageAuthorityError, establish, revalidate
-    storage_authority = establish(volume=Path("/Volumes/TradeBotData"), runtime_root=output_root)
+    from core.runtime_storage_authority import StorageAuthorityError, establish, revalidate, resolve_storage_volume
+    vol = resolve_storage_volume(output_root)
+    storage_authority = establish(volume=vol, runtime_root=output_root)
     env = safe_environment()
     contract = safety_contract(env, child_command=[sys.executable, "-B", "core.kite_read_only_observation_runtime.py"])
     contract.update(broker_api_ledger.safety_fields())

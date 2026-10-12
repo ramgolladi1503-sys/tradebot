@@ -167,6 +167,12 @@ class LiveSourceRuntimeBridge:
                 diagnostic_context = {
                     "bar_interval_mismatch": snapshot_audit,
                 }
+            elif snapshot_reason == SNAPSHOT_TIMED_OUT:
+                diagnostic_context = {
+                    "snapshot_completion": snapshot_audit,
+                    "missing_identities": list(rejected),
+                    "completion_grace_ms": snapshot_audit.get("completion_grace_ms"),
+                }
             return self._reject(
                 snapshot_reason,
                 latency_ms=latency_ms,
@@ -183,7 +189,15 @@ class LiveSourceRuntimeBridge:
             return self._reject("SNAPSHOT_FRESHNESS_CONFIG_INVALID", latency_ms=latency_ms, identities=(), audit=subscription)
         snapshot_age = float(snapshot["observed_at_epoch"]) - float(snapshot["source_bar_end_epoch"])
         if snapshot_age < 0.0 or snapshot_age > max_freshness_sec:
-            return self._reject("SNAPSHOT_STALE", latency_ms=latency_ms, identities=(), audit=subscription)
+            return self._reject(
+                "SNAPSHOT_STALE", latency_ms=latency_ms, identities=(), audit=subscription,
+                diagnostic_context={
+                    "observed_at_epoch": float(snapshot["observed_at_epoch"]),
+                    "source_bar_end_epoch": float(snapshot["source_bar_end_epoch"]),
+                    "source_age_sec": snapshot_age,
+                    "max_age_sec": max_freshness_sec,
+                },
+            )
         stale_tick_context, stale_tick_symbols, stale_tick_reason = _source_tick_freshness_failure(
             snapshot, max_age_sec=max_freshness_sec
         )
@@ -473,7 +487,12 @@ class LiveSourceRuntimeBridge:
                     float(self._metrics["meg_completion_latency_ms"]),
                     max(0.0, time.monotonic() - started) * 1000.0,
                 )
-                return None, SNAPSHOT_TIMED_OUT, result[2], {}
+                return None, SNAPSHOT_TIMED_OUT, result[2], {
+                    "last_incomplete_audit": dict(result[3] or {}),
+                    "missing_identities": list(result[2]),
+                    "waited_ms": round(max(0.0, time.monotonic() - started) * 1000.0, 3),
+                    "completion_grace_ms": grace_ms,
+                }
             time.sleep(min(0.025, remaining))
 
     def _assemble_snapshot_once(
@@ -485,7 +504,15 @@ class LiveSourceRuntimeBridge:
     ) -> tuple[dict[str, Any] | None, str, tuple[str, ...], dict[str, Any]]:
         index_bar = self._completed_bar_for(contract.index_symbol, cycle_cutoff=cycle_cutoff)
         if index_bar is None:
-            return None, SNAPSHOT_INCOMPLETE, (contract.index_symbol,), {}
+            missing = [contract.index_symbol]
+            for spec in contract.constituents:
+                symbol = str(spec["symbol"]).upper()
+                if self._completed_bar_for(symbol, cycle_cutoff=cycle_cutoff) is None:
+                    missing.append(symbol)
+            return None, SNAPSHOT_INCOMPLETE, tuple(missing), {
+                "missing_identities": missing,
+                "index_bar_available": False,
+            }
         index_end = _bar_end_epoch(index_bar)
         if index_end is None:
             return None, INDEX_INTERVAL_MISALIGNED, (contract.index_symbol,), {
@@ -516,12 +543,24 @@ class LiveSourceRuntimeBridge:
         if not ok:
             return None, reason, (contract.index_symbol,), {}
 
-        constituent_bars: list[dict[str, Any]] = []
+        constituent_inputs: list[tuple[str, Mapping[str, Any], int]] = []
+        missing_constituents: list[str] = []
         for spec in contract.constituents:
             symbol = str(spec["symbol"]).upper()
             bar = self._completed_bar_for(symbol, cycle_cutoff=cycle_cutoff)
             if bar is None:
-                return None, SNAPSHOT_INCOMPLETE, (symbol,), {}
+                missing_constituents.append(symbol)
+                continue
+            constituent_inputs.append((symbol, bar, int(spec["instrument_token"])))
+        if missing_constituents:
+            return None, SNAPSHOT_INCOMPLETE, tuple(missing_constituents), {
+                "missing_identities": missing_constituents,
+                "index_bar_available": True,
+                "index_bar_end_epoch": float(index_end),
+            }
+
+        constituent_bars: list[dict[str, Any]] = []
+        for symbol, bar, instrument_token in constituent_inputs:
             end_epoch = _bar_end_epoch(bar)
             if end_epoch != index_end:
                 return None, INDEX_INTERVAL_MISALIGNED, (symbol,), {
@@ -539,7 +578,7 @@ class LiveSourceRuntimeBridge:
             ok, reason = _bar_has_live_provenance(
                 bar,
                 expected_symbol=symbol,
-                expected_token=int(spec["instrument_token"]),
+                expected_token=instrument_token,
                 contract=contract,
                 subscription=subscription,
             )
@@ -547,7 +586,7 @@ class LiveSourceRuntimeBridge:
                 return None, reason, (symbol,), {}
             bar = dict(bar)
             bar["symbol"] = symbol
-            bar["instrument_token"] = int(spec["instrument_token"])
+            bar["instrument_token"] = instrument_token
             bar["source_bar_end_epoch"] = float(index_end)
             bar["completed"] = True
             constituent_bars.append(bar)

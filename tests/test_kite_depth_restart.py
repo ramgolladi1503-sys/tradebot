@@ -6,6 +6,9 @@ from core.feed_recovery_coordinator import FeedRecoveryCoordinator
 from config import config as cfg
 import json
 import pytest
+import threading
+
+_REAL_THREAD = threading.Thread
 
 @pytest.fixture(autouse=True)
 def mock_check_socket_health(monkeypatch):
@@ -56,9 +59,11 @@ def _reset_ws_runtime_state(monkeypatch):
         "_INTENDED_TOKEN_COUNT": 0,
         "_RUNTIME_STATE": "STOPPED",
         "_LAST_RUNTIME_ERROR": "",
+        "_CALLBACK_UNREADY_REASON": "",
         "_LAST_FULL_RESTART_EPOCH": 0.0,
         "_FULL_RESTARTS": [],
         "_FEED_HEALTH_DURATION_STATE": None,
+        "_LAST_RESTART_VERIFY_BLOCK_LOG_EPOCH": 0.0,
     }.items():
         monkeypatch.setattr(ws, name, value, raising=False)
     monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False, raising=False)
@@ -90,6 +95,202 @@ def _reset_ws_runtime_state(monkeypatch):
 
     monkeypatch.setattr(ws.threading, "Thread", _NoopThread, raising=True)
     ws._reset_feed_restart_verification(reason="unit_test_reset")
+
+
+def test_socket_factory_failure_does_not_poison_callback_owner_and_retry_succeeds(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+
+    class _RestClient:
+        def profile(self):
+            return {"user_id": "ABCD1234"}
+
+    class _FakeTicker:
+        def connect(self, threaded=True):
+            assert threaded is True
+
+    calls = {"factory": 0}
+
+    def ticker_factory(**_kwargs):
+        calls["factory"] += 1
+        if calls["factory"] == 1:
+            raise RuntimeError("transient factory failure")
+        return _FakeTicker()
+
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "runtime.sqlite"), raising=False)
+    monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
+    monkeypatch.setattr(cfg, "KITE_API_KEY", "test_key", raising=False)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "KiteTicker", object(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_ticker", ticker_factory, raising=True)
+    monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=True)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: _RestClient(), raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
+    monkeypatch.setattr(ws, "_log_ws", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ws, "_persist_runtime_snapshot_row", lambda **_kwargs: None)
+    monkeypatch.setattr(ws.lifecycle, "register", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(RuntimeError, match="transient factory failure"):
+        ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+
+    assert ws._CALLBACK_UNREADY_REASON == ""
+    assert ws._RUNTIME_STATE == "SUBSCRIBE_FAILED"
+    assert ws._CALLBACK_COORDINATOR.state.value == "running"
+    assert ws.start_depth_ws([101], skip_lock=True, skip_guard=True) is True
+    assert calls["factory"] == 2
+    assert ws._CALLBACK_UNREADY_REASON == ""
+
+
+@pytest.mark.parametrize("state", ["PENDING", "FAILED"])
+def test_restart_verification_state_blocks_restart_before_side_effects(monkeypatch, state):
+    events = []
+    calls = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 2], raising=False)
+    monkeypatch.setattr(ws, "_resubscribe_token_selection", lambda: calls.append("resolve"))
+    monkeypatch.setattr(ws, "append_feed_forensic_event", lambda *a, **k: calls.append("forensic"))
+    monkeypatch.setattr(ws, "stop_depth_ws", lambda **_kwargs: calls.append("stop"))
+    monkeypatch.setattr(ws, "start_depth_ws", lambda *a, **k: calls.append("start"))
+    monkeypatch.setattr(ws, "_persist_runtime_snapshot_row", lambda **_kwargs: calls.append("snapshot"))
+    monkeypatch.setattr(ws, "_restart_verification_enabled", lambda: True)
+
+    with ws._RESTART_VERIFY_LOCK:
+        ws._FEED_RESTART_VERIFY_STATE = state
+        ws._FEED_RESTART_VERIFY_REASON = "prior_restart"
+        ws._FEED_RESTART_VERIFY_FAILURE_DETAIL = "verification_timeout" if state == "FAILED" else ""
+        ws._FEED_RESTART_VERIFY_DEADLINE_EPOCH = 1234.0
+
+    assert ws.restart_depth_ws(reason="retry", ignore_cooldown=True, force_full_restart=True) is False
+    assert ws._schedule_restart_depth_ws(
+        reason="watchdog_retry", ignore_cooldown=True, force_full_restart=True, source="test"
+    ) is False
+    assert calls == []
+    blocked = [(event, payload) for event, payload in events if event == "FEED_RESTART_BLOCKED_BY_VERIFICATION"]
+    assert blocked
+    assert blocked[0][1]["verification_state"] == state
+    assert blocked[0][1]["read_only"] is True
+    assert blocked[0][1]["is_order_action"] is False
+    assert blocked[0][1]["broker_api_called"] is False
+    assert blocked[0][1]["allowed_for_live_execution"] is False
+
+
+def test_restart_verification_block_preserves_auth_latch_priority(monkeypatch):
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append(event))
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", True, raising=False)
+    monkeypatch.setattr(ws, "_restart_verification_enabled", lambda: True)
+    with ws._RESTART_VERIFY_LOCK:
+        ws._FEED_RESTART_VERIFY_STATE = "PENDING"
+
+    assert ws.restart_depth_ws(reason="auth_latched") is False
+    assert "FEED_RESTART_BLOCKED_AUTH_REQUIRED" in events
+    assert "FEED_RESTART_BLOCKED_BY_VERIFICATION" not in events
+
+
+def test_failed_restart_verification_can_recover_from_fresh_proof(monkeypatch):
+    monkeypatch.setattr(ws, "_restart_verification_enabled", lambda: True)
+    monkeypatch.setattr(ws, "_restart_verification_live_recovery_proof", lambda _now: (True, "live_recovery_ok", {}))
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    with ws._SOCKET_GENERATION_LOCK:
+        monkeypatch.setattr(ws, "_SOCKET_GENERATION", 30, raising=False)
+    with ws._RESTART_VERIFY_LOCK:
+        ws._FEED_RESTART_VERIFY_STATE = "FAILED"
+        ws._FEED_RESTART_VERIFY_SOCKET_GENERATION = 30
+        ws._FEED_RESTART_VERIFY_REASON = "previous_attempt"
+        ws._FEED_RESTART_VERIFY_START_EPOCH = 100.0
+        ws._FEED_RESTART_VERIFY_DEADLINE_EPOCH = 110.0
+        ws._FEED_RESTART_VERIFY_CONNECT_EPOCH = 100.1
+        ws._FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH = 100.2
+        ws._FEED_RESTART_VERIFY_FAILURE_DETAIL = "verification_timeout"
+
+    ws._tick_feed_restart_verification(now_epoch=120.0)
+    assert ws._restart_verification_restart_block() is None
+
+
+def test_snapshot_state_does_not_bypass_generation_checked_failed_verifier(monkeypatch):
+    monkeypatch.setattr(ws, "_restart_verification_enabled", lambda: True)
+    monkeypatch.setattr(ws, "_tick_feed_restart_verification", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        ws,
+        "_restart_verification_live_recovery_proof",
+        lambda _now: (_ for _ in ()).throw(AssertionError("snapshot path must not run a second proof")),
+    )
+    with ws._RESTART_VERIFY_LOCK:
+        ws._FEED_RESTART_VERIFY_STATE = "FAILED"
+        ws._FEED_RESTART_VERIFY_FAILURE_DETAIL = "verification_timeout"
+
+    effective, detail = ws._effective_runtime_state_for_snapshot("RUNNING", now_epoch=120.0)
+
+    assert effective == "RESTART_VERIFY_FAILED"
+    assert detail == "verification_timeout"
+    assert ws._FEED_RESTART_VERIFY_STATE == "FAILED"
+
+
+def test_failed_verifier_is_polled_while_recovery_latch_remains_set(monkeypatch):
+    monkeypatch.setattr(ws, "_restart_verification_enabled", lambda: True)
+    monkeypatch.setattr(ws, "_restart_verification_live_recovery_proof", lambda _now: (True, "live_recovery_ok", {}))
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: 120.0)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "causal_recovery_required", raising=False)
+    with ws._SOCKET_GENERATION_LOCK:
+        monkeypatch.setattr(ws, "_SOCKET_GENERATION", 31, raising=False)
+    with ws._RESTART_VERIFY_LOCK:
+        ws._FEED_RESTART_VERIFY_STATE = "FAILED"
+        ws._FEED_RESTART_VERIFY_SOCKET_GENERATION = 31
+        ws._FEED_RESTART_VERIFY_REASON = "previous_attempt"
+        ws._FEED_RESTART_VERIFY_START_EPOCH = 100.0
+        ws._FEED_RESTART_VERIFY_DEADLINE_EPOCH = 110.0
+        ws._FEED_RESTART_VERIFY_CONNECT_EPOCH = 100.1
+        ws._FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH = 100.2
+        ws._FEED_RESTART_VERIFY_FAILURE_DETAIL = "verification_timeout"
+
+    ws._watchdog_tick_restart_verification_while_blocked()
+
+    assert ws._FEED_RESTART_VERIFY_STATE == "OK"
+    assert ws._RECONNECT_BLOCKED_REASON == "causal_recovery_required"
+    assert ws._restart_verification_restart_block() is None
+
+
+def test_soft_resubscribe_rechecks_verification_after_token_selection(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ws, "_restart_verification_enabled", lambda: True)
+    monkeypatch.setattr(ws, "get_current_feed_session_identity", lambda: {})
+    monkeypatch.setattr(ws, "append_feed_forensic_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_KITE_TICKER", object(), raising=False)
+    monkeypatch.setattr(ws, "_use_native_reconnect", lambda: True)
+    monkeypatch.setattr(ws, "_ws_connected_state", lambda: True)
+    monkeypatch.setattr(ws, "_tick_option_feed_verification", lambda **_kwargs: None)
+    monkeypatch.setattr(ws, "_attempt_causal_ws1006_recovery_clear", lambda **_kwargs: None)
+    monkeypatch.setattr(ws, "_soft_resubscribe_eligibility", lambda **kwargs: (True, "eligible"))
+    monkeypatch.setattr(ws, "_soft_resubscribe_current", lambda **kwargs: calls.append("mutate") or True)
+
+    def _transition_during_token_selection():
+        with ws._RESTART_VERIFY_LOCK:
+            ws._FEED_RESTART_VERIFY_STATE = "PENDING"
+        return [1], {}
+
+    monkeypatch.setattr(ws, "_resubscribe_token_selection", _transition_during_token_selection)
+
+    assert ws.restart_depth_ws(reason="racing_soft_restart") is False
+    assert calls == []
+
+
+@pytest.mark.parametrize(("state", "enabled"), [("IDLE", True), ("OK", True), ("PENDING", False)])
+def test_restart_verification_gate_preserves_idle_ok_and_disabled_compatibility(monkeypatch, state, enabled):
+    calls = []
+    monkeypatch.setattr(ws, "_restart_verification_enabled", lambda: enabled)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "get_current_feed_session_identity", lambda: {})
+    monkeypatch.setattr(ws, "append_feed_forensic_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_resubscribe_token_selection", lambda: (calls.append("resolve") or ([], {})))
+    with ws._RESTART_VERIFY_LOCK:
+        ws._FEED_RESTART_VERIFY_STATE = state
+
+    assert ws.restart_depth_ws(reason="compatibility_check") is False
+    assert calls == ["resolve"]
 
 
 def _read_feed_runtime_latest(tmp_path):
@@ -217,6 +418,9 @@ def test_restart_respects_cooldown(monkeypatch):
 
 
 def test_restart_ignore_cooldown_allows_immediate_restart(monkeypatch):
+    # This test isolates cooldown override behavior; restart verification is
+    # covered separately and intentionally blocks while its state is PENDING.
+    monkeypatch.setattr(cfg, "FEED_RESTART_VERIFY_ENABLE", False, raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
     monkeypatch.setattr(ws, "_FULL_RESTARTS", [], raising=False)
     monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
@@ -1548,6 +1752,12 @@ def test_restart_verification_pending_when_start_handoff_succeeds_but_no_connect
 
     def _start(tokens, profile_verified=False, **kwargs):
         ws._DEPTH_WS_START_EPOCH = 1000.0
+        ws._begin_feed_restart_verification(
+            reason=str(kwargs.get("restart_verification_reason") or "test"),
+            start_epoch=1000.0,
+            now_epoch=1000.0,
+            socket_generation=ws._current_socket_generation(),
+        )
         return True
 
     monkeypatch.setattr(ws, "start_depth_ws", _start)
@@ -1601,9 +1811,11 @@ def test_restart_verification_emits_verified_ok_only_after_connect_subscribe_and
     monkeypatch.setattr(ws, "_ws_connected_state", lambda: True, raising=False)
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
 
-    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0)
-    ws._record_feed_restart_verify_connect(now_epoch=1000.5)
-    ws._record_feed_restart_verify_subscribe(now_epoch=1000.6)
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 20, raising=False)
+    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0, socket_generation=20)
+    ws._record_feed_restart_verify_connect(now_epoch=1000.5, socket_generation=20)
+    ws._record_feed_restart_verify_subscribe(now_epoch=1000.6, socket_generation=20)
+    ws._record_feed_restart_verify_tick(token=101, receipt_epoch=1000.7, socket_generation=20)
 
     ws._write_feed_runtime_snapshot(
         now_epoch=1001.0,
@@ -1651,7 +1863,8 @@ def test_restart_verification_timeout_emits_failed_and_blocks(monkeypatch, tmp_p
     monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 1000.0, raising=False)
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
 
-    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0)
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 20, raising=False)
+    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0, socket_generation=20)
 
     ws._write_feed_runtime_snapshot(
         now_epoch=1002.0,
@@ -1668,10 +1881,13 @@ def test_restart_verification_timeout_emits_failed_and_blocks(monkeypatch, tmp_p
         state_machine={"state": "LIVE", "reason": "ticks_flowing"},
         runtime_state="RUNNING",
         last_error="",
+        restart_attempt_allowed=True,
     )
 
     payload = _read_feed_runtime_latest(tmp_path)
     assert payload["runtime_state"] == "RESTART_VERIFY_FAILED"
+    assert payload["restart_attempt_allowed"] is False
+    assert payload["restart_attempted"] is False
     assert "FEED_RESTART_VERIFY_FAILED" in [event for event, _payload in events]
     ws._reset_feed_restart_verification(reason="unit_test_teardown")
 
@@ -1700,9 +1916,20 @@ def test_restart_verification_failed_state_can_recover_after_fresh_proof(monkeyp
     monkeypatch.setattr(ws, "_ws_connected_state", lambda: True, raising=False)
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
 
-    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0)
-    monkeypatch.setattr(ws, "_FEED_RESTART_VERIFY_STATE", "FAILED", raising=False)
-    monkeypatch.setattr(ws, "_FEED_RESTART_VERIFY_FAILURE_DETAIL", "timeout", raising=False)
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 20, raising=False)
+    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0, socket_generation=20)
+    ws._tick_feed_restart_verification(now_epoch=1001.0)
+    assert ws._FEED_RESTART_VERIFY_STATE == "FAILED"
+
+    # A timeout before lifecycle evidence must remain latched until callbacks
+    # from the still-active socket and a fresh option-feed proof arrive. No
+    # manual FAILED -> PENDING state transition is allowed or needed.
+    ws._record_feed_restart_verify_connect(socket_generation=20, now_epoch=1001.0)
+    ws._record_feed_restart_verify_subscribe(socket_generation=20, now_epoch=1002.0)
+    ws._record_feed_restart_verify_tick(token=101, receipt_epoch=1002.5, socket_generation=20)
+    assert ws._FEED_RESTART_VERIFY_STATE == "FAILED"
+    assert ws._FEED_RESTART_VERIFY_CONNECT_EPOCH == 1001.0
+    assert ws._FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH == 1002.0
 
     ws._write_feed_runtime_snapshot(
         now_epoch=1003.0,
@@ -1750,9 +1977,10 @@ def test_restart_subscription_verification_does_not_clear_ws1006_recovery_blocke
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RECOVERY_BLOCKED", raising=False)
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
 
-    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0)
-    ws._record_feed_restart_verify_connect(now_epoch=1000.5)
-    ws._record_feed_restart_verify_subscribe(now_epoch=1000.6)
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 20, raising=False)
+    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0, socket_generation=20)
+    ws._record_feed_restart_verify_connect(now_epoch=1000.5, socket_generation=20)
+    ws._record_feed_restart_verify_subscribe(now_epoch=1000.6, socket_generation=20)
 
     monkeypatch.setattr(
         ws,
@@ -1805,9 +2033,10 @@ def test_restart_verification_does_not_call_broker_or_order_paths(monkeypatch, t
     monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 1000.0, raising=False)
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
 
-    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0)
-    ws._record_feed_restart_verify_connect(now_epoch=1000.5)
-    ws._record_feed_restart_verify_subscribe(now_epoch=1000.6)
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 20, raising=False)
+    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0, socket_generation=20)
+    ws._record_feed_restart_verify_connect(now_epoch=1000.5, socket_generation=20)
+    ws._record_feed_restart_verify_subscribe(now_epoch=1000.6, socket_generation=20)
 
     ws._write_feed_runtime_snapshot(
         now_epoch=1001.0,
@@ -1826,6 +2055,347 @@ def test_restart_verification_does_not_call_broker_or_order_paths(monkeypatch, t
         last_error="",
     )
     ws._reset_feed_restart_verification(reason="unit_test_teardown")
+
+
+def _prepare_restart_verification_race(monkeypatch):
+    monkeypatch.setattr(cfg, "FEED_RESTART_VERIFY_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_VERIFY_REQUIRE_MARKET_OPEN", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_VERIFY_TIMEOUT_SEC", 1.0, raising=False)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    ws._reset_feed_restart_verification(reason="race_test_setup")
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 10, raising=False)
+    ws._begin_feed_restart_verification(
+        reason="old_generation", start_epoch=1000.0, now_epoch=1000.0, socket_generation=10
+    )
+    ws._record_feed_restart_verify_connect(now_epoch=1000.1, socket_generation=10)
+    ws._record_feed_restart_verify_subscribe(now_epoch=1000.2, socket_generation=10)
+
+
+def test_old_socket_callback_cannot_record_connect_for_new_restart_verification(monkeypatch):
+    _prepare_restart_verification_race(monkeypatch)
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 11, raising=False)
+    ws._begin_feed_restart_verification(
+        reason="new_socket_generation", start_epoch=2000.0, now_epoch=2000.0, socket_generation=11
+    )
+
+    # Models a callback that passed its socket-current check, was paused, then
+    # resumed only after a newer socket/verifier generation became active.
+    ws._record_feed_restart_verify_connect(now_epoch=2000.1, socket_generation=10)
+
+    assert ws._FEED_RESTART_VERIFY_STATE == "PENDING"
+    assert ws._FEED_RESTART_VERIFY_REASON == "new_socket_generation"
+    assert ws._FEED_RESTART_VERIFY_CONNECT_EPOCH is None
+
+
+def test_delayed_old_tick_callback_cannot_satisfy_new_restart_verification(monkeypatch):
+    _prepare_restart_verification_race(monkeypatch)
+    monkeypatch.setattr(cfg, "FEED_RESTART_VERIFY_ENABLE", True, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101], raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_ws_connected_state", lambda: True)
+    monkeypatch.setattr(ws, "_option_runtime_state", lambda **_kwargs: {
+        "subscribed_count_by_symbol": {"NIFTY": 1},
+        "feed_block_reason_by_symbol": {},
+        "option_count": 1,
+    })
+    monkeypatch.setattr(cfg, "FEED_RESTART_VERIFY_MIN_TICKS_PER_SYMBOL", 1, raising=False)
+    monkeypatch.setattr(cfg, "MAX_DEPTH_AGE_SEC", 5.0, raising=False)
+
+    # Model a callback that passed its wrapper check before cutover and then
+    # reached the delegate with its captured old generation.
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 11, raising=False)
+    ws._begin_feed_restart_verification(
+        reason="new_socket_generation", start_epoch=2000.0, now_epoch=2000.0, socket_generation=11
+    )
+    ws._record_feed_restart_verify_connect(now_epoch=2000.1, socket_generation=11)
+    ws._record_feed_restart_verify_subscribe(now_epoch=2000.2, socket_generation=11)
+
+    previous_last_ws_tick_epoch = ws._LAST_WS_TICK_EPOCH
+    previous_token_receipt = dict(ws._LAST_MSG_TS_BY_TOKEN)
+    ws.on_ticks(None, [{"instrument_token": 101, "last_price": 100.0}], socket_generation=10)
+    assert ws._FEED_RESTART_VERIFY_STATE in {"PENDING", "FAILED"}
+    assert ws._FEED_RESTART_VERIFY_TICK_EPOCH_BY_TOKEN == {}
+    assert ws._LAST_WS_TICK_EPOCH == previous_last_ws_tick_epoch
+    assert ws._LAST_MSG_TS_BY_TOKEN == previous_token_receipt
+
+    ws._tick_feed_restart_verification(now_epoch=2000.3)
+    assert ws._FEED_RESTART_VERIFY_STATE in {"PENDING", "FAILED"}
+    assert ws._FEED_RESTART_VERIFY_STATE != "OK"
+    assert ws._FEED_RESTART_VERIFY_VERIFIED_EPOCH is None
+
+
+def test_socket_cutover_and_tick_callback_do_not_invert_locks(monkeypatch):
+    import threading
+
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION_LOCK", threading.RLock())
+    monkeypatch.setattr(ws, "_KITE_TICKER_LOCK", threading.Lock())
+    assert not ws._KITE_TICKER_LOCK.locked()
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 40, raising=False)
+    monkeypatch.setattr(ws, "_KITE_TICKER", type("Ticker", (), {"is_connected": lambda self: True})(), raising=False)
+    start_has_ticker_lock = threading.Event()
+    start_thread_entered = threading.Event()
+    release_ticker_lock = threading.Event()
+    callback_entered_process = threading.Event()
+    callback_results = []
+    start_results = []
+    thread_errors = []
+
+    def fake_process(_ws, _ticks, *, socket_generation, callback_sequence=None, callback_receive_epoch=None):
+        callback_entered_process.set()
+        callback_results.append(ws._ws_connected_state())
+
+    monkeypatch.setattr(ws, "_process_on_ticks", fake_process)
+
+    def start_path():
+        try:
+            start_thread_entered.set()
+            with ws._KITE_TICKER_LOCK:
+                start_has_ticker_lock.set()
+                assert release_ticker_lock.wait(timeout=3.0)
+            start_results.append(ws._advance_socket_generation())
+        except BaseException as exc:
+            thread_errors.append(exc)
+
+    start_thread = _REAL_THREAD(target=start_path, daemon=True)
+    start_thread.start()
+    assert start_thread_entered.wait(timeout=2.0)
+    assert start_has_ticker_lock.wait(timeout=2.0), repr(thread_errors)
+
+    callback_thread = _REAL_THREAD(
+        target=lambda: ws.on_ticks(None, [{"instrument_token": 101, "last_price": 100.0}], socket_generation=40),
+        daemon=True,
+    )
+    callback_thread.start()
+    assert callback_entered_process.wait(timeout=2.0)
+
+    # Callback holds generation lock and queries ticker health while startup
+    # owns the ticker lock. Startup must release ticker before advancing socket.
+    release_ticker_lock.set()
+    callback_thread.join(timeout=2.0)
+    start_thread.join(timeout=2.0)
+
+    assert not callback_thread.is_alive()
+    assert not start_thread.is_alive()
+    assert callback_results == [True]
+    assert start_results == [41]
+    assert ws._current_socket_generation() == 41
+
+
+def test_subscription_mutation_and_tick_callback_do_not_invert_locks(monkeypatch):
+    import threading
+
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION_LOCK", threading.RLock())
+    monkeypatch.setattr(ws, "_KITE_TICKER_LOCK", threading.Lock())
+    monkeypatch.setattr(ws, "_SOCKET_START_LOCK", threading.RLock())
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 50, raising=False)
+    callback_holds_generation = threading.Event()
+    allow_callback_health_check = threading.Event()
+    subscription_generation_snapshot_started = threading.Event()
+    thread_errors = []
+
+    class FakeTicker:
+        MODE_FULL = "full"
+
+        def is_connected(self):
+            return True
+
+        def subscribe(self, _tokens):
+            return None
+
+        def set_mode(self, _mode, _tokens):
+            return None
+
+    monkeypatch.setattr(ws, "_KITE_TICKER", FakeTicker(), raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [], raising=False)
+    monkeypatch.setattr(ws, "_can_mutate_ws_subscriptions", lambda **_kwargs: (True, "", {}))
+    monkeypatch.setattr(ws, "_client_mode_for_token", lambda *_args: "full")
+    monkeypatch.setattr(ws, "_record_ws_subscription_operation", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ws, "_record_subscription_request_succeeded", lambda _tokens: None)
+    monkeypatch.setattr(ws, "_record_mode_request_succeeded", lambda _tokens: None)
+    monkeypatch.setattr(ws, "_log_ws", lambda *_args, **_kwargs: None)
+    original_generation_snapshot = ws._current_socket_generation
+
+    def observed_generation_snapshot():
+        subscription_generation_snapshot_started.set()
+        return original_generation_snapshot()
+
+    monkeypatch.setattr(ws, "_current_socket_generation", observed_generation_snapshot)
+
+    def fake_process(_ws, _ticks, *, socket_generation, callback_sequence=None, callback_receive_epoch=None):
+        callback_holds_generation.set()
+        if not allow_callback_health_check.wait(timeout=3.0):
+            raise AssertionError("callback health check was not released")
+        assert ws._ws_connected_state() is True
+
+    monkeypatch.setattr(ws, "_process_on_ticks", fake_process)
+
+    def invoke_callback():
+        try:
+            ws.on_ticks(None, [{"instrument_token": 101, "last_price": 100.0}], socket_generation=50)
+        except BaseException as exc:
+            thread_errors.append(exc)
+
+    def invoke_subscription():
+        try:
+            assert ws.ensure_subscribed_tokens([101], reason="lock_order_test") is True
+        except BaseException as exc:
+            thread_errors.append(exc)
+
+    callback_thread = _REAL_THREAD(target=invoke_callback, daemon=True)
+    callback_thread.start()
+    assert callback_holds_generation.wait(timeout=2.0)
+    subscription_thread = _REAL_THREAD(target=invoke_subscription, daemon=True)
+    subscription_thread.start()
+    assert subscription_generation_snapshot_started.wait(timeout=2.0)
+
+    # The subscription path is waiting for the generation snapshot while the
+    # callback owns that lock. It must not already own the ticker lock.
+    allow_callback_health_check.set()
+    callback_thread.join(timeout=2.0)
+    subscription_thread.join(timeout=2.0)
+
+    assert not callback_thread.is_alive()
+    assert not subscription_thread.is_alive()
+    assert thread_errors == []
+    assert ws._LAST_TOKENS == [101]
+
+
+def test_retired_socket_cannot_record_after_direct_socket_replacement(monkeypatch):
+    _prepare_restart_verification_race(monkeypatch)
+    monkeypatch.setattr(ws, "_FEED_RESTART_VERIFY_CONNECT_EPOCH", None, raising=False)
+
+    # The verifier still names generation 10, but a direct socket replacement
+    # has retired it without beginning a new restart-verification generation.
+    with ws._SOCKET_GENERATION_LOCK:
+        ws._SOCKET_GENERATION = 11
+    ws._record_feed_restart_verify_connect(now_epoch=1000.3, socket_generation=10)
+
+    assert ws._FEED_RESTART_VERIFY_STATE == "PENDING"
+    assert ws._FEED_RESTART_VERIFY_CONNECT_EPOCH is None
+
+
+def test_old_socket_stage_and_proof_cannot_verify_after_direct_replacement(monkeypatch):
+    _prepare_restart_verification_race(monkeypatch)
+    proof_entered = threading.Event()
+    release_proof = threading.Event()
+
+    def _blocked_success_proof(now_epoch):
+        proof_entered.set()
+        assert release_proof.wait(timeout=3.0)
+        return True, "old_socket_proved", {"socket_generation": 10}
+
+    monkeypatch.setattr(ws, "_restart_verification_proof", _blocked_success_proof)
+    worker = _REAL_THREAD(target=ws._tick_feed_restart_verification, kwargs={"now_epoch": 1000.5})
+    worker.start()
+    try:
+        assert proof_entered.wait(timeout=2.0)
+        with ws._SOCKET_GENERATION_LOCK:
+            monkeypatch.setattr(ws, "_SOCKET_GENERATION", 11, raising=False)
+            ws._invalidate_feed_restart_verification_for_socket_advance(socket_generation=11)
+    finally:
+        release_proof.set()
+        worker.join(timeout=3.0)
+
+    assert not worker.is_alive()
+    assert ws._FEED_RESTART_VERIFY_STATE == "FAILED"
+    assert ws._FEED_RESTART_VERIFY_SOCKET_GENERATION == 11
+    assert ws._FEED_RESTART_VERIFY_VERIFIED_EPOCH is None
+    assert ws._FEED_RESTART_VERIFY_CONNECT_EPOCH is None
+    assert ws._FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH is None
+
+
+def test_stale_success_proof_cannot_mark_newer_restart_generation_ok(monkeypatch):
+    _prepare_restart_verification_race(monkeypatch)
+    proof_entered = threading.Event()
+    release_proof = threading.Event()
+
+    def _blocked_success_proof(now_epoch):
+        proof_entered.set()
+        assert release_proof.wait(timeout=3.0)
+        return True, "old_generation_proved", {"generation": "old"}
+
+    monkeypatch.setattr(ws, "_restart_verification_proof", _blocked_success_proof)
+    worker = _REAL_THREAD(target=ws._tick_feed_restart_verification, kwargs={"now_epoch": 1000.5})
+    worker.start()
+    try:
+        assert proof_entered.wait(timeout=2.0)
+        monkeypatch.setattr(ws, "_SOCKET_GENERATION", 11, raising=False)
+        ws._begin_feed_restart_verification(
+            reason="new_generation", start_epoch=2000.0, now_epoch=2000.0, socket_generation=11
+        )
+    finally:
+        release_proof.set()
+        worker.join(timeout=3.0)
+
+    assert not worker.is_alive()
+    assert ws._FEED_RESTART_VERIFY_STATE == "PENDING"
+    assert ws._FEED_RESTART_VERIFY_REASON == "new_generation"
+
+
+def test_stale_timeout_cannot_mark_newer_restart_generation_failed(monkeypatch):
+    _prepare_restart_verification_race(monkeypatch)
+    proof_entered = threading.Event()
+    release_proof = threading.Event()
+
+    def _blocked_failure_proof(now_epoch):
+        proof_entered.set()
+        assert release_proof.wait(timeout=3.0)
+        return False, "old_generation_timeout", {"generation": "old"}
+
+    monkeypatch.setattr(ws, "_restart_verification_proof", _blocked_failure_proof)
+    worker = _REAL_THREAD(target=ws._tick_feed_restart_verification, kwargs={"now_epoch": 1002.0})
+    worker.start()
+    try:
+        assert proof_entered.wait(timeout=2.0)
+        monkeypatch.setattr(ws, "_SOCKET_GENERATION", 11, raising=False)
+        ws._begin_feed_restart_verification(
+            reason="new_generation", start_epoch=2000.0, now_epoch=2000.0, socket_generation=11
+        )
+    finally:
+        release_proof.set()
+        worker.join(timeout=3.0)
+
+    assert not worker.is_alive()
+    assert ws._FEED_RESTART_VERIFY_STATE == "PENDING"
+    assert ws._FEED_RESTART_VERIFY_REASON == "new_generation"
+    assert ws._FEED_RESTART_VERIFY_FAILURE_DETAIL == ""
+
+
+def test_stale_restart_stage_marker_cannot_overwrite_new_generation(monkeypatch):
+    _prepare_restart_verification_race(monkeypatch)
+    stage_entered = threading.Event()
+    release_stage = threading.Event()
+    original_stage_event = ws._restart_verify_stage_event
+
+    def _blocked_stage_event(stage):
+        stage_entered.set()
+        assert release_stage.wait(timeout=3.0)
+        return original_stage_event(stage)
+
+    monkeypatch.setattr(ws, "_restart_verify_stage_event", _blocked_stage_event)
+    monkeypatch.setattr(
+        ws,
+        "_restart_verification_proof",
+        lambda now_epoch: (False, "not_yet_verified", {"generation": "old"}),
+    )
+    worker = _REAL_THREAD(target=ws._tick_feed_restart_verification, kwargs={"now_epoch": 1000.5})
+    worker.start()
+    try:
+        assert stage_entered.wait(timeout=2.0)
+        monkeypatch.setattr(ws, "_SOCKET_GENERATION", 11, raising=False)
+        ws._begin_feed_restart_verification(
+            reason="new_generation", start_epoch=2000.0, now_epoch=2000.0, socket_generation=11
+        )
+    finally:
+        release_stage.set()
+        worker.join(timeout=3.0)
+
+    assert not worker.is_alive()
+    assert ws._FEED_RESTART_VERIFY_STATE == "PENDING"
+    assert ws._FEED_RESTART_VERIFY_LAST_STAGE_EVENT == ""
 
 
 def test_tick_stalled_watchdog_cycle_escalates_to_forced_full_restart(monkeypatch):
@@ -1912,7 +2482,10 @@ def test_hard_feed_dead_no_ticks_ignores_cooldown_and_forces_full_restart(monkey
     assert calls["start"] == 1
     assert calls["start_auth_mode"] == "read_only_observer"
     assert calls["soft"] == 0
-    assert "FEED_RESTART_FORCE_FULL_PATH" in [event for event, _payload in events]
+    requested = [payload for event, payload in events if event == "FEED_RESTART_FULL_PATH_REQUESTED"]
+    assert len(requested) == 1
+    assert requested[0]["restart_attempted"] is False
+    assert "FEED_FULL_RESTART_BEGIN" in [event for event, _payload in events]
 
 
 def test_hard_feed_dead_depth_stale_ignores_cooldown_and_forces_full_restart(monkeypatch):
@@ -1967,7 +2540,10 @@ def test_hard_feed_dead_depth_stale_ignores_cooldown_and_forces_full_restart(mon
     assert calls["stop"] == 1
     assert calls["start"] == 1
     assert calls["soft"] == 0
-    assert "FEED_RESTART_FORCE_FULL_PATH" in [event for event, _payload in events]
+    requested = [payload for event, payload in events if event == "FEED_RESTART_FULL_PATH_REQUESTED"]
+    assert len(requested) == 1
+    assert requested[0]["restart_attempted"] is False
+    assert "FEED_FULL_RESTART_BEGIN" in [event for event, _payload in events]
 
 
 def test_market_open_option_subscriptions_missing_forces_full_restart(monkeypatch):
@@ -2020,7 +2596,10 @@ def test_market_open_option_subscriptions_missing_forces_full_restart(monkeypatc
         is True
     )
     assert calls == {"stop": 1, "start": 1}
-    assert "FEED_RESTART_FORCE_FULL_PATH" in [event for event, _payload in events]
+    requested = [payload for event, payload in events if event == "FEED_RESTART_FULL_PATH_REQUESTED"]
+    assert len(requested) == 1
+    assert requested[0]["restart_attempted"] is False
+    assert "FEED_FULL_RESTART_BEGIN" in [event for event, _payload in events]
 
 
 def test_repeated_hard_restarts_trip_storm_breaker(monkeypatch):
@@ -2056,6 +2635,93 @@ def test_repeated_hard_restarts_trip_storm_breaker(monkeypatch):
     assert "FEED_RESTART_STORM_TRIP" in [event for event, _payload in events]
     assert calls["breaker"] == 1
     assert calls["risk"] == 1
+
+
+def test_breaker_blocked_restart_logging_uses_storm_cooldown(monkeypatch):
+    monkeypatch.setattr(ws, "_LAST_BREAKER_BLOCK_LOG_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: True)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123], raising=False)
+    monkeypatch.setattr(ws, "_KITE_TICKER", None, raising=False)
+    forensic_events = []
+    monkeypatch.setattr(
+        ws,
+        "append_feed_forensic_event",
+        lambda event, **payload: forensic_events.append((event, payload)),
+    )
+    monkeypatch.setattr(
+        ws,
+        "_resubscribe_token_selection",
+        lambda: (_ for _ in ()).throw(AssertionError("breaker_open_must_skip_token_resolution")),
+    )
+    monkeypatch.setattr(cfg, "FEED_RESTART_STORM_COOLDOWN_SEC", 30.0, raising=False)
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
+    times = iter((100.0, 101.0, 131.0))
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: next(times))
+    events = []
+
+    assert ws.restart_depth_ws(reason="tick_stalled", force_full_restart=True) is False
+    assert ws.restart_depth_ws(reason="tick_stalled", force_full_restart=True) is False
+    assert ws.restart_depth_ws(reason="depth_stale", force_full_restart=True) is False
+
+    blocked = [payload for event, payload in events if event == "FEED_RESTART_BLOCKED_BY_BREAKER"]
+    assert len(blocked) == 2
+    assert blocked[0]["diagnostic_cooldown_sec"] == 30.0
+    assert not any(event == "feed_restart_required" for event, _payload in events)
+    assert forensic_events == []
+    assert not any(event == "FEED_RESTART_BLOCKED_AUTH_REQUIRED" for event, _payload in events)
+
+
+def test_breaker_trip_after_preflight_still_blocks_socket_restart(monkeypatch):
+    breaker_states = iter((False, False, True))
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: next(breaker_states))
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123], raising=False)
+    monkeypatch.setattr(ws, "_KITE_TICKER", object(), raising=False)
+    monkeypatch.setattr(ws, "_resubscribe_token_selection", lambda: ([123], {}))
+    monkeypatch.setattr(ws, "_ws_connected_state", lambda: True)
+    monkeypatch.setattr(ws, "_use_native_reconnect", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+    monkeypatch.setattr(ws, "_RESTART_LOCK", ws.threading.RLock())
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
+    calls = {"stop": 0, "start": 0}
+    monkeypatch.setattr(ws, "stop_depth_ws", lambda **kwargs: calls.__setitem__("stop", calls["stop"] + 1))
+    monkeypatch.setattr(
+        ws,
+        "start_depth_ws",
+        lambda *args, **kwargs: calls.__setitem__("start", calls["start"] + 1),
+    )
+
+    assert ws.restart_depth_ws(reason="tick_stalled", force_full_restart=True) is False
+    assert calls == {"stop": 0, "start": 0}
+    assert any(event == "FEED_RESTART_BLOCKED_BY_BREAKER" for event, _payload in events)
+    requested = [payload for event, payload in events if event == "FEED_RESTART_FULL_PATH_REQUESTED"]
+    assert len(requested) == 1
+    assert requested[0]["restart_attempted"] is False
+    assert not any(event == "FEED_FULL_RESTART_BEGIN" for event, _payload in events)
+
+
+def test_breaker_diagnostic_cooldown_rejects_nonfinite_config(monkeypatch):
+    monkeypatch.setattr(ws, "_LAST_BREAKER_BLOCK_LOG_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_STORM_COOLDOWN_SEC", float("inf"), raising=False)
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: 1000.0)
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
+
+    ws._log_breaker_blocked_restart("tick_stalled")
+
+    blocked = [payload for event, payload in events if event == "FEED_RESTART_BLOCKED_BY_BREAKER"]
+    assert len(blocked) == 1
+    assert blocked[0]["diagnostic_cooldown_sec"] == 900.0
 
 
 def test_auth_required_latch_blocks_hard_restart(monkeypatch):

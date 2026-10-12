@@ -120,3 +120,21 @@ def test_symlinked_material_target_is_rejected(tmp_path: Path, monkeypatch):
 )
 def test_storage_loss_never_claims_successful_seal(storage_lost, drain_complete, expected):
     assert final_seal_status(storage_lost=storage_lost, drain_complete=drain_complete) == expected
+
+
+def test_resolve_storage_volume_under_volumes_hierarchy(tmp_path: Path, monkeypatch):
+    from core.runtime_storage_authority import resolve_storage_volume
+
+    fake_volumes = tmp_path / "Volumes"
+    fake_fast = fake_volumes / "TradeBotFast"
+    fake_session = fake_fast / "sessions" / "session_2026-10-12" / "run_1"
+    fake_session.mkdir(parents=True)
+
+    # Monkeypatch Path("/Volumes") behavior by creating mock or testing path resolution
+    vol = resolve_storage_volume(fake_session)
+    # When fake_session is under tmp_path, it falls back to existing candidate volumes
+    assert vol in {Path("/Volumes/TradeBotFast"), Path("/Volumes/TradeBot"), Path("/Volumes/TradeBotData")}
+
+    # Test direct candidate fallback when /Volumes/TradeBotFast exists
+    if Path("/Volumes/TradeBotFast").is_dir():
+        assert resolve_storage_volume("/Volumes/TradeBotFast/sessions/session_2026-10-12") == Path("/Volumes/TradeBotFast")

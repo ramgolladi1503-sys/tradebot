@@ -514,6 +514,11 @@ def evaluate_feasibility(
 
 def _enrich_outcome(outcome: TradeOutcome, feasibility: Mapping[str, Any]) -> TradeOutcome:
     flags = dict(outcome.exec_feasible_flags or {})
+    path_unassessed = bool(
+        flags.get("outcome_path_observed")
+        and str(flags.get("execution_feasibility_status", "")).upper() == "UNASSESSED"
+    )
+    status_unassessed = str(flags.get("execution_feasibility_status", "")).upper() == "UNASSESSED"
     flags.update(
         {
             "exec_quote_present": bool(feasibility.get("quote_present")),
@@ -524,13 +529,19 @@ def _enrich_outcome(outcome: TradeOutcome, feasibility: Mapping[str, Any]) -> Tr
         }
     )
     exec_feasible = bool(
-        bool(outcome.exec_feasible)
+        ((bool(outcome.exec_feasible) and not status_unassessed) or path_unassessed)
         and flags["exec_quote_present"]
         and flags["exec_spread_ok"]
         and flags["exec_quote_age_ok"]
         and flags["exec_entry_feasible"]
         and flags["exec_target_feasible"]
     )
+    if path_unassessed and flags["exec_quote_present"]:
+        # Price-path observation alone is not execution evidence. This status
+        # advances only after the independent quote gates above are evaluated.
+        flags["execution_feasibility_status"] = (
+            "ASSESSED_FEASIBLE" if exec_feasible else "ASSESSED_INFEASIBLE"
+        )
     return TradeOutcome(
         trade_key=outcome.trade_key,
         event_id=outcome.event_id,
