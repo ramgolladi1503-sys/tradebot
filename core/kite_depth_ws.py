@@ -593,6 +593,16 @@ def _active_launch_plan_tokens() -> list[int]:
     return _normalize_positive_tokens(state.get("final_union_tokens") or [])
 
 
+def _log_kite_ws_created(*, ticker: Any, api_key: str, access_token: str) -> None:
+    """Log websocket creation without exposing credential fragments."""
+    logger.info(
+        "kite_ws_created api_key_present=%s access_token_present=%s kite_id=%s",
+        bool(api_key),
+        bool(access_token),
+        id(ticker),
+    )
+
+
 def _ensure_feed_session_id() -> str:
     global _FEED_SESSION_ID
     if not _FEED_SESSION_ID:
@@ -9767,11 +9777,10 @@ def _start_depth_ws_impl(
                     kws.auto_reconnect = _use_native_reconnect()
                 except Exception:
                     pass
-            logger.info(
-                "kite_ws_created api_key_tail4=%s access_token_tail4=%s kite_id=%s",
-                api_key[-4:] if len(str(api_key or "")) >= 4 else api_key,
-                access_token[-4:] if len(str(access_token or "")) >= 4 else access_token,
-                id(kws),
+            _log_kite_ws_created(
+                ticker=kws,
+                api_key=api_key,
+                access_token=access_token,
             )
             with _KITE_TICKER_LOCK:
                 _KITE_TICKER = kws
