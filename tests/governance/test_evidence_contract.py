@@ -1188,6 +1188,33 @@ def test_trusted_candidate_prep_fails_closed_before_archive_or_output(
         assert "archive" not in git_log_path.read_text()
 
 
+@pytest.mark.parametrize("dirty_kind", ["modified", "untracked"])
+def test_trusted_candidate_prep_reports_dirty_paths_and_stops_before_fetch(
+        tmp_path: Path, dirty_kind: str):
+    fixture = _trusted_git_fixture(tmp_path)
+    trusted = Path(fixture["trusted"])
+    if dirty_kind == "modified":
+        (trusted / "base.txt").write_text("private file contents must not be logged\n")
+        expected_path = "base.txt"
+    else:
+        (trusted / "unexpected\ncheckout.txt").write_text("private file contents must not be logged\n")
+        expected_path = r"unexpected\\ncheckout.txt"
+
+    result = _run_candidate_prep(fixture)
+
+    assert result.returncode != 0
+    assert "protected-base checkout is not clean; refusing to run verifier" in result.stderr
+    assert "dirty checkout status" in result.stderr
+    assert expected_path in result.stderr
+    assert "private file contents must not be logged" not in result.stderr
+    assert not Path(fixture["github_output"]).exists()
+    assert not (Path(fixture["runner_temp"]) /
+                "trusted-evidence-candidate-test-run-1").exists()
+    git_calls = Path(fixture["git_log"]).read_text()
+    assert "fetch --no-tags" not in git_calls
+    assert "archive" not in git_calls
+
+
 def test_report_detects_candidate_sha_mismatch():
     head = __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     report = build_report(base_ref="HEAD", candidate_ref="HEAD", candidate_sha="e" * 40)

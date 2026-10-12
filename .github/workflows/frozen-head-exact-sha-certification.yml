@@ -156,8 +156,19 @@ jobs:
             echo "checkout HEAD $actual_base differs from event base $BASE_SHA" >&2
             exit 1
           fi
-          if [[ -n "$(git status --porcelain)" ]]; then
+          checkout_status=$(git status --porcelain=v1 --untracked-files=all)
+          if [[ -n "$checkout_status" ]]; then
             echo "protected-base checkout is not clean; refusing to run verifier" >&2
+            echo "dirty checkout status (first 20 paths; control characters escaped):" >&2
+            printf '%s\n' "$checkout_status" | python3 -c '
+          import sys
+
+          rows = sys.stdin.buffer.read().splitlines()
+          for row in rows[:20]:
+              print(repr(row[:512].decode("utf-8", "backslashreplace")), file=sys.stderr)
+          if len(rows) > 20:
+              print(f"... {len(rows) - 20} additional status rows omitted", file=sys.stderr)
+          '
             exit 1
           fi
 
