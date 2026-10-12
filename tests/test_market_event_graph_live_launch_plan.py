@@ -94,9 +94,9 @@ def test_launch_plan_loader_accepts_legacy_plan_without_heritage_fields(tmp_path
     assert "heritage_manifest_sha256" not in loaded
 
 
-def test_schema_v2_requires_reference_scoped_t1_field_name(tmp_path: Path) -> None:
+def test_schema_v3_rejects_legacy_t1_status_alias(tmp_path: Path) -> None:
     plan = _plan()
-    assert plan["schema_version"] == 2
+    assert plan["schema_version"] == 3
     path = tmp_path / "launch_plan.json"
     raw = dict(plan)
     raw["t1_prerequisite_status"] = raw.pop("t1_manifest_reference_status")
@@ -107,7 +107,8 @@ def test_schema_v2_requires_reference_scoped_t1_field_name(tmp_path: Path) -> No
         "observation_exclusive_tokens", "final_union_tokens", "configured_budget",
         "missing_observation_tokens", "production_resolution", "master_sha256", "universe_sha256",
         "configuration_fingerprint", "broker_metadata_called", "heritage_manifest_path",
-        "heritage_manifest_sha256", "t1_prerequisite_status",
+        "heritage_manifest_sha256", "t1_prerequisite_status", "venue", "calendar_id",
+        "calendar_version", "selected_futures_contract_key", "target_expiry",
     )
     raw["launch_plan_sha256"] = _sha({key: raw[key] for key in basis_keys})
     path.write_text(json.dumps(raw, sort_keys=True), encoding="utf-8")

@@ -38,6 +38,9 @@ def _isolate_observation_plan_state(monkeypatch):
 
 
 def _setup_depth_window_mocks(monkeypatch):
+    # These resolver tests assert the production index/option universe. The
+    # governed MEG tests opt in explicitly and provide their own registry.
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False, raising=False)
     expiry = date(2026, 3, 5)
     atm_by_symbol = {
         "NIFTY": 22000,
