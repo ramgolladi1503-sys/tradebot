@@ -9495,7 +9495,7 @@ def _start_depth_ws_impl(
             source="start_depth_ws:import_missing",
             runtime_state="IMPORT_MISSING",
             last_error=_LAST_RUNTIME_ERROR,
-            intended_tokens_count=_INTENDED_TOKEN_COUNT,
+            intended_tokens_count=requested_intended_count,
         )
         logger.error("depth_ws_not_available")
         return False

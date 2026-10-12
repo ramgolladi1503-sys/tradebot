@@ -59,6 +59,10 @@ def test_second_request_clears_request_scoped_tick_but_preserves_session_first(m
 
 def test_already_running_start_does_not_rotate_generation_or_clear_evidence(monkeypatch):
     ws = importlib.import_module("core.kite_depth_ws")
+    # This idempotency contract assumes callback admission is healthy. Other
+    # tests deliberately latch process-lifetime failure and that state must
+    # not leak into this isolated branch assertion.
+    monkeypatch.setattr(ws, "_CALLBACK_UNREADY_REASON", "")
     ws._FEED_SESSION_ID = "session-running"
     ws._FEED_RECONNECT_GENERATION = 5
     ws._FEED_CONNECTION_START_EPOCH = 1234.0

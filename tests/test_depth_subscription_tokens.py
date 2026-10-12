@@ -14,6 +14,29 @@ def _count(values) -> int:
     return int(sum(1 for _ in list(values or [])))
 
 
+@pytest.fixture(autouse=True)
+def _isolate_observation_plan_state(monkeypatch):
+    # The builder tests exercise the caller-supplied token path. A preceding
+    # observer test may leave a process-wide governed union active, which has
+    # higher precedence by design and changes this test's token universe.
+    monkeypatch.setattr(ws, "_OBSERVATION_PLAN_STATE", {
+        "enabled": False,
+        "verdict": "DISABLED",
+        "production_tokens": [],
+        "observation_tokens": [],
+        "overlap_tokens": [],
+        "observation_exclusive_tokens": [],
+        "final_union_tokens": [],
+        "missing_observation_tokens": [],
+        "configured_budget": None,
+        "feed_session_id": "",
+        "feed_epoch": 0,
+        "reconnect_generation": 0,
+        "plan_sha": "",
+        "decision_epoch": None,
+    })
+
+
 def _setup_depth_window_mocks(monkeypatch):
     expiry = date(2026, 3, 5)
     atm_by_symbol = {
