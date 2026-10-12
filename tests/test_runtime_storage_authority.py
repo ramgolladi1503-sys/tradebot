@@ -138,4 +138,3 @@ def test_resolve_storage_volume_under_volumes_hierarchy(tmp_path: Path, monkeypa
     # Test direct candidate fallback when /Volumes/TradeBotFast exists
     if Path("/Volumes/TradeBotFast").is_dir():
         assert resolve_storage_volume("/Volumes/TradeBotFast/sessions/session_2026-10-12") == Path("/Volumes/TradeBotFast")
-

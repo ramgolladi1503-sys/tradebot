@@ -760,4 +760,3 @@ def test_shadow_buffer_deduplicates_already_persisted_bars_across_provenance_shi
     # Second persist must not crash with SessionMemoryConflict, but safely detect already durable
     res2 = get_live_source_shadow_completed_bars("NIFTY", as_of=cutoff)
     assert len(res2) == 2
-
