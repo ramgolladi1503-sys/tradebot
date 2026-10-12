@@ -90,3 +90,13 @@ After an authorized deployment, a read-only observation must bind the exact prod
 ## Human Approval
 
 The user authorized preparing and raising a PR and working toward green CI. That authorization does not waive the frozen-flow policy, authorize changing its baseline/gate, authorize merge, or authorize live/broker/order actions.
+
+## Rebase and CI Follow-up
+
+The branch was rebased onto `origin/main` at `1fec69212cea655325404d5d16e780082577066e`. The old PR head `877472b2d395e1298c564223a503a1be4c9a87c7` produced two hosted unit-test shards with 8 and 9 failures. The CI RCA tied these to an immutable-source hash mismatch, test leakage from governed observation-plan/callback state, an import-missing snapshot persisting a stale intended-token count, and a test assuming synchronous callback artifact persistence.
+
+The repair preserves production precedence and asynchronous callback persistence. The import-missing snapshot now reports the request-local token count. Tests reset only the state they own and wait with a bounded timeout for queued persistence. Four callback/restart environment settings are validated in `core/feed/callback_config.py`, outside hash-pinned `config/config.py`; defaults are queue max 64, transition wait 10 seconds, lifecycle wait 10 seconds, and blocked-log cooldown 30 seconds. Invalid values fall back to those defaults and valid values are clamped to documented bounds. No risk, freshness, kill-switch, or live-mode gate was weakened.
+
+Validation after the rebase: the previously failing test modules plus the new config tests passed locally (**74 passed**). On the pushed intermediate head `a6719bdc38d96d78686e3f128f2f762cbfb82455`, `agent-review-evidence`, exact-SHA identity, candidate safety tests, documentation/contract gate, base-authority checks, and secret scan passed. `pr818-live-flow-freeze-target` failed as expected under the frozen protected-path policy; the main unit-test, feed-smoke, focused-contract, verification, and trusted-base evidence jobs had not completed at the time of this note. This is not a green exact-head CI result or live-readiness approval.
+
+The PR remains draft. Do not bypass the frozen-flow gate or promote these local tests to hosted CI evidence. Recheck every status against the latest PR head after this follow-up is pushed.

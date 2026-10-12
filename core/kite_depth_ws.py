@@ -35,6 +35,7 @@ from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.market_session_state import PREMARKET, derive_market_session_policy
 from core.runtime_boot_identity import stamp_runtime_payload
 from core.feed.artifact_provenance import stamp_feed_runtime_provenance
+from core.feed import callback_config
 from core.feed.feed_epoch import advance_feed_epoch, current_feed_epoch
 from core.feed.tick_callback_coordinator import (
     CallbackCoordinatorError,
@@ -187,11 +188,15 @@ _SOCKET_LIFECYCLE_LOCK = threading.RLock()
 _CALLBACK_INGRESS_LOCK = threading.Lock()
 _CALLBACK_SEQUENCE = 0
 _CALLBACK_COORDINATOR = TickCallbackCoordinator(
-    max_pending=max(1, int(getattr(cfg, "DEPTH_WS_CALLBACK_QUEUE_MAX_PENDING", 64))),
+    max_pending=callback_config.callback_queue_max_pending(
+        getattr(cfg, "DEPTH_WS_CALLBACK_QUEUE_MAX_PENDING", None)
+    ),
 )
 _SOCKET_TRANSITION_LOCAL = threading.local()
 _DEFERRED_LIFECYCLE_QUEUE: queue.Queue = queue.Queue(
-    maxsize=max(1, int(getattr(cfg, "DEPTH_WS_CALLBACK_QUEUE_MAX_PENDING", 64)))
+    maxsize=callback_config.callback_queue_max_pending(
+        getattr(cfg, "DEPTH_WS_CALLBACK_QUEUE_MAX_PENDING", None)
+    )
 )
 _DEFERRED_LIFECYCLE_THREAD: threading.Thread | None = None
 _DEFERRED_LIFECYCLE_LOCK = threading.Lock()
@@ -258,11 +263,9 @@ def _mark_callback_coordinator_failed(
 
 
 def _callback_transition_timeout_sec() -> float:
-    try:
-        value = float(getattr(cfg, "DEPTH_WS_CALLBACK_TRANSITION_TIMEOUT_SEC", 10.0))
-    except (TypeError, ValueError, OverflowError):
-        return 10.0
-    return value if math.isfinite(value) and value >= 0.0 else 10.0
+    return callback_config.callback_transition_timeout_sec(
+        getattr(cfg, "DEPTH_WS_CALLBACK_TRANSITION_TIMEOUT_SEC", None)
+    )
 
 
 def _begin_socket_transition(reason: str):
@@ -4272,10 +4275,9 @@ def _restart_attempt_allowed_for_snapshot(
 
 def _restart_verification_block_event_due(*, now_epoch: float | None = None) -> bool:
     global _LAST_RESTART_VERIFY_BLOCK_LOG_EPOCH
-    try:
-        cooldown = max(0.0, float(getattr(cfg, "FEED_RESTART_VERIFY_BLOCK_LOG_COOLDOWN_SEC", 30.0)))
-    except Exception:
-        cooldown = 30.0
+    cooldown = callback_config.restart_verify_block_log_cooldown_sec(
+        getattr(cfg, "FEED_RESTART_VERIFY_BLOCK_LOG_COOLDOWN_SEC", None)
+    )
     now = float(now_epoch if now_epoch is not None else time.time())
     with _RESTART_VERIFY_LOCK:
         if (now - float(_LAST_RESTART_VERIFY_BLOCK_LOG_EPOCH or 0.0)) < cooldown:
@@ -8029,13 +8031,9 @@ def _schedule_restart_depth_ws(
 
 def _acquire_restart_lifecycle_lock(*, reason: str, path: str) -> bool:
     """Wait briefly for an in-progress start/stop to finish before retrying."""
-    try:
-        wait_sec = float(getattr(cfg, "FEED_RESTART_LIFECYCLE_WAIT_SEC", 10.0))
-        if not math.isfinite(wait_sec):
-            wait_sec = 10.0
-    except (TypeError, ValueError, OverflowError):
-        wait_sec = 10.0
-    wait_sec = min(30.0, max(0.0, wait_sec))
+    wait_sec = callback_config.restart_lifecycle_wait_sec(
+        getattr(cfg, "FEED_RESTART_LIFECYCLE_WAIT_SEC", None)
+    )
     if _SOCKET_LIFECYCLE_LOCK.acquire(timeout=wait_sec):
         return True
     _log_ws(
