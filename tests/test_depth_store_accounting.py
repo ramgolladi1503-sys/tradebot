@@ -126,6 +126,29 @@ def test_depth_accounting_invariant_enqueued_equals_persisted_plus_queued_plus_r
     assert state["accounting_invariant_ok"] is True
 
 
+def test_request_shutdown_closes_depth_admission_then_drains_accepted_rows(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "depth-signal.sqlite"), raising=False)
+    monkeypatch.setenv("TRADE_DB_PATH", str(tmp_path / "depth-signal.sqlite"))
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 25, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+
+    store = DepthStore()
+    sample_depth = {
+        "buy": [{"price": 100.0, "quantity": 10, "orders": 1}],
+        "sell": [{"price": 101.0, "quantity": 10, "orders": 1}],
+    }
+    store.update(9001, sample_depth)
+    store.request_persistence_shutdown()
+    store.update(9002, sample_depth)
+
+    state = store.shutdown_persistence(deadline_seconds=5.0)
+    assert state["complete"] is True
+    assert state["enqueued"] == 1
+    assert state["persisted"] == 1
+    assert state["pre_enqueue_rejected"] == 1
+    assert state["admission_accounting_invariant_ok"] is True
+
+
 def test_depth_accounting_invariant_under_lock_contention(tmp_path, monkeypatch):
     """Under artificial lock failure, unwritten rows are counted as rejected and accounting holds."""
     import core.depth_store as ds_mod

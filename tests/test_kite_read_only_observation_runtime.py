@@ -386,6 +386,122 @@ def test_lifecycle_recomputes_each_store_budget_from_one_deadline(monkeypatch):
     assert report["is_order_action"] is False
 
 
+def test_lifecycle_signals_all_persistence_workers_before_bridge_or_drain_wait(monkeypatch):
+    import core.tick_store as tick_store
+    import core.depth_store as depth_store
+    import core.feed.runtime_store as runtime_store
+
+    events = []
+
+    class Feed:
+        def start_depth_ws(self, tokens, **kwargs):
+            return True
+
+        def stop_depth_ws(self, **kwargs):
+            events.append("feed-stop")
+
+    monkeypatch.setattr(tick_store, "request_persistence_shutdown", lambda: events.append("tick-signal"))
+    monkeypatch.setattr(depth_store.depth_store, "request_persistence_shutdown", lambda: events.append("depth-signal"))
+    monkeypatch.setattr(runtime_store, "request_runtime_persistence_shutdown", lambda: events.append("runtime-signal"))
+
+    def bridge_flush():
+        assert {"tick-signal", "depth-signal", "runtime-signal"}.issubset(events)
+        events.append("bridge-wait")
+        return {"flushed": True}
+
+    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.flush_live_source_bridge", bridge_flush)
+
+    def wait_for_store(name, result):
+        assert {"tick-signal", "depth-signal", "runtime-signal"}.issubset(events)
+        events.append(f"{name}-wait")
+        return result
+
+    monkeypatch.setattr(tick_store, "pending_tick_count", lambda: 0)
+    monkeypatch.setattr(tick_store, "shutdown_persistence_worker", lambda **_: wait_for_store("tick", {"complete": True}))
+    monkeypatch.setattr(tick_store, "get_persistence_worker_state", lambda: {
+        "worker_join_completed": True, "queue_depth_at_shutdown": 0,
+        "pending_writes_at_shutdown": 0, "accounting_invariant_ok": True,
+    })
+    monkeypatch.setattr(depth_store.depth_store, "persistence_state", lambda: {
+        "worker_alive": False, "queue_depth": 0, "in_flight": 0,
+    })
+    monkeypatch.setattr(depth_store.depth_store, "shutdown_persistence", lambda **_: wait_for_store("depth", {"complete": True}))
+    monkeypatch.setattr(runtime_store, "runtime_persistence_state", lambda: {
+        "worker_alive": False, "pending": 0,
+    })
+    monkeypatch.setattr(runtime_store, "shutdown_runtime_persistence", lambda **_: wait_for_store("runtime", {"complete": True}))
+
+    lifecycle = ObservationLifecycle(Feed(), drain_deadline_seconds=1.0)
+    lifecycle.start([256265])
+    report = lifecycle.shutdown()
+
+    signal_positions = [events.index(f"{name}-signal") for name in ("tick", "depth", "runtime")]
+    wait_positions = [events.index(f"{name}-wait") for name in ("tick", "depth", "runtime")]
+    assert max(signal_positions) < events.index("bridge-wait")
+    assert max(signal_positions) < min(wait_positions)
+    assert report["shutdown_drain_complete"] is True
+
+
+def test_lifecycle_signals_workers_before_bridge_exhausts_shared_deadline(monkeypatch):
+    import core.kite_read_only_observation_runtime as lifecycle_module
+    import core.tick_store as tick_store
+    import core.depth_store as depth_store
+    import core.feed.runtime_store as runtime_store
+
+    now = [0.0]
+    events = []
+
+    class Clock:
+        def monotonic(self):
+            return now[0]
+
+        def sleep(self, seconds):
+            now[0] += seconds
+
+    class Feed:
+        def start_depth_ws(self, tokens, **kwargs):
+            return True
+
+        def stop_depth_ws(self, **kwargs):
+            events.append("feed-stop")
+
+    monkeypatch.setattr(lifecycle_module, "time", Clock())
+    monkeypatch.setattr(tick_store, "request_persistence_shutdown", lambda: events.append("tick-signal"))
+    monkeypatch.setattr(depth_store.depth_store, "request_persistence_shutdown", lambda: events.append("depth-signal"))
+    monkeypatch.setattr(runtime_store, "request_runtime_persistence_shutdown", lambda: events.append("runtime-signal"))
+
+    def slow_bridge():
+        assert {"tick-signal", "depth-signal", "runtime-signal"}.issubset(events)
+        now[0] += 1.0
+        return {"flushed": False}
+
+    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.flush_live_source_bridge", slow_bridge)
+    monkeypatch.setattr(tick_store, "pending_tick_count", lambda: 1)
+    monkeypatch.setattr(tick_store, "shutdown_persistence_worker", lambda **kw: {"complete": False, "budget": kw["deadline_seconds"]})
+    monkeypatch.setattr(tick_store, "get_persistence_worker_state", lambda: {
+        "worker_join_completed": False, "queue_depth_at_shutdown": 1,
+        "pending_writes_at_shutdown": 1, "accounting_invariant_ok": True,
+    })
+    monkeypatch.setattr(depth_store.depth_store, "persistence_state", lambda: {
+        "worker_alive": True, "queue_depth": 1, "in_flight": 0,
+    })
+    monkeypatch.setattr(depth_store.depth_store, "shutdown_persistence", lambda **kw: {"complete": False, "budget": kw["deadline_seconds"]})
+    monkeypatch.setattr(runtime_store, "runtime_persistence_state", lambda: {
+        "worker_alive": True, "pending": 1,
+    })
+    monkeypatch.setattr(runtime_store, "shutdown_runtime_persistence", lambda **kw: {"complete": False, "budget": kw["deadline_seconds"]})
+
+    lifecycle = ObservationLifecycle(Feed(), drain_deadline_seconds=1.0)
+    lifecycle.start([256265])
+    report = lifecycle.shutdown()
+
+    assert report["shutdown_drain_complete"] is False
+    assert report["phase"] == "FAILED"
+    assert report["shutdown_drain_deadline_expired"] is True
+    assert report["persistence_shutdown_budgets_seconds"] == {"tick": 0.0, "depth": 0.0, "runtime": 0.0}
+    assert {"tick-signal", "depth-signal", "runtime-signal"}.issubset(events)
+
+
 def test_safe_environment_overwrites_inherited_live_values():
     env = safe_environment({
         "TRADING_MODE": "LIVE",

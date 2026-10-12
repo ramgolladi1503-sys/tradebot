@@ -414,6 +414,12 @@ class ObservationLifecycle:
             import core.feed.runtime_store as runtime_store
             bridge_module = __import__("core.market_event_graph_live_runtime_bridge", fromlist=["flush_live_source_bridge"])
             self.phase = "IN_FLIGHT_CALLBACKS_SETTLED"
+            # Close every persistence admission and wake all drain workers before
+            # any bridge flush, queue polling, sleep, or worker join can consume
+            # the single shared shutdown deadline.
+            tick_store.request_persistence_shutdown()
+            depth_store.depth_store.request_persistence_shutdown()
+            runtime_store.request_runtime_persistence_shutdown()
             bridge_result = bridge_module.flush_live_source_bridge()
             self.phase = "MEG_FLUSHED"
             self.phase = "PERSISTENCE_DRAINING"
