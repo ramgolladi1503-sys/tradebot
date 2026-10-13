@@ -356,6 +356,11 @@ def _resolve_known_tokens(ws: Any) -> set[int]:
 
 def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None = None) -> tuple[list[int], list[dict[str, Any]]]:
     ws = _ws_module()
+    # Do not permit reconnect to reuse a previous partial plan if any part of
+    # this build (resolution, filtering, merge, or budgeting) fails.
+    invalidate_candidate = getattr(ws, "invalidate_desired_subscription_candidate", None)
+    if callable(invalidate_candidate):
+        invalidate_candidate("depth_subscription_engine.build_started")
     conf = _cfg(ws)
     symbols_l = [str(s).upper() for s in list(symbols or list(getattr(conf, "SYMBOLS", []) or []))]
     if _cfg_bool(conf, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False):
@@ -701,7 +706,6 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         else:
             row["option_drop_reason"] = None
     ws._LAST_OPTION_COUNTS_BY_SYMBOL = {r["symbol"]: int(r.get("option_count") or 0) for r in resolution}
-    ws._LAST_DESIRED_TOKENS = _normalize_positive_tokens(ws, tokens) or None
     final_option_tokens = sorted(set(tokens) & set(option_rank))
     staged_contracts = {
         token: option_contract_by_token[token]
@@ -727,6 +731,29 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             )
         except Exception:
             pass
+    record_candidate = getattr(ws, "record_desired_subscription_candidate", None)
+    if callable(record_candidate):
+        try:
+            record_candidate(
+                tokens,
+                option_tokens=final_option_tokens,
+                configured_budget=max_tokens,
+                source="depth_subscription_engine.build_subscription_tokens",
+                observation_required=_cfg_bool(
+                    conf, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False
+                ),
+            )
+        except Exception as exc:
+            ws.invalidate_desired_subscription_candidate(
+                f"depth_subscription_engine.candidate_rejected:{type(exc).__name__}"
+            )
+            try:
+                ws._log_ws(
+                    "FEED_SUBSCRIPTION_CANDIDATE_REJECTED",
+                    {"reason": type(exc).__name__, "token_count": len(tokens)},
+                )
+            except Exception:
+                pass
     return list(tokens), resolution
 
 

@@ -10,7 +10,7 @@
 - `allowed_paths`: the exact set in the work item; no credentials, order/broker, strategy, risk-gate, or live configuration path changed.
 - `forbidden_paths`: `main.py`, `run_live.sh`, credentials, broker/order paths, risk gates, strategies, and `runtime/live/`.
 - `expected_tests`: the targeted callback, stability, refresh, token, launch-universe, and evidence-contract pytest command recorded in the work item.
-- `acceptance_proof`: 249 passed and 1 skipped in the targeted suite; compile, evidence JSON parsing, and `git diff --check` passed locally. Remote exact-head CI is tracked separately and is not claimed green here.
+- `acceptance_proof`: 331 passed and 1 skipped in the current focused non-WAL suite; compile, evidence JSON parsing, and `git diff --check` passed locally. Remote exact-head CI is tracked separately and is not claimed green here.
 
 ## Scope Guard
 
@@ -32,15 +32,15 @@ The implementation covers callback ownership checks, sidecar staging and freshne
 
 ## QA / Safety Review
 
-The original implementation-focused targeted suite completed with 249 passed and 1 skipped. After aligning legacy regression fixtures, the five affected test files passed 177 tests, and the added reconnect-ownership assertions passed in a 15-test candidate/reconnect run. Modified Python modules and test modules compiled. Three evidence JSON documents parsed, and `git diff --check` passed. The full expanded focused command was interrupted by the execution session ending without a captured result; do not treat it as passed. Independent review found and closed the sidecar mapping issue before the candidate was committed.
+After correcting stale fixture state and aligning restart fixtures with the validated-candidate contract, the current focused non-WAL command completed with 331 passed and 1 skipped. Modified Python modules compiled, the work-item JSON parsed, and `git diff --check` passed. The separate SQLite WAL initialization experiment is not part of this PR's scope or this test count. Independent review found and closed the sidecar mapping issue before the candidate was committed.
 
-The first broad run exposed legacy fixture failures because those tests inferred applied option truth from token-to-symbol mappings. Fixtures were updated to establish a KNOWN snapshot where their assertions require applied option health; tests that lack applied ownership retain fail-closed expectations. The post-fix local five-file regression slice reported 177 passed. A broader focused command including mutation, token, launch-universe, and evidence-contract tests was attempted, but the execution session ended without a captured result. Its outcome is unknown and must not be represented as a pass.
+The first broad run exposed legacy fixture failures because those tests inferred applied option truth from token-to-symbol mappings. Fixtures were updated to establish a KNOWN snapshot where their assertions require applied option health; tests that lack applied ownership retain fail-closed expectations. The hosted run at `18829c43891ad7003efdf0d9e1ffa673f2aba53c` recorded 9,120 passed, 2 failed, 16 skipped, and 28 deselected. Its two failures were the recovery fixture's inherited required-symbol map and a stale-refresh fixture without a validated candidate; both were corrected locally and are covered by the 331-pass focused result above.
 
 Independent QA noted that some state-rendering fixtures seed KNOWN via the private commit helper without exercising socket API methods, and the candidate-safety test stubs the observed adapter callback. These are fixture/interface checks only. Separate mutation tests exercise subscribe and FULL mode calls and assert resulting ownership. The reconnect test now additionally asserts KNOWN state, the active generation, and exact expected option token identities. Do not characterize every fixture as proof of API application.
 
 ## Current PR / CI Status
 
-At committed head `a683240ca3c374e365fb2748377cdf2e6b65f713`, GitHub `unit_tests` failed 16 tests and Trusted Base failed for incomplete lifecycle history/state/evidence. The local test-only corrections have not yet been pushed or run by GitHub. The `pr818-live-flow-freeze-target` check also fails; the user explicitly authorized ignoring that check. No authorization was given to bypass unit-test failures or Trusted Base. Exact-head CI and delivery lifecycle remain blockers.
+At remote head `18829c43891ad7003efdf0d9e1ffa673f2aba53c`, GitHub `unit_tests` failed 2 tests (9,120 passed); the local fixture corrections have not yet been pushed or run by GitHub. Trusted Base failed because the work item remains `BACKLOG` with no lifecycle evidence. The `pr818-live-flow-freeze-target` check also fails; the user explicitly authorized ignoring that check. No authorization was given to bypass Trusted Base. Exact-head CI and delivery lifecycle remain blockers.
 
 ## Acceptance Proof
 

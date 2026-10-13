@@ -461,6 +461,25 @@ class DesiredOptionContractSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class DesiredSubscriptionCandidate:
+    """Validated final subscription plan eligible for reconnect replay."""
+
+    revision: int
+    tokens: frozenset[int]
+    option_revision: int
+    configured_budget: int
+    observation_enabled: bool
+    observation_verdict: str
+    observation_final_union: frozenset[int]
+    observation_plan_sha: str
+    observation_feed_session_id: str
+    observation_feed_epoch: int
+    observation_reconnect_generation: int
+    complete: bool
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
 class AppliedOptionOwnershipSnapshot:
     """Generation-bound local API-applied option ownership view."""
 
@@ -480,6 +499,22 @@ _DESIRED_OPTION_CONTRACT_SNAPSHOT = DesiredOptionContractSnapshot(
     expected_tokens=frozenset(),
     contracts=MappingProxyType({}),
     complete=False,
+)
+_DESIRED_SUBSCRIPTION_CANDIDATE_REVISION = 0
+_DESIRED_SUBSCRIPTION_CANDIDATE = DesiredSubscriptionCandidate(
+    revision=0,
+    tokens=frozenset(),
+    option_revision=0,
+    configured_budget=0,
+    observation_enabled=False,
+    observation_verdict="UNAVAILABLE",
+    observation_final_union=frozenset(),
+    observation_plan_sha="",
+    observation_feed_session_id="",
+    observation_feed_epoch=0,
+    observation_reconnect_generation=0,
+    complete=False,
+    source="uninitialized",
 )
 _APPLIED_OPTION_OWNERSHIP_REVISION = 0
 _APPLIED_OPTION_OWNERSHIP_SNAPSHOT = AppliedOptionOwnershipSnapshot(
@@ -568,6 +603,139 @@ def get_desired_option_contract_snapshot() -> DesiredOptionContractSnapshot:
     """Return one immutable proposal snapshot for a mutation transaction."""
     with _OPTION_OWNERSHIP_LOCK:
         return _DESIRED_OPTION_CONTRACT_SNAPSHOT
+
+
+def invalidate_desired_subscription_candidate(source: str) -> None:
+    """Retire any cached plan before a new/failed build can reuse it."""
+    global _DESIRED_SUBSCRIPTION_CANDIDATE_REVISION, _DESIRED_SUBSCRIPTION_CANDIDATE
+    global _LAST_DESIRED_TOKENS
+    with _OPTION_OWNERSHIP_LOCK:
+        _DESIRED_SUBSCRIPTION_CANDIDATE_REVISION += 1
+        _DESIRED_SUBSCRIPTION_CANDIDATE = DesiredSubscriptionCandidate(
+            revision=_DESIRED_SUBSCRIPTION_CANDIDATE_REVISION,
+            tokens=frozenset(),
+            option_revision=_DESIRED_OPTION_CONTRACT_REVISION,
+            configured_budget=0,
+            observation_enabled=False,
+            observation_verdict="UNAVAILABLE",
+            observation_final_union=frozenset(),
+            observation_plan_sha="",
+            observation_feed_session_id="",
+            observation_feed_epoch=0,
+            observation_reconnect_generation=0,
+            complete=False,
+            source=str(source or "candidate_invalidated"),
+        )
+        _LAST_DESIRED_TOKENS = None
+
+
+def record_desired_subscription_candidate(
+    tokens: Sequence[int],
+    *,
+    option_tokens: Sequence[int],
+    configured_budget: int,
+    source: str,
+    observation_required: bool | None = None,
+) -> int:
+    """Record only a complete post-filter, post-merge, post-budget target."""
+    global _DESIRED_SUBSCRIPTION_CANDIDATE_REVISION, _DESIRED_SUBSCRIPTION_CANDIDATE
+    global _LAST_DESIRED_TOKENS
+    raw_tokens = list(tokens or [])
+    normalized = _normalize_positive_tokens(raw_tokens)
+    expected_options = set(_normalize_positive_tokens(option_tokens))
+    desired_options = get_desired_option_contract_snapshot()
+    observation = _observation_state_payload()
+    try:
+        budget = int(configured_budget)
+        governed_budget = int(_GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+    except (TypeError, ValueError, OverflowError):
+        budget = governed_budget = 0
+    observation_enabled = bool(observation.get("enabled"))
+    if observation_required is None:
+        observation_required = bool(
+            getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)
+        )
+    observation_required = bool(observation_required)
+    observation_union = set(_normalize_positive_tokens(observation.get("final_union_tokens") or []))
+    observation_valid = observation_enabled == observation_required and (
+        not observation_required
+        or (
+        str(observation.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+        and bool(str(observation.get("plan_sha") or "").strip())
+        and observation_union == set(normalized)
+        )
+    )
+    non_option_tokens = set(normalized) - expected_options
+    explicit_non_options = {
+        token for token in non_option_tokens
+        if _is_underlying_token(token)
+        or str(_TOKEN_TO_SYMBOL.get(token) or "").strip().upper() == "STICKY"
+        or (observation_enabled and token in observation_union)
+    }
+    complete = bool(
+        normalized
+        and len(normalized) == len(raw_tokens)
+        and len(set(raw_tokens)) == len(raw_tokens)
+        and len(normalized) <= budget <= governed_budget
+        and expected_options
+        and expected_options.issubset(set(normalized))
+        and desired_options.complete
+        and set(desired_options.expected_tokens) == expected_options
+        and set(desired_options.contracts) == expected_options
+        and explicit_non_options == non_option_tokens
+        and observation_valid
+    )
+    with _OPTION_OWNERSHIP_LOCK:
+        _DESIRED_SUBSCRIPTION_CANDIDATE_REVISION += 1
+        _DESIRED_SUBSCRIPTION_CANDIDATE = DesiredSubscriptionCandidate(
+            revision=_DESIRED_SUBSCRIPTION_CANDIDATE_REVISION,
+            tokens=frozenset(normalized),
+            option_revision=desired_options.revision,
+            configured_budget=budget,
+            observation_enabled=observation_enabled,
+            observation_verdict=str(observation.get("verdict") or ""),
+            observation_final_union=frozenset(observation_union),
+            observation_plan_sha=str(observation.get("plan_sha") or ""),
+            observation_feed_session_id=str(observation.get("feed_session_id") or ""),
+            observation_feed_epoch=int(observation.get("feed_epoch") or 0),
+            observation_reconnect_generation=int(observation.get("reconnect_generation") or 0),
+            complete=complete,
+            source=str(source or "unknown"),
+        )
+        # Keep the proposal available for existing desired-count/rebalance
+        # diagnostics. Replay authority comes only from the separate
+        # `complete` snapshot checked by `_validated_desired_subscription_tokens`.
+        _LAST_DESIRED_TOKENS = list(normalized) if normalized else None
+        return _DESIRED_SUBSCRIPTION_CANDIDATE_REVISION
+
+
+def _validated_desired_subscription_tokens() -> tuple[list[int], str]:
+    candidate = _DESIRED_SUBSCRIPTION_CANDIDATE
+    desired_options = get_desired_option_contract_snapshot()
+    observation = _observation_state_payload()
+    valid = bool(
+        candidate.complete
+        and candidate.tokens
+        and bool(observation.get("enabled")) == candidate.observation_enabled
+        and candidate.option_revision == desired_options.revision
+        and desired_options.complete
+        and set(desired_options.expected_tokens) == set(desired_options.contracts)
+        and len(candidate.tokens) <= candidate.configured_budget <= _GOVERNED_FEED_SUBSCRIPTION_BUDGET
+    )
+    if candidate.observation_enabled:
+        valid = valid and bool(
+            observation.get("enabled")
+            and str(observation.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+            and str(observation.get("plan_sha") or "") == candidate.observation_plan_sha
+            and str(observation.get("feed_session_id") or "") == candidate.observation_feed_session_id
+            and int(observation.get("feed_epoch") or 0) == candidate.observation_feed_epoch
+            and int(observation.get("reconnect_generation") or 0) == candidate.observation_reconnect_generation
+            and frozenset(_normalize_positive_tokens(observation.get("final_union_tokens") or [])) == candidate.observation_final_union
+            and candidate.tokens == candidate.observation_final_union
+        )
+    if not valid:
+        return [], "desired_subscription_candidate_invalid_or_stale"
+    return sorted(candidate.tokens), "validated_desired_plan"
 
 
 def get_applied_option_ownership_snapshot() -> AppliedOptionOwnershipSnapshot:
@@ -2147,31 +2315,30 @@ def _stale_option_mutation_guard_blocked(refresh_payload: dict[str, object] | No
 
 
 def _resubscribe_token_selection() -> tuple[list[int], dict[str, int | bool | str]]:
-    desired_tokens = _normalize_positive_tokens(_LAST_DESIRED_TOKENS)
+    desired_tokens, desired_reason = _validated_desired_subscription_tokens()
     fallback_tokens = _normalize_positive_tokens(_LAST_TOKENS)
     use_desired_tokens = _use_desired_tokens_for_resubscribe()
     desired_option_tokens_count = sum(1 for t in desired_tokens if not _is_underlying_token(t))
     fallback_option_tokens_count = sum(1 for t in fallback_tokens if not _is_underlying_token(t))
-    auto_recover_missing_options = bool(
-        desired_tokens
-        and desired_option_tokens_count > 0
-        and fallback_option_tokens_count <= 0
-    )
-    prefer_desired_tokens = bool((use_desired_tokens or auto_recover_missing_options) and desired_tokens)
-    tokens = desired_tokens if prefer_desired_tokens else fallback_tokens
+    # Applied option ownership alone cannot authorize the full replay set: it
+    # does not contain an immutable identity for every underlying, sticky, or
+    # observation token. Without a current validated full-plan snapshot, fail
+    # closed instead of rebuilding a potentially smaller set from raw caches.
+    tokens = desired_tokens
+    token_source = "validated_desired_plan" if desired_tokens else "blocked"
     return tokens, {
         "use_desired_tokens": use_desired_tokens,
         "desired_tokens_count": len(desired_tokens),
         "desired_option_tokens_count": desired_option_tokens_count,
         "fallback_tokens_count": len(fallback_tokens),
         "fallback_option_tokens_count": fallback_option_tokens_count,
-        "auto_recover_missing_options": auto_recover_missing_options,
+        "auto_recover_missing_options": False,
         "resubscribe_tokens_count": len(tokens),
-        "token_source": (
-            "desired"
-            if use_desired_tokens and desired_tokens
-            else ("desired_auto_recovery" if auto_recover_missing_options and desired_tokens else "last_tokens")
-        ),
+        "token_source": token_source,
+        "selection_block_reason": "" if tokens else desired_reason,
+        "fallback_ownership_state": str(get_applied_option_ownership_snapshot().state),
+        "fallback_socket_generation": int(get_applied_option_ownership_snapshot().socket_generation),
+        "active_socket_generation": int(_current_socket_generation()),
     }
 
 
@@ -2186,7 +2353,13 @@ def _soft_resubscribe_current(reason: str) -> bool:
         ws_obj = _KITE_TICKER
         tokens, selection_payload = _resubscribe_token_selection()
         log_payload = {"reason": reason, **selection_payload}
-        if ws_obj is None or not tokens:
+        if not tokens:
+            _log_ws(
+                "FEED_SOFT_RESUBSCRIBE_BLOCKED",
+                {**log_payload, "detail": "no_validated_or_current_applied_subscription_set"},
+            )
+            return False
+        if ws_obj is None:
             _PENDING_SUBSCRIBE_TOKENS = set(tokens)
             _log_ws("FEED_MUTATION_QUEUED", {**log_payload, "detail": "ws_missing_queued", "token_count": len(tokens)})
             return False
@@ -4196,7 +4369,21 @@ def _transition_partial_activity_recovery(
     option_threshold_sec: float,
 ) -> dict[str, object]:
     global _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _PARTIAL_RECOVERY_VERIFICATION
-    previous_cycles = int(dict(_PARTIAL_RECOVERY_VERIFICATION or {}).get("stable_cycles") or 0)
+    active_generation = _current_socket_generation()
+    prior_verification = dict(_PARTIAL_RECOVERY_VERIFICATION or {})
+    prior_generation = prior_verification.get("socket_generation")
+    try:
+        prior_generation_matches = (
+            prior_generation is not None
+            and int(prior_generation) == int(active_generation)
+        )
+    except (TypeError, ValueError):
+        prior_generation_matches = False
+    previous_cycles = (
+        int(prior_verification.get("stable_cycles") or 0)
+        if prior_generation_matches and _ws_connected_state() is True
+        else 0
+    )
     verification = _build_partial_recovery_verification(
         now_epoch=now_epoch,
         current_tokens=current_tokens,
@@ -4206,7 +4393,23 @@ def _transition_partial_activity_recovery(
         option_threshold_sec=option_threshold_sec,
         previous_stable_cycles=previous_cycles,
     )
-    _PARTIAL_RECOVERY_VERIFICATION = dict(verification)
+    # The proof is scoped to one connected socket generation.  A generation
+    # change during verification invalidates this cycle and prevents stale
+    # evidence from being committed as recovery success.
+    verification["socket_generation"] = int(active_generation)
+    # Socket transitions drain the callback owner before advancing generation,
+    # so commit the proof atomically against that monotonic generation value.
+    # If an out-of-band transition nevertheless raced this evaluation, discard
+    # its cycle rather than publishing success from an obsolete socket.
+    transport_still_connected = _ws_connected_state() is True
+    with _SOCKET_GENERATION_LOCK:
+        if int(active_generation) != int(_SOCKET_GENERATION) or not transport_still_connected:
+            verification["stable_cycles"] = 0
+            verification["verified"] = False
+            verification["failure_reasons"] = list(verification.get("failure_reasons") or [])
+            if "socket_generation_changed_during_verification" not in verification["failure_reasons"]:
+                verification["failure_reasons"].append("socket_generation_changed_during_verification")
+        _PARTIAL_RECOVERY_VERIFICATION = dict(verification)
     verified_local_activity = bool(verification.get("verified"))
     restart_required_blocked = _reconnect_recovery_blocked_active()
     clearance_allowed = False
@@ -4575,7 +4778,22 @@ def _runtime_transport_truth_fields(
     last_depth_age_sec: float | None,
     reconnect_blocked_reason: str | None,
 ) -> dict[str, object]:
-    verification = dict(_PARTIAL_RECOVERY_VERIFICATION or {})
+    raw_verification = dict(_PARTIAL_RECOVERY_VERIFICATION or {})
+    active_generation = _current_socket_generation()
+    try:
+        verification_generation_matches = (
+            raw_verification.get("socket_generation") is not None
+            and int(raw_verification["socket_generation"]) == int(active_generation)
+        )
+    except (TypeError, ValueError):
+        verification_generation_matches = False
+    # Only a proof from this connected generation may inform recovery truth.
+    # Missing or stale proof stays unknown and fails closed in derived fields.
+    verification = (
+        raw_verification
+        if verification_generation_matches and ws_connected is True
+        else {}
+    )
     callback_epoch = None
     callback_candidates = [float(_LAST_WS_TICK_EPOCH or 0.0)]
     callback_candidates.extend(float(epoch) for epoch in dict(_LAST_MSG_TS_BY_TOKEN or {}).values())
@@ -4603,9 +4821,9 @@ def _runtime_transport_truth_fields(
     )
     subscription_truth_complete = subscription_registry_consistent
     mode_full_truth_complete = subscription_registry_consistent and len(_PENDING_MODE_FULL_TOKENS or set()) == 0
-    critical_feed_fresh = bool(verification.get("critical_feed_fresh", True))
-    core_feed_fresh_ratio = float(verification.get("core_fresh_ratio", 1.0) or 0.0)
-    depth_ratio = float(verification.get("depth_feed_fresh_ratio", 1.0 if last_depth_age_sec is not None else 0.0) or 0.0)
+    critical_feed_fresh = bool(verification.get("critical_feed_fresh", False))
+    core_feed_fresh_ratio = float(verification.get("core_fresh_ratio", 0.0) or 0.0)
+    depth_ratio = float(verification.get("depth_feed_fresh_ratio", 0.0) or 0.0)
     state_text = str(runtime_state or "").strip().upper()
     blocked_reason = str(reconnect_blocked_reason or "").strip().lower()
     execution_feed_ready = bool(
@@ -7455,6 +7673,9 @@ def _build_subscription_tokens_impl(
     global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING, _TOKEN_TO_SYMBOL, _LAST_ATM_BY_SYMBOL
     global _LAST_DESIRED_TOKENS
     global _LAST_OPTION_COUNTS_BY_SYMBOL, _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL
+    invalidate_desired_subscription_candidate(
+        "kite_depth_ws._build_subscription_tokens_impl.build_started"
+    )
     symbols = [str(symbol).strip().upper() for symbol in list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))]
     if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
         symbols = [symbol for symbol in symbols if symbol in _INDEX_SYMBOLS]
@@ -8011,6 +8232,15 @@ def _build_subscription_tokens_impl(
             "FEED_OPTION_OWNERSHIP_METADATA_REJECTED",
             {"reason": str(exc), "expected_token_count": len(desired_option_tokens)},
         )
+    record_desired_subscription_candidate(
+        desired_tokens,
+        option_tokens=desired_option_tokens,
+        configured_budget=max_tokens,
+        source="kite_depth_ws._build_subscription_tokens_impl",
+        observation_required=bool(
+            getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)
+        ),
+    )
     return tokens, resolution
 
 
@@ -9554,7 +9784,7 @@ def _stop_depth_ws_impl(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
     """
-    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
+    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS, _PARTIAL_RECOVERY_VERIFICATION
     transition = _begin_socket_transition(f"stop_depth_ws:{reason}")
     if transition is None:
         return False
@@ -9573,10 +9803,23 @@ def _stop_depth_ws_impl(reason: str = "manual_stop"):
                 _STOP_REQUESTED = True
                 _LAST_FEED_HEALTH_STATE = None
                 _RUNTIME_STATE = "STOPPED"
+                # Even when the socket resources are already absent, replace
+                # the latest artifact after retiring proof. Otherwise an old
+                # verified recovery record remains visible as current state.
+                _PARTIAL_RECOVERY_VERIFICATION = {}
+                _persist_runtime_snapshot_row(
+                    ws_connected=False,
+                    source=f"stop_depth_ws:{reason}",
+                    runtime_state="STOPPED",
+                    last_error=str(reason),
+                )
                 return True
         # Retire callbacks before close/disconnect. The barrier above has
         # already drained every callback admitted under the previous generation.
         _advance_socket_generation()
+        # Generation advancement follows the acknowledged callback barrier.
+        # Clear proof only now, before any terminal snapshot can serialize it.
+        _PARTIAL_RECOVERY_VERIFICATION = {}
         with _KITE_TICKER_LOCK:
             has_active_ticker = _KITE_TICKER is not None
             has_active_watchdog = _WATCHDOG_THREAD is not None or _WATCHDOG_STOP is not None

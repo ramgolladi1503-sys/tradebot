@@ -183,10 +183,17 @@ def test_option_recovery_verification_ignores_underlying_ticks(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {101: 1001.0, 301: 1001.0}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101, 301}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {101: "NIFTY", 301: "RELIANCE"}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {}, raising=False)
     _commit_test_option_ownership(ws, {
         201: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-08-06", "strike": 25000},
         202: {"symbol": "NIFTY", "instrument_type": "PE", "exchange": "NFO", "expiry": "2026-08-06", "strike": 25000},
     })
+    ws.record_desired_subscription_candidate(
+        [101, 201, 202],
+        option_tokens=[201, 202],
+        configured_budget=123,
+        source="test_stale_refresh_plan",
+    )
     ws._reset_option_feed_verification(reason="test_reset")
     ws._begin_option_feed_verification(
         reason="reconnect",
@@ -1662,7 +1669,7 @@ def test_build_subscription_tokens_activates_observation_plan(monkeypatch):
     monkeypatch.setattr(
         ws.kite_client,
         "resolve_option_tokens_window",
-        lambda **kwargs: option_resolution_symbols.append(kwargs["symbol"]) or [910001, 910002, 910003, 910004],
+        lambda **kwargs: option_resolution_symbols.append(kwargs["symbol"]) or [920001, 920002, 920003, 920004],
     )
     registry_mod.reset_observation_registry()
     ws._reset_market_event_graph_generation_evidence()
@@ -1675,7 +1682,10 @@ def test_build_subscription_tokens_activates_observation_plan(monkeypatch):
     assert state["verdict"] == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
     assert len(state["observation_tokens"]) == 51
     assert set(registry.all_tokens).issubset(set(tokens))
-    assert set(registry.all_tokens).issubset(set(ws._LAST_DESIRED_TOKENS))
+    candidate = ws._DESIRED_SUBSCRIPTION_CANDIDATE
+    assert candidate.complete is True
+    assert set(registry.all_tokens).issubset(set(candidate.tokens))
+    assert set(candidate.tokens) == set(tokens)
     assert ws._TOKEN_TO_SYMBOL[registry.index_token] == "NIFTY"
     assert ws._TOKEN_TO_SYMBOL[registry.token_by_symbol["RELIANCE"]] == "RELIANCE"
     assert option_resolution_symbols == ["NIFTY"]

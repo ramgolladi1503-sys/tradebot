@@ -13,11 +13,12 @@ import core.kite_depth_ws as ws
 from core.feed_recovery_coordinator import FeedRecoveryCoordinator
 import core.tick_store as tick_store
 class _DummyThread:
-    def __init__(self, target=None, daemon=None, args=(), kwargs=None):
+    def __init__(self, target=None, daemon=None, args=(), kwargs=None, name=None):
         self.target = target
         self.args = args
         self.kwargs = kwargs or {}
         self.daemon = daemon
+        self.name = name
         self.started = False
     def start(self):
         self.started = True
@@ -151,7 +152,23 @@ def _patch_common(monkeypatch):
     tick_store.set_replay_pressure_immediate_flush_enabled(True)
     tick_store.set_replay_pressure_read_flush_enabled(True)
     monkeypatch.setattr(auth_module, "resolve_access_token", lambda **kwargs: "TOKEN123")
-    monkeypatch.setattr(ws.threading, "Thread", _DummyThread)
+    # Keep the mocked WebSocket watchdog threads local to this module.  The
+    # feed runtime and tick-store persistence workers need real threads to
+    # flush their queues, and the threading module object is otherwise shared
+    # across every importer.
+    import threading as threading_module
+    from types import SimpleNamespace
+    monkeypatch.setattr(
+        ws,
+        "threading",
+        SimpleNamespace(
+            Thread=_DummyThread,
+            Event=threading_module.Event,
+            Lock=threading_module.Lock,
+            RLock=threading_module.RLock,
+            current_thread=threading_module.current_thread,
+        ),
+    )
     rest = _DummyRestClient()
     monkeypatch.setattr(ws.kite_client, "ensure", lambda: rest, raising=False)
     monkeypatch.setattr(ws.kite_client, "kite", rest, raising=False)
@@ -1972,6 +1989,30 @@ def _establish_test_applied_option(ws, token=201):
     )
 
 
+def _record_test_replay_candidate(tokens, option_tokens):
+    """Publish a complete desired-plan snapshot for reconnect-only fixtures."""
+    contracts = {
+        int(token): {
+            "symbol": "NIFTY",
+            "instrument_type": "CE" if index % 2 == 0 else "PE",
+            "exchange": "NFO",
+            "expiry": "2026-12-31",
+            "strike": 25000 + index * 50,
+        }
+        for index, token in enumerate(option_tokens)
+    }
+    revision = ws.record_desired_option_contracts(
+        contracts, expected_tokens=list(option_tokens), source="test_reconnect_plan"
+    )
+    assert revision > 0
+    return ws.record_desired_subscription_candidate(
+        tokens,
+        option_tokens=list(option_tokens),
+        configured_budget=123,
+        source="test_reconnect_plan",
+    )
+
+
 def test_reconnect_callback_invalidates_applied_option_ownership(monkeypatch):
     _patch_common(monkeypatch)
     ticker = _setup_mock_ticker_and_start(monkeypatch)
@@ -2065,7 +2106,10 @@ def test_b_concurrent_reconnect_requests(monkeypatch):
     counted_lock = CountedLock()
     monkeypatch.setattr(ws, "_RESTART_LOCK", counted_lock)
 
-    ws._LAST_TOKENS = [101]
+    ws._UNDERLYING_TOKENS = {101}
+    ws._UNDERLYING_TOKEN_TO_SYMBOL = {101: "NIFTY"}
+    ws._LAST_TOKENS = [101, 102]
+    _record_test_replay_candidate([101, 102], [102])
 
     reconnect_attempts = []
     def mock_start_depth_ws(*args, **kwargs):
@@ -2111,6 +2155,8 @@ def test_c_complete_resubscription(monkeypatch):
 
     ws._LAST_TOKENS = [101, 102, 103]
     ws._UNDERLYING_TOKENS = {101}
+    ws._UNDERLYING_TOKEN_TO_SYMBOL = {101: "NIFTY"}
+    _record_test_replay_candidate([101, 102, 103], [102, 103])
 
     # old websocket disconnects
     ticker.close()
@@ -2284,6 +2330,157 @@ def test_partial_recovery_requires_three_stable_cycles(monkeypatch):
     assert ws._PARTIAL_RECOVERY_VERIFICATION["stable_cycles"] == 3
     assert ws._PARTIAL_RECOVERY_VERIFICATION["verified"] is True
     assert ws._RUNTIME_STATE == "LIVE"
+
+
+def test_partial_recovery_does_not_carry_cycles_across_socket_generation(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ticker.on_connect(ticker, "mock_response")
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 2, raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102, 103], raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101}, raising=False)
+    monkeypatch.setattr(ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {
+        "socket_generation": 1,
+        "stable_cycles": 2,
+        "verified": False,
+    }, raising=False)
+
+    result = ws._transition_partial_activity_recovery(
+        now_epoch=100.0,
+        current_tokens={101, 102, 103},
+        underlying_tokens={101},
+        last_msg_by_token={101: 100.0, 102: 100.0, 103: 100.0},
+        index_threshold_sec=5.0,
+        option_threshold_sec=5.0,
+    )
+
+    assert result["socket_generation"] == 2
+    assert result["stable_cycles"] == 1
+    assert result["verified"] is False
+
+
+def test_partial_recovery_legacy_proof_without_generation_starts_at_one(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ticker.on_connect(ticker, "mock_response")
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102, 103], raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101}, raising=False)
+    monkeypatch.setattr(ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {
+        "stable_cycles": 2,
+        "verified": False,
+    }, raising=False)
+
+    result = ws._transition_partial_activity_recovery(
+        now_epoch=100.0,
+        current_tokens={101, 102, 103},
+        underlying_tokens={101},
+        last_msg_by_token={101: 100.0, 102: 100.0, 103: 100.0},
+        index_threshold_sec=5.0,
+        option_threshold_sec=5.0,
+    )
+
+    assert result["socket_generation"] == ws._current_socket_generation()
+    assert result["stable_cycles"] == 1
+    assert result["verified"] is False
+
+
+def test_missing_or_stale_partial_recovery_proof_serializes_unknown_fail_closed(monkeypatch):
+    _patch_common(monkeypatch)
+    generation = ws._current_socket_generation()
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {
+        "socket_generation": generation - 1,
+        "stable_cycles": 3,
+        "verified": True,
+        "critical_feed_fresh": True,
+        "core_fresh_ratio": 1.0,
+        "depth_feed_fresh_ratio": 1.0,
+    }, raising=False)
+
+    stale = ws._runtime_transport_truth_fields(
+        now_epoch=100.0,
+        ws_connected=True,
+        runtime_state="RUNNING",
+        last_ws_tick_epoch=100.0,
+        last_tick_age_sec=0.0,
+        last_depth_age_sec=0.0,
+        reconnect_blocked_reason=None,
+    )
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {}, raising=False)
+    missing = ws._runtime_transport_truth_fields(
+        now_epoch=100.0,
+        ws_connected=True,
+        runtime_state="RUNNING",
+        last_ws_tick_epoch=100.0,
+        last_tick_age_sec=0.0,
+        last_depth_age_sec=0.0,
+        reconnect_blocked_reason=None,
+    )
+
+    for snapshot in (stale, missing):
+        assert snapshot["recovery_verification"] is None
+        assert snapshot["critical_feed_fresh"] is False
+        assert snapshot["core_feed_fresh_ratio"] == 0.0
+        assert snapshot["depth_feed_fresh_ratio"] == 0.0
+        assert snapshot["execution_feed_ready"] is False
+
+
+def test_acknowledged_stop_does_not_serialize_old_verified_partial_recovery(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    generation = ws._current_socket_generation()
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {
+        "socket_generation": generation,
+        "stable_cycles": 3,
+        "verified": True,
+    }, raising=False)
+
+    assert ws.stop_depth_ws(reason="verified_recovery_stop") is True
+    from core.feed import runtime_store
+    runtime_store._RUNTIME_WRITE_QUEUE.join()
+    payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+
+    assert payload["runtime_state"] == "STOPPED"
+    assert payload.get("recovery_verification") is None
+    assert ws._PARTIAL_RECOVERY_VERIFICATION == {}
+
+
+def test_acknowledged_stop_without_resources_replaces_old_recovery_artifact(monkeypatch):
+    _patch_common(monkeypatch)
+    generation = ws._current_socket_generation()
+    monkeypatch.setattr(ws, "_KITE_TICKER", None, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_THREAD", None, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {
+        "socket_generation": generation,
+        "stable_cycles": 3,
+        "verified": True,
+    }, raising=False)
+
+    assert ws.stop_depth_ws(reason="verified_recovery_without_resources") is True
+    from core.feed import runtime_store
+    runtime_store._RUNTIME_WRITE_QUEUE.join()
+    payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+
+    assert payload["runtime_state"] == "STOPPED"
+    assert payload.get("recovery_verification") is None
+    assert ws._PARTIAL_RECOVERY_VERIFICATION == {}
+
+
+def test_unacknowledged_stop_barrier_preserves_partial_recovery_proof(monkeypatch):
+    _patch_common(monkeypatch)
+    _setup_mock_ticker_and_start(monkeypatch)
+    proof = {"socket_generation": ws._current_socket_generation(), "stable_cycles": 3, "verified": True}
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", dict(proof), raising=False)
+    monkeypatch.setattr(ws, "_begin_socket_transition", lambda reason: None)
+
+    assert ws.stop_depth_ws(reason="barrier_not_acknowledged") is False
+    assert ws._PARTIAL_RECOVERY_VERIFICATION == proof
 
 
 def test_partial_recovery_stale_critical_stays_degraded(monkeypatch):
@@ -2504,8 +2701,9 @@ def test_ws_recovery_proof_context_aligns_with_resubscribe_selection(monkeypatch
     ws._LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN[underlying] = 100.0
 
     # Desired has underlying + option; last tokens has only underlying
-    ws._LAST_DESIRED_TOKENS = [underlying, option_token]
+    ws._TOKEN_TO_SYMBOL = {option_token: "NIFTY"}
     ws._LAST_TOKENS = [underlying]
+    _record_test_replay_candidate([underlying, option_token], [option_token])
 
     context = ws._new_ws_recovery_proof_context(disconnect_started_at=105.0)
     # Proof context expected tokens should contain both tokens (aligned with what resubscribe will apply)
