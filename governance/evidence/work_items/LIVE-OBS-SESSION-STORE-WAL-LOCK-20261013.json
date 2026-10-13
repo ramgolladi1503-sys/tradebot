@@ -1,0 +1,528 @@
+{
+  "acceptance_criteria": [
+    "Initialization checks effective journal mode and fails explicitly if WAL cannot be established.",
+    "Repeated connection creation does not issue journal_mode negotiation.",
+    "A locked write reports failure and does not report persisted/cached success.",
+    "After the lock is released, a write can succeed and the persisted bar can be read back.",
+    "The focused test suite at the current exact candidate and hosted CI remain required before merge; no live behavior is inferred.",
+    "core/candidate_feed_dependencies.py: refresh the pinned MarketSessionStore source digest required by the integrity validator"
+  ],
+  "acting_role": "RELEASE_MANAGER",
+  "allowed_paths": [
+    "core/market_session_store.py",
+    "docs/agent_reviews/pr977_sqlite_wal_lock.md",
+    "governance/evidence/CLAIM_REGISTRY.json",
+    "governance/evidence/VERIFICATION_MATRIX.json",
+    "governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
+    "tests/core/test_market_session_store.py",
+    "core/candidate_feed_dependencies.py"
+  ],
+  "architecture_impact": "Reuses the existing MarketSessionStore connection initialization and persistence boundary. No new runtime subsystem or parallel evidence ledger is introduced.",
+  "business_goal": "Reduce avoidable SQLite lock contention observed during a live-session completed-bar persistence attempt without weakening write failure behavior.",
+  "current_behavior": "A captured MarketSessionStore.persist_completed_bar path entered _conn and attempted PRAGMA journal_mode=WAL; sqlite3 raised database is locked. The lock holder was not identified and timestamp attribution is limited.",
+  "current_state": "PR_OPEN",
+  "defect_history": [],
+  "defects": [],
+  "dependencies": [
+    "Captured live_observation.log stack location as reported in PR task evidence",
+    "Existing core.delivery evidence model",
+    "SQLite WAL semantics as implemented by Python sqlite3"
+  ],
+  "evidence": [
+    {
+      "author": "/root/sqlite_ba (reported BA-role review; agent identity unauthenticated; result relayed by task coordinator)",
+      "check_results": [],
+      "content_hash": "e5b9a3925737021c78eaab25845bfa27b9492b67dd248f9b2db54a0d4bb0653e",
+      "evidence_id": "LIVE-OBS-SQLITE-G0-BA-20261013",
+      "evidence_type": "REQUIREMENT_EVIDENCE",
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "references": [
+        "docs/agent_reviews/pr977_sqlite_wal_lock.md",
+        "live_observation.log:1030-1043 (reported locator; source artifact not present in this worktree)"
+      ],
+      "role": "BUSINESS_ANALYST",
+      "sequence": 1,
+      "status": "PASS",
+      "summary": "Coordinator record of the reported requirements review: acceptance is limited to WAL initialization behavior and explicit lock failure handling. Captured evidence does not identify the SQLite lock holder or establish timestamps within the 15-minute window.",
+      "timestamp": "2026-10-13T10:58:35.885251Z",
+      "work_item_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "work_item_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013"
+    },
+    {
+      "author": "Current user (explicit scoped lifecycle and gated-auto-merge authorization; product-owner role self-attested, identity unauthenticated)",
+      "check_results": [],
+      "content_hash": "a97fa03380ab5e86a233f45b6541aae17a715c1ec2a0d83dfbf84b05f5104bfc",
+      "evidence_id": "LIVE-OBS-SQLITE-PO-DESIGN-20261013",
+      "evidence_type": "REQUIREMENT_EVIDENCE",
+      "previous_hash": "e5b9a3925737021c78eaab25845bfa27b9492b67dd248f9b2db54a0d4bb0653e",
+      "references": [
+        "conversation://current-task/user-authorized-lifecycle-and-merge-after-gates"
+      ],
+      "role": "PRODUCT_OWNER",
+      "sequence": 2,
+      "status": "PASS",
+      "summary": "Record the user authorization for this narrow lifecycle work and automatic merge only after required gates permit. It is not live-readiness approval, check bypass, or identity authentication.",
+      "timestamp": "2026-10-13T10:58:36.095421Z",
+      "work_item_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "work_item_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013"
+    },
+    {
+      "author": "/root/sqlite_hermes (reported architecture-role review; agent identity unauthenticated; result relayed by task coordinator)",
+      "check_results": [],
+      "content_hash": "9fd4fec54b1d1afd6989744536a41c8e6a9a4cdb1ca326f95f857772cbafaa27",
+      "evidence_id": "LIVE-OBS-SQLITE-G1-HERMES-20261013",
+      "evidence_type": "ARCHITECTURE_EVIDENCE",
+      "previous_hash": "a97fa03380ab5e86a233f45b6541aae17a715c1ec2a0d83dfbf84b05f5104bfc",
+      "references": [
+        "docs/agent_reviews/pr977_sqlite_wal_lock.md",
+        "core/market_session_store.py"
+      ],
+      "role": "SOLUTION_ARCHITECT",
+      "sequence": 3,
+      "status": "PASS",
+      "summary": "Coordinator record of the reported architecture review: initialization-time WAL verification fits the existing store boundary and failure remains explicit. Concurrent first initialization is not proven covered.",
+      "timestamp": "2026-10-13T10:58:36.166532Z",
+      "work_item_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "work_item_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013"
+    },
+    {
+      "author": "Codex GSD implementation role (identity unauthenticated)",
+      "check_results": [],
+      "content_hash": "4869f041d321bdd9190178dd139285dd84fdd5aa2dfacb6d1607a523f4d340f0",
+      "evidence_id": "LIVE-OBS-SQLITE-G2-DEV-20261013",
+      "evidence_type": "DEV_TEST_EVIDENCE",
+      "previous_hash": "9fd4fec54b1d1afd6989744536a41c8e6a9a4cdb1ca326f95f857772cbafaa27",
+      "references": [
+        "git:0714c423641f04cf6f987c95379af254c7fd9819",
+        "conversation://focused-market-session-store-test-result-22-passed-before-retry-assertion"
+      ],
+      "role": "BACKEND_DEVELOPER",
+      "sequence": 4,
+      "status": "PASS",
+      "summary": "Coordinator record of focused MarketSessionStore suite output previously reported as 22 passed on implementation commit 0714c423641f04cf6f987c95379af254c7fd9819. That run predates the uncommitted retry-after-lock assertion now in the worktree; the assertion is not covered and exact-head CI remains required.",
+      "timestamp": "2026-10-13T10:58:36.391912Z",
+      "work_item_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "work_item_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013"
+    },
+    {
+      "author": "/root/sqlite_qa (reported QA-role review; agent identity unauthenticated; result relayed by task coordinator)",
+      "check_results": [],
+      "content_hash": "aa54222f095e74365fb2c56baed0639c4d285e9ac0439ab38360952968521457",
+      "evidence_id": "LIVE-OBS-SQLITE-G3-QA-20261013",
+      "evidence_type": "QA_EVIDENCE",
+      "previous_hash": "4869f041d321bdd9190178dd139285dd84fdd5aa2dfacb6d1607a523f4d340f0",
+      "references": [
+        "docs/agent_reviews/pr977_sqlite_wal_lock.md",
+        "conversation://sqlite_qa-review-and-focused-suite-report"
+      ],
+      "role": "QA_ENGINEER",
+      "sequence": 5,
+      "status": "PASS",
+      "summary": "Coordinator record of the reported QA finding: no blocking scope issue in the bounded persistence behavior; the focused 22-test result predates the current retry assertion. The lock-holder identity and live behavior remain unknown.",
+      "timestamp": "2026-10-13T10:58:37.089309Z",
+      "work_item_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "work_item_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013"
+    },
+    {
+      "author": "/root/sqlite_senior_qa (reported senior-QA-role review; agent identity unauthenticated; result relayed by task coordinator)",
+      "check_results": [],
+      "content_hash": "7070684e370710e48c6ba9ad5c5a5cfd222cfabfe36cb61ff04f52cd29aa6284",
+      "evidence_id": "LIVE-OBS-SQLITE-SENIOR-QA-20261013",
+      "evidence_type": "SENIOR_QA_EVIDENCE",
+      "previous_hash": "aa54222f095e74365fb2c56baed0639c4d285e9ac0439ab38360952968521457",
+      "references": [
+        "docs/agent_reviews/pr977_sqlite_wal_lock.md",
+        "conversation://sqlite_senior_qa-review"
+      ],
+      "role": "SENIOR_QA",
+      "sequence": 6,
+      "status": "PASS",
+      "summary": "Coordinator record of the reported senior review: no P1/P2 finding for the scoped implementation; lock-holder attribution and test limits remain explicit. Identity is unauthenticated.",
+      "timestamp": "2026-10-13T10:58:37.244202Z",
+      "work_item_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "work_item_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013"
+    },
+    {
+      "author": "/root/sqlite_uat (reported offline-UAT-role review; agent identity unauthenticated; result relayed by task coordinator)",
+      "check_results": [],
+      "content_hash": "81285aca9f12da65b176e476f3b0197db6f963c516f562f29223913b988b0ec6",
+      "evidence_id": "LIVE-OBS-SQLITE-UAT-20261013",
+      "evidence_type": "UAT_EVIDENCE",
+      "previous_hash": "7070684e370710e48c6ba9ad5c5a5cfd222cfabfe36cb61ff04f52cd29aa6284",
+      "references": [
+        "docs/agent_reviews/pr977_sqlite_wal_lock.md",
+        "conversation://sqlite_uat-offline-review"
+      ],
+      "role": "UAT_REVIEWER",
+      "sequence": 7,
+      "status": "PASS",
+      "summary": "Coordinator record of reported offline UAT pass for the scoped store behavior. No live process, broker, order path, or production database was exercised.",
+      "timestamp": "2026-10-13T10:58:37.532564Z",
+      "work_item_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "work_item_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013"
+    },
+    {
+      "author": "Current user (explicit scoped lifecycle and gated-auto-merge authorization; product-owner role self-attested, identity unauthenticated)",
+      "check_results": [],
+      "content_hash": "2d92c80a92cbf3a7624b3985c792d8e32e5f87dd4a284cd8ee0261ee869d87dc",
+      "evidence_id": "LIVE-OBS-SQLITE-PO-ACCEPT-20261013",
+      "evidence_type": "PRODUCT_ACCEPTANCE_EVIDENCE",
+      "previous_hash": "81285aca9f12da65b176e476f3b0197db6f963c516f562f29223913b988b0ec6",
+      "references": [
+        "conversation://current-task/user-authorized-lifecycle-and-merge-after-gates"
+      ],
+      "role": "PRODUCT_OWNER",
+      "sequence": 8,
+      "status": "PASS",
+      "summary": "Record acceptance of the bounded PR deliverable for review and CI only, with merge conditional on required checks. Not live readiness, universal lock resolution, or authenticated identity.",
+      "timestamp": "2026-10-13T10:58:37.677054Z",
+      "work_item_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "work_item_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013"
+    },
+    {
+      "author": "/root task coordinator (release-manager role assigned for recording; identity unauthenticated)",
+      "check_results": [],
+      "content_hash": "8652d96350262be38c715d1a454cb2ec3cbf6b8bb1314fc6b7b13ebcf3a4cad6",
+      "evidence_id": "LIVE-OBS-SQLITE-RELEASE-20261013",
+      "evidence_type": "RELEASE_EVIDENCE",
+      "previous_hash": "2d92c80a92cbf3a7624b3985c792d8e32e5f87dd4a284cd8ee0261ee869d87dc",
+      "references": [
+        "https://github.com/ramgolladi1503-sys/tradebot/pull/977",
+        "docs/agent_reviews/pr977_sqlite_wal_lock.md"
+      ],
+      "role": "RELEASE_MANAGER",
+      "sequence": 9,
+      "status": "PASS",
+      "summary": "Record eligibility for PR-stage validation only. Do not merge until current exact-head required CI passes; no check is waived. The current retry assertion is not covered by the earlier focused suite.",
+      "timestamp": "2026-10-13T10:58:37.923292Z",
+      "work_item_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "work_item_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013"
+    },
+    {
+      "author": "/root task coordinator (release-manager role assigned for recording; identity unauthenticated)",
+      "check_results": [],
+      "content_hash": "1f426a755ebad3257b2b19ee188513b07318002d0de97b8a930cfdba151e63c8",
+      "evidence_id": "LIVE-OBS-SQLITE-RELEASE-PR-OPEN-20261013",
+      "evidence_type": "RELEASE_EVIDENCE",
+      "previous_hash": "8652d96350262be38c715d1a454cb2ec3cbf6b8bb1314fc6b7b13ebcf3a4cad6",
+      "references": [
+        "https://github.com/ramgolladi1503-sys/tradebot/pull/977",
+        "docs/agent_reviews/pr977_sqlite_wal_lock.md"
+      ],
+      "role": "RELEASE_MANAGER",
+      "sequence": 10,
+      "status": "PASS",
+      "summary": "The PR is open. This evidence records PR existence only; exact-head checks remain required and no merge is approved.",
+      "timestamp": "2026-10-13T10:58:38.078259Z",
+      "work_item_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "work_item_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013"
+    }
+  ],
+  "evidence_refs": [
+    "docs/agent_reviews/pr977_sqlite_wal_lock.md",
+    "live_observation.log:1030-1043 (captured stack locator reported in the task; no embedded timestamp or lock-holder identity)",
+    "core/market_session_store.py",
+    "tests/core/test_market_session_store.py",
+    "conversation://current-task/parent-reported-pytest-rerun-after-retry-assertion-2026-10-13 (PYTHONPATH=. pytest -q tests/core/test_market_session_store.py --tb=short; 22 passed, 1 warning; worktree HEAD 0714c423641f04cf6f987c95379af254c7fd9819; locally reported, not independently observed or hosted exact-head CI)"
+  ],
+  "expected_behavior": "WAL mode is checked/negotiated at initialization, and a failure to establish WAL remains explicit. Later connection acquisition does not re-negotiate journal mode. Bar writes remain fail-closed.",
+  "expected_tests": [
+    "pytest -q tests/core/test_market_session_store.py --tb=short",
+    "python3 -m core.delivery.cli validate governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
+    "python3 -m core.delivery.cli readiness governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
+    "python3 tools/verify_evidence.py --base-ref origin/main --candidate-ref HEAD --candidate-sha <full-candidate-sha> --candidate-root . --candidate-root-sha <same-full-candidate-sha> --verifier-source-sha <trusted-verifier-sha> --mode enforce-new-material",
+    "Parse changed governance JSON and run git diff --check"
+  ],
+  "extensions": {
+    "agent_task_contracts": [
+      {
+        "acceptance_proof": "The agent-review evidence gate has the required sections; all changed PR paths are classified, assessed and covered by a registered UNVERIFIED claim; delivery lifecycle uses sealed evidence with stated identity limitations; exact-head CI remains a separate merge requirement.",
+        "action": "GENERATE_PATCH",
+        "allowed_paths": [
+          "core/market_session_store.py",
+          "docs/agent_reviews/pr977_sqlite_wal_lock.md",
+          "governance/evidence/CLAIM_REGISTRY.json",
+          "governance/evidence/VERIFICATION_MATRIX.json",
+          "governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
+          "tests/core/test_market_session_store.py"
+        ],
+        "expected_tests": [
+          "python3 -m core.delivery.cli validate governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
+          "python3 -m core.delivery.cli readiness governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
+          "trusted-base exact-candidate verification",
+          "JSON parse and git diff --check"
+        ],
+        "forbidden_paths": [
+          "all other paths",
+          "live/runtime/broker/order/credential/risk changes",
+          "gate bypasses",
+          "fabricated identity or evidence"
+        ],
+        "requested_paths": [
+          "core/market_session_store.py",
+          "docs/agent_reviews/pr977_sqlite_wal_lock.md",
+          "governance/evidence/CLAIM_REGISTRY.json",
+          "governance/evidence/VERIFICATION_MATRIX.json",
+          "governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
+          "tests/core/test_market_session_store.py"
+        ],
+        "scope": "Governance documentation and evidence for the existing SQLite WAL initialization PR only. Preserve the unrelated uncommitted retry assertion and do not alter core/test code.",
+        "source_agent": "gsd",
+        "task_contract_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013-GSD",
+        "title": "Record bounded SQLite WAL lock remediation evidence"
+      }
+    ],
+    "evidence_standard": {
+      "applicability": "REQUIRED",
+      "applicability_reason": "This PR changes material persistence implementation and its behavioral tests.",
+      "assessed_paths": [
+        "core/market_session_store.py",
+        "docs/agent_reviews/pr977_sqlite_wal_lock.md",
+        "governance/evidence/CLAIM_REGISTRY.json",
+        "governance/evidence/VERIFICATION_MATRIX.json",
+        "governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
+        "tests/core/test_market_session_store.py",
+        "core/candidate_feed_dependencies.py"
+      ],
+      "claims": [
+        {
+          "assumptions": [],
+          "claim_id": "LIVE_OBS_SESSION_STORE_WAL_INITIALIZATION_20261013",
+          "claim_kind": "operational_reliability",
+          "evidence_refs": [],
+          "gate_evidence": {},
+          "limitation": "This is a bounded code/test claim only. The observed lock holder and initiating cause remain unknown; this record does not prove all contention fixed, exact-head CI, merge, or live/production readiness.",
+          "source_ids": [],
+          "statement": "The scoped MarketSessionStore change negotiates and verifies SQLite WAL mode during database initialization rather than on each connection, while retaining fail-closed writes and the existing busy timeout and synchronous durability setting.",
+          "status": "UNVERIFIED"
+        }
+      ],
+      "enforcement_mode": "REPORT_ONLY",
+      "schema_version": 1,
+      "subject_commit_sha": null
+    }
+  },
+  "forbidden_paths": [
+    "all paths outside allowed_paths",
+    "main.py",
+    "run_live.sh",
+    "config/",
+    "credentials.py",
+    ".env",
+    "runtime/live/",
+    "core/broker/",
+    "core/order/",
+    "core/execution",
+    "core/risk/",
+    "core/feed/",
+    "strategies/",
+    "broker/order/credential/risk/feed/strategy/live runtime actions"
+  ],
+  "in_scope": [
+    "core/market_session_store.py: initialize and verify WAL once; retain existing busy_timeout and synchronous settings",
+    "tests/core/test_market_session_store.py: exercise lock failure, no false persisted/cache success, and retry after lock release",
+    "governance records and review note for this exact SQLite lock PR",
+    "core/candidate_feed_dependencies.py: refresh the pinned MarketSessionStore source digest required by the integrity validator"
+  ],
+  "out_of_scope": [
+    "SQLite lock holder identification, which is unknown from captured evidence",
+    "claim that all SQLite contention is fixed",
+    "live processes, runtime configuration, broker/order paths, credentials, risk controls, strategy thresholds",
+    "PR #976 option subscription ownership changes",
+    "exact-head CI outcomes, merge, deployment, or production/live readiness"
+  ],
+  "parent_epic": "LIVE-OBSERVED-ISSUES-20261013",
+  "parent_feature": "SESSION-STORE-PERSISTENCE",
+  "priority": "P1",
+  "qa_attack_plan": [
+    "locked write propagates failure without false persisted/cache state",
+    "lock release permits a later write and readback",
+    "WAL initialization failure remains explicit",
+    "no repeated journal_mode transition attempt occurs on ordinary connection acquisition",
+    "concurrent initialization behavior remains a stated test limit if not exercised"
+  ],
+  "release_gates": [
+    "G0_REQUIREMENT",
+    "G1_ARCHITECTURE",
+    "G2_DEVELOPMENT",
+    "G3_QA",
+    "G4_UAT",
+    "G5_PRODUCT",
+    "G7_RELEASE",
+    "Exact-head required CI checks pass before merge"
+  ],
+  "required_ci_checks": [],
+  "rollback_plan": "Revert only the WAL initialization change after reviewing the exact resulting diff. Preserve explicit persistence errors and existing durability settings. Do not alter SQLite data or live state as part of rollback.",
+  "safety_constraints": [
+    "read_only=true for investigation and governance evidence",
+    "is_order_action=false",
+    "broker_api_called=false",
+    "allowed_for_live_execution=false",
+    "append=false for read-only evidence/contracts",
+    "No restart, broker call, order operation, runtime configuration change, or risk-gate change"
+  ],
+  "schema_version": 1,
+  "state_history": [
+    {
+      "acting_role": "BUSINESS_ANALYST",
+      "actor": "/root/sqlite_ba (reported BA-role review; agent identity unauthenticated; result relayed by task coordinator)",
+      "contract_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "entry_hash": "83dd7a6ca46e8bdccb7f58aa144190098d68190efc0c76e05215a37477fbdc4c",
+      "evidence_ids": [
+        "LIVE-OBS-SQLITE-G0-BA-20261013"
+      ],
+      "from_state": "BACKLOG",
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "reason": "Record the bounded requirement and preserve uncertainty about lock ownership.",
+      "timestamp": "2026-10-13T10:58:35.984311Z",
+      "to_state": "REQUIREMENT_READY"
+    },
+    {
+      "acting_role": "SOLUTION_ARCHITECT",
+      "actor": "/root/sqlite_hermes (reported architecture-role review; agent identity unauthenticated; result relayed by task coordinator)",
+      "contract_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "entry_hash": "2ab77c691696c7549a9378234ba5d02b3bcf6d4008869bd1c6e9bead89caea37",
+      "evidence_ids": [
+        "LIVE-OBS-SQLITE-G1-HERMES-20261013",
+        "LIVE-OBS-SQLITE-PO-DESIGN-20261013",
+        "LIVE-OBS-SQLITE-G0-BA-20261013"
+      ],
+      "from_state": "REQUIREMENT_READY",
+      "previous_hash": "83dd7a6ca46e8bdccb7f58aa144190098d68190efc0c76e05215a37477fbdc4c",
+      "reason": "Record the reported design review with the source roles unauthenticated.",
+      "timestamp": "2026-10-13T10:58:36.242274Z",
+      "to_state": "DESIGN_READY"
+    },
+    {
+      "acting_role": "BACKEND_DEVELOPER",
+      "actor": "Codex GSD implementation role (identity unauthenticated)",
+      "contract_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "entry_hash": "5cb90b806deb0d01580e7457e1ed0547d31144a81522617a4d2bc49948b90e11",
+      "evidence_ids": [],
+      "from_state": "DESIGN_READY",
+      "previous_hash": "2ab77c691696c7549a9378234ba5d02b3bcf6d4008869bd1c6e9bead89caea37",
+      "reason": "The bounded implementation is recorded at the cited commit; no runtime path is in scope.",
+      "timestamp": "2026-10-13T10:58:36.312607Z",
+      "to_state": "IN_DEVELOPMENT"
+    },
+    {
+      "acting_role": "BACKEND_DEVELOPER",
+      "actor": "Codex GSD implementation role (identity unauthenticated)",
+      "contract_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "entry_hash": "d0b372c617bd0aef3453862e831a7b7fba342f85c85cc596fc098076c1764ac5",
+      "evidence_ids": [
+        "LIVE-OBS-SQLITE-G2-DEV-20261013"
+      ],
+      "from_state": "IN_DEVELOPMENT",
+      "previous_hash": "5cb90b806deb0d01580e7457e1ed0547d31144a81522617a4d2bc49948b90e11",
+      "reason": "Record the prior focused result only; the additional worktree assertion and exact candidate are not implied tested.",
+      "timestamp": "2026-10-13T10:58:36.461564Z",
+      "to_state": "DEV_VERIFIED"
+    },
+    {
+      "acting_role": "QA_ENGINEER",
+      "actor": "/root/sqlite_qa (reported QA-role review; agent identity unauthenticated; result relayed by task coordinator)",
+      "contract_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "entry_hash": "ab55c7680e2d36344bc8c49c7d4e1323ff6406156b0eb01f4adbb76399ef497e",
+      "evidence_ids": [],
+      "from_state": "DEV_VERIFIED",
+      "previous_hash": "d0b372c617bd0aef3453862e831a7b7fba342f85c85cc596fc098076c1764ac5",
+      "reason": "Proceed with bounded independent review; no claim is made about live behavior.",
+      "timestamp": "2026-10-13T10:58:36.552026Z",
+      "to_state": "QA_IN_PROGRESS"
+    },
+    {
+      "acting_role": "QA_ENGINEER",
+      "actor": "/root/sqlite_qa (reported QA-role review; agent identity unauthenticated; result relayed by task coordinator)",
+      "contract_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "entry_hash": "4af65770bc922e8dfe2df49bf2268e127b12043a6dd4f9d7dabc6ffcc938d1f0",
+      "evidence_ids": [
+        "LIVE-OBS-SQLITE-G3-QA-20261013"
+      ],
+      "from_state": "QA_IN_PROGRESS",
+      "previous_hash": "ab55c7680e2d36344bc8c49c7d4e1323ff6406156b0eb01f4adbb76399ef497e",
+      "reason": "Record the reported scoped QA assessment; exact-head CI remains a separate gate.",
+      "timestamp": "2026-10-13T10:58:37.168901Z",
+      "to_state": "QA_PASSED"
+    },
+    {
+      "acting_role": "SENIOR_QA",
+      "actor": "/root/sqlite_senior_qa (reported senior-QA-role review; agent identity unauthenticated; result relayed by task coordinator)",
+      "contract_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "entry_hash": "739ce2384c8fb1eee162cc6936287c60cc9cd3c70b5000e7675e371c57f6330b",
+      "evidence_ids": [
+        "LIVE-OBS-SQLITE-SENIOR-QA-20261013"
+      ],
+      "from_state": "QA_PASSED",
+      "previous_hash": "4af65770bc922e8dfe2df49bf2268e127b12043a6dd4f9d7dabc6ffcc938d1f0",
+      "reason": "Record the separate reported senior-QA assessment.",
+      "timestamp": "2026-10-13T10:58:37.332340Z",
+      "to_state": "SENIOR_QA"
+    },
+    {
+      "acting_role": "SENIOR_QA",
+      "actor": "/root/sqlite_senior_qa (reported senior-QA-role review; agent identity unauthenticated; result relayed by task coordinator)",
+      "contract_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "entry_hash": "5a6ed88296c525124fb96ec3507439d62d6145ca4e1db1b4d31adb61c0e9fb4e",
+      "evidence_ids": [
+        "LIVE-OBS-SQLITE-SENIOR-QA-20261013"
+      ],
+      "from_state": "SENIOR_QA",
+      "previous_hash": "739ce2384c8fb1eee162cc6936287c60cc9cd3c70b5000e7675e371c57f6330b",
+      "reason": "Proceed to offline UAT only; no runtime or broker verification is implied.",
+      "timestamp": "2026-10-13T10:58:37.430254Z",
+      "to_state": "UAT"
+    },
+    {
+      "acting_role": "PRODUCT_OWNER",
+      "actor": "Current user (explicit scoped lifecycle and gated-auto-merge authorization; product-owner role self-attested, identity unauthenticated)",
+      "contract_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "entry_hash": "77d88e1866bcdf035f9bf02fb7535c51773bda75dcc1d955940d251d8cfd6513",
+      "evidence_ids": [
+        "LIVE-OBS-SQLITE-UAT-20261013",
+        "LIVE-OBS-SQLITE-PO-ACCEPT-20261013"
+      ],
+      "from_state": "UAT",
+      "previous_hash": "5a6ed88296c525124fb96ec3507439d62d6145ca4e1db1b4d31adb61c0e9fb4e",
+      "reason": "The bounded offline deliverable is accepted for PR-stage validation; exact-head CI remains required.",
+      "timestamp": "2026-10-13T10:58:37.804384Z",
+      "to_state": "PRODUCT_ACCEPTED"
+    },
+    {
+      "acting_role": "RELEASE_MANAGER",
+      "actor": "/root task coordinator (release-manager role assigned for recording; identity unauthenticated)",
+      "contract_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "entry_hash": "927b3a4e9e6694c35bf0a616236fee94f75b932fb0ab8217bca9e278a81e343d",
+      "evidence_ids": [
+        "LIVE-OBS-SQLITE-RELEASE-20261013"
+      ],
+      "from_state": "PRODUCT_ACCEPTED",
+      "previous_hash": "77d88e1866bcdf035f9bf02fb7535c51773bda75dcc1d955940d251d8cfd6513",
+      "reason": "Eligible to proceed to PR_OPEN for checks, not to merge; CI remains unverified/blocked.",
+      "timestamp": "2026-10-13T10:58:38.008457Z",
+      "to_state": "RELEASE_READY"
+    },
+    {
+      "acting_role": "RELEASE_MANAGER",
+      "actor": "/root task coordinator (release-manager role assigned for recording; identity unauthenticated)",
+      "contract_hash": "05618c74dd5044427cc78626185461274bcb4e71df6677c110793d52d796040a",
+      "entry_hash": "a1dc33d36c7507e9453a22a8ab99cb230e79f3a9032fa95cba55e30c3bf87310",
+      "evidence_ids": [
+        "LIVE-OBS-SQLITE-RELEASE-PR-OPEN-20261013"
+      ],
+      "from_state": "RELEASE_READY",
+      "previous_hash": "927b3a4e9e6694c35bf0a616236fee94f75b932fb0ab8217bca9e278a81e343d",
+      "reason": "Record existing PR state; no passing CI or merge authorization is implied.",
+      "timestamp": "2026-10-13T10:58:38.157514Z",
+      "to_state": "PR_OPEN"
+    }
+  ],
+  "title": "Avoid repeated SQLite WAL mode negotiation during MarketSessionStore connections",
+  "type": "BUG",
+  "uat_criteria": [
+    "Offline review confirms this patch does not call a broker or perform order actions.",
+    "Offline evidence does not claim production or live readiness.",
+    "Observed lock holder remains unknown unless new timestamped evidence identifies it."
+  ],
+  "work_item_id": "LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013"
+}

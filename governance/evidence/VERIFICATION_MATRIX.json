@@ -74,7 +74,8 @@
     "docs/samples/codex-supervisor-task.json",
     ".github/workflows/repo-forensics-pr-gate.yml",
     ".github/workflows/pr818-apply-safe-test-contract-repairs.yml",
-    ".github/workflows/rag-ci.yml"
+    ".github/workflows/rag-ci.yml",
+    "tests/core/"
   ],
   "gates": {
     "G1_SOURCE": {

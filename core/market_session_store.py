@@ -424,12 +424,21 @@ class MarketSessionStore:
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout=30000")
-        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=FULL")
         return conn
 
     def _init_db(self) -> None:
         with self._lock, self._conn() as conn:
+            # WAL mode is persistent for this database. Negotiate it once while
+            # initializing the store, rather than on each short-lived write
+            # connection where a concurrent writer could hold the WAL lock.
+            mode_row = conn.execute("PRAGMA journal_mode").fetchone()
+            journal_mode = "" if mode_row is None else str(mode_row[0]).lower()
+            if journal_mode != "wal":
+                mode_row = conn.execute("PRAGMA journal_mode=WAL").fetchone()
+                journal_mode = "" if mode_row is None else str(mode_row[0]).lower()
+            if journal_mode != "wal":
+                raise sqlite3.OperationalError("market_session_wal_unavailable")
             conn.executescript("""
             CREATE TABLE IF NOT EXISTS market_session_bars(
               session_date TEXT NOT NULL, symbol TEXT NOT NULL, timeframe TEXT NOT NULL,

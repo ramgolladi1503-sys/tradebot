@@ -31,6 +31,135 @@ def _persist(store, symbol, bar, *, completed_as_of=None):
     return store.persist_completed_bar(symbol, bar, completed_as_of=cutoff)
 
 
+class _ShortBusyTimeoutConnection:
+    """Test-only proxy to keep real SQLite lock tests bounded."""
+
+    def __init__(self, connection, timeout_ms):
+        self._connection = connection
+        self._timeout_ms = timeout_ms
+
+    @property
+    def row_factory(self):
+        return self._connection.row_factory
+
+    @row_factory.setter
+    def row_factory(self, value):
+        self._connection.row_factory = value
+
+    def execute(self, statement, *args):
+        if statement.strip().upper() == "PRAGMA BUSY_TIMEOUT=30000":
+            statement = f"PRAGMA busy_timeout={self._timeout_ms}"
+        return self._connection.execute(statement, *args)
+
+    def __enter__(self):
+        self._connection.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self._connection.__exit__(exc_type, exc_value, traceback)
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+
+def _shorten_test_connection_busy_timeout(monkeypatch, *, timeout_ms=20):
+    original_connect = sqlite3.connect
+
+    def connect(*args, **kwargs):
+        return _ShortBusyTimeoutConnection(
+            original_connect(*args, **kwargs), timeout_ms
+        )
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    return original_connect
+
+
+def test_wal_mode_is_negotiated_once_and_connection_durability_is_preserved(tmp_path, monkeypatch):
+    statements = []
+    original_connect = sqlite3.connect
+
+    def trace_connect(*args, **kwargs):
+        connection = original_connect(*args, **kwargs)
+        connection.set_trace_callback(statements.append)
+        return connection
+
+    monkeypatch.setattr(sqlite3, "connect", trace_connect)
+    db_path = tmp_path / "session.sqlite"
+    store = MarketSessionStore(db_path=db_path, report_root=tmp_path / "reports")
+    ts = datetime(2026, 9, 7, 9, 15, tzinfo=IST)
+    assert _persist(store, "NIFTY", _bar(ts, 25000))["persisted"] is True
+    assert len(store.get_bars("NIFTY", as_of=ts + timedelta(minutes=1))) == 1
+    reopened = MarketSessionStore(db_path=db_path, report_root=tmp_path / "reports")
+    assert _persist(reopened, "NIFTY", _bar(ts, 25000))["status"] == "EXISTS"
+    with reopened._conn() as conn:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+        assert conn.execute("PRAGMA synchronous").fetchone()[0] == 2
+
+    wal_negotiations = [
+        statement.strip().rstrip(";").lower()
+        for statement in statements
+        if statement.strip().lower().startswith("pragma journal_mode=")
+    ]
+    assert wal_negotiations == ["pragma journal_mode=wal"]
+    assert sum(
+        statement.strip().rstrip(";").lower() == "pragma synchronous=full"
+        for statement in statements
+    ) >= 4
+
+
+def test_locked_wal_initialization_propagates_operational_error(tmp_path, monkeypatch):
+    db_path = tmp_path / "locked-init.sqlite"
+    lock_conn = sqlite3.connect(db_path, timeout=0.1)
+    lock_conn.execute("CREATE TABLE lock_seed (value INTEGER)")
+    lock_conn.commit()
+    lock_conn.execute("BEGIN EXCLUSIVE")
+    original_connect = _shorten_test_connection_busy_timeout(monkeypatch)
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            MarketSessionStore(db_path=db_path, report_root=tmp_path / "reports")
+    finally:
+        lock_conn.rollback()
+        lock_conn.close()
+
+    with original_connect(db_path) as conn:
+        tables = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+    assert "market_session_bars" not in tables
+
+
+def test_locked_bar_write_propagates_error_without_persisted_or_cached_success(
+    tmp_path, monkeypatch
+):
+    db_path = tmp_path / "locked-write.sqlite"
+    store = MarketSessionStore(db_path=db_path, report_root=tmp_path / "reports")
+    ts = datetime(2026, 9, 7, 9, 15, tzinfo=IST)
+    key = (ts.date().isoformat(), "NIFTY")
+    lock_conn = sqlite3.connect(db_path, timeout=0.1)
+    lock_conn.execute("BEGIN IMMEDIATE")
+    original_connect = _shorten_test_connection_busy_timeout(monkeypatch)
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            _persist(store, "NIFTY", _bar(ts, 25000))
+        assert key not in store._cache
+        assert key not in store._loaded
+    finally:
+        lock_conn.rollback()
+        lock_conn.close()
+
+    with original_connect(db_path) as conn:
+        row_count = conn.execute(
+            "SELECT COUNT(*) FROM market_session_bars WHERE session_date=? AND symbol=?",
+            key,
+        ).fetchone()[0]
+    assert row_count == 0
+
+    retry_result = _persist(store, "NIFTY", _bar(ts, 25000))
+    assert retry_result["persisted"] is True
+    reopened = MarketSessionStore(db_path=db_path, report_root=tmp_path / "reports")
+    assert len(reopened.get_bars("NIFTY", as_of=ts + timedelta(minutes=1))) == 1
+
+
 def test_session_store_derives_only_complete_timeframes_and_builds_context(tmp_path):
     store = MarketSessionStore(db_path=tmp_path / "session.sqlite", report_root=tmp_path / "reports")
     start = datetime(2026, 9, 7, 9, 15, tzinfo=IST)

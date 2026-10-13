@@ -137,6 +137,24 @@
       ],
       "evidence_refs": [],
       "limitation": "This governance change does not inspect or certify live execution, broker, or risk behavior."
+    },
+    {
+      "claim_id": "LIVE_OBS_SESSION_STORE_WAL_INITIALIZATION_20261013",
+      "statement": "The scoped MarketSessionStore change negotiates and verifies SQLite WAL mode during database initialization rather than on each connection, while retaining fail-closed writes and the existing busy timeout and synchronous durability setting.",
+      "claim_kind": "operational_reliability",
+      "scope_paths": [
+        "core/market_session_store.py",
+        "docs/agent_reviews/pr977_sqlite_wal_lock.md",
+        "governance/evidence/CLAIM_REGISTRY.json",
+        "governance/evidence/VERIFICATION_MATRIX.json",
+        "governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
+        "tests/core/test_market_session_store.py",
+        "core/candidate_feed_dependencies.py"
+      ],
+      "status": "UNVERIFIED",
+      "source_ids": [],
+      "evidence_refs": [],
+      "limitation": "This claim is limited to the reviewed code and focused SQLite tests. It does not establish the original live lock holder, eliminate all SQLite contention, prove the cause of the observed lock, or establish exact-head CI, merge, deployment, or production/live behavior."
     }
   ]
 }

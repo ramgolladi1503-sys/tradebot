@@ -259,7 +259,7 @@ REGISTRY_ENTRIES: tuple[CandidateFeedDependencySpec, ...] = (
             source_sha256=(
                 ("core/candidate_evaluators.py", "073e1dcdfb4d46033deb3ae6f24b6c9126878c981d05617e21ff4b1e17322b46"),
                 ("core/market_data.py", "6d5984c15b59c8e41ab1e92a4292a1bd61317144c723610e9d0c791eabc8bd47"),
-                ("core/market_session_store.py", "50e89cfd40dbfe052773eda008fec23a4dabcebf9c877b4582e4f09341791551"),
+                ("core/market_session_store.py", "f6e9ac7b559f23093b7591f1bea3fe895b81a9f1b69940707546bc37467db713"),
                 ("core/orchestrator.py", "29c748f4a140928edb49f7e61dffaef9d9f513d50da5560cd91cd0c4dc0ecffa"),
                 ("core/governed_strategy_authority.py", "54d08ecc0fe676875e46b26c87ab00bf1cc07f026b245a4c198013793c5e18fc"),
             ),
