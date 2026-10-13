@@ -2,6 +2,7 @@ import importlib
 import threading
 import time
 from datetime import date
+from types import SimpleNamespace
 import pytest
 
 from config import config as cfg
@@ -268,9 +269,15 @@ def test_stale_option_refresh_decision_excludes_observation_sticky_and_unknown_t
     monkeypatch.setattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_DRIFT_REFRESH_SEC", 0.0, raising=False)
     monkeypatch.setattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_MIN_FRESH_RATIO", 0.8, raising=False)
     monkeypatch.setattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_MUTATION_MIN_STALE_COUNT", 1, raising=False)
+    # This case exercises refresh routing after one stale window; dedicated
+    # stability tests cover the production three-window mutation threshold.
+    monkeypatch.setattr(
+        cfg, "FEED_STALE_OPTION_SUBSCRIPTION_MUTATION_CONSECUTIVE_WINDOWS", 1,
+        raising=False,
+    )
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(ws, "build_subscription_tokens", lambda _symbols: (
-        [101, 201, 202], [{"symbol": "NIFTY", "tokens": [101, 201, 202], "stale_option_pruned_count": 0}]
+        [101, 201], [{"symbol": "NIFTY", "tokens": [101, 201], "stale_option_pruned_count": 0}]
     ))
     monkeypatch.setattr(ws, "get_latest_tick_rows_db", lambda _tokens: {}, raising=False)
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY", 201: "NIFTY", 202: "NIFTY", 301: "RELIANCE"}, raising=False)
@@ -282,6 +289,15 @@ def test_stale_option_refresh_decision_excludes_observation_sticky_and_unknown_t
     monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {201: 70.0, 301: 1.0, 401: 1.0}, raising=False)
     monkeypatch.setattr(ws, "_SYMBOL_LAST_OPTION_TICK_TS", {"RELIANCE": 1.0}, raising=False)
     monkeypatch.setattr(ws, "_STALE_OPTION_MUTATION_WINDOW_STATE", {}, raising=False)
+    monkeypatch.setattr(
+        ws, "_KITE_TICKER", SimpleNamespace(is_connected=lambda: True), raising=False
+    )
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "CONNECTED", raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 99.0, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
     _commit_test_option_ownership(ws, {
         201: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-08-06", "strike": 25000},
         202: {"symbol": "NIFTY", "instrument_type": "PE", "exchange": "NFO", "expiry": "2026-08-06", "strike": 25000},

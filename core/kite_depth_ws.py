@@ -8786,6 +8786,92 @@ def _close_ticker_instance(instance):
                 _log_ws("FEED_CLOSE_ERROR", {"method": method_name, "error": str(exc)})
 
 
+def _request_stale_ticker_retirement(
+    instance,
+    *,
+    socket_generation: int,
+    active_generation: int,
+) -> bool:
+    """Ask the reactor to close a ticker that is still emitting stale callbacks.
+
+    KiteTicker callbacks execute on Twisted's reactor thread. Always marshal the
+    close through callFromThread so this remains safe if a future caller moves
+    off that thread. The active ticker identity is checked both before queueing
+    and again when the queued close runs; transport drain is not inferred.
+    """
+    if instance is None or instance is _KITE_TICKER:
+        return False
+    try:
+        if bool(getattr(instance, "_tradebot_stale_retirement_queued", False)):
+            return False
+        setattr(instance, "_tradebot_stale_retirement_queued", True)
+    except Exception as exc:
+        _log_ws(
+            "FEED_STALE_GENERATION_RETIREMENT_ERROR",
+            {
+                "socket_generation": int(socket_generation),
+                "active_generation": int(active_generation),
+                "error_type": type(exc).__name__,
+                "stage": "mark_queued",
+            },
+        )
+        return False
+
+    try:
+        from twisted.internet import reactor
+
+        if not bool(getattr(reactor, "running", False)):
+            raise RuntimeError("twisted_reactor_not_running")
+
+        def _close_if_still_obsolete() -> None:
+            with _KITE_TICKER_LOCK:
+                if instance is _KITE_TICKER:
+                    try:
+                        setattr(instance, "_tradebot_stale_retirement_queued", False)
+                    except Exception:
+                        pass
+                    _log_ws(
+                        "FEED_STALE_GENERATION_RETIREMENT_SKIPPED",
+                        {
+                            "socket_generation": int(socket_generation),
+                            "active_generation": int(active_generation),
+                            "reason": "ticker_became_active",
+                        },
+                    )
+                    return
+                # Keep ownership stable through the close request so a
+                # concurrent start cannot install this ticker as active
+                # between the identity check and the close call.
+                _close_ticker_instance(instance)
+            _log_ws(
+                "FEED_STALE_GENERATION_RETIREMENT_REQUESTED",
+                {
+                    "socket_generation": int(socket_generation),
+                    "active_generation": int(active_generation),
+                    "close_requested": True,
+                    "transport_drained": False,
+                },
+            )
+
+        reactor.callFromThread(_close_if_still_obsolete)
+    except Exception as exc:
+        try:
+            delattr(instance, "_tradebot_stale_retirement_queued")
+        except Exception:
+            pass
+        _log_ws(
+            "FEED_STALE_GENERATION_RETIREMENT_ERROR",
+            {
+                "socket_generation": int(socket_generation),
+                "active_generation": int(active_generation),
+                "error_type": type(exc).__name__,
+                "stage": "schedule_close",
+            },
+        )
+        return False
+    return True
+
+
 def _join_thread_safe(thread_obj, timeout_sec: float) -> None:
     if thread_obj is None:
         return
@@ -10700,11 +10786,18 @@ def _start_depth_ws_impl(
     def _generation_is_current(callback: str) -> bool:
         if socket_generation == int(_SOCKET_GENERATION):
             return True
+        active_generation = int(_SOCKET_GENERATION)
+        if callback == "on_ticks":
+            _request_stale_ticker_retirement(
+                kws,
+                socket_generation=int(socket_generation),
+                active_generation=active_generation,
+            )
         _log_ws(
             "FEED_OLD_GENERATION_CALLBACK_IGNORED",
             {
                 "socket_generation": socket_generation,
-                "active_generation": int(_SOCKET_GENERATION),
+                "active_generation": active_generation,
                 "callback": callback,
                 "callback_thread": threading.current_thread().name,
                 "timestamp": float(now_utc_epoch()),
