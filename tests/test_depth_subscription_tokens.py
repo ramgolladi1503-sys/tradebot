@@ -513,6 +513,39 @@ def test_degraded_coverage_blocks_until_fresh_option_tick_proves_recovery(monkey
     )
     assert option_state["feed_block_reason_by_symbol"]["NIFTY"] == "NO_LIVE_OPTION_FEED"
 
+    # This test's recovery assertion requires authoritative applied option
+    # ownership; resolver output alone is only a proposal.
+    identities = {
+        token: {
+            "symbol": "NIFTY",
+            "instrument_type": token_meta[token]["instrument_type"],
+            "exchange": "NFO",
+            "expiry": "2026-03-05",
+            "strike": token_meta[token]["strike"],
+        }
+        for token in option_tokens
+    }
+    generation = ws._current_socket_generation()
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = generation
+    ws._invalidate_applied_option_ownership(
+        "test_reset", socket_generation=generation
+    )
+    revision = ws.record_desired_option_contracts(
+        identities, expected_tokens=option_tokens, source="test_instrument_master"
+    )
+    base, invalidated = ws._begin_applied_option_mutation(
+        "test_local_subscription", affected_tokens=option_tokens
+    )
+    assert ws._commit_applied_option_ownership(
+        socket_generation=generation,
+        desired_revision=revision,
+        base_snapshot=base,
+        invalidated_revision=invalidated.revision,
+        confirmed_tokens=option_tokens,
+        subscribe_tokens=option_tokens,
+        fresh_socket=True,
+        provenance="test_local_api_success",
+    )
     monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {int(option_tokens[0]): 199.5}, raising=False)
     option_state = ws._option_runtime_state(
         now_epoch=200.0,

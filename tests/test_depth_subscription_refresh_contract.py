@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from types import MappingProxyType
 
 import core.depth_subscription_engine as engine
 
@@ -7,6 +8,15 @@ def test_freshness_refresh_never_unsubscribes_fixed_intended_registry(monkeypatc
     ws = SimpleNamespace(
         _LAST_TOKENS=[101, 202, 303],
         _TOKEN_TO_SYMBOL={101: "NIFTY", 202: "NIFTY", 303: "NIFTY"},
+        get_applied_option_ownership_snapshot=lambda: SimpleNamespace(
+            state="KNOWN",
+            socket_generation=0,
+            contracts=MappingProxyType({
+                202: SimpleNamespace(symbol="NIFTY", instrument_type="CE"),
+                303: SimpleNamespace(symbol="NIFTY", instrument_type="PE"),
+            }),
+        ),
+        _current_socket_generation=lambda: 0,
         cfg=SimpleNamespace(
             SYMBOLS=["NIFTY"],
             FEED_STALE_OPTION_SUBSCRIPTION_MIN_FRESH_RATIO=0.8,

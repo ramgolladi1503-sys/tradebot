@@ -175,6 +175,7 @@ def _load_option_meta(ws: Any, symbol: str, exchange: str, expiry: Any) -> dict[
             "instrument_type": str(row.get("instrument_type") or row.get("right") or "").upper(),
             "exchange": str(exchange).upper(),
             "symbol": str(symbol).upper(),
+            "expiry": expiry_norm,
         }
     return out
 
@@ -401,6 +402,7 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     token_to_symbol: dict[int, str] = {}
     option_rank: dict[int, tuple] = {}
     option_token_set: set[int] = set()
+    option_contract_by_token: dict[int, dict[str, Any]] = {}
 
     for symbol in symbols_l:
         exchange = "BFO" if symbol == "SENSEX" else "NFO"
@@ -482,6 +484,13 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             option_token_set.add(int(token))
             option_rank[int(token)] = _rank(meta.get(int(token)), atm, step, int(token))
             m = meta.get(int(token)) or {}
+            option_contract_by_token[int(token)] = {
+                "symbol": symbol,
+                "instrument_type": str(m.get("instrument_type") or "").upper(),
+                "exchange": exchange,
+                "expiry": m.get("expiry") or _expiry_key(expiry),
+                "strike": m.get("strike"),
+            }
             strike = _sf(m.get("strike"), None)
             typ = str(m.get("instrument_type") or "").upper()
             if strike is not None and typ in {"CE", "PE"}:
@@ -547,8 +556,38 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         observation_registry = None
     if observation_registry is not None:
         observation_token_list = [int(token) for token in observation_registry.all_tokens]
+        production_tokens = [int(token) for token in tokens]
+        production_token_set = set(production_tokens)
+        production_resolution: list[dict[str, Any]] = []
+        production_underlying_tokens: set[int] = set()
+        production_option_tokens: set[int] = set()
+        for source_row in resolution:
+            if not isinstance(source_row, dict):
+                continue
+            symbol = str(source_row.get("symbol") or "").strip().upper()
+            try:
+                index_token = int(source_row.get("index_token") or 0)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if index_token <= 0 or index_token not in production_token_set:
+                continue
+            source_row_tokens = set(_dedupe_tokens(source_row.get("tokens") or []))
+            surviving_options = sorted(
+                token
+                for token in (source_row_tokens & production_token_set)
+                if token != index_token and token not in sticky
+            )
+            option_count = len(surviving_options)
+            row = dict(source_row)
+            row["tokens"] = [index_token, *surviving_options]
+            row["final_option_count"] = option_count
+            row["option_count"] = option_count
+            row["option_min_required"] = _option_min_required(ws, symbol, option_count)
+            production_resolution.append(row)
+            production_underlying_tokens.add(index_token)
+            production_option_tokens.update(surviving_options)
         merge = ws.build_observation_subscription_merge(
-            production_tokens=[int(token) for token in tokens],
+            production_tokens=production_tokens,
             observation_tokens=observation_token_list,
             budget=max_tokens,
         )
@@ -559,12 +598,20 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
                 if bool(merge.get("ok"))
                 else str(merge.get("reason") or ws.BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION_BUDGET)
             ),
-            "production_tokens": [int(token) for token in tokens],
+            "production_tokens": production_tokens,
             "observation_tokens": observation_token_list,
             "final_union_tokens": [int(token) for token in list(merge.get("tokens") or [])],
             "missing_observation_tokens": [int(token) for token in list(merge.get("missing_or_pruned_observation_tokens") or [])],
             "configured_budget": max_tokens,
             "launch_plan_sha256": str(getattr(observation_registry, "canonical_sha256", "") or ""),
+            # Preserve a production-only resolution for core validation.
+            # The merged subscription list also contains cash observations;
+            # passing a merged row here would misclassify them as options.
+            "production_resolution": production_resolution,
+            "production_underlying_tokens": sorted(production_underlying_tokens),
+            "production_option_tokens": sorted(production_option_tokens),
+            "production_sticky_tokens": sorted(sticky & production_token_set),
+            "production_option_count": len(production_option_tokens),
         }
         observation_identity: dict[int, str] = {}
         identity_error = None
@@ -655,6 +702,31 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             row["option_drop_reason"] = None
     ws._LAST_OPTION_COUNTS_BY_SYMBOL = {r["symbol"]: int(r.get("option_count") or 0) for r in resolution}
     ws._LAST_DESIRED_TOKENS = _normalize_positive_tokens(ws, tokens) or None
+    final_option_tokens = sorted(set(tokens) & set(option_rank))
+    staged_contracts = {
+        token: option_contract_by_token[token]
+        for token in final_option_tokens
+        if token in option_contract_by_token
+    }
+    try:
+        ws.record_desired_option_contracts(
+            staged_contracts,
+            expected_tokens=final_option_tokens,
+            source="depth_subscription_engine.build_subscription_tokens",
+        )
+    except Exception as exc:
+        ws.record_desired_option_contracts(
+            {},
+            expected_tokens=final_option_tokens,
+            source="depth_subscription_engine.invalid_candidate",
+        )
+        try:
+            ws._log_ws(
+                "FEED_OPTION_OWNERSHIP_CANDIDATE_REJECTED",
+                {"reason": type(exc).__name__, "expected_token_count": len(final_option_tokens)},
+            )
+        except Exception:
+            pass
     return list(tokens), resolution
 
 
@@ -683,12 +755,12 @@ def _option_freshness_stats(ws: Any, tokens: list[int], now_epoch: float) -> tup
     conf = _cfg(ws)
     urgent = _cfg_float(conf, "FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", 8.0)
     by_symbol: dict[str, dict[str, Any]] = {}
-    for token in _dedupe_tokens(tokens):
-        if _is_underlying(ws, token):
-            continue
-        symbol = str((getattr(ws, "_TOKEN_TO_SYMBOL", {}) or {}).get(int(token)) or "").upper()
-        if not symbol or symbol == "STICKY":
-            continue
+    ownership = ws.get_applied_option_ownership_snapshot()
+    current_generation = ws._current_socket_generation()
+    known = bool(ownership.state == "KNOWN" and ownership.socket_generation == current_generation)
+    owned_tokens = set(ownership.contracts) if known else set()
+    for token in sorted(set(_dedupe_tokens(tokens)) & owned_tokens):
+        symbol = ownership.contracts[int(token)].symbol
         stats = by_symbol.setdefault(symbol, {"option_count": 0, "fresh_count": 0, "stale_count": 0, "fresh_ratio": 1.0, "max_age_sec": 0.0, "urgent_max_age_sec": urgent, "stale_samples": []})
         is_fresh, age, db_epoch, memory_epoch = _classify_option_freshness(ws, token, now_epoch, urgent)
         stats["option_count"] += 1
@@ -704,7 +776,7 @@ def _option_freshness_stats(ws: Any, tokens: list[int], now_epoch: float) -> tup
     total_options = sum(int(v["option_count"]) for v in by_symbol.values())
     total_fresh = sum(int(v["fresh_count"]) for v in by_symbol.values())
     total_stale = sum(int(v["stale_count"]) for v in by_symbol.values())
-    overall = {"option_count": total_options, "fresh_count": total_fresh, "stale_count": total_stale, "fresh_ratio": (total_fresh / total_options if total_options else 1.0), "max_age_sec": max([float(v.get("max_age_sec") or 0.0) for v in by_symbol.values()], default=0.0), "urgent_max_age_sec": urgent, "stale_samples": [s for v in by_symbol.values() for s in list(v.get("stale_samples") or [])][:10]}
+    overall = {"ownership_state": "KNOWN" if known else "UNKNOWN", "option_count": total_options, "fresh_count": total_fresh, "stale_count": total_stale, "fresh_ratio": (total_fresh / total_options if total_options else (1.0 if known else 0.0)), "max_age_sec": max([float(v.get("max_age_sec") or 0.0) for v in by_symbol.values()], default=0.0), "urgent_max_age_sec": urgent, "stale_samples": [s for v in by_symbol.values() for s in list(v.get("stale_samples") or [])][:10]}
     return by_symbol, overall
 
 
@@ -713,6 +785,9 @@ def _maybe_refresh_stale_option_subscription_universe(*, now_epoch: float, refre
     conf = _cfg(ws)
     if not bool(ws.is_market_open_ist()):
         return False, {"reason": "market_closed"}
+    ownership = ws.get_applied_option_ownership_snapshot()
+    if ownership.state != "KNOWN" or ownership.socket_generation != ws._current_socket_generation():
+        return False, {"reason": "option_ownership_unknown", "refresh_applied": False, "freshness_urgent": True, "ownership_state": "UNKNOWN"}
     now = float(now_epoch)
     state = refresh_state if isinstance(refresh_state, dict) else {}
     current = _normalize_positive_tokens(ws, getattr(ws, "_LAST_TOKENS", []))
