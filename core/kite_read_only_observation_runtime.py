@@ -424,9 +424,17 @@ class ObservationLifecycle:
             self.phase = "MEG_FLUSHED"
             self.phase = "PERSISTENCE_DRAINING"
 
-            # Pre-shutdown active queue drain loop: allow high-frequency buffers to drain before signalling stop
-            # Uses public persistence APIs exclusively (no private member inspection)
-            while time.monotonic() < overall_deadline_mono:
+            # Bound the optional active queue-drain wait so it cannot consume
+            # the shared deadline before the persistence shutdown APIs run.
+            # Workers have already been signalled above; reserve most of the
+            # configured window for their bounded flush/join operations.
+            persistence_reserve_seconds = max(1.0, float(self.drain_deadline_seconds)) * 0.9
+            pre_drain_deadline_mono = min(
+                overall_deadline_mono,
+                overall_deadline_mono - persistence_reserve_seconds,
+            )
+            # Uses public persistence APIs exclusively (no private member inspection).
+            while time.monotonic() < pre_drain_deadline_mono:
                 d_st = depth_store.depth_store.persistence_state()
                 depth_pending = int(d_st.get("queue_depth", 0)) + int(d_st.get("in_flight", 0))
                 tick_pending = tick_store.pending_tick_count()
@@ -436,9 +444,9 @@ class ObservationLifecycle:
                     break
                 time.sleep(0.05)
 
-            tick_budget_sec = max(0.0, overall_deadline_mono - time.monotonic())
+            tick_budget_sec = max(0.0, overall_deadline_mono - time.monotonic()) / 3
             tick_result = tick_store.shutdown_persistence_worker(deadline_seconds=tick_budget_sec)
-            depth_budget_sec = max(0.0, overall_deadline_mono - time.monotonic())
+            depth_budget_sec = max(0.0, overall_deadline_mono - time.monotonic()) / 2
             depth_result = depth_store.depth_store.shutdown_persistence(deadline_seconds=depth_budget_sec)
             runtime_budget_sec = max(0.0, overall_deadline_mono - time.monotonic())
             runtime_result = runtime_store.shutdown_runtime_persistence(deadline_seconds=runtime_budget_sec)
