@@ -3592,8 +3592,8 @@ def _ws1006_fault_category(*, code: int | None, reason_text: str | None) -> str:
 
 def _new_ws_recovery_proof_context(*, disconnect_started_at: float) -> dict[str, Any]:
     """Snapshot exact subscription and critical underlying evidence at disconnect."""
-    resub_tokens, _ = _resubscribe_token_selection()
-    expected_tokens = _normalize_positive_tokens(resub_tokens or _LAST_TOKENS)
+    resub_tokens, selection_payload = _resubscribe_token_selection()
+    expected_tokens = _normalize_positive_tokens(resub_tokens)
     required_tokens = sorted({int(token) for token in (_UNDERLYING_TOKENS or set()) if int(token) > 0})
     symbol_by_token = {
         str(int(token)): str(symbol or "").strip().upper()
@@ -3607,6 +3607,11 @@ def _new_ws_recovery_proof_context(*, disconnect_started_at: float) -> dict[str,
     invalid = []
     if not expected_tokens:
         invalid.append("expected_subscription_set_missing")
+        selection_reason = str(selection_payload.get("selection_block_reason") or "").strip()
+        invalid.append(
+            "replay_candidate_invalid"
+            + (f":{selection_reason}" if selection_reason else "")
+        )
     if not required_tokens:
         invalid.append("required_underlying_identity_set_missing")
     if set(required_tokens) - set(expected_tokens):
@@ -10966,15 +10971,28 @@ def _start_depth_ws_impl(
         _log_ws("subscription_replay_requested", {"reason": reason})
         old_tokens = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
         desired, selection_payload = _resubscribe_token_selection()
-        if not desired:
-            desired = sorted(set(int(t) for t in (tokens or []) if int(t) > 0))
         desired = sorted({int(token) for token in (desired or []) if int(token) > 0})
         if not desired:
+            selection_reason = str(
+                selection_payload.get("selection_block_reason") or "candidate_empty"
+            ).strip()
+            failure_reason = f"replay_candidate_invalid:{selection_reason}"[:1000]
+            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+            _LAST_RUNTIME_ERROR = failure_reason
+            _log_ws(
+                "FEED_SUBSCRIPTION_REPLAY_BLOCKED",
+                {
+                    "reason": failure_reason,
+                    "token_source": str(selection_payload.get("token_source") or "blocked"),
+                    "fallback_tokens_count": int(selection_payload.get("fallback_tokens_count") or 0),
+                    "socket_generation": int(socket_generation),
+                },
+            )
             return {
                 "success": False,
                 "changed": False,
                 "status": "FAILED",
-                "reason": "no_tokens",
+                "reason": failure_reason,
                 "old_tokens": old_tokens,
                 "new_tokens": old_tokens,
             }

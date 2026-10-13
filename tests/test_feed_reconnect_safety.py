@@ -91,6 +91,12 @@ def test_on_connect_resubscribes_all_tokens_and_restores_mode(ticker_callbacks):
         expected_tokens=expected_options,
         source="test_instrument_master",
     )
+    assert kite_depth_ws.record_desired_subscription_candidate(
+        expected_options,
+        option_tokens=expected_options,
+        configured_budget=123,
+        source="test_reconnect_plan",
+    ) > 0
     with patch("core.kite_depth_ws._LAST_TOKENS", [123, 456]), \
          patch("core.kite_depth_ws._LAST_DESIRED_TOKENS", [123, 456]), \
          patch("core.kite_depth_ws._LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 2}), \

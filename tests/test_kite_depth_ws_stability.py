@@ -640,6 +640,7 @@ def test_runtime_ws_recovery_requires_complete_identity_proof_and_healthy_window
     monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 202])
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101})
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {101: "NIFTY"})
+    _record_test_replay_candidate([101, 202], [202])
     monkeypatch.setattr(ws, "_LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN", {101: 999.0})
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
     monkeypatch.setattr(reliability_cfg, "FEED_RECOVERY_HEALTH_WINDOW_SEC", 2.0, raising=False)
@@ -2052,6 +2053,31 @@ def test_on_connect_does_not_overwrite_failed_option_replay(monkeypatch):
     assert ws.get_applied_option_ownership_snapshot().state == "UNKNOWN"
     assert "unconfirmed" in ws._LAST_RUNTIME_ERROR or "unconfirmed" in ws._LAST_RUNTIME_ERROR.lower()
 
+
+def test_on_connect_blocks_raw_closure_tokens_when_replay_candidate_is_invalid(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ws._LAST_TOKENS = [101, 102]
+    replay_calls = []
+    monkeypatch.setattr(
+        ws,
+        "_resubscribe_token_selection",
+        lambda: ([], {
+            "token_source": "blocked",
+            "fallback_tokens_count": 2,
+            "selection_block_reason": "desired_subscription_candidate_invalid_or_stale",
+        }),
+    )
+    monkeypatch.setattr(ticker, "subscribe", lambda tokens: replay_calls.append(("subscribe", list(tokens))))
+    monkeypatch.setattr(ticker, "set_mode", lambda mode, tokens: replay_calls.append(("set_mode", mode, list(tokens))))
+
+    ticker.on_connect(ticker, "mock_response")
+
+    assert replay_calls == []
+    assert ws._RUNTIME_STATE == "SUBSCRIBE_FAILED"
+    assert "replay_candidate_invalid" in ws._LAST_RUNTIME_ERROR
+    assert ws.get_applied_option_ownership_snapshot().state != "KNOWN"
+
 def test_b_concurrent_reconnect_requests(monkeypatch):
     """
     Test B — Concurrent reconnect requests
@@ -2639,6 +2665,7 @@ def test_g_repeated_reconnect_cycles(monkeypatch):
         expected_tokens=[102],
         source="test_instrument_master",
     )
+    _record_test_replay_candidate([101, 102], [102])
 
     for i in range(20):
         # Stop existing
@@ -2709,3 +2736,30 @@ def test_ws_recovery_proof_context_aligns_with_resubscribe_selection(monkeypatch
     # Proof context expected tokens should contain both tokens (aligned with what resubscribe will apply)
     assert set(context["expected_tokens"]) == {str(underlying), str(option_token)}
     assert "expected_subscription_set_missing" not in context["invalid_reasons"]
+
+
+def test_ws_recovery_proof_rejects_raw_last_tokens_when_candidate_is_invalid(monkeypatch):
+    _patch_common(monkeypatch)
+    underlying = 256265
+    ws._UNDERLYING_TOKENS = {underlying}
+    ws._UNDERLYING_TOKEN_TO_SYMBOL = {underlying: "NIFTY"}
+    ws._LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN[underlying] = 100.0
+    ws._LAST_TOKENS = [underlying, 100001]
+    monkeypatch.setattr(
+        ws,
+        "_resubscribe_token_selection",
+        lambda: ([], {
+            "token_source": "blocked",
+            "fallback_tokens_count": 2,
+            "selection_block_reason": "desired_subscription_candidate_invalid_or_stale",
+        }),
+    )
+
+    context = ws._new_ws_recovery_proof_context(disconnect_started_at=105.0)
+
+    assert context["expected_tokens"] == []
+    assert "expected_subscription_set_missing" in context["invalid_reasons"]
+    assert any(
+        reason.startswith("replay_candidate_invalid:")
+        for reason in context["invalid_reasons"]
+    )

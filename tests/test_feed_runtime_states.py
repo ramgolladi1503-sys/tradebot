@@ -581,6 +581,15 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
     monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {1}, raising=False)
     monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
     monkeypatch.setattr(depth_ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    _commit_test_option_ownership({
+        101: {
+            "symbol": "NIFTY",
+            "instrument_type": "CE",
+            "exchange": "NFO",
+            "expiry": "2026-12-31",
+            "strike": 25000,
+        }
+    })
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
@@ -625,7 +634,8 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
         ),
     )
     assert payload["feed_ok"] is False
-    assert payload["execution_feed_ready"] is True
+    assert payload["execution_feed_ready"] is False
+    assert payload["canonical_feed_state"] == "DEGRADED_LOCAL"
     assert (logs_path / "feed_runtime_latest.json").exists()
 
 
