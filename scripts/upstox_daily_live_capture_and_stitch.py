@@ -371,19 +371,6 @@ def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Pa
     except Exception as e:
         logger.error(f"Error in historical candle fetch: {e}")
 
-    # Mirror stitched files to local storage copy if primary is external
-    try:
-        local_dir = FALLBACK_BASE_DIR / date_str
-        if data_dir.resolve() != local_dir.resolve():
-            local_dir.mkdir(parents=True, exist_ok=True)
-            for fname in [f"upstox_full_ticks_{date_compact}_stitched.parquet", f"stitching_summary_{date_compact}.json", f"indices_1m_{date_compact}.parquet"]:
-                src_f = data_dir / fname
-                if src_f.exists():
-                    shutil.copy2(src_f, local_dir / fname)
-            logger.info(f"[✓] Mirrored post-market master files to local storage copy: {local_dir}")
-    except Exception as e:
-        logger.warning(f"Could not mirror files to local copy: {e}")
-
     # Upload stitched data to Google Drive & cleanup local storage if using fallback
     sync_to_gdrive_and_cleanup(data_dir, date_str)
 
