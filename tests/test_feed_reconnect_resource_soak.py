@@ -101,6 +101,9 @@ def test_profile_contract_is_explicit():
     assert guarded["configuration"]["scope"] == "offline guarded policy validation"
     assert guarded["configuration"]["safety_limits_overridden"] is False
     assert guarded["configuration"]["original_safety_limits"] == guarded["configuration"]["test_safety_limits"]
+    assert guarded["verdict"] == "RECONNECT_GUARDED_POLICY_PASS"
+    assert guarded["guarded_policy_block_count"] > 0
+    assert guarded["last_cycle_condition_snapshot"]["replay_candidate_matches_expected"] is True
 
     rc, stress, _, _ = run_profile("reconnect_unbounded_resource_stress", 10)
     assert rc == 0
@@ -108,6 +111,10 @@ def test_profile_contract_is_explicit():
     assert stress["configuration"]["scope"] == "offline synthetic resource stress"
     assert stress["configuration"]["safety_limits_overridden"] is True
     assert stress["configuration"]["original_safety_limits"] != stress["configuration"]["test_safety_limits"]
+    assert stress["verified_successful_reconnect_count"] == 10
+    assert stress["generation_transition_count"] == 10
+    assert stress["hard_failures"] == 0
+    assert stress["last_cycle_condition_snapshot"]["replay_candidate_matches_expected"] is True
 
 
 def test_soak_candidate_reports_requested_and_budgeted_token_counts():
