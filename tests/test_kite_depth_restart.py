@@ -65,6 +65,7 @@ def _record_validated_candidate(tokens, option_tokens, *, budget=123):
         option_tokens=list(option_tokens),
         configured_budget=budget,
         source="test_validated_plan",
+        observation_required=False,
     )
 
 
@@ -77,6 +78,9 @@ from types import SimpleNamespace
 
 @pytest.fixture(autouse=True)
 def _reset_ws_runtime_state(monkeypatch):
+    # These tests exercise ordinary production-feed restart policy unless a
+    # test opts into observer mode explicitly.
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False, raising=False)
     generation = ws._current_socket_generation()
     ws.invalidate_desired_subscription_candidate("test_isolation")
     ws.reset_market_event_graph_observation_plan_state()

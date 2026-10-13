@@ -77,6 +77,8 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(depth_hook_cleanup, "_maybe_reapply_depth_engine", lambda: None, raising=False)
     monkeypatch.setattr(depth_hook_cleanup, "_reapply_depth_engine", lambda *args, **kwargs: None, raising=False)
     importlib.reload(ws)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False, raising=False)
+    ws.reset_market_event_graph_observation_plan_state()
     reset_kite_runtime_credentials_guard()
     monkeypatch.setattr(ws, "_FEED_RECOVERY_COORDINATOR", FeedRecoveryCoordinator(), raising=False)
     monkeypatch.setattr(ws, "_KITE_TICKER", None, raising=False)
@@ -2011,6 +2013,7 @@ def _record_test_replay_candidate(tokens, option_tokens):
         option_tokens=list(option_tokens),
         configured_budget=123,
         source="test_reconnect_plan",
+        observation_required=False,
     )
 
 

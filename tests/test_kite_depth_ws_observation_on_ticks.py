@@ -39,9 +39,11 @@ def _commit_test_option_ownership(ws, contracts):
 
 
 @pytest.fixture(autouse=True)
-def _reset_test_option_ownership():
+def _reset_test_option_ownership(monkeypatch):
     """Keep generation-bound ownership evidence isolated between tests."""
     ws = importlib.import_module("core.kite_depth_ws")
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False, raising=False)
+    ws.reset_market_event_graph_observation_plan_state()
     generation = ws._current_socket_generation()
     ws.record_desired_option_contracts(
         {}, expected_tokens=[], source="test_isolation"

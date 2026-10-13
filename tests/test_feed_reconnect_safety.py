@@ -13,6 +13,8 @@ def mock_api_key(monkeypatch):
 
 @pytest.fixture
 def ticker_callbacks(monkeypatch):
+    # Do not inherit an observer union from a test that ran earlier in-process.
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False, raising=False)
     monkeypatch.setattr(cfg, "KITE_API_KEY", "mock_key", raising=False)
     monkeypatch.setattr(cfg, "KITE_ACCESS_TOKEN", "mock_token", raising=False)
     import core.feed.runtime_store as runtime_store
@@ -32,6 +34,7 @@ def ticker_callbacks(monkeypatch):
     
     # Clear state that might leak from other tests in CI
     import core.kite_depth_ws as kite_depth_ws
+    kite_depth_ws.reset_market_event_graph_observation_plan_state()
     monkeypatch.setattr(kite_depth_ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
     monkeypatch.setattr(kite_depth_ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
     monkeypatch.setattr(kite_depth_ws, "_reactor_terminal_restart_block_active", lambda: False, raising=False)
